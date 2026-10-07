@@ -78,6 +78,7 @@ Carried over from the Milestone 0 reviews (7 October 2026):
 
 - A save that holds a mod vehicle and has an overdue tax bill throws in the game's forced payment once the mod is removed (it reads every vehicle's type). Document a safe uninstall: sell or store mod vehicles first.
 - Mod vehicles need a dealer with a spawn point, or the mod's own purchase flow; the spike lists them at every dealer.
+- From the in-game session: clear the vehicles' sleep setup (Sleep in the item panel throws), make truck storage openable, fix the cart's grip and its sideways sliding, and give the cart a hover highlight.
 - The debug tax statement action should refuse while a bill is unpaid; the session's save count can run one ahead if serialization ever fails.
 
 The first playable slice. It touches every risky layer at once: bundle, vehicle, cargo, money, saves.

@@ -6,17 +6,19 @@ A mod that adds street food to Big Ambitions: push a cart or drive a truck to a 
 
 ## Evidence
 
-Each question the mod depends on, and how sure we are. "Checked" means seen in the game. Reading the game's code counts as unverified.
+Each question the mod depends on, and how sure we are. "Checked" means seen in the game. Reading the game's code counts as unverified. Milestone 0 was played on 7 October 2026 with the 1.0 game (build 25482473); the full session report is in [docs/evidence/milestone-0-session-1.md](docs/evidence/milestone-0-session-1.md).
 
 | # | Question | Status | Notes |
 |---|---|---|---|
-| 1 | Can the official SDK build a mod vehicle on a Mac in batch mode, and can a player buy it? | Pending | Builds without clicks on the Mac (`tools/build-mod.sh`). Registering a vehicle type does not put it on sale anywhere; a Harmony postfix on `VehicleContractSettings.SetListOfVehiclesForSale` adds it to dealers. Not yet seen in game. |
-| 2 | Can a modded vehicle be pushed like the hand truck? | Pending | Needs a `HandTruck` component, `spawnInPlayerObject`, and the `ba:vehicletag_ishandvehicle` tag. The test cart is built from primitives by `unity/BuildEditor/CartAssets.cs`. |
-| 3 | Does mod state survive save, quit and load in `GameInstance.modData`? | Pending | The game serializes the whole `GameInstance`, and `GlobalEvents.onSaveGame` runs before it does. The state is versioned JSON (`Core/Saves`). |
-| 4 | Can the mod add its sales to income tax? | Pending | Postfixes on `TaxCalculationHelper.GetBusinessIncome`, `GetBusinessSales` and `GetBusinessIncomeTotal` add the mod's daily sales ledger. |
-| 5 | Can the mod spawn a person who walks to a point and stands there? | Pending | Creates the game's pedestrian character prefab the way its `ThirdPersonCharacterPool` does, and walks it on the NavMesh. |
-| 6 | Do mod payments show in the transaction history with their own label? | Pending | Transaction types are strings; the label comes from the mod's locale file. |
-| 7 | What happens to a save with mod vehicles after the mod is removed? | Pending | From the code: the vehicle record stays in the save and fails to spawn, with a logged exception. Loading while holding a mod cart may break player positioning, and the Persona app's wealth figure reads every vehicle's type. Local mods can't be switched off in the game, so the test moves the folder out of `ModsLocal` (`tools/park-remote.sh`). |
+| 1 | Can the official SDK build a mod vehicle on a Mac in batch mode, and can a player buy it? | Checked: yes | `tools/build-mod.sh` builds without clicks. A Harmony postfix on `VehicleContractSettings.SetListOfVehiclesForSale` lists both test vehicles at General US Trucks (1 7th Avenue), in the order list; buying works with delivery unticked. One purchase at a time until the vehicle is picked up. |
+| 2 | Can a modded vehicle be pushed like the hand truck? | Checked: yes, rough | Grab, walk, run, release and grab again all work with a `HandTruck` prefab built from primitives. The cart slides sideways to stay in front, the fingers are distorted, there's no hover highlight before pickup, and the interaction icon is offset. |
+| 3 | Does mod state survive save, quit and load in `GameInstance.modData`? | Checked: yes | Save count and a $200,040 ledger came back after quitting the game. Data also survived a save written while the mod was removed (zero ledger tested). |
+| 4 | Can the mod add its sales to income tax? | Checked: yes | The game's own tax statement listed "Street food $200,040.00" and taxed it; Econoview's projection matched the mod's status readout to the cent. |
+| 5 | Can the mod spawn a person who walks to a point and stands there? | Checked: yes | The pedestrian prefab walked 8.2 m on the NavMesh, stood, and was removed on request. |
+| 6 | Do mod payments show in the transaction history with their own label? | Checked: yes | "Street food sale: test sale". With the mod removed, Econoview shows the raw key `foodtrucks:transaction_sale`. |
+| 7 | What happens to a save with mod vehicles after the mod is removed? | Checked: unsafe | Parked mod vehicles disappear but the save plays; Persona shows broken wealth figures. A save made while holding the mod cart loads to a different place with no world interaction. Reinstalling the mod restores the vehicles, even after a save without it. The mod needs an uninstall step that sells or stores its vehicles first. |
+
+Also found in the session: clicking Sleep in a mod vehicle's item panel throws `SleepEnvironment config is not assigned` (the prefabs carry an empty sleep setup), and the test truck's storage can't be opened although it shows 0/20.
 
 ## Building
 
