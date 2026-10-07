@@ -13,6 +13,7 @@ GAME_DLLS="${BA_GAME_DLLS:-$REPO/build/game-dlls}"
 UNITY="${UNITY:-/Applications/Unity/Hub/Editor/2022.3.62f2/Unity.app/Contents/MacOS/Unity}"
 HARMONY_URL="https://api.nuget.org/v3-flatcontainer/lib.harmony/2.4.2/lib.harmony.2.4.2.nupkg"
 HARMONY_SHA256="d64592e53090464559fce48612c9ca7c8dc73113841376b7aa3455f46fc5d579"
+HARMONY_DLL_SHA256="7b9e756306fa3d7620e02a857c8927a6ab04973f9bd8a77d3866700a6deac55c"
 MOD_DIR="$REPO/unity/FoodTrucks"
 DEPS="$MOD_DIR/Dependencies"
 LOG_DIR="$REPO/build/logs"
@@ -23,6 +24,11 @@ mkdir -p "$LOG_DIR" "$DEPS"
 if [ ! -d "$SDK/.git" ]; then
   git clone -q "$SDK_URL" "$SDK"
   git -C "$SDK" checkout -q "$SDK_COMMIT"
+fi
+# Refuse a clone at another commit or with edited SDK sources, rather than resetting it.
+[ "$(git -C "$SDK" rev-parse HEAD)" = "$SDK_COMMIT" ] || { echo "$SDK is not at the pinned SDK commit $SDK_COMMIT" >&2; exit 1; }
+if [ -n "$(git -C "$SDK" status --porcelain --untracked-files=no -- Assets/Editor Packages ProjectSettings)" ]; then
+  echo "$SDK has local changes in Assets/Editor, Packages or ProjectSettings; refusing to build" >&2; exit 1
 fi
 # The SDK compiles against the installed game's DLLs; copy only changed files to avoid reimports.
 rsync -a --checksum "$GAME_DLLS/" "$SDK/Assets/_BaDependencies/GameDlls/" --include='*.dll' --exclude='*'
@@ -39,6 +45,7 @@ if [ ! -f "$DEPS/0Harmony.dll" ]; then
   cp "$tmp/LICENSE" "$REPO/build/Harmony-LICENSE.txt"
   rm -rf "$tmp"
 fi
+echo "$HARMONY_DLL_SHA256  $DEPS/0Harmony.dll" | shasum -a 256 -c - >/dev/null || { echo "Cached 0Harmony.dll does not match the pinned hash; delete it and rebuild" >&2; exit 1; }
 
 # Core, compiled for netstandard2.1 and shipped next to the mod DLL.
 dotnet build "$REPO/Core/FoodTrucks.Core.csproj" -c Release -nologo -v quiet

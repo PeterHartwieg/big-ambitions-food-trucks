@@ -16,7 +16,7 @@ Each question the mod depends on, and how sure we are. "Checked" means seen in t
 | 4 | Can the mod add its sales to income tax? | Pending | Postfixes on `TaxCalculationHelper.GetBusinessIncome`, `GetBusinessSales` and `GetBusinessIncomeTotal` add the mod's daily sales ledger. |
 | 5 | Can the mod spawn a person who walks to a point and stands there? | Pending | Uses the game's `ThirdPersonCharacterPool`, as for passengers leaving cars. |
 | 6 | Do mod payments show in the transaction history with their own label? | Pending | Transaction types are strings; the label comes from the mod's locale file. |
-| 7 | What happens to a save with mod vehicles after the mod is removed? | Pending | From the code: the vehicle record stays in the save and fails to spawn, with a logged exception. Loading while holding a mod cart may break player positioning. |
+| 7 | What happens to a save with mod vehicles after the mod is removed? | Pending | From the code: the vehicle record stays in the save and fails to spawn, with a logged exception. Loading while holding a mod cart may break player positioning, and the Persona app's wealth figure reads every vehicle's type. Local mods can't be switched off in the game, so the test moves the folder out of `ModsLocal` (`tools/park-remote.sh`). |
 
 ## Building
 
@@ -27,6 +27,8 @@ dotnet test
 tools/build-mod.sh --generate
 tools/install-remote.sh <ssh host of the Windows game PC>
 ```
+
+`tools/park-remote.sh park|restore` moves the installed mod out of `ModsLocal` and back, and `tools/fetch-log-remote.sh <label>` copies the game's log; both are for the in-game checks in [CHECKS.md](CHECKS.md).
 
 `build-mod.sh` links `unity/FoodTrucks` into the SDK's `Assets/Mods` and `unity/BuildEditor` into its `Assets/Editor`, generates the vehicle assets, and runs the SDK's own packager. Harmony 2.4.2 (MIT) is downloaded from NuGet with a pinned checksum and shipped in `Dependencies/`.
 

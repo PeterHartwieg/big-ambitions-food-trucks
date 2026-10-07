@@ -90,11 +90,39 @@ namespace FoodTrucks.Core.Saves
 
                 var state = document.ToObject<SaveState>(JsonSerializer.Create(settings))
                     ?? throw new JsonSerializationException("Save state must be a JSON object.");
+                ValidateState(state);
                 return new LoadResult(status, state);
             }
             catch (Exception exception)
             {
                 return new LoadResult(LoadStatus.Corrupt, rawJson: json, error: exception.Message);
+            }
+        }
+
+        internal static void ValidateState(SaveState state)
+        {
+            if (state.Licence == null)
+                throw new JsonSerializationException("Licence must not be null.");
+            if (state.SaveCount < 0)
+                throw new JsonSerializationException("SaveCount must not be negative.");
+
+            foreach (var vehicle in state.Vehicles)
+            {
+                if (vehicle == null)
+                    throw new JsonSerializationException("Vehicles must not contain null entries.");
+                if (vehicle.LifetimeSales < 0 || vehicle.LifetimeRevenueCents < 0)
+                    throw new JsonSerializationException("Vehicle LifetimeSales and LifetimeRevenueCents must not be negative.");
+            }
+
+            var days = new HashSet<int>();
+            foreach (var sale in state.DailySales)
+            {
+                if (sale == null)
+                    throw new JsonSerializationException("DailySales must not contain null entries.");
+                if (sale.RevenueCents < 0)
+                    throw new JsonSerializationException("DailySales RevenueCents must not be negative.");
+                if (!days.Add(sale.Day))
+                    throw new JsonSerializationException($"DailySales contains duplicate Day {sale.Day}.");
             }
         }
     }

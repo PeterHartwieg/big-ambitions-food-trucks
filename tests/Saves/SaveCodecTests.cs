@@ -10,6 +10,18 @@ public class SaveCodecTests
 {
     private readonly SaveCodec codec = new();
 
+    public static TheoryData<string, string> UnusableStates => new()
+    {
+        { "{\"schemaVersion\":1,\"licence\":null}", "Licence" },
+        { "{\"schemaVersion\":1,\"vehicles\":[null]}", "Vehicles" },
+        { "{\"schemaVersion\":1,\"dailySales\":[null]}", "DailySales" },
+        { "{\"schemaVersion\":1,\"dailySales\":[{\"day\":1,\"revenueCents\":-1}]}", "RevenueCents" },
+        { "{\"schemaVersion\":1,\"dailySales\":[{\"day\":1},{\"day\":1}]}", "duplicate Day 1" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{\"lifetimeSales\":-1}]}", "LifetimeSales" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{\"lifetimeRevenueCents\":-1}]}", "LifetimeRevenueCents" },
+        { "{\"schemaVersion\":1,\"saveCount\":-1}", "SaveCount" }
+    };
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -181,13 +193,59 @@ public class SaveCodecTests
     }
 
     [Fact]
-    public void NullKnownPropertiesRetainNonNullDefaults()
+    public void NullOptionalPropertiesRetainNonNullDefaults()
     {
-        var result = codec.Load("{\"schemaVersion\":1,\"writtenByModVersion\":null,\"licence\":null,\"vehicles\":null}");
+        var result = codec.Load("{\"schemaVersion\":1,\"writtenByModVersion\":null,\"vehicles\":null,\"dailySales\":null}");
         var state = Assert.IsType<SaveState>(result.State);
         Assert.Equal(string.Empty, state.WrittenByModVersion);
         Assert.NotNull(state.Licence);
         Assert.Empty(state.Vehicles);
+        Assert.Empty(state.DailySales);
+    }
+
+    [Theory]
+    [MemberData(nameof(UnusableStates))]
+    public void UnusableStateIsCorruptWithClearError(string json, string error)
+    {
+        var result = codec.Load(json);
+
+        Assert.Equal(LoadStatus.Corrupt, result.Status);
+        Assert.Null(result.State);
+        Assert.Equal(json, result.RawJson);
+        Assert.Contains(error, result.Error);
+    }
+
+    [Theory]
+    [MemberData(nameof(UnusableStates))]
+    public void UnusableMigrationResultIsCorruptWithOriginalJson(string migratedJson, string error)
+    {
+        const string json = "{\"schemaVersion\":1}";
+        var migratingCodec = new SaveCodec(2, new Dictionary<int, Func<JObject, JObject>>
+        {
+            [1] = _ => JObject.Parse(migratedJson)
+        });
+
+        var result = migratingCodec.Load(json);
+
+        Assert.Equal(LoadStatus.Corrupt, result.Status);
+        Assert.Null(result.State);
+        Assert.Equal(json, result.RawJson);
+        Assert.Contains(error, result.Error);
+    }
+
+    [Fact]
+    public void NewerModVersionWithCurrentSchemaStillLoads()
+    {
+        var state = new SaveState { WrittenByModVersion = "99.0.0" };
+        Assert.True(ModVersion.IsNewerThan(state.WrittenByModVersion, "0.0.1-spike"));
+
+        var result = codec.Load(codec.Serialize(state));
+
+        Assert.Equal(LoadStatus.Loaded, result.Status);
+        Assert.Equal(SaveState.CurrentSchemaVersion, result.State!.SchemaVersion);
+        Assert.Equal(state.WrittenByModVersion, result.State.WrittenByModVersion);
+        Assert.Null(result.RawJson);
+        Assert.Null(result.Error);
     }
 
     [Fact]

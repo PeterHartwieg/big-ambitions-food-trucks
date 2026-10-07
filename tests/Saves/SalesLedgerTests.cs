@@ -36,6 +36,44 @@ public class SalesLedgerTests
     }
 
     [Fact]
+    public void ZeroRevenueCreatesNoEntry()
+    {
+        var state = new SaveState();
+
+        SalesLedger.Record(state, 1, 0);
+
+        Assert.Empty(state.DailySales);
+        SalesLedger.Record(state, 2, long.MaxValue);
+        SalesLedger.Record(state, 2, 0);
+        SalesLedger.Record(state, 3, 0);
+        Assert.Single(state.DailySales);
+        Assert.Equal(long.MaxValue, state.DailySales[0].RevenueCents);
+    }
+
+    [Fact]
+    public void RecordOverflowThrowsWithoutChangingRevenue()
+    {
+        var state = new SaveState();
+        SalesLedger.Record(state, 1, long.MaxValue);
+
+        Assert.Throws<OverflowException>(() => SalesLedger.Record(state, 1, 1));
+
+        Assert.Single(state.DailySales);
+        Assert.Equal(long.MaxValue, state.DailySales[0].RevenueCents);
+    }
+
+    [Fact]
+    public void SumOverflowThrows()
+    {
+        var state = new SaveState();
+        SalesLedger.Record(state, 1, long.MaxValue);
+        SalesLedger.Record(state, 2, 1);
+
+        Assert.Equal(long.MaxValue, SalesLedger.SumCents(state, 1, 1));
+        Assert.Throws<OverflowException>(() => SalesLedger.SumCents(state, 1, 2));
+    }
+
+    [Fact]
     public void LedgerSurvivesARoundTrip()
     {
         var codec = new SaveCodec();

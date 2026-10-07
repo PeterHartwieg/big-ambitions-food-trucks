@@ -9,7 +9,9 @@ using Vehicles.VehicleTypes;
 namespace FoodTrucks.BuildEditor
 {
     // Spike 2: a placeholder push cart built from primitives and wired like the game's hand truck.
-    // Box sizes are in metres: about 1.6 long, 0.8 wide, 1.0 high, with handles at the back.
+    // HandTruck.EnterVehicle parents the cart to the player at local zero and, with playerOffsetWhenActive 0,
+    // leaves the player model at that same origin. So the origin is where the pusher stands: the handle is
+    // 0.35 m ahead at hand height and the 1.4 m body runs forward from it.
     internal static class CartAssets
     {
         private const string HandVehicleTag = "ba:vehicletag_ishandvehicle";
@@ -79,8 +81,8 @@ namespace FoodTrucks.BuildEditor
 
             // Clickable collider on the root: the mouse raycast looks for the controller on the hit object itself.
             var collider = root.AddComponent<BoxCollider>();
-            collider.center = new Vector3(0f, 0.55f, 0f);
-            collider.size = new Vector3(0.8f, 1.1f, 1.6f);
+            collider.center = new Vector3(0f, 0.6f, 1.15f);
+            collider.size = new Vector3(0.8f, 1.2f, 1.5f);
 
             var obstacle = root.AddComponent<NavMeshObstacle>();
             obstacle.shape = NavMeshObstacleShape.Box;
@@ -96,34 +98,35 @@ namespace FoodTrucks.BuildEditor
 
             var renderers = new List<Renderer>
             {
-                Box(root.transform, "Body", new Vector3(0f, 0.6f, 0.05f), new Vector3(0.8f, 0.7f, 1.4f), new Color(0.85f, 0.25f, 0.2f)),
-                Box(root.transform, "Canopy", new Vector3(0f, 1.25f, 0.05f), new Vector3(0.95f, 0.05f, 1.55f), new Color(0.95f, 0.9f, 0.8f)),
-                Box(root.transform, "Handle", new Vector3(0f, 0.95f, -0.8f), new Vector3(0.7f, 0.05f, 0.05f), Color.gray),
-                Box(root.transform, "WheelLeft", new Vector3(-0.42f, 0.18f, 0.3f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
-                Box(root.transform, "WheelRight", new Vector3(0.42f, 0.18f, 0.3f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
+                Box(root.transform, "Body", new Vector3(0f, 0.6f, 1.15f), new Vector3(0.8f, 0.7f, 1.4f), new Color(0.85f, 0.25f, 0.2f)),
+                Box(root.transform, "Canopy", new Vector3(0f, 1.25f, 1.15f), new Vector3(0.95f, 0.05f, 1.55f), new Color(0.95f, 0.9f, 0.8f)),
+                Box(root.transform, "Handle", new Vector3(0f, 0.95f, 0.35f), new Vector3(0.7f, 0.05f, 0.05f), Color.gray),
+                Box(root.transform, "WheelLeft", new Vector3(-0.42f, 0.18f, 1.4f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
+                Box(root.transform, "WheelRight", new Vector3(0.42f, 0.18f, 1.4f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
             };
 
             // One child per cargo slot; HandTruck shows the first N children for N cargo entries.
             var boxes = new GameObject("BoxPlaceholder").transform;
             boxes.SetParent(root.transform, false);
-            boxes.localPosition = new Vector3(0f, 0.95f, 0.05f);
+            boxes.localPosition = new Vector3(0f, 0.95f, 1.15f);
             for (var i = 0; i < CargoSlots; i++)
             {
                 var box = Box(boxes, "Box" + i, new Vector3((i % 2 - 0.5f) * 0.35f, 0.12f, (i / 2 - 1) * 0.4f), new Vector3(0.3f, 0.2f, 0.3f), new Color(0.6f, 0.45f, 0.3f));
                 box.gameObject.SetActive(false);
             }
 
-            var leftHand = Point(root.transform, "LeftHandIK", new Vector3(-0.3f, 0.95f, -0.8f));
-            var rightHand = Point(root.transform, "RightHandIK", new Vector3(0.3f, 0.95f, -0.8f));
-            var loading = Point(root.transform, "LoadingPosition", new Vector3(0f, 0f, -1.3f));
-            var navTarget = Point(root.transform, "NavMeshTarget", new Vector3(0f, 0f, -1.1f));
+            var leftHand = Point(root.transform, "LeftHandIK", new Vector3(-0.25f, 0.95f, 0.35f));
+            var rightHand = Point(root.transform, "RightHandIK", new Vector3(0.25f, 0.95f, 0.35f));
+            // Where the player walks to grab the cart and to load it: just behind the handle.
+            var loading = Point(root.transform, "LoadingPosition", new Vector3(0f, 0f, -0.3f));
+            var navTarget = Point(root.transform, "NavMeshTarget", new Vector3(0f, 0f, -0.3f));
 
             var truck = root.AddComponent<HandTruck>();
             truck.vehicleType = type;
             truck.boxPlaceholder = boxes;
             truck.LHandIKAttachmentPoint = leftHand;
             truck.RHandIKAttachmentPoint = rightHand;
-            truck.playerOffsetWhenActive = 0.9f;
+            truck.playerOffsetWhenActive = 0f;
             truck.navMeshObstacle = obstacle;
             truck.vehicleCollider = collider;
             truck.vehicleLoadingPosition = loading;

@@ -11,8 +11,16 @@ namespace FoodTrucks.BuildEditor
     // Runs the SDK's own validator and packager, then exits with 0 on success and 1 on failure.
     public static class BatchBuild
     {
+        private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(20);
+        private static bool finished;
+
         public static void Build()
         {
+            var deadline = DateTime.UtcNow + Timeout;
+            EditorApplication.update += () =>
+            {
+                if (!finished && DateTime.UtcNow > deadline) Finish(1, $"No result from the packager after {Timeout.TotalMinutes} minutes.");
+            };
             var modId = ArgValue("-modId") ?? "FoodTrucks";
             try
             {
@@ -42,6 +50,8 @@ namespace FoodTrucks.BuildEditor
 
         private static void Finish(int code, string message)
         {
+            if (finished) return;
+            finished = true;
             Debug.Log($"[FoodTrucksBuild] {(code == 0 ? "OK" : "FAILED")}: {message}");
             EditorApplication.delayCall += () => EditorApplication.Exit(code);
         }

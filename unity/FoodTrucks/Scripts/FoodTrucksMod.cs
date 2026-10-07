@@ -74,7 +74,9 @@ namespace FoodTrucks
             {
                 registered.Add(typeName);
                 RegisteredVehicleTypes.Add(typeName);
-                Log.Info($"Vehicle registered: {typeName} (hand vehicle tag: {type.HasTag(HandVehicleTag)}, price {type.price}).");
+                // The game checks the tag by index, so log the index lookup rather than the string list.
+                var handVehicle = type.HasTag(BigAmbitions.Tags.TagRef.Vehicletag.ishandvehicle);
+                Log.Info($"Vehicle registered: {typeName} (hand vehicle tag: {handVehicle}, price {type.price}).");
             }
             else
             {
@@ -99,16 +101,16 @@ namespace FoodTrucks
 
         public static void Init(IModLogger modLogger) => logger = modLogger;
 
-        // Every line carries the same prefix so it can be found in Player.log.
+        // The game's mod logger adds its own "[Mod:Food Trucks]" prefix.
         public static void Info(string message)
         {
-            if (logger != null) logger.Info("[Food Trucks] " + message);
+            if (logger != null) logger.Info(message);
             else Debug.Log("[Food Trucks] " + message);
         }
 
         public static void Error(string message)
         {
-            if (logger != null) logger.Error("[Food Trucks] " + message);
+            if (logger != null) logger.Error(message);
             else Debug.LogError("[Food Trucks] " + message);
         }
 

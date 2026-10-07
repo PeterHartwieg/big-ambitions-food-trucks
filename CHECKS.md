@@ -6,53 +6,82 @@ Spike build `0.0.1-spike`. It answers the seven questions in the plan's Mileston
 
 - [ ] `dotnet test` passes.
 - [ ] `tools/build-mod.sh --generate` finishes without clicks. `build/FoodTrucks.sha256` lists `FoodTrucks.dll`, `Dependencies/0Harmony.dll`, `Dependencies/FoodTrucks.Core.dll`, `AssetBundles/Windows/foodtrucks.unity3d` and `Locales/en.json`.
-- [ ] `tools/install-remote.sh` installs to `ModsLocal\FoodTrucks` on the game PC, with the game closed.
+- [ ] `tools/install-remote.sh` installs to `ModsLocal\FoodTrucks` on the game PC with the game closed. Then `tools/park-remote.sh park`, so that phase A starts without the mod.
 
-## 2. In game (about 20 minutes)
+## 2. In game (about 30 minutes, four launches)
 
-Before you start:
+Rules for the whole session:
 
-- Use a new, throwaway save. Never load the series save while this mod is enabled.
-- Disable the other gameplay mods (Rival Balance, Campaign Objectives) so the log only has this mod in it.
-- Launch with `-console` in Steam's launch options if you want the backtick console. The hotkeys work without it.
+- Only touch saves whose names start with **FT**. Never load the series save while this mod is installed. Don't let the game autosave over an FT save you still need; use **Save as** with the names below.
+- Turn off the other gameplay mods (Rival Balance, Campaign Objectives) so the log only has this mod in it.
+- Local mods can't be switched off in the Mods menu. To remove or restore this one, quit the game and tell me ("park" or "restore"), or move the folder yourself: `%USERPROFILE%\AppData\LocalLow\Hovgaard Games\Big Ambitions\ModsLocal\FoodTrucks` to `...\Big Ambitions\FoodTrucksParked\` and back.
+- The game overwrites `Player.log` at every launch. After each phase, quit the game and tell me, so I can copy the log before the next launch.
+- Optional: add `-console` to Steam's launch options for the backtick console. The hotkeys work without it.
 
-Hotkeys: hold Ctrl and press F6 (spawn test truck), F7 (spawn test cart), F8 ($10 test sale), F9 (test customer on and off), F10 (status).
+Hotkeys, holding Ctrl: **F6** test truck, **F7** test cart, **F8** $10 test sale, **Shift+F8** tax test, **F9** test customer on and off, **F10** status.
 
-| # | Do | Expect | Answers spike |
+### Phase A: a save without the mod (mod parked)
+
+| # | Do | Expect | Spike |
 |---|---|---|---|
-| 1 | Main menu, Mods | "Food Trucks" listed and enabled | 1 |
-| 2 | Start a new game, get to the street | No error popup | 1 |
-| 3 | Open any vehicle dealer's buy dialog | "Food truck (test)" and "Food cart (test)" listed at $1, next to the normal stock | 1 |
-| 4 | Buy the test truck, drive it 100 m, park | It drives like the example car | 1 |
-| 5 | Ctrl+F7 next to a pavement | A red box cart appears | 2 |
-| 6 | Click the cart | You grab it with both hands on the handle | 2 |
-| 7 | Walk 50 m, then run | The cart follows at your speed | 2 |
-| 8 | Park it (the release key in the item panel), grab it again | Release and grab both work | 2 |
-| 9 | Ctrl+F8 three times | Money goes up by $10 each time; Econoview transactions show three "Street food" entries | 6 |
-| 10 | Sleep or skip to the next day, open Econoview taxes | Projected income includes the $30 (tax is 10% of it on default settings) | 4 |
-| 11 | Ctrl+F9 on a pavement | A person walks to about 2 m in front of you and stays standing; Ctrl+F9 again removes them | 5 |
-| 12 | Ctrl+F10 | Status shows "data Fresh" or "Loaded", save count, street food $30 | 3 |
-| 13 | Save, quit to menu, load the save, Ctrl+F10 | Save count is one higher, street food still $30, truck and cart still there | 3 |
-| 14 | Load a save made before this mod was installed | Loads normally; Ctrl+F10 shows "data Fresh" | 3 |
-| 15 | Quit. Disable Food Trucks in Mods. Load the save from step 13 | Note exactly what happens: loads or not, truck and cart gone or present, any popup | 7 |
-| 16 | Re-enable the mod, load the step 13 save again | Note whether the vehicles and the $30 are back | 7 |
-| 17 | Optional, only in the throwaway save: grab the cart, save while holding it, quit, disable the mod, load | Note what happens; this is the worst case for uninstalling | 7 |
+| A1 | Start a new game. Sleep until day 2. Save as **FT baseline**. Quit the game | Normal game, no Food Trucks in the Mods menu | 3 |
 
-Then send me `Player.log` (or just say "done", and I'll fetch it over ssh).
+Tell me "A done"; I copy the log and restore the mod.
+
+### Phase B: the mod (mod installed)
+
+| # | Do | Expect | Spike |
+|---|---|---|---|
+| B1 | Main menu, Mods | "Food Trucks" listed and on | 1 |
+| B2 | Load **FT baseline**, Ctrl+F10 | Status says "data Fresh", save count 0 | 3 |
+| B3 | Open a vehicle dealer's buy list (any dealer) | "Food truck (test)" and "Food cart (test)" at $1, next to the normal stock | 1 |
+| B4 | Buy the test truck | It appears at the dealer. **If nothing happens**, write that down and press Ctrl+F6 instead | 1 |
+| B5 | Drive the truck 100 m and park | It drives like the SDK's example car | 1 |
+| B6 | On a pavement, Ctrl+F7 | A red box cart appears in front of you, handle towards you | 2 |
+| B7 | Click the cart | You walk to the handle and grab it with both hands; the cart is in front of you | 2 |
+| B8 | Walk 50 m, then run | The cart moves with you and stays in front | 2 |
+| B9 | Release it (the park button in the item panel), then grab it again | Both work | 2 |
+| B10 | Ctrl+F8 three times | Money +$10 each time. Econoview transactions: three "Street food" entries | 6 |
+| B11 | Ctrl+Shift+F8 | Status shows taxable sales of at least $200,000, a "Street food" statement row of $200,000 and a projected tax above $0. No money changes (it only writes the mod's tax record) | 4 |
+| B12 | Econoview, Taxes | Projected tax is shown (not "under the tax minimum") and matches the status figure. Optional with `-console`: `IRSPrintTaxesOwedSoFar` prints a non-zero amount | 4 |
+| B13 | On a pavement, Ctrl+F9 | A person walks to about 2 m in front of you and stays standing. Ctrl+F9 again removes them | 5 |
+| B14 | Release the cart next to the truck. Ctrl+F10. Save as **FT parked**. Quit to menu, load **FT parked**, Ctrl+F10 | Save count went up by one; street food this tax year unchanged; truck and cart where you left them | 3 |
+| B15 | Grab the cart. Save as **FT holding**. Quit the game | | 7 |
+
+Tell me "B done"; I copy the log and park the mod.
+
+### Phase C: uninstalled (mod parked)
+
+| # | Do | Expect | Spike |
+|---|---|---|---|
+| C1 | Load **FT parked** | Write down: loads or not, any popup, truck and cart gone or visible | 7 |
+| C2 | Walk around for a minute. Open the Persona app on the phone. Open Econoview | Write down anything broken | 7 |
+| C3 | Save as **FT parked removed**. Quit to menu | | 7 |
+| C4 | Load **FT holding** | Write down what happens. This is the worst case: holding a mod vehicle when the mod is removed | 7 |
+
+Quit the game. Tell me "C done"; I copy the log and restore the mod.
+
+### Phase D: reinstalled (mod installed)
+
+| # | Do | Expect | Spike |
+|---|---|---|---|
+| D1 | Load **FT parked removed**, Ctrl+F10 | Write down: truck and cart back or gone; street food figure kept or lost | 3, 7 |
+
+Quit the game and tell me "D done". Then you can delete the FT saves.
 
 ## 3. Log lines
 
-`Player.log` must contain, in this order at startup:
+The game prefixes this mod's lines with `[Mod:...]` and the mod's display name. At startup, in this order, lines containing:
 
 ```
-[Food Trucks] Version 0.0.1-spike loading.
-[Food Trucks] Vehicle registered: foodtrucks:vehicletype_spiketruck (hand vehicle tag: False, price 1).
-[Food Trucks] Vehicle registered: foodtrucks:vehicletype_spikecart (hand vehicle tag: True, price 1).
-[Food Trucks] Harmony 2.4.2.0.
-[Food Trucks] Patch TaxCalculationHelper.GetBusinessIncome: Active.
-[Food Trucks] Patch TaxCalculationHelper.GetBusinessSales: Active.
-[Food Trucks] Patch TaxCalculationHelper.GetBusinessIncomeTotal: Active.
-[Food Trucks] Patch VehicleContractSettings.SetListOfVehiclesForSale: Active.
+Version 0.0.1-spike loading.
+Vehicle registered: foodtrucks:vehicletype_spiketruck (hand vehicle tag: False, price 1).
+Vehicle registered: foodtrucks:vehicletype_spikecart (hand vehicle tag: True, price 1).
+Harmony 2.4.2.0.
+Patch TaxCalculationHelper.GetBusinessIncome: Active.
+Patch TaxCalculationHelper.GetBusinessSales: Active.
+Patch TaxCalculationHelper.GetBusinessIncomeTotal: Active.
+Patch VehicleContractSettings.SetListOfVehiclesForSale: Active.
 ```
 
 After loading a save: one `Save data Fresh|Loaded ...` line, one `Debug actions ready` line, and one `Vehicle dealer: contact ...` line per dealer. After each save: `Save data written: save count N.`

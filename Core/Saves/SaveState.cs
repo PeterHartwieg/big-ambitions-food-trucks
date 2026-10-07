@@ -11,6 +11,7 @@ namespace FoodTrucks.Core.Saves
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string WrittenByModVersion { get; set; } = string.Empty;
         public int SaveCount { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Include)]
         public LicenceState Licence { get; set; } = new LicenceState();
         public List<VehicleState> Vehicles { get; set; } = new List<VehicleState>();
         public List<DailySales> DailySales { get; set; } = new List<DailySales>();

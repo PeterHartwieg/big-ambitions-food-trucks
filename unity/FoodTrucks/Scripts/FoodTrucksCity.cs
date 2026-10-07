@@ -67,6 +67,9 @@ namespace FoodTrucks
 
         public static LoadStatus LastLoadStatus { get; private set; }
 
+        // False for data written by a newer mod version: it is read for tax but never changed.
+        public static bool CanWrite => canWrite && CurrentState != null;
+
         // Null unless a save is attached and its mod data was readable.
         public static SaveState? CurrentState =>
             game != null && ReferenceEquals(game, SaveGameManager.Current) ? state : null;
@@ -82,9 +85,12 @@ namespace FoodTrucks
             game = current;
             state = result.State;
             // Data written by a newer mod version, or unreadable data, stays in the save untouched.
-            canWrite = result.State != null;
+            var newerWriter = state != null && ModVersion.IsNewerThan(state.WrittenByModVersion, FoodTrucksMod.Version);
+            canWrite = state != null && !newerWriter;
 
-            if (canWrite)
+            if (newerWriter)
+                Log.Error($"Save data was written by Food Trucks {state!.WrittenByModVersion}, newer than {FoodTrucksMod.Version}. The mod will read it but not change it.");
+            else if (canWrite)
                 Log.Info($"Save data {result.Status}: schema {state!.SchemaVersion}, written by {Empty(state.WrittenByModVersion)}, save count {state.SaveCount}, street food days {state.DailySales.Count}.");
             else
                 Log.Error($"Save data {result.Status}: {result.Error ?? "written by a newer version"}. The mod will not change it.");

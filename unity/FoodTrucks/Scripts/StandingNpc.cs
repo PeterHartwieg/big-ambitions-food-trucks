@@ -1,14 +1,20 @@
 #nullable enable
+using System;
+using Helpers;
 using UnityEngine;
 using UnityEngine.AI;
 
 namespace FoodTrucks
 {
-    // A pooled game character that walks to a point and stays there until destroyed.
-    // Spike 5; the queue view in Milestone 3 builds on it.
+    // A game character that walks to a point and stays there until destroyed.
+    // Spike 5; the queue view in Milestone 3 builds on it. The character is created the way
+    // ThirdPersonCharacterPool.CreateFunc does it; a pool made at runtime is not registered with
+    // the game's PoolingManager, so GetPoolHandler() cannot be used.
     internal sealed class StandingNpc : MonoBehaviour
     {
-        private ThirdPersonCharacterPool? pool;
+        private const string CharacterPrefab = "Characters/HumanDefinitionLow";
+        private const int PlayerAgentTypeId = 1479372276;
+
         private ThirdPersonCharacter? character;
         private Quaternion finalFacing;
         private bool walking;
@@ -18,16 +24,24 @@ namespace FoodTrucks
             var owner = new GameObject("FoodTrucks.StandingNpc");
             owner.transform.position = spawn;
             var npc = owner.AddComponent<StandingNpc>();
-            if (npc.Initialize(spawn, destination, facing)) return npc;
+            try
+            {
+                if (npc.Initialize(spawn, destination, facing)) return npc;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Test customer: " + ex);
+            }
             Destroy(owner);
             return null;
         }
 
         private bool Initialize(Vector3 spawn, Vector3 destination, Quaternion facing)
         {
-            pool = ScriptableObject.CreateInstance<ThirdPersonCharacterPool>();
-            pool.CreatePool(transform);
-            character = pool.GetPoolHandler().Get();
+            character = PrefabHelper.CreatePrefab<ThirdPersonCharacter>(CharacterPrefab, transform);
+            if (character == null) throw new InvalidOperationException($"Prefab {CharacterPrefab} not found.");
+            character.navmeshAgent.agentTypeID = PlayerAgentTypeId;
+            character.gameObject.SetActive(true);
             character.isPlayer = false;
             character.appearanceSetter.SetRandomAppearance();
 
@@ -74,12 +88,10 @@ namespace FoodTrucks
             Log.Info("Test customer arrived and is standing.");
         }
 
+        // The character is a child of this object, so destroying the owner removes it too.
         private void OnDestroy()
         {
-            if (pool == null) return;
-            if (character != null) pool.GetPoolHandler().Release(character);
-            pool.Dispose();
-            Destroy(pool);
+            character = null;
         }
     }
 }

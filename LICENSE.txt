@@ -22,9 +22,10 @@ SOFTWARE.
 
 ---
 
-Scope: this licence covers the HART Free Camera mod, meaning its source code,
-configuration, locale files, documentation and the compiled HARTFreeCamera.dll.
-It does not cover the HART name, the HART. wordmark or any other HART Group
-artwork, including the Workshop thumbnail. It grants no rights to Big
-Ambitions or its assemblies, which belong to Hovgaard Games and are not
-included.
+Scope: this licence covers the Food Trucks mod, meaning its source code, data,
+locale files, documentation, generated Unity assets and the compiled
+FoodTrucks.dll and FoodTrucks.Core.dll. It grants no rights to Big Ambitions or
+its assemblies, which belong to Hovgaard Games and are not included. The
+placeholder test truck is built from the Big Ambitions modding SDK's example
+car (MIT, Hovgaard Games). Harmony (MIT, Andreas Pardeike) ships with its own
+licence in Dependencies/.

@@ -17,9 +17,12 @@ namespace FoodTrucks
     internal sealed class DebugActions : MonoBehaviour
     {
         private const float TestSaleAmount = 10f;
+        // Above the game's $150,000 income tax threshold, so Econoview shows a projected tax.
+        private const long TaxFixtureCents = 200_000_00;
         private static readonly Action SpawnTruckAction = () => SpawnVehicle(FoodTrucksMod.TruckTypeName);
         private static readonly Action SpawnCartAction = () => SpawnVehicle(FoodTrucksMod.CartTypeName);
         private static readonly Action SaleAction = TestSale;
+        private static readonly Action TaxFixtureAction = TaxFixture;
         private static readonly Action NpcAction = ToggleNpc;
         private static readonly Action StatusAction = ShowStatus;
 
@@ -32,11 +35,12 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_spawn_truck", "Food Trucks: spawn the test truck next to you", SpawnTruckAction);
                 CommandHelper.AddCommand("foodtrucks_spawn_cart", "Food Trucks: spawn the test cart next to you", SpawnCartAction);
                 CommandHelper.AddCommand("foodtrucks_sale", "Food Trucks: record a $10 test sale", SaleAction);
+                CommandHelper.AddCommand("foodtrucks_tax_fixture", "Food Trucks: record $200,000 of street food yesterday, ledger only", TaxFixtureAction);
                 CommandHelper.AddCommand("foodtrucks_npc", "Food Trucks: spawn or remove the queue test character", NpcAction);
                 CommandHelper.AddCommand("foodtrucks_status", "Food Trucks: show the mod's save data", StatusAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: Ctrl+F6 truck, Ctrl+F7 cart, Ctrl+F8 test sale, Ctrl+F9 test customer, Ctrl+F10 status.");
+            Log.Info("Debug actions ready: Ctrl+F6 truck, Ctrl+F7 cart, Ctrl+F8 test sale, Ctrl+Shift+F8 tax fixture, Ctrl+F9 test customer, Ctrl+F10 status.");
         }
 
         private void OnDisable()
@@ -46,6 +50,7 @@ namespace FoodTrucks
                 CommandHelper.RemoveCommand(SpawnTruckAction);
                 CommandHelper.RemoveCommand(SpawnCartAction);
                 CommandHelper.RemoveCommand(SaleAction);
+                CommandHelper.RemoveCommand(TaxFixtureAction);
                 CommandHelper.RemoveCommand(NpcAction);
                 CommandHelper.RemoveCommand(StatusAction);
             }
@@ -62,6 +67,7 @@ namespace FoodTrucks
 
             if (keyboard.f6Key.wasPressedThisFrame) Run("spawn truck", SpawnTruckAction);
             else if (keyboard.f7Key.wasPressedThisFrame) Run("spawn cart", SpawnCartAction);
+            else if (keyboard.f8Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax fixture", TaxFixtureAction);
             else if (keyboard.f8Key.wasPressedThisFrame) Run("test sale", SaleAction);
             else if (keyboard.f9Key.wasPressedThisFrame) Run("test customer", NpcAction);
             else if (keyboard.f10Key.wasPressedThisFrame) Run("status", StatusAction);
@@ -88,8 +94,10 @@ namespace FoodTrucks
             }
             var player = PlayerHelper.PlayerController.transform;
             var instance = new VehicleInstance(typeName) { fuel = type.maxFuel * 0.97f };
+            // A car's origin is its centre, so it needs more room than the cart, whose origin is the pusher's spot.
+            var distance = type.spawnInPlayerObject ? 1.5f : 5f;
             var controller = VehicleHelper.CreateAndSpawnVehicle(
-                instance, player.position + player.forward * 2.5f, player.rotation);
+                instance, player.position + player.forward * distance, player.rotation);
             Log.Info($"Spawned {typeName}: id {instance.id}, controller {(controller == null ? "none" : controller.GetType().Name)}.");
             Notify($"Spawned {typeName}.");
         }
@@ -98,9 +106,9 @@ namespace FoodTrucks
         private static void TestSale()
         {
             var state = FoodTrucksSession.CurrentState;
-            if (state == null)
+            if (state == null || !FoodTrucksSession.CanWrite)
             {
-                Notify("Food Trucks save data is not loaded.");
+                Notify("Food Trucks save data is not loaded or is read-only.");
                 return;
             }
             var info = new TransactionInfo("foodtrucks:transaction_sale",
@@ -115,6 +123,27 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
             Log.Info($"Test sale: ${TestSaleAmount} on day {day}; street food revenue that day ${SalesLedger.SumCents(state, day, day) / 100f}.");
             Notify($"Test sale ${TestSaleAmount}. Today's street food: ${SalesLedger.SumCents(state, day, day) / 100f}.");
+        }
+
+        // Spike 4: a large ledger-only entry for yesterday, so the tax threshold is crossed. No money moves.
+        private static void TaxFixture()
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || !FoodTrucksSession.CanWrite)
+            {
+                Notify("Food Trucks save data is not loaded or is read-only.");
+                return;
+            }
+            var day = SaveGameManager.Current.Day - 1;
+            if (day < 1)
+            {
+                Notify("Sleep until day 2 first: the tax projection only counts finished days.");
+                return;
+            }
+            SalesLedger.Record(state, day, TaxFixtureCents);
+            FoodTrucksSession.MarkChanged();
+            Log.Info($"Tax fixture: ${TaxFixtureCents / 100} of street food recorded for day {day} (ledger only).");
+            ShowStatus();
         }
 
         // Spike 5: one character walks from eight metres away to a spot in front of the player and stands there.
@@ -143,9 +172,22 @@ namespace FoodTrucks
                 return;
             }
             var game = SaveGameManager.Current;
-            var periodStart = Math.Max(1, game.Day - 59);
+            var year = game.gameVariables.daysPerYear;
+            // Same period and figures as Econoview's projected tax row (EconoViewTaxes.SetupProjectedTaxRow).
+            var start = game.Day / year * year + 1;
+            var lastFinished = game.Day - 1;
+            var finishedDays = Math.Max(0, lastFinished - start + 1);
+            var streetFood = SalesLedger.SumCents(state, start, game.Day) / 100f;
             var message = $"Food Trucks {FoodTrucksMod.Version}: data {FoodTrucksSession.LastLoadStatus}, save count {state.SaveCount}, " +
-                          $"street food last 60 days ${SalesLedger.SumCents(state, periodStart, game.Day) / 100f}.";
+                          $"street food this tax year ${streetFood:N0}.";
+            if (finishedDays > 0)
+            {
+                var sales = TaxCalculationHelper.GetBusinessSales(start, lastFinished);
+                var projected = TaxCalculationHelper.CalculateProjectedPeriod(start, lastFinished, finishedDays, year, game.gameVariables.taxPercentage);
+                var rows = TaxCalculationHelper.GetBusinessIncome(start, lastFinished);
+                var row = rows.Find(r => r.Item1 == "Street food");
+                message += $" Taxable sales days {start}-{lastFinished}: ${sales:N0}; statement row ${row.Item2:N0}; projected tax ${projected.TotalTax:N0}.";
+            }
             Log.Info(message);
             Notify(message);
         }

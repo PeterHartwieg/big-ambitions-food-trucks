@@ -110,7 +110,7 @@ Transform:
   m_GameObject: {fileID: 1112222962611467866}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.42, y: 0.18, z: 0.3}
+  m_LocalPosition: {x: 0.42, y: 0.18, z: 1.4}
   m_LocalScale: {x: 0.06, y: 0.36, z: 0.36}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -274,7 +274,7 @@ Transform:
   m_GameObject: {fileID: 2419517013167507447}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.3, y: 0.95, z: -0.8}
+  m_LocalPosition: {x: 0.25, y: 0.95, z: 0.35}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -307,7 +307,7 @@ Transform:
   m_GameObject: {fileID: 2902044784106117430}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.25, z: 0.05}
+  m_LocalPosition: {x: 0, y: 1.25, z: 1.15}
   m_LocalScale: {x: 0.95, y: 0.05, z: 1.55}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -390,7 +390,7 @@ Transform:
   m_GameObject: {fileID: 3089317474067539322}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.95, z: -0.8}
+  m_LocalPosition: {x: 0, y: 0.95, z: 0.35}
   m_LocalScale: {x: 0.7, y: 0.05, z: 0.05}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -473,7 +473,7 @@ Transform:
   m_GameObject: {fileID: 3404463382137650425}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.42, y: 0.18, z: 0.3}
+  m_LocalPosition: {x: -0.42, y: 0.18, z: 1.4}
   m_LocalScale: {x: 0.06, y: 0.36, z: 0.36}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -637,7 +637,7 @@ Transform:
   m_GameObject: {fileID: 5537009369601524783}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.95, z: 0.05}
+  m_LocalPosition: {x: 0, y: 0.95, z: 1.15}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -674,7 +674,7 @@ Transform:
   m_GameObject: {fileID: 6690070748470088838}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.3, y: 0.95, z: -0.8}
+  m_LocalPosition: {x: -0.25, y: 0.95, z: 0.35}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -705,7 +705,7 @@ Transform:
   m_GameObject: {fileID: 6731610794911345343}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -1.3}
+  m_LocalPosition: {x: 0, y: 0, z: -0.3}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -985,7 +985,7 @@ Transform:
   m_GameObject: {fileID: 8826803671804113678}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -1.1}
+  m_LocalPosition: {x: 0, y: 0, z: -0.3}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1018,7 +1018,7 @@ Transform:
   m_GameObject: {fileID: 8927695127426018410}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.6, z: 0.05}
+  m_LocalPosition: {x: 0, y: 0.6, z: 1.15}
   m_LocalScale: {x: 0.8, y: 0.7, z: 1.4}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1138,8 +1138,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.8, y: 1.1, z: 1.6}
-  m_Center: {x: 0, y: 0.55, z: 0}
+  m_Size: {x: 0.8, y: 1.2, z: 1.5}
+  m_Center: {x: 0, y: 0.6, z: 1.15}
 --- !u!208 &3464204825323267025
 NavMeshObstacle:
   m_ObjectHideFlags: 0
@@ -1150,11 +1150,11 @@ NavMeshObstacle:
   m_Enabled: 1
   serializedVersion: 3
   m_Shape: 1
-  m_Extents: {x: 0.4, y: 0.55, z: 0.8}
+  m_Extents: {x: 0.4, y: 0.6, z: 0.75}
   m_MoveThreshold: 0.1
   m_Carve: 1
   m_CarveOnlyStationary: 1
-  m_Center: {x: 0, y: 0.55, z: 0}
+  m_Center: {x: 0, y: 0.6, z: 1.15}
   m_TimeToStationary: 0.5
 --- !u!82 &5749540980778620193
 AudioSource:
@@ -1325,7 +1325,7 @@ MonoBehaviour:
   hasExitSound: 0
   ExitSound: 0
   boxPlaceholder: {fileID: 271604186294190628}
-  playerOffsetWhenActive: 0.9
+  playerOffsetWhenActive: 0
   mainVolume: 0
   minVolume: 0
   maxVolume: 0
