@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1156002225, guid: 8886001327901f6fdbae60e8ea6c53fd, type: 3}
+  m_Name: SpikeCart
+  m_EditorClassIdentifier: 
+  database: {fileID: 0}
+  tags:
+  - ba:vehicletag_ishandvehicle
+  vehicleTypeName: foodtrucks:vehicletype_spikecart
+  price: 1
+  itemVersion: 
+  maxFuel: 0
+  maxCargoCapacity: 6
+  maxSpeed: 5
+  enginePower: 0
+  brakeForce: 0
+  turnRadius: 0
+  damageIntensity: 0
+  fitsHandTruck: 0
+  fitsFlatbed: 0
+  autoParkSupported: 0
+  taxDeductible: 1
+  hasRadio: 0
+  isLuxuryCar: 0
+  requiredDeliveryDriverSkillValue: 0
+  destinationsThatCanDeliver: 0
+  countsForPersonalGoals: 0
+  spawnInPlayerObject: 1
+  usePedestrianCam: 1
+  autoDestroyAfterMinutes: -1
+  enclosed: 0
+  canGetDirty: 0
+  dirtinessTimer: 600
+  cleanByRainTimer: 360

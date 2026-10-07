@@ -1,0 +1,7 @@
+{
+    "foodtrucks:vehicletype_spiketruck": "Food truck (test)",
+    "foodtrucks:vehicletype_spikecart": "Food cart (test)",
+    "foodtrucks:transaction_sale": "Street food sale: {itemName}",
+    "foodtrucks:transaction_sale_label": "Street food",
+    "foodtrucks:notification": "{message}"
+}
