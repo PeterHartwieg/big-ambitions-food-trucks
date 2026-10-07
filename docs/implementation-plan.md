@@ -8,6 +8,8 @@ Turns [design.md](design.md) into ordered work. Written 7 October 2026. The stru
 2. Machine setup (paths to the decompile, the SDK clone, the game PC and the test save) is in `CLAUDE.local.md`, which is not committed.
 3. Milestone 0 results go into the README's evidence section, marked checked, pending or unverified.
 
+**Status, 7 October 2026:** Milestone 0 is done and played (README evidence table; session report in `evidence/milestone-0-session-1.md`). Next is Milestone 1, starting with the items carried over at its top. The spike's debug actions (`DebugActions.cs`) and generated test assets are scaffolding to replace, not to build on as is.
+
 ## Ground rules
 
 - **Version 1 keeps the full scope** Peter chose, built in the milestone order below. If a feature fights back, it moves to 1.1 following the [cut list](#cut-list). No milestone waits on another track's polish.
