@@ -7,6 +7,91 @@ namespace FoodTrucks.Core.Tests.Saves;
 public class SalesLedgerTests
 {
     [Fact]
+    public void CanRecordRejectsNegativeRevenueWithoutChangingState()
+    {
+        var state = new SaveState();
+
+        Assert.False(SalesLedger.CanRecord(state, 1, -1));
+        Assert.Empty(state.DailySales);
+    }
+
+    [Fact]
+    public void CanRecordRejectsPerDayOverflowWithoutChangingState()
+    {
+        var state = new SaveState();
+        SalesLedger.Record(state, 1, long.MaxValue);
+
+        Assert.False(SalesLedger.CanRecord(state, 1, 1));
+        Assert.Single(state.DailySales);
+        Assert.Equal(long.MaxValue, state.DailySales[0].RevenueCents);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void CanRecordRejectsTotalOverflowEvenWhenTheDayHasRoom(int day)
+    {
+        var state = new SaveState();
+        SalesLedger.Record(state, 1, long.MaxValue - 1);
+        SalesLedger.Record(state, 2, 1);
+
+        Assert.False(SalesLedger.CanRecord(state, day, 1));
+        Assert.Equal(2, state.DailySales.Count);
+        Assert.Equal(long.MaxValue, SalesLedger.SumCents(state, 1, 3));
+    }
+
+    [Fact]
+    public void CanRecordRejectsAnAlreadyOverflowingTotal()
+    {
+        var state = new SaveState();
+        SalesLedger.Record(state, 1, long.MaxValue);
+        SalesLedger.Record(state, 2, 1);
+
+        Assert.False(SalesLedger.CanRecord(state, 3, 0));
+    }
+
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(3, 0)]
+    [InlineData(1, 1)]
+    [InlineData(3, 1)]
+    [InlineData(1, 2)]
+    [InlineData(3, 2)]
+    public void CanRecordAllowsRevenueUpToTheTotalLimitAndRecordSucceeds(int day, long revenueCents)
+    {
+        var state = new SaveState();
+        SalesLedger.Record(state, 1, long.MaxValue - 3);
+        SalesLedger.Record(state, 2, 1);
+
+        Assert.True(SalesLedger.CanRecord(state, day, revenueCents));
+        Assert.Equal(long.MaxValue - 2, SalesLedger.SumCents(state, 1, 3));
+        SalesLedger.Record(state, day, revenueCents);
+
+        Assert.Equal(long.MaxValue - 2 + revenueCents, SalesLedger.SumCents(state, 1, 3));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(100)]
+    [InlineData(long.MaxValue)]
+    public void CanRecordAllowsRevenueOnAnEmptyLedger(long revenueCents)
+    {
+        var state = new SaveState();
+
+        Assert.True(SalesLedger.CanRecord(state, 1, revenueCents));
+        Assert.Empty(state.DailySales);
+        SalesLedger.Record(state, 1, revenueCents);
+
+        Assert.Equal(revenueCents, SalesLedger.SumCents(state, 1, 1));
+    }
+
+    [Fact]
+    public void CanRecordRejectsNullStateWithoutThrowing()
+    {
+        Assert.False(SalesLedger.CanRecord(null!, 1, 1));
+    }
+
+    [Fact]
     public void RecordAddsToTheSameDay()
     {
         var state = new SaveState();

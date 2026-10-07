@@ -27,8 +27,9 @@ if [ ! -d "$SDK/.git" ]; then
 fi
 # Refuse a clone at another commit or with edited SDK sources, rather than resetting it.
 [ "$(git -C "$SDK" rev-parse HEAD)" = "$SDK_COMMIT" ] || { echo "$SDK is not at the pinned SDK commit $SDK_COMMIT" >&2; exit 1; }
-if [ -n "$(git -C "$SDK" status --porcelain --untracked-files=no -- Assets/Editor Packages ProjectSettings)" ]; then
-  echo "$SDK has local changes in Assets/Editor, Packages or ProjectSettings; refusing to build" >&2; exit 1
+SDK_INPUTS=(Assets/Editor Assets/Mods/Example-Vehicle "Assets/_BaDependencies/Vehicle Dependencies" Packages ProjectSettings)
+if [ -n "$(git -C "$SDK" status --porcelain --untracked-files=no -- "${SDK_INPUTS[@]}")" ]; then
+  echo "$SDK has local changes in ${SDK_INPUTS[*]}; refusing to build" >&2; exit 1
 fi
 # The SDK compiles against the installed game's DLLs; copy only changed files to avoid reimports.
 rsync -a --checksum "$GAME_DLLS/" "$SDK/Assets/_BaDependencies/GameDlls/" --include='*.dll' --exclude='*'

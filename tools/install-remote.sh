@@ -8,5 +8,6 @@ PKG="$REPO/build/FoodTrucks"
 [ -f "$PKG/FoodTrucks.dll" ] || { echo "Build first: tools/build-mod.sh" >&2; exit 1; }
 STAGE="FoodTrucks-staged-$(date +%Y%m%d%H%M%S)"
 scp -q -r "$PKG" "$HOST:$STAGE" < /dev/null
+scp -q "$REPO/build/FoodTrucks.sha256" "$HOST:$STAGE.sha256" < /dev/null
 scp -q "$REPO/tools/Install-Windows.ps1" "$HOST:Install-FoodTrucks.ps1" < /dev/null
-ssh "$HOST" "powershell -NoProfile -ExecutionPolicy Bypass -File Install-FoodTrucks.ps1 -Source $STAGE" < /dev/null
+ssh "$HOST" "powershell -NoProfile -ExecutionPolicy Bypass -File Install-FoodTrucks.ps1 -Source $STAGE -Manifest $STAGE.sha256" < /dev/null

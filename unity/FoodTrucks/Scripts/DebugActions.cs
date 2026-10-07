@@ -6,6 +6,8 @@ using FoodTrucks.Core.Saves;
 using Helpers;
 using Streets;
 using IngameDebugConsole;
+using Parking.UndergroundParking;
+using HarmonyLib;
 using UI.Notification;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -23,6 +25,7 @@ namespace FoodTrucks
         private static readonly Action SpawnCartAction = () => SpawnVehicle(FoodTrucksMod.CartTypeName);
         private static readonly Action SaleAction = TestSale;
         private static readonly Action TaxFixtureAction = TaxFixture;
+        private static readonly Action TaxStatementAction = IssueTaxStatement;
         private static readonly Action NpcAction = ToggleNpc;
         private static readonly Action StatusAction = ShowStatus;
 
@@ -36,11 +39,12 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_spawn_cart", "Food Trucks: spawn the test cart next to you", SpawnCartAction);
                 CommandHelper.AddCommand("foodtrucks_sale", "Food Trucks: record a $10 test sale", SaleAction);
                 CommandHelper.AddCommand("foodtrucks_tax_fixture", "Food Trucks: record $200,000 of street food yesterday, ledger only", TaxFixtureAction);
+                CommandHelper.AddCommand("foodtrucks_tax_statement", "Food Trucks: issue this year's tax statement now (throwaway saves only)", TaxStatementAction);
                 CommandHelper.AddCommand("foodtrucks_npc", "Food Trucks: spawn or remove the queue test character", NpcAction);
                 CommandHelper.AddCommand("foodtrucks_status", "Food Trucks: show the mod's save data", StatusAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: Ctrl+F6 truck, Ctrl+F7 cart, Ctrl+F8 test sale, Ctrl+Shift+F8 tax fixture, Ctrl+F9 test customer, Ctrl+F10 status.");
+            Log.Info("Debug actions ready: Ctrl+F6 truck, Ctrl+F7 cart, Ctrl+F8 test sale, Ctrl+Shift+F8 tax fixture, Ctrl+F9 test customer, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now.");
         }
 
         private void OnDisable()
@@ -51,6 +55,7 @@ namespace FoodTrucks
                 CommandHelper.RemoveCommand(SpawnCartAction);
                 CommandHelper.RemoveCommand(SaleAction);
                 CommandHelper.RemoveCommand(TaxFixtureAction);
+                CommandHelper.RemoveCommand(TaxStatementAction);
                 CommandHelper.RemoveCommand(NpcAction);
                 CommandHelper.RemoveCommand(StatusAction);
             }
@@ -70,6 +75,7 @@ namespace FoodTrucks
             else if (keyboard.f8Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax fixture", TaxFixtureAction);
             else if (keyboard.f8Key.wasPressedThisFrame) Run("test sale", SaleAction);
             else if (keyboard.f9Key.wasPressedThisFrame) Run("test customer", NpcAction);
+            else if (keyboard.f10Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax statement", TaxStatementAction);
             else if (keyboard.f10Key.wasPressedThisFrame) Run("status", StatusAction);
         }
 
@@ -86,6 +92,11 @@ namespace FoodTrucks
         // Spikes 1 and 2: a player-owned vehicle of the mod's type, two metres in front of the player.
         private static void SpawnVehicle(string typeName)
         {
+            if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking)
+            {
+                Notify("Go outside first: vehicles spawn on the street.");
+                return;
+            }
             var type = VehicleTypeHelper.GetVehicleType(typeName);
             if (type == null)
             {
@@ -111,6 +122,14 @@ namespace FoodTrucks
                 Notify("Food Trucks save data is not loaded or is read-only.");
                 return;
             }
+            var day = SaveGameManager.Current.Day;
+            var cents = (long)Math.Round(TestSaleAmount * 100);
+            // Check the ledger can take the sale before any money moves.
+            if (!SalesLedger.CanRecord(state, day, cents))
+            {
+                Notify("The street food record is full; sale refused.");
+                return;
+            }
             var info = new TransactionInfo("foodtrucks:transaction_sale",
                 new Dictionary<string, string> { { "itemName", "test sale" } });
             if (!GameManager.ChangeMoneySafe(TestSaleAmount, info))
@@ -118,8 +137,7 @@ namespace FoodTrucks
                 Notify("Test sale refused by the game.");
                 return;
             }
-            var day = SaveGameManager.Current.Day;
-            SalesLedger.Record(state, day, (long)Math.Round(TestSaleAmount * 100));
+            SalesLedger.Record(state, day, cents);
             FoodTrucksSession.MarkChanged();
             Log.Info($"Test sale: ${TestSaleAmount} on day {day}; street food revenue that day ${SalesLedger.SumCents(state, day, day) / 100f}.");
             Notify($"Test sale ${TestSaleAmount}. Today's street food: ${SalesLedger.SumCents(state, day, day) / 100f}.");
@@ -138,6 +156,11 @@ namespace FoodTrucks
             if (day < 1)
             {
                 Notify("Sleep until day 2 first: the tax projection only counts finished days.");
+                return;
+            }
+            if (!SalesLedger.CanRecord(state, day, TaxFixtureCents))
+            {
+                Notify("The street food record is full.");
                 return;
             }
             SalesLedger.Record(state, day, TaxFixtureCents);
@@ -179,17 +202,35 @@ namespace FoodTrucks
             var finishedDays = Math.Max(0, lastFinished - start + 1);
             var streetFood = SalesLedger.SumCents(state, start, game.Day) / 100f;
             var message = $"Food Trucks {FoodTrucksMod.Version}: data {FoodTrucksSession.LastLoadStatus}, save count {state.SaveCount}, " +
-                          $"street food this tax year ${streetFood:N0}.";
+                          $"street food this tax year {Money(streetFood)}.";
             if (finishedDays > 0)
             {
                 var sales = TaxCalculationHelper.GetBusinessSales(start, lastFinished);
                 var projected = TaxCalculationHelper.CalculateProjectedPeriod(start, lastFinished, finishedDays, year, game.gameVariables.taxPercentage);
                 var rows = TaxCalculationHelper.GetBusinessIncome(start, lastFinished);
                 var row = rows.Find(r => r.Item1 == "Street food");
-                message += $" Taxable sales days {start}-{lastFinished}: ${sales:N0}; statement row ${row.Item2:N0}; projected tax ${projected.TotalTax:N0}.";
+                message += $" Taxable sales days {start}-{lastFinished}: {Money(sales)}; statement row {Money(row.Item2)}; " +
+                           $"projected tax {TaxCalculationHelper.ToCurrencyFormat(projected.TotalTax)}.";
             }
             Log.Info(message);
             Notify(message);
+        }
+
+        private static string Money(float value) => TaxCalculationHelper.ToCurrencyFormat(TaxCalculationHelper.RoundCurrency(value));
+
+        // Spike 4: the game's own year-end tax event, now. It bills the save and starts a new tax year,
+        // so it is for throwaway saves only. The statement arrives as a text message from the IRS.
+        private static void IssueTaxStatement()
+        {
+            var method = AccessTools.Method(typeof(TaxHelper), "ExecutePlayerTaxesEvent");
+            if (method == null)
+            {
+                Notify("TaxHelper.ExecutePlayerTaxesEvent not found in this game version.");
+                return;
+            }
+            method.Invoke(null, null);
+            Log.Info("Tax statement issued on request.");
+            Notify("Tax statement sent: open the IRS message on your phone.");
         }
 
         // For choosing the dealer in Milestone 1: every vehicle dealer's contact id and address.

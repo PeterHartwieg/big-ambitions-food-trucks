@@ -17,6 +17,9 @@ public class SaveCodecTests
         { "{\"schemaVersion\":1,\"dailySales\":[null]}", "DailySales" },
         { "{\"schemaVersion\":1,\"dailySales\":[{\"day\":1,\"revenueCents\":-1}]}", "RevenueCents" },
         { "{\"schemaVersion\":1,\"dailySales\":[{\"day\":1},{\"day\":1}]}", "duplicate Day 1" },
+        { "{\"schemaVersion\":1,\"dailySales\":[{\"day\":1,\"revenueCents\":9223372036854775807},{\"day\":2,\"revenueCents\":1}]}", "overflow" },
+        { "{\"schemaVersion\":1,\"writtenByModVersion\":\"99.0\"}", "WrittenByModVersion" },
+        { "{\"schemaVersion\":1,\"writtenByModVersion\":\"garbage\"}", "WrittenByModVersion" },
         { "{\"schemaVersion\":1,\"vehicles\":[{\"lifetimeSales\":-1}]}", "LifetimeSales" },
         { "{\"schemaVersion\":1,\"vehicles\":[{\"lifetimeRevenueCents\":-1}]}", "LifetimeRevenueCents" },
         { "{\"schemaVersion\":1,\"saveCount\":-1}", "SaveCount" }
@@ -246,6 +249,26 @@ public class SaveCodecTests
         Assert.Equal(state.WrittenByModVersion, result.State.WrittenByModVersion);
         Assert.Null(result.RawJson);
         Assert.Null(result.Error);
+    }
+
+    [Fact]
+    public void EmptyWrittenByModVersionLoads()
+    {
+        var result = codec.Load("{\"schemaVersion\":1,\"writtenByModVersion\":\"\"}");
+
+        Assert.Equal(LoadStatus.Loaded, result.Status);
+        Assert.Equal(string.Empty, result.State!.WrittenByModVersion);
+        Assert.Null(result.RawJson);
+        Assert.Null(result.Error);
+    }
+
+    [Fact]
+    public void DailySalesTotalAtTheLimitLoads()
+    {
+        var result = codec.Load("{\"schemaVersion\":1,\"dailySales\":[{\"day\":1,\"revenueCents\":9223372036854775806},{\"day\":2,\"revenueCents\":1}]}");
+
+        Assert.Equal(LoadStatus.Loaded, result.Status);
+        Assert.Equal(long.MaxValue, SalesLedger.SumCents(result.State, 1, 2));
     }
 
     [Fact]

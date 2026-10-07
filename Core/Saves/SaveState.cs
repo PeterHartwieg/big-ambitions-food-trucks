@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -18,6 +19,12 @@ namespace FoodTrucks.Core.Saves
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+
+        public static void IncrementSaveCount(SaveState state)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            if (state.SaveCount < int.MaxValue) state.SaveCount++;
+        }
     }
 
     public class LicenceState

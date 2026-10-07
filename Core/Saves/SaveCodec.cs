@@ -105,6 +105,8 @@ namespace FoodTrucks.Core.Saves
                 throw new JsonSerializationException("Licence must not be null.");
             if (state.SaveCount < 0)
                 throw new JsonSerializationException("SaveCount must not be negative.");
+            if (!string.IsNullOrEmpty(state.WrittenByModVersion) && !ModVersion.IsValid(state.WrittenByModVersion))
+                throw new JsonSerializationException("WrittenByModVersion must be a valid SemVer version or empty.");
 
             foreach (var vehicle in state.Vehicles)
             {
@@ -115,6 +117,7 @@ namespace FoodTrucks.Core.Saves
             }
 
             var days = new HashSet<int>();
+            long total = 0;
             foreach (var sale in state.DailySales)
             {
                 if (sale == null)
@@ -123,6 +126,7 @@ namespace FoodTrucks.Core.Saves
                     throw new JsonSerializationException("DailySales RevenueCents must not be negative.");
                 if (!days.Add(sale.Day))
                     throw new JsonSerializationException($"DailySales contains duplicate Day {sale.Day}.");
+                total = checked(total + sale.RevenueCents);
             }
         }
     }

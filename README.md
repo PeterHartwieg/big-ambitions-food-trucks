@@ -14,7 +14,7 @@ Each question the mod depends on, and how sure we are. "Checked" means seen in t
 | 2 | Can a modded vehicle be pushed like the hand truck? | Pending | Needs a `HandTruck` component, `spawnInPlayerObject`, and the `ba:vehicletag_ishandvehicle` tag. The test cart is built from primitives by `unity/BuildEditor/CartAssets.cs`. |
 | 3 | Does mod state survive save, quit and load in `GameInstance.modData`? | Pending | The game serializes the whole `GameInstance`, and `GlobalEvents.onSaveGame` runs before it does. The state is versioned JSON (`Core/Saves`). |
 | 4 | Can the mod add its sales to income tax? | Pending | Postfixes on `TaxCalculationHelper.GetBusinessIncome`, `GetBusinessSales` and `GetBusinessIncomeTotal` add the mod's daily sales ledger. |
-| 5 | Can the mod spawn a person who walks to a point and stands there? | Pending | Uses the game's `ThirdPersonCharacterPool`, as for passengers leaving cars. |
+| 5 | Can the mod spawn a person who walks to a point and stands there? | Pending | Creates the game's pedestrian character prefab the way its `ThirdPersonCharacterPool` does, and walks it on the NavMesh. |
 | 6 | Do mod payments show in the transaction history with their own label? | Pending | Transaction types are strings; the label comes from the mod's locale file. |
 | 7 | What happens to a save with mod vehicles after the mod is removed? | Pending | From the code: the vehicle record stays in the save and fails to spawn, with a logged exception. Loading while holding a mod cart may break player positioning, and the Persona app's wealth figure reads every vehicle's type. Local mods can't be switched off in the game, so the test moves the folder out of `ModsLocal` (`tools/park-remote.sh`). |
 

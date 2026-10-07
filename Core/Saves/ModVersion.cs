@@ -45,6 +45,8 @@ namespace FoodTrucks.Core.Saves
             return firstIdentifiers.Length.CompareTo(secondIdentifiers.Length);
         }
 
+        public static bool IsValid(string? version) => Parse(version) != null;
+
         public static bool IsNewerThan(string? candidate, string current) => Compare(candidate, current) > 0;
 
         private static Match? Parse(string? version)

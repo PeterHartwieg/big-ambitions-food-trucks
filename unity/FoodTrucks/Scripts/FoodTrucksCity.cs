@@ -104,10 +104,12 @@ namespace FoodTrucks
         public static void WriteToSave()
         {
             if (!canWrite || state == null || game == null || !ReferenceEquals(game, SaveGameManager.Current)) return;
-            state.SaveCount++;
+            SaveState.IncrementSaveCount(state);
             state.WrittenByModVersion = FoodTrucksMod.Version;
+            // Serialize first, so a failure leaves the save's previous mod data in place.
+            var json = Codec.Serialize(state);
             if (game.modData == null) game.modData = new Dictionary<string, string>();
-            game.modData[SaveKey] = Codec.Serialize(state);
+            game.modData[SaveKey] = json;
             Log.Info($"Save data written: save count {state.SaveCount}.");
         }
 

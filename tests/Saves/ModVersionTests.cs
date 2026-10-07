@@ -7,6 +7,18 @@ namespace FoodTrucks.Core.Tests.Saves;
 public class ModVersionTests
 {
     [Theory]
+    [InlineData("0.0.0")]
+    [InlineData("99.0.0")]
+    [InlineData("0.0.1-spike")]
+    [InlineData("1.0.0-alpha.1+build.001")]
+    [InlineData("1.0.0-0a+001")]
+    [InlineData("999999999999999999999999999999.0.0")]
+    public void IsValidAcceptsSemVer(string version)
+    {
+        Assert.True(ModVersion.IsValid(version));
+    }
+
+    [Theory]
     [InlineData("0.0.1-spike", "0.0.1", "0.0.2", "0.1.0", "1.0.0")]
     [InlineData("1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-beta", "1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1", "1.0.0")]
     public void VersionsFollowSemVerPrecedence(params string[] versions)
@@ -61,6 +73,7 @@ public class ModVersionTests
     [InlineData(" ")]
     [InlineData("1")]
     [InlineData("1.0")]
+    [InlineData("99.0")]
     [InlineData("1.0.0.0")]
     [InlineData("v1.0.0")]
     [InlineData("01.0.0")]
@@ -81,6 +94,7 @@ public class ModVersionTests
     [InlineData("1.0.0\n")]
     public void InvalidVersionsAreEqualAndLowerThanEveryValidVersion(string? invalid)
     {
+        Assert.False(ModVersion.IsValid(invalid));
         Assert.Equal(0, ModVersion.Compare(invalid, null));
         Assert.Equal(0, ModVersion.Compare(null, invalid));
         Assert.Equal(0, ModVersion.Compare(invalid, ""));

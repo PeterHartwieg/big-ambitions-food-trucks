@@ -5,6 +5,20 @@ namespace FoodTrucks.Core.Saves
 {
     public static class SalesLedger
     {
+        public static bool CanRecord(SaveState state, int day, long revenueCents)
+        {
+            if (state == null || state.DailySales == null || revenueCents < 0) return false;
+            var remaining = long.MaxValue - revenueCents;
+            foreach (var entry in state.DailySales)
+            {
+                if (entry == null || entry.RevenueCents < 0) return false;
+                if (entry.Day == day && entry.RevenueCents > long.MaxValue - revenueCents) return false;
+                if (entry.RevenueCents > remaining) return false;
+                remaining -= entry.RevenueCents;
+            }
+            return true;
+        }
+
         public static void Record(SaveState state, int day, long revenueCents)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
