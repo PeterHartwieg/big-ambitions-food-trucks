@@ -24,6 +24,9 @@ namespace FoodTrucks.Core.Demand
         // Each category's share of its customers left by the player's other vehicles nearby
         // (Competition.Evaluate). Missing categories, or null, keep all their customers.
         public IReadOnlyDictionary<string, double>? CategoryShares { get; set; }
+        // Each area's crowd now against what the area tables assume: venues open or closed, surges
+        // (AreaClassifier.LiveFactors). Missing areas, or null, are as usual.
+        public IReadOnlyDictionary<string, double>? AreaLive { get; set; }
         // The game's customer promotion variable relative to its default, so difficulty reaches trucks.
         public double Promotion { get; set; } = 1.0;
     }
@@ -98,7 +101,7 @@ namespace FoodTrucks.Core.Demand
             var neighbourhood = tables.Neighbourhood(query.Neighbourhood);
 
             var baseline = tables.StreetBaseline(daypart);
-            var areaCrowds = AreaCrowds(query.Areas, daypart, day);
+            var areaCrowds = AreaCrowds(query.Areas, daypart, day, query.AreaLive);
             var crowdTotal = baseline + areaCrowds.Values.Sum();
             var footfallFactor = tables.PassersPerHour
                 * neighbourhood.Footfall * neighbourhood.DaypartFactor(daypart) * neighbourhood.DayFactor(day) * neighbourhood.SeasonFactor(season)
@@ -153,13 +156,14 @@ namespace FoodTrucks.Core.Demand
             total > 0 ? (baseline + crowds.Sum(p => p.Value * tables.Area(p.Key).AppetiteFactor(category))) / total : 1.0;
 
         // Independent crowds before the factors common to every passer, in a stable area order.
-        private Dictionary<string, double> AreaCrowds(AreaMix areas, Daypart daypart, DayOfWeek day)
+        private Dictionary<string, double> AreaCrowds(AreaMix areas, Daypart daypart, DayOfWeek day, IReadOnlyDictionary<string, double>? live)
         {
             var crowds = new Dictionary<string, double>(StringComparer.Ordinal);
             foreach (var presence in areas.Presences.OrderBy(p => p.Key, StringComparer.Ordinal))
             {
                 var area = tables.Area(presence.Key);
-                crowds.Add(presence.Key, presence.Value * area.Footfall(daypart) * area.DayFactor(day));
+                var factor = live != null && live.TryGetValue(presence.Key, out var f) && !double.IsNaN(f) && !double.IsInfinity(f) && f >= 0 ? f : 1.0;
+                crowds.Add(presence.Key, presence.Value * area.Footfall(daypart) * area.DayFactor(day) * factor);
             }
             return crowds;
         }

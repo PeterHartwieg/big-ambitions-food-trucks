@@ -89,20 +89,62 @@ public class ReputationBookTests
     }
 
     [Fact]
-    public void FoodOnBoardForThreeDaysIsStale()
+    public void TheOldestFoodSellsFirstAndGoesStaleAfterThreeDays()
     {
         var cart = new VehicleState { VehicleId = "c1" };
-        ReputationBook.TrackStock(cart, new[] { "hotdog" }, 3);
-        ReputationBook.TrackStock(cart, new[] { "hotdog", "soda" }, 5);
+        ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 10 }, 3);
+        // Topped up on day 5: ten old, twenty new.
+        ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 30 }, 5);
 
-        Assert.False(book.Sold(cart, "hotdog", 5));
         Assert.True(book.Sold(cart, "hotdog", 6));
-        Assert.False(book.Sold(cart, "soda", 6));
         Assert.True(cart.Days.Single(d => d.Day == 6).SoldStale);
 
-        // Sold out and loaded again: fresh.
-        ReputationBook.TrackStock(cart, new[] { "soda" }, 7);
-        ReputationBook.TrackStock(cart, new[] { "hotdog", "soda" }, 7);
-        Assert.False(book.IsStale(cart, "hotdog", 8));
+        // The old ten sold: what is left came on day 5.
+        ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 20 }, 6);
+        Assert.False(book.IsStale(cart, "hotdog", 7));
+        Assert.True(book.IsStale(cart, "hotdog", 8));
+
+        ReputationBook.TrackStock(cart, new Dictionary<string, int>(), 8);
+        Assert.Empty(cart.StockBatches);
+    }
+
+    [Fact]
+    public void ALateNightCountsForTheEveningBefore()
+    {
+        var cart = new VehicleState { VehicleId = "c1" };
+        // Day 3, 22:00 to day 4, 02:00, with the night ending at 05:00.
+        ReputationBook.AddOpenMinutes(cart, (3 - 1) * 1440 + 22 * 60, (4 - 1) * 1440 + 2 * 60, "bars", 5 * 60, 0);
+
+        Assert.Equal(240, cart.Days.Single(d => d.Day == 3).Visits.Single().Minutes);
+        Assert.Equal(3, ReputationBook.ServiceDay((4 - 1) * 1440 + 4 * 60, 5 * 60));
+        Assert.Equal(4, ReputationBook.ServiceDay((4 - 1) * 1440 + 5 * 60, 5 * 60));
+    }
+
+    [Fact]
+    public void MinutesForACountedDayAreDropped()
+    {
+        var cart = new VehicleState { VehicleId = "c1" };
+
+        ReputationBook.AddOpenMinutes(cart, (3 - 1) * 1440 + 12 * 60, (3 - 1) * 1440 + 13 * 60, "a", 5 * 60, closedThrough: 3);
+
+        Assert.Empty(cart.Days);
+    }
+
+    [Fact]
+    public void RegularsFadeThroughDaysNobodyWorked()
+    {
+        var state = new SaveState();
+        var cart = new VehicleState { VehicleId = "c1" };
+        state.Vehicles.Add(cart);
+        ReputationBook.AddMinutes(cart, 3, "a", 90);
+        book.CloseDaysBefore(state, 4);
+        var weekday = 10;
+        Assert.True(book.RegularsFactor(state, "a", weekday) > 1.0);
+
+        // Three weeks without opening anywhere.
+        book.CloseDaysBefore(state, 25);
+
+        Assert.Equal(24, state.Regulars.LastUpdatedDay);
+        Assert.Equal(1.0, book.RegularsFactor(state, "a", 24));
     }
 }

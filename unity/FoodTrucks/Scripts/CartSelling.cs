@@ -46,6 +46,8 @@ namespace FoodTrucks
         private readonly Dictionary<string, Dictionary<CustomerExit, int>> lostSinceOpen = new Dictionary<string, Dictionary<CustomerExit, int>>();
         // The spot each open cart stands on, read at opening and again each new day.
         private readonly Dictionary<string, Spot> spots = new Dictionary<string, Spot>();
+        // The pitch each open vehicle stands on, fixed when it opened.
+        private readonly Dictionary<string, string> pitches = new Dictionary<string, string>();
         // Sales Core has made whose customer is still on the way to the window in the visible queue, per cart.
         // They are paid when that customer pays (CartQueueView calls Paid), so the money and the message
         // come with the person at the window. Their units already count as gone for Core.
@@ -85,7 +87,7 @@ namespace FoodTrucks
         {
             instance = this;
             GlobalEvents.onEnterVehicle += OnEnterVehicle;
-            GlobalEvents.onNewDay += OnNewDay;
+            GlobalEvents.onNewHour += OnNewHour;
             GlobalEvents.onTimeMachineStarted += OnTimeMachineStarted;
             GlobalEvents.onTimeMachineEnded += OnTimeMachineEnded;
         }
@@ -93,7 +95,7 @@ namespace FoodTrucks
         private void OnDisable()
         {
             GlobalEvents.onEnterVehicle -= OnEnterVehicle;
-            GlobalEvents.onNewDay -= OnNewDay;
+            GlobalEvents.onNewHour -= OnNewHour;
             GlobalEvents.onTimeMachineStarted -= OnTimeMachineStarted;
             GlobalEvents.onTimeMachineEnded -= OnTimeMachineEnded;
             if (instance == this) instance = null;
@@ -285,21 +287,33 @@ namespace FoodTrucks
             spots[cart.id] = spot;
             TruckHatch.Set(controller, true);
             Inspect(vehicle, kind);
+            // The pitch is fixed for this opening, so its minutes stay together.
+            pitches[cart.id] = World.PitchKey(FoodTrucksSession.CurrentState, spot.X, spot.Z);
             FoodTrucksSession.MarkChanged();
             var plan = CartDemand.Plan(tables, cart, spot);
             var service = Service(rules, kind, vehicle, hireStop == null);
             Log.Info($"{Title(kind)} {cart.id} open{(hireStop != null ? $" by its crew at stop {hireStop + 1}" : "")} on day {TimeHelper.CurrentDay} at {TimeHelper.CurrentHour:D2}:{(int)TimeHelper.CurrentMinute:D2}: {World.Describe(spot)}; {CartDemand.Describe(plan)} " +
                      $"Window: {service.Servers} serving, customer service skill {service.Skill:F0}, speed {service.Speed:F2}, {plan.CapacityPerServer * service.Speed * Math.Max(1, service.Servers):F0} an hour at most, customers {service.Mood.ToString().ToLowerInvariant()}; queue limit {service.QueueLimit}. " +
-                     $"Reputation: {CartDemand.Reputation(tables, cart, spot, vehicle, plan.Stock.Keys.ToList()).Parts}; pitch {World.PitchKey(FoodTrucksSession.CurrentState, spot.X, spot.Z)}.");
+                     $"Reputation: {Reputation(tables, cart, spot, vehicle, plan)}; pitch {pitches[cart.id]}.");
             return plan;
         }
 
-        // The vehicle opens: the inspector may come by (design: Health grades). A new grade is news.
+        private static string Reputation(DemandTables tables, VehicleInstance cart, Spot spot, VehicleState vehicle, CartPlan plan)
+        {
+            var (parts, shares) = CartDemand.Reputation(tables, cart, spot, vehicle, plan.Stock.Keys.ToList());
+            var split = shares == null || shares.Count == 0 || shares.Values.All(v => v >= 1) ? "" :
+                "; customers left by neighbours " + string.Join(", ", shares.Select(p => $"{p.Key} {p.Value:P0}"));
+            return parts + split;
+        }
+
+        // The vehicle opens, or works into a new day: the inspector may come by (design: Health grades).
         private static void Inspect(VehicleState vehicle, string kind)
         {
             var book = CartDemand.Book();
-            if (book == null) return;
-            var day = SaveGameManager.Current.Day;
+            var state = FoodTrucksSession.CurrentState;
+            if (book == null || state == null) return;
+            var day = ServiceDayNow();
+            if (day <= ReputationBook.ClosedThrough(state)) return;
             var result = book.Opened(vehicle, day, SeededRandom.SeedFor(vehicle.VehicleId, day));
             if (result == null) return;
             Log.Info($"Health inspection: {kind} {vehicle.VehicleId} on day {day}: grade {result.Value.Grade}, {result.Value.Points} points.");
@@ -311,25 +325,43 @@ namespace FoodTrucks
                 ? LocalizorManager.GetLocalization("foodtrucks:grade_pending", null)
                 : string.Format(LocalizorManager.GetLocalization("foodtrucks:grade_letter", null), vehicle.Health.Grade);
 
-        // A new day: yesterday's open days go into health marks and the fleet's regulars.
-        private void OnNewDay()
+        // The working day this minute belongs to: the night counts for the evening before (until the demand
+        // model's night ends, 05:00), so a late stop is one working day.
+        internal static int ServiceDay(long absoluteMinute) =>
+            ReputationBook.ServiceDay(absoluteMinute, DemandData.Tables?.NightEndsMinute ?? 5 * 60);
+
+        internal static int ServiceDayNow() => ServiceDay(HireCrew.Now());
+
+        // Each hour: finished working days go into health marks and the fleet's regulars, and a vehicle still
+        // open into a new working day gets that day's inspector's chance. Also once after a load.
+        private void OnNewHour()
         {
             try { CloseDays(); }
-            catch (Exception ex) { Log.Error("Reputation, new day: " + ex); }
+            catch (Exception ex) { Log.Error("Reputation, new hour: " + ex); }
         }
+
+        private bool daysClosedAfterLoad;
 
         private static void CloseDays()
         {
             var state = FoodTrucksSession.CurrentState;
             var book = CartDemand.Book();
             if (state == null || book == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
+            var today = ServiceDayNow();
             var before = state.Vehicles.Sum(v => v.Days?.Count ?? 0);
-            book.CloseDaysBefore(state, SaveGameManager.Current.Day);
+            var lastCounted = state.Regulars.LastUpdatedDay;
+            var dropped = book.CloseDaysBefore(state, today);
             var after = state.Vehicles.Sum(v => v.Days?.Count ?? 0);
-            if (before == after) return;
-            FoodTrucksSession.MarkChanged();
-            Log.Info($"Reputation: {before - after} vehicle days counted; regulars at {state.Regulars.Entries.Count} pitches and weekdays; " +
-                     string.Join(", ", state.Vehicles.Where(v => v.Health != null).Select(v => $"{v.VehicleId} {v.Health!.Grade} ({book.Points(v)} points)")) + ".");
+            if (dropped > 0) Log.Error($"Reputation: {dropped} visits came after their day was counted; dropped.");
+            if (before != after || lastCounted != state.Regulars.LastUpdatedDay)
+            {
+                FoodTrucksSession.MarkChanged();
+                Log.Info($"Reputation through day {today - 1}: {before - after} vehicle days counted; regulars at {state.Regulars.Entries.Count} pitches and weekdays; " +
+                         string.Join(", ", state.Vehicles.Where(v => v.Health != null).Select(v => $"{v.VehicleId} {v.Health!.Grade} ({book.Points(v)} points)")) + ".");
+            }
+            // Open through the night into a new working day: that day counts as opened, inspector included.
+            foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && (v.Days == null || !v.Days.Any(d => d.Day == today))))
+                Inspect(vehicle, string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType);
         }
 
         // The crew opens the window at a route stop, where the vehicle has just been placed. Null when it
@@ -371,9 +403,7 @@ namespace FoodTrucks
             if (instance == null) return;
             AdvanceTo(vehicle, minute);
             if (!vehicle.IsOpen) return;
-            // The crew cleans up as they close.
-            ReputationBook.Day(vehicle, SaveGameManager.Current.Day).Cleaned = true;
-            instance.Close(vehicle, "foodtrucks:notification_hire_closed");
+            instance.Close(vehicle, "foodtrucks:notification_hire_closed", minute);
         }
 
         // Sells at a window the crew runs up to that game minute, in steps the simulator takes at once.
@@ -469,6 +499,14 @@ namespace FoodTrucks
         // at: the game minute the window closes, when the sales clock is catching up behind the live one.
         private void Close(VehicleState vehicle, string messageKey, double? at = null)
         {
+            // The crew cleans up whenever they close, sold out or not.
+            var state = FoodTrucksSession.CurrentState;
+            if (vehicle.HireStop != null && state != null)
+            {
+                var day = ServiceDay((long)Math.Floor(at ?? HireCrew.NowExact()));
+                if (day > ReputationBook.ClosedThrough(state)) ReputationBook.Day(vehicle, day).Cleaned = true;
+            }
+            pitches.Remove(vehicle.VehicleId);
             // A crew window closed by a failing sale stays closed for the rest of that opening.
             if (vehicle.HireStop != null && messageKey == "foodtrucks:notification_closed_error")
                 HireRunner.GiveUp(vehicle, vehicle.HireStop.Value, (long)Math.Floor(at ?? HireCrew.NowExact()));
@@ -541,6 +579,7 @@ namespace FoodTrucks
             instance?.sinceOpen.Clear();
             instance?.lostSinceOpen.Clear();
             instance?.spots.Clear();
+            instance?.pitches.Clear();
             instance?.held.Clear();
             instance?.heldFailed.Clear();
             FoodTrucksSession.MarkChanged();
@@ -555,6 +594,11 @@ namespace FoodTrucks
             if (state == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
             try
             {
+                if (!daysClosedAfterLoad)
+                {
+                    daysClosedAfterLoad = true;
+                    CloseDays();
+                }
                 TrackStock(state);
                 foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && !RunByRoute(v)).ToList())
                     Tick(state, vehicle, HireCrew.NowExact());
@@ -616,16 +660,21 @@ namespace FoodTrucks
             var tables = DemandData.Tables;
             var rules = DemandData.Rules;
             if (tables == null || rules == null) return;
-            // Minutes open at this pitch today, for the regulars.
-            if (spots.TryGetValue(vehicle.VehicleId, out var openSpot))
-                ReputationBook.AddMinutes(vehicle, SaveGameManager.Current.Day, World.PitchKey(FoodTrucksSession.CurrentState, openSpot.X, openSpot.Z), elapsed);
             var atWindow = !inSkip && PlayerIsAtCart(cart);
             var window = Service(rules, CartDemand.KindOf(cart), vehicle, atWindow, (long)Math.Floor(from));
             if (window.Servers == 0)
             {
                 if (pausedNoticeShown.Add(vehicle.VehicleId)) Say("foodtrucks:notification_paused", KindOf(vehicle));
             }
-            else pausedNoticeShown.Remove(vehicle.VehicleId);
+            else
+            {
+                pausedNoticeShown.Remove(vehicle.VehicleId);
+                // Minutes someone worked the window here count for the regulars, by working day.
+                if (!pitches.TryGetValue(vehicle.VehicleId, out var pitch) && spots.TryGetValue(vehicle.VehicleId, out var openSpot))
+                    pitches[vehicle.VehicleId] = pitch = World.PitchKey(state, openSpot.X, openSpot.Z);
+                if (pitch != null)
+                    ReputationBook.AddOpenMinutes(vehicle, (long)Math.Floor(from), (long)Math.Floor(from) + elapsed, pitch, tables.NightEndsMinute, ReputationBook.ClosedThrough(state));
+            }
             var spot = SpotFor(tables, cart);
             if (spot == null) return;
             // Units held for customers on their way to the window are sold already: the plan leaves them out.
@@ -788,9 +837,10 @@ namespace FoodTrucks
         {
             // Live venue crowds change by the hour, so the spot is read again each game hour.
             if (spots.TryGetValue(cart.id, out var spot) && spot.Day == SaveGameManager.Current.Day && spot.Hour == TimeHelper.CurrentHour) return spot;
+            // A crew's vehicle far from the player may have no controller: read it where it stood.
             var controller = VehicleHelper.GetVehicleController(cart);
-            if (controller == null) return spot;
-            spot = World.ReadSpot(tables, controller.transform.position);
+            if (controller == null && spot == null) return null;
+            spot = World.ReadSpot(tables, controller != null ? controller.transform.position : new Vector3(spot!.X, spot.Y, spot.Z));
             spots[cart.id] = spot;
             Log.Info($"Cart {cart.id} spot on day {spot.Day}, {spot.Hour:D2}:00: {World.Describe(spot)}.");
             return spot;
@@ -872,8 +922,9 @@ namespace FoodTrucks
             // and the ledger must not miss a paid sale if one of them throws. Neither call can fail here.
             StreetSales.Record(state, vehicle.VehicleId, day, cents, 1);
             // Food on board for days counts against the health grade (design: Health grades).
-            if (CartDemand.Book()?.Sold(vehicle, itemName, day) == true)
-                Log.Info($"Cart {vehicle.VehicleId}: stale {itemName} sold on day {day} (on board since day {vehicle.StockSince[itemName]}).");
+            var workDay = ServiceDayNow();
+            if (workDay > ReputationBook.ClosedThrough(state) && CartDemand.Book()?.Sold(vehicle, itemName, workDay) == true)
+                Log.Info($"Cart {vehicle.VehicleId}: stale {itemName} sold on day {workDay} (on board since day {vehicle.StockBatches[itemName][0].Day}).");
             // What this unit cost at the wholesaler, for the profit shown in the day summary and Econoview.
             SalesLedger.RecordCost(state, day, (long)Math.Round(Math.Max(0f, entry.pricePerUnit) * 100.0));
             sinceOpen.TryGetValue(vehicle.VehicleId, out var totals);
@@ -900,20 +951,26 @@ namespace FoodTrucks
             foreach (var instance in SaveGameManager.Current.VehicleInstances)
             {
                 if (instance == null || FoodTrucksMod.KindOf(instance.vehicleTypeName) == null) continue;
-                var items = new HashSet<string>(StringComparer.Ordinal);
+                var items = new Dictionary<string, int>(StringComparer.Ordinal);
                 foreach (var entry in instance.cargoInstances)
                 {
                     if (entry == null) continue;
-                    if (entry.amount > 0 && tables.Product(entry.itemName) != null) items.Add(entry.itemName);
+                    if (entry.amount > 0 && tables.Product(entry.itemName) != null) Add(items, entry.itemName, entry.amount);
                     if (entry.nestedCargoInstances == null) continue;
                     foreach (var nested in entry.nestedCargoInstances)
-                        if (nested != null && nested.amount > 0 && tables.Product(nested.itemName) != null) items.Add(nested.itemName);
+                        if (nested != null && nested.amount > 0 && tables.Product(nested.itemName) != null) Add(items, nested.itemName, nested.amount);
                 }
                 var vehicle = StreetSales.Find(state, instance.id);
                 if (vehicle == null && items.Count == 0) continue;
                 vehicle ??= StreetSales.GetOrAdd(state, instance.id);
                 if (ReputationBook.TrackStock(vehicle, items, day)) FoodTrucksSession.MarkChanged();
             }
+        }
+
+        private static void Add(Dictionary<string, int> units, string item, int amount)
+        {
+            units.TryGetValue(item, out var have);
+            units[item] = (int)Math.Min(int.MaxValue, (long)have + amount);
         }
 
         // Cleaning the vehicle by hand (the "Clean" button): a short wait while the game's clock runs, like a
@@ -933,8 +990,8 @@ namespace FoodTrucks
             if (timeMachine.isRunning) return;
             var vehicle = StreetSales.GetOrAdd(state, cart.id);
             if (string.IsNullOrEmpty(vehicle.VehicleType)) vehicle.VehicleType = kind;
-            var day = SaveGameManager.Current.Day;
-            ReputationBook.Day(vehicle, day).Cleaned = true;
+            var day = ServiceDayNow();
+            if (day > ReputationBook.ClosedThrough(state)) ReputationBook.Day(vehicle, day).Cleaned = true;
             FoodTrucksSession.MarkChanged();
             var goal = TimeHelper.Now();
             goal.AddMinutes(CleaningMinutes);

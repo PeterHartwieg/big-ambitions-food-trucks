@@ -166,6 +166,9 @@ namespace FoodTrucks.Core.Demand
         // True from midnight until Early starts: those hours still belong to the previous day's night out.
         public bool IsBeforeEarly(int minuteOfDay) => minuteOfDay < daypartStarts[(int)Daypart.Early];
 
+        // When the night ends: minutes before this belong to the evening before (night out, service day).
+        public int NightEndsMinute => daypartStarts[(int)Daypart.Early];
+
         // The mod's own month for an in-game day: day 1 is the first day of StartMonth.
         public int MonthOf(int gameDay)
         {

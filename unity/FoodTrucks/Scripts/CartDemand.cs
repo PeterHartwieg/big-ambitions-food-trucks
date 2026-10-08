@@ -181,7 +181,8 @@ namespace FoodTrucks
             var reputationBook = Book();
             if (state == null || rules == null || reputationBook == null) return (new ReputationParts(1, 1, 1), null);
             var health = reputationBook.HealthFactor(vehicle);
-            var regulars = reputationBook.RegularsFactor(state, World.PitchKey(state, spot.X, spot.Z), SaveGameManager.Current.Day);
+            // Regulars by working day: after midnight it is still the evening's crowd.
+            var regulars = reputationBook.RegularsFactor(state, World.PitchKey(state, spot.X, spot.Z), CartSelling.ServiceDayNow());
             var fleet = new List<CompetitionVehicle> { new CompetitionVehicle { VehicleId = cart.id, X = spot.X, Z = spot.Z, Menu = sellable.ToList() } };
             foreach (var other in state.Vehicles)
             {

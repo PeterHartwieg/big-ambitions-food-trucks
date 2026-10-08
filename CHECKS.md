@@ -13,15 +13,15 @@ Build `0.7.0`. Health grades, regulars, competition between your own vehicles, a
 |---|---|---|
 | 1 | Open a cart or truck | The message names the grade on the window ("grade pending" on a new vehicle) |
 | 2 | Hold the cart (or sit in the truck) and press Clean | The game's time-skip overlay runs 20 minutes with "Cleaning the window, the counter and the equipment", then "clean for today" |
-| 3 | Open two of your vehicles with the same food within a block of each other | Each sells less of that food than alone (the log shows "neighbours" above 1 and the split) |
-| 4 | Open next to a theatre or cinema in the evening, or a nightclub as it closes | More customers around 22:30 (theatre), on the half hours after 17:00 (cinema), or just after the club closes. A nightclub by day brings nobody |
+| 3 | Open two of your vehicles with the same food within a block of each other | Each sells less of that food than alone (the open log line shows "neighbours" above 1 and "customers left by neighbours") |
+| 4 | Open next to a theatre or cinema in the evening, or a nightclub as it closes | More customers from 22:30 for about 45 minutes (theatre), at 17:00, 19:30, 22:00 and 00:30 (cinema), or for 30 minutes after the club closes. A closed nightclub brings nobody |
 | 5 | If you have time: sleep a few days with a cart open each day at the same spot, never cleaning | A health inspector's message with a grade below A, eventually; the next open message shows it |
 
 ## 3. Log lines (me)
 
-- `Version 0.7.0 loading.`; `Reputation: N vehicle days counted` after each new day with an open vehicle.
+- `Version 0.7.0 loading.`; `Reputation through day …: N vehicle days counted` after 05:00 each day with an open vehicle (the night belongs to the evening before).
 - Open lines end with `Reputation: grade … x regulars … x neighbours … = …; pitch …`.
-- `Cart … spot on day …, HH:00: … live venues at HH:00: …` hourly while open near venues.
+- `Cart … spot on day …, HH:00: …; N live venues, now nightlife x… ` hourly while open near venues.
 - `Cleaning: … cleaned on day …`; `Health inspection: …` when the inspector comes; `stale … sold` after three days with the same stock.
 
 # Milestone 5 checks: hires

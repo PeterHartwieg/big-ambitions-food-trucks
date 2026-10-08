@@ -16,22 +16,44 @@ namespace FoodTrucks
     // never every minute (implementation plan, Game adapters).
     internal sealed class Spot
     {
-        public Spot(AreaMix areas, string? neighbourhood, int buildings, int day, float x = 0f, float z = 0f, int hour = -1, string? live = null)
+        public Spot(AreaMix areas, string? neighbourhood, int buildings, int day, Vector3 position = default, int hour = -1,
+            IReadOnlyList<(NearbyPlace Place, VenueNow? Venue)>? places = null)
         {
             Areas = areas;
             Neighbourhood = neighbourhood;
             Buildings = buildings;
             Day = day;
-            X = x;
-            Z = z;
+            X = position.x;
+            Y = position.y;
+            Z = position.z;
             Hour = hour;
-            Live = live;
+            Places = places ?? Array.Empty<(NearbyPlace, VenueNow?)>();
         }
 
-        // The game hour its live crowds were read for: a new hour reads them again.
+        public float Y { get; }
+        // The game hour its venues were read for: a new hour reads them again.
         public int Hour { get; }
-        // The live venues nearby and what they bring now, for the log.
-        public string? Live { get; }
+        // The buildings within reach, and for live venues what the game said of them this hour.
+        public IReadOnlyList<(NearbyPlace Place, VenueNow? Venue)> Places { get; }
+
+        // Each area's live crowd at that minute of this hour (LiveCrowds, AreaClassifier.LiveFactors).
+        public IReadOnlyDictionary<string, double> LiveFactors(DemandTables tables, LiveCrowds? live, int minuteOfDay, DayOfWeek day)
+        {
+            if (live == null || !Places.Any(p => p.Venue != null)) return new Dictionary<string, double>();
+            var weighted = Places.Select(p => p.Venue == null ? p.Place
+                : new NearbyPlace(p.Place.BuildingType, p.Place.BusinessType, p.Place.DistanceMetres, live.Weight(At(p.Venue, minuteOfDay), minuteOfDay, day)));
+            return new AreaClassifier(tables).LiveFactors(weighted);
+        }
+
+        // The venue at that minute: one that closed at the top of this hour has been closed since then.
+        private VenueNow At(VenueNow venue, int minuteOfDay) => venue.ClosedMinutesAgo == null ? venue
+            : new VenueNow { Kind = venue.Kind, Open = false, Workers = venue.Workers, ClosedMinutesAgo = Math.Max(0, minuteOfDay - Hour * 60) };
+
+        public string Live(DemandTables tables, LiveCrowds? live, int minuteOfDay, DayOfWeek day)
+        {
+            var factors = LiveFactors(tables, live, minuteOfDay, day);
+            return factors.Count == 0 ? "" : string.Join(", ", factors.Select(f => $"{f.Key} x{f.Value:F2}"));
+        }
 
         // Where it was read, on the ground.
         public float X { get; }
@@ -92,9 +114,7 @@ namespace FoodTrucks
                 businesses[(address.streetName, address.streetNumber)] = registration;
             }
             var live = DemandData.Rules?.LiveCrowds;
-            var minute = TimeHelper.CurrentHour * 60 + (int)TimeHelper.CurrentMinute;
-            var weekday = DayOfWeekOf(SaveGameManager.Current.Day);
-            var liveNotes = new List<string>();
+            var read = new List<(NearbyPlace, VenueNow?)>();
 
             var places = new List<NearbyPlace>();
             string? neighbourhood = null;
@@ -113,13 +133,10 @@ namespace FoodTrucks
                 var address = building.Address;
                 businesses.TryGetValue((address.streetName, address.streetNumber), out var registration);
                 var business = registration?.businessTypeName;
-                var weight = 1.0;
-                if (live != null && registration != null && live.KindOf(business) is var kind && kind != VenueKind.Other)
-                {
-                    weight = live.Weight(VenueNow(registration, kind), minute, weekday);
-                    liveNotes.Add($"{Short(business)} {weight:F1}");
-                }
-                places.Add(new NearbyPlace(building.BuildingType, business, distance, weight));
+                var place = new NearbyPlace(building.BuildingType, business, distance);
+                places.Add(place);
+                read.Add((place, live != null && registration != null && live.KindOf(business) is var kind && kind != VenueKind.Other
+                    ? VenueNow(registration, kind) : null));
             }
             // Subway stations bring their own crowd (the `transit` area in demand.json).
             var stations = InstanceBehavior<CityManager>.Instance?.subwayStations;
@@ -133,8 +150,7 @@ namespace FoodTrucks
                 }
             }
             var areas = new AreaClassifier(tables).Classify(places, position.x, position.z);
-            return new Spot(areas, neighbourhood, places.Count, SaveGameManager.Current.Day, position.x, position.z, TimeHelper.CurrentHour,
-                liveNotes.Count == 0 ? null : string.Join(", ", liveNotes));
+            return new Spot(areas, neighbourhood, places.Count, SaveGameManager.Current.Day, position, TimeHelper.CurrentHour, read);
         }
 
         // A venue as the game has it this hour: open by its own schedule (AI businesses have one too), when it
@@ -149,7 +165,8 @@ namespace FoodTrucks
             {
                 var previousDay = hour == 0 ? day - 1 : day;
                 var previousHour = hour == 0 ? 23 : hour - 1;
-                if (previousDay >= 1 && OpenAt(registration, previousDay, previousHour)) closedAgo = (int)TimeHelper.CurrentMinute;
+                // Closed at the top of this hour; the minutes since are counted when the weight is asked for.
+                if (previousDay >= 1 && OpenAt(registration, previousDay, previousHour)) closedAgo = 0;
             }
             int? workers = null;
             if (kind == VenueKind.Office || kind == VenueKind.Factory)
@@ -179,7 +196,8 @@ namespace FoodTrucks
         // few metres off on another day still finds its regulars.
         private const double SamePitchMetres = 30;
 
-        // The key regulars and routes know a pitch by: a known pitch nearby, or a new one on a 10 m grid.
+        // The key regulars and routes know a pitch by: a known pitch nearby (regulars, route stops, today's
+        // visits not counted yet), or a new one on a 10 m grid.
         public static string PitchKey(SaveState? state, float x, float z)
         {
             string? best = null;
@@ -187,7 +205,8 @@ namespace FoodTrucks
             if (state != null)
             {
                 var known = state.Regulars.Entries.Select(e => e.SpotKey)
-                    .Concat(state.Vehicles.SelectMany(v => v.Schedule?.Stops ?? new List<ScheduleStop>()).Select(s => s.SpotKey));
+                    .Concat(state.Vehicles.SelectMany(v => v.Schedule?.Stops ?? new List<ScheduleStop>()).Select(s => s.SpotKey))
+                    .Concat(state.Vehicles.SelectMany(v => v.Days ?? new List<DayRecord>()).SelectMany(d => d.Visits).Select(v => v.SpotKey));
                 foreach (var key in known.Distinct())
                 {
                     if (!TryParsePitch(key, out var kx, out var kz)) continue;
@@ -214,6 +233,7 @@ namespace FoodTrucks
         public static DemandQuery Query(DemandTables tables, Spot spot, IReadOnlyCollection<string> menu,
             double reputation = 1.0, IReadOnlyDictionary<string, double>? categoryShares = null)
         {
+            var minuteOfDay = TimeHelper.CurrentHour * 60 + (int)TimeHelper.CurrentMinute;
             var game = SaveGameManager.Current;
             var market = new Dictionary<string, double>();
             if (!string.IsNullOrEmpty(spot.Neighbourhood))
@@ -233,7 +253,7 @@ namespace FoodTrucks
                 Areas = spot.Areas,
                 Neighbourhood = spot.Neighbourhood,
                 Menu = menu,
-                MinuteOfDay = TimeHelper.CurrentHour * 60 + (int)TimeHelper.CurrentMinute,
+                MinuteOfDay = minuteOfDay,
                 Day = DayOfWeekOf(game.Day),
                 Month = tables.MonthOf(game.Day),
                 Raining = RainHelper.isRaining,
@@ -241,13 +261,22 @@ namespace FoodTrucks
                 Promotion = promotion > 0 ? promotion : 1.0,
                 Reputation = reputation,
                 CategoryShares = categoryShares,
+                AreaLive = spot.LiveFactors(tables, DemandData.Rules?.LiveCrowds, minuteOfDay, DayOfWeekOf(game.Day)),
             };
         }
 
         // Plain text for the status and the demand readout.
         public static string Describe(Spot spot) =>
             $"{Short(spot.Neighbourhood)}, {spot.Buildings} buildings within reach, areas {spot.Areas}" +
-            (spot.Live != null ? $"; live venues at {spot.Hour:D2}:00: {spot.Live}" : "");
+            (spot.Places.Any(p => p.Venue != null) ? $"; {spot.Places.Count(p => p.Venue != null)} live venues, now {Live(spot)}" : "");
+
+        private static string Live(Spot spot)
+        {
+            var tables = DemandData.Tables;
+            if (tables == null) return "";
+            var text = spot.Live(tables, DemandData.Rules?.LiveCrowds, TimeHelper.CurrentHour * 60 + (int)TimeHelper.CurrentMinute, DayOfWeekOf(SaveGameManager.Current.Day));
+            return text.Length == 0 ? "as usual" : text;
+        }
 
         public static string Short(string? id)
         {

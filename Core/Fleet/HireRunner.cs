@@ -136,7 +136,8 @@ namespace FoodTrucks.Core.Fleet
             var arrival = vehicle.Arrival;
             if (arrival != null && Travel.Distance(x, z, arrival.X, arrival.Z) <= 3)
             {
-                var stop = vehicle.Schedule?.Stops?.FirstOrDefault(s => s.SpotKey == arrival.SpotKey);
+                var stop = arrival.StopIndex != null ? vehicle.Schedule?.Stops?.ElementAtOrDefault(arrival.StopIndex.Value)
+                    : vehicle.Schedule?.Stops?.FirstOrDefault(s => s.SpotKey == arrival.SpotKey);
                 if (stop != null) return (stop.X, stop.Z);
             }
             return (x, z);
@@ -175,11 +176,13 @@ namespace FoodTrucks.Core.Fleet
             if (want == null || vehicle.Crew == null || vehicle.Crew.Count == 0) return HireAction.None;
             var stop = vehicle.Schedule?.Stops?.ElementAtOrDefault(want.StopIndex);
             if (stop == null) return HireAction.None;
-            if (vehicle.Skipped != null && vehicle.Skipped.SpotKey == stop.SpotKey && now < vehicle.Skipped.Until) return HireAction.None;
+            if (vehicle.Skipped != null && now < vehicle.Skipped.Until &&
+                (vehicle.Skipped.StopIndex != null ? vehicle.Skipped.StopIndex == want.StopIndex : vehicle.Skipped.SpotKey == stop.SpotKey))
+                return HireAction.None;
             var distance = Travel.Distance(where.X, where.Z, stop.X, stop.Z);
             // Where the crew parked it for this stop counts as the stop even if it reads as no place to sell:
             // moving it would only bring it back there. Opening then says why not, once a day.
-            var atStop = ParkedFor(vehicle, stop, where) || (where.CanSellHere && distance <= rules.StopRadiusMetres);
+            var atStop = ParkedFor(vehicle, want.StopIndex, stop, where) || (where.CanSellHere && distance <= rules.StopRadiusMetres);
             if (!atStop)
             {
                 if (where.StayPut || !where.HasStock) return HireAction.None;
@@ -194,8 +197,9 @@ namespace FoodTrucks.Core.Fleet
         }
 
         // The crew parked it here for this stop and nobody has moved it since.
-        private static bool ParkedFor(VehicleState vehicle, ScheduleStop stop, VehicleWhere where) =>
-            vehicle.Arrival != null && vehicle.Arrival.SpotKey == stop.SpotKey &&
+        private static bool ParkedFor(VehicleState vehicle, int stopIndex, ScheduleStop stop, VehicleWhere where) =>
+            vehicle.Arrival != null &&
+            (vehicle.Arrival.StopIndex != null ? vehicle.Arrival.StopIndex == stopIndex : vehicle.Arrival.SpotKey == stop.SpotKey) &&
             Travel.Distance(where.X, where.Z, vehicle.Arrival.X, vehicle.Arrival.Z) <= 3;
 
         // When the planned opening at that stop ends, from the plan running now.
@@ -246,7 +250,7 @@ namespace FoodTrucks.Core.Fleet
                 foreach (var leg in plan.Legs)
                     if (leg.Kind == LegKind.Open && leg.StopIndex == stopIndex && leg.Start <= minute && leg.End > minute)
                     {
-                        vehicle.Skipped = new SkipState { SpotKey = stop.SpotKey, Until = leg.End };
+                        vehicle.Skipped = new SkipState { SpotKey = stop.SpotKey, StopIndex = stopIndex, Until = leg.End };
                         return;
                     }
         }
@@ -277,13 +281,13 @@ namespace FoodTrucks.Core.Fleet
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var transit = vehicle.Transit;
             vehicle.Transit = null;
-            vehicle.Arrival = atStop && transit != null ? new ArrivalState { SpotKey = transit.ToSpotKey, X = x, Z = z } : null;
+            vehicle.Arrival = atStop && transit != null ? new ArrivalState { SpotKey = transit.ToSpotKey, StopIndex = transit.ToStopIndex, X = x, Z = z } : null;
             if (atStop || transit == null) return;
             // The opening this trip was for, not a later one at the same stop.
             var index = transit.ToStopIndex ?? vehicle.Schedule?.Stops?.FindIndex(s => s.SpotKey == transit.ToSpotKey) ?? -1;
             var until = transit.ToCloseAt ?? (index >= 0 ? OpenEnd(vehicle, index, now) : null);
             if (until != null && until <= now) until = now + 1;
-            vehicle.Skipped = new SkipState { SpotKey = transit.ToSpotKey, Until = until ?? now + 60 };
+            vehicle.Skipped = new SkipState { SpotKey = transit.ToSpotKey, StopIndex = index >= 0 ? index : (int?)null, Until = until ?? now + 60 };
         }
 
         // Minutes of [from, to) the crew is on shift: from the first leg of a planned day to its last.
@@ -364,6 +368,16 @@ namespace FoodTrucks.Core.Fleet
             {
                 var moved = map(vehicle.HireStop.Value);
                 vehicle.HireStop = moved < 0 ? (int?)null : moved;
+            }
+            if (vehicle.Arrival?.StopIndex != null)
+            {
+                var moved = map(vehicle.Arrival.StopIndex.Value);
+                vehicle.Arrival.StopIndex = moved < 0 ? (int?)null : moved;
+            }
+            if (vehicle.Skipped?.StopIndex != null)
+            {
+                var moved = map(vehicle.Skipped.StopIndex.Value);
+                vehicle.Skipped.StopIndex = moved < 0 ? (int?)null : moved;
             }
             // A removed destination falls back to finding the stop by its spot.
             if (vehicle.Transit?.ToStopIndex != null)

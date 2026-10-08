@@ -79,8 +79,8 @@ namespace FoodTrucks.Core.Saves
         // What happened each day not yet counted into health and regulars: opened, cleaned, stale stock, and the
         // minutes open at each spot. Counted and dropped when a new day starts (ReputationBook.CloseDaysBefore).
         public List<DayRecord> Days { get; set; } = new List<DayRecord>();
-        // The day each food item on board was first seen there, until that item runs out (stale stock).
-        public Dictionary<string, int> StockSince { get; set; } = new Dictionary<string, int>(StringComparer.Ordinal);
+        // Food on board by the day it came on, oldest first, sold oldest first (stale stock).
+        public Dictionary<string, List<StockBatch>> StockBatches { get; set; } = new Dictionary<string, List<StockBatch>>(StringComparer.Ordinal);
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -183,6 +183,8 @@ namespace FoodTrucks.Core.Saves
     public class ArrivalState
     {
         public string SpotKey { get; set; } = string.Empty;
+        // The stop it was parked for, when known; a route can visit one spot twice.
+        public int? StopIndex { get; set; }
         public double X { get; set; }
         public double Z { get; set; }
 
@@ -211,9 +213,20 @@ namespace FoodTrucks.Core.Saves
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
+    public class StockBatch
+    {
+        public int Day { get; set; }
+        public int Units { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
     public class SkipState
     {
         public string SpotKey { get; set; } = string.Empty;
+        // The stop given up, when known; a route can visit one spot twice.
+        public int? StopIndex { get; set; }
         public long Until { get; set; }
 
         [JsonExtensionData]

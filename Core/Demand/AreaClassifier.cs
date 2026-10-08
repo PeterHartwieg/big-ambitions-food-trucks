@@ -45,8 +45,7 @@ namespace FoodTrucks.Core.Demand
                 var rule = RuleFor(place.BuildingType, place.BusinessType);
                 if (rule == null) continue;
 
-                var live = IsFinite(place.Weight) && place.Weight >= 0 ? place.Weight : 1.0;
-                var factor = (1.0 - (1.0 - settings.EdgeWeight) * (place.DistanceMetres / settings.RadiusMetres)) * live;
+                var factor = 1.0 - (1.0 - settings.EdgeWeight) * (place.DistanceMetres / settings.RadiusMetres);
                 foreach (var pair in rule)
                 {
                     var weight = pair.Value * factor;
@@ -71,6 +70,39 @@ namespace FoodTrucks.Core.Demand
             // MaxAreas is accepted for old data, but never trims independent crowds.
             return AreaMix.FromPresences(totals.OrderByDescending(pair => pair.Value)
                 .ThenBy(pair => pair.Key, StringComparer.Ordinal));
+        }
+
+        // Each area's live crowd against the usual one: its votes' mean live weight (NearbyPlace.Weight), so a
+        // closed venue takes its share out and a surge multiplies it, after the presence curve. Areas whose
+        // places are all at weight 1 are left out.
+        public IReadOnlyDictionary<string, double> LiveFactors(IEnumerable<NearbyPlace> places)
+        {
+            if (places == null) throw new ArgumentNullException(nameof(places));
+            var settings = tables.Classifier;
+            var sums = new Dictionary<string, (double Votes, double Weighted)>(StringComparer.Ordinal);
+            foreach (var place in places)
+            {
+                if (place == null || !IsFinite(place.DistanceMetres) || place.DistanceMetres < 0 ||
+                    place.DistanceMetres > settings.RadiusMetres) continue;
+                var rule = RuleFor(place.BuildingType, place.BusinessType);
+                if (rule == null) continue;
+                var factor = 1.0 - (1.0 - settings.EdgeWeight) * (place.DistanceMetres / settings.RadiusMetres);
+                var live = IsFinite(place.Weight) && place.Weight >= 0 ? place.Weight : 1.0;
+                foreach (var pair in rule)
+                {
+                    var vote = pair.Value * factor;
+                    if (vote <= 0) continue;
+                    sums.TryGetValue(pair.Key, out var sum);
+                    sums[pair.Key] = (sum.Votes + vote, sum.Weighted + vote * live);
+                }
+            }
+            var result = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (var pair in sums.OrderBy(p => p.Key, StringComparer.Ordinal))
+            {
+                var mean = pair.Value.Votes > 0 ? pair.Value.Weighted / pair.Value.Votes : 1.0;
+                if (Math.Abs(mean - 1.0) > 1e-9) result.Add(pair.Key, mean);
+            }
+            return result;
         }
 
         // The areas a building votes for: its business type's rule, else its building type's; null for neither.

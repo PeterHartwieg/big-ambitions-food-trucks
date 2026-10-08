@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using FoodTrucks.Core.Demand;
 using Xunit;
@@ -62,13 +63,30 @@ public class LiveCrowdsTests
     }
 
     [Fact]
-    public void AClosedVenueAddsNoCrowdToThePitch()
+    public void LiveFactorsAreEachAreasMeanWeightAfterTheCurve()
     {
         var classifier = new AreaClassifier(ShippedData.Tables);
-        var open = classifier.FromPlaces(new[] { new NearbyPlace("ba:buildingtype_retail", "ba:businesstype_nightclub", 20, 1.0) });
-        var closed = classifier.FromPlaces(new[] { new NearbyPlace("ba:buildingtype_retail", "ba:businesstype_nightclub", 20, 0.0) });
+        var club = new NearbyPlace("ba:buildingtype_retail", "ba:businesstype_nightclub", 20, 0.0);
+        var theatre = new NearbyPlace("ba:buildingtype_theater", "ba:businesstype_theater", 20, 2.5);
 
-        Assert.True(open.PresenceOf("nightlife") > 0);
-        Assert.Equal(0, closed.PresenceOf("nightlife"));
+        Assert.Equal(0.0, classifier.LiveFactors(new[] { club })["nightlife"]);
+        Assert.Equal(2.5, classifier.LiveFactors(new[] { theatre })["nightlife"], 9);
+        // Same votes each: half closed, half surging.
+        Assert.Equal(1.25, classifier.LiveFactors(new[] { club, theatre })["nightlife"], 9);
+        Assert.Empty(classifier.LiveFactors(new[] { new NearbyPlace("ba:buildingtype_office", null, 20) }));
+    }
+
+    [Fact]
+    public void ASurgeMultipliesTheAreasCrowdInFull()
+    {
+        var model = new DemandModel(ShippedData.Tables);
+        var query = new DemandQuery
+        {
+            Areas = AreaMix.Single("nightlife"), Menu = new[] { "ba:itemname_hotdog" }, MinuteOfDay = 22 * 60 + 40, Day = DayOfWeek.Wednesday
+        };
+        var usual = model.Estimate(query).AreaFootfall["nightlife"];
+        query.AreaLive = new Dictionary<string, double> { ["nightlife"] = 2.5 };
+
+        Assert.Equal(usual * 2.5, model.Estimate(query).AreaFootfall["nightlife"], 6);
     }
 }
