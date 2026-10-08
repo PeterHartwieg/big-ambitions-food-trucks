@@ -2,7 +2,7 @@
 
 A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, open the window and sell to the lunch crowd, then move on before the evening rush starts somewhere else.
 
-**Status, 8 October 2026:** Milestone 1, the first playable slice, played once; results below. Buy a food cart at General US Trucks (1 7th Avenue), carry boxes of food out of a wholesale store and click the cart to load them, push it to a pavement, press **Open here**, and customers buy about 12 items an hour while you stay with the cart. No demand model, queue or licence yet. The cart sells hot dogs, burgers, fries, pizza, coffee, croissants, donuts, cupcakes, ice cream and soda cans at the game's market price; which of these wholesale stores stock as boxes is unverified. The design is in [docs/design.md](docs/design.md) and the build order in [docs/implementation-plan.md](docs/implementation-plan.md).
+**Status, 8 October 2026:** Milestone 2 (demand and menu) built, not yet checked in the game. Fit the game's own equipment to the cart (carry a hot dog grill to it and click), load up to 80 items of food, and open on a legal pavement spot. How many customers come depends on the buildings and businesses around the spot, the neighbourhood, the hour, the day, the season and rain, the game's market for each product, and the price; Ctrl+F9 shows the model's reading. Milestone 1 was played once; results below.
 
 ## Removing the mod
 
@@ -61,7 +61,7 @@ tools/build-mod.sh --generate
 tools/install-remote.sh <ssh host of the Windows game PC>
 ```
 
-Debug keys (holding Ctrl): **F6** test truck, **F7** free food cart, **Shift+F8** record $200,000 of street food today without moving money, **F10** status, **Shift+F10** issue the tax statement now (throwaway saves only), **Shift+F12** the uninstall step.
+Debug keys (holding Ctrl): **F6** test truck, **F7** free food cart, **F9** the demand model's reading for the cart next to you, **Shift+F8** record $200,000 of street food today without moving money, **F10** status, **Shift+F10** issue the tax statement now (throwaway saves only), **Shift+F12** the uninstall step.
 
 `tools/park-remote.sh park|restore` moves the installed mod out of `ModsLocal` and back, and `tools/fetch-log-remote.sh <label>` copies the game's log; both are for the in-game checks in [CHECKS.md](CHECKS.md).
 

@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Dialogs;
 using FoodTrucks.Core.Saves;
 using Helpers;
@@ -15,7 +16,7 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks
 {
-    // Debug and maintenance actions: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F8 tax fixture, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
+    // Debug and maintenance actions: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
     // Ctrl+Shift+F12 uninstall step. Also console commands when the game runs with -console.
     internal sealed class DebugActions : MonoBehaviour
     {
@@ -24,6 +25,7 @@ namespace FoodTrucks
         private static readonly Action TaxFixtureAction = TaxFixture;
         private static readonly Action TaxStatementAction = IssueTaxStatement;
         private static readonly Action StatusAction = ShowStatus;
+        private static readonly Action DemandAction = ShowDemand;
         private static readonly Action UninstallAction = Uninstall.Request;
 
         private void OnEnable()
@@ -34,11 +36,12 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_spawn_cart", "Food Trucks: spawn a free food cart next to you (testing)", SpawnCartAction);
                 CommandHelper.AddCommand("foodtrucks_tax_fixture", "Food Trucks: record $200,000 of street food today, ledger only (throwaway saves only)", TaxFixtureAction);
                 CommandHelper.AddCommand("foodtrucks_tax_statement", "Food Trucks: issue this year's tax statement now (throwaway saves only)", TaxStatementAction);
+                CommandHelper.AddCommand("foodtrucks_demand", "Food Trucks: the demand model's reading for the cart next to you", DemandAction);
                 CommandHelper.AddCommand("foodtrucks_status", "Food Trucks: show the mod's save data", StatusAction);
                 CommandHelper.AddCommand("foodtrucks_uninstall", "Food Trucks: remove and refund all Food Trucks vehicles (run twice to confirm)", UninstallAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F8 tax fixture, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.");
+            Log.Info("Debug actions ready: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.");
         }
 
         private void OnDisable()
@@ -50,6 +53,7 @@ namespace FoodTrucks
                 CommandHelper.RemoveCommand(TaxFixtureAction);
                 CommandHelper.RemoveCommand(TaxStatementAction);
                 CommandHelper.RemoveCommand(StatusAction);
+                CommandHelper.RemoveCommand(DemandAction);
                 CommandHelper.RemoveCommand(UninstallAction);
             }
             catch (Exception ex) { Log.Error(ex); }
@@ -64,6 +68,7 @@ namespace FoodTrucks
             if (keyboard.f6Key.wasPressedThisFrame) Run("spawn truck", SpawnTruckAction);
             else if (keyboard.f7Key.wasPressedThisFrame) Run("spawn cart", SpawnCartAction);
             else if (keyboard.f8Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax fixture", TaxFixtureAction);
+            else if (keyboard.f9Key.wasPressedThisFrame) Run("demand here", DemandAction);
             else if (keyboard.f10Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax statement", TaxStatementAction);
             else if (keyboard.f10Key.wasPressedThisFrame) Run("status", StatusAction);
             else if (keyboard.f12Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("uninstall", UninstallAction);
@@ -166,6 +171,44 @@ namespace FoodTrucks
         }
 
         private static string Short(string id) => id.Length > 6 ? id.Substring(0, 6) : id;
+
+        // For the balance check: what the model sees at the cart you push or stand next to (within 10 m),
+        // as if it opened now: the spot, whether it's legal, and the sales rate with its fitted menu.
+        private static void ShowDemand()
+        {
+            var tables = DemandData.Tables;
+            if (tables == null)
+            {
+                Notify($"Demand data not loaded: {DemandData.Error}");
+                return;
+            }
+            var game = SaveGameManager.Current;
+            VehicleController? controller = null;
+            if (game.ActiveVehicleId != null && VehicleHelper.GetCurrentVehicle()?.vehicleTypeName == FoodTrucksMod.CartTypeName)
+                controller = VehicleHelper.GetCurrentVehicleBase();
+            if (controller == null)
+            {
+                var player = PlayerHelper.GetPosition();
+                controller = VehicleHelper.AllPlayerVehicles
+                    .Where(v => v != null && v.vehicleInstance?.vehicleTypeName == FoodTrucksMod.CartTypeName)
+                    .OrderBy(v => Vector3.Distance(v.transform.position, player))
+                    .FirstOrDefault(v => Vector3.Distance(v.transform.position, player) <= 10f);
+            }
+            if (controller == null)
+            {
+                Notify("Stand next to a food cart, or push one.");
+                return;
+            }
+            var position = controller.transform.position;
+            var spot = World.ReadSpot(tables, position);
+            var legality = Legality.Check(position);
+            var plan = CartDemand.Plan(tables, controller.vehicleInstance, spot);
+            var message = $"Day {game.Day} ({World.DayOfWeekOf(game.Day)}) {TimeHelper.CurrentHour:D2}:{(int)TimeHelper.CurrentMinute:D2}, " +
+                          $"rain {(BigAmbitions.DayNightCycle.RainHelper.isRaining ? "yes" : "no")}. Spot: {World.Describe(spot)}. " +
+                          $"Open here: {legality.Detail}{(legality.RoadBelow ? " (road layer below)" : "")}. {CartDemand.Describe(plan)}";
+            Log.Info("Demand here: " + message);
+            Notify(message);
+        }
 
         private static string Money(float value) => TaxCalculationHelper.ToCurrencyFormat(TaxCalculationHelper.RoundCurrency(value));
 

@@ -16,7 +16,7 @@ namespace FoodTrucks
     [ModEntryOnInitializationLoad]
     public sealed class FoodTrucksMod : IModBigAmbitions
     {
-        public const string Version = "0.1.0";
+        public const string Version = "0.2.0";
         internal const string BundleKey = "AssetBundles/foodtrucks.unity3d";
         internal const string TruckTypeName = "foodtrucks:vehicletype_testtruck";
         internal const string CartTypeName = "foodtrucks:vehicletype_foodcart";
@@ -51,6 +51,7 @@ namespace FoodTrucks
         {
             Log.Init(context.Logger);
             Log.Info($"Version {Version} loading.");
+            DemandData.Load(context.ModRootPath);
 
             var bundle = AssetService.GetBundle(context.ModId, BundleKey);
             Bundle = bundle;

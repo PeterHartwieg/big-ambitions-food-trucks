@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using BigAmbitions.Items;
+using FoodTrucks.Core.Demand;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
 using Helpers;
@@ -15,9 +16,11 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Milestone 1 selling: Open parks the cart where it stands; while it is open and the player stays
-    // close, customers buy at a constant rate. Each sale takes one unit of cargo and pays the game's
-    // market price with the mod's transaction label. Grabbing the cart closes it.
+    // Selling: Open parks the cart where it stands, if the spot is legal and the fitted equipment gives a
+    // menu. While it is open and the player stays close, customers come at the rate the demand model
+    // gives for the spot and the hour (CartDemand). Each customer buys one main item and sometimes a cold
+    // drink; each item takes one unit of cargo and pays the game's market price with the mod's label.
+    // Grabbing the cart closes it.
     internal sealed class CartSelling : MonoBehaviour
     {
         // The player works the window, so sales pause when they walk further away than this.
@@ -31,6 +34,10 @@ namespace FoodTrucks
         private readonly Dictionary<string, float> simulatedUntil = new Dictionary<string, float>();
         private readonly HashSet<string> pausedNoticeShown = new HashSet<string>();
         private readonly Dictionary<string, (int Sales, long Cents)> sinceOpen = new Dictionary<string, (int, long)>();
+        // The spot each open cart stands on, read at opening and again each new day.
+        private readonly Dictionary<string, Spot> spots = new Dictionary<string, Spot>();
+        private readonly Dictionary<string, double> addOnProgress = new Dictionary<string, double>();
+        private readonly System.Random random = new System.Random();
         private float nextTick;
         // From the time machine's start event to its end event (sleep, skips, paid activities).
         // Its component turns off a moment before the end event, so isRunning alone misses the last minutes.
@@ -90,14 +97,41 @@ namespace FoodTrucks
                 Notify("foodtrucks:notification_open_outside");
                 return;
             }
+            var tables = DemandData.Tables;
+            if (tables == null)
+            {
+                Notify("foodtrucks:notification_open_no_data");
+                return;
+            }
             if (cart.cargoInstances.Any(c => !c.paid))
             {
                 Notify("foodtrucks:notification_open_unpaid");
                 return;
             }
-            if (StockByItem(cart).Count == 0)
+            var menu = CartDemand.MenuOf(tables, cart);
+            if (menu.Problem == MenuProblem.TooMuchEquipment)
+            {
+                Notify("foodtrucks:notification_open_too_much_equipment", ("slots", (tables.Vehicle(CartDemand.Kind)?.EquipmentSlots ?? 0).ToString()));
+                return;
+            }
+            if (menu.Problem != MenuProblem.None || menu.Menu.Items.Count == 0)
+            {
+                Log.Info($"Open: cart {cart.id} has no usable equipment ({menu.Problem} {menu.Detail}).");
+                Notify("foodtrucks:notification_open_no_equipment");
+                return;
+            }
+            if (CartDemand.StockOf(cart, menu.Menu).Count == 0)
             {
                 Notify("foodtrucks:notification_open_no_stock");
+                return;
+            }
+            var controller = VehicleHelper.GetCurrentVehicleBase();
+            var position = controller != null ? controller.transform.position : PlayerHelper.GetPosition();
+            var legality = Legality.Check(position);
+            Log.Info($"Open: cart {cart.id} at {position}: {legality.Detail}; road layer below: {(legality.RoadBelow ? "yes" : "no")}.");
+            if (!legality.Legal)
+            {
+                Notify(legality.RuleKey!);
                 return;
             }
 
@@ -116,9 +150,13 @@ namespace FoodTrucks
             simulatedUntil[cart.id] = TimeHelper.NowInMinutes();
             pausedNoticeShown.Remove(cart.id);
             sinceOpen[cart.id] = (0, 0);
+            addOnProgress[cart.id] = 0;
+            var spot = World.ReadSpot(tables, position);
+            spots[cart.id] = spot;
             FoodTrucksSession.MarkChanged();
-            Log.Info($"Cart {cart.id} open on day {TimeHelper.CurrentDay} at {TimeHelper.CurrentHour:D2}:{(int)TimeHelper.CurrentMinute:D2}, stock {StockUnits(cart)}.");
-            Notify("foodtrucks:notification_open", ("units", StockUnits(cart).ToString()));
+            var plan = CartDemand.Plan(tables, cart, spot);
+            Log.Info($"Cart {cart.id} open on day {TimeHelper.CurrentDay} at {TimeHelper.CurrentHour:D2}:{(int)TimeHelper.CurrentMinute:D2}: {World.Describe(spot)}; {CartDemand.Describe(plan)}");
+            Notify("foodtrucks:notification_open", ("units", plan.StockUnits.ToString()), ("rate", plan.SalesPerHour.ToString("F0")));
         }
 
         private void OnEnterVehicle(VehicleController controller)
@@ -142,6 +180,8 @@ namespace FoodTrucks
             pausedNoticeShown.Remove(vehicle.VehicleId);
             sinceOpen.TryGetValue(vehicle.VehicleId, out var totals);
             sinceOpen.Remove(vehicle.VehicleId);
+            spots.Remove(vehicle.VehicleId);
+            addOnProgress.Remove(vehicle.VehicleId);
             FoodTrucksSession.MarkChanged();
             Log.Info($"Cart {vehicle.VehicleId} closed ({messageKey}): {totals.Sales} sales, {Money(totals.Cents)} since opening; lifetime {vehicle.LifetimeSales} sales, {Money(vehicle.LifetimeRevenueCents)}.");
             Notify(messageKey, ("sales", totals.Sales.ToString()), ("revenue", Money(totals.Cents)));
@@ -159,6 +199,8 @@ namespace FoodTrucks
             }
             instance?.simulatedUntil.Clear();
             instance?.sinceOpen.Clear();
+            instance?.spots.Clear();
+            instance?.addOnProgress.Clear();
             FoodTrucksSession.MarkChanged();
         }
 
@@ -214,18 +256,96 @@ namespace FoodTrucks
             }
             pausedNoticeShown.Remove(vehicle.VehicleId);
 
-            var result = SalesTick.Advance(vehicle.SaleProgress, elapsed, CartTuning.SalesPerHour, StockUnits(cart));
-            if (result.Skipped) return;
-            vehicle.SaleProgress = result.Progress;
-            var sold = 0;
-            for (var i = 0; i < result.Sales; i++)
+            var tables = DemandData.Tables;
+            if (tables == null) return;
+            var spot = SpotFor(tables, cart);
+            if (spot == null) return;
+            var plan = CartDemand.Plan(tables, cart, spot);
+            if (!plan.Usable)
             {
-                if (!SellOne(state, vehicle, cart)) break;
-                sold++;
+                // A cart opened under 0.1.0 has food but no equipment; it isn't sold out.
+                Close(vehicle, "foodtrucks:notification_closed_no_equipment");
+                return;
             }
-            if (sold > 0 || result.Sales > 0) FoodTrucksSession.MarkChanged();
-            if (sold < result.Sales || StockUnits(cart) == 0)
-                Close(vehicle, StockUnits(cart) == 0 ? "foodtrucks:notification_sold_out" : "foodtrucks:notification_closed_error");
+            if (elapsed > SalesTick.MaxCatchUpMinutes) return;
+
+            // Walk through the elapsed minutes customer by customer: after each sale the stock, and so the
+            // rate, may change (a category that sells out stops drawing customers for the rest of the time).
+            var progress = vehicle.SaleProgress;
+            if (double.IsNaN(progress) || progress < 0 || progress >= 1) progress = 0;
+            double minutesLeft = elapsed;
+            var served = 0;
+            var failed = false;
+            while (minutesLeft > 0 && plan.StockUnits > 0)
+            {
+                var perMinute = plan.SalesPerHour / 60.0;
+                // Nobody buys at these prices right now: no sales, and no stock-only fallback.
+                if (perMinute <= 0 || plan.Conversion <= 0) break;
+                var needed = (1 - progress) / perMinute;
+                if (needed > minutesLeft)
+                {
+                    progress = Math.Min(progress + minutesLeft * perMinute, 0.999999);
+                    break;
+                }
+                minutesLeft -= needed;
+                progress = 0;
+                if (!ServeCustomer(state, vehicle, cart, tables, plan))
+                {
+                    failed = true;
+                    break;
+                }
+                served++;
+                plan = CartDemand.Plan(tables, cart, spot);
+            }
+            if (served > 0 || progress != vehicle.SaleProgress) FoodTrucksSession.MarkChanged();
+            vehicle.SaleProgress = progress;
+            if (failed || plan.StockUnits == 0)
+                Close(vehicle, plan.StockUnits == 0 ? "foodtrucks:notification_sold_out" : "foodtrucks:notification_closed_error");
+        }
+
+        // The spot is read again on a new day, in case the city around the cart changed.
+        private Spot? SpotFor(DemandTables tables, VehicleInstance cart)
+        {
+            if (spots.TryGetValue(cart.id, out var spot) && spot.Day == SaveGameManager.Current.Day) return spot;
+            var controller = VehicleHelper.GetVehicleController(cart);
+            if (controller == null) return spot;
+            spot = World.ReadSpot(tables, controller.transform.position);
+            spots[cart.id] = spot;
+            Log.Info($"Cart {cart.id} spot on day {spot.Day}: {World.Describe(spot)}.");
+            return spot;
+        }
+
+        // One customer: a main item chosen by the categories' shares of customers, plus the cold drinks
+        // the add-on rate gives. One notification per customer.
+        private bool ServeCustomer(SaveState state, VehicleState vehicle, VehicleInstance cart, DemandTables tables, CartPlan plan)
+        {
+            var stock = CartDemand.StockOf(cart, plan.Menu.Menu);
+            var main = CustomerPick.MainItem(tables, plan.BuyerShares, stock, random.NextDouble());
+            if (main == null) return false;
+            var labels = new List<string>();
+            long cents = 0;
+            var sold = SellItem(state, vehicle, cart, main);
+            if (sold < 0) return false;
+            labels.Add(LocalizorManager.GetLocalization(main, null));
+            cents += sold;
+
+            // Drinks ride only with customers who came for food; a drink customer doesn't buy a second one.
+            var drinkCustomer = tables.Category(tables.Product(main)!.Category).AddOnFactor > 0;
+            addOnProgress.TryGetValue(vehicle.VehicleId, out var progress);
+            var (addOns, next) = drinkCustomer ? (0, progress) : CustomerPick.AdvanceAddOns(progress, plan.AddOnsPerFoodBuyer);
+            addOnProgress[vehicle.VehicleId] = next;
+            for (var i = 0; i < addOns; i++)
+            {
+                var drink = CustomerPick.AddOnItem(tables, CartDemand.StockOf(cart, plan.Menu.Menu));
+                if (drink == null) break;
+                var drinkCents = SellItem(state, vehicle, cart, drink);
+                if (drinkCents < 0) break;
+                labels.Add(LocalizorManager.GetLocalization(drink, null));
+                cents += drinkCents;
+            }
+            var left = CartDemand.StockOf(cart, plan.Menu.Menu).Values.Sum();
+            Notify("foodtrucks:notification_sale", ("item", string.Join(" + ", labels)), ("price", Money(cents)), ("units", left.ToString()));
+            return true;
         }
 
         private static bool PlayerIsAtCart(VehicleInstance cart)
@@ -237,45 +357,40 @@ namespace FoodTrucks
             return Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position) <= WorkingDistance;
         }
 
-        // One customer: the menu item with the most stock, at the game's market price.
-        private static bool SellOne(SaveState state, VehicleState vehicle, VehicleInstance cart)
+        // One item at the cart's price. Returns the cents paid, or -1 if nothing was sold.
+        private long SellItem(SaveState state, VehicleState vehicle, VehicleInstance cart, string itemName)
         {
-            var itemName = CartMenu.PickNext(StockByItem(cart));
-            if (itemName == null) return false;
-            var item = ItemsGetter.GetByName(itemName, suppressError: true);
-            if (item == null) return false;
-            var cents = (long)Math.Round(item.DefaultMarketPrice * CartTuning.PriceMultiplier * 100);
+            var cents = (long)Math.Round(CartDemand.PriceOf(itemName) * 100.0);
             if (cents <= 0)
             {
                 Log.Error($"Sale refused: {itemName} has no market price.");
-                return false;
+                return -1;
             }
             var day = SaveGameManager.Current.Day;
             // Check the record can take the sale before any money moves.
             if (!StreetSales.CanRecord(state, vehicle.VehicleId, day, cents, 1))
             {
                 Log.Error("Sale refused: the street food record is full.");
-                return false;
+                return -1;
             }
             var entry = cart.cargoInstances
-                .Where(c => c.itemName == itemName && c.paid && !c.IsSealed && c.amount > 0)
+                .Where(c => c.itemName == itemName && c.paid && !c.IsSealed && c.amount > 0 &&
+                            (c.nestedCargoInstances == null || c.nestedCargoInstances.Count == 0))
                 .OrderBy(c => c.amount)
-                .First();
+                .FirstOrDefault();
+            if (entry == null) return -1;
             var label = LocalizorManager.GetLocalization(itemName, null);
             var info = new TransactionInfo("foodtrucks:transaction_sale", new Dictionary<string, string> { { "itemName", label } });
             if (!Payments.PayIn(cents, info))
             {
                 Log.Error($"Sale refused by the game: {itemName} for {Money(cents)}.");
-                return false;
+                return -1;
             }
             // Record before touching the cargo: emptying a stack runs the game's cargo listeners,
             // and the ledger must not miss a paid sale if one of them throws. Neither call can fail here.
             StreetSales.Record(state, vehicle.VehicleId, day, cents, 1);
-            if (instance != null)
-            {
-                instance.sinceOpen.TryGetValue(vehicle.VehicleId, out var totals);
-                instance.sinceOpen[vehicle.VehicleId] = (totals.Sales + 1, totals.Cents + cents);
-            }
+            sinceOpen.TryGetValue(vehicle.VehicleId, out var totals);
+            sinceOpen[vehicle.VehicleId] = (totals.Sales + 1, totals.Cents + cents);
             try
             {
                 // Emptying a stack already runs the game's cargo listeners; a throwing one must not stop selling.
@@ -285,26 +400,16 @@ namespace FoodTrucks
                 GameEvent.Invoke("ba:gameevent_itemcargochanged");
             }
             catch (Exception ex) { Log.Error("Cargo update listeners: " + ex); }
-            var left = StockUnits(cart);
-            Log.Info($"Sale: {itemName} for {Money(cents)} on day {day}, {left} units left.");
-            Notify("foodtrucks:notification_sale", ("item", label), ("price", Money(cents)), ("units", left.ToString()));
-            return true;
+            Log.Info($"Sale: {itemName} for {Money(cents)} on day {day}, {cart.GetAmountByItemName(itemName)} of it left.");
+            return cents;
         }
 
-        // Paid, unsealed menu items in the cart, in units.
-        internal static Dictionary<string, int> StockByItem(VehicleInstance cart)
+        // Paid food units in the cart, whatever the menu (for the status readout).
+        internal static int StockUnits(VehicleInstance cart)
         {
-            var stock = new Dictionary<string, int>();
-            foreach (var entry in cart.cargoInstances)
-            {
-                if (entry == null || !entry.paid || entry.IsSealed || entry.amount <= 0 || !CartMenu.IsOnMenu(entry.itemName)) continue;
-                stock.TryGetValue(entry.itemName, out var units);
-                stock[entry.itemName] = units + entry.amount;
-            }
-            return stock;
+            var tables = DemandData.Tables;
+            return tables == null ? 0 : CargoRules.FoodUnits(tables, CargoLimit.Lines(cart));
         }
-
-        internal static int StockUnits(VehicleInstance cart) => StockByItem(cart).Values.Sum();
 
         internal static string Money(long cents) =>
             TaxCalculationHelper.ToCurrencyFormat(TaxCalculationHelper.RoundCurrency(cents / 100f));

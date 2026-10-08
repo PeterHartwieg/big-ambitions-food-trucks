@@ -76,6 +76,9 @@ namespace FoodTrucks.Core.Selling
             return best;
         }
 
+        public static MenuBuild FromCargo(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo) =>
+            FromEquipment(tables, vehicleType, CargoRules.FittedEquipment(tables, cargo));
+
         // The products the fitted equipment unlocks, in fitting order. Equipment is inventory: each
         // piece takes one of the vehicle's slots, and a second piece of the same kind adds no items.
         public static MenuBuild FromEquipment(DemandTables tables, string? vehicleType, IEnumerable<string?> fittedEquipment)

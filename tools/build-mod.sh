@@ -82,6 +82,9 @@ rm -rf "$OUT"
 cp -R "$SDK/Output/FoodTrucks" "$OUT"
 cp "$REPO/build/Harmony-LICENSE.txt" "$OUT/Dependencies/Harmony-LICENSE.txt" 2>/dev/null || true
 cp "$REPO/README.md" "$REPO/LICENSE.txt" "$OUT/"
+# The demand and economy tables, read at startup from the mod folder so players can tune them.
+mkdir -p "$OUT/data"
+cp "$REPO"/data/*.json "$OUT/data/"
 ( cd "$OUT" && find . -type f | sort | xargs shasum -a 256 ) > "$REPO/build/FoodTrucks.sha256"
 echo "Built $OUT"
 cat "$REPO/build/FoodTrucks.sha256"

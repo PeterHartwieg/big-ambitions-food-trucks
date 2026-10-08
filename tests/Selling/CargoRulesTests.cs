@@ -1,0 +1,178 @@
+using System;
+using System.Collections.Generic;
+using FoodTrucks.Core.Selling;
+using FoodTrucks.Core.Tests.Demand;
+using Xunit;
+
+namespace FoodTrucks.Core.Tests.Selling;
+
+public class CargoRulesTests
+{
+    private const string HotDog = "ba:itemname_hotdog";
+    private const string Grill = "ba:itemname_hotdoggrill";
+    private const string Fridge = "ba:itemname_drinksfridge";
+
+    [Fact]
+    public void FoodUnitsCountsAllLooseProductsOnly()
+    {
+        var cargo = new[]
+        {
+            new CargoLine(HotDog, 30, false), new CargoLine("ba:itemname_pizza", 20, false),
+            new CargoLine(HotDog, 500, true), new CargoLine(Grill, 2, false),
+            new CargoLine("ba:itemname_box", 80, false), new CargoLine(null, 10, false),
+            new CargoLine(HotDog, -5, false), new CargoLine(HotDog, 0, false)
+        };
+
+        Assert.Equal(50, CargoRules.FoodUnits(ShippedData.Tables, cargo));
+        Assert.Equal(0, CargoRules.FoodUnits(ShippedData.Tables, Array.Empty<CargoLine>()));
+    }
+
+    [Fact]
+    public void FoodUnitsSaturatesRatherThanOverflowing()
+    {
+        var cargo = new[] { new CargoLine(HotDog, int.MaxValue, false), new CargoLine(HotDog, 1, false) };
+
+        Assert.Equal(int.MaxValue, CargoRules.FoodUnits(ShippedData.Tables, cargo));
+        Assert.Equal(0, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, HotDog, 500, false));
+    }
+
+    [Fact]
+    public void FittedEquipmentKeepsEntryOrderAndAmounts()
+    {
+        var cargo = new[]
+        {
+            new CargoLine(Grill, 2, false), new CargoLine(HotDog, 80, false),
+            new CargoLine("ba:itemname_cheapcoffeemachine", 1, false),
+            new CargoLine(Fridge, 1, true), new CargoLine("ba:itemname_box", 1, true),
+            new CargoLine(Grill, -1, false), new CargoLine(Grill, 0, false), new CargoLine(null, 1, false)
+        };
+
+        Assert.Equal(new[] { "hotdoggrill", "hotdoggrill", "coffeemachine", "cooler" },
+            CargoRules.FittedEquipment(ShippedData.Tables, cargo));
+    }
+
+    [Theory]
+    [InlineData("cart", 0, 10, 10)]
+    [InlineData("cart", 60, 10, 10)]
+    [InlineData("cart", 60, 500, 20)]
+    [InlineData("cart", 80, 500, 0)]
+    [InlineData("cart", 100, 500, 0)]
+    [InlineData("truck", 60, 500, 100)]
+    [InlineData("cart", -5, 500, 80)]
+    [InlineData("unknown", 80, 500, 500)]
+    [InlineData(null, 80, 500, 500)]
+    public void FoodLoadsOnlyWhatFits(string? vehicle, int stock, int incoming, int allowed)
+    {
+        var cargo = new[]
+        {
+            new CargoLine(HotDog, stock, false), new CargoLine(Grill, 2, false),
+            new CargoLine(HotDog, 500, true), new CargoLine("ba:itemname_box", 80, false)
+        };
+
+        Assert.Equal(allowed, CargoRules.AllowedUnits(ShippedData.Tables, vehicle, cargo,
+            "ba:itemname_water", incoming, false));
+    }
+
+    [Theory]
+    [InlineData("cart", 0, 1, 1)]
+    [InlineData("cart", 0, 5, 2)]
+    [InlineData("cart", 1, 3, 1)]
+    [InlineData("cart", 2, 1, 0)]
+    [InlineData("cart", 3, 1, 0)]
+    [InlineData("truck", 2, 3, 2)]
+    [InlineData("truck", 4, 1, 0)]
+    [InlineData("unknown", 4, 3, 3)]
+    [InlineData("cart", int.MaxValue, 1, 0)]
+    public void EquipmentLoadsOnlyIntoFreeEquipmentSlots(string vehicle, int fitted, int incoming, int allowed)
+    {
+        var cargo = new[] { new CargoLine(Grill, fitted, false), new CargoLine(HotDog, 80, false) };
+
+        Assert.Equal(allowed, CargoRules.AllowedUnits(ShippedData.Tables, vehicle, cargo, Fridge, incoming, false));
+    }
+
+    [Fact]
+    public void StockedEquipmentStillTakesAnEquipmentSlot()
+    {
+        var cargo = new[] { new CargoLine(Grill, 2, false) };
+
+        Assert.Equal(0, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, Fridge, 1, true));
+        Assert.Equal(1, CargoRules.AllowedUnits(ShippedData.Tables, "cart", new[] { new CargoLine(Grill, 1, false) }, Fridge, 1, true));
+    }
+
+    [Theory]
+    [InlineData(HotDog, true)]
+    [InlineData("ba:itemname_box", true)]
+    [InlineData("ba:itemname_box", false)]
+    [InlineData(null, false)]
+    public void OtherItemsAndIncomingNestedCargoPassThrough(string? incomingItem, bool nested)
+    {
+        var cargo = new[] { new CargoLine(HotDog, 80, false), new CargoLine(Grill, 2, false) };
+
+        Assert.Equal(500, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, incomingItem, 500, nested));
+    }
+
+    [Theory]
+    [InlineData(HotDog)]
+    [InlineData(Grill)]
+    [InlineData("ba:itemname_box")]
+    public void IncomingAmountsNeverBecomeNegative(string incomingItem)
+    {
+        Assert.Equal(0, CargoRules.AllowedUnits(ShippedData.Tables, "cart", Array.Empty<CargoLine>(), incomingItem, -1, false));
+        Assert.Equal(0, CargoRules.AllowedUnits(ShippedData.Tables, null, Array.Empty<CargoLine>(), incomingItem, -1, true));
+    }
+
+    [Fact]
+    public void MenuFromCargoUsesOnlyFittedEquipment()
+    {
+        var cargo = new[]
+        {
+            new CargoLine(Grill, 1, false), new CargoLine(Fridge, 1, false),
+            new CargoLine("ba:itemname_pizza", 40, false), new CargoLine("ba:itemname_box", 1, true)
+        };
+
+        var build = Menu.FromCargo(ShippedData.Tables, "cart", cargo);
+
+        Assert.Equal(MenuProblem.None, build.Problem);
+        Assert.Null(build.Detail);
+        Assert.Equal(new[] { HotDog, "ba:itemname_sodacan", "ba:itemname_water" }, build.Menu.Items);
+    }
+
+    [Fact]
+    public void MenuFromCargoCountsDuplicatePiecesAgainstSlots()
+    {
+        var cargo = new[] { new CargoLine(Grill, 2, false), new CargoLine(Fridge, 1, false) };
+
+        var cart = Menu.FromCargo(ShippedData.Tables, "cart", cargo);
+        var truck = Menu.FromCargo(ShippedData.Tables, "truck", cargo);
+
+        Assert.Equal(MenuProblem.TooMuchEquipment, cart.Problem);
+        Assert.Equal("cooler", cart.Detail);
+        Assert.Empty(cart.Menu.Items);
+        Assert.Equal(MenuProblem.None, truck.Problem);
+        Assert.Equal(new[] { HotDog, "ba:itemname_sodacan", "ba:itemname_water" }, truck.Menu.Items);
+    }
+
+    [Fact]
+    public void MenuFromCargoReportsUnknownVehicleAndEmptyMenu()
+    {
+        Assert.Equal(MenuProblem.UnknownVehicle,
+            Menu.FromCargo(ShippedData.Tables, "unknown", Array.Empty<CargoLine>()).Problem);
+        var build = Menu.FromCargo(ShippedData.Tables, "cart", new[] { new CargoLine(HotDog, 80, false) });
+
+        Assert.Equal(MenuProblem.None, build.Problem);
+        Assert.Empty(build.Menu.Items);
+    }
+
+    [Fact]
+    public void AllowedUnitsReadsCargoOnce()
+    {
+        var enumerations = 0;
+        IEnumerable<CargoLine> Cargo()
+        {
+            Assert.Equal(1, ++enumerations);
+            yield return new CargoLine(HotDog, 60, false);
+        }
+
+        Assert.Equal(20, CargoRules.AllowedUnits(ShippedData.Tables, "cart", Cargo(), HotDog, 500, false));
+    }
+}

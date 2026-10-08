@@ -17,7 +17,13 @@ namespace FoodTrucks.BuildEditor
         private const string HandVehicleTag = "ba:vehicletag_ishandvehicle";
         private const int CargoSlots = 6;
         private const float CartPrice = 1200f; // Placeholder until the economy milestone.
-        private const float PusherDistance = 1.15f;
+        // Grip measured from the vanilla hand truck (logged at city load, Milestone 1 session): hands
+        // 1.16 m high, 0.30 m either side, 0.65 m ahead of the player. The handle sits at the body's rear edge.
+        private const float GripHeight = 1.16f;
+        private const float GripHalfWidth = 0.30f;
+        private const float GripReach = 0.65f;
+        private const float HandleZ = -0.75f;
+        private const float PusherDistance = -HandleZ + GripReach;
 
         public static void GenerateCart(string folder, string typeName)
         {
@@ -103,7 +109,10 @@ namespace FoodTrucks.BuildEditor
             {
                 Box(root.transform, "Body", new Vector3(0f, 0.6f, 0f), new Vector3(0.8f, 0.7f, 1.4f), new Color(0.85f, 0.25f, 0.2f)),
                 Box(root.transform, "Canopy", new Vector3(0f, 1.25f, 0f), new Vector3(0.95f, 0.05f, 1.55f), new Color(0.95f, 0.9f, 0.8f)),
-                Box(root.transform, "Handle", new Vector3(0f, 0.95f, -0.8f), new Vector3(0.7f, 0.05f, 0.05f), Color.gray),
+                Box(root.transform, "Handle", new Vector3(0f, GripHeight, HandleZ), new Vector3(0.75f, 0.04f, 0.04f), Color.gray),
+                // Two uprights from the body's top edge (0.95 m) up to the handle.
+                Box(root.transform, "HandlePostLeft", new Vector3(-0.36f, (0.95f + GripHeight) / 2f, HandleZ), new Vector3(0.04f, GripHeight - 0.95f, 0.04f), Color.gray),
+                Box(root.transform, "HandlePostRight", new Vector3(0.36f, (0.95f + GripHeight) / 2f, HandleZ), new Vector3(0.04f, GripHeight - 0.95f, 0.04f), Color.gray),
                 Box(root.transform, "WheelLeft", new Vector3(-0.42f, 0.18f, 0f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
                 Box(root.transform, "WheelRight", new Vector3(0.42f, 0.18f, 0f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
             };
@@ -118,8 +127,8 @@ namespace FoodTrucks.BuildEditor
                 box.gameObject.SetActive(false);
             }
 
-            var leftHand = Point(root.transform, "LeftHandIK", new Vector3(-0.25f, 0.95f, -0.8f));
-            var rightHand = Point(root.transform, "RightHandIK", new Vector3(0.25f, 0.95f, -0.8f));
+            var leftHand = Point(root.transform, "LeftHandIK", new Vector3(-GripHalfWidth, GripHeight, HandleZ));
+            var rightHand = Point(root.transform, "RightHandIK", new Vector3(GripHalfWidth, GripHeight, HandleZ));
             // The mod copies vanilla hand truck IK rotations at runtime.
             // Where the player walks to grab the cart and to load it: just behind the handle.
             var loading = Point(root.transform, "LoadingPosition", new Vector3(0f, 0f, -PusherDistance));

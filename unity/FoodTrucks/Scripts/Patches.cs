@@ -6,6 +6,7 @@ using Buildings;
 using Dialogs;
 using Entities;
 using FoodTrucks.Core.Saves;
+using BigAmbitions.Items;
 using HarmonyLib;
 using Helpers;
 using UI.ItemPanel;
@@ -38,6 +39,12 @@ namespace FoodTrucks
             Patch(typeof(ItemPanelUI), "SetVehicle", new[] { typeof(VehicleController) }, nameof(PanelVehicle));
             Patch(typeof(ItemPanelUI), "SetItemInstance", null, nameof(PanelOther));
             Patch(typeof(ItemPanelUI), "SetMiniGameMode", null, nameof(PanelOther));
+
+            // Cargo limit: food up to the vehicle's units, equipment up to its slots.
+            Patch(typeof(VehicleInstance), "MergeIntoCargo", new[] { typeof(CargoInstance) },
+                typeof(CargoLimit), prefix: nameof(CargoLimit.MergePrefix), finalizer: nameof(CargoLimit.MergeFinalizer));
+            Patch(typeof(VehicleInstance), "TryToAddToCargo", new[] { typeof(CargoInstance) },
+                typeof(CargoLimit), prefix: nameof(CargoLimit.AddPrefix));
         }
 
         public static void Remove()
@@ -48,6 +55,12 @@ namespace FoodTrucks
 
         private static void Patch(Type type, string method, Type[]? args, string patch, bool prefix = false)
         {
+            if (prefix) Patch(type, method, args, typeof(Patches), prefix: patch);
+            else Patch(type, method, args, typeof(Patches), postfix: patch);
+        }
+
+        private static void Patch(Type type, string method, Type[]? args, Type handlers, string? prefix = null, string? postfix = null, string? finalizer = null)
+        {
             var name = $"{type.Name}.{method}";
             try
             {
@@ -57,9 +70,10 @@ namespace FoodTrucks
                     Log.Error($"Patch {name}: Not active, method not found.");
                     return;
                 }
-                var handler = new HarmonyMethod(typeof(Patches), patch);
-                if (prefix) harmony!.Patch(original, prefix: handler);
-                else harmony!.Patch(original, postfix: handler);
+                harmony!.Patch(original,
+                    prefix: prefix == null ? null : new HarmonyMethod(handlers, prefix),
+                    postfix: postfix == null ? null : new HarmonyMethod(handlers, postfix),
+                    finalizer: finalizer == null ? null : new HarmonyMethod(handlers, finalizer));
                 Log.Info($"Patch {name}: Active.");
             }
             catch (Exception ex)

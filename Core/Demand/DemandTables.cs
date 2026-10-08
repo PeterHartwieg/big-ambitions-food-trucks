@@ -28,6 +28,7 @@ namespace FoodTrucks.Core.Demand
         private readonly Dictionary<string, double> rainAppetite;
         private readonly Dictionary<string, ProductInfo> products;
         private readonly Dictionary<string, EquipmentInfo> equipment;
+        private readonly Dictionary<string, EquipmentInfo> equipmentByGameItem;
         private readonly Dictionary<string, VehicleInfo> vehicles;
 
         public double PassersPerHour { get; }
@@ -130,6 +131,9 @@ namespace FoodTrucks.Core.Demand
             Classifier = ReadClassifier(r, r.Object(demand, "classifier"));
 
             ReadEconomy(economyReader, economy, out products, out equipment, out vehicles, out var curve);
+            equipmentByGameItem = new Dictionary<string, EquipmentInfo>(StringComparer.Ordinal);
+            foreach (var piece in equipment.Values)
+                foreach (var item in piece.GameItems) equipmentByGameItem.Add(item, piece);
             PriceCurve = curve;
             Zones = ReadZones(zonesReader, zones);
         }
@@ -193,6 +197,9 @@ namespace FoodTrucks.Core.Demand
             itemName != null && products.TryGetValue(itemName, out var product) ? product : null;
 
         public EquipmentInfo? Equipment(string? id) => id != null && equipment.TryGetValue(id, out var piece) ? piece : null;
+
+        public EquipmentInfo? EquipmentForGameItem(string? itemName) =>
+            itemName != null && equipmentByGameItem.TryGetValue(itemName, out var piece) ? piece : null;
 
         public VehicleInfo? Vehicle(string? type) => type != null && vehicles.TryGetValue(type, out var vehicle) ? vehicle : null;
 
@@ -321,10 +328,11 @@ namespace FoodTrucks.Core.Demand
             if (productTable.Count == 0) throw r.Fail("products", "must list at least one product");
 
             equipmentTable = new Dictionary<string, EquipmentInfo>(StringComparer.Ordinal);
+            var gameItemOwners = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var entry in r.Entries(r.Object(root, "equipment")))
             {
                 var obj = AsObject(r, entry);
-                r.OnlyKeys(obj, "products");
+                r.OnlyKeys(obj, "products", "gameItems");
                 var list = r.List(obj, "products");
                 if (list.Count == 0) throw r.Fail(list.Path, "must list at least one product");
                 var items = new List<string>();
@@ -335,7 +343,21 @@ namespace FoodTrucks.Core.Demand
                     if (items.Contains(item)) throw r.Fail(token.Path, $"lists '{item}' twice");
                     items.Add(item);
                 }
-                equipmentTable.Add(entry.Name, new EquipmentInfo(entry.Name, items));
+                var gameItems = new List<string>();
+                var gameList = r.OptionalArray(obj, "gameItems");
+                if (gameList != null)
+                {
+                    foreach (var token in gameList)
+                    {
+                        var item = r.Text(token, token.Path);
+                        if (string.IsNullOrWhiteSpace(item)) throw r.Fail(token.Path, "must not be blank");
+                        if (gameItemOwners.TryGetValue(item, out var owner))
+                            throw r.Fail(token.Path, $"lists '{item}' again; it already maps to equipment '{owner}'");
+                        gameItemOwners.Add(item, entry.Name);
+                        gameItems.Add(item);
+                    }
+                }
+                equipmentTable.Add(entry.Name, new EquipmentInfo(entry.Name, items, gameItems));
             }
 
             vehicleTable = new Dictionary<string, VehicleInfo>(StringComparer.Ordinal);
@@ -639,14 +661,17 @@ namespace FoodTrucks.Core.Demand
 
     public sealed class EquipmentInfo
     {
-        internal EquipmentInfo(string id, IReadOnlyList<string> products)
+        internal EquipmentInfo(string id, IReadOnlyList<string> products, IReadOnlyList<string> gameItems)
         {
             Id = id;
             Products = products;
+            GameItems = gameItems;
         }
 
         public string Id { get; }
         public IReadOnlyList<string> Products { get; }
+        // Vanilla item names that fit this piece of equipment. Missing gameItems means none.
+        public IReadOnlyList<string> GameItems { get; }
     }
 
     public sealed class VehicleInfo

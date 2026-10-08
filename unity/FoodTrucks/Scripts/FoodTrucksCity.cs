@@ -118,6 +118,7 @@ namespace FoodTrucks
 
         public static void Detach()
         {
+            World.Reset();
             if (runtimeObject != null) Object.Destroy(runtimeObject);
             runtimeObject = null;
             game = null;

@@ -175,6 +175,7 @@
 
   "_classifier": "Buildings and businesses within radiusMetres vote for area types; a vote counts in full at the spot and edgeWeight at the radius. A business type rule replaces its building's rule. The strongest maxAreas types are kept. With no votes the spot gets fallbackArea. Waterfront and parks come only from zones.",
   "classifier": {
+    "_coverage": "The added shop, service and public-service business weights are first-draft tuning guesses for playtesting. Empty businesses stay unclassified so the building type decides. buildingtype_special stays unclassified: it covers different uses with no single sensible area; a known business type decides, otherwise the classifier falls back.",
     "radiusMetres": 50,
     "edgeWeight": 0.5,
     "maxAreas": 2,
@@ -208,7 +209,28 @@
       "ba:businesstype_recruitmentagency": { "office": 1.0 },
       "ba:businesstype_eventplanningagency": { "office": 1.0 },
       "ba:businesstype_travelagency": { "office": 0.5, "retail": 0.5 },
-      "ba:businesstype_interiorinstallationfirm": { "office": 0.5, "industrial": 0.5 }
+      "ba:businesstype_interiorinstallationfirm": { "office": 0.5, "industrial": 0.5 },
+      "ba:businesstype_coffeeshop": { "retail": 1.0 },
+      "ba:businesstype_fastfoodrestaurant": { "retail": 1.0 },
+      "ba:businesstype_giftshop": { "retail": 1.0 },
+      "ba:businesstype_supermarket": { "retail": 1.0 },
+      "ba:businesstype_jewelrystore": { "retail": 1.0 },
+      "ba:businesstype_clothingstore": { "retail": 1.0 },
+      "ba:businesstype_cardealership": { "retail": 1.0 },
+      "ba:businesstype_appliancestore": { "retail": 1.0 },
+      "ba:businesstype_furniturestore": { "retail": 1.0 },
+      "ba:businesstype_officesupplystore": { "retail": 1.0 },
+      "ba:businesstype_florist": { "retail": 1.0 },
+      "ba:businesstype_fruitandvegetablestore": { "retail": 1.0 },
+      "ba:businesstype_hairdresser": { "retail": 1.0 },
+      "ba:businesstype_electronicsstore": { "retail": 1.0 },
+      "ba:businesstype_bookstore": { "retail": 1.0 },
+      "ba:businesstype_gym": { "retail": 0.5, "residential": 0.5 },
+      "ba:businesstype_school": { "residential": 1.0 },
+      "ba:businesstype_hospital": { "office": 1.0 },
+      "ba:businesstype_clinic": { "office": 1.0 },
+      "ba:businesstype_irs": { "office": 1.0 },
+      "ba:businesstype_gasstation": { "industrial": 1.0 }
     }
   }
 }

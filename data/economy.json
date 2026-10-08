@@ -18,15 +18,15 @@
     "ba:itemname_cupcake": { "category": "bakery", "serviceMinutes": 3 }
   },
 
-  "_equipment": "The mod's own equipment IDs and the products each unlocks. Which game item or mod item the player buys for each is decided on the game side.",
+  "_equipment": "The mod's own equipment IDs, the products each unlocks and the vanilla items that fit them. Carry a game item to the vehicle and click it to fit it; it stays in cargo and shares the game's cargo slots with food. Vanilla item IDs come from the game's code; their presence in the 1.0 assets is unverified. Each listed game item fits one piece (the burger station's grill and fryer are alternatives).",
   "equipment": {
-    "hotdoggrill": { "products": ["ba:itemname_hotdog"] },
-    "burgerstation": { "products": ["ba:itemname_burger", "ba:itemname_frenchfries"] },
-    "coffeemachine": { "products": ["ba:itemname_cupofcoffee", "ba:itemname_cupoftea"] },
-    "icecreamcounter": { "products": ["ba:itemname_icecream"] },
-    "pizzaoven": { "products": ["ba:itemname_pizza"] },
-    "cooler": { "products": ["ba:itemname_sodacan", "ba:itemname_water"] },
-    "displaycase": { "products": ["ba:itemname_croissant", "ba:itemname_donut", "ba:itemname_cupcake"] }
+    "hotdoggrill": { "products": ["ba:itemname_hotdog"], "gameItems": ["ba:itemname_hotdoggrill"] },
+    "burgerstation": { "products": ["ba:itemname_burger", "ba:itemname_frenchfries"], "gameItems": ["ba:itemname_industrialgrill", "ba:itemname_industrialfryermachine"] },
+    "coffeemachine": { "products": ["ba:itemname_cupofcoffee", "ba:itemname_cupoftea"], "gameItems": ["ba:itemname_cheapcoffeemachine", "ba:itemname_industrialcoffeemachine"] },
+    "icecreamcounter": { "products": ["ba:itemname_icecream"], "gameItems": ["ba:itemname_icecreamcounter"] },
+    "pizzaoven": { "products": ["ba:itemname_pizza"], "gameItems": ["ba:itemname_pizzaoven"] },
+    "cooler": { "products": ["ba:itemname_sodacan", "ba:itemname_water"], "gameItems": ["ba:itemname_drinksfridge", "ba:itemname_largedrinksfridge"] },
+    "displaycase": { "products": ["ba:itemname_croissant", "ba:itemname_donut", "ba:itemname_cupcake"], "gameItems": ["ba:itemname_bakeryshowcase"] }
   },
 
   "_vehicles": "stockUnits is how much food the vehicle holds in units, separate from the game's cargo slots, which count boxes. The cart holds about half a day at a good pitch (one person serves 12 to 20 an hour), the truck a full lunch rush and a bit (three people, about 36 an hour).",
