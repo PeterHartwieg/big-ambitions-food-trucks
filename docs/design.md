@@ -131,7 +131,7 @@ Every street spot gets an **area type** in two layers:
 | Industrial | warehouses, factories | shift workers, early and late |
 | Waterfront and park | parks, piers, open space | walkers and tourists, warm weekends |
 
-A spot can mix two types (for example office 70%, nightlife 30%) and blends their curves.
+A spot can be several types at once, and their crowds add up: each type has a presence from 0 to 1 that grows with the number and closeness of its buildings (two office buildings nearby read about 0.67), and each brings its own crowd on top of the ordinary street traffic every pavement has. Who buys at a given hour follows who is there then.
 
 ### Neighbourhood character
 
@@ -149,7 +149,7 @@ Each game neighbourhood has a character that scales area footfall and shifts app
 
 ### Footfall
 
-People passing per hour = area base × neighbourhood factor × daypart × day × season × weather. Dayparts:
+People passing per hour = (street baseline + Σ area presence × area curve × area day factor) × neighbourhood factor (by daypart and day) × season × weather × promotion. A player-edited data file from before 0.3.1 has no street baseline, so spots without classified buildings get no passers until one is added. Dayparts:
 
 | Daypart | Hours |
 |---|---|

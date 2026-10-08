@@ -70,17 +70,54 @@ public class AreaClassifierTests
         Assert.Equal(Presence(1), mix.PresenceOf("office"), 12);
     }
 
-    [Fact]
-    public void NothingNearbyUsesFallback()
+    [Theory]
+    [InlineData("residential")]
+    [InlineData("office")]
+    public void NothingClassifiedNearbyLeavesOnlyTheStreetBaseline(string fallbackArea)
     {
-        var classifier = new AreaClassifier(ShippedData.Tables);
+        var demand = JObject.Parse(ShippedData.Demand);
+        demand["classifier"]!["fallbackArea"] = fallbackArea;
+        var tables = DemandTables.Parse(demand.ToString(), ShippedData.Economy, ShippedData.Zones);
+        var classifier = new AreaClassifier(tables);
         var empty = classifier.FromPlaces(Array.Empty<NearbyPlace>());
         var ignored = classifier.FromPlaces(new[] { null!, Place("unknown", 0), Place("office", 51) });
 
-        Assert.Single(empty.Shares);
-        Assert.Single(ignored.Shares);
-        Assert.Equal(1.0, empty.ShareOf(ShippedData.Tables.Classifier.FallbackArea));
-        Assert.Equal(1.0, ignored.ShareOf(ShippedData.Tables.Classifier.FallbackArea));
+        Assert.Equal(fallbackArea, tables.Classifier.FallbackArea);
+        Assert.Empty(empty.Presences);
+        Assert.Empty(ignored.Presences);
+    }
+
+    [Theory]
+    [InlineData(6)]
+    [InlineData(9)]
+    [InlineData(12)]
+    [InlineData(15)]
+    [InlineData(18)]
+    [InlineData(22)]
+    [InlineData(3)]
+    public void NoBuildingsIsNeverBusierThanOneResidentialBuilding(int hour)
+    {
+        var tables = ShippedData.Tables;
+        var classifier = new AreaClassifier(tables);
+        var model = new DemandModel(tables);
+        var empty = classifier.FromPlaces(Array.Empty<NearbyPlace>());
+        var residential = classifier.FromPlaces(new[] { Place("residential", 0) });
+        foreach (DayOfWeek day in Enum.GetValues(typeof(DayOfWeek)))
+        {
+            var query = new DemandQuery
+            {
+                Areas = empty, MinuteOfDay = hour * 60, Day = day,
+                Menu = new[] { "ba:itemname_hotdog", "ba:itemname_cupofcoffee" }
+            };
+            var emptyEstimate = model.Estimate(query);
+            query.Areas = residential;
+            var residentialEstimate = model.Estimate(query);
+
+            Assert.Equal(emptyEstimate.Baseline, emptyEstimate.Footfall);
+            Assert.Empty(emptyEstimate.AreaFootfall);
+            Assert.True(emptyEstimate.Footfall <= residentialEstimate.Footfall, $"{day} at {hour}:00 footfall");
+            Assert.True(emptyEstimate.CustomersPerHour <= residentialEstimate.CustomersPerHour, $"{day} at {hour}:00 customers");
+        }
     }
 
     [Fact]
@@ -155,7 +192,7 @@ public class AreaClassifierTests
     }
 
     [Fact]
-    public void ZeroVotesAtAnEdgeUseFallback()
+    public void ZeroVotesAtAnEdgeLeaveOnlyTheStreetBaseline()
     {
         var demand = JObject.Parse(ShippedData.Demand);
         demand["classifier"]!["edgeWeight"] = 0;
@@ -163,7 +200,7 @@ public class AreaClassifierTests
 
         var mix = new AreaClassifier(tables).FromPlaces(new[] { Place("office", tables.Classifier.RadiusMetres) });
 
-        Assert.Equal(1.0, mix.ShareOf(tables.Classifier.FallbackArea));
+        Assert.Empty(mix.Presences);
     }
 
     [Fact]

@@ -229,7 +229,7 @@ public class DemandModelTests
     }
 
     [Fact]
-    public void MidtownMorningCoffeeIsStronger()
+    public void MidtownMorningCoffeeAppliesEachNeighbourhoodFactorOnce()
     {
         var plain = Query("office", 9, 0, Coffee);
         var midtown = Query("office", 9, 0, Coffee);
@@ -237,9 +237,16 @@ public class DemandModelTests
 
         var plainEstimate = model.Estimate(plain);
         var midtownEstimate = model.Estimate(midtown);
-        Assert.True(midtownEstimate.Appetite > plainEstimate.Appetite);
-        Assert.True(midtownEstimate.Footfall > plainEstimate.Footfall);
-        Assert.True(midtownEstimate.CustomersPerHour > plainEstimate.CustomersPerHour);
+        var neighbourhood = ShippedData.Tables.Neighbourhood(Midtown);
+        var appetiteFactor = neighbourhood.AppetiteFactor("coffee", plainEstimate.Daypart, plain.Day, plainEstimate.Season);
+        var footfallFactor = neighbourhood.Footfall * neighbourhood.DaypartFactor(plainEstimate.Daypart)
+            * neighbourhood.DayFactor(plain.Day) * neighbourhood.SeasonFactor(plainEstimate.Season);
+        // Both appetites are below the cap, so ratios expose omitted or repeated factors.
+        Assert.True(plainEstimate.Appetite > 0 && plainEstimate.Appetite < 1.0);
+        Assert.True(plainEstimate.Appetite * appetiteFactor < 1.0);
+        Assert.Equal(appetiteFactor, midtownEstimate.Appetite / plainEstimate.Appetite, 9);
+        Assert.Equal(footfallFactor, midtownEstimate.Footfall / plainEstimate.Footfall, 9);
+        Assert.Equal(footfallFactor * appetiteFactor, midtownEstimate.CustomersPerHour / plainEstimate.CustomersPerHour, 9);
     }
 
     [Fact]
@@ -268,18 +275,53 @@ public class DemandModelTests
         Assert.Equal(model.Estimate(plain).CustomersPerHour, model.Estimate(unknown).CustomersPerHour, 9);
     }
 
-    [Fact]
-    public void RainHalvesFootfallAndShiftsAppetite()
+    [Theory]
+    [InlineData("office", 9, Coffee)]
+    [InlineData("retail", 15, IceCream)]
+    public void RainAppliesEachLoadedFactorOnce(string area, int hour, string item)
     {
-        var dry = Query("office", 9, 0, Coffee);
-        var wet = Query("office", 9, 0, Coffee);
+        var dry = Query(area, hour, 0, item);
+        var wet = Query(area, hour, 0, item);
         wet.Raining = true;
-        var wetIceCream = Query("retail", 15, 0, IceCream);
-        wetIceCream.Raining = true;
+        var dryEstimate = model.Estimate(dry);
+        var wetEstimate = model.Estimate(wet);
+        var tables = ShippedData.Tables;
+        var appetiteFactor = tables.RainAppetite(tables.Product(item)!.Category);
 
-        Assert.Equal(0.5 * model.Estimate(dry).Footfall, model.Estimate(wet).Footfall, 9);
-        Assert.True(model.Estimate(wet).Appetite > model.Estimate(dry).Appetite);
-        Assert.Equal(0.20 * 0.3, model.Estimate(wetIceCream).Appetite, 9);
+        Assert.True(dryEstimate.Appetite > 0 && dryEstimate.Appetite < 1.0);
+        Assert.True(dryEstimate.Appetite * appetiteFactor < 1.0);
+        Assert.Equal(tables.RainFootfall, wetEstimate.Footfall / dryEstimate.Footfall, 9);
+        Assert.Equal(dryEstimate.Appetite * appetiteFactor, wetEstimate.Appetite, 9);
+        Assert.Equal(tables.RainFootfall * appetiteFactor, wetEstimate.CustomersPerHour / dryEstimate.CustomersPerHour, 9);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OlderDataWithNoCrowdHasFiniteAppetiteAndNoCustomers(bool hasBuilding)
+    {
+        var demand = JObject.Parse(ShippedData.Demand);
+        demand.Property("streetBaseline")!.Remove();
+        ((JObject)demand["classifier"]!).Property("saturation")!.Remove();
+        if (hasBuilding)
+            foreach (var daypart in ((JObject)demand["areas"]!["residential"]!["footfall"]!).Properties()
+                .Where(p => !p.Name.StartsWith("_", StringComparison.Ordinal)))
+                daypart.Value = 0;
+        var tables = DemandTables.Parse(demand.ToString(), ShippedData.Economy, ShippedData.Zones);
+        var query = Query("residential", 9, 0, Coffee);
+        query.Areas = new AreaClassifier(tables).FromPlaces(hasBuilding
+            ? new[] { new NearbyPlace("ba:buildingtype_residential", null, 0) }
+            : Array.Empty<NearbyPlace>());
+
+        var estimate = new DemandModel(tables).Estimate(query);
+
+        Assert.Equal(0, estimate.Baseline);
+        Assert.Equal(0, estimate.Footfall);
+        Assert.Equal(0, estimate.CustomersPerHour);
+        Assert.Equal(tables.Category("coffee").Appetite(estimate.Daypart)
+            * tables.SeasonAppetite(estimate.Season, "coffee"), estimate.Appetite, 9);
+        Assert.Equal(1.0, estimate.Market);
+        Assert.Equal(0, estimate.AddOnsPerCustomer);
     }
 
     [Fact]

@@ -59,7 +59,9 @@ namespace FoodTrucks.Core.Demand
 
             PassersPerHour = r.Number(demand, "passersPerHour", 0, 100000);
             daypartStarts = ReadDayparts(r, r.Object(demand, "dayparts"));
-            streetBaseline = FullTable(r, r.Object(demand, "streetBaseline"), DaypartKeys, double.Epsilon, 100);
+            // Older demand files have no street baseline; retain their area-only traffic.
+            streetBaseline = demand["streetBaseline"] == null ? new double[DaypartKeys.Length]
+                : FullTable(r, r.Object(demand, "streetBaseline"), DaypartKeys, double.Epsilon, 100);
 
             categories = new Dictionary<string, CategoryTable>(StringComparer.Ordinal);
             foreach (var entry in r.Entries(r.Object(demand, "categories")))
@@ -271,7 +273,7 @@ namespace FoodTrucks.Core.Demand
             return new ClassifierSettings(
                 r.Number(obj, "radiusMetres", 1, 10000),
                 r.Number(obj, "edgeWeight", 0, 1),
-                r.Number(obj, "saturation", double.Epsilon, double.MaxValue),
+                obj["saturation"] == null ? 1.25 : r.Number(obj, "saturation", double.Epsilon, double.MaxValue),
                 r.Integer(obj, "maxAreas", 1, areas.Count),
                 fallback,
                 AreaRules(r, r.Object(obj, "buildingTypes")),
@@ -654,6 +656,7 @@ namespace FoodTrucks.Core.Demand
         public double Saturation { get; }
         // Accepted for compatibility; independent area presences are never trimmed.
         public int MaxAreas { get; }
+        // Accepted and validated for compatibility; no longer used to supply area presence.
         public string FallbackArea { get; }
         public IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> BuildingTypes { get; }
         public IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> BusinessTypes { get; }
