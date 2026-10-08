@@ -197,7 +197,7 @@ The game tracks demand per product per neighbourhood: 100 minus the number of sh
 ### Conditions and reputation
 
 - **Season.** April to October 1.0, March and November 0.8, December to February 0.6. Ice cream 0.2 in winter, 1.3 in summer. Hamptons footfall 0.3 in winter. The game has no climate seasons, so the mod keeps its own calendar from the in-game day count; the season length is a setting. If the Alcware Seasons mod is installed, the mod follows its season instead.
-- **Weather.** Rain is the only weather the game has: footfall 0.5 while it rains, coffee appetite 1.3, ice cream 0.3. Heat and cold come from the season instead: winter raises coffee appetite by 1.3, summer raises ice cream and cold drinks by 1.4.
+- **Weather.** Rain is the only weather the game has: footfall 0.5 while it rains, coffee appetite 1.3, ice cream 0.3. Heat and cold come from the season instead: winter raises coffee appetite by 1.3, summer raises cold drinks by 1.4 (ice cream by the 1.3 above).
 - **Reputation.** Health grade, regulars bonus and same-food competition, as described below.
 
 ### Live crowds from game businesses

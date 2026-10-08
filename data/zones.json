@@ -1,0 +1,5 @@
+{
+  "_notes": "Hand-drawn zones on top of the automatic area mix. Each zone is a polygon of [x, z] points in world metres. mode override replaces the spot's mix with the zone's areas; mode add blends them in at share (0 to 1). The first matching override wins and ends the list; add zones before it are dropped. Add zones can push the mix past classifier.maxAreas. Empty until the zones are drawn in the game.",
+  "schemaVersion": 1,
+  "zones": []
+}
