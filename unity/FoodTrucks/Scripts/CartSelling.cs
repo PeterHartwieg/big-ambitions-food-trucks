@@ -419,11 +419,12 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error(ex); }
         }
 
-        private void Close(VehicleState vehicle, string messageKey)
+        // at: the game minute the window closes, when the sales clock is catching up behind the live one.
+        private void Close(VehicleState vehicle, string messageKey, double? at = null)
         {
-            // A crew window closed by a failing sale stays closed for the rest of the stop's hours.
+            // A crew window closed by a failing sale stays closed for the rest of that opening.
             if (vehicle.HireStop != null && messageKey == "foodtrucks:notification_closed_error")
-                HireRunner.GiveUp(vehicle, vehicle.HireStop.Value, HireCrew.Now());
+                HireRunner.GiveUp(vehicle, vehicle.HireStop.Value, (long)Math.Floor(at ?? HireCrew.NowExact()));
             PayHeld(vehicle, null);
             heldFailed.Remove(vehicle.VehicleId);
             vehicle.IsOpen = false;
@@ -547,7 +548,7 @@ namespace FoodTrucks
             }
             if (heldFailed.Remove(vehicle.VehicleId))
             {
-                Close(vehicle, "foodtrucks:notification_closed_error");
+                Close(vehicle, "foodtrucks:notification_closed_error", from);
                 return;
             }
             // The licence ran out while open (a new day began).
@@ -619,7 +620,7 @@ namespace FoodTrucks
             CartQueueView.Record(vehicle.VehicleId, result, window.Mood);
             // Every simulated minute changes the saved queue (its clock, random state, orders in progress).
             FoodTrucksSession.MarkChanged();
-            if (failed) Close(vehicle, "foodtrucks:notification_closed_error");
+            if (failed) Close(vehicle, "foodtrucks:notification_closed_error", now);
             else if (result.SoldOut) Close(vehicle, "foodtrucks:notification_sold_out");
         }
 

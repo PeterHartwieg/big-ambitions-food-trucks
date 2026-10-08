@@ -234,14 +234,21 @@ namespace FoodTrucks.Core.Fleet
             };
         }
 
-        // The crew stops trying a stop until its planned opening ends (or for an hour without one): a window
-        // that closed on an error would otherwise open again at once.
-        public static void GiveUp(VehicleState vehicle, int stopIndex, long now)
+        // The crew stops trying the opening running at that minute until it ends: a window that closed on an
+        // error would otherwise open again at once. An error right at closing time belongs to the opening that
+        // just ended, so nothing later is given up.
+        public static void GiveUp(VehicleState vehicle, int stopIndex, long minute)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var stop = vehicle.Schedule?.Stops?.ElementAtOrDefault(stopIndex);
             if (stop == null) return;
-            vehicle.Skipped = new SkipState { SpotKey = stop.SpotKey, Until = OpenEnd(vehicle, stopIndex, now) ?? now + 60 };
+            foreach (var plan in vehicle.Shifts ?? new List<ShiftPlan>())
+                foreach (var leg in plan.Legs)
+                    if (leg.Kind == LegKind.Open && leg.StopIndex == stopIndex && leg.Start < minute && leg.End > minute)
+                    {
+                        vehicle.Skipped = new SkipState { SpotKey = stop.SpotKey, Until = leg.End };
+                        return;
+                    }
         }
 
         // Shift minutes as the plans will be once today's exists, without saving anything: the game's payroll

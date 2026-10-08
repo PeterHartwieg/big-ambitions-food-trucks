@@ -83,7 +83,16 @@ namespace FoodTrucks
             foreach (var id in routedUntil.Keys.Where(id => running.All(v => v.VehicleId != id)).ToList()) routedUntil.Remove(id);
             foreach (var vehicle in running)
             {
-                if (broken.Contains(vehicle.VehicleId)) continue;
+                if (broken.Contains(vehicle.VehicleId))
+                {
+                    // A stopped route still brings a vehicle on its way back, as soon as there is room.
+                    if (vehicle.Transit != null)
+                    {
+                        try { Recover(vehicle); }
+                        catch (Exception ex) { Log.Error("Hire routes, bringing it back: " + ex); }
+                    }
+                    continue;
+                }
                 try { Run(vehicle, now); }
                 catch (Exception ex)
                 {
@@ -93,8 +102,6 @@ namespace FoodTrucks
                     CartSelling.Notify("foodtrucks:notification_routes_failed");
                     try { if (vehicle.HireStop != null) CartSelling.CloseByCrew(vehicle, now); }
                     catch (Exception closeEx) { Log.Error("Hire routes, closing: " + closeEx); }
-                    try { Recover(vehicle); }
-                    catch (Exception recoverEx) { Log.Error("Hire routes, bringing it back: " + recoverEx); }
                 }
             }
         }
@@ -315,20 +322,34 @@ namespace FoodTrucks
                 ("time", StaffDialog.Clock((int)(action.ArrivesAt % 1440))));
         }
 
-        // A stopped route never leaves its vehicle off the map: one on its way goes back where it left from,
-        // even onto a taken spot, since there is no next try.
+        // A stopped route never leaves its vehicle off the map: one on its way goes back where it left from, or
+        // for a truck into a free space near there. Tried every tick until there is room.
         private static void Recover(VehicleState vehicle)
         {
             var transit = vehicle.Transit;
             var instance = Instance(vehicle.VehicleId);
             if (transit == null || instance == null) return;
+            var kind = KindOf(vehicle);
             var from = new Vector3((float)transit.FromX, (float)transit.FromY, (float)transit.FromZ);
-            var controller = Place(instance, from, Quaternion.Euler(0f, (float)transit.FromHeading, 0f));
-            instance.parkingState = (ParkingState)transit.FromParkingState;
+            var rotation = Quaternion.Euler(0f, (float)transit.FromHeading, 0f);
+            var position = from;
+            var parking = (ParkingState)transit.FromParkingState;
+            string? neighbourhood = null;
+            if (Taken(from, rotation, kind))
+            {
+                var spot = kind == "truck" ? FreeParking(from, WideParkingMetres) : null;
+                if (spot == null) return;
+                (position, rotation, neighbourhood) = spot.Value;
+                parking = ParkingState.Legal;
+            }
+            var controller = Place(instance, position, rotation);
+            if (controller == null) return;
+            instance.parkingState = parking;
+            if (neighbourhood != null) instance.parkingNeighbourhood = neighbourhood;
             vehicle.Transit = null;
             vehicle.Arrival = null;
             FoodTrucksSession.MarkChanged();
-            Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} put back where it left from after its route stopped ({(controller != null ? "placed" : "not placed; it appears there on the next load")}).");
+            Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} brought back to {position} after its route stopped.");
         }
 
         // Whether another vehicle stands where this one's hull would be.
