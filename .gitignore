@@ -17,3 +17,12 @@ CLAUDE.local.md
 # Fetched or built at build time; the folder itself is recreated by tools/build-mod.sh.
 unity/FoodTrucks/Dependencies/
 unity/FoodTrucks/Dependencies.meta
+
+# Art: only the finals and the review sheets are kept in git (Peter, 8 October 2026).
+art/**/renders/*
+!art/**/renders/review-sheet.png
+art/truck/v1/
+art/truck/v2/
+art/**/__pycache__/
+art/**/.*
+art/**/*.log

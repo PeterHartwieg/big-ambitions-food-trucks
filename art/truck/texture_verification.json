@@ -1,0 +1,15 @@
+{
+  "errors": [],
+  "checked_faces": 3550,
+  "light_classes": {
+    "head": 88,
+    "tail": 12,
+    "reverse": 12,
+    "right": 12,
+    "left": 12,
+    "marker": 48,
+    "worklight": 12
+  },
+  "AO_min_at_face_centers": 0.7803922295570374,
+  "markers_on_headlight_circuit": true
+}

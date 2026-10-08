@@ -1,0 +1,9 @@
+{
+  "Truck_Body": 6400,
+  "Truck_Wheel_FL": 400,
+  "Truck_Wheel_FR": 400,
+  "Truck_Wheel_RL": 400,
+  "Truck_Wheel_RR": 400,
+  "Truck_Hatch": 164,
+  "Truck_Collision": 122
+}

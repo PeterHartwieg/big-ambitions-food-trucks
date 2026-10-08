@@ -1,0 +1,242 @@
+{
+  "name": "FoodTruck",
+  "fbx": "FoodTruck.fbx",
+  "visible_budget": 8500,
+  "position_tolerance_m": 0.005,
+  "uv_layers": 2,
+  "uv_min_fill": 0.4,
+  "textures": [
+    {
+      "file": "T_FoodTruck_D.png",
+      "size": 2048
+    },
+    {
+      "file": "T_FoodTruck_MaskMap.png",
+      "size": 2048
+    },
+    {
+      "file": "T_FoodTruck_N.png",
+      "size": 2048
+    },
+    {
+      "file": "T_FoodTruck_E.png",
+      "size": 2048
+    },
+    {
+      "file": "T_FoodTruck_EM_1.png",
+      "size": 2048
+    },
+    {
+      "file": "T_FoodTruck_EM_2.png",
+      "size": 2048
+    }
+  ],
+  "objects": {
+    "Truck_Body": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "max_tris": 6500
+    },
+    "Truck_Wheel_FL": {
+      "origin": [
+        0.87,
+        -1.8,
+        0.38
+      ],
+      "wheel": true,
+      "diameter": 0.76,
+      "width": 0.23,
+      "max_tris": 400
+    },
+    "Truck_Wheel_FR": {
+      "origin": [
+        -0.87,
+        -1.8,
+        0.38
+      ],
+      "wheel": true,
+      "diameter": 0.76,
+      "width": 0.23,
+      "max_tris": 400
+    },
+    "Truck_Wheel_RL": {
+      "origin": [
+        0.87,
+        1.8,
+        0.38
+      ],
+      "wheel": true,
+      "diameter": 0.76,
+      "width": 0.23,
+      "max_tris": 400
+    },
+    "Truck_Wheel_RR": {
+      "origin": [
+        -0.87,
+        1.8,
+        0.38
+      ],
+      "wheel": true,
+      "diameter": 0.76,
+      "width": 0.23,
+      "max_tris": 400
+    },
+    "Truck_Hatch": {
+      "origin": [
+        -1.1,
+        1.1,
+        2.15
+      ],
+      "hinge": {
+        "axis": "Y",
+        "line": [
+          -1.1,
+          0,
+          2.15
+        ],
+        "open_deg": 80,
+        "opens_towards": "-x"
+      },
+      "max_tris": 200
+    },
+    "Truck_Collision": {
+      "collision": true,
+      "max_tris": 150
+    }
+  },
+  "envelope": {
+    "x": [
+      -1.26,
+      1.26
+    ],
+    "y": [
+      -2.66,
+      3.16
+    ],
+    "z": [
+      0,
+      3.06
+    ]
+  },
+  "extent_at_least": {
+    "x": [
+      -1.1,
+      1.1
+    ],
+    "y": [
+      -2.65,
+      3.15
+    ],
+    "z": [
+      0,
+      2.9
+    ]
+  },
+  "near_points": [
+    {
+      "label": "hatch hinge rail",
+      "object": "Truck_Body",
+      "point": [
+        -1.1,
+        1.1,
+        2.15
+      ],
+      "max_dist": 0.03
+    },
+    {
+      "label": "serving shelf",
+      "object": "Truck_Body",
+      "point": [
+        -1.2,
+        1.1,
+        1.15
+      ],
+      "max_dist": 0.02
+    }
+  ],
+  "clear_boxes": [
+    {
+      "label": "serving window opening",
+      "objects": [
+        "Truck_Body"
+      ],
+      "min": [
+        -1.09,
+        0.25,
+        1.25
+      ],
+      "max": [
+        -0.82,
+        1.95,
+        2.1
+      ]
+    },
+    {
+      "label": "front-left wheel arch",
+      "objects": [
+        "Truck_Body"
+      ],
+      "min": [
+        0.745,
+        -2.24,
+        0.0
+      ],
+      "max": [
+        0.995,
+        -1.36,
+        0.84
+      ]
+    },
+    {
+      "label": "front-right wheel arch",
+      "objects": [
+        "Truck_Body"
+      ],
+      "min": [
+        -0.995,
+        -2.24,
+        0.0
+      ],
+      "max": [
+        -0.745,
+        -1.36,
+        0.84
+      ]
+    },
+    {
+      "label": "rear-left wheel arch",
+      "objects": [
+        "Truck_Body"
+      ],
+      "min": [
+        0.745,
+        1.36,
+        0.0
+      ],
+      "max": [
+        0.995,
+        2.24,
+        0.84
+      ]
+    },
+    {
+      "label": "rear-right wheel arch",
+      "objects": [
+        "Truck_Body"
+      ],
+      "min": [
+        -0.995,
+        1.36,
+        0.0
+      ],
+      "max": [
+        -0.745,
+        2.24,
+        0.84
+      ]
+    }
+  ]
+}

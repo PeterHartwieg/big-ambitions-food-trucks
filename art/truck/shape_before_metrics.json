@@ -1,0 +1,21 @@
+{
+  "file": "art/truck/FoodTruck.blend",
+  "counts": {
+    "Truck_Body": 4216,
+    "Truck_Collision": 138,
+    "Truck_Hatch": 164,
+    "Truck_Wheel_FL": 400,
+    "Truck_Wheel_FR": 400,
+    "Truck_Wheel_RL": 400,
+    "Truck_Wheel_RR": 400
+  },
+  "wheel_hashes": {
+    "Truck_Wheel_FL": "cfd3895e80e110b98127b73f71b2ba708e8c8f4f97f9b679214436710feefcf0",
+    "Truck_Wheel_FR": "cfd3895e80e110b98127b73f71b2ba708e8c8f4f97f9b679214436710feefcf0",
+    "Truck_Wheel_RL": "aaebda3c947e0ea90f8f33f5c3689bfa571f28481ac9861e08b59d4e55f1801c",
+    "Truck_Wheel_RR": "aaebda3c947e0ea90f8f33f5c3689bfa571f28481ac9861e08b59d4e55f1801c"
+  },
+  "material": [
+    "FoodTruck_Vehicle"
+  ]
+}

@@ -1,0 +1,675 @@
+{
+  "spec": "spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "Truck_Body",
+      "Truck_Collision",
+      "Truck_Hatch",
+      "Truck_Wheel_FL",
+      "Truck_Wheel_FR",
+      "Truck_Wheel_RL",
+      "Truck_Wheel_RR"
+    ],
+    "per_object": {
+      "Truck_Body": {
+        "triangles": 6400,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -1.26,
+          -2.65,
+          0.2
+        ],
+        "bbox_max": [
+          1.25,
+          3.15,
+          3.05
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "Truck_Wheel_FL": {
+        "triangles": 400,
+        "origin": [
+          0.87,
+          -1.8,
+          0.38
+        ],
+        "bbox_min": [
+          0.755,
+          -2.18,
+          0.0
+        ],
+        "bbox_max": [
+          0.985,
+          -1.42,
+          0.76
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.76,
+        "width": 0.23,
+        "axle": "X"
+      },
+      "Truck_Wheel_FR": {
+        "triangles": 400,
+        "origin": [
+          -0.87,
+          -1.8,
+          0.38
+        ],
+        "bbox_min": [
+          -0.985,
+          -2.18,
+          0.0
+        ],
+        "bbox_max": [
+          -0.755,
+          -1.42,
+          0.76
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.76,
+        "width": 0.23,
+        "axle": "X"
+      },
+      "Truck_Wheel_RL": {
+        "triangles": 400,
+        "origin": [
+          0.87,
+          1.8,
+          0.38
+        ],
+        "bbox_min": [
+          0.755,
+          1.42,
+          0.0
+        ],
+        "bbox_max": [
+          0.985,
+          2.18,
+          0.76
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.76,
+        "width": 0.23,
+        "axle": "X"
+      },
+      "Truck_Wheel_RR": {
+        "triangles": 400,
+        "origin": [
+          -0.87,
+          1.8,
+          0.38
+        ],
+        "bbox_min": [
+          -0.985,
+          1.42,
+          0.0
+        ],
+        "bbox_max": [
+          -0.755,
+          2.18,
+          0.76
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.76,
+        "width": 0.23,
+        "axle": "X"
+      },
+      "Truck_Hatch": {
+        "triangles": 164,
+        "origin": [
+          -1.1,
+          1.1,
+          2.15
+        ],
+        "bbox_min": [
+          -1.143,
+          0.2,
+          1.2
+        ],
+        "bbox_max": [
+          -0.9681,
+          2.0,
+          2.15
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "opens_with_rotation_sign": 1,
+        "open_centroid_x": {
+          "1": -1.632,
+          "-1": -0.561
+        }
+      },
+      "Truck_Collision": {
+        "triangles": 122,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -1.26,
+          -2.65,
+          0.0
+        ],
+        "bbox_max": [
+          1.231,
+          3.15,
+          2.9
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.00044
+      }
+    },
+    "visible_triangles": 8164,
+    "visible_bbox_min": [
+      -1.26,
+      -2.65,
+      0.0
+    ],
+    "visible_bbox_max": [
+      1.25,
+      3.15,
+      3.05
+    ],
+    "visible_dims": [
+      2.51,
+      5.8,
+      3.05
+    ],
+    "near_points": {
+      "hatch hinge rail": 0.0,
+      "serving shelf": 0.0
+    },
+    "clear_boxes": {
+      "serving window opening": 0,
+      "front-left wheel arch": 0,
+      "front-right wheel arch": 0,
+      "rear-left wheel arch": 0,
+      "rear-right wheel arch": 0
+    },
+    "materials": [
+      "FoodTruck_Vehicle"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5144,
+      "overlap_fraction": 0.0
+    },
+    "uv1": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5144,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_FoodTruck_D.png": [
+        2048,
+        2048
+      ],
+      "T_FoodTruck_MaskMap.png": [
+        2048,
+        2048
+      ],
+      "T_FoodTruck_N.png": [
+        2048,
+        2048
+      ],
+      "T_FoodTruck_E.png": [
+        2048,
+        2048
+      ],
+      "T_FoodTruck_EM_1.png": [
+        2048,
+        2048
+      ],
+      "T_FoodTruck_EM_2.png": [
+        2048,
+        2048
+      ]
+    },
+    "blend_size_mb": 0.26
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "Truck_Body",
+      "Truck_Collision",
+      "Truck_Hatch",
+      "Truck_Wheel_FL",
+      "Truck_Wheel_FR",
+      "Truck_Wheel_RL",
+      "Truck_Wheel_RR"
+    ],
+    "per_object": {
+      "Truck_Body": {
+        "triangles": 6400,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -1.26,
+          -2.65,
+          0.2
+        ],
+        "bbox_max": [
+          1.25,
+          3.15,
+          3.05
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "Truck_Wheel_FL": {
+        "triangles": 400,
+        "origin": [
+          0.87,
+          -1.8,
+          0.38
+        ],
+        "bbox_min": [
+          0.755,
+          -2.18,
+          0.0
+        ],
+        "bbox_max": [
+          0.985,
+          -1.42,
+          0.76
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.76,
+        "width": 0.23,
+        "axle": "X"
+      },
+      "Truck_Wheel_FR": {
+        "triangles": 400,
+        "origin": [
+          -0.87,
+          -1.8,
+          0.38
+        ],
+        "bbox_min": [
+          -0.985,
+          -2.18,
+          0.0
+        ],
+        "bbox_max": [
+          -0.755,
+          -1.42,
+          0.76
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.76,
+        "width": 0.23,
+        "axle": "X"
+      },
+      "Truck_Wheel_RL": {
+        "triangles": 400,
+        "origin": [
+          0.87,
+          1.8,
+          0.38
+        ],
+        "bbox_min": [
+          0.755,
+          1.42,
+          0.0
+        ],
+        "bbox_max": [
+          0.985,
+          2.18,
+          0.76
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.76,
+        "width": 0.23,
+        "axle": "X"
+      },
+      "Truck_Wheel_RR": {
+        "triangles": 400,
+        "origin": [
+          -0.87,
+          1.8,
+          0.38
+        ],
+        "bbox_min": [
+          -0.985,
+          1.42,
+          0.0
+        ],
+        "bbox_max": [
+          -0.755,
+          2.18,
+          0.76
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.76,
+        "width": 0.23,
+        "axle": "X"
+      },
+      "Truck_Hatch": {
+        "triangles": 164,
+        "origin": [
+          -1.1,
+          1.1,
+          2.15
+        ],
+        "bbox_min": [
+          -1.143,
+          0.2,
+          1.2
+        ],
+        "bbox_max": [
+          -0.9681,
+          2.0,
+          2.15
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "opens_with_rotation_sign": 1,
+        "open_centroid_x": {
+          "1": -1.632,
+          "-1": -0.561
+        }
+      },
+      "Truck_Collision": {
+        "triangles": 122,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -1.26,
+          -2.65,
+          -0.0
+        ],
+        "bbox_max": [
+          1.231,
+          3.15,
+          2.9
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.00044
+      }
+    },
+    "visible_triangles": 8164,
+    "visible_bbox_min": [
+      -1.26,
+      -2.65,
+      0.0
+    ],
+    "visible_bbox_max": [
+      1.25,
+      3.15,
+      3.05
+    ],
+    "visible_dims": [
+      2.51,
+      5.8,
+      3.05
+    ],
+    "near_points": {
+      "hatch hinge rail": 0.0,
+      "serving shelf": 0.0
+    },
+    "clear_boxes": {
+      "serving window opening": 0,
+      "front-left wheel arch": 0,
+      "front-right wheel arch": 0,
+      "rear-left wheel arch": 0,
+      "rear-right wheel arch": 0
+    },
+    "materials": [
+      "FoodTruck_Vehicle"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5144,
+      "overlap_fraction": 0.0
+    },
+    "uv1": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5144,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.61
+  },
+  "failures": [],
+  "passed": true
+}

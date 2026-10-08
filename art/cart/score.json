@@ -1,0 +1,489 @@
+{
+  "spec": "spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "Cart_Body",
+      "Cart_Collision",
+      "Cart_Lid",
+      "Cart_Wheel_L",
+      "Cart_Wheel_R"
+    ],
+    "per_object": {
+      "Cart_Body": {
+        "triangles": 2948,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.8,
+          -1.4,
+          0.0
+        ],
+        "bbox_max": [
+          0.8,
+          0.77,
+          2.3
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "Cart_Wheel_L": {
+        "triangles": 388,
+        "origin": [
+          0.455,
+          0.0,
+          0.25
+        ],
+        "bbox_min": [
+          0.43,
+          -0.25,
+          0.0
+        ],
+        "bbox_max": [
+          0.48,
+          0.25,
+          0.5
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.5,
+        "width": 0.05,
+        "axle": "X"
+      },
+      "Cart_Wheel_R": {
+        "triangles": 388,
+        "origin": [
+          -0.455,
+          0.0,
+          0.25
+        ],
+        "bbox_min": [
+          -0.48,
+          -0.25,
+          0.0
+        ],
+        "bbox_max": [
+          -0.43,
+          0.25,
+          0.5
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.5,
+        "width": 0.05,
+        "axle": "X"
+      },
+      "Cart_Lid": {
+        "triangles": 88,
+        "origin": [
+          0.0,
+          -0.025,
+          0.95
+        ],
+        "bbox_min": [
+          -0.15,
+          -0.275,
+          0.947
+        ],
+        "bbox_max": [
+          0.15,
+          -0.025,
+          0.962
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "opens_with_rotation_sign": -1,
+        "open_centroid_z": {
+          "1": 0.79,
+          "-1": 1.108
+        }
+      },
+      "Cart_Collision": {
+        "triangles": 84,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.48,
+          -0.7,
+          0.0
+        ],
+        "bbox_max": [
+          0.48,
+          0.7,
+          0.95
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 3812,
+    "visible_bbox_min": [
+      -0.8,
+      -1.4,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.8,
+      0.77,
+      2.3
+    ],
+    "visible_dims": [
+      1.6,
+      2.17,
+      2.3
+    ],
+    "near_points": {
+      "left hand grip": 0.0166,
+      "right hand grip": 0.0166,
+      "counter front-left corner": 0.0035,
+      "counter rear-right corner": 0.0035,
+      "umbrella top": 0.0
+    },
+    "clear_boxes": {
+      "cargo box zone above the counter": 0,
+      "pusher zone behind the handle": 0,
+      "headroom under the umbrella": 0,
+      "headroom under the umbrella (left)": 0
+    },
+    "materials": [
+      "Cart_Atlas.002"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.441,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_FoodCart_BaseColor.png": [
+        1024,
+        1024
+      ]
+    },
+    "blend_size_mb": 0.22
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "Cart_Body",
+      "Cart_Collision",
+      "Cart_Lid",
+      "Cart_Wheel_L",
+      "Cart_Wheel_R"
+    ],
+    "per_object": {
+      "Cart_Body": {
+        "triangles": 2948,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.8,
+          -1.4,
+          -0.0
+        ],
+        "bbox_max": [
+          0.8,
+          0.77,
+          2.3
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "Cart_Wheel_L": {
+        "triangles": 388,
+        "origin": [
+          0.455,
+          0.0,
+          0.25
+        ],
+        "bbox_min": [
+          0.43,
+          -0.25,
+          0.0
+        ],
+        "bbox_max": [
+          0.48,
+          0.25,
+          0.5
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.5,
+        "width": 0.05,
+        "axle": "X"
+      },
+      "Cart_Wheel_R": {
+        "triangles": 388,
+        "origin": [
+          -0.455,
+          0.0,
+          0.25
+        ],
+        "bbox_min": [
+          -0.48,
+          -0.25,
+          0.0
+        ],
+        "bbox_max": [
+          -0.43,
+          0.25,
+          0.5
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "hub_offset": 0.0,
+        "diameter": 0.5,
+        "width": 0.05,
+        "axle": "X"
+      },
+      "Cart_Lid": {
+        "triangles": 88,
+        "origin": [
+          0.0,
+          -0.025,
+          0.95
+        ],
+        "bbox_min": [
+          -0.15,
+          -0.275,
+          0.947
+        ],
+        "bbox_max": [
+          0.15,
+          -0.025,
+          0.962
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "opens_with_rotation_sign": -1,
+        "open_centroid_z": {
+          "1": 0.79,
+          "-1": 1.108
+        }
+      },
+      "Cart_Collision": {
+        "triangles": 84,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.48,
+          -0.7,
+          -0.0
+        ],
+        "bbox_max": [
+          0.48,
+          0.7,
+          0.95
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 3812,
+    "visible_bbox_min": [
+      -0.8,
+      -1.4,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.8,
+      0.77,
+      2.3
+    ],
+    "visible_dims": [
+      1.6,
+      2.17,
+      2.3
+    ],
+    "near_points": {
+      "left hand grip": 0.0166,
+      "right hand grip": 0.0166,
+      "counter front-left corner": 0.0035,
+      "counter rear-right corner": 0.0035,
+      "umbrella top": 0.0
+    },
+    "clear_boxes": {
+      "cargo box zone above the counter": 0,
+      "pusher zone behind the handle": 0,
+      "headroom under the umbrella": 0,
+      "headroom under the umbrella (left)": 0
+    },
+    "materials": [
+      "Cart_Atlas.002"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.441,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.24
+  },
+  "failures": [],
+  "passed": true
+}
