@@ -25,7 +25,9 @@ namespace FoodTrucks
         private const string LineKey = "foodtrucks:mapfilter_line";
         private const string VehiclesKey = "foodtrucks:mapfilter_vehicles";
         private const string PitchesKey = "foodtrucks:mapfilter_pitches";
+        private const string CateringKey = "foodtrucks:mapfilter_catering";
         private static readonly Color PitchColour = new Color(0.95f, 0.70f, 0.15f);
+        private static readonly Color CateringColour = new Color(0.25f, 0.55f, 0.95f);
         private static string KeyOf(string filter) => "foodtrucks:mapfilter_" + filter;
 
         // Each building filter's icon and colour: a business type the filter stands for.
@@ -49,8 +51,9 @@ namespace FoodTrucks
         private static List<string> selected = new List<string>();
         // The game's own "hide closed" filter, read with the selection: closed venues stay dark.
         private static bool hideClosed;
-        // With the pitches filter on: the buildings premium spots and coming events are outside, by address.
-        private static HashSet<string> pitchAddresses = new HashSet<string>(StringComparer.Ordinal);
+        // With the pitches or catering filter on: the buildings premium spots, coming events and booked gigs are
+        // outside, by address, with their colour.
+        private static Dictionary<string, Color> pitchAddresses = new Dictionary<string, Color>(StringComparer.Ordinal);
         private static AccessTools.FieldRef<CityMapFilters, bool>? hideClosedField;
 
         // The player's food vehicles' markers, by vehicle ID. Hidden unless the filter is on.
@@ -73,8 +76,9 @@ namespace FoodTrucks
                 foreach (var filter in StreetFoodMap.BuildingFilters)
                     AddFilter(__instance, line, KeyOf(filter), BusinessTypeHelper.GetData(IconBusiness[filter])?.icon);
                 AddFilter(__instance, line, PitchesKey, BusinessTypeHelper.GetData("ba:businesstype_fastfoodrestaurant")?.icon);
+                AddFilter(__instance, line, CateringKey, BusinessTypeHelper.GetData("ba:businesstype_eventplanningagency")?.icon);
                 AddFilter(__instance, line, VehiclesKey, InstanceBehavior<GlobalReferences>.Instance?.vehiclePOIIcon);
-                Log.Info($"Map filters: Street food line with {StreetFoodMap.BuildingFilters.Count + 2} filters.");
+                Log.Info($"Map filters: Street food line with {StreetFoodMap.BuildingFilters.Count + 3} filters.");
             }
             catch (Exception ex) { Log.Error("Map filters: " + ex); }
         }
@@ -100,12 +104,13 @@ namespace FoodTrucks
                 if (tables == null || controller == null || controller.building == null || controller.buildingRegistration == null) return;
                 if (selected.Count == 0 && pitchAddresses.Count == 0) return;
                 var at = controller.building.Address;
-                if (at != null && pitchAddresses.Contains(World.AddressKey(at.streetName, at.streetNumber)))
+                if (at != null && pitchAddresses.TryGetValue(World.AddressKey(at.streetName, at.streetNumber), out var marked))
                 {
                     if (controller.poi == null) controller.CreatePOI();
                     else if (controller.poi.Permanent) controller.poi.SetHidden(false);
-                    controller.SetHighlight(true, (Color32)PitchColour);
-                    controller.poi.SetIcon(BusinessTypeHelper.GetData("ba:businesstype_fastfoodrestaurant")?.icon, PitchColour);
+                    controller.SetHighlight(true, (Color32)marked);
+                    var iconType = marked == CateringColour ? "ba:businesstype_eventplanningagency" : "ba:businesstype_fastfoodrestaurant";
+                    controller.poi.SetIcon(BusinessTypeHelper.GetData(iconType)?.icon, marked);
                     return;
                 }
                 if (selected.Count == 0) return;
@@ -157,7 +162,9 @@ namespace FoodTrucks
                 selected = StreetFoodMap.BuildingFilters.Where(f => Selected(__instance, KeyOf(f))).ToList();
                 hideClosedField ??= AccessTools.FieldRefAccess<CityMapFilters, bool>("_hideClosed");
                 hideClosed = hideClosedField(__instance);
-                pitchAddresses = Selected(__instance, PitchesKey) ? PitchAddresses() : new HashSet<string>(StringComparer.Ordinal);
+                pitchAddresses = new Dictionary<string, Color>(StringComparer.Ordinal);
+                if (Selected(__instance, PitchesKey)) foreach (var address in PitchAddresses()) pitchAddresses[address] = PitchColour;
+                if (Selected(__instance, CateringKey)) foreach (var address in Catering.BookedPlaces()) pitchAddresses[address] = CateringColour;
                 var show = Selected(__instance, VehiclesKey);
                 var state = FoodTrucksSession.CurrentState;
                 var game = SaveGameManager.Current;
@@ -237,7 +244,7 @@ namespace FoodTrucks
             foreach (var id in markers.Keys.ToList()) Remove(id);
             classifier = null;
             selected = new List<string>();
-            pitchAddresses = new HashSet<string>(StringComparer.Ordinal);
+            pitchAddresses = new Dictionary<string, Color>(StringComparer.Ordinal);
             greened.Clear();
         }
     }

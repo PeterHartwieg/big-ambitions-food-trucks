@@ -160,6 +160,9 @@ namespace FoodTrucks
             return buildings;
         }
 
+        // Every building with its entrances (catering places).
+        internal static List<(CityBuildingController Controller, Vector3[] Doors)> AllBuildings() => Buildings();
+
         // Every entrance of every building, for the legality rule.
         public static IEnumerable<Vector3> DoorPositions() => Buildings().SelectMany(b => b.Doors);
 

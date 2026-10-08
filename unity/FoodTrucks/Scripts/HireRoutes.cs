@@ -241,7 +241,8 @@ namespace FoodTrucks
         {
             var controller = VehicleHelper.GetVehicleController(instance);
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
-            var held = SaveGameManager.Current.ActiveVehicleId == vehicle.VehicleId;
+            // A truck at a catering gig stays there, as one the player holds does.
+            var held = SaveGameManager.Current.ActiveVehicleId == vehicle.VehicleId || Catering.Busy(vehicle.VehicleId);
             // Inside a building or an underground garage it isn't on the street to drive off from.
             var indoors = !string.IsNullOrEmpty(instance.streetName);
             if (indoors && indoorsShown.Add(vehicle.VehicleId))

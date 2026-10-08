@@ -2,7 +2,7 @@
   "_notes": "Products, equipment, vehicles and the price curve, tuned by the accepted cart balance study (8 October 2026). Calculated proposals; not yet checked in game. Keys starting with an underscore are notes; the loader ignores them.",
   "schemaVersion": 1,
 
-  "_products": "Base-game items the vehicles can sell: the demand category each belongs to and how many in-game minutes one takes to serve. An order takes the longest service time of its items. Optional stockWeight is the share of one stock unit occupied by an item (default 1.0): coffee and tea 0.25, pastries 0.5.",
+  "_products": "Base-game items the vehicles can sell: the demand category each belongs to and how many in-game minutes one takes to serve. An order takes the longest service time of its items. Optional stockWeight is the share of one stock unit occupied by an item (default 1.0): coffee and tea 0.25, pastries 0.5. The bakeryxx items come from the optional Bakery mod (its item IDs, read from its DLL); without that mod they never reach a vehicle and change nothing.",
   "products": {
     "ba:itemname_hotdog": { "category": "fastfood", "serviceMinutes": 3 },
     "ba:itemname_burger": { "category": "fastfood", "serviceMinutes": 5 },
@@ -15,18 +15,23 @@
     "ba:itemname_water": { "category": "colddrinks", "serviceMinutes": 1 },
     "ba:itemname_croissant": { "category": "bakery", "serviceMinutes": 2, "stockWeight": 0.5 },
     "ba:itemname_donut": { "category": "bakery", "serviceMinutes": 2, "stockWeight": 0.5 },
-    "ba:itemname_cupcake": { "category": "bakery", "serviceMinutes": 2, "stockWeight": 0.5 }
+    "ba:itemname_cupcake": { "category": "bakery", "serviceMinutes": 2, "stockWeight": 0.5 },
+    "bakeryxx:itemname_bread": { "category": "bakery", "serviceMinutes": 1, "stockWeight": 1.0 },
+    "bakeryxx:itemname_bun": { "category": "bakery", "serviceMinutes": 1, "stockWeight": 0.5 },
+    "bakeryxx:itemname_chocolatecookie": { "category": "bakery", "serviceMinutes": 1, "stockWeight": 0.5 },
+    "bakeryxx:itemname_latte": { "category": "coffee", "serviceMinutes": 1.5, "stockWeight": 0.25 },
+    "bakeryxx:itemname_americano": { "category": "coffee", "serviceMinutes": 1.0, "stockWeight": 0.25 }
   },
 
-  "_equipment": "The mod's own equipment IDs, the products each unlocks and the vanilla items that fit them. Carry a game item to the vehicle and click it to fit it; it stays in cargo and shares the game's cargo slots with food. Vanilla item IDs come from the game's code; their presence in the 1.0 assets is unverified. Each listed game item fits one piece (the burger station's grill and fryer are alternatives). Coffee maps only to the industrial coffee machine; the cheap machine is office equipment.",
+  "_equipment": "The mod's own equipment IDs, the products each unlocks and the vanilla items that fit them. Carry a game item to the vehicle and click it to fit it; it stays in cargo and shares the game's cargo slots with food. Vanilla item IDs come from the game's code; their presence in the 1.0 assets is unverified. Each listed game item fits one piece (the burger station's grill and fryer are alternatives). Coffee maps only to the industrial coffee machine; the cheap machine is office equipment. With the Bakery mod, its bread counter fits as a display case and its bistro machine as a coffee machine, and its goods sell from them.",
   "equipment": {
     "hotdoggrill": { "products": ["ba:itemname_hotdog"], "gameItems": ["ba:itemname_hotdoggrill"] },
     "burgerstation": { "products": ["ba:itemname_burger", "ba:itemname_frenchfries"], "gameItems": ["ba:itemname_industrialgrill", "ba:itemname_industrialfryermachine"] },
-    "coffeemachine": { "products": ["ba:itemname_cupofcoffee", "ba:itemname_cupoftea"], "gameItems": ["ba:itemname_industrialcoffeemachine"] },
+    "coffeemachine": { "products": ["ba:itemname_cupofcoffee", "ba:itemname_cupoftea", "bakeryxx:itemname_latte", "bakeryxx:itemname_americano"], "gameItems": ["ba:itemname_industrialcoffeemachine", "bakeryxx:itemname_bistromachine"] },
     "icecreamcounter": { "products": ["ba:itemname_icecream"], "gameItems": ["ba:itemname_icecreamcounter"] },
     "pizzaoven": { "products": ["ba:itemname_pizza"], "gameItems": ["ba:itemname_pizzaoven"] },
     "cooler": { "products": ["ba:itemname_sodacan", "ba:itemname_water"], "gameItems": ["ba:itemname_drinksfridge", "ba:itemname_largedrinksfridge"] },
-    "displaycase": { "products": ["ba:itemname_croissant", "ba:itemname_donut", "ba:itemname_cupcake"], "gameItems": ["ba:itemname_bakeryshowcase"] }
+    "displaycase": { "products": ["ba:itemname_croissant", "ba:itemname_donut", "ba:itemname_cupcake", "bakeryxx:itemname_bread", "bakeryxx:itemname_bun", "bakeryxx:itemname_chocolatecookie"], "gameItems": ["ba:itemname_bakeryshowcase", "bakeryxx:itemname_breadcounter"] }
   },
 
   "_vehicles": "stockUnits limits weighted food load, separate from the game's cargo slots, which count boxes. Cart 80, truck 160: 80 hot dogs or 320 coffees fit in a cart; mixed loads share the same limit.",

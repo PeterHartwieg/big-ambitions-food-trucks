@@ -56,7 +56,7 @@ namespace FoodTrucks.BuildEditor
             manifest.ModId = "FoodTrucks";
             manifest.DisplayName = "Food Trucks";
             manifest.Author = "Peter Hartwieg";
-            manifest.Version = "0.8.0";
+            manifest.Version = "0.9.0";
             manifest.AssetBundleName = "foodtrucks.unity3d";
             manifest.ModAssembly = AssetDatabase.LoadAssetAtPath<AssemblyDefinitionAsset>(ModFolder + "/FoodTrucks.asmdef");
             manifest.LocalesFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(ModFolder + "/Locales");

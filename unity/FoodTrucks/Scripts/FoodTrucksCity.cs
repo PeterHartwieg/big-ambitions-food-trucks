@@ -104,11 +104,21 @@ namespace FoodTrucks
             runtimeObject.AddComponent<CartSelling>();
             runtimeObject.AddComponent<CartQueueView>();
             runtimeObject.AddComponent<HireRoutes>();
+            runtimeObject.AddComponent<Catering>();
             runtimeObject.AddComponent<DebugActions>();
             try { PrefabFixes.Apply(); }
             catch (Exception ex) { Log.Error("Prefab fixes: " + ex); }
             try { CityLicensing.Attach(); }
             catch (Exception ex) { Log.Error("City of New York: " + ex); }
+            try { Catering.Attach(); }
+            catch (Exception ex) { Log.Error("Catering: " + ex); }
+            // The Bakery mod's goods sell from the display case and the coffee machine when it is installed.
+            try
+            {
+                var bakery = BigAmbitions.Items.ItemsGetter.GetByName("bakeryxx:itemname_bread", suppressError: true) != null;
+                Log.Info($"Bakery mod: {(bakery ? "found; its bread, buns, cookies, lattes and americanos sell from the display case and the coffee machine" : "not installed")}.");
+            }
+            catch (Exception ex) { Log.Error("Bakery mod check: " + ex); }
         }
 
         public static void WriteToSave()
@@ -128,6 +138,7 @@ namespace FoodTrucks
         {
             World.Reset();
             CityLicensing.Detach();
+            Catering.Detach();
             MapFilters.Clear();
             TruckHatch.Forget();
             WindowCrew.Reset();

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FoodTrucks.Core.Selling;
 using FoodTrucks.Core.Tests.Demand;
 using Xunit;
@@ -44,7 +45,9 @@ public class MenuTests
         var build = Menu.FromEquipment(ShippedData.Tables, "truck", new[] { "hotdoggrill", "cooler", "coffeemachine", "displaycase" });
 
         Assert.Equal(MenuProblem.None, build.Problem);
-        Assert.Equal(8, build.Menu.Items.Count);
+        // Eight base-game items and five from the Bakery mod, which only reach a vehicle when that mod is installed.
+        Assert.Equal(13, build.Menu.Items.Count);
+        Assert.Equal(8, build.Menu.Items.Count(i => i.StartsWith("ba:", StringComparison.Ordinal)));
     }
 
     [Fact]

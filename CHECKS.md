@@ -1,3 +1,28 @@
+# Milestone 7 checks: catering and Bakery
+
+Build `0.9.0`. Catering gigs for trucks, offered by a new "Street Food Bookings" contact, and the Bakery mod's goods when that mod is installed. On top of 0.8.0 (its list is below). Fresh **FT** save, other gameplay mods off; the Bakery mod on for row 5 only. Debug: **Ctrl+F12** books a gig at the nearest place from in 30 minutes.
+
+## 1. Automated (me)
+
+- [ ] `dotnet test` passes; `tools/build-mod.sh --generate` builds; installed after the mod was parked for any recording.
+- [ ] After the session: the log lines in section 3.
+
+## 2. In game (about 15 minutes)
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Ctrl+F6 truck, Ctrl+Shift+F6, fit a grill, load 50 hot dogs. Ctrl+F12 near an office | "Debug: catering gig at …". Is "Street Food Bookings" in the contacts? |
+| 2 | Drive to the building named, park in front within the half hour | "Catering: the truck serves the guests until …". Open the window too: it sells only the hot dogs beyond the gig's 40 |
+| 3 | Wait the hour by the truck (or sleep) | A text "Thanks for the catering … paid" and a catering transaction; 40 hot dogs fewer in the cargo |
+| 4 | Play or sleep a few in-game days with the truck having sold some food | Offer texts from Street Food Bookings. Call: take one. Does the dialog read well? |
+| 5 | With the Bakery mod on: fit its bread counter, load bread | The truck opens and sells bread |
+
+## 3. Log lines (me)
+
+- `Version 0.9.0 loading.`; `Catering: bookings by phone …`; `Bakery mod: found …` or `not installed`.
+- `Catering: day …: N offers from …`; `Catering offer … taken`; `Catering gig … started`; `… completed … paid`; failures with their reason.
+- `Map filters: Street food line with 7 filters.`
+
 # Milestone 6 checks: depth (second half)
 
 Build `0.8.0`. Premium spots, the city's events and partner deals with your own venues, on top of 0.7.0 (whose list is below and comes first if time is short). Fresh **FT** save, other gameplay mods off. Debug keys as before, plus **Ctrl+Shift+F11**: a city event at the nearest event place from now for three hours, with one place booked.

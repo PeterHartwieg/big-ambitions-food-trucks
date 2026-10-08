@@ -100,6 +100,13 @@ namespace FoodTrucks
                     else stock.Remove(pair.Key);
                 }
             }
+            // A catering gig's units are held back from street sales until it ends.
+            foreach (var pair in Catering.Reserved(cart.id, stock))
+            {
+                if (!stock.TryGetValue(pair.Key, out var units)) continue;
+                if (units - pair.Value > 0) stock[pair.Key] = units - pair.Value;
+                else stock.Remove(pair.Key);
+            }
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, cart.id);
             if (menu.Problem != MenuProblem.None || menu.Menu.Items.Count == 0 || stock.Count == 0)
                 return new CartPlan(menu, stock, null, 0, 0, 0, NoShares, 0);

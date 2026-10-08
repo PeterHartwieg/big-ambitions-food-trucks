@@ -23,9 +23,22 @@ public class ShippedDataTests
     public void CoffeeMachineMapsOnlyToTheIndustrialMachine()
     {
         var tables = ShippedData.Tables;
-        Assert.Equal(new[] { "ba:itemname_industrialcoffeemachine" }, tables.Equipment("coffeemachine")!.GameItems);
+        // And to the Bakery mod's bistro machine, when that mod is installed.
+        Assert.Equal(new[] { "ba:itemname_industrialcoffeemachine", "bakeryxx:itemname_bistromachine" }, tables.Equipment("coffeemachine")!.GameItems);
         Assert.Same(tables.Equipment("coffeemachine"), tables.EquipmentForGameItem("ba:itemname_industrialcoffeemachine"));
         Assert.Null(tables.EquipmentForGameItem("ba:itemname_cheapcoffeemachine"));
+    }
+
+    [Fact]
+    public void BakeryModGoodsSellFromTheDisplayCaseAndTheCoffeeMachine()
+    {
+        var tables = ShippedData.Tables;
+        Assert.Same(tables.Equipment("displaycase"), tables.EquipmentForGameItem("bakeryxx:itemname_breadcounter"));
+        Assert.Same(tables.Equipment("coffeemachine"), tables.EquipmentForGameItem("bakeryxx:itemname_bistromachine"));
+        foreach (var item in new[] { "bakeryxx:itemname_bread", "bakeryxx:itemname_bun", "bakeryxx:itemname_chocolatecookie" })
+            Assert.Equal("bakery", tables.Product(item)!.Category);
+        foreach (var item in new[] { "bakeryxx:itemname_latte", "bakeryxx:itemname_americano" })
+            Assert.Equal("coffee", tables.Product(item)!.Category);
     }
 
     [Fact]

@@ -17,7 +17,7 @@ using Vehicles.VehicleTypes;
 namespace FoodTrucks
 {
     // Debug and maintenance actions: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
-    // Ctrl+Shift+F12 uninstall step. Also console commands when the game runs with -console.
+    // Ctrl+F12 catering gig here, Ctrl+Shift+F12 uninstall step. Also console commands when the game runs with -console.
     internal sealed class DebugActions : MonoBehaviour
     {
         private static readonly Action SpawnTruckAction = () => SpawnVehicle(FoodTrucksMod.TruckTypeName);
@@ -34,6 +34,7 @@ namespace FoodTrucks
         private static readonly Action HireAction = () => Run("hire", HireTestWorker);
         private static readonly Action UninstallAction = Uninstall.Request;
         private static readonly Action EventAction = () => CityPitches.EventHereForTesting(PlayerHelper.GetPosition());
+        private static readonly Action GigAction = () => Catering.GigHereForTesting(PlayerHelper.GetPosition());
 
         private void OnEnable()
         {
@@ -43,6 +44,7 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_licence", "Food Trucks: a free vendor licence and permits for every food vehicle (throwaway saves only)", LicenceAction);
                 CommandHelper.AddCommand("foodtrucks_spawn_cart", "Food Trucks: spawn a free food cart next to you (testing)", SpawnCartAction);
                 CommandHelper.AddCommand("foodtrucks_spawn_handtruck", "Food Trucks: spawn a vanilla hand truck to compare the grip", SpawnHandTruckAction);
+                CommandHelper.AddCommand("foodtrucks_gig_here", "Food Trucks: a booked catering gig at the nearest place from in 30 minutes (throwaway saves only)", GigAction);
                 CommandHelper.AddCommand("foodtrucks_event_here", "Food Trucks: a city event at the nearest event place from now for three hours, one place booked (throwaway saves only)", EventAction);
                 CommandHelper.AddCommand("foodtrucks_zone_point", "Food Trucks: log where you stand, for drawing park zones", ZonePointAction);
                 CommandHelper.AddCommand("foodtrucks_grip", "Food Trucks: log where the hands and grip points are while pushing", GripAction);
@@ -54,7 +56,7 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_uninstall", "Food Trucks: remove and refund all Food Trucks vehicles (run twice to confirm)", UninstallAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.");
+            Log.Info("Debug actions ready: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+F12 catering gig here, Ctrl+Shift+F12 uninstall step.");
         }
 
         private void OnDisable()
@@ -67,6 +69,7 @@ namespace FoodTrucks
                 CommandHelper.RemoveCommand(SpawnHandTruckAction);
                 CommandHelper.RemoveCommand(GripAction);
                 CommandHelper.RemoveCommand(EventAction);
+                CommandHelper.RemoveCommand(GigAction);
                 CommandHelper.RemoveCommand(ZonePointAction);
                 CommandHelper.RemoveCommand(TaxFixtureAction);
                 CommandHelper.RemoveCommand(TaxStatementAction);
@@ -97,6 +100,7 @@ namespace FoodTrucks
             else if (keyboard.f10Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax statement", TaxStatementAction);
             else if (keyboard.f10Key.wasPressedThisFrame) Run("status", StatusAction);
             else if (keyboard.f12Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("uninstall", UninstallAction);
+            else if (keyboard.f12Key.wasPressedThisFrame) Run("gig here", GigAction);
         }
 
         private static void Run(string name, Action action)

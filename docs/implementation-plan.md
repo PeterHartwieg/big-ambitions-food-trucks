@@ -275,6 +275,18 @@ The first playable slice. It touches every risky layer at once: bundle, vehicle,
 - When the truck leaves, or once the gig's end has passed with the truck still there, call `Finish` with the time it left (or the end), then pay the fee and take the units. Never call it during the gig. When time moves on, do that first and then call `MissOverdue`, and message the player about the misses.
 - A missed or failed gig only lowers the booking reputation, so fewer offers come.
 
+**Game side, built 9 October 2026 overnight (0.9.0, branch `milestone-7` on top of `milestone-6`, not yet checked in game).** Peter was away; these are my calls.
+
+- **The bookings contact.** "Street Food Bookings", a permanent contact the mod adds (`Catering.cs`), texts each offer: the kind, the place's address, guests, food, day and hours, fee, and the day to answer by. Calling it goes through the open offers one at a time, "Take it" or "Turn it down"; with none, it says how many gigs are booked. Offers come once a day (and once after a load on a day without them), from Core's `ForDay`.
+- **Places** are the city's buildings whose own type or business points to one area (offices for office lunches, homes and clubs for parties, shops for events; the design's waterfront has no buildings yet), named by address. A truck stands at a gig within 60 m of the building's nearest entrance.
+- **The fee's price** per food is the highest default price among the items of that food the caterers' menus can serve.
+- **Arriving.** A truck with a permit, parked at the place (not driven, not in transit) from an hour before the start, starts the gig if it has the licence, the food on its menu and a portion per guest. A truck parked there through a time skip counts from when it was first seen there, so sleeping in the truck outside doesn't make it late. Not ready says so once per gig; the player can restock and come back before the start plus 10 minutes.
+- **During the gig** its portions are held back from street sales (`CartDemand.Plan`), so the window can stay open on the rest, and the crew's route leaves the truck where it is.
+- **The end.** At the gig's end the truck is paid and the portions leave the cargo, most stock first; the fee goes into the street food record, so it is taxed like any sale, and the stock's wholesale cost into the day's costs. Portions the truck no longer had aren't paid for. A truck that leaves early fails the gig, at the last minute it was seen there. Missed gigs get a text and cut the booking reputation (Core).
+- **Map:** a "Catering bookings" filter lights the places of booked gigs.
+- **Bakery mod:** its bread, buns and chocolate cookies are pastries on the display case, its latte and americano coffee on the coffee machine; its bread counter fits as a display case and its bistro machine as a coffee machine (`economy.json`). Without the mod nothing changes. The log says at load whether it is there [code, unverified in game].
+- **Debug:** Ctrl+F12 books a gig at the nearest place from in 30 minutes, 40 guests, for the first food a truck with a permit can serve.
+
 ## Milestone 8: art and release
 
 - Final cart, truck and equipment models from the winning Blender pipeline, swapped into the existing prefabs.
