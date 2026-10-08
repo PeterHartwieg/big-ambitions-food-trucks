@@ -7,19 +7,21 @@ Runs the mod's own Core demand model over the city to price a cart day. The find
 ```sh
 cd tools/balance
 dotnet build
-dotnet bin/Debug/net10.0/balance.dll                       # today's data
-dotnet bin/Debug/net10.0/balance.dll --patch proposed.json --pricing index   # the study's proposal
+dotnet bin/Debug/net10.0/balance.dll                          # today's data, price at the ceiling
+dotnet bin/Debug/net10.0/balance.dll --pricing default         # today's data, default price
+dotnet bin/Debug/net10.0/balance.dll --patch proposed.json     # the study's proposed curves
 ```
 
 It prints Markdown tables. `--out FILE` also writes them to a file. A full run takes about a minute; `--reports archetypes,costs` is instant.
 
 | Option | Meaning |
 |---|---|
-| `--reports LIST` | Any of `archetypes,spots,single,routes,costs` (default: all) |
+| `--reports LIST` | Any of `archetypes,spots,single,routes,compare,pricing,costs` (default: all). `compare` is staying all day against the best route over the same 16 hours; `pricing` is the price sensitivity |
 | `--patch FILE` | A JSON merge patch over `data/demand.json` and `data/economy.json`: `{"demand": {...}, "economy": {...}}`. The data files are not changed |
-| `--pricing default\|index` | `default`: the cart charges the item's default price, as `CartDemand.PriceOf` does today. `index`: default × the neighbourhood's price index, what vanilla shops charge |
+| `--pricing ceiling\|default\|manager\|upper` | `ceiling` (default): reference × the neighbourhood's index, the most every customer class accepts. `default`: the item's default price, as `CartDemand.PriceOf` does today. `manager`: a pricing manager, reference + (ceiling − reference) × capture. `upper`: the most the upper class accepts |
+| `--price-factor N` | With `ceiling`, multiplies the price (0.9 is 10% under). With `manager`, the capture (0 to 1) |
 | `--market N` | The game's demand for the cart's items, 0 to 100 (100: no shop sells them in the neighbourhood; 71.5: two shops do) |
-| `--restock wholesaler\|hand` | `wholesaler`: walk to the nearest wholesaler and back. `hand`: reload on the spot from a box in hand |
+| `--restock wholesaler\|hand` | `wholesaler`: refill by pushing the cart to the nearest wholesaler (all six sell the cart's food) and back or on. `hand`: refill on the spot, no walk (a what-if) |
 | `--speed M/S` | Pushing speed, default 4 (the player's jog) |
 | `--cart-price N` | For the cost table, default 1200 |
 | `--data`, `--city`, `--prices` | Other inputs than `data/`, `city.json`, `game-prices.json` |
@@ -30,5 +32,5 @@ It prints Markdown tables. `--out FILE` also writes them to a file. A full run t
 - `City.cs`: spots, the classifier and walking times. `Days.cs`: single-spot days and routes.
 - `city.json`: the city, from `make_city.py`. Rebuild it with `python3 make_city.py [--save SAVE.hsg]` (needs `~/big-copilot`). The committed file holds the fixed AI businesses and one late-game save's rival businesses.
 - `game-prices.json`: item prices, wholesale prices, neighbourhood price indices and equipment prices, from Big Copilot.
-- `proposed.json`: the study's proposed data changes.
+- `proposed.json`: the study's proposed data changes (footfall curves and `passersPerHour`).
 - `store/`: the small-store yardstick. `extract_payload.py SAVE OUT.json` has Big Copilot read a save (read-only); `node store/store_yardstick.cjs OUT.json` runs Big Copilot's validated Open a store model on it at the default difficulty. Keep the extracted payload out of git: it comes from a personal save.

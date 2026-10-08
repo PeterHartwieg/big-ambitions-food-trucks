@@ -1,9 +1,48 @@
 {
-  "_notes": "The study's proposed data changes (docs/balance/cart-economics.md), as a merge patch over data/*.json. Run with: --patch tools/balance/proposed.json --pricing index. The pricing rule is game-side (CartDemand.PriceOf), so it is a flag, not data.",
-  "economy": {
-    "vehicles": {
-      "cart": { "stockUnits": 120 },
-      "truck": { "stockUnits": 240 }
+  "_notes": "The study's proposed data changes (docs/balance/cart-economics.md), as a merge patch over data/*.json. Run with: --patch proposed.json (prices default to the ceiling, --pricing ceiling). Daypart footfall: sharper outside each area's peak, nightlife's peak raised, lunch at offices unchanged at 3.0; passersPerHour lowered to keep the best route inside the band. Stock stays at 80 (cart) and 160 (truck).",
+  "demand": {
+    "passersPerHour": 22,
+    "areas": {
+      "office": {
+        "footfall": {
+          "afternoon": 0.2,
+          "evening": 0.2,
+          "late": 0.05
+        }
+      },
+      "residential": {
+        "footfall": {
+          "lunch": 0.3,
+          "afternoon": 0.3,
+          "evening": 0.5,
+          "late": 0.2
+        }
+      },
+      "retail": {
+        "footfall": {
+          "early": 0.05,
+          "morning": 0.3,
+          "evening": 0.5,
+          "late": 0.1,
+          "lunch": 0.8
+        }
+      },
+      "industrial": {
+        "footfall": {
+          "morning": 0.2,
+          "afternoon": 0.15,
+          "evening": 0.3
+        }
+      },
+      "nightlife": {
+        "footfall": {
+          "evening": 2.0,
+          "late": 3.0,
+          "lunch": 0.15,
+          "afternoon": 0.1,
+          "morning": 0.05
+        }
+      }
     }
   }
 }

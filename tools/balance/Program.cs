@@ -116,7 +116,7 @@ if (opts.Wants("single"))
     {
         var cart = carts[key].Cart;
         var planner = PlannerFor(cart);
-        o.AppendLine($"## Best single spot per neighbourhood, {cart.Name}, 07:00 to 23:00");
+        o.AppendLine($"## Best single spot per neighbourhood, {cart.Name}, 09:00 to 01:00");
         o.AppendLine();
         o.AppendLine("Profit = sales at the cart's price minus wholesale cost of what sold. Restocks walk to the nearest wholesaler and back.");
         o.AppendLine();
@@ -125,8 +125,8 @@ if (opts.Wants("single"))
         foreach (var hood in hoods)
         {
             var hs = spots.Where(s => s.Hood == hood).ToList();
-            var best = hs.Select(s => (s, d: planner.SingleSpot(s, 420, 1380, conditions[0]))).OrderByDescending(x => x.d.Total.Profit).First();
-            var cells = conditions.Select(c => Money(planner.SingleSpot(best.s, 420, 1380, c).Total.Profit));
+            var best = hs.Select(s => (s, d: planner.SingleSpot(s, 540, 1500, conditions[0]))).OrderByDescending(x => x.d.Total.Profit).First();
+            var cells = conditions.Select(c => Money(planner.SingleSpot(best.s, 540, 1500, c).Total.Profit));
             o.AppendLine($"| {H(hood)} | {best.s.Name} ({best.s.Areas}) | {string.Join(" | ", cells)} | {best.d.Total.Units:0} | {best.d.Restocks} |");
         }
         o.AppendLine();
@@ -180,26 +180,35 @@ if (opts.Wants("routes"))
 
 if (opts.Wants("compare"))
 {
-    // Moving against staying: the best single spot all day (07:00 to 01:00) against the best route
+    // Moving against staying: the best single spot all day (09:00 to 01:00, the same 16 hours a route may use) against the best route
     // (lunch + evening, or lunch + evening + late), hot dog grill + cooler.
     var cart = carts["hotdog+cooler"].Cart;
     var planner = PlannerFor(cart);
-    var hotdogRoutes = routes.Where(r => r.Cart == "hotdog+cooler").ToList();
+    // Routes that split the same 16 hours into two or three pitches; staying put is one of them.
+    var hotdogRoutes = new List<(string Name, (int, int)[] Windows)>
+    {
+        ("2 pitches, change at 14:30", new[] { (540, 870), (870, 1500) }),
+        ("2 pitches, change at 17:00", new[] { (540, 1020), (1020, 1500) }),
+        ("3 pitches, change at 14:30 and 21:00", new[] { (540, 870), (870, 1260), (1260, 1500) }),
+    };
     foreach (var c in new[] { conditions[0], conditions[2] })
     {
         o.AppendLine($"## Staying against moving, {cart.Name}, {c.Label}");
         o.AppendLine();
-        o.AppendLine("| Where | Best single spot 07:00-01:00 | Profit | Best route | Profit | Staying ÷ route |");
+        o.AppendLine("| Where | Best single spot 09:00-01:00 | Profit | Best route | Profit | Staying ÷ route |");
         o.AppendLine("|---|---|---|---|---|---|");
         foreach (var hood in hoods.Append("city"))
         {
             var pool = hood == "city" ? spots : spots.Where(s => s.Hood == hood).ToList();
-            var stay = pool.Select(s => planner.SingleSpot(s, 420, 1500, c)).OrderByDescending(d => d.Total.Profit).First();
+            var stays = pool.Select(s => planner.SingleSpot(s, 540, 1500, c)).OrderByDescending(d => d.Total.Profit).ToList();
+            var stay = stays[0];
+            // The best all-day spots join every pitch's shortlist, so a route can always stay put.
+            var stayers = stays.Take(5).Select(d => d.Stays[0].Spot).ToList();
             DayResult? move = null;
             string? moveName = null;
             foreach (var route in hotdogRoutes)
             {
-                var r = planner.BestRoute(pool, route.Windows, c);
+                var r = planner.BestRoute(pool, route.Windows, c, 20, stayers);
                 if (r != null && (move == null || r.Total.Profit > move.Total.Profit)) { move = r; moveName = route.Name; }
             }
             var s0 = stay.Stays[0];
@@ -221,9 +230,11 @@ if (opts.Wants("pricing"))
     foreach (var (label, c) in new (string, Conditions)[]
              {
                  ("default price (today)", Cond(pricing: Pricing.Default, factor: 1)),
-                 ("pricing manager × 0.9", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 0.9)),
-                 ("pricing manager (default × neighbourhood index)", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1)),
-                 ("pricing manager × 1.1", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1.1)),
+                 ("pricing manager, capture 0.5", Cond(pricing: Pricing.Manager, factor: 0.5)),
+                 ("pricing manager, capture 0.75", Cond(pricing: Pricing.Manager, factor: 0.75)),
+                 ("ceiling × 0.9", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 0.9)),
+                 ("ceiling: the most every class accepts (default × neighbourhood index)", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1)),
+                 ("ceiling × 1.1", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1.1)),
                  ("upper-class maximum: default × max(1.7, index)", Cond(pricing: Pricing.UpperClass, factor: 1)),
              })
     {
@@ -239,8 +250,10 @@ if (opts.Wants("pricing"))
     var office = new Spot("office", AreaMix.Single("office"), "ba:neighborhood_midtown", "", 0, 0);
     foreach (var (label, c) in new (string, Conditions)[]
              {
-                 ("default", Cond(pricing: Pricing.Default, factor: 1)), ("manager × 0.9", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 0.9)),
-                 ("manager", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1)), ("manager × 1.1", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1.1)),
+                 ("default", Cond(pricing: Pricing.Default, factor: 1)),
+                 ("manager, capture 0.5", Cond(pricing: Pricing.Manager, factor: 0.5)), ("manager, capture 0.75", Cond(pricing: Pricing.Manager, factor: 0.75)),
+                 ("ceiling × 0.9", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 0.9)),
+                 ("ceiling", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1)), ("ceiling × 1.1", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1.1)),
                  ("upper-class maximum", Cond(pricing: Pricing.UpperClass, factor: 1)),
              })
     {
@@ -325,7 +338,10 @@ sealed class Options
                 case "--patch": o.Patch = Next(); break;
                 case "--out": o.Out = Next(); break;
                 case "--pricing":
-                    o.Pricing = Next() switch { "index" => Pricing.NeighbourhoodIndex, "upper" => Pricing.UpperClass, _ => Pricing.Default };
+                    o.Pricing = Next() switch
+                    {
+                        "ceiling" or "index" => Pricing.NeighbourhoodIndex, "manager" => Pricing.Manager, "upper" => Pricing.UpperClass, _ => Pricing.Default
+                    };
                     break;
                 case "--price-factor": o.PriceFactor = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "--market": o.Market = double.Parse(Next(), CultureInfo.InvariantCulture); break;

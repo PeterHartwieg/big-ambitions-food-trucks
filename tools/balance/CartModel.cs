@@ -29,10 +29,14 @@ public enum Pricing
 {
     // CartDemand.PriceOf today: the item's default market price.
     Default,
-    // What a vanilla pricing manager sets: reference × the neighbourhood's average price index, the most
-    // every social class accepts (ItemHelper.CalculateOptimalPriceByNeighborhood,
-    // PricingManagerHelper.ComputeSuggestion at full skill). Conditions.PriceFactor scales it.
+    // The ceiling: the most every social class accepts, reference × min over classes of
+    // max(class index, neighbourhood average index) = reference × the neighbourhood's index
+    // (ItemHelper.CalculateMaxAcceptablePriceByNeighborhood; no monopoly bonus, the cart is no provider).
+    // What a player sets by hand, and what a full-skill pricing manager suggests. Conditions.PriceFactor scales it.
     NeighbourhoodIndex,
+    // A pricing manager below full skill: reference + (ceiling - reference) × capture
+    // (PricingManagerHelper.ComputeSuggestion). Conditions.PriceFactor is the capture.
+    Manager,
     // The most the upper class accepts: reference × max(1.7, the neighbourhood's index)
     // (CitizenHelper.MaxAcceptableRelativePrice). Working and middle class may walk away.
     UpperClass
@@ -114,6 +118,7 @@ public sealed class Cart
     public double PriceOf(string item, string hood, Conditions c) => prices.Items[item].Price * c.Pricing switch
     {
         Pricing.NeighbourhoodIndex => IndexOf(hood) * c.PriceFactor,
+        Pricing.Manager => 1 + (IndexOf(hood) - 1) * c.PriceFactor,
         Pricing.UpperClass => Math.Max(1.7, IndexOf(hood)),
         _ => 1.0
     };

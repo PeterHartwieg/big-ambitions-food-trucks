@@ -16,6 +16,8 @@ public sealed class Stay
     public int Restocks;
     public int RestockMinutes;
     public StopResult Result = new();
+    // Stock left when the stay ends.
+    public Dictionary<string, double> Left = new();
 }
 
 public sealed class DayResult
@@ -26,7 +28,8 @@ public sealed class DayResult
     public int Start => Stays.Count > 0 ? Stays[0].From : 0;
     public int End => Stays.Count > 0 ? Stays[^1].To : 0;
     public double Hours => (End - Start) / 60.0;
-    public int Restocks => Stays.Sum(s => s.Restocks) + Math.Max(0, Stays.Count - 1);
+    public int Refills;
+    public int Restocks => Stays.Sum(s => s.Restocks) + Refills;
 }
 
 public sealed class Planner
@@ -69,6 +72,7 @@ public sealed class Planner
             t = r.SoldOutAt.Value + trip;
             stock = Selling.Load(cart, spot, t, to, c);
         }
+        stay.Left = new Dictionary<string, double>(stock);
         return stay;
     }
 
@@ -81,27 +85,52 @@ public sealed class Planner
         return day;
     }
 
-    // Pitches in order, each with a window. The cart arrives full at the first; between pitches it goes
-    // through the nearest wholesaler and arrives full again, starting late if the walk runs into the window.
+    // Pitches in order, each with a window. The cart arrives full at the first. Between pitches it keeps
+    // its stock and goes straight on when at least half is left; otherwise it goes through the nearest
+    // wholesaler and arrives full. Staying at the same pitch costs no walk. A walk that runs into the next
+    // window starts that pitch late.
     public DayResult? Route(IReadOnlyList<Spot> spots, IReadOnlyList<(int From, int To)> windows, Conditions c)
     {
         var day = new DayResult();
         var t = windows[0].From;
+        Dictionary<string, double>? stock = null;
         for (var i = 0; i < spots.Count; i++)
         {
+            var full = true;
             if (i > 0)
             {
-                var move = Mode == RestockMode.BoxInHand
-                    ? travel.Minutes(spots[i - 1].Distance(spots[i]))
-                    : travel.Restock(city, spots[i - 1], spots[i]).Minutes;
-                if (move == int.MaxValue) return null;
+                var left = stock!.Values.Sum();
+                var move = 0;
+                if (left >= cart.StockUnits / 2.0)
+                {
+                    full = false;
+                    if (spots[i] != spots[i - 1]) move = travel.Minutes(spots[i - 1].Distance(spots[i]));
+                }
+                else
+                {
+                    move = Mode == RestockMode.BoxInHand
+                        ? travel.Minutes(spots[i - 1].Distance(spots[i]))
+                        : travel.Restock(city, spots[i - 1], spots[i]).Minutes;
+                    if (move == int.MaxValue) return null;
+                    day.Refills++;
+                }
                 day.MoveMinutes += move;
                 t += move;
             }
             // Arrival rounded up to the 5-minute selling step.
             var from = Math.Max((t + 4) / 5 * 5, windows[i].From);
             if (from >= windows[i].To - 30) return null;
-            var stay = SellFull(spots[i], from, windows[i].To, c);
+            Stay stay;
+            if (full)
+            {
+                stay = SellFull(spots[i], from, windows[i].To, c);
+                stock = new Dictionary<string, double>(stay.Left);
+            }
+            else
+            {
+                stock = new Dictionary<string, double>(stock!);
+                stay = SellAt(spots[i], from, windows[i].To, c, stock);
+            }
             day.Stays.Add(stay);
             day.Total.Add(stay.Result);
             t = windows[i].To;
@@ -111,11 +140,13 @@ public sealed class Planner
 
     // The best route over the given windows: each window's best `top` spots on their own, then every
     // combination within one map region. A pitch may repeat (staying put and restocking in between).
-    public DayResult? BestRoute(IReadOnlyList<Spot> candidates, IReadOnlyList<(int From, int To)> windows, Conditions c, int top = 20)
+    public DayResult? BestRoute(IReadOnlyList<Spot> candidates, IReadOnlyList<(int From, int To)> windows, Conditions c, int top = 20,
+        IReadOnlyList<Spot>? alwaysTry = null)
     {
         var shortlists = windows.Select(w => candidates
             .Select(s => (s, p: SellFull(s, w.From, w.To, c).Result.Profit))
-            .OrderByDescending(x => x.p).Take(top).Select(x => x.s).ToList()).ToList();
+            .OrderByDescending(x => x.p).Take(top).Select(x => x.s)
+            .Concat(alwaysTry ?? Array.Empty<Spot>()).Distinct().ToList()).ToList();
         DayResult? best = null;
         void Walk(int i, List<Spot> chosen)
         {
