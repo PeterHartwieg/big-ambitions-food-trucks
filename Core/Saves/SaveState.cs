@@ -79,6 +79,8 @@ namespace FoodTrucks.Core.Saves
         // What happened each day not yet counted into health and regulars: opened, cleaned, stale stock, and the
         // minutes open at each spot. Counted and dropped when a new day starts (ReputationBook.CloseDaysBefore).
         public List<DayRecord> Days { get; set; } = new List<DayRecord>();
+        // The pitch the open window stands on, fixed when it opened; null when closed.
+        public string? OpenPitch { get; set; }
         // The working day the vehicle last opened on, so cleaning after a late shift reaches that day.
         public int? LastOpenedDay { get; set; }
         // Food on board by the day it came on, oldest first, sold oldest first (stale stock).

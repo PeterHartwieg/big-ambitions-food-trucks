@@ -230,10 +230,13 @@ namespace FoodTrucks
                    double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out z);
         }
 
+        // `at`: the absolute game minute ((day - 1) × 1440 + minute) to ask about; null is now.
         public static DemandQuery Query(DemandTables tables, Spot spot, IReadOnlyCollection<string> menu,
-            double reputation = 1.0, IReadOnlyDictionary<string, double>? categoryShares = null)
+            double reputation = 1.0, IReadOnlyDictionary<string, double>? categoryShares = null, double? at = null)
         {
-            var minuteOfDay = TimeHelper.CurrentHour * 60 + (int)TimeHelper.CurrentMinute;
+            var absolute = (long)Math.Floor(at ?? HireCrew.NowExact());
+            var gameDay = (int)(absolute / 1440) + 1;
+            var minuteOfDay = (int)(absolute - (gameDay - 1) * 1440L);
             var game = SaveGameManager.Current;
             var market = new Dictionary<string, double>();
             if (!string.IsNullOrEmpty(spot.Neighbourhood))
@@ -254,14 +257,16 @@ namespace FoodTrucks
                 Neighbourhood = spot.Neighbourhood,
                 Menu = menu,
                 MinuteOfDay = minuteOfDay,
-                Day = DayOfWeekOf(game.Day),
-                Month = tables.MonthOf(game.Day),
+                Day = DayOfWeekOf(gameDay),
+                Month = tables.MonthOf(gameDay),
                 Raining = RainHelper.isRaining,
                 MarketDemand = market,
                 Promotion = promotion > 0 ? promotion : 1.0,
                 Reputation = reputation,
                 CategoryShares = categoryShares,
-                AreaLive = spot.LiveFactors(tables, DemandData.Rules?.LiveCrowds, minuteOfDay, DayOfWeekOf(game.Day)),
+                // The venues as read this hour, at the asked minute: a step in an earlier hour still sees this
+                // hour's open or closed venues, at most a frame of game time behind during a skip.
+                AreaLive = spot.LiveFactors(tables, DemandData.Rules?.LiveCrowds, minuteOfDay, DayOfWeekOf(gameDay)),
             };
         }
 

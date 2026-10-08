@@ -137,6 +137,20 @@ public class ReputationBookTests
     }
 
     [Fact]
+    public void AWindowOpenPast0500CanStillBeCleanedForItsNight()
+    {
+        var cart = new VehicleState { VehicleId = "c1" };
+        book.Opened(cart, 5, 1);
+        // Still open at 05:00: day 6 begins, the window doesn't reopen.
+        book.Opened(cart, 6, 1, opening: false);
+
+        ReputationBook.Cleaned(cart, 6, closedThrough: 4);
+
+        Assert.True(cart.Days.Single(d => d.Day == 5).Cleaned);
+        Assert.True(cart.Days.Single(d => d.Day == 6).Cleaned);
+    }
+
+    [Fact]
     public void StaleSalesMarkTheWorkingDay()
     {
         var cart = new VehicleState { VehicleId = "c1" };

@@ -45,13 +45,14 @@ namespace FoodTrucks.Core.Reputation
             visit.Minutes = (int)Math.Min(int.MaxValue, (long)visit.Minutes + minutes);
         }
 
-        // The vehicle opens: a new vehicle gets its health record, and the inspector may come by. Returns the
-        // inspection's result, if there was one.
-        public InspectionResult? Opened(VehicleState vehicle, int today, long seed)
+        // The vehicle opens (or, with opening false, works on into a new working day): a new vehicle gets its
+        // health record, and the inspector may come by. Only a real opening moves LastOpenedDay, so cleaning
+        // after a shift that ran past 05:00 still reaches the day it opened on.
+        public InspectionResult? Opened(VehicleState vehicle, int today, long seed, bool opening = true)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             Day(vehicle, today).Opened = true;
-            vehicle.LastOpenedDay = today;
+            if (opening) vehicle.LastOpenedDay = today;
             vehicle.Health ??= HealthGrades.NewVehicle(healthRules, today, seed);
             return health.OnOpen(vehicle.Health, today);
         }

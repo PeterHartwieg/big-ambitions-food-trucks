@@ -86,7 +86,8 @@ namespace FoodTrucks
         // Demand, price and service are all worked out on what the cart can sell right now: menu items
         // with stock. A grill with no hot dogs left brings no hot-dog customers. `reserved` are units already
         // sold to customers still on their way to the window (CartSelling's held sales); they don't count.
-        public static CartPlan Plan(DemandTables tables, VehicleInstance cart, Spot spot, IReadOnlyDictionary<string, int>? reserved = null)
+        // `at`: the absolute game minute to plan for (a catch-up step's start); null is now.
+        public static CartPlan Plan(DemandTables tables, VehicleInstance cart, Spot spot, IReadOnlyDictionary<string, int>? reserved = null, double? at = null)
         {
             var menu = MenuOf(tables, cart);
             var stock = StockOf(cart, menu.Menu);
@@ -105,7 +106,7 @@ namespace FoodTrucks
 
             var sellable = stock.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
             var (reputation, shares) = Reputation(tables, cart, spot, vehicle, sellable);
-            var estimate = new DemandModel(tables).Estimate(World.Query(tables, spot, sellable, reputation.Factor, shares));
+            var estimate = new DemandModel(tables).Estimate(World.Query(tables, spot, sellable, reputation.Factor, shares, at));
 
             // Accepted demand per category: share × the conversion of the item customers accept best in it,
             // so one overpriced item doesn't block a well-priced one in the same category.
