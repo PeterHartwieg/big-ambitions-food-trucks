@@ -16,8 +16,8 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 | Licence | Fee plus the game's existing Food Safety course. |
 | Pitches | Park anywhere legal, plus curated premium spots and temporary event pitches. Area type is automatic from nearby buildings, with hand-drawn zones on top. |
 | Illegal spot | The Open button is disabled and says why. No fines. |
-| Equipment | Version 1: plain inventory, no placement. Later: place equipment inside the truck ("tetris"). |
-| Restocking | Buy boxes at a wholesaler, carry them out and click the cart or truck to load them, the way the game loads a car. A hand truck full of boxes can be unloaded into the cart the same way. Pushing the cart into a store and loading it at the shelves still works, as with the game's hand truck; kept for now. A commissary as a home base is a later addition. |
+| Equipment | Version 1: plain inventory, no placement. The game's own equipment items (hot dog grill, coffee machine and so on): carry one to the vehicle and click it to fit it; fitted equipment uses cargo space. Later: place equipment inside the truck ("tetris"). |
+| Restocking | Buy boxes at a wholesaler, carry them out and click the cart or truck to load them, the way the game loads a car. A hand truck full of boxes can be unloaded into the cart the same way. Pushing the cart into a store and loading it at the shelves still works, as with the game's hand truck; kept for now. Each vehicle holds a limited number of units (cart 80, truck 160): loading a box that doesn't fit whole moves what fits, and the box with the rest stays in the player's hands. A commissary as a home base is a later addition. |
 | Economy | Game-calibrated. Real NYC shape, Big Ambitions money. |
 | Demand | Own thematic model: area type, neighbourhood character, daypart and product category. Strong peaks, lunch about 3x in office areas. Not based on `trafficIndex`. |
 | Ladder | Cart, then truck. |
