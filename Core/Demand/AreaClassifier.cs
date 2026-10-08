@@ -7,16 +7,19 @@ namespace FoodTrucks.Core.Demand
     // One building near the spot, as the game adapter reads it. The adapter decides how to measure the distance.
     public sealed class NearbyPlace
     {
-        public NearbyPlace(string buildingType, string? businessType, double distanceMetres)
+        public NearbyPlace(string buildingType, string? businessType, double distanceMetres, double weight = 1.0)
         {
             BuildingType = buildingType;
             BusinessType = businessType;
             DistanceMetres = distanceMetres;
+            Weight = weight;
         }
 
         public string BuildingType { get; }
         public string? BusinessType { get; }
         public double DistanceMetres { get; }
+        // How much of its usual crowd it brings now (LiveCrowds.Weight); 1.0 for anything not live.
+        public double Weight { get; }
     }
 
     public sealed class AreaClassifier
@@ -42,7 +45,8 @@ namespace FoodTrucks.Core.Demand
                 var rule = RuleFor(place.BuildingType, place.BusinessType);
                 if (rule == null) continue;
 
-                var factor = 1.0 - (1.0 - settings.EdgeWeight) * (place.DistanceMetres / settings.RadiusMetres);
+                var live = IsFinite(place.Weight) && place.Weight >= 0 ? place.Weight : 1.0;
+                var factor = (1.0 - (1.0 - settings.EdgeWeight) * (place.DistanceMetres / settings.RadiusMetres)) * live;
                 foreach (var pair in rule)
                 {
                     var weight = pair.Value * factor;

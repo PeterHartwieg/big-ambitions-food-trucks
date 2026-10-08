@@ -5,6 +5,8 @@ using System.Linq;
 using AI.Citizens;
 using BigAmbitions.Items;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Reputation;
+using FoodTrucks.Core.Rules;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
 using Helpers;
@@ -102,7 +104,8 @@ namespace FoodTrucks
                 return new CartPlan(menu, stock, null, 0, 0, 0, NoShares, 0);
 
             var sellable = stock.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
-            var estimate = new DemandModel(tables).Estimate(World.Query(tables, spot, sellable));
+            var (reputation, shares) = Reputation(tables, cart, spot, vehicle, sellable);
+            var estimate = new DemandModel(tables).Estimate(World.Query(tables, spot, sellable, reputation.Factor, shares));
 
             // Accepted demand per category: share × the conversion of the item customers accept best in it,
             // so one overpriced item doesn't block a well-priced one in the same category.
@@ -133,6 +136,65 @@ namespace FoodTrucks
             var foodShare = estimate.CustomerShares.Where(p => tables.Category(p.Key).AddOnFactor <= 0).Sum(p => p.Value);
             var addOns = drink == null || foodShare <= 0 ? 0 : estimate.AddOnsPerCustomer / foodShare * drinkConversion;
             return new CartPlan(menu, stock, estimate, conversion, capacity, perHour, buyerShares, addOns, saleItems, drink, staff);
+        }
+
+        internal readonly struct ReputationParts
+        {
+            public ReputationParts(double health, double regulars, double footfall)
+            {
+                Health = health;
+                Regulars = regulars;
+                Footfall = footfall;
+            }
+
+            public double Health { get; }
+            public double Regulars { get; }
+            public double Footfall { get; }
+            public double Factor => ReputationFactor.Combine(Health, Regulars, Footfall);
+
+            public override string ToString() => $"grade {Health:F2} x regulars {Regulars:F2} x neighbours {Footfall:F2} = {Factor:F2}";
+        }
+
+        private static RuleTables? bookRules;
+        private static ReputationBook? book;
+
+        public static ReputationBook? Book()
+        {
+            var rules = DemandData.Rules;
+            if (rules == null) return null;
+            if (!ReferenceEquals(rules, bookRules))
+            {
+                bookRules = rules;
+                book = new ReputationBook(rules);
+            }
+            return book;
+        }
+
+        // The design's reputation (Health grades, Regulars, Competition): the grade on this vehicle's window,
+        // the regulars at this pitch on this weekday, and the player's other open vehicles within a block,
+        // which bring extra passers and split the customers for the same items.
+        public static (ReputationParts Parts, IReadOnlyDictionary<string, double>? Shares) Reputation(DemandTables tables, VehicleInstance cart, Spot spot,
+            VehicleState? vehicle, IReadOnlyCollection<string> sellable)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            var rules = DemandData.Rules;
+            var reputationBook = Book();
+            if (state == null || rules == null || reputationBook == null) return (new ReputationParts(1, 1, 1), null);
+            var health = reputationBook.HealthFactor(vehicle);
+            var regulars = reputationBook.RegularsFactor(state, World.PitchKey(state, spot.X, spot.Z), SaveGameManager.Current.Day);
+            var fleet = new List<CompetitionVehicle> { new CompetitionVehicle { VehicleId = cart.id, X = spot.X, Z = spot.Z, Menu = sellable.ToList() } };
+            foreach (var other in state.Vehicles)
+            {
+                if (other.VehicleId == cart.id || !other.IsOpen || other.Transit != null) continue;
+                var instance = SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v.id == other.VehicleId);
+                if (instance == null) continue;
+                var controller = VehicleHelper.GetVehicleController(instance);
+                var position = controller != null ? controller.transform.position : (UnityEngine.Vector3)instance.position;
+                var menu = MenuOf(tables, instance);
+                fleet.Add(new CompetitionVehicle { VehicleId = other.VehicleId, X = position.x, Z = position.z, Menu = StockOf(instance, menu.Menu).Keys.ToList() });
+            }
+            var effect = new Competition(tables, rules.Competition).Evaluate(fleet)[cart.id];
+            return (new ReputationParts(health, regulars, effect.FootfallFactor), effect.CategoryShares);
         }
 
         // The stocked item of a category customers accept best at its price; ties go to more stock.

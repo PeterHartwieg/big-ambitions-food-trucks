@@ -76,6 +76,11 @@ namespace FoodTrucks.Core.Saves
         public ArrivalState? Arrival { get; set; }
         // A stop the crew couldn't park at, given up on until its opening ends.
         public SkipState? Skipped { get; set; }
+        // What happened each day not yet counted into health and regulars: opened, cleaned, stale stock, and the
+        // minutes open at each spot. Counted and dropped when a new day starts (ReputationBook.CloseDaysBefore).
+        public List<DayRecord> Days { get; set; } = new List<DayRecord>();
+        // The day each food item on board was first seen there, until that item runs out (stale stock).
+        public Dictionary<string, int> StockSince { get; set; } = new Dictionary<string, int>(StringComparer.Ordinal);
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -180,6 +185,27 @@ namespace FoodTrucks.Core.Saves
         public string SpotKey { get; set; } = string.Empty;
         public double X { get; set; }
         public double Z { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    public class DayRecord
+    {
+        public int Day { get; set; }
+        public bool Opened { get; set; }
+        public bool Cleaned { get; set; }
+        public bool SoldStale { get; set; }
+        public List<SpotMinutes> Visits { get; set; } = new List<SpotMinutes>();
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    public class SpotMinutes
+    {
+        public string SpotKey { get; set; } = string.Empty;
+        public int Minutes { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

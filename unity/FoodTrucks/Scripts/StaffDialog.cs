@@ -206,8 +206,8 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
         }
 
-        // Regulars and logs know a stop by its 10 m square.
-        internal static string SpotKey(float x, float z) => $"{Math.Round(x / 10.0) * 10:F0}:{Math.Round(z / 10.0) * 10:F0}";
+        // A stop is a pitch: the same key regulars use (World.PitchKey).
+        internal static string SpotKey(float x, float z) => World.PitchKey(FoodTrucksSession.CurrentState, x, z);
 
         // 13:30; a late stop's closing time past midnight reads "01:00 (after midnight)".
         internal static string Clock(int minute)

@@ -4,7 +4,7 @@
     "foodtrucks:transaction_sale_label": "Street food",
     "foodtrucks:itempanel_open": "Open here",
     "foodtrucks:notification": "{message}",
-    "foodtrucks:notification_open": "The {vehicle} is open with {units} items. About {rate} customers an hour here right now, as long as someone is at the window.",
+    "foodtrucks:notification_open": "The {vehicle} is open with {units} items, {grade} on the window. About {rate} customers an hour here right now, as long as someone is at the window.",
     "foodtrucks:notification_open_outside": "Street food is sold out on the street.",
     "foodtrucks:notification_open_unpaid": "The stock in the {vehicle} isn't paid for yet.",
     "foodtrucks:notification_open_no_stock": "Nothing to sell: there's no food in the {vehicle} that its equipment can serve.",
@@ -125,5 +125,11 @@
     "foodtrucks:notification_hire_no_stock": "There's no food left in the {vehicle} for the crew to sell.",
     "foodtrucks:notification_routes_failed": "Hired crews stopped after an error. See Player.log.",
     "foodtrucks:hires_after_midnight": "{0} (after midnight)",
-    "foodtrucks:notification_hire_indoors": "The {vehicle} is parked indoors. Its crew waits for it out on the street."
+    "foodtrucks:notification_hire_indoors": "The {vehicle} is parked indoors. Its crew waits for it out on the street.",
+    "foodtrucks:notification_inspection": "A health inspector checked the {vehicle}: grade {grade} ({points} points).",
+    "foodtrucks:grade_pending": "grade pending",
+    "foodtrucks:grade_letter": "grade {0}",
+    "foodtrucks:itempanel_clean": "Clean",
+    "foodtrucks:timemachine_cleaning": "Cleaning the window, the counter and the equipment",
+    "foodtrucks:notification_cleaned": "The {vehicle} is clean for today."
 }

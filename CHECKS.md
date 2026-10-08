@@ -1,3 +1,29 @@
+# Milestone 6 checks: depth (first half)
+
+Build `0.7.0`. Health grades, regulars, competition between your own vehicles, and live crowds from nearby venues. It includes Milestones 3 to 5, also unplayed; their lists are below and come first if time is short. Fresh **FT** save, other gameplay mods off.
+
+## 1. Automated (me)
+
+- [ ] `dotnet test` passes; `tools/build-mod.sh --generate` builds; installed after the mod was parked for any recording.
+- [ ] After the session: the log lines in section 3.
+
+## 2. In game (about 10 minutes, after the Milestone 5 list)
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Open a cart or truck | The message names the grade on the window ("grade pending" on a new vehicle) |
+| 2 | Hold the cart (or sit in the truck) and press Clean | The game's time-skip overlay runs 20 minutes with "Cleaning the window, the counter and the equipment", then "clean for today" |
+| 3 | Open two of your vehicles with the same food within a block of each other | Each sells less of that food than alone (the log shows "neighbours" above 1 and the split) |
+| 4 | Open next to a theatre or cinema in the evening, or a nightclub as it closes | More customers around 22:30 (theatre), on the half hours after 17:00 (cinema), or just after the club closes. A nightclub by day brings nobody |
+| 5 | If you have time: sleep a few days with a cart open each day at the same spot, never cleaning | A health inspector's message with a grade below A, eventually; the next open message shows it |
+
+## 3. Log lines (me)
+
+- `Version 0.7.0 loading.`; `Reputation: N vehicle days counted` after each new day with an open vehicle.
+- Open lines end with `Reputation: grade … x regulars … x neighbours … = …; pitch …`.
+- `Cart … spot on day …, HH:00: … live venues at HH:00: …` hourly while open near venues.
+- `Cleaning: … cleaned on day …`; `Health inspection: …` when the inspector comes; `stale … sold` after three days with the same stock.
+
 # Milestone 5 checks: hires
 
 Build `0.6.0`. The game's own employees can run a cart or truck: the "Hires" button on the vehicle's panel puts an unassigned employee on it and builds a route of stops with opening hours. The crew drives (or pushes) to each stop, opens, closes at the stop's time and moves on, and the game pays them at midnight. The player still restocks. 0.6.0 includes Milestone 4, which hasn't been played yet either: its list is below and can share the session.

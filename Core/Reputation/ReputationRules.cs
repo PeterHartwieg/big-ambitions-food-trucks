@@ -30,8 +30,11 @@ namespace FoodTrucks.Core.Reputation
     public sealed class HealthRules
     {
         public HealthRules(int memoryDays = 14, int uncleanedDayPoints = 3, int staleStockPoints = 4,
-            IEnumerable<GradeBand>? grades = null, int firstInspectionWeeks = 2, int minimumGapDays = 7, int daysPerWeek = 7)
+            IEnumerable<GradeBand>? grades = null, int firstInspectionWeeks = 2, int minimumGapDays = 7, int daysPerWeek = 7,
+            int staleAfterDays = 3)
         {
+            ReputationRuleChecks.Range(staleAfterDays, 1, 365, nameof(staleAfterDays));
+            StaleAfterDays = staleAfterDays;
             ReputationRuleChecks.Range(memoryDays, 1, 365, nameof(memoryDays));
             ReputationRuleChecks.Range(uncleanedDayPoints, 0, 100, nameof(uncleanedDayPoints));
             ReputationRuleChecks.Range(staleStockPoints, 0, 100, nameof(staleStockPoints));
@@ -59,6 +62,8 @@ namespace FoodTrucks.Core.Reputation
         public int MemoryDays { get; }
         public int UncleanedDayPoints { get; }
         public int StaleStockPoints { get; }
+        // Food on board this many days or more is stale. The game's food never spoils, so this is the mod's rule.
+        public int StaleAfterDays { get; }
         public IReadOnlyList<GradeBand> Grades { get; }
         public int FirstInspectionWeeks { get; }
         public int MinimumGapDays { get; }
@@ -66,7 +71,7 @@ namespace FoodTrucks.Core.Reputation
 
         internal static HealthRules Read(DataReader r, JObject obj)
         {
-            r.OnlyKeys(obj, "memoryDays", "uncleanedDayPoints", "staleStockPoints", "grades", "firstInspectionWeeks", "minimumGapDays", "daysPerWeek");
+            r.OnlyKeys(obj, "memoryDays", "uncleanedDayPoints", "staleStockPoints", "staleAfterDays", "grades", "firstInspectionWeeks", "minimumGapDays", "daysPerWeek");
             var list = r.List(obj, "grades");
             if (list.Count != 3) throw r.Fail(list.Path, "must list exactly A, B, C in that order");
             var bands = new List<GradeBand>();
@@ -96,7 +101,8 @@ namespace FoodTrucks.Core.Reputation
                 r.Integer(obj, "staleStockPoints", 0, 100), bands,
                 r.Integer(obj, "firstInspectionWeeks", 1, 520),
                 r.Integer(obj, "minimumGapDays", 0, 365),
-                r.Integer(obj, "daysPerWeek", 1, 365));
+                r.Integer(obj, "daysPerWeek", 1, 365),
+                r.Integer(obj, "staleAfterDays", 1, 365));
         }
     }
 

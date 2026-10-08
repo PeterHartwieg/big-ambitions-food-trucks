@@ -5,6 +5,7 @@ using System.Linq;
 using BigAmbitions.DayNightCycle;
 using BigAmbitions.Items;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Saves;
 using Helpers;
 using UnityEngine;
 
@@ -15,13 +16,26 @@ namespace FoodTrucks
     // never every minute (implementation plan, Game adapters).
     internal sealed class Spot
     {
-        public Spot(AreaMix areas, string? neighbourhood, int buildings, int day)
+        public Spot(AreaMix areas, string? neighbourhood, int buildings, int day, float x = 0f, float z = 0f, int hour = -1, string? live = null)
         {
             Areas = areas;
             Neighbourhood = neighbourhood;
             Buildings = buildings;
             Day = day;
+            X = x;
+            Z = z;
+            Hour = hour;
+            Live = live;
         }
+
+        // The game hour its live crowds were read for: a new hour reads them again.
+        public int Hour { get; }
+        // The live venues nearby and what they bring now, for the log.
+        public string? Live { get; }
+
+        // Where it was read, on the ground.
+        public float X { get; }
+        public float Z { get; }
 
         public AreaMix Areas { get; }
         public string? Neighbourhood { get; }
@@ -69,14 +83,18 @@ namespace FoodTrucks
             var radius = tables.Classifier.RadiusMetres;
             // Business types by address, read directly: BuildingHelper.GetBuildingRegistration creates
             // a registration when none exists, which a read must not do.
-            var businesses = new Dictionary<(string, int), string>();
+            var businesses = new Dictionary<(string, int), BuildingRegistration>();
             foreach (var registration in SaveGameManager.Current.BuildingRegistrations)
             {
                 if (registration == null || string.IsNullOrEmpty(registration.businessTypeName)) continue;
                 var address = registration.Address;
                 if (address == null) continue;
-                businesses[(address.streetName, address.streetNumber)] = registration.businessTypeName;
+                businesses[(address.streetName, address.streetNumber)] = registration;
             }
+            var live = DemandData.Rules?.LiveCrowds;
+            var minute = TimeHelper.CurrentHour * 60 + (int)TimeHelper.CurrentMinute;
+            var weekday = DayOfWeekOf(SaveGameManager.Current.Day);
+            var liveNotes = new List<string>();
 
             var places = new List<NearbyPlace>();
             string? neighbourhood = null;
@@ -93,8 +111,15 @@ namespace FoodTrucks
                 }
                 if (distance > radius) continue;
                 var address = building.Address;
-                businesses.TryGetValue((address.streetName, address.streetNumber), out var business);
-                places.Add(new NearbyPlace(building.BuildingType, business, distance));
+                businesses.TryGetValue((address.streetName, address.streetNumber), out var registration);
+                var business = registration?.businessTypeName;
+                var weight = 1.0;
+                if (live != null && registration != null && live.KindOf(business) is var kind && kind != VenueKind.Other)
+                {
+                    weight = live.Weight(VenueNow(registration, kind), minute, weekday);
+                    liveNotes.Add($"{Short(business)} {weight:F1}");
+                }
+                places.Add(new NearbyPlace(building.BuildingType, business, distance, weight));
             }
             // Subway stations bring their own crowd (the `transit` area in demand.json).
             var stations = InstanceBehavior<CityManager>.Instance?.subwayStations;
@@ -108,14 +133,86 @@ namespace FoodTrucks
                 }
             }
             var areas = new AreaClassifier(tables).Classify(places, position.x, position.z);
-            return new Spot(areas, neighbourhood, places.Count, SaveGameManager.Current.Day);
+            return new Spot(areas, neighbourhood, places.Count, SaveGameManager.Current.Day, position.x, position.z, TimeHelper.CurrentHour,
+                liveNotes.Count == 0 ? null : string.Join(", ", liveNotes));
+        }
+
+        // A venue as the game has it this hour: open by its own schedule (AI businesses have one too), when it
+        // closed if that was within the last hour, and for offices and factories the staff at work.
+        private static VenueNow VenueNow(BuildingRegistration registration, VenueKind kind)
+        {
+            var day = SaveGameManager.Current.Day;
+            var hour = TimeHelper.CurrentHour;
+            var open = OpenAt(registration, day, hour);
+            int? closedAgo = null;
+            if (!open)
+            {
+                var previousDay = hour == 0 ? day - 1 : day;
+                var previousHour = hour == 0 ? 23 : hour - 1;
+                if (previousDay >= 1 && OpenAt(registration, previousDay, previousHour)) closedAgo = (int)TimeHelper.CurrentMinute;
+            }
+            int? workers = null;
+            if (kind == VenueKind.Office || kind == VenueKind.Factory)
+            {
+                if (registration.RentedByPlayer)
+                {
+                    var today = registration.scheduleDays?.Find(d => d != null && d.day == TimeHelper.GetDayOfWeek(day));
+                    workers = today?.workShifts?.Count(s => s != null && !string.IsNullOrEmpty(s.employeeId) && s.startingHour <= hour && s.endingHour > hour) ?? 0;
+                }
+                else if (registration.aiEmployees != null) workers = open ? registration.aiEmployees.Count : 0;
+            }
+            return new VenueNow { Kind = kind, Open = open, ClosedMinutesAgo = closedAgo, Workers = workers };
+        }
+
+        private static bool OpenAt(BuildingRegistration registration, int day, int hour)
+        {
+            if (registration.temporarilyClosed || registration.scheduleDays == null) return false;
+            var schedule = registration.scheduleDays.Find(d => d != null && d.day == TimeHelper.GetDayOfWeek(day));
+            return schedule != null && schedule.IsOpenAtHour(hour);
         }
 
         // Day 1 is a Monday (seen in game: "Monday (Day 1)", Milestone 1 session).
         public static DayOfWeek DayOfWeekOf(int gameDay) =>
             (DayOfWeek)(((int)DayOfWeek.Monday + Math.Max(0, gameDay - 1)) % 7);
 
-        public static DemandQuery Query(DemandTables tables, Spot spot, IReadOnlyCollection<string> menu)
+        // How near a pitch already known (a regulars entry or a route stop) counts as that pitch, so parking a
+        // few metres off on another day still finds its regulars.
+        private const double SamePitchMetres = 30;
+
+        // The key regulars and routes know a pitch by: a known pitch nearby, or a new one on a 10 m grid.
+        public static string PitchKey(SaveState? state, float x, float z)
+        {
+            string? best = null;
+            var bestDistance = double.MaxValue;
+            if (state != null)
+            {
+                var known = state.Regulars.Entries.Select(e => e.SpotKey)
+                    .Concat(state.Vehicles.SelectMany(v => v.Schedule?.Stops ?? new List<ScheduleStop>()).Select(s => s.SpotKey));
+                foreach (var key in known.Distinct())
+                {
+                    if (!TryParsePitch(key, out var kx, out var kz)) continue;
+                    var distance = Math.Sqrt((kx - x) * (kx - x) + (kz - z) * (kz - z));
+                    if (distance <= SamePitchMetres && distance < bestDistance)
+                    {
+                        best = key;
+                        bestDistance = distance;
+                    }
+                }
+            }
+            return best ?? $"{Math.Round(x / 10.0) * 10:F0}:{Math.Round(z / 10.0) * 10:F0}";
+        }
+
+        private static bool TryParsePitch(string key, out double x, out double z)
+        {
+            x = z = 0;
+            var parts = key.Split(':');
+            return parts.Length == 2 &&
+                   double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out x) &&
+                   double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out z);
+        }
+
+        public static DemandQuery Query(DemandTables tables, Spot spot, IReadOnlyCollection<string> menu,
+            double reputation = 1.0, IReadOnlyDictionary<string, double>? categoryShares = null)
         {
             var game = SaveGameManager.Current;
             var market = new Dictionary<string, double>();
@@ -142,12 +239,15 @@ namespace FoodTrucks
                 Raining = RainHelper.isRaining,
                 MarketDemand = market,
                 Promotion = promotion > 0 ? promotion : 1.0,
+                Reputation = reputation,
+                CategoryShares = categoryShares,
             };
         }
 
         // Plain text for the status and the demand readout.
         public static string Describe(Spot spot) =>
-            $"{Short(spot.Neighbourhood)}, {spot.Buildings} buildings within reach, areas {spot.Areas}";
+            $"{Short(spot.Neighbourhood)}, {spot.Buildings} buildings within reach, areas {spot.Areas}" +
+            (spot.Live != null ? $"; live venues at {spot.Hour:D2}:00: {spot.Live}" : "");
 
         public static string Short(string? id)
         {

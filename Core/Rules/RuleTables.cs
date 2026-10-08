@@ -17,7 +17,7 @@ namespace FoodTrucks.Core.Rules
 
         private RuleTables(DataReader r, JObject root)
         {
-            r.OnlyKeys(root, "schemaVersion", "queue", "service", "health", "regulars", "competition", "fleet", "catering");
+            r.OnlyKeys(root, "schemaVersion", "queue", "service", "health", "regulars", "competition", "fleet", "catering", "liveCrowds");
             r.SchemaVersion(root, SchemaVersion);
             Queue = QueueRules.Read(r, r.Object(root, "queue"));
             Service = ServiceRules.Read(r, r.Object(root, "service"));
@@ -26,6 +26,7 @@ namespace FoodTrucks.Core.Rules
             Competition = CompetitionRules.Read(r, r.Object(root, "competition"));
             Fleet = FleetRules.Read(r, r.Object(root, "fleet"));
             Catering = CateringRules.Read(r, r.Object(root, "catering"));
+            LiveCrowds = LiveCrowds.Read(r, r.Object(root, "liveCrowds"));
         }
 
         public QueueRules Queue { get; }
@@ -35,6 +36,7 @@ namespace FoodTrucks.Core.Rules
         public CompetitionRules Competition { get; }
         public FleetRules Fleet { get; }
         public CateringRules Catering { get; }
+        public LiveCrowds LiveCrowds { get; }
 
         public static RuleTables Parse(string? json)
         {

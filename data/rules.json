@@ -20,11 +20,12 @@
     "maxQueue": 12
   },
 
-  "_health": "Hidden cleanliness points: the sum of the daily marks of the last memoryDays days the vehicle was open. An open day without cleaning adds uncleanedDayPoints, selling stale stock adds staleStockPoints. The grade changes only when an inspector comes, about every inspectionWeeks for the current grade, with no visits inside minimumGapDays. After that each open day has chance 1 / max(1, inspectionWeeks x daysPerWeek - minimumGapDays); an ungraded vehicle uses firstInspectionWeeks. Bands from the design, which follows NYC's 0-13 / 14-27 / 28+.",
+  "_health": "Hidden cleanliness points: the sum of the daily marks of the last memoryDays days the vehicle was open. An open day without cleaning adds uncleanedDayPoints, selling stale stock adds staleStockPoints; food is stale once it has been on board staleAfterDays days (the game's food never spoils, so the mod counts from the day it first sees an item on board until that item runs out). The grade changes only when an inspector comes, about every inspectionWeeks for the current grade, with no visits inside minimumGapDays. After that each open day has chance 1 / max(1, inspectionWeeks x daysPerWeek - minimumGapDays); an ungraded vehicle uses firstInspectionWeeks. Bands from the design, which follows NYC's 0-13 / 14-27 / 28+.",
   "health": {
     "memoryDays": 14,
     "uncleanedDayPoints": 3,
     "staleStockPoints": 4,
+    "staleAfterDays": 3,
     "grades": [
       { "grade": "A", "maxPoints": 13, "demand": 1.0, "inspectionWeeks": 12 },
       { "grade": "B", "maxPoints": 27, "demand": 0.9, "inspectionWeeks": 6 },
@@ -81,5 +82,29 @@
       { "id": "event", "areas": ["waterfront", "retail"], "days": ["fri", "sat", "sun"], "start": ["12:00", "16:00"],
         "durationMinutes": [120, 180], "guests": [100, 200], "categories": { "fastfood": 1.0, "icecream": 1.0, "colddrinks": 0.5, "pizza": 0.5 }, "weight": 0.5 }
     ]
+  },
+
+  "_liveCrowds": "How much of its usual crowd a venue near a pitch brings this hour (design: Live crowds from game businesses). A closed nightclub, theatre or cinema brings closedWeight. Theatre audiences come out at letOuts (minutes after midnight; 1350 is 22:30), plus weekendLetOuts at weekends (the matinee at 17:00), cinema audiences every `every` minutes from `first` to `last` (1470 is 00:30 after midnight); each surge lasts surgeMinutes at `surge` times the crowd, times weekendSurge on Saturdays and Sundays. A nightclub's guests come out for clubClosing.minutes after it closes. Offices and factories bring their staff at work divided by workers.reference, between workers.min and workers.max. kinds maps the game's business types to these venues; everything else is as the area tables say. Every number is a guess.",
+  "liveCrowds": {
+    "closedWeight": 0.0,
+    "surgeMinutes": 45,
+    "theatre": { "surge": 2.5, "letOuts": [1350], "weekendLetOuts": [1020] },
+    "cinema": { "surge": 2.0, "first": 1020, "every": 150, "last": 1470 },
+    "weekendSurge": 1.5,
+    "clubClosing": { "minutes": 30, "surge": 2.5 },
+    "workers": { "reference": 10, "min": 0.3, "max": 2.0 },
+    "kinds": {
+      "ba:businesstype_nightclub": "nightclub",
+      "ba:businesstype_theater": "theatre",
+      "ba:businesstype_cinema": "cinema",
+      "ba:businesstype_headquarters": "office",
+      "ba:businesstype_lawfirm": "office",
+      "ba:businesstype_webdevelopmentagency": "office",
+      "ba:businesstype_marketingagency": "office",
+      "ba:businesstype_graphicdesigner": "office",
+      "ba:businesstype_recruitmentagency": "office",
+      "ba:businesstype_eventplanningagency": "office",
+      "ba:businesstype_factory": "factory"
+    }
   }
 }

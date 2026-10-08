@@ -162,6 +162,12 @@ namespace FoodTrucks.Core.Saves
                     throw new JsonSerializationException("Shifts must be plans with legs that end no earlier than they start.");
                 if ((vehicle.Arrival != null && vehicle.Arrival.SpotKey == null) || (vehicle.Skipped != null && vehicle.Skipped.SpotKey == null))
                     throw new JsonSerializationException("Arrival and Skipped must name their spot.");
+                if (vehicle.Days == null || vehicle.Days.Any(d => d == null || d.Visits == null ||
+                        d.Visits.Any(v => v == null || string.IsNullOrEmpty(v.SpotKey) || v.Minutes < 0)) ||
+                    vehicle.Days.Select(d => d.Day).Distinct().Count() != vehicle.Days.Count)
+                    throw new JsonSerializationException("Days must be one record per day, with named spots and minutes not negative.");
+                if (vehicle.StockSince == null || vehicle.StockSince.Keys.Any(string.IsNullOrEmpty))
+                    throw new JsonSerializationException("StockSince must name its items.");
                 if (vehicle.HireStop < 0)
                     throw new JsonSerializationException("HireStop must not be negative.");
             }
