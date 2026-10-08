@@ -28,7 +28,7 @@ All figures: one player, default difficulty, a weekday without rain, the player'
 - **[BC model]**: Big Copilot's Open a store model (`template/open-store-model.js`), validated against 94 of the player's real shops: median actual ÷ model 0.96, p25 0.80, p90 1.08 (`docs/open-a-store-scope.md`, "Expected profit").
 - **[mod data]**: this repo's `data/*.json` or Core.
 - **[seen]**: seen in game (Milestone 1 session, `docs/evidence/milestone-1-session-1.md`).
-- **[Peter]**: Peter's play, recorded in the HART workspace's opener research of 23 September 2026, or his answers of 8 October.
+- **[Peter]**: the mod author's own play notes (opener research of 23 September 2026) and his answers of 8 October.
 - **[calc]**: this study's tool.
 - **[assumption]**: a judgement of mine, listed at the end.
 
