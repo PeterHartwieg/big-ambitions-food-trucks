@@ -100,8 +100,12 @@ namespace FoodTrucks
         // Every entrance of every building, for the legality rule.
         public static IEnumerable<Vector3> DoorPositions() => Buildings().SelectMany(b => b.Doors);
 
-        public static Spot ReadSpot(DemandTables tables, Vector3 position)
+        // `at`: the absolute game minute whose hour the venues are read for; null is now.
+        public static Spot ReadSpot(DemandTables tables, Vector3 position, double? at = null)
         {
+            var absolute = (long)Math.Floor(at ?? HireCrew.NowExact());
+            var readDay = (int)(absolute / 1440) + 1;
+            var readHour = (int)(absolute % 1440 / 60);
             var radius = tables.Classifier.RadiusMetres;
             // Business types by address, read directly: BuildingHelper.GetBuildingRegistration creates
             // a registration when none exists, which a read must not do.
@@ -136,7 +140,7 @@ namespace FoodTrucks
                 var place = new NearbyPlace(building.BuildingType, business, distance);
                 places.Add(place);
                 read.Add((place, live != null && registration != null && live.KindOf(business) is var kind && kind != VenueKind.Other
-                    ? VenueNow(registration, kind) : null));
+                    ? VenueNow(registration, kind, readDay, readHour) : null));
             }
             // Subway stations bring their own crowd (the `transit` area in demand.json).
             var stations = InstanceBehavior<CityManager>.Instance?.subwayStations;
@@ -150,15 +154,13 @@ namespace FoodTrucks
                 }
             }
             var areas = new AreaClassifier(tables).Classify(places, position.x, position.z);
-            return new Spot(areas, neighbourhood, places.Count, SaveGameManager.Current.Day, position, TimeHelper.CurrentHour, read);
+            return new Spot(areas, neighbourhood, places.Count, readDay, position, readHour, read);
         }
 
         // A venue as the game has it this hour: open by its own schedule (AI businesses have one too), when it
         // closed if that was within the last hour, and for offices and factories the staff at work.
-        private static VenueNow VenueNow(BuildingRegistration registration, VenueKind kind)
+        private static VenueNow VenueNow(BuildingRegistration registration, VenueKind kind, int day, int hour)
         {
-            var day = SaveGameManager.Current.Day;
-            var hour = TimeHelper.CurrentHour;
             var open = OpenAt(registration, day, hour);
             int? closedAgo = null;
             if (!open)

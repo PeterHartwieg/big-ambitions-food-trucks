@@ -419,13 +419,30 @@ namespace FoodTrucks
             var self = instance;
             var state = FoodTrucksSession.CurrentState;
             if (self == null || state == null || !FoodTrucksSession.CanWrite || !vehicle.IsOpen) return;
-            for (var i = 0; i < 48 && vehicle.IsOpen; i++)
+            self.Advance(state, vehicle, minute);
+        }
+
+        // Sells up to that game minute in steps that never cross a game hour (the venues are read by the hour)
+        // and last at most StepMinutes, so a surge starts and ends within a step of its time.
+        private void Advance(SaveState state, VehicleState vehicle, double until)
+        {
+            for (var i = 0; i < 200 && vehicle.IsOpen; i++)
             {
-                if (!self.simulatedUntil.TryGetValue(vehicle.VehicleId, out var from)) self.simulatedUntil[vehicle.VehicleId] = from = minute;
-                if (minute - from < 1) return;
-                self.Tick(state, vehicle, Math.Min(minute, from + SalesTick.MaxCatchUpMinutes));
+                if (!simulatedUntil.TryGetValue(vehicle.VehicleId, out var from))
+                {
+                    simulatedUntil[vehicle.VehicleId] = until;
+                    return;
+                }
+                if (until - from < 1) return;
+                var nextHour = (Math.Floor(from / 60) + 1) * 60;
+                var end = Math.Min(until, Math.Max(from + 1, Math.Min(from + StepMinutes, nextHour)));
+                Tick(state, vehicle, end);
+                // A tick that left the clock where it was (paused, or closed) ends the catch-up.
+                if (!simulatedUntil.TryGetValue(vehicle.VehicleId, out var after) || after <= from) return;
             }
         }
+
+        private const double StepMinutes = 15;
 
         private static string LicensingKey(OpenProblem problem)
         {
@@ -600,7 +617,7 @@ namespace FoodTrucks
             {
                 TrackStock(state);
                 foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && !RunByRoute(v)).ToList())
-                    Tick(state, vehicle, HireCrew.NowExact());
+                    Advance(state, vehicle, HireCrew.NowExact());
             }
             catch (Exception ex)
             {
@@ -676,7 +693,7 @@ namespace FoodTrucks
                 if (pitch != null)
                     ReputationBook.AddOpenMinutes(vehicle, (long)Math.Floor(from), (long)Math.Floor(from) + elapsed, pitch, tables.NightEndsMinute, ReputationBook.ClosedThrough(state));
             }
-            var spot = SpotFor(tables, cart);
+            var spot = SpotFor(tables, cart, from);
             if (spot == null) return;
             // Units held for customers on their way to the window are sold already: the plan leaves them out.
             // Demand at the start of this step's minutes: during a catch-up, not the live clock's.
@@ -837,14 +854,17 @@ namespace FoodTrucks
         }
 
         // The spot is read again each game hour: live venue crowds change, and the city around it may have.
-        private Spot? SpotFor(DemandTables tables, VehicleInstance cart)
+        private Spot? SpotFor(DemandTables tables, VehicleInstance cart, double at)
         {
-            // Live venue crowds change by the hour, so the spot is read again each game hour.
-            if (spots.TryGetValue(cart.id, out var spot) && spot.Day == SaveGameManager.Current.Day && spot.Hour == TimeHelper.CurrentHour) return spot;
+            // Live venue crowds change by the hour, so the spot is read again for each game hour sold in.
+            var absolute = (long)Math.Floor(at);
+            var day = (int)(absolute / 1440) + 1;
+            var hour = (int)(absolute % 1440 / 60);
+            if (spots.TryGetValue(cart.id, out var spot) && spot.Day == day && spot.Hour == hour) return spot;
             // A crew's vehicle far from the player may have no controller: read it where it stood.
             var controller = VehicleHelper.GetVehicleController(cart);
             if (controller == null && spot == null) return null;
-            spot = World.ReadSpot(tables, controller != null ? controller.transform.position : new Vector3(spot!.X, spot.Y, spot.Z));
+            spot = World.ReadSpot(tables, controller != null ? controller.transform.position : new Vector3(spot!.X, spot.Y, spot.Z), at);
             spots[cart.id] = spot;
             Log.Info($"Cart {cart.id} spot on day {spot.Day}, {spot.Hour:D2}:00: {World.Describe(spot)}.");
             return spot;
