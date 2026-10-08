@@ -35,8 +35,10 @@ namespace FoodTrucks
         // For each started or booked gig and truck: the first game minute it was seen at the place, and the last.
         // Not saved: after a load it starts from then.
         private readonly Dictionary<(long Gig, string Vehicle), (long Since, Vector3 At)> nearSince = new Dictionary<(long, string), (long, Vector3)>();
-        // Minutes a truck must have stood still at the place before its gig starts, so driving past doesn't start it.
+        // Minutes a truck must have stood still at the place before its gig starts, so driving past doesn't start it:
+        // longer with the player at the wheel, since a red light or a queue holds a truck still for a moment.
         private const long StandMinutes = 2;
+        private const long StandMinutesDriving = 10;
         private readonly Dictionary<long, long> lastSeenNear = new Dictionary<long, long>();
         // "Not ready" told once per gig and truck.
         private readonly HashSet<(long, string)> notReadyShown = new HashSet<(long, string)>();
@@ -82,9 +84,14 @@ namespace FoodTrucks
         // it shows no raw texts and nothing brings the contact back.
         public static void RemoveContact()
         {
-            var catering = FoodTrucksSession.CurrentState?.Catering;
-            if (catering != null && FoodTrucksSession.CanWrite)
+            var state = FoodTrucksSession.CurrentState;
+            var catering = state?.Catering;
+            if (state != null && catering != null && FoodTrucksSession.CanWrite)
             {
+                // Fees still owed are paid now; one the game still refuses is dropped with the rest.
+                PayUnpaid(state);
+                if (catering.Unpaid.Count > 0) Log.Error($"Catering: {catering.Unpaid.Count} unpaid fees dropped for the uninstall step.");
+                catering.Unpaid.Clear();
                 var gigs = catering.Gigs.Count;
                 catering.Offers.Clear();
                 catering.Gigs.Clear();
@@ -248,7 +255,8 @@ namespace FoodTrucks
                     var position = PositionOf(vehicle);
                     if (!nearSince.TryGetValue(key, out var seen) || Vector3.Distance(seen.At, position) > 3f) nearSince[key] = seen = (now, position);
                     var since = seen.Since;
-                    if (now < start - rules.ArrivalWindowMinutes || now < since + StandMinutes) continue;
+                    var stand = SaveGameManager.Current.ActiveVehicleId == vehicle.id ? StandMinutesDriving : StandMinutes;
+                    if (now < start - rules.ArrivalWindowMinutes || now < since + stand) continue;
                     // Parked there through a skip: it arrived when it first stood there, or when the window opened.
                     var arrived = Math.Max(since, start - rules.ArrivalWindowMinutes);
                     if (Arrive(state, rules, tables, gig, vehicle, saved, kind, arrived)) break;
