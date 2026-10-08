@@ -1,0 +1,9 @@
+{
+  "_notes": "The study's proposed data changes (docs/balance/cart-economics.md), as a merge patch over data/*.json. Run with: --patch tools/balance/proposed.json --pricing index. The pricing rule is game-side (CartDemand.PriceOf), so it is a flag, not data.",
+  "economy": {
+    "vehicles": {
+      "cart": { "stockUnits": 120 },
+      "truck": { "stockUnits": 240 }
+    }
+  }
+}

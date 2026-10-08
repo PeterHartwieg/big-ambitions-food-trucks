@@ -1,0 +1,33 @@
+{
+  "_notes": "Game money the balance tool needs that the mod's data files don't hold. price = Item.DefaultMarketPrice, wholesale = Item.wholesalePrice (before the import price index and the difficulty's market multiplier, both 1.0 here), box = units per wholesale box: Big Copilot's ba_store_rules.json, validated against saves. The hot dog's $11.65 was also seen in game (Milestone 1). priceIndex = each neighbourhood's average price index, the most every customer there pays relative to the reference price (Big Copilot's openStore facts; opener research of 23 Sep 2026). equipment = default item prices from Big Copilot's ba_item_prices.json.",
+  "items": {
+    "ba:itemname_hotdog": { "price": 11.65, "wholesale": 4.45, "box": 500 },
+    "ba:itemname_burger": { "price": 12.5, "wholesale": 4.75, "box": 500 },
+    "ba:itemname_frenchfries": { "price": 6.25, "wholesale": 2.22, "box": 500 },
+    "ba:itemname_pizza": { "price": 22.0, "wholesale": 8.0, "box": 500 },
+    "ba:itemname_cupofcoffee": { "price": 3.9, "wholesale": 0.9, "box": 500 },
+    "ba:itemname_cupoftea": { "price": 3.9, "wholesale": 0.9, "box": 500 },
+    "ba:itemname_icecream": { "price": 11.5, "wholesale": 4.33, "box": 500 },
+    "ba:itemname_sodacan": { "price": 3.0, "wholesale": 0.5, "box": 500 },
+    "ba:itemname_croissant": { "price": 7.2, "wholesale": 2.91, "box": 500 },
+    "ba:itemname_donut": { "price": 3.8, "wholesale": 1.52, "box": 500 },
+    "ba:itemname_cupcake": { "price": 5.2, "wholesale": 2.1, "box": 500 }
+  },
+  "priceIndex": {
+    "ba:neighborhood_garmentdistrict": 1.284,
+    "ba:neighborhood_hellskitchen": 1.424,
+    "ba:neighborhood_industrycity": 1.246,
+    "ba:neighborhood_lowermanhattan": 1.258,
+    "ba:neighborhood_midtown": 1.682,
+    "ba:neighborhood_murrayhill": 1.342,
+    "ba:neighborhood_thehamptons": 1.636
+  },
+  "equipment": {
+    "hotdoggrill": 2200,
+    "coffeemachine": 400,
+    "displaycase": 895,
+    "cooler": 875,
+    "burgerstation": 1400,
+    "icecreamcounter": 1800
+  }
+}
