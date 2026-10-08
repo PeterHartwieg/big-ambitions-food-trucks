@@ -32,8 +32,7 @@ namespace FoodTrucks
         private static Catering? instance;
         private static bool attached;
         private long lastMinute = -1;
-        // For each started or booked gig and truck: the first game minute it was seen at the place, and the last.
-        // Not saved: after a load it starts from then.
+        // Where trucks stood and when, none of it saved: after a load it starts from then.
         // By gig and truck: the first minute the truck stood there ready for it (crew or player, licence, food,
         // portions), so a wait to confirm it is parked never stretches the deadline for a truck that got ready late.
         private readonly Dictionary<(long Gig, string Vehicle), long> readySince = new Dictionary<(long, string), long>();
@@ -43,6 +42,7 @@ namespace FoodTrucks
         // longer with the player at the wheel, since a red light or a queue holds a truck still for a moment.
         private const long StandMinutes = 2;
         private const long StandMinutesDriving = 10;
+        // By started gig: the last game minute its truck was seen at the place.
         private readonly Dictionary<long, long> lastSeenNear = new Dictionary<long, long>();
         // "Not ready" told once per gig and truck.
         private readonly HashSet<(long, string)> notReadyShown = new HashSet<(long, string)>();
