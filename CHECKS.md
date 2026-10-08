@@ -1,3 +1,32 @@
+# Milestone 6 checks: depth (second half)
+
+Build `0.8.0`. Premium spots, the city's events and partner deals with your own venues, on top of 0.7.0 (whose list is below and comes first if time is short). Fresh **FT** save, other gameplay mods off. Debug keys as before, plus **Ctrl+Shift+F11**: a city event at the nearest event place from now for three hours, with one place booked.
+
+## 1. Automated (me)
+
+- [ ] `dotnet test` passes; `tools/build-mod.sh --generate` builds; installed after the mod was parked for any recording.
+- [ ] After the session: the log lines in section 3.
+
+## 2. In game (about 15 minutes, after the 0.7.0 list)
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Open the city map, Street food line, "Premium spots and events" | About 17 buildings lit in gold, two or three per neighbourhood. Do any look like silly places for a food cart? Name them and I drop them |
+| 2 | Push a cart to a lit building and open within about 40 m of its door | A second message names the spot ("Fifth Street office row: the cart has the spot …"). Open a second vehicle next to it: "your cart already has the spot" |
+| 3 | Wait or sleep a few days | A text from the City of New York about a weekend market or street festival. Call the city: "Event places", book one. Does the dialog read well? |
+| 4 | Ctrl+Shift+F11 near a lit event place, then open a cart within about 60 m | "The cart has its place at the …"; more customers than before. A second vehicle there without a place is refused ("The street is taken by a city event") |
+| 5 | If the save owns a nightclub, theatre, cinema or office: park within 50 m, Hires | "Sign a street food partner deal with …". Sign it; open there in the evening |
+| 6 | Sleep to the next morning after the partner sold an hour outside a nightclub, theatre or cinema | The venue's facility satisfaction a few points up in BizMan (5 points; the log line gives before and after) |
+
+## 3. Log lines (me)
+
+- `Version 0.8.0 loading.`; `Demand data loaded … 17 premium spots, 7 event places, 2 event kinds`; `Pitches: 17 of 17 premium spots and 7 of 7 event places found in the city.` (any missing addresses are listed).
+- `Patch BusinessHelper.UpdateSatisfaction(BuildingRegistration): Active.`
+- `Premium spot …: held by …` / `taken by …`; open lines end with `premium spot …` and `partner …` where they apply.
+- `City event …: market at … on day …`; `City of New York: place 1 of 2 booked at event …`; `Event …: place held by …`; `Open: … refused at the …`.
+- `Partnership: … signed with …`, `worked day …`, `facility satisfaction … -> …`.
+- `Cart … spot on day …` lines show live venues from your own clubs and theatres with their guest counts behind the weights.
+
 # Milestone 6 checks: depth (first half)
 
 Build `0.7.0`. Health grades, regulars, competition between your own vehicles, and live crowds from nearby venues. It includes Milestones 3 to 5, also unplayed; their lists are below and come first if time is short. Fresh **FT** save, other gameplay mods off.
