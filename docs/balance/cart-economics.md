@@ -494,6 +494,21 @@ At lunch a quarter of the city's pitches sell under 9 hot dogs an hour, the medi
 
 **Tests.** Sol's data-pinned Core tests were written for his first values. This pass changes `passersPerHour`, the venue weights and the fast food and coffee appetites, so the tests that pinned them were rewritten to assert behaviour instead: the in-game case is busy at a Midtown weekday lunch (at least 60 passers an hour) and busier than an office block in the evening.
 
+## 7. The queue (Milestone 3, 8 October 2026)
+
+From 0.4.0 the game sells through Core's `SalesSimulator` instead of the fluid rate. Customers who buy arrive at random (Poisson) at the same hourly rate, wait in a queue of at most 6 at a cart (10 at a truck, `data/rules.json`), give up after about 20 minutes (12 in rain), and the window serves them at the item's service time. The player's customer service skill sets the window's speed; at 50, the starting value, it is the base speed the study uses.
+
+The calculator mirrors it with `--service queue`, now the default (`--service fluid` is the old rule). Each 5-minute step's sales are scaled by the share of customers the queue really serves at that load, measured with `SalesSimulator` itself for each order time, staff count and weather. Far below the window's capacity, or far above it, the queue serves what the fluid rule did. Close to capacity, random bunching costs up to about 8%: some customers find the queue full while the window was idle a minute earlier.
+
+| Cart, weekday dry, ceiling price | Fluid | Queue | Change |
+|---|---|---|---|
+| Hot dog grill + cooler, best route | $1,975 | $1,975 | 0 |
+| Hot dog, best route, weekend | $2,201 | $2,160 | −1.9% |
+| Coffee machine + display case, best route | $2,393 | $2,326 | −2.8% |
+| Truck stand-in, best route | $4,123 | $4,114 | −0.2% |
+
+The ladder holds: coffee is 1.18× the hot dog cart instead of 1.21×, and the truck is about twice the cart. Coffee loses most; its best pitches run close to the window's capacity, where bunching costs the most. Nothing was retuned.
+
 ## Assumptions
 
 1. Default difficulty is `GameVariables`' code defaults. The Normal preset may differ.

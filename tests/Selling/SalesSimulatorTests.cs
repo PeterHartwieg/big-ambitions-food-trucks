@@ -52,17 +52,73 @@ public class SalesSimulatorTests
     private static int Served(IEnumerable<SalesResult> results) => results.Sum(r => r.Count(CustomerExit.Served));
 
     [Fact]
-    public void ACategorySellsItsChosenItemWhileItLasts()
+    public void ACategorySellsOnlyItsChosenItem()
     {
         // Hot dogs and burgers are both fast food; burgers have fewer units but are the chosen item.
+        // Once they run out, fast food customers walk on rather than buy hot dogs they may not accept.
         var input = Input(30, units: 0, menu: new[] { HotDog, Burger });
         input.Stock = new Dictionary<string, int> { [HotDog] = 50, [Burger] = 3 };
         input.CategoryItems = new Dictionary<string, string> { ["fastfood"] = Burger };
-        var sales = Merge(Run(SalesSimulator.Open(11), input, 240));
+        var results = Run(SalesSimulator.Open(11), input, 240);
+        var sales = Merge(results);
 
-        Assert.True(sales.Count > 3);
-        Assert.All(sales.Take(3), s => Assert.Equal(Burger, s.Item));
-        Assert.All(sales.Skip(3), s => Assert.Equal(HotDog, s.Item));
+        Assert.Equal(3, sales.Count);
+        Assert.All(sales, s => Assert.Equal(Burger, s.Item));
+        Assert.True(results.Sum(r => r.Count(CustomerExit.NothingLeft)) > 0);
+    }
+
+    [Fact]
+    public void AnOrderWhoseItemIsNoLongerOfferedGetsTheCurrentOne()
+    {
+        // A burger order is at the window when the burger's price stops being accepted: the customer
+        // gets the category's new item instead of a burger at a refused price.
+        var state = SalesSimulator.Open(13);
+        var input = Input(200, units: 0, menu: new[] { HotDog, Burger });
+        input.Stock = new Dictionary<string, int> { [HotDog] = 50, [Burger] = 50 };
+        input.CategoryItems = new Dictionary<string, string> { ["fastfood"] = Burger };
+        simulator.Advance(state, input, 1);
+        Assert.Single(state.Window);
+        Assert.Equal(Burger, state.Window[0].Item);
+        var waiting = state.Window[0].Id;
+
+        input.CategoryItems = new Dictionary<string, string> { ["fastfood"] = HotDog };
+        var sales = Merge(Run(state, input, 10));
+
+        Assert.Equal(HotDog, Assert.Single(sales, s => s.CustomerId == waiting).Item);
+        Assert.DoesNotContain(sales, s => s.Item == Burger);
+    }
+
+    [Fact]
+    public void AnOrderWhoseCategoryIsNoLongerOfferedWalksOn()
+    {
+        var state = SalesSimulator.Open(13);
+        var input = Input(200, units: 0, menu: new[] { HotDog, Burger });
+        input.Stock = new Dictionary<string, int> { [HotDog] = 50, [Burger] = 50 };
+        input.CategoryItems = new Dictionary<string, string> { ["fastfood"] = Burger };
+        simulator.Advance(state, input, 1);
+        var waiting = Assert.Single(state.Window).Id;
+
+        input.CategoryItems = new Dictionary<string, string>();
+        var results = Run(state, input, 10);
+
+        Assert.DoesNotContain(Merge(results), s => s.CustomerId == waiting);
+        Assert.Contains(results.SelectMany(r => r.Left), l => l.Id == waiting && l.Exit == CustomerExit.NothingLeft);
+    }
+
+    [Fact]
+    public void FoodBuyersAddOnlyTheChosenDrink()
+    {
+        const string Water = "ba:itemname_water";
+        var input = Input(30, units: 0, menu: new[] { HotDog, Soda, Water });
+        input.Stock = new Dictionary<string, int> { [HotDog] = 500, [Soda] = 5, [Water] = 500 };
+        input.CustomerShares = new Dictionary<string, double> { ["fastfood"] = 1.0 };
+        input.AddOnsPerCustomer = 1.0;
+        input.AddOnItem = Soda;
+        var sales = Merge(Run(SalesSimulator.Open(12), input, 240));
+
+        Assert.Equal(5, sales.Count(s => s.AddOn));
+        Assert.All(sales.Where(s => s.AddOn), s => Assert.Equal(Soda, s.Item));
+        Assert.DoesNotContain(sales, s => s.Item == Water);
     }
 
     [Fact]

@@ -22,13 +22,17 @@ namespace FoodTrucks.Core.Selling
         public double Conversion { get; set; } = 1.0;
         // DemandEstimate.CustomerShares. Empty means every stocked category is equally likely.
         public IReadOnlyDictionary<string, double>? CustomerShares { get; set; }
-        // Per category, the item its customers buy while it lasts (the game side's best-accepted item at
-        // its price). A category without one, or whose item has run out, gets its item with the most units.
+        // Per category, the only item its customers buy (the game side's best-accepted item at its price).
+        // When set, a customer whose category has no entry, or whose item has run out, walks on: other
+        // items may be priced beyond what they accept. Null: each category sells its item with the most units.
         public IReadOnlyDictionary<string, string>? CategoryItems { get; set; }
+        // The only drink food buyers add, chosen the same way; none once it runs out. Null: the add-on
+        // item with the most units.
+        public string? AddOnItem { get; set; }
         // DemandEstimate.AddOnsPerCustomer, averaged over all customers.
         public double AddOnsPerCustomer { get; set; }
-        // Workers serving on their own: hires, or the player while the game side still sells
-        // automatically. 0 when only the player serves, through ServeHead.
+        // Workers serving on their own: hires, or the player at the window (the game side counts them as
+        // one server). 0 when nobody serves, or when the player serves through ServeHead.
         public int Servers { get; set; }
         // Multiplies each worker's service speed: order time is ServiceMinutes / ServiceSpeed.
         // Non-finite or non-positive values use 1.0; speeds above 10 are capped.
@@ -112,7 +116,7 @@ namespace FoodTrucks.Core.Selling
     // queue away. The same tick drives the visible queue near the player and
     // the statistical sales elsewhere, so switching views changes nothing.
     // Deterministic: the random state lives in ServiceState, so a save and load replay the same minutes.
-    // Replaces SalesTick and SalesRate's "customers above the cap are lost" once the game side switches.
+    // Replaces SalesTick and SalesRate's "customers above the cap are lost" on the game side since 0.4.0.
     public sealed class SalesSimulator
     {
         public const int MaxMinutesPerCall = 1440;
@@ -278,7 +282,9 @@ namespace FoodTrucks.Core.Selling
                 var finished = active[next]!;
                 used[next] = Math.Min(1.0, nextTime);
                 finished.MinutesLeft = 0;
-                var item = InStock(finished.Item, stock) ? finished.Item : ItemFor(finished.Category, input, stock);
+                // An order whose item is no longer on offer (sold out, or its price now refused) gets the
+                // category's current item, or the customer walks on.
+                var item = StillOffered(finished, input, stock) ? finished.Item : ItemFor(finished.Category, input, stock);
                 if (item == null) result.Leave(finished.Id, CustomerExit.NothingLeft);
                 else Complete(state, finished, item!, input, stock, random, result);
                 active[next] = null;
@@ -354,7 +360,7 @@ namespace FoodTrucks.Core.Selling
             var count = (int)Math.Floor(rate) + (random.Chance(rate - Math.Floor(rate)) ? 1 : 0);
             for (var i = 0; i < count; i++)
             {
-                var addOn = AddOnItem(stock);
+                var addOn = AddOnItem(input, stock);
                 if (addOn == null) break;
                 Take(stock, addOn);
                 result.Sell(new Sale(customer.Id, addOn, true, state.Minute));
@@ -423,13 +429,17 @@ namespace FoodTrucks.Core.Selling
             return stocked.Contains(picked) ? picked : null;
         }
 
-        // The category's chosen item (CategoryItems) while it lasts, else its item with the most units left,
-        // ties broken by name.
+        // The category's chosen item (CategoryItems) while it lasts, or without choices its item with the
+        // most units left, ties broken by name.
         private string? ItemFor(string category, SalesInput input, Dictionary<string, int> stock)
         {
-            if (input.CategoryItems != null && input.CategoryItems.TryGetValue(category, out var chosen) &&
-                InStock(chosen, stock) && tables.Product(chosen)!.Category == category)
-                return chosen;
+            if (input.CategoryItems != null)
+            {
+                return input.CategoryItems.TryGetValue(category, out var chosen) && InStock(chosen, stock) &&
+                       tables.Product(chosen)!.Category == category
+                    ? chosen
+                    : null;
+            }
             string? best = null;
             var bestUnits = 0;
             foreach (var pair in stock.OrderBy(p => p.Key, StringComparer.Ordinal))
@@ -443,8 +453,14 @@ namespace FoodTrucks.Core.Selling
             return best;
         }
 
-        private string? AddOnItem(Dictionary<string, int> stock)
+        private string? AddOnItem(SalesInput input, Dictionary<string, int> stock)
         {
+            if (input.AddOnItem != null)
+            {
+                return InStock(input.AddOnItem, stock) && tables.Category(tables.Product(input.AddOnItem)!.Category).AddOnFactor > 0
+                    ? input.AddOnItem
+                    : null;
+            }
             string? best = null;
             var bestUnits = 0;
             foreach (var pair in stock.OrderBy(p => p.Key, StringComparer.Ordinal))
@@ -469,6 +485,11 @@ namespace FoodTrucks.Core.Selling
             }
             return stock;
         }
+
+        private static bool StillOffered(ServiceCustomer order, SalesInput input, Dictionary<string, int> stock) =>
+            InStock(order.Item, stock) &&
+            (input.CategoryItems == null ||
+             (input.CategoryItems.TryGetValue(order.Category, out var chosen) && chosen == order.Item));
 
         private static bool InStock(string? item, Dictionary<string, int> stock) =>
             item != null && stock.TryGetValue(item, out var units) && units > 0;

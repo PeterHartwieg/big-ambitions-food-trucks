@@ -20,6 +20,7 @@ It prints Markdown tables. `--out FILE` also writes them to a file. A full run t
 | `--carts LIST` | Carts for `compare`: any of `hotdog+cooler,coffee+bakery,truck-like` (default: all three). `truck-like` is a stand-in for the truck: two at the window, 160 units, four items |
 | `--no-archetypes` | Leave out the archetype park and subway-entrance pitches (one of each per district, at the middle of its buildings) |
 | `--patch FILE` | A JSON merge patch over `data/demand.json` and `data/economy.json`: `{"demand": {...}, "economy": {...}}`, with arrays replaced. The data files are not changed. Use native fields: `economy.products.<item>.stockWeight` and `demand.areas.<area>.appetite`. Legacy `rules` sections are rejected with a migration message |
+| `--service queue\|fluid` | `queue` (default): sales follow the game's queue since 0.4.0, Core's `SalesSimulator` measured per order time and load (`QueueThroughput` in `CartModel.cs`). `fluid`: the old min(customers who buy, window capacity) |
 | `--pricing ceiling\|default\|manager\|upper` | `ceiling` (default): reference × the neighbourhood's index, the most every customer class accepts. `default`: the item's default price. `manager`: a pricing manager, reference + (ceiling − reference) × capture. `upper`: the most the upper class accepts |
 | `--price-factor N` | With `ceiling`, multiplies the price (0.9 is 10% under). With `manager`, the capture (0 to 1) |
 | `--market N` | The game's demand for the cart's items, 0 to 100 (100: no shop sells them in the neighbourhood; 71.5: two shops do) |

@@ -44,8 +44,31 @@ namespace FoodTrucks
         private readonly Dictionary<string, Dictionary<CustomerExit, int>> lostSinceOpen = new Dictionary<string, Dictionary<CustomerExit, int>>();
         // The spot each open cart stands on, read at opening and again each new day.
         private readonly Dictionary<string, Spot> spots = new Dictionary<string, Spot>();
+        // Sales Core has made whose customer is still on the way to the window in the visible queue, per cart.
+        // They are paid when that customer pays (CartQueueView calls Paid), so the money and the message
+        // come with the person at the window. Their units already count as gone for Core.
+        private readonly Dictionary<string, List<HeldSale>> held = new Dictionary<string, List<HeldSale>>();
+        // Carts where paying a held sale failed; the next tick closes them.
+        private readonly HashSet<string> heldFailed = new HashSet<string>();
         private SalesSimulator? simulator;
         private float nextTick;
+
+        // A held sale is paid anyway after this many in-game minutes, whatever the view does.
+        private const double MaxHeldMinutes = 60;
+
+        private sealed class HeldSale
+        {
+            public HeldSale(long customerId, List<string> items, double minute)
+            {
+                CustomerId = customerId;
+                Items = items;
+                Minute = minute;
+            }
+
+            public long CustomerId { get; }
+            public List<string> Items { get; }
+            public double Minute { get; }
+        }
         // From the time machine's start event to its end event (sleep, skips, paid activities).
         // Its component turns off a moment before the end event, so isRunning alone misses the last minutes.
         private bool skipping;
@@ -70,7 +93,9 @@ namespace FoodTrucks
 
         private void OnTimeMachineStarted()
         {
+            PayAllHeld();
             skipping = true;
+            CartQueueView.Suspended = true;
             CartQueueView.ClearAll();
         }
 
@@ -79,18 +104,15 @@ namespace FoodTrucks
         private void OnTimeMachineEnded()
         {
             skipping = false;
+            CartQueueView.Suspended = false;
             var now = TimeHelper.NowInMinutes();
             foreach (var id in simulatedUntil.Keys.ToList()) simulatedUntil[id] = now;
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite) return;
+            // Not counted as walking away at closing: the cart stays open.
             foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && v.Service != null))
             {
-                var gone = SalesSimulator.Close(vehicle.Service!);
-                if (gone.Left.Count > 0)
-                {
-                    CountLost(vehicle.VehicleId, gone);
-                    FoodTrucksSession.MarkChanged();
-                }
+                if (SalesSimulator.Close(vehicle.Service!).Left.Count > 0) FoodTrucksSession.MarkChanged();
             }
         }
 
@@ -170,7 +192,7 @@ namespace FoodTrucks
             var vehicle = StreetSales.GetOrAdd(state, cart.id);
             vehicle.IsOpen = true;
             vehicle.SaleProgress = 0;
-            vehicle.Service = SalesSimulator.Open(SeededRandom.SeedFor(cart.id, SaveGameManager.Current.Day));
+            vehicle.Service = SalesSimulator.Open(Seed(cart.id));
             simulatedUntil[cart.id] = TimeHelper.NowInMinutes();
             pausedNoticeShown.Remove(cart.id);
             sinceOpen[cart.id] = (0, 0);
@@ -221,6 +243,9 @@ namespace FoodTrucks
 
         private const string CustomerServiceSkill = "ba:skill_customerservice";
 
+        // Each opening gets its own customers: the cart and the minute it opened.
+        private static long Seed(string vehicleId) => SeededRandom.SeedFor(vehicleId, (long)Math.Floor(TimeHelper.NowInMinutes()));
+
         // Sales an hour while the player serves: the customers who buy, up to what the window can make.
         private static double ExpectedSales(CartPlan plan, double speed) =>
             plan.Estimate == null ? 0 : Math.Min(plan.Estimate.CustomersPerHour * plan.Conversion, plan.Capacity * speed);
@@ -240,6 +265,8 @@ namespace FoodTrucks
 
         private void Close(VehicleState vehicle, string messageKey)
         {
+            PayHeld(vehicle, null);
+            heldFailed.Remove(vehicle.VehicleId);
             vehicle.IsOpen = false;
             vehicle.SaleProgress = 0;
             if (vehicle.Service != null) CountLost(vehicle.VehicleId, SalesSimulator.Close(vehicle.Service));
@@ -279,6 +306,7 @@ namespace FoodTrucks
         {
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite) return;
+            instance?.PayAllHeld();
             foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen))
             {
                 vehicle.IsOpen = false;
@@ -290,6 +318,8 @@ namespace FoodTrucks
             instance?.sinceOpen.Clear();
             instance?.lostSinceOpen.Clear();
             instance?.spots.Clear();
+            instance?.held.Clear();
+            instance?.heldFailed.Clear();
             FoodTrucksSession.MarkChanged();
         }
 
@@ -307,6 +337,9 @@ namespace FoodTrucks
             catch (Exception ex)
             {
                 Log.Error("Sales tick: " + ex);
+                // Selling stops; what customers already bought is still paid.
+                try { PayAllHeld(); }
+                catch (Exception payEx) { Log.Error("Paying held sales: " + payEx); }
                 enabled = false;
                 Notify("foodtrucks:notification_tick_failed");
             }
@@ -335,6 +368,14 @@ namespace FoodTrucks
                 simulatedUntil[vehicle.VehicleId] = now;
                 return;
             }
+            if (heldFailed.Remove(vehicle.VehicleId))
+            {
+                Close(vehicle, "foodtrucks:notification_closed_error");
+                return;
+            }
+            // Customers nobody can see any more, or who never reached the window, pay now.
+            if (!CartQueueView.Showing(vehicle.VehicleId)) PayHeld(vehicle, null);
+            else PayHeld(vehicle, h => now - h.Minute > MaxHeldMinutes);
             var elapsed = (int)Math.Floor(now - from);
             if (elapsed < 1) return;
             simulatedUntil[vehicle.VehicleId] = from + elapsed;
@@ -350,7 +391,8 @@ namespace FoodTrucks
             if (tables == null || rules == null) return;
             var spot = SpotFor(tables, cart);
             if (spot == null) return;
-            var plan = CartDemand.Plan(tables, cart, spot);
+            // Units held for customers on their way to the window are sold already: the plan leaves them out.
+            var plan = CartDemand.Plan(tables, cart, spot, Reserved(vehicle.VehicleId));
             if (!plan.Usable)
             {
                 // A cart opened under 0.1.0 has food but no equipment; it isn't sold out.
@@ -365,25 +407,118 @@ namespace FoodTrucks
             if (elapsed > SalesTick.MaxCatchUpMinutes) return;
 
             // A cart opened before 0.4.0 has no queue yet; it starts one now.
-            vehicle.Service ??= SalesSimulator.Open(SeededRandom.SeedFor(cart.id, SaveGameManager.Current.Day));
+            vehicle.Service ??= SalesSimulator.Open(Seed(cart.id));
             simulator ??= new SalesSimulator(tables, rules.Queue);
             var window = Service(rules);
             var result = simulator.Advance(vehicle.Service, Input(tables, plan, atWindow ? 1 : 0, window), elapsed);
             CountLost(vehicle.VehicleId, result);
             var failed = false;
-            // One notification per customer: their main item and the drink that came with it.
+            var showing = CartQueueView.Showing(vehicle.VehicleId);
+            // One notification per customer: their main item and the drink that came with it. With the queue
+            // in view, the sale waits for that customer to pay at the window.
             foreach (var customer in result.Sales.GroupBy(s => s.CustomerId))
             {
-                if (!ServeCustomer(state, vehicle, cart, plan, customer.Select(s => s.Item).ToList()))
+                var items = customer.Select(s => s.Item).ToList();
+                if (showing)
+                {
+                    if (!held.TryGetValue(vehicle.VehicleId, out var list)) held[vehicle.VehicleId] = list = new List<HeldSale>();
+                    list.Add(new HeldSale(customer.Key, items, now));
+                }
+                else if (!ServeCustomer(state, vehicle, cart, plan.Menu.Menu, items))
                 {
                     failed = true;
                     break;
                 }
             }
             CartQueueView.Record(vehicle.VehicleId, result, window.Mood);
-            if (result.Sales.Count > 0 || result.Joined.Count > 0 || result.Left.Count > 0) FoodTrucksSession.MarkChanged();
+            // Every simulated minute changes the saved queue (its clock, random state, orders in progress).
+            FoodTrucksSession.MarkChanged();
             if (failed) Close(vehicle, "foodtrucks:notification_closed_error");
-            else if (result.SoldOut || CartDemand.StockOf(cart, plan.Menu.Menu).Count == 0) Close(vehicle, "foodtrucks:notification_sold_out");
+            else if (result.SoldOut) Close(vehicle, "foodtrucks:notification_sold_out");
+        }
+
+        // Called by the queue view when a customer starts paying at the window, or leaves the view unseen.
+        public static void Paid(string vehicleId, long customerId)
+        {
+            var self = instance;
+            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
+            if (self == null || vehicle == null || !FoodTrucksSession.CanWrite) return;
+            try { self.PayHeld(vehicle, h => h.CustomerId == customerId); }
+            catch (Exception ex)
+            {
+                Log.Error("Paying a held sale: " + ex);
+                self.heldFailed.Add(vehicleId);
+            }
+        }
+
+        // Pays every held sale; before saving and time skips, so the save never misses a sale Core made.
+        public static void PayAllHeldNow() => instance?.PayAllHeld();
+
+        private void PayAllHeld()
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || !FoodTrucksSession.CanWrite) return;
+            foreach (var id in held.Keys.ToList())
+            {
+                var vehicle = StreetSales.Find(state, id);
+                if (vehicle != null) PayHeld(vehicle, null);
+                else held.Remove(id);
+            }
+        }
+
+        // Pays the cart's held sales that match (all when `which` is null), in the order Core made them, one
+        // at a time: each leaves the list just before it is paid, so a failure or exception costs only that
+        // one and a callback during payment can never pay it twice.
+        private void PayHeld(VehicleState vehicle, Func<HeldSale, bool>? which)
+        {
+            if (!held.TryGetValue(vehicle.VehicleId, out var list) || list.Count == 0) return;
+            var state = FoodTrucksSession.CurrentState;
+            var cart = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId);
+            var tables = DemandData.Tables;
+            if (state == null || cart == null || tables == null)
+            {
+                var gone = which == null ? list.Count : list.Count(which);
+                if (which == null) held.Remove(vehicle.VehicleId);
+                else list.RemoveAll(h => which(h));
+                if (gone > 0) Log.Error($"Cart {vehicle.VehicleId}: {gone} held sales dropped, the cart or the data is gone.");
+                return;
+            }
+            var menu = CartDemand.MenuOf(tables, cart).Menu;
+            var paid = false;
+            while (true)
+            {
+                var sale = which == null ? list.FirstOrDefault() : list.FirstOrDefault(which);
+                if (sale == null) break;
+                list.Remove(sale);
+                paid = true;
+                // A sale that can't be paid (its stock taken out by hand, say) is dropped and logged; the cart
+                // closes with the error message on its next tick, as a failed sale always did.
+                bool ok;
+                try { ok = ServeCustomer(state, vehicle, cart, menu, sale.Items); }
+                catch (Exception ex)
+                {
+                    Log.Error($"Cart {vehicle.VehicleId}: paying held sale for customer {sale.CustomerId}: {ex}");
+                    ok = false;
+                }
+                if (ok) continue;
+                Log.Error($"Cart {vehicle.VehicleId}: held sale for customer {sale.CustomerId} ({string.Join(", ", sale.Items)}) not fully paid; dropped.");
+                heldFailed.Add(vehicle.VehicleId);
+            }
+            if (list.Count == 0) held.Remove(vehicle.VehicleId);
+            if (paid) FoodTrucksSession.MarkChanged();
+        }
+
+        // Units per item held for customers on their way to the window; null when none are.
+        private Dictionary<string, int>? Reserved(string vehicleId)
+        {
+            if (!held.TryGetValue(vehicleId, out var list) || list.Count == 0) return null;
+            var reserved = new Dictionary<string, int>();
+            foreach (var item in list.SelectMany(h => h.Items))
+            {
+                reserved.TryGetValue(item, out var units);
+                reserved[item] = units + 1;
+            }
+            return reserved;
         }
 
         // What the simulator needs for these minutes, from the cart's plan. Customers who buy arrive at the
@@ -400,6 +535,7 @@ namespace FoodTrucks
                 Conversion = plan.Conversion,
                 CustomerShares = plan.BuyerShares,
                 CategoryItems = plan.SaleItems,
+                AddOnItem = plan.AddOnItem,
                 // Core spreads add-ons over all buyers and divides by the food buyers' share again.
                 AddOnsPerCustomer = plan.AddOnItem == null ? 0 : plan.AddOnsPerFoodBuyer * mainShare,
                 Servers = servers,
@@ -423,7 +559,7 @@ namespace FoodTrucks
 
         // One customer's order as Core sold it: each item takes a unit and is paid at the cart's price.
         // One notification per customer.
-        private bool ServeCustomer(SaveState state, VehicleState vehicle, VehicleInstance cart, CartPlan plan, List<string> items)
+        private bool ServeCustomer(SaveState state, VehicleState vehicle, VehicleInstance cart, Menu menu, List<string> items)
         {
             var labels = new List<string>();
             long cents = 0;
@@ -434,12 +570,13 @@ namespace FoodTrucks
                 if (sold < 0)
                 {
                     if (labels.Count == 0) return false;
+                    Log.Info($"Cart {vehicle.VehicleId}: {item} not sold with the order, none left to take.");
                     break;
                 }
                 labels.Add(LocalizorManager.GetLocalization(item, null));
                 cents += sold;
             }
-            var left = CartDemand.StockOf(cart, plan.Menu.Menu).Values.Sum();
+            var left = CartDemand.StockOf(cart, menu).Values.Sum();
             Notify("foodtrucks:notification_sale", ("item", string.Join(" + ", labels)), ("price", Money(cents)), ("units", left.ToString()));
             return true;
         }

@@ -7,6 +7,7 @@ using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
 using Helpers;
 using Parking.UndergroundParking;
+using UI;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.SceneManagement;
@@ -23,7 +24,7 @@ namespace FoodTrucks
     // stand at the window for a moment when served and walk off. Core can serve someone before they reach
     // the window (an in-game minute is a second at normal speed); they still walk up, pay and leave.
     // Everyone is removed when the cart closes or is grabbed (they walk off), and at once when the player
-    // goes further than ViewMetres, enters a building, skips time, leaves the city or runs the uninstall
+    // goes further than KeepMetres, enters a building, skips time, leaves the city or runs the uninstall
     // step. At most MaxPeople exist at a time, across all carts.
     internal sealed class CartQueueView : MonoBehaviour
     {
@@ -35,13 +36,20 @@ namespace FoodTrucks
 
         private static CartQueueView? instance;
         private readonly Dictionary<string, QueueLine> lines = new Dictionary<string, QueueLine>();
+        // Lines of carts that closed, while their people walk off; a cart reopened meanwhile gets a new line.
+        private readonly List<QueueLine> departing = new List<QueueLine>();
         private float nextCheck;
         private int spawnedTotal;
         private int mostAtOnce;
 
+        // Set from the time machine's start event to its end event: no lines while time skips.
+        public static bool Suspended { get; set; }
+
         private void OnEnable()
         {
             instance = this;
+            // A skip that ended while no runtime listened must not hide the queue for good.
+            Suspended = false;
             // A runtime from an earlier load (or a mod reload) may have left people behind.
             foreach (var old in FindObjectsOfType<QueueLineRoot>())
             {
@@ -75,19 +83,30 @@ namespace FoodTrucks
             }
         }
 
+        // True while the cart's queue is on screen: CartSelling then holds each sale until the customer
+        // pays at the window (Paid).
+        public static bool Showing(string vehicleId) =>
+            instance != null && instance.enabled && instance.lines.TryGetValue(vehicleId, out var line) && line.HasPlaces;
+
         // The cart closed: everyone in line walks off, then the line goes.
-        public static void Closed(string vehicleId)
-        {
-            if (instance != null && instance.lines.TryGetValue(vehicleId, out var line)) line.Close();
-        }
+        public static void Closed(string vehicleId) => instance?.Retire(vehicleId);
 
         // Removes every person at once: time skips, the uninstall step, leaving the city.
         public static void ClearAll() => instance?.RemoveAll("cleared");
 
+        private void Retire(string vehicleId)
+        {
+            if (!lines.TryGetValue(vehicleId, out var line)) return;
+            lines.Remove(vehicleId);
+            line.Close();
+            departing.Add(line);
+        }
+
         private void RemoveAll(string reason)
         {
-            foreach (var line in lines.Values) line.Destroy(reason);
+            foreach (var line in lines.Values.Concat(departing)) line.Destroy(reason);
             lines.Clear();
+            departing.Clear();
         }
 
         private void Update()
@@ -99,22 +118,21 @@ namespace FoodTrucks
                     nextCheck = Time.unscaledTime + CheckSeconds;
                     CheckLines();
                 }
-                var room = MaxPeople - lines.Values.Sum(l => l.Count);
-                foreach (var line in lines.Values.ToList())
+                var room = MaxPeople - lines.Values.Concat(departing).Sum(l => l.Count);
+                foreach (var line in lines.Values) room -= line.Tick(Math.Max(0, room));
+                for (var i = departing.Count - 1; i >= 0; i--)
                 {
-                    room -= line.Tick(Math.Max(0, room));
-                    if (line.Finished)
-                    {
-                        line.Destroy("closed");
-                        lines.Remove(line.VehicleId);
-                    }
+                    departing[i].Tick(0);
+                    if (!departing[i].Finished) continue;
+                    departing[i].Destroy("closed");
+                    departing.RemoveAt(i);
                 }
-                var now = lines.Values.Sum(l => l.Count);
+                var now = lines.Values.Concat(departing).Sum(l => l.Count);
                 if (now > mostAtOnce) mostAtOnce = now;
             }
             catch (Exception ex)
             {
-                Log.Error("Queue view: " + ex);
+                Log.Error("Queue view: " + ex + " The queue stays hidden until the next load; sales go on.");
                 RemoveAll("error");
                 enabled = false;
             }
@@ -125,23 +143,37 @@ namespace FoodTrucks
         {
             var state = FoodTrucksSession.CurrentState;
             var game = SaveGameManager.Current;
-            if (state == null || game == null || BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking)
+            var timeMachine = InstanceBehavior<UIs>.Instance?.timeMachine;
+            if (state == null || game == null || Suspended || (timeMachine != null && timeMachine.isRunning) ||
+                BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking)
             {
-                if (lines.Count > 0) RemoveAll("player indoors");
+                if (lines.Count + departing.Count > 0) RemoveAll(Suspended ? "time skip" : "player away");
                 return;
             }
             var player = PlayerHelper.GetPosition();
             foreach (var line in lines.Values.ToList())
             {
                 var controller = ControllerOf(game, line.VehicleId);
-                var service = state.Vehicles.FirstOrDefault(v => v.VehicleId == line.VehicleId)?.Service;
+                var vehicle = state.Vehicles.FirstOrDefault(v => v.VehicleId == line.VehicleId);
                 if (controller == null || Vector3.Distance(player, controller.transform.position) > KeepMetres)
                 {
                     line.Destroy("out of range");
                     lines.Remove(line.VehicleId);
                 }
-                else if (!line.Closing && (service == null || game.ActiveVehicleId == line.VehicleId)) line.Close();
-                else if (!line.Closing) line.Service = service;
+                else if (vehicle == null || !vehicle.IsOpen || vehicle.Service == null || game.ActiveVehicleId == line.VehicleId)
+                    Retire(line.VehicleId);
+                // A cart closed and opened again between two checks has a new queue.
+                else if (!ReferenceEquals(line.Service, vehicle.Service))
+                {
+                    Retire(line.VehicleId);
+                }
+            }
+            foreach (var line in departing.ToList())
+            {
+                var controller = ControllerOf(game, line.VehicleId);
+                if (controller != null && Vector3.Distance(player, controller.transform.position) <= KeepMetres) continue;
+                line.Destroy("out of range");
+                departing.Remove(line);
             }
 
             var rules = DemandData.Rules;
@@ -152,9 +184,11 @@ namespace FoodTrucks
                 if (game.ActiveVehicleId == vehicle.VehicleId) continue;
                 var controller = ControllerOf(game, vehicle.VehicleId);
                 if (controller == null || Vector3.Distance(player, controller.transform.position) > ViewMetres) continue;
-                var places = rules.Service.QueueLimit(CartDemand.Kind, rules.Queue.MaxQueue) + 1;
-                var line = QueueLine.Create(vehicle.VehicleId, controller.transform, Math.Min(places, MaxPeople), vehicle.Service);
+                var limit = rules.Service.QueueLimit(CartDemand.Kind, rules.Queue.MaxQueue);
+                var line = QueueLine.Create(vehicle.VehicleId, controller.transform, limit, vehicle.Service);
                 line.OnSpawned = () => spawnedTotal++;
+                var id = vehicle.VehicleId;
+                line.Paid = customer => CartSelling.Paid(id, customer);
                 lines[vehicle.VehicleId] = line;
             }
         }
@@ -177,13 +211,23 @@ namespace FoodTrucks
         // Metres from the cart's middle to the window place, sideways, and between people in line.
         private const float WindowOffset = 1.05f;
         private const float Spacing = 0.8f;
-        // How long a served customer stands at the window, in game-speed seconds; shorter while others wait to pay.
-        private const float PaySeconds = 1.8f;
-        private const float HurriedPaySeconds = 0.8f;
+        // How long a served customer stands at the window in all, in game-speed seconds (an in-game minute is
+        // a second at normal speed): taking the order, paying, picking it up. Shorter while others wait to pay.
+        // Time already spent standing there while the order was made counts, but paying takes at least MinPaySeconds.
+        private const float WindowSeconds = 4.5f;
+        private const float HurriedWindowSeconds = 2.5f;
+        private const float MinPaySeconds = 1.5f;
+        private const float HurriedMinPaySeconds = 1f;
         private const float SpawnGapSeconds = 0.6f;
         // Served customers not yet shown are dropped beyond this, so the view never runs far behind Core.
         private const int MaxUnshownServed = 3;
+        // Served customers still in line beyond this walk off without stopping at the window.
+        private const int MaxShownServed = 5;
+        // Places beyond the queue limit, for served customers still on their way to the window.
+        private const int ExtraPlaces = 3;
         private const float ClosingSeconds = 40f;
+        private const int MaxSpawnFailures = 3;
+        private const float SpawnRetrySeconds = 15f;
 
         private readonly List<Vector3> places;
         private readonly Vector3 windowLook;
@@ -193,9 +237,14 @@ namespace FoodTrucks
         private readonly List<QueuePerson> leaving = new List<QueuePerson>();
         // Customers Core has served who haven't left the window yet, in the order they were served.
         private readonly List<long> served = new List<long>();
+        // Served customers whose sale has been paid (they reached the window).
+        private readonly HashSet<long> payingStarted = new HashSet<long>();
         private bool fresh = true;
         private float nextSpawn;
         private float closedAt;
+        private int spawnFailures;
+        // After repeated spawn failures, nobody is spawned until then, a new line's first batch included.
+        private float blockedUntil;
 
         private QueueLine(string vehicleId, GameObject root, List<Vector3> places, Vector3 windowLook, List<Vector3> ends, ServiceState service)
         {
@@ -208,40 +257,58 @@ namespace FoodTrucks
         }
 
         public string VehicleId { get; }
-        public ServiceState Service { get; set; }
+        public ServiceState Service { get; }
         public ServiceMood Mood { get; set; } = ServiceMood.Neutral;
         public Dictionary<long, CustomerExit> Exits { get; } = new Dictionary<long, CustomerExit>();
-        public bool Closing { get; private set; }
         public Action? OnSpawned { get; set; }
+        // Called once per served customer: when they start paying at the window, or when the view lets them
+        // go unseen (dropped, removed, closed), so CartSelling never holds a sale for good.
+        public Action<long>? Paid { get; set; }
+        public bool HasPlaces => places.Count > 0;
         public int Count => people.Count + leaving.Count;
-        public bool Finished => Closing && (Count == 0 || Time.time - closedAt > ClosingSeconds);
+        public bool Finished => Count == 0 || Time.time - closedAt > ClosingSeconds;
 
-        public static QueueLine Create(string vehicleId, Transform cart, int count, ServiceState service)
+        // Places for the window, the queue limit and a few served customers on their way.
+        public static QueueLine Create(string vehicleId, Transform cart, int queueLimit, ServiceState service)
         {
-            var (places, look, ends, detail) = Layout(cart, count);
+            var (places, look, ends, detail) = Layout(cart, queueLimit + 1 + ExtraPlaces);
             var root = new GameObject("FoodTrucks.Queue." + vehicleId);
             root.AddComponent<QueueLineRoot>();
             Log.Info($"Queue view: line at cart {vehicleId}: {detail}.");
             return new QueueLine(vehicleId, root, places, look, ends, service);
         }
 
+        private void ReleaseServed()
+        {
+            var ids = served.ToList();
+            served.Clear();
+            foreach (var id in ids) Release(id);
+        }
+
+        // A served customer leaves the view without paying at the window: their sale is paid now.
+        private void Release(long id)
+        {
+            payingStarted.Remove(id);
+            Paid?.Invoke(id);
+        }
+
         public void Served(long id)
         {
-            if (!served.Contains(id)) served.Add(id);
+            // A line with no places shows nobody, so it keeps no history either.
+            if (places.Count > 0 && !served.Contains(id)) served.Add(id);
         }
 
         public void Close()
         {
-            if (Closing) return;
-            Closing = true;
             closedAt = Time.time;
-            served.Clear();
+            ReleaseServed();
             foreach (var person in people.Values) StartLeaving(person, null);
             people.Clear();
         }
 
         public void Destroy(string reason)
         {
+            ReleaseServed();
             var count = Count;
             people.Clear();
             leaving.Clear();
@@ -253,92 +320,138 @@ namespace FoodTrucks
         public int Tick(int room)
         {
             var spawned = 0;
-            if (!Closing)
+            if (places.Count > 0 && people.Count + room > 0)
             {
                 var order = Order();
+                var inLine = new HashSet<long>(order);
                 // Anyone no longer in line leaves: gave up, walked on, or the window closed on them.
-                foreach (var id in people.Keys.Where(id => !order.Contains(id)).ToList())
+                foreach (var id in people.Keys.Where(id => !inLine.Contains(id)).ToList())
                 {
-                    Exits.TryGetValue(id, out var exit);
-                    StartLeaving(people[id], Exits.ContainsKey(id) ? exit : (CustomerExit?)null);
+                    StartLeaving(people[id], Exits.TryGetValue(id, out var exit) ? exit : (CustomerExit?)null);
                     people.Remove(id);
                 }
-                for (var i = 0; i < order.Count; i++)
+                for (var i = 0; i < order.Count && i < places.Count; i++)
                 {
                     var id = order[i];
                     if (!people.TryGetValue(id, out var person))
                     {
-                        if (i >= places.Count || room - spawned <= 0) continue;
-                        if (!fresh && Time.time < nextSpawn) continue;
+                        if (room - spawned <= 0 || Time.time < blockedUntil || (!fresh && Time.time < nextSpawn)) continue;
                         person = Spawn(id, i);
                         if (person == null) continue;
                         spawned++;
                     }
-                    person.Place = i;
-                    if (i < places.Count) person.GoTo(places[i], i == 0 ? windowLook : places[i - 1]);
+                    person.GoTo(places[i], i == 0 ? windowLook : places[i - 1]);
                 }
                 fresh = false;
                 ServeAtWindow(order);
             }
-            foreach (var person in people.Values) person.Tick();
+
+            // People whose character the game removed are dropped, so nobody waits behind them.
+            foreach (var pair in people.ToList())
+            {
+                if (pair.Value != null && !pair.Value.Tick()) continue;
+                if (pair.Value != null) Object.Destroy(pair.Value.gameObject);
+                people.Remove(pair.Key);
+                if (served.Remove(pair.Key) && !payingStarted.Contains(pair.Key)) Release(pair.Key);
+                payingStarted.Remove(pair.Key);
+            }
             for (var i = leaving.Count - 1; i >= 0; i--)
             {
                 var person = leaving[i];
-                if (person == null || person.Tick())
-                {
-                    if (person != null) Object.Destroy(person.gameObject);
-                    leaving.RemoveAt(i);
-                }
+                if (person != null && !person.Tick()) continue;
+                if (person != null) Object.Destroy(person.gameObject);
+                leaving.RemoveAt(i);
             }
-            foreach (var id in Exits.Keys.Where(id => !people.ContainsKey(id)).ToList()) Exits.Remove(id);
+            if (Exits.Count > 0)
+            {
+                foreach (var id in Exits.Keys.Where(id => !people.ContainsKey(id)).ToList()) Exits.Remove(id);
+            }
             return spawned;
         }
 
         // Served customers first (they reached the window before anyone still waiting), then the orders
-        // being made, then the queue. Served customers nobody saw arrive are dropped beyond a few.
+        // being made, then the queue. Served customers nobody saw arrive are dropped beyond a few, and
+        // served ones still in line beyond a few walk off.
         private List<long> Order()
         {
             var order = new List<long>();
             var unshown = 0;
+            var shown = 0;
             foreach (var id in served.ToList())
             {
-                if (!people.ContainsKey(id) && ++unshown > MaxUnshownServed)
+                if (people.TryGetValue(id, out var person))
+                {
+                    if (++shown > MaxShownServed && !person.Paying)
+                    {
+                        served.Remove(id);
+                        people.Remove(id);
+                        Release(id);
+                        StartLeaving(person, CustomerExit.Served);
+                        continue;
+                    }
+                }
+                else if (++unshown > MaxUnshownServed)
                 {
                     served.Remove(id);
+                    Release(id);
                     continue;
                 }
                 order.Add(id);
             }
+            var seen = new HashSet<long>(order);
             foreach (var customer in Service.Window.Concat(Service.Queue))
             {
-                if (customer != null && !order.Contains(customer.Id)) order.Add(customer.Id);
+                if (customer != null && seen.Add(customer.Id)) order.Add(customer.Id);
             }
             return order;
         }
 
-        // The served customer at the window pays for a moment, then walks off.
+        // The served customer at the window pays for a moment, then walks off. With others waiting to pay,
+        // the next one in line pays where they stand, so a fast window doesn't leave a crowd of paid customers.
         private void ServeAtWindow(List<long> order)
         {
-            if (order.Count == 0 || !served.Contains(order[0]) || !people.TryGetValue(order[0], out var person)) return;
-            if (!person.Arrived) return;
-            if (!person.Paying)
+            var windows = served.Count > 2 ? 2 : 1;
+            for (var i = 0; i < windows && i < order.Count; i++)
             {
-                person.Pay(served.Count > 2 ? HurriedPaySeconds : PaySeconds, Mood);
-                return;
+                var id = order[i];
+                if (!served.Contains(id) || !people.TryGetValue(id, out var person) || !person.Arrived) continue;
+                if (!person.Paying)
+                {
+                    var hurried = served.Count > 2;
+                    var seconds = Math.Max(hurried ? HurriedMinPaySeconds : MinPaySeconds,
+                        (hurried ? HurriedWindowSeconds : WindowSeconds) - person.SecondsStanding);
+                    person.Pay(seconds, Mood);
+                    // The money and the sale message come now, with the customer at the window.
+                    payingStarted.Add(id);
+                    Paid?.Invoke(id);
+                    continue;
+                }
+                if (!person.DonePaying) continue;
+                served.Remove(id);
+                payingStarted.Remove(id);
+                people.Remove(id);
+                StartLeaving(person, CustomerExit.Served);
             }
-            if (!person.DonePaying) return;
-            served.Remove(order[0]);
-            people.Remove(order[0]);
-            StartLeaving(person, CustomerExit.Served);
         }
 
         private QueuePerson? Spawn(long id, int place)
         {
             nextSpawn = Time.time + SpawnGapSeconds;
             // A new line shows the people already waiting where they stand; later ones walk in.
-            var start = fresh || ends.Count == 0 ? places[Math.Min(place, places.Count - 1)] : ends[UnityEngine.Random.Range(0, ends.Count)];
+            var start = fresh || ends.Count == 0 ? places[place] : ends[UnityEngine.Random.Range(0, ends.Count)];
             var person = QueuePerson.Create(root.transform, id, start);
-            if (person == null) return null;
+            if (person == null)
+            {
+                // A missing prefab or NavMesh won't fix itself: wait a while instead of filling the log.
+                if (++spawnFailures >= MaxSpawnFailures)
+                {
+                    blockedUntil = Time.time + SpawnRetrySeconds;
+                    spawnFailures = 0;
+                    Log.Error($"Queue view: cart {VehicleId}: customers could not be created; trying again in {SpawnRetrySeconds:F0} s.");
+                }
+                return null;
+            }
+            spawnFailures = 0;
             people[id] = person;
             OnSpawned?.Invoke();
             return person;
@@ -347,23 +460,31 @@ namespace FoodTrucks
         private void StartLeaving(QueuePerson person, CustomerExit? exit)
         {
             if (person == null) return;
-            var target = ends.Count > 0
-                ? ends[UnityEngine.Random.Range(0, ends.Count)]
-                : person.transform.position + (person.transform.position - places[0]).normalized * 15f;
-            person.Leave(target, exit, Mood);
+            var target = ends.Count > 0 ? ends[UnityEngine.Random.Range(0, ends.Count)] : AwayFrom(person.Position);
+            person.Leave(target, exit);
             leaving.Add(person);
+        }
+
+        // Without ways out: a point on the NavMesh about 15 m from the window, past the person.
+        private Vector3 AwayFrom(Vector3 position)
+        {
+            var away = position - windowLook;
+            away.y = 0f;
+            var wanted = position + (away.sqrMagnitude > 0.01f ? away.normalized : Vector3.forward) * 15f;
+            return NavMesh.SamplePosition(wanted, out var hit, 4f, QueuePerson.Filter) ? hit.position : wanted;
         }
 
         // The line runs from a window place beside the cart along its length, on whichever side and in
         // whichever direction keeps the most places on walkable pavement, out of parking lanes and off the road.
+        // No walkable window place at all: the line has no places and shows nobody.
         private static (List<Vector3> Places, Vector3 Look, List<Vector3> Ends, string Detail) Layout(Transform cart, int count)
         {
             var center = cart.position;
-            var forward = Flat(cart.forward);
-            var right = Flat(cart.right);
+            var forward = Direction(cart.forward);
+            var right = Direction(cart.right);
             var filter = QueuePerson.Filter;
 
-            List<Vector3>? best = null;
+            var best = new List<Vector3>();
             var bestScore = int.MinValue;
             var bestSide = 1;
             var bestDirection = 1;
@@ -376,7 +497,7 @@ namespace FoodTrucks
                     for (var k = 0; k < count; k++)
                     {
                         var wanted = center + right * (side * WindowOffset) + forward * (direction * k * Spacing);
-                        if (!NavMesh.SamplePosition(wanted, out var hit, 0.6f, filter) || Flat(hit.position - wanted).magnitude > 0.45f) break;
+                        if (!NavMesh.SamplePosition(wanted, out var hit, 0.6f, filter) || FlatDistance(hit.position, wanted) > 0.45f) break;
                         if (Legality.InParkingLane(hit.position)) break;
                         if (Legality.RoadBelow(hit.position)) roads++;
                         placed.Add(hit.position);
@@ -391,8 +512,7 @@ namespace FoodTrucks
                     }
                 }
             }
-            var places = best ?? new List<Vector3>();
-            if (places.Count == 0) places.Add(center + right * WindowOffset);
+            if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the cart at {center}; nobody shown");
 
             // Ways in and out: points on the pavement a little way along in both directions, reachable from the window.
             var ends = new List<Vector3>();
@@ -401,7 +521,7 @@ namespace FoodTrucks
             {
                 var wanted = center + forward * (bestDirection * along) + right * (bestSide * UnityEngine.Random.Range(0.6f, 2.4f));
                 if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter)) continue;
-                if (!NavMesh.CalculatePath(hit.position, places[0], filter, path) || path.status != NavMeshPathStatus.PathComplete) continue;
+                if (!NavMesh.CalculatePath(hit.position, best[0], filter, path) || path.status != NavMeshPathStatus.PathComplete) continue;
                 ends.Add(hit.position);
             }
             for (var attempt = 0; ends.Count < 2 && attempt < 8; attempt++)
@@ -409,22 +529,24 @@ namespace FoodTrucks
                 var angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
                 var wanted = center + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * UnityEngine.Random.Range(9f, 16f);
                 if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter)) continue;
-                if (!NavMesh.CalculatePath(hit.position, places[0], filter, path) || path.status != NavMeshPathStatus.PathComplete) continue;
+                if (!NavMesh.CalculatePath(hit.position, best[0], filter, path) || path.status != NavMeshPathStatus.PathComplete) continue;
                 ends.Add(hit.position);
             }
-            var detail = $"{places.Count} of {count} places on the {(bestSide > 0 ? "right" : "left")} side towards the {(bestDirection > 0 ? "front" : "back")}, " +
+            var detail = $"{best.Count} of {count} places on the {(bestSide > 0 ? "right" : "left")} side towards the {(bestDirection > 0 ? "front" : "back")}, " +
                          $"{ends.Count} ways in and out";
-            return (places, center, ends, detail);
+            return (best, center, ends, detail);
         }
 
-        private static Vector3 Flat(Vector3 v)
+        private static Vector3 Direction(Vector3 v)
         {
             v.y = 0f;
             return v.sqrMagnitude > 1e-6f ? v.normalized : Vector3.forward;
         }
+
+        private static float FlatDistance(Vector3 a, Vector3 b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
     }
 
-    // One customer: a game character walking on the NavMesh, as spike 5 showed (StandingNpc).
+    // One customer: a game character walking on the NavMesh, as spike 5 showed.
     internal sealed class QueuePerson : MonoBehaviour
     {
         private const string CharacterPrefab = "Characters/HumanDefinitionLow";
@@ -432,9 +554,12 @@ namespace FoodTrucks
         // Someone who can't reach their place in this time is put there; someone leaving is removed.
         private const float StuckSeconds = 20f;
         private const float LeaveSeconds = 30f;
+        // How close to a place counts as being there.
+        private const float ArriveMetres = 0.35f;
         private const float TurnDegreesPerSecond = 360f;
 
         private static bool expressionFailed;
+        private static bool agentLogged;
 
         private ThirdPersonCharacter? character;
         private Vector3 target;
@@ -442,15 +567,20 @@ namespace FoodTrucks
         private bool walking;
         private bool hasTarget;
         private bool leavingNow;
+        // No complete path to the target: a person in line is put there, a leaving one removed.
+        private bool noPath;
         private float walkStarted;
         private float payUntil;
+        private float standingSince;
 
         public static NavMeshQueryFilter Filter => new NavMeshQueryFilter { agentTypeID = PlayerAgentTypeId, areaMask = NavMesh.AllAreas };
 
-        public long Id { get; private set; }
-        public int Place { get; set; }
         public bool Arrived => hasTarget && !walking;
+        // Where the character stands; the owner object itself stays at the world origin.
+        public Vector3 Position => character != null ? character.transform.position : transform.position;
         public bool Paying { get; private set; }
+        // How long they have stood at their current place.
+        public float SecondsStanding => walking || !hasTarget ? 0f : Time.time - standingSince;
         public bool DonePaying => Paying && Time.time >= payUntil;
 
         public static QueuePerson? Create(Transform parent, long id, Vector3 start)
@@ -458,7 +588,6 @@ namespace FoodTrucks
             var owner = new GameObject("FoodTrucks.Customer." + id);
             owner.transform.SetParent(parent, false);
             var person = owner.AddComponent<QueuePerson>();
-            person.Id = id;
             try
             {
                 if (person.Initialize(start)) return person;
@@ -486,6 +615,11 @@ namespace FoodTrucks
                 return false;
             }
             character.SetWalkingSpeed(ThirdPersonCharacter.WalkingSpeed.Walk);
+            if (!agentLogged)
+            {
+                agentLogged = true;
+                Log.Info($"Queue view: customer agent speed {agent.speed:F2} m/s, stopping distance {agent.stoppingDistance:F2} m, radius {agent.radius:F2} m.");
+            }
             return true;
         }
 
@@ -506,7 +640,7 @@ namespace FoodTrucks
             else if (mood == ServiceMood.Complaining) Express(CharacterEmojiName.CustomerBadService);
         }
 
-        public void Leave(Vector3 to, CustomerExit? exit, ServiceMood mood)
+        public void Leave(Vector3 to, CustomerExit? exit)
         {
             leavingNow = true;
             // Someone who waited in vain shows it as they go [the game's own emoji, unverified on a spawned character].
@@ -514,19 +648,27 @@ namespace FoodTrucks
             if (character != null) Walk(to);
         }
 
-        // One frame. Returns true when a leaving person is done and can be removed.
+        // One frame. Returns true when the person is done: a leaving one has gone, or the character was removed.
         public bool Tick()
         {
             if (character == null) return true;
             var agent = character.navmeshAgent;
+            if (agent == null || !agent.isActiveAndEnabled) return true;
             if (walking)
             {
-                var reached = agent.isOnNavMesh && !agent.pathPending &&
-                              (!agent.hasPath || agent.remainingDistance <= agent.stoppingDistance + 0.1f);
-                var stuck = Time.time - walkStarted > (leavingNow ? LeaveSeconds : StuckSeconds);
+                var near = FlatDistance(character.transform.position, target) <= ArriveMetres;
+                var reached = near || (agent.isOnNavMesh && !agent.pathPending && agent.hasPath &&
+                                       agent.pathStatus == NavMeshPathStatus.PathComplete &&
+                                       agent.remainingDistance <= agent.stoppingDistance + 0.1f && FlatDistance(character.transform.position, target) <= 1f);
+                var stuck = noPath || Time.time - walkStarted > (leavingNow ? LeaveSeconds : StuckSeconds);
                 if (leavingNow) return reached || stuck;
-                if (stuck && !reached) agent.Warp(target);
-                if (reached || stuck) Stop();
+                if (reached) Stop();
+                else if (stuck)
+                {
+                    // Put them in their place rather than leave them standing somewhere else.
+                    if (!agent.Warp(target)) return true;
+                    Stop();
+                }
                 return false;
             }
             if (leavingNow) return true;
@@ -548,25 +690,35 @@ namespace FoodTrucks
             target = to;
             hasTarget = true;
             walking = true;
+            noPath = false;
             walkStarted = Time.time;
-            if (!agent.isOnNavMesh) return;
+            if (!agent.isOnNavMesh)
+            {
+                noPath = true;
+                return;
+            }
             agent.isStopped = false;
             var path = new NavMeshPath();
-            if (agent.CalculatePath(to, path) && path.status != NavMeshPathStatus.PathInvalid) agent.SetPath(path);
-            else agent.ResetPath();
+            if (agent.CalculatePath(to, path) && path.status == NavMeshPathStatus.PathComplete) agent.SetPath(path);
+            else
+            {
+                agent.ResetPath();
+                noPath = true;
+            }
         }
 
         private void Stop()
         {
             walking = false;
+            standingSince = Time.time;
             if (character == null) return;
             var agent = character.navmeshAgent;
             if (agent.isOnNavMesh)
             {
                 agent.isStopped = true;
                 agent.ResetPath();
+                agent.velocity = Vector3.zero;
             }
-            agent.velocity = Vector3.zero;
             character.LookTarget = Vector3.zero;
             character.Move(Vector3.zero);
         }
@@ -582,6 +734,8 @@ namespace FoodTrucks
                 Log.Error("Queue view: customer expressions unavailable: " + ex.Message);
             }
         }
+
+        private static float FlatDistance(Vector3 a, Vector3 b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
 
         private void OnDestroy()
         {

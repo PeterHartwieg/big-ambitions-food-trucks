@@ -77,11 +77,21 @@ namespace FoodTrucks
         private static readonly IReadOnlyDictionary<string, double> NoShares = new Dictionary<string, double>();
 
         // Demand, price and service are all worked out on what the cart can sell right now: menu items
-        // with stock. A grill with no hot dogs left brings no hot-dog customers.
-        public static CartPlan Plan(DemandTables tables, VehicleInstance cart, Spot spot)
+        // with stock. A grill with no hot dogs left brings no hot-dog customers. `reserved` are units already
+        // sold to customers still on their way to the window (CartSelling's held sales); they don't count.
+        public static CartPlan Plan(DemandTables tables, VehicleInstance cart, Spot spot, IReadOnlyDictionary<string, int>? reserved = null)
         {
             var menu = MenuOf(tables, cart);
             var stock = StockOf(cart, menu.Menu);
+            if (reserved != null)
+            {
+                foreach (var pair in reserved)
+                {
+                    if (!stock.TryGetValue(pair.Key, out var units)) continue;
+                    if (units - pair.Value > 0) stock[pair.Key] = units - pair.Value;
+                    else stock.Remove(pair.Key);
+                }
+            }
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, cart.id);
             if (menu.Problem != MenuProblem.None || menu.Menu.Items.Count == 0 || stock.Count == 0)
                 return new CartPlan(menu, stock, null, 0, 0, 0, NoShares, 0);
