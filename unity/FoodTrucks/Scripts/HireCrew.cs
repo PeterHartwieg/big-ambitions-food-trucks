@@ -51,7 +51,8 @@ namespace FoodTrucks
         {
             if (vehicle.Crew == null || vehicle.Crew.Count == 0 || vehicle.Transit != null || HireRunner.Want(vehicle, now) == null)
                 return new List<EmployeeInstance>();
-            return vehicle.Crew.Select(Find).Where(e => e != null && !e.isAbsent && e.trainingSession == null).Select(e => e!).ToList();
+            // Someone a headhunter is replacing is on the way out: the game stops paying them, so they don't serve.
+            return vehicle.Crew.Select(Find).Where(e => e != null && !e.isAbsent && e.trainingSession == null && !e.isBeingReplaced).Select(e => e!).ToList();
         }
 
         public static bool Add(SaveState state, VehicleState vehicle, EmployeeInstance employee)
@@ -134,7 +135,7 @@ namespace FoodTrucks
             foreach (var employee in (vehicle.Crew ?? new List<string>()).Select(Find))
             {
                 // A building job's hours are the game's to set.
-                if (employee == null || employee.IsAssignedToAnyBusiness()) continue;
+                if (employee == null || employee.IsAssignedToAnyBusiness() || employee.isBeingReplaced) continue;
                 employee.assignedWeeklyHours = hours;
                 var list = (IList)employee.assignedWeeklyDays;
                 list.Clear();
@@ -180,14 +181,21 @@ namespace FoodTrucks
             Check(state);
             // The hour that is starting, as the game counts it: its own minute may still hold later hours.
             var hourStart = HireSchedules.Absolute(TimeHelper.CurrentDay, TimeHelper.CurrentHour * 60);
-            // Counted from the plans as they stand: making or dropping plans is the routes' job, which may still be
-            // catching up on the minutes before this hour.
+            // Counted from the plans without changing them: making and dropping plans is the routes' job, which may
+            // still be catching up on the minutes before this hour. A day not planned yet is previewed.
+            var rules = DemandData.Rules;
+            var runner = rules == null ? null : new HireRunner(rules.Fleet);
             foreach (var vehicle in state.Vehicles)
             {
-                if (vehicle.Crew == null || vehicle.Crew.Count == 0) continue;
+                if (vehicle.Crew == null || vehicle.Crew.Count == 0 || runner == null) continue;
+                var instance = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId);
+                var controller = instance == null ? null : VehicleHelper.GetVehicleController(instance);
+                var position = controller != null ? controller.transform.position
+                    : vehicle.Transit != null ? new UnityEngine.Vector3((float)vehicle.Transit.ToX, 0f, (float)vehicle.Transit.ToZ)
+                    : instance != null ? (UnityEngine.Vector3)instance.position : UnityEngine.Vector3.zero;
                 // The game clears these only when a building's shifts change, so they should hold; once an hour is cheap.
                 SetWeeklyWork(vehicle);
-                if (HireRunner.ShiftMinutes(vehicle, hourStart, hourStart + 60) < 30) continue;
+                if (runner.PlannedShiftMinutes(vehicle, hourStart, hourStart + 60, position.x, position.z, HireRoutes.GameSpeed()) < 30) continue;
                 foreach (var employee in vehicle.Crew.Select(Find))
                 {
                     if (employee == null || employee.isAbsent || employee.trainingSession != null || employee.isBeingReplaced || employee.IsAssignedToAnyBusiness()) continue;

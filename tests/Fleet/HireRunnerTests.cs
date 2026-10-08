@@ -151,6 +151,20 @@ public class HireRunnerTests
     }
 
     [Fact]
+    public void WeeklyWorkCountsHoursAsThePayrollDoes()
+    {
+        // 11:30 to 12:30 covers half of two hours: two worked hours.
+        var lunch = new HireSchedule { Days = new List<DayOfWeek> { DayOfWeek.Monday }, Stops = new List<ScheduleStop> { Stop("a", 0, 11 * 60 + 30, 12 * 60 + 30) } };
+        Assert.Equal(2, HireRunner.WeeklyWork(lunch).Hours);
+
+        // Friday 22:00 to 02:00 works Friday night and Saturday morning.
+        var late = new HireSchedule { Days = new List<DayOfWeek> { DayOfWeek.Friday }, Stops = new List<ScheduleStop> { Stop("b", 0, 22 * 60, 26 * 60) } };
+        var (hours, days) = HireRunner.WeeklyWork(late);
+        Assert.Equal(4, hours);
+        Assert.Equal(new[] { DayOfWeek.Friday, DayOfWeek.Saturday }, days);
+    }
+
+    [Fact]
     public void StopsAreAddedInTimeOrderAndOverlapsRefused()
     {
         var schedules = new HireSchedules(rules);
@@ -218,6 +232,39 @@ public class HireRunnerTests
         Assert.Null(truck.HireStop);
         Assert.Null(truck.Schedule);
         Assert.Null(HireRunner.Want(truck, At(4, 1)));
+    }
+
+    [Fact]
+    public void ThePlayerNearbyOrNoStockKeepsTheCrewFromDrivingOff()
+    {
+        var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60));
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
+
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), new VehicleWhere(0, 0, leaveAlone: false, stayPut: true)).Kind);
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), new VehicleWhere(0, 0, leaveAlone: false, hasStock: false)).Kind);
+        // At the stop, staying put doesn't stop it opening.
+        Assert.Equal(HireActionKind.Open, runner.Step(truck, At(3, 12), new VehicleWhere(2000, 0, leaveAlone: false, stayPut: true)).Kind);
+    }
+
+    [Fact]
+    public void MidnightsHourCountsFromAPreviewWithoutSavingIt()
+    {
+        var truck = Truck(Stop("early", 0, 0, 3 * 60));
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
+
+        Assert.Equal(60, runner.PlannedShiftMinutes(truck, At(4, 0), At(4, 1), 0, 0));
+        Assert.DoesNotContain(truck.Shifts, p => p.Day == 4);
+    }
+
+    [Fact]
+    public void ALegOutOfRangeIsDroppedOnEdit()
+    {
+        var truck = Truck(Stop("office", 0, 11 * 60, 14 * 60));
+        truck.Shifts.Add(new ShiftPlan { Day = 3, Legs = new List<ShiftLeg> { new() { Kind = LegKind.Open, StopIndex = 5, Start = 1, End = 2 } } });
+
+        Assert.Equal(ScheduleProblem.None, RouteEditor.AddStop(new HireSchedules(rules), truck, Stop("bars", 0, 18 * 60, 22 * 60)));
+
+        Assert.Empty(truck.Shifts.Single().Legs);
     }
 
     [Fact]

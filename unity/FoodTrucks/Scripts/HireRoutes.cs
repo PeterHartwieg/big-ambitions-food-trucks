@@ -37,6 +37,11 @@ namespace FoodTrucks
         private readonly Dictionary<string, long> routedUntil = new Dictionary<string, long>();
         private readonly HashSet<string> broken = new HashSet<string>();
         private readonly HashSet<string> indoorsShown = new HashSet<string>();
+        // The game minute the player last pushed or drove each vehicle.
+        private readonly Dictionary<string, long> lastHeld = new Dictionary<string, long>();
+        // The crew doesn't drive a vehicle away within this long of the player using it, or with the player this close.
+        private const long StayPutMinutes = 60;
+        private const float StayPutMetres = 15f;
 
         // Runs an action on the next frame, after the game's list picker has closed its current list.
         public static void Later(Action action)
@@ -182,10 +187,20 @@ namespace FoodTrucks
                 CartSelling.Say("foodtrucks:notification_hire_indoors", KindOf(vehicle));
             }
             if (!indoors) indoorsShown.Remove(vehicle.VehicleId);
+            if (held) lastHeld[vehicle.VehicleId] = t;
             var canSell = true;
+            var hasStock = true;
+            var stayPut = false;
             if (!held && !indoors && !vehicle.IsOpen && vehicle.Transit == null && HireRunner.Want(vehicle, t) != null)
+            {
                 canSell = KindOf(vehicle) == "truck" ? instance.parkingState == ParkingState.Legal : Legality.Check(position).Legal;
-            return new VehicleWhere(position.x, position.z, held || indoors, canSell);
+                var tables = DemandData.Tables;
+                hasStock = tables == null || CartDemand.StockOf(instance, CartDemand.MenuOf(tables, instance).Menu).Count > 0;
+                // The player just stepped out (to buy stock, say) or stands right by it: it stays where it is.
+                stayPut = (lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes) ||
+                          (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres);
+            }
+            return new VehicleWhere(position.x, position.z, held || indoors, canSell, hasStock, stayPut);
         }
 
         // Does one step; false when nothing changed, so the loop stops.
@@ -282,10 +297,19 @@ namespace FoodTrucks
                 if (spot != null) (position, rotation, neighbourhood) = spot.Value;
                 else
                 {
-                    position = new Vector3((float)transit.FromX, (float)transit.FromY, (float)transit.FromZ);
-                    rotation = Quaternion.Euler(0f, (float)transit.FromHeading, 0f);
+                    // Back towards where it left from: a free space there, or its own spot if nothing has taken it.
+                    var from = new Vector3((float)transit.FromX, (float)transit.FromY, (float)transit.FromZ);
+                    var back = FreeParking(from, WideParkingMetres);
+                    if (back != null) (position, rotation, neighbourhood) = back.Value;
+                    else
+                    {
+                        position = from;
+                        rotation = Quaternion.Euler(0f, (float)transit.FromHeading, 0f);
+                        if (Physics.CheckSphere(position + Vector3.up, 1.5f, 1 << LayerHelper.VehiclesLayerIndex))
+                            Log.Error($"Route: truck {vehicle.VehicleId} goes back to {position}, where another vehicle now stands.");
+                    }
                     atStop = false;
-                    Log.Info($"Route: no free parking space for truck {vehicle.VehicleId} near {transit.ToSpotKey}; it goes back where it left from.");
+                    Log.Info($"Route: no free parking space for truck {vehicle.VehicleId} near {transit.ToSpotKey}; it goes back towards where it left from.");
                 }
             }
             else
@@ -306,8 +330,8 @@ namespace FoodTrucks
                 VehicleHelper.TeleportVehicle(controller, position, rotation * Quaternion.Euler(0f, 180f, 0f));
                 controller.SavePosition();
             }
-            // A parking space is legal; back where it left from, it is what it was.
-            instance.parkingState = kind == "truck" && !atStop ? (ParkingState)transit.FromParkingState : ParkingState.Legal;
+            // A parking space is legal; back on its own old spot, it is what it was.
+            instance.parkingState = kind == "truck" && !atStop && neighbourhood == null ? (ParkingState)transit.FromParkingState : ParkingState.Legal;
             if (neighbourhood != null) instance.parkingNeighbourhood = neighbourhood;
             var placed = controller.transform.position;
             HireRunner.Arrived(vehicle, placed.x, placed.z, atStop, t);
@@ -327,15 +351,18 @@ namespace FoodTrucks
                 controller.SavePosition();
                 return controller;
             }
-            // CreateAndSpawnVehicle adds the instance to the list again.
-            SaveGameManager.Current.VehicleInstances.Remove(instance);
+            // CreateAndSpawnVehicle adds the instance to the end of the list; it goes back to its old place after.
+            var list = SaveGameManager.Current.VehicleInstances;
+            var index = list.IndexOf(instance);
+            list.Remove(instance);
             try
             {
                 controller = VehicleHelper.CreateAndSpawnVehicle(instance, position, rotation);
             }
             finally
             {
-                if (!SaveGameManager.Current.VehicleInstances.Contains(instance)) SaveGameManager.Current.VehicleInstances.Add(instance);
+                list.Remove(instance);
+                list.Insert(index >= 0 && index <= list.Count ? index : list.Count, instance);
             }
             if (controller != null) PrefabFixes.ApplyTo(controller);
             return controller;

@@ -98,10 +98,14 @@ namespace FoodTrucks
 
         private void OnTimeMachineStarted()
         {
-            PayAllHeld();
             skipping = true;
             CartQueueView.Suspended = true;
-            CartQueueView.ClearAll();
+            try
+            {
+                PayAllHeld();
+                CartQueueView.ClearAll();
+            }
+            catch (Exception ex) { Log.Error("Time skip start: " + ex); }
         }
 
         // Skipped time is not the player's working time: every cart the player runs starts counting again from
@@ -110,6 +114,12 @@ namespace FoodTrucks
         {
             skipping = false;
             CartQueueView.Suspended = false;
+            try { ResumeAfterSkip(); }
+            catch (Exception ex) { Log.Error("Time skip end: " + ex); }
+        }
+
+        private void ResumeAfterSkip()
+        {
             var now = HireCrew.NowExact();
             var state = FoodTrucksSession.CurrentState;
             var crewed = new HashSet<string>(state?.Vehicles.Where(v => RunByRoute(v) || Crewed(v)).Select(v => v.VehicleId) ?? Enumerable.Empty<string>());

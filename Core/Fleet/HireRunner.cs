@@ -40,12 +40,14 @@ namespace FoodTrucks.Core.Fleet
     // Where the vehicle is and what the game side knows about the place, this minute.
     public readonly struct VehicleWhere
     {
-        public VehicleWhere(double x, double z, bool leaveAlone, bool canSellHere = true)
+        public VehicleWhere(double x, double z, bool leaveAlone, bool canSellHere = true, bool hasStock = true, bool stayPut = false)
         {
             X = x;
             Z = z;
             LeaveAlone = leaveAlone;
             CanSellHere = canSellHere;
+            HasStock = hasStock;
+            StayPut = stayPut;
         }
 
         public double X { get; }
@@ -54,6 +56,11 @@ namespace FoodTrucks.Core.Fleet
         public bool LeaveAlone { get; }
         // False where the vehicle may not sell even near a stop (a truck parked illegally): the crew moves it.
         public bool CanSellHere { get; }
+        // False when there is nothing on board the crew could sell: no point driving to a stop.
+        public bool HasStock { get; }
+        // The player is right by it or used it a moment ago (stepped out to buy stock, say): the crew opens and
+        // closes as usual but doesn't drive it away.
+        public bool StayPut { get; }
     }
 
     // Runs a hire's route minute by minute. The saved day plan says what the hire should be doing now;
@@ -155,6 +162,7 @@ namespace FoodTrucks.Core.Fleet
             var atStop = where.CanSellHere && (distance <= rules.StopRadiusMetres || ParkedFor(vehicle, stop, where));
             if (!atStop)
             {
+                if (where.StayPut || !where.HasStock) return HireAction.None;
                 var minutes = Travel.Minutes(rules, distance, Travel.ModeFor(vehicle.VehicleType), gameSpeed);
                 var arrives = now + Math.Max(1, minutes);
                 // Moved away by the player too far to make it back before the stop closes: wait for the next one.
@@ -190,6 +198,7 @@ namespace FoodTrucks.Core.Fleet
             vehicle.Arrival = null;
             vehicle.Transit = new TransitState
             {
+                ToStopIndex = action.Stop,
                 FromX = x,
                 FromY = y,
                 FromZ = z,
@@ -204,6 +213,24 @@ namespace FoodTrucks.Core.Fleet
             };
         }
 
+        // Shift minutes as the plans will be once today's exists, without saving anything: the game's payroll
+        // can count midnight's hour before the routes have planned the new day.
+        public long PlannedShiftMinutes(VehicleState vehicle, long from, long to, double x, double z, double gameSpeed = 1.0)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            var preview = new VehicleState
+            {
+                VehicleId = vehicle.VehicleId,
+                VehicleType = vehicle.VehicleType,
+                Crew = vehicle.Crew,
+                Schedule = vehicle.Schedule,
+                Shifts = (vehicle.Shifts ?? new List<ShiftPlan>()).ToList()
+            };
+            // EnsurePlan drops only plans that ended by `from`, which count nothing here anyway.
+            EnsurePlan(preview, from, x, z, gameSpeed);
+            return ShiftMinutes(preview, from, to);
+        }
+
         // The transit is over and the vehicle stands at (x, z): at its stop, or back where it left from when the
         // stop had no room. A stop given up on stays given up until its opening ends (or for an hour when the
         // plan has no opening there), so the crew doesn't set off for it again and again.
@@ -214,7 +241,7 @@ namespace FoodTrucks.Core.Fleet
             vehicle.Transit = null;
             vehicle.Arrival = atStop && transit != null ? new ArrivalState { SpotKey = transit.ToSpotKey, X = x, Z = z } : null;
             if (atStop || transit == null) return;
-            var index = vehicle.Schedule?.Stops?.FindIndex(s => s.SpotKey == transit.ToSpotKey) ?? -1;
+            var index = transit.ToStopIndex ?? vehicle.Schedule?.Stops?.FindIndex(s => s.SpotKey == transit.ToSpotKey) ?? -1;
             var until = index >= 0 ? OpenEnd(vehicle, index, now) : null;
             vehicle.Skipped = new SkipState { SpotKey = transit.ToSpotKey, Until = until ?? now + 60 };
         }
@@ -234,17 +261,34 @@ namespace FoodTrucks.Core.Fleet
             return Math.Min(minutes, to - from);
         }
 
-        // The hours and weekdays a route asks of its crew each week, for the game's job demands.
+        // The hours and weekdays a route asks of its crew each week, for the game's job demands, counted the way
+        // the payroll counts them: an hour the shift covers at least half of is a worked hour, and a late stop's
+        // hours after midnight fall on the next weekday. The shift runs from the first opening to the last
+        // closing; driving to the first stop isn't known ahead, so it isn't in it.
         public static (int Hours, List<DayOfWeek> Days) WeeklyWork(HireSchedule? schedule)
         {
             if (schedule?.Stops == null || schedule.Stops.Count == 0) return (0, new List<DayOfWeek>());
-            var days = schedule.Days == null || schedule.Days.Count == 0
+            var routeDays = schedule.Days == null || schedule.Days.Count == 0
                 ? Enum.GetValues(typeof(DayOfWeek)).Cast<DayOfWeek>().ToList()
-                : schedule.Days.Distinct().OrderBy(d => d).ToList();
+                : schedule.Days.Distinct().ToList();
             var first = schedule.Stops.Min(s => s.OpenAt);
             var last = schedule.Stops.Max(s => s.CloseAt);
-            var hours = (int)Math.Round(Math.Max(0, last - first) / 60.0 * days.Count);
-            return (hours, days);
+            var sameDay = 0;
+            var nextDay = 0;
+            for (var hour = 0; hour < 48; hour++)
+            {
+                var covered = Math.Min(last, hour * 60 + 60) - Math.Max(first, hour * 60);
+                if (covered < 30) continue;
+                if (hour < 24) sameDay++;
+                else nextDay++;
+            }
+            var days = new HashSet<DayOfWeek>();
+            foreach (var day in routeDays)
+            {
+                if (sameDay > 0) days.Add(day);
+                if (nextDay > 0) days.Add((DayOfWeek)(((int)day + 1) % 7));
+            }
+            return ((sameDay + nextDay) * routeDays.Count, days.OrderBy(d => d).ToList());
         }
 
         private static long End(ShiftPlan plan) => plan.Legs.Count == 0 ? 0 : plan.Legs.Max(l => l.End);
@@ -262,7 +306,7 @@ namespace FoodTrucks.Core.Fleet
             var problem = AddStop(schedules, schedule, stop);
             if (problem != ScheduleProblem.None) return problem;
             vehicle.Schedule = schedule;
-            Remap(vehicle, i => schedule.Stops.IndexOf(before[i]));
+            Remap(vehicle, i => i >= 0 && i < before.Count ? schedule.Stops.IndexOf(before[i]) : -1);
             return problem;
         }
 
@@ -271,7 +315,8 @@ namespace FoodTrucks.Core.Fleet
         {
             if (vehicle?.Schedule?.Stops == null || index < 0 || index >= vehicle.Schedule.Stops.Count) return;
             vehicle.Schedule.Stops.RemoveAt(index);
-            Remap(vehicle, i => i == index ? -1 : i > index ? i - 1 : i);
+            var count = vehicle.Schedule.Stops.Count + 1;
+            Remap(vehicle, i => i == index || i < 0 || i >= count ? -1 : i > index ? i - 1 : i);
             if (vehicle.Schedule.Stops.Count == 0) vehicle.Schedule = null;
         }
 
