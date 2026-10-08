@@ -160,8 +160,8 @@ namespace FoodTrucks.Core.Saves
                 if (vehicle.Shifts == null || vehicle.Shifts.Any(p => p == null || p.Legs == null || p.Legs.Any(l =>
                         l == null || !Enum.IsDefined(typeof(FoodTrucks.Core.Fleet.LegKind), l.Kind) || l.StopIndex < 0 || l.End < l.Start)))
                     throw new JsonSerializationException("Shifts must be plans with legs that end no earlier than they start.");
-                if (vehicle.Arrival != null && vehicle.Arrival.SpotKey == null)
-                    throw new JsonSerializationException("Arrival must name its spot.");
+                if ((vehicle.Arrival != null && vehicle.Arrival.SpotKey == null) || (vehicle.Skipped != null && vehicle.Skipped.SpotKey == null))
+                    throw new JsonSerializationException("Arrival and Skipped must name their spot.");
                 if (vehicle.HireStop < 0)
                     throw new JsonSerializationException("HireStop must not be negative.");
             }

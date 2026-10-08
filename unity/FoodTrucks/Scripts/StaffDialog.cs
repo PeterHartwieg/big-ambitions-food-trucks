@@ -82,8 +82,9 @@ namespace FoodTrucks
                     options.Add((Format("foodtrucks:hires_option_removestop", (i + 1).ToString(), Clock(stop.OpenAt), Clock(stop.CloseAt), Place(stop)), () =>
                     {
                         if (vehicle.Schedule == null || index >= vehicle.Schedule.Stops.Count) return;
-                        vehicle.Schedule.Stops.RemoveAt(index);
-                        if (vehicle.Schedule.Stops.Count == 0) vehicle.Schedule = null;
+                        // The crew closes a window open at the stop that goes.
+                        if (vehicle.IsOpen && vehicle.HireStop == index) CartSelling.CloseByCrew(vehicle, HireCrew.Now());
+                        RouteEditor.RemoveStop(vehicle, index);
                         RouteChanged(vehicle);
                         Log.Info($"Route: stop {index + 1} removed from {kind} {id}.");
                     }));
@@ -143,18 +144,17 @@ namespace FoodTrucks
             var rules = DemandData.Rules;
             if (state == null || rules == null || !FoodTrucksSession.CanWrite) return;
             var vehicle = StreetSales.GetOrAdd(state, vehicleId);
-            var schedule = vehicle.Schedule ?? new HireSchedule();
             var x = position.x;
             var z = position.z;
             var stop = new ScheduleStop { SpotKey = SpotKey(x, z), X = x, Y = position.y, Z = z, Heading = heading, OpenAt = open, CloseAt = close };
-            var problem = RouteEditor.AddStop(new HireSchedules(rules.Fleet), schedule, stop);
+            var problem = RouteEditor.AddStop(new HireSchedules(rules.Fleet), vehicle, stop);
             if (problem != ScheduleProblem.None)
             {
                 Log.Info($"Route: stop {Clock(open)}-{Clock(close)} refused for {vehicleId}: {problem}.");
                 CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
                 return;
             }
-            vehicle.Schedule = schedule;
+            var schedule = vehicle.Schedule!;
             RouteChanged(vehicle);
             Log.Info($"Route: stop {SpotKey(x, z)} {Clock(open)}-{Clock(close)} added to {vehicle.VehicleType} {vehicleId}; {schedule.Stops.Count} stops.");
             CartSelling.Notify("foodtrucks:notification_route_added", ("open", Clock(open)), ("close", Clock(close)), ("count", schedule.Stops.Count.ToString()));

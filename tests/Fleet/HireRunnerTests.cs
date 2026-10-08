@@ -47,7 +47,7 @@ public class HireRunnerTests
         var arrive = runner.Step(truck, At(3, 11), At(0));
         Assert.Equal(HireActionKind.Arrive, arrive.Kind);
         Assert.Equal("office", arrive.Transit!.ToSpotKey);
-        HireRunner.Arrived(truck, 2003, 0, atStop: true);
+        HireRunner.Arrived(truck, 2003, 0, atStop: true, At(3, 11));
 
         var open = runner.Step(truck, At(3, 11), At(2003));
         Assert.Equal((HireActionKind.Open, 0), (open.Kind, open.Stop));
@@ -171,11 +171,53 @@ public class HireRunnerTests
         HireRunner.Depart(truck, runner.Step(truck, At(3, 9, 40), At(0)), At(3, 9, 40), 0, 0, 0, 0);
 
         // The nearest free space was 50 m on, beyond the 25 m stop radius.
-        HireRunner.Arrived(truck, 2050, 0, atStop: true);
+        HireRunner.Arrived(truck, 2050, 0, atStop: true, At(3, 11));
 
         Assert.Equal(HireActionKind.Open, runner.Step(truck, At(3, 11), At(2050)).Kind);
         // Moved away by someone else, it goes back.
         Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 11), At(2080)).Kind);
+    }
+
+    [Fact]
+    public void AStopWithNoRoomIsGivenUpUntilItCloses()
+    {
+        var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60), Stop("bars", 4000, 18 * 60, 23 * 60));
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
+        HireRunner.Depart(truck, runner.Step(truck, At(3, 9, 40), At(0)), At(3, 9, 40), 0, 0, 0, 0);
+
+        // No parking near the office: back where it left from.
+        HireRunner.Arrived(truck, 0, 0, atStop: false, At(3, 11, 20));
+
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), At(0)).Kind);
+        runner.EnsurePlan(truck, At(3, 14), 0, 0);
+        Assert.Null(truck.Skipped);
+        // The plan leaves the office for the bars at 16:40 (2 km, 80 minutes).
+        Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 16, 40), At(0)).Kind);
+    }
+
+    [Fact]
+    public void EditingTheRouteKeepsIndicesPointingAtTheSameStops()
+    {
+        var schedules = new HireSchedules(rules);
+        var truck = Truck(Stop("bars", 0, 22 * 60, 26 * 60));
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
+        runner.EnsurePlan(truck, At(4, 0, 30), 0, 0);
+        truck.IsOpen = true;
+        truck.HireStop = 0;
+
+        // An earlier stop goes in front of the late one after midnight.
+        Assert.Equal(ScheduleProblem.None, RouteEditor.AddStop(schedules, truck, Stop("office", 0, 11 * 60, 14 * 60)));
+
+        Assert.Equal(1, truck.HireStop);
+        Assert.Equal("bars", truck.Schedule!.Stops[HireRunner.Want(truck, At(4, 1))!.StopIndex].SpotKey);
+
+        RouteEditor.RemoveStop(truck, 0);
+        Assert.Equal(0, truck.HireStop);
+        Assert.Equal("bars", truck.Schedule!.Stops[HireRunner.Want(truck, At(4, 1))!.StopIndex].SpotKey);
+        RouteEditor.RemoveStop(truck, 0);
+        Assert.Null(truck.HireStop);
+        Assert.Null(truck.Schedule);
+        Assert.Null(HireRunner.Want(truck, At(4, 1)));
     }
 
     [Fact]

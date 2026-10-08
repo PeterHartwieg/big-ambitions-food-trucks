@@ -74,6 +74,8 @@ namespace FoodTrucks.Core.Saves
         public int? HireStop { get; set; }
         // Where the crew last parked it for a stop: a truck may stand further from the stop than the stop radius.
         public ArrivalState? Arrival { get; set; }
+        // A stop the crew couldn't park at, given up on until its opening ends.
+        public SkipState? Skipped { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -183,6 +185,15 @@ namespace FoodTrucks.Core.Saves
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
+    public class SkipState
+    {
+        public string SpotKey { get; set; } = string.Empty;
+        public long Until { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
     // Times are absolute game minutes: (day - 1) × 1440 + minute of the day.
     public class TransitState
     {
@@ -196,6 +207,8 @@ namespace FoodTrucks.Core.Saves
         public double FromY { get; set; }
         public double FromZ { get; set; }
         public double FromHeading { get; set; }
+        // The game's parking state where it left from, as a number, to restore if it goes back there.
+        public int FromParkingState { get; set; }
         public long DepartsAt { get; set; }
         public long ArrivesAt { get; set; }
 

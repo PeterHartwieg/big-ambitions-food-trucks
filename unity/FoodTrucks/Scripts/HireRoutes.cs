@@ -31,7 +31,6 @@ namespace FoodTrucks
         private static readonly List<Action> later = new List<Action>();
         private HireRunner? runner;
         private float nextTick;
-        private bool hidAfterLoad;
         // Refusals already told to the player: vehicle, stop, day.
         private readonly HashSet<(string, int, int)> refusalsShown = new HashSet<(string, int, int)>();
         // The game minute each vehicle's route has been run up to. Not saved: after a load it starts now.
@@ -55,7 +54,8 @@ namespace FoodTrucks
         private void Update()
         {
             RunLater();
-            if (Time.unscaledTime < nextTick) return;
+            // During sleep and other skips every frame counts, so each step is at most one frame of game time.
+            if (Time.unscaledTime < nextTick && !CartSelling.Skipping) return;
             nextTick = Time.unscaledTime + TickSeconds;
             var state = FoodTrucksSession.CurrentState;
             var rules = DemandData.Rules;
@@ -63,12 +63,8 @@ namespace FoodTrucks
             try
             {
                 runner ??= new HireRunner(rules.Fleet);
-                if (!hidAfterLoad)
-                {
-                    hidAfterLoad = true;
-                    // Unity destroys at the end of the frame: the routes run from the next tick.
-                    if (HideInTransit(state)) return;
-                }
+                // The city load spawns vehicles where they were saved, those on their way too.
+                HideInTransit(state);
                 HireCrew.Check(state);
             }
             catch (Exception ex)
@@ -107,20 +103,17 @@ namespace FoodTrucks
             }
         }
 
-        // The city load spawns every street vehicle where it was saved, those on their way too.
-        private static bool HideInTransit(SaveState state)
+        // A vehicle on its way has no business on the map, whoever spawned it.
+        private static void HideInTransit(SaveState state)
         {
-            var hidden = false;
             foreach (var vehicle in state.Vehicles.Where(v => v.Transit != null))
             {
                 var instance = Instance(vehicle.VehicleId);
                 var controller = instance == null ? null : VehicleHelper.GetVehicleController(instance);
                 if (controller == null) continue;
                 TakeOffMap(controller);
-                hidden = true;
-                Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} is on its way; taken off the map after the load.");
+                Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} is on its way; taken off the map again.");
             }
-            return hidden;
         }
 
         // Steps through the minutes since the last tick in order: each moment a leg starts or ends, or a
@@ -152,7 +145,10 @@ namespace FoodTrucks
                     if (leg.Start > t && leg.Start < next) next = leg.Start;
                     if (leg.End > t && leg.End < next) next = leg.End;
                 }
-            if (vehicle.Transit != null && vehicle.Transit.ArrivesAt > t && vehicle.Transit.ArrivesAt < next) next = vehicle.Transit.ArrivesAt;
+            // An arrival, and the two later tries for parking.
+            if (vehicle.Transit != null)
+                foreach (var due in new[] { vehicle.Transit.ArrivesAt, vehicle.Transit.ArrivesAt + RetryMinutes, vehicle.Transit.ArrivesAt + 2 * RetryMinutes })
+                    if (due > t && due < next) next = due;
             // A new day gets its plan at midnight.
             var midnight = (t / 1440 + 1) * 1440;
             if (midnight > t && midnight < next) next = midnight;
@@ -237,9 +233,11 @@ namespace FoodTrucks
                 controller.SavePosition();
                 TakeOffMap(controller);
             }
+            var parking = instance.parkingState;
             // No parking fees or tickets while it's away (ParkingSimulator skips Undefined).
             instance.parkingState = ParkingState.Undefined;
             HireRunner.Depart(vehicle, action, t, position.x, position.y, position.z, heading);
+            vehicle.Transit!.FromParkingState = (int)parking;
             FoodTrucksSession.MarkChanged();
             var stop = vehicle.Schedule!.Stops[action.Stop];
             Log.Info($"Route: {kind} {vehicle.VehicleId} leaves for stop {action.Stop + 1} ({stop.SpotKey}), arriving at minute {action.ArrivesAt} ({action.ArrivesAt - t} minutes).");
@@ -256,6 +254,9 @@ namespace FoodTrucks
                 if (controller.additionalCollider != null) GleyTrafficSystem.Manager.TriggerColliderRemovedEvent(controller.additionalCollider);
             }
             catch (Exception ex) { Log.Error($"Route: collider event for {controller.vehicleInstance?.id}: {ex}"); }
+            // Deactivating unregisters it from the game's vehicle list at once (VehicleController.OnDisable);
+            // Destroy only happens at the end of the frame, and an arrival in the same frame must not find it.
+            controller.gameObject.SetActive(false);
             Object.Destroy(controller.gameObject);
         }
 
@@ -305,10 +306,11 @@ namespace FoodTrucks
                 VehicleHelper.TeleportVehicle(controller, position, rotation * Quaternion.Euler(0f, 180f, 0f));
                 controller.SavePosition();
             }
-            instance.parkingState = ParkingState.Legal;
+            // A parking space is legal; back where it left from, it is what it was.
+            instance.parkingState = kind == "truck" && !atStop ? (ParkingState)transit.FromParkingState : ParkingState.Legal;
             if (neighbourhood != null) instance.parkingNeighbourhood = neighbourhood;
             var placed = controller.transform.position;
-            HireRunner.Arrived(vehicle, placed.x, placed.z, atStop);
+            HireRunner.Arrived(vehicle, placed.x, placed.z, atStop, t);
             FoodTrucksSession.MarkChanged();
             Log.Info($"Route: {kind} {vehicle.VehicleId} arrived {(atStop ? "at" : "back from")} {transit.ToSpotKey}: {placed}, {Vector3.Distance(placed, target):F0} m from the stop.");
             return true;
@@ -343,7 +345,10 @@ namespace FoodTrucks
         // no disabled or delivery lanes, a random free slot in the lane that no player vehicle blocks.
         private static (Vector3, Quaternion, string?)? FreeParking(Vector3 target, float maxMetres)
         {
-            var lanes = Object.FindObjectsByType<ParkingLaneGenerator>(FindObjectsSortMode.None)
+            // The lanes belong to the city scene: found once per city load.
+            if (laneCache == null || laneCache.Any(l => l == null))
+                laneCache = Object.FindObjectsByType<ParkingLaneGenerator>(FindObjectsSortMode.None);
+            var lanes = laneCache
                 .Where(l => l != null && !l.isHandicapParking && !l.preventUseByPrivateDriver && !l.designatedDeliveryVanSpot && l.chanceOfFreeSpot <= 99)
                 .OrderBy(l => (l.GetWorldCenterPosition() - target).sqrMagnitude)
                 .Take(12);
@@ -368,9 +373,12 @@ namespace FoodTrucks
 
         private static string KindOf(VehicleState vehicle) => string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType;
 
+        private static ParkingLaneGenerator[]? laneCache;
+
         public static void Reset()
         {
             lock (later) later.Clear();
+            laneCache = null;
         }
 
         private static VehicleInstance? Instance(string id) =>

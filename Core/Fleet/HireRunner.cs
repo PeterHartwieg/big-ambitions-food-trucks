@@ -81,6 +81,7 @@ namespace FoodTrucks.Core.Fleet
             vehicle.Shifts ??= new List<ShiftPlan>();
             var day = DayOf(now);
             vehicle.Shifts.RemoveAll(p => p.Day < day && End(p) <= now);
+            if (vehicle.Skipped != null && vehicle.Skipped.Until <= now) vehicle.Skipped = null;
             var schedule = vehicle.Schedule;
             if (schedule == null || vehicle.Crew == null || vehicle.Crew.Count == 0 || schedules.Validate(schedule) != ScheduleProblem.None)
             {
@@ -149,6 +150,7 @@ namespace FoodTrucks.Core.Fleet
             if (want == null || vehicle.Crew == null || vehicle.Crew.Count == 0) return HireAction.None;
             var stop = vehicle.Schedule?.Stops?.ElementAtOrDefault(want.StopIndex);
             if (stop == null) return HireAction.None;
+            if (vehicle.Skipped != null && vehicle.Skipped.SpotKey == stop.SpotKey && now < vehicle.Skipped.Until) return HireAction.None;
             var distance = Travel.Distance(where.X, where.Z, stop.X, stop.Z);
             var atStop = where.CanSellHere && (distance <= rules.StopRadiusMetres || ParkedFor(vehicle, stop, where));
             if (!atStop)
@@ -203,13 +205,18 @@ namespace FoodTrucks.Core.Fleet
         }
 
         // The transit is over and the vehicle stands at (x, z): at its stop, or back where it left from when the
-        // stop had no room.
-        public static void Arrived(VehicleState vehicle, double x, double z, bool atStop)
+        // stop had no room. A stop given up on stays given up until its opening ends (or for an hour when the
+        // plan has no opening there), so the crew doesn't set off for it again and again.
+        public static void Arrived(VehicleState vehicle, double x, double z, bool atStop, long now)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var transit = vehicle.Transit;
             vehicle.Transit = null;
             vehicle.Arrival = atStop && transit != null ? new ArrivalState { SpotKey = transit.ToSpotKey, X = x, Z = z } : null;
+            if (atStop || transit == null) return;
+            var index = vehicle.Schedule?.Stops?.FindIndex(s => s.SpotKey == transit.ToSpotKey) ?? -1;
+            var until = index >= 0 ? OpenEnd(vehicle, index, now) : null;
+            vehicle.Skipped = new SkipState { SpotKey = transit.ToSpotKey, Until = until ?? now + 60 };
         }
 
         // Minutes of [from, to) the crew is on shift: from the first leg of a planned day to its last.
@@ -245,6 +252,43 @@ namespace FoodTrucks.Core.Fleet
 
     public static class RouteEditor
     {
+        // Adds a stop to the vehicle's route in time order. Plans kept from yesterday and the open window's stop
+        // follow the stops' new places.
+        public static ScheduleProblem AddStop(HireSchedules schedules, VehicleState vehicle, ScheduleStop stop)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            var schedule = vehicle.Schedule ?? new HireSchedule();
+            var before = schedule.Stops?.ToList() ?? new List<ScheduleStop>();
+            var problem = AddStop(schedules, schedule, stop);
+            if (problem != ScheduleProblem.None) return problem;
+            vehicle.Schedule = schedule;
+            Remap(vehicle, i => schedule.Stops.IndexOf(before[i]));
+            return problem;
+        }
+
+        // Removes a stop. A window the crew opened there must be closed first; legs for it are dropped.
+        public static void RemoveStop(VehicleState vehicle, int index)
+        {
+            if (vehicle?.Schedule?.Stops == null || index < 0 || index >= vehicle.Schedule.Stops.Count) return;
+            vehicle.Schedule.Stops.RemoveAt(index);
+            Remap(vehicle, i => i == index ? -1 : i > index ? i - 1 : i);
+            if (vehicle.Schedule.Stops.Count == 0) vehicle.Schedule = null;
+        }
+
+        private static void Remap(VehicleState vehicle, Func<int, int> map)
+        {
+            foreach (var plan in vehicle.Shifts ?? new List<ShiftPlan>())
+            {
+                plan.Legs.RemoveAll(l => map(l.StopIndex) < 0);
+                foreach (var leg in plan.Legs) leg.StopIndex = map(leg.StopIndex);
+            }
+            if (vehicle.HireStop != null)
+            {
+                var moved = map(vehicle.HireStop.Value);
+                vehicle.HireStop = moved < 0 ? (int?)null : moved;
+            }
+        }
+
         // Adds a stop in time order. The route is unchanged when the result is invalid.
         public static ScheduleProblem AddStop(HireSchedules schedules, HireSchedule schedule, ScheduleStop stop)
         {

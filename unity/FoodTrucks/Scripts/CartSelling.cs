@@ -76,6 +76,10 @@ namespace FoodTrucks
 
         private static CartSelling? instance;
 
+        // A time skip is running (sleep, paid activities): the crew's routes then step every frame.
+        internal static bool Skipping => instance != null && instance.skipping ||
+                                         (InstanceBehavior<UIs>.Instance?.timeMachine?.isRunning ?? false);
+
         private void OnEnable()
         {
             instance = this;
@@ -108,7 +112,7 @@ namespace FoodTrucks
             CartQueueView.Suspended = false;
             var now = HireCrew.NowExact();
             var state = FoodTrucksSession.CurrentState;
-            var crewed = new HashSet<string>(state?.Vehicles.Where(Crewed).Select(v => v.VehicleId) ?? Enumerable.Empty<string>());
+            var crewed = new HashSet<string>(state?.Vehicles.Where(v => RunByRoute(v) || Crewed(v)).Select(v => v.VehicleId) ?? Enumerable.Empty<string>());
             foreach (var id in simulatedUntil.Keys.ToList())
                 if (!crewed.Contains(id)) simulatedUntil[id] = now;
             if (state == null || !FoodTrucksSession.CanWrite) return;
@@ -482,7 +486,8 @@ namespace FoodTrucks
 
         private void Update()
         {
-            if (Time.unscaledTime < nextTick) return;
+            // During a skip every frame counts, so a crew's sales follow the clock a frame at a time.
+            if (Time.unscaledTime < nextTick && !Skipping) return;
             nextTick = Time.unscaledTime + TickSeconds;
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
