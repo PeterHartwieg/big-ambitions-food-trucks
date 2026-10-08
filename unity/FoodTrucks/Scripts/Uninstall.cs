@@ -52,6 +52,7 @@ namespace FoodTrucks
         {
             CartSelling.CloseAllQuietly();
             HireCrew.ReleaseAll();
+            Catering.RemoveContact();
             long refundCents = 0;
             long unpaidCents = 0;
             var removed = 0;

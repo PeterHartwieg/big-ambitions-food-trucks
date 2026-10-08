@@ -241,8 +241,7 @@ namespace FoodTrucks
         {
             var controller = VehicleHelper.GetVehicleController(instance);
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
-            // A truck at a catering gig stays there, as one the player holds does.
-            var held = SaveGameManager.Current.ActiveVehicleId == vehicle.VehicleId || Catering.Busy(vehicle.VehicleId);
+            var held = SaveGameManager.Current.ActiveVehicleId == vehicle.VehicleId;
             // Inside a building or an underground garage it isn't on the street to drive off from.
             var indoors = !string.IsNullOrEmpty(instance.streetName);
             if (indoors && indoorsShown.Add(vehicle.VehicleId))
@@ -267,7 +266,9 @@ namespace FoodTrucks
                           (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres) ||
                           HireCrew.OnShift(vehicle, t).Count == 0;
             }
-            return new VehicleWhere(position.x, position.z, held || indoors, canSell, hasStock, stayPut);
+            // A truck at a catering gig at this minute stays there, as one the player holds does (without counting as
+            // the player's use, which would keep it an hour longer).
+            return new VehicleWhere(position.x, position.z, held || indoors || Catering.BusyAt(vehicle.VehicleId, t), canSell, hasStock, stayPut);
         }
 
         // Does one step; false when nothing changed, so the loop stops.

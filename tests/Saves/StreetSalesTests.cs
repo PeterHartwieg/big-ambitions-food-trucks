@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using FoodTrucks.Core.Saves;
 using Xunit;
 
@@ -208,5 +209,17 @@ public class StreetSalesTests
 
         Assert.False(StreetSales.CanRecord(state, "cart-1", 1, 100, 1));
         Assert.NotNull(Record.Exception(() => StreetSales.Record(state, "cart-1", 1, 100, 1)));
+    }
+
+    [Fact]
+    public void AGigsFeeIsBookedOnceForAllItsPortions()
+    {
+        var state = new SaveState();
+        Assert.True(StreetSales.CanRecordTotal(state, "truck", 4, 6250, 40));
+        StreetSales.RecordTotal(state, "truck", 4, 6250, 40);
+        Assert.Equal(6250, state.DailySales.Single(d => d.Day == 4).RevenueCents);
+        var truck = StreetSales.Find(state, "truck")!;
+        Assert.Equal(40, truck.LifetimeSales);
+        Assert.Equal(6250, truck.LifetimeRevenueCents);
     }
 }

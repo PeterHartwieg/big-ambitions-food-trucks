@@ -872,6 +872,10 @@ namespace FoodTrucks
             if (paid) FoodTrucksSession.MarkChanged();
         }
 
+        // Units already sold to customers still walking to the window (catering checks its stock without them).
+        internal static Dictionary<string, int> HeldUnits(string vehicleId) =>
+            instance?.Reserved(vehicleId) ?? new Dictionary<string, int>();
+
         // Units per item held for customers on their way to the window; null when none are.
         private Dictionary<string, int>? Reserved(string vehicleId)
         {

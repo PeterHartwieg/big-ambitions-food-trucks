@@ -55,6 +55,11 @@ namespace FoodTrucks
             return vehicle.Crew.Select(Find).Where(e => e != null && !e.isAbsent && e.trainingSession == null && !e.isBeingReplaced).Select(e => e!).ToList();
         }
 
+        // The crew who could work now, shift or not: not off sick, training or being replaced (catering gigs).
+        public static List<EmployeeInstance> Present(VehicleState vehicle) =>
+            vehicle.Crew == null ? new List<EmployeeInstance>()
+                : vehicle.Crew.Select(Find).Where(e => e != null && !e.isAbsent && e.trainingSession == null && !e.isBeingReplaced).Select(e => e!).ToList();
+
         public static bool Add(SaveState state, VehicleState vehicle, EmployeeInstance employee)
         {
             if (vehicle.Crew.Count >= Limit(vehicle.VehicleType)) return false;

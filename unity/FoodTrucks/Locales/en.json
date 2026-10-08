@@ -222,5 +222,8 @@
     "foodtrucks:notification_catering_started": "Catering: the {vehicle} serves the guests until {end}. {units} {food} are kept for them.",
     "foodtrucks:notification_catering_not_ready": "The guests want {units} portions of {food}, and the {vehicle} doesn't have them.",
     "foodtrucks:notification_catering_no_licence": "The {vehicle} can't cater without a valid vendor licence and its permit.",
-    "foodtrucks:mapfilter_catering": "Catering bookings"
+    "foodtrucks:mapfilter_catering": "Catering bookings",
+    "foodtrucks:dialog_bookings_no_truck": "We only book food trucks with a vending permit. Call again when you have one.",
+    "foodtrucks:notification_catering_no_crew": "Nobody is with the {vehicle} to serve the guests: its crew, or you.",
+    "foodtrucks:message_bookings_unpaid": "The gig at {place} is done, but the payment didn't go through."
 }
