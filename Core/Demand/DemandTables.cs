@@ -342,8 +342,9 @@ namespace FoodTrucks.Core.Demand
             foreach (var entry in r.Entries(r.Object(root, "vehicles")))
             {
                 var obj = AsObject(r, entry);
-                r.OnlyKeys(obj, "equipmentSlots", "staff");
-                vehicleTable.Add(entry.Name, new VehicleInfo(entry.Name, r.Integer(obj, "equipmentSlots", 1, 64), r.Integer(obj, "staff", 1, 64)));
+                r.OnlyKeys(obj, "equipmentSlots", "staff", "stockUnits");
+                vehicleTable.Add(entry.Name, new VehicleInfo(entry.Name, r.Integer(obj, "equipmentSlots", 1, 64), r.Integer(obj, "staff", 1, 64),
+                    r.Integer(obj, "stockUnits", 1, 100000)));
             }
 
             var curveObj = r.Object(root, "priceCurve");
@@ -650,8 +651,9 @@ namespace FoodTrucks.Core.Demand
 
     public sealed class VehicleInfo
     {
-        internal VehicleInfo(string type, int equipmentSlots, int staff)
+        internal VehicleInfo(string type, int equipmentSlots, int staff, int stockUnits)
         {
+            StockUnits = stockUnits;
             Type = type;
             EquipmentSlots = equipmentSlots;
             Staff = staff;
@@ -659,6 +661,9 @@ namespace FoodTrucks.Core.Demand
 
         public string Type { get; }
         public int EquipmentSlots { get; }
+        // Food the vehicle holds, in units, whatever the game's box slots allow: one wholesale box
+        // can hold hundreds of units.
+        public int StockUnits { get; }
         public int Staff { get; }
     }
 }

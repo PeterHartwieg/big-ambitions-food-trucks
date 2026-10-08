@@ -28,6 +28,8 @@ public class DemandTablesTests
     [InlineData("economy.json", "priceCurve.points[1][1]", "1.2")]
     [InlineData("economy.json", "priceCurve.assumedPriceIndex", "1.1")]
     [InlineData("economy.json", "priceCurve.assumedPriceIndex", "1.9")]
+    [InlineData("economy.json", "vehicles.cart.stockUnits", "0")]
+    [InlineData("economy.json", "vehicles.cart.stockUnits", null)]
     [InlineData("economy.json", "priceCurve.points", "[[1,1]]")]
     [InlineData("zones.json", "zones[0].polygon", "[[0,0],[5,0],[10,0]]")]
     [InlineData("zones.json", "zones[0].polygon", "[[0,0],[10,10],[10,0],[0,10]]")]

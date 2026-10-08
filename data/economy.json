@@ -29,9 +29,10 @@
     "displaycase": { "products": ["ba:itemname_croissant", "ba:itemname_donut", "ba:itemname_cupcake"] }
   },
 
+  "_vehicles": "stockUnits is how much food the vehicle holds in units, separate from the game's cargo slots, which count boxes. The cart holds about half a day at a good pitch (one person serves 12 to 20 an hour), the truck a full lunch rush and a bit (three people, about 36 an hour).",
   "vehicles": {
-    "cart": { "equipmentSlots": 2, "staff": 1 },
-    "truck": { "equipmentSlots": 4, "staff": 3 }
+    "cart": { "equipmentSlots": 2, "staff": 1, "stockUnits": 80 },
+    "truck": { "equipmentSlots": 4, "staff": 3, "stockUnits": 160 }
   },
 
   "_priceCurve": "Share of customers who still buy at a price, as [price / reference price, share] points; straight lines between them, flat beyond the ends. Smoothed from the game's shop rule (read in the decompile, unverified in game): a customer buys up to max(class index, neighbourhood average index) times the reference price, with class indices 1.2, 1.4 and 1.7. assumedPriceIndex is the neighbourhood average the points are drawn for (a 50/35/15 class mix gives about 1.35); the adapter rescales other neighbourhoods onto it. The 0.8 point is the mod's own small bonus for undercutting.",
