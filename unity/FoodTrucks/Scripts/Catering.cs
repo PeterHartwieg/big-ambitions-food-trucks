@@ -34,7 +34,9 @@ namespace FoodTrucks
         private long lastMinute = -1;
         // For each started or booked gig and truck: the first game minute it was seen at the place, and the last.
         // Not saved: after a load it starts from then.
-        private readonly Dictionary<(long Gig, string Vehicle), long> nearSince = new Dictionary<(long, string), long>();
+        private readonly Dictionary<(long Gig, string Vehicle), (long Since, Vector3 At)> nearSince = new Dictionary<(long, string), (long, Vector3)>();
+        // Minutes a truck must have stood still at the place before its gig starts, so driving past doesn't start it.
+        private const long StandMinutes = 2;
         private readonly Dictionary<long, long> lastSeenNear = new Dictionary<long, long>();
         // "Not ready" told once per gig and truck.
         private readonly HashSet<(long, string)> notReadyShown = new HashSet<(long, string)>();
@@ -76,9 +78,19 @@ namespace FoodTrucks
             return contact;
         }
 
-        // The uninstall step: the contact goes with the mod, so a save without it shows no raw texts.
+        // The uninstall step: offers and gigs end without a word, then the contact goes with the mod, so a save without
+        // it shows no raw texts and nothing brings the contact back.
         public static void RemoveContact()
         {
+            var catering = FoodTrucksSession.CurrentState?.Catering;
+            if (catering != null && FoodTrucksSession.CanWrite)
+            {
+                var gigs = catering.Gigs.Count;
+                catering.Offers.Clear();
+                catering.Gigs.Clear();
+                FoodTrucksSession.MarkChanged();
+                if (gigs > 0) Log.Info($"Catering: {gigs} booked gigs dropped for the uninstall step.");
+            }
             var removed = SaveGameManager.Current?.Contacts.RemoveAll(c => c != null && c.id == ContactId) ?? 0;
             if (removed > 0) Log.Info("Catering: the bookings contact removed.");
         }
@@ -235,14 +247,17 @@ namespace FoodTrucks
                 foreach (var (vehicle, saved, kind) in caterers)
                 {
                     var key = (gig.Id, vehicle.id);
-                    // Driving, away, or still at another gig: not standing there for this one yet.
-                    if (Moving(vehicle) || saved.Transit != null || BusyAt(vehicle.id, now) || !Near(vehicle, gig.PlaceId))
+                    // Away, in transit, or still at another gig: not standing there for this one yet.
+                    if (saved.Transit != null || BusyAt(vehicle.id, now) || !Near(vehicle, gig.PlaceId))
                     {
                         nearSince.Remove(key);
                         continue;
                     }
-                    if (!nearSince.TryGetValue(key, out var since)) nearSince[key] = since = now;
-                    if (now < start - rules.ArrivalWindowMinutes) continue;
+                    // It must stand still: moved more than a few metres since it was first seen, it starts again.
+                    var position = PositionOf(vehicle);
+                    if (!nearSince.TryGetValue(key, out var seen) || Vector3.Distance(seen.At, position) > 3f) nearSince[key] = seen = (now, position);
+                    var since = seen.Since;
+                    if (now < start - rules.ArrivalWindowMinutes || now < since + StandMinutes) continue;
                     // Parked there through a skip: it arrived when it first stood there, or when the window opened.
                     var arrived = Math.Max(since, start - rules.ArrivalWindowMinutes);
                     if (Arrive(state, rules, tables, gig, vehicle, saved, kind, arrived)) break;
@@ -258,10 +273,11 @@ namespace FoodTrucks
             }
         }
 
-        // The player at the wheel while it moves: not parked anywhere. Sitting in a parked truck counts as parked.
-        private static bool Moving(VehicleInstance vehicle) =>
-            SaveGameManager.Current.ActiveVehicleId == vehicle.id &&
-            (vehicle.parkingState == ParkingState.NotAvailable || vehicle.parkingState == ParkingState.Undefined);
+        private static Vector3 PositionOf(VehicleInstance vehicle)
+        {
+            var controller = VehicleHelper.GetVehicleController(vehicle);
+            return controller != null ? controller.transform.position : (Vector3)vehicle.position;
+        }
 
         // A truck at the place in the arrival window: the gig starts if someone can serve (its crew, or the player
         // beside it or in it), it has the licence and permit, the food on its menu and a portion per guest.
