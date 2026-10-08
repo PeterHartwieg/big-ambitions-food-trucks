@@ -130,6 +130,8 @@ namespace FoodTrucks
             CityLicensing.Detach();
             MapFilters.Clear();
             TruckHatch.Forget();
+            WindowCrew.Reset();
+            HireRoutes.Reset();
             if (runtimeObject != null) Object.Destroy(runtimeObject);
             runtimeObject = null;
             game = null;

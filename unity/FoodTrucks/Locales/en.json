@@ -123,5 +123,7 @@
     "foodtrucks:notification_hire_departs": "{crew} sets off with the {vehicle}, arriving about {time}.",
     "foodtrucks:notification_hire_refused": "The crew can't open: {reason}",
     "foodtrucks:notification_hire_no_stock": "There's no food left in the {vehicle} for the crew to sell.",
-    "foodtrucks:notification_routes_failed": "Hired crews stopped after an error. See Player.log."
+    "foodtrucks:notification_routes_failed": "Hired crews stopped after an error. See Player.log.",
+    "foodtrucks:hires_after_midnight": "{0} (after midnight)",
+    "foodtrucks:notification_hire_indoors": "The {vehicle} is parked indoors. Its crew waits for it out on the street."
 }

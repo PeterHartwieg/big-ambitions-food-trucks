@@ -38,7 +38,7 @@ namespace FoodTrucks
 
         // In-game minute up to which each open cart has been simulated. Not saved: after a load the
         // first tick starts counting again, so time spent in the menu never turns into sales.
-        private readonly Dictionary<string, float> simulatedUntil = new Dictionary<string, float>();
+        private readonly Dictionary<string, double> simulatedUntil = new Dictionary<string, double>();
         private readonly HashSet<string> pausedNoticeShown = new HashSet<string>();
         private readonly Dictionary<string, (int Sales, long Cents)> sinceOpen = new Dictionary<string, (int, long)>();
         // Customers since opening who left without buying, by reason, for the close log line.
@@ -106,7 +106,7 @@ namespace FoodTrucks
         {
             skipping = false;
             CartQueueView.Suspended = false;
-            var now = TimeHelper.NowInMinutes();
+            var now = HireCrew.NowExact();
             var state = FoodTrucksSession.CurrentState;
             var crewed = new HashSet<string>(state?.Vehicles.Where(Crewed).Select(v => v.VehicleId) ?? Enumerable.Empty<string>());
             foreach (var id in simulatedUntil.Keys.ToList())
@@ -121,6 +121,10 @@ namespace FoodTrucks
 
         // A crew is at the window now.
         private static bool Crewed(VehicleState vehicle) => HireCrew.OnShift(vehicle, HireCrew.Now()).Count > 0;
+
+        // A window the crew opened is run by HireRoutes, step by step through time, so its sales stop at the
+        // stop's closing time even across a time skip.
+        private static bool RunByRoute(VehicleState vehicle) => vehicle.HireStop != null;
 
         // Called by the item panel's Open button while the player pushes a cart or sits in a stopped truck.
         public static void OpenHere(ItemPanelUI panel)
@@ -246,7 +250,8 @@ namespace FoodTrucks
 
         // The window opens: a fresh queue, the spot read, the hatch up. hireStop is the route's stop when the
         // crew opened it, null when the player did.
-        private CartPlan StartSelling(VehicleState vehicle, VehicleInstance cart, VehicleController? controller, Vector3 position, string kind, int? hireStop)
+        private CartPlan StartSelling(VehicleState vehicle, VehicleInstance cart, VehicleController? controller, Vector3 position, string kind, int? hireStop,
+            double? openedAt = null)
         {
             var tables = DemandData.Tables!;
             var rules = DemandData.Rules!;
@@ -254,7 +259,7 @@ namespace FoodTrucks
             vehicle.HireStop = hireStop;
             vehicle.SaleProgress = 0;
             vehicle.Service = SalesSimulator.Open(Seed(cart.id));
-            simulatedUntil[cart.id] = TimeHelper.NowInMinutes();
+            simulatedUntil[cart.id] = openedAt ?? HireCrew.NowExact();
             pausedNoticeShown.Remove(cart.id);
             sinceOpen[cart.id] = (0, 0);
             lostSinceOpen.Remove(cart.id);
@@ -271,7 +276,7 @@ namespace FoodTrucks
 
         // The crew opens the window at a route stop, where the vehicle has just been placed. Null when it
         // opened; otherwise the message saying why not (the route tells the player once a day per stop).
-        internal static string? OpenByCrew(VehicleState vehicle, int stop)
+        internal static string? OpenByCrew(VehicleState vehicle, int stop, long minute)
         {
             var self = instance;
             var state = FoodTrucksSession.CurrentState;
@@ -285,7 +290,7 @@ namespace FoodTrucks
             var menu = CartDemand.MenuOf(tables, cart);
             if (menu.Problem != MenuProblem.None || menu.Menu.Items.Count == 0) return "foodtrucks:notification_open_no_equipment";
             if (CartDemand.StockOf(cart, menu.Menu).Count == 0) return "foodtrucks:notification_hire_no_stock";
-            var crew = HireCrew.OnShift(vehicle, HireCrew.Now()).Count;
+            var crew = HireCrew.OnShift(vehicle, minute).Count;
             var licensing = Licensing.CanOpen(state, cart.id, SaveGameManager.Current!.Day, playerAtWindow: false, hires: crew);
             if (licensing != OpenProblem.None) return LicensingKey(licensing);
             var controller = VehicleHelper.GetVehicleController(cart);
@@ -297,15 +302,30 @@ namespace FoodTrucks
                 if (!legality.Legal) return legality.RuleKey;
             }
             else if (!QueueLine.HasWindowPlace(controller.transform, kind)) return "foodtrucks:legality_truck_hatch";
-            self.StartSelling(vehicle, cart, controller, position, kind, stop);
+            self.StartSelling(vehicle, cart, controller, position, kind, stop, minute);
             return null;
         }
 
-        // The crew closes the window at the end of a stop's hours.
-        internal static void CloseByCrew(VehicleState vehicle)
+        // The crew closes the window at the end of a stop's hours, after selling up to that minute.
+        internal static void CloseByCrew(VehicleState vehicle, long minute)
         {
             if (instance == null) return;
-            instance.Close(vehicle, "foodtrucks:notification_hire_closed");
+            AdvanceTo(vehicle, minute);
+            if (vehicle.IsOpen) instance.Close(vehicle, "foodtrucks:notification_hire_closed");
+        }
+
+        // Sells at a window the crew runs up to that game minute, in steps the simulator takes at once.
+        internal static void AdvanceTo(VehicleState vehicle, double minute)
+        {
+            var self = instance;
+            var state = FoodTrucksSession.CurrentState;
+            if (self == null || state == null || !FoodTrucksSession.CanWrite || !vehicle.IsOpen) return;
+            for (var i = 0; i < 48 && vehicle.IsOpen; i++)
+            {
+                if (!self.simulatedUntil.TryGetValue(vehicle.VehicleId, out var from)) self.simulatedUntil[vehicle.VehicleId] = from = minute;
+                if (minute - from < 1) return;
+                self.Tick(state, vehicle, Math.Min(minute, from + SalesTick.MaxCatchUpMinutes));
+            }
         }
 
         private static string LicensingKey(OpenProblem problem)
@@ -341,10 +361,12 @@ namespace FoodTrucks
 
         // Everyone at the window: the crew on shift, each at skill × satisfaction / 100, and the player at
         // their own skill when they stand there. They serve at the team's mean speed (ServiceRules.Team).
-        private static Window Service(RuleTables rules, string kind, VehicleState vehicle, bool playerAtWindow)
+        private static Window Service(RuleTables rules, string kind, VehicleState vehicle, bool playerAtWindow, long? minute = null)
         {
-            var skills = HireCrew.OnShift(vehicle, HireCrew.Now()).Select(HireCrew.Effective).ToList();
+            var skills = HireCrew.OnShift(vehicle, minute ?? HireCrew.Now()).Select(HireCrew.Effective).ToList();
             if (playerAtWindow) skills.Add(ServiceRules.EffectiveSkill(PlayerSkill(), 100));
+            // No more than the vehicle's staff fit at the window: the best of them serve.
+            skills = skills.OrderByDescending(s => s).Take(HireCrew.Limit(kind)).ToList();
             var team = rules.Service.Team(skills);
             return new Window(skills.Count, team.Skill, team.Speed, team.Mood, rules.Service.QueueLimit(kind, rules.Queue.MaxQueue));
         }
@@ -361,7 +383,7 @@ namespace FoodTrucks
         private const string CustomerServiceSkill = "ba:skill_customerservice";
 
         // Each opening gets its own customers: the cart and the minute it opened.
-        private static long Seed(string vehicleId) => SeededRandom.SeedFor(vehicleId, (long)Math.Floor(TimeHelper.NowInMinutes()));
+        private static long Seed(string vehicleId) => SeededRandom.SeedFor(vehicleId, (long)Math.Floor(HireCrew.NowExact()));
 
         // Sales an hour with this window: the customers who buy, up to what the workers can make.
         private static double ExpectedSales(CartPlan plan, Window window) =>
@@ -466,8 +488,8 @@ namespace FoodTrucks
             if (state == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
             try
             {
-                foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen).ToList())
-                    Tick(state, vehicle);
+                foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && !RunByRoute(v)).ToList())
+                    Tick(state, vehicle, HireCrew.NowExact());
             }
             catch (Exception ex)
             {
@@ -480,7 +502,7 @@ namespace FoodTrucks
             }
         }
 
-        private void Tick(SaveState state, VehicleState vehicle)
+        private void Tick(SaveState state, VehicleState vehicle, double until)
         {
             var cart = SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId);
             if (cart == null)
@@ -490,7 +512,7 @@ namespace FoodTrucks
                 return;
             }
 
-            var now = TimeHelper.NowInMinutes();
+            var now = until;
             if (!simulatedUntil.TryGetValue(vehicle.VehicleId, out var from))
             {
                 simulatedUntil[vehicle.VehicleId] = now;
@@ -499,7 +521,7 @@ namespace FoodTrucks
             // Sleeping and other time skips run the clock without the player at the window; a crew keeps selling.
             var timeMachine = InstanceBehavior<UIs>.Instance?.timeMachine;
             var inSkip = skipping || (timeMachine != null && timeMachine.isRunning);
-            if (inSkip && !Crewed(vehicle))
+            if (inSkip && !RunByRoute(vehicle) && !Crewed(vehicle))
             {
                 simulatedUntil[vehicle.VehicleId] = now;
                 return;
@@ -527,7 +549,7 @@ namespace FoodTrucks
             var rules = DemandData.Rules;
             if (tables == null || rules == null) return;
             var atWindow = !inSkip && PlayerIsAtCart(cart);
-            var window = Service(rules, CartDemand.KindOf(cart), vehicle, atWindow);
+            var window = Service(rules, CartDemand.KindOf(cart), vehicle, atWindow, (long)Math.Floor(from));
             if (window.Servers == 0)
             {
                 if (pausedNoticeShown.Add(vehicle.VehicleId)) Say("foodtrucks:notification_paused", KindOf(vehicle));

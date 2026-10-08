@@ -55,7 +55,7 @@ namespace FoodTrucks
                     CartSelling.Say("foodtrucks:notification_crew_letgo", kind, ("name", name));
                 }));
             }
-            var limit = rules.Fleet.CrewLimit(kind);
+            var limit = HireCrew.Limit(kind);
             if (vehicle.Crew.Count < limit)
             {
                 foreach (var employee in HireCrew.Available(state).Take(MaxCandidatesShown))
@@ -92,12 +92,11 @@ namespace FoodTrucks
             }
 
             var labels = options.Select(o => o.Label).ToList();
-            DropdownSelector.Show(labels, chosen =>
+            DropdownSelector.Show(labels, Guard(chosen =>
             {
                 var match = options.FirstOrDefault(o => o.Label == chosen);
-                try { match.Act?.Invoke(); }
-                catch (Exception ex) { Log.Error("Hires: " + ex); }
-            }, "foodtrucks:hires_header", vehicle.Crew.Count == 0 ? "foodtrucks:hires_body_nocrew" : "foodtrucks:hires_body");
+                match.Act?.Invoke();
+            }), "foodtrucks:hires_header", vehicle.Crew.Count == 0 ? "foodtrucks:hires_body_nocrew" : "foodtrucks:hires_body");
         }
 
         // The stop is where the vehicle stands, if the vehicle could open here now.
@@ -121,10 +120,10 @@ namespace FoodTrucks
         {
             var times = new Dictionary<string, int>();
             for (var minute = 0; minute < 24 * 60; minute += Step) times[Clock(minute)] = minute;
-            DropdownSelector.Show(times.Keys.ToList(), chosen =>
+            DropdownSelector.Show(times.Keys.ToList(), Guard(chosen =>
             {
                 if (times.TryGetValue(chosen, out var open)) HireRoutes.Later(() => AskClose(vehicleId, position, heading, open));
-            }, "foodtrucks:hires_open_header", "foodtrucks:hires_open_body");
+            }), "foodtrucks:hires_open_header", "foodtrucks:hires_open_body");
         }
 
         private static void AskClose(string vehicleId, UnityEngine.Vector3 position, float heading, int open)
@@ -132,10 +131,10 @@ namespace FoodTrucks
             var latest = DemandData.Rules?.Fleet.LatestCloseMinute ?? 27 * 60;
             var times = new Dictionary<string, int>();
             for (var minute = open + Step; minute <= latest; minute += Step) times[Clock(minute)] = minute;
-            DropdownSelector.Show(times.Keys.ToList(), chosen =>
+            DropdownSelector.Show(times.Keys.ToList(), Guard(chosen =>
             {
                 if (times.TryGetValue(chosen, out var close)) AddStop(vehicleId, position, heading, open, close);
-            }, "foodtrucks:hires_close_header", "foodtrucks:hires_close_body");
+            }), "foodtrucks:hires_close_header", "foodtrucks:hires_close_body");
         }
 
         private static void AddStop(string vehicleId, UnityEngine.Vector3 position, float heading, int open, int close)
@@ -172,7 +171,7 @@ namespace FoodTrucks
         private static void AskDays(string vehicleId)
         {
             var options = DayChoices.ToDictionary(c => Text(c.Key), c => c.Days);
-            DropdownSelector.Show(options.Keys.ToList(), chosen =>
+            DropdownSelector.Show(options.Keys.ToList(), Guard(chosen =>
             {
                 var state = FoodTrucksSession.CurrentState;
                 var vehicle = StreetSales.Find(state, vehicleId);
@@ -180,7 +179,7 @@ namespace FoodTrucks
                 vehicle.Schedule.Days = days.ToList();
                 RouteChanged(vehicle);
                 Log.Info($"Route: {vehicleId} runs {(days.Length == 0 ? "every day" : string.Join(", ", days))}.");
-            }, "foodtrucks:hires_days_header", null!);
+            }), "foodtrucks:hires_days_header", null!);
         }
 
         private static string DaysKey(List<DayOfWeek>? days)
@@ -191,9 +190,16 @@ namespace FoodTrucks
             return "foodtrucks:hires_days_custom";
         }
 
+        // The game's list picker calls back without a guard: nothing may throw out of a choice.
+        private static Action<string> Guard(Action<string> choice) => chosen =>
+        {
+            try { choice(chosen); }
+            catch (Exception ex) { Log.Error("Hires: " + ex); }
+        };
+
         private static void RouteChanged(VehicleState vehicle)
         {
-            HireRunner.Replan(vehicle);
+            HireRunner.Replan(vehicle, HireCrew.Now());
             HireCrew.SetWeeklyWork(vehicle);
             FoodTrucksSession.MarkChanged();
         }
@@ -201,8 +207,12 @@ namespace FoodTrucks
         // Regulars and logs know a stop by its 10 m square.
         internal static string SpotKey(float x, float z) => $"{Math.Round(x / 10.0) * 10:F0}:{Math.Round(z / 10.0) * 10:F0}";
 
-        // 13:30, and 01:00 for a late stop that runs past midnight.
-        internal static string Clock(int minute) => $"{minute / 60 % 24:D2}:{minute % 60:D2}";
+        // 13:30; a late stop's closing time past midnight reads "01:00 (after midnight)".
+        internal static string Clock(int minute)
+        {
+            var time = $"{minute / 60 % 24:D2}:{minute % 60:D2}";
+            return minute >= 24 * 60 ? string.Format(Text("foodtrucks:hires_after_midnight"), time) : time;
+        }
 
         private static string Place(ScheduleStop stop)
         {

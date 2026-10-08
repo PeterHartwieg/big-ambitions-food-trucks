@@ -72,6 +72,8 @@ namespace FoodTrucks.Core.Saves
         public List<ShiftPlan> Shifts { get; set; } = new List<ShiftPlan>();
         // The stop a hire opened the window at; null when the player opened it or it is closed.
         public int? HireStop { get; set; }
+        // Where the crew last parked it for a stop: a truck may stand further from the stop than the stop radius.
+        public ArrivalState? Arrival { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -171,6 +173,16 @@ namespace FoodTrucks.Core.Saves
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
+    public class ArrivalState
+    {
+        public string SpotKey { get; set; } = string.Empty;
+        public double X { get; set; }
+        public double Z { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
     // Times are absolute game minutes: (day - 1) × 1440 + minute of the day.
     public class TransitState
     {
@@ -179,6 +191,11 @@ namespace FoodTrucks.Core.Saves
         public double ToZ { get; set; }
         public double ToY { get; set; }
         public double ToHeading { get; set; }
+        // Where it left from, so it can go back there when the stop has no room for it.
+        public double FromX { get; set; }
+        public double FromY { get; set; }
+        public double FromZ { get; set; }
+        public double FromHeading { get; set; }
         public long DepartsAt { get; set; }
         public long ArrivesAt { get; set; }
 

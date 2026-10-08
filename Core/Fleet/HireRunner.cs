@@ -37,20 +37,23 @@ namespace FoodTrucks.Core.Fleet
         public TransitState? Transit { get; }
     }
 
-    // Where the vehicle is and who has it, as the game side sees it this minute.
+    // Where the vehicle is and what the game side knows about the place, this minute.
     public readonly struct VehicleWhere
     {
-        public VehicleWhere(double x, double z, bool playerHasIt)
+        public VehicleWhere(double x, double z, bool leaveAlone, bool canSellHere = true)
         {
             X = x;
             Z = z;
-            PlayerHasIt = playerHasIt;
+            LeaveAlone = leaveAlone;
+            CanSellHere = canSellHere;
         }
 
         public double X { get; }
         public double Z { get; }
-        // The player pushes or drives it: the hire leaves it alone.
-        public bool PlayerHasIt { get; }
+        // The player pushes or drives it, or it stands in a building or garage: the crew leaves it alone.
+        public bool LeaveAlone { get; }
+        // False where the vehicle may not sell even near a stop (a truck parked illegally): the crew moves it.
+        public bool CanSellHere { get; }
     }
 
     // Runs a hire's route minute by minute. The saved day plan says what the hire should be doing now;
@@ -105,11 +108,13 @@ namespace FoodTrucks.Core.Fleet
             });
         }
 
-        // The route changed or the crew did: plan again from now.
-        public static void Replan(VehicleState vehicle)
+        // The route changed: plan today again from now. Yesterday's plan for a stop still running past
+        // midnight stays, so the crew finishes it.
+        public static void Replan(VehicleState vehicle, long now)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
-            vehicle.Shifts?.Clear();
+            var day = DayOf(now);
+            vehicle.Shifts?.RemoveAll(p => p.Day >= day);
         }
 
         // The leg the plan has running at that minute, or null when the hire is off.
@@ -132,7 +137,7 @@ namespace FoodTrucks.Core.Fleet
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             if (vehicle.Transit != null)
                 return now >= vehicle.Transit.ArrivesAt ? new HireAction(HireActionKind.Arrive, transit: vehicle.Transit) : HireAction.None;
-            if (where.PlayerHasIt) return HireAction.None;
+            if (where.LeaveAlone) return HireAction.None;
             var want = Want(vehicle, now);
             if (vehicle.IsOpen)
             {
@@ -145,24 +150,48 @@ namespace FoodTrucks.Core.Fleet
             var stop = vehicle.Schedule?.Stops?.ElementAtOrDefault(want.StopIndex);
             if (stop == null) return HireAction.None;
             var distance = Travel.Distance(where.X, where.Z, stop.X, stop.Z);
-            if (distance > rules.StopRadiusMetres)
+            var atStop = where.CanSellHere && (distance <= rules.StopRadiusMetres || ParkedFor(vehicle, stop, where));
+            if (!atStop)
             {
                 var minutes = Travel.Minutes(rules, distance, Travel.ModeFor(vehicle.VehicleType), gameSpeed);
-                return new HireAction(HireActionKind.Depart, want.StopIndex, now + Math.Max(1, minutes));
+                var arrives = now + Math.Max(1, minutes);
+                // Moved away by the player too far to make it back before the stop closes: wait for the next one.
+                var closes = OpenEnd(vehicle, want.StopIndex, now);
+                if (closes != null && arrives >= closes) return HireAction.None;
+                return new HireAction(HireActionKind.Depart, want.StopIndex, arrives);
             }
             return want.Kind == LegKind.Open ? new HireAction(HireActionKind.Open, want.StopIndex) : HireAction.None;
         }
 
-        // Puts the vehicle in transit to the stop (closing any queue; HireSchedules.Depart).
-        public static void Depart(VehicleState vehicle, HireAction action, long now)
+        // The crew parked it here for this stop and nobody has moved it since.
+        private static bool ParkedFor(VehicleState vehicle, ScheduleStop stop, VehicleWhere where) =>
+            vehicle.Arrival != null && vehicle.Arrival.SpotKey == stop.SpotKey &&
+            Travel.Distance(where.X, where.Z, vehicle.Arrival.X, vehicle.Arrival.Z) <= 3;
+
+        // When the planned opening at that stop ends, from the plan running now.
+        private static long? OpenEnd(VehicleState vehicle, int stopIndex, long now)
+        {
+            foreach (var plan in vehicle.Shifts ?? new List<ShiftPlan>())
+                foreach (var leg in plan.Legs)
+                    if (leg.Kind == LegKind.Open && leg.StopIndex == stopIndex && leg.End > now) return leg.End;
+            return null;
+        }
+
+        // Puts the vehicle in transit to the stop, from where it stands (x, y, z, heading).
+        public static void Depart(VehicleState vehicle, HireAction action, long now, double x, double y, double z, double heading)
         {
             if (action.Kind != HireActionKind.Depart) throw new ArgumentException("Not a departure.", nameof(action));
             var stop = vehicle.Schedule!.Stops[action.Stop];
             vehicle.Service = null;
             vehicle.IsOpen = false;
             vehicle.HireStop = null;
+            vehicle.Arrival = null;
             vehicle.Transit = new TransitState
             {
+                FromX = x,
+                FromY = y,
+                FromZ = z,
+                FromHeading = heading,
                 ToSpotKey = stop.SpotKey,
                 ToX = stop.X,
                 ToZ = stop.Z,
@@ -171,6 +200,16 @@ namespace FoodTrucks.Core.Fleet
                 DepartsAt = now,
                 ArrivesAt = action.ArrivesAt
             };
+        }
+
+        // The transit is over and the vehicle stands at (x, z): at its stop, or back where it left from when the
+        // stop had no room.
+        public static void Arrived(VehicleState vehicle, double x, double z, bool atStop)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            var transit = vehicle.Transit;
+            vehicle.Transit = null;
+            vehicle.Arrival = atStop && transit != null ? new ArrivalState { SpotKey = transit.ToSpotKey, X = x, Z = z } : null;
         }
 
         // Minutes of [from, to) the crew is on shift: from the first leg of a planned day to its last.

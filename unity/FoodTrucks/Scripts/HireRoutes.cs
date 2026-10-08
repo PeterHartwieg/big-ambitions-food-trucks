@@ -19,10 +19,11 @@ namespace FoodTrucks
     internal sealed class HireRoutes : MonoBehaviour
     {
         private const float TickSeconds = 0.25f;
-        // A stop with no free parking space nearby is tried again this many game minutes later.
+        // A stop with no free parking space nearby is tried again for this many game minutes, then wider.
         private const int RetryMinutes = 10;
-        // Parking spaces further than this from the stop don't count as the stop.
+        // Parking spaces this close count as the stop; after a wait, the crew takes one further out.
         private const float MaxParkingMetres = 60f;
+        private const float WideParkingMetres = 200f;
         // Steps per vehicle per tick: enough to close, leave and so on after a load or a time skip.
         private const int MaxSteps = 4;
 
@@ -33,6 +34,10 @@ namespace FoodTrucks
         private bool hidAfterLoad;
         // Refusals already told to the player: vehicle, stop, day.
         private readonly HashSet<(string, int, int)> refusalsShown = new HashSet<(string, int, int)>();
+        // The game minute each vehicle's route has been run up to. Not saved: after a load it starts now.
+        private readonly Dictionary<string, long> routedUntil = new Dictionary<string, long>();
+        private readonly HashSet<string> broken = new HashSet<string>();
+        private readonly HashSet<string> indoorsShown = new HashSet<string>();
 
         // Runs an action on the next frame, after the game's list picker has closed its current list.
         public static void Later(Action action)
@@ -65,15 +70,24 @@ namespace FoodTrucks
                     if (HideInTransit(state)) return;
                 }
                 HireCrew.Check(state);
-                var now = HireCrew.Now();
-                foreach (var vehicle in state.Vehicles.Where(v => (v.Crew != null && v.Crew.Count > 0) || v.Transit != null).ToList())
-                    Run(vehicle, now);
             }
             catch (Exception ex)
             {
                 Log.Error("Hire routes: " + ex);
-                enabled = false;
-                CartSelling.Notify("foodtrucks:notification_routes_failed");
+                return;
+            }
+            var now = HireCrew.Now();
+            foreach (var vehicle in state.Vehicles.Where(v => (v.Crew != null && v.Crew.Count > 0) || v.Transit != null || v.HireStop != null).ToList())
+            {
+                if (broken.Contains(vehicle.VehicleId)) continue;
+                try { Run(vehicle, now); }
+                catch (Exception ex)
+                {
+                    // One vehicle's route stops; the others go on.
+                    broken.Add(vehicle.VehicleId);
+                    Log.Error($"Hire routes: {vehicle.VehicleType} {vehicle.VehicleId} stopped: {ex}");
+                    CartSelling.Notify("foodtrucks:notification_routes_failed");
+                }
             }
         }
 
@@ -102,52 +116,104 @@ namespace FoodTrucks
                 var instance = Instance(vehicle.VehicleId);
                 var controller = instance == null ? null : VehicleHelper.GetVehicleController(instance);
                 if (controller == null) continue;
-                Object.Destroy(controller.gameObject);
+                TakeOffMap(controller);
                 hidden = true;
                 Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} is on its way; taken off the map after the load.");
             }
             return hidden;
         }
 
+        // Steps through the minutes since the last tick in order: each moment a leg starts or ends, or a
+        // transit is due, gets its own steps, and the crew's window sells up to it first. So a time skip
+        // over a whole stop still opens, sells and closes it.
         private void Run(VehicleState vehicle, long now)
         {
             var instance = Instance(vehicle.VehicleId);
             if (instance == null) return;
-            var playerHasIt = SaveGameManager.Current.ActiveVehicleId == vehicle.VehicleId;
-            var controller = VehicleHelper.GetVehicleController(instance);
-            var position = controller != null ? controller.transform.position : (Vector3)instance.position;
-            runner!.EnsurePlan(vehicle, now, position.x, position.z);
+            if (!routedUntil.TryGetValue(vehicle.VehicleId, out var from) || from > now) from = now;
+            var t = from;
+            for (var guard = 0; guard < 64; guard++)
+            {
+                StepAt(vehicle, instance, t);
+                if (t >= now) break;
+                t = NextMoment(vehicle, t, now);
+            }
+            routedUntil[vehicle.VehicleId] = now;
+            CartSelling.AdvanceTo(vehicle, HireCrew.NowExact());
+        }
+
+        // The next leg boundary or arrival after t, or now.
+        private static long NextMoment(VehicleState vehicle, long t, long now)
+        {
+            var next = now;
+            foreach (var plan in vehicle.Shifts ?? new List<ShiftPlan>())
+                foreach (var leg in plan.Legs)
+                {
+                    if (leg.Start > t && leg.Start < next) next = leg.Start;
+                    if (leg.End > t && leg.End < next) next = leg.End;
+                }
+            if (vehicle.Transit != null && vehicle.Transit.ArrivesAt > t && vehicle.Transit.ArrivesAt < next) next = vehicle.Transit.ArrivesAt;
+            // A new day gets its plan at midnight.
+            var midnight = (t / 1440 + 1) * 1440;
+            if (midnight > t && midnight < next) next = midnight;
+            return next;
+        }
+
+        private void StepAt(VehicleState vehicle, VehicleInstance instance, long t)
+        {
+            CartSelling.AdvanceTo(vehicle, t);
+            var where = Where(vehicle, instance, t);
+            runner!.EnsurePlan(vehicle, t, where.X, where.Z, GameSpeed());
             for (var i = 0; i < MaxSteps; i++)
             {
-                controller = VehicleHelper.GetVehicleController(instance);
-                position = controller != null ? controller.transform.position : (Vector3)instance.position;
-                var action = runner.Step(vehicle, now, new VehicleWhere(position.x, position.z, playerHasIt));
-                if (action.Kind == HireActionKind.None || !Do(vehicle, instance, action, now)) return;
+                if (i > 0) where = Where(vehicle, instance, t);
+                var action = runner.Step(vehicle, t, where, GameSpeed());
+                if (action.Kind == HireActionKind.None || !Do(vehicle, instance, action, t)) return;
             }
         }
 
-        // Does one step; false when nothing changed, so the loop stops.
-        private bool Do(VehicleState vehicle, VehicleInstance instance, HireAction action, long now)
+        // Where the vehicle stands, and whether the crew may touch it or sell there.
+        private VehicleWhere Where(VehicleState vehicle, VehicleInstance instance, long t)
         {
-            var kind = string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType;
+            var controller = VehicleHelper.GetVehicleController(instance);
+            var position = controller != null ? controller.transform.position : (Vector3)instance.position;
+            var held = SaveGameManager.Current.ActiveVehicleId == vehicle.VehicleId;
+            // Inside a building or an underground garage it isn't on the street to drive off from.
+            var indoors = !string.IsNullOrEmpty(instance.streetName);
+            if (indoors && indoorsShown.Add(vehicle.VehicleId))
+            {
+                Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} is in {instance.streetName} {instance.streetNumber}; the crew waits for it on the street.");
+                CartSelling.Say("foodtrucks:notification_hire_indoors", KindOf(vehicle));
+            }
+            if (!indoors) indoorsShown.Remove(vehicle.VehicleId);
+            var canSell = true;
+            if (!held && !indoors && !vehicle.IsOpen && vehicle.Transit == null && HireRunner.Want(vehicle, t) != null)
+                canSell = KindOf(vehicle) == "truck" ? instance.parkingState == ParkingState.Legal : Legality.Check(position).Legal;
+            return new VehicleWhere(position.x, position.z, held || indoors, canSell);
+        }
+
+        // Does one step; false when nothing changed, so the loop stops.
+        private bool Do(VehicleState vehicle, VehicleInstance instance, HireAction action, long t)
+        {
+            var kind = KindOf(vehicle);
             switch (action.Kind)
             {
                 case HireActionKind.Close:
-                    CartSelling.CloseByCrew(vehicle);
+                    CartSelling.CloseByCrew(vehicle, t);
                     return !vehicle.IsOpen;
                 case HireActionKind.Depart:
-                    Depart(vehicle, instance, action, now, kind);
+                    Depart(vehicle, instance, action, t, kind);
                     return true;
                 case HireActionKind.Arrive:
-                    return Arrive(vehicle, instance, action.Transit!, now, kind);
+                    return Arrive(vehicle, instance, action.Transit!, t, kind);
                 case HireActionKind.Open:
-                    var refusal = CartSelling.OpenByCrew(vehicle, action.Stop);
+                    var refusal = CartSelling.OpenByCrew(vehicle, action.Stop, t);
                     if (refusal == null)
                     {
                         CartSelling.Say("foodtrucks:notification_hire_open", kind, ("crew", CrewNames(vehicle)));
                         return true;
                     }
-                    if (refusalsShown.Add((vehicle.VehicleId, action.Stop, HireRunner.DayOf(now))))
+                    if (refusalsShown.Add((vehicle.VehicleId, action.Stop, HireRunner.DayOf(t))))
                     {
                         Log.Info($"Route: {kind} {vehicle.VehicleId} can't open at stop {action.Stop + 1}: {refusal}.");
                         var noun = LocalizorManager.GetLocalization("foodtrucks:noun_" + kind, null);
@@ -160,42 +226,66 @@ namespace FoodTrucks
             }
         }
 
-        private static void Depart(VehicleState vehicle, VehicleInstance instance, HireAction action, long now, string kind)
+        private static void Depart(VehicleState vehicle, VehicleInstance instance, HireAction action, long t, string kind)
         {
             var controller = VehicleHelper.GetVehicleController(instance);
+            var position = controller != null ? controller.transform.position : (Vector3)instance.position;
+            var heading = controller != null ? controller.transform.eulerAngles.y : ((Quaternion)instance.rotation).eulerAngles.y;
             if (controller != null)
             {
                 TruckHatch.Set(controller, false);
                 controller.SavePosition();
-                Object.Destroy(controller.gameObject);
+                TakeOffMap(controller);
             }
             // No parking fees or tickets while it's away (ParkingSimulator skips Undefined).
             instance.parkingState = ParkingState.Undefined;
-            HireRunner.Depart(vehicle, action, now);
+            HireRunner.Depart(vehicle, action, t, position.x, position.y, position.z, heading);
             FoodTrucksSession.MarkChanged();
             var stop = vehicle.Schedule!.Stops[action.Stop];
-            Log.Info($"Route: {kind} {vehicle.VehicleId} leaves for stop {action.Stop + 1} ({stop.SpotKey}), arriving at minute {action.ArrivesAt} ({action.ArrivesAt - now} minutes).");
+            Log.Info($"Route: {kind} {vehicle.VehicleId} leaves for stop {action.Stop + 1} ({stop.SpotKey}), arriving at minute {action.ArrivesAt} ({action.ArrivesAt - t} minutes).");
             CartSelling.Say("foodtrucks:notification_hire_departs", kind, ("crew", CrewNames(vehicle)),
                 ("time", StaffDialog.Clock((int)(action.ArrivesAt % 1440))));
         }
 
-        private static bool Arrive(VehicleState vehicle, VehicleInstance instance, TransitState transit, long now, string kind)
+        // As the game's own vehicle sale does, traffic forgets the colliders before the vehicle goes.
+        private static void TakeOffMap(VehicleController controller)
+        {
+            try
+            {
+                if (controller.vehicleCollider != null) GleyTrafficSystem.Manager.TriggerColliderRemovedEvent(controller.vehicleCollider);
+                if (controller.additionalCollider != null) GleyTrafficSystem.Manager.TriggerColliderRemovedEvent(controller.additionalCollider);
+            }
+            catch (Exception ex) { Log.Error($"Route: collider event for {controller.vehicleInstance?.id}: {ex}"); }
+            Object.Destroy(controller.gameObject);
+        }
+
+        // A truck goes into the nearest free parking space near the stop, a cart where the player stood it.
+        // With no room near the stop, the truck tries again a little later; after that, wider; and in the
+        // end it goes back where it left from, so it is never lost off the map.
+        private static bool Arrive(VehicleState vehicle, VehicleInstance instance, TransitState transit, long t, string kind)
         {
             var target = new Vector3((float)transit.ToX, (float)transit.ToY, (float)transit.ToZ);
             Vector3 position;
             Quaternion rotation;
             string? neighbourhood = null;
+            var atStop = true;
             if (kind == "truck")
             {
-                var spot = FreeParking(target);
-                if (spot == null)
+                var late = t - transit.ArrivesAt;
+                var spot = FreeParking(target, MaxParkingMetres) ?? (late >= RetryMinutes ? FreeParking(target, WideParkingMetres) : null);
+                if (spot == null && late < 2 * RetryMinutes)
                 {
-                    transit.ArrivesAt = now + RetryMinutes;
-                    FoodTrucksSession.MarkChanged();
-                    Log.Info($"Route: no free parking space within {MaxParkingMetres} m of {transit.ToSpotKey} for truck {vehicle.VehicleId}; trying again in {RetryMinutes} minutes.");
+                    if (late == 0) Log.Info($"Route: no free parking space near {transit.ToSpotKey} for truck {vehicle.VehicleId}; trying again.");
                     return false;
                 }
-                (position, rotation, neighbourhood) = spot.Value;
+                if (spot != null) (position, rotation, neighbourhood) = spot.Value;
+                else
+                {
+                    position = new Vector3((float)transit.FromX, (float)transit.FromY, (float)transit.FromZ);
+                    rotation = Quaternion.Euler(0f, (float)transit.FromHeading, 0f);
+                    atStop = false;
+                    Log.Info($"Route: no free parking space for truck {vehicle.VehicleId} near {transit.ToSpotKey}; it goes back where it left from.");
+                }
             }
             else
             {
@@ -206,21 +296,21 @@ namespace FoodTrucks
             var controller = Place(instance, position, rotation);
             if (controller == null)
             {
-                transit.ArrivesAt = now + RetryMinutes;
-                Log.Error($"Route: {kind} {vehicle.VehicleId} could not be placed at {position}; trying again in {RetryMinutes} minutes.");
+                Log.Error($"Route: {kind} {vehicle.VehicleId} could not be placed at {position}.");
                 return false;
             }
             // The hatch has to face the pavement: a lane's rotation can point either way along the kerb.
-            if (kind == "truck" && !QueueLine.HasWindowPlace(controller.transform, kind))
+            if (kind == "truck" && atStop && !QueueLine.HasWindowPlace(controller.transform, kind))
             {
                 VehicleHelper.TeleportVehicle(controller, position, rotation * Quaternion.Euler(0f, 180f, 0f));
                 controller.SavePosition();
             }
             instance.parkingState = ParkingState.Legal;
             if (neighbourhood != null) instance.parkingNeighbourhood = neighbourhood;
-            vehicle.Transit = null;
+            var placed = controller.transform.position;
+            HireRunner.Arrived(vehicle, placed.x, placed.z, atStop);
             FoodTrucksSession.MarkChanged();
-            Log.Info($"Route: {kind} {vehicle.VehicleId} arrived at {transit.ToSpotKey}: {controller.transform.position}, {Vector3.Distance(controller.transform.position, target):F0} m from the stop.");
+            Log.Info($"Route: {kind} {vehicle.VehicleId} arrived {(atStop ? "at" : "back from")} {transit.ToSpotKey}: {placed}, {Vector3.Distance(placed, target):F0} m from the stop.");
             return true;
         }
 
@@ -251,7 +341,7 @@ namespace FoodTrucks
 
         // The nearest free parking space to the stop, as the game's private driver finds one: lanes by distance,
         // no disabled or delivery lanes, a random free slot in the lane that no player vehicle blocks.
-        private static (Vector3, Quaternion, string?)? FreeParking(Vector3 target)
+        private static (Vector3, Quaternion, string?)? FreeParking(Vector3 target, float maxMetres)
         {
             var lanes = Object.FindObjectsByType<ParkingLaneGenerator>(FindObjectsSortMode.None)
                 .Where(l => l != null && !l.isHandicapParking && !l.preventUseByPrivateDriver && !l.designatedDeliveryVanSpot && l.chanceOfFreeSpot <= 99)
@@ -260,7 +350,7 @@ namespace FoodTrucks
             foreach (var lane in lanes)
             {
                 if (!lane.TryGetRandomFreeSpotForPlayerVehicle(out var position, out var rotation, 1 << LayerHelper.VehiclesLayerIndex)) continue;
-                if (Vector3.Distance(position, target) > MaxParkingMetres) continue;
+                if (Vector3.Distance(position, target) > maxMetres) continue;
                 return (position, rotation, lane.neighbourhood);
             }
             return null;
@@ -268,6 +358,20 @@ namespace FoodTrucks
 
         private static string CrewNames(VehicleState vehicle) =>
             string.Join(", ", (vehicle.Crew ?? new List<string>()).Select(HireCrew.Find).Where(e => e != null).Select(e => HireCrew.Name(e!)));
+
+        // Game minutes per real second, as the game's taxi times its trips.
+        internal static double GameSpeed()
+        {
+            var speed = PlayerPrefSettings.GameSpeed;
+            return speed > 0 ? speed : 1.0;
+        }
+
+        private static string KindOf(VehicleState vehicle) => string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType;
+
+        public static void Reset()
+        {
+            lock (later) later.Clear();
+        }
 
         private static VehicleInstance? Instance(string id) =>
             SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == id);

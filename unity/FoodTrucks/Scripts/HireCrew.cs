@@ -32,6 +32,10 @@ namespace FoodTrucks
                 .ToList();
         }
 
+        // How many work the window at once: the vehicle's staff in economy.json (cart 1, truck 3).
+        public static int Limit(string? kind) =>
+            DemandData.Tables?.Vehicle(string.IsNullOrEmpty(kind) ? "cart" : kind!)?.Staff ?? 1;
+
         public static EmployeeInstance? Find(string id) => EmployeeHelper.GetEmployeeById(id, showError: false);
 
         public static double Skill(EmployeeInstance employee) => employee.GetSkillValue(CustomerServiceSkill);
@@ -52,11 +56,9 @@ namespace FoodTrucks
 
         public static bool Add(SaveState state, VehicleState vehicle, EmployeeInstance employee)
         {
-            var rules = DemandData.Rules;
-            if (rules == null || vehicle.Crew.Count >= rules.Fleet.CrewLimit(vehicle.VehicleType)) return false;
+            if (vehicle.Crew.Count >= Limit(vehicle.VehicleType)) return false;
             if (state.Vehicles.Any(v => v.Crew != null && v.Crew.Contains(employee.id))) return false;
             vehicle.Crew.Add(employee.id);
-            HireRunner.Replan(vehicle);
             SetWeeklyWork(vehicle);
             ClearUnassignedTask(employee);
             FoodTrucksSession.MarkChanged();
@@ -68,7 +70,6 @@ namespace FoodTrucks
         public static void Remove(VehicleState vehicle, string employeeId, string reason)
         {
             if (vehicle.Crew == null || !vehicle.Crew.Remove(employeeId)) return;
-            HireRunner.Replan(vehicle);
             var employee = Find(employeeId);
             if (employee != null)
             {
@@ -81,11 +82,24 @@ namespace FoodTrucks
         }
 
         // Fired, resigned, retired, poached or put to work in a building by the player: off the vehicle.
+        // A vehicle that is gone (sold, seized, removed) lets its whole crew go and ends its route.
         public static void Check(SaveState state)
         {
+            var game = SaveGameManager.Current;
             foreach (var vehicle in state.Vehicles)
             {
                 if (vehicle.Crew == null || vehicle.Crew.Count == 0) continue;
+                if (game != null && !game.VehicleInstances.Any(v => v.id == vehicle.VehicleId) &&
+                    (game.privateDriverVehicleInstances == null || !game.privateDriverVehicleInstances.Any(v => v.id == vehicle.VehicleId)))
+                {
+                    foreach (var id in vehicle.Crew.ToList()) Remove(vehicle, id, "the vehicle is gone");
+                    vehicle.Schedule = null;
+                    vehicle.Shifts.Clear();
+                    vehicle.Transit = null;
+                    vehicle.Arrival = null;
+                    vehicle.HireStop = null;
+                    continue;
+                }
                 foreach (var id in vehicle.Crew.ToList())
                 {
                     var employee = Find(id);
@@ -161,8 +175,9 @@ namespace FoodTrucks
         {
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite) return;
-            var now = Now();
-            var hourStart = now - now % 60;
+            // The hour that is starting, as the game counts it: its own minute may still hold later hours.
+            var hourStart = HireSchedules.Absolute(TimeHelper.CurrentDay, TimeHelper.CurrentHour * 60);
+            var now = hourStart;
             var rules = DemandData.Rules;
             var runner = rules == null ? null : new HireRunner(rules.Fleet);
             foreach (var vehicle in state.Vehicles)
@@ -174,7 +189,7 @@ namespace FoodTrucks
                 {
                     var controller = VehicleHelper.GetVehicleController(instance);
                     var position = controller != null ? controller.transform.position : (UnityEngine.Vector3)instance.position;
-                    runner.EnsurePlan(vehicle, now, position.x, position.z);
+                    runner.EnsurePlan(vehicle, now, position.x, position.z, HireRoutes.GameSpeed());
                 }
                 // The game clears these only when a building's shifts change, so they should hold; once an hour is cheap.
                 SetWeeklyWork(vehicle);
@@ -189,9 +204,12 @@ namespace FoodTrucks
             }
         }
 
-        // Absolute game minutes as Core counts them: (day - 1) × 1440 + minute of the day.
-        public static long Now() =>
-            HireSchedules.Absolute(TimeHelper.CurrentDay, TimeHelper.CurrentHour * 60 + (int)Math.Floor(TimeHelper.CurrentMinute));
+        // Absolute game minutes as Core counts them: (day - 1) × 1440 + minute of the day. Inside the game's
+        // hourly loop the minute can still hold hours not yet counted, so it is capped at the hour's end.
+        public static double NowExact() =>
+            HireSchedules.Absolute(TimeHelper.CurrentDay, TimeHelper.CurrentHour * 60) + Math.Min(Math.Max(0f, TimeHelper.CurrentMinute), 59.999f);
+
+        public static long Now() => (long)Math.Floor(NowExact());
 
         private static string KindOf(VehicleState vehicle) => string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType;
     }

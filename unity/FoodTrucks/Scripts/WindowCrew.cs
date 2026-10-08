@@ -65,7 +65,7 @@ namespace FoodTrucks
             {
                 // Once is enough: the window works without them.
                 failed = true;
-                Log.Error("Window crew: " + ex + " Crews stay unseen until the next load.");
+                Log.Error("Window crew: " + ex + " Crews stay unseen until a save is loaded again.");
                 RemoveAll();
             }
         }
@@ -81,6 +81,13 @@ namespace FoodTrucks
         public static void RemoveAll()
         {
             foreach (var id in workers.Keys.ToList()) Remove(id);
+        }
+
+        // A new save starts with a clean slate, a failure included.
+        public static void Reset()
+        {
+            RemoveAll();
+            failed = false;
         }
 
         private static Worker? Spawn(string vehicleId, EmployeeInstance employee)

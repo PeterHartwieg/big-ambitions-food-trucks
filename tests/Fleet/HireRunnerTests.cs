@@ -29,7 +29,7 @@ public class HireRunnerTests
         Schedule = new HireSchedule { Stops = stops.ToList() }
     };
 
-    private static VehicleWhere At(double x) => new(x, 0, playerHasIt: false);
+    private static VehicleWhere At(double x) => new(x, 0, leaveAlone: false);
 
     [Fact]
     public void AHiredTruckDrivesOpensClosesAndMovesOn()
@@ -41,13 +41,13 @@ public class HireRunnerTests
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 9), At(0)).Kind);
         var leave = runner.Step(truck, At(3, 9, 40), At(0));
         Assert.Equal((HireActionKind.Depart, 0, At(3, 11)), (leave.Kind, leave.Stop, leave.ArrivesAt));
-        HireRunner.Depart(truck, leave, At(3, 9, 40));
+        HireRunner.Depart(truck, leave, At(3, 9, 40), 0, 0, 0, 0);
 
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 10, 59), At(0)).Kind);
         var arrive = runner.Step(truck, At(3, 11), At(0));
         Assert.Equal(HireActionKind.Arrive, arrive.Kind);
         Assert.Equal("office", arrive.Transit!.ToSpotKey);
-        truck.Transit = null;
+        HireRunner.Arrived(truck, 2003, 0, atStop: true);
 
         var open = runner.Step(truck, At(3, 11), At(2003));
         Assert.Equal((HireActionKind.Open, 0), (open.Kind, open.Stop));
@@ -81,7 +81,7 @@ public class HireRunnerTests
         var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60));
         runner.EnsurePlan(truck, At(3, 6), 0, 0);
 
-        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), new VehicleWhere(0, 0, playerHasIt: true)).Kind);
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), new VehicleWhere(0, 0, leaveAlone: true)).Kind);
         truck.IsOpen = true;
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), At(0)).Kind);
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 16), At(0)).Kind);
@@ -164,11 +164,51 @@ public class HireRunnerTests
     }
 
     [Fact]
-    public void CrewLimitsFromTheData()
+    public void ATruckParkedFurtherOutForItsStopCountsAsThere()
     {
-        Assert.Equal(1, rules.CrewLimit("cart"));
-        Assert.Equal(3, rules.CrewLimit("truck"));
-        Assert.Equal(1, rules.CrewLimit(""));
+        var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60));
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
+        HireRunner.Depart(truck, runner.Step(truck, At(3, 9, 40), At(0)), At(3, 9, 40), 0, 0, 0, 0);
+
+        // The nearest free space was 50 m on, beyond the 25 m stop radius.
+        HireRunner.Arrived(truck, 2050, 0, atStop: true);
+
+        Assert.Equal(HireActionKind.Open, runner.Step(truck, At(3, 11), At(2050)).Kind);
+        // Moved away by someone else, it goes back.
+        Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 11), At(2080)).Kind);
+    }
+
+    [Fact]
+    public void AVehicleThatCantSellWhereItStandsIsMoved()
+    {
+        var truck = Truck(Stop("office", 0, 11 * 60, 14 * 60));
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
+
+        var step = runner.Step(truck, At(3, 12), new VehicleWhere(5, 0, leaveAlone: false, canSellHere: false));
+
+        Assert.Equal(HireActionKind.Depart, step.Kind);
+    }
+
+    [Fact]
+    public void NoDepartureThatArrivesAfterTheStopCloses()
+    {
+        var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60), Stop("bars", 2000, 18 * 60, 23 * 60));
+        runner.EnsurePlan(truck, At(3, 6), 2000, 0);
+
+        // The player left it 2 km away at 13:00: 80 minutes back, after 14:00.
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 13), At(0)).Kind);
+    }
+
+    [Fact]
+    public void ReplanningKeepsALateStopRunningPastMidnight()
+    {
+        var truck = Truck(Stop("bars", 0, 22 * 60, 26 * 60));
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
+        runner.EnsurePlan(truck, At(4, 0, 30), 0, 0);
+
+        HireRunner.Replan(truck, At(4, 0, 30));
+
+        Assert.Equal(0, HireRunner.Want(truck, At(4, 1))!.StopIndex);
     }
 
     [Fact]
