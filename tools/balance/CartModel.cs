@@ -54,6 +54,10 @@ public sealed class Conditions
     public Pricing Pricing { get; init; } = Pricing.Default;
     // Multiplies the NeighbourhoodIndex price: 0.9 is a custom price 10% under the manager's.
     public double PriceFactor { get; init; } = 1.0;
+    // A premium spot's or an event's bonus (Core PitchBonus), applied from PitchFrom to PitchTo (minutes of the day).
+    public FoodTrucks.Core.Pitches.PitchBonus Pitch { get; init; } = FoodTrucks.Core.Pitches.PitchBonus.None;
+    public int PitchFrom { get; init; }
+    public int PitchTo { get; init; } = 2880;
 
     public string Label => $"{(Day is DayOfWeek.Saturday or DayOfWeek.Sunday ? "weekend" : "weekday")} {(Rain ? "rain" : "dry")}";
 }
@@ -152,7 +156,8 @@ public sealed class Cart
         var day = minute >= 1440 ? (DayOfWeek)(((int)c.Day + 1) % 7) : c.Day;
         var estimate = model.Estimate(new DemandQuery
         {
-            Areas = spot.Areas,
+            Areas = PitchTime.PitchAt(c, minute).Apply(spot.Areas),
+            PitchFootfall = PitchTime.PitchAt(c, minute).Footfall,
             Neighbourhood = spot.Hood,
             Menu = sellable,
             MinuteOfDay = minute % 1440,
@@ -417,4 +422,10 @@ public sealed class QueueThroughput
         });
         return table;
     }
+}
+
+internal static class PitchTime
+{
+    public static FoodTrucks.Core.Pitches.PitchBonus PitchAt(Conditions c, int minute) =>
+        minute % 1440 >= c.PitchFrom && minute % 1440 < c.PitchTo ? c.Pitch : FoodTrucks.Core.Pitches.PitchBonus.None;
 }

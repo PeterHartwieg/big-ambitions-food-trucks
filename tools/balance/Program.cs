@@ -204,6 +204,63 @@ if (opts.Wants("premium"))
     o.AppendLine();
 }
 
+// Premium spots and events (data/pitches.json): what the bonus adds at each place, against an ordinary day there,
+// for the hot dog cart and the truck stand-in. Events are worth their fee when the gain over their hours beats it.
+if (opts.Wants("pitches"))
+{
+    var pitchTables = FoodTrucks.Core.Pitches.PitchTables.Parse(File.ReadAllText(Path.Combine(opts.Data, "pitches.json")), tables);
+    // city.json names a spot "2 fifthstreet" for the key ba:street_fifthstreet#2.
+    Spot? At(string address)
+    {
+        var parts = address.Replace("ba:street_", "").Split('#');
+        return spots.FirstOrDefault(s => s.Name == $"{parts[1]} {parts[0]}");
+    }
+    o.AppendLine("## Premium spots: a day with the spot held against the same pitch without it");
+    o.AppendLine();
+    o.AppendLine("| Spot | Hot dog weekday | with spot | Hot dog Saturday | with spot | Truck weekday | with spot |");
+    o.AppendLine("|---|---|---|---|---|---|---|");
+    var hot = PlannerFor(carts["hotdog+cooler"].Cart);
+    var truck = PlannerFor(carts["truck-like"].Cart);
+    var (hFrom, hTo, _) = days["hotdog+cooler"];
+    var (tFrom, tTo, _) = days["truck-like"];
+    foreach (var premium in pitchTables.Spots)
+    {
+        var spot = At(premium.Address);
+        if (spot == null) { o.AppendLine($"| {premium.Id} | not in city.json | | | | | |"); continue; }
+        var bonus = FoodTrucks.Core.Pitches.PitchBonus.Of(premium);
+        Conditions With(Conditions c) => new() { Day = c.Day, Rain = c.Rain, Pricing = c.Pricing, PriceFactor = c.PriceFactor, MarketDemand = c.MarketDemand, Pitch = bonus };
+        double P(Planner p, int f, int t, Conditions c) => p.SingleSpot(spot, f, t, c).Total.Profit;
+        o.AppendLine($"| {premium.Id} | {Money(P(hot, hFrom, hTo, conditions[0]))} | {Money(P(hot, hFrom, hTo, With(conditions[0])))} | " +
+                     $"{Money(P(hot, hFrom, hTo, conditions[2]))} | {Money(P(hot, hFrom, hTo, With(conditions[2])))} | " +
+                     $"{Money(P(truck, tFrom, tTo, conditions[0]))} | {Money(P(truck, tFrom, tTo, With(conditions[0])))} |");
+    }
+    o.AppendLine();
+    o.AppendLine("## Events: profit over the event's hours with a booked place against the same hours without the event");
+    o.AppendLine();
+    o.AppendLine("| Place | Event | Fee | Hot dog without | with | gain less fee | Truck without | with | gain less fee |");
+    o.AppendLine("|---|---|---|---|---|---|---|---|---|");
+    foreach (var place in pitchTables.Places)
+    {
+        var spot = At(place.Address);
+        if (spot == null) { o.AppendLine($"| {place.Id} | not in city.json | | | | | | | |"); continue; }
+        foreach (var kindId in place.Kinds)
+        {
+            var kind = pitchTables.Kind(kindId)!;
+            var day = kind.Days.Contains(DayOfWeek.Saturday) ? DayOfWeek.Saturday : kind.Days[0];
+            var plain = Cond(day);
+            var with = new Conditions { Day = day, Pricing = plain.Pricing, PriceFactor = plain.PriceFactor, MarketDemand = plain.MarketDemand,
+                Pitch = FoodTrucks.Core.Pitches.PitchBonus.Of(kind), PitchFrom = kind.Start, PitchTo = kind.End };
+            var fee = kind.FeeCents / 100.0;
+            var h0 = hot.SingleSpot(spot, kind.Start, kind.End, plain).Total.Profit;
+            var h1 = hot.SingleSpot(spot, kind.Start, kind.End, with).Total.Profit;
+            var t0 = truck.SingleSpot(spot, kind.Start, kind.End, plain).Total.Profit;
+            var t1 = truck.SingleSpot(spot, kind.Start, kind.End, with).Total.Profit;
+            o.AppendLine($"| {place.Id} | {kind.Id} | {Money(fee)} | {Money(h0)} | {Money(h1)} | {Money(h1 - h0 - fee)} | {Money(t0)} | {Money(t1)} | {Money(t1 - t0 - fee)} |");
+        }
+    }
+    o.AppendLine();
+}
+
 var routes = new List<(string Name, string Cart, (int, int)[] Windows)>
 {
     ("lunch + evening", "hotdog+cooler", new[] { (660, 870), (1020, 1380) }),

@@ -106,7 +106,7 @@ If the check fails, the Open button is disabled and names the rule.
 
 **Event pitches.** Temporary spots announced a few days ahead: a weekend market, a game day, a street festival. High traffic for a few hours, an entry fee, a limited number of trucks.
 
-Decided while building 0.8.0 (9 October 2026, Peter away; numbers in `data/pitches.json`): 17 premium spots, each outside one building and named after its street, picked from the balance calculator's best pitches. The first of the player's vehicles to open on one holds it until it closes, with 1.25 times the passers and the spot's own crowd. Events are weekend markets and street festivals at 7 places; the City of New York texts 3 or 4 days ahead and sells up to 2 places per event by phone. During an event only vehicles with a booked place may open there. There is no game day: the city has no stadium.
+Decided while building 0.8.0 (9 October 2026, Peter away; numbers in `data/pitches.json`): 17 premium spots, each outside one building and named after its street, picked from the balance calculator's best pitches. The first of the player's vehicles to open on one holds it until it closes, with 1.25 times the passers and the spot's own crowd. Events are weekend markets and street festivals at 7 places; the City of New York texts 3 or 4 days ahead and sells up to 2 places per event by phone ($80 at a market, $120 at a festival). During an event only vehicles with a booked place may open there. There is no game day: the city has no stadium.
 
 ## Demand
 

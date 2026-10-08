@@ -180,7 +180,7 @@
           "retail": 1.0
         },
         "places": 2,
-        "fee": 150
+        "fee": 80
       },
       {
         "id": "festival",
@@ -198,7 +198,7 @@
           "nightlife": 1.0
         },
         "places": 2,
-        "fee": 250
+        "fee": 120
       }
     ],
     "places": [
@@ -225,7 +225,7 @@
         "name": "foodtrucks:pitch_murray-fourth-avenue",
         "address": "ba:street_fourthavenue#27",
         "kinds": [
-          "festival"
+          "market"
         ]
       },
       {
@@ -233,8 +233,7 @@
         "name": "foodtrucks:pitch_hells-fourth-street-market",
         "address": "ba:street_fourthstreet#18",
         "kinds": [
-          "market",
-          "festival"
+          "market"
         ]
       },
       {
