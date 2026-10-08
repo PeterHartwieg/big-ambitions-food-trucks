@@ -29,8 +29,13 @@ public enum Pricing
 {
     // CartDemand.PriceOf today: the item's default market price.
     Default,
-    // The price every customer in the neighbourhood still accepts: default × the neighbourhood's index.
-    NeighbourhoodIndex
+    // What a vanilla pricing manager sets: reference × the neighbourhood's average price index, the most
+    // every social class accepts (ItemHelper.CalculateOptimalPriceByNeighborhood,
+    // PricingManagerHelper.ComputeSuggestion at full skill). Conditions.PriceFactor scales it.
+    NeighbourhoodIndex,
+    // The most the upper class accepts: reference × max(1.7, the neighbourhood's index)
+    // (CitizenHelper.MaxAcceptableRelativePrice). Working and middle class may walk away.
+    UpperClass
 }
 
 public sealed class Conditions
@@ -41,6 +46,8 @@ public sealed class Conditions
     // The game's demand for the item in the neighbourhood, 0 to 100. 100: nobody else sells it there.
     public double MarketDemand { get; init; } = 100;
     public Pricing Pricing { get; init; } = Pricing.Default;
+    // Multiplies the NeighbourhoodIndex price: 0.9 is a custom price 10% under the manager's.
+    public double PriceFactor { get; init; } = 1.0;
 
     public string Label => $"{(Day is DayOfWeek.Saturday or DayOfWeek.Sunday ? "weekend" : "weekday")} {(Rain ? "rain" : "dry")}";
 }
@@ -104,8 +111,12 @@ public sealed class Cart
     public DemandTables Tables => tables;
     public GamePrices Prices => prices;
 
-    public double PriceOf(string item, string hood, Conditions c) =>
-        prices.Items[item].Price * (c.Pricing == Pricing.NeighbourhoodIndex ? IndexOf(hood) : 1.0);
+    public double PriceOf(string item, string hood, Conditions c) => prices.Items[item].Price * c.Pricing switch
+    {
+        Pricing.NeighbourhoodIndex => IndexOf(hood) * c.PriceFactor,
+        Pricing.UpperClass => Math.Max(1.7, IndexOf(hood)),
+        _ => 1.0
+    };
 
     public double IndexOf(string hood) => prices.PriceIndex.TryGetValue(hood, out var i) ? i : tables.PriceCurve.AssumedPriceIndex;
 

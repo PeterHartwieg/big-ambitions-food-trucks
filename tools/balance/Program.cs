@@ -12,14 +12,9 @@ var prices = GamePrices.Load(opts.Prices);
 var city = City.Load(opts.City);
 var travel = new Travel { MetresPerMinute = opts.MetresPerSecond };
 var spots = city.Spots(tables);
-var baseC = new Conditions { Pricing = opts.Pricing, MarketDemand = opts.Market };
-var conditions = new[]
-{
-    baseC,
-    new Conditions { Pricing = opts.Pricing, MarketDemand = opts.Market, Rain = true },
-    new Conditions { Pricing = opts.Pricing, MarketDemand = opts.Market, Day = DayOfWeek.Saturday },
-    new Conditions { Pricing = opts.Pricing, MarketDemand = opts.Market, Day = DayOfWeek.Saturday, Rain = true },
-};
+Conditions Cond(DayOfWeek day = DayOfWeek.Wednesday, bool rain = false, Pricing? pricing = null, double? factor = null) =>
+    new() { Day = day, Rain = rain, Pricing = pricing ?? opts.Pricing, PriceFactor = factor ?? opts.PriceFactor, MarketDemand = opts.Market };
+var conditions = new[] { Cond(), Cond(rain: true), Cond(DayOfWeek.Saturday), Cond(DayOfWeek.Saturday, true) };
 
 const string HotDog = "ba:itemname_hotdog", Soda = "ba:itemname_sodacan", Coffee = "ba:itemname_cupofcoffee", Croissant = "ba:itemname_croissant";
 var carts = new Dictionary<string, (Cart Cart, string[] Equipment)>
@@ -41,7 +36,7 @@ string Money(double v) => v.ToString("#,0", CultureInfo.InvariantCulture);
 var o = new StringBuilder();
 o.AppendLine($"# Cart balance run");
 o.AppendLine();
-o.AppendLine($"Data: {opts.Data}{(opts.Patch != null ? $" patched with {opts.Patch}" : "")}. Pricing: {opts.Pricing}. Market demand: {opts.Market}. " +
+o.AppendLine($"Data: {opts.Data}{(opts.Patch != null ? $" patched with {opts.Patch}" : "")}. Pricing: {opts.Pricing}{(opts.PriceFactor != 1 ? $" × {opts.PriceFactor}" : "")}. Market demand: {opts.Market}. " +
              $"Restock: {opts.Restock}. Pushing speed: {opts.MetresPerSecond} m/s ({opts.MetresPerSecond * 60:0} m per in-game hour). " +
              $"Cart: {tables.Vehicle("cart")!.StockUnits} units, {tables.Vehicle("cart")!.Staff} staff. passersPerHour {tables.PassersPerHour}. Month: May.");
 o.AppendLine();
@@ -183,17 +178,92 @@ if (opts.Wants("routes"))
     o.AppendLine();
 }
 
+if (opts.Wants("compare"))
+{
+    // Moving against staying: the best single spot all day (07:00 to 01:00) against the best route
+    // (lunch + evening, or lunch + evening + late), hot dog grill + cooler.
+    var cart = carts["hotdog+cooler"].Cart;
+    var planner = PlannerFor(cart);
+    var hotdogRoutes = routes.Where(r => r.Cart == "hotdog+cooler").ToList();
+    foreach (var c in new[] { conditions[0], conditions[2] })
+    {
+        o.AppendLine($"## Staying against moving, {cart.Name}, {c.Label}");
+        o.AppendLine();
+        o.AppendLine("| Where | Best single spot 07:00-01:00 | Profit | Best route | Profit | Staying ÷ route |");
+        o.AppendLine("|---|---|---|---|---|---|");
+        foreach (var hood in hoods.Append("city"))
+        {
+            var pool = hood == "city" ? spots : spots.Where(s => s.Hood == hood).ToList();
+            var stay = pool.Select(s => planner.SingleSpot(s, 420, 1500, c)).OrderByDescending(d => d.Total.Profit).First();
+            DayResult? move = null;
+            string? moveName = null;
+            foreach (var route in hotdogRoutes)
+            {
+                var r = planner.BestRoute(pool, route.Windows, c);
+                if (r != null && (move == null || r.Total.Profit > move.Total.Profit)) { move = r; moveName = route.Name; }
+            }
+            var s0 = stay.Stays[0];
+            o.AppendLine($"| {H(hood)} | {s0.Spot.Name} ({s0.Spot.Areas}), {s0.Restocks} restocks | {Money(stay.Total.Profit)} | " +
+                         (move == null ? "none | | |" : $"{moveName}: {string.Join(" → ", move.Stays.Select(x => x.Spot.Name))}, {move.Restocks} restocks | {Money(move.Total.Profit)} | {stay.Total.Profit / move.Total.Profit:P0} |"));
+        }
+        o.AppendLine();
+    }
+}
+
+if (opts.Wants("pricing"))
+{
+    var cart = carts["hotdog+cooler"].Cart;
+    var planner = PlannerFor(cart);
+    o.AppendLine($"## Price sensitivity: best lunch + evening route city-wide, {cart.Name}, weekday dry");
+    o.AppendLine();
+    o.AppendLine("| Price | Profit | Units | Pitches |");
+    o.AppendLine("|---|---|---|---|");
+    foreach (var (label, c) in new (string, Conditions)[]
+             {
+                 ("default price (today)", Cond(pricing: Pricing.Default, factor: 1)),
+                 ("pricing manager × 0.9", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 0.9)),
+                 ("pricing manager (default × neighbourhood index)", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1)),
+                 ("pricing manager × 1.1", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1.1)),
+                 ("upper-class maximum: default × max(1.7, index)", Cond(pricing: Pricing.UpperClass, factor: 1)),
+             })
+    {
+        var best = planner.BestRoute(spots, routes[0].Windows, c);
+        if (best == null) continue;
+        o.AppendLine($"| {label} | {Money(best.Total.Profit)} | {best.Total.Units:0} | {Describe(best, c, cart)} |");
+    }
+    o.AppendLine();
+    o.AppendLine("Midtown office lunch, one hour, by price:");
+    o.AppendLine();
+    o.AppendLine("| Price | Hot dog price | Bought / customers | Served/h | Profit/h |");
+    o.AppendLine("|---|---|---|---|---|");
+    var office = new Spot("office", AreaMix.Single("office"), "ba:neighborhood_midtown", "", 0, 0);
+    foreach (var (label, c) in new (string, Conditions)[]
+             {
+                 ("default", Cond(pricing: Pricing.Default, factor: 1)), ("manager × 0.9", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 0.9)),
+                 ("manager", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1)), ("manager × 1.1", Cond(pricing: Pricing.NeighbourhoodIndex, factor: 1.1)),
+                 ("upper-class maximum", Cond(pricing: Pricing.UpperClass, factor: 1)),
+             })
+    {
+        var r = Selling.Run(cart, office, 660, 870, c, Selling.Unlimited(cart));
+        var t = r.ByDaypart[Daypart.Lunch];
+        var plan = cart.Plan(office, 700, c, Selling.Unlimited(cart));
+        o.AppendLine($"| {label} | ${cart.PriceOf(HotDog, office.Hood, c):0.00} | {plan.Conversion:P0} | {t.PerHour(t.Served):0.0} | ${Money(t.PerHour(t.Profit))} |");
+    }
+    o.AppendLine();
+}
+
 if (opts.Wants("costs"))
 {
     o.AppendLine($"## Cost to start (cart ${Money(opts.CartPrice)})");
     o.AppendLine();
-    o.AppendLine("| Cart | Equipment | First boxes (whole boxes at wholesale) | Total |");
+    o.AppendLine("| Cart | Equipment | First load (the cart's units at wholesale, split by a Midtown lunch) | Total |");
     o.AppendLine("|---|---|---|---|");
     foreach (var (key, (cart, equipment)) in carts)
     {
         var eq = equipment.Sum(e => prices.Equipment[e]);
-        var boxes = cart.Menu.Sum(i => prices.Items[i].Wholesale * prices.Items[i].Box);
-        o.AppendLine($"| {cart.Name} | {Money(eq)} | {Money(boxes)} | {Money(opts.CartPrice + eq + boxes)} |");
+        var load = Selling.Load(cart, new Spot("office", AreaMix.Single("office"), "ba:neighborhood_midtown", "", 0, 0), 660, 870, conditions[0]);
+        var stock = load.Sum(p => p.Value * prices.Items[p.Key].Wholesale);
+        o.AppendLine($"| {cart.Name} | {Money(eq)} | {Money(stock)} | {Money(opts.CartPrice + eq + stock)} |");
     }
     o.AppendLine();
 }
@@ -223,12 +293,13 @@ sealed class Options
     public string Prices = "";
     public string? Patch;
     public string? Out;
-    public Pricing Pricing = Pricing.Default;
+    public Pricing Pricing = Pricing.NeighbourhoodIndex;
+    public double PriceFactor = 1.0;
     public double Market = 100;
     public RestockMode Restock = RestockMode.Wholesaler;
     public double MetresPerSecond = 4.0;
     public double CartPrice = 1200;
-    public HashSet<string> Reports = new() { "archetypes", "spots", "single", "routes", "costs" };
+    public HashSet<string> Reports = new() { "archetypes", "spots", "single", "routes", "compare", "pricing", "costs" };
 
     public bool Wants(string report) => Reports.Contains(report);
 
@@ -253,7 +324,10 @@ sealed class Options
                 case "--prices": o.Prices = Next(); break;
                 case "--patch": o.Patch = Next(); break;
                 case "--out": o.Out = Next(); break;
-                case "--pricing": o.Pricing = Next() == "index" ? Pricing.NeighbourhoodIndex : Pricing.Default; break;
+                case "--pricing":
+                    o.Pricing = Next() switch { "index" => Pricing.NeighbourhoodIndex, "upper" => Pricing.UpperClass, _ => Pricing.Default };
+                    break;
+                case "--price-factor": o.PriceFactor = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "--market": o.Market = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "--restock": o.Restock = Next() == "hand" ? RestockMode.BoxInHand : RestockMode.Wholesaler; break;
                 case "--speed": o.MetresPerSecond = double.Parse(Next(), CultureInfo.InvariantCulture); break;
