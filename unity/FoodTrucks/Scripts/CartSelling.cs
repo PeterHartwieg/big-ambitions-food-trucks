@@ -419,15 +419,18 @@ namespace FoodTrucks
             var self = instance;
             var state = FoodTrucksSession.CurrentState;
             if (self == null || state == null || !FoodTrucksSession.CanWrite || !vehicle.IsOpen) return;
-            self.Advance(state, vehicle, minute);
+            // The route acts (closes, leaves) right after this, so the window must be sold up to `minute` first,
+            // however many steps that takes.
+            self.Advance(state, vehicle, minute, int.MaxValue);
         }
 
         // Sells up to that game minute one game minute at a time, so every minute gets its own demand, venue
         // weights and surges, as the live clock would give it. A live tick is about a minute anyway; only a
-        // catch-up after a skip takes several steps (at most 200 a frame, the rest next frame).
-        private void Advance(SaveState state, VehicleState vehicle, double until)
+        // catch-up after a skip takes several steps. A window the player runs takes at most maxSteps a frame and
+        // the rest next frame; a crew's window is caught up in full before its route acts (AdvanceTo).
+        private void Advance(SaveState state, VehicleState vehicle, double until, int maxSteps = 200)
         {
-            for (var i = 0; i < 200 && vehicle.IsOpen; i++)
+            for (var i = 0; i < maxSteps && vehicle.IsOpen; i++)
             {
                 if (!simulatedUntil.TryGetValue(vehicle.VehicleId, out var from))
                 {
