@@ -20,6 +20,7 @@ namespace FoodTrucks.Core.Demand
         internal static readonly string[] MonthKeys = { "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec" };
 
         private readonly int[] daypartStarts;
+        private readonly double[] streetBaseline;
         private readonly Dictionary<string, AreaTable> areas;
         private readonly Dictionary<string, CategoryTable> categories;
         private readonly Dictionary<string, NeighbourhoodTable> neighbourhoods;
@@ -52,12 +53,13 @@ namespace FoodTrucks.Core.Demand
         private DemandTables(DataReader demandReader, JObject demand, DataReader economyReader, JObject economy, DataReader zonesReader, JObject zones)
         {
             var r = demandReader;
-            r.OnlyKeys(demand, "schemaVersion", "passersPerHour", "dayparts", "areas", "categories", "menu", "neighbourhoods",
+            r.OnlyKeys(demand, "schemaVersion", "passersPerHour", "streetBaseline", "dayparts", "areas", "categories", "menu", "neighbourhoods",
                 "calendar", "months", "seasons", "rain", "market", "classifier");
             r.SchemaVersion(demand, DemandSchemaVersion);
 
             PassersPerHour = r.Number(demand, "passersPerHour", 0, 100000);
             daypartStarts = ReadDayparts(r, r.Object(demand, "dayparts"));
+            streetBaseline = FullTable(r, r.Object(demand, "streetBaseline"), DaypartKeys, double.Epsilon, 100);
 
             categories = new Dictionary<string, CategoryTable>(StringComparer.Ordinal);
             foreach (var entry in r.Entries(r.Object(demand, "categories")))
@@ -180,6 +182,7 @@ namespace FoodTrucks.Core.Demand
         }
 
         public bool HasArea(string name) => name != null && areas.ContainsKey(name);
+        public double StreetBaseline(Daypart daypart) => streetBaseline[(int)daypart];
         public AreaTable Area(string name) =>
             areas.TryGetValue(name, out var area) ? area : throw new ArgumentException($"Unknown area type '{name}'.", nameof(name));
 
@@ -262,12 +265,13 @@ namespace FoodTrucks.Core.Demand
 
         private ClassifierSettings ReadClassifier(DataReader r, JObject obj)
         {
-            r.OnlyKeys(obj, "radiusMetres", "edgeWeight", "maxAreas", "fallbackArea", "buildingTypes", "businessTypes");
+            r.OnlyKeys(obj, "radiusMetres", "edgeWeight", "saturation", "maxAreas", "fallbackArea", "buildingTypes", "businessTypes");
             var fallback = r.Text(obj, "fallbackArea");
             if (!areas.ContainsKey(fallback)) throw r.Fail(DataReader.PathOf(obj, "fallbackArea"), $"names unknown area '{fallback}'");
             return new ClassifierSettings(
                 r.Number(obj, "radiusMetres", 1, 10000),
                 r.Number(obj, "edgeWeight", 0, 1),
+                r.Number(obj, "saturation", double.Epsilon, double.MaxValue),
                 r.Integer(obj, "maxAreas", 1, areas.Count),
                 fallback,
                 AreaRules(r, r.Object(obj, "buildingTypes")),
@@ -283,14 +287,14 @@ namespace FoodTrucks.Core.Demand
         }
 
         // Area name to weight; every name must be a known area.
-        private Dictionary<string, double> AreaWeights(DataReader r, JObject obj, bool requirePositive)
+        private Dictionary<string, double> AreaWeights(DataReader r, JObject obj, bool requirePositive, double maximum = 100)
         {
             var weights = new Dictionary<string, double>(StringComparer.Ordinal);
             foreach (var entry in r.Entries(obj))
             {
                 var path = DataReader.PathOf(obj, entry.Name);
                 if (!areas.ContainsKey(entry.Name)) throw r.Fail(path, "is not an area listed in areas");
-                weights.Add(entry.Name, r.Number(entry.Value, path, 0, 100));
+                weights.Add(entry.Name, r.Number(entry.Value, path, 0, maximum));
             }
             if (requirePositive && weights.Values.Sum() <= 0) throw r.Fail(obj.Path, "must give at least one area a weight above 0");
             return weights;
@@ -412,9 +416,9 @@ namespace FoodTrucks.Core.Demand
                 else if (modeText == "add") mode = ZoneMode.Add;
                 else throw r.Fail(DataReader.PathOf(obj, "mode"), $"must be override or add, got '{modeText}'");
                 double share = 1;
-                if (mode == ZoneMode.Add) share = r.Number(obj, "share", 0, 1);
+                if (mode == ZoneMode.Add && obj["share"] != null) share = r.Number(obj, "share", 0, 1);
                 else if (obj["share"] != null) throw r.Fail(DataReader.PathOf(obj, "share"), "only applies to add zones");
-                var weights = AreaWeights(r, r.Object(obj, "areas"), requirePositive: true);
+                var weights = AreaWeights(r, r.Object(obj, "areas"), requirePositive: true, maximum: 1);
                 var polygonList = r.List(obj, "polygon");
                 var polygon = new List<ZonePoint>();
                 foreach (var pointToken in polygonList)
@@ -427,7 +431,7 @@ namespace FoodTrucks.Core.Demand
                     polygon.RemoveAt(polygon.Count - 1);
                 var problem = PolygonProblem(polygon);
                 if (problem != null) throw r.Fail(polygonList.Path, problem);
-                zones.Add(new Zone(id, mode, share, AreaMix.FromWeights(weights), polygon));
+                zones.Add(new Zone(id, mode, share, AreaMix.FromPresences(weights), polygon));
             }
             return zones;
         }
@@ -632,12 +636,13 @@ namespace FoodTrucks.Core.Demand
 
     public sealed class ClassifierSettings
     {
-        internal ClassifierSettings(double radiusMetres, double edgeWeight, int maxAreas, string fallbackArea,
+        internal ClassifierSettings(double radiusMetres, double edgeWeight, double saturation, int maxAreas, string fallbackArea,
             IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> buildingTypes,
             IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> businessTypes)
         {
             RadiusMetres = radiusMetres;
             EdgeWeight = edgeWeight;
+            Saturation = saturation;
             MaxAreas = maxAreas;
             FallbackArea = fallbackArea;
             BuildingTypes = buildingTypes;
@@ -646,6 +651,8 @@ namespace FoodTrucks.Core.Demand
 
         public double RadiusMetres { get; }
         public double EdgeWeight { get; }
+        public double Saturation { get; }
+        // Accepted for compatibility; independent area presences are never trimmed.
         public int MaxAreas { get; }
         public string FallbackArea { get; }
         public IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> BuildingTypes { get; }

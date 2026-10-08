@@ -3,7 +3,10 @@
   "schemaVersion": 1,
 
   "_passersPerHour": "Passers per hour at footfall 1.0, before the menu's appetite. Calibration knob for the whole model.",
-  "passersPerHour": 22,
+  "passersPerHour": 16,
+
+  "_streetBaseline": "Ordinary street traffic, added to independent area crowds. Lunch 1.0 keeps any pavement alive at midday. With passersPerHour 16, two offices at 20 and 40 m plus a nightclub at 30 m give about 65 passers/hour at a Midtown lunch (docs/balance/cart-economics.md, section 6). Night stays low. All neighbourhood, month, rain and promotion factors still apply. First values pending balance recalibration and an in-game check.",
+  "streetBaseline": { "early": 0.3, "morning": 0.5, "lunch": 1.0, "afternoon": 0.5, "evening": 0.3, "late": 0.08, "night": 0.03 },
 
   "_dayparts": "Start time of each daypart. Late runs past midnight; night (02 to 05) is the dead hours the design leaves out.",
   "dayparts": {
@@ -16,7 +19,7 @@
     "night": "02:00"
   },
 
-  "_areas": "Footfall per daypart and a factor per day of the week. 1.0 is the reference footfall, not the average after tuning. Before 05:00 the previous day's factors apply. Optional appetite factors multiply categories by the area's share of a spot; unlisted categories use 1.0. Waterfront covers parks, waterfront and tourist stretches placed by zones. Transit has all seven dayparts and weekdays from the study; areas have no season table, so transit uses the existing month and neighbourhood season factors.",
+  "_areas": "Footfall per daypart and a factor per day of the week. 1.0 is the reference footfall, not the average after tuning. Before 05:00 the previous day's factors apply. Independent area crowds add to the street baseline. Optional appetite factors are weighted by each area's contribution to footfall at this hour; the baseline and unlisted categories use factor 1.0. Waterfront covers parks, waterfront and tourist stretches placed by zones. Transit has all seven dayparts and weekdays from the study; areas have no season table, so transit uses the existing month and neighbourhood season factors.",
   "areas": {
     "office": {
       "footfall": { "early": 1.5, "morning": 2.0, "lunch": 3.0, "afternoon": 0.2, "evening": 0.2, "late": 0.05, "night": 0.02 },
@@ -52,13 +55,13 @@
   "_categories": "Base appetite: the share of passers who want the category in that daypart. newCustomerWeight scales how much of that share comes as customers of its own; addOnFactor turns the rest into items added to other customers' orders.",
   "categories": {
     "coffee": {
-      "appetite": { "early": 0.55, "morning": 0.45, "lunch": 0.12, "afternoon": 0.35, "evening": 0.05, "late": 0.02, "night": 0.02 }
+      "appetite": { "early": 0.6, "morning": 0.5, "lunch": 0.12, "afternoon": 0.4, "evening": 0.05, "late": 0.02, "night": 0.02 }
     },
     "bakery": {
       "appetite": { "early": 0.25, "morning": 0.2, "lunch": 0.05, "afternoon": 0.25, "evening": 0.03, "late": 0.02, "night": 0.01 }
     },
     "fastfood": {
-      "appetite": { "early": 0.03, "morning": 0.05, "lunch": 0.25, "afternoon": 0.08, "evening": 0.2, "late": 0.25, "night": 0.3 }
+      "appetite": { "early": 0.03, "morning": 0.05, "lunch": 0.25, "afternoon": 0.08, "evening": 0.15, "late": 0.2, "night": 0.3 }
     },
     "pizza": {
       "appetite": { "early": 0.0, "morning": 0.02, "lunch": 0.20, "afternoon": 0.05, "evening": 0.20, "late": 0.30, "night": 0.25 }
@@ -178,11 +181,13 @@
   "_market": "The game's demand per product and neighbourhood (0 to 100) divided by 100, kept between floor and ceiling.",
   "market": { "floor": 0.3, "ceiling": 1.0 },
 
-  "_classifier": "Buildings and businesses within radiusMetres vote for area types; a vote counts in full at the spot and edgeWeight at the radius. A business type rule replaces its building's rule. The strongest maxAreas types are kept. With no votes the spot gets fallbackArea. Venues vote strongly enough to lead a mixed spot. Subway entrances are nearby places reported by the game side with building type subwayentrance and vote transit. Parks, waterfront and tourist stretches come from zones.",
+  "_classifier": "Buildings and businesses within radiusMetres vote for area types; a vote counts in full at the spot and edgeWeight at the radius. A business type rule replaces its building's rule. Each area independently gets presence = 1 - exp(-votes / saturation), with no normalization or trimming. maxAreas remains accepted for compatibility but is ignored. With no votes the spot gets fallbackArea. Venues reach high presence without reducing any other crowd. Zones set direct presences in [0,1]; override replaces the automatic result, add raises each presence to at least the zone value. Legacy additive zone share is accepted but ignored. Subway entrances are nearby places reported by the game side with building type subwayentrance and vote transit. Parks, waterfront and tourist stretches come from zones.",
   "classifier": {
     "_coverage": "Venue weights follow the accepted study tuning; the other shop, service and public-service weights remain draft values for playtesting. Empty businesses stay unclassified so the building type decides. buildingtype_special stays unclassified: it covers different uses with no single sensible area; a known business type decides, otherwise the classifier falls back.",
     "radiusMetres": 50,
     "edgeWeight": 0.5,
+    "_saturation": "1.25 makes two unit-weight buildings at 20-40 m give presence 0.62-0.72 (0.674 at 20 and 40 m); two at the spot give 0.798. Further buildings approach 1 with diminishing returns.",
+    "saturation": 1.25,
     "maxAreas": 2,
     "fallbackArea": "residential",
     "buildingTypes": {
@@ -190,16 +195,16 @@
       "ba:buildingtype_retail": { "retail": 1.0 },
       "ba:buildingtype_residential": { "residential": 1.0 },
       "ba:buildingtype_warehouse": { "industrial": 1.0 },
-      "ba:buildingtype_cinema": { "retail": 1.0, "nightlife": 3.0 },
-      "ba:buildingtype_theater": { "nightlife": 6.0 },
+      "ba:buildingtype_cinema": { "retail": 1.0, "nightlife": 2.0 },
+      "ba:buildingtype_theater": { "nightlife": 4.0 },
       "subwayentrance": { "transit": 1.0 }
     },
     "businessTypes": {
-      "ba:businesstype_nightclub": { "nightlife": 10.0 },
-      "ba:businesstype_casino": { "nightlife": 6.0 },
-      "ba:businesstype_theater": { "nightlife": 6.0 },
+      "ba:businesstype_nightclub": { "nightlife": 4.0 },
+      "ba:businesstype_casino": { "nightlife": 4.0 },
+      "ba:businesstype_theater": { "nightlife": 4.0 },
       "ba:businesstype_liquorstore": { "nightlife": 1.0, "retail": 0.5 },
-      "ba:businesstype_cinema": { "retail": 1.0, "nightlife": 3.0 },
+      "ba:businesstype_cinema": { "retail": 1.0, "nightlife": 2.0 },
       "ba:businesstype_factory": { "industrial": 1.5 },
       "ba:businesstype_warehouse": { "industrial": 1.0 },
       "ba:businesstype_wholesalestore": { "industrial": 0.5, "retail": 0.5 },

@@ -2,6 +2,8 @@
 
 Written 8 October 2026 and revised twice that day with Peter's answers. Second pass: the cart prices like a shop, keeps 80 units bought per unit at the wholesaler's shelves, refills during the day, fees are undecided, and moving should pay. Third pass: coffee is the step after hot dogs, at the industrial coffee machine; coffee gets its own crowds (commuters, subway entrances, parks); nightlife comes from buildings (nightclubs, theatres, cinemas); hand-drawn zones only for parks, waterfront and tourist stretches. Nothing here was played. Cart figures come from running the mod's own Core demand model (`tools/balance/`), store figures from Big Copilot's validated store model, delivery figures from the game code and Peter's play.
 
+**Fourth pass, additive crowds (8 October): see [section 6](#6-fourth-pass-additive-crowds). Its numbers replace the ladder and district table below, which were computed on the share model. Peter has dropped the staying target: finding a good spot is rewarded, and staying there is fine.**
+
 ## The answer
 
 One player, default difficulty, a weekday without rain, a 16-hour day (hot dogs 09:00 to 01:00, coffee 06:00 to 22:00, the truck stand-in 07:00 to 23:00). "Ceiling" is the most every customer class accepts, "default" the item's default price.
@@ -408,6 +410,90 @@ The draft in the worktree `friendly-kepler-2476dc` (`Core/Economics/Economy.cs`,
 - `RouteDay` prices: burger $15.00 (game $12.50), coffee $4.50 ($3.90), soda $3.50 ($3.00), wholesale at 30% of price (hot dog $3.50, coffee $1.35; game $4.45, $0.90). It uses pure archetype spots, which real spots rarely reach, and the default price.
 - Walking pace: `RouteDay` notes 1.2 m/s for walking. The player's default is a 4 m/s jog [code].
 
+## 6. Fourth pass: additive crowds
+
+In game on 8 October, a spot with two offices and a nightclub read as 88% nightlife and 3 passers an hour at lunch: areas were shares of one crowd, so the club pushed the offices out. Peter decided that areas must not be exclusive. The working tree now has additive crowds (Core and `data/demand.json`, by Sol):
+
+- **Presence per area.** Each area's presence is 1 − exp(−votes / `classifier.saturation`), with no cut to two areas.
+- **Footfall.** passersPerHour × the existing factors × (`streetBaseline` + Σ presence × area curve × day factor).
+- **Appetite** is weighted by each crowd's share of the hour's footfall.
+
+**Peter's decision, also 8 October:** finding a good spot should be rewarded, so staying there is fine. The "staying at most 70% of the best route" target is dropped; staying ÷ route is reported below for information only. Presence stays lively: Sol's saturation 1.25, a street baseline that keeps any pavement alive at midday, and venues that add an evening crowd without drowning the offices. Only levels were retuned to hold the band.
+
+The calculator builds against the new Core unchanged. Its classifier table now reports presence instead of share, and an `ingame` report covers the in-game case and typical spots.
+
+### Values in `data/demand.json`
+
+Sol's lively structure is kept: `classifier.saturation` 1.25, `streetBaseline` early / morning / lunch / afternoon / evening / late / night 0.3 / 0.5 / 1.0 / 0.5 / 0.3 / 0.08 / 0.03, and the third pass's area curves. Changed:
+
+| Key | Before | Now | Why |
+|---|---|---|---|
+| `passersPerHour` | 22 | **16** | Sets the level: the best hot dog route lands at 1.76 delivery days |
+| nightclub (business), theatre (building and business), casino | nightlife 10 / 6 / 6 | **4.0** | A club or theatre still reads as a full evening crowd at saturation 1.25 (presence 0.9 at 30 m) without needing more |
+| cinema (building and business) | nightlife 3.0, retail 1.0 | **nightlife 2.0**, retail 1.0 | Same, for the smaller venue |
+| `categories.fastfood.appetite` evening / late | 0.20 / 0.25 | **0.15 / 0.20** | With every evening spot alive, fast food's evening share sets the hot dog cart's top |
+| `categories.coffee.appetite` early / morning / afternoon | 0.55 / 0.45 / 0.35 | **0.60 / 0.50 / 0.40** | Keeps coffee 1.2 times the hot dog cart at the lower footfall |
+
+Service times, stock weights and park appetite are as in `data/economy.json` and the third pass.
+
+### Results
+
+Weekday, dry, ceiling price, the 16-hour days and route splits of section 4 [calc]:
+
+| Rung | Cost to start | Best route, ceiling | Default price | Weekend, ceiling | Staying ÷ route (information) |
+|---|---|---|---|---|---|
+| Delivery day (D) | $0 | $1,120 | | | |
+| Hot dog cart (grill + cooler; grill only $3,756) | $4,552 | **$1,975** (1.76 D, 76% of S) | $1,014 | $2,201 | 100% |
+| Coffee cart (industrial machine + display case) | $7,135 | **$2,393** (1.21× hot dog) | $1,232 | $1,601 | 92% |
+| Small starter shop run by the player (S) | $7,600 to $11,400 | $2,600 | | | |
+| Truck stand-in (two at the window, 160 units, four items) | $10,400 before a truck price | **$4,123**, about $3,900 after a hire | $2,108 | $3,113 | 75% |
+
+The yardsticks are unchanged: delivery and the shop don't use the mod's model.
+
+- **The truck sits far above.** It reaches 1.7 times the coffee cart and 1.5 times S, so its own price, the hire's wage and fuel have plenty of room.
+- **The best day is one good spot.** In Midtown it is 4 Third Avenue all day, with one refill: nightlife, retail and office presence all above 0.9, residential 0.74.
+
+Staying ÷ best route per district, weekday, hot dog / coffee, for information: Midtown 100% / 92%; Hell's Kitchen 100% / 100%; Garment District 100% / 100%; Lower Manhattan 99% / 92%; Murray Hill 90% / 99%; Hamptons 96% / 73%; Industry City 62% / 82%.
+
+### The in-game case
+
+Two offices at 20 and 40 m and a nightclub at 30 m. Presence: office 0.67, nightlife 0.89. Hot dog grill + cooler, weekday, ceiling price; passers per hour / customers per hour [calc]:
+
+| District, hour | Share model (0.3.0) | Additive, now | Pure office block (eight offices, presence 0.99) |
+|---|---|---|---|
+| Midtown lunch 12:00 | 17 / 5.2 | **65 / 20.0** (the window is full) | 83 / 25.5 |
+| Midtown evening 19:00 | 34 / 7.3 | **35 / 5.7** | 10 / 1.7 |
+| Midtown late 22:00 | 25 / 6.5 | 21 / 4.4 | |
+| Murray Hill lunch 12:00 | 8 / 2.2 | 31 / 8.4 | |
+| Murray Hill evening 19:00 | 24 / 5.0 | 24 / 3.9 | |
+
+At lunch the spot is busy: over the 60 passers aimed for in Midtown, and the cart sells as fast as one person can serve. In the evening it is three and a half times as busy as a pure office block.
+
+### A typical spot
+
+Hot dog grill + cooler at every real pitch, weekday, ceiling price; customers served per hour, p25 / median / p90 [calc]:
+
+| District | Lunch 12:00 | Evening 19:00 | Lunch passers/h, median |
+|---|---|---|---|
+| Midtown | 21 / 21 / 21 | 3.6 / 4.0 / 8.5 | 90 |
+| Lower Manhattan | 17 / 21 / 21 | 1.4 / 1.6 / 2.7 | 80 |
+| Garment District | 18 / 21 / 21 | 3.0 / 3.2 / 6.2 | 61 |
+| Hell's Kitchen | 9.9 / 14.5 / 18.6 | 4.3 / 4.7 / 9.4 | 54 |
+| Murray Hill | 10.3 / 12.4 / 14.5 | 3.1 / 3.3 / 5.1 | 46 |
+| Industry City | 7.3 / 7.4 / 11.7 | 1.8 / 2.4 / 3.2 | 25 |
+| Hamptons | 2.9 / 3.4 / 4.4 | 0.8 / 1.0 / 3.0 | 13 |
+| **City** | **8.6 / 14.6 / 21** | **2.1 / 3.1 / 6.2** | 51 |
+
+At lunch a quarter of the city's pitches sell under 9 hot dogs an hour, the median 15, and the window is full in Midtown, Lower Manhattan and Garment District almost everywhere. In the evening the median is 3 an hour, away from the venues. Nowhere is near zero; the quietest are the Hamptons at 3 an hour at lunch.
+
+### What this means
+
+- **Finding the spot is the game.** Where the city's crowds overlap, a cart stays put. Midtown's best spot is good from lunch to late, and the route search finds nothing better. A route still pays where the crowds are apart: Industry City's industrial lunch and its club in the evening (staying 62%).
+- **Lunch is generous everywhere downtown.** The window binds at most Midtown, Lower Manhattan and Garment District pitches. Picking a spot matters more for the evening, where venues make the difference: a club or theatre corner sells 2 to 3 times the median.
+- **A tiring-pitch rule isn't needed** under this decision.
+
+**Tests.** Sol's data-pinned Core tests were written for his first values. This pass changes `passersPerHour`, the venue weights and the fast food and coffee appetites, so tests that pin those numbers need updating; Peter has asked for that separately.
+
 ## Assumptions
 
 1. Default difficulty is `GameVariables`' code defaults. The Normal preset may differ.
@@ -426,6 +512,8 @@ The draft in the worktree `friendly-kepler-2476dc` (`Core/Economics/Economy.cs`,
 14. All six wholesalers sell hot dogs, coffee, croissants and soda (Big Copilot's wiki data).
 
 ## Open questions for Peter
+
+1. **The truck's room.** With lively crowds the truck stand-in makes about $3,900 a day after its hire, 1.5 times the small shop. Should its price, or its window, take some of that back?
 
 1. **Subway entrances and parks first.** The coffee cart's lead needs both. Should the game side report subway entrances to the classifier, and the park zones be drawn, before your balance check?
 2. **Stock weight and per-area appetite.** Both need Core changes (a weight per product in `economy.json`, an optional appetite table per area in `demand.json`). Agreed, or should coffee get its volume another way (a bigger unit limit for drinks)?

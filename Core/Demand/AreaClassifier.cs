@@ -64,10 +64,11 @@ namespace FoodTrucks.Core.Demand
             var totals = votes.Select(pair =>
             {
                 pair.Value.Sort();
-                return new KeyValuePair<string, double>(pair.Key, pair.Value.Sum());
+                return new KeyValuePair<string, double>(pair.Key, 1.0 - Math.Exp(-pair.Value.Sum() / settings.Saturation));
             });
-            return AreaMix.FromWeights(totals.OrderByDescending(pair => pair.Value)
-                .ThenBy(pair => pair.Key, StringComparer.Ordinal).Take(settings.MaxAreas));
+            // MaxAreas is accepted for old data, but never trims independent crowds.
+            return AreaMix.FromPresences(totals.OrderByDescending(pair => pair.Value)
+                .ThenBy(pair => pair.Key, StringComparer.Ordinal));
         }
 
         public AreaMix ApplyZones(AreaMix automatic, double x, double z)
@@ -78,10 +79,7 @@ namespace FoodTrucks.Core.Demand
             {
                 if (!Contains(zone.Polygon, x, z)) continue;
                 if (zone.Mode == ZoneMode.Override) return zone.Areas;
-                mix = AreaMix.FromWeights(mix.Shares.Select(pair =>
-                        new KeyValuePair<string, double>(pair.Key, (1.0 - zone.Share) * pair.Value))
-                    .Concat(zone.Areas.Shares.Select(pair =>
-                        new KeyValuePair<string, double>(pair.Key, zone.Share * pair.Value))));
+                mix = AreaMix.FromPresences(mix.Presences.Concat(zone.Areas.Presences));
             }
             return mix;
         }

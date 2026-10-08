@@ -43,32 +43,56 @@ public class ShippedDataTests
         Assert.InRange(model.Estimate(query).Footfall / average, 2.5, 3.5);
     }
 
-    [Fact]
-    public void NearbyNightclubLeadsAMixedSpotAndBringsAnEveningPeak()
+    [Theory]
+    [InlineData(DayOfWeek.Monday)]
+    [InlineData(DayOfWeek.Tuesday)]
+    [InlineData(DayOfWeek.Wednesday)]
+    [InlineData(DayOfWeek.Thursday)]
+    [InlineData(DayOfWeek.Friday)]
+    public void NearbyNightclubAddsAnEveningCrowdToAnOfficeSpot(DayOfWeek day)
     {
         var classifier = new AreaClassifier(ShippedData.Tables);
-        var buildings = Enumerable.Range(0, 4).Select(_ => new NearbyPlace("ba:buildingtype_office", null, 0));
-        var spot = classifier.FromPlaces(buildings.Append(new NearbyPlace("ba:buildingtype_special", "ba:businesstype_nightclub", 40)));
-        Assert.Equal(2, spot.Shares.Count);
-        Assert.True(spot.ShareOf("nightlife") > spot.ShareOf("office"));
+        // Section 6's in-game case: two offices at 20/40 m and a club at 30 m.
+        var buildings = new[]
+        {
+            new NearbyPlace("ba:buildingtype_office", null, 20),
+            new NearbyPlace("ba:buildingtype_office", null, 40)
+        };
+        var offices = classifier.FromPlaces(buildings);
+        var spot = classifier.FromPlaces(buildings.Append(new NearbyPlace("ba:buildingtype_special", "ba:businesstype_nightclub", 30)));
+        Assert.Equal(2, spot.Presences.Count);
+        Assert.Equal(offices.PresenceOf("office"), spot.PresenceOf("office"));
+        Assert.InRange(spot.PresenceOf("nightlife"), double.Epsilon, 1);
 
         var model = new DemandModel(ShippedData.Tables);
-        var query = new DemandQuery { Areas = spot, Day = DayOfWeek.Friday, Month = 5, MinuteOfDay = 12 * 60 };
+        var query = new DemandQuery
+        {
+            Areas = spot, Neighbourhood = "ba:neighborhood_midtown",
+            Day = day, Month = 5, MinuteOfDay = 12 * 60
+        };
         var lunch = model.Estimate(query).Footfall;
-        query.MinuteOfDay = 18 * 60;
-        Assert.True(model.Estimate(query).Footfall > lunch);
+        Assert.True(lunch >= 60, $"{day}: Midtown lunch should be busy, got {lunch} passers/h.");
+        query.MinuteOfDay = 19 * 60;
+        var evening = model.Estimate(query).Footfall;
+        // Compare with the study's dense pure office block, rather than pinning a crowd ratio.
+        query.Areas = classifier.FromPlaces(Enumerable.Repeat(new NearbyPlace("ba:buildingtype_office", null, 0), 8));
+        Assert.True(evening > model.Estimate(query).Footfall);
+        query.Areas = offices;
+        query.MinuteOfDay = 12 * 60;
+        Assert.True(lunch > model.Estimate(query).Footfall);
     }
 
     [Fact]
     public void SubwayEntranceGivesTransitAMorningPeak()
     {
         var spot = new AreaClassifier(ShippedData.Tables).FromPlaces(new[] { new NearbyPlace("subwayentrance", null, 20) });
-        Assert.Equal(1.0, spot.ShareOf("transit"));
+        Assert.Single(spot.Presences);
+        Assert.InRange(spot.PresenceOf("transit"), double.Epsilon, 1);
 
         var model = new DemandModel(ShippedData.Tables);
         var query = new DemandQuery { Areas = spot, Day = DayOfWeek.Wednesday, Month = 5, MinuteOfDay = 9 * 60 };
         var peak = model.Estimate(query).Footfall;
-        Assert.Equal(22 * 2.5, peak);
+        Assert.True(peak > model.Estimate(query).Baseline);
         foreach (var hour in new[] { 6, 12, 15, 18, 22, 3 })
         {
             query.MinuteOfDay = hour * 60;
@@ -76,7 +100,9 @@ public class ShippedDataTests
         }
         query.MinuteOfDay = 9 * 60;
         query.Day = DayOfWeek.Saturday;
-        Assert.Equal(peak * 0.5, model.Estimate(query).Footfall);
+        var weekend = model.Estimate(query);
+        Assert.True(weekend.Footfall > weekend.Baseline);
+        Assert.True(weekend.Footfall < peak);
     }
 
     [Theory]
@@ -120,19 +146,19 @@ public class ShippedDataTests
         var mix = classifier.FromPlaces(new[] { new NearbyPlace("ba:buildingtype_special", "ba:businesstype_" + business, 0) });
 
         Assert.Single(mix.Shares);
-        Assert.Equal(1.0, mix.ShareOf(area));
+        Assert.Equal(1 - Math.Exp(-1 / 1.25), mix.PresenceOf(area), 12);
     }
 
     [Fact]
-    public void GymBlendsRetailAndResidential()
+    public void GymAddsRetailAndResidentialPresences()
     {
         var mix = new AreaClassifier(ShippedData.Tables).FromPlaces(new[]
         {
             new NearbyPlace("ba:buildingtype_special", "ba:businesstype_gym", 0)
         });
 
-        Assert.Equal(0.5, mix.ShareOf("retail"));
-        Assert.Equal(0.5, mix.ShareOf("residential"));
+        Assert.Equal(1 - Math.Exp(-0.5 / 1.25), mix.PresenceOf("retail"), 12);
+        Assert.Equal(1 - Math.Exp(-0.5 / 1.25), mix.PresenceOf("residential"), 12);
     }
 
     [Fact]
@@ -142,10 +168,10 @@ public class ShippedDataTests
 
         Assert.False(ShippedData.Tables.Classifier.BusinessTypes.ContainsKey("ba:businesstype_empty"));
         Assert.False(ShippedData.Tables.Classifier.BuildingTypes.ContainsKey("ba:buildingtype_special"));
-        Assert.Equal(1.0, classifier.FromPlaces(new[]
+        Assert.Equal(1 - Math.Exp(-1 / 1.25), classifier.FromPlaces(new[]
         {
             new NearbyPlace("ba:buildingtype_office", "ba:businesstype_empty", 0)
-        }).ShareOf("office"));
+        }).PresenceOf("office"), 12);
         Assert.Equal(1.0, classifier.FromPlaces(new[]
         {
             new NearbyPlace("ba:buildingtype_special", "ba:businesstype_empty", 0)

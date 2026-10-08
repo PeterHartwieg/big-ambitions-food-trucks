@@ -1,5 +1,5 @@
 {
-  "_notes": "The study's data patch (docs/balance/cart-economics.md, section 4) has been applied in data/demand.json and data/economy.json. Retained as an idempotent merge patch: running with --patch proposed.json should match running without a patch. All fields are native Core data, including economy.products.<item>.stockWeight and demand.areas.<area>.appetite; no calculator rules are emulated.",
+  "_notes": "The third pass's data patch (docs/balance/cart-economics.md, section 4), kept for reference. The fourth pass (section 6) edits data/demand.json directly for the additive crowd model; applying this patch on top would bring back third-pass values (passersPerHour 22, venue weights 6 to 10, the old nightlife and coffee curves). Run without --patch for the current data.",
   "demand": {
     "passersPerHour": 22,
     "areas": {

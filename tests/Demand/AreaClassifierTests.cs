@@ -23,7 +23,7 @@ public class AreaClassifierTests
         }, 5, 5);
 
         Assert.Single(mix.Shares);
-        Assert.Equal(1.0, mix.ShareOf("office"));
+        Assert.Equal(Presence(2.68), mix.PresenceOf("office"), 12);
     }
 
     [Fact]
@@ -35,7 +35,8 @@ public class AreaClassifierTests
         });
 
         Assert.Single(mix.Shares);
-        Assert.Equal(1.0, mix.ShareOf("nightlife"));
+        Assert.InRange(mix.PresenceOf("nightlife"), double.Epsilon, 1);
+        Assert.Equal(0, mix.PresenceOf("retail"));
     }
 
     [Theory]
@@ -49,7 +50,7 @@ public class AreaClassifierTests
             new NearbyPlace("ba:buildingtype_office", businessType, 0)
         });
 
-        Assert.Equal(1.0, mix.ShareOf("office"));
+        Assert.Equal(Presence(1), mix.PresenceOf("office"), 12);
     }
 
     [Theory]
@@ -66,7 +67,7 @@ public class AreaClassifierTests
         });
 
         Assert.Single(mix.Shares);
-        Assert.Equal(1.0, mix.ShareOf("office"));
+        Assert.Equal(Presence(1), mix.PresenceOf("office"), 12);
     }
 
     [Fact]
@@ -83,7 +84,7 @@ public class AreaClassifierTests
     }
 
     [Fact]
-    public void KeepsOnlyTheTwoStrongestAreas()
+    public void KeepsAllIndependentAreasDespiteMaxAreas()
     {
         var mix = new AreaClassifier(ShippedData.Tables).FromPlaces(new[]
         {
@@ -91,10 +92,10 @@ public class AreaClassifierTests
             Place("retail", 0), Place("retail", 0), Place("residential", 0)
         });
 
-        Assert.Equal(2, mix.Shares.Count);
-        Assert.Equal(0.6, mix.ShareOf("office"), 12);
-        Assert.Equal(0.4, mix.ShareOf("retail"), 12);
-        Assert.Equal(0, mix.ShareOf("residential"));
+        Assert.Equal(3, mix.Presences.Count);
+        Assert.Equal(Presence(3), mix.PresenceOf("office"), 12);
+        Assert.Equal(Presence(2), mix.PresenceOf("retail"), 12);
+        Assert.Equal(Presence(1), mix.PresenceOf("residential"), 12);
     }
 
     [Fact]
@@ -104,25 +105,25 @@ public class AreaClassifierTests
         var places = new[] { Place("retail", 0), Place("office", 0), Place("warehouse", 0) };
 
         var mix = classifier.FromPlaces(places);
-        Assert.Equal(new[] { "industrial", "office" }, mix.Shares.Keys.ToArray());
-        Assert.Equal(0.5, mix.ShareOf("industrial"));
-        Assert.Equal(0.5, mix.ShareOf("office"));
+        Assert.Equal(new[] { "industrial", "office", "retail" }, mix.Shares.Keys.ToArray());
+        Assert.Equal(Presence(1), mix.PresenceOf("industrial"), 12);
+        Assert.Equal(Presence(1), mix.PresenceOf("office"), 12);
         Assert.Equal(mix.Shares.ToArray(), classifier.FromPlaces(places.Reverse()).Shares.ToArray());
     }
 
     [Theory]
-    [InlineData(0, 0.5)]
-    [InlineData(25, 0.5714285714285714)]
-    [InlineData(50, 0.6666666666666666)]
-    public void NearerBuildingsCountMoreWithLinearFalloff(double retailDistance, double officeShare)
+    [InlineData(0, 1.0)]
+    [InlineData(25, 0.75)]
+    [InlineData(50, 0.5)]
+    public void NearerBuildingsCountMoreWithLinearFalloff(double retailDistance, double retailVotes)
     {
         var mix = new AreaClassifier(ShippedData.Tables).FromPlaces(new[]
         {
             Place("office", 0), Place("retail", retailDistance)
         });
 
-        Assert.Equal(officeShare, mix.ShareOf("office"), 12);
-        Assert.Equal(1 - officeShare, mix.ShareOf("retail"), 12);
+        Assert.Equal(Presence(1), mix.PresenceOf("office"), 12);
+        Assert.Equal(Presence(retailVotes), mix.PresenceOf("retail"), 12);
     }
 
     [Fact]
@@ -134,8 +135,8 @@ public class AreaClassifierTests
             new NearbyPlace("ba:buildingtype_retail", "ba:businesstype_importexport", 0)
         });
 
-        Assert.Equal(0.75, mix.ShareOf("office"));
-        Assert.Equal(0.25, mix.ShareOf("industrial"));
+        Assert.Equal(Presence(1.5), mix.PresenceOf("office"), 12);
+        Assert.Equal(Presence(0.5), mix.PresenceOf("industrial"), 12);
         Assert.Equal(0, mix.ShareOf("retail"));
     }
 
@@ -168,7 +169,7 @@ public class AreaClassifierTests
     [Fact]
     public void ZoneOverridesAnOfficeBlock()
     {
-        var classifier = WithZones(Zone("park", "override", new JObject { ["waterfront"] = 3, ["retail"] = 1 }));
+        var classifier = WithZones(Zone("park", "override", new JObject { ["waterfront"] = 0.75, ["retail"] = 0.25 }));
         var mix = classifier.Classify(new[] { Place("office", 0), Place("office", 10) }, 5, 5);
 
         Assert.Equal(0, mix.ShareOf("office"));
@@ -180,17 +181,17 @@ public class AreaClassifierTests
     [InlineData(0)]
     [InlineData(0.25)]
     [InlineData(1)]
-    public void AddZoneBlendsAtItsShare(double share)
+    public void AddZoneSetsPresenceAndIgnoresLegacyShare(double share)
     {
         var classifier = WithZones(Zone("park", "add", new JObject { ["waterfront"] = 1 }, share));
         var mix = classifier.ApplyZones(AreaMix.Single("office"), 5, 5);
 
-        Assert.Equal(1 - share, mix.ShareOf("office"), 12);
-        Assert.Equal(share, mix.ShareOf("waterfront"), 12);
+        Assert.Equal(1, mix.PresenceOf("office"), 12);
+        Assert.Equal(1, mix.PresenceOf("waterfront"), 12);
     }
 
     [Fact]
-    public void AddZonesBlendInFileOrderWithoutTrimming()
+    public void AddZonesRetainAllCrowdsWithoutDilution()
     {
         var classifier = WithZones(
             Zone("park", "add", new JObject { ["waterfront"] = 1 }, 0.5),
@@ -198,9 +199,25 @@ public class AreaClassifierTests
         var mix = classifier.ApplyZones(AreaMix.Single("office"), 5, 5);
 
         Assert.Equal(3, mix.Shares.Count);
-        Assert.Equal(0.25, mix.ShareOf("office"));
-        Assert.Equal(0.25, mix.ShareOf("waterfront"));
-        Assert.Equal(0.5, mix.ShareOf("retail"));
+        Assert.Equal(1, mix.PresenceOf("office"));
+        Assert.Equal(1, mix.PresenceOf("waterfront"));
+        Assert.Equal(1, mix.PresenceOf("retail"));
+    }
+
+    [Fact]
+    public void AddZonesRaisePresenceToTheMaximumAndCanOmitLegacyShare()
+    {
+        var classifier = WithZones(
+            Zone("park", "add", new JObject { ["waterfront"] = 0.6, ["office"] = 0.3 }),
+            Zone("more-park", "add", new JObject { ["waterfront"] = 0.4, ["office"] = 0.8 }));
+        var mix = classifier.ApplyZones(AreaMix.FromPresences(new Dictionary<string, double>
+        {
+            ["office"] = 0.7, ["nightlife"] = 0.9
+        }), 5, 5);
+
+        Assert.Equal(0.8, mix.PresenceOf("office"));
+        Assert.Equal(0.6, mix.PresenceOf("waterfront"));
+        Assert.Equal(0.9, mix.PresenceOf("nightlife"));
     }
 
     [Fact]
@@ -226,8 +243,8 @@ public class AreaClassifierTests
 
         var mix = classifier.ApplyZones(AreaMix.Single("office"), 5, 5);
 
-        Assert.Equal(0.5, mix.ShareOf("office"));
-        Assert.Equal(0.5, mix.ShareOf("waterfront"));
+        Assert.Equal(1, mix.PresenceOf("office"));
+        Assert.Equal(1, mix.PresenceOf("waterfront"));
     }
 
     [Theory]
@@ -292,6 +309,8 @@ public class AreaClassifierTests
         Assert.False(AreaClassifier.Contains(triangle, 4, 5));
         Assert.True(AreaClassifier.Contains(triangle, 6, 5));
     }
+
+    private static double Presence(double votes) => 1 - Math.Exp(-votes / ShippedData.Tables.Classifier.Saturation);
 
     private static NearbyPlace Place(string building, double distance) =>
         new("ba:buildingtype_" + building, null, distance);

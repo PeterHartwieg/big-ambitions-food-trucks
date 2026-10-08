@@ -30,6 +30,7 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 | Pricing | The cart behaves like a shop: the standard price by default, the price a pricing manager covering the district sets, or the player's own price per product. Where feasible it appears in the game's business screens like a shop (to research: those screens are built around rented buildings). |
 | Restocking day | Carts carry about half a day's stock; a refill at a wholesaler during the day is expected. The player buys only what fits, so no full box is needed. |
 | Coffee | The step after hot dogs: the industrial coffee machine (the shop machine; the cheap one is an office item), fast service, its own crowds (morning commuters, parks at weekends and on warm afternoons). It should earn more than a hot dog cart at its own spots and cost more to start. |
+| Crowds add up | A spot's area types are not exclusive: offices nearby bring an office crowd, a nightclub a nightlife crowd, and the two add up rather than share a total. Every pavement also has ordinary street traffic at every hour. Who buys at a given hour follows who is there then. (Peter, 8 October 2026, after a spot next to offices and a club read as near-empty at lunch.) |
 | Nightlife and parks | Nightlife pitches come from buildings: nightclubs, theatres and cinemas nearby. Hand-drawn zones are for what has no building to find: parks, the waterfront, tourist stretches. |
 | Staff skill and queues | Service speed follows the worker's customer service skill times their satisfaction (the game's own measure; the player serves with theirs, 50 at the start): 50 serves at the base speeds the balance uses, low skill about 1.5× slower, top skill about 30% faster. Each vehicle's queue has a limit (cart about 6, truck about 10); arrivals at a full queue walk on. So skilled staff pay off at peaks and cheaper staff off-peak. As in the game, low skill makes customers complain and high skill pleases them, feeding reputation. All three in the data files. (Peter, 8 October 2026; in the game itself skill affects only satisfaction, not speed [code].) |
 | Messages | In-world wording: say what happens in the game ("The cart can't open without any equipment installed"), never how to use the interface. Maintenance tools such as the uninstall step may stay plain. |
@@ -44,7 +45,7 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 5. Save up for a truck: more menu slots, more stock, more staff, catering.
 6. Hire staff and add trucks until the permit cap stops you.
 
-The day is shaped by the demand curve. A good day is a breakfast or lunch pitch in an office area, a restock, and an evening pitch near nightlife or a market. Staying in one spot all day should earn noticeably less than moving.
+The day is shaped by the demand curve. A good day is a breakfast or lunch pitch in an office area, a restock, and an evening pitch near nightlife or a market. Finding a good spot is the reward: a pitch where offices, venues and transit meet can carry a whole day, and staying there is fine. Moving pays when a spot's peak has passed and another spot's is starting (Peter, 8 October 2026; replaces the earlier rule that staying must earn clearly less).
 
 ## Licence and permits
 

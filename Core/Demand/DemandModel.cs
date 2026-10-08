@@ -31,7 +31,8 @@ namespace FoodTrucks.Core.Demand
     public sealed class DemandEstimate
     {
         internal DemandEstimate(Daypart daypart, Season season, double footfall, double appetite, double market,
-            double customersPerHour, double addOnsPerCustomer, IReadOnlyDictionary<string, double> customerShares)
+            double customersPerHour, double addOnsPerCustomer, IReadOnlyDictionary<string, double> customerShares,
+            double baseline, IReadOnlyDictionary<string, double> areaFootfall)
         {
             Daypart = daypart;
             Season = season;
@@ -41,12 +42,17 @@ namespace FoodTrucks.Core.Demand
             CustomersPerHour = customersPerHour;
             AddOnsPerCustomer = addOnsPerCustomer;
             CustomerShares = customerShares;
+            Baseline = baseline;
+            AreaFootfall = areaFootfall;
         }
 
         public Daypart Daypart { get; }
         public Season Season { get; }
         // People passing per hour.
         public double Footfall { get; }
+        // Contributions in passers/hour, including neighbourhood, conditions and promotion.
+        public double Baseline { get; }
+        public IReadOnlyDictionary<string, double> AreaFootfall { get; }
         // Share of passers who buy from this menu, market included.
         public double Appetite { get; }
         // How much the game's market cut the appetite: 1.0 is no cut.
@@ -81,7 +87,7 @@ namespace FoodTrucks.Core.Demand
                 throw new ArgumentOutOfRangeException(nameof(query), "Month must be 1 to 12.");
             RequireFactor(query.Reputation, nameof(query.Reputation));
             RequireFactor(query.Promotion, nameof(query.Promotion));
-            foreach (var area in query.Areas.Shares.Keys)
+            foreach (var area in query.Areas.Presences.Keys)
                 if (!tables.HasArea(area)) throw new ArgumentException($"Unknown area type '{area}'.", nameof(query));
 
             var daypart = tables.DaypartAt(query.MinuteOfDay);
@@ -91,14 +97,20 @@ namespace FoodTrucks.Core.Demand
             var season = month.Season;
             var neighbourhood = tables.Neighbourhood(query.Neighbourhood);
 
-            var footfall = Footfall(query.Areas, neighbourhood, daypart, day, season, month.Footfall, query.Raining) * query.Promotion;
+            var baseline = tables.StreetBaseline(daypart);
+            var areaCrowds = AreaCrowds(query.Areas, daypart, day);
+            var crowdTotal = baseline + areaCrowds.Values.Sum();
+            var footfallFactor = tables.PassersPerHour
+                * neighbourhood.Footfall * neighbourhood.DaypartFactor(daypart) * neighbourhood.DayFactor(day) * neighbourhood.SeasonFactor(season)
+                * month.Footfall * (query.Raining ? tables.RainFootfall : 1.0) * query.Promotion;
+            var footfall = crowdTotal * footfallFactor;
 
             var shares = new List<(string Category, double WithMarket, double WithoutMarket, double AddOns)>();
             foreach (var group in MenuCategories(query.Menu))
             {
                 var category = tables.Category(group.Key);
                 var appetite = category.Appetite(daypart)
-                    * AreaAppetite(query.Areas, category.Name)
+                    * AreaAppetite(areaCrowds, baseline, crowdTotal, category.Name)
                     * neighbourhood.AppetiteFactor(category.Name, daypart, day, season)
                     * tables.SeasonAppetite(season, category.Name)
                     * (query.Raining ? tables.RainAppetite(category.Name) : 1.0);
@@ -130,27 +142,25 @@ namespace FoodTrucks.Core.Demand
             var addOnsPerCustomer = mainShare * shares.Sum(s => s.AddOns);
 
             var customers = footfall * menuAppetite * query.Reputation;
-            return new DemandEstimate(daypart, season, footfall, menuAppetite, marketFactor, customers, addOnsPerCustomer, customerShares);
+            return new DemandEstimate(daypart, season, footfall, menuAppetite, marketFactor, customers, addOnsPerCustomer, customerShares,
+                baseline * footfallFactor, areaCrowds.ToDictionary(p => p.Key, p => p.Value * footfallFactor, StringComparer.Ordinal));
         }
 
-        private double AreaAppetite(AreaMix areas, string category) =>
-            areas.Shares.OrderBy(p => p.Key, StringComparer.Ordinal)
-                .Sum(share => share.Value * tables.Area(share.Key).AppetiteFactor(category));
+        // Weight appetite by the crowd here now, including the baseline's neutral factor of 1.
+        // Common footfall factors cancel; using unscaled crowds also handles promotion/conditions of zero.
+        private double AreaAppetite(IReadOnlyDictionary<string, double> crowds, double baseline, double total, string category) =>
+            (baseline + crowds.Sum(p => p.Value * tables.Area(p.Key).AppetiteFactor(category))) / total;
 
-        // People passing per hour before the menu.
-        private double Footfall(AreaMix areas, NeighbourhoodTable neighbourhood, Daypart daypart, DayOfWeek day, Season season,
-            double monthFootfall, bool raining)
+        // Independent crowds before the factors common to every passer, in a stable area order.
+        private Dictionary<string, double> AreaCrowds(AreaMix areas, Daypart daypart, DayOfWeek day)
         {
-            var blended = 0.0;
-            foreach (var share in areas.Shares.OrderBy(p => p.Key, StringComparer.Ordinal))
+            var crowds = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (var presence in areas.Presences.OrderBy(p => p.Key, StringComparer.Ordinal))
             {
-                var area = tables.Area(share.Key);
-                blended += share.Value * area.Footfall(daypart) * area.DayFactor(day);
+                var area = tables.Area(presence.Key);
+                crowds.Add(presence.Key, presence.Value * area.Footfall(daypart) * area.DayFactor(day));
             }
-            return tables.PassersPerHour * blended
-                * neighbourhood.Footfall * neighbourhood.DaypartFactor(daypart) * neighbourhood.DayFactor(day) * neighbourhood.SeasonFactor(season)
-                * monthFootfall
-                * (raining ? tables.RainFootfall : 1.0);
+            return crowds;
         }
 
         // What each category adds to the menu's appetite: the strongest counts in full, each further one

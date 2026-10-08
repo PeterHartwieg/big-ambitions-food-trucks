@@ -9,14 +9,14 @@ cd tools/balance
 dotnet build
 dotnet bin/Debug/net10.0/balance.dll                          # today's data, price at the ceiling
 dotnet bin/Debug/net10.0/balance.dll --pricing default         # today's data, default price
-dotnet bin/Debug/net10.0/balance.dll --patch proposed.json     # already applied; matches today's data
+dotnet bin/Debug/net10.0/balance.dll --reports ingame          # the in-game case: two offices and a nightclub
 ```
 
 It prints Markdown tables. `--out FILE` also writes them to a file. A full run takes about five minutes (the `compare` report is most of it); `--reports archetypes,costs` is instant.
 
 | Option | Meaning |
 |---|---|
-| `--reports LIST` | Any of `archetypes,spots,single,routes,compare,pricing,costs` (default: all but `routes`). `compare` is staying all day against the best route over the same 16 hours, per district, and ends with the ladder table; `pricing` is the price sensitivity; `routes` the older fixed lunch/evening routes |
+| `--reports LIST` | Any of `archetypes,spots,single,routes,compare,pricing,costs,ingame` (default: all but `routes`). `compare` is staying all day against the best route over the same 16 hours, per district, and ends with the ladder table; `pricing` is the price sensitivity; `routes` the older fixed lunch/evening routes; `ingame` the spot found in game on 8 October (two offices at 20 and 40 m, a nightclub at 30 m) under the old share model and the additive model, a pure office block, and customers per hour at every real pitch (p25, median, p90 per district) |
 | `--carts LIST` | Carts for `compare`: any of `hotdog+cooler,coffee+bakery,truck-like` (default: all three). `truck-like` is a stand-in for the truck: two at the window, 160 units, four items |
 | `--no-archetypes` | Leave out the archetype park and subway-entrance pitches (one of each per district, at the middle of its buildings) |
 | `--patch FILE` | A JSON merge patch over `data/demand.json` and `data/economy.json`: `{"demand": {...}, "economy": {...}}`, with arrays replaced. The data files are not changed. Use native fields: `economy.products.<item>.stockWeight` and `demand.areas.<area>.appetite`. Legacy `rules` sections are rejected with a migration message |
@@ -34,23 +34,7 @@ Like `CartDemand.Plan` and `CartSelling.ServeCustomer`, each category offers its
 
 ## Verify shipped balance
 
-After building, run these from `tools/balance/` to compare the two cart headlines at the ceiling price:
-
-```sh
-dotnet bin/Debug/net10.0/balance.dll --reports compare --carts hotdog+cooler,coffee+bakery --pricing ceiling
-dotnet bin/Debug/net10.0/balance.dll --reports compare --carts hotdog+cooler,coffee+bakery --pricing ceiling --patch proposed.json
-```
-
-Checked on 8 October 2026: all report results match; only the header naming the patch differs. The city-wide headlines for a dry weekday in May, market demand 100, wholesale restocking and the same 16-hour day are:
-
-| Cart | No patch: best route profit | No patch: staying ÷ route | `--patch proposed.json`: best route profit | `--patch proposed.json`: staying ÷ route |
-|---|---|---|---|---|
-| Hot dog grill + cooler | $1,946 | 64% | $1,946 | 64% |
-| Coffee machine + display case (croissants) | $2,353 | 72% | $2,353 | 72% |
-
-Rechecked on 8 October 2026 before and after mirroring `BestItem`, `BestAddOn` and the plan's sale selection: the full `compare` reports are unchanged both ways. These two carts have one item per category, so their headline results are unaffected by the selection change.
-
-The archetype demand and initial-stock cost reports (`--reports archetypes,costs`) also match both ways.
+Headlines on the additive crowd model with the fourth pass's data (8 October 2026; dry weekday in May, market demand 100, wholesale restocking, the 16-hour day), from `--reports compare`: hot dog grill + cooler $1,975 best route; coffee machine + display case $2,393; truck stand-in $4,123. `--reports ingame` gives the in-game case and the typical-spot table. See section 6 of the study.
 
 ## Files
 
@@ -58,5 +42,5 @@ The archetype demand and initial-stock cost reports (`--reports archetypes,costs
 - `City.cs`: spots, the classifier and walking times. `Days.cs`: single-spot days and routes.
 - `city.json`: the city, from `make_city.py`. Rebuild it with `python3 make_city.py [--save SAVE.hsg]` (needs `~/big-copilot`). The committed file holds the fixed AI businesses and one late-game save's rival businesses.
 - `game-prices.json`: item prices, wholesale prices, neighbourhood price indices and equipment prices, from Big Copilot.
-- `proposed.json`: the study's patch, already applied in `data/demand.json` and `data/economy.json`. Retained with native stock-weight and area-appetite fields so reapplying it gives the same results.
+- `proposed.json`: the third pass's patch, kept for reference. The fourth pass edited `data/demand.json` directly; applying this patch brings back third-pass values, so run without it.
 - `store/`: the small-store yardstick. `extract_payload.py SAVE OUT.json` has Big Copilot read a save (read-only); `node store/store_yardstick.cjs OUT.json` runs Big Copilot's validated Open a store model on it at the default difficulty. Keep the extracted payload out of git: it comes from a personal save.

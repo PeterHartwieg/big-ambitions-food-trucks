@@ -131,13 +131,13 @@ if (opts.Wants("spots"))
     o.AppendLine();
     o.AppendLine("One pitch in front of each building; buildings whose outline is within the classifier radius vote.");
     o.AppendLine();
-    o.AppendLine("| Neighbourhood | Spots | Mostly office | Mostly residential | Mostly retail | Mostly industrial | Mostly nightlife | Nightlife 0.3 or more | Best office share |");
+    o.AppendLine("| Neighbourhood | Spots | Office presence 0.5+ | Residential 0.5+ | Retail 0.5+ | Industrial 0.5+ | Nightlife 0.5+ | Nightlife 0.3+ | Highest office presence |");
     o.AppendLine("|---|---|---|---|---|---|---|---|---|");
     foreach (var hood in hoods)
     {
         var hs = spots.Where(s => s.Hood == hood && !s.Name.Contains("archetype")).ToList();
-        int Mostly(string a) => hs.Count(s => s.Areas.ShareOf(a) >= 0.5);
-        o.AppendLine($"| {H(hood)} | {hs.Count} | {Mostly("office")} | {Mostly("residential")} | {Mostly("retail")} | {Mostly("industrial")} | {Mostly("nightlife")} | {hs.Count(s => s.Areas.ShareOf("nightlife") >= 0.3)} | {hs.Max(s => s.Areas.ShareOf("office")):0.00} |");
+        int Mostly(string a) => hs.Count(s => s.Areas.PresenceOf(a) >= 0.5);
+        o.AppendLine($"| {H(hood)} | {hs.Count} | {Mostly("office")} | {Mostly("residential")} | {Mostly("retail")} | {Mostly("industrial")} | {Mostly("nightlife")} | {hs.Count(s => s.Areas.PresenceOf("nightlife") >= 0.3)} | {hs.Max(s => s.Areas.PresenceOf("office")):0.00} |");
     }
     o.AppendLine();
 }
@@ -318,6 +318,90 @@ if (opts.Wants("pricing"))
     o.AppendLine();
 }
 
+if (opts.Wants("ingame"))
+{
+    // The case found in game on 8 October: two offices 20 and 40 m away and a nightclub 30 m away. "Shares" is the
+    // 0.3.0 model (votes normalised, the two biggest areas kept, no street baseline), rebuilt here from the same
+    // votes; "presences" is the additive model in Core now.
+    var places = new[]
+    {
+        new NearbyPlace("ba:buildingtype_office", null, 20), new NearbyPlace("ba:buildingtype_office", null, 40),
+        new NearbyPlace("ba:buildingtype_retail", "ba:businesstype_nightclub", 30)
+    };
+    var settings = tables.Classifier;
+    var votes = new Dictionary<string, double>(StringComparer.Ordinal);
+    foreach (var pl in places)
+    {
+        IReadOnlyDictionary<string, double>? rule = null;
+        if (pl.BusinessType != null) settings.BusinessTypes.TryGetValue(pl.BusinessType, out rule);
+        if (rule == null) settings.BuildingTypes.TryGetValue(pl.BuildingType, out rule);
+        if (rule == null) continue;
+        var f = 1.0 - (1.0 - settings.EdgeWeight) * pl.DistanceMetres / settings.RadiusMetres;
+        foreach (var r in rule) votes[r.Key] = votes.GetValueOrDefault(r.Key) + r.Value * f;
+    }
+    var top = votes.OrderByDescending(v => v.Value).Take(2).ToList();
+    var shares = AreaMix.FromPresences(top.Select(v => new KeyValuePair<string, double>(v.Key, v.Value / top.Sum(t => t.Value))));
+    var presences = new AreaClassifier(tables).FromPlaces(places);
+    var oldTables = LoadTables(opts, zeroBaseline: true);
+    var oldCart = new Cart(oldTables, prices, new[] { HotDog, Soda }, "hot dog grill + cooler");
+    var newCart = carts["hotdog+cooler"].Cart;
+    o.AppendLine("## The in-game case: two offices at 20 and 40 m, a nightclub at 30 m, hot dog grill + cooler, weekday, ceiling price");
+    o.AppendLine();
+    o.AppendLine($"Votes: {string.Join(", ", votes.Select(v => $"{v.Key} {v.Value:0.00}"))}. Shares (old model on the current data): {shares}. Presences (now): {presences}.");
+    o.AppendLine();
+    o.AppendLine("| District | Hour | Model | Passers/h | Customers/h | Served/h | Profit/h |");
+    o.AppendLine("|---|---|---|---|---|---|---|");
+    foreach (var hood in new[] { "ba:neighborhood_midtown", "ba:neighborhood_murrayhill" })
+    foreach (var (label, from) in new[] { ("lunch 12:00", 720), ("evening 19:00", 1140), ("late 22:00", 1320) })
+    foreach (var (model, cart, mix) in new[] { ("shares (old model, current data)", oldCart, shares), ("presences, now", newCart, presences) })
+    {
+        var spot = new Spot("in-game case", mix, hood, "", 0, 0);
+        var r = Selling.Run(cart, spot, from, from + 60, conditions[0], Selling.Unlimited(cart));
+        var t = r.ByDaypart.Values.First();
+        o.AppendLine($"| {H(hood)} | {label} | {model} | {t.PerHour(t.Passers):0} | {t.PerHour(t.Demand):0.0} | {t.PerHour(t.Served):0.0} | ${Money(t.PerHour(t.Profit))} |");
+    }
+    o.AppendLine();
+    // How a cart does at an ordinary spot: hot dog grill + cooler customers per hour at weekday lunch (12:00) and evening
+    // (19:00) over every real pitch, by district: the median and the quarter mark.
+    o.AppendLine("## Typical spots: hot dog grill + cooler, weekday, ceiling price, customers per hour (served)");
+    o.AppendLine();
+    o.AppendLine("| District | Lunch 12:00: p25 / median / p90 | Evening 19:00: p25 / median / p90 | Lunch passers/h, median |");
+    o.AppendLine("|---|---|---|---|");
+    foreach (var hood in hoods.Append("city"))
+    {
+        var pool = spots.Where(s => !s.Name.Contains("archetype") && (hood == "city" || s.Hood == hood)).ToList();
+        (double P25, double Med, double P90, double Passers) At(int minute)
+        {
+            var served = new List<double>();
+            var passers = new List<double>();
+            foreach (var sp in pool)
+            {
+                var r = Selling.Run(newCart, sp, minute, minute + 60, conditions[0], Selling.Unlimited(newCart));
+                var t = r.ByDaypart.Values.First();
+                served.Add(t.PerHour(t.Served));
+                passers.Add(t.PerHour(t.Passers));
+            }
+            served.Sort(); passers.Sort();
+            double Q(List<double> v, double q) => v[(int)Math.Min(v.Count - 1, Math.Floor(q * v.Count))];
+            return (Q(served, .25), Q(served, .5), Q(served, .9), Q(passers, .5));
+        }
+        var l = At(720);
+        var e = At(1140);
+        o.AppendLine($"| {H(hood)} | {l.P25:0.0} / {l.Med:0.0} / {l.P90:0.0} | {e.P25:0.0} / {e.Med:0.0} / {e.P90:0.0} | {l.Passers:0} |");
+    }
+    o.AppendLine();
+    // A pure office block (eight office buildings around the pitch) for comparison with the in-game case.
+    var block = new AreaClassifier(tables).FromPlaces(Enumerable.Range(0, 8).Select(i => new NearbyPlace("ba:buildingtype_office", null, 5 + i * 6)));
+    foreach (var (label, from) in new[] { ("lunch 12:00", 720), ("evening 19:00", 1140) })
+    {
+        var spot = new Spot("office block", block, "ba:neighborhood_midtown", "", 0, 0);
+        var r = Selling.Run(newCart, spot, from, from + 60, conditions[0], Selling.Unlimited(newCart));
+        var t = r.ByDaypart.Values.First();
+        o.AppendLine($"Pure office block (eight offices within 50 m, {block}), Midtown {label}: {t.PerHour(t.Passers):0} passers/h, {t.PerHour(t.Demand):0.0} customers/h, {t.PerHour(t.Served):0.0} served/h.");
+        o.AppendLine();
+    }
+}
+
 if (opts.Wants("costs"))
 {
     o.AppendLine($"## Cost to start (cart ${Money(opts.CartPrice)})");
@@ -338,7 +422,7 @@ if (opts.Out != null) File.WriteAllText(opts.Out, o.ToString());
 Console.Write(o.ToString());
 
 // Merge native data fields before Core loads them. Core owns stock weights and area appetite.
-static DemandTables LoadTables(Options opts)
+static DemandTables LoadTables(Options opts, bool zeroBaseline = false)
 {
     var demand = JObject.Parse(File.ReadAllText(Path.Combine(opts.Data, "demand.json")));
     var economy = JObject.Parse(File.ReadAllText(Path.Combine(opts.Data, "economy.json")));
@@ -352,6 +436,9 @@ static DemandTables LoadTables(Options opts)
         if (patch["demand"] is JObject d) demand.Merge(d, settings);
         if (patch["economy"] is JObject e) economy.Merge(e, settings);
     }
+    // The share model had no street baseline: zero it to rebuild the old footfall.
+    if (zeroBaseline && demand["streetBaseline"] is JObject baseline)
+        foreach (var p in baseline.Properties().ToList()) p.Value = 1e-9; // the data must stay above 0
     return DemandTables.Parse(demand.ToString(), economy.ToString(), zones);
 }
 

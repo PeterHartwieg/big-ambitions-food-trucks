@@ -35,7 +35,8 @@ namespace FoodTrucks.Core.Demand
 
         public string Id { get; }
         public ZoneMode Mode { get; }
-        // For Add zones: the zone's part of the blended mix, 0 to 1. Override zones use 1.
+        // Legacy field accepted for compatibility, ignored. Areas set direct presences;
+        // Add raises each presence to at least the zone's value without diluting other areas.
         public double Share { get; }
         public AreaMix Areas { get; }
         public IReadOnlyList<ZonePoint> Polygon { get; }
