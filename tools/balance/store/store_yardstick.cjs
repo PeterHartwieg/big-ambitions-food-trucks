@@ -50,7 +50,7 @@ const STARTERS = {
   "burgers": {slug: "ba:businesstype_fastfoodrestaurant", products: ["ba:itemname_burger"],
     equipment: ["ba:itemname_industrialgrill"], counters: 2},
   "coffee + croissants": {slug: "ba:businesstype_coffeeshop", products: ["ba:itemname_cupofcoffee", "ba:itemname_croissant"],
-    equipment: ["ba:itemname_cheapcoffeemachine", "ba:itemname_bakeryshowcase"], counters: 2},
+    equipment: ["ba:itemname_industrialcoffeemachine", "ba:itemname_bakeryshowcase"], counters: 2},
 };
 
 function starterFacts(F, starter){

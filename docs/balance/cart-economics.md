@@ -1,25 +1,56 @@
 # Cart economics: a calculated balance study
 
-Written 8 October 2026, revised the same day with Peter's answers: the cart prices like a shop, it keeps 80 units and buys per unit at the wholesaler's shelves, refills during the day are expected, fees are undecided, and moving should pay. Nothing here was played. Cart figures come from running the mod's own Core demand model (`tools/balance/`), store figures from Big Copilot's validated store model, delivery figures from the game code and Peter's play.
+Written 8 October 2026 and revised twice that day with Peter's answers. Second pass: the cart prices like a shop, keeps 80 units bought per unit at the wholesaler's shelves, refills during the day, fees are undecided, and moving should pay. Third pass: coffee is the step after hot dogs, at the industrial coffee machine; coffee gets its own crowds (commuters, subway entrances, parks); nightlife comes from buildings (nightclubs, theatres, cinemas); hand-drawn zones only for parks, waterfront and tourist stretches. Nothing here was played. Cart figures come from running the mod's own Core demand model (`tools/balance/`), store figures from Big Copilot's validated store model, delivery figures from the game code and Peter's play.
 
 ## The answer
 
-All figures: one player, default difficulty, a weekday without rain, the player's 16-hour day (09:00 to 01:00 for the cart).
+One player, default difficulty, a weekday without rain, a 16-hour day (hot dogs 09:00 to 01:00, coffee 06:00 to 22:00, the truck stand-in 07:00 to 23:00). "Ceiling" is the most every customer class accepts, "default" the item's default price.
 
-| | Profit a day | Cost to start | Source |
+**The ladder** [calc; BC model for the shop]:
+
+| Rung | Cost to start | Best route, ceiling | Best route, default price | Weekend, ceiling | Staying ÷ best route |
+|---|---|---|---|---|---|
+| Delivery driving, 3 to 4 jobs (D) | $0 | $960 to $1,280, mid $1,120 | same | | |
+| Hot dog cart: grill + cooler (grill only $3,756) | $4,552 | **$1,946** (today $2,038) | $1,002 (today $1,018) | $1,753 | **64%** (today 83%) |
+| Coffee cart: industrial coffee machine + display case | $7,135 | **$2,353** (today $928) | $1,210 (today $471) | $1,601 | **72%** (today 96%) |
+| Small starter shop run by the player (S), city median | $7,600 to $11,400 | about $2,600 | | | |
+| Truck stand-in: two at the window, 160 units, grill + coffee + display case + cooler | $10,400 before a truck price | $3,239, about $3,000 after a hire | $1,696 | $2,897 | 71% |
+
+**Moving against staying per district**, proposed, weekday, ceiling price (staying ÷ best route; target 70% or less) [calc]:
+
+| District | Hot dog cart today → proposed | Coffee cart today → proposed | Evening pitches today → proposed (spots with nightlife 0.3 or more) |
 |---|---|---|---|
-| Delivery driving, 3 to 4 jobs (D) | $960 to $1,280, mid $1,120 | $0 | [code], [Peter] |
-| Cart today, default price, best route in the city | $1,018 | $3,756 (grill) to $4,554 (grill + cooler) | [calc] |
-| Cart today, price set at the ceiling, best route | $2,038; staying at one spot earns 83% of that | same | [calc] |
-| **Cart with the proposed curves, price at the ceiling, best route** | **$1,962**; staying earns **64%** | same | [calc] |
-| same, default price (a player who sets nothing) | $1,013; staying 66% | same | [calc] |
-| Small starter shop run by the player (S), city median | about $2,600 ($1,720 to $3,600) | $7,100 to $9,400 | [BC model] |
+| Midtown | 83% → **64%** | 96% → 72% | 6 → 29 |
+| Hell's Kitchen | 87% → **58%** | 100% → **69%** | 0 → 18 |
+| Garment District | 95% → **69%** | 94% → **67%** | 0 → 15 |
+| Murray Hill | 61% → 85% | 94% → **68%** | 1 → 7 |
+| Lower Manhattan | 91% → 84% | 93% → 73% | 0 → 20 |
+| Industry City | 86% → 98% | 100% → 85% | 0 → 12 |
+| Hamptons | 80% → 78% | 94% → **68%** | 7 → 14 |
+| **City** | 83% → **64%** | 96% → 72% | |
 
-**Verdict.** At the ceiling price, today's data already puts the best cart day at 1.8 D, but staying put in one mixed spot earns 83% of the best route: moving doesn't pay. At the default price the cart is about a delivery day. The proposed footfall curves keep the best route in the band ($1,962, 1.75 D, 75% of S) and drop staying to 64% of it. A careless player at the default price earns about one delivery day; a player who sets the ceiling earns 1.9 times that.
+**Verdict.**
 
-**Tune on the ceiling price.** The ceiling is the most every customer class accepts: reference × the neighbourhood's average price index. A player who sets prices by hand reaches it, and so does a full-skill pricing manager. The default price is the floor a careless player gets. The gap between them is the neighbourhood index: ×1.25 in Industry City, ×1.68 in Midtown, about ×1.9 on the best route's profit.
+- **Hot dog cart.** With today's data it already earns a good amount at the ceiling ($2,038), but staying at one mixed spot earns 83% of that, and Hell's Kitchen has no evening pitch at all. With the patch the best route is $1,946 (1.7 D, 75% of S), staying drops to 64%, and moving pays in Midtown, Hell's Kitchen and Garment District.
+- **Coffee cart.** Today it is a trap: $928 at best after a $6,900 start. With the patch it earns $2,353, 1.21 times the hot dog cart, and costs 1.6 times as much. A player who sets nothing (default price) gets $1,002 from hot dogs and $1,210 from coffee, so the ceiling roughly doubles the day.
+- **The truck** stays clearly above both, at about $3,000 after its hire.
 
-**The patch** (section 4 has the full list): `passersPerHour` 30 → 22, and in `demand.json` each area's footfall lowered outside its own peak, with nightlife's peak raised (evening 1.5 → 2.0, late 2.0 → 3.0). Office lunch stays at 3.0. Nothing changes in `economy.json`.
+Two caveats:
+
+- **Parks and subways decide the coffee lead.** Coffee's lead comes from subway-entrance and park pitches, which the city data can't place yet: they are archetype spots at each district's centre. Without them the coffee cart makes $1,436 (0.74 times the hot dog cart) and has no reason to move.
+- **Weekends belong to hot dogs**, through the nightlife pitches.
+
+**Tune on the ceiling price**, with the default price as the floor a careless player gets. The gap is the neighbourhood's index: ×1.25 in Industry City, ×1.68 in Midtown, about ×1.9 on the best route.
+
+**The patch** (section 4 has the full list):
+
+- **Footfall.** Sharper daypart curves, `passersPerHour` 22.
+- **Nightlife from buildings.** Nightclub, theatre and casino votes raised, and cinemas vote nightlife.
+- **Coffee crowds.** A morning commuter peak at offices, a new `transit` area for subway entrances, and busier park afternoons.
+- **Coffee service.** Coffee serves in 1 minute and bakery in 2. Coffee's appetite rises through the day.
+- **Fast food.** Lunch and late appetite trimmed to keep the hot dog cart in its band.
+- **Equipment.** The coffee machine maps to the industrial machine only.
+- **Two rules Core can't express yet.** A stock weight per item, so a coffee takes a quarter of a unit and a pastry half. A per-area appetite factor, so parks double coffee and ice cream.
 
 ## Labels
 
@@ -64,14 +95,14 @@ Big Copilot's model, run unchanged by `tools/balance/store/store_yardstick.cjs` 
 | Hot dogs + soda | no other sellers | $941 / $1,316 / $1,617 | $2,534 / $2,909 / $3,210 | $9,424 |
 | Burgers | save's sellers | -$192 / $126 / $932 | $1,401 / $1,719 / $2,525 | $7,649 |
 | Burgers | no other sellers | $808 / $1,160 / $1,446 | $2,401 / $2,753 / $3,039 | $7,649 |
-| Coffee + croissants | save's sellers | $678 / $879 / $2,034 | $2,271 / $2,472 / $3,627 | $7,074 |
-| Coffee + croissants | no other sellers | $1,520 / $2,004 / $2,376 | $3,113 / $3,597 / $3,969 | $7,074 |
+| Coffee + croissants | save's sellers | $678 / $879 / $2,034 | $2,271 / $2,472 / $3,627 | $11,374 |
+| Coffee + croissants | no other sellers | $1,520 / $2,004 / $2,376 | $3,113 / $3,597 / $3,969 | $11,374 |
 
 - The model's staffing is its structural estimate: a cashier, a cleaner and a guard every open hour, $1,593 a day for 16 hours [BC model]. A beginner usually stands at the register, so the right-hand column is the fair match for a cart, which is also the player's own day.
-- Cost to open: register $900, two counter tops at $400, the product's machine (hot dog grill $2,200, drinks fridge $875, industrial grill $1,400, cheap coffee machine $400, bakery showcase $895), one box of each product at wholesale (a shop's shelves take whole boxes: 500 hot dogs $2,225), the deposit and the first day's rent [BC data, opener research].
+- Cost to open: register $900, two counter tops at $400, the product's machine (hot dog grill $2,200, drinks fridge $875, industrial grill $1,400, industrial coffee machine $4,700, bakery showcase $895; the $400 cheap coffee machine is office equipment, ItemType 0x8000 in Big Copilot's data, not shop equipment), one box of each product at wholesale (a shop's shelves take whole boxes: 500 hot dogs $2,225), the deposit and the first day's rent [BC data, opener research].
 - The full fast food outfit (whole range, 24/7, best marketing) has a median of $21,900 a day on a $53,700 investment. That's where shops go later; the cart is never compared with it.
 
-**The yardstick S:** about **$2,600 a day** (the median of the six owner-run medians, which run from $1,720 to $3,600), **$7,100 to $9,400** to open.
+**The yardstick S:** about **$2,600 a day** (the median of the six owner-run medians, which run from $1,720 to $3,600), **$7,600 to $11,400** to open (burgers to coffee).
 
 ## 3. The cart
 
@@ -105,17 +136,17 @@ How vanilla shops price [code]:
 
 So the study models (a) **default price**: a player who sets nothing; (b) **ceiling**: reference × index, a player who sets the most every class accepts, or a full-skill manager; (c) **a pricing manager** at capture 0.5 and 0.75. Below and above the ceiling the mod's own price curve decides how many buy [mod data].
 
-Best lunch + evening route, hot dog grill + cooler, proposed curves [calc]:
+Best lunch + evening route (11:00 to 14:30, 17:00 to 23:00), hot dog grill + cooler, the final proposal [calc]:
 
 | Price | Midtown hot dog | Midtown office lunch: share who buy, profit/h | Best route | ÷ ceiling |
 |---|---|---|---|---|
-| (a) default | $11.65 | 100%, $157 | $818 | 49% |
-| (c) manager, capture 0.5 | $15.62 | 100%, $241 | $1,238 | 74% |
-| (c) manager, capture 0.75 | $17.61 | 100%, $283 | $1,455 | 87% |
-| ceiling × 0.9 | $17.64 | 100%, $284 | $1,458 | 87% |
-| **(b) ceiling** | **$19.60** | **100%, $325** | **$1,672** | 100% |
-| ceiling × 1.1 | $21.55 | 7%, $35 | $527 | 32% |
-| upper class's maximum, reference × max(1.7, index) | $19.81 | 73%, $323 | $1,543 | 92% |
+| (a) default | $11.65 | 100%, $157 | $885 | 52% |
+| (c) manager, capture 0.5 | $15.62 | 100%, $241 | $1,279 | 75% |
+| (c) manager, capture 0.75 | $17.61 | 100%, $283 | $1,491 | 87% |
+| ceiling × 0.9 | $17.64 | 100%, $284 | $1,494 | 87% |
+| **(b) ceiling** | **$19.60** | **100%, $325** | **$1,713** | 100% |
+| ceiling × 1.1 | $21.55 | 7%, $29 | $498 | 29% |
+| upper class's maximum, reference × max(1.7, index) | $19.81 | 73%, $297 | $1,419 | 83% |
 
 Above the ceiling sales collapse: 10% over loses 90% of buyers in Midtown. The game is harsher still: there, 10% over the ceiling is above what every class accepts, so nobody buys. A price setting needs to show the ceiling.
 
@@ -196,39 +227,46 @@ One pitch in front of each building; every building whose outline is within 50 m
 | Industry City | 200 | 0 | 73 | 83 | 44 | 0 | 0.26 |
 | Hamptons | 58 | 0 | 28 | 29 | 0 | 1 | 0.00 |
 
-Nightlife is rare: only theatres, the casino boat and rival nightclubs vote for it. Hell's Kitchen, the design's nightlife district, has no nightlife spot at all. This matters for moving (below): an evening pitch is what makes a route pay.
+Nightlife is rare, and Hell's Kitchen, the design's nightlife district, has no nightlife spot at all. Why:
+
+- **Which venues exist.** The city's nightlife buildings are four theatres on Broadway (all in Midtown) and one in the Hamptons, five cinemas (two in Midtown, one each in Lower Manhattan, Hell's Kitchen and the Hamptons) and the casino boat (Murray Hill). Nightclubs are businesses, and in the save they were all rivals' (eight, one of them in Hell's Kitchen at 2 Fourth Street), so a new game may have none [BC data, save].
+- **Cinemas vote retail.** `data/demand.json` maps cinemas (building and business) to retail, so Hell's Kitchen's only fixed venue, the cinema at 15 Third Avenue, counts as a shop.
+- **Venues are outvoted.** A nightclub votes 1.5 and a theatre 1.0, against every other building within 50 m. The club at 2 Fourth Street has 11 neighbours (4 residential, 5 retail, 2 office), worth about 7 votes in all, and the Garment District club at 15 Fourth Avenue has 30.
+- **maxAreas 2 drops the venue.** The classifier keeps only the two biggest areas, so the venue's nightlife share isn't diluted, it disappears: the club's own spot reads retail and residential.
+
+The 50 m radius and the 0.5 edge weight are not the problem: the venue is at distance 0 from its own pitch. Neither is a longer reach needed; stronger venue votes are enough (section 4).
 
 ### Today: staying against moving
 
-The best single spot all day against the best route that splits the same 16 hours into two or three pitches (changing at 14:30, at 17:00, or at 14:30 and 21:00), hot dog grill + cooler, weekday, dry. Staying put is one of the routes the search may pick, so a ratio over 100% is only the search's rounding [calc].
+The best single spot over the cart's 16-hour day against the best route that splits the same hours into two or three pitches (hot dogs change at 14:30, at 17:00, or at 14:30 and 21:00; coffee at 11:00, at 14:30, or at both). Staying put is one of the routes the search may pick. Today's data, ceiling price, weekday, dry [calc]. Hot dog grill + cooler, then coffee machine + display case (croissants):
 
-| | Default price: stay / route | Ceiling price: stay / route / stay ÷ route |
+| | Hot dog: stay / route / ratio | Coffee: stay / route / ratio |
 |---|---|---|
-| Midtown | $814 / $979 | $1,693 / $2,038 / 83% |
-| Lower Manhattan | $591 / $649 | $832 / $914 / 91% |
-| Murray Hill | $536 / $883 | $828 / $1,363 / 61% |
-| Hell's Kitchen | $794 / $915 | $1,328 / $1,531 / 87% |
-| Garment District | $845 / $888 | $1,227 / $1,288 / 95% |
-| Industry City | $667 / $778 | $928 / $1,082 / 86% |
-| Hamptons | $386 / $482 | $776 / $969 / 80% |
-| **City** | **$845 / $1,018** | **$1,693 / $2,038 / 83%** |
+| Midtown | $1,693 / $2,038 / 83% | $889 / $928 / 96% |
+| Lower Manhattan | $832 / $914 / 91% | $451 / $485 / 93% |
+| Murray Hill | $828 / $1,363 / 61% | $403 / $430 / 94% |
+| Hell's Kitchen | $1,328 / $1,531 / 87% | $364 / $364 / 100% |
+| Garment District | $1,227 / $1,288 / 95% | $344 / $366 / 94% |
+| Industry City | $928 / $1,082 / 86% | $322 / $322 / 100% |
+| Hamptons | $776 / $969 / 80% | $246 / $261 / 94% |
+| **City** | **$1,693 / $2,038 / 83%** | **$889 / $928 / 96%** |
 
-Weekend, ceiling: city $1,700 / $2,087 (81%).
+Default price: hot dog $1,018, coffee $471. Weekend, ceiling: hot dog $2,087 (staying 81%), coffee $682.
 
-Why staying works today: a spot half office and half residential fills the window at lunch with half the office crowd (office lunch demand is twice the window's rate), then gets the residential evening at 1.0. Moving costs two hours of pushing and gains little.
+Why staying works today: a spot half office and half residential fills the window at lunch with half the office crowd (office lunch demand is twice the window's rate), then gets the residential evening at 1.0. Moving costs two hours of pushing and gains little. Coffee today is a morning business at offices with nowhere better to go in the afternoon, and at 3 minutes a cup it can't serve the morning crowd.
 
 ### Cost to start
 
-The cart ($1,200 [seen, dealer dialog]), its equipment [BC data], and 80 units at wholesale, split by what a Midtown lunch sells [calc]:
+The cart ($1,200 [seen, dealer dialog]), its equipment [BC data] and the first 80 units at wholesale [calc]. The coffee machine is the industrial one at $4,700: the $400 cheap coffee machine is office equipment (ItemType 0x8000 in Big Copilot's data), and Peter notes its price may have changed in a patch.
 
 | Menu | Equipment | First 80 units | Total | In delivery days |
 |---|---|---|---|---|
 | Hot dog grill | $2,200 | $356 | **$3,756** | 3.4 |
-| Hot dog grill + cooler | $3,075 | $279 | **$4,554** | 4.1 |
-| Hot dog grill + coffee machine | $2,600 | $323 | **$4,123** | 3.7 |
-| Coffee machine + display case | $1,295 | $110 | **$2,605** | 2.3 |
+| Hot dog grill + cooler | $3,075 | $277 | **$4,552** | 4.1 |
+| Hot dog grill + coffee machine | $6,900 | $352 | **$8,452** | 7.5 |
+| Coffee machine + display case | $5,595 | $340 | **$7,135** | 6.4 |
 
-Optional fees, not counted in the band: a vehicle permit of $500 and a vendor licence of $250 per 60 days (about $4 a day) would add $750 to the first day.
+The coffee cart's first load is the proposal's (a coffee counts a quarter of a unit, so 80 units hold more cups); today it is $110. Optional fees, not counted in the band: a vehicle permit of $500 and a vendor licence of $250 per 60 days (about $4 a day) would add $750 to the first day.
 
 ## 4. Verdict and tuning
 
@@ -236,96 +274,120 @@ Optional fees, not counted in the band: a vehicle permit of $500 and a vendor li
 
 Tuned on the ceiling price, weekday, dry.
 
-| Rung | Profit a day | Cost to start |
-|---|---|---|
-| Delivery day (D) | $1,120 | $0 |
-| **Cart: best route** | **1.5 to 1.8 D ($1,700 to $2,000), at most 75% of S ($1,950)** | **3 to 4.5 D ($3,400 to $5,000)** |
-| **Cart: best single spot all day** | **at most 70% of the best route** | |
-| Cart at the default price | about 1 D | |
-| Small starter shop run by the player (S) | $2,600 | $7,100 to $9,400 |
-| Truck with the player and one hire (Milestones 4 and 5) | above the cart's best, up to S | |
+| Rung | Profit a day | Cost to start | Moving |
+|---|---|---|---|
+| Delivery day (D) | $1,120 | $0 | |
+| **Hot dog cart** | **1.5 to 1.8 D ($1,700 to $2,000), at most 75% of S**; about 1 D at the default price | 3 to 4.5 D | staying at most 70% of the best route |
+| **Coffee cart** | **1.2 to 1.4 times the hot dog cart's best route**, below S | more than the hot dog cart | staying at most 70% of the best route |
+| Small starter shop run by the player (S) | $2,600 | $7,600 to $11,400 | |
+| Truck with the player and one hire (Milestones 4 and 5) | above the coffee cart | | |
 
-### Where the cart sits now
+The coffee cart sits close to a shop on purpose. It costs as much as a burger shop to start, it needs a morning and a park to pay, and it gives up the weekend nights to hot dogs.
 
-- **Profit.** At the ceiling price the best route makes $2,038 (1.8 D, 78% of S), just over the band. At the default price it makes $1,018 (0.9 D).
-- **Moving doesn't pay.** Staying makes 83% of the best route.
-- **Start-up is already in the band.** With per-unit buying it costs $3,756 to $4,554 (3.4 to 4.1 D, about half a starter shop).
+### Where the carts sit now
+
+- **Hot dog cart.** At the ceiling price its best route is $2,038 (1.8 D, 78% of S), just over the band, and staying earns 83% of it. Hell's Kitchen, Garment District, Lower Manhattan and Industry City have no evening pitch.
+- **Coffee cart.** It earns $928 at best (0.8 D) for $6,905, and staying earns 96% of that. It is the worst choice on the ladder.
 
 ### Proposed changes
 
-**Rules (game side, none in Core data):**
+**Rules (game side or Core; not data):**
 
-1. **The cart prices like a shop.** Default price unless the player sets one; a price per product; a pricing manager covering the district applies. `PricingManagerHelper.IsManageableBusiness` only takes rented buildings, so the mod has to apply a district plan's suggestion to its carts itself (`PricingManagerPlan.cachedSuggestions`, by item and district). The price setting should show the ceiling (reference × the district's index), because 10% over it loses almost every buyer.
-2. **Stock 80 per cart (160 per truck), bought per unit at the shelves,** as built. Refill trips are part of the day.
-3. **Fees stay optional.** If they come, a $500 permit and a $250 licence per 60 days leave the band unchanged (under $5 a day).
+1. **The cart prices like a shop.** Default price unless the player sets one; a price per product; a pricing manager covering the district applies. `PricingManagerHelper.IsManageableBusiness` only takes rented buildings, so the mod applies a district plan's suggestion to its carts itself (`PricingManagerPlan.cachedSuggestions`, by item and district). The price setting should show the ceiling, because 10% over it loses almost every buyer.
+2. **80 units per cart (160 per truck), bought per unit at the shelves,** as built. Refill trips are part of the day.
+3. **Stock weight per item** (Core: `StockLimit`/`CargoRules`, plus a field per product in `economy.json`). A coffee takes 0.25 of a unit, a croissant, donut or cupcake 0.5, everything else 1. A cup from the machine is beans and water, a pastry is small; without this, 80 cups last two hours of a morning rush and the refill walk eats the rest.
+4. **Per-area appetite factors** (Core: `DemandModel`, plus an optional `appetite` table per area in `demand.json`). Parks: coffee ×2, ice cream ×2. The design's "Not chosen: per-area demand curves" stays true; this scales a category per area, it doesn't add curves. The tool emulates it for pure park spots only.
+5. **Subway entrances vote** (game side: `World` already finds subway entrances for `Legality`; report each within the radius as a nearby place of building type `subwayentrance`). They feed the new `transit` area.
+6. **Parks, waterfront and tourist stretches** stay hand-drawn zones. Nightlife no longer needs zones.
+7. **Fees stay optional.** A $500 permit and a $250 licence per 60 days would leave the band unchanged.
 
-**Data, as a patch over `data/demand.json`** (`tools/balance/proposed.json`). Each area keeps its peaks; footfall outside them drops, so a spot that mixes two areas no longer earns well all day. Nightlife's peak rises, so the evening pitch is worth the walk. `passersPerHour` comes down to keep the best route inside the band.
+**Data, as a patch** (`tools/balance/proposed.json`).
+
+`data/economy.json`:
+
+| Key | Today | Proposed | Why |
+|---|---|---|---|
+| `equipment.coffeemachine.gameItems` | cheap and industrial coffee machine | **industrial only** | The cheap one is office equipment (ItemType 0x8000) |
+| `products.ba:itemname_cupofcoffee.serviceMinutes`, `cupoftea` | 3 | **1.0** | Press a button, lid, hand over. At 1.5 minutes the morning window binds and the coffee cart loses about a fifth of its best day |
+| `products.ba:itemname_croissant`, `donut`, `cupcake` `.serviceMinutes` | 3 | **2.0** | Bought in, no prep: take from the case, bag, hand over. Slower than a cup, faster than a hot dog that is assembled (3) |
+| `vehicles` | cart 80, truck 160 | unchanged | |
+
+`data/demand.json`, footfall by daypart (early 05-08, morning 08-11, lunch 11-14:30, afternoon 14:30-17, evening 17-21, late 21-02; `night` unchanged):
 
 | Key | Today | Proposed |
 |---|---|---|
 | `passersPerHour` | 30 | **22** |
-| `areas.office.footfall` early / morning / lunch | 0.8 / 1.2 / 3.0 | unchanged |
-| `areas.office.footfall` afternoon / evening / late | 0.5 / 0.6 / 0.1 | **0.2 / 0.2 / 0.05** |
-| `areas.residential.footfall` early / morning | 0.6 / 0.7 | unchanged |
-| `areas.residential.footfall` lunch / afternoon / evening / late | 0.5 / 0.5 / 1.0 / 0.4 | **0.3 / 0.3 / 0.5 / 0.2** |
-| `areas.retail.footfall` afternoon | 1.3 | unchanged (its peak) |
-| `areas.retail.footfall` early / morning / lunch / evening / late | 0.1 / 0.5 / 1.2 / 1.0 / 0.2 | **0.05 / 0.3 / 0.8 / 0.5 / 0.1** |
-| `areas.industrial.footfall` early / lunch / late | 1.5 / 1.5 / 1.0 | unchanged (shift peaks) |
-| `areas.industrial.footfall` morning / afternoon / evening | 0.4 / 0.3 / 0.5 | **0.2 / 0.15 / 0.3** |
-| `areas.nightlife.footfall` morning / lunch / afternoon | 0.1 / 0.4 / 0.3 | **0.05 / 0.15 / 0.1** |
-| `areas.nightlife.footfall` evening / late | 1.5 / 2.0 | **2.0 / 3.0** |
-| `areas.waterfront`, day factors, appetites, neighbourhoods, `night` dayparts | | unchanged |
-| `data/economy.json` | | unchanged (stock 80 / 160, service minutes) |
+| `areas.office.footfall` | 0.8 / 1.2 / 3.0 / 0.5 / 0.6 / 0.1 | **1.5 / 2.0** / 3.0 / **0.2 / 0.2 / 0.05** |
+| `areas.residential.footfall` | 0.6 / 0.7 / 0.5 / 0.5 / 1.0 / 0.4 | 0.6 / 0.7 / **0.3 / 0.3 / 0.5 / 0.2** |
+| `areas.retail.footfall` | 0.1 / 0.5 / 1.2 / 1.3 / 1.0 / 0.2 | **0.05 / 0.3 / 0.8** / 1.3 / **0.5 / 0.1** |
+| `areas.industrial.footfall` | 1.5 / 0.4 / 1.5 / 0.3 / 0.5 / 1.0 | 1.5 / **0.2** / 1.5 / **0.15 / 0.3** / 1.0 |
+| `areas.nightlife.footfall` | 0 / 0.1 / 0.4 / 0.3 / 1.5 / 2.0 | 0 / **0.05 / 0.15 / 0.1 / 2.0 / 2.5** |
+| `areas.waterfront.footfall` (parks) | 0.1 / 0.4 / 0.8 / 1.2 / 0.8 / 0.1 | 0.1 / 0.4 / 0.8 / **2.0** / 0.8 / 0.1 |
+| `areas.waterfront.days` mon-thu / fri / sat-sun | 0.7 / 0.9 / 1.6 | **0.9 / 1.0** / 1.6 |
+| `areas.transit` (new) footfall | | **2.0 / 2.5 / 0.3 / 0.4 / 0.8 / 0.2**, night 0.05 |
+| `areas.transit.days` mon-fri / sat / sun | | **1.0 / 0.5 / 0.4** |
 
-The shape stays: offices peak at lunch at 3.0 and in the morning, nightlife late, industrial at shift changes, retail in the afternoon, residential mornings and evenings. The design's footfall table says 1.0 is an average open hour city-wide; after the patch the average is lower, and the table should be updated with the numbers if the patch is taken.
+`data/demand.json`, appetite (the same six dayparts):
 
-Rates at a pure spot, before → after, ceiling price, weekday dry (customers per hour / profit per hour) [calc]:
+| Key | Today | Proposed |
+|---|---|---|
+| `categories.coffee.appetite` | 0.40 / 0.30 / 0.08 / 0.15 / 0.05 / 0.02 | **0.55 / 0.45 / 0.12 / 0.35** / 0.05 / 0.02 |
+| `categories.bakery.appetite` afternoon | 0.12 | **0.25** |
+| `categories.fastfood.appetite` lunch / late | 0.30 / 0.35 | **0.25 / 0.25** |
 
-| Spot | Lunch | Afternoon | Evening | Late |
-|---|---|---|---|---|
-| Midtown office | 43 / $325 → 31 / $325 | 2 / $27 → 1 / $8 | 5 / $75 → 1 / $18 | 1 / $13 → 0 / $5 |
-| Midtown residential | 6 / $101 → 3 / $44 | 2 / $24 → 1 / $11 | 7 / $113 → 3 / $41 | 3 / $47 → 1 / $17 |
-| Midtown retail | 15 / $241 → 8 / $118 | 5 / $63 → 3 / $46 | 7 / $113 → 3 / $41 | 2 / $23 → 1 / $9 |
-| Midtown nightlife | 4 / $63 → 1 / $17 | 1 / $11 → 0 / $3 | 9 / $132 → 9 / $129 | 12 / $181 → 13 / $200 |
-| Hell's Kitchen nightlife | 3 / $33 → 1 / $9 | 1 / $7 → 0 / $2 | 10 / $117 → 9 / $114 | 23 / $252 → 26 / $252 |
-| Industry City industrial | 13 / $130 → 9 / $96 | 0 / $4 → 0 / $1 | 3 / $26 → 1 / $11 | 12 / $124 → 9 / $91 |
+`data/demand.json`, classifier (radius 50 m, edge weight 0.5 and `maxAreas` 2 unchanged):
 
-Midtown's office lunch still fills the window (31 customers an hour against 20 served), so a pure office pitch keeps its lunch. A half-office spot no longer does.
+| Key | Today | Proposed |
+|---|---|---|
+| `buildingTypes.ba:buildingtype_theater` | nightlife 1.0 | **nightlife 6.0** |
+| `buildingTypes.ba:buildingtype_cinema` | retail 1.0 | **nightlife 3.0, retail 1.0** |
+| `buildingTypes.subwayentrance` (new) | | **transit 1.0** |
+| `businessTypes.ba:businesstype_nightclub` | nightlife 1.5 | **nightlife 10.0** |
+| `businessTypes.ba:businesstype_theater` / `casino` | nightlife 1.0 | **nightlife 6.0** |
+| `businessTypes.ba:businesstype_cinema` | retail 1.0 | **nightlife 3.0, retail 1.0** |
+| `businessTypes.ba:businesstype_liquorstore` | nightlife 0.5, retail 0.5 | **nightlife 1.0**, retail 0.5 |
+
+A venue now outvotes a block of ordinary buildings, so pitches next to it read as nightlife; their daytime footfall is low, which is what sends the cart elsewhere at lunch. A per-type reach (a longer radius for venues, a Core change) wasn't needed. `maxAreas` 3 dilutes the venue instead of keeping it, and lost nightlife spots in the test.
+
+The shape stays: offices peak at lunch (3.0) with a morning commuter peak (2.0); nightlife late; industrial at shift changes; retail in the afternoon; residential mornings and evenings; parks in the afternoon and at weekends; subway entrances in the morning rush. The design's footfall table says 1.0 is an average open hour city-wide; after the patch the average is lower, and the table should take these numbers if the patch is accepted.
 
 ### Before and after
 
-Ceiling price, hot dog grill + cooler, the 16-hour day [calc]:
+Ceiling price, weekday, dry unless noted [calc]:
 
 | | Today | Proposed |
 |---|---|---|
-| **Best route in the city, weekday dry** | $2,038 | **$1,962** (Midtown: lunch at 2 Fifth Street, office/retail, then the theatre corner at 6 Fifth Street from 14:30, one refill) |
-| Best single spot, weekday dry | $1,693 (83%) | **$1,250 (64%)** |
-| Best route / staying, weekend dry | $2,087 / $1,700 (81%) | $1,626 / $1,169 (72%) |
-| Lunch + evening route, weekday dry / weekday rain / weekend rain | $1,741 / $1,373 / $924 | $1,672 / $1,076 / $775 |
-| Default price: best route / staying, weekday dry | $1,018 / $845 | $1,013 / $663 (66%) |
-| Two shops already sell hot dogs (market 71.5) | | $1,717, staying 65% |
-| Truck-like run: two at the window, 160 units | | $2,484, about $2,250 after a hire |
+| Hot dog best route | $2,038 | **$1,946**: an office lunch at 7 Eighth Street (Midtown), the theatre corner at 6 Fifth Street from 16:50, then 17 Third Avenue by the Hell's Kitchen cinema from 21:40; one refill |
+| Hot dog, staying | $1,693 (83%) | **$1,238 (64%)** |
+| Hot dog, weekend: route / staying | $2,087 / 81% | $1,753 / 86% |
+| Hot dog, default price | $1,018 | $1,002 (staying 59%) |
+| Coffee best route | $928 | **$2,353**: the Midtown subway entrance from 06:00, a Midtown park from 12:05; one refill |
+| Coffee, staying | $889 (96%) | **$1,704 (72%)** |
+| Coffee, weekend | $682 | $1,601 (staying 82%) |
+| Coffee, default price | $471 | $1,210 |
+| Coffee without the subway and park archetypes | | $1,436, staying 100% |
+| Hot dog without them | | $1,946 weekday, $1,593 weekend |
+| Truck stand-in, best route | $2,971 | $3,239, about $3,000 after a hire |
 
-Per neighbourhood, proposed, weekday dry, ceiling (stay / best route / ratio): Midtown $1,250 / $1,962 / 64%; Murray Hill $803 / $1,210 / 66%; Garment District $963 / $1,041 / 92%; Hell's Kitchen $854 / $979 / 87%; Lower Manhattan $760 / $829 / 92%; Hamptons $688 / $848 / 81%; Industry City $711 / $673 (staying is the best plan there).
+Hourly rates at pure spots after the patch, coffee cart, ceiling, weekday (customers per hour / profit per hour): Midtown subway entrance early 46 / $293, morning 55 / $320; Midtown office early 35 / $219, morning 44 / $278; Midtown park afternoon 42 / $263 (weekend 53 / $323); Hell's Kitchen park afternoon 33 / $165 (weekend 58 / $264). Hot dog cart: Midtown office lunch 27 / $325; Hell's Kitchen nightlife late (weekend) 33 / $252; Midtown nightlife evening (weekend) 13 / $194 [calc].
 
-Against the band: the best route is 1.75 D and 75% of S; staying is 64% of the best route; the default price gives 0.9 D; start-up is 3.4 to 4.1 D. The truck-like run makes about $2,250 after its hire, 15% over the cart's best and 87% of S.
+Per district, see the table at the top. Moving pays clearly in Midtown, Hell's Kitchen and Garment District for hot dogs, and in five districts for coffee.
 
 ### What the patch doesn't fix
 
-- **Moving pays only where there's an evening pitch.** In Midtown and Murray Hill (theatres, the casino boat) the route wins clearly. Hell's Kitchen, Garment District, Lower Manhattan and Industry City have no nightlife spot, so their best route is still within 10% of staying. The design's hand-drawn zones and premium spots are the fix; they should come before Peter's balance check.
-- **Refills are part of why moving pays.** If a refill took no walk, staying would rise to 77% of the best route. Keep refills at the wholesaler.
-- **Weekends are flatter.** Offices go quiet and retail spreads over the day, so staying earns 72% of the best route on a Saturday. I think that's right for a weekend.
-- **The coffee + bakery cart stays weak.** Best route $621, best spot $470: its margins at a 3-minute serve can't reach the band. As a grill's second slot it works: hot dog + coffee, breakfast + lunch + evening, $1,926.
-- **Classifier blending.** Keeping one area per spot (`classifier.maxAreas` 1) also separates moving from staying (55% in Midtown), but the design wants blended spots, so I left it out.
+- **Coffee's lead rests on pitches the data can't place yet.** Parks need the hand-drawn zones; subway entrances need the game side to report them. The archetype park and subway sit at each district's centre. Without them coffee earns 0.74 times the hot dog cart.
+- **Murray Hill and Industry City.** For hot dogs, Murray Hill's best route lost ground (staying 85%, against 61% today): its office lunches are weaker after the patch and its evening pitch is the casino boat. Industry City's best plan is an industrial spot all day: its shift peaks (early, lunch, late) are the area's own design. I'd leave both.
+- **Weekends.** Staying earns 82 to 86% of the best route at weekends: offices are quiet and the nightlife pitch is good all evening. I think that's right for a Saturday.
+- **Rival nightclubs.** Garment District's and Industry City's evening pitches in this city come from rivals' nightclubs. A new game may not have them until rivals open clubs.
 
 ### Room for the truck, and Milestones 3 to 7
 
-The truck-like run (two people at the window, 160 units, proposed curves) makes $2,484 on the best weekday route; less a hire at a job-board wage (cashier base $16 × (20^1.05/100 + 1) = $19.70 an hour [code, `EmployeeHelper`; BC data], 12 hours = $236) and a little fuel ($1.30 a litre [code, `GasStationOverlay`]), about **$2,250**: above the cart, below S. The second person helps only where demand beats 20 an hour, so the truck's further room should come from its four slots, catering and premium spots.
+The truck stand-in (two at the window, 160 units, grill + coffee machine + display case + cooler) makes $3,239 on the best weekday route; less a hire at a job-board wage (cashier base $16 × (20^1.05/100 + 1) = $19.70 an hour [code, `EmployeeHelper`; BC data], 12 hours = $236) and a little fuel ($1.30 a litre [code, `GasStationOverlay`]), about **$3,000**: 1.3 times the coffee cart and 1.15 times S. It starts at $10,400 before the truck itself is priced.
 
-- **Milestone 3, queues.** Customers above the window's rate wait up to 20 minutes instead of leaving. At a full pitch this moves sales later more than it adds them: a few percent.
-- **Milestone 4, truck and licence.** `TaxPatch` adds cart sales to taxable income at the game's rate (10% by default): the best route nets $1,766, still 1.6 D against untaxed delivery pay.
-- **Milestone 5, hires.** A hired cart on the best route earns about $1,962 − 12 × $19.70 = $1,726. Two hired carts would pass a starter shop, so the permit cap (default 4) is the brake; consider a lower cap for carts than for trucks.
-- **Milestone 6, regulars (+30% at a pitch after six weeks), premium spots, live venue crowds.** They add demand, which only pays where the window isn't full: evenings, weekends and weaker districts. Regulars reward a fixed route, which helps moving. I'd expect the best route to reach about $2,200 [assumption], 85% of S; check it at the Milestone 6 balance session.
+- **Milestone 3, queues.** Customers above the window's rate wait up to 20 minutes. At a full pitch this moves sales later more than it adds them: a few percent.
+- **Milestone 4, truck and licence.** `TaxPatch` adds cart sales to taxable income at the game's rate (10% by default). The hot dog cart's best day nets $1,751, still 1.6 D against untaxed delivery pay.
+- **Milestone 5, hires.** A hired hot dog cart on the best route earns about $1,946 − 12 × $19.70 = $1,710, a hired coffee cart about $2,120. The permit cap (default 4) is the brake; consider a lower cap for carts than for trucks.
+- **Milestone 6, regulars, premium spots, live venue crowds.** They add demand where the window isn't full: evenings, weekends and weaker districts. Regulars reward a fixed route, which helps moving. The coffee cart's best day could reach about $2,600 [assumption], level with S; check it at the Milestone 6 balance session.
 - **Milestone 7, catering.** Trucks only, so it widens the gap to the truck.
 
 ## 5. The Economy draft on `core-m3-m7`
@@ -355,17 +417,20 @@ The draft in the worktree `friendly-kepler-2476dc` (`Core/Economics/Economy.cs`,
 5. Hot dogs cost $4.45 at every wholesaler (index 1.0, store 100); the real price is 10% either side.
 6. Market demand 100 (no shop sells the cart's items in the neighbourhood), and no cheaper shop sets the reference price. A shop selling below the default price lowers the reference, and with it the ceiling.
 7. May: footfall 1.0, no season factors.
-8. The day is 16 hours, 09:00 to 01:00, for both staying and routes. Routes change pitch at 14:30, at 17:00, or at 14:30 and 21:00; the best route is the best the search found (top 20 per pitch plus the five best all-day spots), not a proven optimum.
+8. The day is 16 hours for staying and routes alike: hot dogs 09:00 to 01:00, coffee 06:00 to 22:00, the truck stand-in 07:00 to 23:00. Routes change pitch at fixed times (hot dogs 14:30, 17:00, or 14:30 and 21:00; coffee 11:00, 14:30, or both); the best route is the best the search found (top 20 per pitch plus the five best all-day spots), not a proven optimum.
 9. Store yardstick: Big Copilot's model on one late-game city, A units, 06:00 to 22:00, satisfaction 95, no marketing.
 10. Business types: fixed AI businesses plus one save's rivals. A new game has different rivals, so its nightlife spots differ.
 11. Pricing manager capture 0.5 and 0.75 stand in for a typical analyst; `minSkillCapture` is asset data.
+12. Parks and subway entrances are archetype spots, one of each per district at the middle of its buildings. Real parks come from zones and real subway entrances from the game; their number and places will move the coffee figures most.
+13. The stock weights and the park appetite factors are emulated by the tool (`rules` in `proposed.json`); Core doesn't have them yet.
+14. All six wholesalers sell hot dogs, coffee, croissants and soda (Big Copilot's wiki data).
 
 ## Open questions for Peter
 
-1. **Evening pitches outside Midtown.** Moving pays only where the city has a nightlife spot. Should the hand-drawn zones (Hell's Kitchen theatre blocks and others) come before your balance check, so routes pay in more than two districts?
-2. **Weekends.** Staying earns 72% of the best route on a Saturday, against 64% on weekdays. Fine, or should weekends separate as much?
-3. **Pricing manager on carts.** The game's manager only reprices rented buildings. Should the mod apply a district plan to carts automatically, or only when the player assigns the cart to it?
-4. **Delivery check.** How many in-game hours does one delivery job take, and does it pay $300 plus about $20 in tips on default settings? The band's floor rests on it.
-5. **Fees.** If you do add a permit and a licence, are $500 and $250 per 60 days about right? And what does the Food Safety course cost?
-6. **Coffee + bakery as a standalone cart.** Leave it as a cheap but weak start ($2,605 to start, best route $621), or lift it?
+1. **Subway entrances and parks first.** The coffee cart's lead needs both. Should the game side report subway entrances to the classifier, and the park zones be drawn, before your balance check?
+2. **Stock weight and per-area appetite.** Both need Core changes (a weight per product in `economy.json`, an optional appetite table per area in `demand.json`). Agreed, or should coffee get its volume another way (a bigger unit limit for drinks)?
+3. **Weekends.** Staying earns 82 to 86% of the best route on a Saturday. Fine, or should weekends separate as much as weekdays?
+4. **Pricing manager on carts.** The game's manager only reprices rented buildings. Should the mod apply a district plan to carts automatically, or only when the player assigns the cart to it?
+5. **Delivery check.** How many in-game hours does one delivery job take, and does it pay $300 plus about $20 in tips on default settings? The band's floor rests on it.
+6. **Fees.** If you add a permit and a licence, are $500 and $250 per 60 days about right? And what does the Food Safety course cost?
 7. **Hired carts.** Should the permit cap differ for carts and trucks, so a fleet of hired carts doesn't pass the shop before the truck exists?

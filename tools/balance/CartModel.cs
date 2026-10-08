@@ -96,19 +96,31 @@ public sealed class Cart
     private readonly DemandModel model;
     private readonly GamePrices prices;
 
-    public Cart(DemandTables tables, GamePrices prices, IReadOnlyList<string> menu, string name, int? stockUnits = null)
+    private readonly DemandModel? parkModel;
+
+    // stockWeights: how much of the unit limit one unit of an item takes (a proposed Core rule; 1 today).
+    // parkTables: tables with the park's own appetite factors, used for spots that are pure waterfront
+    // (a proposed per-area appetite rule, emulated for the park archetype only).
+    public Cart(DemandTables tables, GamePrices prices, IReadOnlyList<string> menu, string name, int? stockUnits = null,
+        IReadOnlyDictionary<string, double>? stockWeights = null, DemandTables? parkTables = null, int? staff = null)
     {
         this.tables = tables;
         this.prices = prices;
         model = new DemandModel(tables);
+        parkModel = parkTables == null ? null : new DemandModel(parkTables);
+        StockWeights = stockWeights ?? new Dictionary<string, double>();
         Menu = menu;
         Name = name;
         var vehicle = tables.Vehicle(Kind) ?? throw new InvalidOperationException("economy.json has no cart.");
-        Staff = vehicle.Staff;
+        Staff = staff ?? vehicle.Staff;
         StockUnits = stockUnits ?? vehicle.StockUnits;
     }
 
     public string Name { get; }
+    public IReadOnlyDictionary<string, double> StockWeights { get; }
+    public double WeightOf(string item) => StockWeights.TryGetValue(item, out var w) ? w : 1.0;
+    // Stock measured against the unit limit.
+    public double Load(IReadOnlyDictionary<string, double> stock) => stock.Sum(p => p.Value * WeightOf(p.Key));
     public IReadOnlyList<string> Menu { get; }
     public int Staff { get; }
     public int StockUnits { get; }
@@ -138,7 +150,8 @@ public sealed class Cart
         var sellable = Menu.Where(i => stock.TryGetValue(i, out var u) && u > 1e-6).OrderBy(i => i, StringComparer.Ordinal).ToList();
         if (sellable.Count == 0) return HourPlan.None;
         var day = minute >= 1440 ? (DayOfWeek)(((int)c.Day + 1) % 7) : c.Day;
-        var estimate = model.Estimate(new DemandQuery
+        var useModel = parkModel != null && spot.Areas.Shares.Count == 1 && spot.Areas.ShareOf("waterfront") > 0 ? parkModel : model;
+        var estimate = useModel.Estimate(new DemandQuery
         {
             Areas = spot.Areas,
             Neighbourhood = spot.Hood,
@@ -282,8 +295,10 @@ public static class Selling
         var unlimited = cart.Menu.ToDictionary(i => i, _ => 1e9, StringComparer.Ordinal);
         var dry = Run(cart, spot, from, to, c, unlimited);
         var total = dry.Units;
-        if (total <= 0) return cart.Menu.ToDictionary(i => i, _ => (double)cart.StockUnits / cart.Menu.Count, StringComparer.Ordinal);
-        return cart.Menu.ToDictionary(i => i, i => cart.StockUnits * dry.Sold.GetValueOrDefault(i) / total, StringComparer.Ordinal);
+        if (total <= 0) return cart.Menu.ToDictionary(i => i, i => cart.StockUnits / cart.Menu.Count / cart.WeightOf(i), StringComparer.Ordinal);
+        // Fill the unit limit in the proportions the stop sells, each item counting at its stock weight.
+        var weighted = cart.Menu.Sum(i => dry.Sold.GetValueOrDefault(i) * cart.WeightOf(i));
+        return cart.Menu.ToDictionary(i => i, i => cart.StockUnits * dry.Sold.GetValueOrDefault(i) / weighted, StringComparer.Ordinal);
     }
 
     public static Dictionary<string, double> Unlimited(Cart cart) => cart.Menu.ToDictionary(i => i, _ => 1e9, StringComparer.Ordinal);

@@ -99,7 +99,7 @@ public sealed class Planner
             var full = true;
             if (i > 0)
             {
-                var left = stock!.Values.Sum();
+                var left = cart.Load(stock!);
                 var move = 0;
                 if (left >= cart.StockUnits / 2.0)
                 {

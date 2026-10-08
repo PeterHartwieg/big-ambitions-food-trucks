@@ -1,5 +1,5 @@
 {
-  "_notes": "The study's proposed data changes (docs/balance/cart-economics.md), as a merge patch over data/*.json. Run with: --patch proposed.json (prices default to the ceiling, --pricing ceiling). Daypart footfall: sharper outside each area's peak, nightlife's peak raised, lunch at offices unchanged at 3.0; passersPerHour lowered to keep the best route inside the band. Stock stays at 80 (cart) and 160 (truck).",
+  "_notes": "The study's proposed data (docs/balance/cart-economics.md, section 4), as a merge patch over data/*.json. Run: dotnet bin/Debug/net10.0/balance.dll --patch proposed.json (prices default to the ceiling). 'demand' and 'economy' are plain data changes. 'rules' are proposals Core can't express yet; the tool emulates them: stockWeight (share of the unit limit one unit takes) and areaAppetite (per-area appetite factors, emulated only for pure park spots). The classifier's 'subwayentrance' building type needs the game side to report subway entrances as nearby places.",
   "demand": {
     "passersPerHour": 22,
     "areas": {
@@ -7,7 +7,9 @@
         "footfall": {
           "afternoon": 0.2,
           "evening": 0.2,
-          "late": 0.05
+          "late": 0.05,
+          "early": 1.5,
+          "morning": 2.0
         }
       },
       "residential": {
@@ -37,11 +39,138 @@
       "nightlife": {
         "footfall": {
           "evening": 2.0,
-          "late": 3.0,
+          "late": 2.5,
           "lunch": 0.15,
           "afternoon": 0.1,
           "morning": 0.05
         }
+      },
+      "transit": {
+        "footfall": {
+          "early": 2.0,
+          "morning": 2.5,
+          "lunch": 0.3,
+          "afternoon": 0.4,
+          "evening": 0.8,
+          "late": 0.2,
+          "night": 0.05
+        },
+        "days": {
+          "mon": 1.0,
+          "tue": 1.0,
+          "wed": 1.0,
+          "thu": 1.0,
+          "fri": 1.0,
+          "sat": 0.5,
+          "sun": 0.4
+        }
+      },
+      "waterfront": {
+        "footfall": {
+          "afternoon": 2.0
+        },
+        "days": {
+          "mon": 0.9,
+          "tue": 0.9,
+          "wed": 0.9,
+          "thu": 0.9,
+          "fri": 1.0
+        }
+      }
+    },
+    "classifier": {
+      "buildingTypes": {
+        "ba:buildingtype_theater": {
+          "nightlife": 6.0
+        },
+        "ba:buildingtype_cinema": {
+          "nightlife": 3.0,
+          "retail": 1.0
+        },
+        "subwayentrance": {
+          "transit": 1.0
+        }
+      },
+      "businessTypes": {
+        "ba:businesstype_nightclub": {
+          "nightlife": 10.0
+        },
+        "ba:businesstype_casino": {
+          "nightlife": 6.0
+        },
+        "ba:businesstype_theater": {
+          "nightlife": 6.0
+        },
+        "ba:businesstype_cinema": {
+          "nightlife": 3.0,
+          "retail": 1.0
+        },
+        "ba:businesstype_liquorstore": {
+          "nightlife": 1.0,
+          "retail": 0.5
+        }
+      }
+    },
+    "categories": {
+      "coffee": {
+        "appetite": {
+          "early": 0.55,
+          "morning": 0.45,
+          "afternoon": 0.35,
+          "lunch": 0.12
+        }
+      },
+      "bakery": {
+        "appetite": {
+          "afternoon": 0.25
+        }
+      },
+      "fastfood": {
+        "appetite": {
+          "lunch": 0.25,
+          "late": 0.25
+        }
+      }
+    }
+  },
+  "economy": {
+    "equipment": {
+      "coffeemachine": {
+        "gameItems": [
+          "ba:itemname_industrialcoffeemachine"
+        ]
+      }
+    },
+    "products": {
+      "ba:itemname_cupofcoffee": {
+        "serviceMinutes": 1.0
+      },
+      "ba:itemname_cupoftea": {
+        "serviceMinutes": 1.0
+      },
+      "ba:itemname_croissant": {
+        "serviceMinutes": 2
+      },
+      "ba:itemname_donut": {
+        "serviceMinutes": 2
+      },
+      "ba:itemname_cupcake": {
+        "serviceMinutes": 2
+      }
+    }
+  },
+  "rules": {
+    "stockWeight": {
+      "ba:itemname_cupofcoffee": 0.25,
+      "ba:itemname_cupoftea": 0.25,
+      "ba:itemname_croissant": 0.5,
+      "ba:itemname_donut": 0.5,
+      "ba:itemname_cupcake": 0.5
+    },
+    "areaAppetite": {
+      "waterfront": {
+        "coffee": 2.0,
+        "icecream": 2.0
       }
     }
   }
