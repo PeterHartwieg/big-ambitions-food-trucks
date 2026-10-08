@@ -210,8 +210,11 @@ namespace FoodTrucks
         {
             CartSelling.AdvanceTo(vehicle, t);
             var controller = VehicleHelper.GetVehicleController(instance);
-            // On its way, it plans from where it is going, as the payroll's preview does.
+            // On its way, it plans from where it is going, as the payroll's preview does; at a stop the crew
+            // parked it for, from that stop, so a replan doesn't send it on a few metres' trip.
+            var parkedFor = vehicle.Arrival == null ? null : vehicle.Schedule?.Stops?.FirstOrDefault(s => s.SpotKey == vehicle.Arrival.SpotKey);
             var position = vehicle.Transit != null ? new Vector3((float)vehicle.Transit.ToX, 0f, (float)vehicle.Transit.ToZ)
+                : parkedFor != null ? new Vector3((float)parkedFor.X, 0f, (float)parkedFor.Z)
                 : controller != null ? controller.transform.position : (Vector3)instance.position;
             runner!.EnsurePlan(vehicle, t, position.x, position.z, GameSpeed());
             for (var i = 0; i < MaxSteps; i++)
@@ -410,9 +413,6 @@ namespace FoodTrucks
                 }
             }
 
-            // The hatch has to face the pavement: a lane's rotation can point either way along the kerb. Decided
-            // before the truck is placed, so it is placed once, already turned.
-            if (kind == "truck" && atStop && !HatchFacesPavement(position, rotation)) rotation *= Quaternion.Euler(0f, 180f, 0f);
             var controller = Place(instance, position, rotation);
             if (controller == null)
             {
@@ -475,8 +475,10 @@ namespace FoodTrucks
             {
                 if (!lane.TryGetRandomFreeSpotForPlayerVehicle(out var position, out var rotation, 1 << LayerHelper.VehiclesLayerIndex)) continue;
                 if (Vector3.Distance(position, target) > maxMetres) continue;
-                // The game's slot test is sized for a car; the truck is longer.
-                if (Taken(position, rotation, "truck") && Taken(position, rotation * Quaternion.Euler(0f, 180f, 0f), "truck")) continue;
+                // The hatch has to face the pavement: a lane's rotation can point either way along the kerb. The
+                // game's slot test is sized for a car, so the truck's own hull is checked, the way it will stand.
+                if (!HatchFacesPavement(position, rotation)) rotation *= Quaternion.Euler(0f, 180f, 0f);
+                if (Taken(position, rotation, "truck")) continue;
                 return (position, rotation, lane.neighbourhood);
             }
             return null;

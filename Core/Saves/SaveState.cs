@@ -200,8 +200,9 @@ namespace FoodTrucks.Core.Saves
         public string ToSpotKey { get; set; } = string.Empty;
         public double ToX { get; set; }
         public double ToZ { get; set; }
-        // The stop it is going to; absent in transits saved before this field.
+        // The stop it is going to, and when that stop's planned opening ends; absent in older transits.
         public int? ToStopIndex { get; set; }
+        public long? ToCloseAt { get; set; }
         public double ToY { get; set; }
         public double ToHeading { get; set; }
         // Where it left from, so it can go back there when the stop has no room for it.

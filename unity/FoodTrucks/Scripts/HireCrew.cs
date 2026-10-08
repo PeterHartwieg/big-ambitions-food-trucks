@@ -200,7 +200,9 @@ namespace FoodTrucks
             foreach (var vehicle in state.Vehicles)
             {
                 if (vehicle.Crew == null || vehicle.Crew.Count == 0 || runner == null) continue;
-                var instance = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId);
+                // With the private driver, it waits in the game's own list, at its saved position.
+                var instance = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId)
+                               ?? SaveGameManager.Current?.privateDriverVehicleInstances?.FirstOrDefault(v => v.id == vehicle.VehicleId);
                 var controller = instance == null ? null : VehicleHelper.GetVehicleController(instance);
                 var position = controller != null ? controller.transform.position
                     : vehicle.Transit != null ? new UnityEngine.Vector3((float)vehicle.Transit.ToX, 0f, (float)vehicle.Transit.ToZ)

@@ -285,6 +285,38 @@ public class HireRunnerTests
     }
 
     [Fact]
+    public void GivingUpAfterTheStopClosedDoesntCostTomorrowsVisit()
+    {
+        var truck = Truck(Stop("bars", 2000, 22 * 60, 23 * 60 + 30));
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
+        HireRunner.Depart(truck, runner.Step(truck, At(3, 21), At(0)), At(3, 21), 0, 0, 0, 0);
+        runner.EnsurePlan(truck, At(4, 0, 30), 0, 0);
+
+        // No parking until well after midnight: back where it left from.
+        HireRunner.Arrived(truck, 0, 0, atStop: false, At(4, 0, 30));
+
+        Assert.True(truck.Skipped!.Until <= At(4, 0, 31));
+    }
+
+    [Fact]
+    public void EditingTheRouteWhileOpenKeepsTheWindowOpen()
+    {
+        var schedules = new HireSchedules(rules);
+        var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60));
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
+        truck.IsOpen = true;
+        truck.HireStop = 0;
+        truck.Arrival = new ArrivalState { SpotKey = "office", X = 2040, Z = 0 };
+
+        RouteEditor.AddStop(schedules, truck, Stop("bars", 4000, 18 * 60, 23 * 60));
+        HireRunner.Replan(truck, At(3, 12));
+        // Planned from where the truck stands, 40 m out: a short leg to the stop it is open at.
+        runner.EnsurePlan(truck, At(3, 12), 2040, 0);
+
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), At(2040)).Kind);
+    }
+
+    [Fact]
     public void AVehicleThatCantSellWhereItStandsIsMoved()
     {
         var truck = Truck(Stop("office", 0, 11 * 60, 14 * 60));

@@ -91,6 +91,9 @@ namespace FoodTrucks
                 options.Add((Format("foodtrucks:hires_option_days", Text(DaysKey(schedule.Days))), () => HireRoutes.Later(() => AskDays(id))));
             }
 
+            // Two employees can read the same; a number keeps the choices apart.
+            for (var i = 0; i < options.Count; i++)
+                if (options.Take(i).Any(o => o.Label == options[i].Label)) options[i] = ($"{options[i].Label} ({i + 1})", options[i].Act);
             var labels = options.Select(o => o.Label).ToList();
             DropdownSelector.Show(labels, Guard(chosen =>
             {

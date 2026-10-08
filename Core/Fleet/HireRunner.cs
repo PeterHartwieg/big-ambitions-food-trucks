@@ -150,7 +150,8 @@ namespace FoodTrucks.Core.Fleet
             if (vehicle.IsOpen)
             {
                 if (vehicle.HireStop == null) return HireAction.None;
-                return want != null && want.Kind == LegKind.Open && want.StopIndex == vehicle.HireStop
+                // Still the stop it is open at, even if a fresh plan has a short leg "to" it first.
+                return want != null && want.StopIndex == vehicle.HireStop
                     ? HireAction.None
                     : new HireAction(HireActionKind.Close);
             }
@@ -201,6 +202,7 @@ namespace FoodTrucks.Core.Fleet
             vehicle.Transit = new TransitState
             {
                 ToStopIndex = action.Stop,
+                ToCloseAt = OpenEnd(vehicle, action.Stop, now),
                 FromX = x,
                 FromY = y,
                 FromZ = z,
@@ -243,8 +245,10 @@ namespace FoodTrucks.Core.Fleet
             vehicle.Transit = null;
             vehicle.Arrival = atStop && transit != null ? new ArrivalState { SpotKey = transit.ToSpotKey, X = x, Z = z } : null;
             if (atStop || transit == null) return;
+            // The opening this trip was for, not a later one at the same stop.
             var index = transit.ToStopIndex ?? vehicle.Schedule?.Stops?.FindIndex(s => s.SpotKey == transit.ToSpotKey) ?? -1;
-            var until = index >= 0 ? OpenEnd(vehicle, index, now) : null;
+            var until = transit.ToCloseAt ?? (index >= 0 ? OpenEnd(vehicle, index, now) : null);
+            if (until != null && until <= now) until = now + 1;
             vehicle.Skipped = new SkipState { SpotKey = transit.ToSpotKey, Until = until ?? now + 60 };
         }
 
