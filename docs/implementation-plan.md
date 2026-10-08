@@ -162,21 +162,13 @@ The first playable slice. It touches every risky layer at once: bundle, vehicle,
 
 ## Checklists
 
-Every milestone ends with three lists in the mod's `CHECKS.md`:
+Every milestone ends with three lists in the mod's `CHECKS.md`, split by who can check what (decided 8 October 2026, after two long sessions where the useful finds came from playing, not from scripted rows):
 
-1. **Automated:** Core tests green, build hash and version logged.
-2. **Peter in game:** numbered steps of about 15 minutes in total, each with the exact thing to see. Always includes "load a save made without the mod" and "remove the mod and load".
-3. **Log lines:** the `Player.log` lines the mod must print, including each Harmony patch's Active line.
+1. **Automated:** Core tests green, build hash and version logged, install.
+2. **Peter in game:** about 15 minutes of normal play, asking only for what eyes or judgement can tell: how something looks and moves, whether the numbers feel right. No rows for things the log proves.
+3. **Log lines:** what the agent reads from `Player.log` afterwards, including each Harmony patch's Active line. Where something can't be seen in the log yet, add a log line rather than a checklist row.
 
-Example for Milestone 1:
-
-1. The mods menu shows Food Trucks enabled.
-2. The dealer lists the food cart at the expected price.
-3. Buy it, push it 50 m; it follows at walking speed.
-4. Load 20 hot dogs at a wholesaler; the cart shows 20.
-5. Open at 12:00 in Midtown; three sales arrive in the transaction history with the mod's label, and the stock goes down.
-6. Save, quit to the menu, load: cart owned, sales count restored.
-7. Remove the mod, load the save: the game loads, no exception in the log.
+The uninstall step, a save made without the mod and removing the mod are checked only in milestones that change save data or vehicle types, and once before release.
 
 ## Parallel tracks
 
