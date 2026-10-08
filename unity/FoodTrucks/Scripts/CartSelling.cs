@@ -421,6 +421,9 @@ namespace FoodTrucks
 
         private void Close(VehicleState vehicle, string messageKey)
         {
+            // A crew window closed by a failing sale stays closed for the rest of the stop's hours.
+            if (vehicle.HireStop != null && messageKey == "foodtrucks:notification_closed_error")
+                HireRunner.GiveUp(vehicle, vehicle.HireStop.Value, HireCrew.Now());
             PayHeld(vehicle, null);
             heldFailed.Remove(vehicle.VehicleId);
             vehicle.IsOpen = false;

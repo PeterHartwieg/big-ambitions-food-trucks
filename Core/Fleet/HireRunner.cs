@@ -234,6 +234,16 @@ namespace FoodTrucks.Core.Fleet
             };
         }
 
+        // The crew stops trying a stop until its planned opening ends (or for an hour without one): a window
+        // that closed on an error would otherwise open again at once.
+        public static void GiveUp(VehicleState vehicle, int stopIndex, long now)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            var stop = vehicle.Schedule?.Stops?.ElementAtOrDefault(stopIndex);
+            if (stop == null) return;
+            vehicle.Skipped = new SkipState { SpotKey = stop.SpotKey, Until = OpenEnd(vehicle, stopIndex, now) ?? now + 60 };
+        }
+
         // Shift minutes as the plans will be once today's exists, without saving anything: the game's payroll
         // can count midnight's hour before the routes have planned the new day.
         public long PlannedShiftMinutes(VehicleState vehicle, long from, long to, double x, double z, double gameSpeed = 1.0)

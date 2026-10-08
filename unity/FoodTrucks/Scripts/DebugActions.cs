@@ -30,7 +30,8 @@ namespace FoodTrucks
         private static readonly Action TaxStatementAction = IssueTaxStatement;
         private static readonly Action StatusAction = ShowStatus;
         private static readonly Action DemandAction = ShowDemand;
-        private static readonly Action HireAction = HireTestWorker;
+        // The console calls this directly, so it carries its own guard.
+        private static readonly Action HireAction = () => Run("hire", HireTestWorker);
         private static readonly Action UninstallAction = Uninstall.Request;
 
         private void OnEnable()

@@ -327,6 +327,18 @@ public class HireRunnerTests
     }
 
     [Fact]
+    public void AStopGivenUpAfterAnErrorStaysClosedUntilItsHoursEnd()
+    {
+        var truck = Truck(Stop("office", 0, 11 * 60, 14 * 60));
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
+
+        HireRunner.GiveUp(truck, 0, At(3, 12));
+
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), At(0)).Kind);
+        Assert.Equal(At(3, 14), truck.Skipped!.Until);
+    }
+
+    [Fact]
     public void AVehicleThatCantSellWhereItStandsIsMoved()
     {
         var truck = Truck(Stop("office", 0, 11 * 60, 14 * 60));

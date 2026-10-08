@@ -93,6 +93,8 @@ namespace FoodTrucks
                     CartSelling.Notify("foodtrucks:notification_routes_failed");
                     try { if (vehicle.HireStop != null) CartSelling.CloseByCrew(vehicle, now); }
                     catch (Exception closeEx) { Log.Error("Hire routes, closing: " + closeEx); }
+                    try { Recover(vehicle); }
+                    catch (Exception recoverEx) { Log.Error("Hire routes, bringing it back: " + recoverEx); }
                 }
             }
         }
@@ -313,6 +315,22 @@ namespace FoodTrucks
                 ("time", StaffDialog.Clock((int)(action.ArrivesAt % 1440))));
         }
 
+        // A stopped route never leaves its vehicle off the map: one on its way goes back where it left from,
+        // even onto a taken spot, since there is no next try.
+        private static void Recover(VehicleState vehicle)
+        {
+            var transit = vehicle.Transit;
+            var instance = Instance(vehicle.VehicleId);
+            if (transit == null || instance == null) return;
+            var from = new Vector3((float)transit.FromX, (float)transit.FromY, (float)transit.FromZ);
+            var controller = Place(instance, from, Quaternion.Euler(0f, (float)transit.FromHeading, 0f));
+            instance.parkingState = (ParkingState)transit.FromParkingState;
+            vehicle.Transit = null;
+            vehicle.Arrival = null;
+            FoodTrucksSession.MarkChanged();
+            Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} put back where it left from after its route stopped ({(controller != null ? "placed" : "not placed; it appears there on the next load")}).");
+        }
+
         // Whether another vehicle stands where this one's hull would be.
         private static bool Taken(Vector3 position, Quaternion rotation, string kind) =>
             Physics.CheckBox(position + rotation * (kind == "truck" ? TruckCentre : CartCentre), kind == "truck" ? TruckHalfSize : CartHalfSize,
@@ -467,10 +485,15 @@ namespace FoodTrucks
             // The lanes belong to the city scene: found once per city load.
             if (laneCache == null || laneCache.Any(l => l == null))
                 laneCache = Object.FindObjectsByType<ParkingLaneGenerator>(FindObjectsSortMode.None);
+            // Every lane whose middle is within reach (a lane runs up to about a block, so its middle can be
+            // that much further than its nearest slot), nearest first.
+            var reach = maxMetres + LaneReachMetres;
             var lanes = laneCache
                 .Where(l => l != null && !l.isHandicapParking && !l.preventUseByPrivateDriver && !l.designatedDeliveryVanSpot && l.chanceOfFreeSpot <= 99)
-                .OrderBy(l => (l.GetWorldCenterPosition() - target).sqrMagnitude)
-                .Take(12);
+                .Select(l => (Lane: l, Distance: (l.GetWorldCenterPosition() - target).sqrMagnitude))
+                .Where(l => l.Distance <= reach * reach)
+                .OrderBy(l => l.Distance)
+                .Select(l => l.Lane);
             foreach (var lane in lanes)
             {
                 if (!lane.TryGetRandomFreeSpotForPlayerVehicle(out var position, out var rotation, 1 << LayerHelper.VehiclesLayerIndex)) continue;
@@ -497,6 +520,7 @@ namespace FoodTrucks
         private static string KindOf(VehicleState vehicle) => string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType;
 
         private static ParkingLaneGenerator[]? laneCache;
+        private const float LaneReachMetres = 100f;
 
         public static void Reset()
         {
