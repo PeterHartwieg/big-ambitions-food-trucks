@@ -37,8 +37,7 @@ namespace FoodTrucks
             var road = RoadBelow(position);
 
             // A parking lane is the road side of the kerb.
-            var hits = Physics.OverlapSphere(position, 0.4f, LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide);
-            if (hits.Any(h => h != null && h.GetComponentInParent<ParkingLaneGenerator>() != null))
+            if (InParkingLane(position, 0.4f))
                 return new Result("foodtrucks:legality_parking_lane", "inside a parking lane", road);
 
             var near = Physics.OverlapSphere(position, CrosswalkMetres, ~0, QueryTriggerInteraction.Collide);
@@ -65,7 +64,13 @@ namespace FoodTrucks
 
         private static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
 
-        private static bool RoadBelow(Vector3 position)
+        public static bool InParkingLane(Vector3 position, float radius = 0.3f)
+        {
+            var hits = Physics.OverlapSphere(position, radius, LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide);
+            return hits.Any(h => h != null && h.GetComponentInParent<ParkingLaneGenerator>() != null);
+        }
+
+        public static bool RoadBelow(Vector3 position)
         {
             try
             {

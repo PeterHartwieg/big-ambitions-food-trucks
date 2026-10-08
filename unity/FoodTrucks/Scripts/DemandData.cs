@@ -2,19 +2,23 @@
 using System;
 using System.IO;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Rules;
 
 namespace FoodTrucks
 {
-    // The demand and economy tables from the mod folder's data/ files, loaded once at startup.
+    // The demand, economy and rule tables from the mod folder's data/ files, loaded once at startup.
     // Players can edit them; a bad file is reported in the log and the cart can't open until it's fixed.
     internal static class DemandData
     {
         public static DemandTables? Tables { get; private set; }
+        // rules.json: queues and service for now; licences, fleet, reputation and catering later.
+        public static RuleTables? Rules { get; private set; }
         public static string? Error { get; private set; }
 
         public static void Load(string modRootPath)
         {
             Tables = null;
+            Rules = null;
             Error = null;
             try
             {
@@ -23,16 +27,19 @@ namespace FoodTrucks
                     Read(folder, "demand.json"),
                     Read(folder, "economy.json"),
                     Read(folder, "zones.json"));
-                Log.Info($"Demand data loaded from {folder}: {Tables.Zones.Count} zones.");
+                Rules = RuleTables.Parse(Read(folder, "rules.json"));
+                Log.Info($"Demand data loaded from {folder}: {Tables.Zones.Count} zones; queue patience {Rules.Queue.PatienceMinutes} min, cart queue limit {Rules.Service.QueueLimit(CartDemand.Kind, Rules.Queue.MaxQueue)}.");
             }
             catch (Exception ex)
             {
+                Tables = null;
+                Rules = null;
                 Error = ex.Message;
                 Log.Error("Demand data not loaded; carts can't open. " + ex.Message);
             }
         }
 
-        // zones.json is optional; the other two are required.
+        // zones.json is optional; the others are required.
         private static string? Read(string folder, string name)
         {
             var path = Path.Combine(folder, name);

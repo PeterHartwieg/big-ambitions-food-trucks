@@ -22,11 +22,20 @@ namespace FoodTrucks.Core.Selling
         public double Conversion { get; set; } = 1.0;
         // DemandEstimate.CustomerShares. Empty means every stocked category is equally likely.
         public IReadOnlyDictionary<string, double>? CustomerShares { get; set; }
+        // Per category, the item its customers buy while it lasts (the game side's best-accepted item at
+        // its price). A category without one, or whose item has run out, gets its item with the most units.
+        public IReadOnlyDictionary<string, string>? CategoryItems { get; set; }
         // DemandEstimate.AddOnsPerCustomer, averaged over all customers.
         public double AddOnsPerCustomer { get; set; }
         // Workers serving on their own: hires, or the player while the game side still sells
         // automatically. 0 when only the player serves, through ServeHead.
         public int Servers { get; set; }
+        // Multiplies each worker's service speed: order time is ServiceMinutes / ServiceSpeed.
+        // Non-finite or non-positive values use 1.0; speeds above 10 are capped.
+        public double ServiceSpeed { get; set; } = 1.0;
+        // Waiting customers, excluding orders at the window. 0 or less uses the global MaxQueue;
+        // a positive limit is capped at MaxQueue.
+        public int QueueLimit { get; set; }
         public bool Raining { get; set; }
     }
 
@@ -98,8 +107,9 @@ namespace FoodTrucks.Core.Selling
 
     // Milestone 3's per-minute sales tick: customers arrive at random from the demand rate, wait in a
     // queue, give up after about 20 minutes (sooner in rain), and are served one order per worker at
-    // the order's service time. Each sale draws one unit; a sold-out item can't be chosen and selling
-    // out everything sends the queue away. The same tick drives the visible queue near the player and
+    // the order's service time divided by their service speed. Arrivals at the queue limit walk on.
+    // Each sale draws one unit; a sold-out item can't be chosen and selling out everything sends the
+    // queue away. The same tick drives the visible queue near the player and
     // the statistical sales elsewhere, so switching views changes nothing.
     // Deterministic: the random state lives in ServiceState, so a save and load replay the same minutes.
     // Replaces SalesTick and SalesRate's "customers above the cap are lost" once the game side switches.
@@ -164,7 +174,7 @@ namespace FoodTrucks.Core.Selling
             var random = new SeededRandom(state.RandomState);
             var stock = StockOnMenu(input);
             GiveUp(state, input, result, state.Minute);
-            var head = StartNext(state, stock, result);
+            var head = StartNext(state, input, stock, result);
             if (head != null) Complete(state, head, head.Item!, input, stock, random, result);
             if (TotalUnits(stock) == 0) SellOut(state, result);
             state.RandomState = random.State;
@@ -196,6 +206,7 @@ namespace FoodTrucks.Core.Selling
         {
             var perHour = Usable(input.CustomersPerHour) * Usable(input.Conversion);
             var arrivals = random.Poisson(Math.Min(MaxArrivalsPerMinute, perHour / 60.0));
+            var queueLimit = input.QueueLimit <= 0 ? rules.MaxQueue : Math.Min(input.QueueLimit, rules.MaxQueue);
             for (var i = 0; i < arrivals; i++)
             {
                 var category = PickCategory(input.CustomerShares, stock, random);
@@ -204,7 +215,7 @@ namespace FoodTrucks.Core.Selling
                     result.Leave(0, CustomerExit.NothingLeft);
                     continue;
                 }
-                if (state.Queue.Count >= rules.MaxQueue)
+                if (state.Queue.Count >= queueLimit)
                 {
                     result.Leave(0, CustomerExit.QueueFull);
                     continue;
@@ -243,7 +254,7 @@ namespace FoodTrucks.Core.Selling
             // later in the minute never picks ahead of one who was idle at its start.
             var active = new List<ServiceCustomer?>(state.Window);
             state.Window.Clear();
-            for (var worker = active.Count; worker < servers; worker++) active.Add(StartNext(state, stock, result));
+            for (var worker = active.Count; worker < servers; worker++) active.Add(StartNext(state, input, stock, result));
             // Completions run in time order across the workers (ties by worker), so the order that
             // finishes first gets the last unit, and a freed worker starts the next customer at that moment.
             var used = new double[servers];
@@ -267,13 +278,13 @@ namespace FoodTrucks.Core.Selling
                 var finished = active[next]!;
                 used[next] = Math.Min(1.0, nextTime);
                 finished.MinutesLeft = 0;
-                var item = InStock(finished.Item, stock) ? finished.Item : ItemFor(finished.Category, stock);
+                var item = InStock(finished.Item, stock) ? finished.Item : ItemFor(finished.Category, input, stock);
                 if (item == null) result.Leave(finished.Id, CustomerExit.NothingLeft);
                 else Complete(state, finished, item!, input, stock, random, result);
                 active[next] = null;
                 // The last unit is gone: the orders still being made leave with the queue (SellOut).
                 if (TotalUnits(stock) == 0) break;
-                if (used[next] < 1.0 - Epsilon) active[next] = StartNext(state, stock, result);
+                if (used[next] < 1.0 - Epsilon) active[next] = StartNext(state, input, stock, result);
             }
             for (var worker = 0; worker < servers; worker++)
             {
@@ -281,7 +292,7 @@ namespace FoodTrucks.Core.Selling
                 if (order == null)
                 {
                     // A worker who finished right at the end of the minute calls the next customer now.
-                    if (used[worker] >= 1.0 - Epsilon) order = StartNext(state, stock, result);
+                    if (used[worker] >= 1.0 - Epsilon) order = StartNext(state, input, stock, result);
                     if (order == null) continue;
                 }
                 else order.MinutesLeft = Math.Max(0, order.MinutesLeft - (1.0 - used[worker]));
@@ -290,21 +301,23 @@ namespace FoodTrucks.Core.Selling
         }
 
         // The next customer in line who can still get something, now at the window.
-        private ServiceCustomer? StartNext(ServiceState state, Dictionary<string, int> stock, SalesResult result)
+        private ServiceCustomer? StartNext(ServiceState state, SalesInput input, Dictionary<string, int> stock, SalesResult result)
         {
             // Sold out: leave the queue for SellOut, which sends it away as Closed.
             while (state.Queue.Count > 0 && TotalUnits(stock) > 0)
             {
                 var customer = state.Queue[0];
                 state.Queue.RemoveAt(0);
-                var item = ItemFor(customer.Category, stock);
+                var item = ItemFor(customer.Category, input, stock);
                 if (item == null)
                 {
                     result.Leave(customer.Id, CustomerExit.NothingLeft);
                     continue;
                 }
                 customer.Item = item;
-                customer.MinutesLeft = tables.Product(item)!.ServiceMinutes;
+                var speed = input.ServiceSpeed;
+                if (double.IsNaN(speed) || double.IsInfinity(speed) || speed <= 0) speed = 1.0;
+                customer.MinutesLeft = tables.Product(item)!.ServiceMinutes / Math.Min(10, speed);
                 return customer;
             }
             return null;
@@ -410,9 +423,13 @@ namespace FoodTrucks.Core.Selling
             return stocked.Contains(picked) ? picked : null;
         }
 
-        // The category's item with the most units left, ties broken by name.
-        private string? ItemFor(string category, Dictionary<string, int> stock)
+        // The category's chosen item (CategoryItems) while it lasts, else its item with the most units left,
+        // ties broken by name.
+        private string? ItemFor(string category, SalesInput input, Dictionary<string, int> stock)
         {
+            if (input.CategoryItems != null && input.CategoryItems.TryGetValue(category, out var chosen) &&
+                InStock(chosen, stock) && tables.Product(chosen)!.Category == category)
+                return chosen;
             string? best = null;
             var bestUnits = 0;
             foreach (var pair in stock.OrderBy(p => p.Key, StringComparer.Ordinal))

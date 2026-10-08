@@ -2,8 +2,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BigAmbitions.Characters.Skills;
+using BigAmbitions.DayNightCycle;
 using BigAmbitions.Items;
+using FoodTrucks.Core.Common;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Rules;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
 using Helpers;
@@ -17,10 +21,12 @@ using UnityEngine;
 namespace FoodTrucks
 {
     // Selling: Open parks the cart where it stands, if the spot is legal and the fitted equipment gives a
-    // menu. While it is open and the player stays close, customers come at the rate the demand model
-    // gives for the spot and the hour (CartDemand). Each customer buys one main item and sometimes a cold
-    // drink; each item takes one unit of cargo and pays the game's market price with the mod's label.
-    // Grabbing the cart closes it.
+    // menu. While it is open, Core's SalesSimulator runs every in-game minute: customers arrive at the rate
+    // the demand model gives for the spot and the hour (CartDemand), queue at the window and give up after
+    // a while. The player serves while they stay close, at the speed of their customer service skill;
+    // away from the window nobody serves, so the queue waits and thins out. Each customer buys one main
+    // item and sometimes a cold drink; each item takes one unit of cargo and pays the cart's price with
+    // the mod's label. CartQueueView shows the queue as people near the player. Grabbing the cart closes it.
     internal sealed class CartSelling : MonoBehaviour
     {
         // The player works the window, so sales pause when they walk further away than this.
@@ -34,10 +40,11 @@ namespace FoodTrucks
         private readonly Dictionary<string, float> simulatedUntil = new Dictionary<string, float>();
         private readonly HashSet<string> pausedNoticeShown = new HashSet<string>();
         private readonly Dictionary<string, (int Sales, long Cents)> sinceOpen = new Dictionary<string, (int, long)>();
+        // Customers since opening who left without buying, by reason, for the close log line.
+        private readonly Dictionary<string, Dictionary<CustomerExit, int>> lostSinceOpen = new Dictionary<string, Dictionary<CustomerExit, int>>();
         // The spot each open cart stands on, read at opening and again each new day.
         private readonly Dictionary<string, Spot> spots = new Dictionary<string, Spot>();
-        private readonly Dictionary<string, double> addOnProgress = new Dictionary<string, double>();
-        private readonly System.Random random = new System.Random();
+        private SalesSimulator? simulator;
         private float nextTick;
         // From the time machine's start event to its end event (sleep, skips, paid activities).
         // Its component turns off a moment before the end event, so isRunning alone misses the last minutes.
@@ -61,14 +68,30 @@ namespace FoodTrucks
             if (instance == this) instance = null;
         }
 
-        private void OnTimeMachineStarted() => skipping = true;
+        private void OnTimeMachineStarted()
+        {
+            skipping = true;
+            CartQueueView.ClearAll();
+        }
 
-        // Skipped time is not working time: every open cart starts counting again from now.
+        // Skipped time is not working time: every open cart starts counting again from now, and the people
+        // who were waiting have long gone.
         private void OnTimeMachineEnded()
         {
             skipping = false;
             var now = TimeHelper.NowInMinutes();
             foreach (var id in simulatedUntil.Keys.ToList()) simulatedUntil[id] = now;
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || !FoodTrucksSession.CanWrite) return;
+            foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && v.Service != null))
+            {
+                var gone = SalesSimulator.Close(vehicle.Service!);
+                if (gone.Left.Count > 0)
+                {
+                    CountLost(vehicle.VehicleId, gone);
+                    FoodTrucksSession.MarkChanged();
+                }
+            }
         }
 
         // Called by the item panel's Open button while the player pushes a cart.
@@ -98,7 +121,7 @@ namespace FoodTrucks
                 return;
             }
             var tables = DemandData.Tables;
-            if (tables == null)
+            if (tables == null || DemandData.Rules == null)
             {
                 Notify("foodtrucks:notification_open_no_data");
                 return;
@@ -147,17 +170,60 @@ namespace FoodTrucks
             var vehicle = StreetSales.GetOrAdd(state, cart.id);
             vehicle.IsOpen = true;
             vehicle.SaleProgress = 0;
+            vehicle.Service = SalesSimulator.Open(SeededRandom.SeedFor(cart.id, SaveGameManager.Current.Day));
             simulatedUntil[cart.id] = TimeHelper.NowInMinutes();
             pausedNoticeShown.Remove(cart.id);
             sinceOpen[cart.id] = (0, 0);
-            addOnProgress[cart.id] = 0;
+            lostSinceOpen.Remove(cart.id);
             var spot = World.ReadSpot(tables, position);
             spots[cart.id] = spot;
             FoodTrucksSession.MarkChanged();
             var plan = CartDemand.Plan(tables, cart, spot);
-            Log.Info($"Cart {cart.id} open on day {TimeHelper.CurrentDay} at {TimeHelper.CurrentHour:D2}:{(int)TimeHelper.CurrentMinute:D2}: {World.Describe(spot)}; {CartDemand.Describe(plan)}");
-            Notify("foodtrucks:notification_open", ("units", plan.StockUnits.ToString()), ("rate", plan.SalesPerHour.ToString("F0")));
+            var service = Service(DemandData.Rules);
+            Log.Info($"Cart {cart.id} open on day {TimeHelper.CurrentDay} at {TimeHelper.CurrentHour:D2}:{(int)TimeHelper.CurrentMinute:D2}: {World.Describe(spot)}; {CartDemand.Describe(plan)} " +
+                     $"Window: customer service skill {service.Skill:F0}, speed {service.Speed:F2}, {plan.Capacity * service.Speed:F0} an hour at most, customers {service.Mood.ToString().ToLowerInvariant()}; queue limit {service.QueueLimit}.");
+            Notify("foodtrucks:notification_open", ("units", plan.StockUnits.ToString()), ("rate", ExpectedSales(plan, service.Speed).ToString("F0")));
         }
+
+        // The window as the player works it: their customer service skill sets the speed (Core: ServiceRules).
+        // The player has no satisfaction of their own in the game, so their skill counts in full.
+        private readonly struct Window
+        {
+            public Window(double skill, double speed, ServiceMood mood, int queueLimit)
+            {
+                Skill = skill;
+                Speed = speed;
+                Mood = mood;
+                QueueLimit = queueLimit;
+            }
+
+            public double Skill { get; }
+            public double Speed { get; }
+            public ServiceMood Mood { get; }
+            public int QueueLimit { get; }
+        }
+
+        private static Window Service(RuleTables rules)
+        {
+            var skill = ServiceRules.EffectiveSkill(PlayerSkill(), 100);
+            return new Window(skill, rules.Service.Speed(skill), rules.Service.Mood(skill),
+                rules.Service.QueueLimit(CartDemand.Kind, rules.Queue.MaxQueue));
+        }
+
+        // The player's customer service skill [code, unverified in game]: the first character in the save is
+        // the player, and the game gives everyone 50 when the skill is missing (InitializePlayerSkills).
+        private static double PlayerSkill()
+        {
+            var skills = SaveGameManager.Current?.charactersData?.FirstOrDefault()?.skills;
+            var skill = skills?.Find(s => s != null && s.name == CustomerServiceSkill);
+            return skill != null ? skill.value : 50;
+        }
+
+        private const string CustomerServiceSkill = "ba:skill_customerservice";
+
+        // Sales an hour while the player serves: the customers who buy, up to what the window can make.
+        private static double ExpectedSales(CartPlan plan, double speed) =>
+            plan.Estimate == null ? 0 : Math.Min(plan.Estimate.CustomersPerHour * plan.Conversion, plan.Capacity * speed);
 
         private void OnEnterVehicle(VehicleController controller)
         {
@@ -176,15 +242,36 @@ namespace FoodTrucks
         {
             vehicle.IsOpen = false;
             vehicle.SaleProgress = 0;
+            if (vehicle.Service != null) CountLost(vehicle.VehicleId, SalesSimulator.Close(vehicle.Service));
+            vehicle.Service = null;
+            CartQueueView.Closed(vehicle.VehicleId);
             simulatedUntil.Remove(vehicle.VehicleId);
             pausedNoticeShown.Remove(vehicle.VehicleId);
             sinceOpen.TryGetValue(vehicle.VehicleId, out var totals);
             sinceOpen.Remove(vehicle.VehicleId);
+            lostSinceOpen.TryGetValue(vehicle.VehicleId, out var lost);
+            lostSinceOpen.Remove(vehicle.VehicleId);
             spots.Remove(vehicle.VehicleId);
-            addOnProgress.Remove(vehicle.VehicleId);
             FoodTrucksSession.MarkChanged();
-            Log.Info($"Cart {vehicle.VehicleId} closed ({messageKey}): {totals.Sales} sales, {Money(totals.Cents)} since opening; lifetime {vehicle.LifetimeSales} sales, {Money(vehicle.LifetimeRevenueCents)}.");
+            Log.Info($"Cart {vehicle.VehicleId} closed ({messageKey}): {totals.Sales} sales, {Money(totals.Cents)} since opening; " +
+                     $"walked away: {Lost(lost, CustomerExit.GaveUp)} tired of waiting, {Lost(lost, CustomerExit.QueueFull)} at a full queue, " +
+                     $"{Lost(lost, CustomerExit.NothingLeft)} found nothing left, {Lost(lost, CustomerExit.Closed)} at closing; " +
+                     $"lifetime {vehicle.LifetimeSales} sales, {Money(vehicle.LifetimeRevenueCents)}.");
             Notify(messageKey, ("sales", totals.Sales.ToString()), ("revenue", Money(totals.Cents)));
+        }
+
+        private static int Lost(Dictionary<CustomerExit, int>? lost, CustomerExit exit) =>
+            lost != null && lost.TryGetValue(exit, out var count) ? count : 0;
+
+        private void CountLost(string vehicleId, SalesResult result)
+        {
+            if (result.Left.Count == 0) return;
+            if (!lostSinceOpen.TryGetValue(vehicleId, out var lost)) lostSinceOpen[vehicleId] = lost = new Dictionary<CustomerExit, int>();
+            foreach (var (_, exit) in result.Left)
+            {
+                lost.TryGetValue(exit, out var count);
+                lost[exit] = count + 1;
+            }
         }
 
         // Closes every open cart without a message, for the uninstall step.
@@ -196,11 +283,13 @@ namespace FoodTrucks
             {
                 vehicle.IsOpen = false;
                 vehicle.SaleProgress = 0;
+                vehicle.Service = null;
             }
+            CartQueueView.ClearAll();
             instance?.simulatedUntil.Clear();
             instance?.sinceOpen.Clear();
+            instance?.lostSinceOpen.Clear();
             instance?.spots.Clear();
-            instance?.addOnProgress.Clear();
             FoodTrucksSession.MarkChanged();
         }
 
@@ -249,15 +338,16 @@ namespace FoodTrucks
             var elapsed = (int)Math.Floor(now - from);
             if (elapsed < 1) return;
             simulatedUntil[vehicle.VehicleId] = from + elapsed;
-            if (!PlayerIsAtCart(cart))
+            var atWindow = PlayerIsAtCart(cart);
+            if (!atWindow)
             {
                 if (pausedNoticeShown.Add(vehicle.VehicleId)) Notify("foodtrucks:notification_paused");
-                return;
             }
-            pausedNoticeShown.Remove(vehicle.VehicleId);
+            else pausedNoticeShown.Remove(vehicle.VehicleId);
 
             var tables = DemandData.Tables;
-            if (tables == null) return;
+            var rules = DemandData.Rules;
+            if (tables == null || rules == null) return;
             var spot = SpotFor(tables, cart);
             if (spot == null) return;
             var plan = CartDemand.Plan(tables, cart, spot);
@@ -267,40 +357,56 @@ namespace FoodTrucks
                 Close(vehicle, "foodtrucks:notification_closed_no_equipment");
                 return;
             }
+            if (plan.StockUnits == 0)
+            {
+                Close(vehicle, "foodtrucks:notification_sold_out");
+                return;
+            }
             if (elapsed > SalesTick.MaxCatchUpMinutes) return;
 
-            // Walk through the elapsed minutes customer by customer: after each sale the stock, and so the
-            // rate, may change (a category that sells out stops drawing customers for the rest of the time).
-            var progress = vehicle.SaleProgress;
-            if (double.IsNaN(progress) || progress < 0 || progress >= 1) progress = 0;
-            double minutesLeft = elapsed;
-            var served = 0;
+            // A cart opened before 0.4.0 has no queue yet; it starts one now.
+            vehicle.Service ??= SalesSimulator.Open(SeededRandom.SeedFor(cart.id, SaveGameManager.Current.Day));
+            simulator ??= new SalesSimulator(tables, rules.Queue);
+            var window = Service(rules);
+            var result = simulator.Advance(vehicle.Service, Input(tables, plan, atWindow ? 1 : 0, window), elapsed);
+            CountLost(vehicle.VehicleId, result);
             var failed = false;
-            while (minutesLeft > 0 && plan.StockUnits > 0)
+            // One notification per customer: their main item and the drink that came with it.
+            foreach (var customer in result.Sales.GroupBy(s => s.CustomerId))
             {
-                var perMinute = plan.SalesPerHour / 60.0;
-                // Nobody buys at these prices right now: no sales, and no stock-only fallback.
-                if (perMinute <= 0 || plan.Conversion <= 0) break;
-                var needed = (1 - progress) / perMinute;
-                if (needed > minutesLeft)
-                {
-                    progress = Math.Min(progress + minutesLeft * perMinute, 0.999999);
-                    break;
-                }
-                minutesLeft -= needed;
-                progress = 0;
-                if (!ServeCustomer(state, vehicle, cart, tables, plan))
+                if (!ServeCustomer(state, vehicle, cart, plan, customer.Select(s => s.Item).ToList()))
                 {
                     failed = true;
                     break;
                 }
-                served++;
-                plan = CartDemand.Plan(tables, cart, spot);
             }
-            if (served > 0 || progress != vehicle.SaleProgress) FoodTrucksSession.MarkChanged();
-            vehicle.SaleProgress = progress;
-            if (failed || plan.StockUnits == 0)
-                Close(vehicle, plan.StockUnits == 0 ? "foodtrucks:notification_sold_out" : "foodtrucks:notification_closed_error");
+            CartQueueView.Record(vehicle.VehicleId, result, window.Mood);
+            if (result.Sales.Count > 0 || result.Joined.Count > 0 || result.Left.Count > 0) FoodTrucksSession.MarkChanged();
+            if (failed) Close(vehicle, "foodtrucks:notification_closed_error");
+            else if (result.SoldOut || CartDemand.StockOf(cart, plan.Menu.Menu).Count == 0) Close(vehicle, "foodtrucks:notification_sold_out");
+        }
+
+        // What the simulator needs for these minutes, from the cart's plan. Customers who buy arrive at the
+        // model's rate times the price conversion and pick a category by the buyer shares; each category
+        // sells the item customers accept best (plan.SaleItems), and food buyers add the plan's drink.
+        private static SalesInput Input(DemandTables tables, CartPlan plan, int servers, Window window)
+        {
+            var mainShare = plan.BuyerShares.Where(p => tables.Category(p.Key).AddOnFactor <= 0).Sum(p => p.Value);
+            return new SalesInput
+            {
+                Menu = plan.Stock.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList(),
+                Stock = plan.Stock,
+                CustomersPerHour = plan.Estimate?.CustomersPerHour ?? 0,
+                Conversion = plan.Conversion,
+                CustomerShares = plan.BuyerShares,
+                CategoryItems = plan.SaleItems,
+                // Core spreads add-ons over all buyers and divides by the food buyers' share again.
+                AddOnsPerCustomer = plan.AddOnItem == null ? 0 : plan.AddOnsPerFoodBuyer * mainShare,
+                Servers = servers,
+                Raining = RainHelper.isRaining,
+                ServiceSpeed = window.Speed,
+                QueueLimit = window.QueueLimit
+            };
         }
 
         // The spot is read again on a new day, in case the city around the cart changed.
@@ -315,35 +421,23 @@ namespace FoodTrucks
             return spot;
         }
 
-        // One customer: a main item chosen by the categories' shares of customers, plus the cold drinks
-        // the add-on rate gives. One notification per customer.
-        private bool ServeCustomer(SaveState state, VehicleState vehicle, VehicleInstance cart, DemandTables tables, CartPlan plan)
+        // One customer's order as Core sold it: each item takes a unit and is paid at the cart's price.
+        // One notification per customer.
+        private bool ServeCustomer(SaveState state, VehicleState vehicle, VehicleInstance cart, CartPlan plan, List<string> items)
         {
-            var stock = CartDemand.StockOf(cart, plan.Menu.Menu);
-            // Customers buy only the item their category sells now (the best-accepted one).
-            var offered = stock.Where(s => plan.SaleItems.Values.Contains(s.Key)).ToDictionary(s => s.Key, s => s.Value);
-            var main = CustomerPick.MainItem(tables, plan.BuyerShares, offered, random.NextDouble());
-            if (main == null) return false;
             var labels = new List<string>();
             long cents = 0;
-            var sold = SellItem(state, vehicle, cart, main);
-            if (sold < 0) return false;
-            labels.Add(LocalizorManager.GetLocalization(main, null));
-            cents += sold;
-
-            // Drinks ride only with customers who came for food; a drink customer doesn't buy a second one.
-            var drinkCustomer = tables.Category(tables.Product(main)!.Category).AddOnFactor > 0;
-            addOnProgress.TryGetValue(vehicle.VehicleId, out var progress);
-            var (addOns, next) = drinkCustomer ? (0, progress) : CustomerPick.AdvanceAddOns(progress, plan.AddOnsPerFoodBuyer);
-            addOnProgress[vehicle.VehicleId] = next;
-            for (var i = 0; i < addOns; i++)
+            foreach (var item in items)
             {
-                var drink = plan.AddOnItem;
-                if (drink == null || cart.GetAmountByItemName(drink) <= 0) break;
-                var drinkCents = SellItem(state, vehicle, cart, drink);
-                if (drinkCents < 0) break;
-                labels.Add(LocalizorManager.GetLocalization(drink, null));
-                cents += drinkCents;
+                var sold = SellItem(state, vehicle, cart, item);
+                // The main item failing stops selling; a drink that fails only leaves the order without it.
+                if (sold < 0)
+                {
+                    if (labels.Count == 0) return false;
+                    break;
+                }
+                labels.Add(LocalizorManager.GetLocalization(item, null));
+                cents += sold;
             }
             var left = CartDemand.StockOf(cart, plan.Menu.Menu).Values.Sum();
             Notify("foodtrucks:notification_sale", ("item", string.Join(" + ", labels)), ("price", Money(cents)), ("units", left.ToString()));

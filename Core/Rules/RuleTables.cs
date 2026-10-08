@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using FoodTrucks.Core.Catering;
 using FoodTrucks.Core.Demand;
 using FoodTrucks.Core.Fleet;
@@ -14,9 +16,10 @@ namespace FoodTrucks.Core.Rules
 
         private RuleTables(DataReader r, JObject root)
         {
-            r.OnlyKeys(root, "schemaVersion", "queue", "health", "regulars", "competition", "fleet", "catering");
+            r.OnlyKeys(root, "schemaVersion", "queue", "service", "health", "regulars", "competition", "fleet", "catering");
             r.SchemaVersion(root, SchemaVersion);
             Queue = QueueRules.Read(r, r.Object(root, "queue"));
+            Service = ServiceRules.Read(r, r.Object(root, "service"));
             Health = HealthRules.Read(r, r.Object(root, "health"));
             Regulars = RegularsRules.Read(r, r.Object(root, "regulars"));
             Competition = CompetitionRules.Read(r, r.Object(root, "competition"));
@@ -25,6 +28,7 @@ namespace FoodTrucks.Core.Rules
         }
 
         public QueueRules Queue { get; }
+        public ServiceRules Service { get; }
         public HealthRules Health { get; }
         public RegularsRules Regulars { get; }
         public CompetitionRules Competition { get; }
@@ -35,6 +39,71 @@ namespace FoodTrucks.Core.Rules
         {
             var reader = new DataReader("rules.json");
             return new RuleTables(reader, reader.Parse(json));
+        }
+    }
+
+    public enum ServiceMood { Complaining, Neutral, Pleased }
+
+    public sealed class ServiceRules
+    {
+        public ServiceRules(double baseSkill = 50, double slowestTimeFactor = 1.5, double fastestSpeed = 1.3,
+            double complainBelowSkill = 25, double pleasedFromSkill = 75, IReadOnlyDictionary<string, int>? queueLimits = null)
+        {
+            BaseSkill = baseSkill;
+            SlowestTimeFactor = slowestTimeFactor;
+            FastestSpeed = fastestSpeed;
+            ComplainBelowSkill = complainBelowSkill;
+            PleasedFromSkill = pleasedFromSkill;
+            QueueLimits = queueLimits ?? new Dictionary<string, int>(StringComparer.Ordinal) { ["cart"] = 6, ["truck"] = 10 };
+        }
+
+        public double BaseSkill { get; }
+        public double SlowestTimeFactor { get; }
+        public double FastestSpeed { get; }
+        public double ComplainBelowSkill { get; }
+        public double PleasedFromSkill { get; }
+        public IReadOnlyDictionary<string, int> QueueLimits { get; }
+
+        // Order time is divided by this speed; BaseSkill keeps the item's base service time.
+        public double Speed(double skill)
+        {
+            skill = ClampSkill(skill, BaseSkill);
+            if (skill == BaseSkill) return 1.0;
+            if (skill == 100) return FastestSpeed;
+            var slowestSpeed = 1.0 / SlowestTimeFactor;
+            return skill < BaseSkill
+                ? slowestSpeed + (1.0 - slowestSpeed) * skill / BaseSkill
+                : 1.0 + (FastestSpeed - 1.0) * (skill - BaseSkill) / (100.0 - BaseSkill);
+        }
+
+        // The game's worker measure. The player uses their skill alone.
+        public static double EffectiveSkill(double skill, double satisfaction) =>
+            ClampSkill(skill, 0) * ClampSkill(satisfaction, 0) / 100.0;
+
+        // A hook for customer reactions; it does not change sales yet.
+        public ServiceMood Mood(double skill) => skill < ComplainBelowSkill ? ServiceMood.Complaining
+            : skill >= PleasedFromSkill ? ServiceMood.Pleased : ServiceMood.Neutral;
+
+        public int QueueLimit(string vehicleKind, int maxQueue) =>
+            QueueLimits.TryGetValue(vehicleKind, out var limit) ? Math.Min(limit, maxQueue) : maxQueue;
+
+        private static double ClampSkill(double value, double whenNaN) =>
+            double.IsNaN(value) ? whenNaN : Math.Max(0, Math.Min(100, value));
+
+        internal static ServiceRules Read(DataReader r, JObject obj)
+        {
+            r.OnlyKeys(obj, "baseSkill", "slowestTimeFactor", "fastestSpeed", "complainBelowSkill", "pleasedFromSkill", "queueLimits");
+            var baseSkill = r.Number(obj, "baseSkill", 1, 99);
+            var slowestTimeFactor = r.Number(obj, "slowestTimeFactor", 1, 5);
+            var fastestSpeed = r.Number(obj, "fastestSpeed", 1, 3);
+            var complainBelowSkill = r.Number(obj, "complainBelowSkill", 0, 100);
+            var pleasedFromSkill = r.Number(obj, "pleasedFromSkill", 0, 100);
+            if (pleasedFromSkill <= complainBelowSkill)
+                throw r.Fail(DataReader.PathOf(obj, "pleasedFromSkill"), "must be above complainBelowSkill");
+            var limits = r.Object(obj, "queueLimits");
+            var queueLimits = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var entry in r.Entries(limits)) queueLimits.Add(entry.Name, r.Integer(limits, entry.Name, 1, 100));
+            return new ServiceRules(baseSkill, slowestTimeFactor, fastestSpeed, complainBelowSkill, pleasedFromSkill, queueLimits);
         }
     }
 

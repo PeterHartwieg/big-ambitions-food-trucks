@@ -2,12 +2,14 @@ using System.Globalization;
 using System.Text;
 using FoodTrucks.Balance;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Rules;
 using Newtonsoft.Json.Linq;
 
 // The cart balance calculator. See README.md.
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var opts = Options.Parse(args);
 var tables = LoadTables(opts);
+Selling.Queue = opts.Queue ? new QueueThroughput(tables, RuleTables.Parse(File.ReadAllText(Path.Combine(opts.Data, "rules.json")))) : null;
 var prices = GamePrices.Load(opts.Prices);
 var city = City.Load(opts.City);
 var travel = new Travel { MetresPerMinute = opts.MetresPerSecond };
@@ -27,7 +29,7 @@ Conditions Cond(DayOfWeek day = DayOfWeek.Wednesday, bool rain = false, Pricing?
 var conditions = new[] { Cond(), Cond(rain: true), Cond(DayOfWeek.Saturday), Cond(DayOfWeek.Saturday, true) };
 
 const string HotDog = "ba:itemname_hotdog", Soda = "ba:itemname_sodacan", Coffee = "ba:itemname_cupofcoffee", Croissant = "ba:itemname_croissant";
-Cart MakeCart(string[] menu, string name, int? units = null, int? staff = null) => new(tables, prices, menu, name, units, staff);
+Cart MakeCart(string[] menu, string name, int? units = null, int? staff = null, string kind = Cart.Kind) => new(tables, prices, menu, name, units, staff, kind);
 var carts = new Dictionary<string, (Cart Cart, string[] Equipment)>
 {
     ["hotdog"] = (MakeCart(new[] { HotDog }, "hot dog grill"), new[] { "hotdoggrill" }),
@@ -37,7 +39,7 @@ var carts = new Dictionary<string, (Cart Cart, string[] Equipment)>
     // Not a vehicle in the data yet: a truck stand-in with the truck's 160 units, the player and one hire at the
     // window, and a grill, coffee machine, display case and cooler (four slots).
     ["truck-like"] = (MakeCart(new[] { HotDog, Coffee, Croissant, Soda }, "truck stand-in: 2 at the window, 160 units, 4 items",
-        tables.Vehicle("truck")?.StockUnits ?? 160, 2), new[] { "hotdoggrill", "coffeemachine", "displaycase", "cooler" }),
+        tables.Vehicle("truck")?.StockUnits ?? 160, 2, "truck"), new[] { "hotdoggrill", "coffeemachine", "displaycase", "cooler" }),
 };
 // Each cart's 16-hour day and the ways a route may split it (staying put is one of them).
 var days = new Dictionary<string, (int From, int To, (string Name, (int, int)[] Windows)[] Splits)>
@@ -456,6 +458,8 @@ sealed class Options
     public double MetresPerSecond = 4.0;
     public double CartPrice = 1200;
     public bool Parks = true;
+    // --service queue (default): the game's queue since 0.4.0. --service fluid: the old min(buyers, capacity).
+    public bool Queue = true;
     public string[] Carts = { "hotdog+cooler", "coffee+bakery", "truck-like" };
     public HashSet<string> Reports = new() { "archetypes", "spots", "single", "compare", "pricing", "costs" };
 
@@ -494,6 +498,7 @@ sealed class Options
                 case "--speed": o.MetresPerSecond = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "--no-parks": case "--no-archetypes": o.Parks = false; break;
                 case "--carts": o.Carts = Next().Split(','); break;
+                case "--service": o.Queue = Next() != "fluid"; break;
                 case "--cart-price": o.CartPrice = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "--reports": o.Reports = new HashSet<string>(Next().Split(',')); break;
                 default: throw new ArgumentException($"Unknown option {args[i]}. See tools/balance/README.md.");

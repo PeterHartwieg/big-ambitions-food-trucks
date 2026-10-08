@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Rules;
 using FoodTrucks.Core.Selling;
 using Newtonsoft.Json.Linq;
 
@@ -99,8 +101,9 @@ public sealed class Cart
     private readonly GamePrices prices;
 
     public Cart(DemandTables tables, GamePrices prices, IReadOnlyList<string> menu, string name, int? stockUnits = null,
-        int? staff = null)
+        int? staff = null, string kind = Kind)
     {
+        VehicleKind = kind;
         this.tables = tables;
         this.prices = prices;
         model = new DemandModel(tables);
@@ -112,6 +115,8 @@ public sealed class Cart
     }
 
     public string Name { get; }
+    // "cart" or "truck" in rules.json's queue limits.
+    public string VehicleKind { get; }
     // Use the same per-product load as Core's CargoRules.
     public double WeightOf(string item) => tables.Product(item)?.StockWeight ?? 1.0;
     // Stock measured against the unit limit.
@@ -266,6 +271,10 @@ public static class Selling
 {
     public const int StepMinutes = 5;
 
+    // The game's queue (Milestone 3): set by --service queue (the default). Null sells the fluid rate,
+    // min(customers who buy, window capacity), as the game did before 0.4.0.
+    public static QueueThroughput? Queue { get; set; }
+
     // Sells from `stock` at the spot from minute `from` to `to` (minutes since 00:00 of the day, past 1440 is
     // after midnight). Each served customer takes the plan's best-accepted item for their category by the
     // buyer shares, and the plan's add-on drink at its rate, as CartSelling.ServeCustomer does. Stops when nothing on
@@ -284,6 +293,8 @@ public static class Selling
             d.Demand += plan.Demand * step / 60;
             d.Capacity += plan.Capacity * step / 60;
             var served = plan.Served * step / 60;
+            if (Queue != null && plan.Capacity > 0)
+                served *= Queue.Factor(plan.Demand * plan.Conversion, plan.Capacity, cart.Staff, c.Rain, cart.VehicleKind);
             var foodBuyers = 0.0;
             var servedNow = 0.0;
             foreach (var share in plan.BuyerShares.OrderBy(p => p.Key, StringComparer.Ordinal))
@@ -330,4 +341,80 @@ public static class Selling
     }
 
     public static Dictionary<string, double> Unlimited(Cart cart) => cart.Menu.ToDictionary(i => i, _ => 1e9, StringComparer.Ordinal);
+}
+
+// The share of the fluid rate the game's queue serves. In the game, Core's SalesSimulator draws arrivals at
+// random (Poisson), holds them in a queue up to the vehicle's limit and lets them give up after their patience,
+// so a window near its capacity loses some customers to bunching. This runs that same simulator once per
+// order time, staff and weather over a grid of loads (customers who buy ÷ window capacity), on a hot dog
+// whose service time is scaled to the order time, and interpolates. Above the grid the queue is always full
+// and the window always busy, so the factor is 1.
+public sealed class QueueThroughput
+{
+    private const string StandIn = "ba:itemname_hotdog";
+    private const double GridStep = 0.05;
+    private const double GridMax = 3.0;
+    private const int Hours = 300;
+
+    private readonly DemandTables tables;
+    private readonly RuleTables rules;
+    private readonly ConcurrentDictionary<(int OrderTenths, int Staff, bool Rain, int Limit), double[]> cache = new();
+
+    public QueueThroughput(DemandTables tables, RuleTables rules)
+    {
+        this.tables = tables;
+        this.rules = rules;
+    }
+
+    public double Factor(double buyersPerHour, double capacityPerHour, int staff, bool rain, string kind)
+    {
+        if (buyersPerHour <= 0 || capacityPerHour <= 0 || staff <= 0) return 1.0;
+        var load = buyersPerHour / capacityPerHour;
+        if (load >= GridMax) return 1.0;
+        var orderMinutes = staff * 60.0 / capacityPerHour;
+        var limit = rules.Service.QueueLimit(kind, rules.Queue.MaxQueue);
+        var key = ((int)Math.Round(orderMinutes * 10), staff, rain, limit);
+        var table = cache.GetOrAdd(key, k => Measure(k.OrderTenths / 10.0, k.Staff, k.Rain, k.Limit));
+        var x = load / GridStep;
+        var i = Math.Min((int)x, table.Length - 2);
+        return table[i] + (table[i + 1] - table[i]) * (x - i);
+    }
+
+    // Served ÷ what the fluid rate would serve, at each load on the grid.
+    private double[] Measure(double orderMinutes, int staff, bool rain, int limit)
+    {
+        var points = (int)Math.Round(GridMax / GridStep) + 1;
+        var table = new double[points];
+        var speed = tables.Product(StandIn)!.ServiceMinutes / Math.Max(0.1, orderMinutes);
+        var capacity = staff * 60.0 / orderMinutes;
+        Parallel.For(0, points, i =>
+        {
+            if (i == 0) { table[i] = 1.0; return; }
+            var simulator = new SalesSimulator(tables, rules.Queue);
+            var state = SalesSimulator.Open(1000 + i);
+            var input = new SalesInput
+            {
+                Menu = new[] { StandIn },
+                Stock = new Dictionary<string, int> { [StandIn] = int.MaxValue / 2 },
+                CustomersPerHour = i * GridStep * capacity,
+                CustomerShares = new Dictionary<string, double> { ["fastfood"] = 1.0 },
+                Servers = staff,
+                Raining = rain,
+                ServiceSpeed = speed,
+                QueueLimit = limit
+            };
+            long served = 0, joined = 0, walkedOn = 0;
+            for (var h = 0; h < Hours; h++)
+            {
+                var r = simulator.Advance(state, input, 60);
+                served += r.Count(CustomerExit.Served);
+                joined += r.Joined.Count;
+                walkedOn += r.Count(CustomerExit.QueueFull);
+            }
+            // Against the customers who really came, so the arrivals' own randomness doesn't count as a loss.
+            var fluid = Math.Min(joined + walkedOn, capacity * Hours);
+            table[i] = fluid > 0 ? Math.Min(1.0, served / fluid) : 1.0;
+        });
+        return table;
+    }
 }

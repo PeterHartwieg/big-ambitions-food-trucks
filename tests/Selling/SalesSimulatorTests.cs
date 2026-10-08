@@ -52,6 +52,31 @@ public class SalesSimulatorTests
     private static int Served(IEnumerable<SalesResult> results) => results.Sum(r => r.Count(CustomerExit.Served));
 
     [Fact]
+    public void ACategorySellsItsChosenItemWhileItLasts()
+    {
+        // Hot dogs and burgers are both fast food; burgers have fewer units but are the chosen item.
+        var input = Input(30, units: 0, menu: new[] { HotDog, Burger });
+        input.Stock = new Dictionary<string, int> { [HotDog] = 50, [Burger] = 3 };
+        input.CategoryItems = new Dictionary<string, string> { ["fastfood"] = Burger };
+        var sales = Merge(Run(SalesSimulator.Open(11), input, 240));
+
+        Assert.True(sales.Count > 3);
+        Assert.All(sales.Take(3), s => Assert.Equal(Burger, s.Item));
+        Assert.All(sales.Skip(3), s => Assert.Equal(HotDog, s.Item));
+    }
+
+    [Fact]
+    public void WithoutAChosenItemACategorySellsWhatItHasMostOf()
+    {
+        var input = Input(30, units: 0, menu: new[] { HotDog, Burger });
+        input.Stock = new Dictionary<string, int> { [HotDog] = 50, [Burger] = 3 };
+        var sales = Merge(Run(SalesSimulator.Open(11), input, 60));
+
+        Assert.NotEmpty(sales);
+        Assert.All(sales, s => Assert.Equal(HotDog, s.Item));
+    }
+
+    [Fact]
     public void TheSameSeedGivesTheSameDay()
     {
         var first = SalesSimulator.Open(42);
@@ -63,6 +88,30 @@ public class SalesSimulatorTests
         Assert.Equal(a.Sales.Select(s => (s.CustomerId, s.Item, s.Minute)), b.Sales.Select(s => (s.CustomerId, s.Item, s.Minute)));
         Assert.Equal(a.Left, b.Left);
         Assert.Equal(first.RandomState, second.RandomState);
+    }
+
+    [Fact]
+    public void DefaultServiceInputsMatchExplicitDefaults()
+    {
+        var first = SalesSimulator.Open(42);
+        var second = SalesSimulator.Open(42);
+        var defaults = Input(100, menu: new[] { HotDog, Soda });
+        var explicitDefaults = Input(100, menu: new[] { HotDog, Soda });
+        defaults.AddOnsPerCustomer = explicitDefaults.AddOnsPerCustomer = 0.2;
+        explicitDefaults.ServiceSpeed = 1.0;
+        explicitDefaults.QueueLimit = 0;
+
+        var a = simulator.Advance(first, defaults, 600);
+        var b = simulator.Advance(second, explicitDefaults, 600);
+
+        Assert.Equal(a.Sales.Select(s => (s.CustomerId, s.Item, s.AddOn, s.Minute)), b.Sales.Select(s => (s.CustomerId, s.Item, s.AddOn, s.Minute)));
+        Assert.Equal(a.Joined, b.Joined);
+        Assert.Equal(a.Left, b.Left);
+        Assert.Equal(a.Draws, b.Draws);
+        Assert.Equal(a.MinutesSimulated, b.MinutesSimulated);
+        Assert.Equal(a.Skipped, b.Skipped);
+        Assert.Equal(a.SoldOut, b.SoldOut);
+        Assert.Equal(Newtonsoft.Json.JsonConvert.SerializeObject(first), Newtonsoft.Json.JsonConvert.SerializeObject(second));
     }
 
     [Fact]
@@ -133,6 +182,88 @@ public class SalesSimulatorTests
 
         Assert.InRange(Served(results), 198, 201);
         Assert.True(results.Sum(r => r.Count(CustomerExit.GaveUp) + r.Count(CustomerExit.QueueFull)) > 300);
+    }
+
+    [Theory]
+    [InlineData(2.0, 398, 400)]
+    [InlineData(0.5, 98, 100)]
+    public void ServiceSpeedScalesHotDogsPerHour(double speed, int minimum, int maximum)
+    {
+        var input = Input(200);
+        input.ServiceSpeed = speed;
+
+        var results = Run(SalesSimulator.Open(5), input, 600);
+
+        Assert.InRange(Served(results), minimum, maximum);
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void UnusableServiceSpeedsUseTheBaseTime(double speed)
+    {
+        var input = Input(200);
+        input.ServiceSpeed = speed;
+
+        var results = Run(SalesSimulator.Open(5), input, 600);
+
+        Assert.InRange(Served(results), 198, 200);
+    }
+
+    [Fact]
+    public void ServiceSpeedIsCappedAtTen()
+    {
+        var capped = Input(3600);
+        capped.ServiceSpeed = 10;
+        var above = Input(3600);
+        above.ServiceSpeed = 100;
+
+        var a = simulator.Advance(SalesSimulator.Open(5), capped, 60);
+        var b = simulator.Advance(SalesSimulator.Open(5), above, 60);
+
+        Assert.InRange(a.Count(CustomerExit.Served), 198, 200);
+        Assert.Equal(a.Sales.Select(s => (s.CustomerId, s.Minute)), b.Sales.Select(s => (s.CustomerId, s.Minute)));
+        Assert.Equal(a.Left, b.Left);
+    }
+
+    [Theory]
+    [InlineData(6, 6)]
+    [InlineData(100, 12)]
+    [InlineData(0, 12)]
+    [InlineData(-1, 12)]
+    public void QueueLimitsTurnExcessArrivalsAway(int limit, int expected)
+    {
+        var state = SalesSimulator.Open(5);
+        var input = Input(3600, servers: 0);
+        input.QueueLimit = limit;
+        var turnedAway = 0;
+        for (var minute = 0; minute < 60; minute++)
+        {
+            var result = simulator.Advance(state, input, 1);
+            Assert.InRange(state.Queue.Count, 0, expected);
+            Assert.True(result.Joined.Count <= expected);
+            turnedAway += result.Count(CustomerExit.QueueFull);
+        }
+
+        Assert.Equal(expected, state.Queue.Count);
+        Assert.True(turnedAway > 0);
+    }
+
+    [Fact]
+    public void OrdersAtTheWindowDoNotCountTowardTheQueueLimit()
+    {
+        var state = SalesSimulator.Open(5);
+        var input = Input(3600);
+        input.ServiceSpeed = 0.5;
+        input.QueueLimit = 6;
+
+        simulator.Advance(state, input, 2);
+
+        Assert.Equal(6, state.Queue.Count);
+        Assert.Single(state.Window);
     }
 
     [Fact]
