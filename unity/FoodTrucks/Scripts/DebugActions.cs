@@ -16,12 +16,14 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks
 {
-    // Debug and maintenance actions: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
+    // Debug and maintenance actions: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
     // Ctrl+Shift+F12 uninstall step. Also console commands when the game runs with -console.
     internal sealed class DebugActions : MonoBehaviour
     {
         private static readonly Action SpawnTruckAction = () => SpawnVehicle(FoodTrucksMod.TruckTypeName);
         private static readonly Action SpawnCartAction = () => SpawnVehicle(FoodTrucksMod.CartTypeName);
+        private static readonly Action SpawnHandTruckAction = () => SpawnVehicle("ba:vehicletype_handtruck");
+        private static readonly Action GripAction = LogGrip;
         private static readonly Action TaxFixtureAction = TaxFixture;
         private static readonly Action TaxStatementAction = IssueTaxStatement;
         private static readonly Action StatusAction = ShowStatus;
@@ -34,6 +36,8 @@ namespace FoodTrucks
             {
                 CommandHelper.AddCommand("foodtrucks_spawn_truck", "Food Trucks: spawn the test truck next to you", SpawnTruckAction);
                 CommandHelper.AddCommand("foodtrucks_spawn_cart", "Food Trucks: spawn a free food cart next to you (testing)", SpawnCartAction);
+                CommandHelper.AddCommand("foodtrucks_spawn_handtruck", "Food Trucks: spawn a vanilla hand truck to compare the grip", SpawnHandTruckAction);
+                CommandHelper.AddCommand("foodtrucks_grip", "Food Trucks: log where the hands and grip points are while pushing", GripAction);
                 CommandHelper.AddCommand("foodtrucks_tax_fixture", "Food Trucks: record $200,000 of street food today, ledger only (throwaway saves only)", TaxFixtureAction);
                 CommandHelper.AddCommand("foodtrucks_tax_statement", "Food Trucks: issue this year's tax statement now (throwaway saves only)", TaxStatementAction);
                 CommandHelper.AddCommand("foodtrucks_demand", "Food Trucks: the demand model's reading for the cart next to you", DemandAction);
@@ -41,7 +45,7 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_uninstall", "Food Trucks: remove and refund all Food Trucks vehicles (run twice to confirm)", UninstallAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.");
+            Log.Info("Debug actions ready: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.");
         }
 
         private void OnDisable()
@@ -50,6 +54,8 @@ namespace FoodTrucks
             {
                 CommandHelper.RemoveCommand(SpawnTruckAction);
                 CommandHelper.RemoveCommand(SpawnCartAction);
+                CommandHelper.RemoveCommand(SpawnHandTruckAction);
+                CommandHelper.RemoveCommand(GripAction);
                 CommandHelper.RemoveCommand(TaxFixtureAction);
                 CommandHelper.RemoveCommand(TaxStatementAction);
                 CommandHelper.RemoveCommand(StatusAction);
@@ -66,7 +72,9 @@ namespace FoodTrucks
             if (!keyboard.ctrlKey.isPressed) return;
 
             if (keyboard.f6Key.wasPressedThisFrame) Run("spawn truck", SpawnTruckAction);
+            else if (keyboard.f7Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("spawn hand truck", SpawnHandTruckAction);
             else if (keyboard.f7Key.wasPressedThisFrame) Run("spawn cart", SpawnCartAction);
+            else if (keyboard.f11Key.wasPressedThisFrame) Run("grip", GripAction);
             else if (keyboard.f8Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax fixture", TaxFixtureAction);
             else if (keyboard.f9Key.wasPressedThisFrame) Run("demand here", DemandAction);
             else if (keyboard.f10Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax statement", TaxStatementAction);
@@ -131,6 +139,37 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
             Log.Info($"Tax fixture: ${TaxFixtureCents / 100} of street food recorded for day {day} (ledger only).");
             Notify($"Tax fixture: $200,000 of street food recorded for today. No money moved.");
+        }
+
+        // Grip measurement: while pushing any hand vehicle, logs the grip points and the hand bones relative
+        // to the player root. Pushing the vanilla hand truck and then the cart gives the numbers to copy:
+        // the vanilla truck's animator tilts it while pushed, so its prefab's rest pose isn't what the hands follow.
+        private static void LogGrip()
+        {
+            var controller = PlayerHelper.PlayerController;
+            var vehicle = VehicleHelper.GetCurrentVehicleBase();
+            if (controller == null || vehicle == null)
+            {
+                Notify("Push a hand truck or the food cart first.");
+                return;
+            }
+            var root = controller.transform;
+            string At(Transform? t)
+            {
+                if (t == null) return "none";
+                var position = root.InverseTransformPoint(t.position);
+                var rotation = (Quaternion.Inverse(root.rotation) * t.rotation).eulerAngles;
+                return $"position {position:F3}, rotation {rotation:F1}";
+            }
+            var character = controller.Character;
+            var truck = vehicle as HandTruck;
+            var moving = character != null && character.CurrentVelocity > 0.1f ? "moving" : "standing";
+            var message = $"Grip ({vehicle.vehicleInstance?.vehicleTypeName}, {moving}): vehicle {At(vehicle.transform)}; " +
+                          $"left point {At(truck?.LHandIKAttachmentPoint)}; right point {At(truck?.RHandIKAttachmentPoint)}; " +
+                          $"left hand {At(character?.leftHand)}; right hand {At(character?.rightHand)}; " +
+                          $"model {At(PlayerHelper.GetAnimator()?.transform)}.";
+            Log.Info(message);
+            Notify("Grip logged. Press it once standing and once while walking.");
         }
 
         private static void ShowStatus()

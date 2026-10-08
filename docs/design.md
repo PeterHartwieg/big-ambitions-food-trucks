@@ -27,6 +27,7 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 | Tax | Truck sales are added to the game's taxable income through a Harmony patch, at the game's own rate. |
 | Show surges | Fixed times near theatres and cinemas, bigger at weekends. |
 | Off-screen | Sales away from the player and hired trucks are statistical; customers are visible within about 100 m. |
+| Messages | In-world wording: say what happens in the game ("The cart can't open without any equipment installed"), never how to use the interface. Maintenance tools such as the uninstall step may stay plain. |
 | Not chosen | Grey-market permits, fines, time-restricted streets, per-area demand curves. |
 
 ## Core loop

@@ -186,6 +186,9 @@ namespace FoodTrucks.BuildEditor
                 AssetDatabase.CreateAsset(material, path);
             }
             material.SetColor("_BaseColor", color);
+            // Street dirt is drawn with HDRP decals, which land on any material that accepts them.
+            material.SetFloat("_SupportDecals", 0f);
+            material.EnableKeyword("_DISABLE_DECALS");
             EditorUtility.SetDirty(material);
             Materials[color] = material;
             return material;
