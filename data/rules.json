@@ -1,0 +1,79 @@
+{
+  "_notes": "Rules for queues, money, the fleet, reputation and catering. Kept apart from demand.json and economy.json so balance passes on demand don't touch them. Every number is a first guess unless a note says it comes from the game. Keys starting with an underscore are notes; the loader ignores them.",
+  "schemaVersion": 1,
+
+  "_queue": "Customers above the service rate wait at the window. Each one gives up after patienceMinutes, spread by up to patienceSpread either way, times rainPatience while it rains. Nobody joins a queue of maxQueue people; the visible queue needs a cap anyway.",
+  "queue": {
+    "patienceMinutes": 20,
+    "patienceSpread": 0.25,
+    "rainPatience": 0.6,
+    "maxQueue": 12
+  },
+
+  "_health": "Hidden cleanliness points: the sum of the daily marks of the last memoryDays days the vehicle was open. An open day without cleaning adds uncleanedDayPoints, selling stale stock adds staleStockPoints. The grade changes only when an inspector comes, about every inspectionWeeks for the current grade, with no visits inside minimumGapDays. After that each open day has chance 1 / max(1, inspectionWeeks x daysPerWeek - minimumGapDays); an ungraded vehicle uses firstInspectionWeeks. Bands from the design, which follows NYC's 0-13 / 14-27 / 28+.",
+  "health": {
+    "memoryDays": 14,
+    "uncleanedDayPoints": 3,
+    "staleStockPoints": 4,
+    "grades": [
+      { "grade": "A", "maxPoints": 13, "demand": 1.0, "inspectionWeeks": 12 },
+      { "grade": "B", "maxPoints": 27, "demand": 0.9, "inspectionWeeks": 6 },
+      { "grade": "C", "demand": 0.75, "inspectionWeeks": 4 }
+    ],
+    "firstInspectionWeeks": 2,
+    "minimumGapDays": 7,
+    "daysPerWeek": 7
+  },
+
+  "_regulars": "Opening at the same spot on the same weekday builds a bonus for the whole fleet: gainPerVisit per visit of at least minOpenMinutes, up to maxBonus (six weeks to +30%). Each missed week takes missPenalty off that spot and weekday.",
+  "regulars": {
+    "gainPerVisit": 0.05,
+    "maxBonus": 0.30,
+    "missPenalty": 0.075,
+    "minOpenMinutes": 60
+  },
+
+  "_competition": "Between the player's own vehicles only. Each other vehicle within nearbyMetres adds footfallPerNeighbour to the spot's footfall, up to maxFootfallBonus; vehicles selling the same item split that item's customers.",
+  "competition": {
+    "nearbyMetres": 80,
+    "footfallPerNeighbour": 0.10,
+    "maxFootfallBonus": 0.30
+  },
+
+  "_fleet": "The vendor licence lasts licenceDays and can be renewed in its last renewWindowDays. The fleet starts with one permit and gains one per unlock reached, by days since the first licence or by items sold across the fleet, up to maxPermits (the mod setting's default). travel is the game's own timing [code, unverified in game]: a taxi takes 0.04 game minutes per straight-line metre, and a cart moves at the 1.2 m/s walking pace, so a hire pushing a cart covers about 72 m per game hour at normal speed.",
+  "fleet": {
+    "licenceDays": 60,
+    "renewWindowDays": 10,
+    "maxPermits": 4,
+    "permitUnlocks": [
+      { "days": 14, "lifetimeSales": 400 },
+      { "days": 35, "lifetimeSales": 1500 },
+      { "days": 70, "lifetimeSales": 4000 }
+    ],
+    "travel": { "driveMinutesPerMetre": 0.04, "pushMetresPerSecond": 1.2, "roadFactor": 1.0 },
+    "schedules": { "maxStops": 6, "latestCloseMinute": 1620 }
+  },
+
+  "_catering": "Gig offers arrive by text message from a bookings contact; only vehicleTypes cater. A mature fleet (maturityServed items sold) gets offersPerDayAtMaturity offers a day on average, scaled by the booking reputation, at most maxOffersPerDay. Each gig is leadDays ahead and must be accepted within replyDays. The vehicle must arrive by the start plus graceMinutes with the required category on the menu and guests x unitsPerGuest units of it, and stay to the end. The fee is guests x unitsPerGuest x the category's reference price x feeMarkup, paid on completion. A failed gig takes reputation.failure off the booking reputation, a completed one adds reputation.success. Every number is a guess.",
+  "catering": {
+    "vehicleTypes": ["truck"],
+    "offersPerDayAtMaturity": 0.5,
+    "maxOffersPerDay": 2,
+    "maturityServed": 500,
+    "leadDays": [2, 5],
+    "replyDays": 1,
+    "graceMinutes": 10,
+    "arrivalWindowMinutes": 60,
+    "unitsPerGuest": 1.0,
+    "feeMarkup": 1.25,
+    "reputation": { "start": 1.0, "min": 0.1, "success": 0.05, "failure": 0.25 },
+    "kinds": [
+      { "id": "office", "areas": ["office"], "days": ["mon", "tue", "wed", "thu", "fri"], "start": ["11:30", "12:30"],
+        "durationMinutes": [60, 90], "guests": [40, 120], "categories": { "fastfood": 1.0, "pizza": 1.0, "coffee": 0.3 }, "weight": 1.0 },
+      { "id": "party", "areas": ["residential", "nightlife"], "start": ["18:00", "20:00"],
+        "durationMinutes": [90, 150], "guests": [40, 100], "categories": { "pizza": 1.0, "fastfood": 1.0, "icecream": 0.5 }, "weight": 0.8 },
+      { "id": "event", "areas": ["waterfront", "retail"], "days": ["fri", "sat", "sun"], "start": ["12:00", "16:00"],
+        "durationMinutes": [120, 180], "guests": [100, 200], "categories": { "fastfood": 1.0, "icecream": 1.0, "colddrinks": 0.5, "pizza": 0.5 }, "weight": 0.5 }
+    ]
+  }
+}

@@ -128,6 +128,15 @@ The first playable slice. It touches every risky layer at once: bundle, vehicle,
 - Visible queue within about 100 m; statistical sales elsewhere, from the same Core tick.
 - Abandonment after about 20 minutes, sooner in rain.
 
+**Core half, built 8 October 2026 on branch `core-m3-m7`** (unit-tested, nothing wired into the game yet): `SalesSimulator` in `Core/Selling`, its state (`ServiceState`) on each vehicle in the save, and a new data file, `data/rules.json`, for everything from here on, so balance passes on `demand.json` and `economy.json` never touch it. `SalesTick` and `SalesRate` still work as before; the game side switches when it builds the window. Decisions:
+
+- One tick, in whole minutes, for the visible queue and for sales away from the player. Customers arrive at random (Poisson) at the demand model's rate times the price conversion, wait in a first-come queue, and leave after their patience: 20 minutes, ±25% per customer, times 0.6 while it rains. Rain shortens the patience of people already waiting. Nobody joins a queue of 12.
+- Each customer picks a category by the demand model's `CustomerShares` and gets that category's item with the most units left. A customer whose category has sold out walks on; the demand doesn't turn into drink sales. Add-on drinks ride with customers who came for food.
+- `Servers` workers each make one order at a time, at the item's service time. When the player works the window, the game side either counts them as a server (automatic selling, as now) or calls `ServeHead` for each serve action. A hire who goes home puts their half-made order back at the head of the queue.
+- Each sale takes one unit; the result lists the units to remove. Selling out sends the queue away and reports `SoldOut`, so the window closes.
+- Deterministic: the random state lives in the save, so a save and load replay the same customers. Customer IDs let the visible queue spawn and remove the right people. Mono and .NET may round `Math.Exp` differently, which can change a draw but never what the save holds.
+- The save schema stays at 1: every new field is optional and old saves load with defaults.
+
 ## Milestone 4: truck, licence and city systems
 
 - Truck vehicle with cargo, driven like any car.
@@ -136,10 +145,23 @@ The first playable slice. It touches every risky layer at once: bundle, vehicle,
 - `TaxPatch` live; truck sales in the tax statement.
 - "Street food" category on the city map: offices, factories, nightlife, theatres and cinemas, premium spots.
 
+**Core half, built 8 October 2026 on branch `core-m3-m7`:** `Licensing` and `FleetRules` in `Core/Fleet`. Decisions:
+
+- The licence needs the Food Safety course, lasts 60 days and can be renewed in its last 10; a renewal adds a full period, so renewing early loses nothing. The game's diploma never expires [code, unverified in game]; the mod's licence does.
+- The permit cap starts at one and gains one at 14, 35 and 70 days since the first licence, or sooner at 400, 1,500 and 4,000 items sold across the fleet, up to the setting (default 4). The cap reached is kept in the save and never drops.
+- To open, a vehicle needs the player's valid licence, its own permit and somebody at the window. Hires need neither the course nor a licence of their own.
+- Vehicles from Milestone 1 saves have no type. `Licensing.GrandfatherOldVehicles` makes them carts with a permit, so an existing cart isn't locked out; the player still needs the course and a licence. The game side calls it once after loading, with the first mod version that sets vehicle types, so only older saves qualify. Every new vehicle must get its type.
+
 ## Milestone 5: hires
 
 - A hired worker serves alone at a parked vehicle, at the game's wages, as a deductible expense.
 - Hire schedules: the vehicle is marked in transit for the game's travel time, then placed in a free parking spot at the next stop.
+
+**Core half, built 8 October 2026 on branch `core-m3-m7`:** `HireSchedules` and `Travel` in `Core/Fleet`. Decisions:
+
+- A schedule is up to six stops a day, each with a spot, a position and opening hours (a late stop can close at 03:00), on chosen weekdays. The vehicle leaves as late as it can and still open on time. If it can't make it, it opens on arrival and closes at the usual time; a stop it can't reach before closing is skipped. Leaving a stop closes the queue.
+- Travel time is the game's taxi formula: straight-line metres × 0.04 × game speed, in game minutes [code, unverified in game]. A cart moves at the 1.2 m/s walking pace, and a real second is one game minute at normal speed, so a hire pushing a cart covers only about 72 m per game hour. Hire schedules are really for trucks, and carts need stops a block apart.
+- Restocking a hired vehicle is still open: with no commissary, somebody has to carry boxes from a wholesaler.
 
 ## Milestone 6: depth
 
@@ -150,12 +172,26 @@ The first playable slice. It touches every risky layer at once: bundle, vehicle,
 - Live venue crowds: opening hours for every venue, fixed theatre and cinema surge times, real counts for the player's own venues.
 - Partnerships with the player's own venues.
 
+**Core half, built 8 October 2026 on branch `core-m3-m7`:** `HealthGrades`, `Regulars`, `Competition` and `ReputationFactor` in `Core/Reputation`; the rules are in the design's Health grades, Regulars and Competition sections. The game side combines them: `ReputationFactor.Combine(grade, regulars, competition footfall)` goes into `DemandQuery.Reputation`, and competition's per-category shares into the new `DemandQuery.CategoryShares`. Shares apply after the menu's ranking and its appetite cap, and an estimate without them is unchanged. Decisions beyond the design:
+
+- Health points come from the last 14 open days, so closing doesn't wash them away. Inspections have no schedule: after a 7-day gap the chance builds day by day, so the intervals average 12, 6 and 4 calendar weeks with no safe stretch. A vehicle draws at most once a day.
+- Regulars are fleet-wide. The weekday comes from the day number (day 1 is a Monday [code, unverified in game]), and days the game skipped still count as missed.
+- Competition counts only open neighbours with something to sell, so parked empty carts bring nothing.
+
 **Peter:** second balance check over a full in-game week, including a rainy day and a weekend.
 
 ## Milestone 7: catering and Bakery
 
 - Catering offers by text message from a bookings contact; booked gigs as map filters.
 - Bakery mod goods in the display case when that mod is installed.
+
+**Core half, built 8 October 2026 on branch `core-m3-m7`:** `CateringOffers` and `CateringGigs` in `Core/Catering`; the rules are in the design's Catering gigs section. The game side's contract:
+
+- Once a day, `ForDay` with the candidate places (address and main area type), the eligible trucks, items sold, the reference price per category the trucks can sell, and the largest truck's stock limit. The game side sends each offer as a text message.
+- The player's reply calls `Accept` or `Decline`. `ExpireOffers` drops offers nobody answered.
+- When a truck reaches the place, `Arrive` with the truck's ID, type, menu and stock. Only `Started` counts. `NotYet`, `NotReady`, `Busy` and `NotEligible` change nothing, so the player can restock and come back before the deadline. A started gig's units are held back from street sales.
+- When the truck leaves, or once the gig's end has passed with the truck still there, call `Finish` with the time it left (or the end), then pay the fee and take the units. Never call it during the gig. When time moves on, do that first and then call `MissOverdue`, and message the player about the misses.
+- A missed or failed gig only lowers the booking reputation, so fewer offers come.
 
 ## Milestone 8: art and release
 
