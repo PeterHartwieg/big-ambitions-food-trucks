@@ -53,7 +53,7 @@ namespace FoodTrucks
 
         // The earliest game minute a route still has to run from, null when none lags (CartSelling.SoldThrough).
         internal static long? RoutedThrough() =>
-            instance == null || instance.routedUntil.Count == 0 ? (long?)null : instance.routedUntil.Values.Min();
+            instance == null ? null : instance.routedUntil.Where(p => !instance.broken.Contains(p.Key)).Select(p => (long?)p.Value).Min();
 
         private void OnDisable()
         {

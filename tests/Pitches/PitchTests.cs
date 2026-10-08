@@ -313,6 +313,13 @@ public class PartnershipsTests
         partnership.ScoredDay = 8;
         Assert.False(Partnerships.BonusDue(partnership, 8));
 
+        // Working the next day too: its bonus waits for the next morning's score, never two on one score.
+        partnership.ScoredDay = 7;
+        partnership.LastWorkedDay = 7;
+        Assert.False(Partnerships.BonusDue(partnership, 7));
+        partnership.ScoredDay = 8;
+        Assert.True(Partnerships.BonusDue(partnership, 8));
+
         // Too old for the score of day 9, which counts the orders of days 8 and 9.
         var old = new PartnershipState { VehicleId = "cart", Venue = "v#1", LastWorkedDay = 6, ScoredDay = 9 };
         Assert.False(Partnerships.BonusDue(old, 9));

@@ -65,11 +65,11 @@ namespace FoodTrucks.Core.Pitches
                 partnership.LastWorkedDay = day;
         }
 
-        // The game's daily satisfaction update on `today` scores the orders of yesterday and today. The bonus is due
-        // once for each worked day, on the score that update worked out from paying customers (ScoredDay): at the
-        // update, or as soon as the day counts as worked when its last minutes were sold after it (a time skip).
+        // The game's daily satisfaction update on `today` scores the day just ended. The bonus for a worked day goes on
+        // the next morning's score, when the game worked it out from paying customers (ScoredDay): at the update, or
+        // as soon as the day counts as worked when its last minutes were sold after it (a time skip). Once per day.
         public static bool BonusDue(PartnershipState partnership, int today) =>
-            partnership?.LastWorkedDay is { } worked && partnership.ScoredDay == today && worked >= today - 1 && worked <= today &&
+            partnership?.LastWorkedDay is { } worked && partnership.ScoredDay == today && worked == today - 1 &&
             worked > (partnership.BonusForDay ?? int.MinValue);
 
         public static void BonusGiven(PartnershipState partnership)
