@@ -14,13 +14,13 @@ Build `0.8.0`. Premium spots, the city's events and partner deals with your own 
 | 1 | Open the city map, Street food line, "Premium spots and events" | About 17 buildings lit in gold, two or three per neighbourhood. Do any look like silly places for a food cart? Name them and I drop them |
 | 2 | Push a cart to a lit building and open within about 40 m of its door | A second message names the spot ("Fifth Street office row: the cart has the spot …"). Open a second vehicle next to it: "your cart already has the spot" |
 | 3 | Wait or sleep a few days | A text from the City of New York about a weekend market or street festival. Call the city: "Event places", book one. Does the dialog read well? |
-| 4 | Ctrl+Shift+F11 near a lit event place, then open a cart within about 60 m | "The cart has its place at the …"; more customers than before. A second vehicle there without a place is refused ("The street is taken by a city event") |
+| 4 | Ctrl+Shift+F11 near a lit event place, then open a cart within about 60 m | "The cart has its place at the …"; more customers than before. A second vehicle there is refused ("Your booked places at this event are taken by your other vehicles"); after an unbooked event (a real one you didn't book) the message is "The street is taken by a city event" |
 | 5 | If the save owns a nightclub, theatre, cinema or office: park within 50 m, Hires | "Sign a street food partner deal with …". Sign it; open there in the evening |
 | 6 | Sleep to the next morning after the partner sold an hour outside a nightclub, theatre or cinema | The venue's facility satisfaction a few points up in BizMan (5 points; the log line gives before and after) |
 
 ## 3. Log lines (me)
 
-- `Version 0.8.0 loading.`; `Demand data loaded … 17 premium spots, 7 event places, 2 event kinds`; `Pitches: 17 of 17 premium spots and 7 of 7 event places found in the city.` (any missing addresses are listed).
+- `Version 0.8.0 loading.`; `Pitches loaded: 17 premium spots, 7 event places, 2 event kinds.`; `Pitches: 17 of 17 premium spots and 7 of 7 event places found in the city.` (any missing addresses are listed).
 - `Patch BusinessHelper.UpdateSatisfaction(BuildingRegistration): Active.`
 - `Premium spot …: held by …` / `taken by …`; open lines end with `premium spot …` and `partner …` where they apply.
 - `City event …: market at … on day …`; `City of New York: place 1 of 2 booked at event …`; `Event …: place held by …`; `Open: … refused at the …`.

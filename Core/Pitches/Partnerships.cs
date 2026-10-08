@@ -65,14 +65,18 @@ namespace FoodTrucks.Core.Pitches
                 partnership.LastWorkedDay = day;
         }
 
-        // The game's daily satisfaction update on `today` scores the orders of yesterday and today: the bonus is
-        // due when the partner worked there yesterday or today.
+        // The game's daily satisfaction update on `today` scores the orders of yesterday and today. The bonus is due
+        // once for each worked day: in the first update after it, or the one after that when the day's last minutes
+        // were counted only after midnight's update (a catch-up over a time skip).
         public static bool BonusDue(PartnershipState partnership, int today) =>
-            partnership?.LastWorkedDay is { } worked && worked >= today - 1 && worked <= today;
+            partnership?.LastWorkedDay is { } worked && worked >= today - 2 && worked <= today &&
+            worked > (partnership.BonusForDay ?? int.MinValue);
 
-        // A partner venue's live weight: surges (anything above the usual crowd) are bigger.
-        public static double Weight(double weight, PartnershipRules rules) =>
-            weight > 1.0 ? 1.0 + (weight - 1.0) * rules.Surge : weight;
+        public static void BonusGiven(PartnershipState partnership)
+        {
+            if (partnership == null) throw new ArgumentNullException(nameof(partnership));
+            partnership.BonusForDay = partnership.LastWorkedDay;
+        }
 
         // The venue's facility satisfaction with the bonus, and the overall the game's own way: the mean of its four parts.
         public static (int Facility, int Overall) WithBonus(int customerService, int pricing, int cleanliness, int facility, PartnershipRules rules)

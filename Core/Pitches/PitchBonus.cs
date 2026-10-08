@@ -37,6 +37,14 @@ namespace FoodTrucks.Core.Pitches
             if (mix == null) throw new ArgumentNullException(nameof(mix));
             return Areas == null ? mix : AreaMix.FromPresences(mix.Presences.Concat(Areas.Presences));
         }
+
+        // Fills the query's pitch fields: the areas stay apart from the venues' live factor.
+        public void ApplyTo(DemandQuery query)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            query.PitchAreas = Areas;
+            query.PitchFootfall = Footfall;
+        }
     }
 
     public enum PremiumClaim { Held, Taken }

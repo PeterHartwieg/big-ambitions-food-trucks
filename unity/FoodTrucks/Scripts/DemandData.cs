@@ -32,8 +32,7 @@ namespace FoodTrucks
                     Read(folder, "economy.json"),
                     Read(folder, "zones.json"));
                 Rules = RuleTables.Parse(Read(folder, "rules.json"));
-                Pitches = PitchTables.Parse(Read(folder, "pitches.json"), Tables);
-                Log.Info($"Demand data loaded from {folder}: {Tables.Zones.Count} zones; queue patience {Rules.Queue.PatienceMinutes} min, cart queue limit {Rules.Service.QueueLimit("cart", Rules.Queue.MaxQueue)}, truck {Rules.Service.QueueLimit("truck", Rules.Queue.MaxQueue)}; licence ${Rules.Fleet.LicenceFeeCents / 100} for {Rules.Fleet.LicenceDays} days, permit ${Rules.Fleet.PermitFeeCents / 100}; {Pitches.Spots.Count} premium spots, {Pitches.Places.Count} event places, {Pitches.Kinds.Count} event kinds.");
+                Log.Info($"Demand data loaded from {folder}: {Tables.Zones.Count} zones; queue patience {Rules.Queue.PatienceMinutes} min, cart queue limit {Rules.Service.QueueLimit("cart", Rules.Queue.MaxQueue)}, truck {Rules.Service.QueueLimit("truck", Rules.Queue.MaxQueue)}; licence ${Rules.Fleet.LicenceFeeCents / 100} for {Rules.Fleet.LicenceDays} days, permit ${Rules.Fleet.PermitFeeCents / 100}.");
             }
             catch (Exception ex)
             {
@@ -42,6 +41,18 @@ namespace FoodTrucks
                 Pitches = null;
                 Error = ex.Message;
                 Log.Error("Demand data not loaded; carts can't open. " + ex.Message);
+                return;
+            }
+            // Apart: a mistake in pitches.json takes away premium spots, events and partnerships, not selling.
+            try
+            {
+                Pitches = PitchTables.Parse(Read(Path.Combine(modRootPath, "data"), "pitches.json"), Tables);
+                Log.Info($"Pitches loaded: {Pitches.Spots.Count} premium spots, {Pitches.Places.Count} event places, {Pitches.Kinds.Count} event kinds.");
+            }
+            catch (Exception ex)
+            {
+                Pitches = null;
+                Log.Error("Pitches not loaded; no premium spots, events or partnerships. " + ex.Message);
             }
         }
 

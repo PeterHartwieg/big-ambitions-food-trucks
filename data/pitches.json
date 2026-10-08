@@ -160,7 +160,7 @@
       }
     ]
   },
-  "_events": "The City of New York announces events leadDays ahead: on each of a kind's weekdays there is an event with probability chance, at one of the places that hold that kind. The player books places by phone (up to places per event, fee dollars each, tax-deductible) until the event ends. During its hours, a booked vehicle within radiusMetres of the place's nearest entrance gets footfall times the passers and the kind's areas; one without a booked place can't open there. Booked places go to the vehicles that open there first.",
+  "_events": "The City of New York announces events leadDays ahead: on each of a kind's weekdays there is an event with probability chance, at one of the places that hold that kind. Places are at least 110 m from every premium spot, so an event never takes a premium spot's street. The player books places by phone (up to places per event, fee dollars each, tax-deductible) until the event ends. During its hours, a booked vehicle within radiusMetres of the place's nearest entrance gets footfall times the passers and the kind's areas; one without a booked place can't open there. Booked places go to the vehicles that open there first.",
   "events": {
     "radiusMetres": 60,
     "kinds": [
@@ -203,59 +203,61 @@
     ],
     "places": [
       {
-        "id": "midtown-broadway-street",
-        "name": "foodtrucks:pitch_midtown-broadway-street",
-        "address": "ba:street_broadwaystreet#10",
+        "id": "midtown-fourth-avenue",
+        "name": "foodtrucks:pitch_midtown-fourth-avenue",
+        "address": "ba:street_fourthavenue#34",
         "kinds": [
           "market",
           "festival"
         ]
       },
       {
-        "id": "lower-fifth-avenue-market",
-        "name": "foodtrucks:pitch_lower-fifth-avenue-market",
-        "address": "ba:street_fifthavenue#61",
+        "id": "lower-sixth-avenue",
+        "name": "foodtrucks:pitch_lower-sixth-avenue",
+        "address": "ba:street_sixthavenue#36",
         "kinds": [
           "market",
           "festival"
         ]
       },
       {
-        "id": "murray-fourth-avenue",
-        "name": "foodtrucks:pitch_murray-fourth-avenue",
-        "address": "ba:street_fourthavenue#27",
+        "id": "murray-fifth-avenue-market",
+        "name": "foodtrucks:pitch_murray-fifth-avenue-market",
+        "address": "ba:street_fifthavenue#62",
         "kinds": [
           "market"
         ]
       },
       {
-        "id": "hells-fourth-street-market",
-        "name": "foodtrucks:pitch_hells-fourth-street-market",
-        "address": "ba:street_fourthstreet#18",
+        "id": "hells-third-avenue-cinema",
+        "name": "foodtrucks:pitch_hells-third-avenue-cinema",
+        "address": "ba:street_thirdavenue#15",
         "kinds": [
-          "market"
-        ]
-      },
-      {
-        "id": "garment-third-street-market",
-        "name": "foodtrucks:pitch_garment-third-street-market",
-        "address": "ba:street_thirdstreet#44",
-        "kinds": [
-          "market"
-        ]
-      },
-      {
-        "id": "industry-twenty-first-street-festival",
-        "name": "foodtrucks:pitch_industry-twenty-first-street-festival",
-        "address": "ba:street_twentyfirststreet#10",
-        "kinds": [
+          "market",
           "festival"
         ]
       },
       {
-        "id": "hamptons-seventh-avenue-market",
-        "name": "foodtrucks:pitch_hamptons-seventh-avenue-market",
-        "address": "ba:street_seventhavenue#40",
+        "id": "garment-first-street",
+        "name": "foodtrucks:pitch_garment-first-street",
+        "address": "ba:street_firststreet#82",
+        "kinds": [
+          "market"
+        ]
+      },
+      {
+        "id": "industry-tenth-avenue",
+        "name": "foodtrucks:pitch_industry-tenth-avenue",
+        "address": "ba:street_tenthavenue#22",
+        "kinds": [
+          "market",
+          "festival"
+        ]
+      },
+      {
+        "id": "hamptons-harbor-street",
+        "name": "foodtrucks:pitch_hamptons-harbor-street",
+        "address": "ba:street_harborstreet#1",
         "kinds": [
           "market",
           "festival"

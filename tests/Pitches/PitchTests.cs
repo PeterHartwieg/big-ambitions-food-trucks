@@ -31,7 +31,7 @@ public class PitchTablesTests
     [InlineData("\"office\": 1.0", "\"offices\": 1.0", "is not an area")]
     [InlineData("\"address\": \"ba:street_fifthstreet#2\"", "\"address\": \"ba:street_fifthstreet\"", "street#number")]
     [InlineData("\"end\": \"16:00\"", "\"end\": \"09:00\"", "must be after start")]
-    [InlineData("\"kinds\": [\n          \"festival\"\n        ]", "\"kinds\": [\n          \"parade\"\n        ]", "one of the event kinds")]
+    [InlineData("\"kinds\": [\n          \"market\"\n        ]", "\"kinds\": [\n          \"parade\"\n        ]", "one of the event kinds")]
     public void BadEntriesFailWithTheirPath(string from, string to, string message)
     {
         var json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "data", "pitches.json"));
@@ -85,6 +85,16 @@ public class CityEventsTests
     }
 
     [Fact]
+    public void PlacesTheGameCantFindGetNoEvents()
+    {
+        var state = new EventsState();
+        var only = tables.Places[0].Id;
+        for (var day = 1; day <= 60; day++) events.Announce(state, day, p => p.Id == only);
+        Assert.NotEmpty(state.Events);
+        Assert.All(state.Events, e => Assert.Equal(only, e.PlaceId));
+    }
+
+    [Fact]
     public void ANewSaveStartsAnnouncingToday()
     {
         var state = new EventsState();
@@ -122,6 +132,14 @@ public class CityEventsTests
 
         var unbooked = new CityEvent { Id = 2, Booked = 0, Places = 2 };
         Assert.False(CityEvents.Claim(unbooked, "cart"));
+
+        // The cart closes: its place goes to the next vehicle there.
+        var state = new EventsState();
+        city.Booked = 1;
+        city.Vehicles.Remove("truck");
+        state.Events.Add(city);
+        Assert.Equal(1, CityEvents.Release(state, "cart"));
+        Assert.True(CityEvents.Claim(city, "truck"));
     }
 
     [Fact]
@@ -135,8 +153,9 @@ public class CityEventsTests
         Assert.True(CityEvents.Running(city, start));
         Assert.Same(city, CityEvents.RunningAt(state, "p", start + 359));
         Assert.Null(CityEvents.RunningAt(state, "p", start + 360));
-        Assert.Equal(0, CityEvents.Expire(state, 5));
-        Assert.Equal(1, CityEvents.Expire(state, 6));
+        // Yesterday's event stays for a catch-up over midnight.
+        Assert.Equal(0, CityEvents.Expire(state, 6));
+        Assert.Equal(1, CityEvents.Expire(state, 7));
     }
 }
 
@@ -190,6 +209,27 @@ public class PremiumSpotsTests
     }
 
     [Fact]
+    public void AnEventsCrowdComesWhateverTheVenuesNearbyAreDoing()
+    {
+        var model = new DemandModel(ShippedData.Tables);
+        var nightlife = AreaMix.FromPresences(new Dictionary<string, double> { ["nightlife"] = 0.9 });
+        DemandQuery Query(AreaMix? pitch) => new()
+        {
+            Areas = nightlife,
+            Menu = new[] { "ba:itemname_hotdog" },
+            MinuteOfDay = 20 * 60,
+            Day = DayOfWeek.Saturday,
+            Month = 5,
+            AreaLive = new Dictionary<string, double> { ["nightlife"] = 0.0 },
+            PitchAreas = pitch
+        };
+        var closed = model.Estimate(Query(null));
+        var festival = model.Estimate(Query(AreaMix.FromPresences(new Dictionary<string, double> { ["nightlife"] = 1.0 })));
+        Assert.False(closed.AreaFootfall.TryGetValue("nightlife", out var none) && none > 0);
+        Assert.True(festival.AreaFootfall["nightlife"] > 0);
+    }
+
+    [Fact]
     public void PitchFootfallMultipliesCustomersInTheModel()
     {
         var model = new DemandModel(ShippedData.Tables);
@@ -238,16 +278,26 @@ public class PartnershipsTests
         Assert.Equal(6, partnership.LastWorkedDay);
 
         Assert.True(Partnerships.BonusDue(partnership, 6));
-        Assert.True(Partnerships.BonusDue(partnership, 7));
-        Assert.False(Partnerships.BonusDue(partnership, 8));
+        // Once per worked day.
+        Partnerships.BonusGiven(partnership);
+        Assert.False(Partnerships.BonusDue(partnership, 7));
+
+        // A day whose last minutes were counted after midnight's update still gets it the morning after.
+        var late = new PartnershipState { VehicleId = "cart", Venue = "v#1", LastWorkedDay = 6 };
+        Assert.True(Partnerships.BonusDue(late, 8));
+        Assert.False(Partnerships.BonusDue(late, 9));
     }
 
     [Fact]
-    public void SurgesGrowAndTheBonusFollowsTheGamesMean()
+    public void OnlySurgesGrowAndTheBonusFollowsTheGamesMean()
     {
-        Assert.Equal(1.0, Partnerships.Weight(1.0, rules));
-        Assert.Equal(0.3, Partnerships.Weight(0.3, rules));
-        Assert.Equal(1 + 1.5 * 1.5, Partnerships.Weight(2.5, rules), 9);
+        var live = ShippedData.Rules.LiveCrowds;
+        var club = new VenueNow { Kind = VenueKind.Nightclub, Open = true, Guests = 40 };
+        // A busy club's guests are not a surge: the partner's boost leaves them alone.
+        Assert.Equal(live.Weight(club, 23 * 60, DayOfWeek.Friday), live.Weight(club, 23 * 60, DayOfWeek.Friday, rules.Surge));
+        // A quiet club's closing: the surge part grows, then the guests scale it.
+        var closing = new VenueNow { Kind = VenueKind.Nightclub, Open = false, ClosedMinutesAgo = 5, Guests = 6 };
+        Assert.Equal((1 + (live.ClubClosingSurge - 1) * rules.Surge) * 0.3, live.Weight(closing, 3 * 60 + 5, DayOfWeek.Saturday, rules.Surge), 9);
         Assert.Equal((100, 85), Partnerships.WithBonus(80, 80, 80, 98, rules));
         Assert.Equal((65, 68), Partnerships.WithBonus(70, 70, 70, 60, rules));
     }

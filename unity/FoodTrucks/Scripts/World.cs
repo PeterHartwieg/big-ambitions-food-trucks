@@ -47,12 +47,9 @@ namespace FoodTrucks
             return new AreaClassifier(tables).LiveFactors(weighted);
         }
 
-        // A partner venue's surges are bigger (Partnerships.Weight).
-        private double Weight(LiveCrowds live, PartnershipRules? partners, VenueNow venue, int minuteOfDay, DayOfWeek day)
-        {
-            var weight = live.Weight(At(venue, minuteOfDay), minuteOfDay, day);
-            return venue.Partner && partners != null ? Partnerships.Weight(weight, partners) : weight;
-        }
+        // A partner venue's surges are bigger (PartnershipRules.Surge); its guests and staff count as usual.
+        private double Weight(LiveCrowds live, PartnershipRules? partners, VenueNow venue, int minuteOfDay, DayOfWeek day) =>
+            live.Weight(At(venue, minuteOfDay), minuteOfDay, day, venue.Partner && partners != null ? partners.Surge : 1.0);
 
         // The venue at that minute: one that closed at the top of this hour has been closed since then.
         private VenueNow At(VenueNow venue, int minuteOfDay) => venue.ClosedMinutesAgo == null ? venue
@@ -250,16 +247,22 @@ namespace FoodTrucks
         }
 
         // Customers served in one game hour: today's from the orders not yet processed, earlier days' from the
-        // daily history (kept about 16 days); null when the game has neither.
+        // daily history (kept about 16 days); null when the game has neither, or says none. The game simulates its
+        // businesses' hours over several frames, so an hour can read empty before its orders are in; an empty hour
+        // counts as unknown rather than as an empty venue.
         private static int? GuestsIn(BuildingRegistration registration, int day, int hour)
         {
             if (day < 1) return null;
+            int? count;
             if (day == SaveGameManager.Current.Day)
-                return registration.unprocessedCompletedOrders?.Count(o => o != null && o.completed && o.timestamp != null &&
+                count = registration.unprocessedCompletedOrders?.Count(o => o != null && o.completed && o.timestamp != null &&
                     o.timestamp.Day == day && o.timestamp.Hour == hour && o.entries.Exists(e => e.paid));
-            var history = registration.orderHistory?.Find(h => h != null && h.dayNumber == day);
-            if (history?.hourReports == null) return null;
-            return history.hourReports.Find(r => r != null && r.hour == hour)?.customers ?? 0;
+            else
+            {
+                var history = registration.orderHistory?.Find(h => h != null && h.dayNumber == day);
+                count = history?.hourReports?.Find(r => r != null && r.hour == hour)?.customers;
+            }
+            return count > 0 ? count : null;
         }
 
         private static bool OpenAt(BuildingRegistration registration, int day, int hour)
@@ -333,10 +336,9 @@ namespace FoodTrucks
             }
             // The game's default for this multiplier is 0.5; difficulty moves it (GameVariables).
             var promotion = game.gameVariables.baseCustomerPromotionMultiplier / 0.5f;
-            return new DemandQuery
+            var query = new DemandQuery
             {
-                Areas = (pitch ?? PitchBonus.None).Apply(spot.Areas),
-                PitchFootfall = (pitch ?? PitchBonus.None).Footfall,
+                Areas = spot.Areas,
                 Neighbourhood = spot.Neighbourhood,
                 Menu = menu,
                 MinuteOfDay = minuteOfDay,
@@ -351,6 +353,8 @@ namespace FoodTrucks
                 // hour's open or closed venues, at most a frame of game time behind during a skip.
                 AreaLive = spot.LiveFactors(tables, DemandData.Rules?.LiveCrowds, minuteOfDay, DayOfWeekOf(gameDay)),
             };
+            (pitch ?? PitchBonus.None).ApplyTo(query);
+            return query;
         }
 
         // Plain text for the status and the demand readout.

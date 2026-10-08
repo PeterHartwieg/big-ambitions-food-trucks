@@ -549,6 +549,7 @@ namespace FoodTrucks
                 ReputationBook.Cleaned(vehicle, ServiceDay(closedAt - 1), ReputationBook.ClosedThrough(state));
             vehicle.OpenPitch = null;
             PremiumSpots.Release(vehicle);
+            if (state != null) CityEvents.Release(state.Events, vehicle.VehicleId);
             // A crew window closed by a failing sale stays closed for the rest of that opening.
             if (vehicle.HireStop != null && messageKey == "foodtrucks:notification_closed_error")
                 HireRunner.GiveUp(vehicle, vehicle.HireStop.Value, (long)Math.Floor(at ?? HireCrew.NowExact()));
@@ -715,8 +716,12 @@ namespace FoodTrucks
             }
             var spot = SpotFor(tables, cart, from);
             if (spot == null) return;
-            if (window.Servers > 0) Partners.Worked(state, vehicle, spot, (long)Math.Floor(from), elapsed);
-            CityPitches.Tick(state, vehicle, spot, (long)Math.Floor(from));
+            // An event starting here: a booked place, or the window closes until it ends.
+            if (!CityPitches.Tick(state, vehicle, spot, (long)Math.Floor(from)))
+            {
+                Close(vehicle, "foodtrucks:notification_event_closed", from);
+                return;
+            }
             // Units held for customers on their way to the window are sold already: the plan leaves them out.
             // Demand at the start of this step's minutes: during a catch-up, not the live clock's.
             var plan = CartDemand.Plan(tables, cart, spot, Reserved(vehicle.VehicleId), from);
@@ -732,6 +737,8 @@ namespace FoodTrucks
                 return;
             }
             if (elapsed > SalesTick.MaxCatchUpMinutes) return;
+            // Minutes sold outside a partner venue count towards its day.
+            if (window.Servers > 0) Partners.Worked(state, vehicle, spot, (long)Math.Floor(from), elapsed);
 
             // A cart opened before 0.4.0 has no queue yet; it starts one now.
             vehicle.Service ??= SalesSimulator.Open(Seed(cart.id));

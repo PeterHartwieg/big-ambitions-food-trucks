@@ -186,11 +186,12 @@
     "foodtrucks:pitch_industry-ninth-avenue": "Ninth Avenue factory gate",
     "foodtrucks:pitch_hamptons-ocean-crest-road": "Ocean Crest Road",
     "foodtrucks:pitch_hamptons-seventh-avenue": "Seventh Avenue village",
-    "foodtrucks:pitch_midtown-broadway-street": "the Broadway Street theatre plaza",
-    "foodtrucks:pitch_lower-fifth-avenue-market": "Fifth Avenue, Lower Manhattan",
-    "foodtrucks:pitch_murray-fourth-avenue": "Fourth Avenue, Murray Hill",
-    "foodtrucks:pitch_hells-fourth-street-market": "Fourth Street, Hell's Kitchen",
-    "foodtrucks:pitch_garment-third-street-market": "Third Street, Garment District",
-    "foodtrucks:pitch_industry-twenty-first-street-festival": "Twenty-First Street, Industry City",
-    "foodtrucks:pitch_hamptons-seventh-avenue-market": "Seventh Avenue by the beach"
+    "foodtrucks:notification_event_closed": "A city event starts here and the {vehicle} has no booked place. It closes: {sales} sales, {revenue}.",
+    "foodtrucks:pitch_midtown-fourth-avenue": "Fourth Avenue, Midtown",
+    "foodtrucks:pitch_lower-sixth-avenue": "Sixth Avenue, Lower Manhattan",
+    "foodtrucks:pitch_murray-fifth-avenue-market": "Fifth Avenue, Murray Hill",
+    "foodtrucks:pitch_hells-third-avenue-cinema": "the cinema square on Third Avenue",
+    "foodtrucks:pitch_garment-first-street": "First Street, Garment District",
+    "foodtrucks:pitch_industry-tenth-avenue": "Tenth Avenue, Industry City",
+    "foodtrucks:pitch_hamptons-harbor-street": "Harbor Street"
 }

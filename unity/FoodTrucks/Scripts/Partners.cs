@@ -130,12 +130,19 @@ namespace FoodTrucks
                 var address = registration.Address;
                 if (address == null || !registration.RentedByPlayer) return;
                 var partnership = Partnerships.ForVenue(state, World.AddressKey(address.streetName, address.streetNumber));
-                if (partnership == null || !Partnerships.BonusDue(partnership, SaveGameManager.Current.Day)) return;
+                var today = SaveGameManager.Current.Day;
+                if (partnership == null || !Partnerships.BonusDue(partnership, today)) return;
+                // Only a facility score the game worked out from paying customers: with none, it copies the old one,
+                // bonus included, and another bonus would stack on it.
+                if (registration.unprocessedCompletedOrders == null || !registration.unprocessedCompletedOrders.Exists(o =>
+                        o != null && o.completed && o.timestamp != null && o.timestamp.Day >= today - 1 && o.entries.Exists(e => e.paid))) return;
                 var s = registration.satisfaction;
                 var (facility, overall) = Partnerships.WithBonus(s.customerService, s.pricing, s.cleanliness, s.facility, rules);
                 Log.Info($"Partnership: {partnership.Venue} facility satisfaction {s.facility} -> {facility}, overall {s.overall} -> {overall} ({partnership.VehicleId} worked day {partnership.LastWorkedDay}).");
                 s.facility = facility;
                 s.overall = overall;
+                Partnerships.BonusGiven(partnership);
+                FoodTrucksSession.MarkChanged();
             }
             catch (Exception ex) { Log.Error("Partnership satisfaction: " + ex); }
         }

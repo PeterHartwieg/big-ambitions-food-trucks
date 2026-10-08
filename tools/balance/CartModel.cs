@@ -156,7 +156,8 @@ public sealed class Cart
         var day = minute >= 1440 ? (DayOfWeek)(((int)c.Day + 1) % 7) : c.Day;
         var estimate = model.Estimate(new DemandQuery
         {
-            Areas = PitchTime.PitchAt(c, minute).Apply(spot.Areas),
+            Areas = spot.Areas,
+            PitchAreas = PitchTime.PitchAt(c, minute).Areas,
             PitchFootfall = PitchTime.PitchAt(c, minute).Footfall,
             Neighbourhood = spot.Hood,
             Menu = sellable,

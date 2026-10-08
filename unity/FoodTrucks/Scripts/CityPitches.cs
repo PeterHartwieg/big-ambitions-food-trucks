@@ -91,17 +91,22 @@ namespace FoodTrucks
             return message;
         }
 
-        // Each sales step of an open window: an event starting while a booked vehicle is already open there gives
-        // it its place.
-        public static void Tick(SaveState state, VehicleState vehicle, Spot spot, long minute)
+        // Each sales step of an open window: an event starting while a vehicle is already open there gives it a booked
+        // place if one is free. False when it has none: it must close, as it couldn't have opened there.
+        public static bool Tick(SaveState state, VehicleState vehicle, Spot spot, long minute)
         {
             var here = EventAt(state, spot.X, spot.Z, minute);
-            if (here == null || here.Value.Event.Vehicles.Contains(vehicle.VehicleId)) return;
-            if (!CityEvents.Claim(here.Value.Event, vehicle.VehicleId)) return;
+            if (here == null || here.Value.Event.Vehicles.Contains(vehicle.VehicleId)) return true;
+            if (!CityEvents.Claim(here.Value.Event, vehicle.VehicleId))
+            {
+                Log.Info($"Event {here.Value.Event.Id} ({here.Value.Kind.Id} at {here.Value.Place.Id}) started: {vehicle.VehicleId} has no place and closes.");
+                return false;
+            }
             FoodTrucksSession.MarkChanged();
             Log.Info($"Event {here.Value.Event.Id} ({here.Value.Kind.Id} at {here.Value.Place.Id}) started: place held by {vehicle.VehicleId}, open there.");
             CartSelling.Say("foodtrucks:notification_event_place", string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType,
                 ("event", Text(here.Value.Kind.Name)), ("place", Text(here.Value.Place.Name)), ("end", Clock(here.Value.Event.End)));
+            return true;
         }
 
         // What the pitch adds at that minute: the premium spot the window holds, and a running event it has a
@@ -125,12 +130,21 @@ namespace FoodTrucks
             var tables = Tables;
             if (tables == null || !FoodTrucksSession.CanWrite) return;
             var dropped = CityEvents.Expire(state.Events, today);
-            var added = new CityEvents(tables).Announce(state.Events, today);
+            // After a load, places held by vehicles that aren't open any more go back.
+            if (loading)
+                foreach (var city in state.Events.Events)
+                    city.Vehicles.RemoveAll(id => StreetSales.Find(state, id)?.IsOpen != true);
+            // Only places the city has; before its buildings are there, nothing is announced (the day is caught up later).
+            if (!tables.Places.Any(p => World.EntrancesOf(p.Address) != null)) return;
+            var added = new CityEvents(tables).Announce(state.Events, today, p => World.EntrancesOf(p.Address) != null);
+            // The city writes to vendors: players with a food cart or truck.
+            var vendor = CityLicensing.FoodVehicles(state).Count > 0;
             foreach (var city in added)
             {
                 var kind = tables.Kind(city.Kind)!;
                 var place = tables.Place(city.PlaceId)!;
-                Log.Info($"City event {city.Id}: {kind.Id} at {place.Id} ({place.Address}) on day {city.Day}, {Clock(city.Start)} to {Clock(city.End)}, {city.Places} places at {CartSelling.Money(city.FeeCents)}.");
+                Log.Info($"City event {city.Id}: {kind.Id} at {place.Id} ({place.Address}) on day {city.Day}, {Clock(city.Start)} to {Clock(city.End)}, {city.Places} places at {CartSelling.Money(city.FeeCents)}{(vendor ? "" : "; no text, no food vehicle")}.");
+                if (!vendor) continue;
                 GameManager.SendTextMessage(CityLicensing.City(), "foodtrucks:message_city_event", new Dictionary<string, string>
                 {
                     { "event", Text(kind.Name) },

@@ -85,8 +85,11 @@ namespace FoodTrucks.Core.Demand
         public VenueKind KindOf(string? businessType) =>
             businessType != null && Kinds.TryGetValue(businessType, out var kind) ? kind : VenueKind.Other;
 
-        public double Weight(VenueNow venue, int minuteOfDay, DayOfWeek day)
+        // surgeBoost scales a surge's part above the usual crowd (a partner venue's, Pitches.Partnerships); guest and
+        // worker counts are not surges.
+        public double Weight(VenueNow venue, int minuteOfDay, DayOfWeek day, double surgeBoost = 1.0)
         {
+            double Boost(double surge) => surge > 1.0 ? 1.0 + (surge - 1.0) * surgeBoost : surge;
             if (venue == null) throw new ArgumentNullException(nameof(venue));
             if (minuteOfDay < 0 || minuteOfDay >= 1440) throw new ArgumentOutOfRangeException(nameof(minuteOfDay));
             var weekend = day == DayOfWeek.Saturday || day == DayOfWeek.Sunday;
@@ -94,17 +97,17 @@ namespace FoodTrucks.Core.Demand
             {
                 case VenueKind.Nightclub:
                     if (venue.Open) return GuestFactor(venue);
-                    return venue.ClosedMinutesAgo is { } since && since >= 0 && since < ClubClosingMinutes ? ClubClosingSurge * GuestFactor(venue) : ClosedWeight;
+                    return venue.ClosedMinutesAgo is { } since && since >= 0 && since < ClubClosingMinutes ? Boost(ClubClosingSurge) * GuestFactor(venue) : ClosedWeight;
                 case VenueKind.Theatre:
                 {
                     var letOuts = weekend ? TheatreLetOuts.Concat(TheatreWeekendLetOuts) : TheatreLetOuts;
-                    var surge = InSurge(letOuts, minuteOfDay) ? TheatreSurge * (weekend ? WeekendSurge : 1.0) : 1.0;
+                    var surge = Boost(InSurge(letOuts, minuteOfDay) ? TheatreSurge * (weekend ? WeekendSurge : 1.0) : 1.0);
                     // The audience comes out as the doors close, so a show ending at closing time still counts.
                     return venue.Open || (surge > 1.0 && venue.ClosedMinutesAgo is { } ago && ago < SurgeMinutes) ? surge * GuestFactor(venue) : ClosedWeight;
                 }
                 case VenueKind.Cinema:
                 {
-                    var surge = InSurge(CinemaShows(), minuteOfDay) ? CinemaSurge * (weekend ? WeekendSurge : 1.0) : 1.0;
+                    var surge = Boost(InSurge(CinemaShows(), minuteOfDay) ? CinemaSurge * (weekend ? WeekendSurge : 1.0) : 1.0);
                     return venue.Open || (surge > 1.0 && venue.ClosedMinutesAgo is { } ago && ago < SurgeMinutes) ? surge * GuestFactor(venue) : ClosedWeight;
                 }
                 case VenueKind.Office:

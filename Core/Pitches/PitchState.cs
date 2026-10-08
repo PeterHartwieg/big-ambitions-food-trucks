@@ -49,6 +49,8 @@ namespace FoodTrucks.Core.Pitches
         public int SignedDay { get; set; }
         // The last game day the vehicle worked outside the venue for long enough (PartnershipRules.MinWorkedMinutes).
         public int? LastWorkedDay { get; set; }
+        // The worked day the venue last got its satisfaction bonus for.
+        public int? BonusForDay { get; set; }
         // Minutes worked outside the venue on WorkingDay, counted up to the minimum.
         public int WorkingDay { get; set; }
         public int WorkedMinutes { get; set; }

@@ -19,8 +19,8 @@ namespace FoodTrucks.Core.Pitches
         // The city's announcements up to today, each day's once: for every kind, the day LeadDays ahead may get an
         // event at one of its places, by a draw seeded from the kind and that day, so the same save always gets
         // the same events. Days the game skipped are caught up; an event already over is never announced. Returns
-        // the new events.
-        public List<CityEvent> Announce(EventsState state, int today)
+        // the new events. `usable` leaves out places the game side can't find (null: every place).
+        public List<CityEvent> Announce(EventsState state, int today, Func<EventPlace, bool>? usable = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (today < 1) throw new ArgumentOutOfRangeException(nameof(today));
@@ -36,7 +36,7 @@ namespace FoodTrucks.Core.Pitches
                     var random = new SeededRandom(SeededRandom.SeedFor("event:" + kind.Id, day));
                     if (!random.Chance(kind.Chance)) continue;
                     var used = new HashSet<string>(state.Events.Where(e => e.Day == day).Select(e => e.PlaceId), StringComparer.Ordinal);
-                    var places = tables.Places.Where(p => p.Kinds.Contains(kind.Id) && !used.Contains(p.Id)).ToList();
+                    var places = tables.Places.Where(p => p.Kinds.Contains(kind.Id) && !used.Contains(p.Id) && (usable == null || usable(p))).ToList();
                     if (places.Count == 0) continue;
                     var place = places[(int)(random.NextDouble() * places.Count) % places.Count];
                     var city = new CityEvent
@@ -59,11 +59,18 @@ namespace FoodTrucks.Core.Pitches
             return added;
         }
 
-        // Events over before today are dropped.
+        // Events from before yesterday are dropped: yesterday's stay until a catch-up over midnight has sold through them.
         public static int Expire(EventsState state, int today)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
-            return state.Events.RemoveAll(e => e.Day < today);
+            return state.Events.RemoveAll(e => e.Day < today - 1);
+        }
+
+        // A vehicle that closes, leaves or is gone gives its places back; the booking stays paid for.
+        public static int Release(EventsState state, string vehicleId)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            return state.Events.Sum(e => e.Vehicles.RemoveAll(v => v == vehicleId));
         }
 
         public static long StartsAt(CityEvent city) => (city.Day - 1) * 1440L + city.Start;

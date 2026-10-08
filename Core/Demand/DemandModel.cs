@@ -31,6 +31,9 @@ namespace FoodTrucks.Core.Demand
         public double Promotion { get; set; } = 1.0;
         // A premium spot's or an event's extra passers (PitchBonus); 1.0 on an ordinary pitch.
         public double PitchFootfall { get; set; } = 1.0;
+        // A premium spot's or an event's own crowd: each area at least this presence, whatever the venues
+        // nearby are doing (AreaLive applies to the spot's own areas only). Null on an ordinary pitch.
+        public AreaMix? PitchAreas { get; set; }
     }
 
     public sealed class DemandEstimate
@@ -93,7 +96,7 @@ namespace FoodTrucks.Core.Demand
             RequireFactor(query.Reputation, nameof(query.Reputation));
             RequireFactor(query.Promotion, nameof(query.Promotion));
             RequireFactor(query.PitchFootfall, nameof(query.PitchFootfall));
-            foreach (var area in query.Areas.Presences.Keys)
+            foreach (var area in query.Areas.Presences.Keys.Concat(query.PitchAreas?.Presences.Keys ?? Enumerable.Empty<string>()))
                 if (!tables.HasArea(area)) throw new ArgumentException($"Unknown area type '{area}'.", nameof(query));
 
             var daypart = tables.DaypartAt(query.MinuteOfDay);
@@ -104,7 +107,7 @@ namespace FoodTrucks.Core.Demand
             var neighbourhood = tables.Neighbourhood(query.Neighbourhood);
 
             var baseline = tables.StreetBaseline(daypart);
-            var areaCrowds = AreaCrowds(query.Areas, daypart, day, query.AreaLive);
+            var areaCrowds = AreaCrowds(query.Areas, daypart, day, query.AreaLive, query.PitchAreas);
             var crowdTotal = baseline + areaCrowds.Values.Sum();
             var footfallFactor = tables.PassersPerHour
                 * neighbourhood.Footfall * neighbourhood.DaypartFactor(daypart) * neighbourhood.DayFactor(day) * neighbourhood.SeasonFactor(season)
@@ -159,14 +162,18 @@ namespace FoodTrucks.Core.Demand
             total > 0 ? (baseline + crowds.Sum(p => p.Value * tables.Area(p.Key).AppetiteFactor(category))) / total : 1.0;
 
         // Independent crowds before the factors common to every passer, in a stable area order.
-        private Dictionary<string, double> AreaCrowds(AreaMix areas, Daypart daypart, DayOfWeek day, IReadOnlyDictionary<string, double>? live)
+        // A pitch's own areas (PitchAreas) raise an area's presence to at least theirs, after the venues' live factor.
+        private Dictionary<string, double> AreaCrowds(AreaMix areas, Daypart daypart, DayOfWeek day, IReadOnlyDictionary<string, double>? live,
+            AreaMix? pitch = null)
         {
             var crowds = new Dictionary<string, double>(StringComparer.Ordinal);
-            foreach (var presence in areas.Presences.OrderBy(p => p.Key, StringComparer.Ordinal))
+            var names = areas.Presences.Keys.Concat(pitch?.Presences.Keys ?? Enumerable.Empty<string>()).Distinct().OrderBy(k => k, StringComparer.Ordinal);
+            foreach (var name in names)
             {
-                var area = tables.Area(presence.Key);
-                var factor = live != null && live.TryGetValue(presence.Key, out var f) && !double.IsNaN(f) && !double.IsInfinity(f) && f >= 0 ? f : 1.0;
-                crowds.Add(presence.Key, presence.Value * area.Footfall(daypart) * area.DayFactor(day) * factor);
+                var area = tables.Area(name);
+                var factor = live != null && live.TryGetValue(name, out var f) && !double.IsNaN(f) && !double.IsInfinity(f) && f >= 0 ? f : 1.0;
+                var presence = Math.Max(areas.PresenceOf(name) * factor, pitch?.PresenceOf(name) ?? 0);
+                crowds.Add(name, presence * area.Footfall(daypart) * area.DayFactor(day));
             }
             return crowds;
         }
