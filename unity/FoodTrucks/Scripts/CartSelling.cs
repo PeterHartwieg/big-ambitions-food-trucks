@@ -708,7 +708,7 @@ namespace FoodTrucks
             // The licence ran out while open (a new day began).
             if (!Licensing.IsValid(state.Licence, SaveGameManager.Current.Day))
             {
-                Close(vehicle, state.Licence.HasVendorLicence ? "foodtrucks:notification_closed_licence" : "foodtrucks:notification_closed_no_licence");
+                Close(vehicle, state.Licence.HasVendorLicence ? "foodtrucks:notification_closed_licence" : "foodtrucks:notification_closed_no_licence", from);
                 return;
             }
             // A truck loaded open, or respawned near the player, shows its hatch open.
@@ -753,12 +753,12 @@ namespace FoodTrucks
             if (!plan.Usable)
             {
                 // A cart opened under 0.1.0 has food but no equipment; it isn't sold out.
-                Close(vehicle, "foodtrucks:notification_closed_no_equipment");
+                Close(vehicle, "foodtrucks:notification_closed_no_equipment", from);
                 return;
             }
             if (plan.StockUnits == 0)
             {
-                Close(vehicle, "foodtrucks:notification_sold_out");
+                Close(vehicle, "foodtrucks:notification_sold_out", from);
                 return;
             }
             if (elapsed > SalesTick.MaxCatchUpMinutes) return;
@@ -796,7 +796,8 @@ namespace FoodTrucks
             // Every simulated minute changes the saved queue (its clock, random state, orders in progress).
             FoodTrucksSession.MarkChanged();
             if (failed) Close(vehicle, "foodtrucks:notification_closed_error", now);
-            else if (result.SoldOut) Close(vehicle, "foodtrucks:notification_sold_out");
+            // At the step's game minute, so a catch-up frees a shared place when it really sold out.
+            else if (result.SoldOut) Close(vehicle, "foodtrucks:notification_sold_out", from + elapsed);
         }
 
         // Called by the queue view when a customer starts paying at the window, or leaves the view unseen.

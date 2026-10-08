@@ -22,12 +22,14 @@ namespace FoodTrucks.Core.Pitches
             return null;
         }
 
-        // Who would keep the vehicle from a place at that minute; null when one is free (or it holds one).
+        // Who would keep the vehicle from a place at that minute; null when one is free (or it holds one). A claim
+        // runs on with no end yet, so every hold not over by then counts, including one that starts later: whichever
+        // vehicle a catch-up reaches first, two never hold one place at the same minute.
         public static string? Blocker(IReadOnlyList<PlaceHold> holds, string vehicleId, long minute, int capacity)
         {
             if (holds == null) throw new ArgumentNullException(nameof(holds));
             if (Holding(holds, vehicleId)) return null;
-            var others = holds.Where(h => h.VehicleId != vehicleId && HeldAt(h, minute)).ToList();
+            var others = holds.Where(h => h.VehicleId != vehicleId && (h.Until == null || h.Until > minute)).ToList();
             if (others.Count < capacity) return null;
             return others.Count == 0 ? string.Empty : others[0].VehicleId;
         }

@@ -152,6 +152,17 @@ public class CityEventsTests
     }
 
     [Fact]
+    public void ACatchUpInTheOtherOrderCantShareAPlaceEither()
+    {
+        var city = new CityEvent { Id = 1, Booked = 1, Places = 2, Day = 5, Start = 600, End = 960 };
+        var ten = 4 * 1440L + 600;
+        // The truck that opened at 11:30 is caught up first and still holds the place.
+        Assert.True(CityEvents.Claim(city, "truck", ten + 90));
+        // The cart that opened at 10:00 would overlap it from 11:30: it goes without.
+        Assert.False(CityEvents.Claim(city, "cart", ten));
+    }
+
+    [Fact]
     public void RunsFromStartUntilEndAndExpiresAfterItsDay()
     {
         var state = new EventsState();
@@ -292,15 +303,19 @@ public class PartnershipsTests
         Partnerships.Worked(partnership, rules, 6, 20);
         Assert.Equal(6, partnership.LastWorkedDay);
 
-        Assert.True(Partnerships.BonusDue(partnership, 6));
+        // Only on a score the game worked out from paying customers that day.
+        Assert.False(Partnerships.BonusDue(partnership, 7));
+        partnership.ScoredDay = 7;
+        Assert.True(Partnerships.BonusDue(partnership, 7));
         // Once per worked day.
         Partnerships.BonusGiven(partnership);
         Assert.False(Partnerships.BonusDue(partnership, 7));
+        partnership.ScoredDay = 8;
+        Assert.False(Partnerships.BonusDue(partnership, 8));
 
-        // A day whose last minutes were counted after midnight's update still gets it the morning after.
-        var late = new PartnershipState { VehicleId = "cart", Venue = "v#1", LastWorkedDay = 6 };
-        Assert.True(Partnerships.BonusDue(late, 8));
-        Assert.False(Partnerships.BonusDue(late, 9));
+        // Too old for the score of day 9, which counts the orders of days 8 and 9.
+        var old = new PartnershipState { VehicleId = "cart", Venue = "v#1", LastWorkedDay = 6, ScoredDay = 9 };
+        Assert.False(Partnerships.BonusDue(old, 9));
     }
 
     [Fact]

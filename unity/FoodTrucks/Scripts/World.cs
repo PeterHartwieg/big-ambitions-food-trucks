@@ -269,8 +269,10 @@ namespace FoodTrucks
                     o.timestamp.Day == day && o.timestamp.Hour == hour && o.entries.Exists(e => e.paid));
             else
             {
+                // The game writes an hour's report only when it had paying customers: a day on record without
+                // that hour had none.
                 var history = registration.orderHistory?.Find(h => h != null && h.dayNumber == day);
-                count = history?.hourReports?.Find(r => r != null && r.hour == hour)?.customers;
+                count = history?.hourReports == null ? null : history.hourReports.Find(r => r != null && r.hour == hour)?.customers ?? 0;
             }
             var current = SaveGameManager.Current;
             var hourJustEnded = TimeHelper.CurrentHour == 0 ? day == current.Day - 1 && hour == 23 : day == current.Day && hour == TimeHelper.CurrentHour - 1;

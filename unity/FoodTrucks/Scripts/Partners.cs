@@ -111,25 +111,24 @@ namespace FoodTrucks
             if (World.DistanceTo(partnership.Venue, spot.X, spot.Z) > rules.RadiusMetres) return;
             var before = partnership.LastWorkedDay;
             Partnerships.Worked(partnership, rules, (int)(from / 1440) + 1, minutes);
-            if (partnership.LastWorkedDay != before)
-                Log.Info($"Partnership: {vehicle.VehicleId} worked day {partnership.LastWorkedDay} outside {partnership.Venue}.");
+            if (partnership.LastWorkedDay == before) return;
+            Log.Info($"Partnership: {vehicle.VehicleId} worked day {partnership.LastWorkedDay} outside {partnership.Venue}.");
+            // Yesterday's minutes sold only after midnight's update (a time skip): the bonus goes on today's score now.
+            var registration = Registration(partnership.Venue);
+            if (registration != null) TryBonus(registration, partnership, rules, SaveGameManager.Current.Day);
         }
 
-        // The game's midnight update can run before the partner's window has sold through the evening (a time skip):
-        // the minutes it still has to sell outside the venue on yesterday's date count now. Counting them again when
-        // they are sold changes nothing, as a day counts once.
-        private static void CountPending(SaveState state, PartnershipState partnership, PartnershipRules rules, int today)
+        // The bonus on the venue's score, when it is due.
+        private static void TryBonus(BuildingRegistration registration, PartnershipState partnership, PartnershipRules rules, int today)
         {
-            var vehicle = StreetSales.Find(state, partnership.VehicleId);
-            var spot = CartSelling.SpotOf(partnership.VehicleId);
-            var soldUntil = CartSelling.SoldUntil(partnership.VehicleId);
-            if (vehicle == null || !vehicle.IsOpen || spot == null || soldUntil == null) return;
-            if (World.DistanceTo(partnership.Venue, spot.X, spot.Z) > rules.RadiusMetres) return;
-            var dayStart = (today - 2) * 1440L;
-            var dayEnd = (today - 1) * 1440L;
-            var from = Math.Max(dayStart, (long)Math.Floor(soldUntil.Value));
-            var until = Math.Min(dayEnd, HireCrew.Now());
-            if (until > from) Partnerships.Worked(partnership, rules, today - 1, (int)(until - from));
+            if (registration.satisfaction == null || !Partnerships.BonusDue(partnership, today)) return;
+            var s = registration.satisfaction;
+            var (facility, overall) = Partnerships.WithBonus(s.customerService, s.pricing, s.cleanliness, s.facility, rules);
+            Log.Info($"Partnership: {partnership.Venue} facility satisfaction {s.facility} -> {facility}, overall {s.overall} -> {overall} ({partnership.VehicleId} worked day {partnership.LastWorkedDay}).");
+            s.facility = facility;
+            s.overall = overall;
+            Partnerships.BonusGiven(partnership);
+            FoodTrucksSession.MarkChanged();
         }
 
         // Harmony, around BusinessHelper.UpdateSatisfaction: when the game wrote a new satisfaction for a partner
@@ -149,19 +148,13 @@ namespace FoodTrucks
                 var partnership = Partnerships.ForVenue(state, World.AddressKey(address.streetName, address.streetNumber));
                 var today = SaveGameManager.Current.Day;
                 if (partnership == null) return;
-                CountPending(state, partnership, rules, today);
-                if (!Partnerships.BonusDue(partnership, today)) return;
                 // Only a facility score the game worked out from paying customers: with none, it copies the old one,
                 // bonus included, and another bonus would stack on it.
                 if (registration.unprocessedCompletedOrders == null || !registration.unprocessedCompletedOrders.Exists(o =>
                         o != null && o.completed && o.timestamp != null && o.timestamp.Day >= today - 1 && o.entries.Exists(e => e.paid))) return;
-                var s = registration.satisfaction;
-                var (facility, overall) = Partnerships.WithBonus(s.customerService, s.pricing, s.cleanliness, s.facility, rules);
-                Log.Info($"Partnership: {partnership.Venue} facility satisfaction {s.facility} -> {facility}, overall {s.overall} -> {overall} ({partnership.VehicleId} worked day {partnership.LastWorkedDay}).");
-                s.facility = facility;
-                s.overall = overall;
-                Partnerships.BonusGiven(partnership);
+                partnership.ScoredDay = today;
                 FoodTrucksSession.MarkChanged();
+                TryBonus(registration, partnership, rules, today);
             }
             catch (Exception ex) { Log.Error("Partnership satisfaction: " + ex); }
         }
