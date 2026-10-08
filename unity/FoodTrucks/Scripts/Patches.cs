@@ -3,9 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Buildings;
+using Dialogs;
+using Entities;
 using FoodTrucks.Core.Saves;
 using HarmonyLib;
 using Helpers;
+using UI.ItemPanel;
 
 namespace FoodTrucks
 {
@@ -26,8 +29,15 @@ namespace FoodTrucks
             Patch(typeof(TaxCalculationHelper), "GetBusinessSales", new[] { typeof(int), typeof(int) }, nameof(TaxSales));
             Patch(typeof(TaxCalculationHelper), "GetBusinessIncomeTotal", new[] { typeof(int), typeof(int) }, nameof(TaxIncomeTotal));
 
-            // Dealers: list the mod's vehicles next to the vanilla stock.
+            // Dealer: list the cart next to the vanilla stock at one dealer with a spawn point.
             Patch(typeof(VehicleContractSettings), "SetListOfVehiclesForSale", Type.EmptyTypes, nameof(DealerStock));
+            // Delivery would put a hand vehicle into a warehouse slot, which nothing has tested.
+            Patch(typeof(VehicleStoreDialog), "OnVehicleSettingsSet", Type.EmptyTypes, nameof(RefuseDelivery), prefix: true);
+
+            // Item panel: the cart's Open button, hidden whenever the panel shows something else.
+            Patch(typeof(ItemPanelUI), "SetVehicle", new[] { typeof(VehicleController) }, nameof(PanelVehicle));
+            Patch(typeof(ItemPanelUI), "SetItemInstance", null, nameof(PanelOther));
+            Patch(typeof(ItemPanelUI), "SetMiniGameMode", null, nameof(PanelOther));
         }
 
         public static void Remove()
@@ -36,7 +46,7 @@ namespace FoodTrucks
             harmony = null;
         }
 
-        private static void Patch(Type type, string method, Type[] args, string postfix)
+        private static void Patch(Type type, string method, Type[]? args, string patch, bool prefix = false)
         {
             var name = $"{type.Name}.{method}";
             try
@@ -47,7 +57,9 @@ namespace FoodTrucks
                     Log.Error($"Patch {name}: Not active, method not found.");
                     return;
                 }
-                harmony!.Patch(original, postfix: new HarmonyMethod(typeof(Patches), postfix));
+                var handler = new HarmonyMethod(typeof(Patches), patch);
+                if (prefix) harmony!.Patch(original, prefix: handler);
+                else harmony!.Patch(original, postfix: handler);
                 Log.Info($"Patch {name}: Active.");
             }
             catch (Exception ex)
@@ -88,16 +100,59 @@ namespace FoodTrucks
 
         private static MethodInfo? addVehicle;
 
-        // Spike: every vehicle dealer lists the mod's vehicles. Milestone 1 picks one dealer.
+        // General US Trucks, 1 7th Avenue: it has the spawn point that a vehicle without a showcase
+        // model needs (ContractVehicleForSale.Purchase uses the building's first custom position).
+        private const string DealerStreet = "ba:street_seventhavenue";
+        private const int DealerNumber = 1;
+
+        // Only in person: a phone order would deliver the cart into a warehouse slot.
         private static void DealerStock(VehicleContractSettings __instance)
         {
             try
             {
+                var dialog = DialogController.current;
+                var address = dialog?.contact?.Address;
+                if (dialog == null || dialog.dialogType != DialogType.Physical || address == null) return;
+                if (address.streetName != DealerStreet || address.streetNumber != DealerNumber) return;
                 addVehicle ??= AccessTools.Method(typeof(VehicleContractSettings), "TryAddVehicleByVehicleType");
                 if (addVehicle == null) return;
-                foreach (var typeName in FoodTrucksMod.RegisteredVehicleTypes)
-                    addVehicle.Invoke(__instance, new object?[] { typeName, null });
+                foreach (var typeName in FoodTrucksMod.SoldAtDealer)
+                {
+                    if (FoodTrucksMod.RegisteredVehicleTypes.Contains(typeName))
+                        addVehicle.Invoke(__instance, new object?[] { typeName, null });
+                }
             }
+            catch (Exception ex) { Log.Error(ex); }
+        }
+
+        // Returning false skips the dialog step; a null entry keeps the dialog open, as the game's own errors do.
+        private static bool RefuseDelivery(ref DialogEntry? __result)
+        {
+            try
+            {
+                var settings = DialogController.current?.GetInputTransform<VehicleContractSettings>(null);
+                if (settings == null || !settings.isDelivery) return true;
+                if (!FoodTrucksMod.IsModVehicle(settings.selectedVehicleForSale?.VehicleName)) return true;
+                CartSelling.Notify("foodtrucks:notification_no_delivery");
+                __result = null;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex);
+                return true;
+            }
+        }
+
+        private static void PanelVehicle(ItemPanelUI __instance, VehicleController vehicle)
+        {
+            try { CartButton.OnSetVehicle(__instance, vehicle); }
+            catch (Exception ex) { Log.Error(ex); }
+        }
+
+        private static void PanelOther()
+        {
+            try { CartButton.Hide(); }
             catch (Exception ex) { Log.Error(ex); }
         }
     }

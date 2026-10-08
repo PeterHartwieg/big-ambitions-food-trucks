@@ -17,7 +17,7 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 | Pitches | Park anywhere legal, plus curated premium spots and temporary event pitches. Area type is automatic from nearby buildings, with hand-drawn zones on top. |
 | Illegal spot | The Open button is disabled and says why. No fines. |
 | Equipment | Version 1: plain inventory, no placement. Later: place equipment inside the truck ("tetris"). |
-| Restocking | Drive to a wholesaler and load the vehicle directly. |
+| Restocking | Buy boxes at a wholesaler, carry them out and click the cart or truck to load them, the way the game loads a car. A hand truck full of boxes can be unloaded into the cart the same way. Pushing the cart into a store and loading it at the shelves still works, as with the game's hand truck; kept for now. A commissary as a home base is a later addition. |
 | Economy | Game-calibrated. Real NYC shape, Big Ambitions money. |
 | Demand | Own thematic model: area type, neighbourhood character, daypart and product category. Strong peaks, lunch about 3x in office areas. Not based on `trafficIndex`. |
 | Ladder | Cart, then truck. |
@@ -27,12 +27,12 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 | Tax | Truck sales are added to the game's taxable income through a Harmony patch, at the game's own rate. |
 | Show surges | Fixed times near theatres and cinemas, bigger at weekends. |
 | Off-screen | Sales away from the player and hired trucks are statistical; customers are visible within about 100 m. |
-| Not chosen | Grey-market permits, fines, time-restricted streets, per-area demand curves, commissary. |
+| Not chosen | Grey-market permits, fines, time-restricted streets, per-area demand curves. |
 
 ## Core loop
 
 1. Take the street food course and buy the vendor licence.
-2. Buy a cart, buy equipment, load stock at a wholesaler.
+2. Buy a cart, buy equipment, carry stock out of a wholesaler and load it into the cart.
 3. Push or tow the cart to a pitch, open, serve the queue yourself.
 4. Sell out or close, restock, move to the next pitch for the next peak.
 5. Save up for a truck: more menu slots, more stock, more staff, catering.
@@ -328,7 +328,7 @@ The official mod API is thin: business and vehicle registration, options, asset 
 
 **Version 1.** Cart and truck, licence with course, permits with a fleet cap, equipment as inventory, anywhere-legal plus premium and event pitches, the thematic demand model with weather and seasons, live crowds from nightclubs, theatres, offices and factories (opening hours for all venues, real counts for the player's own), the Street food map filters, partnerships with the player's own venues, visible queues, catering gigs, health grades, regulars, same-food competition between the player's vehicles, per-save state. The player works the window; hires can serve alone and drive a vehicle along a schedule.
 
-**Later.** Partnerships with AI venues. Equipment placement inside the truck. AI food trucks (possibly through BusinessBridge). Waiting list and grey-market permits as settings. Time-restricted streets.
+**Later.** A commissary as the vehicles' home base: rented storage that wholesalers deliver to, where vehicles restock and park overnight, as NYC requires. Partnerships with AI venues. Equipment placement inside the truck. AI food trucks (possibly through BusinessBridge). Waiting list and grey-market permits as settings. Time-restricted streets.
 
 ## Answered design questions
 

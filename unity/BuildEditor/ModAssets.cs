@@ -18,8 +18,8 @@ namespace FoodTrucks.BuildEditor
         private const string ExampleVehicleType = "Assets/Mods/Example-Vehicle/TurboHonza.asset";
         private const string ExampleVehiclePrefab = "Assets/Mods/Example-Vehicle/TurboHonza.prefab";
 
-        public const string TruckTypeName = "foodtrucks:vehicletype_spiketruck";
-        public const string CartTypeName = "foodtrucks:vehicletype_spikecart";
+        public const string TruckTypeName = "foodtrucks:vehicletype_testtruck";
+        public const string CartTypeName = "foodtrucks:vehicletype_foodcart";
 
         [MenuItem("Big Ambitions/Food Trucks/Generate assets")]
         public static void GenerateFromMenu() => Run(exitWhenDone: false);
@@ -59,7 +59,7 @@ namespace FoodTrucks.BuildEditor
             manifest.ModId = "FoodTrucks";
             manifest.DisplayName = "Food Trucks";
             manifest.Author = "Peter Hartwieg";
-            manifest.Version = "0.0.1";
+            manifest.Version = "0.1.0";
             manifest.AssetBundleName = "foodtrucks.unity3d";
             manifest.ModAssembly = AssetDatabase.LoadAssetAtPath<AssemblyDefinitionAsset>(ModFolder + "/FoodTrucks.asmdef");
             manifest.LocalesFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(ModFolder + "/Locales");
@@ -70,15 +70,16 @@ namespace FoodTrucks.BuildEditor
             EditorUtility.SetDirty(manifest);
         }
 
-        // Spike 1: the SDK's example car under a new type name. Placeholder until the real truck exists.
+        // SDK example car for storage and sleep checks; not sold in Milestone 1.
         private static void GenerateTruck()
         {
-            var typePath = VehiclesFolder + "/SpikeTruck.asset";
-            var prefabPath = VehiclesFolder + "/SpikeTruck.prefab";
+            var typePath = VehiclesFolder + "/TestTruck.asset";
+            var prefabPath = VehiclesFolder + "/TestTruck.prefab";
             CopyFresh(ExampleVehicleType, typePath);
             CopyFresh(ExampleVehiclePrefab, prefabPath);
 
             var type = AssetDatabase.LoadAssetAtPath<VehicleType>(typePath);
+            type.name = "TestTruck";
             type.vehicleTypeName = TruckTypeName;
             type.price = 1f;
             type.maxCargoCapacity = 20;
@@ -91,7 +92,10 @@ namespace FoodTrucks.BuildEditor
                 var controller = root.GetComponent<VehicleController>();
                 if (controller == null) throw new InvalidOperationException("Example prefab has no VehicleController.");
                 controller.vehicleType = type;
-                root.name = "SpikeTruck";
+                controller.showCargoInItemPanel = true;
+                // The example YAML predates SleepEnvironmentConfig, so its sleep config is null.
+                // The mod assigns the sleep setup at runtime.
+                root.name = "TestTruck";
                 PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             }
             finally

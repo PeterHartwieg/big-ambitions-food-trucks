@@ -8,7 +8,7 @@ Turns [design.md](design.md) into ordered work. Written 7 October 2026. The stru
 2. Machine setup (paths to the decompile, the SDK clone, the game PC and the test save) is in `CLAUDE.local.md`, which is not committed.
 3. Milestone 0 results go into the README's evidence section, marked checked, pending or unverified.
 
-**Status, 7 October 2026:** Milestone 0 is done and played (README evidence table; session report in `evidence/milestone-0-session-1.md`). Next is Milestone 1, starting with the items carried over at its top. The spike's debug actions (`DebugActions.cs`) and generated test assets are scaffolding to replace, not to build on as is.
+**Status, 7 October 2026:** Milestone 0 is done and played (README evidence table; session report in `evidence/milestone-0-session-1.md`). Milestone 1 is built and waits for its in-game check (`CHECKS.md`). The carried-over items are done in code except the cart's map icon after a reload (vanilla hand trucks lose it too). Remaining debug keys are listed in the README; gate or remove them before the Workshop release.
 
 ## Ground rules
 
@@ -86,7 +86,7 @@ Carried over from the Milestone 0 reviews (7 October 2026):
 The first playable slice. It touches every risky layer at once: bundle, vehicle, cargo, money, saves.
 
 - A box cart, bought from the vehicle dealer, pushed by the player.
-- Load stock at a wholesaler into the cart's cargo.
+- Load stock the way the game loads a car: carry a box out of a wholesaler and click the cart.
 - "Open" at any spot. Sales come from a constant per hour, draw stock and pay money with the mod's label.
 - State in `modData`: licence placeholder, open or closed, lifetime sales.
 - One notification line per sale; no queue, no people.

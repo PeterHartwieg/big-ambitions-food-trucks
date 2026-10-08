@@ -295,7 +295,7 @@ GameObject:
   - component: {fileID: 64384983332986028}
   - component: {fileID: -3287067865891520098}
   m_Layer: 19
-  m_Name: SpikeTruck
+  m_Name: TestTruck
   m_TagString: Vehicle
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -444,7 +444,7 @@ MonoBehaviour:
     preventWarehouseAssign: 0
     cargoIds: []
   controlledByPlayer: 0
-  showCargoInItemPanel: 0
+  showCargoInItemPanel: 1
   poi: {fileID: 0}
   navMeshObstacle: {fileID: 8896437893411584091}
   vehicleCollider: {fileID: 230812991609941467}

@@ -10,11 +10,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1156002225, guid: 8886001327901f6fdbae60e8ea6c53fd, type: 3}
-  m_Name: TurboHonza
+  m_Name: TestTruck
   m_EditorClassIdentifier: 
   database: {fileID: 0}
   tags: []
-  vehicleTypeName: foodtrucks:vehicletype_spiketruck
+  vehicleTypeName: foodtrucks:vehicletype_testtruck
   price: 1
   itemVersion: 
   maxFuel: 55

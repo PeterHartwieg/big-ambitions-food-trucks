@@ -16,17 +16,30 @@ namespace FoodTrucks
     [ModEntryOnInitializationLoad]
     public sealed class FoodTrucksMod : IModBigAmbitions
     {
-        public const string Version = "0.0.1-spike";
+        public const string Version = "0.1.0";
         internal const string BundleKey = "AssetBundles/foodtrucks.unity3d";
-        internal const string TruckTypeName = "foodtrucks:vehicletype_spiketruck";
-        internal const string CartTypeName = "foodtrucks:vehicletype_spikecart";
+        internal const string TruckTypeName = "foodtrucks:vehicletype_testtruck";
+        internal const string CartTypeName = "foodtrucks:vehicletype_foodcart";
+        internal const string CartPrefabPath = "Assets/Mods/FoodTrucks/Vehicles/FoodCart.prefab";
+        internal const string TruckPrefabPath = "Assets/Mods/FoodTrucks/Vehicles/TestTruck.prefab";
+        // Every vehicle type this mod has ever registered starts with this, spike types included.
+        internal const string VehicleTypePrefix = "foodtrucks:vehicletype_";
         private const string HandVehicleTag = "ba:vehicletag_ishandvehicle";
 
         private static readonly (string TypeName, string AssetPath)[] VehicleAssets =
         {
-            (TruckTypeName, "Assets/Mods/FoodTrucks/Vehicles/SpikeTruck.asset"),
-            (CartTypeName, "Assets/Mods/FoodTrucks/Vehicles/SpikeCart.asset"),
+            (TruckTypeName, "Assets/Mods/FoodTrucks/Vehicles/TestTruck.asset"),
+            (CartTypeName, "Assets/Mods/FoodTrucks/Vehicles/FoodCart.asset"),
         };
+
+        // Only the cart is for sale in Milestone 1; the test truck is spawned with a debug key.
+        internal static readonly string[] SoldAtDealer = { CartTypeName };
+
+        // The mod's asset bundle, for the prefab fixes applied at city load.
+        internal static AssetBundle? Bundle { get; private set; }
+
+        internal static bool IsModVehicle(string? typeName) =>
+            typeName != null && typeName.StartsWith(VehicleTypePrefix, StringComparison.Ordinal);
 
         private readonly List<string> registered = new List<string>();
 
@@ -40,6 +53,7 @@ namespace FoodTrucks
             Log.Info($"Version {Version} loading.");
 
             var bundle = AssetService.GetBundle(context.ModId, BundleKey);
+            Bundle = bundle;
             if (bundle == null)
             {
                 Log.Error($"Asset bundle '{BundleKey}' not found; no vehicles registered.");
@@ -91,6 +105,7 @@ namespace FoodTrucks
                 ModdingAPI.UnregisterModVehicleType(typeName);
             registered.Clear();
             RegisteredVehicleTypes.Clear();
+            Bundle = null;
             return Task.CompletedTask;
         }
     }

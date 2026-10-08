@@ -10,13 +10,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1156002225, guid: 8886001327901f6fdbae60e8ea6c53fd, type: 3}
-  m_Name: SpikeCart
+  m_Name: FoodCart
   m_EditorClassIdentifier: 
   database: {fileID: 0}
   tags:
   - ba:vehicletag_ishandvehicle
-  vehicleTypeName: foodtrucks:vehicletype_spikecart
-  price: 1
+  vehicleTypeName: foodtrucks:vehicletype_foodcart
+  price: 1200
   itemVersion: 
   maxFuel: 0
   maxCargoCapacity: 6

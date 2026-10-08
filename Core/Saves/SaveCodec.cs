@@ -51,6 +51,26 @@ namespace FoodTrucks.Core.Saves
             return document.ToString(Formatting.None);
         }
 
+        // Applies the saved count and mod version only after serialization succeeds.
+        public string SerializeForSave(SaveState state, string modVersion)
+        {
+            if (state == null)
+                throw new ArgumentNullException(nameof(state));
+            if (!ModVersion.IsValid(modVersion))
+                throw new ArgumentException("Mod version must be a valid SemVer version.", nameof(modVersion));
+
+            var saveCount = state.SaveCount < int.MaxValue ? state.SaveCount + 1 : int.MaxValue;
+            var document = JObject.FromObject(state, JsonSerializer.Create(settings));
+            document["schemaVersion"] = currentVersion;
+            document["saveCount"] = saveCount;
+            document["writtenByModVersion"] = modVersion;
+            var json = document.ToString(Formatting.None);
+
+            state.SaveCount = saveCount;
+            state.WrittenByModVersion = modVersion;
+            return json;
+        }
+
         public LoadResult Load(string? json)
         {
             if (string.IsNullOrWhiteSpace(json))
@@ -108,12 +128,20 @@ namespace FoodTrucks.Core.Saves
             if (!string.IsNullOrEmpty(state.WrittenByModVersion) && !ModVersion.IsValid(state.WrittenByModVersion))
                 throw new JsonSerializationException("WrittenByModVersion must be a valid SemVer version or empty.");
 
+            var vehicleIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var vehicle in state.Vehicles)
             {
                 if (vehicle == null)
                     throw new JsonSerializationException("Vehicles must not contain null entries.");
                 if (vehicle.LifetimeSales < 0 || vehicle.LifetimeRevenueCents < 0)
                     throw new JsonSerializationException("Vehicle LifetimeSales and LifetimeRevenueCents must not be negative.");
+                if (string.IsNullOrEmpty(vehicle.VehicleId))
+                    throw new JsonSerializationException("VehicleId must not be empty.");
+                if (!vehicleIds.Add(vehicle.VehicleId))
+                    throw new JsonSerializationException($"Vehicles contains duplicate VehicleId {vehicle.VehicleId}.");
+                if (double.IsNaN(vehicle.SaleProgress) || double.IsInfinity(vehicle.SaleProgress) ||
+                    vehicle.SaleProgress < 0 || vehicle.SaleProgress >= 1)
+                    throw new JsonSerializationException("Vehicle SaleProgress must be finite and in [0, 1).");
             }
 
             var days = new HashSet<int>();

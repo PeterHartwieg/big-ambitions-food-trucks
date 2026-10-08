@@ -40,6 +40,7 @@ namespace FoodTrucks.Core.Saves
     {
         public string VehicleId { get; set; } = string.Empty;
         public bool IsOpen { get; set; }
+        public double SaleProgress { get; set; }
         public int LifetimeSales { get; set; }
         public long LifetimeRevenueCents { get; set; }
 

@@ -1,0 +1,31 @@
+#nullable enable
+using System;
+using System.Linq;
+
+namespace FoodTrucks
+{
+    // Pays money in through the game and reports whether it was actually credited.
+    // GameManager.ChangeMoney credits the balance and books the transaction before it fires
+    // the money-change event, whose listeners are not guarded. If one of them throws, the payment
+    // has happened anyway. Whether the transaction was booked decides, not the exception: the float
+    // balance can't show a few dollars on a balance of tens of millions.
+    internal static class Payments
+    {
+        public static bool PayIn(long cents, TransactionInfo info)
+        {
+            if (cents <= 0) throw new ArgumentOutOfRangeException(nameof(cents));
+            var transactions = SaveGameManager.Current.Transactions;
+            var lastBefore = transactions.Count > 0 ? transactions.Last() : null;
+            try
+            {
+                return GameManager.ChangeMoneySafe(cents / 100f, info);
+            }
+            catch (Exception ex)
+            {
+                var credited = transactions.Count > 0 && !ReferenceEquals(transactions.Last(), lastBefore);
+                Log.Error($"Payment of {CartSelling.Money(cents)} threw ({(credited ? "credited" : "not credited")}): {ex}");
+                return credited;
+            }
+        }
+    }
+}

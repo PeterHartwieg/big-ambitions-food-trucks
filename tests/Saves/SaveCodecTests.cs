@@ -22,7 +22,17 @@ public class SaveCodecTests
         { "{\"schemaVersion\":1,\"writtenByModVersion\":\"garbage\"}", "WrittenByModVersion" },
         { "{\"schemaVersion\":1,\"vehicles\":[{\"lifetimeSales\":-1}]}", "LifetimeSales" },
         { "{\"schemaVersion\":1,\"vehicles\":[{\"lifetimeRevenueCents\":-1}]}", "LifetimeRevenueCents" },
-        { "{\"schemaVersion\":1,\"saveCount\":-1}", "SaveCount" }
+        { "{\"schemaVersion\":1,\"saveCount\":-1}", "SaveCount" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{}]}", "VehicleId" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":null}]}", "VehicleId" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"\"}]}", "VehicleId" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\"},{\"vehicleId\":\"cart-1\"}]}", "duplicate VehicleId" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":-0.1}]}", "SaleProgress" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":1}]}", "SaleProgress" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":2}]}", "SaleProgress" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":\"NaN\"}]}", "SaleProgress" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":\"Infinity\"}]}", "SaleProgress" },
+        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":\"-Infinity\"}]}", "SaleProgress" }
     };
 
     [Theory]
@@ -71,7 +81,7 @@ public class SaveCodecTests
             Licence = new LicenceState { HasVendorLicence = true, LicenceExpiresOnDay = 60 },
             Vehicles = new List<VehicleState>
             {
-                new() { VehicleId = "cart-1", IsOpen = true, LifetimeSales = 42, LifetimeRevenueCents = 5_000_000_123L },
+                new() { VehicleId = "cart-1", IsOpen = true, SaleProgress = 0.75, LifetimeSales = 42, LifetimeRevenueCents = 5_000_000_123L },
                 new() { VehicleId = "truck-2", IsOpen = false, LifetimeSales = 9, LifetimeRevenueCents = 1800 }
             }
         };
@@ -91,6 +101,7 @@ public class SaveCodecTests
         {
             Assert.Equal(state.Vehicles[i].VehicleId, loaded.Vehicles[i].VehicleId);
             Assert.Equal(state.Vehicles[i].IsOpen, loaded.Vehicles[i].IsOpen);
+            Assert.Equal(state.Vehicles[i].SaleProgress, loaded.Vehicles[i].SaleProgress);
             Assert.Equal(state.Vehicles[i].LifetimeSales, loaded.Vehicles[i].LifetimeSales);
             Assert.Equal(state.Vehicles[i].LifetimeRevenueCents, loaded.Vehicles[i].LifetimeRevenueCents);
         }
@@ -142,6 +153,116 @@ public class SaveCodecTests
         Assert.True(JToken.DeepEquals(original["licence"]!["FutureLicence"], saved["licence"]!["FutureLicence"]));
         Assert.True(JToken.DeepEquals(original["vehicles"]![0]!["FutureVehicle"], saved["vehicles"]![0]!["FutureVehicle"]));
         Assert.Equal(JTokenType.Null, saved["vehicles"]![1]!["futureNull"]!.Type);
+    }
+
+    [Fact]
+    public void VersionOneBeforeSaleProgressStillLoadsWithZeroProgress()
+    {
+        const string json = """
+            {"schemaVersion":1,"writtenByModVersion":"0.0.1-spike","saveCount":3,
+             "vehicles":[{"vehicleId":"cart-1","isOpen":true,"lifetimeSales":7,"lifetimeRevenueCents":875}]}
+            """;
+
+        var result = codec.Load(json);
+
+        Assert.Equal(LoadStatus.Loaded, result.Status);
+        Assert.Equal(1, result.State!.SchemaVersion);
+        var vehicle = Assert.Single(result.State.Vehicles);
+        Assert.Equal(0, vehicle.SaleProgress);
+        Assert.Equal(7, vehicle.LifetimeSales);
+        Assert.Equal(875, vehicle.LifetimeRevenueCents);
+    }
+
+    [Fact]
+    public void FutureVehicleFieldSurvivesAlongsideSaleProgress()
+    {
+        const string json = """
+            {"schemaVersion":1,"vehicles":[{"vehicleId":"cart-1","saleProgress":0.5,
+             "FutureServing":{"Mode":"fast","slots":[1,2]}}]}
+            """;
+
+        var result = codec.Load(json);
+
+        Assert.Equal(LoadStatus.Loaded, result.Status);
+        var saved = JObject.Parse(codec.Serialize(result.State!));
+        Assert.Equal(0.5, saved["vehicles"]![0]!["saleProgress"]!.Value<double>());
+        Assert.True(JToken.DeepEquals(JObject.Parse(json)["vehicles"]![0]!["FutureServing"],
+            saved["vehicles"]![0]!["FutureServing"]));
+        Assert.Equal(LoadStatus.Loaded, codec.Load(saved.ToString()).Status);
+    }
+
+    [Fact]
+    public void VehicleIdUniquenessUsesOrdinalComparison()
+    {
+        var result = codec.Load("{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\"},{\"vehicleId\":\"Cart-1\"}]}");
+
+        Assert.Equal(LoadStatus.Loaded, result.Status);
+        Assert.Equal(2, result.State!.Vehicles.Count);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(7, 8)]
+    [InlineData(int.MaxValue - 1, int.MaxValue)]
+    [InlineData(int.MaxValue, int.MaxValue)]
+    public void SerializeForSaveWritesAndAppliesNextCountAndModVersion(int initialCount, int expectedCount)
+    {
+        var state = new SaveState { SchemaVersion = 0, SaveCount = initialCount, WrittenByModVersion = "0.0.1" };
+        state.ExtensionData["FutureRoot"] = new JObject { ["key"] = true };
+        state.Vehicles.Add(new VehicleState { VehicleId = "cart-1", SaleProgress = 0.5 });
+
+        var json = codec.SerializeForSave(state, "0.1.0");
+        var result = codec.Load(json);
+
+        Assert.Equal(LoadStatus.Loaded, result.Status);
+        Assert.Equal(expectedCount, state.SaveCount);
+        Assert.Equal("0.1.0", state.WrittenByModVersion);
+        Assert.Equal(expectedCount, result.State!.SaveCount);
+        Assert.Equal("0.1.0", result.State.WrittenByModVersion);
+        Assert.Equal(1, result.State.SchemaVersion);
+        Assert.Equal(0, state.SchemaVersion);
+        Assert.Equal(0.5, Assert.Single(result.State.Vehicles).SaleProgress);
+        Assert.True(JToken.DeepEquals(state.ExtensionData["FutureRoot"], result.State.ExtensionData["FutureRoot"]));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("1.0")]
+    [InlineData("garbage")]
+    public void SerializeForSaveRejectsInvalidModVersionWithoutChangingState(string? version)
+    {
+        var state = new SaveState { SaveCount = 7, WrittenByModVersion = "0.0.1" };
+        var before = codec.Serialize(state);
+
+        Assert.Throws<ArgumentException>(() => codec.SerializeForSave(state, version!));
+
+        Assert.Equal(before, codec.Serialize(state));
+    }
+
+    [Fact]
+    public void SerializeForSaveRejectsNullState()
+    {
+        Assert.Throws<ArgumentNullException>(() => codec.SerializeForSave(null!, "0.1.0"));
+    }
+
+    [Fact]
+    public void FailedSerializationLeavesSaveCountAndModVersionUnchanged()
+    {
+        var state = new ThrowingState { SchemaVersion = 0, SaveCount = 7, WrittenByModVersion = "0.0.1" };
+
+        Assert.Throws<Newtonsoft.Json.JsonSerializationException>(() => codec.SerializeForSave(state, "0.1.0"));
+
+        Assert.Equal(7, state.SaveCount);
+        Assert.Equal("0.0.1", state.WrittenByModVersion);
+        Assert.Equal(0, state.SchemaVersion);
+        Assert.Empty(state.Vehicles);
+        Assert.Empty(state.ExtensionData);
+    }
+
+    private sealed class ThrowingState : SaveState
+    {
+        public string BrokenProperty => throw new InvalidOperationException("Cannot serialize this property.");
     }
 
     [Fact]

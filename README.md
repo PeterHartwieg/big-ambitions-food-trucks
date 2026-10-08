@@ -2,7 +2,17 @@
 
 A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, open the window and sell to the lunch crowd, then move on before the evening rush starts somewhere else.
 
-**Status, 7 October 2026:** Milestone 0. This build only tests whether the parts the mod depends on work in the game. It is not playable yet. The design is in [docs/design.md](docs/design.md) and the build order in [docs/implementation-plan.md](docs/implementation-plan.md).
+**Status, 7 October 2026:** Milestone 1, the first playable slice, built but not yet checked in the game. Buy a food cart at General US Trucks (1 7th Avenue), carry boxes of food out of a wholesale store and click the cart to load them, push it to a pavement, press **Open here**, and customers buy about 12 items an hour while you stay with the cart. No demand model, queue or licence yet. The cart sells hot dogs, burgers, fries, pizza, coffee, croissants, donuts, cupcakes, ice cream and soda cans at the game's market price; which of these wholesale stores stock as boxes is unverified. The design is in [docs/design.md](docs/design.md) and the build order in [docs/implementation-plan.md](docs/implementation-plan.md).
+
+## Removing the mod
+
+A save that still holds a Food Trucks vehicle breaks without the mod: a held cart leaves you somewhere else with no way to interact with the world, and once a tax bill is overdue the game's forced payment throws on the unknown vehicle. The game can't sell a pushed cart, so the mod does it:
+
+1. Load every save that has a Food Trucks vehicle and let go of the cart.
+2. Press **Ctrl+Shift+F12** twice within 10 seconds (or run `foodtrucks_uninstall` twice in the console). Every Food Trucks vehicle is removed and refunded at its purchase price plus the stock still in it, and any pending delivery of one is cancelled.
+3. Wait for "Removed … vehicles, refunded …". Save, then remove the mod. If the message says something is still in the save or a refund was not paid, keep the mod installed and check `Player.log`.
+
+Street food sales stay in that save's history, labelled with the raw key `foodtrucks:transaction_sale` once the mod is gone. The mod's own data stays in the save and does nothing without the mod.
 
 ## Evidence
 
@@ -20,6 +30,17 @@ Each question the mod depends on, and how sure we are. "Checked" means seen in t
 
 Also found in the session: clicking Sleep in a mod vehicle's item panel throws `SleepEnvironment config is not assigned` (the prefabs carry an empty sleep setup), and the test truck's storage can't be opened although it shows 0/20.
 
+Milestone 1 fixes for these, pending an in-game check:
+
+| Finding | Cause in the game code (unverified) | Fix |
+|---|---|---|
+| Sleep throws on the test truck | The SDK example car's sleep setup predates the game's `SleepEnvironmentConfig`, so the reference is empty | The mod copies a vanilla car's sleep setup onto the truck at city load |
+| Truck storage won't open | Vanilla cars have no "open storage" either: an empty car is loaded by clicking it with an item in hand, and cargo shows in the item panel only with `showCargoInItemPanel` | The truck now shows its cargo slots in the item panel |
+| Cart distorted fingers | The game copies the grip points' rotation onto the hand bones; the cart's grip points had none | The mod copies the vanilla hand truck's grip rotations at city load and logs them |
+| Cart slides sideways | The cart turned around the player's feet | The cart's origin is now its axle, with the pusher 1.15 m behind (`playerOffsetWhenActive` −1.15) |
+| No hover highlight, offset icon | Overlay types were unset; the map icon sits on the cart's origin | Vanilla overlay types; the origin moved to the cart's centre. The icon is still missing after a reload, as for the vanilla hand truck |
+| Mod vehicles at every dealer | The spike listed them everywhere | Only General US Trucks lists the cart, in person, and delivery is refused: it would put a pushed cart into a warehouse slot |
+
 ## Building
 
 Needs Unity 2022.3.62f2 with Windows Build Support (Mono), the official [Big Ambitions modding SDK](https://github.com/hovgaardgames/bigambitions) with its game DLLs imported, and the .NET SDK.
@@ -29,6 +50,8 @@ dotnet test
 tools/build-mod.sh --generate
 tools/install-remote.sh <ssh host of the Windows game PC>
 ```
+
+Debug keys (holding Ctrl): **F6** test truck, **F7** free food cart, **Shift+F8** record $200,000 of street food today without moving money, **F10** status, **Shift+F10** issue the tax statement now (throwaway saves only), **Shift+F12** the uninstall step.
 
 `tools/park-remote.sh park|restore` moves the installed mod out of `ModsLocal` and back, and `tools/fetch-log-remote.sh <label>` copies the game's log; both are for the in-game checks in [CHECKS.md](CHECKS.md).
 

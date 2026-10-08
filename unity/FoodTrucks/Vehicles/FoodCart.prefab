@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 6283576337600011941}
   - component: {fileID: 7105291394971917739}
   - component: {fileID: 2049886259299617388}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: Box4
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -94,7 +94,7 @@ GameObject:
   - component: {fileID: 3839688191194723269}
   - component: {fileID: 626014524361876558}
   - component: {fileID: 6621743996291550198}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: WheelRight
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -110,7 +110,7 @@ Transform:
   m_GameObject: {fileID: 1112222962611467866}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.42, y: 0.18, z: 1.4}
+  m_LocalPosition: {x: 0.42, y: 0.18, z: 0}
   m_LocalScale: {x: 0.06, y: 0.36, z: 0.36}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -177,7 +177,7 @@ GameObject:
   - component: {fileID: 5248811613762171974}
   - component: {fileID: 4807560365529163047}
   - component: {fileID: 4291191401834140651}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: Box5
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -274,7 +274,7 @@ Transform:
   m_GameObject: {fileID: 2419517013167507447}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.25, y: 0.95, z: 0.35}
+  m_LocalPosition: {x: 0.25, y: 0.95, z: -0.8}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -291,7 +291,7 @@ GameObject:
   - component: {fileID: 5090228431340299715}
   - component: {fileID: 1939999343006993245}
   - component: {fileID: 6832041815279087665}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: Canopy
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -307,7 +307,7 @@ Transform:
   m_GameObject: {fileID: 2902044784106117430}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.25, z: 1.15}
+  m_LocalPosition: {x: 0, y: 1.25, z: 0}
   m_LocalScale: {x: 0.95, y: 0.05, z: 1.55}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -374,7 +374,7 @@ GameObject:
   - component: {fileID: 3202486258692057935}
   - component: {fileID: 3947418200315994214}
   - component: {fileID: 8740568635700806184}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: Handle
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -390,7 +390,7 @@ Transform:
   m_GameObject: {fileID: 3089317474067539322}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.95, z: 0.35}
+  m_LocalPosition: {x: 0, y: 0.95, z: -0.8}
   m_LocalScale: {x: 0.7, y: 0.05, z: 0.05}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -457,7 +457,7 @@ GameObject:
   - component: {fileID: 1375097159479975068}
   - component: {fileID: 7867800574914639812}
   - component: {fileID: 5068469669055525157}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: WheelLeft
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -473,7 +473,7 @@ Transform:
   m_GameObject: {fileID: 3404463382137650425}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.42, y: 0.18, z: 1.4}
+  m_LocalPosition: {x: -0.42, y: 0.18, z: 0}
   m_LocalScale: {x: 0.06, y: 0.36, z: 0.36}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -540,7 +540,7 @@ GameObject:
   - component: {fileID: 3499660824282758835}
   - component: {fileID: 250871872522622892}
   - component: {fileID: 4009710513434654422}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: Box2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -637,7 +637,7 @@ Transform:
   m_GameObject: {fileID: 5537009369601524783}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.95, z: 1.15}
+  m_LocalPosition: {x: 0, y: 0.95, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -674,7 +674,7 @@ Transform:
   m_GameObject: {fileID: 6690070748470088838}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.25, y: 0.95, z: 0.35}
+  m_LocalPosition: {x: -0.25, y: 0.95, z: -0.8}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -705,7 +705,7 @@ Transform:
   m_GameObject: {fileID: 6731610794911345343}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -0.3}
+  m_LocalPosition: {x: 0, y: 0, z: -1.15}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -722,7 +722,7 @@ GameObject:
   - component: {fileID: 4696762453762203898}
   - component: {fileID: 8849930858817917768}
   - component: {fileID: 1550915861282857784}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: Box1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -805,7 +805,7 @@ GameObject:
   - component: {fileID: 3762334642125009530}
   - component: {fileID: 6193225725984575230}
   - component: {fileID: 1501351165740608556}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: Box3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -888,7 +888,7 @@ GameObject:
   - component: {fileID: 9221073507334384263}
   - component: {fileID: 2657087753555560316}
   - component: {fileID: 2784679056917419736}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: Box0
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -985,7 +985,7 @@ Transform:
   m_GameObject: {fileID: 8826803671804113678}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -0.3}
+  m_LocalPosition: {x: 0, y: 0, z: -1.15}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1002,7 +1002,7 @@ GameObject:
   - component: {fileID: 7216478235020888955}
   - component: {fileID: 588675443336859041}
   - component: {fileID: 3801485378344966911}
-  m_Layer: 0
+  m_Layer: 12
   m_Name: Body
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1018,7 +1018,7 @@ Transform:
   m_GameObject: {fileID: 8927695127426018410}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.6, z: 1.15}
+  m_LocalPosition: {x: 0, y: 0.6, z: 0}
   m_LocalScale: {x: 0.8, y: 0.7, z: 1.4}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1088,7 +1088,7 @@ GameObject:
   - component: {fileID: 5749540980778620193}
   - component: {fileID: 7960950714287232139}
   m_Layer: 12
-  m_Name: SpikeCart
+  m_Name: FoodCart
   m_TagString: Vehicle
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1139,7 +1139,7 @@ BoxCollider:
   m_Enabled: 1
   serializedVersion: 3
   m_Size: {x: 0.8, y: 1.2, z: 1.5}
-  m_Center: {x: 0, y: 0.6, z: 1.15}
+  m_Center: {x: 0, y: 0.6, z: 0}
 --- !u!208 &3464204825323267025
 NavMeshObstacle:
   m_ObjectHideFlags: 0
@@ -1154,7 +1154,7 @@ NavMeshObstacle:
   m_MoveThreshold: 0.1
   m_Carve: 1
   m_CarveOnlyStationary: 1
-  m_Center: {x: 0, y: 0.6, z: 1.15}
+  m_Center: {x: 0, y: 0.6, z: 0}
   m_TimeToStationary: 0.5
 --- !u!82 &5749540980778620193
 AudioSource:
@@ -1265,8 +1265,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   primaryInteractionEnabled: 1
-  simpleOverlayType: 0
-  detailedOverlayType: 0
+  simpleOverlayType: 5
+  detailedOverlayType: 16
   customOverlayHeaderKey: 
   itemWarningIconOffset: {x: 0, y: 0, z: 0}
   alwaysShowWarningIcon: 0
@@ -1325,7 +1325,7 @@ MonoBehaviour:
   hasExitSound: 0
   ExitSound: 0
   boxPlaceholder: {fileID: 271604186294190628}
-  playerOffsetWhenActive: 0
+  playerOffsetWhenActive: -1.15
   mainVolume: 0
   minVolume: 0
   maxVolume: 0

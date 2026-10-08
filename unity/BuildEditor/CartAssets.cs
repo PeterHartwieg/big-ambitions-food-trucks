@@ -8,19 +8,21 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks.BuildEditor
 {
-    // Spike 2: a placeholder push cart built from primitives and wired like the game's hand truck.
-    // HandTruck.EnterVehicle parents the cart to the player at local zero and, with playerOffsetWhenActive 0,
-    // leaves the player model at that same origin. So the origin is where the pusher stands: the handle is
-    // 0.35 m ahead at hand height and the 1.4 m body runs forward from it.
+    // Placeholder push cart with its ground-level origin at the body centre / wheel axle.
+    // HandTruck.EnterVehicle parents the cart at the player root, then a negative playerOffsetWhenActive
+    // moves that root forward while keeping the player model in place. The cart turns around its centre,
+    // with the pusher's feet PusherDistance behind it and the body facing +z.
     internal static class CartAssets
     {
         private const string HandVehicleTag = "ba:vehicletag_ishandvehicle";
         private const int CargoSlots = 6;
+        private const float CartPrice = 1200f; // Placeholder until the economy milestone.
+        private const float PusherDistance = 1.15f;
 
         public static void GenerateCart(string folder, string typeName)
         {
-            var typePath = folder + "/SpikeCart.asset";
-            var prefabPath = folder + "/SpikeCart.prefab";
+            var typePath = folder + "/FoodCart.asset";
+            var prefabPath = folder + "/FoodCart.prefab";
 
             var type = AssetDatabase.LoadAssetAtPath<VehicleType>(typePath);
             if (type == null)
@@ -28,8 +30,9 @@ namespace FoodTrucks.BuildEditor
                 type = ScriptableObject.CreateInstance<VehicleType>();
                 AssetDatabase.CreateAsset(type, typePath);
             }
+            type.name = "FoodCart";
             type.vehicleTypeName = typeName;
-            type.price = 1f;
+            type.price = CartPrice;
             type.itemVersion = string.Empty;
             type.maxFuel = 0f;
             type.maxCargoCapacity = CargoSlots;
@@ -75,13 +78,13 @@ namespace FoodTrucks.BuildEditor
 
         private static GameObject BuildCart(VehicleType type)
         {
-            var root = new GameObject("SpikeCart");
+            var root = new GameObject("FoodCart");
             root.tag = "Vehicle";
             root.layer = LayerMask.NameToLayer("Vehicles");
 
             // Clickable collider on the root: the mouse raycast looks for the controller on the hit object itself.
             var collider = root.AddComponent<BoxCollider>();
-            collider.center = new Vector3(0f, 0.6f, 1.15f);
+            collider.center = new Vector3(0f, 0.6f, 0f);
             collider.size = new Vector3(0.8f, 1.2f, 1.5f);
 
             var obstacle = root.AddComponent<NavMeshObstacle>();
@@ -98,41 +101,45 @@ namespace FoodTrucks.BuildEditor
 
             var renderers = new List<Renderer>
             {
-                Box(root.transform, "Body", new Vector3(0f, 0.6f, 1.15f), new Vector3(0.8f, 0.7f, 1.4f), new Color(0.85f, 0.25f, 0.2f)),
-                Box(root.transform, "Canopy", new Vector3(0f, 1.25f, 1.15f), new Vector3(0.95f, 0.05f, 1.55f), new Color(0.95f, 0.9f, 0.8f)),
-                Box(root.transform, "Handle", new Vector3(0f, 0.95f, 0.35f), new Vector3(0.7f, 0.05f, 0.05f), Color.gray),
-                Box(root.transform, "WheelLeft", new Vector3(-0.42f, 0.18f, 1.4f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
-                Box(root.transform, "WheelRight", new Vector3(0.42f, 0.18f, 1.4f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
+                Box(root.transform, "Body", new Vector3(0f, 0.6f, 0f), new Vector3(0.8f, 0.7f, 1.4f), new Color(0.85f, 0.25f, 0.2f)),
+                Box(root.transform, "Canopy", new Vector3(0f, 1.25f, 0f), new Vector3(0.95f, 0.05f, 1.55f), new Color(0.95f, 0.9f, 0.8f)),
+                Box(root.transform, "Handle", new Vector3(0f, 0.95f, -0.8f), new Vector3(0.7f, 0.05f, 0.05f), Color.gray),
+                Box(root.transform, "WheelLeft", new Vector3(-0.42f, 0.18f, 0f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
+                Box(root.transform, "WheelRight", new Vector3(0.42f, 0.18f, 0f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
             };
 
             // One child per cargo slot; HandTruck shows the first N children for N cargo entries.
             var boxes = new GameObject("BoxPlaceholder").transform;
             boxes.SetParent(root.transform, false);
-            boxes.localPosition = new Vector3(0f, 0.95f, 1.15f);
+            boxes.localPosition = new Vector3(0f, 0.95f, 0f);
             for (var i = 0; i < CargoSlots; i++)
             {
                 var box = Box(boxes, "Box" + i, new Vector3((i % 2 - 0.5f) * 0.35f, 0.12f, (i / 2 - 1) * 0.4f), new Vector3(0.3f, 0.2f, 0.3f), new Color(0.6f, 0.45f, 0.3f));
                 box.gameObject.SetActive(false);
             }
 
-            var leftHand = Point(root.transform, "LeftHandIK", new Vector3(-0.25f, 0.95f, 0.35f));
-            var rightHand = Point(root.transform, "RightHandIK", new Vector3(0.25f, 0.95f, 0.35f));
+            var leftHand = Point(root.transform, "LeftHandIK", new Vector3(-0.25f, 0.95f, -0.8f));
+            var rightHand = Point(root.transform, "RightHandIK", new Vector3(0.25f, 0.95f, -0.8f));
+            // The mod copies vanilla hand truck IK rotations at runtime.
             // Where the player walks to grab the cart and to load it: just behind the handle.
-            var loading = Point(root.transform, "LoadingPosition", new Vector3(0f, 0f, -0.3f));
-            var navTarget = Point(root.transform, "NavMeshTarget", new Vector3(0f, 0f, -0.3f));
+            var loading = Point(root.transform, "LoadingPosition", new Vector3(0f, 0f, -PusherDistance));
+            var navTarget = Point(root.transform, "NavMeshTarget", new Vector3(0f, 0f, -PusherDistance));
 
             var truck = root.AddComponent<HandTruck>();
             truck.vehicleType = type;
             truck.boxPlaceholder = boxes;
             truck.LHandIKAttachmentPoint = leftHand;
             truck.RHandIKAttachmentPoint = rightHand;
-            truck.playerOffsetWhenActive = 0f;
+            truck.playerOffsetWhenActive = -PusherDistance;
             truck.navMeshObstacle = obstacle;
             truck.vehicleCollider = collider;
             truck.vehicleLoadingPosition = loading;
             truck.showCargoInItemPanel = true;
 
             var serialized = new SerializedObject(truck);
+            // Vanilla vehicle overlays: hover outline and click popup.
+            SetInt(serialized, "simpleOverlayType", 5);
+            SetInt(serialized, "detailedOverlayType", 16);
             SetObject(serialized, "rollingAudioSource", audio);
             SetArray(serialized, "renderers", renderers.ToArray());
             SetArray(serialized, "navMeshTargets", new UnityEngine.Object[] { navTarget });
@@ -146,6 +153,7 @@ namespace FoodTrucks.BuildEditor
             go.name = name;
             UnityEngine.Object.DestroyImmediate(go.GetComponent<BoxCollider>());
             go.transform.SetParent(parent, false);
+            go.layer = LayerMask.NameToLayer("Vehicles");
             go.transform.localPosition = position;
             go.transform.localScale = size;
             var renderer = go.GetComponent<MeshRenderer>();
@@ -186,6 +194,12 @@ namespace FoodTrucks.BuildEditor
         {
             var property = serialized.FindProperty(field) ?? throw new InvalidOperationException($"Field {field} not found on {serialized.targetObject.GetType().Name}.");
             property.objectReferenceValue = value;
+        }
+
+        private static void SetInt(SerializedObject serialized, string field, int value)
+        {
+            var property = serialized.FindProperty(field) ?? throw new InvalidOperationException($"Field {field} not found on {serialized.targetObject.GetType().Name}.");
+            property.intValue = value;
         }
 
         private static void SetArray(SerializedObject serialized, string field, UnityEngine.Object[] values)

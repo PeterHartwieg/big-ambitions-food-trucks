@@ -97,17 +97,18 @@ namespace FoodTrucks
 
             runtimeObject = new GameObject("FoodTrucks.Runtime");
             Object.DontDestroyOnLoad(runtimeObject);
+            runtimeObject.AddComponent<CartSelling>();
             runtimeObject.AddComponent<DebugActions>();
-            DebugActions.LogDealerRoster();
+            try { PrefabFixes.Apply(); }
+            catch (Exception ex) { Log.Error("Prefab fixes: " + ex); }
         }
 
         public static void WriteToSave()
         {
             if (!canWrite || state == null || game == null || !ReferenceEquals(game, SaveGameManager.Current)) return;
-            SaveState.IncrementSaveCount(state);
-            state.WrittenByModVersion = FoodTrucksMod.Version;
-            // Serialize first, so a failure leaves the save's previous mod data in place.
-            var json = Codec.Serialize(state);
+            // The count and version change only if serialization succeeds, so a failed write
+            // leaves both the save's previous mod data and the in-memory count untouched.
+            var json = Codec.SerializeForSave(state, FoodTrucksMod.Version);
             if (game.modData == null) game.modData = new Dictionary<string, string>();
             game.modData[SaveKey] = json;
             Log.Info($"Save data written: save count {state.SaveCount}.");
