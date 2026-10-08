@@ -31,7 +31,8 @@ namespace FoodTrucks.Core.Pitches
             if (holds == null) throw new ArgumentNullException(nameof(holds));
             if (Holding(holds, vehicleId)) return null;
             if (capacity <= 0) return holds.FirstOrDefault(h => h.VehicleId != vehicleId)?.VehicleId ?? string.Empty;
-            var others = holds.Where(h => h.VehicleId != vehicleId && (h.Until == null || h.Until > minute)).ToList();
+            // A hold that ended the minute it started (a window closed in its first step) held nothing.
+            var others = holds.Where(h => h.VehicleId != vehicleId && (h.Until == null || h.Until > Math.Max(h.From, minute))).ToList();
             // Starts before ends at the same minute: a hold ending at 12:00 and one starting then don't overlap.
             var changes = others.Select(h => (At: Math.Max(h.From, minute), Step: 1, Hold: h))
                 .Concat(others.Where(h => h.Until != null).Select(h => (At: h.Until!.Value, Step: -1, Hold: h)))

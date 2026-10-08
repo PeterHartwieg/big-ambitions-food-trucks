@@ -170,6 +170,16 @@ public class CityEventsTests
     }
 
     [Fact]
+    public void AWindowThatClosedAsItOpenedHeldNothing()
+    {
+        var city = new CityEvent { Id = 1, Booked = 1, Places = 1, Day = 5, Start = 600, End = 960 };
+        var noon = 4 * 1440L + 720;
+        Assert.True(CityEvents.Claim(city, "truck", noon));
+        Holds.Release(city.Holds, "truck", noon);
+        Assert.True(CityEvents.Claim(city, "cart", noon - 30));
+    }
+
+    [Fact]
     public void ACatchUpInTheOtherOrderCantShareAPlaceEither()
     {
         var city = new CityEvent { Id = 1, Booked = 1, Places = 2, Day = 5, Start = 600, End = 960 };
