@@ -29,6 +29,8 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 | Off-screen | Sales away from the player and hired trucks are statistical; customers are visible within about 100 m. |
 | Pricing | The cart behaves like a shop: by default its prices follow the district, as a pricing manager would set them, and the player can set custom prices per product. Where feasible it appears in the game's business screens like a shop (to research: those screens are built around rented buildings). |
 | Restocking day | Carts carry about half a day's stock; a refill at a wholesaler during the day is expected. The player buys only what fits, so no full box is needed. |
+| Coffee | The step after hot dogs: the industrial coffee machine (the shop machine; the cheap one is an office item), fast service, its own crowds (morning commuters, parks at weekends and on warm afternoons). It should earn more than a hot dog cart at its own spots and cost more to start. |
+| Nightlife and parks | Nightlife pitches come from buildings: nightclubs, theatres and cinemas nearby. Hand-drawn zones are for what has no building to find: parks, the waterfront, tourist stretches. |
 | Messages | In-world wording: say what happens in the game ("The cart can't open without any equipment installed"), never how to use the interface. Maintenance tools such as the uninstall step may stay plain. |
 | Not chosen | Grey-market permits, fines, time-restricted streets, per-area demand curves. |
 
