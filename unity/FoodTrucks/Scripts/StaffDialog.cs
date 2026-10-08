@@ -17,7 +17,6 @@ namespace FoodTrucks
     // stop with its opening hours, remove a stop, pick the days the route runs.
     internal static class StaffDialog
     {
-        private const int MaxCandidatesShown = 8;
         // Opening hours are picked in half hours.
         private const int Step = 30;
 
@@ -58,7 +57,7 @@ namespace FoodTrucks
             var limit = HireCrew.Limit(kind);
             if (vehicle.Crew.Count < limit)
             {
-                foreach (var employee in HireCrew.Available(state).Take(MaxCandidatesShown))
+                foreach (var employee in HireCrew.Available(state))
                 {
                     var hire = employee;
                     options.Add((Format("foodtrucks:hires_option_takeon", HireCrew.Name(employee), Skill(employee),

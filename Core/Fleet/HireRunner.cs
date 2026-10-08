@@ -275,22 +275,15 @@ namespace FoodTrucks.Core.Fleet
                 : schedule.Days.Distinct().ToList();
             var first = schedule.Stops.Min(s => s.OpenAt);
             var last = schedule.Stops.Max(s => s.CloseAt);
-            var sameDay = 0;
-            var nextDay = 0;
+            var hours = new List<int>();
             for (var hour = 0; hour < 48; hour++)
-            {
-                var covered = Math.Min(last, hour * 60 + 60) - Math.Max(first, hour * 60);
-                if (covered < 30) continue;
-                if (hour < 24) sameDay++;
-                else nextDay++;
-            }
-            var days = new HashSet<DayOfWeek>();
+                if (Math.Min(last, hour * 60 + 60) - Math.Max(first, hour * 60) >= 30) hours.Add(hour);
+            // Hours of the week, each counted once: a late stop's night can meet the next day's early start.
+            var week = new HashSet<int>();
             foreach (var day in routeDays)
-            {
-                if (sameDay > 0) days.Add(day);
-                if (nextDay > 0) days.Add((DayOfWeek)(((int)day + 1) % 7));
-            }
-            return ((sameDay + nextDay) * routeDays.Count, days.OrderBy(d => d).ToList());
+                foreach (var hour in hours) week.Add(((int)day * 24 + hour) % (7 * 24));
+            var days = week.Select(h => (DayOfWeek)(h / 24)).Distinct().OrderBy(d => d).ToList();
+            return (week.Count, days);
         }
 
         private static long End(ShiftPlan plan) => plan.Legs.Count == 0 ? 0 : plan.Legs.Max(l => l.End);

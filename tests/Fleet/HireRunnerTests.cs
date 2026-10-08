@@ -162,6 +162,10 @@ public class HireRunnerTests
         var (hours, days) = HireRunner.WeeklyWork(late);
         Assert.Equal(4, hours);
         Assert.Equal(new[] { DayOfWeek.Friday, DayOfWeek.Saturday }, days);
+
+        // Every day 01:00 to 27:00 (03:00): the nights overlap the next morning's hours, counted once.
+        var allDay = new HireSchedule { Stops = new List<ScheduleStop> { Stop("c", 0, 60, 27 * 60) } };
+        Assert.Equal(7 * 24, HireRunner.WeeklyWork(allDay).Hours);
     }
 
     [Fact]

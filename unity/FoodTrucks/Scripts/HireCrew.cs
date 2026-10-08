@@ -121,9 +121,21 @@ namespace FoodTrucks
             foreach (var vehicle in state.Vehicles)
             {
                 foreach (var id in (vehicle.Crew ?? new List<string>()).ToList()) Remove(vehicle, id, "uninstall");
+                // A vehicle on its way goes back where it left from, so the game spawns it there if it stays.
+                var transit = vehicle.Transit;
+                var instance = transit == null ? null : SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId);
+                if (transit != null && instance != null)
+                {
+                    instance.position = new UnityEngine.Vector3((float)transit.FromX, (float)transit.FromY, (float)transit.FromZ);
+                    instance.rotation = UnityEngine.Quaternion.Euler(0f, (float)transit.FromHeading, 0f);
+                    instance.parkingState = (ParkingState)transit.FromParkingState;
+                }
                 vehicle.Schedule = null;
                 vehicle.Shifts?.Clear();
                 vehicle.Transit = null;
+                vehicle.Arrival = null;
+                vehicle.Skipped = null;
+                vehicle.HireStop = null;
             }
             FoodTrucksSession.MarkChanged();
         }
