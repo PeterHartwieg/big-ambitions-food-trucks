@@ -289,6 +289,8 @@ The target is game money, not NYC money:
 
 Vehicle prices, equipment prices and permit fees are set as multiples of the cheapest small-shop setup at the current difficulty, so they scale with the game's price settings.
 
+Drafted while building the Core (8 October 2026), and held until the balance study in `docs/balance/` sets the cart's economics: the setup is 30 days' rent as the deposit, the equipment and the first stock. Of the difficulty settings only the wholesale multiplier reaches it, since rent and equipment prices don't change with difficulty [code, unverified in game]. The shop's numbers are asset data, so `rules.json` holds guesses until the game side reads them. The implementation plan's Milestone 4 notes list the results.
+
 ## Technical approach
 
 Every business system in the game hangs off a rented building's `BuildingRegistration`: customers, BizMan, employees, revenue, rivals, tax. A vehicle has none of it, so the mod runs its own simulation and connects to the game at the edges.

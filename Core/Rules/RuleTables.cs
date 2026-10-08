@@ -1,5 +1,6 @@
 using FoodTrucks.Core.Catering;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Economics;
 using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Reputation;
 using Newtonsoft.Json.Linq;
@@ -14,9 +15,10 @@ namespace FoodTrucks.Core.Rules
 
         private RuleTables(DataReader r, JObject root)
         {
-            r.OnlyKeys(root, "schemaVersion", "queue", "health", "regulars", "competition", "fleet", "catering");
+            r.OnlyKeys(root, "schemaVersion", "queue", "economy", "health", "regulars", "competition", "fleet", "catering");
             r.SchemaVersion(root, SchemaVersion);
             Queue = QueueRules.Read(r, r.Object(root, "queue"));
+            Economy = EconomyRules.Read(r, r.Object(root, "economy"));
             Health = HealthRules.Read(r, r.Object(root, "health"));
             Regulars = RegularsRules.Read(r, r.Object(root, "regulars"));
             Competition = CompetitionRules.Read(r, r.Object(root, "competition"));
@@ -25,6 +27,7 @@ namespace FoodTrucks.Core.Rules
         }
 
         public QueueRules Queue { get; }
+        public EconomyRules Economy { get; }
         public HealthRules Health { get; }
         public RegularsRules Regulars { get; }
         public CompetitionRules Competition { get; }

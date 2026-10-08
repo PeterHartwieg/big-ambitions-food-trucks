@@ -141,22 +141,27 @@ The first playable slice. It touches every risky layer at once: bundle, vehicle,
 - `TaxPatch` live; truck sales in the tax statement.
 - "Street food" category on the city map: offices, factories, nightlife, theatres and cinemas, premium spots.
 
-**Core half, built 8 October 2026 on branch `core-m3-m7`:** `Licensing` and `FleetRules` in `Core/Fleet`. Decisions:
+**Core half, built 8 October 2026 on branch `core-m3-m7`:** `Licensing` and `FleetRules` in `Core/Fleet`, and `Economy` in `Core/Economics`. `Economy` is held: a separate balance study (`docs/balance/`) will set the cart's economics, so the Economy points below are a first draft that the study may replace. Decisions:
 
 - The licence needs the Food Safety course, lasts 60 days and can be renewed in its last 10; a renewal adds a full period, so renewing early loses nothing. The game's diploma never expires [code, unverified in game]; the mod's licence does.
 - The permit cap starts at one and gains one at 14, 35 and 70 days since the first licence, or sooner at 400, 1,500 and 4,000 items sold across the fleet, up to the setting (default 4). The cap reached is kept in the save and never drops.
 - To open, a vehicle needs the player's valid licence, its own permit and somebody at the window. Hires need neither the course nor a licence of their own.
 - Vehicles from Milestone 1 saves have no type. `Licensing.GrandfatherOldVehicles` makes them carts with a permit, so an existing cart isn't locked out; the player still needs the course and a licence. The game side calls it once after loading, with the first mod version that sets vehicle types, so only older saves qualify. Every new vehicle must get its type.
+- (Economy, held for the balance study.) Money is set against the cheapest small fast food shop. `Economy.ReferenceShopIncome(difficulty)` follows the game's shop formula: customers per hour = the building's capacity × (base promotion + 0.75 × traffic / 100) × the hour factor, capped by the shop's capacity, times the margin, less rent and wages [code, unverified in game]. The difficulty changes wholesale prices, wages and the base promotion; it doesn't change rent, sale prices, equipment, vehicles or fuel [code, unverified in game].
+- Every input of that shop is asset data the decompile doesn't hold, so `rules.json` carries guesses (rent $90 a day, the hot dog's wholesale price $3.50, a cashier's base wage $16 an hour, and so on), giving about $1,430 a day. The game side should read the live values, or call the game's own `EstimatedWeeklyIncomeHelper.GetEstimatedWeeklyIncome` on an AI fast food shop and pass the result as `MeasuredDailyProfitCents`.
+- Prices are multiples of the shop's setup cost (30 days' rent as the deposit, the equipment, the first stock: about $5,935 with the guesses), rounded to $10. The cart's 0.202 gives the $1,200 the Milestone 1 dealer charges; the truck is 1.5 ($8,900), the licence 0.03 ($180 per period), a permit 0.1 ($590), equipment 0.04 to 0.15.
+- The calibration targets run through a test-only day simulator (`tests/Economics/RouteDay.cs`) that drives the demand model and `SalesSimulator` minute by minute. With the guessed shop: a cart at a Midtown office lunch plus a Hell's Kitchen evening makes $1,062 (0.74 shops; target 0.5) and sells 95% of its two loads of 80, so the stock limit sets its day. That day needs the player to push the cart about 1.2 km between the pitches at a run (6 m/s), which is a guess: whether a hand vehicle can be pushed at a run is untested in game. At walking pace the cart gets one pitch a day, about 0.37 of a shop. A truck with the player and one hire makes $1,528 (1.07; target 1.0), only 1.44 carts where the targets imply 2. A hire alone at a residential afternoon loses money. Four hired trucks make $4,772, below a mid-game business at 8 shops (a guess). The cart and truck tests allow ±50% while the shop is a guess.
 
 ## Milestone 5: hires
 
 - A hired worker serves alone at a parked vehicle, at the game's wages, as a deductible expense.
 - Hire schedules: the vehicle is marked in transit for the game's travel time, then placed in a free parking spot at the next stop.
 
-**Core half, built 8 October 2026 on branch `core-m3-m7`:** `HireSchedules` and `Travel` in `Core/Fleet`. Decisions:
+**Core half, built 8 October 2026 on branch `core-m3-m7`:** `HireSchedules` and `Travel` in `Core/Fleet`; wages and fuel in `Economy`, held for the balance study like the rest of it. Decisions:
 
 - A schedule is up to six stops a day, each with a spot, a position and opening hours (a late stop can close at 03:00), on chosen weekdays. The vehicle leaves as late as it can and still open on time. If it can't make it, it opens on arrival and closes at the usual time; a stop it can't reach before closing is skipped. Leaving a stop closes the queue.
 - Travel time is the game's taxi formula: straight-line metres × 0.04 × game speed, in game minutes [code, unverified in game]. A cart moves at the 1.2 m/s walking pace, and a real second is one game minute at normal speed, so a hire pushing a cart covers only about 72 m per game hour. Hire schedules are really for trucks, and carts need stops a block apart.
+- A hire is paid for the whole shift, driving included, at the game's wage formula: base wage × (skill^1.05 / 100 + 1) × the difficulty's wage multiplier [code, unverified in game]. Fuel for simulated driving is 0.15 litres per km (a guess) at the game's $1.30 a litre [code, unverified in game]. A truck the player drives burns the game's own fuel.
 - Restocking a hired vehicle is still open: with no commissary, somebody has to carry boxes from a wholesaler.
 
 ## Milestone 6: depth

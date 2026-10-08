@@ -10,6 +10,47 @@
     "maxQueue": 12
   },
 
+  "_economy": "Money is set against the cheapest small fast food shop. referenceShop is that shop as the formulas in the 1.0 decompile see it [code, unverified in game]; every value in it is a guess until the game side reads the live numbers (cheapest retail rent, the hot dog's wholesale price, the cashier's base wage, a register's customers per hour). The hot dog's $11.65 was seen in game. prices.multiples are multiples of the shop's setup cost (deposit, equipment, first stock); with these guesses the setup costs about $5,935 and the shop makes about $1,430 a day.",
+  "economy": {
+    "referenceShop": {
+      "dailyRentCents": 9000,
+      "depositDays": 30,
+      "equipmentCents": 250000,
+      "buildingCustomersPerHour": 20,
+      "registerCustomersPerHour": 30,
+      "trafficIndex": 50,
+      "hoursOpen": 12,
+      "averageHourFactor": 0.7,
+      "itemsPerCustomer": 1.5,
+      "itemPriceCents": 1165,
+      "itemWholesaleCents": 350,
+      "baseHourlyWageCents": 1600,
+      "workerSkill": 20,
+      "workers": 1,
+      "openingStockUnits": 200
+    },
+    "_prices": "The cart's 0.2 lands on the $1,200 the Milestone 1 dealer charges. The licence is paid every licence period (fleet.licenceDays).",
+    "prices": {
+      "roundToCents": 1000,
+      "multiples": {
+        "cart": 0.202,
+        "truck": 1.5,
+        "licence": 0.03,
+        "permit": 0.1,
+        "hotdoggrill": 0.06,
+        "burgerstation": 0.12,
+        "coffeemachine": 0.08,
+        "icecreamcounter": 0.1,
+        "pizzaoven": 0.15,
+        "cooler": 0.04,
+        "displaycase": 0.06
+      }
+    },
+    "_fuel": "Only for a hire's simulated driving. The game charges $1.30 a litre at every station [code, unverified in game]; litresPerKm is a guess for a small truck.",
+    "fuel": { "litresPerKm": 0.15, "centsPerLitre": 130 },
+    "midGameBusinessShops": 8
+  },
+
   "_health": "Hidden cleanliness points: the sum of the daily marks of the last memoryDays days the vehicle was open. An open day without cleaning adds uncleanedDayPoints, selling stale stock adds staleStockPoints. The grade changes only when an inspector comes, about every inspectionWeeks for the current grade, with no visits inside minimumGapDays. After that each open day has chance 1 / max(1, inspectionWeeks x daysPerWeek - minimumGapDays); an ungraded vehicle uses firstInspectionWeeks. Bands from the design, which follows NYC's 0-13 / 14-27 / 28+.",
   "health": {
     "memoryDays": 14,
