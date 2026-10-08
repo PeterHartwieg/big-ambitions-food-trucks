@@ -143,6 +143,9 @@ namespace FoodTrucks.Core.Saves
                 if (double.IsNaN(vehicle.SaleProgress) || double.IsInfinity(vehicle.SaleProgress) ||
                     vehicle.SaleProgress < 0 || vehicle.SaleProgress >= 1)
                     throw new JsonSerializationException("Vehicle SaleProgress must be finite and in [0, 1).");
+                if (vehicle.CustomPriceCents == null || vehicle.CustomPriceCents.Any(price =>
+                        string.IsNullOrEmpty(price.Key) || price.Value <= 0 || price.Value > 1_000_000))
+                    throw new JsonSerializationException("Vehicle CustomPriceCents must name items with prices from 1 to 1,000,000 cents.");
                 if (vehicle.Service != null) ValidateService(vehicle.Service);
                 if (vehicle.Health != null) FoodTrucks.Core.Reputation.ReputationValidation.Validate(vehicle.Health);
                 if (vehicle.VehicleType == null)
@@ -167,6 +170,8 @@ namespace FoodTrucks.Core.Saves
             {
                 if (sale == null)
                     throw new JsonSerializationException("DailySales must not contain null entries.");
+                if (sale.CostCents < 0)
+                    throw new JsonSerializationException("DailySales CostCents must not be negative.");
                 if (sale.RevenueCents < 0)
                     throw new JsonSerializationException("DailySales RevenueCents must not be negative.");
                 if (!days.Add(sale.Day))

@@ -8,6 +8,58 @@ namespace FoodTrucks.Core.Tests.Saves;
 
 public class SaveCodecTests
 {
+    [Fact]
+    public void CustomPricesRoundTripWithOrdinalItemNamesInSchemaOne()
+    {
+        var codec = new SaveCodec();
+        var state = new SaveState();
+        var vehicle = new VehicleState { VehicleId = "cart-1" };
+        vehicle.CustomPriceCents.Add("ba:itemname_cupofcoffee", 590);
+        vehicle.CustomPriceCents.Add("BA:ITEMNAME_CUPOFCOFFEE", 1_000_000);
+        state.Vehicles.Add(vehicle);
+
+        var json = codec.Serialize(state);
+        var result = codec.Load(json);
+
+        Assert.Equal(LoadStatus.Loaded, result.Status);
+        Assert.Equal(1, result.State!.SchemaVersion);
+        var loaded = Assert.Single(result.State.Vehicles);
+        Assert.Equal(590, loaded.CustomPriceCents["ba:itemname_cupofcoffee"]);
+        Assert.Equal(1_000_000, loaded.CustomPriceCents["BA:ITEMNAME_CUPOFCOFFEE"]);
+        Assert.Equal(2, loaded.CustomPriceCents.Count);
+        Assert.Equal(StringComparer.Ordinal, loaded.CustomPriceCents.Comparer);
+        Assert.Equal(json, codec.Serialize(result.State));
+    }
+
+    [Fact]
+    public void OlderVehiclesLoadWithIndependentEmptyCustomPrices()
+    {
+        var result = new SaveCodec().Load("{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\"},{\"vehicleId\":\"cart-2\"}]}");
+
+        Assert.Equal(LoadStatus.Loaded, result.Status);
+        Assert.All(result.State!.Vehicles, vehicle => Assert.Empty(vehicle.CustomPriceCents));
+        result.State.Vehicles[0].CustomPriceCents["ba:itemname_hotdog"] = 1165;
+        Assert.Empty(result.State.Vehicles[1].CustomPriceCents);
+        Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load(new SaveCodec().Serialize(result.State)).Status);
+    }
+
+    [Theory]
+    [InlineData("{\"ba:itemname_hotdog\":0}")]
+    [InlineData("{\"ba:itemname_hotdog\":-1}")]
+    [InlineData("{\"ba:itemname_hotdog\":1000001}")]
+    [InlineData("{\"ba:itemname_hotdog\":9223372036854775807}")]
+    [InlineData("{\"\":1165}")]
+    public void InvalidCustomPricesAreCorruptWithAClearFieldError(string prices)
+    {
+        var json = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"customPriceCents\":" + prices + "}]}";
+        var result = new SaveCodec().Load(json);
+
+        Assert.Equal(LoadStatus.Corrupt, result.Status);
+        Assert.Null(result.State);
+        Assert.Equal(json, result.RawJson);
+        Assert.Contains("CustomPriceCents", result.Error);
+    }
+
     private readonly SaveCodec codec = new();
 
     public static TheoryData<string, string> UnusableStates => new()

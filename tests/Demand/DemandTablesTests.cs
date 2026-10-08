@@ -9,6 +9,74 @@ namespace FoodTrucks.Core.Tests.Demand;
 public class DemandTablesTests
 {
     [Theory]
+    [InlineData("0")]
+    [InlineData("-0.25")]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("null")]
+    [InlineData("\"0.25\"")]
+    public void InvalidStockWeightNamesTheProductAndField(string value)
+    {
+        var economy = JObject.Parse(ShippedData.Economy);
+        economy["products"]!["ba:itemname_cupofcoffee"]!["stockWeight"] = JToken.Parse(value);
+
+        var error = Assert.Throws<DemandDataException>(() =>
+            DemandTables.Parse(ShippedData.Demand, economy.ToString(), ShippedData.Zones));
+
+        Assert.Contains("economy.json", error.Message);
+        Assert.Contains("ba:itemname_cupofcoffee", error.Message);
+        Assert.Contains("stockWeight", error.Message);
+    }
+
+    [Fact]
+    public void StockWeightDefaultsToOneAndAcceptsAnyPositiveFiniteWeight()
+    {
+        var economy = JObject.Parse(ShippedData.Economy);
+        ((JObject)economy["products"]!["ba:itemname_cupofcoffee"]!).Property("stockWeight")!.Remove();
+        economy["products"]!["ba:itemname_hotdog"]!["stockWeight"] = double.Epsilon;
+        economy["products"]!["ba:itemname_burger"]!["stockWeight"] = double.MaxValue;
+        var tables = DemandTables.Parse(ShippedData.Demand, economy.ToString(), ShippedData.Zones);
+
+        Assert.Equal(1.0, tables.Product("ba:itemname_cupofcoffee")!.StockWeight);
+        Assert.Equal(double.Epsilon, tables.Product("ba:itemname_hotdog")!.StockWeight);
+        Assert.Equal(double.MaxValue, tables.Product("ba:itemname_burger")!.StockWeight);
+    }
+
+    [Theory]
+    [InlineData("{\"cofee\":2}")]
+    [InlineData("{\"coffee\":-1}")]
+    [InlineData("{\"coffee\":NaN}")]
+    [InlineData("{\"coffee\":Infinity}")]
+    [InlineData("{\"coffee\":101}")]
+    [InlineData("{\"coffee\":\"2\"}")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    public void InvalidAreaAppetiteNamesTheAreaAndField(string value)
+    {
+        var demand = JObject.Parse(ShippedData.Demand);
+        demand["areas"]!["waterfront"]!["appetite"] = JToken.Parse(value);
+
+        var error = Assert.Throws<DemandDataException>(() =>
+            DemandTables.Parse(demand.ToString(), ShippedData.Economy, ShippedData.Zones));
+
+        Assert.Contains("demand.json", error.Message);
+        Assert.Contains("areas.waterfront.appetite", error.Message);
+    }
+
+    [Fact]
+    public void AreaAppetiteDefaultsToOneAndCanDisableACategory()
+    {
+        var demand = JObject.Parse(ShippedData.Demand);
+        demand["areas"]!["waterfront"]!["appetite"] = new JObject { ["coffee"] = 0 };
+        var tables = DemandTables.Parse(demand.ToString(), ShippedData.Economy, ShippedData.Zones);
+
+        Assert.Equal(0, tables.Area("waterfront").AppetiteFactor("coffee"));
+        Assert.Equal(1, tables.Area("waterfront").AppetiteFactor("fastfood"));
+        Assert.Equal(1, tables.Area("office").AppetiteFactor("coffee"));
+    }
+
+    [Theory]
     [InlineData("demand.json", "schemaVersion", "2")]
     [InlineData("economy.json", "schemaVersion", "2")]
     [InlineData("zones.json", "schemaVersion", "2")]

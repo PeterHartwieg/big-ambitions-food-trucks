@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Buildings;
 using Dialogs;
@@ -40,6 +41,10 @@ namespace FoodTrucks
             Patch(typeof(ItemPanelUI), "SetItemInstance", null, nameof(PanelOther));
             Patch(typeof(ItemPanelUI), "SetMiniGameMode", null, nameof(PanelOther));
 
+            // Day summary and Econoview: the carts' profit counts like a business's (sales less the stock sold).
+            Patch(typeof(FinancialSummaryHelper), "CreateFinancialSummary", new[] { typeof(int) }, nameof(DaySummary));
+            Patch(AccessTools.TypeByName("UI.Smartphone.Apps.EconoView.EconoViewIncomeStatementScrollerController"), "LoadSalaryRows", Type.EmptyTypes, nameof(EconoViewRow));
+
             // Cargo limit: food up to the vehicle's units, equipment up to its slots.
             Patch(typeof(VehicleInstance), "MergeIntoCargo", new[] { typeof(CargoInstance) },
                 typeof(CargoLimit), prefix: nameof(CargoLimit.MergePrefix), finalizer: nameof(CargoLimit.MergeFinalizer));
@@ -53,15 +58,20 @@ namespace FoodTrucks
             harmony = null;
         }
 
-        private static void Patch(Type type, string method, Type[]? args, string patch, bool prefix = false)
+        private static void Patch(Type? type, string method, Type[]? args, string patch, bool prefix = false)
         {
             if (prefix) Patch(type, method, args, typeof(Patches), prefix: patch);
             else Patch(type, method, args, typeof(Patches), postfix: patch);
         }
 
-        private static void Patch(Type type, string method, Type[]? args, Type handlers, string? prefix = null, string? postfix = null, string? finalizer = null)
+        private static void Patch(Type? type, string method, Type[]? args, Type handlers, string? prefix = null, string? postfix = null, string? finalizer = null)
         {
-            var name = $"{type.Name}.{method}";
+            var name = $"{type?.Name ?? "(type not found)"}.{method}";
+            if (type == null)
+            {
+                Log.Error($"Patch {name}: Not active, type not found.");
+                return;
+            }
             try
             {
                 var original = AccessTools.Method(type, method, args);
@@ -156,6 +166,48 @@ namespace FoodTrucks
                 Log.Error(ex);
                 return true;
             }
+        }
+
+        private static void DaySummary(int dayNumber, FinancialSummary __result)
+        {
+            try
+            {
+                var state = FoodTrucksSession.CurrentState;
+                if (__result == null || state == null) return;
+                // Read-only data (written by a newer mod version) can't be marked, so it only counts days
+                // already marked; otherwise Econoview's row and its total would disagree.
+                if (!FoodTrucksSession.CanWrite && !SalesLedger.IsInSummary(state, dayNumber)) return;
+                var profit = SalesLedger.ProfitCents(state, dayNumber);
+                if (profit != 0) __result.totalProfit += profit / 100f;
+                if (FoodTrucksSession.CanWrite) SalesLedger.MarkInSummary(state, dayNumber);
+            }
+            catch (Exception ex) { Log.Error(ex); }
+        }
+
+        private static MethodInfo? createRow;
+
+        // One "Food carts" row in the income statement, next to the other income, so its total still
+        // adds up with the day summary's profit.
+        private static void EconoViewRow(object __instance)
+        {
+            try
+            {
+                var summaries = Traverse.Create(__instance).Field("_financialSummaries").GetValue<List<FinancialSummary>>();
+                if (summaries == null || summaries.Count == 0) return;
+                var state = FoodTrucksSession.CurrentState;
+                // Only days whose stored total includes the carts, so the statement still adds up.
+                var values = summaries.Select(s => SalesLedger.IsInSummary(state, s.dayNumber)
+                    ? SalesLedger.ProfitCents(state, s.dayNumber) / 100f : 0f).ToList();
+                if (values.All(v => v == 0f)) return;
+                createRow ??= AccessTools.Method(__instance.GetType(), "CreateRow");
+                if (createRow == null) return;
+                var rowType = createRow.GetParameters()[0].ParameterType;
+                createRow.Invoke(__instance, new object?[]
+                {
+                    Enum.Parse(rowType, values[0] >= 0 ? "Success" : "Danger"), "foodtrucks:econoview_row", values, true, null, null
+                });
+            }
+            catch (Exception ex) { Log.Error(ex); }
         }
 
         private static void PanelVehicle(ItemPanelUI __instance, VehicleController vehicle)

@@ -16,7 +16,7 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks
 {
-    // Debug and maintenance actions: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
+    // Debug and maintenance actions: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
     // Ctrl+Shift+F12 uninstall step. Also console commands when the game runs with -console.
     internal sealed class DebugActions : MonoBehaviour
     {
@@ -24,6 +24,7 @@ namespace FoodTrucks
         private static readonly Action SpawnCartAction = () => SpawnVehicle(FoodTrucksMod.CartTypeName);
         private static readonly Action SpawnHandTruckAction = () => SpawnVehicle("ba:vehicletype_handtruck");
         private static readonly Action GripAction = LogGrip;
+        private static readonly Action ZonePointAction = MarkZonePoint;
         private static readonly Action TaxFixtureAction = TaxFixture;
         private static readonly Action TaxStatementAction = IssueTaxStatement;
         private static readonly Action StatusAction = ShowStatus;
@@ -37,6 +38,7 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_spawn_truck", "Food Trucks: spawn the test truck next to you", SpawnTruckAction);
                 CommandHelper.AddCommand("foodtrucks_spawn_cart", "Food Trucks: spawn a free food cart next to you (testing)", SpawnCartAction);
                 CommandHelper.AddCommand("foodtrucks_spawn_handtruck", "Food Trucks: spawn a vanilla hand truck to compare the grip", SpawnHandTruckAction);
+                CommandHelper.AddCommand("foodtrucks_zone_point", "Food Trucks: log where you stand, for drawing park zones", ZonePointAction);
                 CommandHelper.AddCommand("foodtrucks_grip", "Food Trucks: log where the hands and grip points are while pushing", GripAction);
                 CommandHelper.AddCommand("foodtrucks_tax_fixture", "Food Trucks: record $200,000 of street food today, ledger only (throwaway saves only)", TaxFixtureAction);
                 CommandHelper.AddCommand("foodtrucks_tax_statement", "Food Trucks: issue this year's tax statement now (throwaway saves only)", TaxStatementAction);
@@ -45,7 +47,7 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_uninstall", "Food Trucks: remove and refund all Food Trucks vehicles (run twice to confirm)", UninstallAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.");
+            Log.Info("Debug actions ready: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.");
         }
 
         private void OnDisable()
@@ -56,6 +58,7 @@ namespace FoodTrucks
                 CommandHelper.RemoveCommand(SpawnCartAction);
                 CommandHelper.RemoveCommand(SpawnHandTruckAction);
                 CommandHelper.RemoveCommand(GripAction);
+                CommandHelper.RemoveCommand(ZonePointAction);
                 CommandHelper.RemoveCommand(TaxFixtureAction);
                 CommandHelper.RemoveCommand(TaxStatementAction);
                 CommandHelper.RemoveCommand(StatusAction);
@@ -76,6 +79,7 @@ namespace FoodTrucks
             else if (keyboard.f7Key.wasPressedThisFrame) Run("spawn cart", SpawnCartAction);
             else if (keyboard.f11Key.wasPressedThisFrame) Run("grip", GripAction);
             else if (keyboard.f8Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax fixture", TaxFixtureAction);
+            else if (keyboard.f8Key.wasPressedThisFrame) Run("zone point", ZonePointAction);
             else if (keyboard.f9Key.wasPressedThisFrame) Run("demand here", DemandAction);
             else if (keyboard.f10Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax statement", TaxStatementAction);
             else if (keyboard.f10Key.wasPressedThisFrame) Run("status", StatusAction);
@@ -170,6 +174,19 @@ namespace FoodTrucks
                           $"model {At(PlayerHelper.GetAnimator()?.transform)}.";
             Log.Info(message);
             Notify("Grip logged. Press it once standing and once while walking.");
+        }
+
+        // For drawing park and waterfront zones: walk a park's outline and press this at each corner.
+        private static int zonePoints;
+
+        private static void MarkZonePoint()
+        {
+            var position = PlayerHelper.GetPosition();
+            var tables = DemandData.Tables;
+            var neighbourhood = tables == null ? null : World.ReadSpot(tables, position).Neighbourhood;
+            zonePoints++;
+            Log.Info($"Zone point {zonePoints}: {World.Short(neighbourhood)}, x {position.x:F1}, z {position.z:F1}.");
+            Notify($"Point {zonePoints} marked.");
         }
 
         private static void ShowStatus()

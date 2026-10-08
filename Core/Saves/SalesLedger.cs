@@ -33,6 +33,45 @@ namespace FoodTrucks.Core.Saves
             entry.RevenueCents = checked(entry.RevenueCents + revenueCents);
         }
 
+        // Adds the wholesale cost of stock sold on a day. Never fails: the cost only feeds the profit shown
+        // in the game's summaries, so an overflow is capped rather than refusing a sale already paid.
+        public static void RecordCost(SaveState state, int day, long costCents)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            if (costCents <= 0) return;
+            var entry = state.DailySales.FirstOrDefault(d => d.Day == day);
+            if (entry == null)
+            {
+                entry = new DailySales { Day = day };
+                state.DailySales.Add(entry);
+            }
+            entry.CostCents = entry.CostCents > long.MaxValue - costCents ? long.MaxValue : entry.CostCents + costCents;
+        }
+
+        // Marks a day as counted in the game's financial summary.
+        public static void MarkInSummary(SaveState state, int day)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            foreach (var entry in state.DailySales)
+                if (entry != null && entry.Day == day) entry.InSummary = true;
+        }
+
+        public static bool IsInSummary(SaveState? state, int day) =>
+            state != null && state.DailySales.Any(d => d != null && d.Day == day && d.InSummary);
+
+        // Sales less the wholesale cost of what was sold, for one day.
+        public static long ProfitCents(SaveState? state, int day)
+        {
+            if (state == null) return 0;
+            long profit = 0;
+            foreach (var entry in state.DailySales)
+            {
+                if (entry != null && entry.Day == day)
+                    profit = checked(profit + entry.RevenueCents - entry.CostCents);
+            }
+            return profit;
+        }
+
         // Inclusive on both ends, like the game's tax period.
         public static long SumCents(SaveState? state, int firstDay, int lastDay)
         {

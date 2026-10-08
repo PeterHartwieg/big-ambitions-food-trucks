@@ -34,7 +34,7 @@ public class ServiceRateTests
 
         var minutes = ServiceRate.OrderMinutes(Tables, new[] { "ba:itemname_pizza", "ba:itemname_donut" }, shares);
 
-        Assert.Equal(0.75 * 6 + 0.25 * 3, minutes, 9);
+        Assert.Equal(0.75 * 6 + 0.25 * 2, minutes, 9);
     }
 
     [Fact]

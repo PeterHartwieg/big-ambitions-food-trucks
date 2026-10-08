@@ -21,9 +21,24 @@ namespace FoodTrucks.Core.Selling
 
     public static class CargoRules
     {
-        // Only loose products count towards the food limit, whether or not currently on the menu.
+        // Round the total load up for the integer API, so a partial unit still occupies space.
         public static int FoodUnits(DemandTables tables, IEnumerable<CargoLine> cargo) =>
-            CountUnits(tables, cargo, equipment: false);
+            (int)Math.Min(int.MaxValue, Math.Ceiling(FoodLoad(tables, cargo)));
+
+        // Only loose products count, whether or not currently on the menu. Keep fractions when loading.
+        public static double FoodLoad(DemandTables tables, IEnumerable<CargoLine> cargo)
+        {
+            if (tables == null) throw new ArgumentNullException(nameof(tables));
+            if (cargo == null) throw new ArgumentNullException(nameof(cargo));
+            var load = 0.0;
+            foreach (var line in cargo)
+            {
+                var product = tables.Product(line.ItemName);
+                if (product != null && !line.HasNestedCargo && line.Amount > 0)
+                    load += line.Amount * product.StockWeight;
+            }
+            return load;
+        }
 
         // Each mapped entry fits Amount pieces, in cargo order. Contents of nested cargo are not read.
         public static IReadOnlyList<string> FittedEquipment(DemandTables tables, IEnumerable<CargoLine> cargo)
@@ -51,23 +66,22 @@ namespace FoodTrucks.Core.Selling
             if (amount == 0 || vehicle == null) return amount;
             // Equipment takes a slot whether or not it carries stock inside it (a stocked drinks fridge).
             if (tables.EquipmentForGameItem(incomingItem) != null)
-                return StockLimit.CanLoad(CountUnits(tables, cargo, equipment: true), amount, vehicle.EquipmentSlots);
+                return StockLimit.CanLoad(EquipmentUnits(tables, cargo), amount, vehicle.EquipmentSlots);
             if (incomingHasNestedCargo) return amount;
-            if (tables.Product(incomingItem) != null)
-                return StockLimit.CanLoad(FoodUnits(tables, cargo), amount, vehicle.StockUnits);
+            var product = tables.Product(incomingItem);
+            if (product != null)
+                return StockLimit.CanLoad(FoodLoad(tables, cargo), amount, vehicle.StockUnits, product.StockWeight);
             return amount;
         }
 
-        private static int CountUnits(DemandTables tables, IEnumerable<CargoLine> cargo, bool equipment)
+        private static int EquipmentUnits(DemandTables tables, IEnumerable<CargoLine> cargo)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
             if (cargo == null) throw new ArgumentNullException(nameof(cargo));
             var units = 0;
             foreach (var line in cargo)
             {
-                var counts = equipment ? tables.EquipmentForGameItem(line.ItemName) != null
-                    : !line.HasNestedCargo && tables.Product(line.ItemName) != null;
-                if (counts && line.Amount > 0)
+                if (tables.EquipmentForGameItem(line.ItemName) != null && line.Amount > 0)
                     units = (int)Math.Min(int.MaxValue, (long)units + line.Amount);
             }
             return units;

@@ -320,7 +320,9 @@ namespace FoodTrucks
         private bool ServeCustomer(SaveState state, VehicleState vehicle, VehicleInstance cart, DemandTables tables, CartPlan plan)
         {
             var stock = CartDemand.StockOf(cart, plan.Menu.Menu);
-            var main = CustomerPick.MainItem(tables, plan.BuyerShares, stock, random.NextDouble());
+            // Customers buy only the item their category sells now (the best-accepted one).
+            var offered = stock.Where(s => plan.SaleItems.Values.Contains(s.Key)).ToDictionary(s => s.Key, s => s.Value);
+            var main = CustomerPick.MainItem(tables, plan.BuyerShares, offered, random.NextDouble());
             if (main == null) return false;
             var labels = new List<string>();
             long cents = 0;
@@ -336,8 +338,8 @@ namespace FoodTrucks
             addOnProgress[vehicle.VehicleId] = next;
             for (var i = 0; i < addOns; i++)
             {
-                var drink = CustomerPick.AddOnItem(tables, CartDemand.StockOf(cart, plan.Menu.Menu));
-                if (drink == null) break;
+                var drink = plan.AddOnItem;
+                if (drink == null || cart.GetAmountByItemName(drink) <= 0) break;
                 var drinkCents = SellItem(state, vehicle, cart, drink);
                 if (drinkCents < 0) break;
                 labels.Add(LocalizorManager.GetLocalization(drink, null));
@@ -360,7 +362,8 @@ namespace FoodTrucks
         // One item at the cart's price. Returns the cents paid, or -1 if nothing was sold.
         private long SellItem(SaveState state, VehicleState vehicle, VehicleInstance cart, string itemName)
         {
-            var cents = (long)Math.Round(CartDemand.PriceOf(itemName) * 100.0);
+            spots.TryGetValue(cart.id, out var spot);
+            var cents = CartPricing.PriceCents(vehicle, itemName, spot?.Neighbourhood);
             if (cents <= 0)
             {
                 Log.Error($"Sale refused: {itemName} has no market price.");
@@ -389,6 +392,8 @@ namespace FoodTrucks
             // Record before touching the cargo: emptying a stack runs the game's cargo listeners,
             // and the ledger must not miss a paid sale if one of them throws. Neither call can fail here.
             StreetSales.Record(state, vehicle.VehicleId, day, cents, 1);
+            // What this unit cost at the wholesaler, for the profit shown in the day summary and Econoview.
+            SalesLedger.RecordCost(state, day, (long)Math.Round(Math.Max(0f, entry.pricePerUnit) * 100.0));
             sinceOpen.TryGetValue(vehicle.VehicleId, out var totals);
             sinceOpen[vehicle.VehicleId] = (totals.Sales + 1, totals.Cents + cents);
             try

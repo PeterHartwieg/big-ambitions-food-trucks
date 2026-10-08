@@ -98,6 +98,7 @@ namespace FoodTrucks.Core.Demand
             {
                 var category = tables.Category(group.Key);
                 var appetite = category.Appetite(daypart)
+                    * AreaAppetite(query.Areas, category.Name)
                     * neighbourhood.AppetiteFactor(category.Name, daypart, day, season)
                     * tables.SeasonAppetite(season, category.Name)
                     * (query.Raining ? tables.RainAppetite(category.Name) : 1.0);
@@ -131,6 +132,10 @@ namespace FoodTrucks.Core.Demand
             var customers = footfall * menuAppetite * query.Reputation;
             return new DemandEstimate(daypart, season, footfall, menuAppetite, marketFactor, customers, addOnsPerCustomer, customerShares);
         }
+
+        private double AreaAppetite(AreaMix areas, string category) =>
+            areas.Shares.OrderBy(p => p.Key, StringComparer.Ordinal)
+                .Sum(share => share.Value * tables.Area(share.Key).AppetiteFactor(category));
 
         // People passing per hour before the menu.
         private double Footfall(AreaMix areas, NeighbourhoodTable neighbourhood, Daypart daypart, DayOfWeek day, Season season,

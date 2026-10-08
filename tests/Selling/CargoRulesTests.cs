@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using FoodTrucks.Core.Selling;
 using FoodTrucks.Core.Tests.Demand;
+using FoodTrucks.Core.Demand;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace FoodTrucks.Core.Tests.Selling;
@@ -11,6 +13,63 @@ public class CargoRulesTests
     private const string HotDog = "ba:itemname_hotdog";
     private const string Grill = "ba:itemname_hotdoggrill";
     private const string Fridge = "ba:itemname_drinksfridge";
+    private const string Coffee = "ba:itemname_cupofcoffee";
+
+    [Fact]
+    public void EightyStockUnitsHoldThreeHundredTwentyCoffees()
+    {
+        var tables = ShippedData.Tables;
+        Assert.Equal(320, CargoRules.AllowedUnits(tables, "cart", Array.Empty<CargoLine>(), Coffee, 500, false));
+        var full = new[] { new CargoLine(Coffee, 320, false) };
+        Assert.Equal(80, CargoRules.FoodUnits(tables, full));
+        Assert.Equal(0, CargoRules.AllowedUnits(tables, "cart", full, Coffee, 1, false));
+        Assert.Equal(1, CargoRules.AllowedUnits(tables, "cart", new[] { new CargoLine(Coffee, 319, false) }, Coffee, 10, false));
+    }
+
+    [Fact]
+    public void MixedFoodSharesWeightedCapacityAndKeepsFractionalRoom()
+    {
+        var cargo = new[]
+        {
+            new CargoLine(HotDog, 60, false), new CargoLine(Coffee, 3, false),
+            new CargoLine("ba:itemname_croissant", 3, false)
+        };
+        Assert.Equal(62.25, CargoRules.FoodLoad(ShippedData.Tables, cargo));
+        Assert.Equal(63, CargoRules.FoodUnits(ShippedData.Tables, cargo));
+        Assert.Equal(71, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, Coffee, 500, false));
+        Assert.Equal(17, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, HotDog, 500, false));
+        Assert.Equal(35, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, "ba:itemname_donut", 500, false));
+    }
+
+    [Theory]
+    [InlineData(0.25)]
+    [InlineData(0.5)]
+    [InlineData(0.1)]
+    [InlineData(0.3)]
+    [InlineData(0.3333333333333333)]
+    [InlineData(0.9999999999999999)]
+    [InlineData(1e-300)]
+    public void FractionalWeightsNeverOverfillTheLimit(double weight)
+    {
+        var economy = JObject.Parse(ShippedData.Economy);
+        economy["products"]![Coffee]!["stockWeight"] = weight;
+        var tables = DemandTables.Parse(ShippedData.Demand, economy.ToString(), ShippedData.Zones);
+        for (var existing = 0; existing <= 80; existing++)
+        {
+            var cargo = new List<CargoLine> { new(HotDog, existing, false), new(Coffee, 1, false) };
+            var before = CargoRules.FoodLoad(tables, cargo);
+            var allowed = CargoRules.AllowedUnits(tables, "cart", cargo, Coffee, int.MaxValue, false);
+            if (before > 80)
+            {
+                Assert.Equal(0, allowed);
+                continue;
+            }
+            cargo.Add(new CargoLine(Coffee, allowed, false));
+            Assert.True(CargoRules.FoodLoad(tables, cargo) <= 80);
+            if (allowed < int.MaxValue)
+                Assert.True(before + (allowed + 1.0) * weight > 80 || before == 80);
+        }
+    }
 
     [Fact]
     public void FoodUnitsCountsAllLooseProductsOnly()
@@ -42,7 +101,7 @@ public class CargoRulesTests
         var cargo = new[]
         {
             new CargoLine(Grill, 2, false), new CargoLine(HotDog, 80, false),
-            new CargoLine("ba:itemname_cheapcoffeemachine", 1, false),
+            new CargoLine("ba:itemname_industrialcoffeemachine", 1, false),
             new CargoLine(Fridge, 1, true), new CargoLine("ba:itemname_box", 1, true),
             new CargoLine(Grill, -1, false), new CargoLine(Grill, 0, false), new CargoLine(null, 1, false)
         };

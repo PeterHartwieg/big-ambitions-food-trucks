@@ -32,6 +32,9 @@ namespace FoodTrucks
 
     internal static class World
     {
+        // The building type the classifier knows subway stations by (demand.json, classifier.buildingTypes).
+        public const string SubwayEntrance = "subwayentrance";
+
         // Every city building's entrance doors, cached per city load. All city scenes load together, so
         // the controllers exist even far from the player. Not cached while the city isn't there yet.
         private static List<(CityBuildingController Controller, Vector3[] Doors)>? buildings;
@@ -92,6 +95,17 @@ namespace FoodTrucks
                 var address = building.Address;
                 businesses.TryGetValue((address.streetName, address.streetNumber), out var business);
                 places.Add(new NearbyPlace(building.BuildingType, business, distance));
+            }
+            // Subway stations bring their own crowd (the `transit` area in demand.json).
+            var stations = InstanceBehavior<CityManager>.Instance?.subwayStations;
+            if (stations != null)
+            {
+                foreach (var station in stations)
+                {
+                    if (station == null) continue;
+                    var distance = Vector3.Distance(position, station.transform.position);
+                    if (distance <= radius) places.Add(new NearbyPlace(SubwayEntrance, null, distance));
+                }
             }
             var areas = new AreaClassifier(tables).Classify(places, position.x, position.z);
             return new Spot(areas, neighbourhood, places.Count, SaveGameManager.Current.Day);

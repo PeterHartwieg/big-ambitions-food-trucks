@@ -55,6 +55,8 @@ namespace FoodTrucks.Core.Saves
         public double SaleProgress { get; set; }
         public int LifetimeSales { get; set; }
         public long LifetimeRevenueCents { get; set; }
+        // Item names keep their exact spelling; absent in older schema-1 saves.
+        public Dictionary<string, long> CustomPriceCents { get; set; } = new Dictionary<string, long>(StringComparer.Ordinal);
         // The queue and the orders at the window while open (SalesSimulator); null when closed.
         public ServiceState? Service { get; set; }
         // "cart" or "truck", as in economy.json. Empty for vehicles saved before Milestone 4.
@@ -76,6 +78,11 @@ namespace FoodTrucks.Core.Saves
     {
         public int Day { get; set; }
         public long RevenueCents { get; set; }
+        // What the stock sold that day cost at the wholesaler (additive field: older saves read 0).
+        public long CostCents { get; set; }
+        // True once this day's profit has been added to the game's financial summary, so Econoview shows
+        // the carts' row only where the stored total includes it (summaries from before 0.3.0 don't).
+        public bool InSummary { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

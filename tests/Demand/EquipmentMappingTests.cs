@@ -11,7 +11,6 @@ public class EquipmentMappingTests
     [InlineData("hotdoggrill", "ba:itemname_hotdoggrill")]
     [InlineData("burgerstation", "ba:itemname_industrialgrill")]
     [InlineData("burgerstation", "ba:itemname_industrialfryermachine")]
-    [InlineData("coffeemachine", "ba:itemname_cheapcoffeemachine")]
     [InlineData("coffeemachine", "ba:itemname_industrialcoffeemachine")]
     [InlineData("icecreamcounter", "ba:itemname_icecreamcounter")]
     [InlineData("pizzaoven", "ba:itemname_pizzaoven")]
@@ -32,6 +31,7 @@ public class EquipmentMappingTests
     [InlineData("hotdoggrill")]
     [InlineData("ba:itemname_hotdog")]
     [InlineData("ba:itemname_missing")]
+    [InlineData("ba:itemname_cheapcoffeemachine")]
     [InlineData("BA:ITEMNAME_HOTDOGGRILL")]
     public void OtherNamesDoNotMap(string? item)
     {

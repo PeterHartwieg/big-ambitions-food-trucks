@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using FoodTrucks.Core.Demand;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace FoodTrucks.Core.Tests.Demand;
@@ -16,6 +17,51 @@ public class DemandModelTests
     private const string Midtown = "ba:neighborhood_midtown";
 
     private static readonly DemandModel model = new(ShippedData.Tables);
+
+    [Theory]
+    [InlineData(Coffee, 2.0)]
+    [InlineData(IceCream, 2.0)]
+    [InlineData(HotDog, 1.0)]
+    public void ParkAppetiteScalesOnlyTheListedCategories(string item, double factor)
+    {
+        var demand = JObject.Parse(ShippedData.Demand);
+        ((JObject)demand["areas"]!["waterfront"]!).Property("appetite")!.Remove();
+        var neutral = new DemandModel(DemandTables.Parse(demand.ToString(), ShippedData.Economy, ShippedData.Zones));
+        var query = Query("waterfront", 15, 0, item);
+
+        Assert.Equal(neutral.Estimate(query).Appetite * factor, model.Estimate(query).Appetite, 9);
+        Assert.Equal(neutral.Estimate(query).CustomersPerHour * factor, model.Estimate(query).CustomersPerHour, 9);
+        Assert.Equal(neutral.Estimate(query).Footfall, model.Estimate(query).Footfall);
+    }
+
+    [Theory]
+    [InlineData(0.0, 1.0)]
+    [InlineData(0.25, 1.25)]
+    [InlineData(0.5, 1.5)]
+    [InlineData(1.0, 2.0)]
+    public void AreaAppetiteBlendsByAreaShareRatherThanFootfall(double parkShare, double factor)
+    {
+        var query = Query("office", 15, 0, Coffee);
+        query.Areas = AreaMix.FromWeights(new Dictionary<string, double>
+        {
+            ["waterfront"] = parkShare, ["office"] = 1 - parkShare
+        });
+
+        Assert.Equal(0.35 * factor, model.Estimate(query).Appetite, 9);
+    }
+
+    [Fact]
+    public void AreaAppetiteStillStacksConditionsAndRespectsTheCap()
+    {
+        var query = Query("waterfront", 15, 0, IceCream);
+        query.Month = 1;
+        query.Raining = true;
+        Assert.Equal(0.20 * 2 * 0.2 * 0.3, model.Estimate(query).Appetite, 9);
+
+        query = Query("waterfront", 9, 0, Coffee);
+        query.Neighbourhood = Midtown;
+        Assert.Equal(1.0, model.Estimate(query).Appetite);
+    }
 
     private static DemandQuery Query(string area, int hour, int minute = 0, params string[] menu) => new()
     {
@@ -83,14 +129,14 @@ public class DemandModelTests
     }
 
     [Theory]
-    [InlineData("office", 6, 0.8)]
-    [InlineData("office", 9, 1.2)]
-    [InlineData("office", 15, 0.5)]
+    [InlineData("office", 6, 1.5)]
+    [InlineData("office", 9, 2.0)]
+    [InlineData("office", 15, 0.2)]
     [InlineData("retail", 15, 1.3)]
-    [InlineData("residential", 18, 1.0)]
-    [InlineData("nightlife", 22, 2.0)]
+    [InlineData("residential", 18, 0.5)]
+    [InlineData("nightlife", 22, 2.5)]
     [InlineData("industrial", 6, 1.5)]
-    [InlineData("waterfront", 15, 1.2)]
+    [InlineData("waterfront", 15, 2.0)]
     public void WeekdayFootfallFollowsTheAreaTable(string area, int hour, double factor)
     {
         var wednesday = ShippedData.Tables.Area(area).DayFactor(DayOfWeek.Wednesday);
@@ -104,7 +150,7 @@ public class DemandModelTests
         var query = Query("office", 12);
         query.Areas = AreaMix.FromWeights(new Dictionary<string, double> { ["office"] = 0.7, ["nightlife"] = 0.3 });
 
-        Assert.Equal((0.7 * 3.0 + 0.3 * 0.4 * 0.7) * ShippedData.Tables.PassersPerHour, model.Estimate(query).Footfall, 9);
+        Assert.Equal((0.7 * 3.0 + 0.3 * 0.15 * 0.7) * ShippedData.Tables.PassersPerHour, model.Estimate(query).Footfall, 9);
     }
 
     [Theory]
@@ -128,7 +174,7 @@ public class DemandModelTests
 
         Assert.Equal(Daypart.Late, estimate.Daypart);
         // Friday's 1.4, not Saturday's 1.5.
-        Assert.Equal(2.0 * 1.4 * ShippedData.Tables.PassersPerHour, estimate.Footfall, 9);
+        Assert.Equal(2.5 * 1.4 * ShippedData.Tables.PassersPerHour, estimate.Footfall, 9);
     }
 
     [Fact]
@@ -177,8 +223,8 @@ public class DemandModelTests
         var midtown = Query("office", 9, 0, Coffee);
         midtown.Neighbourhood = Midtown;
 
-        Assert.Equal(0.30, model.Estimate(plain).Appetite, 9);
-        Assert.Equal(0.30 * 1.4, model.Estimate(midtown).Appetite, 9);
+        Assert.Equal(0.45, model.Estimate(plain).Appetite, 9);
+        Assert.Equal(0.45 * 1.4, model.Estimate(midtown).Appetite, 9);
         Assert.Equal(1.3 * model.Estimate(plain).Footfall, model.Estimate(midtown).Footfall, 9);
     }
 
@@ -192,10 +238,10 @@ public class DemandModelTests
         winter.Neighbourhood = "ba:neighborhood_thehamptons";
         winter.Month = 1;
 
-        // Waterfront afternoon 1.2 on a Wednesday (0.7), Hamptons 0.7, then the season and month.
-        Assert.Equal(0.7 * 1.6 * 1.2 * 0.7 * ShippedData.Tables.PassersPerHour, model.Estimate(summer).Footfall, 9);
+        // Waterfront afternoon 2.0 on a Wednesday (0.9), Hamptons 0.7, then the season and month.
+        Assert.Equal(0.7 * 1.6 * 2.0 * 0.9 * ShippedData.Tables.PassersPerHour, model.Estimate(summer).Footfall, 9);
         // The Hamptons' winter 0.5 times the winter month's 0.6: footfall 0.3 of normal.
-        Assert.Equal(0.7 * 0.5 * 0.6 * 1.2 * 0.7 * ShippedData.Tables.PassersPerHour, model.Estimate(winter).Footfall, 9);
+        Assert.Equal(0.7 * 0.5 * 0.6 * 2.0 * 0.9 * ShippedData.Tables.PassersPerHour, model.Estimate(winter).Footfall, 9);
     }
 
     [Fact]
@@ -218,7 +264,7 @@ public class DemandModelTests
         wetIceCream.Raining = true;
 
         Assert.Equal(0.5 * model.Estimate(dry).Footfall, model.Estimate(wet).Footfall, 9);
-        Assert.Equal(0.30 * 1.3, model.Estimate(wet).Appetite, 9);
+        Assert.Equal(0.45 * 1.3, model.Estimate(wet).Appetite, 9);
         Assert.Equal(0.20 * 0.3, model.Estimate(wetIceCream).Appetite, 9);
     }
 
@@ -227,15 +273,15 @@ public class DemandModelTests
     {
         var estimate = model.Estimate(Query("office", 12, 0, HotDog, Coffee));
 
-        Assert.Equal(0.30 + 0.5 * 0.08, estimate.Appetite, 9);
-        Assert.Equal(0.30 / 0.34, estimate.CustomerShares["fastfood"], 9);
-        Assert.Equal(0.04 / 0.34, estimate.CustomerShares["coffee"], 9);
+        Assert.Equal(0.25 + 0.5 * 0.12, estimate.Appetite, 9);
+        Assert.Equal(0.25 / 0.31, estimate.CustomerShares["fastfood"], 9);
+        Assert.Equal(0.06 / 0.31, estimate.CustomerShares["coffee"], 9);
     }
 
     [Fact]
     public void TwoItemsOfOneCategoryCountOnce()
     {
-        Assert.Equal(0.30, model.Estimate(Query("office", 12, 0, HotDog, Burger)).Appetite, 9);
+        Assert.Equal(0.25, model.Estimate(Query("office", 12, 0, HotDog, Burger)).Appetite, 9);
     }
 
     [Fact]
@@ -246,10 +292,10 @@ public class DemandModelTests
         var drinksOnly = model.Estimate(Query("office", 12, 0, Soda));
 
         var drinkPart = 0.5 * 0.15 * 0.25;
-        Assert.Equal(0.30 + drinkPart, withDrinks.Appetite, 9);
+        Assert.Equal(0.25 + drinkPart, withDrinks.Appetite, 9);
         // Drink-only customers get no add-on drink, so the add-on rate counts only the hot dog customers.
-        Assert.Equal(0.30 / (0.30 + drinkPart) * 0.15 * 0.75 * 2.0, withDrinks.AddOnsPerCustomer, 9);
-        Assert.Equal(drinkPart / (0.30 + drinkPart), withDrinks.CustomerShares["colddrinks"], 9);
+        Assert.Equal(0.25 / (0.25 + drinkPart) * 0.15 * 0.75 * 2.0, withDrinks.AddOnsPerCustomer, 9);
+        Assert.Equal(drinkPart / (0.25 + drinkPart), withDrinks.CustomerShares["colddrinks"], 9);
         Assert.Equal(0, food.AddOnsPerCustomer);
         Assert.Equal(0.15 * 0.25, drinksOnly.Appetite, 9);
         Assert.Equal(0, drinksOnly.AddOnsPerCustomer);
@@ -268,7 +314,7 @@ public class DemandModelTests
 
         var estimate = model.Estimate(query);
 
-        Assert.Equal(0.30 * factor, estimate.Appetite, 9);
+        Assert.Equal(0.25 * factor, estimate.Appetite, 9);
         Assert.Equal(factor, estimate.Market, 9);
     }
 
@@ -278,8 +324,8 @@ public class DemandModelTests
         var query = Query("office", 12, 0, HotDog, Coffee);
         query.MarketDemand = new Dictionary<string, double> { [HotDog] = 30, [Coffee] = 100 };
 
-        // Fast food falls to 0.09 and still leads; coffee adds half its 0.08.
-        Assert.Equal(0.30 * 0.3 + 0.5 * 0.08, model.Estimate(query).Appetite, 9);
+        // Fast food falls to 0.075; coffee leads at 0.12, so fast food adds half.
+        Assert.Equal(0.12 + 0.5 * 0.25 * 0.3, model.Estimate(query).Appetite, 9);
     }
 
     [Fact]
@@ -288,7 +334,7 @@ public class DemandModelTests
         var query = Query("office", 12, 0, HotDog, Burger);
         query.MarketDemand = new Dictionary<string, double> { [HotDog] = 100, [Burger] = 40 };
 
-        Assert.Equal(0.30 * 0.7, model.Estimate(query).Appetite, 9);
+        Assert.Equal(0.25 * 0.7, model.Estimate(query).Appetite, 9);
     }
 
     [Fact]
@@ -307,7 +353,7 @@ public class DemandModelTests
     {
         var estimate = model.Estimate(Query("office", 12));
 
-        Assert.Equal(90 * 0.30, estimate.CustomersPerHour, 9);
+        Assert.Equal(66 * 0.25, estimate.CustomersPerHour, 9);
     }
 
     [Fact]

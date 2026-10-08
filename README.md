@@ -2,7 +2,7 @@
 
 A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, open the window and sell to the lunch crowd, then move on before the evening rush starts somewhere else.
 
-**Status, 8 October 2026:** Milestone 2 (demand and menu) built, not yet checked in the game. Fit the game's own equipment to the cart (carry a hot dog grill to it and click), load up to 80 items of food, and open on a legal pavement spot. How many customers come depends on the buildings and businesses around the spot, the neighbourhood, the hour, the day, the season and rain, the game's market for each product, and the price; Ctrl+F9 shows the model's reading. Milestone 1 was played once; results below.
+**Status, 8 October 2026:** Milestone 2 (demand and menu), second build `0.3.0`, not yet checked in the game. Fit the game's own equipment to the cart (carry a hot dog grill or the industrial coffee machine to it and click), load up to 80 units of food (a coffee takes a quarter of a unit), and open on a legal pavement spot. Customers depend on the buildings, venues and subway entrances around the spot, the neighbourhood, time, day, season, rain, the game's market and the price. Prices work like a shop's: the standard price, a pricing manager's price if one covers the district, or your own (Prices in the item panel). The carts' profit shows in the day summary and Econoview. Balance is set by calculation: [docs/balance/cart-economics.md](docs/balance/cart-economics.md). Milestone 1 was played once; results below.
 
 ## Removing the mod
 
@@ -61,7 +61,7 @@ tools/build-mod.sh --generate
 tools/install-remote.sh <ssh host of the Windows game PC>
 ```
 
-Debug keys (holding Ctrl): **F6** test truck, **F7** free food cart, **F9** the demand model's reading for the cart next to you, **Shift+F8** record $200,000 of street food today without moving money, **F10** status, **Shift+F10** issue the tax statement now (throwaway saves only), **Shift+F12** the uninstall step.
+Debug keys (holding Ctrl): **F6** test truck, **F7** free food cart, **F8** mark a point for drawing a park zone, **F9** the demand model's reading for the cart next to you, **F11** log the grip while pushing, **Shift+F7** a vanilla hand truck, **Shift+F8** record $200,000 of street food today without moving money, **F10** status, **Shift+F10** issue the tax statement now (throwaway saves only), **Shift+F12** the uninstall step.
 
 `tools/park-remote.sh park|restore` moves the installed mod out of `ModsLocal` and back, and `tools/fetch-log-remote.sh <label>` copies the game's log; both are for the in-game checks in [CHECKS.md](CHECKS.md).
 

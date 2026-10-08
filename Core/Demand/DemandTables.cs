@@ -59,18 +59,6 @@ namespace FoodTrucks.Core.Demand
             PassersPerHour = r.Number(demand, "passersPerHour", 0, 100000);
             daypartStarts = ReadDayparts(r, r.Object(demand, "dayparts"));
 
-            areas = new Dictionary<string, AreaTable>(StringComparer.Ordinal);
-            var areasObj = r.Object(demand, "areas");
-            foreach (var entry in r.Entries(areasObj))
-            {
-                var obj = AsObject(r, entry);
-                r.OnlyKeys(obj, "footfall", "days");
-                areas.Add(entry.Name, new AreaTable(entry.Name,
-                    FullTable(r, r.Object(obj, "footfall"), DaypartKeys, 0, 100),
-                    FullTable(r, r.Object(obj, "days"), DayKeys, 0, 100)));
-            }
-            if (areas.Count == 0) throw r.Fail("areas", "must list at least one area");
-
             categories = new Dictionary<string, CategoryTable>(StringComparer.Ordinal);
             foreach (var entry in r.Entries(r.Object(demand, "categories")))
             {
@@ -81,6 +69,20 @@ namespace FoodTrucks.Core.Demand
                 categories.Add(entry.Name, new CategoryTable(entry.Name, FullTable(r, r.Object(obj, "appetite"), DaypartKeys, 0, 1), weight, addOn));
             }
             if (categories.Count == 0) throw r.Fail("categories", "must list at least one category");
+
+            areas = new Dictionary<string, AreaTable>(StringComparer.Ordinal);
+            var areasObj = r.Object(demand, "areas");
+            foreach (var entry in r.Entries(areasObj))
+            {
+                var obj = AsObject(r, entry);
+                r.OnlyKeys(obj, "footfall", "days", "appetite");
+                areas.Add(entry.Name, new AreaTable(entry.Name,
+                    FullTable(r, r.Object(obj, "footfall"), DaypartKeys, 0, 100),
+                    FullTable(r, r.Object(obj, "days"), DayKeys, 0, 100),
+                    obj["appetite"] == null ? new Dictionary<string, double>(StringComparer.Ordinal)
+                        : CategoryFactors(r, r.Object(obj, "appetite"))));
+            }
+            if (areas.Count == 0) throw r.Fail("areas", "must list at least one area");
 
             var menu = r.Object(demand, "menu");
             r.OnlyKeys(menu, "furtherCategoryWeight");
@@ -319,11 +321,12 @@ namespace FoodTrucks.Core.Demand
             foreach (var entry in r.Entries(r.Object(root, "products")))
             {
                 var obj = AsObject(r, entry);
-                r.OnlyKeys(obj, "category", "serviceMinutes");
+                r.OnlyKeys(obj, "category", "serviceMinutes", "stockWeight");
                 var category = r.Text(obj, "category");
                 if (!categories.ContainsKey(category))
                     throw r.Fail(DataReader.PathOf(obj, "category"), $"names '{category}', which is not a category in demand.json");
-                productTable.Add(entry.Name, new ProductInfo(entry.Name, category, r.Number(obj, "serviceMinutes", 0.1, 120)));
+                var stockWeight = obj["stockWeight"] == null ? 1.0 : r.Number(obj, "stockWeight", double.Epsilon, double.MaxValue);
+                productTable.Add(entry.Name, new ProductInfo(entry.Name, category, r.Number(obj, "serviceMinutes", 0.1, 120), stockWeight));
             }
             if (productTable.Count == 0) throw r.Fail("products", "must list at least one product");
 
@@ -517,17 +520,21 @@ namespace FoodTrucks.Core.Demand
     {
         private readonly double[] footfall;
         private readonly double[] days;
+        private readonly Dictionary<string, double> appetite;
 
-        internal AreaTable(string name, double[] footfall, double[] days)
+        internal AreaTable(string name, double[] footfall, double[] days, Dictionary<string, double> appetite)
         {
             Name = name;
             this.footfall = footfall;
             this.days = days;
+            this.appetite = appetite;
         }
 
         public string Name { get; }
         public double Footfall(Daypart daypart) => footfall[(int)daypart];
         public double DayFactor(DayOfWeek day) => days[(int)day];
+        // Unlisted categories keep their base appetite.
+        public double AppetiteFactor(string category) => appetite.TryGetValue(category, out var factor) ? factor : 1.0;
     }
 
     public sealed class CategoryTable
@@ -647,16 +654,19 @@ namespace FoodTrucks.Core.Demand
 
     public sealed class ProductInfo
     {
-        internal ProductInfo(string itemName, string category, double serviceMinutes)
+        internal ProductInfo(string itemName, string category, double serviceMinutes, double stockWeight)
         {
             ItemName = itemName;
             Category = category;
             ServiceMinutes = serviceMinutes;
+            StockWeight = stockWeight;
         }
 
         public string ItemName { get; }
         public string Category { get; }
         public double ServiceMinutes { get; }
+        // Share of the vehicle's stock limit occupied by one item; defaults to 1.0.
+        public double StockWeight { get; }
     }
 
     public sealed class EquipmentInfo
