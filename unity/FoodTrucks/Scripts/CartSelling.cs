@@ -48,6 +48,26 @@ namespace FoodTrucks
         // The spot each open cart stands on, read at opening and again each new day.
         private readonly Dictionary<string, Spot> spots = new Dictionary<string, Spot>();
         // The pitch an open vehicle stands on, fixed when it opened; null when closed.
+        // The earliest game minute an open window still has to sell from; now when none lags behind.
+        internal static long SoldThrough()
+        {
+            var now = HireCrew.Now();
+            var self = instance;
+            var state = FoodTrucksSession.CurrentState;
+            if (self == null || state == null) return now;
+            foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen))
+                if (self.simulatedUntil.TryGetValue(vehicle.VehicleId, out var until) && until < now) now = (long)Math.Floor(until);
+            return now;
+        }
+
+        // Where an open window's spot was last read, null when closed.
+        internal static Spot? SpotOf(string vehicleId) =>
+            instance != null && instance.spots.TryGetValue(vehicleId, out var spot) ? spot : null;
+
+        // How far an open window has sold, null when closed or not started.
+        internal static double? SoldUntil(string vehicleId) =>
+            instance != null && instance.simulatedUntil.TryGetValue(vehicleId, out var until) ? until : (double?)null;
+
         internal static string? PitchOf(string vehicleId) =>
             StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId)?.OpenPitch;
 
@@ -548,8 +568,11 @@ namespace FoodTrucks
             if (state != null && (vehicle.HireStop != null || HireCrew.OnShift(vehicle, closedAt).Count > 0))
                 ReputationBook.Cleaned(vehicle, ServiceDay(closedAt - 1), ReputationBook.ClosedThrough(state));
             vehicle.OpenPitch = null;
-            PremiumSpots.Release(vehicle);
-            if (state != null) CityEvents.Release(state.Events, vehicle.VehicleId);
+            if (state != null)
+            {
+                PremiumSpots.Release(state, vehicle, closedAt);
+                CityEvents.Release(state.Events, vehicle.VehicleId, closedAt);
+            }
             // A crew window closed by a failing sale stays closed for the rest of that opening.
             if (vehicle.HireStop != null && messageKey == "foodtrucks:notification_closed_error")
                 HireRunner.GiveUp(vehicle, vehicle.HireStop.Value, (long)Math.Floor(at ?? HireCrew.NowExact()));
@@ -889,13 +912,14 @@ namespace FoodTrucks
             var absolute = (long)Math.Floor(at);
             var day = (int)(absolute / 1440) + 1;
             var hour = (int)(absolute % 1440 / 60);
-            if (spots.TryGetValue(cart.id, out var spot) && spot.Day == day && spot.Hour == hour) return spot;
+            if (spots.TryGetValue(cart.id, out var spot) && spot.Day == day && spot.Hour == hour && !spot.Provisional) return spot;
             // A crew's vehicle far from the player may have no controller: read it where it stood.
             var controller = VehicleHelper.GetVehicleController(cart);
             if (controller == null && spot == null) return null;
             spot = World.ReadSpot(tables, controller != null ? controller.transform.position : new Vector3(spot!.X, spot.Y, spot.Z), at, Partners.VenueOf(cart.id));
+            var again = spots.TryGetValue(cart.id, out var before) && before.Day == spot.Day && before.Hour == spot.Hour;
             spots[cart.id] = spot;
-            Log.Info($"Cart {cart.id} spot on day {spot.Day}, {spot.Hour:D2}:00: {World.Describe(spot)}.");
+            if (!again || !spot.Provisional) Log.Info($"Cart {cart.id} spot on day {spot.Day}, {spot.Hour:D2}:00{(spot.Provisional ? " (venues still being simulated)" : "")}: {World.Describe(spot)}.");
             return spot;
         }
 

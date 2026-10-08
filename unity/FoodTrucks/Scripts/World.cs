@@ -32,6 +32,9 @@ namespace FoodTrucks
         }
 
         public float Y { get; }
+        // Read while the game was still simulating its businesses' hour: the player's venues' guest counts may be
+        // short, so the next sales step reads the spot again.
+        public bool Provisional { get; set; }
         // The game hour its venues were read for: a new hour reads them again.
         public int Hour { get; }
         // The buildings within reach, and for live venues what the game said of them this hour.
@@ -213,7 +216,10 @@ namespace FoodTrucks
                 }
             }
             var areas = new AreaClassifier(tables).Classify(places, position.x, position.z);
-            return new Spot(areas, neighbourhood, places.Count, readDay, position, readHour, read);
+            return new Spot(areas, neighbourhood, places.Count, readDay, position, readHour, read)
+            {
+                Provisional = SimulationPending && read.Any(p => p.Item2 != null && p.Item2.Kind is VenueKind.Nightclub or VenueKind.Theatre or VenueKind.Cinema)
+            };
         }
 
         // A venue as the game has it this hour: open by its own schedule (AI businesses have one too), when it
@@ -242,14 +248,18 @@ namespace FoodTrucks
             // The player's own nightclubs, theatres and cinemas: their guests in the hour before.
             int? guests = null;
             if (registration.RentedByPlayer && (kind == VenueKind.Nightclub || kind == VenueKind.Theatre || kind == VenueKind.Cinema))
-                guests = hour == 0 ? GuestsIn(registration, day - 1, 23) : GuestsIn(registration, day, hour - 1);
+            {
+                var (guestDay, guestHour) = hour == 0 ? (day - 1, 23) : (day, hour - 1);
+                // Closed that hour: no count says anything about the crowd now.
+                if (guestDay >= 1 && OpenAt(registration, guestDay, guestHour)) guests = GuestsIn(registration, guestDay, guestHour);
+            }
             return new VenueNow { Kind = kind, Open = open, ClosedMinutesAgo = closedAgo, Workers = workers, Guests = guests };
         }
 
         // Customers served in one game hour: today's from the orders not yet processed, earlier days' from the
-        // daily history (kept about 16 days); null when the game has neither, or says none. The game simulates its
-        // businesses' hours over several frames, so an hour can read empty before its orders are in; an empty hour
-        // counts as unknown rather than as an empty venue.
+        // daily history (kept about 16 days); null when the game has neither. The game simulates its businesses'
+        // hours over several frames, so while that work is pending the hour just ended can read short: then none
+        // counts as unknown rather than as an empty venue, and the spot is read again (Spot.Provisional).
         private static int? GuestsIn(BuildingRegistration registration, int day, int hour)
         {
             if (day < 1) return null;
@@ -262,8 +272,12 @@ namespace FoodTrucks
                 var history = registration.orderHistory?.Find(h => h != null && h.dayNumber == day);
                 count = history?.hourReports?.Find(r => r != null && r.hour == hour)?.customers;
             }
-            return count > 0 ? count : null;
+            var current = SaveGameManager.Current;
+            var hourJustEnded = TimeHelper.CurrentHour == 0 ? day == current.Day - 1 && hour == 23 : day == current.Day && hour == TimeHelper.CurrentHour - 1;
+            return count == 0 && hourJustEnded && SimulationPending ? null : count;
         }
+
+        private static bool SimulationPending => BusinessSimulatorHelper.Work.HasPendingWork;
 
         private static bool OpenAt(BuildingRegistration registration, int day, int hour)
         {

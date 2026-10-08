@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Entities;
 using FoodTrucks.Core.Common;
 using FoodTrucks.Core.Pitches;
 using FoodTrucks.Core.Saves;
@@ -60,8 +61,8 @@ namespace FoodTrucks
             var here = EventAt(state, position.x, position.z, minute);
             if (here == null) return null;
             var city = here.Value.Event;
-            if (city.Vehicles.Contains(vehicleId) || city.Vehicles.Count < city.Booked) return null;
-            Log.Info($"Open: {vehicleId} refused at the {city.Kind} at {city.PlaceId}: {city.Booked} places booked, held by {string.Join(", ", city.Vehicles)}.");
+            if (CityEvents.CanClaim(city, vehicleId, minute)) return null;
+            Log.Info($"Open: {vehicleId} refused at the {city.Kind} at {city.PlaceId}: {city.Booked} places booked, held by {string.Join(", ", city.Holds.Select(h => h.VehicleId).Distinct())}.");
             return city.Booked == 0 ? "foodtrucks:notification_event_not_booked" : "foodtrucks:notification_event_places_taken";
         }
 
@@ -73,16 +74,16 @@ namespace FoodTrucks
             var spot = PremiumAt(position);
             if (spot != null)
             {
-                var (claim, holder) = PremiumSpots.Claim(state, vehicle, spot.Id);
+                var (claim, holder) = PremiumSpots.Claim(state, vehicle, spot.Id, minute);
                 Log.Info($"Premium spot {spot.Id}: {(claim == PremiumClaim.Held ? $"held by {vehicle.VehicleId}" : $"taken by {holder}, {vehicle.VehicleId} sells as on any pitch")}.");
                 var holderKind = StreetSales.Find(state, holder)?.VehicleType;
                 message = claim == PremiumClaim.Held
                     ? ("foodtrucks:notification_premium_held", new[] { ("spot", Text(spot.Name)) })
                     : ("foodtrucks:notification_premium_taken", new[] { ("spot", Text(spot.Name)), ("other", Text("foodtrucks:noun_" + (string.IsNullOrEmpty(holderKind) ? "cart" : holderKind))) });
             }
-            else PremiumSpots.Release(vehicle);
+            else PremiumSpots.Release(state, vehicle, minute);
             var here = EventAt(state, position.x, position.z, minute);
-            if (here != null && CityEvents.Claim(here.Value.Event, vehicle.VehicleId))
+            if (here != null && CityEvents.Claim(here.Value.Event, vehicle.VehicleId, minute))
             {
                 Log.Info($"Event {here.Value.Event.Id} ({here.Value.Kind.Id} at {here.Value.Place.Id}): place held by {vehicle.VehicleId}.");
                 message = ("foodtrucks:notification_event_place", new[] { ("event", Text(here.Value.Kind.Name)), ("place", Text(here.Value.Place.Name)), ("end", Clock(here.Value.Event.End)) });
@@ -96,8 +97,8 @@ namespace FoodTrucks
         public static bool Tick(SaveState state, VehicleState vehicle, Spot spot, long minute)
         {
             var here = EventAt(state, spot.X, spot.Z, minute);
-            if (here == null || here.Value.Event.Vehicles.Contains(vehicle.VehicleId)) return true;
-            if (!CityEvents.Claim(here.Value.Event, vehicle.VehicleId))
+            if (here == null || Holds.Holding(here.Value.Event.Holds, vehicle.VehicleId)) return true;
+            if (!CityEvents.Claim(here.Value.Event, vehicle.VehicleId, minute))
             {
                 Log.Info($"Event {here.Value.Event.Id} ({here.Value.Kind.Id} at {here.Value.Place.Id}) started: {vehicle.VehicleId} has no place and closes.");
                 return false;
@@ -119,7 +120,7 @@ namespace FoodTrucks
             var premium = tables.Spot(vehicle.PremiumSpot);
             if (premium != null) bonus = bonus.And(PitchBonus.Of(premium));
             var here = EventAt(state, spot.X, spot.Z, minute);
-            if (here != null && here.Value.Event.Vehicles.Contains(vehicle.VehicleId)) bonus = bonus.And(PitchBonus.Of(here.Value.Kind));
+            if (here != null && Holds.HeldBy(here.Value.Event.Holds, vehicle.VehicleId, minute)) bonus = bonus.And(PitchBonus.Of(here.Value.Kind));
             return bonus;
         }
 
@@ -129,11 +130,20 @@ namespace FoodTrucks
         {
             var tables = Tables;
             if (tables == null || !FoodTrucksSession.CanWrite) return;
-            var dropped = CityEvents.Expire(state.Events, today);
-            // After a load, places held by vehicles that aren't open any more go back.
+            // Nothing a window still has to sell through goes: a catch-up can be days behind after a long skip.
+            var soldThrough = CartSelling.SoldThrough();
+            var dropped = CityEvents.Expire(state.Events, today, soldThrough);
+            PremiumSpots.Prune(state, soldThrough);
             if (loading)
-                foreach (var city in state.Events.Events)
-                    city.Vehicles.RemoveAll(id => StreetSales.Find(state, id)?.IsOpen != true);
+            {
+                // Places held by vehicles that aren't open any more go back.
+                var now = HireCrew.Now();
+                foreach (var holder in state.Events.Events.SelectMany(e => e.Holds).Concat(state.PremiumHolds.Values.SelectMany(h => h))
+                             .Where(h => h.Until == null && StreetSales.Find(state, h.VehicleId)?.IsOpen != true).ToList())
+                    holder.Until = Math.Max(holder.From, now);
+                foreach (var vehicle in state.Vehicles.Where(v => !v.IsOpen && v.PremiumSpot != null)) vehicle.PremiumSpot = null;
+                DropUnknown(state, tables, now);
+            }
             // Only places the city has; before its buildings are there, nothing is announced (the day is caught up later).
             if (!tables.Places.Any(p => World.EntrancesOf(p.Address) != null)) return;
             var added = new CityEvents(tables).Announce(state.Events, today, p => World.EntrancesOf(p.Address) != null);
@@ -174,6 +184,22 @@ namespace FoodTrucks
             }
             if (added.Count > 0 || dropped > 0 || !loading) FoodTrucksSession.MarkChanged();
             if (added.Count > 0 || dropped > 0) Log.Info($"City events on day {today}: {added.Count} announced, {dropped} over; {state.Events.Events.Count} coming.");
+        }
+
+        // Events whose place or kind the data file no longer has (an edited pitches.json) can't be held: they go, and
+        // places booked for one not over yet are paid back.
+        private static void DropUnknown(SaveState state, PitchTables tables, long now)
+        {
+            foreach (var city in state.Events.Events.Where(e => tables.Place(e.PlaceId) == null || tables.Kind(e.Kind) == null).ToList())
+            {
+                state.Events.Events.Remove(city);
+                var refund = now < CityEvents.EndsAt(city) ? city.Booked * city.FeeCents : 0;
+                Log.Info($"City event {city.Id} ({city.Kind} at {city.PlaceId}) dropped: not in pitches.json; {city.Booked} places booked, {CartSelling.Money(refund)} paid back.");
+                if (refund <= 0) continue;
+                var info = new TransactionInfo("foodtrucks:transaction_event_refund", new Dictionary<string, string>());
+                GameManager.ChangeMoneySafe(refund / 100f, info, null, null, force: true, showNotification: true);
+                GameManager.SendTextMessage(CityLicensing.City(), "foodtrucks:message_city_event_cancelled", new Dictionary<string, string> { { "fee", CartSelling.Money(refund) } });
+            }
         }
 
         // Debug key for throwaway saves: an event at the nearest event place, running from now for three hours,

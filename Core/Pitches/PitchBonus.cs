@@ -79,25 +79,41 @@ namespace FoodTrucks.Core.Pitches
             return best;
         }
 
-        // The vehicle opening on the spot takes it unless another open vehicle holds it. Returns who holds it.
-        public static (PremiumClaim Claim, string Holder) Claim(SaveState state, VehicleState vehicle, string spotId)
+        // The vehicle opening on the spot at that minute takes it unless another held it then. Returns who holds it.
+        public static (PremiumClaim Claim, string Holder) Claim(SaveState state, VehicleState vehicle, string spotId, long minute)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
-            var holder = state.Vehicles.FirstOrDefault(v => v != vehicle && v.IsOpen && v.PremiumSpot == spotId);
+            if (vehicle.PremiumSpot != null && vehicle.PremiumSpot != spotId) Release(state, vehicle, minute);
+            if (!state.PremiumHolds.TryGetValue(spotId, out var holds)) state.PremiumHolds[spotId] = holds = new List<PlaceHold>();
+            var holder = Holds.Claim(holds, vehicle.VehicleId, minute, 1);
             if (holder != null)
             {
                 vehicle.PremiumSpot = null;
-                return (PremiumClaim.Taken, holder.VehicleId);
+                return (PremiumClaim.Taken, holder);
             }
             vehicle.PremiumSpot = spotId;
             return (PremiumClaim.Held, vehicle.VehicleId);
         }
 
-        public static void Release(VehicleState vehicle)
+        // The vehicle gives the spot back at that minute (it closed, left, or is gone).
+        public static void Release(SaveState state, VehicleState vehicle, long minute)
         {
+            if (state == null) throw new ArgumentNullException(nameof(state));
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            foreach (var holds in state.PremiumHolds.Values) Holds.Release(holds, vehicle.VehicleId, minute);
             vehicle.PremiumSpot = null;
+        }
+
+        // Holds that ended before that minute are dropped, and spots nobody holds.
+        public static void Prune(SaveState state, long before)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            foreach (var pair in state.PremiumHolds.ToList())
+            {
+                Holds.Prune(pair.Value, before);
+                if (pair.Value.Count == 0) state.PremiumHolds.Remove(pair.Key);
+            }
         }
     }
 }

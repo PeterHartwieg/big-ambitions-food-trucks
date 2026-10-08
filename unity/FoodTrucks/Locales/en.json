@@ -193,5 +193,7 @@
     "foodtrucks:pitch_hells-third-avenue-cinema": "the cinema square on Third Avenue",
     "foodtrucks:pitch_garment-first-street": "First Street, Garment District",
     "foodtrucks:pitch_industry-tenth-avenue": "Tenth Avenue, Industry City",
-    "foodtrucks:pitch_hamptons-harbor-street": "Harbor Street"
+    "foodtrucks:pitch_hamptons-harbor-street": "Harbor Street",
+    "foodtrucks:transaction_event_refund": "Event vendor place, paid back",
+    "foodtrucks:message_city_event_cancelled": "An event you booked has been called off. Your {fee} is paid back."
 }

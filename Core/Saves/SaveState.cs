@@ -26,6 +26,8 @@ namespace FoodTrucks.Core.Saves
         public CateringState Catering { get; set; } = new CateringState();
         // The city's events and the player's bookings (additive field: older saves read none).
         public EventsState Events { get; set; } = new EventsState();
+        // Who held each premium spot when, by spot ID (Holds).
+        public Dictionary<string, List<PlaceHold>> PremiumHolds { get; set; } = new Dictionary<string, List<PlaceHold>>(StringComparer.Ordinal);
         // Vehicles partnered with the player's own venues.
         public List<PartnershipState> Partnerships { get; set; } = new List<PartnershipState>();
 

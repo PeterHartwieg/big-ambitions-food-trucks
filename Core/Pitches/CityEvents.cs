@@ -59,18 +59,19 @@ namespace FoodTrucks.Core.Pitches
             return added;
         }
 
-        // Events from before yesterday are dropped: yesterday's stay until a catch-up over midnight has sold through them.
-        public static int Expire(EventsState state, int today)
+        // Events from before today that ended before `soldThrough` are dropped: the earliest minute any open window
+        // still has to sell, so a catch-up over one or more midnights still sells through them.
+        public static int Expire(EventsState state, int today, long soldThrough)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
-            return state.Events.RemoveAll(e => e.Day < today - 1);
+            return state.Events.RemoveAll(e => e.Day < today && EndsAt(e) <= soldThrough);
         }
 
-        // A vehicle that closes, leaves or is gone gives its places back; the booking stays paid for.
-        public static int Release(EventsState state, string vehicleId)
+        // A vehicle that closes, leaves or is gone gives its places back at that minute; the booking stays paid for.
+        public static int Release(EventsState state, string vehicleId, long minute)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
-            return state.Events.Sum(e => e.Vehicles.RemoveAll(v => v == vehicleId));
+            return state.Events.Sum(e => Holds.Release(e.Holds, vehicleId, minute));
         }
 
         public static long StartsAt(CityEvent city) => (city.Day - 1) * 1440L + city.Start;
@@ -93,16 +94,16 @@ namespace FoodTrucks.Core.Pitches
             return BookingResult.Booked;
         }
 
-        // A vehicle at the event while it runs takes one of the booked places, first come; one already holding a
-        // place keeps it. False when every booked place is held by another vehicle, or none was booked.
-        public static bool Claim(CityEvent city, string vehicleId)
+        // A vehicle at the event while it runs takes one of the booked places at that minute, first come; one
+        // already holding a place keeps it. False when every booked place was held by others then, or none was booked.
+        public static bool Claim(CityEvent city, string vehicleId, long minute)
         {
             if (city == null) throw new ArgumentNullException(nameof(city));
-            if (city.Vehicles.Contains(vehicleId)) return true;
-            if (city.Vehicles.Count >= city.Booked) return false;
-            city.Vehicles.Add(vehicleId);
-            return true;
+            return Holds.Claim(city.Holds, vehicleId, minute, city.Booked) == null;
         }
+
+        public static bool CanClaim(CityEvent city, string vehicleId, long minute) =>
+            Holds.Blocker(city.Holds, vehicleId, minute, city.Booked) == null;
 
         // The event running at that minute at a place, if any.
         public static CityEvent? RunningAt(EventsState state, string placeId, long minute) =>

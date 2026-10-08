@@ -124,22 +124,31 @@ public class CityEventsTests
     public void BookedPlacesGoToTheFirstVehiclesThere()
     {
         var city = new CityEvent { Id = 1, Booked = 1, Places = 2, Day = 5, Start = 600, End = 960 };
-        Assert.True(CityEvents.Claim(city, "cart"));
-        Assert.True(CityEvents.Claim(city, "cart"));
-        Assert.False(CityEvents.Claim(city, "truck"));
+        Assert.True(CityEvents.Claim(city, "cart", 6360));
+        Assert.True(CityEvents.Claim(city, "cart", 6370));
+        Assert.False(CityEvents.Claim(city, "truck", 6370));
         city.Booked = 2;
-        Assert.True(CityEvents.Claim(city, "truck"));
+        Assert.True(CityEvents.Claim(city, "truck", 6370));
 
         var unbooked = new CityEvent { Id = 2, Booked = 0, Places = 2 };
-        Assert.False(CityEvents.Claim(unbooked, "cart"));
+        Assert.False(CityEvents.Claim(unbooked, "cart", 6360));
+    }
 
-        // The cart closes: its place goes to the next vehicle there.
+    [Fact]
+    public void APlaceComesBackWhenItsVehicleClosesAndCatchUpOrderCantShareIt()
+    {
         var state = new EventsState();
-        city.Booked = 1;
-        city.Vehicles.Remove("truck");
+        var city = new CityEvent { Id = 1, Booked = 1, Places = 2, Day = 5, Start = 600, End = 960 };
         state.Events.Add(city);
-        Assert.Equal(1, CityEvents.Release(state, "cart"));
-        Assert.True(CityEvents.Claim(city, "truck"));
+        var ten = 4 * 1440L + 600;
+        // A cart is caught up first: open from 10:00, closed at 12:00.
+        Assert.True(CityEvents.Claim(city, "cart", ten));
+        Assert.Equal(1, CityEvents.Release(state, "cart", ten + 120));
+        // Then a truck opened at 11:30 in the same skip: the cart still held the place then.
+        Assert.False(CityEvents.CanClaim(city, "truck", ten + 90));
+        Assert.False(CityEvents.Claim(city, "truck", ten + 90));
+        // From 12:00 the place is free.
+        Assert.True(CityEvents.Claim(city, "truck", ten + 120));
     }
 
     [Fact]
@@ -153,9 +162,10 @@ public class CityEventsTests
         Assert.True(CityEvents.Running(city, start));
         Assert.Same(city, CityEvents.RunningAt(state, "p", start + 359));
         Assert.Null(CityEvents.RunningAt(state, "p", start + 360));
-        // Yesterday's event stays for a catch-up over midnight.
-        Assert.Equal(0, CityEvents.Expire(state, 6));
-        Assert.Equal(1, CityEvents.Expire(state, 7));
+        // An event stays while a window still has to sell through it, days later after a long skip.
+        Assert.Equal(0, CityEvents.Expire(state, 9, start + 359));
+        Assert.Equal(0, CityEvents.Expire(state, 5, start + 400));
+        Assert.Equal(1, CityEvents.Expire(state, 6, start + 360));
     }
 }
 
@@ -184,13 +194,18 @@ public class PremiumSpotsTests
         state.Vehicles.Add(cart);
         state.Vehicles.Add(truck);
 
-        Assert.Equal((PremiumClaim.Held, "cart"), PremiumSpots.Claim(state, cart, "spot"));
-        Assert.Equal((PremiumClaim.Taken, "cart"), PremiumSpots.Claim(state, truck, "spot"));
+        Assert.Equal((PremiumClaim.Held, "cart"), PremiumSpots.Claim(state, cart, "spot", 600));
+        Assert.Equal((PremiumClaim.Taken, "cart"), PremiumSpots.Claim(state, truck, "spot", 650));
         Assert.Null(truck.PremiumSpot);
 
         cart.IsOpen = false;
-        PremiumSpots.Release(cart);
-        Assert.Equal((PremiumClaim.Held, "truck"), PremiumSpots.Claim(state, truck, "spot"));
+        PremiumSpots.Release(state, cart, 720);
+        Assert.Null(cart.PremiumSpot);
+        // A catch-up that reaches the truck after the cart: at 11:30 the cart still held it.
+        Assert.Equal((PremiumClaim.Taken, "cart"), PremiumSpots.Claim(state, truck, "spot", 690));
+        Assert.Equal((PremiumClaim.Held, "truck"), PremiumSpots.Claim(state, truck, "spot", 720));
+        PremiumSpots.Prune(state, 720);
+        Assert.Single(state.PremiumHolds["spot"]);
     }
 
     [Fact]
@@ -326,13 +341,13 @@ public class PitchSaveTests
         var codec = new SaveCodec();
         var state = new SaveState();
         state.Events.LastAnnouncedDay = 4;
-        state.Events.Events.Add(new CityEvent { Id = 3, Kind = "market", PlaceId = "p", Day = 8, Start = 600, End = 960, Places = 2, Booked = 1, Vehicles = { "cart" } });
+        state.Events.Events.Add(new CityEvent { Id = 3, Kind = "market", PlaceId = "p", Day = 8, Start = 600, End = 960, Places = 2, Booked = 1, Holds = { new PlaceHold { VehicleId = "cart", From = 10680 } } });
         state.Partnerships.Add(new PartnershipState { VehicleId = "cart", Venue = "ba:street_a#1", SignedDay = 2, LastWorkedDay = 3 });
         state.Vehicles.Add(new VehicleState { VehicleId = "cart", PremiumSpot = "midtown-fifth-street" });
 
         var loaded = codec.Load(codec.Serialize(state));
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
-        Assert.Equal("cart", loaded.State!.Events.Events.Single().Vehicles.Single());
+        Assert.Equal("cart", loaded.State!.Events.Events.Single().Holds.Single().VehicleId);
         Assert.Equal(3, loaded.State.Partnerships.Single().LastWorkedDay);
         Assert.Equal("midtown-fifth-street", loaded.State.Vehicles.Single().PremiumSpot);
 

@@ -31,10 +31,21 @@ namespace FoodTrucks.Core.Pitches
         public long FeeCents { get; set; }
         // Places the player has paid for.
         public int Booked { get; set; }
-        // The vehicles holding a booked place, first come.
-        public List<string> Vehicles { get; set; } = new List<string>();
+        // Who held a booked place when, first come (Holds).
+        public List<PlaceHold> Holds { get; set; } = new List<PlaceHold>();
         // The morning reminder went out.
         public bool Reminded { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    // One vehicle's time on a shared place, in absolute game minutes; Until is null while it holds it.
+    public class PlaceHold
+    {
+        public string VehicleId { get; set; } = string.Empty;
+        public long From { get; set; }
+        public long? Until { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
