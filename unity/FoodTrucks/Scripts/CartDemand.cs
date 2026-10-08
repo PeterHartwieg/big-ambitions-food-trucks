@@ -106,7 +106,8 @@ namespace FoodTrucks
 
             var sellable = stock.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
             var (reputation, shares) = Reputation(tables, cart, spot, vehicle, sellable);
-            var estimate = new DemandModel(tables).Estimate(World.Query(tables, spot, sellable, reputation.Factor, shares, at));
+            var pitch = CityPitches.BonusFor(FoodTrucksSession.CurrentState, vehicle, spot, (long)Math.Floor(at ?? HireCrew.NowExact()));
+            var estimate = new DemandModel(tables).Estimate(World.Query(tables, spot, sellable, reputation.Factor, shares, at, pitch));
 
             // Accepted demand per category: share × the conversion of the item customers accept best in it,
             // so one overpriced item doesn't block a well-priced one in the same category.

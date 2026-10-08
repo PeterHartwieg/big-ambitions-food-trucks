@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Pitches;
 using FoodTrucks.Core.Rules;
 
 namespace FoodTrucks
@@ -13,12 +14,15 @@ namespace FoodTrucks
         public static DemandTables? Tables { get; private set; }
         // rules.json: queues and service for now; licences, fleet, reputation and catering later.
         public static RuleTables? Rules { get; private set; }
+        // pitches.json: premium spots, city events and partnerships.
+        public static PitchTables? Pitches { get; private set; }
         public static string? Error { get; private set; }
 
         public static void Load(string modRootPath)
         {
             Tables = null;
             Rules = null;
+            Pitches = null;
             Error = null;
             try
             {
@@ -28,12 +32,14 @@ namespace FoodTrucks
                     Read(folder, "economy.json"),
                     Read(folder, "zones.json"));
                 Rules = RuleTables.Parse(Read(folder, "rules.json"));
-                Log.Info($"Demand data loaded from {folder}: {Tables.Zones.Count} zones; queue patience {Rules.Queue.PatienceMinutes} min, cart queue limit {Rules.Service.QueueLimit("cart", Rules.Queue.MaxQueue)}, truck {Rules.Service.QueueLimit("truck", Rules.Queue.MaxQueue)}; licence ${Rules.Fleet.LicenceFeeCents / 100} for {Rules.Fleet.LicenceDays} days, permit ${Rules.Fleet.PermitFeeCents / 100}.");
+                Pitches = PitchTables.Parse(Read(folder, "pitches.json"), Tables);
+                Log.Info($"Demand data loaded from {folder}: {Tables.Zones.Count} zones; queue patience {Rules.Queue.PatienceMinutes} min, cart queue limit {Rules.Service.QueueLimit("cart", Rules.Queue.MaxQueue)}, truck {Rules.Service.QueueLimit("truck", Rules.Queue.MaxQueue)}; licence ${Rules.Fleet.LicenceFeeCents / 100} for {Rules.Fleet.LicenceDays} days, permit ${Rules.Fleet.PermitFeeCents / 100}; {Pitches.Spots.Count} premium spots, {Pitches.Places.Count} event places, {Pitches.Kinds.Count} event kinds.");
             }
             catch (Exception ex)
             {
                 Tables = null;
                 Rules = null;
+                Pitches = null;
                 Error = ex.Message;
                 Log.Error("Demand data not loaded; carts can't open. " + ex.Message);
             }

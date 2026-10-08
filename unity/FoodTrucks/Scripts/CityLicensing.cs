@@ -5,6 +5,7 @@ using System.Linq;
 using Dialogs;
 using Entities;
 using FoodTrucks.Core.Fleet;
+using FoodTrucks.Core.Pitches;
 using FoodTrucks.Core.Saves;
 using Helpers;
 using Localizor;
@@ -35,7 +36,15 @@ namespace FoodTrucks
             contact.callDialogTypeOverride = DialogType;
             GlobalEvents.onNewDay += OnNewDay;
             attached = true;
-            Log.Info("City of New York: licences and permits by phone.");
+            Log.Info("City of New York: licences, permits and event places by phone.");
+            // After a load: catch up on the city's announcements and end partnerships whose vehicle or venue is gone.
+            var state = FoodTrucksSession.CurrentState;
+            if (state != null && SaveGameManager.Current != null)
+            {
+                CityPitches.LogFound();
+                CityPitches.NewDay(state, SaveGameManager.Current.Day, loading: true);
+                Partners.Prune(state);
+            }
         }
 
         public static void Detach()
@@ -53,6 +62,16 @@ namespace FoodTrucks
         // The city writes when renewal opens and when the licence has run out.
         private static void OnNewDay()
         {
+            try
+            {
+                var current = FoodTrucksSession.CurrentState;
+                if (current != null && SaveGameManager.Current != null)
+                {
+                    CityPitches.NewDay(current, SaveGameManager.Current.Day, loading: false);
+                    Partners.Prune(current);
+                }
+            }
+            catch (Exception ex) { Log.Error("City events: " + ex); }
             try
             {
                 var state = FoodTrucksSession.CurrentState;
@@ -164,8 +183,26 @@ namespace FoodTrucks
             else if (!valid) key = "foodtrucks:dialog_city_start_expired";
             else if (canBuy) key = "foodtrucks:dialog_city_start_renewable";
             else key = "foodtrucks:dialog_city_start_valid";
-            // Permits are offered only to a licensed vendor.
+            // Permits and event places are offered only to a licensed vendor.
             var missing = valid ? CityLicensing.FoodVehicles(state).Count(v => !v.State.HasPermit) : 0;
+            var events = valid ? CityEvents.Bookable(state.Events, HireCrew.Now()).Count() : 0;
+            Func<DialogEntry>? second = null;
+            string? secondText = null;
+            if (missing > 0 && events > 0)
+            {
+                second = Guard(Choose);
+                secondText = "foodtrucks:dialog_city_permits_events";
+            }
+            else if (missing > 0)
+            {
+                second = Guard(() => Permit(0));
+                secondText = "foodtrucks:dialog_city_permits";
+            }
+            else if (events > 0)
+            {
+                second = Guard(() => Event(0));
+                secondText = "foodtrucks:dialog_city_events";
+            }
 
             return new DialogEntry
             {
@@ -175,18 +212,101 @@ namespace FoodTrucks
                     days = rules.LicenceDays.ToString(),
                     day = licence.LicenceExpiresOnDay.ToString(),
                     left = Core.Fleet.Licensing.DaysLeft(licence, day).ToString(),
-                    permits = missing.ToString()
+                    permits = missing.ToString(),
+                    events = events.ToString()
                 }),
                 Template = DialogEntry.TemplateType.Text,
                 OnConfirm = canBuy ? Guard(BuyLicence) : null,
                 ConfirmTextOverride = canBuy
                     ? LocalizorManager.Localize(valid ? "foodtrucks:dialog_city_renew" : "foodtrucks:dialog_city_buy", new { fee })
                     : default,
-                OnSecondOption = missing > 0 ? Guard(() => Permit(0)) : null,
-                SecondOptionTextOverride = missing > 0 ? "foodtrucks:dialog_city_permits" : null,
+                OnSecondOption = second,
+                SecondOptionTextOverride = secondText,
                 OnCancel = Current.CancelDialog,
                 onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
             };
+        }
+
+        // Both permits and event places to offer: the player picks one.
+        private static DialogEntry Choose() => new DialogEntry
+        {
+            messageData = LocalizorManager.Localize("foodtrucks:dialog_city_choose", (object?)null),
+            Template = DialogEntry.TemplateType.Text,
+            OnConfirm = Guard(() => Permit(0)),
+            ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_city_permits", (object?)null),
+            OnSecondOption = Guard(() => Event(0)),
+            SecondOptionTextOverride = "foodtrucks:dialog_city_events",
+            OnCancel = Current.CancelDialog,
+            onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
+        };
+
+        // The events with places left, from the index-th on; wraps around for "next".
+        private static DialogEntry Event(int index)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            var tables = DemandData.Pitches;
+            if (state == null || tables == null || !FoodTrucksSession.CanWrite) return Closing("foodtrucks:dialog_city_unavailable");
+            if (!Core.Fleet.Licensing.IsValid(state.Licence, SaveGameManager.Current.Day)) return Closing("foodtrucks:dialog_city_event_no_licence");
+            var bookable = CityEvents.Bookable(state.Events, HireCrew.Now()).ToList();
+            if (bookable.Count == 0) return Start();
+            index %= bookable.Count;
+            var city = bookable[index];
+            var kind = tables.Kind(city.Kind);
+            var place = tables.Place(city.PlaceId);
+            var fee = CartSelling.Money(city.FeeCents);
+            var id = city.Id;
+            return new DialogEntry
+            {
+                messageData = LocalizorManager.Localize("foodtrucks:dialog_city_event", new
+                {
+                    @event = kind == null ? city.Kind : CityPitches.Text(kind.Name),
+                    place = place == null ? city.PlaceId : CityPitches.Text(place.Name),
+                    weekday = CityPitches.Weekday(city.Day),
+                    day = city.Day.ToString(),
+                    start = CityPitches.Clock(city.Start),
+                    end = CityPitches.Clock(city.End),
+                    left = (city.Places - city.Booked).ToString(),
+                    booked = city.Booked.ToString(),
+                    fee,
+                    number = (index + 1).ToString(),
+                    count = bookable.Count.ToString()
+                }),
+                Template = DialogEntry.TemplateType.Text,
+                OnConfirm = Guard(() => BookEvent(id, index)),
+                ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_city_event_book", new { fee }),
+                OnSecondOption = bookable.Count > 1 ? Guard(() => Event(index + 1)) : Guard(Start),
+                SecondOptionTextOverride = bookable.Count > 1 ? "foodtrucks:dialog_city_event_next" : "foodtrucks:dialog_city_back",
+                OnCancel = Current.CancelDialog,
+                onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
+            };
+        }
+
+        private static DialogEntry? BookEvent(long eventId, int index)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            var tables = DemandData.Pitches;
+            if (state == null || tables == null || !FoodTrucksSession.CanWrite) return Closing("foodtrucks:dialog_city_unavailable");
+            if (!Core.Fleet.Licensing.IsValid(state.Licence, SaveGameManager.Current.Day)) return Closing("foodtrucks:dialog_city_event_no_licence");
+            var city = state.Events.Events.FirstOrDefault(e => e.Id == eventId);
+            var now = HireCrew.Now();
+            if (city == null || city.Booked >= city.Places || now >= CityEvents.EndsAt(city)) return Event(index);
+            // Paid first: a refused payment books nothing.
+            if (!CityLicensing.Charge(city.FeeCents, "foodtrucks:transaction_event")) return null;
+            var result = CityEvents.Book(state.Events, eventId, now);
+            FoodTrucksSession.MarkChanged();
+            var kind = tables.Kind(city.Kind);
+            var place = tables.Place(city.PlaceId);
+            Log.Info($"City of New York: place {city.Booked} of {city.Places} booked at event {city.Id} ({city.Kind} at {city.PlaceId}, day {city.Day}) for {CartSelling.Money(city.FeeCents)}: {result}.");
+            Current.contact.SendMessage(new TextMessage("foodtrucks:message_city_event_booked", new Dictionary<string, string>
+            {
+                { "event", kind == null ? city.Kind : CityPitches.Text(kind.Name) },
+                { "place", place == null ? city.PlaceId : CityPitches.Text(place.Name) },
+                { "weekday", CityPitches.Weekday(city.Day) },
+                { "day", city.Day.ToString() },
+                { "start", CityPitches.Clock(city.Start) },
+                { "booked", city.Booked.ToString() }
+            }, read: true, isNewInteraction: true));
+            return Event(index);
         }
 
         private static DialogEntry? BuyLicence()

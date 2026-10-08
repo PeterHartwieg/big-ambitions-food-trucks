@@ -8,6 +8,7 @@ using BigAmbitions.Items;
 using FoodTrucks.Core.Common;
 using FoodTrucks.Core.Demand;
 using FoodTrucks.Core.Fleet;
+using FoodTrucks.Core.Pitches;
 using FoodTrucks.Core.Reputation;
 using FoodTrucks.Core.Rules;
 using FoodTrucks.Core.Saves;
@@ -222,6 +223,13 @@ namespace FoodTrucks
             }
             var controller = VehicleHelper.GetCurrentVehicleBase();
             var position = controller != null ? controller.transform.position : PlayerHelper.GetPosition();
+            // A running city event: only vehicles with a booked place sell there.
+            var eventProblem = CityPitches.EventProblem(state, cart.id, position, HireCrew.Now());
+            if (eventProblem != null)
+            {
+                Say(eventProblem, kind);
+                return;
+            }
 
             // The game's own Park button: it checks the panel state and refuses where parking is not allowed.
             // For a truck it is the way out of the driver's seat.
@@ -233,10 +241,11 @@ namespace FoodTrucks
                 return;
             }
 
-            var plan = StartSelling(vehicle, cart, controller, position, kind, hireStop: null);
+            var (plan, pitch) = StartSelling(vehicle, cart, controller, position, kind, hireStop: null);
             var service = Service(rules, kind, vehicle, true);
             Say("foodtrucks:notification_open", kind, ("units", plan.StockUnits.ToString()), ("rate", ExpectedSales(plan, service).ToString("F0")),
                 ("grade", GradeText(vehicle)));
+            if (pitch != null) Say(pitch.Value.Key, kind, pitch.Value.Data);
         }
 
         // Where the player stands with the vehicle now, as a pitch: null when it could open here, else the
@@ -270,8 +279,8 @@ namespace FoodTrucks
 
         // The window opens: a fresh queue, the spot read, the hatch up. hireStop is the route's stop when the
         // crew opened it, null when the player did.
-        private CartPlan StartSelling(VehicleState vehicle, VehicleInstance cart, VehicleController? controller, Vector3 position, string kind, int? hireStop,
-            double? openedAt = null)
+        private (CartPlan Plan, (string Key, (string Key, string Value)[] Data)? Pitch) StartSelling(VehicleState vehicle, VehicleInstance cart,
+            VehicleController? controller, Vector3 position, string kind, int? hireStop, double? openedAt = null)
         {
             var tables = DemandData.Tables!;
             var rules = DemandData.Rules!;
@@ -283,8 +292,11 @@ namespace FoodTrucks
             pausedNoticeShown.Remove(cart.id);
             sinceOpen[cart.id] = (0, 0);
             lostSinceOpen.Remove(cart.id);
-            var spot = World.ReadSpot(tables, position);
+            var state = FoodTrucksSession.CurrentState!;
+            var spot = World.ReadSpot(tables, position, partnerVenue: Partners.VenueOf(cart.id));
             spots[cart.id] = spot;
+            // The premium spot and a running event's place go to the first vehicle there.
+            var pitch = CityPitches.Opened(state, vehicle, position, (long)Math.Floor(openedAt ?? HireCrew.NowExact()));
             TruckHatch.Set(controller, true);
             Inspect(vehicle, kind, (long)Math.Floor(openedAt ?? HireCrew.NowExact()));
             // The pitch is fixed for this opening, so its minutes stay together.
@@ -294,8 +306,9 @@ namespace FoodTrucks
             var service = Service(rules, kind, vehicle, hireStop == null);
             Log.Info($"{Title(kind)} {cart.id} open{(hireStop != null ? $" by its crew at stop {hireStop + 1}" : "")} on day {TimeHelper.CurrentDay} at {TimeHelper.CurrentHour:D2}:{(int)TimeHelper.CurrentMinute:D2}: {World.Describe(spot)}; {CartDemand.Describe(plan)} " +
                      $"Window: {service.Servers} serving, customer service skill {service.Skill:F0}, speed {service.Speed:F2}, {plan.CapacityPerServer * service.Speed * Math.Max(1, service.Servers):F0} an hour at most, customers {service.Mood.ToString().ToLowerInvariant()}; queue limit {service.QueueLimit}. " +
-                     $"Reputation: {Reputation(tables, cart, spot, vehicle, plan)}; pitch {vehicle.OpenPitch}.");
-            return plan;
+                     $"Reputation: {Reputation(tables, cart, spot, vehicle, plan)}; pitch {vehicle.OpenPitch}" +
+                     $"{(vehicle.PremiumSpot != null ? $", premium spot {vehicle.PremiumSpot}" : "")}{(Partners.VenueOf(cart.id) is { } partner ? $", partner {partner}" : "")}.");
+            return (plan, pitch);
         }
 
         private static string Reputation(DemandTables tables, VehicleInstance cart, Spot spot, VehicleState vehicle, CartPlan plan)
@@ -400,6 +413,8 @@ namespace FoodTrucks
             }
             else if (cart.parkingState != ParkingState.Legal) return "foodtrucks:legality_truck_parking";
             else if (!QueueLine.HasWindowPlace(controller.transform, kind)) return "foodtrucks:legality_truck_hatch";
+            var eventProblem = CityPitches.EventProblem(state, cart.id, position, minute);
+            if (eventProblem != null) return eventProblem;
             self.StartSelling(vehicle, cart, controller, position, kind, stop, minute);
             return null;
         }
@@ -533,6 +548,7 @@ namespace FoodTrucks
             if (state != null && (vehicle.HireStop != null || HireCrew.OnShift(vehicle, closedAt).Count > 0))
                 ReputationBook.Cleaned(vehicle, ServiceDay(closedAt - 1), ReputationBook.ClosedThrough(state));
             vehicle.OpenPitch = null;
+            PremiumSpots.Release(vehicle);
             // A crew window closed by a failing sale stays closed for the rest of that opening.
             if (vehicle.HireStop != null && messageKey == "foodtrucks:notification_closed_error")
                 HireRunner.GiveUp(vehicle, vehicle.HireStop.Value, (long)Math.Floor(at ?? HireCrew.NowExact()));
@@ -699,6 +715,8 @@ namespace FoodTrucks
             }
             var spot = SpotFor(tables, cart, from);
             if (spot == null) return;
+            if (window.Servers > 0) Partners.Worked(state, vehicle, spot, (long)Math.Floor(from), elapsed);
+            CityPitches.Tick(state, vehicle, spot, (long)Math.Floor(from));
             // Units held for customers on their way to the window are sold already: the plan leaves them out.
             // Demand at the start of this step's minutes: during a catch-up, not the live clock's.
             var plan = CartDemand.Plan(tables, cart, spot, Reserved(vehicle.VehicleId), from);
@@ -868,7 +886,7 @@ namespace FoodTrucks
             // A crew's vehicle far from the player may have no controller: read it where it stood.
             var controller = VehicleHelper.GetVehicleController(cart);
             if (controller == null && spot == null) return null;
-            spot = World.ReadSpot(tables, controller != null ? controller.transform.position : new Vector3(spot!.X, spot.Y, spot.Z), at);
+            spot = World.ReadSpot(tables, controller != null ? controller.transform.position : new Vector3(spot!.X, spot.Y, spot.Z), at, Partners.VenueOf(cart.id));
             spots[cart.id] = spot;
             Log.Info($"Cart {cart.id} spot on day {spot.Day}, {spot.Hour:D2}:00: {World.Describe(spot)}.");
             return spot;

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using FoodTrucks.Core.Common;
 using FoodTrucks.Core.Fleet;
+using FoodTrucks.Core.Pitches;
 using FoodTrucks.Core.Saves;
 using Helpers;
 using Localizor;
@@ -89,6 +90,24 @@ namespace FoodTrucks
                     }));
                 }
                 options.Add((Format("foodtrucks:hires_option_days", Text(DaysKey(schedule.Days))), () => HireRoutes.Later(() => AskDays(id))));
+            }
+
+            // A partner deal with one of the player's own venues within reach, or ending the one it has.
+            var partner = Partners.VenueOf(id);
+            if (partner != null)
+                options.Add((Format("foodtrucks:hires_option_partner_end", Partners.Name(partner)), () => Partners.End(state, vehicle, kind)));
+            else
+            {
+                var here = VehicleHelper.GetCurrentVehicleBase();
+                if (here != null)
+                {
+                    foreach (var venue in Partners.VenuesNear(here.transform.position).Where(v => Partnerships.ForVenue(state, v.Address) == null))
+                    {
+                        var address = venue.Address;
+                        options.Add((Format("foodtrucks:hires_option_partner", Partners.Name(address), Text("foodtrucks:venue_" + venue.Kind.ToString().ToLowerInvariant())),
+                            () => Partners.Sign(state, vehicle, address, kind)));
+                    }
+                }
             }
 
             // Two employees can read the same; a number keeps the choices apart.

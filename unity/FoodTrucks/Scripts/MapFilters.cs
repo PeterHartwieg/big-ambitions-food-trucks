@@ -16,7 +16,7 @@ using Object = UnityEngine.Object;
 namespace FoodTrucks
 {
     // A "Street food" line in the city map's filters (design: Player view): offices, factories and
-    // warehouses, nightlife, theatres and cinemas, and the player's carts (trucks already have the game's own
+    // warehouses, nightlife, theatres and cinemas, premium spots and the city's coming events, and the player's carts (trucks already have the game's own
     // vehicle marker). The building filters follow the demand model's rules (Core StreetFoodMap). Their
     // CityMapFilterData is empty, so the game's own pass matches nothing for them; a postfix on its
     // per-building pass highlights the matches.
@@ -24,6 +24,8 @@ namespace FoodTrucks
     {
         private const string LineKey = "foodtrucks:mapfilter_line";
         private const string VehiclesKey = "foodtrucks:mapfilter_vehicles";
+        private const string PitchesKey = "foodtrucks:mapfilter_pitches";
+        private static readonly Color PitchColour = new Color(0.95f, 0.70f, 0.15f);
         private static string KeyOf(string filter) => "foodtrucks:mapfilter_" + filter;
 
         // Each building filter's icon and colour: a business type the filter stands for.
@@ -47,6 +49,8 @@ namespace FoodTrucks
         private static List<string> selected = new List<string>();
         // The game's own "hide closed" filter, read with the selection: closed venues stay dark.
         private static bool hideClosed;
+        // With the pitches filter on: the buildings premium spots and coming events are outside, by address.
+        private static HashSet<string> pitchAddresses = new HashSet<string>(StringComparer.Ordinal);
         private static AccessTools.FieldRef<CityMapFilters, bool>? hideClosedField;
 
         // The player's food vehicles' markers, by vehicle ID. Hidden unless the filter is on.
@@ -68,8 +72,9 @@ namespace FoodTrucks
                 var line = createLine.Invoke(__instance, new object[] { LineKey });
                 foreach (var filter in StreetFoodMap.BuildingFilters)
                     AddFilter(__instance, line, KeyOf(filter), BusinessTypeHelper.GetData(IconBusiness[filter])?.icon);
+                AddFilter(__instance, line, PitchesKey, BusinessTypeHelper.GetData("ba:businesstype_fastfoodrestaurant")?.icon);
                 AddFilter(__instance, line, VehiclesKey, InstanceBehavior<GlobalReferences>.Instance?.vehiclePOIIcon);
-                Log.Info($"Map filters: Street food line with {StreetFoodMap.BuildingFilters.Count + 1} filters.");
+                Log.Info($"Map filters: Street food line with {StreetFoodMap.BuildingFilters.Count + 2} filters.");
             }
             catch (Exception ex) { Log.Error("Map filters: " + ex); }
         }
@@ -93,6 +98,16 @@ namespace FoodTrucks
             {
                 var tables = DemandData.Tables;
                 if (tables == null || controller == null || controller.building == null || controller.buildingRegistration == null) return;
+                if (selected.Count == 0 && pitchAddresses.Count == 0) return;
+                var at = controller.building.Address;
+                if (at != null && pitchAddresses.Contains(World.AddressKey(at.streetName, at.streetNumber)))
+                {
+                    if (controller.poi == null) controller.CreatePOI();
+                    else if (controller.poi.Permanent) controller.poi.SetHidden(false);
+                    controller.SetHighlight(true, (Color32)PitchColour);
+                    controller.poi.SetIcon(BusinessTypeHelper.GetData("ba:businesstype_fastfoodrestaurant")?.icon, PitchColour);
+                    return;
+                }
                 if (selected.Count == 0) return;
                 classifier ??= new AreaClassifier(tables);
                 var business = controller.buildingRegistration.businessTypeName;
@@ -142,6 +157,7 @@ namespace FoodTrucks
                 selected = StreetFoodMap.BuildingFilters.Where(f => Selected(__instance, KeyOf(f))).ToList();
                 hideClosedField ??= AccessTools.FieldRefAccess<CityMapFilters, bool>("_hideClosed");
                 hideClosed = hideClosedField(__instance);
+                pitchAddresses = Selected(__instance, PitchesKey) ? PitchAddresses() : new HashSet<string>(StringComparer.Ordinal);
                 var show = Selected(__instance, VehiclesKey);
                 var state = FoodTrucksSession.CurrentState;
                 var game = SaveGameManager.Current;
@@ -193,6 +209,20 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Map filters, vehicles: " + ex); }
         }
 
+        // Every premium spot, and the places of events today or later.
+        private static HashSet<string> PitchAddresses()
+        {
+            var set = new HashSet<string>(StringComparer.Ordinal);
+            var pitches = DemandData.Pitches;
+            var state = FoodTrucksSession.CurrentState;
+            if (pitches == null) return set;
+            foreach (var spot in pitches.Spots) set.Add(spot.Address);
+            if (state != null && SaveGameManager.Current != null)
+                foreach (var city in state.Events.Events.Where(e => e.Day >= SaveGameManager.Current.Day))
+                    if (pitches.Place(city.PlaceId) is { } place) set.Add(place.Address);
+            return set;
+        }
+
         private static string Text(string key) => Localizor.LocalizorManager.GetLocalization(key, null);
 
         private static void Remove(string id)
@@ -207,6 +237,7 @@ namespace FoodTrucks
             foreach (var id in markers.Keys.ToList()) Remove(id);
             classifier = null;
             selected = new List<string>();
+            pitchAddresses = new HashSet<string>(StringComparer.Ordinal);
             greened.Clear();
         }
     }

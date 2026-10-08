@@ -18,6 +18,8 @@ namespace FoodTrucks.Core.Demand
         public int? Workers { get; set; }
         // Guests in the last hour (the player's own nightclubs, theatres and cinemas); null when the game doesn't say.
         public int? Guests { get; set; }
+        // The venue is the vehicle's partner (Pitches.Partnerships): the game side counts its crowd in full.
+        public bool Partner { get; set; }
     }
 
     // How much of its usual crowd a venue brings now. A closed venue brings nobody; theatres and cinemas
