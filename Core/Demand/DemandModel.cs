@@ -19,8 +19,11 @@ namespace FoodTrucks.Core.Demand
         public bool Raining { get; set; }
         // The game's demand per item in this neighbourhood, 0 to 100. Missing items count as 100.
         public IReadOnlyDictionary<string, double>? MarketDemand { get; set; }
-        // Health grade, regulars and competition combined; 1.0 until those exist.
+        // Health grade, regulars and the footfall other vehicles bring, combined (ReputationFactor.Combine).
         public double Reputation { get; set; } = 1.0;
+        // Each category's share of its customers left by the player's other vehicles nearby
+        // (Competition.Evaluate). Missing categories, or null, keep all their customers.
+        public IReadOnlyDictionary<string, double>? CategoryShares { get; set; }
         // The game's customer promotion variable relative to its default, so difficulty reaches trucks.
         public double Promotion { get; set; } = 1.0;
     }
@@ -102,13 +105,16 @@ namespace FoodTrucks.Core.Demand
                 var market = Market(group.Value, query.MarketDemand);
                 var addOns = category.AddOnFactor > 0
                     ? Math.Min(1.0, appetite * market * (1 - category.NewCustomerWeight) * category.AddOnFactor)
+                        * CategoryShare(query.CategoryShares, category.Name)
                     : 0;
                 shares.Add((category.Name, appetite * market * category.NewCustomerWeight, appetite * category.NewCustomerWeight, addOns));
             }
 
-            var contributions = Contributions(shares.Select(s => (s.Category, s.WithMarket)));
+            // Other vehicles split a category's customers after the menu's ranking, so a contested
+            // category never promotes another one to the menu's full-weight slot.
+            var contributions = Shared(Contributions(shares.Select(s => (s.Category, s.WithMarket))), query.CategoryShares);
             var menuAppetite = Math.Min(1.0, contributions.Values.Sum());
-            var withoutMarket = Math.Min(1.0, Contributions(shares.Select(s => (s.Category, s.WithoutMarket))).Values.Sum());
+            var withoutMarket = Math.Min(1.0, Shared(Contributions(shares.Select(s => (s.Category, s.WithoutMarket))), query.CategoryShares).Values.Sum());
             var marketFactor = withoutMarket > 0 ? menuAppetite / withoutMarket : 1.0;
 
             // Each category's part of the customers, after the further-category discount.
@@ -184,6 +190,23 @@ namespace FoodTrucks.Core.Demand
             // Fixed item order keeps the market average bit-identical whatever the menu order.
             foreach (var items in groups.Values) items.Sort(StringComparer.Ordinal);
             return groups;
+        }
+
+        private static Dictionary<string, double> Shared(Dictionary<string, double> contributions, IReadOnlyDictionary<string, double>? shares)
+        {
+            if (shares == null) return contributions;
+            // The menu's appetite is capped at 1. Apply that cap to the whole menu first, so splitting
+            // one category's customers can't free room under the cap for the others.
+            var total = contributions.Values.Sum();
+            var cap = total > 1.0 ? 1.0 / total : 1.0;
+            foreach (var category in contributions.Keys.ToList()) contributions[category] *= cap * CategoryShare(shares, category);
+            return contributions;
+        }
+
+        private static double CategoryShare(IReadOnlyDictionary<string, double>? shares, string category)
+        {
+            if (shares == null || !shares.TryGetValue(category, out var share)) return 1.0;
+            return double.IsNaN(share) || double.IsInfinity(share) ? 1.0 : Math.Max(0, Math.Min(1, share));
         }
 
         private static void RequireFactor(double value, string name)

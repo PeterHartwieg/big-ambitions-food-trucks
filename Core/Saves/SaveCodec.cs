@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
@@ -142,7 +143,23 @@ namespace FoodTrucks.Core.Saves
                 if (double.IsNaN(vehicle.SaleProgress) || double.IsInfinity(vehicle.SaleProgress) ||
                     vehicle.SaleProgress < 0 || vehicle.SaleProgress >= 1)
                     throw new JsonSerializationException("Vehicle SaleProgress must be finite and in [0, 1).");
+                if (vehicle.Service != null) ValidateService(vehicle.Service);
+                if (vehicle.Health != null) FoodTrucks.Core.Reputation.ReputationValidation.Validate(vehicle.Health);
+                if (vehicle.VehicleType == null)
+                    throw new JsonSerializationException("VehicleType must not be null.");
+                if (vehicle.Schedule != null && (vehicle.Schedule.Days == null || vehicle.Schedule.Stops == null ||
+                                                 vehicle.Schedule.Stops.Any(s => s == null || s.SpotKey == null)))
+                    throw new JsonSerializationException("Schedule Days and Stops must be lists without null entries.");
+                if (vehicle.Transit != null && (vehicle.Transit.ToSpotKey == null || vehicle.Transit.ArrivesAt < vehicle.Transit.DepartsAt))
+                    throw new JsonSerializationException("Transit must name its spot and arrive no earlier than it departs.");
             }
+
+            if (state.Regulars == null)
+                throw new JsonSerializationException("Regulars must not be null.");
+            FoodTrucks.Core.Reputation.ReputationValidation.Validate(state.Regulars);
+            if (state.Catering == null)
+                throw new JsonSerializationException("Catering must not be null.");
+            FoodTrucks.Core.Catering.CateringValidation.Validate(state.Catering);
 
             var days = new HashSet<int>();
             long total = 0;
@@ -155,6 +172,27 @@ namespace FoodTrucks.Core.Saves
                 if (!days.Add(sale.Day))
                     throw new JsonSerializationException($"DailySales contains duplicate Day {sale.Day}.");
                 total = checked(total + sale.RevenueCents);
+            }
+        }
+
+        private static void ValidateService(ServiceState service)
+        {
+            if (service.Queue == null || service.Window == null)
+                throw new JsonSerializationException("Service Queue and Window must not be null.");
+            if (service.Minute < 0 || service.NextCustomerId < 1)
+                throw new JsonSerializationException("Service Minute must not be negative and NextCustomerId must be at least 1.");
+            var ids = new HashSet<long>();
+            foreach (var customer in service.Window.Concat(service.Queue))
+            {
+                if (customer == null)
+                    throw new JsonSerializationException("Service customers must not be null.");
+                if (customer.Id < 1 || customer.Id >= service.NextCustomerId || !ids.Add(customer.Id))
+                    throw new JsonSerializationException("Service customer IDs must be unique and below NextCustomerId.");
+                if (customer.ArrivedAtMinute < 0 || customer.ArrivedAtMinute > service.Minute)
+                    throw new JsonSerializationException("Service customer ArrivedAtMinute must lie between 0 and Minute.");
+                if (double.IsNaN(customer.Patience) || double.IsInfinity(customer.Patience) || customer.Patience <= 0 ||
+                    double.IsNaN(customer.MinutesLeft) || double.IsInfinity(customer.MinutesLeft) || customer.MinutesLeft < 0)
+                    throw new JsonSerializationException("Service customer Patience must be positive and MinutesLeft not negative, both finite.");
             }
         }
     }

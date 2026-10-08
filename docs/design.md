@@ -49,6 +49,8 @@ NYC separates the vendor licence (a person) from the permit (a cart or truck), a
 
 No waiting list and no grey market in version 1. Both are easy to add later as settings.
 
+Decided while building the Core (8 October 2026; numbers in `data/rules.json`): the licence can be renewed in its last 10 days and a renewal adds a full 60 days. Permits unlock at 14, 35 and 70 days in business, or sooner at 400, 1,500 and 4,000 items sold, and a cap once reached never drops. Vehicles from saves made before permits existed get one free.
+
 ## Vehicles
 
 | | Cart | Truck |
@@ -238,11 +240,15 @@ The footfall and appetite numbers are mine, shaped by the NYC lunch peak (about 
 - **Stock.** Each product draws from the vehicle's stock. A sold-out item disappears from the menu for the day. Selling out everything closes the window.
 - **Price.** Uses the game's normal price setting per product. The mod applies its own price-to-conversion curve, calibrated against the game's shop curve.
 
+Decided while building the Core (8 October 2026): patience is 20 minutes ±25% per customer, times 0.6 in rain, and the queue holds at most 12. A customer whose food has sold out walks on rather than buying something else. One simulation, minute by minute, drives both the visible queue and the sales away from the player.
+
 When the player stands in the window, the sale animation and register work the way they do in a shop, if the game allows it on a vehicle. Otherwise the player gets a simple serve action per customer.
 
 ## Catering gigs
 
 Bookable jobs from offices, parties and events. Offers arrive as text messages from a "Street food bookings" contact, and the player accepts by replying or calling, using the game's contact and call dialog system (the SDK's BackAlleyDealer pattern). Booked gigs also appear as address filters on the map. Each gig has a date, time, place, guest count (40 to 200), a menu requirement and a fixed fee paid on completion. The truck must be at the place on time with enough stock. Missing a gig costs reputation. Real gourmet trucks earn 30% or more of revenue this way, so mature trucks should see a steady flow of offers.
+
+Decided while building the Core (8 October 2026): only trucks cater. Offers grow with items sold (full rate at 500) to about one every two days, at most two a day, scaled by a booking reputation that a failed gig cuts by 0.25 and a completed one raises by 0.05. Gigs are office lunches on weekdays, parties in the evening and weekend events, each with its own areas, times and guest counts, never more guests than a truck holds. A gig is 2 to 5 days ahead and must be accepted within a day. The truck may arrive up to an hour early and must be there by 10 minutes after the start, with the required food on its menu and one unit per guest, which is then held back from street sales. The fee is the guests × the food's reference price × 1.25. "Missing a gig costs reputation" means the booking reputation, so fewer offers; it doesn't touch street sales.
 
 ## Health grades
 
@@ -256,15 +262,21 @@ Each vehicle has hidden cleanliness points. Dirty equipment, old stock and skipp
 
 The grade shows on the window. The demand effect is an assumption; there is no NYC data on how much grades change cart sales.
 
+Decided while building the Core (8 October 2026): the points are the sum of daily marks over the vehicle's last 14 open days. An open day without cleaning adds 3 and selling stale stock adds 4, so cleaning every day keeps an A and never cleaning reaches C in two weeks. Closing doesn't wash points away. The grade changes only when the inspector comes. A new vehicle shows "grade pending" (demand 1.0) until the first visit. After a 7-day gap, the inspector may come on any day with the same small chance, and finds a closed vehicle on its next open day. The intervals average 12, 6 and 4 calendar weeks, however often the vehicle opens, and there is no safe stretch after an inspection. The game has no inspections or reputation of its own [code, unverified in game].
+
 ## Regulars on a route
 
 Opening at the same pitch on the same weekday builds a regulars bonus for that pitch, up to +30% over about six weeks. Missing a scheduled day removes some of it. This rewards a fixed weekly route over random driving. The numbers are invented and need playtesting.
+
+Decided while building the Core (8 October 2026): regulars belong to the whole fleet, by spot and weekday. A visit of at least an hour adds 0.05, so six weekly visits reach +30%. Each missed week takes 0.075 off that spot and weekday, counted even across days the game skipped.
 
 ## Competition
 
 Vehicles within one block of each other add about 10% to the total foot traffic of the spot, but vehicles selling the same product split that product's demand. A hot dog cart next to a burger truck is fine; two hot dog carts halve each other. Shops are already covered by the game's market demand (see Market), so they don't count here.
 
 AI trucks are a later version. Until then, this rule only applies between the player's own vehicles.
+
+Decided while building the Core (8 October 2026): "one block" is 80 m; each open neighbour with something to sell adds 10% footfall, at most 30%. The split is by item, not category: hot dogs and burgers are both fast food, but the cart and the truck sell different things. A category's share is the average over the vehicle's items in it of 1 ÷ (1 + the neighbours selling that item). The split applies after the menu's ranking of its categories, so losing hot dog customers never makes the pizza oven count double.
 
 ## Economy calibration
 
