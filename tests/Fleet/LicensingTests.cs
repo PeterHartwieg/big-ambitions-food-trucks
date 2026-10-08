@@ -64,118 +64,33 @@ public class LicensingTests
     }
 
     [Fact]
-    public void TheFleetStartsWithOnePermit()
-    {
-        var state = Licensed(vehicles: 2);
-
-        Assert.Equal(1, licensing.PermitCap(state, 1));
-        Assert.Equal(PermitProblem.None, licensing.BuyPermit(state, "v1", 1));
-        Assert.Equal(PermitProblem.CapReached, licensing.BuyPermit(state, "v2", 1));
-    }
-
-    [Fact]
-    public void DaysInBusinessUnlockPermits()
-    {
-        var state = Licensed(day: 1);
-
-        Assert.Equal(1, licensing.PermitCap(state, 14));
-        Assert.Equal(2, licensing.PermitCap(state, 15));
-        Assert.Equal(3, licensing.PermitCap(state, 36));
-        Assert.Equal(4, licensing.PermitCap(state, 71));
-    }
-
-    [Fact]
-    public void SalesUnlockPermitsSooner()
-    {
-        var state = Licensed(vehicles: 2);
-        state.Vehicles[0].LifetimeSales = 1000;
-        state.Vehicles[1].LifetimeSales = 500;
-
-        Assert.Equal(3, licensing.PermitCap(state, 2));
-    }
-
-    [Fact]
-    public void TheCapBlocksAFifthVehicle()
-    {
-        // Licensed on day 1, renewed on day 150 when the fourth permit has unlocked.
-        var state = Licensed(vehicles: 5);
-        licensing.Buy(state.Licence, 150, passedFoodSafety: true);
-        for (var i = 1; i <= 4; i++) Assert.Equal(PermitProblem.None, licensing.BuyPermit(state, $"v{i}", 200));
-
-        Assert.Equal(PermitProblem.CapReached, licensing.BuyPermit(state, "v5", 200));
-    }
-
-    [Fact]
-    public void TheModSettingMovesTheCeiling()
+    public void EveryVehicleCanHaveAPermit()
     {
         var state = Licensed(vehicles: 6);
 
-        Assert.Equal(2, licensing.PermitCap(state, 200, maxPermits: 2));
-        Assert.Equal(4, licensing.PermitCap(state, 200, maxPermits: 10));
+        for (var i = 1; i <= 6; i++) Assert.Equal(PermitProblem.None, Licensing.BuyPermit(state, $"v{i}", 1));
+        Assert.Equal(PermitProblem.AlreadyHasPermit, Licensing.BuyPermit(state, "v1", 1));
     }
 
     [Fact]
-    public void TheCapNeverDropsWhenAVehicleLeaves()
+    public void TheCityChargesTheFeesInTheRules()
     {
-        var state = Licensed(vehicles: 2);
-        state.Vehicles[0].LifetimeSales = 2000;
-        Assert.Equal(3, licensing.PermitCap(state, 2));
-
-        state.Vehicles.RemoveAt(0);
-
-        Assert.Equal(3, licensing.PermitCap(state, 2));
-        Assert.Equal(2, licensing.PermitCap(state, 2, maxPermits: 2));
+        Assert.Equal(250_00, ShippedData.Rules.Fleet.LicenceFeeCents);
+        Assert.Equal(500_00, ShippedData.Rules.Fleet.PermitFeeCents);
     }
 
     [Fact]
-    public void MilestoneOneCartsKeepWorkingWithAPermit()
+    public void TheCityWritesWhenRenewalOpensAndWhenTheLicenceRunsOut()
     {
-        var json = "{\"schemaVersion\":1,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"cart-1\",\"lifetimeSales\":15}],\"dailySales\":[]}";
-        var state = new SaveCodec().Load(json).State!;
+        var licence = new LicenceState();
+        licensing.Buy(licence, 1, passedFoodSafety: true);
 
-        Assert.Equal(1, Licensing.GrandfatherOldVehicles(state, "0.3.0"));
-        Assert.Equal(0, Licensing.GrandfatherOldVehicles(state, "0.3.0"));
-
-        Assert.Equal("cart", state.Vehicles[0].VehicleType);
-        Assert.True(state.Vehicles[0].HasPermit);
-        // The licence is still the player's to get.
-        Assert.Equal(OpenProblem.NoLicence, Licensing.CanOpen(state, "cart-1", 1, playerAtWindow: true, hires: 0));
-        licensing.Buy(state.Licence, 1, passedFoodSafety: true);
-        Assert.Equal(OpenProblem.None, Licensing.CanOpen(state, "cart-1", 1, playerAtWindow: true, hires: 0));
-    }
-
-    [Fact]
-    public void ANewerSaveGetsNoFreePermits()
-    {
-        var state = new SaveState { WrittenByModVersion = "0.3.0" };
-        state.Vehicles.Add(new VehicleState { VehicleId = "v1" });
-
-        Assert.Equal(0, Licensing.GrandfatherOldVehicles(state, "0.3.0"));
-        Assert.False(state.Vehicles[0].HasPermit);
-    }
-
-    [Fact]
-    public void ReleasingAVehicleKeepsTheUnlockItsSalesEarned()
-    {
-        var state = Licensed(vehicles: 2);
-        state.Vehicles[0].LifetimeSales = 500;
-        licensing.BuyPermit(state, "v1", 2);
-
-        licensing.ReleasePermit(state, "v1", 2);
-        state.Vehicles.RemoveAt(0);
-
-        Assert.Equal(2, licensing.PermitCap(state, 2));
-    }
-
-    [Fact]
-    public void ReleasingAPermitFreesAPlace()
-    {
-        var state = Licensed(vehicles: 2);
-        licensing.BuyPermit(state, "v1", 1);
-
-        licensing.ReleasePermit(state, "v1", 1);
-
-        Assert.Equal(PermitProblem.None, licensing.BuyPermit(state, "v2", 1));
+        Assert.Equal(LicenceReminder.None, licensing.ReminderFor(licence, 50));
+        Assert.Equal(LicenceReminder.RenewalOpen, licensing.ReminderFor(licence, 51));
+        Assert.Equal(LicenceReminder.None, licensing.ReminderFor(licence, 60));
+        Assert.Equal(LicenceReminder.Expired, licensing.ReminderFor(licence, 61));
+        Assert.Equal(LicenceReminder.None, licensing.ReminderFor(licence, 62));
+        Assert.Equal(LicenceReminder.None, licensing.ReminderFor(new LicenceState(), 61));
     }
 
     [Fact]
@@ -184,8 +99,8 @@ public class LicensingTests
         var state = new SaveState();
         state.Vehicles.Add(new VehicleState { VehicleId = "v1" });
 
-        Assert.Equal(PermitProblem.NoLicence, licensing.CanBuyPermit(state, "v1", 1));
-        Assert.Equal(PermitProblem.UnknownVehicle, licensing.CanBuyPermit(state, "nope", 1));
+        Assert.Equal(PermitProblem.NoLicence, Licensing.CanBuyPermit(state, "v1", 1));
+        Assert.Equal(PermitProblem.UnknownVehicle, Licensing.CanBuyPermit(state, "nope", 1));
     }
 
     [Fact]
@@ -194,7 +109,7 @@ public class LicensingTests
         var state = Licensed(vehicles: 1);
 
         Assert.Equal(OpenProblem.NoPermit, Licensing.CanOpen(state, "v1", 1, playerAtWindow: true, hires: 0));
-        licensing.BuyPermit(state, "v1", 1);
+        Licensing.BuyPermit(state, "v1", 1);
         Assert.Equal(OpenProblem.None, Licensing.CanOpen(state, "v1", 1, playerAtWindow: true, hires: 0));
         Assert.Equal(OpenProblem.NoCrew, Licensing.CanOpen(state, "v1", 1, playerAtWindow: false, hires: 0));
         // A hire works under the vehicle's permit and the player's licence.
@@ -207,7 +122,7 @@ public class LicensingTests
     public void AVehicleInTransitCantOpen()
     {
         var state = Licensed(vehicles: 1);
-        licensing.BuyPermit(state, "v1", 1);
+        Licensing.BuyPermit(state, "v1", 1);
         state.Vehicles[0].Transit = new TransitState { ToSpotKey = "a", DepartsAt = 0, ArrivesAt = 10 };
 
         Assert.Equal(OpenProblem.InTransit, Licensing.CanOpen(state, "v1", 1, playerAtWindow: false, hires: 1));
@@ -228,7 +143,7 @@ public class LicensingTests
     {
         var codec = new SaveCodec();
         var state = Licensed(day: 3, vehicles: 1);
-        licensing.BuyPermit(state, "v1", 3);
+        Licensing.BuyPermit(state, "v1", 3);
 
         var loaded = codec.Load(codec.Serialize(state)).State!;
 

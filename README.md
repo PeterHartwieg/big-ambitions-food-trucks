@@ -2,17 +2,17 @@
 
 A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, open the window and sell to the lunch crowd, then move on before the evening rush starts somewhere else.
 
-**Status, 8 October 2026:** Milestone 3 (serving and queues), build `0.4.0`, not yet checked in the game. Customers come to the cart as people: they walk up from the pavement, queue beside the cart, are served at the window and walk off. Within about 100 m of the player you see them; further away the same simulation runs unseen. The queue holds 6 at a cart, people give up after about 20 minutes (sooner in rain), and your customer service skill sets how fast you serve. Walk away from the window and nobody serves: the queue waits, then thins out. Milestone 2 (demand and menu, `0.3.1`) brought crowds that add up, the game's own equipment, an 80-unit stock limit, legal pavement spots and prices like a shop's; see [docs/implementation-plan.md](docs/implementation-plan.md). Balance is set by calculation: [docs/balance/cart-economics.md](docs/balance/cart-economics.md). Milestone 1 was played once; results below.
+**Status, 8 October 2026:** Milestone 4 (truck, licence and city systems), build `0.5.0`, not yet checked in the game. The food truck is in with its final model: buy it at General US Trucks, stop in a legal parking space and open from the driving panel; the hatch opens and the queue forms on the pavement side. Selling needs a vendor licence (the game's Food Safety course plus a fee) and a permit for each cart and truck, both bought by phone from the City of New York. Trucks pay street parking like any car. The city map has a "Street food" filter line. Milestone 3 (`0.4.0`) brought customers as people with a queue; Milestone 2 (`0.3.1`) crowds that add up, the game's own equipment, stock limits, legal pavement spots and prices like a shop's; see [docs/implementation-plan.md](docs/implementation-plan.md). Balance is set by calculation: [docs/balance/cart-economics.md](docs/balance/cart-economics.md). Milestone 1 was played once; results below.
 
 ## Removing the mod
 
 A save that still holds a Food Trucks vehicle breaks without the mod: a held cart leaves you somewhere else with no way to interact with the world, and once a tax bill is overdue the game's forced payment throws on the unknown vehicle. The game can't sell a pushed cart, so the mod does it:
 
-1. Load every save that has a Food Trucks vehicle and let go of the cart.
+1. Load every save that has a Food Trucks vehicle, let go of the cart and step out of the truck.
 2. Press **Ctrl+Shift+F12** twice within 10 seconds (or run `foodtrucks_uninstall` twice in the console). Every Food Trucks vehicle is removed and refunded at its purchase price plus the stock still in it, and any pending delivery of one is cancelled.
 3. Wait for "Removed … vehicles, refunded …". Save, then remove the mod. If the message says something is still in the save or a refund was not paid, keep the mod installed and check `Player.log`.
 
-Street food sales stay in that save's history, labelled with the raw key `foodtrucks:transaction_sale` once the mod is gone. The mod's own data stays in the save and does nothing without the mod.
+Street food sales, licence and permit fees stay in that save's history, labelled with raw keys (`foodtrucks:transaction_sale`, `foodtrucks:transaction_licence`, `foodtrucks:transaction_permit`, and `foodtrucks:transaction_cityfees_label` on the tax statement) once the mod is gone, and the City of New York's texts about the licence show their raw `foodtrucks:` keys. The mod's own data stays in the save and does nothing without the mod.
 
 ## Evidence
 
@@ -61,7 +61,7 @@ tools/build-mod.sh --generate
 tools/install-remote.sh <ssh host of the Windows game PC>
 ```
 
-Debug keys (holding Ctrl): **F6** test truck, **F7** free food cart, **F8** mark a point for drawing a park zone, **F9** the demand model's reading for the cart next to you, **F11** log the grip while pushing, **Shift+F7** a vanilla hand truck, **Shift+F8** record $200,000 of street food today without moving money, **F10** status, **Shift+F10** issue the tax statement now (throwaway saves only), **Shift+F12** the uninstall step.
+Debug keys (holding Ctrl): **F6** free food truck, **Shift+F6** a free vendor licence and permits for every food vehicle, **F7** free food cart, **F8** mark a point for drawing a park zone, **F9** the demand model's reading for the cart next to you, **F11** log the grip while pushing, **Shift+F7** a vanilla hand truck, **Shift+F8** record $200,000 of street food today without moving money, **F10** status, **Shift+F10** issue the tax statement now (throwaway saves only), **Shift+F12** the uninstall step.
 
 `tools/park-remote.sh park|restore` moves the installed mod out of `ModsLocal` and back, and `tools/fetch-log-remote.sh <label>` copies the game's log; both are for the in-game checks in [CHECKS.md](CHECKS.md).
 
@@ -69,4 +69,4 @@ Debug keys (holding Ctrl): **F6** test truck, **F7** free food cart, **F8** mark
 
 ## Licence
 
-MIT, see [LICENSE.txt](LICENSE.txt). The placeholder test truck reuses the SDK's example car, which Hovgaard Games publishes under MIT. Harmony is MIT, by Andreas Pardeike.
+MIT, see [LICENSE.txt](LICENSE.txt). The food truck is built on the SDK's example car (its physics setup and dirt textures), which Hovgaard Games publishes under MIT. Harmony is MIT, by Andreas Pardeike.

@@ -48,7 +48,7 @@ All pure and unit-tested. Inputs are plain data, outputs are decisions.
 | `PriceCurve` | Own price-to-conversion curve, calibrated once against the shop curve in the decompile | higher price, fewer buyers |
 | `Economy` | Fees, wages, fuel, prices as multiples of the reference shop | `ReferenceShopIncome(difficulty)`; cart ≈ half a small shop at a good lunch pitch |
 | `Reputation` | Health points and grade, regulars per spot and weekday, competition between vehicles | grade thresholds; regulars build and decay |
-| `Fleet` | Vehicles, equipment, permits and cap, crews, hire schedules, travel timing | cap blocks a fifth vehicle; travel time per route |
+| `Fleet` | Vehicles, equipment, licence and permits, crews, hire schedules, travel timing | a vehicle without a permit can't open; travel time per route |
 | `Catering` | Offer generation and gig evaluation | late arrival fails the gig |
 | `SaveModel` | Versioned JSON and migrations | old versions load |
 
@@ -154,17 +154,38 @@ The first playable slice. It touches every risky layer at once: bundle, vehicle,
 ## Milestone 4: truck, licence and city systems
 
 - Truck vehicle with cargo, driven like any car.
-- Vendor licence requires the game's Food Safety course. A permit per vehicle covers its crew. Fleet cap.
-- Cart crossing a bridge uses the game's bridge skip with walking time.
+- Vendor licence requires the game's Food Safety course. A permit per vehicle covers its crew. (A fleet cap was planned and dropped, see the design answers below.)
+- Cart crossing a bridge uses the game's bridge skip with walking time. (Dropped: the cart takes the subway, see below.)
 - `TaxPatch` live; truck sales in the tax statement.
 - "Street food" category on the city map: offices, factories, nightlife, theatres and cinemas, premium spots.
 
 **Core half, built 8 October 2026 on branch `core-m3-m7`:** `Licensing` and `FleetRules` in `Core/Fleet`. Decisions:
 
 - The licence needs the Food Safety course, lasts 60 days and can be renewed in its last 10; a renewal adds a full period, so renewing early loses nothing. The game's diploma never expires [code, unverified in game]; the mod's licence does.
-- The permit cap starts at one and gains one at 14, 35 and 70 days since the first licence, or sooner at 400, 1,500 and 4,000 items sold across the fleet, up to the setting (default 4). The cap reached is kept in the save and never drops.
+- Superseded before the game side: the permit cap (one, plus unlocks at 14, 35 and 70 days or 400, 1,500 and 4,000 items sold, up to 4) was removed from Core.
 - To open, a vehicle needs the player's valid licence, its own permit and somebody at the window. Hires need neither the course nor a licence of their own.
-- Vehicles from Milestone 1 saves have no type. `Licensing.GrandfatherOldVehicles` makes them carts with a permit, so an existing cart isn't locked out; the player still needs the course and a licence. The game side calls it once after loading, with the first mod version that sets vehicle types, so only older saves qualify. Every new vehicle must get its type.
+- Superseded before the game side: `Licensing.GrandfatherOldVehicles` (a free permit for vehicles from saves before Milestone 4) was removed, since the mod is unreleased. The game side sets each vehicle's type when it first sees it.
+
+**Design answers, 8 October 2026 (Peter, before the game side):**
+
+- **Licence and permits come from the city by phone.** A call dialog on the game's City of New York contact (the one that sends parking tickets) sells and renews the licence and sells a permit for a vehicle. The game has no city hall. A vehicle that can't open says what's missing in-world.
+- **No fleet cap.** Every vehicle still needs its own permit, but there is no limit on how many; the cap and its unlocks stay out unless a reason turns up later.
+- **No old-save handling.** The mod is unreleased, so saves from 0.4.0 and earlier get no grandfathering. Schemas stay versioned as before.
+- **Bridges need no work.** A cart crosses to another island by subway. The code reading says `SubwayStation` refuses entry inside a vehicle, so check it in game with the cart.
+- **Parking always costs.** Trucks pay the game's street parking and draw its tickets like any car, open or not.
+- **Truck price and balance wait** until near the end of development; the truck gets a placeholder price.
+- **The final truck model goes in now** (`art/truck/FoodTruck.fbx`), so the window, queue and parking are tuned on its real shape.
+- **The map's "Street food" category** shows venue buildings (offices, factories, nightlife, theatres and cinemas) and a marker for each of the player's carts and trucks (trucks have the game's own).
+
+**Game side, built 8 October 2026 (0.5.0, branch `milestone-4`, not yet checked in game):**
+
+- **Truck.** `foodtrucks:vehicletype_foodtruck` replaces the test truck. `TruckAssets` builds it from the SDK's example car with the final model from `art/truck` (body, wheels, collision hull, a serving hatch on the right), the art's positions for wheels, doors, fuel cap and loading point, and first-guess physics for a step van: 3,500 kg, springs, dampers and engine scaled by 2.5 from the 1,400 kg car, centre of mass at 0.6 m. 16 cargo slots, 80 l of fuel, $15,000 (placeholder), tax-deductible like a business vehicle. It is sold next to the cart at General US Trucks, in person only. The game's own systems treat it as a car: fuel, gas stations, street parking fees and tickets, sleep (`PrefabFixes`) [code, unverified in game].
+- **Opening a truck.** The "Open here" and "Prices" buttons show in the driving panel. Open needs a stop in a legal parking space (the game's own parking check), and pavement beside the hatch (the truck's right side; with the hatch to the road it refuses), then uses the game's Park button to step out; the hatch opens, and closes when the player drives off. The player serves within 8 m, as at the cart. The queue lines up on the truck's right, from the hatch, at the nearest pavement out to 3.4 m from the truck's middle, so a wide parking space still puts it at the kerb; places on the road layer or a crosswalk don't count (`WindowShape`). Whether the road layer covers streets is unverified: it read "no" at every pavement spot logged so far; a truck queues 10. Core's menu, stock and sales are the cart's, with the truck's 4 slots and 160 units.
+- **Licence and permits.** `CityLicensing` sets the City of New York contact's dialog override (an unused `CallDialogType`, registered with `CallDialogFactory`), so the contact gets a call button. The call offers the licence (or its renewal, in the last 10 days) and then a permit for each cart and truck that has none, one at a time. Fees are charged with a tax-deductible label. The licence needs the Food Safety course. A cart or truck refuses to open without a licence or permit, and an open one closes when the licence runs out. The city texts when renewal opens and the day after expiry. The contact is added to the phone without a notification when the mod loads.
+- **Tax.** Unchanged: street food sales were already on the tax statement since Milestone 1, and the truck's go into the same record. The fees are deductible expenses.
+- **Map.** `MapFilters` adds a "Street food" line to the city map's filters: offices, factories and warehouses, nightlife, theatres and cinemas, and "Your food carts". The building filters use the demand model's own rules (Core `StreetFoodMap`, on `AreaClassifier`), so a highlighted building brings that crowd. The vehicle filter adds a marker per cart, green while open; trucks already have the game's own vehicle marker, and so does a cart bought or spawned in the current session (the filter only turns that one green).
+- **Debug.** Ctrl+F6 spawns a free food truck, Ctrl+Shift+F6 grants a free licence and permits for every food vehicle (throwaway saves).
+- The Econoview row is now "Street food", not "Food carts".
 
 ## Milestone 5: hires
 

@@ -52,6 +52,12 @@ echo "$HARMONY_DLL_SHA256  $DEPS/0Harmony.dll" | shasum -a 256 -c - >/dev/null |
 dotnet build "$REPO/Core/FoodTrucks.Core.csproj" -c Release -nologo -v quiet
 cp "$REPO/Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll" "$DEPS/FoodTrucks.Core.dll"
 
+# The truck's final model and textures from art/, copied in so the generator can build the prefab.
+# Only their .meta files are committed (stable GUIDs for the prefab); the binaries stay in art/.
+TRUCK_ART="$MOD_DIR/Vehicles/TruckArt"
+mkdir -p "$TRUCK_ART"
+rsync -a --checksum "$REPO/art/truck/FoodTruck.fbx" "$REPO"/art/truck/T_FoodTruck_*.png "$TRUCK_ART/"
+
 # Link the mod folder and the build helpers into the SDK project.
 link() { # link <target> <link path>
   if [ -L "$2" ]; then [ "$(readlink "$2")" = "$1" ] || { rm "$2"; ln -s "$1" "$2"; }

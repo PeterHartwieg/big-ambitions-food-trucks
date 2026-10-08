@@ -8,17 +8,17 @@ using UnityEngine.UI;
 
 namespace FoodTrucks
 {
-    // The cart's own buttons in the item panel while the player pushes it: "Open here" and "Prices".
-    // Copies of the panel's Sleep button with their own click handlers, shown only for the cart.
+    // The cart's and truck's own buttons in the item panel while the player pushes the cart or drives the
+    // truck: "Open here" and "Prices". Copies of the panel's Sleep button with their own click handlers.
     internal static class CartButton
     {
         private static readonly List<Button> buttons = new List<Button>();
 
         public static void OnSetVehicle(ItemPanelUI panel, VehicleController? vehicle)
         {
-            var isCart = vehicle != null && vehicle.vehicleInstance != null &&
-                         vehicle.vehicleInstance.vehicleTypeName == FoodTrucksMod.CartTypeName;
-            if (!isCart)
+            var isFoodVehicle = vehicle != null && vehicle.vehicleInstance != null &&
+                                FoodTrucksMod.KindOf(vehicle.vehicleInstance.vehicleTypeName) != null;
+            if (!isFoodVehicle)
             {
                 Hide();
                 return;

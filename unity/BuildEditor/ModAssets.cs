@@ -5,7 +5,6 @@ using BAModTemplate.Editor;
 using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
-using Vehicles.VehicleTypes;
 
 namespace FoodTrucks.BuildEditor
 {
@@ -15,10 +14,8 @@ namespace FoodTrucks.BuildEditor
     {
         public const string ModFolder = "Assets/Mods/FoodTrucks";
         private const string VehiclesFolder = ModFolder + "/Vehicles";
-        private const string ExampleVehicleType = "Assets/Mods/Example-Vehicle/TurboHonza.asset";
-        private const string ExampleVehiclePrefab = "Assets/Mods/Example-Vehicle/TurboHonza.prefab";
 
-        public const string TruckTypeName = "foodtrucks:vehicletype_testtruck";
+        public const string TruckTypeName = "foodtrucks:vehicletype_foodtruck";
         public const string CartTypeName = "foodtrucks:vehicletype_foodcart";
 
         [MenuItem("Big Ambitions/Food Trucks/Generate assets")]
@@ -34,7 +31,7 @@ namespace FoodTrucks.BuildEditor
                 AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
                 EnsureFolder(VehiclesFolder);
                 EnsureManifest();
-                GenerateTruck();
+                TruckAssets.GenerateTruck(VehiclesFolder, TruckTypeName);
                 CartAssets.GenerateCart(VehiclesFolder, CartTypeName);
                 AssetDatabase.SaveAssets();
                 Debug.Log("[FoodTrucksBuild] OK: generated assets.");
@@ -59,7 +56,7 @@ namespace FoodTrucks.BuildEditor
             manifest.ModId = "FoodTrucks";
             manifest.DisplayName = "Food Trucks";
             manifest.Author = "Peter Hartwieg";
-            manifest.Version = "0.3.1";
+            manifest.Version = "0.5.0";
             manifest.AssetBundleName = "foodtrucks.unity3d";
             manifest.ModAssembly = AssetDatabase.LoadAssetAtPath<AssemblyDefinitionAsset>(ModFolder + "/FoodTrucks.asmdef");
             manifest.LocalesFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(ModFolder + "/Locales");
@@ -68,48 +65,6 @@ namespace FoodTrucks.BuildEditor
             manifest.TargetPlatforms = ModTargetPlatforms.Windows;
             if (manifest.ModAssembly == null) throw new InvalidOperationException("FoodTrucks.asmdef not found.");
             EditorUtility.SetDirty(manifest);
-        }
-
-        // SDK example car for storage and sleep checks; not sold in Milestone 1.
-        private static void GenerateTruck()
-        {
-            var typePath = VehiclesFolder + "/TestTruck.asset";
-            var prefabPath = VehiclesFolder + "/TestTruck.prefab";
-            CopyFresh(ExampleVehicleType, typePath);
-            CopyFresh(ExampleVehiclePrefab, prefabPath);
-
-            var type = AssetDatabase.LoadAssetAtPath<VehicleType>(typePath);
-            type.name = "TestTruck";
-            type.vehicleTypeName = TruckTypeName;
-            type.price = 1f;
-            type.maxCargoCapacity = 20;
-            type.taxDeductible = true;
-            EditorUtility.SetDirty(type);
-
-            var root = PrefabUtility.LoadPrefabContents(prefabPath);
-            try
-            {
-                var controller = root.GetComponent<VehicleController>();
-                if (controller == null) throw new InvalidOperationException("Example prefab has no VehicleController.");
-                controller.vehicleType = type;
-                controller.showCargoInItemPanel = true;
-                // The example YAML predates SleepEnvironmentConfig, so its sleep config is null.
-                // The mod assigns the sleep setup at runtime.
-                root.name = "TestTruck";
-                PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
-            }
-            finally
-            {
-                PrefabUtility.UnloadPrefabContents(root);
-            }
-        }
-
-        // Overwrites the file but keeps an existing .meta, so the asset GUID stays stable across regenerations.
-        private static void CopyFresh(string from, string to)
-        {
-            var projectRoot = Path.GetDirectoryName(Application.dataPath)!;
-            File.Copy(Path.Combine(projectRoot, from), Path.Combine(projectRoot, to), overwrite: true);
-            AssetDatabase.ImportAsset(to, ImportAssetOptions.ForceUpdate);
         }
 
         internal static void EnsureFolder(string path)

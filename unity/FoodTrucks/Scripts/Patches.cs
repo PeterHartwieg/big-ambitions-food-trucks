@@ -45,6 +45,11 @@ namespace FoodTrucks
             Patch(typeof(FinancialSummaryHelper), "CreateFinancialSummary", new[] { typeof(int) }, nameof(DaySummary));
             Patch(AccessTools.TypeByName("UI.Smartphone.Apps.EconoView.EconoViewIncomeStatementScrollerController"), "LoadSalaryRows", Type.EmptyTypes, nameof(EconoViewRow));
 
+            // City map: a Street food line of filters (buildings that bring crowds, the player's vehicles).
+            Patch(typeof(CityMapFilters), "InitializeFilters", Type.EmptyTypes, typeof(MapFilters), postfix: nameof(MapFilters.InitializePostfix));
+            Patch(typeof(CityMapFilters), "ApplyFilters", Type.EmptyTypes, typeof(MapFilters), postfix: nameof(MapFilters.ApplyPostfix));
+            Patch(typeof(CityMapFilters), "ApplyFilters", new[] { typeof(CityBuildingController) }, typeof(MapFilters), postfix: nameof(MapFilters.BuildingPostfix));
+
             // Cargo limit: food up to the vehicle's units, equipment up to its slots.
             Patch(typeof(VehicleInstance), "MergeIntoCargo", new[] { typeof(CargoInstance) },
                 typeof(CargoLimit), prefix: nameof(CargoLimit.MergePrefix), finalizer: nameof(CargoLimit.MergeFinalizer));
@@ -66,7 +71,8 @@ namespace FoodTrucks
 
         private static void Patch(Type? type, string method, Type[]? args, Type handlers, string? prefix = null, string? postfix = null, string? finalizer = null)
         {
-            var name = $"{type?.Name ?? "(type not found)"}.{method}";
+            // Overloads patched apart need their arguments in the log line to tell them apart.
+            var name = $"{type?.Name ?? "(type not found)"}.{method}{(args != null && args.Length > 0 ? "(" + string.Join(", ", args.Select(a => a.Name)) + ")" : "")}";
             if (type == null)
             {
                 Log.Error($"Patch {name}: Not active, type not found.");

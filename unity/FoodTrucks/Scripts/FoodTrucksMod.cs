@@ -16,30 +16,33 @@ namespace FoodTrucks
     [ModEntryOnInitializationLoad]
     public sealed class FoodTrucksMod : IModBigAmbitions
     {
-        public const string Version = "0.4.0";
+        public const string Version = "0.5.0";
         internal const string BundleKey = "AssetBundles/foodtrucks.unity3d";
-        internal const string TruckTypeName = "foodtrucks:vehicletype_testtruck";
+        internal const string TruckTypeName = "foodtrucks:vehicletype_foodtruck";
         internal const string CartTypeName = "foodtrucks:vehicletype_foodcart";
         internal const string CartPrefabPath = "Assets/Mods/FoodTrucks/Vehicles/FoodCart.prefab";
-        internal const string TruckPrefabPath = "Assets/Mods/FoodTrucks/Vehicles/TestTruck.prefab";
+        internal const string TruckPrefabPath = "Assets/Mods/FoodTrucks/Vehicles/FoodTruck.prefab";
         // Every vehicle type this mod has ever registered starts with this, spike types included.
         internal const string VehicleTypePrefix = "foodtrucks:vehicletype_";
         private const string HandVehicleTag = "ba:vehicletag_ishandvehicle";
 
         private static readonly (string TypeName, string AssetPath)[] VehicleAssets =
         {
-            (TruckTypeName, "Assets/Mods/FoodTrucks/Vehicles/TestTruck.asset"),
+            (TruckTypeName, "Assets/Mods/FoodTrucks/Vehicles/FoodTruck.asset"),
             (CartTypeName, "Assets/Mods/FoodTrucks/Vehicles/FoodCart.asset"),
         };
 
-        // Only the cart is for sale in Milestone 1; the test truck is spawned with a debug key.
-        internal static readonly string[] SoldAtDealer = { CartTypeName };
+        internal static readonly string[] SoldAtDealer = { CartTypeName, TruckTypeName };
 
         // The mod's asset bundle, for the prefab fixes applied at city load.
         internal static AssetBundle? Bundle { get; private set; }
 
         internal static bool IsModVehicle(string? typeName) =>
             typeName != null && typeName.StartsWith(VehicleTypePrefix, StringComparison.Ordinal);
+
+        // "cart" or "truck", the vehicle kinds in economy.json and rules.json; null for any other vehicle.
+        internal static string? KindOf(string? typeName) =>
+            typeName == CartTypeName ? "cart" : typeName == TruckTypeName ? "truck" : null;
 
         private readonly List<string> registered = new List<string>();
 

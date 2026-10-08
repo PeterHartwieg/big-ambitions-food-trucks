@@ -106,6 +106,8 @@ namespace FoodTrucks
             runtimeObject.AddComponent<DebugActions>();
             try { PrefabFixes.Apply(); }
             catch (Exception ex) { Log.Error("Prefab fixes: " + ex); }
+            try { CityLicensing.Attach(); }
+            catch (Exception ex) { Log.Error("City of New York: " + ex); }
         }
 
         public static void WriteToSave()
@@ -124,6 +126,9 @@ namespace FoodTrucks
         public static void Detach()
         {
             World.Reset();
+            CityLicensing.Detach();
+            MapFilters.Clear();
+            TruckHatch.Forget();
             if (runtimeObject != null) Object.Destroy(runtimeObject);
             runtimeObject = null;
             game = null;

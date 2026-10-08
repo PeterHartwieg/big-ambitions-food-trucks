@@ -16,11 +16,12 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks
 {
-    // Debug and maintenance actions: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
+    // Debug and maintenance actions: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
     // Ctrl+Shift+F12 uninstall step. Also console commands when the game runs with -console.
     internal sealed class DebugActions : MonoBehaviour
     {
         private static readonly Action SpawnTruckAction = () => SpawnVehicle(FoodTrucksMod.TruckTypeName);
+        private static readonly Action LicenceAction = CityLicensing.GrantForTesting;
         private static readonly Action SpawnCartAction = () => SpawnVehicle(FoodTrucksMod.CartTypeName);
         private static readonly Action SpawnHandTruckAction = () => SpawnVehicle("ba:vehicletype_handtruck");
         private static readonly Action GripAction = LogGrip;
@@ -35,7 +36,8 @@ namespace FoodTrucks
         {
             try
             {
-                CommandHelper.AddCommand("foodtrucks_spawn_truck", "Food Trucks: spawn the test truck next to you", SpawnTruckAction);
+                CommandHelper.AddCommand("foodtrucks_spawn_truck", "Food Trucks: spawn a free food truck next to you (testing)", SpawnTruckAction);
+                CommandHelper.AddCommand("foodtrucks_licence", "Food Trucks: a free vendor licence and permits for every food vehicle (throwaway saves only)", LicenceAction);
                 CommandHelper.AddCommand("foodtrucks_spawn_cart", "Food Trucks: spawn a free food cart next to you (testing)", SpawnCartAction);
                 CommandHelper.AddCommand("foodtrucks_spawn_handtruck", "Food Trucks: spawn a vanilla hand truck to compare the grip", SpawnHandTruckAction);
                 CommandHelper.AddCommand("foodtrucks_zone_point", "Food Trucks: log where you stand, for drawing park zones", ZonePointAction);
@@ -47,7 +49,7 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_uninstall", "Food Trucks: remove and refund all Food Trucks vehicles (run twice to confirm)", UninstallAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.");
+            Log.Info("Debug actions ready: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.");
         }
 
         private void OnDisable()
@@ -55,6 +57,7 @@ namespace FoodTrucks
             try
             {
                 CommandHelper.RemoveCommand(SpawnTruckAction);
+                CommandHelper.RemoveCommand(LicenceAction);
                 CommandHelper.RemoveCommand(SpawnCartAction);
                 CommandHelper.RemoveCommand(SpawnHandTruckAction);
                 CommandHelper.RemoveCommand(GripAction);
@@ -74,7 +77,8 @@ namespace FoodTrucks
             if (keyboard == null || SaveGameManager.Current == null || GameManager.ShouldBlockKeyboardShortcuts()) return;
             if (!keyboard.ctrlKey.isPressed) return;
 
-            if (keyboard.f6Key.wasPressedThisFrame) Run("spawn truck", SpawnTruckAction);
+            if (keyboard.f6Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("licence", LicenceAction);
+            else if (keyboard.f6Key.wasPressedThisFrame) Run("spawn truck", SpawnTruckAction);
             else if (keyboard.f7Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("spawn hand truck", SpawnHandTruckAction);
             else if (keyboard.f7Key.wasPressedThisFrame) Run("spawn cart", SpawnCartAction);
             else if (keyboard.f11Key.wasPressedThisFrame) Run("grip", GripAction);
@@ -96,8 +100,7 @@ namespace FoodTrucks
             }
         }
 
-        // A free player-owned vehicle in front of the player: the test truck for the storage and sleep
-        // checks, or a cart where pushing one from the dealer would take too long.
+        // A free player-owned vehicle in front of the player, where buying one at the dealer would take too long.
         private static void SpawnVehicle(string typeName)
         {
             if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking)
@@ -114,7 +117,7 @@ namespace FoodTrucks
             var player = PlayerHelper.PlayerController.transform;
             var instance = new VehicleInstance(typeName) { fuel = type.maxFuel * 0.97f };
             // Both origins are vehicle centres; the car is longer.
-            var distance = type.spawnInPlayerObject ? 2f : 5f;
+            var distance = type.spawnInPlayerObject ? 2f : 6f;
             var controller = VehicleHelper.CreateAndSpawnVehicle(
                 instance, player.position + player.forward * distance, player.rotation);
             Log.Info($"Spawned {typeName}: id {instance.id}, controller {(controller == null ? "none" : controller.GetType().Name)}.");
@@ -215,11 +218,14 @@ namespace FoodTrucks
                 message += $" Taxable sales days {start}-{lastFinished}: {Money(sales)}; statement row {Money(row.Item2)}; " +
                            $"projected tax {TaxCalculationHelper.ToCurrencyFormat(projected.TotalTax)}.";
             }
+            message += state.Licence.HasVendorLicence ? $" Licence to day {state.Licence.LicenceExpiresOnDay}." : " No licence.";
             foreach (var vehicle in game.VehicleInstances)
             {
-                if (vehicle.vehicleTypeName != FoodTrucksMod.CartTypeName) continue;
+                var kind = FoodTrucksMod.KindOf(vehicle.vehicleTypeName);
+                if (kind == null) continue;
                 var record = StreetSales.Find(state, vehicle.id);
-                message += $" Cart {Short(vehicle.id)}: {(record?.IsOpen == true ? "open" : "closed")}, stock {CartSelling.StockUnits(vehicle)}, " +
+                message += $" {(kind == "truck" ? "Truck" : "Cart")} {Short(vehicle.id)}: {(record?.IsOpen == true ? "open" : "closed")}, " +
+                           $"{(record?.HasPermit == true ? "permit" : "no permit")}, stock {CartSelling.StockUnits(vehicle)}, " +
                            $"{record?.LifetimeSales ?? 0} sales, {CartSelling.Money(record?.LifetimeRevenueCents ?? 0)} lifetime.";
             }
             Log.Info(message);
@@ -240,19 +246,19 @@ namespace FoodTrucks
             }
             var game = SaveGameManager.Current;
             VehicleController? controller = null;
-            if (game.ActiveVehicleId != null && VehicleHelper.GetCurrentVehicle()?.vehicleTypeName == FoodTrucksMod.CartTypeName)
+            if (game.ActiveVehicleId != null && FoodTrucksMod.KindOf(VehicleHelper.GetCurrentVehicle()?.vehicleTypeName) != null)
                 controller = VehicleHelper.GetCurrentVehicleBase();
             if (controller == null)
             {
                 var player = PlayerHelper.GetPosition();
                 controller = VehicleHelper.AllPlayerVehicles
-                    .Where(v => v != null && v.vehicleInstance?.vehicleTypeName == FoodTrucksMod.CartTypeName)
+                    .Where(v => v != null && FoodTrucksMod.KindOf(v.vehicleInstance?.vehicleTypeName) != null)
                     .OrderBy(v => Vector3.Distance(v.transform.position, player))
                     .FirstOrDefault(v => Vector3.Distance(v.transform.position, player) <= 10f);
             }
             if (controller == null)
             {
-                Notify("Stand next to a food cart, or push one.");
+                Notify("Stand next to a food cart or truck, push the cart or drive the truck.");
                 return;
             }
             var position = controller.transform.position;

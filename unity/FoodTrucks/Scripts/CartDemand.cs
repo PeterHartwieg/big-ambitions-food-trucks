@@ -18,8 +18,9 @@ namespace FoodTrucks
         public CartPlan(MenuBuild menu, Dictionary<string, int> stock, DemandEstimate? estimate,
             double conversion, double capacity, double salesPerHour,
             IReadOnlyDictionary<string, double> buyerShares, double addOnsPerFoodBuyer,
-            IReadOnlyDictionary<string, string>? saleItems = null, string? addOnItem = null)
+            IReadOnlyDictionary<string, string>? saleItems = null, string? addOnItem = null, int staff = 1)
         {
+            Staff = Math.Max(1, staff);
             SaleItems = saleItems ?? new Dictionary<string, string>();
             AddOnItem = addOnItem;
             Menu = menu;
@@ -38,8 +39,11 @@ namespace FoodTrucks
         public DemandEstimate? Estimate { get; }
         // Share of interested passers who buy at the cart's prices.
         public double Conversion { get; }
-        // Customers the window can serve in an hour.
+        // Customers the window can serve in an hour with its full crew (Staff workers).
         public double Capacity { get; }
+        public int Staff { get; }
+        // What one worker makes in an hour, the player alone at the window.
+        public double CapacityPerServer => Capacity / Staff;
         public double SalesPerHour { get; }
         // Each category's part of the customers who buy: the model's shares times that category's
         // price conversion, normalised. Customers pick their main item by these.
@@ -56,10 +60,11 @@ namespace FoodTrucks
 
     internal static class CartDemand
     {
-        public const string Kind = "cart";
+        // The vehicle's kind in the data files; a vehicle of no known kind is treated as a cart.
+        public static string KindOf(VehicleInstance vehicle) => CargoLimit.VehicleKind(vehicle) ?? "cart";
 
         public static MenuBuild MenuOf(DemandTables tables, VehicleInstance cart) =>
-            Menu.FromCargo(tables, Kind, CargoLimit.Lines(cart));
+            Menu.FromCargo(tables, KindOf(cart), CargoLimit.Lines(cart));
 
         public static Dictionary<string, int> StockOf(VehicleInstance cart, Menu menu)
         {
@@ -116,7 +121,7 @@ namespace FoodTrucks
                 ? accepted.ToDictionary(p => p.Key, p => p.Value / conversion)
                 : new Dictionary<string, double>();
 
-            var staff = tables.Vehicle(Kind)?.Staff ?? 1;
+            var staff = tables.Vehicle(KindOf(cart))?.Staff ?? 1;
             // Service time from the items actually on sale, not every stocked one.
             var onSale = saleItems.Values.Distinct().OrderBy(k => k, StringComparer.Ordinal).ToList();
             var capacity = ServiceRate.CustomersPerHour(staff, ServiceRate.OrderMinutes(tables, onSale, buyerShares));
@@ -127,7 +132,7 @@ namespace FoodTrucks
             var (drink, drinkConversion) = BestAddOn(tables, spot, vehicle, stock);
             var foodShare = estimate.CustomerShares.Where(p => tables.Category(p.Key).AddOnFactor <= 0).Sum(p => p.Value);
             var addOns = drink == null || foodShare <= 0 ? 0 : estimate.AddOnsPerCustomer / foodShare * drinkConversion;
-            return new CartPlan(menu, stock, estimate, conversion, capacity, perHour, buyerShares, addOns, saleItems, drink);
+            return new CartPlan(menu, stock, estimate, conversion, capacity, perHour, buyerShares, addOns, saleItems, drink, staff);
         }
 
         // The stocked item of a category customers accept best at its price; ties go to more stock.

@@ -7,6 +7,7 @@ using BigAmbitions.DayNightCycle;
 using BigAmbitions.Items;
 using FoodTrucks.Core.Common;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Rules;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
@@ -20,8 +21,8 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Selling: Open parks the cart where it stands, if the spot is legal and the fitted equipment gives a
-    // menu. While it is open, Core's SalesSimulator runs every in-game minute: customers arrive at the rate
+    // Selling: Open parks the cart where it stands (or the truck where it stopped, in a legal parking space),
+    // if the player has a vendor licence, the vehicle a permit, and the fitted equipment gives a menu. While it is open, Core's SalesSimulator runs every in-game minute: customers arrive at the rate
     // the demand model gives for the spot and the hour (CartDemand), queue at the window and give up after
     // a while. The player serves while they stay close, at the speed of their customer service skill;
     // away from the window nobody serves, so the queue waits and thins out. Each customer buys one main
@@ -116,7 +117,7 @@ namespace FoodTrucks
             }
         }
 
-        // Called by the item panel's Open button while the player pushes a cart.
+        // Called by the item panel's Open button while the player pushes a cart or sits in a stopped truck.
         public static void OpenHere(ItemPanelUI panel)
         {
             try { instance?.Open(panel); }
@@ -131,7 +132,8 @@ namespace FoodTrucks
         {
             var state = FoodTrucksSession.CurrentState;
             var cart = VehicleHelper.GetCurrentVehicle();
-            if (cart == null || cart.vehicleTypeName != FoodTrucksMod.CartTypeName) return;
+            var kind = FoodTrucksMod.KindOf(cart?.vehicleTypeName);
+            if (cart == null || kind == null) return;
             if (state == null || !FoodTrucksSession.CanWrite)
             {
                 Notify("foodtrucks:notification_data_readonly");
@@ -139,57 +141,91 @@ namespace FoodTrucks
             }
             if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking)
             {
-                Notify("foodtrucks:notification_open_outside");
+                Say("foodtrucks:notification_open_outside", kind);
                 return;
             }
             var tables = DemandData.Tables;
-            if (tables == null || DemandData.Rules == null)
+            var rules = DemandData.Rules;
+            if (tables == null || rules == null)
             {
                 Notify("foodtrucks:notification_open_no_data");
                 return;
             }
             if (cart.cargoInstances.Any(c => !c.paid))
             {
-                Notify("foodtrucks:notification_open_unpaid");
+                Say("foodtrucks:notification_open_unpaid", kind);
                 return;
             }
             var menu = CartDemand.MenuOf(tables, cart);
             if (menu.Problem == MenuProblem.TooMuchEquipment)
             {
-                Notify("foodtrucks:notification_open_too_much_equipment", ("slots", (tables.Vehicle(CartDemand.Kind)?.EquipmentSlots ?? 0).ToString()));
+                Say("foodtrucks:notification_open_too_much_equipment", kind, ("slots", (tables.Vehicle(kind)?.EquipmentSlots ?? 0).ToString()));
                 return;
             }
             if (menu.Problem != MenuProblem.None || menu.Menu.Items.Count == 0)
             {
-                Log.Info($"Open: cart {cart.id} has no usable equipment ({menu.Problem} {menu.Detail}).");
-                Notify("foodtrucks:notification_open_no_equipment");
+                Log.Info($"Open: {kind} {cart.id} has no usable equipment ({menu.Problem} {menu.Detail}).");
+                Say("foodtrucks:notification_open_no_equipment", kind);
                 return;
             }
             if (CartDemand.StockOf(cart, menu.Menu).Count == 0)
             {
-                Notify("foodtrucks:notification_open_no_stock");
+                Say("foodtrucks:notification_open_no_stock", kind);
                 return;
             }
+
+            // The city's rules come before the spot's: the player's vendor licence and the vehicle's permit.
+            var vehicle = StreetSales.GetOrAdd(state, cart.id);
+            if (string.IsNullOrEmpty(vehicle.VehicleType)) vehicle.VehicleType = kind;
+            var licensing = Licensing.CanOpen(state, cart.id, SaveGameManager.Current.Day, playerAtWindow: true, hires: 0);
+            if (licensing != OpenProblem.None)
+            {
+                Log.Info($"Open: {kind} {cart.id} refused: {licensing}; licence valid to day {state.Licence.LicenceExpiresOnDay}, permit {vehicle.HasPermit}.");
+                Say(LicensingKey(licensing), kind);
+                return;
+            }
+
             var controller = VehicleHelper.GetCurrentVehicleBase();
             var position = controller != null ? controller.transform.position : PlayerHelper.GetPosition();
-            var legality = Legality.Check(position);
-            Log.Info($"Open: cart {cart.id} at {position}: {legality.Detail}; road layer below: {(legality.RoadBelow ? "yes" : "no")}.");
-            if (!legality.Legal)
+            if (kind == "truck")
             {
-                Notify(legality.RuleKey!);
-                return;
+                // A truck sells from a legal parking space: the game's own check, the one parking fees use.
+                var parking = panel.vehicleInfo != null ? panel.vehicleInfo.currentParkingState : ParkingState.NotAvailable;
+                Log.Info($"Open: truck {cart.id} at {position}: parking {parking}.");
+                if (parking != ParkingState.Legal)
+                {
+                    Notify(parking == ParkingState.NotAvailable ? "foodtrucks:legality_truck_moving" : "foodtrucks:legality_truck_parking");
+                    return;
+                }
+                // The hatch is on the right: with it towards the road, nobody could reach the window.
+                if (controller != null && !QueueLine.HasWindowPlace(controller.transform, kind))
+                {
+                    Log.Info($"Open: truck {cart.id} has no pavement beside its hatch.");
+                    Notify("foodtrucks:legality_truck_hatch");
+                    return;
+                }
+            }
+            else
+            {
+                var legality = Legality.Check(position);
+                Log.Info($"Open: cart {cart.id} at {position}: {legality.Detail}; road layer below: {(legality.RoadBelow ? "yes" : "no")}.");
+                if (!legality.Legal)
+                {
+                    Notify(legality.RuleKey!);
+                    return;
+                }
             }
 
             // The game's own Park button: it checks the panel state and refuses where parking is not allowed.
+            // For a truck it is the way out of the driver's seat.
             panel.ClickPark();
             if (SaveGameManager.Current.ActiveVehicleId == cart.id)
             {
-                Log.Info($"Open: cart {cart.id} could not be parked here.");
-                Notify("foodtrucks:notification_open_cannot_park");
+                Log.Info($"Open: {kind} {cart.id} could not be parked here.");
+                Say("foodtrucks:notification_open_cannot_park", kind);
                 return;
             }
 
-            var vehicle = StreetSales.GetOrAdd(state, cart.id);
             vehicle.IsOpen = true;
             vehicle.SaleProgress = 0;
             vehicle.Service = SalesSimulator.Open(Seed(cart.id));
@@ -199,12 +235,24 @@ namespace FoodTrucks
             lostSinceOpen.Remove(cart.id);
             var spot = World.ReadSpot(tables, position);
             spots[cart.id] = spot;
+            TruckHatch.Set(controller, true);
             FoodTrucksSession.MarkChanged();
             var plan = CartDemand.Plan(tables, cart, spot);
-            var service = Service(DemandData.Rules);
-            Log.Info($"Cart {cart.id} open on day {TimeHelper.CurrentDay} at {TimeHelper.CurrentHour:D2}:{(int)TimeHelper.CurrentMinute:D2}: {World.Describe(spot)}; {CartDemand.Describe(plan)} " +
-                     $"Window: customer service skill {service.Skill:F0}, speed {service.Speed:F2}, {plan.Capacity * service.Speed:F0} an hour at most, customers {service.Mood.ToString().ToLowerInvariant()}; queue limit {service.QueueLimit}.");
-            Notify("foodtrucks:notification_open", ("units", plan.StockUnits.ToString()), ("rate", ExpectedSales(plan, service.Speed).ToString("F0")));
+            var service = Service(rules, kind);
+            Log.Info($"{Title(kind)} {cart.id} open on day {TimeHelper.CurrentDay} at {TimeHelper.CurrentHour:D2}:{(int)TimeHelper.CurrentMinute:D2}: {World.Describe(spot)}; {CartDemand.Describe(plan)} " +
+                     $"Window: customer service skill {service.Skill:F0}, speed {service.Speed:F2}, {plan.CapacityPerServer * service.Speed:F0} an hour at most, customers {service.Mood.ToString().ToLowerInvariant()}; queue limit {service.QueueLimit}.");
+            Say("foodtrucks:notification_open", kind, ("units", plan.StockUnits.ToString()), ("rate", ExpectedSales(plan, service.Speed).ToString("F0")));
+        }
+
+        private static string LicensingKey(OpenProblem problem)
+        {
+            switch (problem)
+            {
+                case OpenProblem.NoLicence: return "foodtrucks:notification_open_no_licence";
+                case OpenProblem.LicenceExpired: return "foodtrucks:notification_open_licence_expired";
+                case OpenProblem.NoPermit: return "foodtrucks:notification_open_no_permit";
+                default: return "foodtrucks:notification_open_failed";
+            }
         }
 
         // The window as the player works it: their customer service skill sets the speed (Core: ServiceRules).
@@ -225,11 +273,11 @@ namespace FoodTrucks
             public int QueueLimit { get; }
         }
 
-        private static Window Service(RuleTables rules)
+        private static Window Service(RuleTables rules, string kind)
         {
             var skill = ServiceRules.EffectiveSkill(PlayerSkill(), 100);
             return new Window(skill, rules.Service.Speed(skill), rules.Service.Mood(skill),
-                rules.Service.QueueLimit(CartDemand.Kind, rules.Queue.MaxQueue));
+                rules.Service.QueueLimit(kind, rules.Queue.MaxQueue));
         }
 
         // The player's customer service skill [code, unverified in game]: the first character in the save is
@@ -246,17 +294,19 @@ namespace FoodTrucks
         // Each opening gets its own customers: the cart and the minute it opened.
         private static long Seed(string vehicleId) => SeededRandom.SeedFor(vehicleId, (long)Math.Floor(TimeHelper.NowInMinutes()));
 
-        // Sales an hour while the player serves: the customers who buy, up to what the window can make.
+        // Sales an hour while the player serves alone: the customers who buy, up to what one worker can make.
         private static double ExpectedSales(CartPlan plan, double speed) =>
-            plan.Estimate == null ? 0 : Math.Min(plan.Estimate.CustomersPerHour * plan.Conversion, plan.Capacity * speed);
+            plan.Estimate == null ? 0 : Math.Min(plan.Estimate.CustomersPerHour * plan.Conversion, plan.CapacityPerServer * speed);
 
         private void OnEnterVehicle(VehicleController controller)
         {
             try
             {
                 var cart = controller?.vehicleInstance;
-                if (cart == null || cart.vehicleTypeName != FoodTrucksMod.CartTypeName) return;
+                if (cart == null || FoodTrucksMod.KindOf(cart.vehicleTypeName) == null) return;
                 PrefabFixes.ApplyTo(controller);
+                // Driving off or grabbing the cart closes the window.
+                TruckHatch.Set(controller, false);
                 var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, cart.id);
                 if (vehicle != null && vehicle.IsOpen && FoodTrucksSession.CanWrite) Close(vehicle, "foodtrucks:notification_closed");
             }
@@ -272,6 +322,7 @@ namespace FoodTrucks
             if (vehicle.Service != null) CountLost(vehicle.VehicleId, SalesSimulator.Close(vehicle.Service));
             vehicle.Service = null;
             CartQueueView.Closed(vehicle.VehicleId);
+            TruckHatch.Set(ControllerOf(vehicle.VehicleId), false);
             simulatedUntil.Remove(vehicle.VehicleId);
             pausedNoticeShown.Remove(vehicle.VehicleId);
             sinceOpen.TryGetValue(vehicle.VehicleId, out var totals);
@@ -280,11 +331,23 @@ namespace FoodTrucks
             lostSinceOpen.Remove(vehicle.VehicleId);
             spots.Remove(vehicle.VehicleId);
             FoodTrucksSession.MarkChanged();
-            Log.Info($"Cart {vehicle.VehicleId} closed ({messageKey}): {totals.Sales} sales, {Money(totals.Cents)} since opening; " +
+            var kind = KindOf(vehicle);
+            Log.Info($"{Title(kind)} {vehicle.VehicleId} closed ({messageKey}): {totals.Sales} sales, {Money(totals.Cents)} since opening; " +
                      $"walked away: {Lost(lost, CustomerExit.GaveUp)} tired of waiting, {Lost(lost, CustomerExit.QueueFull)} at a full queue, " +
                      $"{Lost(lost, CustomerExit.NothingLeft)} found nothing left, {Lost(lost, CustomerExit.Closed)} at closing; " +
                      $"lifetime {vehicle.LifetimeSales} sales, {Money(vehicle.LifetimeRevenueCents)}.");
-            Notify(messageKey, ("sales", totals.Sales.ToString()), ("revenue", Money(totals.Cents)));
+            Say(messageKey, kind, ("sales", totals.Sales.ToString()), ("revenue", Money(totals.Cents)));
+        }
+
+        private static string KindOf(VehicleState vehicle) =>
+            string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType;
+
+        private static string Title(string kind) => kind == "truck" ? "Truck" : "Cart";
+
+        private static VehicleController? ControllerOf(string vehicleId)
+        {
+            var found = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicleId);
+            return found == null ? null : VehicleHelper.GetVehicleController(found);
         }
 
         private static int Lost(Dictionary<CustomerExit, int>? lost, CustomerExit exit) =>
@@ -312,6 +375,7 @@ namespace FoodTrucks
                 vehicle.IsOpen = false;
                 vehicle.SaleProgress = 0;
                 vehicle.Service = null;
+                TruckHatch.Set(ControllerOf(vehicle.VehicleId), false);
             }
             CartQueueView.ClearAll();
             instance?.simulatedUntil.Clear();
@@ -373,6 +437,14 @@ namespace FoodTrucks
                 Close(vehicle, "foodtrucks:notification_closed_error");
                 return;
             }
+            // The licence ran out while open (a new day began).
+            if (!Licensing.IsValid(state.Licence, SaveGameManager.Current.Day))
+            {
+                Close(vehicle, state.Licence.HasVendorLicence ? "foodtrucks:notification_closed_licence" : "foodtrucks:notification_closed_no_licence");
+                return;
+            }
+            // A truck loaded open, or respawned near the player, shows its hatch open.
+            TruckHatch.Set(VehicleHelper.GetVehicleController(cart), true);
             // Customers nobody can see any more, or who never reached the window, pay now.
             if (!CartQueueView.Showing(vehicle.VehicleId)) PayHeld(vehicle, null);
             else PayHeld(vehicle, h => now - h.Minute > MaxHeldMinutes);
@@ -382,7 +454,7 @@ namespace FoodTrucks
             var atWindow = PlayerIsAtCart(cart);
             if (!atWindow)
             {
-                if (pausedNoticeShown.Add(vehicle.VehicleId)) Notify("foodtrucks:notification_paused");
+                if (pausedNoticeShown.Add(vehicle.VehicleId)) Say("foodtrucks:notification_paused", KindOf(vehicle));
             }
             else pausedNoticeShown.Remove(vehicle.VehicleId);
 
@@ -409,7 +481,7 @@ namespace FoodTrucks
             // A cart opened before 0.4.0 has no queue yet; it starts one now.
             vehicle.Service ??= SalesSimulator.Open(Seed(cart.id));
             simulator ??= new SalesSimulator(tables, rules.Queue);
-            var window = Service(rules);
+            var window = Service(rules, CartDemand.KindOf(cart));
             var result = simulator.Advance(vehicle.Service, Input(tables, plan, atWindow ? 1 : 0, window), elapsed);
             CountLost(vehicle.VehicleId, result);
             var failed = false;
@@ -649,6 +721,10 @@ namespace FoodTrucks
 
         internal static string Money(long cents) =>
             TaxCalculationHelper.ToCurrencyFormat(TaxCalculationHelper.RoundCurrency(cents / 100f));
+
+        // A message about one vehicle: {vehicle} in the text is "cart" or "truck".
+        internal static void Say(string key, string kind, params (string Key, string Value)[] data) =>
+            Notify(key, data.Concat(new[] { ("vehicle", LocalizorManager.GetLocalization("foodtrucks:noun_" + kind, null)) }).ToArray());
 
         internal static void Notify(string key, params (string Key, string Value)[] data)
         {

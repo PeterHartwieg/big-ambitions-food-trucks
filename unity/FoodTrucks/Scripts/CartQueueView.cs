@@ -184,8 +184,9 @@ namespace FoodTrucks
                 if (game.ActiveVehicleId == vehicle.VehicleId) continue;
                 var controller = ControllerOf(game, vehicle.VehicleId);
                 if (controller == null || Vector3.Distance(player, controller.transform.position) > ViewMetres) continue;
-                var limit = rules.Service.QueueLimit(CartDemand.Kind, rules.Queue.MaxQueue);
-                var line = QueueLine.Create(vehicle.VehicleId, controller.transform, limit, vehicle.Service);
+                var kind = FoodTrucksMod.KindOf(controller.vehicleInstance?.vehicleTypeName) ?? "cart";
+                var limit = rules.Service.QueueLimit(kind, rules.Queue.MaxQueue);
+                var line = QueueLine.Create(vehicle.VehicleId, controller.transform, limit, vehicle.Service, WindowShape.For(kind));
                 line.OnSpawned = () => spawnedTotal++;
                 var id = vehicle.VehicleId;
                 line.Paid = customer => CartSelling.Paid(id, customer);
@@ -200,6 +201,37 @@ namespace FoodTrucks
         }
     }
 
+    // Where a vehicle's window is, relative to its middle: Sideways metres to the window place, Along metres
+    // forward of the middle, on which sides. A cart serves from either side; the truck's hatch is on its right
+    // (art/README.md: opening at x 1.10, centre z -1.10), so its line is always on the right.
+    internal sealed class WindowShape
+    {
+        private WindowShape(float sideways, float reach, float along, int[] sides, bool pavementOnly)
+        {
+            PavementOnly = pavementOnly;
+            Sideways = sideways;
+            Reach = reach;
+            Along = along;
+            Sides = sides;
+        }
+
+        public float Sideways { get; }
+        // How far out a place may be found when the nearest one isn't pavement: a truck in a wide parking
+        // space has its hatch side over the lane, and the line starts at the kerb instead.
+        public float Reach { get; }
+        public float Along { get; }
+        // No place on the road layer or on a crosswalk: a truck's hatch side may face the street, a cart's
+        // two sides are always on the pavement it stands on. The road layer read "no" at every pavement spot
+        // logged so far; whether it covers streets is unverified.
+        public bool PavementOnly { get; }
+        public int[] Sides { get; }
+
+        private static readonly WindowShape Cart = new WindowShape(1.05f, 1.05f, 0f, new[] { 1, -1 }, pavementOnly: false);
+        private static readonly WindowShape Truck = new WindowShape(1.80f, 3.40f, -1.10f, new[] { 1 }, pavementOnly: true);
+
+        public static WindowShape For(string kind) => kind == "truck" ? Truck : Cart;
+    }
+
     // Marks a line's root object, so a later runtime can find and remove what an earlier one left.
     internal sealed class QueueLineRoot : MonoBehaviour
     {
@@ -208,8 +240,7 @@ namespace FoodTrucks
     // One cart's line: the places along the pavement, the ways in and out, and the people.
     internal sealed class QueueLine
     {
-        // Metres from the cart's middle to the window place, sideways, and between people in line.
-        private const float WindowOffset = 1.05f;
+        // Metres between people in line.
         private const float Spacing = 0.8f;
         // How long a served customer stands at the window in all, in game-speed seconds (an in-game minute is
         // a second at normal speed): taking the order, paying, picking it up. Shorter while others wait to pay.
@@ -269,9 +300,9 @@ namespace FoodTrucks
         public bool Finished => Count == 0 || Time.time - closedAt > ClosingSeconds;
 
         // Places for the window, the queue limit and a few served customers on their way.
-        public static QueueLine Create(string vehicleId, Transform cart, int queueLimit, ServiceState service)
+        public static QueueLine Create(string vehicleId, Transform cart, int queueLimit, ServiceState service, WindowShape shape)
         {
-            var (places, look, ends, detail) = Layout(cart, queueLimit + 1 + ExtraPlaces);
+            var (places, look, ends, detail) = Layout(cart, queueLimit + 1 + ExtraPlaces, shape);
             var root = new GameObject("FoodTrucks.Queue." + vehicleId);
             root.AddComponent<QueueLineRoot>();
             Log.Info($"Queue view: line at cart {vehicleId}: {detail}.");
@@ -474,21 +505,21 @@ namespace FoodTrucks
             return NavMesh.SamplePosition(wanted, out var hit, 4f, QueuePerson.Filter) ? hit.position : wanted;
         }
 
-        // The line runs from a window place beside the cart along its length, on whichever side and in
-        // whichever direction keeps the most places on walkable pavement, out of parking lanes and off the road.
-        // No walkable window place at all: the line has no places and shows nobody.
-        private static (List<Vector3> Places, Vector3 Look, List<Vector3> Ends, string Detail) Layout(Transform cart, int count)
+        // The line runs from a window place beside the vehicle along its length, on whichever of the window's
+        // sides and in whichever direction keeps the most places on walkable pavement, out of parking lanes and
+        // off the road. No walkable window place at all: the line has no places and shows nobody.
+        private static (List<Vector3> Places, Vector3 Look, List<Vector3> Ends, string Detail) Layout(Transform cart, int count, WindowShape shape)
         {
-            var center = cart.position;
             var forward = Direction(cart.forward);
             var right = Direction(cart.right);
+            var center = cart.position + forward * shape.Along;
             var filter = QueuePerson.Filter;
 
             var best = new List<Vector3>();
             var bestScore = int.MinValue;
             var bestSide = 1;
             var bestDirection = 1;
-            foreach (var side in new[] { 1, -1 })
+            foreach (var side in shape.Sides)
             {
                 foreach (var direction in new[] { 1, -1 })
                 {
@@ -496,11 +527,10 @@ namespace FoodTrucks
                     var roads = 0;
                     for (var k = 0; k < count; k++)
                     {
-                        var wanted = center + right * (side * WindowOffset) + forward * (direction * k * Spacing);
-                        if (!NavMesh.SamplePosition(wanted, out var hit, 0.6f, filter) || FlatDistance(hit.position, wanted) > 0.45f) break;
-                        if (Legality.InParkingLane(hit.position)) break;
-                        if (Legality.RoadBelow(hit.position)) roads++;
-                        placed.Add(hit.position);
+                        var place = PlaceBeside(center, right * side, forward * (direction * k * Spacing), shape, filter);
+                        if (place == null) break;
+                        if (Legality.RoadBelow(place.Value)) roads++;
+                        placed.Add(place.Value);
                     }
                     var score = placed.Count * 10 - roads * 3;
                     if (score > bestScore)
@@ -512,15 +542,16 @@ namespace FoodTrucks
                     }
                 }
             }
-            if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the cart at {center}; nobody shown");
+            if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the window at {center}; nobody shown");
 
             // Ways in and out: points on the pavement a little way along in both directions, reachable from the window.
             var ends = new List<Vector3>();
             var path = new NavMeshPath();
             foreach (var along in new[] { 11f, -9f, 15f, -13f, 19f, -17f })
             {
-                var wanted = center + forward * (bestDirection * along) + right * (bestSide * UnityEngine.Random.Range(0.6f, 2.4f));
+                var wanted = center + forward * (bestDirection * along) + right * (bestSide * UnityEngine.Random.Range(shape.Sideways - 0.45f, shape.Reach + 1.35f));
                 if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter)) continue;
+                if (shape.PavementOnly && (Legality.InParkingLane(hit.position) || Legality.RoadBelow(hit.position) || Legality.NearCrosswalk(hit.position, 0.5f))) continue;
                 if (!NavMesh.CalculatePath(hit.position, best[0], filter, path) || path.status != NavMeshPathStatus.PathComplete) continue;
                 ends.Add(hit.position);
             }
@@ -529,12 +560,37 @@ namespace FoodTrucks
                 var angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
                 var wanted = center + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * UnityEngine.Random.Range(9f, 16f);
                 if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter)) continue;
+                if (shape.PavementOnly && (Legality.InParkingLane(hit.position) || Legality.RoadBelow(hit.position) || Legality.NearCrosswalk(hit.position, 0.5f))) continue;
                 if (!NavMesh.CalculatePath(hit.position, best[0], filter, path) || path.status != NavMeshPathStatus.PathComplete) continue;
                 ends.Add(hit.position);
             }
             var detail = $"{best.Count} of {count} places on the {(bestSide > 0 ? "right" : "left")} side towards the {(bestDirection > 0 ? "front" : "back")}, " +
                          $"{ends.Count} ways in and out";
             return (best, center, ends, detail);
+        }
+
+        // The nearest walkable place out of parking lanes beside the window, from Sideways out to Reach.
+        private static Vector3? PlaceBeside(Vector3 center, Vector3 outward, Vector3 along, WindowShape shape, NavMeshQueryFilter filter)
+        {
+            for (var sideways = shape.Sideways; sideways <= shape.Reach + 0.01f; sideways += 0.4f)
+            {
+                var wanted = center + outward * sideways + along;
+                if (!NavMesh.SamplePosition(wanted, out var hit, 0.6f, filter) || FlatDistance(hit.position, wanted) > 0.45f) continue;
+                if (Legality.InParkingLane(hit.position)) continue;
+                if (shape.PavementOnly && (Legality.RoadBelow(hit.position) || Legality.NearCrosswalk(hit.position, 0.5f))) continue;
+                return hit.position;
+            }
+            return null;
+        }
+
+        // Whether the vehicle's window has pavement beside it, for refusing a truck parked with its hatch to the road.
+        public static bool HasWindowPlace(Transform vehicle, string kind)
+        {
+            var shape = WindowShape.For(kind);
+            var forward = Direction(vehicle.forward);
+            var right = Direction(vehicle.right);
+            var center = vehicle.position + forward * shape.Along;
+            return shape.Sides.Any(side => PlaceBeside(center, right * side, Vector3.zero, shape, QueuePerson.Filter) != null);
         }
 
         private static Vector3 Direction(Vector3 v)

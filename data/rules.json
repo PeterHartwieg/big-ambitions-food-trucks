@@ -50,16 +50,12 @@
     "maxFootfallBonus": 0.30
   },
 
-  "_fleet": "The vendor licence lasts licenceDays and can be renewed in its last renewWindowDays. The fleet starts with one permit and gains one per unlock reached, by days since the first licence or by items sold across the fleet, up to maxPermits (the mod setting's default). travel is the game's own timing [code, unverified in game]: a taxi takes 0.04 game minutes per straight-line metre, and a cart moves at the 1.2 m/s walking pace, so a hire pushing a cart covers about 72 m per game hour at normal speed.",
+  "_fleet": "The vendor licence lasts licenceDays and can be renewed in its last renewWindowDays; the City of New York sells it by phone for licenceFee dollars, and a permit for each cart or truck for permitFee. Both fees are tax-deductible and placeholders until the balance pass. There is no cap on the number of permits. travel is the game's own timing [code, unverified in game]: a taxi takes 0.04 game minutes per straight-line metre, and a cart moves at the 1.2 m/s walking pace, so a hire pushing a cart covers about 72 m per game hour at normal speed.",
   "fleet": {
     "licenceDays": 60,
     "renewWindowDays": 10,
-    "maxPermits": 4,
-    "permitUnlocks": [
-      { "days": 14, "lifetimeSales": 400 },
-      { "days": 35, "lifetimeSales": 1500 },
-      { "days": 70, "lifetimeSales": 4000 }
-    ],
+    "licenceFee": 250,
+    "permitFee": 500,
     "travel": { "driveMinutesPerMetre": 0.04, "pushMetresPerSecond": 1.2, "roadFactor": 1.0 },
     "schedules": { "maxStops": 6, "latestCloseMinute": 1620 }
   },

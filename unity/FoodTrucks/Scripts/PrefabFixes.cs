@@ -6,7 +6,7 @@ using UnityEngine;
 namespace FoodTrucks
 {
     // Settings the mod's prefabs can only get from vanilla prefabs at runtime:
-    // the hand truck's grip rotations for the cart, and a car's sleep setup for the test truck.
+    // the hand truck's grip rotations for the cart, and a car's sleep setup for the truck.
     // Applied to the prefab assets (for later spawns) and to vehicles already in the world.
     internal static class PrefabFixes
     {
@@ -28,7 +28,7 @@ namespace FoodTrucks
 
             if (vanillaCart == null) Log.Error($"Prefab fixes: {VanillaHandTruck} not found; the cart keeps its own grip.");
             else if (!loggedVanilla) LogVanillaGrip(vanillaCart);
-            if (vanillaCar == null) Log.Error($"Prefab fixes: {VanillaCar} not found; the test truck has no sleep setup.");
+            if (vanillaCar == null) Log.Error($"Prefab fixes: {VanillaCar} not found; the truck has no sleep setup.");
 
             var bundle = FoodTrucksMod.Bundle;
             if (bundle != null)

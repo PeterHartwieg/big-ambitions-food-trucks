@@ -39,10 +39,7 @@ namespace FoodTrucks.Core.Demand
                 if (place == null || !IsFinite(place.DistanceMetres) || place.DistanceMetres < 0 ||
                     place.DistanceMetres > settings.RadiusMetres) continue;
 
-                IReadOnlyDictionary<string, double>? rule = null;
-                if (place.BusinessType != null) settings.BusinessTypes.TryGetValue(place.BusinessType, out rule);
-                if (rule == null && place.BuildingType != null)
-                    settings.BuildingTypes.TryGetValue(place.BuildingType, out rule);
+                var rule = RuleFor(place.BuildingType, place.BusinessType);
                 if (rule == null) continue;
 
                 var factor = 1.0 - (1.0 - settings.EdgeWeight) * (place.DistanceMetres / settings.RadiusMetres);
@@ -71,6 +68,20 @@ namespace FoodTrucks.Core.Demand
             return AreaMix.FromPresences(totals.OrderByDescending(pair => pair.Value)
                 .ThenBy(pair => pair.Key, StringComparer.Ordinal));
         }
+
+        // The areas a building votes for: its business type's rule, else its building type's; null for neither.
+        public IReadOnlyDictionary<string, double>? RuleFor(string? buildingType, string? businessType)
+        {
+            var settings = tables.Classifier;
+            IReadOnlyDictionary<string, double>? rule = null;
+            if (businessType != null) settings.BusinessTypes.TryGetValue(businessType, out rule);
+            if (rule == null && buildingType != null) settings.BuildingTypes.TryGetValue(buildingType, out rule);
+            return rule;
+        }
+
+        // Whether a building brings the area's crowd to the spots around it.
+        public bool Draws(string area, string? buildingType, string? businessType) =>
+            RuleFor(buildingType, businessType) is { } rule && rule.TryGetValue(area, out var weight) && weight > 0;
 
         public AreaMix ApplyZones(AreaMix automatic, double x, double z)
         {

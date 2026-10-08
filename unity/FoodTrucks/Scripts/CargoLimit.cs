@@ -17,13 +17,7 @@ namespace FoodTrucks
     {
         [ThreadStatic] private static bool inside;
 
-        public static string? VehicleKind(VehicleInstance? vehicle)
-        {
-            var type = vehicle?.vehicleTypeName;
-            if (type == FoodTrucksMod.CartTypeName) return "cart";
-            if (type == FoodTrucksMod.TruckTypeName) return "truck";
-            return null;
-        }
+        public static string? VehicleKind(VehicleInstance? vehicle) => FoodTrucksMod.KindOf(vehicle?.vehicleTypeName);
 
         public static IEnumerable<CargoLine> Lines(VehicleInstance vehicle) =>
             vehicle.cargoInstances.Where(c => c != null).Select(c =>

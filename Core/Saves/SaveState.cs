@@ -39,10 +39,8 @@ namespace FoodTrucks.Core.Saves
         public bool HasVendorLicence { get; set; }
         // The last day the licence is valid.
         public int LicenceExpiresOnDay { get; set; }
-        // The day the first licence was bought: the clock for permit unlocks.
+        // The day the first licence was bought.
         public int? FirstLicensedDay { get; set; }
-        // The highest permit cap reached. The cap never drops, even when vehicles with sales leave the fleet.
-        public int PermitsUnlocked { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -59,7 +57,7 @@ namespace FoodTrucks.Core.Saves
         public Dictionary<string, long> CustomPriceCents { get; set; } = new Dictionary<string, long>(StringComparer.Ordinal);
         // The queue and the orders at the window while open (SalesSimulator); null when closed.
         public ServiceState? Service { get; set; }
-        // "cart" or "truck", as in economy.json. Empty for vehicles saved before Milestone 4.
+        // "cart" or "truck", as in economy.json. Set when the mod first sees the vehicle.
         public string VehicleType { get; set; } = string.Empty;
         public bool HasPermit { get; set; }
         // A hire's route; null when the player runs the vehicle.

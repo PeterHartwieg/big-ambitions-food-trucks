@@ -12,8 +12,8 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 | Bakery mod | Optional. If installed, its goods can be sold from a display case. |
 | Moving | The player drives the vehicle, parks and opens. |
 | Staffing | The player works the window first. Hires can run a vehicle alone, including driving it between spots on a schedule, in version 1. |
-| Long run | A small fleet is possible, capped by permits. Never a replacement for buildings. |
-| Licence | Fee plus the game's existing Food Safety course. |
+| Long run | A small fleet is possible. Each vehicle needs its own permit; there is no cap on their number (Peter, 8 October 2026). Never a replacement for buildings. |
+| Licence | Fee plus the game's existing Food Safety course, bought by phone from the City of New York. |
 | Pitches | Park anywhere legal, plus curated premium spots and temporary event pitches. Area type is automatic from nearby buildings, with hand-drawn zones on top. |
 | Illegal spot | The Open button is disabled and says why. No fines. |
 | Equipment | Version 1: plain inventory, no placement. The game's own equipment items (hot dog grill, coffee machine and so on): carry one to the vehicle and click it to fit it; fitted equipment uses cargo space. Later: place equipment inside the truck ("tetris"). |
@@ -43,7 +43,7 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 3. Push or tow the cart to a pitch, open, serve the queue yourself.
 4. Sell out or close, restock, move to the next pitch for the next peak.
 5. Save up for a truck: more menu slots, more stock, more staff, catering.
-6. Hire staff and add trucks until the permit cap stops you.
+6. Hire staff and add trucks, each with its own permit.
 
 The day is shaped by the demand curve. A good day is a breakfast or lunch pitch in an office area, a restock, and an evening pitch near nightlife or a market. Finding a good spot is the reward: a pitch where offices, venues and transit meet can carry a whole day, and staying there is fine. Moving pays when a spot's peak has passed and another spot's is starting (Peter, 8 October 2026; replaces the earlier rule that staying must earn clearly less).
 
@@ -52,11 +52,12 @@ The day is shaped by the demand curve. A good day is a breakfast or lunch pitch 
 NYC separates the vendor licence (a person) from the permit (a cart or truck), and caps the permits at 5,100 citywide. The mod keeps both layers.
 
 - **Vendor licence.** Needs the game's existing Food Safety course. One fee, renewed every 60 in-game days. The player needs it to open. A vehicle's permit covers its crew, so hires don't need the course.
-- **Vehicle permit.** One per cart or truck, bought at a city office. The fleet cap comes from the permit count: one permit at the start, more unlocked by reputation or days in business, up to a setting (default 4).
+- **Vehicle permit.** One per cart or truck. No cap on the number of permits.
+- **Where.** Both are bought by phone: the game's City of New York contact (the one that sends parking tickets) gets a call dialog. The game has no city hall.
 
 No waiting list and no grey market in version 1. Both are easy to add later as settings.
 
-Decided while building the Core (8 October 2026; numbers in `data/rules.json`): the licence can be renewed in its last 10 days and a renewal adds a full 60 days. Permits unlock at 14, 35 and 70 days in business, or sooner at 400, 1,500 and 4,000 items sold, and a cap once reached never drops. Vehicles from saves made before permits existed get one free.
+Decided while building the Core (8 October 2026; numbers in `data/rules.json`): the licence can be renewed in its last 10 days and a renewal adds a full 60 days. The city texts when renewal opens and when the licence has run out. First fees, placeholders until the balance pass: $250 a licence, $500 a permit, both tax-deductible. The permit cap the Core first had (unlocks by days and sales) was dropped before Milestone 4's game side, and so was the free permit for older saves: the mod is unreleased.
 
 ## Vehicles
 
@@ -345,7 +346,7 @@ The official mod API is thin: business and vehicle registration, options, asset 
 
 ## Versions
 
-**Version 1.** Cart and truck, licence with course, permits with a fleet cap, equipment as inventory, anywhere-legal plus premium and event pitches, the thematic demand model with weather and seasons, live crowds from nightclubs, theatres, offices and factories (opening hours for all venues, real counts for the player's own), the Street food map filters, partnerships with the player's own venues, visible queues, catering gigs, health grades, regulars, same-food competition between the player's vehicles, per-save state. The player works the window; hires can serve alone and drive a vehicle along a schedule.
+**Version 1.** Cart and truck, licence with course, a permit per vehicle, equipment as inventory, anywhere-legal plus premium and event pitches, the thematic demand model with weather and seasons, live crowds from nightclubs, theatres, offices and factories (opening hours for all venues, real counts for the player's own), the Street food map filters, partnerships with the player's own venues, visible queues, catering gigs, health grades, regulars, same-food competition between the player's vehicles, per-save state. The player works the window; hires can serve alone and drive a vehicle along a schedule.
 
 **Later.** A commissary as the vehicles' home base: rented storage that wholesalers deliver to, where vehicles restock and park overnight, as NYC requires. Partnerships with AI venues. Equipment placement inside the truck. AI food trucks (possibly through BusinessBridge). Waiting list and grey-market permits as settings. Time-restricted streets.
 

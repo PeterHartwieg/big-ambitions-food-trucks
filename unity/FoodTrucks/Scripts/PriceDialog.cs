@@ -12,7 +12,7 @@ using UI.InteriorDesigner;
 
 namespace FoodTrucks
 {
-    // Setting the cart's prices, with the game's own list picker and text prompt: pick a menu item,
+    // Setting a cart's or truck's prices, with the game's own list picker and text prompt: pick a menu item,
     // type a price, or leave it empty to go back to the automatic price (pricing manager or default).
     internal static class PriceDialog
     {
@@ -21,7 +21,7 @@ namespace FoodTrucks
             var tables = DemandData.Tables;
             var state = FoodTrucksSession.CurrentState;
             var cart = VehicleHelper.GetCurrentVehicle();
-            if (tables == null || state == null || cart == null || cart.vehicleTypeName != FoodTrucksMod.CartTypeName) return;
+            if (tables == null || state == null || cart == null || FoodTrucksMod.KindOf(cart.vehicleTypeName) == null) return;
             if (!FoodTrucksSession.CanWrite)
             {
                 CartSelling.Notify("foodtrucks:notification_data_readonly");

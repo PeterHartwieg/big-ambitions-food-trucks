@@ -1,37 +1,40 @@
-# Milestone 3 checks: serving and queues
+# Milestone 4 checks: truck, licence and city systems
 
-Build `0.4.0`. Customers now come to the cart as people: they walk up from the pavement, queue beside the cart, are served at the window and walk off. Sales now run through a minute-by-minute queue: customers arrive at random, wait up to about 20 minutes and walk on at a full queue (6 at a cart). Over a day this sells within 3% of the old rule (`docs/balance/cart-economics.md`). You look at how it looks and moves; I read the rest from `Player.log`.
+Build `0.5.0`. The food truck is in, with the final model: buy it at General US Trucks, drive it, stop in a parking space and open from the driving panel. Selling now needs a vendor licence and a permit for each vehicle, both bought by phone from the City of New York (the contact that sends parking tickets). The licence needs the Food Safety course. The city map has a "Street food" filter line. You look at how it looks and handles; I read the rest from `Player.log`.
+
+This build changes save data (licence, permits, vehicle types) and replaces the test truck, so use a fresh save. Don't reopen an older FT save that still has a Ctrl+F6 test truck: that vehicle type is gone, and a save with an unknown vehicle breaks. A save from 0.4.0 or earlier gets no help: its cart needs a licence and a permit like any other.
 
 ## 1. Automated (me)
 
-- [ ] `dotnet test` passes; `tools/build-mod.sh --generate` builds; the package has the four `data/*.json` files, `rules.json` included.
+- [ ] `dotnet test` passes; `tools/build-mod.sh --generate` builds; the bundle has `FoodTruck.prefab` and the truck's textures.
 - [ ] Installed on homepc with the game closed, after your recording is done and the mod was parked.
 - [ ] After the session: the log lines in section 3.
 
-## 2. In game (about 15 minutes, one launch)
+## 2. In game (about 15 to 20 minutes, one launch)
 
-Use a save whose name starts with **FT**, never the series save. Other gameplay mods off. Debug keys, holding Ctrl: **F7** free food cart, **F9** demand here.
+A new save whose name starts with **FT**, never the series save. Other gameplay mods off. Debug keys, holding Ctrl: **F6** free food truck, **Shift+F6** free licence and permits (skips the course), **F7** free food cart, **F9** demand here.
 
 | # | Do | Look for |
 |---|---|---|
-| 1 | Cart with a hot dog grill and hot dogs (F7 for a free cart). Open at a busy spot at lunch (offices nearby, 11:30 to 13:30), stand at the window and watch for five minutes | Do people walk up from the pavement on their own, line up beside the cart, step forward, stop at the window for a moment and walk off? Does it look natural on camera, or do they bump, slide, spin, stand in the road or walk through the cart? |
-| 1b | Same spot, watch one customer from the pavement to the window | The "Sold ..." message and the money come as they reach the window, not before or after. They stand there a few seconds, not a blink |
-| 2 | Walk 20 to 30 m away for a minute, then come back | The line grows while nobody serves, some give up and walk off, and it starts moving again when you're back |
-| 3 | Walk about 150 m away, then back | People vanish while you're away and the line is back when you return. No one left standing alone |
-| 4 | Grab the cart while people are queuing | Everyone walks off; nobody is left standing after half a minute |
-| 5 | Open again and sleep or skip time | Nobody left standing at the spot afterwards |
-| 6 | If you like: a coffee cart at a morning spot (fast service) | Does a fast queue still look right, or do people pile up at the window? |
+| 1 | Without the course: phone the City of New York and try to buy a licence | Does the city show up in the contacts with a call button? The call offers a licence, and refuses it without the Food Safety course. Do the texts read well? |
+| 2 | Ctrl+F6 for a truck, then drive it a few blocks, park, reverse, take a corner fast | How does it look on the road (wheels on the ground, size, lights, mirrors) and how does it handle? Too floaty, too slow, tips over? |
+| 3 | Ctrl+Shift+F6, then load a grill and hot dogs into the truck (box in hand, click the truck). Stop in a parking space at a lunch spot and press Open here | You step out, the hatch on the right swings up, and people line up on the pavement beside the hatch, not in the road or behind the truck. Do they face the hatch? |
+| 4 | Stand at the hatch for a few minutes, then drive off | Sales come in as they reach the hatch. Driving off closes the hatch and the line walks away |
+| 5 | Try Open here while moving, in the road outside a parking space, and parked with the hatch towards the road (on the left side of a one-way street) | The truck refuses each time and says why |
+| 6 | Open the city map, turn on the Street food filters one by one | Offices, factories and warehouses, nightlife, theatres and cinemas light up; "Your food carts" puts a marker on each cart, green while open (trucks have the game's usual car marker; a cart bought or spawned this session also has the game's marker, always shown, and the filter only turns it green). Does any of it look wrong (homes lit as offices, say)? |
+| 7 | If you have time: buy a cart with real money, phone the city and buy its permit ($500), and a licence after the course | The money and the call's messages look right; a cart without a permit refuses to open |
+| 8 | If you have time: push a cart into a subway station | Does the game let you take the cart on the subway? (The code says it refuses vehicles; you said it works.) |
 
-For the trailer, item 1 is the shot: a lunch spot with offices, game speed normal. Anything that looks off, write it down, or note the in-game time so I can find it in the log.
+For the trailer: item 3 is the new shot. Anything off, write it down or note the in-game time.
 
 ## 3. Log lines (me)
 
-- Startup: `Version 0.4.0 loading.`, `Demand data loaded ... cart queue limit 6`, `Active` for every patch, no errors.
-- `Cart ... open ...` with `Window: customer service skill 50, speed 1.00 ...`.
-- `Queue view: line at cart ...: N of 10 places on the ... side ..., M ways in and out` with N close to 10 and M at least 2.
-- `Queue view: customer agent speed ... stopping distance ...` with a stopping distance under about 0.5 m (otherwise people only reach their place by a jump after 20 s).
-- `Sale: ...` lines; `Cart ... closed ...: ... walked away: ... tired of waiting, ... at a full queue ...`.
-- `Queue view: cart ... line removed with N people (out of range / cleared / scene changed)`, and at quit `Queue view: N people shown this session, M at most at once` with M at most 16.
-- No `Queue view:` errors and no `customer expressions unavailable` line.
+- Startup: `Version 0.5.0 loading.`, `Vehicle registered: foodtrucks:vehicletype_foodtruck ... price 15000`, `Demand data loaded ... truck 10; licence $250 for 60 days, permit $500`, `Active` for every patch, including `CityMapFilters.InitializeFilters`, `CityMapFilters.ApplyFilters` and `CityMapFilters.ApplyFilters(CityBuildingController)`, no errors.
+- `City of New York: licences and permits by phone.` on each load; `licence refused, no Food Safety course` from item 1.
+- `Open: truck ... parking Legal`, then `Truck ... open on day ...`, and for item 5 `parking Illegal`, `NotAvailable` or `no pavement beside its hatch`.
+- `Queue view: line at cart ...: N of 14 places on the right side ...` for the truck, with N close to 14.
+- `Map filters: Street food line with 5 filters.` and no `Map filters` errors.
+- Parking: the day's `ba:transaction_publicparking` charge and any ticket for the truck show in the save's transactions (Econoview).
+- No `City of New York` or `City reminder` errors.
 
-Not checked this time, on purpose: loading without the mod (the save only fills a queue field that has been in the schema since 0.3.0), pricing, the day summary and Econoview (unchanged code paths). The uninstall step changed only in that it also removes the people; I check it in the log if you run it, but it isn't on the list.
+Not checked this time, on purpose: delivery of a truck to a warehouse (refused, as for the cart), the licence reminder texts (they need 50 in-game days; Core tests cover the days), the uninstall step with a truck (same code path as the cart; run Ctrl+Shift+F12 at the end if you like and I check the log).

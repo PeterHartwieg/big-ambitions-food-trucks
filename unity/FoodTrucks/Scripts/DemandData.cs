@@ -28,7 +28,7 @@ namespace FoodTrucks
                     Read(folder, "economy.json"),
                     Read(folder, "zones.json"));
                 Rules = RuleTables.Parse(Read(folder, "rules.json"));
-                Log.Info($"Demand data loaded from {folder}: {Tables.Zones.Count} zones; queue patience {Rules.Queue.PatienceMinutes} min, cart queue limit {Rules.Service.QueueLimit(CartDemand.Kind, Rules.Queue.MaxQueue)}.");
+                Log.Info($"Demand data loaded from {folder}: {Tables.Zones.Count} zones; queue patience {Rules.Queue.PatienceMinutes} min, cart queue limit {Rules.Service.QueueLimit("cart", Rules.Queue.MaxQueue)}, truck {Rules.Service.QueueLimit("truck", Rules.Queue.MaxQueue)}; licence ${Rules.Fleet.LicenceFeeCents / 100} for {Rules.Fleet.LicenceDays} days, permit ${Rules.Fleet.PermitFeeCents / 100}.");
             }
             catch (Exception ex)
             {

@@ -40,8 +40,7 @@ namespace FoodTrucks
             if (InParkingLane(position, 0.4f))
                 return new Result("foodtrucks:legality_parking_lane", "inside a parking lane", road);
 
-            var near = Physics.OverlapSphere(position, CrosswalkMetres, ~0, QueryTriggerInteraction.Collide);
-            if (near.Any(h => h != null && h.CompareTag("Crosswalk")))
+            if (NearCrosswalk(position, CrosswalkMetres))
                 return new Result("foodtrucks:legality_crosswalk", $"within {CrosswalkMetres} m of a crosswalk", road);
 
             var door = World.DoorPositions().Select(d => Flat(d - position)).DefaultIfEmpty(float.MaxValue).Min();
@@ -63,6 +62,9 @@ namespace FoodTrucks
         }
 
         private static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
+
+        public static bool NearCrosswalk(Vector3 position, float radius) =>
+            Physics.OverlapSphere(position, radius, ~0, QueryTriggerInteraction.Collide).Any(h => h != null && h.CompareTag("Crosswalk"));
 
         public static bool InParkingLane(Vector3 position, float radius = 0.3f)
         {

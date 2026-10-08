@@ -1,0 +1,252 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.AI;
+using Vehicles.VehicleTypes;
+using Object = UnityEngine.Object;
+
+namespace FoodTrucks.BuildEditor
+{
+    // The food truck: the SDK's example car with the final truck model from art/truck (art/README.md,
+    // "Food truck"). tools/build-mod.sh copies the FBX and textures into Vehicles/TruckArt first.
+    // Physics values the art doesn't give (mass, suspension, engine) are first guesses for a step van.
+    internal static class TruckAssets
+    {
+        private const string ExampleVehicleType = "Assets/Mods/Example-Vehicle/TurboHonza.asset";
+        private const string ExampleVehiclePrefab = "Assets/Mods/Example-Vehicle/TurboHonza.prefab";
+        private const string ExampleMaterial = "Assets/Mods/Example-Vehicle/Models/M_HonzaCar.mat";
+
+        private const float TruckPrice = 15000f; // Placeholder until the balance pass near the end.
+        private const int CargoSlots = 16;
+        private const float Mass = 3500f;
+        // Of the example car's 1,400 kg: springs, dampers and tyre load scale with the weight.
+        private const float WeightRatio = Mass / 1400f;
+
+        private static readonly (string Wheel, string Mesh, Vector3 Hub)[] Wheels =
+        {
+            ("FrontLeft", "Truck_Wheel_FL", new Vector3(-0.87f, 0.38f, 1.80f)),
+            ("FrontRight", "Truck_Wheel_FR", new Vector3(0.87f, 0.38f, 1.80f)),
+            ("RearLeft", "Truck_Wheel_RL", new Vector3(-0.87f, 0.38f, -1.80f)),
+            ("RearRight", "Truck_Wheel_RR", new Vector3(0.87f, 0.38f, -1.80f)),
+        };
+
+        public static void GenerateTruck(string vehiclesFolder, string typeName)
+        {
+            var artFolder = vehiclesFolder + "/TruckArt";
+            var fbxPath = artFolder + "/FoodTruck.fbx";
+            if (!File.Exists(Path.Combine(ProjectRoot, fbxPath)))
+                throw new InvalidOperationException($"{fbxPath} missing; tools/build-mod.sh copies it from art/truck.");
+            ConfigureImports(artFolder);
+            var meshes = Meshes(fbxPath);
+            var material = Material(artFolder);
+
+            var typePath = vehiclesFolder + "/FoodTruck.asset";
+            var prefabPath = vehiclesFolder + "/FoodTruck.prefab";
+            CopyFresh(ExampleVehicleType, typePath);
+            CopyFresh(ExampleVehiclePrefab, prefabPath);
+
+            var type = AssetDatabase.LoadAssetAtPath<VehicleType>(typePath);
+            type.name = "FoodTruck";
+            type.vehicleTypeName = typeName;
+            type.price = TruckPrice;
+            type.maxCargoCapacity = CargoSlots;
+            type.maxFuel = 80f;
+            type.maxSpeed = 50;
+            type.enginePower = 45f * WeightRatio;
+            type.brakeForce = 2500f * WeightRatio;
+            type.taxDeductible = true;
+            EditorUtility.SetDirty(type);
+
+            var root = PrefabUtility.LoadPrefabContents(prefabPath);
+            try
+            {
+                var controller = root.GetComponent<VehicleController>();
+                if (controller == null) throw new InvalidOperationException("Example prefab has no VehicleController.");
+                controller.vehicleType = type;
+                controller.showCargoInItemPanel = true;
+                root.name = "FoodTruck";
+
+                var body = Find(root, "CarHolder/Body/CheapSaloon");
+                body.GetComponent<MeshFilter>().sharedMesh = meshes["Truck_Body"];
+                body.GetComponent<MeshRenderer>().sharedMaterial = material;
+                var obstacle = body.GetComponent<NavMeshObstacle>();
+                obstacle.center = new Vector3(0f, 1.45f, -0.25f);
+                obstacle.size = new Vector3(2.20f, 2.90f, 5.80f);
+
+                // The hatch opens when the truck opens for business (rotated in game, see TruckHatch).
+                var hatch = new GameObject("Truck_Hatch");
+                hatch.layer = body.layer;
+                hatch.transform.SetParent(body.transform.parent, false);
+                hatch.transform.localPosition = new Vector3(1.10f, 2.15f, -1.10f);
+                hatch.AddComponent<MeshFilter>().sharedMesh = meshes["Truck_Hatch"];
+                var hatchRenderer = hatch.AddComponent<MeshRenderer>();
+                hatchRenderer.sharedMaterial = material;
+                // The game paints, dirties and outlines the renderers in these lists; the hatch is body work.
+                Append(root, "renderers", hatchRenderer);
+                Append(root, "bodyMeshes", hatchRenderer);
+
+                var collider = Find(root, "CarHolder/Colliders/BodyCollider").GetComponent<MeshCollider>();
+                collider.sharedMesh = meshes["Truck_Collision"];
+                collider.convex = true;
+
+                foreach (var (wheel, mesh, hub) in Wheels)
+                {
+                    var visual = Find(root, "CarHolder/Wheels/" + wheel);
+                    visual.transform.localPosition = hub;
+                    visual.GetComponent<MeshFilter>().sharedMesh = meshes[mesh];
+                    visual.GetComponent<MeshRenderer>().sharedMaterial = material;
+                    foreach (Transform child in visual.transform)
+                        if (child.name.StartsWith("ShadowCaster", StringComparison.Ordinal)) child.localScale = new Vector3(0.279f, 0.358f, 0.358f);
+
+                    var wheelController = Find(root, wheel + "_WheelController");
+                    wheelController.transform.localPosition = hub + new Vector3(0f, 0.164f, 0f);
+                    Set(wheelController, "wheel.radius", 0.38f);
+                    Set(wheelController, "wheel.width", 0.23f);
+                    Scale(wheelController, "spring.maxForce", WeightRatio);
+                    Scale(wheelController, "damper.bumpRate", WeightRatio);
+                    Scale(wheelController, "damper.reboundRate", WeightRatio);
+                    Scale(wheelController, "loadRating", WeightRatio);
+                }
+
+                root.GetComponent<Rigidbody>().mass = Mass;
+                Set(root, "baseMass", Mass);
+                Set(root, "combinedMass", Mass);
+                Set(root, "dimensions", new Vector3(2.20f, 2.90f, 5.80f));
+                // Low, as on the example car (0.3 m on a 1.4 m body), so the tall box doesn't roll over.
+                Set(root, "centerOfMass", new Vector3(0f, 0.6f, -0.2f));
+                Set(root, "module.capacity", type.maxFuel);
+                Set(root, "module.amount", type.maxFuel);
+
+                Place(root, "RefuelingPosition", new Vector3(-1.45f, 0f, -2.30f));
+                Place(root, "LoadingPosition", new Vector3(0f, 0f, -3.50f));
+                Place(root, "Driverside", new Vector3(-1.35f, 0f, 1.15f));
+                Place(root, "Passengerside", new Vector3(1.35f, 0f, 1.15f));
+                Place(root, "Spotlights", new Vector3(0f, 1.78f, 2.28f));
+                Place(root, "SmokeBrokenCar", new Vector3(0f, 1.00f, 2.20f));
+
+                var spoiler = root.transform.Find("Spoiler");
+                if (spoiler != null) Object.DestroyImmediate(spoiler.gameObject);
+
+                PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        private static string ProjectRoot => Path.GetDirectoryName(Application.dataPath)!;
+
+        // Read/Write meshes for the game's damage deformation; the normal map as a normal map.
+        private static void ConfigureImports(string artFolder)
+        {
+            var model = (ModelImporter)AssetImporter.GetAtPath(artFolder + "/FoodTruck.fbx");
+            if (!model.isReadable || model.importAnimation || model.materialImportMode != ModelImporterMaterialImportMode.None)
+            {
+                model.isReadable = true;
+                model.importAnimation = false;
+                model.materialImportMode = ModelImporterMaterialImportMode.None;
+                model.SaveAndReimport();
+            }
+            var normal = (TextureImporter)AssetImporter.GetAtPath(artFolder + "/T_FoodTruck_N.png");
+            if (normal.textureType != TextureImporterType.NormalMap)
+            {
+                normal.textureType = TextureImporterType.NormalMap;
+                normal.SaveAndReimport();
+            }
+        }
+
+        // Meshes by object name in the FBX (the names are fixed by art/truck/spec.json).
+        private static Dictionary<string, Mesh> Meshes(string fbxPath)
+        {
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(fbxPath);
+            var meshes = new Dictionary<string, Mesh>();
+            foreach (var filter in model.GetComponentsInChildren<MeshFilter>(true))
+                meshes[filter.name] = filter.sharedMesh;
+            var needed = Wheels.Select(w => w.Mesh).Concat(new[] { "Truck_Body", "Truck_Hatch", "Truck_Collision" });
+            var missing = needed.Where(n => !meshes.ContainsKey(n)).ToList();
+            if (missing.Count > 0) throw new InvalidOperationException($"{fbxPath} lacks {string.Join(", ", missing)}.");
+            return meshes;
+        }
+
+        // A copy of the example car's material (the game's vehicle shader, which the SDK project doesn't have,
+        // so the material can't be edited through it) with each of the car's textures swapped for the truck's
+        // counterpart in the file itself. The dirt textures stay the example's (art/README.md).
+        private static Material Material(string artFolder)
+        {
+            var path = artFolder + "/M_FoodTruck.mat";
+            var exampleFolder = Path.GetDirectoryName(ExampleMaterial)!.Replace('\\', '/');
+            var text = File.ReadAllText(Path.Combine(ProjectRoot, ExampleMaterial));
+            foreach (var suffix in new[] { "D", "E", "EM_1", "EM_2", "MaskMap", "N" })
+            {
+                var from = AssetDatabase.AssetPathToGUID($"{exampleFolder}/T_HonzaCar_{suffix}.png");
+                var to = AssetDatabase.AssetPathToGUID($"{artFolder}/T_FoodTruck_{suffix}.png");
+                if (string.IsNullOrEmpty(from) || string.IsNullOrEmpty(to))
+                    throw new InvalidOperationException($"Texture T_HonzaCar_{suffix} or T_FoodTruck_{suffix} not found.");
+                if (!text.Contains(from)) throw new InvalidOperationException($"{ExampleMaterial} doesn't use T_HonzaCar_{suffix}.");
+                text = text.Replace(from, to);
+            }
+            text = text.Replace("m_Name: M_HonzaCar", "m_Name: M_FoodTruck");
+            File.WriteAllText(Path.Combine(ProjectRoot, path), text);
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            return AssetDatabase.LoadAssetAtPath<Material>(path)
+                   ?? throw new InvalidOperationException($"{path} didn't import.");
+        }
+
+        private static GameObject Find(GameObject root, string path) =>
+            root.transform.Find(path)?.gameObject ?? throw new InvalidOperationException($"Example prefab has no {path}.");
+
+        // Nested prefab instances (Driverside, Spotlights, ...) sit anywhere below the root.
+        private static void Place(GameObject root, string name, Vector3 position)
+        {
+            var target = root.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == name)
+                         ?? throw new InvalidOperationException($"Example prefab has no {name}.");
+            target.localPosition = position;
+        }
+
+        // Sets a serialized field on whichever components of the object have it, so the NWH types
+        // need no compile-time reference. Fails when none has it, rather than building a wrong truck.
+        private static void Set(GameObject owner, string path, float value) =>
+            Apply(owner, path, p => p.floatValue = value);
+
+        private static void Set(GameObject owner, string path, Vector3 value) =>
+            Apply(owner, path, p => p.vector3Value = value);
+
+        private static void Scale(GameObject owner, string path, float factor) =>
+            Apply(owner, path, p => p.floatValue *= factor);
+
+        private static void Append(GameObject owner, string path, Object value) =>
+            Apply(owner, path, p =>
+            {
+                if (!p.isArray) throw new InvalidOperationException($"{path} on {owner.name} is not a list.");
+                p.arraySize++;
+                p.GetArrayElementAtIndex(p.arraySize - 1).objectReferenceValue = value;
+            });
+
+        private static void Apply(GameObject owner, string path, Action<SerializedProperty> change)
+        {
+            var hits = 0;
+            foreach (var component in owner.GetComponents<MonoBehaviour>())
+            {
+                if (component == null) continue;
+                var serialized = new SerializedObject(component);
+                var property = serialized.FindProperty(path);
+                if (property == null) continue;
+                change(property);
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                hits++;
+            }
+            if (hits == 0) throw new InvalidOperationException($"No component on {owner.name} has {path}.");
+        }
+
+        private static void CopyFresh(string from, string to)
+        {
+            File.Copy(Path.Combine(ProjectRoot, from), Path.Combine(ProjectRoot, to), overwrite: true);
+            AssetDatabase.ImportAsset(to, ImportAssetOptions.ForceUpdate);
+        }
+    }
+}

@@ -166,7 +166,7 @@ public class RuleTablesTests
     [InlineData("competition.nearbyMetres", "0")]
     [InlineData("fleet.licenceDays", "0")]
     [InlineData("fleet.renewWindowDays", "61")]
-    [InlineData("fleet.permitUnlocks[1].days", "10")]
+    [InlineData("fleet.licenceFee", "-1")]
     [InlineData("fleet.travel.pushMetresPerSecond", "0")]
     [InlineData("fleet.schedules.maxStops", "0")]
     [InlineData("catering.leadDays", "[5, 2]")]

@@ -26,3 +26,7 @@ art/truck/v2/
 art/**/__pycache__/
 art/**/.*
 art/**/*.log
+
+# The truck art copied in by tools/build-mod.sh; the originals are in art/truck.
+unity/FoodTrucks/Vehicles/TruckArt/*.fbx
+unity/FoodTrucks/Vehicles/TruckArt/*.png
