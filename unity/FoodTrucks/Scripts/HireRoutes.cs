@@ -337,10 +337,27 @@ namespace FoodTrucks
             string? neighbourhood = null;
             if (Taken(from, rotation, kind))
             {
-                var spot = kind == "truck" ? FreeParking(from, WideParkingMetres) : null;
-                if (spot == null) return;
-                (position, rotation, neighbourhood) = spot.Value;
-                parking = ParkingState.Legal;
+                if (kind == "truck")
+                {
+                    var spot = FreeParking(from, WideParkingMetres);
+                    if (spot == null) return;
+                    (position, rotation, neighbourhood) = spot.Value;
+                    parking = ParkingState.Legal;
+                }
+                else
+                {
+                    // A cart tries the stop it was heading for instead.
+                    var to = new Vector3((float)transit.ToX, (float)transit.ToY, (float)transit.ToZ);
+                    var toRotation = Quaternion.Euler(0f, (float)transit.ToHeading, 0f);
+                    if (Taken(to, toRotation, kind))
+                    {
+                        if (recoveryWaitShown.Add(vehicle.VehicleId))
+                            Log.Info($"Route: cart {vehicle.VehicleId} waits off the map: both where it left from and its stop are taken.");
+                        return;
+                    }
+                    position = to;
+                    rotation = toRotation;
+                }
             }
             var controller = Place(instance, position, rotation);
             if (controller == null) return;
@@ -541,12 +558,14 @@ namespace FoodTrucks
         private static string KindOf(VehicleState vehicle) => string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType;
 
         private static ParkingLaneGenerator[]? laneCache;
+        private static readonly HashSet<string> recoveryWaitShown = new HashSet<string>();
         private const float LaneReachMetres = 100f;
 
         public static void Reset()
         {
             lock (later) later.Clear();
             laneCache = null;
+            recoveryWaitShown.Clear();
         }
 
         private static VehicleInstance? Instance(string id) =>

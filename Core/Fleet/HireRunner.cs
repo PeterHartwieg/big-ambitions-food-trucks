@@ -236,7 +236,7 @@ namespace FoodTrucks.Core.Fleet
 
         // The crew stops trying the opening running at that minute until it ends: a window that closed on an
         // error would otherwise open again at once. An error right at closing time belongs to the opening that
-        // just ended, so nothing later is given up.
+        // just ended, so nothing later is given up; one at the opening minute belongs to the new opening.
         public static void GiveUp(VehicleState vehicle, int stopIndex, long minute)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -244,7 +244,7 @@ namespace FoodTrucks.Core.Fleet
             if (stop == null) return;
             foreach (var plan in vehicle.Shifts ?? new List<ShiftPlan>())
                 foreach (var leg in plan.Legs)
-                    if (leg.Kind == LegKind.Open && leg.StopIndex == stopIndex && leg.Start < minute && leg.End > minute)
+                    if (leg.Kind == LegKind.Open && leg.StopIndex == stopIndex && leg.Start <= minute && leg.End > minute)
                     {
                         vehicle.Skipped = new SkipState { SpotKey = stop.SpotKey, Until = leg.End };
                         return;
