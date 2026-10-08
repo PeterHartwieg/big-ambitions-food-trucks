@@ -123,6 +123,23 @@ namespace FoodTrucks.Core.Fleet
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var day = DayOf(now);
             vehicle.Shifts?.RemoveAll(p => p.Day >= day);
+            // The stop's hours may have changed: a trip on its way finds its closing time from the new plan.
+            if (vehicle.Transit != null) vehicle.Transit.ToCloseAt = null;
+        }
+
+        // Where to plan a vehicle's day from: where it is going while on its way; the stop itself while it
+        // stands where the crew parked it for that stop (so a replan has no few-metre trip in it); else where it is.
+        public static (double X, double Z) PlanFrom(VehicleState vehicle, double x, double z)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            if (vehicle.Transit != null) return (vehicle.Transit.ToX, vehicle.Transit.ToZ);
+            var arrival = vehicle.Arrival;
+            if (arrival != null && Travel.Distance(x, z, arrival.X, arrival.Z) <= 3)
+            {
+                var stop = vehicle.Schedule?.Stops?.FirstOrDefault(s => s.SpotKey == arrival.SpotKey);
+                if (stop != null) return (stop.X, stop.Z);
+            }
+            return (x, z);
         }
 
         // The leg the plan has running at that minute, or null when the hire is off.

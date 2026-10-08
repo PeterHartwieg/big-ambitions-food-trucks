@@ -317,6 +317,16 @@ public class HireRunnerTests
     }
 
     [Fact]
+    public void PlansStartFromTheStopOnlyWhileTheVehicleIsWhereTheCrewLeftIt()
+    {
+        var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60));
+        truck.Arrival = new ArrivalState { SpotKey = "office", X = 2040, Z = 0 };
+
+        Assert.Equal((2000.0, 0.0), HireRunner.PlanFrom(truck, 2041, 0));
+        Assert.Equal((500.0, 0.0), HireRunner.PlanFrom(truck, 500, 0));
+    }
+
+    [Fact]
     public void AVehicleThatCantSellWhereItStandsIsMoved()
     {
         var truck = Truck(Stop("office", 0, 11 * 60, 14 * 60));

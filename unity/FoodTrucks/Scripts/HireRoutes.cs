@@ -210,13 +210,10 @@ namespace FoodTrucks
         {
             CartSelling.AdvanceTo(vehicle, t);
             var controller = VehicleHelper.GetVehicleController(instance);
-            // On its way, it plans from where it is going, as the payroll's preview does; at a stop the crew
-            // parked it for, from that stop, so a replan doesn't send it on a few metres' trip.
-            var parkedFor = vehicle.Arrival == null ? null : vehicle.Schedule?.Stops?.FirstOrDefault(s => s.SpotKey == vehicle.Arrival.SpotKey);
-            var position = vehicle.Transit != null ? new Vector3((float)vehicle.Transit.ToX, 0f, (float)vehicle.Transit.ToZ)
-                : parkedFor != null ? new Vector3((float)parkedFor.X, 0f, (float)parkedFor.Z)
-                : controller != null ? controller.transform.position : (Vector3)instance.position;
-            runner!.EnsurePlan(vehicle, t, position.x, position.z, GameSpeed());
+            // The same starting point as the payroll's preview (HireRunner.PlanFrom).
+            var position = controller != null ? controller.transform.position : (Vector3)instance.position;
+            var (planX, planZ) = HireRunner.PlanFrom(vehicle, position.x, position.z);
+            runner!.EnsurePlan(vehicle, t, planX, planZ, GameSpeed());
             for (var i = 0; i < MaxSteps; i++)
             {
                 // Read after planning: the checks below depend on the leg the plan has running.
@@ -345,6 +342,9 @@ namespace FoodTrucks
             // The game's own removal tells its listeners (multi-storey car parks keep a list of vehicles).
             try { VehicleHelper.onVehicleDestroyed?.Invoke(controller); }
             catch (Exception ex) { Log.Error($"Route: vehicle destroyed event for {controller.vehicleInstance?.id}: {ex}"); }
+            // Its save hook would write its old pose over the instance until OnDestroy runs at the frame's end;
+            // the same delegate is removed here first (VehicleController.Start adds it, OnDestroy removes it).
+            GlobalEvents.onSaveGame -= controller.SavePosition;
             // Deactivating unregisters it from the game's vehicle list at once (VehicleController.OnDisable);
             // Destroy only happens at the end of the frame, and an arrival in the same frame must not find it.
             controller.gameObject.SetActive(false);

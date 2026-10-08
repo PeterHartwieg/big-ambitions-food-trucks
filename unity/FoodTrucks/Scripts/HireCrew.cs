@@ -204,12 +204,12 @@ namespace FoodTrucks
                 var instance = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId)
                                ?? SaveGameManager.Current?.privateDriverVehicleInstances?.FirstOrDefault(v => v.id == vehicle.VehicleId);
                 var controller = instance == null ? null : VehicleHelper.GetVehicleController(instance);
-                var position = controller != null ? controller.transform.position
-                    : vehicle.Transit != null ? new UnityEngine.Vector3((float)vehicle.Transit.ToX, 0f, (float)vehicle.Transit.ToZ)
+                var standing = controller != null ? controller.transform.position
                     : instance != null ? (UnityEngine.Vector3)instance.position : UnityEngine.Vector3.zero;
+                var (planX, planZ) = HireRunner.PlanFrom(vehicle, standing.x, standing.z);
                 // The game clears these only when a building's shifts change, so they should hold; once an hour is cheap.
                 SetWeeklyWork(vehicle);
-                if (runner.PlannedShiftMinutes(vehicle, hourStart, hourStart + 60, position.x, position.z, HireRoutes.GameSpeed()) < 30) continue;
+                if (runner.PlannedShiftMinutes(vehicle, hourStart, hourStart + 60, planX, planZ, HireRoutes.GameSpeed()) < 30) continue;
                 foreach (var employee in vehicle.Crew.Select(Find))
                 {
                     if (employee == null || employee.isAbsent || employee.trainingSession != null || employee.isBeingReplaced || employee.IsAssignedToAnyBusiness()) continue;
