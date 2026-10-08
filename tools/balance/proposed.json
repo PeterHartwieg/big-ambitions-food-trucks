@@ -1,5 +1,5 @@
 {
-  "_notes": "The study's proposed data (docs/balance/cart-economics.md, section 4), as a merge patch over data/*.json. Run: dotnet bin/Debug/net10.0/balance.dll --patch proposed.json (prices default to the ceiling). 'demand' and 'economy' are plain data changes. 'rules' are proposals Core can't express yet; the tool emulates them: stockWeight (share of the unit limit one unit takes) and areaAppetite (per-area appetite factors, emulated only for pure park spots). The classifier's 'subwayentrance' building type needs the game side to report subway entrances as nearby places.",
+  "_notes": "The study's data patch (docs/balance/cart-economics.md, section 4) has been applied in data/demand.json and data/economy.json. Retained as an idempotent merge patch: running with --patch proposed.json should match running without a patch. All fields are native Core data, including economy.products.<item>.stockWeight and demand.areas.<area>.appetite; no calculator rules are emulated.",
   "demand": {
     "passersPerHour": 22,
     "areas": {
@@ -75,6 +75,10 @@
           "wed": 0.9,
           "thu": 0.9,
           "fri": 1.0
+        },
+        "appetite": {
+          "coffee": 2.0,
+          "icecream": 2.0
         }
       }
     },
@@ -143,34 +147,24 @@
     },
     "products": {
       "ba:itemname_cupofcoffee": {
-        "serviceMinutes": 1.0
+        "serviceMinutes": 1.0,
+        "stockWeight": 0.25
       },
       "ba:itemname_cupoftea": {
-        "serviceMinutes": 1.0
+        "serviceMinutes": 1.0,
+        "stockWeight": 0.25
       },
       "ba:itemname_croissant": {
-        "serviceMinutes": 2
+        "serviceMinutes": 2,
+        "stockWeight": 0.5
       },
       "ba:itemname_donut": {
-        "serviceMinutes": 2
+        "serviceMinutes": 2,
+        "stockWeight": 0.5
       },
       "ba:itemname_cupcake": {
-        "serviceMinutes": 2
-      }
-    }
-  },
-  "rules": {
-    "stockWeight": {
-      "ba:itemname_cupofcoffee": 0.25,
-      "ba:itemname_cupoftea": 0.25,
-      "ba:itemname_croissant": 0.5,
-      "ba:itemname_donut": 0.5,
-      "ba:itemname_cupcake": 0.5
-    },
-    "areaAppetite": {
-      "waterfront": {
-        "coffee": 2.0,
-        "icecream": 2.0
+        "serviceMinutes": 2,
+        "stockWeight": 0.5
       }
     }
   }

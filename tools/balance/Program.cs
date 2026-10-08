@@ -7,7 +7,7 @@ using Newtonsoft.Json.Linq;
 // The cart balance calculator. See README.md.
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var opts = Options.Parse(args);
-var (tables, parkTables, stockWeights) = LoadTables(opts);
+var tables = LoadTables(opts);
 var prices = GamePrices.Load(opts.Prices);
 var city = City.Load(opts.City);
 var travel = new Travel { MetresPerMinute = opts.MetresPerSecond };
@@ -27,7 +27,7 @@ Conditions Cond(DayOfWeek day = DayOfWeek.Wednesday, bool rain = false, Pricing?
 var conditions = new[] { Cond(), Cond(rain: true), Cond(DayOfWeek.Saturday), Cond(DayOfWeek.Saturday, true) };
 
 const string HotDog = "ba:itemname_hotdog", Soda = "ba:itemname_sodacan", Coffee = "ba:itemname_cupofcoffee", Croissant = "ba:itemname_croissant";
-Cart MakeCart(string[] menu, string name, int? units = null, int? staff = null) => new(tables, prices, menu, name, units, stockWeights, parkTables, staff);
+Cart MakeCart(string[] menu, string name, int? units = null, int? staff = null) => new(tables, prices, menu, name, units, staff);
 var carts = new Dictionary<string, (Cart Cart, string[] Equipment)>
 {
     ["hotdog"] = (MakeCart(new[] { HotDog }, "hot dog grill"), new[] { "hotdoggrill" }),
@@ -337,38 +337,22 @@ if (opts.Wants("costs"))
 if (opts.Out != null) File.WriteAllText(opts.Out, o.ToString());
 Console.Write(o.ToString());
 
-// The mod's data with the patch's "demand" and "economy" sections merged in. The patch's "rules" section
-// holds proposals Core can't express yet: "stockWeight" (item → share of a unit of the stock limit) and
-// "areaAppetite" (area → category → factor, emulated only for pure waterfront spots).
-static (DemandTables Tables, DemandTables? Park, Dictionary<string, double> Weights) LoadTables(Options opts)
+// Merge native data fields before Core loads them. Core owns stock weights and area appetite.
+static DemandTables LoadTables(Options opts)
 {
     var demand = JObject.Parse(File.ReadAllText(Path.Combine(opts.Data, "demand.json")));
     var economy = JObject.Parse(File.ReadAllText(Path.Combine(opts.Data, "economy.json")));
     var zones = File.ReadAllText(Path.Combine(opts.Data, "zones.json"));
-    var weights = new Dictionary<string, double>(StringComparer.Ordinal);
-    DemandTables? park = null;
-    JObject? rules = null;
     if (opts.Patch != null)
     {
         var patch = JObject.Parse(File.ReadAllText(opts.Patch));
+        if (patch["rules"] != null)
+            throw new ArgumentException("The patch's legacy 'rules' section is no longer supported. Use economy.products.<item>.stockWeight and demand.areas.<area>.appetite instead.");
         var settings = new JsonMergeSettings { MergeArrayHandling = MergeArrayHandling.Replace };
         if (patch["demand"] is JObject d) demand.Merge(d, settings);
         if (patch["economy"] is JObject e) economy.Merge(e, settings);
-        rules = patch["rules"] as JObject;
     }
-    if (rules?["stockWeight"] is JObject w)
-        foreach (var p in w) if (!p.Key.StartsWith("_")) weights[p.Key] = (double)p.Value!;
-    if (rules?["areaAppetite"]?["waterfront"] is JObject factors)
-    {
-        var parkDemand = (JObject)demand.DeepClone();
-        foreach (var f in factors)
-        {
-            if (f.Key.StartsWith("_") || parkDemand["categories"]?[f.Key]?["appetite"] is not JObject appetite) continue;
-            foreach (var dp in appetite.Properties().ToList()) dp.Value = Math.Min(1.0, (double)dp.Value * (double)f.Value!);
-        }
-        park = DemandTables.Parse(parkDemand.ToString(), economy.ToString(), zones);
-    }
-    return (DemandTables.Parse(demand.ToString(), economy.ToString(), zones), park, weights);
+    return DemandTables.Parse(demand.ToString(), economy.ToString(), zones);
 }
 
 sealed class Options

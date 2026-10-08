@@ -84,6 +84,8 @@ public sealed class HourPlan
     public double Served { get; init; }
     public double DrinksPerFoodBuyer { get; init; }
     public IReadOnlyDictionary<string, double> BuyerShares { get; init; } = new Dictionary<string, double>();
+    public IReadOnlyDictionary<string, string> SaleItems { get; init; } = new Dictionary<string, string>();
+    public string? AddOnItem { get; init; }
 }
 
 // One cart with a fixed menu. Plan() is CartDemand.Plan from unity/FoodTrucks/Scripts/CartDemand.cs with
@@ -96,19 +98,12 @@ public sealed class Cart
     private readonly DemandModel model;
     private readonly GamePrices prices;
 
-    private readonly DemandModel? parkModel;
-
-    // stockWeights: how much of the unit limit one unit of an item takes (a proposed Core rule; 1 today).
-    // parkTables: tables with the park's own appetite factors, used for spots that are pure waterfront
-    // (a proposed per-area appetite rule, emulated for the park archetype only).
     public Cart(DemandTables tables, GamePrices prices, IReadOnlyList<string> menu, string name, int? stockUnits = null,
-        IReadOnlyDictionary<string, double>? stockWeights = null, DemandTables? parkTables = null, int? staff = null)
+        int? staff = null)
     {
         this.tables = tables;
         this.prices = prices;
         model = new DemandModel(tables);
-        parkModel = parkTables == null ? null : new DemandModel(parkTables);
-        StockWeights = stockWeights ?? new Dictionary<string, double>();
         Menu = menu;
         Name = name;
         var vehicle = tables.Vehicle(Kind) ?? throw new InvalidOperationException("economy.json has no cart.");
@@ -117,8 +112,8 @@ public sealed class Cart
     }
 
     public string Name { get; }
-    public IReadOnlyDictionary<string, double> StockWeights { get; }
-    public double WeightOf(string item) => StockWeights.TryGetValue(item, out var w) ? w : 1.0;
+    // Use the same per-product load as Core's CargoRules.
+    public double WeightOf(string item) => tables.Product(item)?.StockWeight ?? 1.0;
     // Stock measured against the unit limit.
     public double Load(IReadOnlyDictionary<string, double> stock) => stock.Sum(p => p.Value * WeightOf(p.Key));
     public IReadOnlyList<string> Menu { get; }
@@ -150,8 +145,7 @@ public sealed class Cart
         var sellable = Menu.Where(i => stock.TryGetValue(i, out var u) && u > 1e-6).OrderBy(i => i, StringComparer.Ordinal).ToList();
         if (sellable.Count == 0) return HourPlan.None;
         var day = minute >= 1440 ? (DayOfWeek)(((int)c.Day + 1) % 7) : c.Day;
-        var useModel = parkModel != null && spot.Areas.Shares.Count == 1 && spot.Areas.ShareOf("waterfront") > 0 ? parkModel : model;
-        var estimate = useModel.Estimate(new DemandQuery
+        var estimate = model.Estimate(new DemandQuery
         {
             Areas = spot.Areas,
             Neighbourhood = spot.Hood,
@@ -164,34 +158,68 @@ public sealed class Cart
             Promotion = 1.0 // baseCustomerPromotionMultiplier 0.5 / 0.5 at the default difficulty
         });
 
+        var menuStock = stock.Where(s => sellable.Contains(s.Key)).ToDictionary(s => s.Key, s => s.Value);
         var accepted = new Dictionary<string, double>(StringComparer.Ordinal);
+        var saleItems = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var share in estimate.CustomerShares)
         {
             if (share.Value <= 0) continue;
-            var item = ItemFor(stock, share.Key);
-            if (item == null) continue;
-            var weight = share.Value * ConversionOf(item, spot.Hood, c);
-            if (weight > 0) accepted[share.Key] = weight;
+            var (item, best) = BestItem(menuStock, share.Key, spot.Hood, c);
+            if (item == null || best <= 0) continue;
+            accepted[share.Key] = share.Value * best;
+            saleItems[share.Key] = item;
         }
         var conversion = accepted.Values.Sum();
         var buyerShares = conversion > 0 ? accepted.ToDictionary(p => p.Key, p => p.Value / conversion) : new Dictionary<string, double>();
-        var capacity = ServiceRate.CustomersPerHour(Staff, ServiceRate.OrderMinutes(tables, sellable, buyerShares));
+        // Service time from the items actually on sale, as CartDemand.Plan does.
+        var onSale = saleItems.Values.Distinct().OrderBy(k => k, StringComparer.Ordinal).ToList();
+        var capacity = ServiceRate.CustomersPerHour(Staff, ServiceRate.OrderMinutes(tables, onSale, buyerShares));
         var served = SalesRate.PerHour(estimate.CustomersPerHour, conversion, capacity);
 
-        var drink = sellable.Where(i => tables.Category(tables.Product(i)!.Category).AddOnFactor > 0)
-            .OrderByDescending(i => stock[i]).ThenBy(i => i, StringComparer.Ordinal).FirstOrDefault();
+        var (drink, drinkConversion) = BestAddOn(menuStock, spot.Hood, c);
         var foodShare = estimate.CustomerShares.Where(p => tables.Category(p.Key).AddOnFactor <= 0).Sum(p => p.Value);
-        var addOns = drink == null || foodShare <= 0 ? 0 : estimate.AddOnsPerCustomer / foodShare * ConversionOf(drink, spot.Hood, c);
+        var addOns = drink == null || foodShare <= 0 ? 0 : estimate.AddOnsPerCustomer / foodShare * drinkConversion;
         return new HourPlan
         {
             Daypart = estimate.Daypart, Passers = estimate.Footfall, Demand = estimate.CustomersPerHour, Conversion = conversion,
-            Capacity = capacity, Served = served, DrinksPerFoodBuyer = addOns, BuyerShares = buyerShares
+            Capacity = capacity, Served = served, DrinksPerFoodBuyer = addOns, BuyerShares = buyerShares,
+            SaleItems = saleItems, AddOnItem = drink
         };
     }
 
-    public string? ItemFor(IReadOnlyDictionary<string, double> stock, string category) =>
-        stock.Where(s => s.Value > 1e-6 && tables.Product(s.Key)?.Category == category)
-            .OrderByDescending(s => s.Value).ThenBy(s => s.Key, StringComparer.Ordinal).Select(s => s.Key).FirstOrDefault();
+    // CartDemand.BestItem: highest price conversion, then more stock, then ordinal item name.
+    private (string? Item, double Conversion) BestItem(IReadOnlyDictionary<string, double> stock, string category,
+        string hood, Conditions c)
+    {
+        string? best = null;
+        double bestConversion = 0;
+        double bestUnits = 0;
+        foreach (var entry in stock.OrderBy(s => s.Key, StringComparer.Ordinal))
+        {
+            if (entry.Value <= 1e-6 || tables.Product(entry.Key)?.Category != category) continue;
+            var conversion = ConversionOf(entry.Key, hood, c);
+            if (best == null || conversion > bestConversion || (conversion == bestConversion && entry.Value > bestUnits))
+            {
+                best = entry.Key;
+                bestConversion = conversion;
+                bestUnits = entry.Value;
+            }
+        }
+        return (best, bestConversion);
+    }
+
+    // CartDemand.BestAddOn: best conversion across add-on categories; equal conversions keep the first category.
+    private (string? Item, double Conversion) BestAddOn(IReadOnlyDictionary<string, double> stock, string hood, Conditions c)
+    {
+        (string? Item, double Conversion) best = (null, 0);
+        foreach (var category in stock.Keys.Select(k => tables.Product(k)?.Category).Where(c => c != null).Distinct())
+        {
+            if (tables.Category(category!).AddOnFactor <= 0) continue;
+            var candidate = BestItem(stock, category!, hood, c);
+            if (candidate.Item != null && candidate.Conversion > best.Conversion) best = candidate;
+        }
+        return best;
+    }
 
     public bool IsDrink(string item) => tables.Category(tables.Product(item)!.Category).AddOnFactor > 0;
 }
@@ -239,8 +267,8 @@ public static class Selling
     public const int StepMinutes = 5;
 
     // Sells from `stock` at the spot from minute `from` to `to` (minutes since 00:00 of the day, past 1440 is
-    // after midnight). Each served customer takes a main item by the buyer shares (the category's item with
-    // the most stock, as CustomerPick and CartDemand do) and drinks at the plan's rate. Stops when nothing on
+    // after midnight). Each served customer takes the plan's best-accepted item for their category by the
+    // buyer shares, and the plan's add-on drink at its rate, as CartSelling.ServeCustomer does. Stops when nothing on
     // the menu is left.
     public static StopResult Run(Cart cart, Spot spot, int from, int to, Conditions c, Dictionary<string, double> stock)
     {
@@ -260,8 +288,7 @@ public static class Selling
             var servedNow = 0.0;
             foreach (var share in plan.BuyerShares.OrderBy(p => p.Key, StringComparer.Ordinal))
             {
-                var item = cart.ItemFor(stock, share.Key);
-                if (item == null) continue;
+                if (!plan.SaleItems.TryGetValue(share.Key, out var item) || stock.GetValueOrDefault(item) <= 1e-6) continue;
                 var units = Math.Min(served * share.Value, stock[item]);
                 Sell(cart, spot, c, stock, item, units, r, d);
                 servedNow += units;
@@ -269,8 +296,9 @@ public static class Selling
             }
             if (plan.DrinksPerFoodBuyer > 0 && foodBuyers > 0)
             {
-                var drink = cart.Menu.Where(i => cart.IsDrink(i) && stock.GetValueOrDefault(i) > 1e-6).OrderByDescending(i => stock[i]).FirstOrDefault();
-                if (drink != null) Sell(cart, spot, c, stock, drink, Math.Min(foodBuyers * plan.DrinksPerFoodBuyer, stock[drink]), r, d);
+                var drink = plan.AddOnItem;
+                if (drink != null && stock.GetValueOrDefault(drink) > 1e-6)
+                    Sell(cart, spot, c, stock, drink, Math.Min(foodBuyers * plan.DrinksPerFoodBuyer, stock[drink]), r, d);
             }
             d.Served += servedNow;
             r.Customers += servedNow;
