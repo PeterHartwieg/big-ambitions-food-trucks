@@ -286,6 +286,7 @@ The first playable slice. It touches every risky layer at once: bundle, vehicle,
 - **Map:** a "Catering bookings" filter lights the places of booked gigs.
 - **The contact** is made again with its call button if the player deletes it. The uninstall step drops open offers and booked gigs without a word and then removes the contact, so a save without the mod shows no raw texts.
 - **Bakery mod:** its bread, buns and chocolate cookies are pastries on the display case, its latte and americano coffee on the coffee machine; its bread counter fits as a display case and its bistro machine as a coffee machine (`economy.json`). Without the mod nothing changes. The log says at load whether it is there [code, unverified in game].
+- **Reviews.** Five rounds with Opus 5.5, GPT 6 Astra and GPT 6.1 Sol until all three said ship; findings and fixes are in `build/review-m7/` (not committed). The first round caught the fee booked once per portion. Taken only in part: no staffing check once a gig has started, crew aren't paid extra for gig hours outside their route, and while one truck is being confirmed as parked the other gigs' misses can come up to ten game minutes late.
 - **Debug:** Ctrl+F12 books a gig at the nearest place from in 30 minutes, 40 guests, for the first food a truck with a permit can serve.
 
 ## Milestone 8: art and release
