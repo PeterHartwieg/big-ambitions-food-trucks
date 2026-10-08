@@ -34,6 +34,9 @@ namespace FoodTrucks
         private long lastMinute = -1;
         // For each started or booked gig and truck: the first game minute it was seen at the place, and the last.
         // Not saved: after a load it starts from then.
+        // By gig and truck: the first minute the truck stood there ready for it (crew or player, licence, food,
+        // portions), so a wait to confirm it is parked never stretches the deadline for a truck that got ready late.
+        private readonly Dictionary<(long Gig, string Vehicle), long> readySince = new Dictionary<(long, string), long>();
         // By place and truck, so gigs back to back at one place share the truck's time there.
         private readonly Dictionary<(string Place, string Vehicle), (long Since, Vector3 At)> nearSince = new Dictionary<(string, string), (long, Vector3)>();
         // Minutes a truck must have stood still at the place before its gig starts, so driving past doesn't start it:
@@ -249,10 +252,22 @@ namespace FoodTrucks
                     var key = (place, vehicle.id);
                     // It must stand still: moved more than a few metres since it was first seen, it starts again.
                     var position = PositionOf(vehicle);
-                    if (!nearSince.TryGetValue(key, out var seen) || Vector3.Distance(seen.At, position) > 3f) nearSince[key] = (now, position);
+                    if (!nearSince.TryGetValue(key, out var seen) || Vector3.Distance(seen.At, position) > 3f)
+                    {
+                        nearSince[key] = (now, position);
+                        foreach (var gigAt in state.Catering.Gigs.Where(g => g.PlaceId == place)) readySince.Remove((gigAt.Id, vehicle.id));
+                    }
                     watched.Add(key);
+                    // Ready for each booking here, from when it first was; not ready, the count starts again.
+                    foreach (var gigAt in state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked && g.PlaceId == place))
+                    {
+                        if (Ready(state, rules, tables, gigAt, vehicle, saved, now)) { if (!readySince.ContainsKey((gigAt.Id, vehicle.id))) readySince[(gigAt.Id, vehicle.id)] = now; }
+                        else readySince.Remove((gigAt.Id, vehicle.id));
+                    }
                 }
             foreach (var key in nearSince.Keys.Where(k => !watched.Contains(k)).ToList()) nearSince.Remove(key);
+            foreach (var key in readySince.Keys.Where(k => !watched.Contains((state.Catering.Gigs.FirstOrDefault(g => g.Id == k.Gig)?.PlaceId ?? "", k.Vehicle))).ToList())
+                readySince.Remove(key);
 
             // Bookings earliest first; a gig a skip carried past its end is settled before the truck's next booking.
             var pending = new List<long>();
@@ -263,14 +278,23 @@ namespace FoodTrucks
                 foreach (var (vehicle, saved, kind) in caterers)
                 {
                     if (!nearSince.TryGetValue((gig.PlaceId, vehicle.id), out var seen)) continue;
-                    // It came, or became free of an earlier gig, at the latest of these.
-                    var arrived = Math.Max(Math.Max(seen.Since, start - rules.ArrivalWindowMinutes), BusyUntil(vehicle.id));
-                    if (arrived > now) continue;
-                    // Still being confirmed as parked: the gig waits, and isn't missed meanwhile if it came in time.
                     var stand = SaveGameManager.Current.ActiveVehicleId == vehicle.id ? StandMinutesDriving : StandMinutes;
+                    if (!readySince.TryGetValue((gig.Id, vehicle.id), out var ready))
+                    {
+                        // There in time but not ready: Arrive says why, once. Too late, the misses catch it.
+                        var came = Math.Max(seen.Since, start - rules.ArrivalWindowMinutes);
+                        if (now >= seen.Since + stand && came <= start + rules.GraceMinutes) Arrive(state, rules, tables, gig, vehicle, saved, kind, came);
+                        continue;
+                    }
+                    // It came ready, or became free of an earlier gig, at the latest of these.
+                    var arrived = Math.Max(Math.Max(Math.Max(seen.Since, ready), start - rules.ArrivalWindowMinutes), BusyUntil(vehicle.id));
+                    if (arrived > now) continue;
+                    // Too late for this one: another truck may still make it; nobody does, the misses catch it.
+                    if (arrived > start + rules.GraceMinutes) continue;
+                    // Still being confirmed as parked: the gig waits, and isn't missed meanwhile, as it was ready in time.
                     if (now < seen.Since + stand)
                     {
-                        if (arrived <= start + rules.GraceMinutes) pending.Add(gig.Id);
+                        pending.Add(gig.Id);
                         continue;
                     }
                     if (!Arrive(state, rules, tables, gig, vehicle, saved, kind, arrived)) continue;
@@ -396,6 +420,19 @@ namespace FoodTrucks
                 FoodTrucksSession.MarkChanged();
                 Log.Info($"Catering gig {unpaid.GigId}: {CartSelling.Money(unpaid.FeeCents)} paid on a retry.");
             }
+        }
+
+        // Whether the truck could start the gig now: someone to serve, licence and permit, the food on its menu and a
+        // portion per guest beyond those promised at the window (the checks Arrive and Core's Arrive make).
+        private static bool Ready(SaveState state, CateringRules rules, DemandTables tables, CateringGig gig, VehicleInstance vehicle, VehicleState saved, long minute)
+        {
+            if (!rules.VehicleTypes.Contains(saved.VehicleType)) return false;
+            var day = (int)(minute / 1440) + 1;
+            if (Licensing.CanOpen(state, vehicle.id, day, playerAtWindow: PlayerBy(vehicle), hires: HireCrew.Present(saved).Count) != OpenProblem.None) return false;
+            var menu = CartDemand.MenuOf(tables, vehicle);
+            var stock = Without(CartDemand.StockOf(vehicle, menu.Menu), CartSelling.HeldUnits(vehicle.id));
+            var units = stock.Where(p => menu.Menu.IsOnMenu(p.Key) && tables.Product(p.Key)?.Category == gig.RequiredCategory).Sum(p => (long)p.Value);
+            return units >= Units(rules, gig);
         }
 
         // The player in the truck or within a few steps of it.
