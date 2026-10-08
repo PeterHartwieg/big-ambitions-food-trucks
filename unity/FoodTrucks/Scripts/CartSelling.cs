@@ -48,10 +48,12 @@ namespace FoodTrucks
         // The spot each open cart stands on, read at opening and again each new day.
         private readonly Dictionary<string, Spot> spots = new Dictionary<string, Spot>();
         // The pitch an open vehicle stands on, fixed when it opened; null when closed.
-        // The earliest game minute an open window still has to sell from; now when none lags behind.
+        // The earliest game minute an open window still has to sell from, or a route still has to run from (it may
+        // open a window there); now when none lags behind.
         internal static long SoldThrough()
         {
             var now = HireCrew.Now();
+            if (HireRoutes.RoutedThrough() is { } routed && routed < now) now = routed;
             var self = instance;
             var state = FoodTrucksSession.CurrentState;
             if (self == null || state == null) return now;

@@ -51,6 +51,10 @@ namespace FoodTrucks
 
         private void OnEnable() => instance = this;
 
+        // The earliest game minute a route still has to run from, null when none lags (CartSelling.SoldThrough).
+        internal static long? RoutedThrough() =>
+            instance == null || instance.routedUntil.Count == 0 ? (long?)null : instance.routedUntil.Values.Min();
+
         private void OnDisable()
         {
             if (instance == this) instance = null;
