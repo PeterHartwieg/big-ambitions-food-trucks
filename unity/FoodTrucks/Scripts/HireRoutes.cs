@@ -111,17 +111,23 @@ namespace FoodTrucks
         }
 
         // A vehicle on its way has no business on the map: the city load spawns it where it was saved, so it
-        // goes again. One that turns up by the player (the private driver brought it, say) stays: its trip ends there.
-        private static void HideInTransit(SaveState state)
+        // goes again. Later, one that turns up by the player somewhere other than where it left from (the private
+        // driver brought it, say) stays: its trip ends there.
+        private void HideInTransit(SaveState state)
         {
+            var afterLoad = !loadHidden;
+            loadHidden = true;
             foreach (var vehicle in state.Vehicles.Where(v => v.Transit != null))
             {
                 var instance = Instance(vehicle.VehicleId);
                 var controller = instance == null ? null : VehicleHelper.GetVehicleController(instance);
                 if (controller == null) continue;
-                if (Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position) <= FetchedMetres)
+                var from = new Vector3((float)vehicle.Transit!.FromX, (float)vehicle.Transit.FromY, (float)vehicle.Transit.FromZ);
+                if (!afterLoad && Vector3.Distance(controller.transform.position, from) > 5f &&
+                    Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position) <= FetchedMetres)
                 {
-                    instance!.parkingState = (ParkingState)vehicle.Transit!.FromParkingState;
+                    // Whoever brought it set its parking; it only needs to be counted again if nobody did.
+                    if (instance!.parkingState == ParkingState.Undefined) instance.parkingState = ParkingState.Legal;
                     vehicle.Transit = null;
                     vehicle.Arrival = null;
                     FoodTrucksSession.MarkChanged();
@@ -134,6 +140,12 @@ namespace FoodTrucks
         }
 
         private const float FetchedMetres = 50f;
+        // The first tick after a load hides whatever the load spawned, without asking how it got there.
+        private bool loadHidden;
+        // The truck's size for checking a spot is free: half of 2.2 m wide, 2.9 m tall, 5.8 m long, a little spare.
+        private static readonly Vector3 TruckHalfSize = new Vector3(1.15f, 1.4f, 2.95f);
+        // The cart's body: 0.8 m wide, 1.4 m long without the handle (art/README.md).
+        private static readonly Vector3 CartHalfSize = new Vector3(0.45f, 0.5f, 0.75f);
 
         // Steps through the minutes since the last tick in order: each moment a leg starts or ends, or a
         // transit is due, gets its own steps, and the crew's window sells up to it first. So a time skip
@@ -203,7 +215,8 @@ namespace FoodTrucks
                 CartSelling.Say("foodtrucks:notification_hire_indoors", KindOf(vehicle));
             }
             if (!indoors) indoorsShown.Remove(vehicle.VehicleId);
-            if (held) lastHeld[vehicle.VehicleId] = t;
+            // After a load, nobody knows when the player last used it: as if just now, so nothing drives off at once.
+            if (held || !lastHeld.ContainsKey(vehicle.VehicleId)) lastHeld[vehicle.VehicleId] = t;
             var canSell = true;
             var hasStock = true;
             var stayPut = false;
@@ -299,6 +312,9 @@ namespace FoodTrucks
                 if (controller.additionalCollider != null) GleyTrafficSystem.Manager.TriggerColliderRemovedEvent(controller.additionalCollider);
             }
             catch (Exception ex) { Log.Error($"Route: collider event for {controller.vehicleInstance?.id}: {ex}"); }
+            // The game's own removal tells its listeners (multi-storey car parks keep a list of vehicles).
+            try { VehicleHelper.onVehicleDestroyed?.Invoke(controller); }
+            catch (Exception ex) { Log.Error($"Route: vehicle destroyed event for {controller.vehicleInstance?.id}: {ex}"); }
             // Deactivating unregisters it from the game's vehicle list at once (VehicleController.OnDisable);
             // Destroy only happens at the end of the frame, and an arrival in the same frame must not find it.
             controller.gameObject.SetActive(false);
@@ -331,7 +347,8 @@ namespace FoodTrucks
                     var from = new Vector3((float)transit.FromX, (float)transit.FromY, (float)transit.FromZ);
                     var back = FreeParking(from, WideParkingMetres);
                     if (back != null) (position, rotation, neighbourhood) = back.Value;
-                    else if (Physics.CheckSphere(from + Vector3.up, 1.5f, 1 << LayerHelper.VehiclesLayerIndex))
+                    else if (Physics.CheckBox(from + Vector3.up * (TruckHalfSize.y + 0.1f), TruckHalfSize,
+                                 Quaternion.Euler(0f, (float)transit.FromHeading, 0f), 1 << LayerHelper.VehiclesLayerIndex))
                     {
                         // Not even its own spot is free: it stays on its way and tries again each tick.
                         if (late == 2 * RetryMinutes) Log.Info($"Route: truck {vehicle.VehicleId} has nowhere to park near {transit.ToSpotKey} or where it left from; still trying.");
@@ -350,6 +367,12 @@ namespace FoodTrucks
             {
                 position = target;
                 rotation = Quaternion.Euler(0f, (float)transit.ToHeading, 0f);
+                // A vehicle on the cart's spot: it waits until the spot is clear.
+                if (Physics.CheckBox(position + Vector3.up * (CartHalfSize.y + 0.1f), CartHalfSize, rotation, 1 << LayerHelper.VehiclesLayerIndex))
+                {
+                    if (t == transit.ArrivesAt) Log.Info($"Route: cart {vehicle.VehicleId}'s spot {transit.ToSpotKey} is taken; it waits.");
+                    return false;
+                }
             }
 
             // The hatch has to face the pavement: a lane's rotation can point either way along the kerb. Decided
