@@ -422,8 +422,9 @@ namespace FoodTrucks
             self.Advance(state, vehicle, minute);
         }
 
-        // Sells up to that game minute in steps that never cross a game hour (the venues are read by the hour)
-        // and last at most StepMinutes, so a surge starts and ends within a step of its time.
+        // Sells up to that game minute one game minute at a time, so every minute gets its own demand, venue
+        // weights and surges, as the live clock would give it. A live tick is about a minute anyway; only a
+        // catch-up after a skip takes several steps (at most 200 a frame, the rest next frame).
         private void Advance(SaveState state, VehicleState vehicle, double until)
         {
             for (var i = 0; i < 200 && vehicle.IsOpen; i++)
@@ -442,7 +443,7 @@ namespace FoodTrucks
             }
         }
 
-        private const double StepMinutes = 15;
+        private const double StepMinutes = 1;
 
         private static string LicensingKey(OpenProblem problem)
         {
