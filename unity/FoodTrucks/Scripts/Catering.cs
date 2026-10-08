@@ -226,17 +226,8 @@ namespace FoodTrucks
             if (tables == null) return;
             var vehicles = SaveGameManager.Current.VehicleInstances.Where(v => v != null).ToDictionary(v => v.id, v => v);
 
-            foreach (var gig in state.Catering.Gigs.Where(g => g.Status == GigStatus.Started).ToList())
-            {
-                vehicles.TryGetValue(gig.VehicleId, out var truck);
-                var end = GigStart(gig) + gig.DurationMinutes;
-                var there = truck != null && Near(truck, gig.PlaceId);
-                if (there) lastSeenNear[gig.Id] = now;
-                if (there && now < end) continue;
-                // Left: at the last minute it was seen there (a skip can hide when). Stayed: at the end.
-                var at = there ? end : Math.Min(now, lastSeenNear.TryGetValue(gig.Id, out var seen) ? seen + 1 : now);
-                Settle(state, rules, tables, gig, truck, Math.Min(at, now));
-            }
+            PayUnpaid(state);
+            SettleEnded(state, rules, tables, vehicles, now);
 
             var caterers = Caterers(state, rules);
             foreach (var gig in state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked).OrderBy(GigStart).ThenBy(g => g.Id).ToList())
@@ -263,6 +254,9 @@ namespace FoodTrucks
                     if (Arrive(state, rules, tables, gig, vehicle, saved, kind, arrived)) break;
                 }
             }
+
+            // A gig started for a truck that stood there through a skip may be over already: settled before the misses.
+            SettleEnded(state, rules, tables, vehicles, now);
 
             var day = (int)(now / 1440) + 1;
             foreach (var missed in CateringGigs.MissOverdue(rules, state.Catering, day, (int)(now % 1440)))
@@ -313,6 +307,7 @@ namespace FoodTrucks
             {
                 case GigCheckStatus.Started:
                     lastSeenNear[gig.Id] = HireCrew.Now();
+                    CartSelling.ServedAt(saved, kind, minute);
                     Log.Info($"Catering gig {gig.Id} started: {kind} {vehicle.id} at {gig.PlaceId} from {Clock((int)(minute % 1440))}, {gig.ReservedUnits} {gig.RequiredCategory} held back; {crew} crew, player {(player ? "there" : "away")}.");
                     CartSelling.Say("foodtrucks:notification_catering_started", kind, ("units", gig.ReservedUnits.ToString()), ("food", Category(gig.RequiredCategory)),
                         ("end", Clock((gig.StartMinute + gig.DurationMinutes) % 1440)));
@@ -323,6 +318,45 @@ namespace FoodTrucks
                     return true;
                 default:
                     return false;
+            }
+        }
+
+        // Started gigs whose end passed or whose truck left are settled.
+        private void SettleEnded(SaveState state, CateringRules rules, DemandTables tables, Dictionary<string, VehicleInstance> vehicles, long now)
+        {
+            foreach (var gig in state.Catering.Gigs.Where(g => g.Status == GigStatus.Started).ToList())
+            {
+                vehicles.TryGetValue(gig.VehicleId, out var truck);
+                var end = GigStart(gig) + gig.DurationMinutes;
+                var there = truck != null && Near(truck, gig.PlaceId);
+                if (there) lastSeenNear[gig.Id] = now;
+                if (there && now < end) continue;
+                long at;
+                if (there) at = end;
+                else
+                {
+                    var seen = lastSeenNear.TryGetValue(gig.Id, out var last) ? last : now;
+                    // Gone unseen over a skip past the end: the player can't drive during one and the route keeps the truck
+                    // there for the gig's minutes, so it stayed to the end. Seen gone live: it left after it was last there.
+                    at = truck != null && now - seen > 1 && now >= end ? end : Math.Min(now, seen + 1);
+                }
+                Settle(state, rules, tables, gig, truck, Math.Min(at, now));
+            }
+        }
+
+        // Fees the game didn't credit, tried again each step; the portions left the truck already.
+        private static void PayUnpaid(SaveState state)
+        {
+            foreach (var unpaid in state.Catering.Unpaid.ToList())
+            {
+                var day = SaveGameManager.Current.Day;
+                var units = Math.Max(1, unpaid.Units);
+                if (!StreetSales.CanRecordTotal(state, unpaid.VehicleId, day, unpaid.FeeCents, units)) continue;
+                if (!Payments.PayIn(unpaid.FeeCents, new TransactionInfo("foodtrucks:transaction_catering", new Dictionary<string, string> { { "place", PlaceName(unpaid.PlaceId) } }))) continue;
+                StreetSales.RecordTotal(state, unpaid.VehicleId, day, unpaid.FeeCents, units);
+                state.Catering.Unpaid.Remove(unpaid);
+                FoodTrucksSession.MarkChanged();
+                Log.Info($"Catering gig {unpaid.GigId}: {CartSelling.Money(unpaid.FeeCents)} paid on a retry.");
             }
         }
 
@@ -370,14 +404,22 @@ namespace FoodTrucks
                 GameManager.SendTextMessage(Bookings(), "foodtrucks:message_bookings_unpaid", Describe(gig));
                 return;
             }
-            var taken = Take(state, vehicle, truck, tables, gig.RequiredCategory, result.Units, held, minute);
+            // Serving at a gig is a day the truck worked, for the health grade and the inspector.
+            CartSelling.ServedAt(vehicle, string.IsNullOrEmpty(vehicle.VehicleType) ? "truck" : vehicle.VehicleType, minute - 1);
+            var available = Without(CartDemand.StockOf(truck, CartDemand.MenuOf(tables, truck).Menu), CartSelling.HeldUnits(gig.VehicleId));
+            var taken = Take(state, vehicle, truck, tables, gig.RequiredCategory, result.Units, held, available, minute);
             // Food the truck no longer had isn't paid for.
             var fee = (long)Math.Round(result.FeeCents * Math.Min(1.0, taken / (double)result.Units));
             var paid = taken > 0 && fee > 0 &&
                        Payments.PayIn(fee, new TransactionInfo("foodtrucks:transaction_catering", new Dictionary<string, string> { { "place", PlaceName(gig.PlaceId) } }));
             // Income for the tax like any street sale: the fee once, for all its portions.
             if (paid) StreetSales.RecordTotal(state, gig.VehicleId, day, fee, taken);
-            else if (taken > 0) Log.Error($"Catering gig {gig.Id}: the game refused the payment of {CartSelling.Money(fee)}.");
+            else if (taken > 0 && fee > 0)
+            {
+                // Kept and tried again each step, so the fee isn't lost with the portions already gone.
+                state.Catering.Unpaid.Add(new UnpaidFee { GigId = gig.Id, VehicleId = gig.VehicleId, PlaceId = gig.PlaceId, FeeCents = fee, Units = taken });
+                Log.Error($"Catering gig {gig.Id}: the game refused the payment of {CartSelling.Money(fee)}; it will be tried again.");
+            }
             Log.Info($"Catering gig {gig.Id} completed at {gig.PlaceId}: {taken} of {result.Units} {gig.RequiredCategory} served, {CartSelling.Money(paid ? fee : 0)} paid; booking reputation {state.Catering.BookingReputation:F2}.");
             GameManager.SendTextMessage(Bookings(), paid ? "foodtrucks:message_bookings_paid" : "foodtrucks:message_bookings_unpaid", new Dictionary<string, string>(Describe(gig))
             {
@@ -387,9 +429,11 @@ namespace FoodTrucks
 
         // Takes the gig's units of its food from the truck: the ones held back for it first, then any other of that
         // food. Books their wholesale cost, and stale food counts for the health grade as at the window.
+        // `available`: each item's units not promised to customers walking to the window; nothing beyond them is taken.
         private static int Take(SaveState state, VehicleState vehicle, VehicleInstance truck, DemandTables tables, string category, int units,
-            IReadOnlyDictionary<string, int> held, long minute)
+            IReadOnlyDictionary<string, int> held, IReadOnlyDictionary<string, int> available, long minute)
         {
+            var left = available.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
             var taken = 0;
             var day = SaveGameManager.Current.Day;
             var menu = CartDemand.MenuOf(tables, truck).Menu;
@@ -401,7 +445,9 @@ namespace FoodTrucks
                 plan.AddRange(menu.Items.Where(i => tables.Product(i)?.Category == category).OrderBy(i => i, StringComparer.Ordinal).Select(i => (Item: i, Units: rest)));
             foreach (var (item, wanted) in plan)
             {
-                var want = Math.Min(wanted, units - taken);
+                left.TryGetValue(item, out var free);
+                var want = Math.Min(Math.Min(wanted, units - taken), free);
+                left[item] = free - Math.Max(0, want);
                 foreach (var entry in truck.cargoInstances
                              .Where(c => c != null && c.itemName == item && c.paid && !c.IsSealed && c.amount > 0 &&
                                          (c.nestedCargoInstances == null || c.nestedCargoInstances.Count == 0))

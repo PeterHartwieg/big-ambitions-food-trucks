@@ -408,6 +408,19 @@ public class PitchSaveTests
     }
 
     [Fact]
+    public void AnUnpaidCateringFeeRoundTripsAndOldSavesReadNone()
+    {
+        var codec = new SaveCodec();
+        var state = new SaveState();
+        state.Catering.Unpaid.Add(new FoodTrucks.Core.Catering.UnpaidFee { GigId = 4, VehicleId = "truck", PlaceId = "ba:street_a#1", FeeCents = 6250, Units = 40 });
+        state.Catering.NextOfferId = 5;
+        var loaded = codec.Load(codec.Serialize(state));
+        Assert.Equal(LoadStatus.Loaded, loaded.Status);
+        Assert.Equal(6250, loaded.State!.Catering.Unpaid.Single().FeeCents);
+        Assert.Empty(codec.Load("{\"schemaVersion\":1}").State!.Catering.Unpaid);
+    }
+
+    [Fact]
     public void TwoPartnershipsForOneVenueAreRejected()
     {
         var codec = new SaveCodec();

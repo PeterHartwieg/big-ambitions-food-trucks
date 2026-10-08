@@ -342,6 +342,9 @@ namespace FoodTrucks
         }
 
         // The vehicle opens, or works into a new day: the inspector may come by (design: Health grades).
+        // A catering gig is a day the truck served food: it counts as opened for health, inspector included.
+        internal static void ServedAt(VehicleState vehicle, string kind, long minute) => Inspect(vehicle, kind, minute);
+
         private static void Inspect(VehicleState vehicle, string kind, long minute, bool opening = true)
         {
             var book = CartDemand.Book();

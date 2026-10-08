@@ -26,6 +26,8 @@ namespace FoodTrucks
             var deliveries = PendingDeliveries(game);
             if (vehicles.Count == 0 && deliveries == 0)
             {
+                // Nothing to take back, but the bookings contact and its gigs still go.
+                Catering.RemoveContact();
                 CartSelling.Notify("foodtrucks:notification_uninstall_none");
                 return;
             }

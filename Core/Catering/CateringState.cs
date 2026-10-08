@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
@@ -19,6 +20,8 @@ namespace FoodTrucks.Core.Catering
         public List<CateringOffer> Offers { get; set; } = new List<CateringOffer>();
         public List<CateringGig> Gigs { get; set; } = new List<CateringGig>();
         public List<CateringGig> History { get; set; } = new List<CateringGig>();
+        // Fees of completed gigs the game didn't credit yet (a payment that failed); the adapter retries them.
+        public List<UnpaidFee> Unpaid { get; set; } = new List<UnpaidFee>();
         public int Completed { get; set; }
         public int Failed { get; set; }
 
@@ -51,6 +54,18 @@ namespace FoodTrucks.Core.Catering
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
+    public class UnpaidFee
+    {
+        public long GigId { get; set; }
+        public string VehicleId { get; set; } = string.Empty;
+        public string PlaceId { get; set; } = string.Empty;
+        public long FeeCents { get; set; }
+        public int Units { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
     public class CateringGig : CateringOffer
     {
         [JsonConverter(typeof(StringEnumConverter))]
@@ -69,6 +84,8 @@ namespace FoodTrucks.Core.Catering
         internal static void Validate(CateringState state)
         {
             if (state == null) throw new JsonSerializationException("Catering state must not be null.");
+            if (state.Unpaid == null || state.Unpaid.Any(u => u == null || u.VehicleId == null || u.PlaceId == null || u.FeeCents < 0 || u.Units < 0))
+                throw new JsonSerializationException("Catering's unpaid fees must name their vehicle and place, with amounts not negative.");
             if (state.Offers == null || state.Gigs == null || state.History == null)
                 throw new JsonSerializationException("Catering lists must not be null.");
             if (double.IsNaN(state.BookingReputation) || double.IsInfinity(state.BookingReputation) || state.BookingReputation < 0 || state.BookingReputation > 1)
