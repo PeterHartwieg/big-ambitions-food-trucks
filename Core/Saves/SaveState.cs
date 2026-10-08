@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using FoodTrucks.Core.Catering;
+using FoodTrucks.Core.Pitches;
 using FoodTrucks.Core.Reputation;
 
 namespace FoodTrucks.Core.Saves
@@ -23,6 +24,10 @@ namespace FoodTrucks.Core.Saves
         // Offers, booked gigs and the booking reputation. Its random state is seeded by the game side
         // on first use (CateringState.New); 0 until then.
         public CateringState Catering { get; set; } = new CateringState();
+        // The city's events and the player's bookings (additive field: older saves read none).
+        public EventsState Events { get; set; } = new EventsState();
+        // Vehicles partnered with the player's own venues.
+        public List<PartnershipState> Partnerships { get; set; } = new List<PartnershipState>();
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -85,6 +90,8 @@ namespace FoodTrucks.Core.Saves
         public int? LastOpenedDay { get; set; }
         // Food on board by the day it came on, oldest first, sold oldest first (stale stock).
         public Dictionary<string, List<StockBatch>> StockBatches { get; set; } = new Dictionary<string, List<StockBatch>>(StringComparer.Ordinal);
+        // The premium spot this open window holds (first come among the player's vehicles); null when none.
+        public string? PremiumSpot { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

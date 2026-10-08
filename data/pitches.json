@@ -1,0 +1,281 @@
+{
+  "_notes": "Premium spots, city events and partnerships (design: Pitches; Live crowds from game businesses). Every number is a first guess. Keys starting with an underscore are notes; the loader ignores them.",
+  "schemaVersion": 1,
+  "_premium": "Curated pitches, two or three per neighbourhood, picked from the balance calculator's best pitches (tools/balance --reports premium, 9 October 2026). Each is outside one building, named by its address (street#number); a vehicle within radiusMetres of the building's nearest entrance stands on the spot. The first of the player's vehicles to open there holds it until it closes; it gets footfall times the passers and the spot's areas raised to at least the presences given, as a zone in add mode does. name is a locale key.",
+  "premium": {
+    "radiusMetres": 40,
+    "spots": [
+      {
+        "id": "midtown-fifth-street",
+        "name": "foodtrucks:pitch_midtown-fifth-street",
+        "address": "ba:street_fifthstreet#2",
+        "areas": {
+          "office": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "midtown-third-avenue",
+        "name": "foodtrucks:pitch_midtown-third-avenue",
+        "address": "ba:street_thirdavenue#4",
+        "areas": {
+          "nightlife": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "midtown-second-avenue",
+        "name": "foodtrucks:pitch_midtown-second-avenue",
+        "address": "ba:street_secondavenue#13",
+        "areas": {
+          "transit": 0.7
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "lower-tenth-street",
+        "name": "foodtrucks:pitch_lower-tenth-street",
+        "address": "ba:street_tenthstreet#10",
+        "areas": {
+          "office": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "lower-fifth-avenue",
+        "name": "foodtrucks:pitch_lower-fifth-avenue",
+        "address": "ba:street_fifthavenue#57",
+        "areas": {
+          "nightlife": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "lower-twelfth-street",
+        "name": "foodtrucks:pitch_lower-twelfth-street",
+        "address": "ba:street_twelfthstreet#13",
+        "areas": {
+          "industrial": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "murray-fourth-street",
+        "name": "foodtrucks:pitch_murray-fourth-street",
+        "address": "ba:street_fourthstreet#9",
+        "areas": {
+          "retail": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "murray-fifth-avenue",
+        "name": "foodtrucks:pitch_murray-fifth-avenue",
+        "address": "ba:street_fifthavenue#23",
+        "areas": {
+          "office": 0.9
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "hells-fourth-street",
+        "name": "foodtrucks:pitch_hells-fourth-street",
+        "address": "ba:street_fourthstreet#4",
+        "areas": {
+          "nightlife": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "hells-fourth-avenue",
+        "name": "foodtrucks:pitch_hells-fourth-avenue",
+        "address": "ba:street_fourthavenue#22",
+        "areas": {
+          "nightlife": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "hells-second-street",
+        "name": "foodtrucks:pitch_hells-second-street",
+        "address": "ba:street_secondstreet#3",
+        "areas": {
+          "office": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "garment-third-street",
+        "name": "foodtrucks:pitch_garment-third-street",
+        "address": "ba:street_thirdstreet#27",
+        "areas": {
+          "retail": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "garment-fifth-avenue",
+        "name": "foodtrucks:pitch_garment-fifth-avenue",
+        "address": "ba:street_fifthavenue#5",
+        "areas": {
+          "office": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "industry-twenty-first-street",
+        "name": "foodtrucks:pitch_industry-twenty-first-street",
+        "address": "ba:street_twentyfirststreet#12",
+        "areas": {
+          "nightlife": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "industry-ninth-avenue",
+        "name": "foodtrucks:pitch_industry-ninth-avenue",
+        "address": "ba:street_ninthavenue#3",
+        "areas": {
+          "industrial": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "hamptons-ocean-crest-road",
+        "name": "foodtrucks:pitch_hamptons-ocean-crest-road",
+        "address": "ba:street_oceancrestroad#1",
+        "areas": {
+          "waterfront": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "hamptons-seventh-avenue",
+        "name": "foodtrucks:pitch_hamptons-seventh-avenue",
+        "address": "ba:street_seventhavenue#34",
+        "areas": {
+          "retail": 1.0
+        },
+        "footfall": 1.25
+      }
+    ]
+  },
+  "_events": "The City of New York announces events leadDays ahead: on each of a kind's weekdays there is an event with probability chance, at one of the places that hold that kind. The player books places by phone (up to places per event, fee dollars each, tax-deductible) until the event ends. During its hours, a booked vehicle within radiusMetres of the place's nearest entrance gets footfall times the passers and the kind's areas; one without a booked place can't open there. Booked places go to the vehicles that open there first.",
+  "events": {
+    "radiusMetres": 60,
+    "kinds": [
+      {
+        "id": "market",
+        "name": "foodtrucks:event_market",
+        "days": [
+          "sat",
+          "sun"
+        ],
+        "chance": 0.6,
+        "leadDays": 4,
+        "start": "10:00",
+        "end": "16:00",
+        "footfall": 2.0,
+        "areas": {
+          "retail": 1.0
+        },
+        "places": 2,
+        "fee": 150
+      },
+      {
+        "id": "festival",
+        "name": "foodtrucks:event_festival",
+        "days": [
+          "fri",
+          "sat"
+        ],
+        "chance": 0.4,
+        "leadDays": 3,
+        "start": "16:00",
+        "end": "23:00",
+        "footfall": 2.5,
+        "areas": {
+          "nightlife": 1.0
+        },
+        "places": 2,
+        "fee": 250
+      }
+    ],
+    "places": [
+      {
+        "id": "midtown-broadway-street",
+        "name": "foodtrucks:pitch_midtown-broadway-street",
+        "address": "ba:street_broadwaystreet#10",
+        "kinds": [
+          "market",
+          "festival"
+        ]
+      },
+      {
+        "id": "lower-fifth-avenue-market",
+        "name": "foodtrucks:pitch_lower-fifth-avenue-market",
+        "address": "ba:street_fifthavenue#61",
+        "kinds": [
+          "market",
+          "festival"
+        ]
+      },
+      {
+        "id": "murray-fourth-avenue",
+        "name": "foodtrucks:pitch_murray-fourth-avenue",
+        "address": "ba:street_fourthavenue#27",
+        "kinds": [
+          "festival"
+        ]
+      },
+      {
+        "id": "hells-fourth-street-market",
+        "name": "foodtrucks:pitch_hells-fourth-street-market",
+        "address": "ba:street_fourthstreet#18",
+        "kinds": [
+          "market",
+          "festival"
+        ]
+      },
+      {
+        "id": "garment-third-street-market",
+        "name": "foodtrucks:pitch_garment-third-street-market",
+        "address": "ba:street_thirdstreet#44",
+        "kinds": [
+          "market"
+        ]
+      },
+      {
+        "id": "industry-twenty-first-street-festival",
+        "name": "foodtrucks:pitch_industry-twenty-first-street-festival",
+        "address": "ba:street_twentyfirststreet#10",
+        "kinds": [
+          "festival"
+        ]
+      },
+      {
+        "id": "hamptons-seventh-avenue-market",
+        "name": "foodtrucks:pitch_hamptons-seventh-avenue-market",
+        "address": "ba:street_seventhavenue#40",
+        "kinds": [
+          "market",
+          "festival"
+        ]
+      }
+    ]
+  },
+  "_partnerships": "A vehicle within radiusMetres of one of the player's own venues of these kinds can sign a partner deal from its Hires list: one venue per vehicle, one vehicle per venue. While it sells there, the venue's crowd counts as if the vehicle stood at its door, and surges above the usual crowd are surge times as big. After a day it sold there for minWorkedMinutes, the venue's facility satisfaction gets satisfactionBonus points in the game's next daily update (businesses that earn from customers only).",
+  "partnerships": {
+    "radiusMetres": 50,
+    "surge": 1.5,
+    "venues": [
+      "nightclub",
+      "theatre",
+      "cinema",
+      "office",
+      "factory"
+    ],
+    "satisfactionBonus": 5,
+    "minWorkedMinutes": 60
+  }
+}

@@ -178,6 +178,15 @@ namespace FoodTrucks.Core.Saves
             if (state.Catering == null)
                 throw new JsonSerializationException("Catering must not be null.");
             FoodTrucks.Core.Catering.CateringValidation.Validate(state.Catering);
+            if (state.Events == null || state.Events.Events == null || state.Events.Events.Any(e =>
+                    e == null || e.Kind == null || e.PlaceId == null || e.Vehicles == null || e.Vehicles.Any(string.IsNullOrEmpty) ||
+                    e.Booked < 0 || e.Places < 0 || e.FeeCents < 0 || e.Start < 0 || e.End < e.Start) ||
+                state.Events.Events.Select(e => e.Id).Distinct().Count() != state.Events.Events.Count)
+                throw new JsonSerializationException("Events must be distinct events with their kind, place and vehicles named and counts not negative.");
+            if (state.Partnerships == null || state.Partnerships.Any(p => p == null || string.IsNullOrEmpty(p.VehicleId) || string.IsNullOrEmpty(p.Venue)) ||
+                state.Partnerships.Select(p => p.VehicleId).Distinct(StringComparer.Ordinal).Count() != state.Partnerships.Count ||
+                state.Partnerships.Select(p => p.Venue).Distinct(StringComparer.Ordinal).Count() != state.Partnerships.Count)
+                throw new JsonSerializationException("Partnerships must be one per vehicle and one per venue, each named.");
 
             var days = new HashSet<int>();
             long total = 0;

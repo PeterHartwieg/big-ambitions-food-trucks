@@ -174,6 +174,36 @@ if (opts.Wants("single"))
     }
 }
 
+// Candidates for the premium spots: each district's best pitches for a hot dog cart and a coffee cart, on a dry
+// weekday and a dry Saturday, so the picks can cover lunch, mornings, nights and weekends.
+if (opts.Wants("premium"))
+{
+    o.AppendLine("## Premium spot candidates: the best pitches per district");
+    o.AppendLine();
+    o.AppendLine("| Neighbourhood | Spot | Area mix | Hot dog weekday | Hot dog Saturday | Coffee weekday | Coffee Saturday |");
+    o.AppendLine("|---|---|---|---|---|---|---|");
+    var hotdog = PlannerFor(carts["hotdog+cooler"].Cart);
+    var coffee = PlannerFor(carts["coffee+bakery"].Cart);
+    var (hFrom, hTo, _) = days["hotdog+cooler"];
+    var (cFrom, cTo, _) = days["coffee+bakery"];
+    foreach (var hood in hoods)
+    {
+        var rows = spots.Where(s => s.Hood == hood && !s.Name.Contains("archetype")).Select(s => (s,
+            hw: hotdog.SingleSpot(s, hFrom, hTo, conditions[0]).Total.Profit,
+            hs: hotdog.SingleSpot(s, hFrom, hTo, conditions[2]).Total.Profit,
+            cw: coffee.SingleSpot(s, cFrom, cTo, conditions[0]).Total.Profit,
+            cs: coffee.SingleSpot(s, cFrom, cTo, conditions[2]).Total.Profit)).ToList();
+        var picked = rows.OrderByDescending(r => r.hw).Take(4)
+            .Concat(rows.OrderByDescending(r => r.hs).Take(4))
+            .Concat(rows.OrderByDescending(r => r.cw).Take(4))
+            .Concat(rows.OrderByDescending(r => r.cs).Take(4))
+            .GroupBy(r => r.s.Name).Select(g => g.First());
+        foreach (var r in picked.OrderByDescending(r => Math.Max(Math.Max(r.hw, r.hs), Math.Max(r.cw, r.cs))))
+            o.AppendLine($"| {H(hood)} | {r.s.Name} | {r.s.Areas} | {Money(r.hw)} | {Money(r.hs)} | {Money(r.cw)} | {Money(r.cs)} |");
+    }
+    o.AppendLine();
+}
+
 var routes = new List<(string Name, string Cart, (int, int)[] Windows)>
 {
     ("lunch + evening", "hotdog+cooler", new[] { (660, 870), (1020, 1380) }),

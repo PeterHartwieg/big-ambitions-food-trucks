@@ -16,6 +16,8 @@ namespace FoodTrucks.Core.Demand
         public int? ClosedMinutesAgo { get; set; }
         // Staff at work now (offices and factories); null when the game doesn't say.
         public int? Workers { get; set; }
+        // Guests in the last hour (the player's own nightclubs, theatres and cinemas); null when the game doesn't say.
+        public int? Guests { get; set; }
     }
 
     // How much of its usual crowd a venue brings now. A closed venue brings nobody; theatres and cinemas
@@ -27,8 +29,11 @@ namespace FoodTrucks.Core.Demand
             IReadOnlyList<int>? theatreWeekendLetOuts = null, double cinemaSurge = 2.0, int cinemaFirst = 17 * 60, int cinemaEvery = 150,
             int cinemaLast = 24 * 60 + 30, double weekendSurge = 1.5, int clubClosingMinutes = 30, double clubClosingSurge = 2.5,
             int referenceWorkers = 10, double minWorkerWeight = 0.3, double maxWorkerWeight = 2.0,
-            IReadOnlyDictionary<string, VenueKind>? kinds = null)
+            IReadOnlyDictionary<string, VenueKind>? kinds = null, int referenceGuests = 20, double minGuestWeight = 0.3, double maxGuestWeight = 2.0)
         {
+            ReferenceGuests = referenceGuests;
+            MinGuestWeight = minGuestWeight;
+            MaxGuestWeight = maxGuestWeight;
             ClosedWeight = closedWeight;
             SurgeMinutes = surgeMinutes;
             TheatreSurge = theatreSurge;
@@ -63,6 +68,15 @@ namespace FoodTrucks.Core.Demand
         public int ReferenceWorkers { get; }
         public double MinWorkerWeight { get; }
         public double MaxWorkerWeight { get; }
+        // A player's venue brings its guests in the last hour divided by ReferenceGuests, between the two bounds,
+        // times any surge.
+        public int ReferenceGuests { get; }
+        public double MinGuestWeight { get; }
+        public double MaxGuestWeight { get; }
+
+        private double GuestFactor(VenueNow venue) => venue.Guests is { } guests
+            ? Math.Max(MinGuestWeight, Math.Min(MaxGuestWeight, guests / (double)ReferenceGuests))
+            : 1.0;
         // Business type to venue kind; anything else is static.
         public IReadOnlyDictionary<string, VenueKind> Kinds { get; }
 
@@ -77,19 +91,19 @@ namespace FoodTrucks.Core.Demand
             switch (venue.Kind)
             {
                 case VenueKind.Nightclub:
-                    if (venue.Open) return 1.0;
-                    return venue.ClosedMinutesAgo is { } since && since >= 0 && since < ClubClosingMinutes ? ClubClosingSurge : ClosedWeight;
+                    if (venue.Open) return GuestFactor(venue);
+                    return venue.ClosedMinutesAgo is { } since && since >= 0 && since < ClubClosingMinutes ? ClubClosingSurge * GuestFactor(venue) : ClosedWeight;
                 case VenueKind.Theatre:
                 {
                     var letOuts = weekend ? TheatreLetOuts.Concat(TheatreWeekendLetOuts) : TheatreLetOuts;
                     var surge = InSurge(letOuts, minuteOfDay) ? TheatreSurge * (weekend ? WeekendSurge : 1.0) : 1.0;
                     // The audience comes out as the doors close, so a show ending at closing time still counts.
-                    return venue.Open || (surge > 1.0 && venue.ClosedMinutesAgo is { } ago && ago < SurgeMinutes) ? surge : ClosedWeight;
+                    return venue.Open || (surge > 1.0 && venue.ClosedMinutesAgo is { } ago && ago < SurgeMinutes) ? surge * GuestFactor(venue) : ClosedWeight;
                 }
                 case VenueKind.Cinema:
                 {
                     var surge = InSurge(CinemaShows(), minuteOfDay) ? CinemaSurge * (weekend ? WeekendSurge : 1.0) : 1.0;
-                    return venue.Open || (surge > 1.0 && venue.ClosedMinutesAgo is { } ago && ago < SurgeMinutes) ? surge : ClosedWeight;
+                    return venue.Open || (surge > 1.0 && venue.ClosedMinutesAgo is { } ago && ago < SurgeMinutes) ? surge * GuestFactor(venue) : ClosedWeight;
                 }
                 case VenueKind.Office:
                 case VenueKind.Factory:
@@ -113,7 +127,12 @@ namespace FoodTrucks.Core.Demand
 
         internal static LiveCrowds Read(DataReader r, JObject obj)
         {
-            r.OnlyKeys(obj, "closedWeight", "surgeMinutes", "theatre", "cinema", "weekendSurge", "clubClosing", "workers", "kinds");
+            r.OnlyKeys(obj, "closedWeight", "surgeMinutes", "theatre", "cinema", "weekendSurge", "clubClosing", "workers", "guests", "kinds");
+            var guests = r.Object(obj, "guests");
+            r.OnlyKeys(guests, "reference", "min", "max");
+            var guestMin = r.Number(guests, "min", 0, 10);
+            var guestMax = r.Number(guests, "max", 0, 10);
+            if (guestMax < guestMin) throw r.Fail(DataReader.PathOf(guests, "max"), "must not be below min");
             var theatre = r.Object(obj, "theatre");
             r.OnlyKeys(theatre, "surge", "letOuts", "weekendLetOuts");
             var cinema = r.Object(obj, "cinema");
@@ -149,7 +168,7 @@ namespace FoodTrucks.Core.Demand
                 r.Integer(club, "minutes", 0, 240),
                 r.Number(club, "surge", 1, 10),
                 r.Integer(workers, "reference", 1, 1000),
-                min, max, kinds);
+                min, max, kinds, r.Integer(guests, "reference", 1, 1000), guestMin, guestMax);
         }
 
         private static IReadOnlyList<int> Minutes(DataReader r, JObject parent, string name)

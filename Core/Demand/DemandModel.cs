@@ -29,6 +29,8 @@ namespace FoodTrucks.Core.Demand
         public IReadOnlyDictionary<string, double>? AreaLive { get; set; }
         // The game's customer promotion variable relative to its default, so difficulty reaches trucks.
         public double Promotion { get; set; } = 1.0;
+        // A premium spot's or an event's extra passers (PitchBonus); 1.0 on an ordinary pitch.
+        public double PitchFootfall { get; set; } = 1.0;
     }
 
     public sealed class DemandEstimate
@@ -90,6 +92,7 @@ namespace FoodTrucks.Core.Demand
                 throw new ArgumentOutOfRangeException(nameof(query), "Month must be 1 to 12.");
             RequireFactor(query.Reputation, nameof(query.Reputation));
             RequireFactor(query.Promotion, nameof(query.Promotion));
+            RequireFactor(query.PitchFootfall, nameof(query.PitchFootfall));
             foreach (var area in query.Areas.Presences.Keys)
                 if (!tables.HasArea(area)) throw new ArgumentException($"Unknown area type '{area}'.", nameof(query));
 
@@ -105,7 +108,7 @@ namespace FoodTrucks.Core.Demand
             var crowdTotal = baseline + areaCrowds.Values.Sum();
             var footfallFactor = tables.PassersPerHour
                 * neighbourhood.Footfall * neighbourhood.DaypartFactor(daypart) * neighbourhood.DayFactor(day) * neighbourhood.SeasonFactor(season)
-                * month.Footfall * (query.Raining ? tables.RainFootfall : 1.0) * query.Promotion;
+                * month.Footfall * (query.Raining ? tables.RainFootfall : 1.0) * query.Promotion * query.PitchFootfall;
             var footfall = crowdTotal * footfallFactor;
 
             var shares = new List<(string Category, double WithMarket, double WithoutMarket, double AddOns)>();
