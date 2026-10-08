@@ -159,7 +159,9 @@ namespace FoodTrucks.Core.Fleet
             if (stop == null) return HireAction.None;
             if (vehicle.Skipped != null && vehicle.Skipped.SpotKey == stop.SpotKey && now < vehicle.Skipped.Until) return HireAction.None;
             var distance = Travel.Distance(where.X, where.Z, stop.X, stop.Z);
-            var atStop = where.CanSellHere && (distance <= rules.StopRadiusMetres || ParkedFor(vehicle, stop, where));
+            // Where the crew parked it for this stop counts as the stop even if it reads as no place to sell:
+            // moving it would only bring it back there. Opening then says why not, once a day.
+            var atStop = ParkedFor(vehicle, stop, where) || (where.CanSellHere && distance <= rules.StopRadiusMetres);
             if (!atStop)
             {
                 if (where.StayPut || !where.HasStock) return HireAction.None;
@@ -331,6 +333,12 @@ namespace FoodTrucks.Core.Fleet
             {
                 var moved = map(vehicle.HireStop.Value);
                 vehicle.HireStop = moved < 0 ? (int?)null : moved;
+            }
+            // A removed destination falls back to finding the stop by its spot.
+            if (vehicle.Transit?.ToStopIndex != null)
+            {
+                var moved = map(vehicle.Transit.ToStopIndex.Value);
+                vehicle.Transit.ToStopIndex = moved < 0 ? (int?)null : moved;
             }
         }
 

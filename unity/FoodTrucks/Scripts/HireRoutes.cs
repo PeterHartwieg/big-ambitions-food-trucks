@@ -84,10 +84,12 @@ namespace FoodTrucks
                 try { Run(vehicle, now); }
                 catch (Exception ex)
                 {
-                    // One vehicle's route stops; the others go on.
+                    // One vehicle's route stops; the others go on. A window its crew opened closes.
                     broken.Add(vehicle.VehicleId);
                     Log.Error($"Hire routes: {vehicle.VehicleType} {vehicle.VehicleId} stopped: {ex}");
                     CartSelling.Notify("foodtrucks:notification_routes_failed");
+                    try { if (vehicle.HireStop != null) CartSelling.CloseByCrew(vehicle, now); }
+                    catch (Exception closeEx) { Log.Error("Hire routes, closing: " + closeEx); }
                 }
             }
         }
@@ -108,7 +110,8 @@ namespace FoodTrucks
             }
         }
 
-        // A vehicle on its way has no business on the map, whoever spawned it.
+        // A vehicle on its way has no business on the map: the city load spawns it where it was saved, so it
+        // goes again. One that turns up by the player (the private driver brought it, say) stays: its trip ends there.
         private static void HideInTransit(SaveState state)
         {
             foreach (var vehicle in state.Vehicles.Where(v => v.Transit != null))
@@ -116,10 +119,21 @@ namespace FoodTrucks
                 var instance = Instance(vehicle.VehicleId);
                 var controller = instance == null ? null : VehicleHelper.GetVehicleController(instance);
                 if (controller == null) continue;
+                if (Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position) <= FetchedMetres)
+                {
+                    instance!.parkingState = (ParkingState)vehicle.Transit!.FromParkingState;
+                    vehicle.Transit = null;
+                    vehicle.Arrival = null;
+                    FoodTrucksSession.MarkChanged();
+                    Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} turned up by the player; its trip ends here.");
+                    continue;
+                }
                 TakeOffMap(controller);
                 Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} is on its way; taken off the map again.");
             }
         }
+
+        private const float FetchedMetres = 50f;
 
         // Steps through the minutes since the last tick in order: each moment a leg starts or ends, or a
         // transit is due, gets its own steps, and the crew's window sells up to it first. So a time skip
@@ -163,11 +177,13 @@ namespace FoodTrucks
         private void StepAt(VehicleState vehicle, VehicleInstance instance, long t)
         {
             CartSelling.AdvanceTo(vehicle, t);
-            var where = Where(vehicle, instance, t);
-            runner!.EnsurePlan(vehicle, t, where.X, where.Z, GameSpeed());
+            var controller = VehicleHelper.GetVehicleController(instance);
+            var position = controller != null ? controller.transform.position : (Vector3)instance.position;
+            runner!.EnsurePlan(vehicle, t, position.x, position.z, GameSpeed());
             for (var i = 0; i < MaxSteps; i++)
             {
-                if (i > 0) where = Where(vehicle, instance, t);
+                // Read after planning: the checks below depend on the leg the plan has running.
+                var where = Where(vehicle, instance, t);
                 var action = runner.Step(vehicle, t, where, GameSpeed());
                 if (action.Kind == HireActionKind.None || !Do(vehicle, instance, action, t)) return;
             }
@@ -197,8 +213,10 @@ namespace FoodTrucks
                 var tables = DemandData.Tables;
                 hasStock = tables == null || CartDemand.StockOf(instance, CartDemand.MenuOf(tables, instance).Menu).Count > 0;
                 // The player just stepped out (to buy stock, say) or stands right by it: it stays where it is.
+                // So does a vehicle whose crew are all off sick, training or being replaced.
                 stayPut = (lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes) ||
-                          (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres);
+                          (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres) ||
+                          HireCrew.OnShift(vehicle, t).Count == 0;
             }
             return new VehicleWhere(position.x, position.z, held || indoors, canSell, hasStock, stayPut);
         }
@@ -260,6 +278,18 @@ namespace FoodTrucks
                 ("time", StaffDialog.Clock((int)(action.ArrivesAt % 1440))));
         }
 
+        // Whether a truck standing there would have pavement by its hatch: the queue's own test, on a stand-in.
+        private static bool HatchFacesPavement(Vector3 position, Quaternion rotation)
+        {
+            var probe = new GameObject("FoodTrucks.HatchProbe");
+            try
+            {
+                probe.transform.SetPositionAndRotation(position, rotation);
+                return QueueLine.HasWindowPlace(probe.transform, "truck");
+            }
+            finally { Object.Destroy(probe); }
+        }
+
         // As the game's own vehicle sale does, traffic forgets the colliders before the vehicle goes.
         private static void TakeOffMap(VehicleController controller)
         {
@@ -301,12 +331,16 @@ namespace FoodTrucks
                     var from = new Vector3((float)transit.FromX, (float)transit.FromY, (float)transit.FromZ);
                     var back = FreeParking(from, WideParkingMetres);
                     if (back != null) (position, rotation, neighbourhood) = back.Value;
+                    else if (Physics.CheckSphere(from + Vector3.up, 1.5f, 1 << LayerHelper.VehiclesLayerIndex))
+                    {
+                        // Not even its own spot is free: it stays on its way and tries again each tick.
+                        if (late == 2 * RetryMinutes) Log.Info($"Route: truck {vehicle.VehicleId} has nowhere to park near {transit.ToSpotKey} or where it left from; still trying.");
+                        return false;
+                    }
                     else
                     {
                         position = from;
                         rotation = Quaternion.Euler(0f, (float)transit.FromHeading, 0f);
-                        if (Physics.CheckSphere(position + Vector3.up, 1.5f, 1 << LayerHelper.VehiclesLayerIndex))
-                            Log.Error($"Route: truck {vehicle.VehicleId} goes back to {position}, where another vehicle now stands.");
                     }
                     atStop = false;
                     Log.Info($"Route: no free parking space for truck {vehicle.VehicleId} near {transit.ToSpotKey}; it goes back towards where it left from.");
@@ -318,17 +352,14 @@ namespace FoodTrucks
                 rotation = Quaternion.Euler(0f, (float)transit.ToHeading, 0f);
             }
 
+            // The hatch has to face the pavement: a lane's rotation can point either way along the kerb. Decided
+            // before the truck is placed, so it is placed once, already turned.
+            if (kind == "truck" && atStop && !HatchFacesPavement(position, rotation)) rotation *= Quaternion.Euler(0f, 180f, 0f);
             var controller = Place(instance, position, rotation);
             if (controller == null)
             {
                 Log.Error($"Route: {kind} {vehicle.VehicleId} could not be placed at {position}.");
                 return false;
-            }
-            // The hatch has to face the pavement: a lane's rotation can point either way along the kerb.
-            if (kind == "truck" && atStop && !QueueLine.HasWindowPlace(controller.transform, kind))
-            {
-                VehicleHelper.TeleportVehicle(controller, position, rotation * Quaternion.Euler(0f, 180f, 0f));
-                controller.SavePosition();
             }
             // A parking space is legal; back on its own old spot, it is what it was.
             instance.parkingState = kind == "truck" && !atStop && neighbourhood == null ? (ParkingState)transit.FromParkingState : ParkingState.Legal;
@@ -348,6 +379,9 @@ namespace FoodTrucks
             if (controller != null)
             {
                 VehicleHelper.TeleportVehicle(controller, position, rotation);
+                // TeleportVehicle moves the rigidbody; the transform follows on the next physics step, and the
+                // save and the hatch check read the transform now.
+                controller.transform.SetPositionAndRotation(position, rotation);
                 controller.SavePosition();
                 return controller;
             }

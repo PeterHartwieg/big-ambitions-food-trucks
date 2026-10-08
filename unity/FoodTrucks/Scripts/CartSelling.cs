@@ -315,6 +315,7 @@ namespace FoodTrucks
                 var legality = Legality.Check(position);
                 if (!legality.Legal) return legality.RuleKey;
             }
+            else if (cart.parkingState != ParkingState.Legal) return "foodtrucks:legality_truck_parking";
             else if (!QueueLine.HasWindowPlace(controller.transform, kind)) return "foodtrucks:legality_truck_hatch";
             self.StartSelling(vehicle, cart, controller, position, kind, stop, minute);
             return null;

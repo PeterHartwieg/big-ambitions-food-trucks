@@ -268,6 +268,19 @@ public class HireRunnerTests
     }
 
     [Fact]
+    public void WhereTheCrewParkedItIsTheStopEvenIfItCantSellThere()
+    {
+        var cart = Truck(Stop("corner", 0, 11 * 60, 14 * 60));
+        cart.VehicleType = "cart";
+        runner.EnsurePlan(cart, At(3, 6), 0, 0);
+        cart.Arrival = new ArrivalState { SpotKey = "corner", X = 0, Z = 0 };
+
+        var step = runner.Step(cart, At(3, 12), new VehicleWhere(0, 0, leaveAlone: false, canSellHere: false));
+
+        Assert.Equal(HireActionKind.Open, step.Kind);
+    }
+
+    [Fact]
     public void AVehicleThatCantSellWhereItStandsIsMoved()
     {
         var truck = Truck(Stop("office", 0, 11 * 60, 14 * 60));
