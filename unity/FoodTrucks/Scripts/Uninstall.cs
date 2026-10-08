@@ -51,6 +51,7 @@ namespace FoodTrucks
         private static void Run(GameInstance game, List<VehicleInstance> vehicles)
         {
             CartSelling.CloseAllQuietly();
+            HireCrew.ReleaseAll();
             long refundCents = 0;
             long unpaidCents = 0;
             var removed = 0;

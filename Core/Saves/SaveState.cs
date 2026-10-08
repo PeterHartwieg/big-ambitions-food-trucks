@@ -66,6 +66,12 @@ namespace FoodTrucks.Core.Saves
         public TransitState? Transit { get; set; }
         // Hidden cleanliness points and the grade on the window; null until the vehicle first opens.
         public HealthState? Health { get; set; }
+        // The game's employee IDs of the hires who run this vehicle, in the order they were taken on.
+        public List<string> Crew { get; set; } = new List<string>();
+        // The route's planned days still running: today's, and yesterday's while a late stop runs past midnight.
+        public List<ShiftPlan> Shifts { get; set; } = new List<ShiftPlan>();
+        // The stop a hire opened the window at; null when the player opened it or it is closed.
+        public int? HireStop { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -134,8 +140,32 @@ namespace FoodTrucks.Core.Saves
         public string SpotKey { get; set; } = string.Empty;
         public double X { get; set; }
         public double Z { get; set; }
+        // Height and facing (degrees) where the vehicle stood: a cart is put back exactly there.
+        public double Y { get; set; }
+        public double Heading { get; set; }
         public int OpenAt { get; set; }
         public int CloseAt { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    // One day of a hire's route as HireSchedules.PlanDay planned it. Times are absolute game minutes.
+    public class ShiftPlan
+    {
+        public int Day { get; set; }
+        public List<ShiftLeg> Legs { get; set; } = new List<ShiftLeg>();
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    public class ShiftLeg
+    {
+        public FoodTrucks.Core.Fleet.LegKind Kind { get; set; }
+        public int StopIndex { get; set; }
+        public long Start { get; set; }
+        public long End { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -147,6 +177,8 @@ namespace FoodTrucks.Core.Saves
         public string ToSpotKey { get; set; } = string.Empty;
         public double ToX { get; set; }
         public double ToZ { get; set; }
+        public double ToY { get; set; }
+        public double ToHeading { get; set; }
         public long DepartsAt { get; set; }
         public long ArrivesAt { get; set; }
 

@@ -96,6 +96,7 @@ namespace FoodTrucks
 
         private void Retire(string vehicleId)
         {
+            WindowCrew.Remove(vehicleId);
             if (!lines.TryGetValue(vehicleId, out var line)) return;
             lines.Remove(vehicleId);
             line.Close();
@@ -105,6 +106,7 @@ namespace FoodTrucks
         private void RemoveAll(string reason)
         {
             foreach (var line in lines.Values.Concat(departing)) line.Destroy(reason);
+            WindowCrew.RemoveAll();
             lines.Clear();
             departing.Clear();
         }
@@ -158,6 +160,7 @@ namespace FoodTrucks
                 if (controller == null || Vector3.Distance(player, controller.transform.position) > KeepMetres)
                 {
                     line.Destroy("out of range");
+                    WindowCrew.Remove(line.VehicleId);
                     lines.Remove(line.VehicleId);
                 }
                 else if (vehicle == null || !vehicle.IsOpen || vehicle.Service == null || game.ActiveVehicleId == line.VehicleId)
@@ -191,6 +194,17 @@ namespace FoodTrucks
                 var id = vehicle.VehicleId;
                 line.Paid = customer => CartSelling.Paid(id, customer);
                 lines[vehicle.VehicleId] = line;
+            }
+
+            // The crew on shift stands at each window in view.
+            var now = HireCrew.Now();
+            foreach (var line in lines.Values)
+            {
+                var vehicle = state.Vehicles.FirstOrDefault(v => v.VehicleId == line.VehicleId);
+                var controller = ControllerOf(game, line.VehicleId);
+                if (vehicle == null || controller == null) continue;
+                var kind = FoodTrucksMod.KindOf(controller.vehicleInstance?.vehicleTypeName) ?? "cart";
+                WindowCrew.Sync(line.VehicleId, controller.transform, kind, line.WindowPlace, HireCrew.OnShift(vehicle, now));
             }
         }
 
@@ -296,6 +310,8 @@ namespace FoodTrucks
         // go unseen (dropped, removed, closed), so CartSelling never holds a sale for good.
         public Action<long>? Paid { get; set; }
         public bool HasPlaces => places.Count > 0;
+        // Where the first customer stands, for the crew behind the window.
+        public Vector3? WindowPlace => places.Count > 0 ? places[0] : (Vector3?)null;
         public int Count => people.Count + leaving.Count;
         public bool Finished => Count == 0 || Time.time - closedAt > ClosingSeconds;
 

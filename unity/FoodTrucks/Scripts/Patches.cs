@@ -6,6 +6,7 @@ using System.Reflection;
 using Buildings;
 using Dialogs;
 using Entities;
+using Enums;
 using FoodTrucks.Core.Saves;
 using BigAmbitions.Items;
 using HarmonyLib;
@@ -49,6 +50,13 @@ namespace FoodTrucks
             Patch(typeof(CityMapFilters), "InitializeFilters", Type.EmptyTypes, typeof(MapFilters), postfix: nameof(MapFilters.InitializePostfix));
             Patch(typeof(CityMapFilters), "ApplyFilters", Type.EmptyTypes, typeof(MapFilters), postfix: nameof(MapFilters.ApplyPostfix));
             Patch(typeof(CityMapFilters), "ApplyFilters", new[] { typeof(CityBuildingController) }, typeof(MapFilters), postfix: nameof(MapFilters.BuildingPostfix));
+
+            // Hires: the game's employees as a vehicle's crew. Their shift hours count as worked (paid at midnight),
+            // a route counts as their task, and the "unassigned" to-do stays away while they have a vehicle.
+            Patch(typeof(EmployeeHelper), "RunHourly", Type.EmptyTypes, nameof(CountCrewHour), prefix: true);
+            Patch(AccessTools.TypeByName("AI.Employees.NoTaskAssignedComplaint"), "ConditionToComplainMet", new[] { typeof(EmployeeInstance) }, nameof(CrewHasTask));
+            Patch(AccessTools.TypeByName("AI.Employees.NoTaskAssignedComplaint"), "ComplaintHandled", new[] { typeof(EmployeeInstance) }, nameof(CrewTaskHandled));
+            Patch(AccessTools.TypeByName("UI.Tasks.TasksUI"), "CreateTodoTask", null, nameof(SkipCrewUnassignedTask), prefix: true);
 
             // Cargo limit: food up to the vehicle's units, equipment up to its slots.
             Patch(typeof(VehicleInstance), "MergeIntoCargo", new[] { typeof(CargoInstance) },
@@ -214,6 +222,35 @@ namespace FoodTrucks
                 });
             }
             catch (Exception ex) { Log.Error(ex); }
+        }
+
+        private static void CountCrewHour()
+        {
+            try { HireCrew.CountHour(); }
+            catch (Exception ex) { Log.Error(ex); }
+        }
+
+        private static void CrewHasTask(EmployeeInstance employeeInstance, ref bool __result)
+        {
+            try { if (__result && HireCrew.IsCrew(employeeInstance)) __result = false; }
+            catch (Exception ex) { Log.Error(ex); }
+        }
+
+        private static void CrewTaskHandled(EmployeeInstance employeeInstance, ref bool __result)
+        {
+            try { if (!__result && HireCrew.IsCrew(employeeInstance)) __result = true; }
+            catch (Exception ex) { Log.Error(ex); }
+        }
+
+        // Returning false skips creating the task; callers ignore the result.
+        private static bool SkipCrewUnassignedTask(TodoTaskType type, string employeeId)
+        {
+            try { return type != TodoTaskType.EmployeeUnassigned || !HireCrew.IsCrew(HireCrew.Find(employeeId)); }
+            catch (Exception ex)
+            {
+                Log.Error(ex);
+                return true;
+            }
         }
 
         private static void PanelVehicle(ItemPanelUI __instance, VehicleController vehicle)

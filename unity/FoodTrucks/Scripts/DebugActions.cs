@@ -16,7 +16,7 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks
 {
-    // Debug and maintenance actions: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
+    // Debug and maintenance actions: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
     // Ctrl+Shift+F12 uninstall step. Also console commands when the game runs with -console.
     internal sealed class DebugActions : MonoBehaviour
     {
@@ -30,6 +30,7 @@ namespace FoodTrucks
         private static readonly Action TaxStatementAction = IssueTaxStatement;
         private static readonly Action StatusAction = ShowStatus;
         private static readonly Action DemandAction = ShowDemand;
+        private static readonly Action HireAction = HireTestWorker;
         private static readonly Action UninstallAction = Uninstall.Request;
 
         private void OnEnable()
@@ -44,12 +45,13 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_grip", "Food Trucks: log where the hands and grip points are while pushing", GripAction);
                 CommandHelper.AddCommand("foodtrucks_tax_fixture", "Food Trucks: record $200,000 of street food today, ledger only (throwaway saves only)", TaxFixtureAction);
                 CommandHelper.AddCommand("foodtrucks_tax_statement", "Food Trucks: issue this year's tax statement now (throwaway saves only)", TaxStatementAction);
+                CommandHelper.AddCommand("foodtrucks_hire", "Food Trucks: hire a customer service worker with skill 60, unassigned (throwaway saves only)", HireAction);
                 CommandHelper.AddCommand("foodtrucks_demand", "Food Trucks: the demand model's reading for the cart next to you", DemandAction);
                 CommandHelper.AddCommand("foodtrucks_status", "Food Trucks: show the mod's save data", StatusAction);
                 CommandHelper.AddCommand("foodtrucks_uninstall", "Food Trucks: remove and refund all Food Trucks vehicles (run twice to confirm)", UninstallAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.");
+            Log.Info("Debug actions ready: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.");
         }
 
         private void OnDisable()
@@ -66,6 +68,7 @@ namespace FoodTrucks
                 CommandHelper.RemoveCommand(TaxStatementAction);
                 CommandHelper.RemoveCommand(StatusAction);
                 CommandHelper.RemoveCommand(DemandAction);
+                CommandHelper.RemoveCommand(HireAction);
                 CommandHelper.RemoveCommand(UninstallAction);
             }
             catch (Exception ex) { Log.Error(ex); }
@@ -84,6 +87,7 @@ namespace FoodTrucks
             else if (keyboard.f11Key.wasPressedThisFrame) Run("grip", GripAction);
             else if (keyboard.f8Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax fixture", TaxFixtureAction);
             else if (keyboard.f8Key.wasPressedThisFrame) Run("zone point", ZonePointAction);
+            else if (keyboard.f9Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("hire", HireAction);
             else if (keyboard.f9Key.wasPressedThisFrame) Run("demand here", DemandAction);
             else if (keyboard.f10Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax statement", TaxStatementAction);
             else if (keyboard.f10Key.wasPressedThisFrame) Run("status", StatusAction);
@@ -98,6 +102,21 @@ namespace FoodTrucks
                 Log.Error($"Action '{name}' failed: {ex}");
                 Notify($"Food Trucks: {name} failed, see Player.log");
             }
+        }
+
+        // A hired, unassigned customer service worker, the way the game's own candidate command makes one,
+        // so a test session needn't run a recruitment campaign.
+        private static void HireTestWorker()
+        {
+            var candidate = RecruitmentHelper.GenerateCandidate(HireCrew.CustomerServiceSkill, 60f, null);
+            if (candidate == null)
+            {
+                Notify("No candidate generated.");
+                return;
+            }
+            EmployeeHelper.HireCandidate(candidate);
+            Log.Info($"Debug: hired {HireCrew.Name(candidate)} ({candidate.id}), customer service {HireCrew.Skill(candidate):F0}, ${candidate.hourlyWage:F2} an hour.");
+            Notify($"Hired {HireCrew.Name(candidate)}, customer service {HireCrew.Skill(candidate):F0}.");
         }
 
         // A free player-owned vehicle in front of the player, where buying one at the dealer would take too long.

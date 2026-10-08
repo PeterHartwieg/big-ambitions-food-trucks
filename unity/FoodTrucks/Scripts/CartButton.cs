@@ -9,7 +9,7 @@ using UnityEngine.UI;
 namespace FoodTrucks
 {
     // The cart's and truck's own buttons in the item panel while the player pushes the cart or drives the
-    // truck: "Open here" and "Prices". Copies of the panel's Sleep button with their own click handlers.
+    // truck: "Open here", "Prices" and "Hires". Copies of the panel's Sleep button with their own click handlers.
     internal static class CartButton
     {
         private static readonly List<Button> buttons = new List<Button>();
@@ -50,6 +50,7 @@ namespace FoodTrucks
             var after = panel.parkButton.transform.GetSiblingIndex();
             Add(template, "FoodTrucks.OpenButton", "foodtrucks:itempanel_open", () => CartSelling.OpenHere(panel), after + 1);
             Add(template, "FoodTrucks.PricesButton", "foodtrucks:itempanel_prices", PriceDialog.Show, after + 2);
+            Add(template, "FoodTrucks.HiresButton", "foodtrucks:itempanel_hires", () => StaffDialog.Show(panel), after + 3);
             Log.Info("Cart buttons added to the item panel.");
         }
 

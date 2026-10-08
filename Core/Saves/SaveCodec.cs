@@ -155,6 +155,13 @@ namespace FoodTrucks.Core.Saves
                     throw new JsonSerializationException("Schedule Days and Stops must be lists without null entries.");
                 if (vehicle.Transit != null && (vehicle.Transit.ToSpotKey == null || vehicle.Transit.ArrivesAt < vehicle.Transit.DepartsAt))
                     throw new JsonSerializationException("Transit must name its spot and arrive no earlier than it departs.");
+                if (vehicle.Crew == null || vehicle.Crew.Any(string.IsNullOrEmpty) || vehicle.Crew.Distinct(StringComparer.Ordinal).Count() != vehicle.Crew.Count)
+                    throw new JsonSerializationException("Crew must list distinct, non-empty employee IDs.");
+                if (vehicle.Shifts == null || vehicle.Shifts.Any(p => p == null || p.Legs == null || p.Legs.Any(l =>
+                        l == null || !Enum.IsDefined(typeof(FoodTrucks.Core.Fleet.LegKind), l.Kind) || l.StopIndex < 0 || l.End < l.Start)))
+                    throw new JsonSerializationException("Shifts must be plans with legs that end no earlier than they start.");
+                if (vehicle.HireStop < 0)
+                    throw new JsonSerializationException("HireStop must not be negative.");
             }
 
             if (state.Regulars == null)

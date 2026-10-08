@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FoodTrucks.Core.Catering;
 using FoodTrucks.Core.Demand;
 using FoodTrucks.Core.Fleet;
@@ -79,6 +80,16 @@ namespace FoodTrucks.Core.Rules
         // The game's worker measure. The player uses their skill alone.
         public static double EffectiveSkill(double skill, double satisfaction) =>
             ClampSkill(skill, 0) * ClampSkill(satisfaction, 0) / 100.0;
+
+        // Several workers at one window: the simulator takes one speed, so each serves at the team's mean
+        // speed, and customers react to the team's mean effective skill. An empty team serves at base speed.
+        public (double Speed, ServiceMood Mood, double Skill) Team(IEnumerable<double> effectiveSkills)
+        {
+            var skills = (effectiveSkills ?? Array.Empty<double>()).Select(s => ClampSkill(s, BaseSkill)).ToList();
+            if (skills.Count == 0) return (1.0, Mood(BaseSkill), BaseSkill);
+            var skill = skills.Average();
+            return (skills.Average(Speed), Mood(skill), skill);
+        }
 
         // A hook for customer reactions; it does not change sales yet.
         public ServiceMood Mood(double skill) => skill < ComplainBelowSkill ? ServiceMood.Complaining

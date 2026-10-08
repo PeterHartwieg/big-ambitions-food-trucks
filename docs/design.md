@@ -11,7 +11,7 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 | Audience | Public Workshop mod. Neutral names, works without other mods. |
 | Bakery mod | Optional. If installed, its goods can be sold from a display case. |
 | Moving | The player drives the vehicle, parks and opens. |
-| Staffing | The player works the window first. Hires can run a vehicle alone, including driving it between spots on a schedule, in version 1. |
+| Staffing | The player works the window first. Hires can run a vehicle alone, including driving it between spots on a schedule, in version 1. Hires are the game's own employees, unassigned to any building; the vehicle's "Hires" button puts them on it and builds the route stop by stop. The crew sells what is loaded and the player restocks (Peter, 8 October 2026). |
 | Long run | A small fleet is possible. Each vehicle needs its own permit; there is no cap on their number (Peter, 8 October 2026). Never a replacement for buildings. |
 | Licence | Fee plus the game's existing Food Safety course, bought by phone from the City of New York. |
 | Pitches | Park anywhere legal, plus curated premium spots and temporary event pitches. Area type is automatic from nearby buildings, with hand-drawn zones on top. |

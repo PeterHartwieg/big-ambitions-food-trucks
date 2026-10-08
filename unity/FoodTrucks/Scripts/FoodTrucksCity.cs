@@ -103,6 +103,7 @@ namespace FoodTrucks
             Object.DontDestroyOnLoad(runtimeObject);
             runtimeObject.AddComponent<CartSelling>();
             runtimeObject.AddComponent<CartQueueView>();
+            runtimeObject.AddComponent<HireRoutes>();
             runtimeObject.AddComponent<DebugActions>();
             try { PrefabFixes.Apply(); }
             catch (Exception ex) { Log.Error("Prefab fixes: " + ex); }
