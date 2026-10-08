@@ -99,7 +99,9 @@ The first playable slice. It touches every risky layer at once: bundle, vehicle,
 - Legality: carts use the mod's pavement rule, trucks the game's parking lanes (once trucks exist). The Open button names the failed rule.
 - Own price curve.
 
-**Peter:** first balance check. He plays a day at three kinds of spot and decides whether the tables feel right.
+**Balance:** set by calculation, not by play (Peter, 8 October 2026: an early build can't be judged by feel). `docs/balance/cart-economics.md` compares the cart with a delivery-driving day and a small vanilla shop; the cart must sit between them as a stepping stone, and moving must pay clearly more than staying. Its tuning goes into `data/` and the pricing rule.
+
+**Pricing (decided 8 October 2026):** district prices by default, as a pricing manager sets them, plus custom prices per product; the cart shows up like a shop in the game's screens where that's feasible (research first).
 
 **Game side, built 8 October 2026** (not yet checked in game): the data files ship in the mod's `data/` folder and load at startup (`DemandData`); `World` reads the buildings, businesses and neighbourhood around a cart from the city's door positions (on Open and each new day), plus time, rain, market demand and difficulty; `Legality` refuses parking lanes, crosswalks, building entrances and subway stations within 3 m (the game has no hydrant, driveway or pavement data; whether the road layer can tell pavement from road is only logged); `CargoLimit` hooks the game's two cargo methods so food stops at the unit limit and equipment at the slot count, the rest staying in the box; the fitted equipment (vanilla items in the cart's cargo, mapped in `economy.json`) makes the menu; `CartDemand` turns the model's customers, the price curve and the window's service rate into sales per hour; each customer buys a main item by category share and sometimes a cold drink. Ctrl+F9 shows the reading for the cart next to you. The cart's handle moved to the vanilla grip (1.16 m high, 0.65 m reach).
 
