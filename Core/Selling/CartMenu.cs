@@ -1,13 +1,12 @@
-using System;
 using System.Collections.Generic;
 
 namespace FoodTrucks.Core.Selling
 {
     // Milestone 1 menu: base-game food a cart may sell, whatever equipment it has.
-    // Milestone 2 replaces this with the menu that follows the fitted equipment.
+    // Menu.FromEquipment replaces it once the game side fits equipment to vehicles.
     public static class CartMenu
     {
-        public static readonly IReadOnlyList<string> Items = new[]
+        private static readonly Menu menu = new Menu(new[]
         {
             "ba:itemname_hotdog",
             "ba:itemname_burger",
@@ -19,34 +18,14 @@ namespace FoodTrucks.Core.Selling
             "ba:itemname_cupcake",
             "ba:itemname_icecream",
             "ba:itemname_sodacan",
-        };
+        });
 
-        public static bool IsOnMenu(string? itemName)
-        {
-            if (string.IsNullOrEmpty(itemName)) return false;
-            foreach (var item in Items)
-            {
-                if (string.Equals(item, itemName, StringComparison.Ordinal)) return true;
-            }
-            return false;
-        }
+        public static IReadOnlyList<string> Items => menu.Items;
+
+        public static bool IsOnMenu(string? itemName) => menu.IsOnMenu(itemName);
 
         // The item the next customer buys: the menu item with the most units in stock,
         // ties broken by menu order. Null when nothing on the menu is in stock.
-        public static string? PickNext(IReadOnlyDictionary<string, int> unitsByItem)
-        {
-            if (unitsByItem == null) throw new ArgumentNullException(nameof(unitsByItem));
-            string? best = null;
-            var bestUnits = 0;
-            foreach (var item in Items)
-            {
-                if (unitsByItem.TryGetValue(item, out var units) && units > bestUnits)
-                {
-                    best = item;
-                    bestUnits = units;
-                }
-            }
-            return best;
-        }
+        public static string? PickNext(IReadOnlyDictionary<string, int> unitsByItem) => menu.PickNext(unitsByItem);
     }
 }

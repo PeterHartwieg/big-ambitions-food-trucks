@@ -101,6 +101,23 @@ The first playable slice. It touches every risky layer at once: bundle, vehicle,
 
 **Peter:** first balance check. He plays a day at three kinds of spot and decides whether the tables feel right.
 
+**Core half, built 8 October 2026 on branch `milestone-2-core`** (unit-tested, nothing wired into the game yet): `data/demand.json`, `data/economy.json` and an empty `data/zones.json`; `DemandTables`, `AreaClassifier`, `DemandModel`, `PriceCurve`, `ServiceRate`, `Menu.FromEquipment` and `SalesRate`. `CartMenu` and `CartTuning.SalesPerHour` still drive Milestone 1. Decisions made while building it:
+
+- A seventh daypart, night (02 to 05), so every minute has a value. Before 05:00 the day-of-week factors of the previous day apply: 01:00 on Saturday is Friday night.
+- The market factor acts per category, not on the whole menu: a burger truck among burger bars loses only its burger customers. Its ceiling is 1.0, because the game caps demand at 100 [code].
+- Cold drinks bring a quarter of their appetite as customers of their own (`newCustomerWeight` 0.25). The rest becomes add-on drinks on other orders, about 0.2 per customer at lunch.
+- Summer ice cream appetite is 1.3 (the design gave 1.3 and 1.4 in two places); summer cold drinks 1.4.
+- The mod's calendar: 7 in-game days per month, day 1 is 1 April. Both are in `demand.json`.
+- The price curve smooths the game's shop rule [code, unverified in game]. A customer buys up to max(class index, neighbourhood average index) times the reference price, with class indices 1.2, 1.4 and 1.7 and the average weighted by the neighbourhood's class mix (`CitizenHelper.MaxAcceptableRelativePrice`). The reference price is the lower of the item's default price and the cheapest shop in the neighbourhood (`ItemHelper.GetMarketReferencePrice`). So nobody in the game refuses a price up to the neighbourhood average, which is never below 1.2. The class mix is asset data; the curve assumes an average index of 1.35 (a 50/35/15 mix) and keeps every buyer up to it, and `PriceCurve.NeighbourhoodRatio` moves other neighbourhoods onto it once the adapter reads their index: prices up to the reference are unchanged, the neighbourhood's index lands on 1.35, and the curve still ends at 1.9 everywhere. Pricing at 0.8 of the reference brings 10% more buyers; the game has no such bonus.
+- Equipment IDs are the mod's own (`hotdoggrill`, `burgerstation`, ...). Which item the player buys for each is a game-side choice.
+- The theatre surge test moves to Milestone 6 with the rest of the live venue crowds.
+- Until queues exist, the sales rate is customers × price conversion, capped by the window's service rate; customers above the cap are lost.
+- `SalesRate` gives customers per hour, one main item each. The game-side wiring (or Milestone 3's `SalesSimulator`) still has to sell `AddOnsPerCustomer` extra drinks and pick each customer's item by `CustomerShares`; `Menu.PickNext` still picks the item with the most stock.
+- A neighbourhood's season factor stacks with the month's footfall: the Hamptons' winter 0.5 times the winter months' 0.6 gives the design's 0.3.
+- Each vehicle has a stock limit in units (`stockUnits` in `economy.json`, `StockLimit` in Core): cart 80, truck 160. The game counts cargo in boxes, and one wholesale box of hot dogs holds 500 units (Milestone 1 session), so without the limit a cart never sells out. The game side enforces it when loading (`StockLimit.CanLoad`, counting all items in the vehicle) and decides what happens to the rest of a box, since the game's cargo holds whole boxes. A cart loaded under Milestone 1 keeps what it has until it sells it.
+- The game's hot dog sells at $11.65 (`Item.DefaultMarketPrice`, seen in the Milestone 1 session). The price curve works in ratios to the reference price, so it needs no money figure; the Economy module's targets will use this as their reference point.
+- Bakery items take 3 minutes to serve, so a display-case cart serves 20 an hour, the top of the design's range. A cooler-only cart serves 60, but drink-only demand is small.
+
 ## Milestone 3: serving and queues
 
 - The window interaction copied from the seller stand: the player serves the head of the queue.
