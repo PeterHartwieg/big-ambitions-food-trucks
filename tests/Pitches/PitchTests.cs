@@ -152,6 +152,24 @@ public class CityEventsTests
     }
 
     [Fact]
+    public void SeparateVisitsTakeOnePlaceAtATime()
+    {
+        var city = new CityEvent { Id = 1, Booked = 2, Places = 2, Day = 5, Start = 600, End = 960 };
+        var ten = 4 * 1440L + 600;
+        // A cart caught up first: there 10:00 to 11:00 and again 12:00 to 13:00.
+        Assert.True(CityEvents.Claim(city, "cart", ten));
+        Holds.Release(city.Holds, "cart", ten + 60);
+        Assert.True(CityEvents.Claim(city, "cart", ten + 120));
+        Holds.Release(city.Holds, "cart", ten + 180);
+        // A truck from 10:30: the cart never holds more than one of the two places.
+        Assert.True(CityEvents.Claim(city, "truck", ten + 30));
+        // A third vehicle at 12:30 finds both taken.
+        Assert.False(CityEvents.Claim(city, "van", ten + 150));
+        // At 11:30 only the truck is there, but the truck runs on and the cart comes back at 12:00: still full.
+        Assert.False(CityEvents.Claim(city, "van", ten + 90));
+    }
+
+    [Fact]
     public void ACatchUpInTheOtherOrderCantShareAPlaceEither()
     {
         var city = new CityEvent { Id = 1, Booked = 1, Places = 2, Day = 5, Start = 600, End = 960 };

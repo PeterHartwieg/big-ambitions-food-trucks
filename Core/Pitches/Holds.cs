@@ -23,15 +23,27 @@ namespace FoodTrucks.Core.Pitches
         }
 
         // Who would keep the vehicle from a place at that minute; null when one is free (or it holds one). A claim
-        // runs on with no end yet, so every hold not over by then counts, including one that starts later: whichever
-        // vehicle a catch-up reaches first, two never hold one place at the same minute.
+        // runs on with no end yet, so the others' holds from then on count, including ones that start later, at
+        // their busiest minute: whichever vehicle a catch-up reaches first, no more than `capacity` ever hold the
+        // place at one minute.
         public static string? Blocker(IReadOnlyList<PlaceHold> holds, string vehicleId, long minute, int capacity)
         {
             if (holds == null) throw new ArgumentNullException(nameof(holds));
             if (Holding(holds, vehicleId)) return null;
+            if (capacity <= 0) return holds.FirstOrDefault(h => h.VehicleId != vehicleId)?.VehicleId ?? string.Empty;
             var others = holds.Where(h => h.VehicleId != vehicleId && (h.Until == null || h.Until > minute)).ToList();
-            if (others.Count < capacity) return null;
-            return others.Count == 0 ? string.Empty : others[0].VehicleId;
+            // Starts before ends at the same minute: a hold ending at 12:00 and one starting then don't overlap.
+            var changes = others.Select(h => (At: Math.Max(h.From, minute), Step: 1, Hold: h))
+                .Concat(others.Where(h => h.Until != null).Select(h => (At: h.Until!.Value, Step: -1, Hold: h)))
+                .OrderBy(c => c.At).ThenBy(c => c.Step);
+            var held = new List<PlaceHold>();
+            foreach (var change in changes)
+            {
+                if (change.Step < 0) held.Remove(change.Hold);
+                else held.Add(change.Hold);
+                if (held.Count >= capacity) return held[0].VehicleId;
+            }
+            return null;
         }
 
         // The vehicle gives its place back at that minute.

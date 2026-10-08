@@ -197,7 +197,8 @@ namespace FoodTrucks
                 Log.Info($"City event {city.Id} ({city.Kind} at {city.PlaceId}) dropped: not in pitches.json; {city.Booked} places booked, {CartSelling.Money(refund)} paid back.");
                 if (refund <= 0) continue;
                 var info = new TransactionInfo("foodtrucks:transaction_event_refund", new Dictionary<string, string>());
-                // Under the fees' own label, so the refund takes back the deduction the fee gave.
+                // Under the fees' label for the record; the game's tax tracking ignores money coming in, so the fee's
+                // deduction stands (documented in the plan).
                 info.SetTaxDeductibleName("foodtrucks:transaction_cityfees_label");
                 GameManager.ChangeMoneySafe(refund / 100f, info, null, null, force: true, showNotification: true);
                 GameManager.SendTextMessage(CityLicensing.City(), "foodtrucks:message_city_event_cancelled", new Dictionary<string, string> { { "fee", CartSelling.Money(refund) } });

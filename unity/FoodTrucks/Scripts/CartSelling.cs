@@ -423,7 +423,8 @@ namespace FoodTrucks
             if (menu.Problem != MenuProblem.None || menu.Menu.Items.Count == 0) return "foodtrucks:notification_open_no_equipment";
             if (CartDemand.StockOf(cart, menu.Menu).Count == 0) return "foodtrucks:notification_hire_no_stock";
             var crew = HireCrew.OnShift(vehicle, minute).Count;
-            var licensing = Licensing.CanOpen(state, cart.id, SaveGameManager.Current!.Day, playerAtWindow: false, hires: crew);
+            // By the day of the opening, which lags the live day in a catch-up.
+            var licensing = Licensing.CanOpen(state, cart.id, (int)(minute / 1440) + 1, playerAtWindow: false, hires: crew);
             if (licensing != OpenProblem.None) return LicensingKey(licensing);
             var controller = VehicleHelper.GetVehicleController(cart);
             if (controller == null) return "foodtrucks:notification_open_failed";
@@ -705,8 +706,8 @@ namespace FoodTrucks
                 Close(vehicle, "foodtrucks:notification_closed_error", from);
                 return;
             }
-            // The licence ran out while open (a new day began).
-            if (!Licensing.IsValid(state.Licence, SaveGameManager.Current.Day))
+            // The licence ran out while open (a new day began), by the day being sold, which lags in a catch-up.
+            if (!Licensing.IsValid(state.Licence, (int)((long)Math.Floor(from) / 1440) + 1))
             {
                 Close(vehicle, state.Licence.HasVendorLicence ? "foodtrucks:notification_closed_licence" : "foodtrucks:notification_closed_no_licence", from);
                 return;
