@@ -8,7 +8,7 @@ Turns [design.md](design.md) into ordered work. Written 7 October 2026. The stru
 2. Machine setup (paths to the decompile, the SDK clone, the game PC and the test save) is in `CLAUDE.local.md`, which is not committed.
 3. Milestone 0 results go into the README's evidence section, marked checked, pending or unverified.
 
-**Status, 7 October 2026:** Milestone 0 is done and played (README evidence table; session report in `evidence/milestone-0-session-1.md`). Milestone 1 is built and waits for its in-game check (`CHECKS.md`). The carried-over items are done in code except the cart's map icon after a reload (vanilla hand trucks lose it too). Remaining debug keys are listed in the README; gate or remove them before the Workshop release.
+**Status, 7 October 2026:** Milestone 0 is done and played (README evidence table; session report in `evidence/milestone-0-session-1.md`). Milestone 1 was played on 8 October (README; session report in `evidence/milestone-1-session-1.md`). Selling, saves, the truck fixes and the uninstall step work. Carried into Milestone 2: the cart's grip (move the handle to the vanilla grip height and reach), a unit limit for the cart's stock, whether street food belongs in the game's day summary, the drive-by question (a workstation at the window?), and the unchecked items: hover outline, delivery refusal on a save with a warehouse, and the forced tax payment without the mod. Remaining debug keys are listed in the README; gate or remove them before the Workshop release.
 
 ## Ground rules
 

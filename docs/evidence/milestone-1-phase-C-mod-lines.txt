@@ -1,0 +1,16 @@
+[Mod:FoodTrucks] Version 0.1.0 loading.
+[Mod:FoodTrucks] Vehicle registered: foodtrucks:vehicletype_testtruck (hand vehicle tag: False, price 1).
+[Mod:FoodTrucks] Vehicle registered: foodtrucks:vehicletype_foodcart (hand vehicle tag: True, price 1200).
+[Mod:FoodTrucks] Harmony 2.4.2.0.
+[Mod:FoodTrucks] Patch TaxCalculationHelper.GetBusinessIncome: Active.
+[Mod:FoodTrucks] Patch TaxCalculationHelper.GetBusinessSales: Active.
+[Mod:FoodTrucks] Patch TaxCalculationHelper.GetBusinessIncomeTotal: Active.
+[Mod:FoodTrucks] Patch VehicleContractSettings.SetListOfVehiclesForSale: Active.
+[Mod:FoodTrucks] Patch VehicleStoreDialog.OnVehicleSettingsSet: Active.
+[Mod:FoodTrucks] Patch ItemPanelUI.SetVehicle: Active.
+[Mod:FoodTrucks] Patch ItemPanelUI.SetItemInstance: Active.
+[Mod:FoodTrucks] Patch ItemPanelUI.SetMiniGameMode: Active.
+[Mod:FoodTrucks] Save data Fresh: schema 1, written by (none), save count 0, street food days 0.
+[Mod:FoodTrucks] Debug actions ready: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F8 tax fixture, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.
+[Mod:FoodTrucks] Vanilla hand truck: offset -0.75, left hand position (-0.302, 1.157, -0.118), rotation (329.4, 57.8, 141.7), right hand position (0.316, 1.157, -0.090), rotation (339.7, 314.2, 199.4).
+[Mod:FoodTrucks] Food Trucks 0.1.0: data Fresh, save count 0, street food this tax year $0.00.

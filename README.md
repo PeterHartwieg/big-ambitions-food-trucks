@@ -2,7 +2,7 @@
 
 A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, open the window and sell to the lunch crowd, then move on before the evening rush starts somewhere else.
 
-**Status, 7 October 2026:** Milestone 1, the first playable slice, built but not yet checked in the game. Buy a food cart at General US Trucks (1 7th Avenue), carry boxes of food out of a wholesale store and click the cart to load them, push it to a pavement, press **Open here**, and customers buy about 12 items an hour while you stay with the cart. No demand model, queue or licence yet. The cart sells hot dogs, burgers, fries, pizza, coffee, croissants, donuts, cupcakes, ice cream and soda cans at the game's market price; which of these wholesale stores stock as boxes is unverified. The design is in [docs/design.md](docs/design.md) and the build order in [docs/implementation-plan.md](docs/implementation-plan.md).
+**Status, 8 October 2026:** Milestone 1, the first playable slice, played once; results below. Buy a food cart at General US Trucks (1 7th Avenue), carry boxes of food out of a wholesale store and click the cart to load them, push it to a pavement, press **Open here**, and customers buy about 12 items an hour while you stay with the cart. No demand model, queue or licence yet. The cart sells hot dogs, burgers, fries, pizza, coffee, croissants, donuts, cupcakes, ice cream and soda cans at the game's market price; which of these wholesale stores stock as boxes is unverified. The design is in [docs/design.md](docs/design.md) and the build order in [docs/implementation-plan.md](docs/implementation-plan.md).
 
 ## Removing the mod
 
@@ -30,16 +30,26 @@ Each question the mod depends on, and how sure we are. "Checked" means seen in t
 
 Also found in the session: clicking Sleep in a mod vehicle's item panel throws `SleepEnvironment config is not assigned` (the prefabs carry an empty sleep setup), and the test truck's storage can't be opened although it shows 0/20.
 
-Milestone 1 fixes for these, pending an in-game check:
+Milestone 1 fixes for these, played on 8 October 2026 (session report in [docs/evidence/milestone-1-session-1.md](docs/evidence/milestone-1-session-1.md)):
 
-| Finding | Cause in the game code (unverified) | Fix |
+| Finding | Fix | Status |
 |---|---|---|
-| Sleep throws on the test truck | The SDK example car's sleep setup predates the game's `SleepEnvironmentConfig`, so the reference is empty | The mod copies a vanilla car's sleep setup onto the truck at city load |
-| Truck storage won't open | Vanilla cars have no "open storage" either: an empty car is loaded by clicking it with an item in hand, and cargo shows in the item panel only with `showCargoInItemPanel` | The truck now shows its cargo slots in the item panel |
-| Cart distorted fingers | The game copies the grip points' rotation onto the hand bones; the cart's grip points had none | The mod copies the vanilla hand truck's grip rotations at city load and logs them |
-| Cart slides sideways | The cart turned around the player's feet | The cart's origin is now its axle, with the pusher 1.15 m behind (`playerOffsetWhenActive` −1.15) |
-| No hover highlight, offset icon | Overlay types were unset; the map icon sits on the cart's origin | Vanilla overlay types; the origin moved to the cart's centre. The icon is still missing after a reload, as for the vanilla hand truck |
-| Mod vehicles at every dealer | The spike listed them everywhere | Only General US Trucks lists the cart, in person, and delivery is refused: it would put a pushed cart into a warehouse slot |
+| Sleep throws on the test truck | The mod copies a vanilla car's sleep setup onto the truck at city load | Checked: sleeping in the truck works |
+| Truck storage won't open | None needed: vanilla cars load by clicking them with a box in hand. The truck now lists its cargo | Checked: a box of hot dogs went into the truck by click |
+| Cart distorted fingers | The mod copies the vanilla hand truck's grip rotations | Not fixed: the hands hang below the handle. The vanilla grip is about 1.16 m high and 0.65 m ahead of the player (logged); the cart's handle is 0.95 m high and 0.35 m ahead |
+| Cart slides sideways | The cart's origin is its axle, the pusher 1.15 m behind | Checked, partly: the pivot feels much more natural. Turning without sliding not confirmed step by step |
+| No hover highlight, offset icon | Vanilla overlay types; origin at the cart's centre | Icon checked: it sits on the released cart. Hover outline pending. The icon is still missing after a reload, as for the vanilla hand truck |
+| Mod vehicles at every dealer | Only General US Trucks lists the cart, in person; delivery is refused | Checked: the cart is listed at $1,200 in person. Delivery refusal pending: a new game has no warehouse to deliver to |
+| A save with mod vehicles breaks without the mod | Ctrl+Shift+F12 twice removes and refunds every Food Trucks vehicle | Checked: both vehicles removed and refunded ($3,279.60); the save then loads without the mod with no exceptions, and walking and interaction work. The forced tax payment without the mod is unverified: the console didn't open |
+
+Milestone 1 selling, checked in the same session: loading by click and at the shelves, Open here, about one sale every 5 in-game minutes at $11.65 a hot dog, "Street food sale: Hotdog" in Econoview, the pause message when walking away, the close summary, an open cart surviving save and load, the tax fixture and the refusal of a second tax statement, and "data Fresh" on a save made without the mod.
+
+Open from the session:
+
+- One box of hot dogs holds 500 units, so six slots last days. The cart needs its own unit limit.
+- The game's day summary shows $0 profit: it counts only businesses in rented buildings.
+- Driving past the open cart in a vehicle within 8 m counts as working it. A workstation the player stands at may be better.
+- F6 hid the UI while spawning the test truck; probably another mod's or the game's binding, not confirmed.
 
 ## Building
 

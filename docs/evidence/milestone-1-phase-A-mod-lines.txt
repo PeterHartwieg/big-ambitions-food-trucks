@@ -1,0 +1,81 @@
+[Mod:FoodTrucks] Version 0.1.0 loading.
+[Mod:FoodTrucks] Vehicle registered: foodtrucks:vehicletype_testtruck (hand vehicle tag: False, price 1).
+[Mod:FoodTrucks] Vehicle registered: foodtrucks:vehicletype_foodcart (hand vehicle tag: True, price 1200).
+[Mod:FoodTrucks] Harmony 2.4.2.0.
+[Mod:FoodTrucks] Patch TaxCalculationHelper.GetBusinessIncome: Active.
+[Mod:FoodTrucks] Patch TaxCalculationHelper.GetBusinessSales: Active.
+[Mod:FoodTrucks] Patch TaxCalculationHelper.GetBusinessIncomeTotal: Active.
+[Mod:FoodTrucks] Patch VehicleContractSettings.SetListOfVehiclesForSale: Active.
+[Mod:FoodTrucks] Patch VehicleStoreDialog.OnVehicleSettingsSet: Active.
+[Mod:FoodTrucks] Patch ItemPanelUI.SetVehicle: Active.
+[Mod:FoodTrucks] Patch ItemPanelUI.SetItemInstance: Active.
+[Mod:FoodTrucks] Patch ItemPanelUI.SetMiniGameMode: Active.
+[Mod:FoodTrucks] Save data Fresh: schema 1, written by (none), save count 0, street food days 0.
+[Mod:FoodTrucks] Debug actions ready: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F8 tax fixture, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.
+[Mod:FoodTrucks] Vanilla hand truck: offset -0.75, left hand position (-0.302, 1.157, -0.118), rotation (329.4, 57.8, 141.7), right hand position (0.316, 1.157, -0.090), rotation (339.7, 314.2, 199.4).
+[Mod:FoodTrucks] Food Trucks 0.1.0: data Fresh, save count 0, street food this tax year $0.00.
+[Mod:FoodTrucks] Save data written: save count 1.
+[Mod:FoodTrucks] Open button added to the item panel.
+[Mod:FoodTrucks] Save data written: save count 2.
+[Mod:FoodTrucks] Cart NiFBpZirk+1uIcNEL53ag== open on day 1 at 15:19, stock 500.
+[Mod:FoodTrucks] Cart NiFBpZirk+1uIcNEL53ag== closed (foodtrucks:notification_closed): 0 sales, $0.00 since opening; lifetime 0 sales, $0.00.
+[Mod:FoodTrucks] Cart NiFBpZirk+1uIcNEL53ag== open on day 1 at 15:24, stock 500.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 499 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 498 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 497 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 496 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 495 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 494 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 493 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 492 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 491 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 490 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 489 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 488 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 487 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 486 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 485 units left.
+[Mod:FoodTrucks] Cart NiFBpZirk+1uIcNEL53ag== closed (foodtrucks:notification_closed): 15 sales, $174.75 since opening; lifetime 15 sales, $174.75.
+[Mod:FoodTrucks] Cart NiFBpZirk+1uIcNEL53ag== open on day 1 at 16:47, stock 485.
+[Mod:FoodTrucks] Cart NiFBpZirk+1uIcNEL53ag== closed (foodtrucks:notification_closed): 0 sales, $0.00 since opening; lifetime 15 sales, $174.75.
+[Mod:FoodTrucks] Save data written: save count 3.
+[Mod:FoodTrucks] Cart NiFBpZirk+1uIcNEL53ag== open on day 1 at 17:43, stock 485.
+[Mod:FoodTrucks] Food Trucks 0.1.0: data Fresh, save count 3, street food this tax year $174.75. Cart NiFBpZ: open, stock 485, 15 sales, $174.75 lifetime.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 484 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 483 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 482 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 481 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 480 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 479 units left.
+[Mod:FoodTrucks] Cart NiFBpZirk+1uIcNEL53ag== closed (foodtrucks:notification_closed): 6 sales, $69.90 since opening; lifetime 21 sales, $244.65.
+[Mod:FoodTrucks] Cart NiFBpZirk+1uIcNEL53ag== open on day 1 at 18:18, stock 479.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 478 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 477 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 476 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 475 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 474 units left.
+[Mod:FoodTrucks] Save data written: save count 4.
+[Mod:FoodTrucks] Save data Loaded: schema 1, written by 0.1.0, save count 4, street food days 1.
+[Mod:FoodTrucks] Debug actions ready: Ctrl+F6 test truck, Ctrl+F7 food cart, Ctrl+Shift+F8 tax fixture, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+Shift+F12 uninstall step.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 473 units left.
+[Mod:FoodTrucks] Food Trucks 0.1.0: data Loaded, save count 4, street food this tax year $314.55. Cart NiFBpZ: open, stock 473, 27 sales, $314.55 lifetime.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 472 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 471 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 470 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 469 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 1, 468 units left.
+[Mod:FoodTrucks] Spawned foodtrucks:vehicletype_testtruck: id tEQ4sqKSZUqkbe90mX0tDA==, controller CarController.
+[Mod:FoodTrucks] Save data written: save count 5.
+[Mod:FoodTrucks] Save data written: save count 6.
+[Mod:FoodTrucks] Save data written: save count 7.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 2, 467 units left.
+[Mod:FoodTrucks] Sale: ba:itemname_hotdog for $11.65 on day 2, 466 units left.
+[Mod:FoodTrucks] Open button added to the item panel.
+[Mod:FoodTrucks] Cart NiFBpZirk+1uIcNEL53ag== closed (foodtrucks:notification_closed): 8 sales, $93.20 since opening; lifetime 34 sales, $396.10.
+[Mod:FoodTrucks] Tax fixture: $200000 of street food recorded for day 2 (ledger only).
+[Mod:FoodTrucks] Tax statement issued on request.
+[Mod:FoodTrucks] Uninstall: removed foodtrucks:vehicletype_foodcart NiFBpZirk+1uIcNEL53ag==, refund $2,202.72.
+[Mod:FoodTrucks] Uninstall: removed foodtrucks:vehicletype_testtruck tEQ4sqKSZUqkbe90mX0tDA==, refund $1,076.88.
+[Mod:FoodTrucks] Uninstall: 2 removed, 0 left, refunded $3,279.60, unpaid $0.00.
+[Mod:FoodTrucks] Save data written: save count 8.
+[Mod:FoodTrucks] Save data written: save count 9.
