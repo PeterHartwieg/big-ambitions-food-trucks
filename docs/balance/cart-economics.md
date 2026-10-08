@@ -492,7 +492,7 @@ At lunch a quarter of the city's pitches sell under 9 hot dogs an hour, the medi
 - **Lunch is generous everywhere downtown.** The window binds at most Midtown, Lower Manhattan and Garment District pitches. Picking a spot matters more for the evening, where venues make the difference: a club or theatre corner sells 2 to 3 times the median.
 - **A tiring-pitch rule isn't needed** under this decision.
 
-**Tests.** Sol's data-pinned Core tests were written for his first values. This pass changes `passersPerHour`, the venue weights and the fast food and coffee appetites, so tests that pin those numbers need updating; Peter has asked for that separately.
+**Tests.** Sol's data-pinned Core tests were written for his first values. This pass changes `passersPerHour`, the venue weights and the fast food and coffee appetites, so the tests that pinned them were rewritten to assert behaviour instead: the in-game case is busy at a Midtown weekday lunch (at least 60 passers an hour) and busier than an office block in the evening.
 
 ## Assumptions
 

@@ -162,7 +162,7 @@ public class ShippedDataTests
     }
 
     [Fact]
-    public void EmptyBusinessesUseTheBuildingAndSpecialWithoutBusinessFallsBack()
+    public void EmptyBusinessesUseTheBuildingAndUnclassifiedSpecialBuildingsLeaveNoPresence()
     {
         var classifier = new AreaClassifier(ShippedData.Tables);
 
@@ -172,10 +172,10 @@ public class ShippedDataTests
         {
             new NearbyPlace("ba:buildingtype_office", "ba:businesstype_empty", 0)
         }).PresenceOf("office"), 12);
-        Assert.Equal(1.0, classifier.FromPlaces(new[]
+        Assert.Empty(classifier.FromPlaces(new[]
         {
             new NearbyPlace("ba:buildingtype_special", "ba:businesstype_empty", 0)
-        }).ShareOf(ShippedData.Tables.Classifier.FallbackArea));
+        }).Presences);
     }
 
     [Fact]

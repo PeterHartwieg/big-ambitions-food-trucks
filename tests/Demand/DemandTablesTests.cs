@@ -9,6 +9,23 @@ namespace FoodTrucks.Core.Tests.Demand;
 public class DemandTablesTests
 {
     [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void AdditiveCrowdKeysDefaultWhenAbsent(bool omitBaseline, bool omitSaturation)
+    {
+        var demand = JObject.Parse(ShippedData.Demand);
+        if (omitBaseline) demand.Property("streetBaseline")!.Remove();
+        if (omitSaturation) ((JObject)demand["classifier"]!).Property("saturation")!.Remove();
+
+        var tables = DemandTables.Parse(demand.ToString(), ShippedData.Economy, ShippedData.Zones);
+
+        foreach (Daypart daypart in Enum.GetValues(typeof(Daypart)))
+            Assert.Equal(omitBaseline ? 0.0 : ShippedData.Tables.StreetBaseline(daypart), tables.StreetBaseline(daypart));
+        Assert.Equal(omitSaturation ? 1.25 : ShippedData.Tables.Classifier.Saturation, tables.Classifier.Saturation);
+    }
+
+    [Theory]
     [InlineData("0")]
     [InlineData("-0.25")]
     [InlineData("NaN")]
@@ -81,6 +98,8 @@ public class DemandTablesTests
     [InlineData("economy.json", "schemaVersion", "2")]
     [InlineData("zones.json", "schemaVersion", "2")]
     [InlineData("demand.json", "passersPerHour", null)]
+    [InlineData("demand.json", "streetBaseline", "null")]
+    [InlineData("demand.json", "streetBaseline", "[]")]
     [InlineData("demand.json", "streetBaseline.lunch", "0")]
     [InlineData("demand.json", "streetBaseline.night", "-1")]
     [InlineData("demand.json", "streetBaseline.morning", "NaN")]
@@ -91,7 +110,8 @@ public class DemandTablesTests
     [InlineData("demand.json", "classifier.saturation", "-1")]
     [InlineData("demand.json", "classifier.saturation", "NaN")]
     [InlineData("demand.json", "classifier.saturation", "Infinity")]
-    [InlineData("demand.json", "classifier.saturation", null)]
+    [InlineData("demand.json", "classifier.saturation", "null")]
+    [InlineData("demand.json", "classifier.saturation", "\"1.25\"")]
     [InlineData("zones.json", "zones[0].areas.waterfront", "1.1")]
     [InlineData("demand.json", "areas.office.footfall.lunch", "-1")]
     [InlineData("demand.json", "areas.office.footfall", "rename:footfal")]

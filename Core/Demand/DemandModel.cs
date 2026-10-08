@@ -148,8 +148,9 @@ namespace FoodTrucks.Core.Demand
 
         // Weight appetite by the crowd here now, including the baseline's neutral factor of 1.
         // Common footfall factors cancel; using unscaled crowds also handles promotion/conditions of zero.
+        // Older data can have no baseline and no area crowd; appetite stays neutral with no passers.
         private double AreaAppetite(IReadOnlyDictionary<string, double> crowds, double baseline, double total, string category) =>
-            (baseline + crowds.Sum(p => p.Value * tables.Area(p.Key).AppetiteFactor(category))) / total;
+            total > 0 ? (baseline + crowds.Sum(p => p.Value * tables.Area(p.Key).AppetiteFactor(category))) / total : 1.0;
 
         // Independent crowds before the factors common to every passer, in a stable area order.
         private Dictionary<string, double> AreaCrowds(AreaMix areas, Daypart daypart, DayOfWeek day)

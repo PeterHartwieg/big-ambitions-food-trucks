@@ -59,7 +59,8 @@ namespace FoodTrucks.Core.Demand
                 }
             }
 
-            if (votes.Count == 0) return AreaMix.Single(settings.FallbackArea);
+            // No classified buildings means street baseline only, without a fallback crowd.
+            if (votes.Count == 0) return AreaMix.FromPresences(Array.Empty<KeyValuePair<string, double>>());
             // Fixed summation order prevents rounding from changing ties when places are reordered.
             var totals = votes.Select(pair =>
             {
