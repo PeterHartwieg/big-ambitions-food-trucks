@@ -51,6 +51,7 @@ namespace FoodTrucks.Core.Reputation
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             Day(vehicle, today).Opened = true;
+            vehicle.LastOpenedDay = today;
             vehicle.Health ??= HealthGrades.NewVehicle(healthRules, today, seed);
             return health.OnOpen(vehicle.Health, today);
         }
@@ -102,14 +103,31 @@ namespace FoodTrucks.Core.Reputation
             vehicle?.StockBatches != null && vehicle.StockBatches.TryGetValue(item, out var batches) && batches.Count > 0 &&
             today - batches[0].Day >= healthRules.StaleAfterDays;
 
-        // A sale of stale food marks the day. True the first time that day.
-        public bool Sold(VehicleState vehicle, string item, int today)
+        // One unit sold: it was the oldest. Food ages by calendar day (`today`); a stale sale marks the working
+        // day it belongs to (`workDay`). True the first time that working day.
+        public bool Sold(VehicleState vehicle, string item, int today, int workDay)
         {
-            if (!IsStale(vehicle, item, today)) return false;
-            var record = Day(vehicle, today);
+            var stale = IsStale(vehicle, item, today);
+            Consume(vehicle, item, 1);
+            if (!stale) return false;
+            var record = Day(vehicle, workDay);
             var first = !record.SoldStale;
             record.SoldStale = true;
             return first;
+        }
+
+        // Units gone from the vehicle, oldest first; TrackStock then finds the count already matching.
+        public static void Consume(VehicleState vehicle, string item, int units)
+        {
+            if (vehicle?.StockBatches == null || !vehicle.StockBatches.TryGetValue(item, out var batches)) return;
+            while (units > 0 && batches.Count > 0)
+            {
+                var used = Math.Min(units, batches[0].Units);
+                batches[0].Units -= used;
+                units -= used;
+                if (batches[0].Units == 0) batches.RemoveAt(0);
+            }
+            if (batches.Count == 0) vehicle.StockBatches.Remove(item);
         }
 
         // The night belongs to the evening before: minutes before nightEnds count for the previous day, so a
@@ -140,7 +158,16 @@ namespace FoodTrucks.Core.Reputation
         public double HealthFactor(VehicleState? vehicle) => vehicle?.Health == null ? 1.0 : health.DemandFactor(vehicle.Health);
 
         public double RegularsFactor(SaveState state, string spotKey, int day) =>
-            state?.Regulars == null || string.IsNullOrEmpty(spotKey) ? 1.0 : regulars.DemandFactor(state.Regulars, spotKey, GameDays.Weekday(day));
+            state?.Regulars == null || string.IsNullOrEmpty(spotKey) || day < 1 ? 1.0 : regulars.DemandFactor(state.Regulars, spotKey, GameDays.Weekday(day));
+
+        // Cleaning counts for the working day it happens on and for the vehicle's last opening, so cleaning
+        // up after a late shift reaches the night's day. Days already counted take nothing.
+        public static void Cleaned(VehicleState vehicle, int workDay, int closedThrough)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            foreach (var day in new[] { workDay, vehicle.LastOpenedDay ?? workDay }.Distinct())
+                if (day >= 1 && day > closedThrough) Day(vehicle, day).Cleaned = true;
+        }
 
         public int Points(VehicleState vehicle) => vehicle?.Health == null ? 0 : health.Points(vehicle.Health);
 

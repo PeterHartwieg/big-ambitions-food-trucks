@@ -96,16 +96,56 @@ public class ReputationBookTests
         // Topped up on day 5: ten old, twenty new.
         ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 30 }, 5);
 
-        Assert.True(book.Sold(cart, "hotdog", 6));
+        Assert.True(book.Sold(cart, "hotdog", 6, 6));
         Assert.True(cart.Days.Single(d => d.Day == 6).SoldStale);
 
-        // The old ten sold: what is left came on day 5.
+        // The old ten sold (one above, nine more): what is left came on day 5.
+        ReputationBook.Consume(cart, "hotdog", 9);
         ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 20 }, 6);
         Assert.False(book.IsStale(cart, "hotdog", 7));
         Assert.True(book.IsStale(cart, "hotdog", 8));
 
         ReputationBook.TrackStock(cart, new Dictionary<string, int>(), 8);
         Assert.Empty(cart.StockBatches);
+    }
+
+    [Fact]
+    public void ASaleTakesTheOldestUnitBeforeARefillIsSeen()
+    {
+        var cart = new VehicleState { VehicleId = "c1" };
+        ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 1 }, 1);
+
+        // The last old unit sells, then a fresh box comes on before the next look at the cargo.
+        book.Sold(cart, "hotdog", 2, 2);
+        ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 50 }, 5);
+
+        Assert.Equal(5, cart.StockBatches["hotdog"].Single().Day);
+    }
+
+    [Fact]
+    public void CleaningAfterALateShiftReachesTheNightsDay()
+    {
+        var cart = new VehicleState { VehicleId = "c1" };
+        book.Opened(cart, 5, 1);
+
+        // Cleaned on day 6, the morning after.
+        ReputationBook.Cleaned(cart, 6, closedThrough: 4);
+
+        Assert.True(cart.Days.Single(d => d.Day == 5).Cleaned);
+        Assert.True(cart.Days.Single(d => d.Day == 6).Cleaned);
+        Assert.Equal(1.0, book.RegularsFactor(new SaveState(), "a", 0));
+    }
+
+    [Fact]
+    public void StaleSalesMarkTheWorkingDay()
+    {
+        var cart = new VehicleState { VehicleId = "c1" };
+        ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 10 }, 3);
+
+        // Day 6 at 01:00: three calendar days old, sold on day 5's night.
+        Assert.True(book.Sold(cart, "hotdog", 6, 5));
+
+        Assert.True(cart.Days.Single(d => d.Day == 5).SoldStale);
     }
 
     [Fact]
