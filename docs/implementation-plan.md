@@ -336,7 +336,11 @@ Peter's first session on 0.9.0 found these; they come before the rest of Milesto
 - the game's own item model, where it fits a cart's counter (to check per item: size, and whether it reads from the street);
 - a small model of our own from the Blender pipeline, where the game's item is shop-sized or looks wrong on a cart (the industrial coffee machine and the drinks fridges are the likely ones).
 
-Each slot gets a mount point on the cart model, kept clear of the push bar, the umbrella pole and the box zone that `art/README.md` lists. The truck is not decided yet: the game's items inside behind the hatch is the simple option. Placing equipment freely ("tetris") stays a later version.
+Each slot gets a mount point on the cart model, kept clear of the push bar, the umbrella pole and the box zone that `art/README.md` lists.
+
+**Cart counter layout (Peter, 9 October 2026; replaces the box zone).** No cargo boxes on the cart: they don't fit the model, and real carts keep stock inside the cabinet. The game's box placeholder moves inside the body, out of sight; the unit count works as now. The counter gets two equipment spots, laid out like real New York carts (steam wells and grill set into a hot dog cart's top, a coffee cart's machine at one end with cups beside it, a pretzel or halal cart's case or griddle along the length): one spot behind the umbrella pole and one in front of the push bar, both centred across the width and sized for the 0.40 × 0.36 m equipment models, so any piece fits either spot. Each piece turns to face the side where the queue forms when the cart opens. The steam-well lid stays closed under the front spot. Own Blender models for every piece, so the cart looks of a piece: the ten in `art/equipment` plus compact versions of the hot dog grill, burger station, ice cream counter, pizza oven and display case (to model).
+
+The truck is not decided yet: the game's items inside behind the hatch is the simple option. Placing equipment freely ("tetris") stays a later version.
 
 ## Checklists
 

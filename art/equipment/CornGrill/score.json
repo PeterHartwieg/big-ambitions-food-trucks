@@ -1,0 +1,229 @@
+{
+  "spec": "spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "CornGrill_Body",
+      "CornGrill_Collision"
+    ],
+    "per_object": {
+      "CornGrill_Body": {
+        "triangles": 1396,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.195,
+          -0.15,
+          0.0
+        ],
+        "bbox_max": [
+          0.195,
+          0.15,
+          0.1825
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "CornGrill_Collision": {
+        "triangles": 12,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.195,
+          -0.151,
+          0.0
+        ],
+        "bbox_max": [
+          0.195,
+          0.172,
+          0.196
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 1396,
+    "visible_bbox_min": [
+      -0.195,
+      -0.15,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.195,
+      0.15,
+      0.1825
+    ],
+    "visible_dims": [
+      0.39,
+      0.3,
+      0.1825
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_CornGrill_Final"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.6868,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_CornGrill_BaseColor.png": [
+        512,
+        512
+      ]
+    },
+    "blend_size_mb": 0.16
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "CornGrill_Body",
+      "CornGrill_Collision"
+    ],
+    "per_object": {
+      "CornGrill_Body": {
+        "triangles": 1396,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.195,
+          -0.15,
+          -0.0
+        ],
+        "bbox_max": [
+          0.195,
+          0.15,
+          0.1825
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "CornGrill_Collision": {
+        "triangles": 12,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.195,
+          -0.151,
+          -0.0
+        ],
+        "bbox_max": [
+          0.195,
+          0.172,
+          0.196
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 1396,
+    "visible_bbox_min": [
+      -0.195,
+      -0.15,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.195,
+      0.15,
+      0.1825
+    ],
+    "visible_dims": [
+      0.39,
+      0.3,
+      0.1825
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_CornGrill_Final"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.6871,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.1
+  },
+  "failures": [],
+  "passed": true
+}

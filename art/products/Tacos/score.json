@@ -1,0 +1,229 @@
+{
+  "spec": "spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "Tacos_Body",
+      "Tacos_Collision"
+    ],
+    "per_object": {
+      "Tacos_Body": {
+        "triangles": 584,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.119,
+          -0.103,
+          0.0
+        ],
+        "bbox_max": [
+          0.119,
+          0.103,
+          0.076
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "Tacos_Collision": {
+        "triangles": 36,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.121,
+          -0.105,
+          0.0
+        ],
+        "bbox_max": [
+          0.121,
+          0.105,
+          0.08
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 584,
+    "visible_bbox_min": [
+      -0.119,
+      -0.103,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.119,
+      0.103,
+      0.076
+    ],
+    "visible_dims": [
+      0.238,
+      0.206,
+      0.076
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_Tacos"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5985,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_Tacos_BaseColor.png": [
+        256,
+        256
+      ]
+    },
+    "blend_size_mb": 0.13
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "Tacos_Body",
+      "Tacos_Collision"
+    ],
+    "per_object": {
+      "Tacos_Body": {
+        "triangles": 584,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.119,
+          -0.103,
+          -0.0
+        ],
+        "bbox_max": [
+          0.119,
+          0.103,
+          0.076
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "Tacos_Collision": {
+        "triangles": 36,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.121,
+          -0.105,
+          -0.0
+        ],
+        "bbox_max": [
+          0.121,
+          0.105,
+          0.08
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 584,
+    "visible_bbox_min": [
+      -0.119,
+      -0.103,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.119,
+      0.103,
+      0.076
+    ],
+    "visible_dims": [
+      0.238,
+      0.206,
+      0.076
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_Tacos"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5985,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.06
+  },
+  "failures": [],
+  "passed": true
+}

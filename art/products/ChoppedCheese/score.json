@@ -1,0 +1,229 @@
+{
+  "spec": "spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "ChoppedCheese_Body",
+      "ChoppedCheese_Collision"
+    ],
+    "per_object": {
+      "ChoppedCheese_Body": {
+        "triangles": 596,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.102,
+          -0.0532,
+          0.0
+        ],
+        "bbox_max": [
+          0.102,
+          0.046,
+          0.1045
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "ChoppedCheese_Collision": {
+        "triangles": 20,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.108,
+          -0.055,
+          0.0
+        ],
+        "bbox_max": [
+          0.108,
+          0.052,
+          0.108
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 596,
+    "visible_bbox_min": [
+      -0.102,
+      -0.0532,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.102,
+      0.046,
+      0.1045
+    ],
+    "visible_dims": [
+      0.204,
+      0.0992,
+      0.1045
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_ChoppedCheese"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5547,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_ChoppedCheese_BaseColor.png": [
+        256,
+        256
+      ]
+    },
+    "blend_size_mb": 0.12
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "ChoppedCheese_Body",
+      "ChoppedCheese_Collision"
+    ],
+    "per_object": {
+      "ChoppedCheese_Body": {
+        "triangles": 596,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.102,
+          -0.0532,
+          -0.0
+        ],
+        "bbox_max": [
+          0.102,
+          0.046,
+          0.1045
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "ChoppedCheese_Collision": {
+        "triangles": 20,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.108,
+          -0.055,
+          -0.0
+        ],
+        "bbox_max": [
+          0.108,
+          0.052,
+          0.108
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 596,
+    "visible_bbox_min": [
+      -0.102,
+      -0.0532,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.102,
+      0.046,
+      0.1045
+    ],
+    "visible_dims": [
+      0.204,
+      0.0992,
+      0.1045
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_ChoppedCheese"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5547,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.06
+  },
+  "failures": [],
+  "passed": true
+}

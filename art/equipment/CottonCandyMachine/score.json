@@ -1,0 +1,229 @@
+{
+  "spec": "spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "CottonCandyMachine_Body",
+      "CottonCandyMachine_Collision"
+    ],
+    "per_object": {
+      "CottonCandyMachine_Body": {
+        "triangles": 1464,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.185,
+          -0.16,
+          0.0
+        ],
+        "bbox_max": [
+          0.1915,
+          0.16,
+          0.495
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "CottonCandyMachine_Collision": {
+        "triangles": 28,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.189,
+          -0.163,
+          0.0
+        ],
+        "bbox_max": [
+          0.194,
+          0.163,
+          0.497
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 1464,
+    "visible_bbox_min": [
+      -0.185,
+      -0.16,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.1915,
+      0.16,
+      0.495
+    ],
+    "visible_dims": [
+      0.3765,
+      0.32,
+      0.495
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_CottonCandyMachine.001"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.6252,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_CottonCandyMachine_BaseColor.png": [
+        512,
+        512
+      ]
+    },
+    "blend_size_mb": 0.15
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "CottonCandyMachine_Body",
+      "CottonCandyMachine_Collision"
+    ],
+    "per_object": {
+      "CottonCandyMachine_Body": {
+        "triangles": 1464,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.185,
+          -0.16,
+          -0.0
+        ],
+        "bbox_max": [
+          0.1915,
+          0.16,
+          0.495
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "CottonCandyMachine_Collision": {
+        "triangles": 28,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.189,
+          -0.163,
+          -0.0
+        ],
+        "bbox_max": [
+          0.194,
+          0.163,
+          0.497
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 1464,
+    "visible_bbox_min": [
+      -0.185,
+      -0.16,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.1915,
+      0.16,
+      0.495
+    ],
+    "visible_dims": [
+      0.3765,
+      0.32,
+      0.495
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_CottonCandyMachine.001"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.6252,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.11
+  },
+  "failures": [],
+  "passed": true
+}
