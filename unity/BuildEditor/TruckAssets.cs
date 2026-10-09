@@ -39,13 +39,13 @@ namespace FoodTrucks.BuildEditor
         {
             ("EquipmentHatchRear", new Vector3(0.955f, LedgeTop, -1.83f), HatchScale),
             ("EquipmentHatchFront", new Vector3(0.955f, LedgeTop, -0.37f), HatchScale),
-            ("EquipmentBackRear", new Vector3(-0.28f, 1.15f, -1.80f), 1f),
-            ("EquipmentBackFront", new Vector3(-0.28f, 1.15f, -1.35f), 1f),
+            ("EquipmentBackRear", new Vector3(-0.28f, 1.75f, -1.80f), 1f),
+            ("EquipmentBackFront", new Vector3(-0.28f, 1.75f, -1.35f), 1f),
         };
         // 0.26 m of recess over a 0.36 m deep piece.
         private const float HatchScale = 0.72f;
-        // Just above the sill (y 1.17 to 1.20); the ledge runs from the panes' track (x 0.815) to the hatch (1.10).
-        private const float LedgeTop = 1.205f;
+        // Just above the sill (y 1.77 to 1.80); the ledge runs from the panes' track (x 0.815) to the hatch (1.10).
+        private const float LedgeTop = 1.805f;
 
         public static void GenerateTruck(string vehiclesFolder, string typeName)
         {
@@ -87,14 +87,14 @@ namespace FoodTrucks.BuildEditor
                 body.GetComponent<MeshFilter>().sharedMesh = meshes["Truck_Body"];
                 body.GetComponent<MeshRenderer>().sharedMaterial = material;
                 var obstacle = body.GetComponent<NavMeshObstacle>();
-                obstacle.center = new Vector3(0f, 1.45f, -0.25f);
-                obstacle.size = new Vector3(2.20f, 2.90f, 5.80f);
+                obstacle.center = new Vector3(0f, 1.55f, -0.25f);
+                obstacle.size = new Vector3(2.20f, 3.10f, 5.80f);
 
                 // The hatch opens when the truck opens for business (rotated in game, see TruckHatch).
                 var hatch = new GameObject("Truck_Hatch");
                 hatch.layer = body.layer;
                 hatch.transform.SetParent(body.transform.parent, false);
-                hatch.transform.localPosition = new Vector3(1.10f, 2.15f, -1.10f);
+                hatch.transform.localPosition = new Vector3(1.10f, 2.82f, -1.10f);
                 hatch.AddComponent<MeshFilter>().sharedMesh = meshes["Truck_Hatch"];
                 var hatchRenderer = hatch.AddComponent<MeshRenderer>();
                 hatchRenderer.sharedMaterial = material;
@@ -114,7 +114,7 @@ namespace FoodTrucks.BuildEditor
 
                 // The four equipment spots (VehicleDisplays), each turned to face out of the hatch (+X). The window's
                 // spots sit at its two ends, between the sliding panes and the hatch, a 0.26 m deep recess, so their
-                // pieces are scaled to fit; the back counter's two stand full size behind the crew, on the rear half
+                // pieces are scaled to fit; the worktop's two stand full size behind the crew, on the rear half
                 // (the cab half has the workstation). Clearances measured against Truck_Body.
                 foreach (var (name, position, scale) in EquipmentSpots)
                 {
@@ -151,7 +151,7 @@ namespace FoodTrucks.BuildEditor
                 root.GetComponent<Rigidbody>().mass = Mass;
                 Set(root, "baseMass", Mass);
                 Set(root, "combinedMass", Mass);
-                Set(root, "dimensions", new Vector3(2.20f, 2.90f, 5.80f));
+                Set(root, "dimensions", new Vector3(2.20f, 3.10f, 5.80f));
                 // Low, as on the example car (0.3 m on a 1.4 m body), so the tall box doesn't roll over.
                 Set(root, "centerOfMass", new Vector3(0f, 0.6f, -0.2f));
                 Set(root, "module.capacity", type.maxFuel);

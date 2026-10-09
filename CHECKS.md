@@ -1,6 +1,6 @@
 # Playtest fixes and truck equipment (0.9.3)
 
-Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, crew serving a window the player opened, the cart's final model with its equipment on the counter and parked cars kept off it, the player inside the truck at the hatch, and the Street food fleet page in BizMan. New in 0.9.3: fitted equipment on show in the truck, and the player and crew at the hatch standing on the truck's floor (they stood half a metre too low). Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
+Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, crew serving a window the player opened, the cart's final model with its equipment on the counter and parked cars kept off it, the player inside the truck at the hatch, and the Street food fleet page in BizMan. New in 0.9.3: fitted equipment on show in the truck, and a taller truck: the roof is 0.20 m higher and the serving window sits 0.60 m higher, so the player and crew stand on the truck's floor with their faces in the window. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
 
 ## 1. Automated (me)
 
@@ -53,7 +53,7 @@ Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety cour
 | 40 | Read a card | Name; "Open at …" or "Closed, at …" (or on the way to a stop, or with the private driver); Today and Last 7 days with sales and profit; Health; Crew; Route; each item with "N sold" today and "N left". Do the sales match Econoview's? With the vehicle out on the street, the location button sets the GPS to where it stands, with a vehicle marker on the map; with it in a garage, to the garage's address |
 | 41 | Open a business from the list, go back, close and reopen BizMan | The section is closed again; your own businesses and warehouses open and look as before |
 | 42 | Fit four pieces in the truck (say a grill, a coffee machine, a cooler and a display case), park and look in through the hatch from the pavement, open and closed | The first two stand at the hatch's two ends on a steel ledge, smaller than on the cart, facing the street; the other two on the back counter behind the crew. Nothing pokes through the walls, the closed hatch or the window panes. Do they read from the street? Is the ledge's grey close enough to the truck's steel? |
-| 43 | Open at the hatch, with a hire on shift | You and the hire stand on the truck's floor with head and shoulders in the window, behind the counter (before 0.9.3 you stood half a metre lower). Nobody stands inside an equipment piece |
+| 43 | Open at the hatch, with a hire on shift; look from the pavement, then from the camera at the hatch | From the pavement: your and the hire's heads and shoulders fill the window, nobody stands inside the griddle, the worktop or an equipment piece. The taller truck looks right from the street (window at about eye height, the step from the cab to the higher box roof). At the hatch, the camera doesn't clip through the roof |
 
 ## 3. Log lines (me)
 

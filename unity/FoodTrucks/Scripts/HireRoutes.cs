@@ -169,8 +169,8 @@ namespace FoodTrucks
         // The first tick after a load hides whatever the load spawned, without asking how it got there.
         private bool loadHidden;
         // The vehicles' collision hulls as boxes, a little spare (art/README.md): the truck's runs x −1.23…1.26,
-        // y 0…2.90, z −3.15…2.65; the cart's body x ±0.48, y 0…0.95, z ±0.70.
-        private static readonly Vector3 TruckHalfSize = new Vector3(1.3f, 1.45f, 2.95f);
+        // y 0…3.10, z −3.15…2.65; the cart's body x ±0.48, y 0…0.95, z ±0.70.
+        private static readonly Vector3 TruckHalfSize = new Vector3(1.3f, 1.55f, 2.95f);
         private static readonly Vector3 TruckCentre = new Vector3(0f, 1.55f, -0.25f);
         private static readonly Vector3 CartHalfSize = new Vector3(0.5f, 0.5f, 0.75f);
         private static readonly Vector3 CartCentre = new Vector3(0f, 0.55f, 0f);

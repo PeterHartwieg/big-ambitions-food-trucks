@@ -20,19 +20,23 @@ namespace FoodTrucks
         // A cart's worker stands behind it, opposite the window place.
         private const float CartBehind = 0.85f;
         private const float CartBeside = 0.9f;
-        // Inside the truck, behind the hatch: right of the middle, on the compartment's floor (y 0.94, measured on
-        // Truck_Body), spread along the window when there are several. The player at the hatch (TruckWindow) stands here too,
+        // Inside the truck, behind the hatch: in the middle of the aisle between the window panes (x 0.75) and the
+        // worktop (x 0.43), on the compartment's floor (y 0.94, measured on Truck_Body), spread along the window
+        // when there are several. The window (y 1.80 to 2.82) shows a standing character's head and shoulders. The player at the hatch (TruckWindow) stands here too,
         // in the middle place, and the crew move aside (Core WindowPlaces).
-        private static readonly Vector3 TruckPlace = new Vector3(0.45f, 0.94f, -1.10f);
+        private static readonly Vector3 TruckPlace = new Vector3(0.59f, 0.94f, -1.10f);
         private const float TruckSpacing = 0.6f;
         // With the player in the middle the crew stand closer, so two fit beside them.
         private const float TruckSpacingWithPlayer = 0.45f;
         // Every place stays inside the hatch's opening (z -2.00 to -0.20, art/README.md): its half-width of 0.90 m
         // less a quarter metre for a body at each end.
         private const double HatchHalfWidth = 0.65;
-        // Crew who don't fit the opening wait further back in the truck, behind the wall past the hatch, side by side.
-        private static readonly Vector3 TruckIdle = new Vector3(0.45f, 0.94f, -2.60f);
-        private const float IdleSpacing = 0.5f;
+        // Crew who don't fit the opening wait further back in the aisle, past the hatch towards the rear doors
+        // (the worktop's cabinet fills the rest of the truck's width): one behind the other, the last place
+        // shared by any more.
+        private static readonly Vector3 TruckIdle = new Vector3(0.59f, 0.94f, -2.25f);
+        private const float IdleSpacing = 0.45f;
+        private const int IdlePlaces = 2;
 
         // Where each crew member stands along the hatch; null for one waiting inside.
         private static double?[] TruckPlaces(int crew, bool player) =>
@@ -54,7 +58,7 @@ namespace FoodTrucks
         // A waiting place inside the truck, away from the hatch, facing it.
         private static (Vector3 Position, Quaternion Rotation) IdleSpot(Transform vehicle, int index)
         {
-            var position = vehicle.TransformPoint(TruckIdle - new Vector3(index % 3 * IdleSpacing, 0f, index / 3 * IdleSpacing));
+            var position = vehicle.TransformPoint(TruckIdle - new Vector3(0f, 0f, Math.Min(index, IdlePlaces - 1) * IdleSpacing));
             var facing = vehicle.right;
             facing.y = 0f;
             return (position, facing.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(facing) : vehicle.rotation);

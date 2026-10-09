@@ -13,7 +13,7 @@
     ],
     "per_object": {
       "Truck_Body": {
-        "triangles": 6400,
+        "triangles": 6492,
         "origin": [
           0.0,
           0.0,
@@ -27,7 +27,7 @@
         "bbox_max": [
           1.25,
           3.15,
-          3.05
+          3.25
         ],
         "rotation_deg": [
           0.0,
@@ -208,17 +208,17 @@
         "origin": [
           -1.1,
           1.1,
-          2.15
+          2.82
         ],
         "bbox_min": [
           -1.143,
           0.2,
-          1.2
+          1.8
         ],
         "bbox_max": [
           -0.9681,
           2.0,
-          2.15
+          2.82
         ],
         "rotation_deg": [
           0.0,
@@ -239,12 +239,12 @@
         "closed_islands_inside_out": 0,
         "opens_with_rotation_sign": 1,
         "open_centroid_x": {
-          "1": -1.632,
-          "-1": -0.561
+          "1": -1.672,
+          "-1": -0.521
         }
       },
       "Truck_Collision": {
-        "triangles": 122,
+        "triangles": 126,
         "origin": [
           0.0,
           0.0,
@@ -258,7 +258,7 @@
         "bbox_max": [
           1.231,
           3.15,
-          2.9
+          3.1
         ],
         "rotation_deg": [
           0.0,
@@ -277,10 +277,10 @@
         "inconsistent_normal_edges": 0,
         "degenerate_faces": 0,
         "closed_islands_inside_out": 0,
-        "max_vertex_outside_face_plane_m": 0.00044
+        "max_vertex_outside_face_plane_m": 4e-05
       }
     },
-    "visible_triangles": 8164,
+    "visible_triangles": 8256,
     "visible_bbox_min": [
       -1.26,
       -2.65,
@@ -289,12 +289,12 @@
     "visible_bbox_max": [
       1.25,
       3.15,
-      3.05
+      3.25
     ],
     "visible_dims": [
       2.51,
       5.8,
-      3.05
+      3.25
     ],
     "near_points": {
       "hatch hinge rail": 0.0,
@@ -312,12 +312,12 @@
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
-      "fill": 0.5144,
+      "fill": 0.5796,
       "overlap_fraction": 0.0
     },
     "uv1": {
       "uv_coords_outside_0_1": 0,
-      "fill": 0.5144,
+      "fill": 0.5796,
       "overlap_fraction": 0.0
     },
     "textures": {
@@ -346,7 +346,7 @@
         2048
       ]
     },
-    "blend_size_mb": 0.26
+    "blend_size_mb": 0.24
   },
   "fbx": {
     "label": "fbx",
@@ -361,7 +361,7 @@
     ],
     "per_object": {
       "Truck_Body": {
-        "triangles": 6400,
+        "triangles": 6492,
         "origin": [
           0.0,
           0.0,
@@ -375,7 +375,7 @@
         "bbox_max": [
           1.25,
           3.15,
-          3.05
+          3.25
         ],
         "rotation_deg": [
           90.0,
@@ -556,17 +556,17 @@
         "origin": [
           -1.1,
           1.1,
-          2.15
+          2.82
         ],
         "bbox_min": [
           -1.143,
           0.2,
-          1.2
+          1.8
         ],
         "bbox_max": [
           -0.9681,
           2.0,
-          2.15
+          2.82
         ],
         "rotation_deg": [
           90.0,
@@ -587,12 +587,12 @@
         "closed_islands_inside_out": 0,
         "opens_with_rotation_sign": 1,
         "open_centroid_x": {
-          "1": -1.632,
-          "-1": -0.561
+          "1": -1.672,
+          "-1": -0.521
         }
       },
       "Truck_Collision": {
-        "triangles": 122,
+        "triangles": 126,
         "origin": [
           0.0,
           0.0,
@@ -606,7 +606,7 @@
         "bbox_max": [
           1.231,
           3.15,
-          2.9
+          3.1
         ],
         "rotation_deg": [
           90.0,
@@ -625,10 +625,10 @@
         "inconsistent_normal_edges": 0,
         "degenerate_faces": 0,
         "closed_islands_inside_out": 0,
-        "max_vertex_outside_face_plane_m": 0.00044
+        "max_vertex_outside_face_plane_m": 4e-05
       }
     },
-    "visible_triangles": 8164,
+    "visible_triangles": 8256,
     "visible_bbox_min": [
       -1.26,
       -2.65,
@@ -637,12 +637,12 @@
     "visible_bbox_max": [
       1.25,
       3.15,
-      3.05
+      3.25
     ],
     "visible_dims": [
       2.51,
       5.8,
-      3.05
+      3.25
     ],
     "near_points": {
       "hatch hinge rail": 0.0,
@@ -660,12 +660,12 @@
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
-      "fill": 0.5144,
+      "fill": 0.5796,
       "overlap_fraction": 0.0
     },
     "uv1": {
       "uv_coords_outside_0_1": 0,
-      "fill": 0.5144,
+      "fill": 0.5796,
       "overlap_fraction": 0.0
     },
     "fbx_size_mb": 0.61

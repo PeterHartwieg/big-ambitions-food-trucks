@@ -36,3 +36,17 @@ Rebuilt detailed model, regenerated all six textures, exported with original FBX
 Peter: "too boxy, especially around the front". Prompt `prompt-shape.md`, with two Wikimedia Commons step-van photos as references (a 1997 Chevrolet P30 for the front, a taco truck for the side; the photos are kept outside this repo). 13 min 16 s, 46 tool calls, about $0.60, no interventions. Truck_Body 4,216 → 6,400, collision 138 → 122, visible 8,164 of 8,500. Rounded cap with five marker lights, 12° split windscreen, narrower sloping hood, twin square headlights, curved fenders, bevelled box edges, stainless diamond-plate lower body. My scorer rerun: `SCORE PASS`; Unity import: rotation 0, scale 1, same positions, hatch opens at z = +80. The marker and work lights share `EM_1` R with the headlights, so they light together.
 
 The detail pass before it (version 2, `prompt-detail.md`): 15 min 28 s, 41 tool calls, about $0.61, no interventions; Truck_Body 1,832 → 4,216. Archived in `v2/`.
+
+## Taller compartment, 9 October 2026 (version 4)
+
+The serving window was too low for the interior: a 1.8 m person on the floor (z 0.94) showed only their torso. Edited `build_truck.py` by hand (Opus 5.5 subagent) and rebuilt headless with `Blender -b FoodTruck.blend --python art/truck/build_truck.py` from the worktree root.
+
+- Compartment roof 2.90 → 3.10 (ceiling 2.76 → 2.96); the cab keeps 2.90, with a sloped step at y −0.98…−0.92 and side wedges closing it. Roof units, the rear rollover, rear drip rail, rear upper markers and the side drip channel (now compartment only) rise 0.20; the ladder reaches 3.06.
+- Serving opening z 1.20…2.15 → 1.80…2.82; hinge and `Truck_Hatch` origin at 2.82. Frame, sill, head, shelf (top 1.75), supports, sliding panes (stretched to the new height, track still at x −0.815…−0.785), lamps and menu panel move with it; the hatch's bands and stays are stretched to the new height.
+- Interior fittings +0.60: worktop 1.65…1.75 on a stainless cabinet down to the floor (two door seams), back counter, griddle station, shelves, hood, tanks; backsplash 1.75…2.94.
+- Collision: roof cut-off 2.901 → 3.101; candidate planes now need 2.6° between them (was 1.8°), because a sliver corner near the rear bumper broke strict convexity (1.5 mm).
+- `spec.json`: hinge, near points, envelope, extent and the window's clear box updated to the new heights.
+
+Triangles: Truck_Body 6,400 → 6,492 (budget 6,500), hatch 164, wheels 400 each, visible 8,256, collision 122 → 126. UV fill 58%. Scorer: `SCORE PASS` (blend and FBX). Renders: `renders/review-sheet.png` (hatch open), `renders/review-sheet-closed.png`, single views in `renders/review/`. Not yet re-imported into Unity.
+
+Follow-up the same day: cleared the aisle behind the hatch. The griddle station and its knobs, its shelf and the hood now stop at x −0.42 (were −0.59, −0.50, −0.45); the worktop at −0.43 and the cabinet at −0.42. A box x −0.74…−0.44, y 0.20…2.00, z 0.95…2.74 (three crew bodies at Unity x 0.59) is clear of Truck_Body; the inner sliding pane stays at x ≥ −0.754. Truck_Body 6,492 tris, `SCORE PASS`.

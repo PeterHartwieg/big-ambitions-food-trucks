@@ -79,19 +79,19 @@ On the cart, `VehicleDisplays` puts the first fitted piece on `EquipmentFront` a
 
 ## Food truck
 
-Replaces the example car's meshes inside the copied `TurboHonza` prefab (`ModAssets.GenerateTruck`). This is version 3 (detail and shaping passes, modelled after the step-van reference photos); `truck/v1/` and `truck/v2/` keep the earlier versions.
+Replaces the example car's meshes inside the copied `TurboHonza` prefab (`ModAssets.GenerateTruck`). This is version 4: version 3's step-van shape (detail and shaping passes, modelled after the reference photos) with a taller food compartment and the serving window raised to a standing person's face. `truck/v1/` and `truck/v2/` keep the earlier versions.
 
 **Meshes** (`truck/FoodTruck.fbx`, all nodes at rotation 0, scale 1, two UV channels):
 
 | Node | Replaces | Position | Notes |
 |---|---|---|---|
-| `Truck_Body` | `CarHolder/Body/CheapSaloon` | (0, 0, 0) | 6,400 tris. Body x ±1.10 (mirrors and shelf to −1.25 / +1.26), y 0.20…2.90 with roof units to 3.05, z −3.15…2.65 (5.80 m) |
+| `Truck_Body` | `CarHolder/Body/CheapSaloon` | (0, 0, 0) | 6,492 tris. Body x ±1.10 (mirrors and shelf to −1.25 / +1.26), y 0.20…3.10 (cab roof 2.90, compartment roof 3.10, ceiling inside 2.96) with roof units to 3.25, z −3.15…2.65 (5.80 m) |
 | `Truck_Wheel_FL` | `Wheels/FrontLeft` | (−0.87, 0.38, 1.80) | 0.76 m diameter (radius 0.38), 0.23 m wide, 400 tris |
 | `Truck_Wheel_FR` | `Wheels/FrontRight` | (0.87, 0.38, 1.80) | |
 | `Truck_Wheel_RL` | `Wheels/RearLeft` | (−0.87, 0.38, −1.80) | |
 | `Truck_Wheel_RR` | `Wheels/RearRight` | (0.87, 0.38, −1.80) | |
-| `Truck_Hatch` | new | (1.10, 2.15, −1.10) | Serving hatch with its struts, hinge along local Z; open at localEulerAngles.z = +80 (checked in Unity). 164 tris |
-| `Truck_Collision` | `Colliders/BodyCollider` mesh | (0, 0, 0) | Convex hull, 122 tris, x −1.231…1.26, y 0…2.90 (roof units left outside), z −3.15…2.65. Convex MeshCollider, layer 12 as before |
+| `Truck_Hatch` | new | (1.10, 2.82, −1.10) | Serving hatch with its struts, hinge along local Z; open at localEulerAngles.z = +80 (checked in Unity). 164 tris |
+| `Truck_Collision` | `Colliders/BodyCollider` mesh | (0, 0, 0) | Convex hull, 126 tris, x −1.231…1.26, y 0…3.10 (roof units left outside), z −3.15…2.65. Convex MeshCollider, layer 12 as before |
 
 Wheelbase 3.60 m (the example car: 2.70 m), track 1.74 m (1.50 m).
 
@@ -103,8 +103,8 @@ Wheelbase 3.60 m (the example car: 2.70 m), track 1.74 m (1.50 m).
 | `*_WheelController` positions | hub + (0, 0.164, 0), so y = 0.544 (0.470), keeping the example's suspension offset [inference] |
 | WheelController radius / width | 0.38 / 0.23 (0.305 / 0.190) |
 | Wheel `ShadowCaster` scale | (0.279, 0.358, 0.358), the example's ratio to wheel width and radius ((0.231, 0.287, 0.287)) |
-| NWH mass module `dimensions` | (2.20, 2.90, 5.80) (1.99, 1.41, 4.58) |
-| `NavMeshObstacle` | centre (0, 1.45, −0.25), extents (1.10, 1.45, 2.90) |
+| NWH mass module `dimensions` | (2.20, 3.10, 5.80) (1.99, 1.41, 4.58) |
+| `NavMeshObstacle` | centre (0, 1.55, −0.25), extents (1.10, 1.55, 2.90) |
 | `RefuelingPosition` | (−1.45, 0, −2.30): fuel cap on the left at (−1.10, 0.90, −2.30) ((−1.2, 0, −1.5)) |
 | `LoadingPosition` | (0, 0, −3.50), 0.35 m behind the rear door, as on the car ((0, 0, −2.633)) |
 | `Driverside` / `Passengerside` | (∓1.35, 0, 1.15), beside the cab doors [suggested; nudge in the editor] ((−1.243 / 1.007, 0, 0.117)) |
@@ -113,17 +113,17 @@ Wheelbase 3.60 m (the example car: 2.70 m), track 1.74 m (1.50 m).
 | Spoiler box colliders | remove; the truck has no spoiler |
 | Rigidbody mass and `centerOfMass` | not an art value; a step van is several times the car's 1,400 kg |
 
-**Serving window** (for the window interaction later): opening at x = 1.10, y 1.20…2.15, z −2.00…−0.20, centre (1.10, 1.675, −1.10), at least 0.30 m deep. Stainless shelf on the outside, top at y 1.15, x 1.10…1.26.
+**Serving window** (for the window interaction later): opening at x = 1.10, y 1.80…2.82, z −2.00…−0.20, centre (1.10, 2.31, −1.10), at least 0.30 m deep. Stainless shelf on the outside, top at y 1.75, x 1.10…1.26. A 1.8 m person on the compartment floor (y 0.94) has eyes at 2.62 and the top of the head at 2.74, both inside the opening. The worktop inside is at y 1.65…1.75 on cabinets down to the floor. Behind the hatch the aisle is clear for standing crew: nothing inside (worktop, cabinets, griddle station, its shelf, hood) reaches past x 0.43, and the parked sliding panes stay at x ≥ 0.754, so three 0.30 m deep bodies side by side at x 0.59 (x 0.44…0.74, z −2.00…−0.20, y 0.95…2.74) touch nothing.
 
 **Equipment spots** (built by `TruckAssets`, not in the FBX). The compartment's floor is at y 0.94; the crew and the player at the hatch stand on it (`WindowCrew`). Each spot is turned +90° about Y, so a piece's front (+Z) faces out of the hatch. Clearances measured against `Truck_Body` in Blender for a 0.40 × 0.36 × 0.70 m piece:
 
 | Spot | Position | Scale | Notes |
 |---|---|---|---|
-| `EquipmentHatchRear` | (0.955, 1.205, −1.83) | 0.72 | Rear end of the hatch, in the recess between the sliding panes' track (x 0.815) and the hatch (x 1.10): 0.26 m deep, so the piece is scaled to 0.26 × 0.29 m, up to 0.50 m tall |
-| `EquipmentHatchFront` | (0.955, 1.205, −0.37) | 0.72 | Cab end of the hatch, as above |
-| `EquipmentBackRear` | (−0.28, 1.15, −1.80) | 1 | On the back counter (top y 1.15), behind the crew, clear of the shelves (x ≤ −0.49) and the hood |
-| `EquipmentBackFront` | (−0.28, 1.15, −1.35) | 1 | As above; further towards the cab the workstation is in the way |
-| `Truck_Ledge` | x 0.82…1.10, y 1.18…1.205, z −1.98…−0.22 | | Steel ledge under the hatch's two spots (`M_TruckLedge`, plain HDRP/Lit). The sill alone is only 0.12 m deep |
+| `EquipmentHatchRear` | (0.955, 1.805, −1.83) | 0.72 | Rear end of the hatch, in the recess between the sliding panes' track (x 0.815) and the hatch (x 1.10): 0.26 m deep, so the piece is scaled to 0.26 × 0.29 m, up to 0.50 m tall. The recess is clear from the sill (y 1.805) to 2.505 for z −1.97…−0.23 |
+| `EquipmentHatchFront` | (0.955, 1.805, −0.37) | 0.72 | Cab end of the hatch, as above |
+| `EquipmentBackRear` | (−0.28, 1.75, −1.80) | 1 | On the worktop (top y 1.75), behind the crew, clear of the shelves (x ≤ −0.49) and the hood |
+| `EquipmentBackFront` | (−0.28, 1.75, −1.35) | 1 | As above; further towards the cab the workstation is in the way |
+| `Truck_Ledge` | x 0.82…1.10, y 1.78…1.805, z −1.98…−0.22 | | Steel ledge under the hatch's two spots (`M_TruckLedge`, plain HDRP/Lit). The sill alone is only 0.12 m deep |
 
 **Material:** duplicate `M_HonzaCar.mat` (the game's `SH_Vehicle` graph) and swap each texture for its counterpart. Import settings as for the example: Read/Write on for the meshes (the damage component deforms them [inference, as in the tooling research]), `T_FoodTruck_N` as a normal map (not sRGB), the others as default textures.
 

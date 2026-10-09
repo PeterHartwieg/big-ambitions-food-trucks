@@ -24,6 +24,9 @@ PALETTE = {
  'tank': ((.72,.76,.72),1,.65,0), 'diamond': ((.60,.66,.67),1,.68,0)
 }
 KEYS=list(PALETTE)
+# Serving band: the opening moved from z 1.20..2.15 to 1.80..2.82 (version 4).
+WIN_LO,WIN_HI=1.80,2.82
+def W(z):return round(WIN_LO+(z-1.20)*(WIN_HI-WIN_LO)/.95,4)
 class Builder:
  def __init__(self): self.v=[]; self.f=[]; self.tags=[]
  def part(self, verts, faces, tag):
@@ -79,8 +82,10 @@ class Builder:
   self.part(verts,faces,'paint')
  def roof_shell(self):
   # Longitudinal stations form the 0.30m front cap and 0.08m rear rollover.
+  # The cab keeps its 2.90m roof; the food compartment steps up to 3.10m behind it.
   stations=[(-1.932,2.60,2.56),(-1.892,2.75,2.60),(-1.782,2.860,2.70),(-1.632,2.90,2.76),
-            (2.96,2.90,2.76),(3.01657,2.87657,2.76),(3.04,2.82,2.76)]
+            (-.98,2.90,2.76),(-.92,3.10,2.96),
+            (2.96,3.10,2.96),(3.01657,3.07657,2.96),(3.04,3.02,2.96)]
   verts=[]
   for y,top,bottom in stations:
    # Two segments across the 0.08m roof edge; rounded front plan corners.
@@ -159,16 +164,16 @@ def add_working_details(b):
   # Low protective rail and upper drip channel.
   xa,xb=sorted((sign*1.102,sign*1.125))
   b.box((xa,-.89,.96),(xb,2.95,1.005),'trim')
-  b.softbox((xa,-1.52,2.78),(xb,2.96,2.815),'steel',.009)
+  b.softbox((xa,-.92,2.98),(xb,2.96,3.015),'steel',.009)
   # Body panel joins kept away from the opening.
-  for y in (-.86,2.75): b.box((xa,y,1.035),(xb,y+.012,2.77),'seam')
+  for y in (-.86,2.75): b.box((xa,y,1.035),(xb,y+.012,2.97),'seam')
   # Separate marker lens islands, using EM1 headlights channel (running lights).
   for y in (-.75,2.73):
    xa,xb=sorted((sign*1.105,sign*1.136));b.box((xa,y-.075,1.065),(xb,y+.075,1.15),'rubber')
    xa,xb=sorted((sign*1.136,sign*1.145));b.box((xa,y-.054,1.082),(xb,y+.054,1.133),'marker')
-  for y in (-1.55,2.88):
-   xa,xb=sorted((sign*1.105,sign*1.132));b.box((xa,y-.065,2.72),(xb,y+.065,2.78),'rubber')
-   xa,xb=sorted((sign*1.132,sign*1.14));b.box((xa,y-.048,2.731),(xb,y+.048,2.769),'marker')
+  for y,dz in ((-1.55,0),(2.88,.20)):
+   xa,xb=sorted((sign*1.105,sign*1.132));b.box((xa,y-.065,2.72+dz),(xb,y+.065,2.78+dz),'rubber')
+   xa,xb=sorted((sign*1.132,sign*1.14));b.box((xa,y-.048,2.731+dz),(xb,y+.048,2.769+dz),'marker')
  # Chassis rails and left utility equipment, between fixed axles.
  for x in (-.66,.66):b.box((x-.055,-1.30,.31),(x+.055,1.29,.42),'plastic')
  b.box((.78,-.58,.37),(1.16,.39,.65),'tank')
@@ -186,44 +191,47 @@ def add_working_details(b):
  # Broad left side interruption: a small stainless backsplash access panel.
  b.box((1.102,1.72,1.45),(1.119,2.50,2.38),'steel')
  b.box((1.119,1.76,1.49),(1.124,2.46,2.34),'tank')
- # Curb menu panel with large, abstract burger and cup pictograms.
- b.box((-1.13,2.14,1.29),(-1.102,2.68,2.16),'steel')
- b.box((-1.139,2.17,1.32),(-1.13,2.65,2.13),'interior')
- b.prism(-1.147,-1.14,[(2.25,1.87),(2.28,1.94),(2.36,1.98),(2.48,1.98),(2.55,1.94),(2.58,1.87)],'warm')
- b.box((-1.147,2.25,1.825),(-1.14,2.58,1.855),'chalk')
- b.box((-1.147,2.27,1.78),(-1.14,2.56,1.815),'warm')
- b.prism(-1.147,-1.14,[(2.32,1.46),(2.49,1.46),(2.53,1.67),(2.28,1.67)],'chalk')
- b.rod((-1.15,2.47,1.66),(-1.15,2.48,1.74),.012,'warm',6)
+ # Curb menu panel with large, abstract burger and cup pictograms, raised with the window.
+ M=.60
+ b.box((-1.13,2.14,1.29+M),(-1.102,2.68,2.16+M),'steel')
+ b.box((-1.139,2.17,1.32+M),(-1.13,2.65,2.13+M),'interior')
+ b.prism(-1.147,-1.14,[(y,z+M) for y,z in [(2.25,1.87),(2.28,1.94),(2.36,1.98),(2.48,1.98),(2.55,1.94),(2.58,1.87)]],'warm')
+ b.box((-1.147,2.25,1.825+M),(-1.14,2.58,1.855+M),'chalk')
+ b.box((-1.147,2.27,1.78+M),(-1.14,2.56,1.815+M),'warm')
+ b.prism(-1.147,-1.14,[(y,z+M) for y,z in [(2.32,1.46),(2.49,1.46),(2.53,1.67),(2.28,1.67)]],'chalk')
+ b.rod((-1.15,2.47,1.66+M),(-1.15,2.48,1.74+M),.012,'warm',6)
  # Two sheltered serving lamps.
  for y in (.43,1.77):
-  b.box((-1.16,y-.10,2.30),(-1.105,y+.10,2.36),'plastic')
-  b.box((-1.164,y-.073,2.302),(-1.158,y+.073,2.337),'worklight')
+  b.box((-1.16,y-.10,2.90),(-1.105,y+.10,2.96),'plastic')
+  b.box((-1.164,y-.073,2.902),(-1.158,y+.073,2.937),'worklight')
  # Sliding window panes sit inside the room beyond the required clear recess.
  # Both pane frames parked on rear half, leaving front half open.
  for x,ya,yb in [(-.795,1.10,1.94),(-.77,1.04,1.88)]:
-  for y in (ya,yb):b.box((x,y,1.24),(x+.016,y+.026,2.105),'steel')
-  for z in (1.235,2.075):b.box((x,ya,z),(x+.016,yb+.026,z+.028),'steel')
+  for y in (ya,yb):b.box((x,y,W(1.24)),(x+.016,y+.026,W(2.105)),'steel')
+  for z in (W(1.235),W(2.075)):b.box((x,ya,z),(x+.016,yb+.026,z+.028),'steel')
   # Tint face in the parked outer pane only; separate inner-pane frame stays visible.
-  if x<-.78:b.box((x+.004,ya+.026,1.27),(x+.009,yb,2.075),'glass')
- b.box((-.815,.20,1.205),(-.785,2.00,1.235),'steel')
- # Interior stainless workstation, hood, shelves and flat cooking surface.
- b.box((-.59,.28,1.16),(.21,.99,1.33),'plastic')
- b.box((-.57,.30,1.33),(.19,.97,1.38),'steel')
- for y in (.37,.47,.57,.67,.77,.87):b.box((-.55,y,1.379),(.17,y+.023,1.39),'plastic')
- for y in (.40,.63,.86):b.cyl((-.595,y,1.27),.028,.016,(1,0,0),'rubber',8)
- b.prism(-.45,.80,[(.22,2.02),(1.06,2.02),(1.06,2.21),(.22,2.21)],'steel')
- b.box((-.45,.27,2.019),(.61,1.01,2.027),'trim')
- b.box((.87,.22,1.35),(.925,1.05,2.10),'tank')
- b.box((-.50,.26,1.70),(.25,.95,1.745),'steel')
+  if x<-.78:b.box((x+.004,ya+.026,W(1.27)),(x+.009,yb,W(2.075)),'glass')
+ b.box((-.815,.20,W(1.205)),(-.785,2.00,W(1.235)),'steel')
+ # Interior stainless workstation, hood, shelves and flat cooking surface, raised 0.60m with the worktop.
+ F=.60
+ # Trimmed so nothing reaches past x=-0.42: the aisle behind the hatch stays clear for standing crew.
+ b.box((-.40,.28,1.16+F),(.21,.99,1.33+F),'plastic')
+ b.box((-.38,.30,1.33+F),(.19,.97,1.38+F),'steel')
+ for y in (.37,.47,.57,.67,.77,.87):b.box((-.36,y,1.379+F),(.17,y+.023,1.39+F),'plastic')
+ for y in (.40,.63,.86):b.cyl((-.41,y,1.27+F),.028,.016,(1,0,0),'rubber',8)
+ b.prism(-.42,.80,[(.22,2.02+F),(1.06,2.02+F),(1.06,2.21+F),(.22,2.21+F)],'steel')
+ b.box((-.42,.27,2.019+F),(.61,1.01,2.027+F),'trim')
+ b.box((.87,.22,1.35+F),(.925,1.05,2.10+F),'tank')
+ b.box((-.42,.26,1.70+F),(.25,.95,1.745+F),'steel')
  for y in (.40,.71):
-  b.cyl((-.05,y,1.827),.063,.16,(0,0,1),'tank',8)
-  b.cyl((-.05,y,1.913),.066,.014,(0,0,1),'plastic',8)
- for z in (1.64,1.95):
+  b.cyl((-.05,y,1.827+F),.063,.16,(0,0,1),'tank',8)
+  b.cyl((-.05,y,1.913+F),.066,.014,(0,0,1),'plastic',8)
+ for z in (1.64+F,1.95+F):
   b.box((.49,1.23,z),(.90,2.58,z+.045),'steel')
   for y in (1.25,2.49):b.box((.865,y,z-.15),(.90,y+.035,z),'trim')
  for y in (1.38,1.68,1.98):
-  b.cyl((.68,y,1.75),.074,.16,(0,0,1),'tank',8)
-  b.cyl((.68,y,1.833),.077,.016,(0,0,1),'plastic',8)
+  b.cyl((.68,y,1.75+F),.074,.16,(0,0,1),'tank',8)
+  b.cyl((.68,y,1.833+F),.077,.016,(0,0,1),'plastic',8)
  # Front bumper recess, corner protectors and hood pressed seam.
  b.box((-.29,-2.649,.50),(.29,-2.64,.62),'rubber')
  b.box((-.24,-2.65,.518),(.24,-2.649,.60),'tank')
@@ -234,8 +242,8 @@ def add_working_details(b):
   b.box((x-.19,3.068,1.91),(x+.19,3.073,2.26),'glass')
   for z in (.97,1.70,2.38):
    b.cyl(((-.67 if x<0 else .67),3.09,z),.028,.17,(0,0,1),'steel',8)
- for x in (-.89,-.58):b.rod((x,3.125,.65),(x,3.125,2.86),.021,'steel',8)
- for z in (.76,1.05,1.34,1.63,1.92,2.21,2.50,2.79):b.rod((-.89,3.125,z),(-.58,3.125,z),.018,'steel',6)
+ for x in (-.89,-.58):b.rod((x,3.125,.65),(x,3.125,3.06),.021,'steel',8)
+ for z in (.76,1.08,1.40,1.72,2.03,2.35,2.67,2.99):b.rod((-.89,3.125,z),(-.58,3.125,z),.018,'steel',6)
  # Narrow tanks fit entirely inside the original rear bumper extent.
  b.box((.13,3.065,.60),(.70,3.15,.65),'plastic')
  for x in (.29,.55):
@@ -245,22 +253,23 @@ def add_working_details(b):
  b.box((.12,3.143,.89),(.72,3.149,.93),'trim')
  b.box((-.23,3.145,.423),(.23,3.148,.52),'rubber')
  b.box((-.19,3.148,.44),(.19,3.15,.503),'tank')
- # Roof equipment: deliberately shallow, maximum z=3.05m.
- b.softbox((-.53,-.75,2.90),(.53,.35,2.93),'rubber',.015,1)
- b.softprism(-.49,.49,[(-.70,2.93),(.30,2.93),(.30,3.015),(.22,3.045),(-.59,3.045),(-.70,3.005)],'tank',.035,1)
- for y in (-.51,-.39,-.27,-.15,-.03,.09):b.box((-.32,y,3.046),(.32,y+.038,3.049),'trim')
- b.softbox((-.40,1.27,2.90),(.40,1.98,2.97),'steel',.025,1)
- b.softprism(-.46,.46,[(1.20,2.975),(2.05,2.975),(1.98,3.05),(1.27,3.05)],'steel',.025,1)
- b.box((-.34,1.20,2.973),(.34,1.214,3.007),'interior')
+ # Roof equipment: deliberately shallow, raised 0.20m with the compartment roof, maximum z=3.25m.
+ R=.20
+ b.softbox((-.53,-.75,2.90+R),(.53,.35,2.93+R),'rubber',.015,1)
+ b.softprism(-.49,.49,[(y,z+R) for y,z in [(-.70,2.93),(.30,2.93),(.30,3.015),(.22,3.045),(-.59,3.045),(-.70,3.005)]],'tank',.035,1)
+ for y in (-.51,-.39,-.27,-.15,-.03,.09):b.box((-.32,y,3.046+R),(.32,y+.038,3.049+R),'trim')
+ b.softbox((-.40,1.27,2.90+R),(.40,1.98,2.97+R),'steel',.025,1)
+ b.softprism(-.46,.46,[(1.20,2.975+R),(2.05,2.975+R),(1.98,3.05+R),(1.27,3.05+R)],'steel',.025,1)
+ b.box((-.34,1.20,2.973+R),(.34,1.214,3.007+R),'interior')
  # Rounded cap has its own marker rail; rear drip rail sits below rollover.
- b.softbox((-1.02,3.025,2.77),(1.02,3.044,2.805),'steel',.009)
+ b.softbox((-1.02,3.025,2.77+R),(1.02,3.044,2.805+R),'steel',.009)
 
 def add_hatch_details(h):
  # Underside teal bands and paired diagonal folding stays, all move with the hatch.
- for ya in (.39,.94,1.49):h.box((-1.099,ya,1.24),(-1.096,ya+.24,2.11),'stripe')
+ for ya in (.39,.94,1.49):h.box((-1.099,ya,W(1.24)),(-1.096,ya+.24,W(2.11)),'stripe')
  for y in (.27,1.93):
-  h.rod((-1.09,y,2.09),(-.98,y,1.36),.012,'steel',8)
-  h.box((-1.093,y-.023,1.32),(-.97,y+.023,1.36),'trim')
+  h.rod((-1.09,y,W(2.09)),(-.98,y,W(1.36)),.012,'steel',8)
+  h.box((-1.093,y-.023,W(1.32)),(-.97,y+.023,W(1.36)),'trim')
 
 def make_geometry(detail=False):
  if bpy.context.object and bpy.context.object.mode!='OBJECT': bpy.ops.object.mode_set(mode='OBJECT')
@@ -270,15 +279,20 @@ def make_geometry(detail=False):
  b=Builder()
  # Roof and enclosed food compartment with a genuine curb-side opening.
  b.roof_shell()
- b.box((1.02,-.91,.91),(1.10,2.96,2.76),'paint')
- b.box((-1.10,2.00,1.17),(-1.02,2.96,2.76),'paint')
- b.box((-1.10,-.91,1.17),(-1.02,.20,2.76),'paint')
- b.box((-1.10,.20,2.15),(-1.02,2.00,2.76),'paint')
- b.box((-1.10,-.91,.91),(-1.02,2.97,1.17),'paint')
- b.box((-1.02,2.97,.91),(1.02,3.04,2.76),'paint')
+ CEIL=2.96
+ b.box((1.02,-.91,.91),(1.10,2.96,CEIL),'paint')
+ b.box((-1.10,2.00,WIN_LO-.03),(-1.02,2.96,CEIL),'paint')
+ b.box((-1.10,-.91,WIN_LO-.03),(-1.02,.20,CEIL),'paint')
+ b.box((-1.10,.20,WIN_HI),(-1.02,2.00,CEIL),'paint')
+ b.box((-1.10,-.91,.91),(-1.02,2.97,WIN_LO-.03),'paint')
+ b.box((-1.02,2.97,.91),(1.02,3.04,CEIL),'paint')
+ # Side wedges close the step between the cab roof (2.76 inside) and the raised compartment.
+ for sign in (-1,1):
+  xa,xb=sorted((sign*1.02,sign*1.10))
+  b.prism(xa,xb,[(-.98,2.76),(-.91,2.76),(-.91,CEIL),(-.92,CEIL)],'paint')
  for sign in (-1,1):
   yz=[(1.02,2.96),(1.10,2.96),(1.07657,3.01657),(1.02,3.04)]
-  verts=[(sign*x,y,z) for z in (.91,2.76) for x,y in yz]
+  verts=[(sign*x,y,z) for z in (.91,CEIL) for x,y in yz]
   b.part(verts,[(0,3,2,1),(4,5,6,7),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)],'paint')
  b.box((-.72,-2.42,.35),(.72,3.04,.85),'plastic')
  b.box((-1.02,-.90,.85),(1.02,2.97,.94),'interior')
@@ -316,14 +330,17 @@ def make_geometry(detail=False):
  b.softbox((-1.09,-2.65,.47),(1.09,-2.51,.66),'plastic',.065,2)
  b.softbox((-1.10,3.04,.40),(1.10,3.15,.56),'plastic',.045,1)
  # Frame, counter and rear dark inner wall deliberately beyond .30m recess.
- for ya,yb in [(.155,.20),(2.00,2.045)]: b.box((-1.115,ya,1.17),(-1.01,yb,2.20),'steel')
- b.box((-1.115,.20,1.17),(-1.01,2.,1.20),'steel')
- b.box((-1.115,.20,2.15),(-1.01,2.,2.19),'steel')
- b.box((-1.26,.25,1.105),(-1.10,1.95,1.15),'steel')
- b.box((-.45,-.70,1.05),(.98,2.80,1.15),'steel')
- b.box((.93,-.80,1.15),(.99,2.85,2.67),'interior')
+ for ya,yb in [(.155,.20),(2.00,2.045)]: b.box((-1.115,ya,WIN_LO-.03),(-1.01,yb,WIN_HI+.05),'steel')
+ b.box((-1.115,.20,WIN_LO-.03),(-1.01,2.,WIN_LO),'steel')
+ b.box((-1.115,.20,WIN_HI),(-1.01,2.,WIN_HI+.04),'steel')
+ b.box((-1.26,.25,WIN_LO-.095),(-1.10,1.95,WIN_LO-.05),'steel')
+ # Worktop at counter height for the raised window, on a stainless cabinet down to the floor.
+ b.box((-.43,-.70,1.65),(.98,2.80,1.75),'steel')
+ b.box((-.42,-.68,.94),(.93,2.78,1.65),'steel')
+ for y in (.65,1.55):b.box((-.426,y-.006,.99),(-.42,y+.006,1.60),'trim')
+ b.box((.93,-.80,1.75),(.99,2.85,2.94),'interior')
  # Hinge rail spans specified line.
- b.cyl((-1.10,1.10,2.15),.018,1.86,(0,1,0),'steel',12)
+ b.cyl((-1.10,1.10,WIN_HI),.018,1.86,(0,1,0),'steel',12)
  if detail:
   # Twin square beams at each side of the upright recessed grille.
   for s in (-1,1):
@@ -372,19 +389,19 @@ def make_geometry(detail=False):
   b.cyl((1.105,2.30,.98),.076,.018,(1,0,0),'rubber',16)
   b.cyl((1.118,2.30,.98),.060,.012,(1,0,0),'steel',16)
   # Small interior back counter / backsplash, enough to read through open hatch.
-  b.box((.74,-.30,1.15),(.86,2.50,1.33),'steel')
-  for y in (.43,1.75): b.box((.56,y,1.15),(.73,y+.30,1.34),'plastic')
+  b.box((.74,-.30,1.75),(.86,2.50,1.93),'steel')
+  for y in (.43,1.75): b.box((.56,y,1.75),(.73,y+.30,1.94),'plastic')
   # Shelf supports outside the recess, well above the rear wheel envelope.
-  for y in (.34,1.84): b.rod((-1.105,y,.97),(-1.235,y,1.10),.014,'steel')
+  for y in (.34,1.84): b.rod((-1.105,y,1.57),(-1.235,y,1.70),.014,'steel')
  if detail: add_working_details(b)
  body=b.object('Truck_Body')
- hatch=Builder(); hatch.box((-1.14,.20,1.20),(-1.10,2.00,2.15),'paint')
+ hatch=Builder(); hatch.box((-1.14,.20,WIN_LO),(-1.10,2.00,WIN_HI),'paint')
  # Edge folds give a tiny visible border, all inside the 0.04m thickness.
  if detail:
-  hatch.box((-1.143,.20,1.20),(-1.140,2.,1.23),'steel')
-  for y in (.20,1.97): hatch.box((-1.143,y,1.23),(-1.140,y+.03,2.15),'steel')
+  hatch.box((-1.143,.20,WIN_LO),(-1.140,2.,WIN_LO+.03),'steel')
+  for y in (.20,1.97): hatch.box((-1.143,y,WIN_LO+.03),(-1.140,y+.03,WIN_HI),'steel')
   add_hatch_details(hatch)
- hatch.object('Truck_Hatch',(-1.10,1.10,2.15))
+ hatch.object('Truck_Hatch',(-1.10,1.10,WIN_HI))
  for side,s in [('L',1),('R',-1)]:
   for end,y in [('F',-1.80),('R',1.80)]:
    w=Builder(); n=16
@@ -459,12 +476,12 @@ def face_pixels(ob,p,tag,size,pad=2):
    lines=(-.86,2.75,1.60) if np.mean(x)>0 else (-.86,-.18,2.75)
    for seam in lines:
     dist=np.abs(y-seam)
-    line=(dist<.006)&(z>1.02)&(z<2.77)
+    line=(dist<.006)&(z>1.02)&(z<2.97)
     shade=np.where(line,.79,shade);ao=np.where(line,.84,ao)
     # Tiny painted rivet heads, lighter centres with a subtle occlusion ring.
     dz=np.abs((z-1.08+.10)%.20-.10)
     d=np.sqrt((y-seam-.028)**2+dz**2)
-    ring=(d<.011)&(z>1.04)&(z<2.72)
+    ring=(d<.011)&(z>1.04)&(z<2.92)
     shade=np.where(ring,.84,shade);ao=np.where(ring,.87,ao)
     shade=np.where((d<.005)&ring,.99,shade)
   diffuse[:,:,:3]*=shade[:,:,None]
@@ -570,7 +587,7 @@ def collision_export_save():
   source=bpy.data.objects[name]
   for v in source.data.vertices:
    p=source.matrix_world @ v.co
-   if p.z>2.901: continue  # Roof equipment is allowed outside the collision hull.
+   if p.z>3.101: continue  # Roof equipment is allowed outside the collision hull.
    if name=='Truck_Body' and abs(p.x)>1.145 and p.y<-1.70 and p.z>1.70: continue
    points.append(tuple(p))
  # Enclose the added front plate recess with one bumper plane instead of
@@ -589,7 +606,8 @@ def collision_export_save():
  candidates=sorted([(f.calc_area(),np.array(tuple(f.normal),dtype=float)) for f in bm.faces],key=lambda a:-a[0])
  dirs=[np.array(d,dtype=float) for d in [(1,0,0),(-1,0,0),(0,1,0),(0,-1,0),(0,0,1),(0,0,-1)]]
  for area,n in candidates:
-  if all(np.dot(n,d)<.9995 for d in dirs):dirs.append(n/np.linalg.norm(n))
+  # Planes under ~2.6 degrees apart make sliver corners that aren't strictly convex.
+  if all(np.dot(n,d)<.999 for d in dirs):dirs.append(n/np.linalg.norm(n))
   if len(dirs)==36:break
  bm.free()
  A=np.array(dirs);cloud=np.array(points);limits=np.max(cloud@A.T,axis=0)
