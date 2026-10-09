@@ -110,12 +110,12 @@ namespace FoodTrucks.Core.Catering
         private static IEnumerable<CateringKind> Defaults()
         {
             yield return new CateringKind("office", new[] { "office" }, (690, 750), (60, 90), (40, 120),
-                new Dictionary<string, double> { ["fastfood"] = 1, ["pizza"] = 1, ["coffee"] = 0.3 },
+                new Dictionary<string, double> { ["fastfood"] = 1, ["pizza"] = 1, ["streetmeal"] = 1, ["coffee"] = 0.3 },
                 days: new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday });
             yield return new CateringKind("party", new[] { "residential", "nightlife" }, (1080, 1200), (90, 150), (40, 100),
-                new Dictionary<string, double> { ["pizza"] = 1, ["fastfood"] = 1, ["icecream"] = 0.5 }, 0.8);
+                new Dictionary<string, double> { ["pizza"] = 1, ["fastfood"] = 1, ["streetmeal"] = 0.5, ["icecream"] = 0.5, ["snacks"] = 0.5 }, 0.8);
             yield return new CateringKind("event", new[] { "waterfront", "retail" }, (720, 960), (120, 180), (100, 200),
-                new Dictionary<string, double> { ["fastfood"] = 1, ["icecream"] = 1, ["colddrinks"] = 0.5, ["pizza"] = 0.5 }, 0.5,
+                new Dictionary<string, double> { ["fastfood"] = 1, ["icecream"] = 1, ["snacks"] = 1, ["colddrinks"] = 0.5, ["pizza"] = 0.5, ["slushies"] = 0.5, ["streetmeal"] = 0.5 }, 0.5,
                 new[] { DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday });
         }
 

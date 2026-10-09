@@ -1,0 +1,106 @@
+{
+  "_notes": "Proposed data for the eight new street foods (docs/balance/new-foods.md). Calculated proposals, unverified in game. Apply with `--patch new-foods-proposal.json`: demand and economy merge over data/*.json as usual (arrays replaced, so neighbourhood appetite lists are restated in full; equipment.burgerstation is set to null to remove it). game holds the Item fields the Unity build needs for the four new mod items, which the calculator reads as prices, and the market demand the calculator assumes for the vanilla cinema items. Kabob, popcorn, cotton candy and slushi are base-game items: their prices and boxes are the game's (tools/balance/game-prices.json) and they are bought at wholesalers like hot dogs. Mod item IDs with the foodtrucks: prefix are placeholders until the build registers the items.",
+
+  "demand": {
+    "areas": {
+      "office": { "appetite": { "streetmeal": 1.2, "snacks": 0.5 } },
+      "retail": { "appetite": { "snacks": 1.3 } },
+      "nightlife": { "appetite": { "snacks": 1.5 } },
+      "waterfront": { "appetite": { "coffee": 2.0, "icecream": 2.0, "snacks": 2.0, "slushies": 2.0 } }
+    },
+    "categories": {
+      "_streetmeal": "Kabobs and dumplings: a plated street meal. Lunch-led like fast food, below it, with a steady evening and late trade (halal night carts). Offices x1.2.",
+      "streetmeal": {
+        "appetite": { "early": 0.02, "morning": 0.03, "lunch": 0.18, "afternoon": 0.05, "evening": 0.11, "late": 0.11, "night": 0.12 }
+      },
+      "_snacks": "Popcorn, cotton candy, grilled corn: impulse snacks for people with time. Afternoon and evening, parks x2, cinema and theatre crowds x1.5, shoppers x1.3, offices x0.5. Summer 1.3, autumn 1.1, winter 0.6, rain 0.5.",
+      "snacks": {
+        "appetite": { "early": 0.0, "morning": 0.02, "lunch": 0.06, "afternoon": 0.17, "evening": 0.15, "late": 0.06, "night": 0.01 }
+      },
+      "_slushies": "A cold treat bought for itself, shaped like ice cream: afternoon peak, parks x2, summer 1.6, winter 0.3, rain 0.4. Not cold drinks: as an add-on it would replace the cooler at twice the margin.",
+      "slushies": {
+        "appetite": { "early": 0.0, "morning": 0.02, "lunch": 0.10, "afternoon": 0.18, "evening": 0.10, "late": 0.04, "night": 0.01 }
+      }
+    },
+    "neighbourhoods": {
+      "ba:neighborhood_midtown": {
+        "appetite": [
+          { "categories": ["coffee", "bakery"], "dayparts": ["morning"], "factor": 1.4 },
+          { "categories": ["coffee", "bakery"], "dayparts": ["early"], "factor": 1.2 },
+          { "categories": ["coffee", "bakery", "fastfood", "pizza", "icecream", "colddrinks", "streetmeal", "snacks", "slushies"], "dayparts": ["lunch"], "factor": 1.15 }
+        ]
+      },
+      "ba:neighborhood_lowermanhattan": {
+        "appetite": [
+          { "categories": ["coffee"], "dayparts": ["early", "morning"], "factor": 1.3 },
+          { "categories": ["fastfood", "pizza", "streetmeal"], "dayparts": ["lunch"], "factor": 1.1 }
+        ]
+      },
+      "ba:neighborhood_hellskitchen": {
+        "appetite": [
+          { "categories": ["coffee", "bakery"], "dayparts": ["early", "morning"], "factor": 0.7 },
+          { "categories": ["fastfood", "pizza", "streetmeal"], "dayparts": ["late", "night"], "factor": 1.3 },
+          { "categories": ["fastfood", "pizza", "colddrinks"], "dayparts": ["evening"], "factor": 1.1 }
+        ]
+      }
+    },
+    "seasons": {
+      "winter": { "appetite": { "snacks": 0.6, "slushies": 0.3 } },
+      "summer": { "appetite": { "snacks": 1.3, "slushies": 1.6 } },
+      "autumn": { "appetite": { "snacks": 1.1 } }
+    },
+    "rain": {
+      "appetite": { "snacks": 0.5, "slushies": 0.4 }
+    }
+  },
+
+  "economy": {
+    "products": {
+      "ba:itemname_kabob": { "category": "streetmeal", "serviceMinutes": 4 },
+      "ba:itemname_popcorn": { "category": "snacks", "serviceMinutes": 2, "stockWeight": 0.25 },
+      "ba:itemname_cottoncandy": { "category": "snacks", "serviceMinutes": 2, "stockWeight": 0.25 },
+      "ba:itemname_slushi": { "category": "slushies", "serviceMinutes": 1.5, "stockWeight": 0.25 },
+      "foodtrucks:itemname_dumplings": { "category": "streetmeal", "serviceMinutes": 3.5, "stockWeight": 0.5 },
+      "foodtrucks:itemname_tacos": { "category": "fastfood", "serviceMinutes": 3.5 },
+      "foodtrucks:itemname_choppedcheese": { "category": "fastfood", "serviceMinutes": 3.5 },
+      "foodtrucks:itemname_grilledcorn": { "category": "snacks", "serviceMinutes": 2, "stockWeight": 0.5 }
+    },
+    "_equipment": "burgerstation is split the way the game splits it: the industrial grill cooks burgers and kabobs, the fryer fries. Fitted pieces come from the game items in cargo, so no save migration; a vehicle with only one of the two machines loses the other's food. The fryer has no display model yet and reuses BurgerStation.",
+    "equipment": {
+      "burgerstation": null,
+      "grill": { "products": ["ba:itemname_burger", "ba:itemname_kabob"], "gameItems": ["ba:itemname_industrialgrill"], "display": "BurgerStation" },
+      "fryer": { "products": ["ba:itemname_frenchfries"], "gameItems": ["ba:itemname_industrialfryermachine"], "display": "BurgerStation" },
+      "concessions": { "products": ["ba:itemname_popcorn", "ba:itemname_cottoncandy"], "gameItems": ["ba:itemname_concessionsdisplaycase"], "display": "PopcornMachine" },
+      "slushiemachine": { "products": ["ba:itemname_slushi"], "gameItems": ["ba:itemname_slushimachine"], "display": "SlushieMachine" },
+      "dumplingsteamer": { "products": ["foodtrucks:itemname_dumplings"], "gameItems": ["foodtrucks:itemname_dumplingsteamer"], "display": "DumplingSteamer" },
+      "griddle": { "products": ["foodtrucks:itemname_tacos", "foodtrucks:itemname_choppedcheese"], "gameItems": ["foodtrucks:itemname_griddle"], "display": "Griddle" },
+      "corngrill": { "products": ["foodtrucks:itemname_grilledcorn"], "gameItems": ["foodtrucks:itemname_corngrill"], "display": "CornGrill" }
+    }
+  },
+
+  "game": {
+    "_items": "Item fields for the four new mod items: defaultMarketPrice (the reference price the mod's price curve uses), wholesalePrice, boxSize (units per box). Bought only through the commissary. isADemandedProduct true and no limitDemandToNeighbourhoods, so every neighbourhood has a market entry. Wholesale is 36 to 38% of price, as for hot dogs, burgers and ice cream. A box holds 40 stock units, half a cart.",
+    "items": {
+      "foodtrucks:itemname_dumplings": { "defaultMarketPrice": 13.5, "wholesalePrice": 5.1, "boxSize": 80 },
+      "foodtrucks:itemname_tacos": { "defaultMarketPrice": 13.0, "wholesalePrice": 4.9, "boxSize": 40 },
+      "foodtrucks:itemname_choppedcheese": { "defaultMarketPrice": 12.0, "wholesalePrice": 4.55, "boxSize": 40 },
+      "foodtrucks:itemname_grilledcorn": { "defaultMarketPrice": 7.0, "wholesalePrice": 2.5, "boxSize": 80 }
+    },
+    "_equipment": "Purchase price of each new machine at Square Appliances, by the mod's equipment key. Vanilla yardsticks: concessions display case 895, industrial grill 1,400, ice cream counter 1,800, hot dog grill 2,200, slushi machine 2,200. The vanilla pieces' prices are in game-prices.json.",
+    "equipment": {
+      "dumplingsteamer": 2000,
+      "griddle": 2000,
+      "corngrill": 1200,
+      "grill": 1400,
+      "fryer": 4400,
+      "concessions": 895,
+      "slushiemachine": 2200
+    },
+    "_market": "The game's demand (0 to 100) the calculator assumes for the cinema items. Their demand is limited to Hell's Kitchen, Midtown, Lower Manhattan and the Hamptons, and every cinema (and theatre, for popcorn) is a provider: demand = 100 - providers x 100 / 7, at least about 31 (ProductMarketHelper.CalculateDemand). Cinemas: Midtown 2, the others 1; theatres: Midtown 4, Hamptons 1. Elsewhere the game has no market entry; these values assume the adapter then leaves the item out (Core: 100). Without that change the game returns 50 and logs an error per query. Rival cinemas would lower the values.",
+    "market": {
+      "ba:itemname_popcorn": { "ba:neighborhood_midtown": 31, "ba:neighborhood_hellskitchen": 86, "ba:neighborhood_lowermanhattan": 86, "ba:neighborhood_thehamptons": 72 },
+      "ba:itemname_cottoncandy": { "ba:neighborhood_midtown": 72, "ba:neighborhood_hellskitchen": 86, "ba:neighborhood_lowermanhattan": 86, "ba:neighborhood_thehamptons": 86 },
+      "ba:itemname_slushi": { "ba:neighborhood_midtown": 72, "ba:neighborhood_hellskitchen": 86, "ba:neighborhood_lowermanhattan": 86, "ba:neighborhood_thehamptons": 86 }
+    }
+  }
+}

@@ -78,11 +78,11 @@
     "reputation": { "start": 1.0, "min": 0.1, "success": 0.05, "failure": 0.25 },
     "kinds": [
       { "id": "office", "areas": ["office"], "days": ["mon", "tue", "wed", "thu", "fri"], "start": ["11:30", "12:30"],
-        "durationMinutes": [60, 90], "guests": [40, 120], "categories": { "fastfood": 1.0, "pizza": 1.0, "coffee": 0.3 }, "weight": 1.0 },
+        "durationMinutes": [60, 90], "guests": [40, 120], "categories": { "fastfood": 1.0, "pizza": 1.0, "streetmeal": 1.0, "coffee": 0.3 }, "weight": 1.0 },
       { "id": "party", "areas": ["residential", "nightlife"], "start": ["18:00", "20:00"],
-        "durationMinutes": [90, 150], "guests": [40, 100], "categories": { "pizza": 1.0, "fastfood": 1.0, "icecream": 0.5 }, "weight": 0.8 },
+        "durationMinutes": [90, 150], "guests": [40, 100], "categories": { "pizza": 1.0, "fastfood": 1.0, "streetmeal": 0.5, "icecream": 0.5, "snacks": 0.5 }, "weight": 0.8 },
       { "id": "event", "areas": ["waterfront", "retail"], "days": ["fri", "sat", "sun"], "start": ["12:00", "16:00"],
-        "durationMinutes": [120, 180], "guests": [100, 200], "categories": { "fastfood": 1.0, "icecream": 1.0, "colddrinks": 0.5, "pizza": 0.5 }, "weight": 0.5 }
+        "durationMinutes": [120, 180], "guests": [100, 200], "categories": { "fastfood": 1.0, "icecream": 1.0, "snacks": 1.0, "colddrinks": 0.5, "pizza": 0.5, "slushies": 0.5, "streetmeal": 0.5 }, "weight": 0.5 }
     ]
   },
 

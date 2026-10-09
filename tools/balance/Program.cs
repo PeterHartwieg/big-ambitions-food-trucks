@@ -11,6 +11,7 @@ var opts = Options.Parse(args);
 var tables = LoadTables(opts);
 Selling.Queue = opts.Queue ? new QueueThroughput(tables, RuleTables.Parse(File.ReadAllText(Path.Combine(opts.Data, "rules.json")))) : null;
 var prices = GamePrices.Load(opts.Prices);
+if (opts.Patch != null && JObject.Parse(File.ReadAllText(opts.Patch))["game"] is JObject gamePatch) prices.Merge(gamePatch);
 var city = City.Load(opts.City);
 var travel = new Travel { MetresPerMinute = opts.MetresPerSecond };
 var spots = city.Spots(tables);
@@ -41,6 +42,40 @@ var carts = new Dictionary<string, (Cart Cart, string[] Equipment)>
     ["truck-like"] = (MakeCart(new[] { HotDog, Coffee, Croissant, Soda }, "truck stand-in: 2 at the window, 160 units, 4 items",
         tables.Vehicle("truck")?.StockUnits ?? 160, 2, "truck"), new[] { "hotdoggrill", "coffeemachine", "displaycase", "cooler" }),
 };
+// The new street foods (new-foods-proposal.json), and the vanilla ice cream counter for comparison. A cart is
+// added only when the data and prices know all its items, so runs without the patch are unchanged.
+const string Dumplings = "foodtrucks:itemname_dumplings", Kabob = "ba:itemname_kabob", Tacos = "foodtrucks:itemname_tacos",
+    ChoppedCheese = "foodtrucks:itemname_choppedcheese", Corn = "foodtrucks:itemname_grilledcorn", Popcorn = "ba:itemname_popcorn",
+    CottonCandy = "ba:itemname_cottoncandy", Slushie = "ba:itemname_slushi", IceCream = "ba:itemname_icecream", Burger = "ba:itemname_burger";
+foreach (var (key, menu, name, equipment, truck) in new (string, string[], string, string[], bool)[]
+         {
+             ("icecream", new[] { IceCream }, "ice cream counter", new[] { "icecreamcounter" }, false),
+             ("dumplings", new[] { Dumplings }, "dumpling steamer", new[] { "dumplingsteamer" }, false),
+             ("dumplings+cooler", new[] { Dumplings, Soda }, "dumpling steamer + cooler", new[] { "dumplingsteamer", "cooler" }, false),
+             ("kabob", new[] { Kabob }, "grill, kabobs only", new[] { "grill" }, false),
+             ("kabob+cooler", new[] { Kabob, Soda }, "grill (kabobs) + cooler", new[] { "grill", "cooler" }, false),
+             ("burger+kabob", new[] { Burger, Kabob }, "grill (burgers, kabobs)", new[] { "grill" }, false),
+             ("burger+kabob+cooler", new[] { Burger, Kabob, Soda }, "grill (burgers, kabobs) + cooler", new[] { "grill", "cooler" }, false),
+             ("hotdog+kabob", new[] { HotDog, Kabob }, "hot dog grill + grill (kabobs)", new[] { "hotdoggrill", "grill" }, false),
+             ("griddle", new[] { Tacos, ChoppedCheese }, "griddle (tacos, chopped cheese)", new[] { "griddle" }, false),
+             ("griddle+cooler", new[] { Tacos, ChoppedCheese, Soda }, "griddle + cooler", new[] { "griddle", "cooler" }, false),
+             ("griddle+slushie", new[] { Tacos, ChoppedCheese, Slushie }, "griddle + slushie machine", new[] { "griddle", "slushiemachine" }, false),
+             ("corn", new[] { Corn }, "corn grill", new[] { "corngrill" }, false),
+             ("concessions", new[] { Popcorn, CottonCandy }, "concessions case (popcorn, cotton candy)", new[] { "concessions" }, false),
+             ("popcorn", new[] { Popcorn }, "concessions case, popcorn only", new[] { "concessions" }, false),
+             ("slushie", new[] { Slushie }, "slushie machine", new[] { "slushiemachine" }, false),
+             ("concessions+slushie", new[] { Popcorn, CottonCandy, Slushie }, "concessions case + slushie machine", new[] { "concessions", "slushiemachine" }, false),
+             ("corn+slushie", new[] { Corn, Slushie }, "corn grill + slushie machine", new[] { "corngrill", "slushiemachine" }, false),
+             ("icecream+slushie", new[] { IceCream, Slushie }, "ice cream counter + slushie machine", new[] { "icecreamcounter", "slushiemachine" }, false),
+             ("truck-street", new[] { Kabob, Tacos, ChoppedCheese, Slushie, Soda }, "truck stand-in: grill (kabobs), griddle, slushie machine, cooler",
+                 new[] { "grill", "griddle", "slushiemachine", "cooler" }, true),
+         })
+{
+    if (!menu.All(i => tables.Product(i) != null && prices.Items.ContainsKey(i)) || !equipment.All(prices.Equipment.ContainsKey)) continue;
+    carts[key] = truck
+        ? (MakeCart(menu, name, tables.Vehicle("truck")?.StockUnits ?? 160, 2, "truck"), equipment)
+        : (MakeCart(menu, name), equipment);
+}
 // Each cart's 16-hour day and the ways a route may split it (staying put is one of them).
 var days = new Dictionary<string, (int From, int To, (string Name, (int, int)[] Windows)[] Splits)>
 {
@@ -64,6 +99,10 @@ var days = new Dictionary<string, (int From, int To, (string Name, (int, int)[] 
         ("change at 11:00 and 14:30", new[] { (360, 660), (660, 870), (870, 1320) }),
     }),
 };
+
+// Carts without their own day take the hot dog cart's (09:00 to 01:00), trucks the truck stand-in's.
+(int From, int To, (string Name, (int, int)[] Windows)[] Splits) DayOf(string key) =>
+    days.TryGetValue(key, out var d) ? d : carts[key].Cart.VehicleKind == "truck" ? days["truck-like"] : days["hotdog+cooler"];
 
 var hoods = new[] { "ba:neighborhood_midtown", "ba:neighborhood_lowermanhattan", "ba:neighborhood_murrayhill", "ba:neighborhood_hellskitchen",
     "ba:neighborhood_garmentdistrict", "ba:neighborhood_industrycity", "ba:neighborhood_thehamptons" };
@@ -316,7 +355,7 @@ if (opts.Wants("compare"))
     {
         var (cart, equipment) = carts[key];
         var planner = PlannerFor(cart);
-        var (dFrom, dTo, splits) = days[key];
+        var (dFrom, dTo, splits) = DayOf(key);
         var cityRows = new Dictionary<string, (DayResult Stay, DayResult? Move)>();
         foreach (var (label, c, perHood) in new[] { ("weekday dry", conditions[0], true), ("weekend dry", conditions[2], true),
                      ("weekday dry, default price", Cond(pricing: Pricing.Default, factor: 1), false) })
@@ -491,6 +530,82 @@ if (opts.Wants("ingame"))
     }
 }
 
+// The new foods against the accepted carts: each cart's best route city-wide (the compare report's search,
+// city pool only) under several conditions, its cost to start, and its best park day in summer.
+if (opts.Wants("foods"))
+{
+    var keys = (opts.FoodCarts ?? carts.Keys.ToArray()).Where(carts.ContainsKey).ToArray();
+    Conditions At(DayOfWeek day, int month, Pricing? pricing = null) => new()
+        { Day = day, Month = month, Pricing = pricing ?? opts.Pricing, PriceFactor = pricing == null ? opts.PriceFactor : 1, MarketDemand = opts.Market };
+    var cases = new (string Label, Conditions C)[]
+    {
+        ("Weekday May", At(DayOfWeek.Wednesday, 5)), ("Saturday May", At(DayOfWeek.Saturday, 5)),
+        ("Weekday July", At(DayOfWeek.Wednesday, 7)), ("Saturday July", At(DayOfWeek.Saturday, 7)),
+        ("Weekday January", At(DayOfWeek.Wednesday, 1)), ("Weekday May, default price", At(DayOfWeek.Wednesday, 5, Pricing.Default)),
+    };
+    var parks = spots.Where(s => s.Name.StartsWith("park")).ToList();
+    var rows = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
+    var routeRows = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
+    var rateRows = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
+    Parallel.ForEach(keys, key =>
+    {
+        var (cart, equipment) = carts[key];
+        var planner = PlannerFor(cart);
+        var (dFrom, dTo, splits) = DayOf(key);
+        DayResult Best(Conditions c)
+        {
+            var stays = spots.Select(s => planner.SingleSpot(s, dFrom, dTo, c)).OrderByDescending(d => d.Total.Profit).ToList();
+            var best = stays[0];
+            var stayers = stays.Take(5).Select(d => d.Stays[0].Spot).ToList();
+            foreach (var split in splits)
+            {
+                var r = planner.BestRoute(spots, split.Windows, c, 20, stayers);
+                if (r != null && r.Total.Profit > best.Total.Profit) best = r;
+            }
+            return best;
+        }
+        var results = cases.Select(x => Best(x.C)).ToList();
+        var park = parks.Count == 0 ? null : parks.Select(s => planner.SingleSpot(s, dFrom, dTo, cases[3].C)).OrderByDescending(d => d.Total.Profit).First();
+        var eq = equipment.Sum(e => prices.Equipment[e]);
+        var load = Selling.Load(cart, new Spot("office", AreaMix.Single("office"), "ba:neighborhood_midtown", "", 0, 0), dFrom, dFrom + 300, cases[0].C);
+        var start = (cart.VehicleKind == "truck" ? 0 : opts.CartPrice) + eq + load.Sum(p => p.Value * prices.Items[p.Key].Wholesale);
+        rows[key] = $"| {cart.Name} | {Money(start)} | {string.Join(" | ", results.Select(r => Money(r.Total.Profit)))} | " +
+                    $"{(park == null ? "-" : $"{Money(park.Total.Profit)} ({H(park.Stays[0].Spot.Hood)})")} |";
+        string Rate(string area, string hood, int from, int to, Conditions c)
+        {
+            var r = Selling.Run(cart, new Spot(area, AreaMix.Single(area), hood, "", 0, 0), from, to, c, Selling.Unlimited(cart));
+            var t = r.ByDaypart.Values.First();
+            return $"{t.PerHour(t.Served):0} / {Money(t.PerHour(t.Profit))}";
+        }
+        rateRows[key] = $"| {cart.Name} | {Rate("office", "ba:neighborhood_midtown", 660, 870, cases[0].C)} | {Rate("residential", "ba:neighborhood_hellskitchen", 1020, 1260, cases[0].C)} | " +
+                        $"{Rate("nightlife", "ba:neighborhood_hellskitchen", 1260, 1500, cases[1].C)} | {Rate("waterfront", "ba:neighborhood_midtown", 870, 1020, cases[0].C)} | " +
+                        $"{Rate("waterfront", "ba:neighborhood_midtown", 870, 1020, cases[3].C)} | {Rate("waterfront", "ba:neighborhood_midtown", 870, 1020, cases[4].C)} |";
+        var w = results[0];
+        routeRows[key] = $"| {cart.Name} | {string.Join(" → ", w.Stays.Select(x => $"{x.Spot.Name} ({H(x.Spot.Hood)}, {x.Spot.Areas}) {Clock(x.From)}"))} | " +
+                      $"{w.Restocks} | {w.Total.Units:0} | {w.Total.Customers:0} | {string.Join(", ", w.Total.Sold.OrderByDescending(p => p.Value).Select(p => $"{p.Key.Split('_').Last()} {p.Value:0}"))} |";
+    });
+    o.AppendLine("## New foods: best day city-wide, ceiling price unless noted, dry");
+    o.AppendLine();
+    o.AppendLine("Best of staying at one spot and the route splits of the compare report, over the whole city. Cost to start: cart (not for the truck stand-in) + equipment + the first load at wholesale.");
+    o.AppendLine();
+    o.AppendLine("| Cart | Cost to start | " + string.Join(" | ", cases.Select(x => x.Label)) + " | Best park all day, Saturday July |");
+    o.AppendLine("|---|---|" + string.Concat(cases.Select(_ => "---|")) + "---|");
+    foreach (var key in keys) o.AppendLine(rows[key]);
+    o.AppendLine();
+    o.AppendLine("## New foods: the weekday May best day");
+    o.AppendLine();
+    o.AppendLine("| Cart | Pitches | Restocks | Units | Customers | Sold |");
+    o.AppendLine("|---|---|---|---|---|---|");
+    foreach (var key in keys) o.AppendLine(routeRows[key]);
+    o.AppendLine();
+    o.AppendLine("## New foods: pure spots, served per hour / profit per hour, unlimited stock");
+    o.AppendLine();
+    o.AppendLine("| Cart | Midtown office lunch, weekday May | Hell's Kitchen residential evening, weekday May | Hell's Kitchen nightlife late, Saturday May | Midtown park afternoon, weekday May | same, Saturday July | same, weekday January |");
+    o.AppendLine("|---|---|---|---|---|---|---|");
+    foreach (var key in keys) o.AppendLine(rateRows[key]);
+    o.AppendLine();
+}
+
 if (opts.Wants("costs"))
 {
     o.AppendLine($"## Cost to start (cart ${Money(opts.CartPrice)})");
@@ -521,9 +636,11 @@ static DemandTables LoadTables(Options opts, bool zeroBaseline = false)
         var patch = JObject.Parse(File.ReadAllText(opts.Patch));
         if (patch["rules"] != null)
             throw new ArgumentException("The patch's legacy 'rules' section is no longer supported. Use economy.products.<item>.stockWeight and demand.areas.<area>.appetite instead.");
-        var settings = new JsonMergeSettings { MergeArrayHandling = MergeArrayHandling.Replace };
+        var settings = new JsonMergeSettings { MergeArrayHandling = MergeArrayHandling.Replace, MergeNullValueHandling = MergeNullValueHandling.Merge };
         if (patch["demand"] is JObject d) demand.Merge(d, settings);
         if (patch["economy"] is JObject e) economy.Merge(e, settings);
+        // A null in the patch removes the key (economy.equipment.burgerstation in new-foods-proposal.json).
+        foreach (var gone in demand.Descendants().Concat(economy.Descendants()).OfType<JProperty>().Where(p => p.Value.Type == JTokenType.Null).ToList()) gone.Remove();
     }
     // The share model had no street baseline: zero it to rebuild the old footfall.
     if (zeroBaseline && demand["streetBaseline"] is JObject baseline)
@@ -548,6 +665,8 @@ sealed class Options
     // --service queue (default): the game's queue since 0.4.0. --service fluid: the old min(buyers, capacity).
     public bool Queue = true;
     public string[] Carts = { "hotdog+cooler", "coffee+bakery", "truck-like" };
+    // Carts for the foods report: --carts when given, otherwise every cart the data knows.
+    public string[]? FoodCarts;
     public HashSet<string> Reports = new() { "archetypes", "spots", "single", "compare", "pricing", "costs" };
 
     public bool Wants(string report) => Reports.Contains(report);
@@ -584,7 +703,7 @@ sealed class Options
                 case "--restock": o.Restock = Next() == "hand" ? RestockMode.BoxInHand : RestockMode.Wholesaler; break;
                 case "--speed": o.MetresPerSecond = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "--no-parks": case "--no-archetypes": o.Parks = false; break;
-                case "--carts": o.Carts = Next().Split(','); break;
+                case "--carts": o.Carts = Next().Split(','); o.FoodCarts = o.Carts; break;
                 case "--service": o.Queue = Next() != "fluid"; break;
                 case "--cart-price": o.CartPrice = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "--reports": o.Reports = new HashSet<string>(Next().Split(',')); break;

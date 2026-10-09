@@ -23,11 +23,13 @@
   "areas": {
     "office": {
       "footfall": { "early": 1.5, "morning": 2.0, "lunch": 3.0, "afternoon": 0.2, "evening": 0.2, "late": 0.05, "night": 0.02 },
-      "days": { "mon": 1.0, "tue": 1.0, "wed": 1.0, "thu": 1.0, "fri": 0.9, "sat": 0.2, "sun": 0.2 }
+      "days": { "mon": 1.0, "tue": 1.0, "wed": 1.0, "thu": 1.0, "fri": 0.9, "sat": 0.2, "sun": 0.2 },
+      "appetite": { "streetmeal": 1.2, "snacks": 0.5 }
     },
     "retail": {
       "footfall": { "early": 0.05, "morning": 0.3, "lunch": 0.8, "afternoon": 1.3, "evening": 0.5, "late": 0.1, "night": 0.0 },
-      "days": { "mon": 0.9, "tue": 0.9, "wed": 0.9, "thu": 1.0, "fri": 1.1, "sat": 1.4, "sun": 1.2 }
+      "days": { "mon": 0.9, "tue": 0.9, "wed": 0.9, "thu": 1.0, "fri": 1.1, "sat": 1.4, "sun": 1.2 },
+      "appetite": { "snacks": 1.3 }
     },
     "residential": {
       "footfall": { "early": 0.6, "morning": 0.7, "lunch": 0.3, "afternoon": 0.3, "evening": 0.5, "late": 0.2, "night": 0.05 },
@@ -35,7 +37,8 @@
     },
     "nightlife": {
       "footfall": { "early": 0.0, "morning": 0.05, "lunch": 0.15, "afternoon": 0.1, "evening": 2.0, "late": 2.5, "night": 0.6 },
-      "days": { "mon": 0.5, "tue": 0.6, "wed": 0.7, "thu": 1.1, "fri": 1.4, "sat": 1.5, "sun": 0.7 }
+      "days": { "mon": 0.5, "tue": 0.6, "wed": 0.7, "thu": 1.1, "fri": 1.4, "sat": 1.5, "sun": 0.7 },
+      "appetite": { "snacks": 1.5 }
     },
     "industrial": {
       "footfall": { "early": 1.5, "morning": 0.2, "lunch": 1.5, "afternoon": 0.15, "evening": 0.3, "late": 1.0, "night": 0.4 },
@@ -48,7 +51,7 @@
     "waterfront": {
       "footfall": { "early": 0.1, "morning": 0.4, "lunch": 0.8, "afternoon": 2.0, "evening": 0.8, "late": 0.1, "night": 0.0 },
       "days": { "mon": 0.9, "tue": 0.9, "wed": 0.9, "thu": 0.9, "fri": 1.0, "sat": 1.6, "sun": 1.6 },
-      "appetite": { "coffee": 2.0, "icecream": 2.0 }
+      "appetite": { "coffee": 2.0, "icecream": 2.0, "snacks": 2.0, "slushies": 2.0 }
     }
   },
 
@@ -73,6 +76,18 @@
       "appetite": { "early": 0.05, "morning": 0.05, "lunch": 0.15, "afternoon": 0.15, "evening": 0.10, "late": 0.08, "night": 0.05 },
       "newCustomerWeight": 0.25,
       "addOnFactor": 2.0
+    },
+    "_streetmeal": "Kabobs and dumplings: a plated street meal. Lunch-led like fast food, below it, with a steady evening and late trade (halal night carts). Offices x1.2. docs/balance/new-foods.md.",
+    "streetmeal": {
+      "appetite": { "early": 0.02, "morning": 0.03, "lunch": 0.18, "afternoon": 0.05, "evening": 0.11, "late": 0.11, "night": 0.12 }
+    },
+    "_snacks": "Popcorn, cotton candy, grilled corn: impulse snacks for people with time. Afternoon and evening, parks x2, cinema and theatre crowds x1.5, shoppers x1.3, offices x0.5. Summer 1.3, autumn 1.1, winter 0.6, rain 0.5.",
+    "snacks": {
+      "appetite": { "early": 0.0, "morning": 0.02, "lunch": 0.06, "afternoon": 0.17, "evening": 0.15, "late": 0.06, "night": 0.01 }
+    },
+    "_slushies": "A cold treat bought for itself, shaped like ice cream: afternoon peak, parks x2, summer 1.6, winter 0.3, rain 0.4. Not cold drinks: as an add-on it would replace the cooler at twice the margin.",
+    "slushies": {
+      "appetite": { "early": 0.0, "morning": 0.02, "lunch": 0.10, "afternoon": 0.18, "evening": 0.10, "late": 0.04, "night": 0.01 }
     }
   },
 
@@ -88,7 +103,7 @@
       "appetite": [
         { "categories": ["coffee", "bakery"], "dayparts": ["morning"], "factor": 1.4 },
         { "categories": ["coffee", "bakery"], "dayparts": ["early"], "factor": 1.2 },
-        { "categories": ["coffee", "bakery", "fastfood", "pizza", "icecream", "colddrinks"], "dayparts": ["lunch"], "factor": 1.15 }
+        { "categories": ["coffee", "bakery", "fastfood", "pizza", "icecream", "colddrinks", "streetmeal", "snacks", "slushies"], "dayparts": ["lunch"], "factor": 1.15 }
       ]
     },
     "ba:neighborhood_lowermanhattan": {
@@ -97,7 +112,7 @@
       "days": { "sat": 0.3, "sun": 0.3 },
       "appetite": [
         { "categories": ["coffee"], "dayparts": ["early", "morning"], "factor": 1.3 },
-        { "categories": ["fastfood", "pizza"], "dayparts": ["lunch"], "factor": 1.1 }
+        { "categories": ["fastfood", "pizza", "streetmeal"], "dayparts": ["lunch"], "factor": 1.1 }
       ]
     },
     "ba:neighborhood_murrayhill": {
@@ -114,7 +129,7 @@
       "dayparts": { "early": 0.5, "morning": 0.7, "evening": 1.3, "late": 1.2 },
       "appetite": [
         { "categories": ["coffee", "bakery"], "dayparts": ["early", "morning"], "factor": 0.7 },
-        { "categories": ["fastfood", "pizza"], "dayparts": ["late", "night"], "factor": 1.3 },
+        { "categories": ["fastfood", "pizza", "streetmeal"], "dayparts": ["late", "night"], "factor": 1.3 },
         { "categories": ["fastfood", "pizza", "colddrinks"], "dayparts": ["evening"], "factor": 1.1 }
       ]
     },
@@ -167,15 +182,15 @@
 
   "_seasons": "Appetite factors per season. Categories not listed stay at 1.0.",
   "seasons": {
-    "winter": { "appetite": { "icecream": 0.2, "coffee": 1.3 } },
+    "winter": { "appetite": { "icecream": 0.2, "coffee": 1.3, "snacks": 0.6, "slushies": 0.3 } },
     "spring": { "appetite": {} },
-    "summer": { "appetite": { "icecream": 1.3, "colddrinks": 1.4 } },
-    "autumn": { "appetite": {} }
+    "summer": { "appetite": { "icecream": 1.3, "colddrinks": 1.4, "snacks": 1.3, "slushies": 1.6 } },
+    "autumn": { "appetite": { "snacks": 1.1 } }
   },
 
   "rain": {
     "footfall": 0.5,
-    "appetite": { "coffee": 1.3, "icecream": 0.3 }
+    "appetite": { "coffee": 1.3, "icecream": 0.3, "snacks": 0.5, "slushies": 0.4 }
   },
 
   "_market": "The game's demand per product and neighbourhood (0 to 100) divided by 100, kept between floor and ceiling.",

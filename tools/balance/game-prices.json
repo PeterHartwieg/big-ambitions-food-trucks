@@ -1,5 +1,5 @@
 {
-  "_notes": "Game money the balance tool needs that the mod's data files don't hold. price = Item.DefaultMarketPrice, wholesale = Item.wholesalePrice (before the import price index and the difficulty's market multiplier, both 1.0 here), box = units per wholesale box: Big Copilot's ba_store_rules.json, validated against saves. The hot dog's $11.65 was also seen in game (Milestone 1). priceIndex = each neighbourhood's average price index, the most every customer there pays relative to the reference price (Big Copilot's openStore facts; opener research of 23 Sep 2026). equipment = default item prices from Big Copilot's ba_item_prices.json; the coffee machine is the industrial one ($4,700): the cheap one ($400) is office equipment (ItemType 0x8000), not shop equipment.",
+  "_notes": "Game money the balance tool needs that the mod's data files don't hold. price = Item.DefaultMarketPrice, wholesale = Item.wholesalePrice (before the import price index and the difficulty's market multiplier, both 1.0 here), box = units per wholesale box: Big Copilot's ba_store_rules.json, validated against saves. The hot dog's $11.65 was also seen in game (Milestone 1). priceIndex = each neighbourhood's average price index, the most every customer there pays relative to the reference price (Big Copilot's openStore facts; opener research of 23 Sep 2026). equipment = default item prices from Big Copilot's ba_item_prices.json; the coffee machine is the industrial one ($4,700): the cheap one ($400) is office equipment (ItemType 0x8000), not shop equipment. Kabob, popcorn, cotton candy and slushi (cinema concessions) added 9 October 2026 for the new-foods study; equipment keys industrialgrill, industrialfryer, concessionsdisplaycase and slushimachine are the vanilla items' prices, for the proposed grill, fryer, concessions and slushie pieces.",
   "items": {
     "ba:itemname_hotdog": {
       "price": 11.65,
@@ -55,6 +55,26 @@
       "price": 5.2,
       "wholesale": 2.1,
       "box": 500
+    },
+    "ba:itemname_kabob": {
+      "price": 14.0,
+      "wholesale": 5.2,
+      "box": 500
+    },
+    "ba:itemname_popcorn": {
+      "price": 8.5,
+      "wholesale": 0.2,
+      "box": 500
+    },
+    "ba:itemname_cottoncandy": {
+      "price": 6.75,
+      "wholesale": 0.1,
+      "box": 500
+    },
+    "ba:itemname_slushi": {
+      "price": 7.0,
+      "wholesale": 0.9,
+      "box": 500
     }
   },
   "priceIndex": {
@@ -71,7 +91,41 @@
     "coffeemachine": 4700,
     "displaycase": 895,
     "cooler": 875,
-    "burgerstation": 1400,
-    "icecreamcounter": 1800
+    "grill": 1400,
+    "fryer": 4400,
+    "concessions": 895,
+    "slushiemachine": 2200,
+    "icecreamcounter": 1800,
+    "industrialgrill": 1400,
+    "industrialfryer": 4400,
+    "concessionsdisplaycase": 895,
+    "slushimachine": 2200
+  },
+  "_market": "The game's market demand (0 to 100) for the cinema items in the four neighbourhoods it keeps it for: 100 - providers x 100 / 7, at least about 31 (ProductMarketHelper.CalculateDemand), counting cinemas (and theatres, for popcorn) as providers. Used instead of --market there.",
+  "market": {
+      "ba:itemname_popcorn": {
+          "ba:neighborhood_midtown": 31,
+          "ba:neighborhood_hellskitchen": 86,
+          "ba:neighborhood_lowermanhattan": 86,
+          "ba:neighborhood_thehamptons": 72
+      },
+      "ba:itemname_cottoncandy": {
+          "ba:neighborhood_midtown": 72,
+          "ba:neighborhood_hellskitchen": 86,
+          "ba:neighborhood_lowermanhattan": 86,
+          "ba:neighborhood_thehamptons": 86
+      },
+      "ba:itemname_slushi": {
+          "ba:neighborhood_midtown": 72,
+          "ba:neighborhood_hellskitchen": 86,
+          "ba:neighborhood_lowermanhattan": 86,
+          "ba:neighborhood_thehamptons": 86
+      }
+  },
+  "_marketLimits": "Items the game keeps market demand for only in these neighbourhoods (Item.limitDemandToNeighbourhoods, ba_store_rules.json). Elsewhere the calculator uses 100, as Core does when the adapter leaves them out.",
+  "marketLimits": {
+    "ba:itemname_popcorn": ["ba:neighborhood_hellskitchen", "ba:neighborhood_midtown", "ba:neighborhood_lowermanhattan", "ba:neighborhood_thehamptons"],
+    "ba:itemname_cottoncandy": ["ba:neighborhood_hellskitchen", "ba:neighborhood_midtown", "ba:neighborhood_lowermanhattan", "ba:neighborhood_thehamptons"],
+    "ba:itemname_slushi": ["ba:neighborhood_hellskitchen", "ba:neighborhood_midtown", "ba:neighborhood_lowermanhattan", "ba:neighborhood_thehamptons"]
   }
 }

@@ -20,14 +20,21 @@
     "bakeryxx:itemname_bun": { "category": "bakery", "serviceMinutes": 1, "stockWeight": 0.5 },
     "bakeryxx:itemname_chocolatecookie": { "category": "bakery", "serviceMinutes": 1, "stockWeight": 0.5 },
     "bakeryxx:itemname_latte": { "category": "coffee", "serviceMinutes": 1.5, "stockWeight": 0.25 },
-    "bakeryxx:itemname_americano": { "category": "coffee", "serviceMinutes": 1.0, "stockWeight": 0.25 }
+    "bakeryxx:itemname_americano": { "category": "coffee", "serviceMinutes": 1.0, "stockWeight": 0.25 },
+    "ba:itemname_kabob": { "category": "streetmeal", "serviceMinutes": 4 },
+    "ba:itemname_popcorn": { "category": "snacks", "serviceMinutes": 2, "stockWeight": 0.25 },
+    "ba:itemname_cottoncandy": { "category": "snacks", "serviceMinutes": 2, "stockWeight": 0.25 },
+    "ba:itemname_slushi": { "category": "slushies", "serviceMinutes": 1.5, "stockWeight": 0.25 }
   },
 
-  "_equipment": "The mod's own equipment IDs, the products each unlocks and the vanilla items that fit them. Carry a game item to the vehicle and click it to fit it; it stays in cargo and shares the game's cargo slots with food. Vanilla item IDs come from the game's code; their presence in the 1.0 assets is unverified. Each listed game item fits one piece (the burger station's grill and fryer are alternatives). Coffee maps only to the industrial coffee machine; the cheap machine is office equipment. With the Bakery mod, its bread counter fits as a display case and its bistro machine as a coffee machine, and its goods sell from them.",
+  "_equipment": "The mod's own equipment IDs, the products each unlocks and the vanilla items that fit them. Carry a game item to the vehicle and click it to fit it; it stays in cargo and shares the game's cargo slots with food. Vanilla item IDs come from the game's code; their presence in the 1.0 assets is unverified. Each listed game item fits one piece. Coffee maps only to the industrial coffee machine; the cheap machine is office equipment. With the Bakery mod, its bread counter fits as a display case and its bistro machine as a coffee machine, and its goods sell from them. The game's industrial grill and fryer are separate pieces, as in the game (grill: burgers and kabobs; fryer: fries); fitted pieces are read from the cargo, so splitting the old burger station needs no save change. Popcorn and cotton candy share the game's concessions display case, slushies its slushi machine (9 October 2026, docs/balance/new-foods.md).",
   "_equipmentDisplay": "display: the model shown on a cart's counter spot when the piece is fitted, by name from the mod's Vehicles/EquipmentArt (BurgerStation, CoffeeStation, CornGrill, CottonCandyMachine, DrinksCooler, DumplingSteamer, Griddle, HotDogRoller, IceCreamCabinet, KabobGrill, MerchRack, PastryCase, PizzaOven, PopcornMachine, SlushieMachine). No display: the spot stays empty.",
   "equipment": {
     "hotdoggrill": { "products": ["ba:itemname_hotdog"], "gameItems": ["ba:itemname_hotdoggrill"], "display": "HotDogRoller" },
-    "burgerstation": { "products": ["ba:itemname_burger", "ba:itemname_frenchfries"], "gameItems": ["ba:itemname_industrialgrill", "ba:itemname_industrialfryermachine"], "display": "BurgerStation" },
+    "grill": { "products": ["ba:itemname_burger", "ba:itemname_kabob"], "gameItems": ["ba:itemname_industrialgrill"], "display": "BurgerStation" },
+    "fryer": { "products": ["ba:itemname_frenchfries"], "gameItems": ["ba:itemname_industrialfryermachine"], "display": "BurgerStation" },
+    "concessions": { "products": ["ba:itemname_popcorn", "ba:itemname_cottoncandy"], "gameItems": ["ba:itemname_concessionsdisplaycase"], "display": "PopcornMachine" },
+    "slushiemachine": { "products": ["ba:itemname_slushi"], "gameItems": ["ba:itemname_slushimachine"], "display": "SlushieMachine" },
     "coffeemachine": { "products": ["ba:itemname_cupofcoffee", "ba:itemname_cupoftea", "bakeryxx:itemname_latte", "bakeryxx:itemname_americano"], "gameItems": ["ba:itemname_industrialcoffeemachine", "bakeryxx:itemname_bistromachine"], "display": "CoffeeStation" },
     "icecreamcounter": { "products": ["ba:itemname_icecream"], "gameItems": ["ba:itemname_icecreamcounter"], "display": "IceCreamCabinet" },
     "pizzaoven": { "products": ["ba:itemname_pizza"], "gameItems": ["ba:itemname_pizzaoven"], "display": "PizzaOven" },

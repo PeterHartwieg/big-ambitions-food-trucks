@@ -14,6 +14,17 @@ public sealed class GamePrices
     public Dictionary<string, ItemPrice> Items { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, double> PriceIndex { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, double> Equipment { get; } = new(StringComparer.Ordinal);
+    // The game's market demand (0 to 100) per item and neighbourhood where it differs from the run's --market.
+    public Dictionary<string, Dictionary<string, double>> Market { get; } = new(StringComparer.Ordinal);
+    // Items whose market demand the game keeps only in these neighbourhoods. Elsewhere the adapter leaves them out
+    // of the market read (World.cs) and Core treats them as unsaturated: 100, whatever --market says.
+    public Dictionary<string, HashSet<string>> MarketLimits { get; } = new(StringComparer.Ordinal);
+
+    public double MarketFor(string item, string hood, double fallback)
+    {
+        if (MarketLimits.TryGetValue(item, out var limit) && !limit.Contains(hood)) return 100;
+        return Market.TryGetValue(item, out var hoods) && hoods.TryGetValue(hood, out var v) ? v : fallback;
+    }
 
     public static GamePrices Load(string path)
     {
@@ -23,7 +34,38 @@ public sealed class GamePrices
             g.Items[p.Key] = new ItemPrice((double)p.Value!["price"]!, (double)p.Value!["wholesale"]!, (int)p.Value!["box"]!);
         foreach (var p in (JObject)json["priceIndex"]!) g.PriceIndex[p.Key] = (double)p.Value!;
         foreach (var p in (JObject)json["equipment"]!) g.Equipment[p.Key] = (double)p.Value!;
+        if (json["marketLimits"] is JObject limits)
+            foreach (var p in limits)
+                if (!p.Key.StartsWith("_")) g.MarketLimits[p.Key] = new HashSet<string>(p.Value!.Values<string>()!, StringComparer.Ordinal);
+        g.MergeMarket(json);
         return g;
+    }
+
+    // A "market" section, from game-prices.json or a patch: item -> neighbourhood -> demand.
+    public void MergeMarket(JObject json)
+    {
+        if (json["market"] is JObject market)
+            foreach (var p in market)
+            {
+                if (p.Key.StartsWith("_") || p.Value is not JObject hoods) continue;
+                Market[p.Key] = hoods.Properties().Where(h => !h.Name.StartsWith("_")).ToDictionary(h => h.Name, h => (double)h.Value, StringComparer.Ordinal);
+            }
+    }
+
+    // A patch's "game" section: Item fields of items the mod would add (defaultMarketPrice, wholesalePrice,
+    // boxSize) and equipment purchase prices by the mod's equipment key. Keys starting with "_" are notes.
+    public void Merge(JObject game)
+    {
+        if (game["items"] is JObject items)
+            foreach (var p in items)
+            {
+                if (p.Key.StartsWith("_")) continue;
+                Items[p.Key] = new ItemPrice((double)p.Value!["defaultMarketPrice"]!, (double)p.Value!["wholesalePrice"]!, (int)p.Value!["boxSize"]!);
+            }
+        MergeMarket(game);
+        if (game["equipment"] is JObject equipment)
+            foreach (var p in equipment)
+                if (!p.Key.StartsWith("_")) Equipment[p.Key] = (double)p.Value!;
     }
 }
 
@@ -165,7 +207,7 @@ public sealed class Cart
             Day = day,
             Month = c.Month,
             Raining = c.Rain,
-            MarketDemand = sellable.ToDictionary(i => i, _ => c.MarketDemand),
+            MarketDemand = sellable.ToDictionary(i => i, i => prices.MarketFor(i, spot.Hood, c.MarketDemand)),
             Promotion = 1.0 // baseCustomerPromotionMultiplier 0.5 / 0.5 at the default difficulty
         });
 

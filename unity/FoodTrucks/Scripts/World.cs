@@ -345,11 +345,16 @@ namespace FoodTrucks
             var market = new Dictionary<string, double>();
             if (!string.IsNullOrEmpty(spot.Neighbourhood))
             {
-                // Only for products the game tracks; for the rest it reports 0, which its own callers read as
+                // Only for products the game tracks in this neighbourhood; for the rest it reports 0, which its own callers read as
                 // 100 (CustomerEntriesCalculatorRetail). Left out, Core treats them as unsaturated.
                 foreach (var item in menu)
                 {
                     if (ItemsGetter.GetByName(item, suppressError: true)?.isADemandedProduct != true) continue;
+                    // Popcorn, cotton candy and slushies have demand only in the game's cinema neighbourhoods;
+                    // elsewhere the game logs an error and answers 50, so leave them out there too.
+                    // The game's check looks the neighbourhood up unguarded; one it didn't load keeps the old read.
+                    if (NeighborhoodHelper.Neighborhoods?.Contains(spot.Neighbourhood) == true
+                        && !ProductMarketHelper.CanNeighborhoodHaveItemDemand(spot.Neighbourhood, item)) continue;
                     market[item] = ProductMarketHelper.GetNeighborhoodDemand(item, spot.Neighbourhood).demand;
                 }
             }
