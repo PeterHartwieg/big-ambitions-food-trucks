@@ -45,19 +45,21 @@ Replaces the box renderers in `CartAssets.BuildCart`. Everything the code places
 | `Cart_Body` | (0, 0, 0) | Box, counter, handle, fenders, feet, umbrella. 2,948 tris. Extents x −0.80…0.80 (umbrella), y 0…2.30, z −0.77…1.40 |
 | `Cart_Wheel_L` | (−0.455, 0.25, 0) | 0.50 m diameter, 0.05 m wide, spins about local X. 388 tris |
 | `Cart_Wheel_R` | (0.455, 0.25, 0) | Same |
-| `Cart_Lid` | (0, 0.95, 0.025) | Steam-well lid, hinge along local X; open at localEulerAngles.x = −100 (checked in Unity). 88 tris |
+| `Cart_Lid` | (0, 0.95, 0.025) | Steam-well lid, hinge along local X; open at localEulerAngles.x = −100 (checked in Unity). Stays closed under the front equipment spot (plan, "Cart counter layout"). 88 tris |
 | `Cart_Collision` | (0, 0, 0) | Convex hull of body and wheels, x ±0.48, y 0…0.95, z ±0.70. 84 tris. Not needed while the root keeps its BoxCollider |
 
 The body box itself is x ±0.40, z ±0.70, counter top at y 0.95, underside at about 0.25. The umbrella's pole stands at (0, 0.95, 0.60); the canopy is 1.60 m across, top 2.30 m, rim no lower than 2.00 m.
 
-**Attachment points** (unchanged constants in `CartAssets.cs`; the mesh matches them):
+**Attachment points** (constants in `CartAssets.cs`; the mesh matches them):
 
 | Point | Position | Check |
 |---|---|---|
 | `LeftHandIK`, `RightHandIK` | (∓0.30, 1.16, −0.75) | The push bar's axis passes through both (bar surface 17 mm away, bar 35 mm thick) |
 | `LoadingPosition`, `NavMeshTarget` | (0, 0, −1.40) | Nothing of the cart in x ±0.40, z −1.70…−0.85 up to 2.0 m |
 | `playerOffsetWhenActive` | −1.40 | |
-| `BoxPlaceholder` | (0, 0.95, 0), six boxes as now | The zone x ±0.325, y 0.97…1.17, z ±0.55 is empty: lids are flush, the pole is outside it |
+| `BoxPlaceholder` | (0, 0.5, 0), inside the body, no boxes | The game only switches the placeholder's children on by the cargo count, so an empty one shows nothing and the cargo logic is unchanged |
+| `EquipmentFront` | (0, 0.963, 0.30) | Equipment spot behind the umbrella pole, just above the closed lid (top 0.962). A 0.40 × 0.36 m piece turned to any angle stays within 0.27 m of the spot: z 0.03…0.57, clear of the pole at z 0.60 |
+| `EquipmentRear` | (0, 0.963, −0.30) | Spot in front of the push bar: z −0.57…−0.03 at any angle, 0.18 m clear of the bar and the hands at z −0.75. The counter is empty here up to 1.17 m (lids flush), and the pieces (up to 0.70 m tall) stay under the canopy's 2.00 m rim |
 
 **Swap steps:**
 
@@ -65,7 +67,15 @@ The body box itself is x ±0.40, z ±0.70, counter top at y 0.95, underside at a
 2. One HDRP/Lit material with `_BaseColorMap` = `T_FoodCart_BaseColor` (base colour white) for all four visible meshes.
 3. In `BuildCart`, instead of the seven `Box(...)` calls, instantiate the four visible mesh nodes under the root on layer `Vehicles` and pass their renderers to `renderers`. Leave out `Cart_Collision`, or keep it disabled for later.
 4. Widen the root `BoxCollider` and the `NavMeshObstacle` to cover the wheels: centre (0, 0.6, 0), size (0.96, 1.2, 1.5). The umbrella stays outside the collider, so people can walk under it.
-5. Optional: spin the wheels about local X with the rolling speed, and open the lid while the cart is open for business.
+5. Optional: spin the wheels about local X with the rolling speed (done, `CartParts`). The lid no longer opens: equipment stands over it.
+
+## Equipment
+
+Ten compact pieces for the cart's counter spots, one folder each in `equipment/` (`<Name>.fbx` with `<Name>_Body` and `<Name>_Collision`, and `T_<Name>_BaseColor.png`). Each fits 0.40 × 0.36 m, origin at the bottom centre, front (Blender −Y) facing the customer, which is +Z in Unity. Heights 0.40 to 0.70 m.
+
+`tools/build-mod.sh` copies each FBX and texture into `unity/FoodTrucks/Vehicles/EquipmentArt/`, and `EquipmentAssets` makes an HDRP/Lit material and a prefab per model there (body mesh only, no collider). Only the `.meta` files, materials and prefabs are committed. `data/economy.json`'s `display` field picks a piece's model by name: the coffee machine shows `CoffeeStation`, the cooler `DrinksCooler`. The other eight models wait for their foods. The hot dog grill, burger station, ice cream counter, pizza oven and display case have no compact model yet and show nothing; giving one a `display` is all that's needed once it exists.
+
+On the cart, `CartDisplays` puts the first fitted piece on `EquipmentFront` and the second on `EquipmentRear`, turned 90° to face the side the queue forms on while the cart is open, and the cart's right side otherwise.
 
 ## Food truck
 

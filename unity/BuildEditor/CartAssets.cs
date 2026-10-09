@@ -18,7 +18,7 @@ namespace FoodTrucks.BuildEditor
     internal static class CartAssets
     {
         private const string HandVehicleTag = "ba:vehicletag_ishandvehicle";
-        private const int CargoSlots = 6;
+        private const int CargoSlots = 6; // The game's cargo slots; food units and equipment are limited by the mod.
         private const float CartPrice = 1200f; // Placeholder until the economy milestone.
         // Grip measured from the vanilla hand truck (logged at city load, Milestone 1 session): hands
         // 1.16 m high, 0.30 m either side, 0.65 m ahead of the player. The handle sits at the body's rear edge.
@@ -27,6 +27,9 @@ namespace FoodTrucks.BuildEditor
         private const float GripReach = 0.65f;
         private const float HandleZ = -0.75f;
         private const float PusherDistance = -HandleZ + GripReach;
+
+        private const float SpotHeight = 0.963f;
+        private const float SpotZ = 0.30f;
 
         // The root collider and nav obstacle, widened to the wheels; the umbrella stays outside it.
         private static readonly Vector3 BodyCenter = new Vector3(0f, 0.6f, 0f);
@@ -151,15 +154,17 @@ namespace FoodTrucks.BuildEditor
             bodyCollider.center = BodyCenter;
             bodyCollider.size = BodySize;
 
-            // One child per cargo slot; HandTruck shows the first N children for N cargo entries.
-            var boxes = new GameObject("BoxPlaceholder").transform;
-            boxes.SetParent(root.transform, false);
-            boxes.localPosition = new Vector3(0f, 0.95f, 0f);
-            for (var i = 0; i < CargoSlots; i++)
-            {
-                var box = Box(boxes, "Box" + i, new Vector3((i % 2 - 0.5f) * 0.35f, 0.12f, (i / 2 - 1) * 0.4f), new Vector3(0.3f, 0.2f, 0.3f), new Color(0.6f, 0.45f, 0.3f));
-                box.gameObject.SetActive(false);
-            }
+            // No cargo boxes on the cart: stock is inside the cabinet (plan, "Cart counter layout"). HandTruck only
+            // switches the placeholder's children on and off by the cargo count, so an empty placeholder inside the
+            // body keeps the game's cargo logic and shows nothing.
+            var boxes = Point(root.transform, "BoxPlaceholder", new Vector3(0f, 0.5f, 0f));
+
+            // The two equipment spots, centred across the counter, each for a 0.40 x 0.36 m piece that may turn
+            // to either side (radius 0.27 m): the front one behind the umbrella pole (z 0.60), the rear one in front
+            // of the push bar (z -0.75). Just above the counter and the closed steam-well lid (top 0.962).
+            // CartDisplays puts the fitted pieces here.
+            Point(root.transform, "EquipmentFront", new Vector3(0f, SpotHeight, SpotZ));
+            Point(root.transform, "EquipmentRear", new Vector3(0f, SpotHeight, -SpotZ));
 
             var leftHand = Point(root.transform, "LeftHandIK", new Vector3(-GripHalfWidth, GripHeight, HandleZ));
             var rightHand = Point(root.transform, "RightHandIK", new Vector3(GripHalfWidth, GripHeight, HandleZ));
@@ -224,11 +229,14 @@ namespace FoodTrucks.BuildEditor
         }
 
         // One HDRP/Lit material with the base colour map, for all four meshes (art/README.md, swap step 2).
-        private static Material ArtMaterial(string artFolder)
+        private static Material ArtMaterial(string artFolder) =>
+            LitMaterial(artFolder + "/M_FoodCart.mat", artFolder + "/T_FoodCart_BaseColor.png");
+
+        // An HDRP/Lit material at path, white with the texture as its base colour map (imported as sRGB).
+        internal static Material LitMaterial(string path, string texturePath)
         {
-            var texturePath = artFolder + "/T_FoodCart_BaseColor.png";
             var importer = (TextureImporter)AssetImporter.GetAtPath(texturePath)
-                           ?? throw new InvalidOperationException($"{texturePath} missing; tools/build-mod.sh copies it from art/cart.");
+                           ?? throw new InvalidOperationException($"{texturePath} missing; tools/build-mod.sh copies it from art/.");
             if (importer.textureType != TextureImporterType.Default || !importer.sRGBTexture)
             {
                 importer.textureType = TextureImporterType.Default;
@@ -236,7 +244,6 @@ namespace FoodTrucks.BuildEditor
                 importer.SaveAndReimport();
             }
             var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
-            var path = artFolder + "/M_FoodCart.mat";
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (material == null)
             {
@@ -246,47 +253,10 @@ namespace FoodTrucks.BuildEditor
             }
             material.SetColor("_BaseColor", Color.white);
             material.SetTexture("_BaseColorMap", texture);
-            material.SetFloat("_SupportDecals", 0f);
-            material.EnableKeyword("_DISABLE_DECALS");
-            EditorUtility.SetDirty(material);
-            return material;
-        }
-
-        private static Renderer Box(Transform parent, string name, Vector3 position, Vector3 size, Color color)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = name;
-            UnityEngine.Object.DestroyImmediate(go.GetComponent<BoxCollider>());
-            go.transform.SetParent(parent, false);
-            go.layer = LayerMask.NameToLayer("Vehicles");
-            go.transform.localPosition = position;
-            go.transform.localScale = size;
-            var renderer = go.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = Material(color);
-            return renderer;
-        }
-
-        private static readonly Dictionary<Color, Material> Materials = new Dictionary<Color, Material>();
-
-        // HDRP Lit materials saved next to the prefab, one per colour (now only the cargo boxes').
-        private static Material Material(Color color)
-        {
-            if (Materials.TryGetValue(color, out var existing) && existing != null) return existing;
-            var path = $"{ModAssets.ModFolder}/Vehicles/Materials/Cart_{ColorUtility.ToHtmlStringRGB(color)}.mat";
-            ModAssets.EnsureFolder(ModAssets.ModFolder + "/Vehicles/Materials");
-            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (material == null)
-            {
-                var shader = Shader.Find("HDRP/Lit") ?? throw new InvalidOperationException("HDRP/Lit shader not found.");
-                material = new Material(shader);
-                AssetDatabase.CreateAsset(material, path);
-            }
-            material.SetColor("_BaseColor", color);
             // Street dirt is drawn with HDRP decals, which land on any material that accepts them.
             material.SetFloat("_SupportDecals", 0f);
             material.EnableKeyword("_DISABLE_DECALS");
             EditorUtility.SetDirty(material);
-            Materials[color] = material;
             return material;
         }
 

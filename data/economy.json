@@ -24,13 +24,14 @@
   },
 
   "_equipment": "The mod's own equipment IDs, the products each unlocks and the vanilla items that fit them. Carry a game item to the vehicle and click it to fit it; it stays in cargo and shares the game's cargo slots with food. Vanilla item IDs come from the game's code; their presence in the 1.0 assets is unverified. Each listed game item fits one piece (the burger station's grill and fryer are alternatives). Coffee maps only to the industrial coffee machine; the cheap machine is office equipment. With the Bakery mod, its bread counter fits as a display case and its bistro machine as a coffee machine, and its goods sell from them.",
+  "_equipmentDisplay": "display: the model shown on a cart's counter spot when the piece is fitted, by name from the mod's Vehicles/EquipmentArt (CoffeeStation, CornGrill, CottonCandyMachine, DrinksCooler, DumplingSteamer, Griddle, KabobGrill, MerchRack, PopcornMachine, SlushieMachine). No display: the spot stays empty (compact models for the other pieces are still to be made).",
   "equipment": {
     "hotdoggrill": { "products": ["ba:itemname_hotdog"], "gameItems": ["ba:itemname_hotdoggrill"] },
     "burgerstation": { "products": ["ba:itemname_burger", "ba:itemname_frenchfries"], "gameItems": ["ba:itemname_industrialgrill", "ba:itemname_industrialfryermachine"] },
-    "coffeemachine": { "products": ["ba:itemname_cupofcoffee", "ba:itemname_cupoftea", "bakeryxx:itemname_latte", "bakeryxx:itemname_americano"], "gameItems": ["ba:itemname_industrialcoffeemachine", "bakeryxx:itemname_bistromachine"] },
+    "coffeemachine": { "products": ["ba:itemname_cupofcoffee", "ba:itemname_cupoftea", "bakeryxx:itemname_latte", "bakeryxx:itemname_americano"], "gameItems": ["ba:itemname_industrialcoffeemachine", "bakeryxx:itemname_bistromachine"], "display": "CoffeeStation" },
     "icecreamcounter": { "products": ["ba:itemname_icecream"], "gameItems": ["ba:itemname_icecreamcounter"] },
     "pizzaoven": { "products": ["ba:itemname_pizza"], "gameItems": ["ba:itemname_pizzaoven"] },
-    "cooler": { "products": ["ba:itemname_sodacan", "ba:itemname_water"], "gameItems": ["ba:itemname_drinksfridge", "ba:itemname_largedrinksfridge"] },
+    "cooler": { "products": ["ba:itemname_sodacan", "ba:itemname_water"], "gameItems": ["ba:itemname_drinksfridge", "ba:itemname_largedrinksfridge"], "display": "DrinksCooler" },
     "displaycase": { "products": ["ba:itemname_croissant", "ba:itemname_donut", "ba:itemname_cupcake", "bakeryxx:itemname_bread", "bakeryxx:itemname_bun", "bakeryxx:itemname_chocolatecookie"], "gameItems": ["ba:itemname_bakeryshowcase", "bakeryxx:itemname_breadcounter"] }
   },
 

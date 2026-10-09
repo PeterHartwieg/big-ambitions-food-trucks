@@ -92,4 +92,33 @@ public class EquipmentMappingTests
         Assert.Contains("ba:itemname_hotdoggrill", error.Message);
         Assert.Contains("already maps to equipment 'hotdoggrill'", error.Message);
     }
+
+    [Theory]
+    [InlineData("coffeemachine", "CoffeeStation")]
+    [InlineData("cooler", "DrinksCooler")]
+    [InlineData("hotdoggrill", null)]
+    [InlineData("burgerstation", null)]
+    [InlineData("icecreamcounter", null)]
+    [InlineData("pizzaoven", null)]
+    [InlineData("displaycase", null)]
+    public void ShippedDisplayModels(string id, string? display)
+    {
+        Assert.Equal(display, ShippedData.Tables.Equipment(id)!.Display);
+    }
+
+    [Theory]
+    [InlineData("\"\"", "must not be empty")]
+    [InlineData("3", "must be a string")]
+    [InlineData("\"Coffee/Station\"", "must be a model name")]
+    public void InvalidDisplayNamesTheField(string json, string problem)
+    {
+        var economy = JObject.Parse(ShippedData.Economy);
+        economy["equipment"]!["hotdoggrill"]!["display"] = JToken.Parse(json);
+
+        var error = Assert.Throws<DemandDataException>(() =>
+            DemandTables.Parse(ShippedData.Demand, economy.ToString(), ShippedData.Zones));
+
+        Assert.Contains("equipment.hotdoggrill.display", error.Message);
+        Assert.Contains(problem, error.Message);
+    }
 }
