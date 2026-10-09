@@ -291,3 +291,93 @@ public class StreetFoodStatementTests
         Assert.Throws<ArgumentException>(() => StreetFoodStatement.Build(new SaveState(), Days, new long[3], NoGameCosts));
     }
 }
+
+public class CrewLogTests
+{
+    [Fact]
+    public void AWageIsSplitOverTheVehiclesWorkedByHours()
+    {
+        var state = new SaveState();
+        for (var i = 0; i < 6; i++) CrewLog.AddHour(state, 3, "emp", "truckA");
+        for (var i = 0; i < 2; i++) CrewLog.AddHour(state, 3, "emp", "truckB");
+
+        var split = CrewLog.Split(state, 3, "emp", 8_000, 8);
+
+        Assert.Equal(new[] { ("truckA", 6_000L), ("truckB", 2_000L) }, split.ToArray());
+    }
+
+    [Fact]
+    public void LeftoverCentsGoToTheVehicleWithMostHours()
+    {
+        var state = new SaveState();
+        CrewLog.AddHour(state, 1, "emp", "a");
+        CrewLog.AddHour(state, 1, "emp", "b");
+        CrewLog.AddHour(state, 1, "emp", "b");
+
+        var split = CrewLog.Split(state, 1, "emp", 1_000, 3);
+
+        Assert.Equal(1_000, split.Sum(s => s.Cents));
+        Assert.Equal(new[] { ("a", 333L), ("b", 667L) }, split.ToArray());
+    }
+
+    [Fact]
+    public void HoursNotLoggedStayWithNoVehicle()
+    {
+        var state = new SaveState();
+        for (var i = 0; i < 3; i++) CrewLog.AddHour(state, 1, "emp", "a");
+
+        // Six hours paid, three of them logged on a vehicle: half the wage is the vehicle's.
+        Assert.Equal(new[] { ("a", 600L) }, CrewLog.Split(state, 1, "emp", 1_200, 6).ToArray());
+    }
+
+    [Fact]
+    public void OtherDaysAndEmployeesDontCount()
+    {
+        var state = new SaveState();
+        CrewLog.AddHour(state, 1, "emp", "a");
+        CrewLog.AddHour(state, 2, "emp", "b");
+        CrewLog.AddHour(state, 1, "other", "c");
+
+        Assert.Equal(new[] { ("a", 500L) }, CrewLog.Split(state, 1, "emp", 500, 1).ToArray());
+        Assert.Empty(CrewLog.Split(state, 3, "emp", 500, 1));
+        Assert.Empty(CrewLog.Split(state, 1, "emp", 0, 1));
+    }
+
+    [Fact]
+    public void PaidHoursAreDroppedAndOldOnesPruned()
+    {
+        var state = new SaveState();
+        CrewLog.AddHour(state, 1, "emp", "a");
+        CrewLog.AddHour(state, 5, "emp", "a");
+        CrewLog.AddHour(state, 5, "other", "a");
+
+        CrewLog.Consume(state, 5, "emp");
+        Assert.False(CrewLog.HasHours(state, 5, "emp"));
+        Assert.True(CrewLog.HasHours(state, 5, "other"));
+
+        CrewLog.Prune(state, 3);
+        Assert.False(CrewLog.HasHours(state, 1, "emp"));
+        Assert.Single(state.CrewHours);
+    }
+
+    [Fact]
+    public void HoursSurviveARoundTripAndOldSavesReadNone()
+    {
+        var codec = new SaveCodec();
+        var state = new SaveState();
+        CrewLog.AddHour(state, 4, "emp", "truck");
+        CrewLog.AddHour(state, 4, "emp", "truck");
+
+        var loaded = codec.Load(codec.Serialize(state));
+        Assert.Equal(LoadStatus.Loaded, loaded.Status);
+        var hours = loaded.State!.CrewHours.Single();
+        Assert.Equal((4, "emp", "truck", 2), (hours.Day, hours.EmployeeId, hours.VehicleId, hours.Hours));
+
+        var old = codec.Load("{\"schemaVersion\":1,\"licence\":{}}");
+        Assert.Equal(LoadStatus.Loaded, old.Status);
+        Assert.Empty(old.State!.CrewHours);
+
+        var bad = codec.Load("{\"schemaVersion\":1,\"licence\":{},\"crewHours\":[{\"day\":1,\"employeeId\":\"e\",\"vehicleId\":\"v\",\"hours\":0}]}");
+        Assert.Equal(LoadStatus.Corrupt, bad.Status);
+    }
+}

@@ -190,6 +190,9 @@ namespace FoodTrucks.Core.Saves
                 state.Partnerships.Select(p => p.Venue).Distinct(StringComparer.Ordinal).Count() != state.Partnerships.Count)
                 throw new JsonSerializationException("Partnerships must be one per vehicle and one per venue, each named.");
 
+            if (state.CrewHours == null || state.CrewHours.Any(h => h == null || string.IsNullOrEmpty(h.EmployeeId) || string.IsNullOrEmpty(h.VehicleId) || h.Hours <= 0))
+                throw new JsonSerializationException("CrewHours must name the employee and vehicle, with at least one hour.");
+
             var days = new HashSet<int>();
             long total = 0;
             foreach (var sale in state.DailySales)

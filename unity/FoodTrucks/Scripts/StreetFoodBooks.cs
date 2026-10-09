@@ -42,7 +42,9 @@ namespace FoodTrucks
         internal static void CheckMoves()
         {
             var scroller = AccessTools.TypeByName(ScrollerTypeName);
-            movesActive = scroller != null && HasOurPostfix(scroller, "LoadOngoingExpenseRows") && HasOurPostfix(scroller, "LoadFeeRows");
+            // The Street food rows have to be there too, or the moved costs would show nowhere.
+            movesActive = scroller != null && HasOurPostfix(scroller, "LoadSalaryRows") &&
+                          HasOurPostfix(scroller, "LoadOngoingExpenseRows") && HasOurPostfix(scroller, "LoadFeeRows");
             Log.Info(movesActive
                 ? "Econoview: crew wages and parking move from the game's rows to the vehicles."
                 : "Econoview: crew wages and parking stay in the game's rows (a patch for moving them isn't active).");
@@ -195,8 +197,11 @@ namespace FoodTrucks
         private static Dictionary<string, string> VehicleNames()
         {
             var names = new Dictionary<string, string>(StringComparer.Ordinal);
-            var vehicles = SaveGameManager.Current.VehicleInstances
-                .Where(v => v != null && FoodTrucksMod.KindOf(v.vehicleTypeName) != null)
+            // Vehicles left with the private driver wait in the game's own list.
+            var game = SaveGameManager.Current;
+            var vehicles = game.VehicleInstances.Concat(game.privateDriverVehicleInstances ?? Enumerable.Empty<VehicleInstance>())
+                .Where(v => v != null && !string.IsNullOrEmpty(v.id) && FoodTrucksMod.KindOf(v.vehicleTypeName) != null)
+                .GroupBy(v => v.id, StringComparer.Ordinal).Select(g => g.First())
                 .OrderBy(v => v.id, StringComparer.Ordinal)
                 .ToList();
             foreach (var kind in vehicles.GroupBy(v => v.vehicleTypeName))
@@ -217,31 +222,58 @@ namespace FoodTrucks
             return LocalizorManager.GetLocalization("foodtrucks:econoview_vehicle_gone", null).Replace("{vehicle}", label);
         }
 
-        // Crew wages: the game pays each employee at midnight, into yesterday. A wage paid as unassigned to someone on a
-        // vehicle's crew is that vehicle's.
-        public static void WagePrefix(out Transaction? __state)
+        // Crew wages: the game pays each employee at midnight, into yesterday, for the hours counted that day. A wage
+        // booked as unassigned is split over the vehicles the hire worked those hours on (CrewLog, written as
+        // HireCrew counts each hour); with no hours logged, it goes to the crew the hire is on at payment.
+        internal sealed class WageCall
+        {
+            public Transaction? Last;
+            public float WorkedHours;
+        }
+
+        public static void WagePrefix(EmployeeInstance __instance, out WageCall? __state)
         {
             __state = null;
-            try { __state = LastTransaction(); }
+            try
+            {
+                var state = FoodTrucksSession.CurrentState;
+                if (state == null || !FoodTrucksSession.CanWrite || __instance == null || SaveGameManager.Current == null) return;
+                // Most employees are nobody's crew: skip them before touching the transactions.
+                if (CrewVehicle(state, __instance.id) == null && !CrewLog.HasHours(state, SaveGameManager.Current.Day - 1, __instance.id)) return;
+                __state = new WageCall { Last = LastTransaction(), WorkedHours = __instance.workedHoursToday };
+            }
             catch (Exception ex) { Log.Error(ex); }
         }
 
-        public static void WagePostfix(EmployeeInstance __instance, Transaction? __state)
+        public static void WagePostfix(EmployeeInstance __instance, WageCall? __state)
         {
             try
             {
                 var state = FoodTrucksSession.CurrentState;
-                if (state == null || !FoodTrucksSession.CanWrite || __instance == null) return;
+                if (__state == null || state == null || !FoodTrucksSession.CanWrite || __instance == null) return;
                 var paid = LastTransaction();
-                if (paid == null || ReferenceEquals(paid, __state) || paid.transactionType != UnassignedWage || paid.amount >= 0f) return;
-                var vehicle = state.Vehicles.FirstOrDefault(v => v.Crew != null && v.Crew.Contains(__instance.id));
-                if (vehicle == null) return;
+                if (paid == null || ReferenceEquals(paid, __state.Last) || paid.transactionType != UnassignedWage || paid.amount >= 0f) return;
+                var day = paid.timestamp.Day;
                 var cents = (long)Math.Round(-(double)paid.amount * 100.0);
-                if (!SalesLedger.RecordGameCost(state, paid.timestamp.Day, vehicle.VehicleId, LedgerLine.Wages, cents))
-                    Log.Info($"Econoview: wage of {CartSelling.Money(cents)} for {HireCrew.Name(__instance)} on day {paid.timestamp.Day} came after that day's summary; it stays in the game's row.");
+                var split = CrewLog.Split(state, day, __instance.id, cents, __state.WorkedHours);
+                CrewLog.Consume(state, day, __instance.id);
+                if (split.Count == 0)
+                {
+                    var vehicle = CrewVehicle(state, __instance.id);
+                    if (vehicle == null) return;
+                    split.Add((vehicle.VehicleId, cents));
+                }
+                foreach (var (vehicleId, share) in split)
+                {
+                    if (!SalesLedger.RecordGameCost(state, day, vehicleId, LedgerLine.Wages, share))
+                        Log.Info($"Econoview: wage of {CartSelling.Money(share)} for {HireCrew.Name(__instance)} on day {day} came after that day's summary; Econoview leaves it out.");
+                }
             }
             catch (Exception ex) { Log.Error(ex); }
         }
+
+        private static VehicleState? CrewVehicle(SaveState state, string employeeId) =>
+            state.Vehicles.FirstOrDefault(v => v.Crew != null && v.Crew.Contains(employeeId));
 
         private static Transaction? LastTransaction()
         {
