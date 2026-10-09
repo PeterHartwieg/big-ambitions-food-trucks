@@ -76,13 +76,16 @@ namespace FoodTrucks.Core.Selling
     public sealed class SalesResult
     {
         private readonly List<Sale> sales = new List<Sale>();
+        private readonly List<long> approached = new List<long>();
         private readonly List<long> joined = new List<long>();
         private readonly List<(long Id, CustomerExit Exit)> left = new List<(long, CustomerExit)>();
         private readonly Dictionary<string, int> draws = new Dictionary<string, int>(StringComparer.Ordinal);
 
         // Every item sold, add-ons included, in the order they were sold.
         public IReadOnlyList<Sale> Sales => sales;
-        // Customers who joined the queue, by ID, for the visible queue to spawn.
+        // Customers who turned up and started walking to the line, by ID, for the visible queue to spawn.
+        public IReadOnlyList<long> Approached => approached;
+        // Customers who reached the line and joined the queue, by ID.
         public IReadOnlyList<long> Joined => joined;
         // Customers who left without buying, by ID where they had one (0 for those who never queued).
         public IReadOnlyList<(long Id, CustomerExit Exit)> Left => left;
@@ -105,13 +108,16 @@ namespace FoodTrucks.Core.Selling
             draws[sale.Item] = units + 1;
         }
 
+        internal void Approach(long id) => approached.Add(id);
         internal void Join(long id) => joined.Add(id);
         internal void Leave(long id, CustomerExit exit) => left.Add((id, exit));
     }
 
-    // Milestone 3's per-minute sales tick: customers arrive at random from the demand rate, wait in a
-    // queue, give up after about 20 minutes (sooner in rain), and are served one order per worker at
-    // the order's service time divided by their service speed. Arrivals at the queue limit walk on.
+    // Milestone 3's per-minute sales tick: customers arrive at random from the demand rate, walk up to the
+    // line for a few minutes (QueueRules.WalkIn*), join the queue, give up after about 20 minutes of
+    // waiting there (sooner in rain), and are served one order per worker at the order's service time
+    // divided by their service speed. Customers who reach a queue at its limit walk on. The sale happens
+    // when the order is done, at the end of its service time.
     // Each sale draws one unit; a sold-out item can't be chosen and selling out everything sends the
     // queue away. The same tick drives the visible queue near the player and
     // the statistical sales elsewhere, so switching views changes nothing.
@@ -185,7 +191,7 @@ namespace FoodTrucks.Core.Selling
             return result;
         }
 
-        // Everyone waiting or at the window leaves; the state can be dropped afterwards.
+        // Everyone walking up, waiting or at the window leaves; the state can be dropped afterwards.
         public static SalesResult Close(ServiceState state)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -197,6 +203,7 @@ namespace FoodTrucks.Core.Selling
         private void Minute(ServiceState state, SalesInput input, Dictionary<string, int> stock, SeededRandom random, SalesResult result)
         {
             Arrive(state, input, stock, random, result);
+            Join(state, input, result);
             // Rain that started since the last call shortens everyone's patience before the window opens.
             GiveUp(state, input, result, state.Minute);
             Serve(state, input, stock, random, result);
@@ -206,11 +213,14 @@ namespace FoodTrucks.Core.Selling
             state.Minute++;
         }
 
+        // New customers pick what they want and start walking to the line. Whether the queue is full is
+        // checked when they reach it (Join), not here: counting the people still walking would hold places
+        // for minutes and leave the window idle, and the queue they could see on arrival has moved on by the
+        // time they get there. Checked on joining, a window serves as many as it did without the walk.
         private void Arrive(ServiceState state, SalesInput input, Dictionary<string, int> stock, SeededRandom random, SalesResult result)
         {
             var perHour = Usable(input.CustomersPerHour) * Usable(input.Conversion);
             var arrivals = random.Poisson(Math.Min(MaxArrivalsPerMinute, perHour / 60.0));
-            var queueLimit = input.QueueLimit <= 0 ? rules.MaxQueue : Math.Min(input.QueueLimit, rules.MaxQueue);
             for (var i = 0; i < arrivals; i++)
             {
                 var category = PickCategory(input.CustomerShares, stock, random);
@@ -219,19 +229,41 @@ namespace FoodTrucks.Core.Selling
                     result.Leave(0, CustomerExit.NothingLeft);
                     continue;
                 }
-                if (state.Queue.Count >= queueLimit)
-                {
-                    result.Leave(0, CustomerExit.QueueFull);
-                    continue;
-                }
                 var spread = rules.PatienceSpread * (2 * random.NextDouble() - 1);
+                var walk = rules.WalkInMinMinutes;
+                if (rules.WalkInMaxMinutes > walk)
+                    walk += Math.Min(rules.WalkInMaxMinutes - walk, (int)Math.Floor(random.NextDouble() * (rules.WalkInMaxMinutes - walk + 1)));
                 var customer = new ServiceCustomer
                 {
                     Id = state.NextCustomerId++,
                     ArrivedAtMinute = state.Minute,
+                    JoinsAtMinute = state.Minute + walk,
                     Patience = rules.PatienceMinutes * (1 + spread),
                     Category = category
                 };
+                state.Approaching.Add(customer);
+                result.Approach(customer.Id);
+            }
+        }
+
+        // Customers whose walk is over join the back of the queue, the earliest to arrive at the line first
+        // (ties by ID, the order they turned up). Their patience counts from now. A full queue sends them on.
+        private void Join(ServiceState state, SalesInput input, SalesResult result)
+        {
+            if (state.Approaching.Count == 0) return;
+            var queueLimit = input.QueueLimit <= 0 ? rules.MaxQueue : Math.Min(input.QueueLimit, rules.MaxQueue);
+            var due = state.Approaching.Where(c => c.JoinsAtMinute <= state.Minute)
+                .OrderBy(c => c.JoinsAtMinute).ThenBy(c => c.Id).ToList();
+            foreach (var customer in due)
+            {
+                state.Approaching.Remove(customer);
+                if (state.Queue.Count >= queueLimit)
+                {
+                    result.Leave(customer.Id, CustomerExit.QueueFull);
+                    continue;
+                }
+                customer.ArrivedAtMinute = state.Minute;
+                customer.JoinsAtMinute = 0;
                 state.Queue.Add(customer);
                 result.Join(customer.Id);
             }
@@ -513,8 +545,10 @@ namespace FoodTrucks.Core.Selling
         {
             foreach (var order in state.Window) result.Leave(order.Id, CustomerExit.Closed);
             foreach (var customer in state.Queue) result.Leave(customer.Id, CustomerExit.Closed);
+            foreach (var customer in state.Approaching) result.Leave(customer.Id, CustomerExit.Closed);
             state.Window.Clear();
             state.Queue.Clear();
+            state.Approaching.Clear();
         }
 
         private bool IsCategory(string name) => tables.CategoryNames.Contains(name);
@@ -527,13 +561,14 @@ namespace FoodTrucks.Core.Selling
             if (input == null) throw new ArgumentNullException(nameof(input));
             if (input.Menu == null) throw new ArgumentException("Menu must be set.", nameof(input));
             if (input.Stock == null) throw new ArgumentException("Stock must be set.", nameof(input));
-            if (state.Queue == null || state.Window == null) throw new ArgumentException("Queue and Window must be set.", nameof(state));
+            if (state.Queue == null || state.Window == null || state.Approaching == null)
+                throw new ArgumentException("Queue, Window and Approaching must be set.", nameof(state));
         }
 
         // A save edited by hand or written by another version may name a category this one lacks.
         private void Prune(ServiceState state, SalesResult result)
         {
-            foreach (var list in new[] { state.Window, state.Queue })
+            foreach (var list in new[] { state.Window, state.Queue, state.Approaching })
             {
                 for (var i = 0; i < list.Count;)
                 {

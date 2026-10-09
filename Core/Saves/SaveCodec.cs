@@ -211,12 +211,12 @@ namespace FoodTrucks.Core.Saves
 
         private static void ValidateService(ServiceState service)
         {
-            if (service.Queue == null || service.Window == null)
-                throw new JsonSerializationException("Service Queue and Window must not be null.");
+            if (service.Queue == null || service.Window == null || service.Approaching == null)
+                throw new JsonSerializationException("Service Queue, Window and Approaching must not be null.");
             if (service.Minute < 0 || service.NextCustomerId < 1)
                 throw new JsonSerializationException("Service Minute must not be negative and NextCustomerId must be at least 1.");
             var ids = new HashSet<long>();
-            foreach (var customer in service.Window.Concat(service.Queue))
+            foreach (var customer in service.Window.Concat(service.Queue).Concat(service.Approaching))
             {
                 if (customer == null)
                     throw new JsonSerializationException("Service customers must not be null.");
@@ -227,6 +227,8 @@ namespace FoodTrucks.Core.Saves
                 if (double.IsNaN(customer.Patience) || double.IsInfinity(customer.Patience) || customer.Patience <= 0 ||
                     double.IsNaN(customer.MinutesLeft) || double.IsInfinity(customer.MinutesLeft) || customer.MinutesLeft < 0)
                     throw new JsonSerializationException("Service customer Patience must be positive and MinutesLeft not negative, both finite.");
+                if (customer.JoinsAtMinute < 0)
+                    throw new JsonSerializationException("Service customer JoinsAtMinute must not be negative.");
             }
         }
     }

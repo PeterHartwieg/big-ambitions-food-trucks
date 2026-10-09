@@ -17,7 +17,12 @@ public class SalesSimulatorTests
     private const string Coffee = "ba:itemname_cupofcoffee";
     private const string Soda = "ba:itemname_sodacan";
 
-    private static readonly SalesSimulator simulator = new(ShippedData.Tables, ShippedData.Rules.Queue);
+    // These tests predate the walk-in: customers join the queue the minute they arrive (SalesWalkInTests
+    // covers the walk). Everything else is the shipped queue rules.
+    internal static readonly QueueRules NoWalk = new(ShippedData.Rules.Queue.PatienceMinutes, ShippedData.Rules.Queue.PatienceSpread,
+        ShippedData.Rules.Queue.RainPatience, ShippedData.Rules.Queue.MaxQueue);
+
+    private static readonly SalesSimulator simulator = new(ShippedData.Tables, NoWalk);
 
     private static SalesInput Input(double perHour, int servers = 1, int units = 10000, params string[] menu)
     {
@@ -296,15 +301,18 @@ public class SalesSimulatorTests
         var input = Input(3600, servers: 0);
         input.QueueLimit = limit;
         var turnedAway = 0;
+        var longest = 0;
         for (var minute = 0; minute < 60; minute++)
         {
             var result = simulator.Advance(state, input, 1);
             Assert.InRange(state.Queue.Count, 0, expected);
             Assert.True(result.Joined.Count <= expected);
             turnedAway += result.Count(CustomerExit.QueueFull);
+            longest = Math.Max(longest, state.Queue.Count);
         }
 
-        Assert.Equal(expected, state.Queue.Count);
+        // Someone whose patience ends at a minute's close can leave the last minute one short.
+        Assert.Equal(expected, longest);
         Assert.True(turnedAway > 0);
     }
 

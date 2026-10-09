@@ -12,12 +12,13 @@
     "queueLimits": { "cart": 6, "truck": 10 }
   },
 
-  "_queue": "Customers above the service rate wait at the window. Each one gives up after patienceMinutes, spread by up to patienceSpread either way, times rainPatience while it rains. Nobody joins a queue of maxQueue people; the visible queue needs a cap anyway.",
+  "_queue": "Customers above the service rate wait at the window. Each one gives up after patienceMinutes, spread by up to patienceSpread either way, times rainPatience while it rains. Nobody joins a queue of maxQueue people; the visible queue needs a cap anyway. An arriving customer first walks up for walkInMinutes (whole minutes, drawn evenly between the two) and only then joins the queue, checks whether it is full and starts counting their patience. An in-game minute is a second at normal speed, so 7 to 14 matches the visible queue's people walking in from 9 to 19 m along the pavement at walking pace. The walk delays sales by those minutes but doesn't change how many a window makes.",
   "queue": {
     "patienceMinutes": 20,
     "patienceSpread": 0.25,
     "rainPatience": 0.6,
-    "maxQueue": 12
+    "maxQueue": 12,
+    "walkInMinutes": [7, 14]
   },
 
   "_health": "Hidden cleanliness points: the sum of the daily marks of the last memoryDays days the vehicle was open. An open day without cleaning adds uncleanedDayPoints, selling stale stock adds staleStockPoints; food is stale once it has been on board staleAfterDays days (the game's food never spoils, so the mod counts from the day it first sees an item on board until that item runs out). The grade changes only when an inspector comes, about every inspectionWeeks for the current grade, with no visits inside minimumGapDays. After that each open day has chance 1 / max(1, inspectionWeeks x daysPerWeek - minimumGapDays); an ungraded vehicle uses firstInspectionWeeks. Bands from the design, which follows NYC's 0-13 / 14-27 / 28+.",

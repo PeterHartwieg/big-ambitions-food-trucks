@@ -120,6 +120,9 @@ namespace FoodTrucks.Core.Saves
         public long RandomState { get; set; }
         public long Minute { get; set; }
         public long NextCustomerId { get; set; } = 1;
+        // Customers walking up to the line, in the order they arrived; each joins Queue at JoinsAtMinute
+        // (additive field: saves from 0.9.0 and earlier have none and load with an empty list).
+        public List<ServiceCustomer> Approaching { get; set; } = new List<ServiceCustomer>();
         // Waiting customers, first in line first.
         public List<ServiceCustomer> Queue { get; set; } = new List<ServiceCustomer>();
         // Orders being made, one per serving worker.
@@ -132,7 +135,11 @@ namespace FoodTrucks.Core.Saves
     public class ServiceCustomer
     {
         public long Id { get; set; }
+        // While approaching: the minute they turned up. In the queue: the minute they joined it, which is
+        // where their patience counts from.
         public long ArrivedAtMinute { get; set; }
+        // Approaching only: the minute they reach the line and join the queue.
+        public long JoinsAtMinute { get; set; }
         // Minutes this customer waits in dry weather before leaving.
         public double Patience { get; set; }
         // The demand category the customer came for.
