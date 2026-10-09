@@ -95,7 +95,7 @@ namespace FoodTrucks
             registered.Add(name);
             var icon = bundle.LoadAsset<Sprite>(Folder + "Icons/" + Id(name) + ".png");
             if (icon != null) icons[name] = icon;
-            Log.Info($"Item {name}: registered ({(item.isFurniture ? "machine" : "food")}, price {item.DefaultMarketPrice:0.##}, " +
+            Log.Info($"Item {name}: registered ({(Array.IndexOf(Machines, name) >= 0 ? "machine" : "food")}, price {item.DefaultMarketPrice:0.##}, " +
                      $"wholesale {item.wholesalePrice:0.##}, box {item.boxSize}, icon {(icon != null ? "yes" : "missing")}).");
         }
 

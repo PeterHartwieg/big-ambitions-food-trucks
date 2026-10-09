@@ -171,7 +171,7 @@ namespace FoodTrucks
                     continue;
                 }
                 var item = BigAmbitions.Items.ItemsGetter.GetByName(name);
-                var price = item.isFurniture ? item.DefaultMarketPrice : item.wholesalePrice;
+                var price = Array.IndexOf(ModItems.Machines, name) >= 0 ? item.DefaultMarketPrice : item.wholesalePrice;
                 var before = vehicle.GetAmountByItemName(name);
                 vehicle.TryToAddToCargo(new BigAmbitions.Items.CargoInstance(name, item.boxSize, price));
                 var added = vehicle.GetAmountByItemName(name) - before;

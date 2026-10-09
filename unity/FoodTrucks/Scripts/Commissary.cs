@@ -805,7 +805,7 @@ namespace FoodTrucks
         // Takes a refunded amount off this tax year's deductions under the commissary label (TaxHelper keeps them per label
         // and values in currentTaxPeriodDeductibleExpenses; it only ever adds). Never below 0; returns the cents taken.
         // Rent shares the label, so an order paid in an earlier tax year can take this year's rent deduction down.
-        private static long ReverseDeduction(long cents)
+        internal static long ReverseDeduction(long cents)
         {
             var expenses = SaveGameManager.Current?.currentTaxPeriodDeductibleExpenses;
             if (expenses == null || cents <= 0) return 0;

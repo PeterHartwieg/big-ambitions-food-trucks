@@ -78,9 +78,11 @@ namespace FoodTrucks
             long refundCents = 0;
             long unpaidCents = 0;
             var removed = 0;
+            long modItemCents = 0;
             foreach (var vehicle in vehicles)
             {
                 var cents = RefundCents(vehicle);
+                var modCents = ModItemCents(vehicle);
                 // A vanilla label, so the history still reads well after the mod is removed.
                 var name = vehicle.VehicleType != null ? LocalizorManager.GetLocalization(vehicle.vehicleTypeName, null) : vehicle.vehicleTypeName;
                 try
@@ -109,7 +111,11 @@ namespace FoodTrucks
                 if (cents > 0)
                 {
                     var info = new TransactionInfo("ba:transaction_itemsold", new Dictionary<string, string> { { "itemSoldInfo", name } });
-                    if (Payments.PayIn(cents, info)) refundCents += cents;
+                    if (Payments.PayIn(cents, info))
+                    {
+                        refundCents += cents;
+                        modItemCents += modCents;
+                    }
                     else
                     {
                         unpaidCents += cents;
@@ -118,12 +124,34 @@ namespace FoodTrucks
                 }
                 Log.Info($"Uninstall: removed {vehicle.vehicleTypeName} {vehicle.id}, refund {CartSelling.Money(cents)}.");
             }
+            // The mod's own items can only have come from a commissary, whose orders were deductible: paid back, they
+            // come off this tax year's commissary deduction too. The game's own foods ordered there can't be told from
+            // wholesaler stock, so their deduction stays (accepted).
+            if (modItemCents > 0)
+                Log.Info($"Uninstall: {CartSelling.Money(Commissary.ReverseDeduction(modItemCents))} of this tax year's commissary deduction taken back for the mod's items refunded with the vehicles.");
             FoodTrucksSession.MarkChanged();
             var left = vehicles.Count - removed;
             Log.Info($"Uninstall: {removed} removed, {left} left, refunded {CartSelling.Money(refundCents)}, unpaid {CartSelling.Money(unpaidCents)}.");
             CartSelling.Notify(left == 0 && unpaidCents == 0 ? "foodtrucks:notification_uninstall_done" : "foodtrucks:notification_uninstall_partial",
                 ("count", removed.ToString()), ("left", left.ToString()), ("refund", CartSelling.Money(refundCents)), ("unpaid", CartSelling.Money(unpaidCents)));
         }
+
+        // What was paid for the mod's own items in the vehicle's cargo (nested cargo included).
+        private static long ModItemCents(VehicleInstance vehicle)
+        {
+            double total = 0;
+            foreach (var entry in vehicle.cargoInstances)
+            {
+                if (entry == null || !entry.paid) continue;
+                if (IsModItem(entry.itemName)) total += (double)entry.amount * entry.pricePerUnit;
+                if (entry.nestedCargoInstances == null) continue;
+                foreach (var nested in entry.nestedCargoInstances)
+                    if (nested != null && IsModItem(nested.itemName)) total += (double)nested.amount * nested.pricePerUnit;
+            }
+            return (long)Math.Round(total * 100);
+        }
+
+        private static bool IsModItem(string? itemName) => itemName != null && itemName.StartsWith(ModItems.Prefix, StringComparison.Ordinal);
 
         // The purchase price, plus what was paid for the stock still in it, including goods packed
         // inside a carried item (nested cargo).
