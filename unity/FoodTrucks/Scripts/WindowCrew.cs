@@ -20,10 +20,10 @@ namespace FoodTrucks
         // A cart's worker stands behind it, opposite the window place.
         private const float CartBehind = 0.85f;
         private const float CartBeside = 0.9f;
-        // Inside the truck, behind the hatch: right of the middle, on the truck's floor (a guess at its height),
-        // spread along the window when there are several. The player at the hatch (TruckWindow) stands here too,
+        // Inside the truck, behind the hatch: right of the middle, on the compartment's floor (y 0.94, measured on
+        // Truck_Body), spread along the window when there are several. The player at the hatch (TruckWindow) stands here too,
         // in the middle place, and the crew move aside (Core WindowPlaces).
-        private static readonly Vector3 TruckPlace = new Vector3(0.45f, 0.45f, -1.10f);
+        private static readonly Vector3 TruckPlace = new Vector3(0.45f, 0.94f, -1.10f);
         private const float TruckSpacing = 0.6f;
         // With the player in the middle the crew stand closer, so two fit beside them.
         private const float TruckSpacingWithPlayer = 0.45f;
@@ -31,7 +31,7 @@ namespace FoodTrucks
         // less a quarter metre for a body at each end.
         private const double HatchHalfWidth = 0.65;
         // Crew who don't fit the opening wait further back in the truck, behind the wall past the hatch, side by side.
-        private static readonly Vector3 TruckIdle = new Vector3(0.45f, 0.45f, -2.60f);
+        private static readonly Vector3 TruckIdle = new Vector3(0.45f, 0.94f, -2.60f);
         private const float IdleSpacing = 0.5f;
 
         // Where each crew member stands along the hatch; null for one waiting inside.

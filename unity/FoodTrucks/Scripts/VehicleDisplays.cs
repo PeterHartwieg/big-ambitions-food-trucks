@@ -9,25 +9,51 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Fitted equipment on a cart's counter: the first fitted piece on the front spot, the second on the rear
-    // (CartAssets' EquipmentFront and EquipmentRear); a piece keeps its spot while it stays fitted. economy.json's "display" names each piece's model in the
-    // bundle; a piece without one leaves its spot empty. Every half second it compares each cart's fitted pieces
-    // with what it shows, so fitting, removing and loading need no hooks. While the cart is open the pieces face
-    // the side its queue forms on (CartQueueView's choice); closed, or with no line laid out, they face right.
-    // The models have no colliders. They follow the cart's visible flag every frame: the game hides a vehicle
-    // (EntityController.Hide, e.g. on another floor of a multi-floor building) by disabling only the renderers
-    // in its own list, which the pieces aren't in.
-    internal sealed class CartDisplays : MonoBehaviour
+    // Fitted equipment on show. On a cart's counter: the first fitted piece on the front spot, the second on the
+    // rear (CartAssets' EquipmentFront and EquipmentRear). In a truck: the first two at the hatch's two ends, the
+    // next two on the back counter (TruckAssets' spots, which carry the turn to the hatch and the scale). A piece
+    // keeps its spot while it stays fitted. economy.json's "display" names each piece's model in the bundle; a
+    // piece without one leaves its spot empty. Every half second it compares each vehicle's fitted pieces with
+    // what it shows, so fitting, removing and loading need no hooks. While a cart is open the pieces face the side
+    // its queue forms on (CartQueueView's choice); closed, or with no line laid out, they face right. A truck's
+    // always face out of the hatch. The models have no colliders. They follow the vehicle's visible flag every
+    // frame: the game hides a vehicle (EntityController.Hide, e.g. on another floor of a multi-floor building) by
+    // disabling only the renderers in its own list, which the pieces aren't in.
+    internal sealed class VehicleDisplays : MonoBehaviour
     {
         private const float CheckSeconds = 0.5f;
         private const string ModelFolder = "Assets/Mods/FoodTrucks/Vehicles/EquipmentArt/";
-        private static readonly string[] SpotNames = { "EquipmentFront", "EquipmentRear" };
-        private static readonly string[] SpotLabels = { "front", "rear" };
 
-        // By the controller's instance ID: a cart spawned again (out of range and back) has a new one.
+        private sealed class Layout
+        {
+            public Layout(string kind, string body, bool turns, string[] spots, string[] labels)
+            {
+                Kind = kind;
+                Body = body;
+                Turns = turns;
+                Spots = spots;
+                Labels = labels;
+            }
+
+            public string Kind { get; }
+            // The renderer whose layer the pieces follow.
+            public string Body { get; }
+            // Whether the pieces turn to the queue's side (the cart) or keep their spot's facing (the truck).
+            public bool Turns { get; }
+            public string[] Spots { get; }
+            public string[] Labels { get; }
+        }
+
+        private static readonly Layout Cart = new Layout("cart", "Cart_Body", turns: true,
+            new[] { "EquipmentFront", "EquipmentRear" }, new[] { "front", "rear" });
+        private static readonly Layout Truck = new Layout("truck", "CarHolder/Body/CheapSaloon", turns: false,
+            new[] { "EquipmentHatchRear", "EquipmentHatchFront", "EquipmentBackRear", "EquipmentBackFront" },
+            new[] { "hatch rear", "hatch front", "back rear", "back front" });
+
+        // By the controller's instance ID: a vehicle spawned again (out of range and back) has a new one.
         private readonly Dictionary<int, Shown> shown = new Dictionary<int, Shown>();
         private readonly Dictionary<string, GameObject?> models = new Dictionary<string, GameObject?>();
-        // Cart, spot and piece already logged, so each fitted piece is logged once per session.
+        // Vehicle, spot and piece already logged, so each fitted piece is logged once per session.
         private readonly HashSet<string> logged = new HashSet<string>();
         private float nextCheck;
 
@@ -38,9 +64,10 @@ namespace FoodTrucks
             public int Layer = -1;
             public Renderer[] Renderers = Array.Empty<Renderer>();
             public bool Visible = true;
-            public Transform?[] Spots = new Transform?[2];
-            public string?[] Pieces = new string?[2];
-            public GameObject?[] Objects = new GameObject?[2];
+            public Layout Layout = Cart;
+            public Transform?[] Spots = Array.Empty<Transform?>();
+            public string?[] Pieces = Array.Empty<string?>();
+            public GameObject?[] Objects = Array.Empty<GameObject?>();
             public int Side;
         }
 
@@ -55,11 +82,11 @@ namespace FoodTrucks
         private void Update()
         {
             try { SyncVisibility(); }
-            catch (Exception ex) { Log.Error("Cart displays: " + ex); }
+            catch (Exception ex) { Log.Error("Vehicle displays: " + ex); }
             if (Time.unscaledTime < nextCheck) return;
             nextCheck = Time.unscaledTime + CheckSeconds;
             try { Check(); }
-            catch (Exception ex) { Log.Error("Cart displays: " + ex); }
+            catch (Exception ex) { Log.Error("Vehicle displays: " + ex); }
         }
 
         private void Check()
@@ -69,32 +96,39 @@ namespace FoodTrucks
             var seen = new HashSet<int>();
             foreach (var controller in VehicleHelper.AllPlayerVehicles)
             {
-                var cart = controller != null ? controller.vehicleInstance : null;
-                if (cart == null || cart.vehicleTypeName != FoodTrucksMod.CartTypeName) continue;
+                var vehicle = controller != null ? controller.vehicleInstance : null;
+                var layout = vehicle?.vehicleTypeName == FoodTrucksMod.CartTypeName ? Cart
+                    : vehicle?.vehicleTypeName == FoodTrucksMod.TruckTypeName ? Truck : null;
+                if (vehicle == null || layout == null) continue;
                 var key = controller!.GetInstanceID();
                 seen.Add(key);
                 if (!shown.TryGetValue(key, out var entry))
                 {
-                    entry = new Shown { Controller = controller, Body = controller.transform.Find("Cart_Body") };
-                    for (var i = 0; i < SpotNames.Length; i++) entry.Spots[i] = controller.transform.Find(SpotNames[i]);
+                    var count = layout.Spots.Length;
+                    entry = new Shown
+                    {
+                        Controller = controller, Body = controller.transform.Find(layout.Body), Layout = layout,
+                        Spots = layout.Spots.Select(name => controller.transform.Find(name)).ToArray(),
+                        Pieces = new string?[count], Objects = new GameObject?[count],
+                    };
                     shown[key] = entry;
-                    // A cart that left the game's list and came back must not get a second set of pieces.
+                    // A vehicle that left the game's list and came back must not get a second set of pieces.
                     foreach (var spot in entry.Spots)
                     {
                         if (spot == null) continue;
                         foreach (Transform child in spot)
                             if (child.name.StartsWith("Display_", StringComparison.Ordinal)) Destroy(child.gameObject);
                     }
-                    if (entry.Spots.Any(s => s == null)) Log.Error($"Cart displays: cart {cart.id} has no equipment spots (a cart from an older build).");
+                    if (entry.Spots.Any(s => s == null)) Log.Error($"Vehicle displays: {layout.Kind} {vehicle.id} lacks equipment spots (a {layout.Kind} from an older build).");
                 }
                 if (entry.Spots.Any(s => s == null)) continue;
 
-                var fitted = CargoRules.FittedEquipment(tables, CargoLimit.Lines(cart));
-                var open = StreetSales.Find(FoodTrucksSession.CurrentState, cart.id)?.IsOpen == true;
-                var side = open ? CartQueueView.QueueSide(cart.id) ?? 1 : 1;
+                var fitted = CargoRules.FittedEquipment(tables, CargoLimit.Lines(vehicle));
+                var open = layout.Turns && StreetSales.Find(FoodTrucksSession.CurrentState, vehicle.id)?.IsOpen == true;
+                var side = !layout.Turns ? 0 : open ? CartQueueView.QueueSide(vehicle.id) ?? 1 : 1;
                 // A piece keeps the spot it took while it stays fitted; new pieces fill the empty spots in cargo order.
                 var remaining = fitted.ToList();
-                var wanted = new string?[SpotNames.Length];
+                var wanted = new string?[entry.Spots.Length];
                 for (var i = 0; i < wanted.Length; i++)
                     if (entry.Pieces[i] != null && remaining.Remove(entry.Pieces[i]!)) wanted[i] = entry.Pieces[i];
                 for (var i = 0; i < wanted.Length; i++)
@@ -103,20 +137,20 @@ namespace FoodTrucks
                     wanted[i] = remaining[0];
                     remaining.RemoveAt(0);
                 }
-                for (var i = 0; i < SpotNames.Length; i++)
+                for (var i = 0; i < wanted.Length; i++)
                 {
                     var piece = wanted[i];
                     if (piece != entry.Pieces[i] || (piece != null && entry.Objects[i] == null && Display(tables, piece) != null))
                     {
                         if (entry.Objects[i] != null) Destroy(entry.Objects[i]);
-                        entry.Objects[i] = piece == null ? null : Place(cart.id, i, piece, Display(tables, piece), entry.Spots[i]!);
+                        entry.Objects[i] = piece == null ? null : Place(vehicle.id, layout, i, piece, Display(tables, piece), entry.Spots[i]!);
                         entry.Pieces[i] = piece;
-                        entry.Side = 0;
+                        entry.Side = int.MinValue;
                         entry.Layer = -1;
                         Collect(entry);
                     }
                 }
-                // The game moves the cart's renderers to the player vehicles layer while it is pushed and back after.
+                // The game moves a pushed cart's renderers to the player vehicles layer while it is pushed and back after.
                 var layer = entry.Body != null ? entry.Body.gameObject.layer : controller.gameObject.layer;
                 if (entry.Layer != layer)
                 {
@@ -127,13 +161,14 @@ namespace FoodTrucks
                 if (entry.Side != side)
                 {
                     entry.Side = side;
-                    // The models face +Z; +90 degrees turns them to the cart's right (+X), -90 to its left.
+                    // The models face +Z; +90 degrees turns them to the cart's right (+X), -90 to its left. A truck's
+                    // spots are turned already (side 0).
                     var rotation = Quaternion.Euler(0f, side * 90f, 0f);
                     foreach (var go in entry.Objects)
                         if (go != null) go.transform.localRotation = rotation;
                 }
             }
-            // Carts despawned or sold: their pieces went with them; forget them.
+            // Vehicles despawned or sold: their pieces went with them; forget them.
             foreach (var key in shown.Keys.Where(k => !seen.Contains(k)).ToList()) shown.Remove(key);
         }
 
@@ -149,7 +184,7 @@ namespace FoodTrucks
             }
         }
 
-        // The pieces' renderers, set to the cart's current visibility (a new piece on a hidden cart starts hidden).
+        // The pieces' renderers, set to the vehicle's current visibility (a new piece on a hidden one starts hidden).
         private static void Collect(Shown entry)
         {
             entry.Renderers = entry.Objects.Where(go => go != null).SelectMany(go => go!.GetComponentsInChildren<Renderer>(true)).ToArray();
@@ -159,16 +194,16 @@ namespace FoodTrucks
 
         private static string? Display(FoodTrucks.Core.Demand.DemandTables tables, string piece) => tables.Equipment(piece)?.Display;
 
-        private GameObject? Place(string cartId, int spot, string piece, string? display, Transform parent)
+        private GameObject? Place(string vehicleId, Layout layout, int spot, string piece, string? display, Transform parent)
         {
             var model = display == null ? null : Model(display);
-            var note = $"{cartId}:{spot}:{piece}:{display}";
+            var note = $"{vehicleId}:{spot}:{piece}:{display}";
             if (logged.Add(note))
             {
                 var what = display == null ? "no display model yet, the spot stays empty"
                     : model == null ? $"display {display} not found in the bundle, the spot stays empty"
                     : $"shows {display}";
-                Log.Info($"Cart displays: cart {cartId} {SpotLabels[spot]} spot, {piece}: {what}.");
+                Log.Info($"Vehicle displays: {layout.Kind} {vehicleId} {layout.Labels[spot]} spot, {piece}: {what}.");
             }
             if (model == null) return null;
             var go = Instantiate(model, parent, false);

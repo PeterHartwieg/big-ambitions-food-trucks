@@ -162,7 +162,7 @@ namespace FoodTrucks.BuildEditor
             // The two equipment spots, centred across the counter, each for a 0.40 x 0.36 m piece that may turn
             // to either side (radius 0.27 m): the front one behind the umbrella pole (z 0.60), the rear one in front
             // of the push bar (z -0.75). Just above the counter and the closed steam-well lid (top 0.962).
-            // CartDisplays puts the fitted pieces here.
+            // VehicleDisplays puts the fitted pieces here.
             Point(root.transform, "EquipmentFront", new Vector3(0f, SpotHeight, SpotZ));
             Point(root.transform, "EquipmentRear", new Vector3(0f, SpotHeight, -SpotZ));
 

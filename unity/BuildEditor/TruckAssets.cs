@@ -34,6 +34,19 @@ namespace FoodTrucks.BuildEditor
             ("RearRight", "Truck_Wheel_RR", new Vector3(0.87f, 0.38f, -1.80f)),
         };
 
+        // Spot, position and scale, in the order pieces fill them. A 0.40 x 0.36 x 0.70 m piece fits each.
+        private static readonly (string Name, Vector3 Position, float Scale)[] EquipmentSpots =
+        {
+            ("EquipmentHatchRear", new Vector3(0.955f, LedgeTop, -1.83f), HatchScale),
+            ("EquipmentHatchFront", new Vector3(0.955f, LedgeTop, -0.37f), HatchScale),
+            ("EquipmentBackRear", new Vector3(-0.28f, 1.15f, -1.80f), 1f),
+            ("EquipmentBackFront", new Vector3(-0.28f, 1.15f, -1.35f), 1f),
+        };
+        // 0.26 m of recess over a 0.36 m deep piece.
+        private const float HatchScale = 0.72f;
+        // Just above the sill (y 1.17 to 1.20); the ledge runs from the panes' track (x 0.815) to the hatch (1.10).
+        private const float LedgeTop = 1.205f;
+
         public static void GenerateTruck(string vehiclesFolder, string typeName)
         {
             var artFolder = vehiclesFolder + "/TruckArt";
@@ -88,6 +101,29 @@ namespace FoodTrucks.BuildEditor
                 // The game paints, dirties and outlines the renderers in these lists; the hatch is body work.
                 Append(root, "renderers", hatchRenderer);
                 Append(root, "bodyMeshes", hatchRenderer);
+
+                // A steel ledge inside the hatch, under the window's two equipment spots (art/README.md, "Serving window").
+                var ledge = new GameObject("Truck_Ledge");
+                ledge.layer = body.layer;
+                ledge.transform.SetParent(body.transform.parent, false);
+                ledge.AddComponent<MeshFilter>().sharedMesh = LedgeMesh(artFolder);
+                var ledgeRenderer = ledge.AddComponent<MeshRenderer>();
+                ledgeRenderer.sharedMaterial = SteelMaterial(artFolder);
+                // Hidden with the truck (EntityController.Hide), but not painted: it isn't body work.
+                Append(root, "renderers", ledgeRenderer);
+
+                // The four equipment spots (VehicleDisplays), each turned to face out of the hatch (+X). The window's
+                // spots sit at its two ends, between the sliding panes and the hatch, a 0.26 m deep recess, so their
+                // pieces are scaled to fit; the back counter's two stand full size behind the crew, on the rear half
+                // (the cab half has the workstation). Clearances measured against Truck_Body.
+                foreach (var (name, position, scale) in EquipmentSpots)
+                {
+                    var spot = new GameObject(name).transform;
+                    spot.SetParent(root.transform, false);
+                    spot.localPosition = position;
+                    spot.localRotation = Quaternion.Euler(0f, 90f, 0f);
+                    spot.localScale = Vector3.one * scale;
+                }
 
                 var collider = Find(root, "CarHolder/Colliders/BodyCollider").GetComponent<MeshCollider>();
                 collider.sharedMesh = meshes["Truck_Collision"];
@@ -195,6 +231,50 @@ namespace FoodTrucks.BuildEditor
             AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
             return AssetDatabase.LoadAssetAtPath<Material>(path)
                    ?? throw new InvalidOperationException($"{path} didn't import.");
+        }
+
+        // A box under the window's equipment: x 0.82 to 1.10, 25 mm thick, along the whole opening (z -1.98 to -0.22).
+        // Kept as an asset so the prefab can reference it.
+        private static Mesh LedgeMesh(string artFolder)
+        {
+            var path = artFolder + "/TruckLedge.asset";
+            var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+            if (mesh == null)
+            {
+                mesh = new Mesh { name = "TruckLedge" };
+                AssetDatabase.CreateAsset(mesh, path);
+            }
+            var cube = Resources.GetBuiltinResource<Mesh>("Cube.fbx");
+            var min = new Vector3(0.82f, LedgeTop - 0.025f, -1.98f);
+            var max = new Vector3(1.10f, LedgeTop, -0.22f);
+            mesh.Clear();
+            mesh.vertices = cube.vertices.Select(v => Vector3.Scale(v + Vector3.one * 0.5f, max - min) + min).ToArray();
+            mesh.normals = cube.normals;
+            mesh.uv = cube.uv;
+            mesh.triangles = cube.triangles;
+            mesh.RecalculateBounds();
+            EditorUtility.SetDirty(mesh);
+            return mesh;
+        }
+
+        // Plain brushed steel for the ledge, HDRP/Lit without textures.
+        private static Material SteelMaterial(string artFolder)
+        {
+            var path = artFolder + "/M_TruckLedge.mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                var shader = Shader.Find("HDRP/Lit") ?? throw new InvalidOperationException("HDRP/Lit shader not found.");
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            material.SetColor("_BaseColor", new Color(0.72f, 0.74f, 0.75f));
+            material.SetFloat("_Metallic", 0.85f);
+            material.SetFloat("_Smoothness", 0.55f);
+            material.SetFloat("_SupportDecals", 0f);
+            material.EnableKeyword("_DISABLE_DECALS");
+            EditorUtility.SetDirty(material);
+            return material;
         }
 
         private static GameObject Find(GameObject root, string path) =>

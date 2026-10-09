@@ -1,6 +1,6 @@
-# Playtest fixes (0.9.2)
+# Playtest fixes and truck equipment (0.9.3)
 
-Build `0.9.2`. The fixes from both 0.9.0 playtest sessions: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, crew serving a window the player opened, the cart's final model with its equipment on the counter and parked cars kept off it, the player inside the truck at the hatch, and the Street food fleet page in BizMan. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
+Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, crew serving a window the player opened, the cart's final model with its equipment on the counter and parked cars kept off it, the player inside the truck at the hatch, and the Street food fleet page in BizMan. New in 0.9.3: fitted equipment on show in the truck, and the player and crew at the hatch standing on the truck's floor (they stood half a metre too low). Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
 
 ## 1. Automated (me)
 
@@ -52,6 +52,8 @@ Build `0.9.2`. The fixes from both 0.9.0 playtest sessions: the Food Safety cour
 | 39 | Click "Street food" | A "Street food" section opens below the warehouses and the list scrolls to it: a card per vehicle, built like a warehouse card. Does it look right, or does anything of the warehouse card show (its buttons, column headings saying "Driver" or "Days left")? |
 | 40 | Read a card | Name; "Open at …" or "Closed, at …" (or on the way to a stop, or with the private driver); Today and Last 7 days with sales and profit; Health; Crew; Route; each item with "N sold" today and "N left". Do the sales match Econoview's? With the vehicle out on the street, the location button sets the GPS to where it stands, with a vehicle marker on the map; with it in a garage, to the garage's address |
 | 41 | Open a business from the list, go back, close and reopen BizMan | The section is closed again; your own businesses and warehouses open and look as before |
+| 42 | Fit four pieces in the truck (say a grill, a coffee machine, a cooler and a display case), park and look in through the hatch from the pavement, open and closed | The first two stand at the hatch's two ends on a steel ledge, smaller than on the cart, facing the street; the other two on the back counter behind the crew. Nothing pokes through the walls, the closed hatch or the window panes. Do they read from the street? Is the ledge's grey close enough to the truck's steel? |
+| 43 | Open at the hatch, with a hire on shift | You and the hire stand on the truck's floor with head and shoulders in the window, behind the counter (before 0.9.3 you stood half a metre lower). Nobody stands inside an equipment piece |
 
 ## 3. Log lines (me)
 
@@ -63,7 +65,7 @@ Build `0.9.2`. The fixes from both 0.9.0 playtest sessions: the Food Safety cour
 - `Crew: <name> paid for HH:00 on day N (open window, <vehicle id>)`, logged as the hour ends, once per hour the crew served a window you opened; none for route hours, none after a sell-out, and never two for the same hour and worker.
 - `Patch EmployeeHelper.RunHourly: Active.` (a prefix and a postfix) and `Patch EmployeeHelper.PayDailyWages: Active.`; `Patch EmployeeHelper.UnassignEmployeeFromAllWorkshifts(EmployeeInstance): Active.`, `Patch EmployeeInstance.ResignBeforeReplacement: Active.`, `Patch EmployeeInstance.Resign: Active.`, `Patch EmployeeInstance.RemoveEmployee: Active.`, `Patch GameManager.RunMainGameTick(Single): Active.`
 - `Patch VehicleHelper.DestroyBlockingVehicles(GameObject, VehicleType, Transform, Boolean): Active.`; at load, `Parking lanes: cart … seen; body collider 0.96 x 1.50 m …` for each cart (or `in hand now …` for one being pushed); after row 26, any `Parking lanes: cleared … parked … cars from cart …`.
-- `Cart displays: cart … front spot, coffeemachine: shows CoffeeStation.`, `… rear spot, cooler: shows DrinksCooler.` and `… hotdoggrill: no display model yet, the spot stays empty.`, once each; no `display … not found in the bundle` and no `has no equipment spots` error.
+- `Vehicle displays: cart … front spot, coffeemachine: shows CoffeeStation.` and `… rear spot, cooler: shows DrinksCooler.`, once each; after row 42, `Vehicle displays: truck … hatch rear spot, …`, `… hatch front spot, …`, `… back rear spot, …` and `… back front spot, …`. No `display … not found in the bundle` and no `lacks equipment spots` error.
 - `Patch PlayerHelper.SaveCurrentPosition: Active.`
 - One `Truck window: player placed at the hatch of truck …` line per open (or `… player left outside …: <reason>`), and `Truck window: player stepped out of truck … (<reason>)` for each way out; no `the NavMesh warp failed`. Row 33: `Truck window: saved at the hatch …`. If the game puts you back in the seat after Park: `Truck window: <id>: the player is back in the driver's seat; not placed at the hatch.` Row 36: `… player left outside …: out of energy` or `stepped out … (out of energy)`.
 - No `Tried to set navigation blocker` warnings or NullReferenceExceptions around the rows above.

@@ -75,7 +75,7 @@ Fifteen compact pieces for the cart's counter spots, one folder each in `equipme
 
 `tools/build-mod.sh` copies each FBX and texture into `unity/FoodTrucks/Vehicles/EquipmentArt/`, and `EquipmentAssets` makes an HDRP/Lit material and a prefab per model there (body mesh only, no collider). Only the `.meta` files, materials and prefabs are committed. `data/economy.json`'s `display` field picks a piece's model by name: the coffee machine shows `CoffeeStation`, the cooler `DrinksCooler`, the hot dog grill `HotDogRoller`, the burger station `BurgerStation`, the ice cream counter `IceCreamCabinet`, the pizza oven `PizzaOven` and the display case `PastryCase`. The other eight models wait for their foods. The last five were modelled with the game's own item icons attached as references (kept outside the repo), so they match the game's look at cart size. A piece without a `display` shows nothing.
 
-On the cart, `CartDisplays` puts the first fitted piece on `EquipmentFront` and the second on `EquipmentRear` (each keeps its spot while fitted), turned 90° to face the side the queue forms on while the cart is open, and the cart's right side otherwise.
+On the cart, `VehicleDisplays` puts the first fitted piece on `EquipmentFront` and the second on `EquipmentRear` (each keeps its spot while fitted), turned 90° to face the side the queue forms on while the cart is open, and the cart's right side otherwise.
 
 ## Food truck
 
@@ -114,6 +114,16 @@ Wheelbase 3.60 m (the example car: 2.70 m), track 1.74 m (1.50 m).
 | Rigidbody mass and `centerOfMass` | not an art value; a step van is several times the car's 1,400 kg |
 
 **Serving window** (for the window interaction later): opening at x = 1.10, y 1.20…2.15, z −2.00…−0.20, centre (1.10, 1.675, −1.10), at least 0.30 m deep. Stainless shelf on the outside, top at y 1.15, x 1.10…1.26.
+
+**Equipment spots** (built by `TruckAssets`, not in the FBX). The compartment's floor is at y 0.94; the crew and the player at the hatch stand on it (`WindowCrew`). Each spot is turned +90° about Y, so a piece's front (+Z) faces out of the hatch. Clearances measured against `Truck_Body` in Blender for a 0.40 × 0.36 × 0.70 m piece:
+
+| Spot | Position | Scale | Notes |
+|---|---|---|---|
+| `EquipmentHatchRear` | (0.955, 1.205, −1.83) | 0.72 | Rear end of the hatch, in the recess between the sliding panes' track (x 0.815) and the hatch (x 1.10): 0.26 m deep, so the piece is scaled to 0.26 × 0.29 m, up to 0.50 m tall |
+| `EquipmentHatchFront` | (0.955, 1.205, −0.37) | 0.72 | Cab end of the hatch, as above |
+| `EquipmentBackRear` | (−0.28, 1.15, −1.80) | 1 | On the back counter (top y 1.15), behind the crew, clear of the shelves (x ≤ −0.49) and the hood |
+| `EquipmentBackFront` | (−0.28, 1.15, −1.35) | 1 | As above; further towards the cab the workstation is in the way |
+| `Truck_Ledge` | x 0.82…1.10, y 1.18…1.205, z −1.98…−0.22 | | Steel ledge under the hatch's two spots (`M_TruckLedge`, plain HDRP/Lit). The sill alone is only 0.12 m deep |
 
 **Material:** duplicate `M_HonzaCar.mat` (the game's `SH_Vehicle` graph) and swap each texture for its counterpart. Import settings as for the example: Read/Write on for the meshes (the damage component deforms them [inference, as in the tooling research]), `T_FoodTruck_N` as a normal map (not sRGB), the others as default textures.
 
