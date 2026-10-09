@@ -168,6 +168,9 @@ namespace FoodTrucks.Core.Saves
                     throw new JsonSerializationException("Days must be one record per day, with named spots and minutes not negative.");
                 if (vehicle.StockBatches == null || vehicle.StockBatches.Any(p => string.IsNullOrEmpty(p.Key) || p.Value == null || p.Value.Any(b => b == null || b.Units <= 0)))
                     throw new JsonSerializationException("StockBatches must name their items and hold batches of at least one unit.");
+                if (vehicle.Sold == null || vehicle.Sold.Any(d => d == null || d.Units == null || d.Units.Any(u => string.IsNullOrEmpty(u.Key) || u.Value <= 0)) ||
+                    vehicle.Sold.Select(d => d.Day).Distinct().Count() != vehicle.Sold.Count)
+                    throw new JsonSerializationException("Sold must be one record per day, naming items with at least one unit.");
                 if (vehicle.HireStop < 0)
                     throw new JsonSerializationException("HireStop must not be negative.");
             }
