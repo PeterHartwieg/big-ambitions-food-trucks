@@ -201,6 +201,7 @@ namespace FoodTrucks
                 // deduction stands (documented in the plan).
                 info.SetTaxDeductibleName("foodtrucks:transaction_cityfees_label");
                 GameManager.ChangeMoneySafe(refund / 100f, info, null, null, force: true, showNotification: true);
+                SalesLedger.RecordEventPlaces(state, SaveGameManager.Current.Day, -refund);
                 GameManager.SendTextMessage(CityLicensing.City(), "foodtrucks:message_city_event_cancelled", new Dictionary<string, string> { { "fee", CartSelling.Money(refund) } });
             }
         }

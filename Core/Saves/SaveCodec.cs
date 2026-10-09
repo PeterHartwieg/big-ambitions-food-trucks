@@ -202,6 +202,12 @@ namespace FoodTrucks.Core.Saves
                     throw new JsonSerializationException("DailySales RevenueCents must not be negative.");
                 if (!days.Add(sale.Day))
                     throw new JsonSerializationException($"DailySales contains duplicate Day {sale.Day}.");
+                if (sale.LicenceCents < 0)
+                    throw new JsonSerializationException("DailySales LicenceCents must not be negative.");
+                if (sale.ByVehicle == null || sale.ByVehicle.Any(v => v == null || string.IsNullOrEmpty(v.VehicleId) ||
+                        v.SalesCents < 0 || v.CateringCents < 0 || v.StockCents < 0 || v.WagesCents < 0 || v.ParkingCents < 0 || v.PermitCents < 0) ||
+                    sale.ByVehicle.Select(v => v.VehicleId).Distinct(StringComparer.Ordinal).Count() != sale.ByVehicle.Count)
+                    throw new JsonSerializationException("DailySales ByVehicle must be one entry per named vehicle, amounts not negative.");
                 total = checked(total + sale.RevenueCents);
             }
         }
