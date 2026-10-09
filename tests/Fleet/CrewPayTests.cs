@@ -8,6 +8,8 @@ namespace FoodTrucks.Core.Tests.Fleet;
 
 public class CrewPayTests
 {
+    private static bool Credit(string employee, string vehicle, long hour) => true;
+
     private static long At(int day, int hour, int minute = 0) => HireSchedules.Absolute(day, hour * 60 + minute);
 
     private static VehicleState Truck(bool open = false, int? hireStop = null) => new()
@@ -186,12 +188,12 @@ public class CrewPayTests
         CrewPay.Served(state, "e2", "t1", At(3, 13, 30));
 
         // Nothing is decided while the hour runs.
-        Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 13))));
-        var paid = CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 14)));
+        Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 13)), Credit));
+        var paid = CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 14)), Credit);
 
         Assert.Equal(new[] { ("e1", "t1", CrewPay.HourOf(At(3, 13))) }, paid);
         // Decided once.
-        Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 15))));
+        Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 15)), Credit));
         Assert.Empty(state.CrewServedHour);
     }
 
@@ -201,9 +203,9 @@ public class CrewPayTests
         // A skip from 12:59 to 14:01 with a route starting at 14:00: at 13:00 the sales are caught up (nothing served
         // yet), at 14:00 the sales reach 14:00 first, so 13:10's serving is decided before the route stamps 14:00.
         var state = new SaveState();
-        Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 13))));
+        Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 13)), Credit));
         CrewPay.Served(state, "e1", "t1", At(3, 13, 10));
-        Assert.Single(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 14))));
+        Assert.Single(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 14)), Credit));
         Assert.True(CrewPay.TryPay(state, "e1", CrewPay.HourOf(At(3, 14))));
     }
 
@@ -218,7 +220,7 @@ public class CrewPayTests
         CrewPay.Served(state, "shop", "t1", At(3, 12, 10));
         CrewPay.Served(state, "late", "t1", At(3, 12, 10));
 
-        var paid = CrewPay.CloseHours(state, hour + 1);
+        var paid = CrewPay.CloseHours(state, hour + 1, Credit);
 
         Assert.Equal(new[] { "late" }, paid.Select(p => p.EmployeeId));
     }
@@ -234,7 +236,7 @@ public class CrewPayTests
         CrewPay.Prune(state, eleven + 3);
         CrewPay.Served(state, "e1", "t1", At(3, 11, 10));
 
-        Assert.Empty(CrewPay.CloseHours(state, eleven + 3));
+        Assert.Empty(CrewPay.CloseHours(state, eleven + 3, Credit));
     }
 
     [Fact]
@@ -243,7 +245,7 @@ public class CrewPayTests
         var state = new SaveState();
         CrewPay.Served(state, "e1", "t1", At(3, 23, 10));
 
-        var paid = CrewPay.CloseHours(state, CrewPay.HourOf(At(4, 0)));
+        var paid = CrewPay.CloseHours(state, CrewPay.HourOf(At(4, 0)), Credit);
 
         Assert.Equal(3, CrewPay.DayOfHour(paid.Single().Hour));
         Assert.Equal(4, CrewPay.DayOfHour(CrewPay.HourOf(At(4, 0))));
@@ -256,7 +258,7 @@ public class CrewPayTests
         CrewPay.Served(state, "e1", "t1", At(3, 12, 5));
         CrewPay.Served(state, "e1", "t2", At(3, 12, 20));
 
-        Assert.Equal("t1", CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 13))).Single().VehicleId);
+        Assert.Equal("t1", CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 13)), Credit).Single().VehicleId);
     }
 
     [Fact]
@@ -278,5 +280,67 @@ public class CrewPayTests
         Assert.Empty(old.State!.CrewPaidHour);
         Assert.Empty(old.State!.CrewServedHour);
         Assert.True(CrewPay.TryPay(old.State!, "e1", 87));
+    }
+
+    [Fact]
+    public void AnHourEarnedBeforeMovingToAShopIsStillPaidOnTheTruck()
+    {
+        // Serves the truck at 12:10, assigned to a shop at 12:40 with a shift from 13:00. At 13:00 the hour that ended is
+        // decided before the game counts the shop's 13:00, so 12:00 is credited to the truck.
+        var state = new SaveState();
+        var noon = CrewPay.HourOf(At(3, 12));
+        CrewPay.Served(state, "e1", "t1", At(3, 12, 10));
+
+        var credited = new List<(string, string, long)>();
+        var paid = CrewPay.CloseHours(state, noon + 1, (e, v, h) => { credited.Add((e, v, h)); return true; });
+        CrewPay.GameCounted(state, "e1", noon + 1);
+
+        Assert.Equal(new[] { ("e1", "t1", noon) }, credited);
+        Assert.Single(paid);
+        Assert.Equal(noon + 1, state.CrewPaidHour["e1"]);
+    }
+
+    [Fact]
+    public void AnHourIsStampedPaidOnlyOnceItIsCredited()
+    {
+        var state = new SaveState();
+        var noon = CrewPay.HourOf(At(3, 12));
+        CrewPay.Served(state, "e1", "t1", At(3, 12, 10));
+
+        Assert.Empty(CrewPay.CloseHours(state, noon + 1, (e, v, h) => false));
+        Assert.True(CrewPay.Unpaid(state, "e1", noon));
+        Assert.True(state.CrewServedHour.ContainsKey("e1"));
+
+        // Tried again at the next decision.
+        Assert.Single(CrewPay.CloseHours(state, noon + 2, Credit));
+        Assert.False(CrewPay.Unpaid(state, "e1", noon));
+        Assert.Empty(state.CrewServedHour);
+    }
+
+    [Fact]
+    public void SettlingEverythingIncludesTheHourStillRunning()
+    {
+        // The uninstall step at 12:20 after serving at 12:05: the running hour is paid now, and its marker stays so
+        // play carrying on doesn't pay it again.
+        var state = new SaveState();
+        var noon = CrewPay.HourOf(At(3, 12));
+        CrewPay.Served(state, "e1", "t1", At(3, 12, 5));
+
+        Assert.Single(CrewPay.CloseHours(state, long.MaxValue, Credit));
+        Assert.False(CrewPay.Unpaid(state, "e1", noon));
+        Assert.Empty(CrewPay.CloseHours(state, noon + 1, Credit));
+    }
+
+    [Fact]
+    public void AnHourPaidSinceANoteFailedIsDroppedNotPaidAgain()
+    {
+        var state = new SaveState();
+        var noon = CrewPay.HourOf(At(3, 12));
+        CrewPay.Served(state, "e1", "t1", At(3, 12, 10));
+        CrewPay.CloseHours(state, noon + 1, (e, v, h) => false);
+        CrewPay.GameCounted(state, "e1", noon + 1);
+
+        Assert.Empty(CrewPay.CloseHours(state, noon + 2, Credit));
+        Assert.Empty(state.CrewServedHour);
     }
 }

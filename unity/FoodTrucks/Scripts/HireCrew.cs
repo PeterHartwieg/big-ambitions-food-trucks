@@ -292,15 +292,36 @@ namespace FoodTrucks
         private static void CloseHours(SaveState state, long boundary, int payrollDay)
         {
             CartSelling.CatchUpTo(boundary);
-            foreach (var (employeeId, vehicleId, hour) in CrewPay.CloseHours(state, CrewPay.HourOf(boundary)))
+            Settle(state, CrewPay.HourOf(boundary), payrollDay);
+        }
+
+        // Credits each earned hour before `beforeHour` onto the game's counters. An hour once earned is paid even if
+        // the hire has since been given a building job (the game then pays it with the building's wage at midnight)
+        // or is being replaced (paid when they leave); only one no longer employed can't be, and their note waits
+        // until it is a day old. An hour the game counted itself is never credited again (CrewPay.Unpaid).
+        private static void Settle(SaveState state, long beforeHour, int payrollDay)
+        {
+            CrewPay.CloseHours(state, beforeHour, (employeeId, vehicleId, hour) =>
             {
-                FoodTrucksSession.MarkChanged();
                 var employee = Find(employeeId);
-                // Let go, or given a building job, before the hour was over: the hour isn't theirs to be paid by the mod.
-                if (employee == null || employee.isBeingReplaced || employee.IsAssignedToAnyBusiness()) continue;
+                if (employee == null) return false;
                 CountOn(state, vehicleId, employee, payrollDay);
-                Log.Info($"Crew: {Name(employee)} paid for {hour % 24:D2}:00 on day {CrewPay.DayOfHour(hour)} (open window, {vehicleId}).");
-            }
+                Log.Info($"Crew: {Name(employee)} paid for {hour % 24:D2}:00 on day {CrewPay.DayOfHour(hour)} (open window, {vehicleId})" +
+                         $"{(employee.IsAssignedToAnyBusiness() ? ", now in a building's wage" : "")}.");
+                return true;
+            });
+            FoodTrucksSession.MarkChanged();
+        }
+
+        // The uninstall step, before the crew is released: the sales are caught up to now and every hour the crew has
+        // earned so far, the running one included, is credited onto today's counters, so it is paid at midnight even
+        // with the mod gone. The paid-hour markers stay, so carrying on playing doesn't pay them again.
+        public static void SettleAll()
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || !FoodTrucksSession.CanWrite) return;
+            CartSelling.CatchUpTo(NowExact());
+            Settle(state, long.MaxValue, TimeHelper.CurrentDay);
         }
 
         // One paid hour on the game's counters, so payrollDay's midnight payroll pays it, logged with its vehicle for
