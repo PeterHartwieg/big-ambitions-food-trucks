@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Entities;
 using Helpers;
 using Localizor;
 using UnityEngine;
@@ -26,8 +27,17 @@ namespace FoodTrucks
             var deliveries = PendingDeliveries(game);
             if (vehicles.Count == 0 && deliveries == 0)
             {
-                // Nothing to take back, but the bookings contact and its gigs, and the commissaries with their stock, still go.
+                // No vehicles, but the bookings contact and its gigs, the commissaries with their stock and the new foods'
+                // market entries still go: asked twice, as with vehicles, since it pays back stock and clears state.
+                if (Time.unscaledTime > armedUntil)
+                {
+                    armedUntil = Time.unscaledTime + ConfirmSeconds;
+                    CartSelling.Notify("foodtrucks:notification_uninstall_confirm_none");
+                    return;
+                }
+                armedUntil = -1f;
                 Catering.RemoveContact();
+                RemoveMarketEntries(game);
                 try { Commissary.RemoveForUninstall(); }
                 catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
                 CartSelling.Notify("foodtrucks:notification_uninstall_none");
@@ -61,6 +71,7 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Uninstall: settling crew hours: " + ex); }
             CartSelling.CloseAllQuietly();
             HireCrew.ReleaseAll();
+            RemoveMarketEntries(game);
             Catering.RemoveContact();
             try { Commissary.RemoveForUninstall(); }
             catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
@@ -130,6 +141,29 @@ namespace FoodTrucks
                 }
             }
             return (long)Math.Round(total * 100);
+        }
+
+        // The new foods' market rows and events, should the game have made any (a hype event, a pre-1.0 upgrade): once
+        // the mod is gone, the game's daily market update would look their items up and throw.
+        private static void RemoveMarketEntries(GameInstance game)
+        {
+            try
+            {
+                static bool Ours(string? name) => name != null && name.StartsWith(ModItems.Prefix, StringComparison.Ordinal);
+                var entries = game.productMarketEntries?.RemoveAll(e => e != null && Ours(e.itemName)) ?? 0;
+                var events = 0;
+                if (game.marketEvents != null)
+                {
+                    // An event about our items only goes; one that also names the game's items just loses ours.
+                    var emptied = new HashSet<MarketEvent>();
+                    foreach (var marketEvent in game.marketEvents.Where(e => e?.itemNames != null))
+                        if (marketEvent.itemNames.RemoveAll(Ours) > 0 && marketEvent.itemNames.Count == 0) emptied.Add(marketEvent);
+                    events = game.marketEvents.RemoveAll(e => e != null && (Ours(e.itemName) || emptied.Contains(e)));
+                }
+                if (entries > 0 || events > 0) FoodTrucksSession.MarkChanged();
+                Log.Info($"Uninstall: {entries} market entries and {events} market events for the mod's foods removed.");
+            }
+            catch (Exception ex) { Log.Error("Uninstall: market entries: " + ex); }
         }
 
         private static int PendingDeliveries(GameInstance game) =>

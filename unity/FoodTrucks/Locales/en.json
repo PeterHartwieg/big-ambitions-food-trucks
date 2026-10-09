@@ -22,6 +22,7 @@
     "foodtrucks:notification_uninstall_none": "No Food Trucks vehicles in this save. It is safe to remove the mod.",
     "foodtrucks:notification_uninstall_release": "Let go of the cart or step out of the truck first, then press again.",
     "foodtrucks:notification_uninstall_confirm": "Remove and refund {count} Food Trucks vehicles and cancel {deliveries} deliveries? Press again within 10 seconds.",
+    "foodtrucks:notification_uninstall_confirm_none": "No Food Trucks vehicles in this save. Give up commissary spaces, pay back their stock and remove the mod's contacts? Press again within 10 seconds.",
     "foodtrucks:notification_uninstall_done": "Removed {count} vehicles, refunded {refund}. Save now; then the mod can be removed.",
     "foodtrucks:notification_uninstall_partial": "Removed {count} vehicles, refunded {refund}. Still in the save: {left}. Refunds not paid: {unpaid}. See Player.log.",
     "foodtrucks:notification_open_cannot_park": "The {vehicle} can't stand here.",

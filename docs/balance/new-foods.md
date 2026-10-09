@@ -134,7 +134,7 @@ Iterations: a first pass with streetmeal at 0.22 lunch and 0.14 evening put dump
 - **Core: none.** New categories, area appetite, season and rain factors, neighbourhood rules, stock weights and the equipment split are all data. A per-item season (corn in late summer only) would need one; not proposed.
 - **Game side: the market read** in `World.cs`, as above: skip items whose demand the game limits away from the neighbourhood.
 - **Locale keys** `foodtrucks:category_streetmeal`, `category_snacks` and `category_slushies` (`Catering.Category` shows them).
-- **New mod items**: dumplings, tacos, chopped cheese, grilled corn, and three machines (dumpling steamer, griddle, corn grill), registered as the Bakery mod does. Each food item needs `isADemandedProduct` and no neighbourhood limit, so the game keeps a market entry everywhere.
+- **New mod items**: dumplings, tacos, chopped cheese, grilled corn, and three machines (dumpling steamer, griddle, corn grill), registered as the Bakery mod does. Each food item was to have `isADemandedProduct` with no neighbourhood limit; the fix round of 9 October 2026 turned it off, since a market entry for a mod item breaks the save once the mod is removed. The foods are therefore unsaturated everywhere, which is what this study assumed.
 - **Calculator** (`tools/balance`, done): a `foods` report, a patch `game` section for item and equipment prices and per-neighbourhood market demand, `null` to remove a key, and the four vanilla items in `game-prices.json`.
 
 ## Open questions for Peter

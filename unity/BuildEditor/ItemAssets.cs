@@ -104,8 +104,9 @@ namespace FoodTrucks.BuildEditor
                 Set(s, "consumeAnimation", 1);
                 Set(s, "consumeSoundType", 18);
                 Set(s, "saturation", food.Saturation);
-                // A market entry in every neighbourhood: no limit, as for the hot dog.
-                Set(s, "isADemandedProduct", true);
+                // No market entry: the game would keep a ProductMarketEntry for the item in the save, and once the mod is
+                // gone its daily market update throws on the unknown item. Core treats the food as unsaturated instead.
+                Set(s, "isADemandedProduct", false);
                 SetStrings(s, "limitDemandToNeighbourhoods");
                 Set(s, "maxWholesaleOrderAmount", 5000);
                 Set(s, "maxOrderAmountPerImporter", 25000);
@@ -123,7 +124,9 @@ namespace FoodTrucks.BuildEditor
                 // A showcase shelf, as the game's grills: it holds and shows the foods it makes.
                 Common(s, machine.Id, ItemType.ShowcaseShelf, machine.Price);
                 Set(s, "boxSize", 1);
-                Set(s, "isFurniture", true);
+                // Street food only in version 1: not furniture, so the game offers no "Place" for it in a building
+                // (CargoItemUi, PackageOverlay and ItemPanelUI all require isFurniture). It still rides in cargo as equipment.
+                Set(s, "isFurniture", false);
                 Set(s, "gridSize", 0.5f);
                 Set(s, "degreesPerRotation", 45f);
                 Set(s, "addedCustomersPerHour", machine.CustomersPerHour);

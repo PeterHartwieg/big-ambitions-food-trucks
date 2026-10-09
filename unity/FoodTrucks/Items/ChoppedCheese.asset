@@ -65,7 +65,7 @@ MonoBehaviour:
   accessoryType: 0
   accessoryIcon: {fileID: 0}
   isReadable: 0
-  isADemandedProduct: 1
+  isADemandedProduct: 0
   limitDemandToNeighbourhoods: []
   isSpecialRivalOnly: 0
   maxWholesaleOrderAmount: 5000

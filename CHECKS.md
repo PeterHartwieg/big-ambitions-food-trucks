@@ -23,7 +23,10 @@ Branch `commissary`, on top of 0.9.3. Five commissary garages (`data/commissarie
 | 8b | If the save rents or owns a building: leave a cart at its door (within 15 m), and a truck inside a warehouse you rent, if you have one; sleep past 04:00 | Neither is fined (Ctrl+Alt+F8 before 04:00 says "at your own building") |
 | 9 | Next day, Econoview's income statement | Under the truck: "Commissary rent"; under the cart: "Overnight fines"; in the Street food group: "Delivery fees". The statement's Total still equals the day summary's profit |
 | 10 | Rent a space for the cart at a second commissary, then move the truck's space there from the panel at that bay; give one up | Messages for each; the rent keeps coming daily for the spaces left |
-| 11 | With stock left at a commissary, run the uninstall step (Ctrl+Shift+F12 twice) | "Commissary stock and open orders paid back: $…", the commissary contacts are gone |
+| 11 | With stock left at a commissary, run the uninstall step (Ctrl+Shift+F12 twice) | "Commissary stock and open orders paid back: $…", the commissary contacts are gone. Drive past a commissary afterwards: no contact or welcome text comes back. Econoview's tax page: the commissary deduction is lower by the refund |
+| 11b | In a save with no Food Trucks vehicles, press Ctrl+Shift+F12 once | A question first ("… Press again within 10 seconds"); nothing happens until the second press |
+| 12 | If you have a business: buy a new machine (griddle, say) at a commissary, restock it into the cart, push the cart into your business and try to place the machine | No "Place" button for it: the machines are street food only. It stays in the cart's cargo. Tell me if the game places it anyway |
+| 13 | Give a truck a route whose last stop runs past 04:00, with little stock, and sleep through | If it sells out and closes before 04:00, it is fined like any vehicle out; if still open at 04:00, it isn't |
 
 ## 3. Log lines (me)
 
@@ -34,7 +37,7 @@ Branch `commissary`, on top of 0.9.3. Five commissary garages (`data/commissarie
 - `Commissary <id>: unlocked on day … (visited)`; `… rented a space …`, `moved its space …`, `gave up its space …`.
 - `Commissary rent: <vehicle> at <id> for day N, $… paid.` once per space per day.
 - `Commissary order at <id>: list of N items shown.`; - `Commissary order N: …`, `Commissary delivery: order N, …`, `Commissary restock: … loaded …; … units didn't fit and stay; … left in stock.`
-- `Uninstall: commissary refund …` after row 11.
+- `Uninstall: commissary refund …` after row 11. Also `Uninstall: $… of this tax year's commissary deduction taken back for the refund.` and `Uninstall: N market entries and M market events for the mod's foods removed.` (both 0 normally).
 - No new Harmony patches; the earlier `Patch …: Active.` lines are unchanged. No `Commissary:` error lines.
 
 # Playtest fixes and truck equipment (0.9.3)

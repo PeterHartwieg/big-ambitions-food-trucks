@@ -35,6 +35,9 @@ namespace FoodTrucks
         private const float CheckSeconds = 0.5f;
 
         private static bool attached;
+        // Set by the uninstall step for the rest of this session: nothing runs, nothing unlocks, no contact comes back.
+        private static bool uninstalled;
+        internal static bool Uninstalled => uninstalled;
         private long lastMinute = -1;
         private float nextCheck;
         // Vehicles told once per load that their space is at a commissary data/commissaries.json no longer has.
@@ -46,6 +49,7 @@ namespace FoodTrucks
         public static void Attach()
         {
             Detach();
+            uninstalled = false;
             var state = FoodTrucksSession.CurrentState;
             var sites = Sites;
             if (sites == null || Rules == null)
@@ -133,6 +137,7 @@ namespace FoodTrucks
         // The first visit: the commissary's contact appears, as the game's own contacts do, and it writes.
         internal static bool Unlock(SaveState state, CommissarySite site, string how)
         {
+            if (uninstalled) return false;
             if (!FoodTrucksSession.CanWrite || !Commissaries.Unlock(state.Commissary, site.Id)) return false;
             FoodTrucksSession.MarkChanged();
             var contact = Contact.GetContact(ContactPrefix + site.Id, ContactCategoryName.General, ContactDescription, null, hasWelcomeMessages: false, skipNewNotification: false);
@@ -155,7 +160,7 @@ namespace FoodTrucks
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
             var sites = Sites;
-            if (!attached || state == null || rules == null || sites == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
+            if (!attached || uninstalled || state == null || rules == null || sites == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
             if (!CityReady(sites)) return;
             if (Time.unscaledTime >= nextCheck)
             {
@@ -405,7 +410,8 @@ namespace FoodTrucks
                     VehicleId = vehicle.id,
                     AtOwnCommissaryBay = site != null && !withDriver.Contains(vehicle.id) && InBay(vehicle, site),
                     PlayerInside = game.ActiveVehicleId == vehicle.id || TruckWindow.PlayerAt(vehicle.id),
-                    OnLateStop = saved != null && ((saved.IsOpen && saved.HireStop != null) || HireRunner.Want(saved, now) != null),
+                    // Only a window the crew has open at a stop right now: a route that sold out and closed early is out like any other.
+                    OnLateStop = saved != null && saved.IsOpen && saved.HireStop != null,
                     InTransit = withDriver.Contains(vehicle.id) || saved?.Transit != null,
                     AtPlayerProperty = !withDriver.Contains(vehicle.id) && AtProperty(vehicle, property)
                 });
@@ -446,7 +452,7 @@ namespace FoodTrucks
             var rules = Rules;
             var cart = VehicleHelper.GetCurrentVehicle();
             var kind = FoodTrucksMod.KindOf(cart?.vehicleTypeName);
-            if (state == null || rules == null || cart == null || kind == null) return;
+            if (state == null || rules == null || cart == null || kind == null || uninstalled) return;
             if (!FoodTrucksSession.CanWrite)
             {
                 CartSelling.Notify("foodtrucks:notification_data_readonly");
@@ -596,7 +602,8 @@ namespace FoodTrucks
                 var item = ItemsGetter.GetByName(name, suppressError: true);
                 if (item == null) continue;
                 var price = item.GetWholesalePrice();
-                if (price <= 0f) price = item.DefaultMarketPrice;
+                // Furniture has no wholesale price: its shop price, with the difficulty's market multiplier as GetWholesalePrice applies to foods.
+                if (price <= 0f) price = item.DefaultMarketPrice * (SaveGameManager.Current?.gameVariables.marketPriceMultiplier ?? 1f);
                 var cents = (long)Math.Round(price * 100.0);
                 if (cents <= 0) continue;
                 list.Add((name, Math.Max(1, item.boxSize), cents));
@@ -626,7 +633,7 @@ namespace FoodTrucks
         // Null when ordering here can go ahead, else the notification key saying why not.
         private static string? OrderProblem(SaveState? state, string siteId)
         {
-            if (state == null || Rules == null || !FoodTrucksSession.CanWrite) return "foodtrucks:notification_data_readonly";
+            if (state == null || Rules == null || !FoodTrucksSession.CanWrite || uninstalled) return "foodtrucks:notification_data_readonly";
             if (DropdownSelector.onShow == null) return "foodtrucks:notification_prices_unavailable";
             if (!state.Commissary.Unlocked.Contains(siteId) || !state.Commissary.Spaces.Any(s => s.CommissaryId == siteId))
                 return "foodtrucks:notification_commissary_no_space";
@@ -767,10 +774,15 @@ namespace FoodTrucks
                 var paidBack = false;
                 if (refund.Total > 0)
                 {
+                    // The game's tax tracking ignores money coming in, so the deduction is taken back by hand below.
                     var info = new TransactionInfo("foodtrucks:transaction_commissary_refund", new Dictionary<string, string>());
-                    info.SetTaxDeductibleName(ExpenseLabel);
                     paidBack = Payments.PayIn(refund.Total, info);
-                    if (paidBack) SalesLedger.RecordDeliveryFees(state, SaveGameManager.Current.Day, -refund.FeeCents);
+                    if (paidBack)
+                    {
+                        SalesLedger.RecordDeliveryFees(state, SaveGameManager.Current.Day, -refund.FeeCents);
+                        var reversed = ReverseDeduction(refund.Total);
+                        Log.Info($"Uninstall: {CartSelling.Money(reversed)} of this tax year's commissary deduction taken back for the refund.");
+                    }
                     else Log.Error($"Uninstall: the commissary refund of {CartSelling.Money(refund.Total)} was not paid.");
                 }
                 // Rent and fines still owed: paid now if the game takes them, else dropped.
@@ -784,8 +796,28 @@ namespace FoodTrucks
                 Log.Info($"Uninstall: commissary refund {CartSelling.Money(paidBack ? refund.Total : 0)} (goods {CartSelling.Money(refund.GoodsCents)}, delivery fees {CartSelling.Money(refund.FeeCents)}); {spaces} spaces given up.");
                 if (paidBack) CartSelling.Notify("foodtrucks:notification_uninstall_commissary", ("refund", CartSelling.Money(refund.Total)));
             }
+            uninstalled = true;
+            CartButton.ShowCommissary(false);
             var removed = SaveGameManager.Current?.Contacts.RemoveAll(c => c != null && c.id != null && c.id.StartsWith(ContactPrefix, StringComparison.Ordinal)) ?? 0;
             if (removed > 0) Log.Info($"Uninstall: {removed} commissary contacts removed.");
+        }
+
+        // Takes a refunded amount off this tax year's deductions under the commissary label (TaxHelper keeps them per label
+        // and values in currentTaxPeriodDeductibleExpenses; it only ever adds). Never below 0; returns the cents taken.
+        // Rent shares the label, so an order paid in an earlier tax year can take this year's rent deduction down.
+        private static long ReverseDeduction(long cents)
+        {
+            var expenses = SaveGameManager.Current?.currentTaxPeriodDeductibleExpenses;
+            if (expenses == null || cents <= 0) return 0;
+            var left = cents / 100.0;
+            foreach (var expense in expenses.Where(e => e != null && e.key == ExpenseLabel && e.amount > 0f))
+            {
+                var take = Math.Min(left, expense.amount);
+                expense.amount = (float)Math.Max(0.0, expense.amount - take);
+                left -= take;
+                if (left <= 0) break;
+            }
+            return (long)Math.Round(cents - Math.Max(0.0, left) * 100.0);
         }
 
         // ---- Debug ----

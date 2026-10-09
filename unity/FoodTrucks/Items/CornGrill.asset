@@ -27,7 +27,7 @@ MonoBehaviour:
   itemPanelMetaView: 0
   customColorChannels: 0
   customizationColors: []
-  isFurniture: 1
+  isFurniture: 0
   gridSize: 0.5
   degreesPerRotation: 45
   quality: 0
