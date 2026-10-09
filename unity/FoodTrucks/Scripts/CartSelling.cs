@@ -1019,7 +1019,7 @@ namespace FoodTrucks
                 Log.Info($"Cart {vehicle.VehicleId}: stale {itemName} sold on working day {workDay} (on board since day {since}).");
             else if (book == null || workDay <= ReputationBook.ClosedThrough(state)) ReputationBook.Consume(vehicle, itemName, 1);
             // What this unit cost at the wholesaler, for the profit shown in the day summary and Econoview.
-            SalesLedger.RecordCost(state, day, (long)Math.Round(Math.Max(0f, entry.pricePerUnit) * 100.0));
+            SalesLedger.RecordCost(state, day, vehicle.VehicleId, (long)Math.Round(Math.Max(0f, entry.pricePerUnit) * 100.0));
             sinceOpen.TryGetValue(vehicle.VehicleId, out var totals);
             sinceOpen[vehicle.VehicleId] = (totals.Sales + 1, totals.Cents + cents);
             try

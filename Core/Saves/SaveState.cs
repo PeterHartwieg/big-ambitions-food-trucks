@@ -109,6 +109,37 @@ namespace FoodTrucks.Core.Saves
         // True once this day's profit has been added to the game's financial summary, so Econoview shows
         // the carts' row only where the stored total includes it (summaries from before 0.3.0 don't).
         public bool InSummary { get; set; }
+        // The day's money per vehicle, for Econoview's breakdown (additive field: days recorded by older
+        // versions have none, and their profit shows as one "not broken down" figure).
+        public List<VehicleDay> ByVehicle { get; set; } = new List<VehicleDay>();
+        // The vendor licence bought that day; it belongs to the whole fleet, not to one vehicle.
+        public long LicenceCents { get; set; }
+        // Event places booked that day, less places paid back; below 0 on a day with more refunds than bookings.
+        public long EventPlacesCents { get; set; }
+        // What the day summary added to the game's total profit for this day, kept when the day is marked.
+        // Null for days marked by older versions, which added sales less stock cost (SalesLedger.SummaryCents).
+        public long? SummaryCents { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    // One vehicle's money on one day. Every amount is 0 or more: income and costs alike.
+    public class VehicleDay
+    {
+        public string VehicleId { get; set; } = string.Empty;
+        // Street sales at the window.
+        public long SalesCents { get; set; }
+        // Catering fees.
+        public long CateringCents { get; set; }
+        // The wholesale cost of the stock sold or served.
+        public long StockCents { get; set; }
+        // The crew's wages, which the game pays as unassigned staff wages (moved out of that row in Econoview).
+        public long WagesCents { get; set; }
+        // Parking fees and tickets, which the game charges in its own "Parking fees" row (moved out of it too).
+        public long ParkingCents { get; set; }
+        // The vehicle's vending permit.
+        public long PermitCents { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

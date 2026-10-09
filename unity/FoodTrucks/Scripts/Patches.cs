@@ -42,9 +42,21 @@ namespace FoodTrucks
             Patch(typeof(ItemPanelUI), "SetItemInstance", null, nameof(PanelOther));
             Patch(typeof(ItemPanelUI), "SetMiniGameMode", null, nameof(PanelOther));
 
-            // Day summary and Econoview: the carts' profit counts like a business's (sales less the stock sold).
-            Patch(typeof(FinancialSummaryHelper), "CreateFinancialSummary", new[] { typeof(int) }, nameof(DaySummary));
-            Patch(AccessTools.TypeByName("UI.Smartphone.Apps.EconoView.EconoViewIncomeStatementScrollerController"), "LoadSalaryRows", Type.EmptyTypes, nameof(EconoViewRow));
+            // Day summary and Econoview: the street food profit counts like a business's, and Econoview breaks it
+            // down per vehicle. Crew wages and parking are noted per vehicle as the game charges them, and move
+            // from the game's own Econoview rows to the vehicles.
+            var scroller = AccessTools.TypeByName(StreetFoodBooks.ScrollerTypeName);
+            Patch(typeof(FinancialSummaryHelper), "CreateFinancialSummary", new[] { typeof(int) }, typeof(StreetFoodBooks), postfix: nameof(StreetFoodBooks.DaySummary));
+            Patch(scroller, "LoadSalaryRows", Type.EmptyTypes, typeof(StreetFoodBooks), postfix: nameof(StreetFoodBooks.IncomeRows));
+            Patch(scroller, "LoadOngoingExpenseRows", Type.EmptyTypes, typeof(StreetFoodBooks), postfix: nameof(StreetFoodBooks.OngoingExpenseRows));
+            Patch(scroller, "LoadFeeRows", Type.EmptyTypes, typeof(StreetFoodBooks), postfix: nameof(StreetFoodBooks.FeeRows));
+            Patch(typeof(EmployeeInstance), "PayWage", new[] { typeof(BuildingRegistration) }, typeof(StreetFoodBooks),
+                prefix: nameof(StreetFoodBooks.WagePrefix), postfix: nameof(StreetFoodBooks.WagePostfix));
+            Patch(typeof(ParkingSimulator), "RunDaily", Type.EmptyTypes, typeof(StreetFoodBooks),
+                prefix: nameof(StreetFoodBooks.ParkingDailyPrefix), postfix: nameof(StreetFoodBooks.ParkingDailyPostfix));
+            Patch(typeof(ParkingSimulator), "RunHourly", Type.EmptyTypes, typeof(StreetFoodBooks),
+                prefix: nameof(StreetFoodBooks.ParkingHourlyPrefix), postfix: nameof(StreetFoodBooks.ParkingHourlyPostfix));
+            StreetFoodBooks.CheckMoves();
 
             // City map: a Street food line of filters (buildings that bring crowds, the player's vehicles).
             Patch(typeof(CityMapFilters), "InitializeFilters", Type.EmptyTypes, typeof(MapFilters), postfix: nameof(MapFilters.InitializePostfix));
@@ -188,48 +200,6 @@ namespace FoodTrucks
                 Log.Error(ex);
                 return true;
             }
-        }
-
-        private static void DaySummary(int dayNumber, FinancialSummary __result)
-        {
-            try
-            {
-                var state = FoodTrucksSession.CurrentState;
-                if (__result == null || state == null) return;
-                // Read-only data (written by a newer mod version) can't be marked, so it only counts days
-                // already marked; otherwise Econoview's row and its total would disagree.
-                if (!FoodTrucksSession.CanWrite && !SalesLedger.IsInSummary(state, dayNumber)) return;
-                var profit = SalesLedger.ProfitCents(state, dayNumber);
-                if (profit != 0) __result.totalProfit += profit / 100f;
-                if (FoodTrucksSession.CanWrite) SalesLedger.MarkInSummary(state, dayNumber);
-            }
-            catch (Exception ex) { Log.Error(ex); }
-        }
-
-        private static MethodInfo? createRow;
-
-        // One "Food carts" row in the income statement, next to the other income, so its total still
-        // adds up with the day summary's profit.
-        private static void EconoViewRow(object __instance)
-        {
-            try
-            {
-                var summaries = Traverse.Create(__instance).Field("_financialSummaries").GetValue<List<FinancialSummary>>();
-                if (summaries == null || summaries.Count == 0) return;
-                var state = FoodTrucksSession.CurrentState;
-                // Only days whose stored total includes the carts, so the statement still adds up.
-                var values = summaries.Select(s => SalesLedger.IsInSummary(state, s.dayNumber)
-                    ? SalesLedger.ProfitCents(state, s.dayNumber) / 100f : 0f).ToList();
-                if (values.All(v => v == 0f)) return;
-                createRow ??= AccessTools.Method(__instance.GetType(), "CreateRow");
-                if (createRow == null) return;
-                var rowType = createRow.GetParameters()[0].ParameterType;
-                createRow.Invoke(__instance, new object?[]
-                {
-                    Enum.Parse(rowType, values[0] >= 0 ? "Success" : "Danger"), "foodtrucks:econoview_row", values, true, null, null
-                });
-            }
-            catch (Exception ex) { Log.Error(ex); }
         }
 
         private static void CountCrewHour()

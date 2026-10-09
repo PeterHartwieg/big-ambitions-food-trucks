@@ -533,7 +533,7 @@ namespace FoodTrucks
                     var cost = (long)Math.Round(Math.Max(0f, entry.pricePerUnit) * 100.0);
                     for (var i = 0; i < n; i++)
                     {
-                        SalesLedger.RecordCost(state, day, cost);
+                        SalesLedger.RecordCost(state, day, vehicle.VehicleId, cost);
                         if (book != null && workDay > ReputationBook.ClosedThrough(state))
                         {
                             if (book.Sold(vehicle, item, HireRunner.DayOf(minute), workDay))

@@ -292,6 +292,7 @@ namespace FoodTrucks
             if (city == null || city.Booked >= city.Places || now >= CityEvents.EndsAt(city)) return Event(index);
             // Paid first: a refused payment books nothing.
             if (!CityLicensing.Charge(city.FeeCents, "foodtrucks:transaction_event")) return null;
+            SalesLedger.RecordEventPlaces(state, SaveGameManager.Current.Day, city.FeeCents);
             var result = CityEvents.Book(state.Events, eventId, now);
             FoodTrucksSession.MarkChanged();
             var kind = tables.Kind(city.Kind);
@@ -325,6 +326,7 @@ namespace FoodTrucks
             if (problem != LicenceProblem.None) return Start();
             var rules = DemandData.Rules!.Fleet;
             if (!CityLicensing.Charge(rules.LicenceFeeCents, "foodtrucks:transaction_licence")) return null;
+            SalesLedger.RecordLicence(state, day, rules.LicenceFeeCents);
             licensing.Buy(state.Licence, day, course);
             FoodTrucksSession.MarkChanged();
             Log.Info($"City of New York: licence bought on day {day} for {CartSelling.Money(rules.LicenceFeeCents)}, valid to day {state.Licence.LicenceExpiresOnDay}.");
@@ -376,6 +378,7 @@ namespace FoodTrucks
             if (problem != PermitProblem.None) return Permit(index);
             var fee = DemandData.Rules.Fleet.PermitFeeCents;
             if (!CityLicensing.Charge(fee, "foodtrucks:transaction_permit")) return null;
+            SalesLedger.RecordLine(state, day, vehicleId, LedgerLine.Permit, fee);
             Core.Fleet.Licensing.BuyPermit(state, vehicleId, day);
             FoodTrucksSession.MarkChanged();
             var kind = StreetSales.Find(state, vehicleId)?.VehicleType ?? "cart";

@@ -36,6 +36,8 @@ namespace FoodTrucks.Core.Saves
 
             var vehicle = GetOrAdd(state, vehicleId);
             SalesLedger.Record(state, day, revenueCents);
+            // A sum for several units at once is a catering fee; Econoview shows it apart from street sales.
+            SalesLedger.RecordLine(state, day, vehicleId, perUnit ? LedgerLine.Sales : LedgerLine.Catering, revenueCents);
             vehicle.LifetimeSales = lifetimeSales;
             vehicle.LifetimeRevenueCents = lifetimeRevenueCents;
         }
