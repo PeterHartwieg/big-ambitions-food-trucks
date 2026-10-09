@@ -394,6 +394,18 @@ public class CrewWageAttributionTests
     }
 
     [Fact]
+    public void ALoadLateAtNightCoversTheNextDay()
+    {
+        // Loaded at 23:30 on day 10; the first hourly count comes at midnight, on day 11.
+        var state = new SaveState();
+        CrewLog.Begin(state, 10);
+        CrewLog.Begin(state, 11);
+        Assert.Equal(11, state.CrewHoursSince);
+        // Day 11's wage for shop hours only, the hire on a truck's crew at payment: not the truck's.
+        Assert.Empty(CrewLog.Attribute(state, 11, "e1", 4800, 6, "truck"));
+    }
+
+    [Fact]
     public void OnlyDaysBeforeTheMarkerFallBackToTheCrew()
     {
         var state = new SaveState();

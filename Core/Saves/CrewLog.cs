@@ -22,8 +22,8 @@ namespace FoodTrucks.Core.Saves
                 entry.Hours++;
         }
 
-        // Notes that hours are logged from now on. Called as hours are counted; the first call sets the marker to the
-        // next day, since hours counted earlier today (before this version ran) weren't logged.
+        // Notes that hours are logged from now on. Called when a save loads and as hours are counted; the first call
+        // sets the marker to the next day, since hours counted earlier today (before this version ran) weren't logged.
         public static void Begin(SaveState state, int today)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));

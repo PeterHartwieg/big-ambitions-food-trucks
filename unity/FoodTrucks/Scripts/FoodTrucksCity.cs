@@ -99,6 +99,10 @@ namespace FoodTrucks
             else
                 Log.Error($"Save data {result.Status}: {result.Error ?? "written by a newer version"}. The mod will not change it.");
 
+            // Crew hours are logged from the day after this load at the latest, even if the first hourly count
+            // only comes after midnight (a save loaded at 23:30).
+            if (canWrite) CrewLog.Begin(state!, current.Day);
+
             runtimeObject = new GameObject("FoodTrucks.Runtime");
             Object.DontDestroyOnLoad(runtimeObject);
             runtimeObject.AddComponent<CartSelling>();
