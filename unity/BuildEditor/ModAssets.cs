@@ -44,6 +44,14 @@ namespace FoodTrucks.BuildEditor
             if (exitWhenDone) EditorApplication.Exit(code);
         }
 
+        private static string RuntimeVersion()
+        {
+            var source = File.ReadAllText(ModFolder + "/Scripts/FoodTrucksMod.cs");
+            var match = System.Text.RegularExpressions.Regex.Match(source, "const string Version = \"([^\"]+)\"");
+            if (!match.Success) throw new InvalidOperationException("No Version constant in FoodTrucksMod.cs.");
+            return match.Groups[1].Value;
+        }
+
         private static void EnsureManifest()
         {
             var path = ModFolder + "/ModManifest.asset";
@@ -56,7 +64,8 @@ namespace FoodTrucks.BuildEditor
             manifest.ModId = "FoodTrucks";
             manifest.DisplayName = "Food Trucks";
             manifest.Author = "Peter Hartwieg";
-            manifest.Version = "0.9.0";
+            // The runtime's Version constant is the one source; this assembly can't reference the mod's.
+            manifest.Version = RuntimeVersion();
             manifest.AssetBundleName = "foodtrucks.unity3d";
             manifest.ModAssembly = AssetDatabase.LoadAssetAtPath<AssemblyDefinitionAsset>(ModFolder + "/FoodTrucks.asmdef");
             manifest.LocalesFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(ModFolder + "/Locales");
