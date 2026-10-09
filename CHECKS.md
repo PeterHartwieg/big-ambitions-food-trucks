@@ -1,6 +1,6 @@
 # Playtest fixes (0.9.1)
 
-The fixes from the first 0.9.0 playtest: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, and the street food breakdown in Econoview. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
+The fixes from the first 0.9.0 playtest: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, and crew serving a window the player opened. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
 
 ## 1. Automated (me)
 
@@ -21,6 +21,10 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 | 8 | Watch a few sales | Each customer waits at the window for the order. The money and the sale message come as they walk away, not as they step up |
 | 9 | After a day with sales, open Econoview's income statement | "Street food" is a group. It opens into one row per vehicle (and "Vendor licence" or "Event places" if you paid for them); a vehicle opens into Sales, Stock sold, Crew wages and so on |
 | 10 | Same day, with a hired crew or paid parking | "Unassigned staff wages" and "Parking fees" are lower by the vehicles' share, which shows under each vehicle instead. The statement's Total equals the day summary's profit for that day |
+| 11 | Put a worker on the truck with no route (Ctrl+Shift+F9 hires one), open it yourself and walk away | The open message says "<name> serves at the window". The worker stands behind the hatch and customers are served; no "Nobody's at the truck's window" |
+| 12 | Leave it open over a full hour and past midnight, then check the next morning's transactions and Econoview | An unassigned wage for the worker covering the hours the window was open (one hour for each hour it was open on the hour, or opened before half past). In Econoview it is under the truck's Crew wages |
+| 13 | Give the worker a route, open the truck yourself during a stop's hours and keep it open past the stop's end | The route leaves the truck where you opened it; the worker keeps serving. The day's wage counts each hour once, not twice for the overlap |
+| 14 | Open the truck with the worker off sick, or with no crew | "Nobody's at the truck's window" once you walk away, as before |
 
 ## 3. Log lines (me)
 
@@ -29,6 +33,7 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 - `Queue view: line at cart …` and `… line removed …` lines, and the session total on unload.
 - `Patch …LoadSalaryRows: Active.`, `Patch …LoadOngoingExpenseRows: Active.`, `…LoadFeeRows: Active.` and `Patch EmployeeInstance.PayWage(BuildingRegistration): Active.` (with the parking patches); `Econoview: crew wages and parking move from the game's rows to the vehicles.`
 - `Sale: …` lines arrive as customers leave the window.
+- `Crew: <name> paid for HH:00 on day N (open window, truck …)` once per hour the crew served a window you opened; none for route hours, and never two for the same hour and worker.
 
 # Milestone 7 checks: catering and Bakery
 

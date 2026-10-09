@@ -265,8 +265,12 @@ namespace FoodTrucks
 
             var (plan, pitch) = StartSelling(vehicle, cart, controller, position, kind, hireStop: null);
             var service = Service(rules, kind, vehicle, true);
-            Say("foodtrucks:notification_open", kind, ("units", plan.StockUnits.ToString()), ("rate", ExpectedSales(plan, service).ToString("F0")),
-                ("grade", GradeText(vehicle)));
+            // The crew serves a window the player opened too, wherever and whenever: the message says who.
+            var serving = HireCrew.Serving(vehicle, HireCrew.Now());
+            var key = serving.Count == 0 ? "foodtrucks:notification_open"
+                : serving.Count == 1 ? "foodtrucks:notification_open_crew_one" : "foodtrucks:notification_open_crew_many";
+            Say(key, kind, ("units", plan.StockUnits.ToString()), ("rate", ExpectedSales(plan, service).ToString("F0")),
+                ("grade", GradeText(vehicle)), ("crew", HireCrew.Names(serving)));
             if (pitch != null) Say(pitch.Value.Key, kind, pitch.Value.Data);
         }
 
@@ -667,7 +671,11 @@ namespace FoodTrucks
             {
                 TrackStock(state);
                 foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && !RunByRoute(v)).ToList())
+                {
                     Advance(state, vehicle, HireCrew.NowExact());
+                    // A crew serving the window the player opened is paid for the hours they serve (HireCrew.CountHour).
+                    if (vehicle.IsOpen) HireCrew.CountServing(state, vehicle);
+                }
             }
             catch (Exception ex)
             {
