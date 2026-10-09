@@ -71,12 +71,21 @@ namespace FoodTrucks
         // The player stands at this truck's hatch.
         public static bool PlayerAt(string id) => instance != null && instance.vehicleId == id && instance.place != null;
 
-        private void OnEnable() => instance = this;
+        private void OnEnable()
+        {
+            instance = this;
+            GlobalEvents.onBindingsChanged += OnBindingsChanged;
+        }
 
         private void OnDisable()
         {
+            GlobalEvents.onBindingsChanged -= OnBindingsChanged;
             if (instance == this) instance = null;
         }
+
+        // The game's panel rebuilds its buttons when key bindings change, which brings the key labels back; the
+        // next Update clears them again, after every handler of the event has run.
+        private void OnBindingsChanged() => keyLabelsCleared = false;
 
         private void OnDestroy()
         {
