@@ -54,6 +54,9 @@ namespace FoodTrucks
         {
             // Out of the truck's hatch before the truck goes.
             TruckWindow.StepOutNow("uninstall");
+            // Hours the crew earned at windows the player opened go on the game's counters before anything closes.
+            try { HireCrew.SettleAll(); }
+            catch (Exception ex) { Log.Error("Uninstall: settling crew hours: " + ex); }
             CartSelling.CloseAllQuietly();
             HireCrew.ReleaseAll();
             Catering.RemoveContact();

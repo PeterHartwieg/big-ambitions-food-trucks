@@ -72,21 +72,34 @@ namespace FoodTrucks.Core.Fleet
             state.CrewServedHour[employeeId] = new CrewServed { Hour = hour, VehicleId = vehicleId };
         }
 
-        // Decides every noted hour before `beforeHour` (the hour now starting, or midnight's): each one the hire
-        // hasn't been paid or counted for is paid now (marked, and returned for the game's counters, in hour order);
-        // the rest are dropped. Called with the sales caught up to the start of `beforeHour`.
-        public static List<(string EmployeeId, string VehicleId, long Hour)> CloseHours(SaveState state, long beforeHour)
+        // Decides every noted hour before `beforeHour` (the hour now starting, midnight's, or long.MaxValue to settle
+        // all, the current hour included), in hour order. An hour the hire has been paid or counted for already (the
+        // route, another window, the game's own shift) is dropped. Each other one goes to `credit` (employee, vehicle,
+        // hour), which puts it on the game's counters: only when that succeeds is the hour stamped paid and the note
+        // dropped, so an earned hour is never lost to a failed or skipped credit; a note that can't be credited stays
+        // to be tried at the next decision, until it is a day old. Returns the hours credited.
+        public static List<(string EmployeeId, string VehicleId, long Hour)> CloseHours(SaveState state, long beforeHour,
+            Func<string, string, long, bool> credit)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
-            var due = state.CrewServedHour.Where(p => p.Value != null && p.Value.Hour < beforeHour)
+            if (credit == null) throw new ArgumentNullException(nameof(credit));
+            foreach (var id in state.CrewServedHour.Where(p => p.Value == null).Select(p => p.Key).ToList()) state.CrewServedHour.Remove(id);
+            var due = state.CrewServedHour.Where(p => p.Value.Hour < beforeHour)
                 .OrderBy(p => p.Value.Hour).ThenBy(p => p.Key, StringComparer.Ordinal).ToList();
             var paid = new List<(string EmployeeId, string VehicleId, long Hour)>();
             foreach (var pair in due)
             {
-                state.CrewServedHour.Remove(pair.Key);
-                if (TryPay(state, pair.Key, pair.Value.Hour)) paid.Add((pair.Key, pair.Value.VehicleId, pair.Value.Hour));
+                var (id, served) = (pair.Key, pair.Value);
+                if (!Unpaid(state, id, served.Hour))
+                {
+                    state.CrewServedHour.Remove(id);
+                    continue;
+                }
+                if (!credit(id, served.VehicleId, served.Hour)) continue;
+                TryPay(state, id, served.Hour);
+                state.CrewServedHour.Remove(id);
+                paid.Add((id, served.VehicleId, served.Hour));
             }
-            foreach (var id in state.CrewServedHour.Where(p => p.Value == null).Select(p => p.Key).ToList()) state.CrewServedHour.Remove(id);
             return paid;
         }
 

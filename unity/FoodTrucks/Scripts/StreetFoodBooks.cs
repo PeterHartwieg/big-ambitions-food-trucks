@@ -252,7 +252,16 @@ namespace FoodTrucks
                 var state = FoodTrucksSession.CurrentState;
                 if (__state == null || state == null || !FoodTrucksSession.CanWrite || __instance == null) return;
                 var paid = LastTransaction();
-                if (paid == null || ReferenceEquals(paid, __state.Last) || paid.transactionType != UnassignedWage || paid.amount >= 0f) return;
+                if (paid == null || ReferenceEquals(paid, __state.Last) || paid.amount >= 0f) return;
+                if (paid.transactionType != UnassignedWage)
+                {
+                    // A hire who earned crew hours and then took a building job is paid them with the building's wage: they
+                    // stay in that business's salaries, and the log for the day is done with.
+                    if (!CrewLog.HasHours(state, paid.timestamp.Day, __instance.id)) return;
+                    Log.Info($"Econoview: {HireCrew.Name(__instance)}'s crew hours on day {paid.timestamp.Day} were paid with a building's wage; they stay in its salaries.");
+                    CrewLog.Consume(state, paid.timestamp.Day, __instance.id);
+                    return;
+                }
                 var day = paid.timestamp.Day;
                 var cents = (long)Math.Round(-(double)paid.amount * 100.0);
                 var split = CrewLog.Attribute(state, day, __instance.id, cents, __state.WorkedHours, CrewVehicle(state, __instance.id)?.VehicleId);
