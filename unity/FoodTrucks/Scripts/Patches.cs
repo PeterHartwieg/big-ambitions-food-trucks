@@ -84,6 +84,10 @@ namespace FoodTrucks
             Patch(typeof(EmployeeInstance), "ResignBeforeReplacement", Type.EmptyTypes, nameof(SettleOnReplacement), prefix: true);
             Patch(typeof(EmployeeInstance), "Resign", Type.EmptyTypes, nameof(SettleOnResign), prefix: true);
             Patch(typeof(EmployeeInstance), "RemoveEmployee", Type.EmptyTypes, nameof(SettleOnRemove), prefix: true);
+            // While the game's tick runs its hourly and daily events, a settle catches the sales up only to the hour being
+            // processed (the clock's minute already holds the rest of a time skip's advance).
+            Patch(typeof(GameManager), "RunMainGameTick", new[] { typeof(float) }, typeof(Patches),
+                prefix: nameof(EnterGameTick), finalizer: nameof(LeaveGameTick));
             Patch(AccessTools.TypeByName("AI.Employees.NoTaskAssignedComplaint"), "ConditionToComplainMet", new[] { typeof(EmployeeInstance) }, nameof(CrewHasTask));
             Patch(AccessTools.TypeByName("AI.Employees.NoTaskAssignedComplaint"), "ComplaintHandled", new[] { typeof(EmployeeInstance) }, nameof(CrewTaskHandled));
             Patch(AccessTools.TypeByName("UI.Tasks.TasksUI"), "CreateTodoTask", null, nameof(SkipCrewUnassignedTask), prefix: true);
@@ -232,6 +236,14 @@ namespace FoodTrucks
         {
             try { HireCrew.CountHour(); }
             catch (Exception ex) { Log.Error(ex); }
+        }
+
+        private static void EnterGameTick() => HireCrew.InGameTick++;
+
+        private static Exception? LeaveGameTick(Exception? __exception)
+        {
+            if (HireCrew.InGameTick > 0) HireCrew.InGameTick--;
+            return __exception;
         }
 
         private static void SettleOnShiftsCleared(EmployeeInstance employeeInstance) => SettleLeaving(employeeInstance, "shifts cleared");

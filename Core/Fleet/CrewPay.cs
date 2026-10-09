@@ -57,6 +57,13 @@ namespace FoodTrucks.Core.Fleet
             return (chosen.Where(p => p.IsCrew).Select(p => p.Who).ToList(), chosen.Select(p => p.Skill).ToList());
         }
 
+        // How far the sales may be caught up before a hire's pay is settled. Inside the game's tick the clock's minute
+        // already holds the rest of the frame's advance (a time skip's) while the hour's and the day's events run, so a
+        // change made there (a retirement at midnight, a resignation in the hourly run) happens at the start of the hour
+        // being processed: the sales go no further. A change the player makes goes up to the live minute.
+        public static double CatchUpLimit(bool inGameTick, long hourBeingProcessedStart, double liveMinute) =>
+            inGameTick ? Math.Min(hourBeingProcessedStart, liveMinute) : liveMinute;
+
         // The day an hour belongs to: (hour / 24) + 1.
         public static int DayOfHour(long hour) => (int)Math.Floor(hour / 24.0) + 1;
 

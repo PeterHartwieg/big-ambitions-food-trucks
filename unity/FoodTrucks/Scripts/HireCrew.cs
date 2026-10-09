@@ -327,7 +327,7 @@ namespace FoodTrucks
             if (!IsCrew(employee) && !state.CrewServedHour.ContainsKey(employee.id) && !CrewLog.HasHours(state, TimeHelper.CurrentDay, employee.id))
                 return true;
             // An hour served so far counts only once the sales have reached it.
-            if (IsCrew(employee)) CartSelling.CatchUpTo(NowExact());
+            if (IsCrew(employee)) CartSelling.CatchUpTo(CatchUpLimit());
             var today = TimeHelper.CurrentDay;
             var owed = CrewPay.Owed(state, employee.id, today);
             if (owed.Hours == 0)
@@ -373,7 +373,7 @@ namespace FoodTrucks
         {
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite) return;
-            CartSelling.CatchUpTo(NowExact());
+            CartSelling.CatchUpTo(CatchUpLimit());
             Settle(state, long.MaxValue, TimeHelper.CurrentDay);
         }
 
@@ -404,6 +404,15 @@ namespace FoodTrucks
 
         private static readonly System.Reflection.FieldInfo? lastWorkedDay =
             typeof(EmployeeInstance).GetField("lastWorkedDay", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        // Inside GameManager.RunMainGameTick (bracketed by Patches), where the hour's and day's events run with the
+        // clock's minute already holding the frame's whole advance.
+        internal static int InGameTick;
+
+        // How far a settle may catch the sales up: the start of the hour being processed inside the game's tick, the
+        // live minute otherwise (CrewPay.CatchUpLimit).
+        private static double CatchUpLimit() =>
+            CrewPay.CatchUpLimit(InGameTick > 0, HireSchedules.Absolute(TimeHelper.CurrentDay, TimeHelper.CurrentHour * 60), NowExact());
 
         // Absolute game minutes as Core counts them: (day - 1) × 1440 + minute of the day. Inside the game's
         // hourly loop the minute can still hold hours not yet counted, so it is capped at the hour's end.
