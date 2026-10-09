@@ -16,6 +16,8 @@ public class RuleTablesTests
 
         Assert.Equal(20, queue.PatienceMinutes);
         Assert.True(queue.RainPatience < 1);
+        Assert.Equal(7, queue.WalkInMinMinutes);
+        Assert.Equal(14, queue.WalkInMaxMinutes);
         var service = ShippedData.Rules.Service;
         Assert.Equal(50, service.BaseSkill);
         Assert.Equal(1.5, service.SlowestTimeFactor);
@@ -133,6 +135,12 @@ public class RuleTablesTests
     [InlineData("queue.rainPatience", "1.5")]
     [InlineData("queue.maxQueue", "2.5")]
     [InlineData("queue.maxQueue", null)]
+    [InlineData("queue.walkInMinutes", null)]
+    [InlineData("queue.walkInMinutes", "[14, 7]")]
+    [InlineData("queue.walkInMinutes", "[7]")]
+    [InlineData("queue.walkInMinutes", "[-1, 7]")]
+    [InlineData("queue.walkInMinutes", "[7, 61]")]
+    [InlineData("queue.walkInMinutes", "[7, 13.5]")]
     [InlineData("queue", "rename:queu")]
     [InlineData("service", null)]
     [InlineData("service", "rename:servce")]

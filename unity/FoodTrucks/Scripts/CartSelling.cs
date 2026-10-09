@@ -73,9 +73,9 @@ namespace FoodTrucks
         internal static string? PitchOf(string vehicleId) =>
             StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId)?.OpenPitch;
 
-        // Sales Core has made whose customer is still on the way to the window in the visible queue, per cart.
-        // They are paid when that customer pays (CartQueueView calls Paid), so the money and the message
-        // come with the person at the window. Their units already count as gone for Core.
+        // Sales Core has made whose customer is still at (or on the way to) the window in the visible queue, per
+        // cart. They are paid when that customer picks up and turns to leave (CartQueueView calls Paid), so the
+        // money and the message come with the person at the window. Their units already count as gone for Core.
         private readonly Dictionary<string, List<HeldSale>> held = new Dictionary<string, List<HeldSale>>();
         // Carts where paying a held sale failed; the next tick closes them.
         private readonly HashSet<string> heldFailed = new HashSet<string>();
@@ -804,7 +804,7 @@ namespace FoodTrucks
             else if (result.SoldOut) Close(vehicle, "foodtrucks:notification_sold_out", from + elapsed);
         }
 
-        // Called by the queue view when a customer starts paying at the window, or leaves the view unseen.
+        // Called by the queue view when a served customer leaves the window, or leaves the view unseen.
         public static void Paid(string vehicleId, long customerId)
         {
             var self = instance;

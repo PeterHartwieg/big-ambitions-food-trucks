@@ -20,9 +20,12 @@ namespace FoodTrucks
     // the range in which the game keeps street people of its own. Further away nothing is spawned and the
     // same Core tick goes on unseen, so the view never changes a sale.
     //
-    // People walk in from the pavement a little way along, take their place in line, step up as it moves,
-    // stand at the window for a moment when served and walk off. Core can serve someone before they reach
-    // the window (an in-game minute is a second at normal speed); they still walk up, pay and leave.
+    // People appear on the pavement a little way along when Core says they turn up, and walk towards the
+    // back of the line while Core has them walking up (ServiceState.Approaching). They get a place in line
+    // only when Core lets them join the queue, step up as it moves, stand at the window while their order
+    // is made, and pay and walk off when Core completes it. An in-game minute is a second at normal speed,
+    // so Core's walk-in and service times match what the view shows; someone who lags behind Core still
+    // walks up, picks up and pays before leaving.
     // Everyone is removed when the cart closes or is grabbed (they walk off), and at once when the player
     // goes further than KeepMetres, enters a building, skips time, leaves the city or runs the uninstall
     // step. At most MaxPeople exist at a time, across all carts.
@@ -84,7 +87,7 @@ namespace FoodTrucks
         }
 
         // True while the cart's queue is on screen: CartSelling then holds each sale until the customer
-        // pays at the window (Paid).
+        // turns from the window to leave (Paid).
         public static bool Showing(string vehicleId) =>
             instance != null && instance.enabled && instance.lines.TryGetValue(vehicleId, out var line) && line.HasPlaces;
 
@@ -258,19 +261,18 @@ namespace FoodTrucks
     {
         // Metres between people in line.
         private const float Spacing = 0.8f;
-        // How long a served customer stands at the window in all, in game-speed seconds (an in-game minute is
-        // a second at normal speed): taking the order, paying, picking it up. Shorter while others wait to pay.
-        // Time already spent standing there while the order was made counts, but paying takes at least MinPaySeconds.
-        private const float WindowSeconds = 4.5f;
-        private const float HurriedWindowSeconds = 2.5f;
-        private const float MinPaySeconds = 1.5f;
-        private const float HurriedMinPaySeconds = 1f;
+        // A served customer stands at the window at least this long, in game-speed seconds, before paying and
+        // leaving: Core's service time already kept them there while the order was made (an in-game minute is
+        // a second at normal speed), so this only matters for someone who got there after Core finished.
+        private const float PickUpSeconds = 1f;
         private const float SpawnGapSeconds = 0.6f;
-        // Served customers not yet shown are dropped beyond this, so the view never runs far behind Core.
-        private const int MaxUnshownServed = 3;
-        // Served customers still in line beyond this walk off without stopping at the window.
+        // Served customers still in line beyond this pay and walk off without stopping at the window.
         private const int MaxShownServed = 5;
-        // Places beyond the queue limit, for served customers still on their way to the window.
+        // Customers walking up who are shown at once, the soonest to reach the line first.
+        private const int MaxShownApproaching = 4;
+        // Assumed walking pace before the first customer's NavMesh agent reports its own (unverified in game).
+        private const float DefaultWalkMetresPerSecond = 1.4f;
+        // Places beyond the queue limit: served customers picking up, and customers walking up behind the line.
         private const int ExtraPlaces = 3;
         private const float ClosingSeconds = 40f;
         private const int MaxSpawnFailures = 3;
@@ -282,10 +284,9 @@ namespace FoodTrucks
         private readonly GameObject root;
         private readonly Dictionary<long, QueuePerson> people = new Dictionary<long, QueuePerson>();
         private readonly List<QueuePerson> leaving = new List<QueuePerson>();
-        // Customers Core has served who haven't left the window yet, in the order they were served.
+        // Customers Core has served who haven't left the window yet, in the order they were served. Each has a
+        // sale CartSelling holds until they leave (Release).
         private readonly List<long> served = new List<long>();
-        // Served customers whose sale has been paid (they reached the window).
-        private readonly HashSet<long> payingStarted = new HashSet<long>();
         private bool fresh = true;
         private float nextSpawn;
         private float closedAt;
@@ -308,8 +309,8 @@ namespace FoodTrucks
         public ServiceMood Mood { get; set; } = ServiceMood.Neutral;
         public Dictionary<long, CustomerExit> Exits { get; } = new Dictionary<long, CustomerExit>();
         public Action? OnSpawned { get; set; }
-        // Called once per served customer: when they start paying at the window, or when the view lets them
-        // go unseen (dropped, removed, closed), so CartSelling never holds a sale for good.
+        // Called once per served customer: when they pay and turn from the window to leave, or when the view
+        // lets them go unseen (dropped, removed, closed), so CartSelling never holds a sale for good.
         public Action<long>? Paid { get; set; }
         public bool HasPlaces => places.Count > 0;
         // Where the first customer stands, for the crew behind the window.
@@ -317,7 +318,7 @@ namespace FoodTrucks
         public int Count => people.Count + leaving.Count;
         public bool Finished => Count == 0 || Time.time - closedAt > ClosingSeconds;
 
-        // Places for the window, the queue limit and a few served customers on their way.
+        // Places for the window, the queue limit and a few more behind them.
         public static QueueLine Create(string vehicleId, Transform cart, int queueLimit, ServiceState service, WindowShape shape)
         {
             var (places, look, ends, detail) = Layout(cart, queueLimit + 1 + ExtraPlaces, shape);
@@ -334,12 +335,8 @@ namespace FoodTrucks
             foreach (var id in ids) Release(id);
         }
 
-        // A served customer leaves the view without paying at the window: their sale is paid now.
-        private void Release(long id)
-        {
-            payingStarted.Remove(id);
-            Paid?.Invoke(id);
-        }
+        // A served customer's sale is paid: as they leave the window, or as the view lets them go unseen.
+        private void Release(long id) => Paid?.Invoke(id);
 
         public void Served(long id)
         {
@@ -369,11 +366,13 @@ namespace FoodTrucks
         public int Tick(int room)
         {
             var spawned = 0;
-            if (places.Count > 0 && people.Count + room > 0)
+            // Runs even with no room to spawn, so a served customer nobody sees is paid at once (Order).
+            if (places.Count > 0)
             {
-                var order = Order();
+                var order = Order(out var lineCount);
                 var inLine = new HashSet<long>(order);
-                // Anyone no longer in line leaves: gave up, walked on, or the window closed on them.
+                // Anyone no longer in line or walking up leaves: gave up, found the queue full, walked on, or
+                // the window closed on them.
                 foreach (var id in people.Keys.Where(id => !inLine.Contains(id)).ToList())
                 {
                     StartLeaving(people[id], Exits.TryGetValue(id, out var exit) ? exit : (CustomerExit?)null);
@@ -385,14 +384,18 @@ namespace FoodTrucks
                     if (!people.TryGetValue(id, out var person))
                     {
                         if (room - spawned <= 0 || Time.time < blockedUntil || (!fresh && Time.time < nextSpawn)) continue;
-                        person = Spawn(id, i);
+                        // Only the first few walking up are shown; the rest appear as they get closer.
+                        if (i >= lineCount && i - lineCount >= MaxShownApproaching) continue;
+                        person = Spawn(id, i, i >= lineCount ? WalkSecondsLeft(id) : (float?)null);
                         if (person == null) continue;
                         spawned++;
                     }
+                    // Someone walking up heads for the place behind the line; it becomes theirs if nobody
+                    // reaches the line first.
                     person.GoTo(places[i], i == 0 ? windowLook : places[i - 1]);
                 }
                 fresh = false;
-                ServeAtWindow(order);
+                FinishAtWindow(order);
             }
 
             // People whose character the game removed are dropped, so nobody waits behind them.
@@ -401,8 +404,7 @@ namespace FoodTrucks
                 if (pair.Value != null && !pair.Value.Tick()) continue;
                 if (pair.Value != null) Object.Destroy(pair.Value.gameObject);
                 people.Remove(pair.Key);
-                if (served.Remove(pair.Key) && !payingStarted.Contains(pair.Key)) Release(pair.Key);
-                payingStarted.Remove(pair.Key);
+                if (served.Remove(pair.Key)) Release(pair.Key);
             }
             for (var i = leaving.Count - 1; i >= 0; i--)
             {
@@ -419,30 +421,28 @@ namespace FoodTrucks
         }
 
         // Served customers first (they reached the window before anyone still waiting), then the orders
-        // being made, then the queue. Served customers nobody saw arrive are dropped beyond a few, and
-        // served ones still in line beyond a few walk off.
-        private List<long> Order()
+        // being made, then the queue; lineCount says how many those are. After them, the customers Core has
+        // walking up, the soonest to reach the line first. A served customer nobody saw is paid at once, and
+        // served ones still in line beyond a few pay and walk off.
+        private List<long> Order(out int lineCount)
         {
             var order = new List<long>();
-            var unshown = 0;
             var shown = 0;
             foreach (var id in served.ToList())
             {
-                if (people.TryGetValue(id, out var person))
+                if (!people.TryGetValue(id, out var person))
                 {
-                    if (++shown > MaxShownServed && !person.Paying)
-                    {
-                        served.Remove(id);
-                        people.Remove(id);
-                        Release(id);
-                        StartLeaving(person, CustomerExit.Served);
-                        continue;
-                    }
-                }
-                else if (++unshown > MaxUnshownServed)
-                {
+                    // Nobody to walk up and pay: the sale is paid now.
                     served.Remove(id);
                     Release(id);
+                    continue;
+                }
+                if (++shown > MaxShownServed)
+                {
+                    served.Remove(id);
+                    people.Remove(id);
+                    Release(id);
+                    StartLeaving(person, CustomerExit.Served);
                     continue;
                 }
                 order.Add(id);
@@ -452,42 +452,53 @@ namespace FoodTrucks
             {
                 if (customer != null && seen.Add(customer.Id)) order.Add(customer.Id);
             }
+            lineCount = order.Count;
+            foreach (var customer in Service.Approaching.Where(c => c != null).OrderBy(c => c.JoinsAtMinute).ThenBy(c => c.Id))
+            {
+                if (seen.Add(customer.Id)) order.Add(customer.Id);
+            }
             return order;
         }
 
-        // The served customer at the window pays for a moment, then walks off. With others waiting to pay,
-        // the next one in line pays where they stand, so a fast window doesn't leave a crowd of paid customers.
-        private void ServeAtWindow(List<long> order)
+        // Game minutes until Core lets this customer join the queue, which are seconds at normal speed.
+        private float? WalkSecondsLeft(long id)
         {
-            var windows = served.Count > 2 ? 2 : 1;
-            for (var i = 0; i < windows && i < order.Count; i++)
+            var customer = Service.Approaching.FirstOrDefault(c => c != null && c.Id == id);
+            return customer == null ? (float?)null : Math.Max(0f, customer.JoinsAtMinute - Service.Minute);
+        }
+
+        // A served customer at the window, whose order Core has completed, pays and walks off: the money and
+        // the sale message come now (Paid), as they turn to leave. Served customers always stand first in line,
+        // so the second place is a second worker's window or the next served customer. With a backlog of
+        // served customers nobody waits out the pick-up, so a fast window doesn't leave a crowd behind it.
+        private void FinishAtWindow(List<long> order)
+        {
+            var hurried = served.Count > 2;
+            for (var i = 0; i < 2 && i < order.Count; i++)
             {
                 var id = order[i];
                 if (!served.Contains(id) || !people.TryGetValue(id, out var person) || !person.Arrived) continue;
-                if (!person.Paying)
-                {
-                    var hurried = served.Count > 2;
-                    var seconds = Math.Max(hurried ? HurriedMinPaySeconds : MinPaySeconds,
-                        (hurried ? HurriedWindowSeconds : WindowSeconds) - person.SecondsStanding);
-                    person.Pay(seconds, Mood);
-                    // The money and the sale message come now, with the customer at the window.
-                    payingStarted.Add(id);
-                    Paid?.Invoke(id);
-                    continue;
-                }
-                if (!person.DonePaying) continue;
+                if (!hurried && person.SecondsStanding < PickUpSeconds) continue;
                 served.Remove(id);
-                payingStarted.Remove(id);
                 people.Remove(id);
+                person.ShowMood(Mood);
+                Release(id);
                 StartLeaving(person, CustomerExit.Served);
             }
         }
 
-        private QueuePerson? Spawn(long id, int place)
+        // `walkSeconds`: for someone walking up, how long Core has them walking, so they start about that far
+        // out and reach the line close to when Core lets them join it.
+        private QueuePerson? Spawn(long id, int place, float? walkSeconds)
         {
             nextSpawn = Time.time + SpawnGapSeconds;
-            // A new line shows the people already waiting where they stand; later ones walk in.
-            var start = fresh || ends.Count == 0 ? places[place] : ends[UnityEngine.Random.Range(0, ends.Count)];
+            // A new line shows the people already waiting where they stand; later ones, and everyone walking
+            // up, walk in.
+            Vector3 start;
+            if (ends.Count == 0) start = places[place];
+            else if (walkSeconds != null) start = EndFor(walkSeconds.Value, places[place]);
+            else if (fresh) start = places[place];
+            else start = ends[UnityEngine.Random.Range(0, ends.Count)];
             var person = QueuePerson.Create(root.transform, id, start);
             if (person == null)
             {
@@ -504,6 +515,22 @@ namespace FoodTrucks
             people[id] = person;
             OnSpawned?.Invoke();
             return person;
+        }
+
+        // The way in whose distance to the place best matches the walk Core has left for this customer.
+        private Vector3 EndFor(float walkSeconds, Vector3 place)
+        {
+            var wanted = walkSeconds * (QueuePerson.WalkMetresPerSecond ?? DefaultWalkMetresPerSecond);
+            var best = ends[0];
+            var bestMiss = float.MaxValue;
+            foreach (var end in ends)
+            {
+                var miss = Math.Abs(Vector3.Distance(end, place) - wanted);
+                if (miss >= bestMiss) continue;
+                best = end;
+                bestMiss = miss;
+            }
+            return best;
         }
 
         private void StartLeaving(QueuePerson person, CustomerExit? exit)
@@ -644,18 +671,17 @@ namespace FoodTrucks
         // No complete path to the target: a person in line is put there, a leaving one removed.
         private bool noPath;
         private float walkStarted;
-        private float payUntil;
         private float standingSince;
 
         public static NavMeshQueryFilter Filter => new NavMeshQueryFilter { agentTypeID = PlayerAgentTypeId, areaMask = NavMesh.AllAreas };
+        // The walking pace of the first customer's NavMesh agent; null until one exists.
+        public static float? WalkMetresPerSecond { get; private set; }
 
         public bool Arrived => hasTarget && !walking;
         // Where the character stands; the owner object itself stays at the world origin.
         public Vector3 Position => character != null ? character.transform.position : transform.position;
-        public bool Paying { get; private set; }
         // How long they have stood at their current place.
         public float SecondsStanding => walking || !hasTarget ? 0f : Time.time - standingSince;
-        public bool DonePaying => Paying && Time.time >= payUntil;
 
         public static QueuePerson? Create(Transform parent, long id, Vector3 start)
         {
@@ -693,6 +719,7 @@ namespace FoodTrucks
             {
                 agentLogged = true;
                 Log.Info($"Queue view: customer agent speed {agent.speed:F2} m/s, stopping distance {agent.stoppingDistance:F2} m, radius {agent.radius:F2} m.");
+                if (agent.speed > 0.1f) WalkMetresPerSecond = agent.speed;
             }
             return true;
         }
@@ -706,10 +733,9 @@ namespace FoodTrucks
             Walk(place);
         }
 
-        public void Pay(float seconds, ServiceMood mood)
+        // The game's good or bad service emoji as they pay, when the server's skill calls for one.
+        public void ShowMood(ServiceMood mood)
         {
-            Paying = true;
-            payUntil = Time.time + seconds;
             if (mood == ServiceMood.Pleased) Express(CharacterEmojiName.CustomerGoodService);
             else if (mood == ServiceMood.Complaining) Express(CharacterEmojiName.CustomerBadService);
         }

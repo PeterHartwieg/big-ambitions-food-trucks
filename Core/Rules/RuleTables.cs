@@ -122,12 +122,17 @@ namespace FoodTrucks.Core.Rules
 
     public sealed class QueueRules
     {
-        public QueueRules(double patienceMinutes = 20, double patienceSpread = 0.25, double rainPatience = 0.6, int maxQueue = 12)
+        public QueueRules(double patienceMinutes = 20, double patienceSpread = 0.25, double rainPatience = 0.6, int maxQueue = 12,
+            int walkInMinMinutes = 0, int walkInMaxMinutes = 0)
         {
+            if (walkInMinMinutes < 0 || walkInMaxMinutes < walkInMinMinutes)
+                throw new ArgumentOutOfRangeException(nameof(walkInMaxMinutes), "The walk-in range must be from 0 up.");
             PatienceMinutes = patienceMinutes;
             PatienceSpread = patienceSpread;
             RainPatience = rainPatience;
             MaxQueue = maxQueue;
+            WalkInMinMinutes = walkInMinMinutes;
+            WalkInMaxMinutes = walkInMaxMinutes;
         }
 
         public double PatienceMinutes { get; }
@@ -136,15 +141,32 @@ namespace FoodTrucks.Core.Rules
         // Multiplies everyone's patience while it rains, so the queue thins as soon as rain starts.
         public double RainPatience { get; }
         public int MaxQueue { get; }
+        // Whole minutes an arriving customer walks before joining the queue, drawn evenly from this range.
+        // 0 to 0 joins at once, as the queue did before the walk-in.
+        public int WalkInMinMinutes { get; }
+        public int WalkInMaxMinutes { get; }
 
         internal static QueueRules Read(DataReader r, JObject obj)
         {
-            r.OnlyKeys(obj, "patienceMinutes", "patienceSpread", "rainPatience", "maxQueue");
+            r.OnlyKeys(obj, "patienceMinutes", "patienceSpread", "rainPatience", "maxQueue", "walkInMinutes");
+            var walk = r.List(obj, "walkInMinutes");
+            if (walk.Count != 2) throw r.Fail(walk.Path, "must contain a minimum and maximum");
+            var walkMin = WholeMinutes(r, walk[0]);
+            var walkMax = WholeMinutes(r, walk[1]);
+            if (walkMin > walkMax) throw r.Fail(walk.Path, "minimum must not exceed maximum");
             return new QueueRules(
                 r.Number(obj, "patienceMinutes", 1, 240),
                 r.Number(obj, "patienceSpread", 0, 0.9),
                 r.Number(obj, "rainPatience", 0.05, 1),
-                r.Integer(obj, "maxQueue", 1, 100));
+                r.Integer(obj, "maxQueue", 1, 100),
+                walkMin,
+                walkMax);
+        }
+
+        private static int WholeMinutes(DataReader r, JToken token)
+        {
+            if (token.Type != JTokenType.Integer) throw r.Fail(token.Path, "must be a whole number");
+            return (int)r.Number(token, token.Path, 0, 60);
         }
     }
 }
