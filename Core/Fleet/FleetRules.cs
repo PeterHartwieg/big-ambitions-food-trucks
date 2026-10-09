@@ -9,7 +9,8 @@ namespace FoodTrucks.Core.Fleet
     {
         public FleetRules(int licenceDays = 60, int renewWindowDays = 10, long licenceFeeCents = 250_00, long permitFeeCents = 500_00,
             double driveMinutesPerMetre = 0.04, double pushMetresPerSecond = 1.2, double roadFactor = 1.0,
-            int maxStops = 6, int latestCloseMinute = 27 * 60, double stopRadiusMetres = 25)
+            int maxStops = 6, int latestCloseMinute = 27 * 60, double stopRadiusMetres = 25,
+            int courseMinutes = 6 * 60, int coursePricePerHour = 25)
         {
             LicenceDays = licenceDays;
             RenewWindowDays = renewWindowDays;
@@ -21,6 +22,8 @@ namespace FoodTrucks.Core.Fleet
             MaxStops = maxStops;
             LatestCloseMinute = latestCloseMinute;
             StopRadiusMetres = stopRadiusMetres;
+            CourseMinutes = courseMinutes;
+            CoursePricePerHour = coursePricePerHour;
         }
 
         // How long a vendor licence lasts. The game's Food Safety diploma itself never expires [code, unverified in game].
@@ -42,10 +45,14 @@ namespace FoodTrucks.Core.Fleet
         public int LatestCloseMinute { get; }
         // A vehicle this close to a stop is at it; further away, the hire moves it there first.
         public double StopRadiusMetres { get; }
+        // The Food Safety course the business school's Market Demands door offers: its length and its
+        // price per hour in whole dollars, as the game's DiplomaData stores them.
+        public int CourseMinutes { get; }
+        public int CoursePricePerHour { get; }
 
         internal static FleetRules Read(DataReader r, JObject obj)
         {
-            r.OnlyKeys(obj, "licenceDays", "renewWindowDays", "licenceFee", "permitFee", "travel", "schedules");
+            r.OnlyKeys(obj, "licenceDays", "renewWindowDays", "licenceFee", "permitFee", "travel", "schedules", "course");
             var licenceDays = r.Integer(obj, "licenceDays", 1, 3650);
             var renewWindow = r.Integer(obj, "renewWindowDays", 0, 3650);
             if (renewWindow > licenceDays) throw r.Fail(DataReader.PathOf(obj, "renewWindowDays"), "must not be above licenceDays");
@@ -56,13 +63,17 @@ namespace FoodTrucks.Core.Fleet
             r.OnlyKeys(travel, "driveMinutesPerMetre", "pushMetresPerSecond", "roadFactor");
             var schedules = r.Object(obj, "schedules");
             r.OnlyKeys(schedules, "maxStops", "latestCloseMinute", "stopRadiusMetres");
+            var course = r.Object(obj, "course");
+            r.OnlyKeys(course, "hours", "pricePerHour");
             return new FleetRules(licenceDays, renewWindow, licenceFee, permitFee,
                 r.Number(travel, "driveMinutesPerMetre", 0.0001, 10),
                 r.Number(travel, "pushMetresPerSecond", 0.1, 20),
                 r.Number(travel, "roadFactor", 1, 5),
                 r.Integer(schedules, "maxStops", 1, 24),
                 r.Integer(schedules, "latestCloseMinute", 60, 48 * 60),
-                r.Number(schedules, "stopRadiusMetres", 1, 500));
+                r.Number(schedules, "stopRadiusMetres", 1, 500),
+                r.Integer(course, "hours", 1, 100) * 60,
+                r.Integer(course, "pricePerHour", 0, 10_000));
         }
 
         private static long Cents(double dollars) => (long)Math.Round(dollars * 100);

@@ -152,6 +152,8 @@ namespace FoodTrucks
                 if (lines.Count + departing.Count > 0) RemoveAll(Suspended ? "time skip" : "player away");
                 return;
             }
+            // The player is gone while the game quits; there is nothing to check against then.
+            if (PlayerHelper.PlayerController == null) return;
             var player = PlayerHelper.GetPosition();
             foreach (var line in lines.Values.ToList())
             {

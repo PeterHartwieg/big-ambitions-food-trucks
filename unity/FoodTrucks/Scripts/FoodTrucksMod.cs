@@ -105,6 +105,7 @@ namespace FoodTrucks
         public Task OnUnloadAsync()
         {
             Patches.Remove();
+            FoodSafetyCourse.Unregister();
             foreach (var typeName in registered)
                 ModdingAPI.UnregisterModVehicleType(typeName);
             registered.Clear();
