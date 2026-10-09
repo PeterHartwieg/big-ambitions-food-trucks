@@ -30,3 +30,7 @@ art/**/*.log
 # The truck art copied in by tools/build-mod.sh; the originals are in art/truck.
 unity/FoodTrucks/Vehicles/TruckArt/*.fbx
 unity/FoodTrucks/Vehicles/TruckArt/*.png
+
+# The cart art, likewise; the originals are in art/cart.
+unity/FoodTrucks/Vehicles/CartArt/*.fbx
+unity/FoodTrucks/Vehicles/CartArt/*.png

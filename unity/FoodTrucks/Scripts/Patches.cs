@@ -78,6 +78,11 @@ namespace FoodTrucks
             Patch(typeof(EducationDoorController), "StartLearning", Type.EmptyTypes, typeof(FoodSafetyCourse),
                 prefix: nameof(FoodSafetyCourse.StartLearningPrefix));
 
+            // Parking lanes: parked cars generated on a cart are cleared, as for the game's own vehicles.
+            Patch(typeof(VehicleHelper), "DestroyBlockingVehicles",
+                new[] { typeof(UnityEngine.GameObject), typeof(Vehicles.VehicleTypes.VehicleType), typeof(UnityEngine.Transform), typeof(bool) },
+                typeof(CartParts), prefix: nameof(CartParts.DestroyBlockingPrefix));
+
             // Cargo limit: food up to the vehicle's units, equipment up to its slots.
             Patch(typeof(VehicleInstance), "MergeIntoCargo", new[] { typeof(CargoInstance) },
                 typeof(CargoLimit), prefix: nameof(CargoLimit.MergePrefix), finalizer: nameof(CargoLimit.MergeFinalizer));

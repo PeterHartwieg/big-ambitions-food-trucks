@@ -110,8 +110,11 @@ namespace FoodTrucks
             runtimeObject.AddComponent<HireRoutes>();
             runtimeObject.AddComponent<Catering>();
             runtimeObject.AddComponent<DebugActions>();
+            runtimeObject.AddComponent<CartParts>();
             try { PrefabFixes.Apply(); }
             catch (Exception ex) { Log.Error("Prefab fixes: " + ex); }
+            try { CartParts.LogLanes(); }
+            catch (Exception ex) { Log.Error("Parking lanes: " + ex); }
             // The game refills its course list when its data loads, so the course goes back in at every load.
             try { FoodSafetyCourse.Register(); }
             catch (Exception ex) { Log.Error("Food Safety course: " + ex); }
