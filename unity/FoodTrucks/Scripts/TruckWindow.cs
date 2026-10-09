@@ -4,6 +4,8 @@ using System.Collections;
 using System.Linq;
 using FoodTrucks.Core.Saves;
 using Helpers;
+using Localizor;
+using Localizor.LanguageChangeEvent;
 using Parking.UndergroundParking;
 using PlayerActivity;
 using UI;
@@ -43,6 +45,12 @@ namespace FoodTrucks
 
         private static TruckWindow? instance;
 
+        // Buttons without a key (HatchActivity): an action the game routes only to free placement, never to the panel.
+        internal const PlayerAction NoKey = PlayerAction.SnapFreePlacement;
+        internal const string CloseButtonName = "FoodTrucksCloseWindow";
+        internal const string DriveButtonName = "FoodTrucksDrive";
+        private bool keyLabelsCleared;
+
         private string? vehicleId;
         private GameObject? place;
         private PlayerController? attached;
@@ -51,6 +59,14 @@ namespace FoodTrucks
         private Vector3 fallbackExit;
         private int stateFrame;
         private Coroutine? entering;
+
+        // Out of energy: the game sends an exhausted player to hospital, which an open activity panel stops, and
+        // it fires its own out-of-energy cancel only when energy crosses the line, not when it is already below.
+        private static bool Exhausted()
+        {
+            var game = SaveGameManager.Current;
+            return game != null && game.gameVariables != null && !game.gameVariables.disableEnergy && game.Energy <= 0f;
+        }
 
         // The player stands at this truck's hatch.
         public static bool PlayerAt(string id) => instance != null && instance.vehicleId == id && instance.place != null;
@@ -126,10 +142,12 @@ namespace FoodTrucks
             else if (vehicleId != null) why = "already at a hatch";
             else if (PlayerActivityUI.IsPanelOpen) why = "another activity panel is open";
             else if (PlayerHelper.ItemInstanceInHands != null) why = "the player holds something";
+            else if (Exhausted()) why = "out of energy";
             else if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking) why = "indoors";
             else if (Vector3.Distance(player.transform.position, controller.transform.position) > 8f) why = "the player is not by the truck";
             if (why != null)
             {
+                if (why == "out of energy") CartSelling.Notify("foodtrucks:notification_hatch_too_tired");
                 Log.Info($"Truck window: {id} open, player left outside at {PlayerHelper.PlayerController?.transform.position}: {why}.");
                 return;
             }
@@ -148,6 +166,7 @@ namespace FoodTrucks
             }
             place = newPlace;
             activity = newActivity;
+            keyLabelsCleared = false;
             vehicleId = id;
             attached = player;
             truckAt = controller.transform.position;
@@ -173,6 +192,7 @@ namespace FoodTrucks
                     activity.Advance();
                     stateFrame = Time.frameCount;
                 }
+                if (!keyLabelsCleared && activity.GetState() == PlayerActivityState.Running) keyLabelsCleared = ClearKeyLabels();
                 var problem = Problem();
                 if (problem != null) StepOut(problem, drive: false);
             }
@@ -184,6 +204,23 @@ namespace FoodTrucks
             }
         }
 
+        // The panel prints each button's key after its label; Close and Drive have none. True once both are done.
+        private static bool ClearKeyLabels()
+        {
+            var ui = InstanceBehavior<UIs>.Instance?.playerActivityUI;
+            if (ui == null) return false;
+            var done = 0;
+            foreach (var button in ui.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+            {
+                if (button.name != CloseButtonName && button.name != DriveButtonName) continue;
+                var label = button.GetComponentInChildren<TextLocalizationComponent>(true);
+                if (label == null) continue;
+                label.Suffix = string.Empty;
+                done++;
+            }
+            return done >= 2;
+        }
+
         // Why the player can't stay at the hatch any more, or null.
         private string? Problem()
         {
@@ -192,6 +229,11 @@ namespace FoodTrucks
             if (place == null || attached.transform.parent != place.transform) return "the player was moved by the game";
             if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) return "the player is in a vehicle";
             if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking) return "indoors";
+            if (Exhausted())
+            {
+                CartSelling.Notify("foodtrucks:notification_hatch_too_tired");
+                return "out of energy";
+            }
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
             if (vehicle == null || !vehicle.IsOpen) return "the window closed";
             var controller = ControllerOf(id);
@@ -244,9 +286,22 @@ namespace FoodTrucks
             }
             else if (player != null && player == PlayerHelper.PlayerController)
             {
-                // Something of the game's moved the player off our place: leave them there, free to walk.
-                player.UnsetNavigationBlocker(Blocker);
-                Log.Info($"Truck window: {id}: the player was no longer at the hatch ({reason}); left where they are.");
+                if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId))
+                {
+                    // In a vehicle or on a scooter: the game holds the player its own way; only our blocker goes.
+                    player.UnsetNavigationBlocker(Blocker);
+                    Log.Info($"Truck window: {id}: the player is in a vehicle ({reason}); only the hatch's blocker removed.");
+                }
+                else
+                {
+                    // Something else moved the player off our place, or the attachment failed halfway: undo all of
+                    // it (collider, physics, agent, parent, blocker) where they stand, on the NavMesh nearby.
+                    var here = Sample(player.transform.position) ?? player.transform.position;
+                    player.transform.position = here;
+                    player.DeattachFromObject(Blocker);
+                    warped = player.Character.navmeshAgent.isActiveAndEnabled && player.Character.navmeshAgent.Warp(here);
+                    Log.Info($"Truck window: {id}: the player was no longer at the hatch ({reason}); freed where they are, at {here}.");
+                }
             }
             if (thisPlace != null) Destroy(thisPlace);
             thisActivity?.MarkFinished();
@@ -386,8 +441,10 @@ namespace FoodTrucks
         public ButtonInfo[] GetButtons() => new[]
         {
             new ButtonInfo("FoodTrucksStepOut", "foodtrucks:activity_hatch_step_out", "gray", owner.OnStepOut, PlayerAction.Cancel),
-            new ButtonInfo("FoodTrucksCloseWindow", "foodtrucks:activity_hatch_close", "gray", () => owner.OnClose(vehicleId), PlayerAction.Interact),
-            new ButtonInfo("FoodTrucksDrive", "foodtrucks:activity_hatch_drive", "blue", owner.OnDrive, PlayerAction.Confirm)
+            // Close and Drive have no key: the panel needs some action for each, so they get one the game never
+            // hands to an activity panel, and TruckWindow clears its key label once the buttons are built.
+            new ButtonInfo(TruckWindow.CloseButtonName, "foodtrucks:activity_hatch_close", "gray", () => owner.OnClose(vehicleId), TruckWindow.NoKey),
+            new ButtonInfo(TruckWindow.DriveButtonName, "foodtrucks:activity_hatch_drive", "blue", owner.OnDrive, TruckWindow.NoKey)
         };
 
         public bool HasFastForward() => false;

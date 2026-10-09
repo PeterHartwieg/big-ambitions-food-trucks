@@ -269,5 +269,6 @@
     "foodtrucks:bizman_fleet_route_stops": "{stops} stops, {days}",
     "foodtrucks:bizman_fleet_sold": "{count} sold",
     "foodtrucks:bizman_fleet_left": "{count} left",
-    "foodtrucks:bizman_fleet_nothing": "No food on board, nothing sold today"
+    "foodtrucks:bizman_fleet_nothing": "No food on board, nothing sold today",
+    "foodtrucks:notification_hatch_too_tired": "You're too tired to work the hatch. Get some rest first."
 }
