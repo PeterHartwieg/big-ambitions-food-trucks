@@ -381,3 +381,50 @@ public class CrewLogTests
         Assert.Equal(LoadStatus.Corrupt, bad.Status);
     }
 }
+
+public class CrewWageAttributionTests
+{
+    [Fact]
+    public void TheMarkerIsSetOnceForTheNextDay()
+    {
+        var state = new SaveState();
+        CrewLog.Begin(state, 10);
+        CrewLog.Begin(state, 12);
+        Assert.Equal(11, state.CrewHoursSince);
+    }
+
+    [Fact]
+    public void OnlyDaysBeforeTheMarkerFallBackToTheCrew()
+    {
+        var state = new SaveState();
+        CrewLog.Begin(state, 10);
+
+        // Day 10: hours counted before this version ran weren't logged, so the crew at payment takes the wage.
+        Assert.Equal(new[] { ("truck", 900L) }, CrewLog.Attribute(state, 10, "emp", 900, 6, "truck").ToArray());
+        // From day 11 the log decides: shop hours with no vehicle hours are no vehicle's wage.
+        Assert.Empty(CrewLog.Attribute(state, 11, "emp", 900, 6, "truck"));
+        Assert.Empty(CrewLog.Attribute(state, 12, "emp", 900, 6, "truck"));
+    }
+
+    [Fact]
+    public void LoggedHoursWinOverTheCrewEvenBeforeTheMarker()
+    {
+        var state = new SaveState();
+        CrewLog.Begin(state, 10);
+        CrewLog.AddHour(state, 10, "emp", "cart");
+        Assert.Equal(new[] { ("cart", 900L) }, CrewLog.Attribute(state, 10, "emp", 900, 1, "truck").ToArray());
+    }
+
+    [Fact]
+    public void SavesWithoutTheMarkerFallBackAndKeepItAcrossARoundTrip()
+    {
+        var state = new SaveState();
+        Assert.Equal(new[] { ("truck", 500L) }, CrewLog.Attribute(state, 3, "emp", 500, 2, "truck").ToArray());
+        Assert.Empty(CrewLog.Attribute(state, 3, "emp", 500, 2, null));
+
+        var codec = new SaveCodec();
+        Assert.Null(codec.Load("{\"schemaVersion\":1,\"licence\":{}}").State!.CrewHoursSince);
+        CrewLog.Begin(state, 3);
+        Assert.Equal(4, codec.Load(codec.Serialize(state)).State!.CrewHoursSince);
+    }
+}

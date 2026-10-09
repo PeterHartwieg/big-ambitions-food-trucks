@@ -224,7 +224,7 @@ namespace FoodTrucks
 
         // Crew wages: the game pays each employee at midnight, into yesterday, for the hours counted that day. A wage
         // booked as unassigned is split over the vehicles the hire worked those hours on (CrewLog, written as
-        // HireCrew counts each hour); with no hours logged, it goes to the crew the hire is on at payment.
+        // HireCrew counts each hour). Only for days from before the log does it go to the crew the hire is on.
         internal sealed class WageCall
         {
             public Transaction? Last;
@@ -255,14 +255,8 @@ namespace FoodTrucks
                 if (paid == null || ReferenceEquals(paid, __state.Last) || paid.transactionType != UnassignedWage || paid.amount >= 0f) return;
                 var day = paid.timestamp.Day;
                 var cents = (long)Math.Round(-(double)paid.amount * 100.0);
-                var split = CrewLog.Split(state, day, __instance.id, cents, __state.WorkedHours);
+                var split = CrewLog.Attribute(state, day, __instance.id, cents, __state.WorkedHours, CrewVehicle(state, __instance.id)?.VehicleId);
                 CrewLog.Consume(state, day, __instance.id);
-                if (split.Count == 0)
-                {
-                    var vehicle = CrewVehicle(state, __instance.id);
-                    if (vehicle == null) return;
-                    split.Add((vehicle.VehicleId, cents));
-                }
                 foreach (var (vehicleId, share) in split)
                 {
                     if (!SalesLedger.RecordGameCost(state, day, vehicleId, LedgerLine.Wages, share))
