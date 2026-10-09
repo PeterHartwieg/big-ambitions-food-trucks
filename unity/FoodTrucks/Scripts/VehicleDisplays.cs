@@ -217,7 +217,7 @@ namespace FoodTrucks
         private GameObject? Model(string display)
         {
             if (models.TryGetValue(display, out var cached)) return cached;
-            var model = FoodTrucksMod.Bundle?.LoadAsset<GameObject>(ModelFolder + display + ".prefab");
+            var model = FoodTrucksMod.Bundle?.LoadAsset<GameObject>(ModelFolder + display + "_Display.prefab");
             models[display] = model;
             return model;
         }

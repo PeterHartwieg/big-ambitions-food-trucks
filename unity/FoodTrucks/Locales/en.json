@@ -273,5 +273,19 @@
     "foodtrucks:bizman_fleet_sold": "{count} sold",
     "foodtrucks:bizman_fleet_left": "{count} left",
     "foodtrucks:bizman_fleet_nothing": "No food on board, nothing sold today",
-    "foodtrucks:notification_hatch_too_tired": "You're too tired to work the hatch. Get some rest first."
+    "foodtrucks:notification_hatch_too_tired": "You're too tired to work the hatch. Get some rest first.",
+    "foodtrucks:itemname_dumplings": "Dumplings",
+    "foodtrucks:itemname_dumplings_description": "Steamed dumplings, six to a tray. A filling street meal for lunch and late nights.",
+    "foodtrucks:itemname_tacos": "Tacos",
+    "foodtrucks:itemname_tacos_description": "Three soft tacos off the griddle. Quick to serve, busiest at lunch and late.",
+    "foodtrucks:itemname_choppedcheese": "Chopped Cheese",
+    "foodtrucks:itemname_choppedcheese_description": "Beef chopped on the griddle with melted cheese in a hero roll.",
+    "foodtrucks:itemname_grilledcorn": "Grilled Corn",
+    "foodtrucks:itemname_grilledcorn_description": "Corn on the cob, grilled and seasoned. A summer snack for parks and evenings out.",
+    "foodtrucks:itemname_dumplingsteamer": "Dumpling Steamer",
+    "foodtrucks:itemname_dumplingsteamer_description": "A compact bamboo steamer for a food cart or truck. Sells dumplings.",
+    "foodtrucks:itemname_griddle": "Griddle",
+    "foodtrucks:itemname_griddle_description": "A flat-top griddle for a food cart or truck. Sells tacos and chopped cheese.",
+    "foodtrucks:itemname_corngrill": "Corn Grill",
+    "foodtrucks:itemname_corngrill_description": "A small grill for a food cart or truck. Sells grilled corn."
 }

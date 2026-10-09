@@ -12,7 +12,7 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks
 {
-    // Loads once at game start: vehicle types and Harmony patches.
+    // Loads once at game start: vehicle types, the mod's own items and Harmony patches.
     [ModEntryOnInitializationLoad]
     public sealed class FoodTrucksMod : IModBigAmbitions
     {
@@ -60,12 +60,13 @@ namespace FoodTrucks
             Bundle = bundle;
             if (bundle == null)
             {
-                Log.Error($"Asset bundle '{BundleKey}' not found; no vehicles registered.");
+                Log.Error($"Asset bundle '{BundleKey}' not found; no vehicles or items registered.");
             }
             else
             {
                 foreach (var (typeName, assetPath) in VehicleAssets)
                     RegisterVehicle(bundle, typeName, assetPath);
+                ModItems.Register(bundle);
             }
 
             Patches.Apply();
@@ -110,6 +111,7 @@ namespace FoodTrucks
                 ModdingAPI.UnregisterModVehicleType(typeName);
             registered.Clear();
             RegisteredVehicleTypes.Clear();
+            ModItems.Unregister();
             Bundle = null;
             return Task.CompletedTask;
         }

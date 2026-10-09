@@ -133,6 +133,22 @@ public class ShippedDataTests
     }
 
     [Theory]
+    [InlineData("dumplings", "streetmeal", 0.5, 3.5, "dumplingsteamer")]
+    [InlineData("tacos", "fastfood", 1.0, 3.5, "griddle")]
+    [InlineData("choppedcheese", "fastfood", 1.0, 3.5, "griddle")]
+    [InlineData("grilledcorn", "snacks", 0.5, 2.0, "corngrill")]
+    public void ModFoodsShipTheProposalAndSellFromTheirMachine(string item, string category, double weight, double minutes, string equipment)
+    {
+        var tables = ShippedData.Tables;
+        var product = tables.Product("foodtrucks:itemname_" + item)!;
+        Assert.Equal(category, product.Category);
+        Assert.Equal(weight, product.StockWeight);
+        Assert.Equal(minutes, product.ServiceMinutes);
+        Assert.Contains("foodtrucks:itemname_" + item, tables.Equipment(equipment)!.Products);
+        Assert.Equal(new[] { "foodtrucks:itemname_" + equipment }, tables.Equipment(equipment)!.GameItems);
+    }
+
+    [Theory]
     [InlineData("coffeeshop", "retail")]
     [InlineData("fastfoodrestaurant", "retail")]
     [InlineData("giftshop", "retail")]

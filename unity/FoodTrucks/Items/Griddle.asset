@@ -1,0 +1,89 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 1411348409, guid: db7404fdd66bed727abbb3141ba453dd, type: 3}
+  m_Name: Griddle
+  m_EditorClassIdentifier: 
+  database: {fileID: 0}
+  tags: []
+  itemName: foodtrucks:itemname_griddle
+  type: 64
+  leanBackSitAnimation: 0
+  wholesalePrice: 0
+  defaultMarketPrice: 2000
+  productSalesRatio: 0
+  boxSize: 1
+  canPutInShoppingBasket: 0
+  showBoxAsHandItem: 1
+  defaultWorldSpaceKey: 
+  itemPanelMetaView: 0
+  customColorChannels: 0
+  customizationColors: []
+  isFurniture: 1
+  gridSize: 0.5
+  degreesPerRotation: 45
+  quality: 0
+  addedCustomersPerHour: 20
+  cargoCapacity: 0
+  cargoCapacityMultiplier: 0.2
+  buildingHeightRequirement: 0
+  furnitureRequirements: []
+  wallMounted: 0
+  snapToCeiling: 0
+  canBeGrabbed: 1
+  stackType: 4
+  itemsThatCanOverlapWith: []
+  wallOverlapMargin: 0.1
+  itemsWhitelist: []
+  isProducer: 0
+  producerSettings:
+    ResourcesRequired: 0
+    itemsToProduce: []
+  defaultShelfItemName: foodtrucks:itemname_tacos
+  itemsThatCanShowcase:
+  - foodtrucks:itemname_tacos
+  - foodtrucks:itemname_choppedcheese
+  assignable: 0
+  hasWaitingLine: 0
+  canPlayerDoOrder: 0
+  suitableSkills: []
+  icon: {fileID: 0}
+  isConsumable: 0
+  requiresWeighing: 0
+  consumeAnimation: 0
+  consumeSoundType: 0
+  consumeHeldPrefabName: 
+  saturation: 0
+  energy: 0
+  isAccessory: 0
+  accessoryType: 0
+  accessoryIcon: {fileID: 0}
+  isReadable: 0
+  isADemandedProduct: 0
+  limitDemandToNeighbourhoods: []
+  isSpecialRivalOnly: 0
+  maxWholesaleOrderAmount: 5000
+  maxOrderAmountPerImporter: 5000
+  providersNeededToStartGeneratingEvents: 7
+  usingAnimation: 28
+  playerMountPosition: {x: 0, y: 0, z: 0}
+  playerMountRotation: {x: 0, y: 0, z: 0}
+  playGrabSound: 0
+  grabSoundType: 0
+  customPlaceSound: 0
+  placeSoundType: 7
+  isSpecialGift: 0
+  season: 0
+  isSeasonalItemFromAIBusiness: 0
+  itemToReplaceWithWhenOvertakingBusiness: 
+  isSeasonalForSale: 0
+  itemsBySeason: []
+  vehicleType: 

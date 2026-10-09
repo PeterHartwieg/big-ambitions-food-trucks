@@ -16,7 +16,7 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks
 {
-    // Debug and maintenance actions: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
+    // Debug and maintenance actions: Ctrl+F5 new items into the food vehicle here, Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
     // Ctrl+F12 catering gig here, Ctrl+Shift+F12 uninstall step. Also console commands when the game runs with -console.
     internal sealed class DebugActions : MonoBehaviour
     {
@@ -35,6 +35,8 @@ namespace FoodTrucks
         private static readonly Action UninstallAction = Uninstall.Request;
         private static readonly Action EventAction = () => CityPitches.EventHereForTesting(PlayerHelper.GetPosition());
         private static readonly Action GigAction = () => Catering.GigHereForTesting(PlayerHelper.GetPosition());
+        // The console calls this directly, so it carries its own guard.
+        private static readonly Action NewItemsAction = () => Run("new items", LoadNewItems);
 
         private void OnEnable()
         {
@@ -53,10 +55,11 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_hire", "Food Trucks: hire a customer service worker with skill 60, unassigned (throwaway saves only)", HireAction);
                 CommandHelper.AddCommand("foodtrucks_demand", "Food Trucks: the demand model's reading for the cart next to you", DemandAction);
                 CommandHelper.AddCommand("foodtrucks_status", "Food Trucks: show the mod's save data", StatusAction);
+                CommandHelper.AddCommand("foodtrucks_new_items", "Food Trucks: one box of each new food and one of each new machine into the food vehicle next to you, as if bought (throwaway saves only)", NewItemsAction);
                 CommandHelper.AddCommand("foodtrucks_uninstall", "Food Trucks: remove and refund all Food Trucks vehicles (run twice to confirm)", UninstallAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+F12 catering gig here, Ctrl+Shift+F12 uninstall step.");
+            Log.Info("Debug actions ready: Ctrl+F5 new items into the food vehicle here, Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+F12 catering gig here, Ctrl+Shift+F12 uninstall step.");
         }
 
         private void OnDisable()
@@ -77,6 +80,7 @@ namespace FoodTrucks
                 CommandHelper.RemoveCommand(DemandAction);
                 CommandHelper.RemoveCommand(HireAction);
                 CommandHelper.RemoveCommand(UninstallAction);
+                CommandHelper.RemoveCommand(NewItemsAction);
             }
             catch (Exception ex) { Log.Error(ex); }
         }
@@ -87,7 +91,8 @@ namespace FoodTrucks
             if (keyboard == null || SaveGameManager.Current == null || GameManager.ShouldBlockKeyboardShortcuts()) return;
             if (!keyboard.ctrlKey.isPressed) return;
 
-            if (keyboard.f6Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("licence", LicenceAction);
+            if (keyboard.f5Key.wasPressedThisFrame && !keyboard.shiftKey.isPressed) NewItemsAction();
+            else if (keyboard.f6Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("licence", LicenceAction);
             else if (keyboard.f6Key.wasPressedThisFrame) Run("spawn truck", SpawnTruckAction);
             else if (keyboard.f7Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("spawn hand truck", SpawnHandTruckAction);
             else if (keyboard.f7Key.wasPressedThisFrame) Run("spawn cart", SpawnCartAction);
@@ -126,6 +131,53 @@ namespace FoodTrucks
             EmployeeHelper.HireCandidate(candidate);
             Log.Info($"Debug: hired {HireCrew.Name(candidate)} ({candidate.id}), customer service {HireCrew.Skill(candidate):F0}, ${candidate.hourlyWage:F2} an hour.");
             Notify($"Hired {HireCrew.Name(candidate)}, customer service {HireCrew.Skill(candidate):F0}.");
+        }
+
+        // One box of each of the mod's new foods and one of each new machine into the food vehicle the player drives,
+        // pushes or stands next to, until the commissary sells them. Machines first, so they take the equipment slots.
+        // Each counts as bought at the item's own price (wholesale for food, the purchase price for a machine), so the
+        // uninstall refund and the game's refund for removed mod items can be checked. The cargo limits apply.
+        private static void LoadNewItems()
+        {
+            var vehicle = FoodVehicleHere();
+            if (vehicle == null)
+            {
+                Notify("Stand next to a food cart or truck, push the cart or drive the truck.");
+                return;
+            }
+            var lines = new List<string>();
+            foreach (var name in ModItems.Machines.Concat(ModItems.Foods))
+            {
+                if (!ModItems.IsRegistered(name))
+                {
+                    lines.Add($"{name} not registered");
+                    continue;
+                }
+                var item = BigAmbitions.Items.ItemsGetter.GetByName(name);
+                var price = item.isFurniture ? item.DefaultMarketPrice : item.wholesalePrice;
+                var before = vehicle.GetAmountByItemName(name);
+                vehicle.TryToAddToCargo(new BigAmbitions.Items.CargoInstance(name, item.boxSize, price));
+                var added = vehicle.GetAmountByItemName(name) - before;
+                lines.Add($"{name.Substring(ModItems.Prefix.Length)} {added}/{item.boxSize}");
+            }
+            FoodTrucksSession.MarkChanged();
+            var message = $"New items into {vehicle.vehicleTypeName} {vehicle.id}: {string.Join(", ", lines)}.";
+            Log.Info("Debug: " + message);
+            Notify(message);
+        }
+
+        private static VehicleInstance? FoodVehicleHere()
+        {
+            if (SaveGameManager.Current.ActiveVehicleId != null)
+            {
+                var current = VehicleHelper.GetCurrentVehicle();
+                if (FoodTrucksMod.KindOf(current?.vehicleTypeName) != null) return current;
+            }
+            var player = PlayerHelper.GetPosition();
+            return VehicleHelper.AllPlayerVehicles
+                .Where(v => v != null && FoodTrucksMod.KindOf(v.vehicleInstance?.vehicleTypeName) != null)
+                .OrderBy(v => Vector3.Distance(v.transform.position, player))
+                .FirstOrDefault(v => Vector3.Distance(v.transform.position, player) <= 10f)?.vehicleInstance;
         }
 
         // A free player-owned vehicle in front of the player, where buying one at the dealer would take too long.

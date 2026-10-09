@@ -2,7 +2,7 @@
   "_notes": "Products, equipment, vehicles and the price curve, tuned by the accepted cart balance study (8 October 2026). Calculated proposals; not yet checked in game. Keys starting with an underscore are notes; the loader ignores them.",
   "schemaVersion": 1,
 
-  "_products": "Base-game items the vehicles can sell: the demand category each belongs to and how many in-game minutes one takes to serve. An order takes the longest service time of its items. Optional stockWeight is the share of one stock unit occupied by an item (default 1.0): coffee and tea 0.25, pastries 0.5. The bakeryxx items come from the optional Bakery mod (its item IDs, read from its DLL); without that mod they never reach a vehicle and change nothing.",
+  "_products": "Base-game items the vehicles can sell: the demand category each belongs to and how many in-game minutes one takes to serve. An order takes the longest service time of its items. Optional stockWeight is the share of one stock unit occupied by an item (default 1.0): coffee and tea 0.25, pastries 0.5. The bakeryxx items come from the optional Bakery mod (its item IDs, read from its DLL); without that mod they never reach a vehicle and change nothing. The foodtrucks: items are the mod's own foods (dumplings, tacos, chopped cheese, grilled corn), registered by the mod and bought through the commissary (docs/balance/new-foods.md).",
   "products": {
     "ba:itemname_hotdog": { "category": "fastfood", "serviceMinutes": 3 },
     "ba:itemname_burger": { "category": "fastfood", "serviceMinutes": 5 },
@@ -24,10 +24,14 @@
     "ba:itemname_kabob": { "category": "streetmeal", "serviceMinutes": 4 },
     "ba:itemname_popcorn": { "category": "snacks", "serviceMinutes": 2, "stockWeight": 0.25 },
     "ba:itemname_cottoncandy": { "category": "snacks", "serviceMinutes": 2, "stockWeight": 0.25 },
-    "ba:itemname_slushi": { "category": "slushies", "serviceMinutes": 1.5, "stockWeight": 0.25 }
+    "ba:itemname_slushi": { "category": "slushies", "serviceMinutes": 1.5, "stockWeight": 0.25 },
+    "foodtrucks:itemname_dumplings": { "category": "streetmeal", "serviceMinutes": 3.5, "stockWeight": 0.5 },
+    "foodtrucks:itemname_tacos": { "category": "fastfood", "serviceMinutes": 3.5 },
+    "foodtrucks:itemname_choppedcheese": { "category": "fastfood", "serviceMinutes": 3.5 },
+    "foodtrucks:itemname_grilledcorn": { "category": "snacks", "serviceMinutes": 2, "stockWeight": 0.5 }
   },
 
-  "_equipment": "The mod's own equipment IDs, the products each unlocks and the vanilla items that fit them. Carry a game item to the vehicle and click it to fit it; it stays in cargo and shares the game's cargo slots with food. Vanilla item IDs come from the game's code; their presence in the 1.0 assets is unverified. Each listed game item fits one piece. Coffee maps only to the industrial coffee machine; the cheap machine is office equipment. With the Bakery mod, its bread counter fits as a display case and its bistro machine as a coffee machine, and its goods sell from them. The game's industrial grill and fryer are separate pieces, as in the game (grill: burgers and kabobs; fryer: fries); fitted pieces are read from the cargo, so splitting the old burger station needs no save change. Popcorn and cotton candy share the game's concessions display case, slushies its slushi machine (9 October 2026, docs/balance/new-foods.md).",
+  "_equipment": "The mod's own equipment IDs, the products each unlocks and the vanilla items that fit them. Carry a game item to the vehicle and click it to fit it; it stays in cargo and shares the game's cargo slots with food. Vanilla item IDs come from the game's code; their presence in the 1.0 assets is unverified. Each listed game item fits one piece. Coffee maps only to the industrial coffee machine; the cheap machine is office equipment. With the Bakery mod, its bread counter fits as a display case and its bistro machine as a coffee machine, and its goods sell from them. The game's industrial grill and fryer are separate pieces, as in the game (grill: burgers and kabobs; fryer: fries); fitted pieces are read from the cargo, so splitting the old burger station needs no save change. Popcorn and cotton candy share the game's concessions display case, slushies its slushi machine (9 October 2026, docs/balance/new-foods.md). The dumpling steamer, griddle and corn grill are the mod's own machines (foodtrucks: items).",
   "_equipmentDisplay": "display: the model shown on a cart's counter spot when the piece is fitted, by name from the mod's Vehicles/EquipmentArt (BurgerStation, CoffeeStation, CornGrill, CottonCandyMachine, DrinksCooler, DumplingSteamer, Griddle, HotDogRoller, IceCreamCabinet, KabobGrill, MerchRack, PastryCase, PizzaOven, PopcornMachine, SlushieMachine). No display: the spot stays empty.",
   "equipment": {
     "hotdoggrill": { "products": ["ba:itemname_hotdog"], "gameItems": ["ba:itemname_hotdoggrill"], "display": "HotDogRoller" },
@@ -35,6 +39,9 @@
     "fryer": { "products": ["ba:itemname_frenchfries"], "gameItems": ["ba:itemname_industrialfryermachine"], "display": "BurgerStation" },
     "concessions": { "products": ["ba:itemname_popcorn", "ba:itemname_cottoncandy"], "gameItems": ["ba:itemname_concessionsdisplaycase"], "display": "PopcornMachine" },
     "slushiemachine": { "products": ["ba:itemname_slushi"], "gameItems": ["ba:itemname_slushimachine"], "display": "SlushieMachine" },
+    "dumplingsteamer": { "products": ["foodtrucks:itemname_dumplings"], "gameItems": ["foodtrucks:itemname_dumplingsteamer"], "display": "DumplingSteamer" },
+    "griddle": { "products": ["foodtrucks:itemname_tacos", "foodtrucks:itemname_choppedcheese"], "gameItems": ["foodtrucks:itemname_griddle"], "display": "Griddle" },
+    "corngrill": { "products": ["foodtrucks:itemname_grilledcorn"], "gameItems": ["foodtrucks:itemname_corngrill"], "display": "CornGrill" },
     "coffeemachine": { "products": ["ba:itemname_cupofcoffee", "ba:itemname_cupoftea", "bakeryxx:itemname_latte", "bakeryxx:itemname_americano"], "gameItems": ["ba:itemname_industrialcoffeemachine", "bakeryxx:itemname_bistromachine"], "display": "CoffeeStation" },
     "icecreamcounter": { "products": ["ba:itemname_icecream"], "gameItems": ["ba:itemname_icecreamcounter"], "display": "IceCreamCabinet" },
     "pizzaoven": { "products": ["ba:itemname_pizza"], "gameItems": ["ba:itemname_pizzaoven"], "display": "PizzaOven" },
