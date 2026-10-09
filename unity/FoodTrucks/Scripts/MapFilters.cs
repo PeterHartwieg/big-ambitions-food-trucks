@@ -16,7 +16,7 @@ using Object = UnityEngine.Object;
 namespace FoodTrucks
 {
     // A "Street food" line in the city map's filters (design: Player view): offices, factories and
-    // warehouses, nightlife, theatres and cinemas, premium spots and the city's coming events, and the player's carts (trucks already have the game's own
+    // warehouses, nightlife, theatres and cinemas, premium spots and the city's coming events, commissaries, and the player's carts (trucks already have the game's own
     // vehicle marker). The building filters follow the demand model's rules (Core StreetFoodMap). Their
     // CityMapFilterData is empty, so the game's own pass matches nothing for them; a postfix on its
     // per-building pass highlights the matches.
@@ -26,8 +26,10 @@ namespace FoodTrucks
         private const string VehiclesKey = "foodtrucks:mapfilter_vehicles";
         private const string PitchesKey = "foodtrucks:mapfilter_pitches";
         private const string CateringKey = "foodtrucks:mapfilter_catering";
+        private const string CommissariesKey = "foodtrucks:mapfilter_commissaries";
         private static readonly Color PitchColour = new Color(0.95f, 0.70f, 0.15f);
         private static readonly Color CateringColour = new Color(0.25f, 0.55f, 0.95f);
+        private static readonly Color CommissaryColour = new Color(0.60f, 0.35f, 0.85f);
         private static string KeyOf(string filter) => "foodtrucks:mapfilter_" + filter;
 
         // Each building filter's icon and colour: a business type the filter stands for.
@@ -77,8 +79,9 @@ namespace FoodTrucks
                     AddFilter(__instance, line, KeyOf(filter), BusinessTypeHelper.GetData(IconBusiness[filter])?.icon);
                 AddFilter(__instance, line, PitchesKey, BusinessTypeHelper.GetData("ba:businesstype_fastfoodrestaurant")?.icon);
                 AddFilter(__instance, line, CateringKey, BusinessTypeHelper.GetData("ba:businesstype_eventplanningagency")?.icon);
+                AddFilter(__instance, line, CommissariesKey, BusinessTypeHelper.GetData("ba:businesstype_wholesalestore")?.icon);
                 AddFilter(__instance, line, VehiclesKey, InstanceBehavior<GlobalReferences>.Instance?.vehiclePOIIcon);
-                Log.Info($"Map filters: Street food line with {StreetFoodMap.BuildingFilters.Count + 3} filters.");
+                Log.Info($"Map filters: Street food line with {StreetFoodMap.BuildingFilters.Count + 4} filters.");
             }
             catch (Exception ex) { Log.Error("Map filters: " + ex); }
         }
@@ -109,7 +112,8 @@ namespace FoodTrucks
                     if (controller.poi == null) controller.CreatePOI();
                     else if (controller.poi.Permanent) controller.poi.SetHidden(false);
                     controller.SetHighlight(true, (Color32)marked);
-                    var iconType = marked == CateringColour ? "ba:businesstype_eventplanningagency" : "ba:businesstype_fastfoodrestaurant";
+                    var iconType = marked == CateringColour ? "ba:businesstype_eventplanningagency"
+                        : marked == CommissaryColour ? "ba:businesstype_wholesalestore" : "ba:businesstype_fastfoodrestaurant";
                     controller.poi.SetIcon(BusinessTypeHelper.GetData(iconType)?.icon, marked);
                     return;
                 }
@@ -165,6 +169,8 @@ namespace FoodTrucks
                 pitchAddresses = new Dictionary<string, Color>(StringComparer.Ordinal);
                 if (Selected(__instance, PitchesKey)) foreach (var address in PitchAddresses()) pitchAddresses[address] = PitchColour;
                 if (Selected(__instance, CateringKey)) foreach (var address in Catering.BookedPlaces()) pitchAddresses[address] = CateringColour;
+                if (Selected(__instance, CommissariesKey) && DemandData.Commissaries != null)
+                    foreach (var site in DemandData.Commissaries.Sites) pitchAddresses[site.Address] = CommissaryColour;
                 var show = Selected(__instance, VehiclesKey);
                 var state = FoodTrucksSession.CurrentState;
                 var game = SaveGameManager.Current;

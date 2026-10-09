@@ -1,3 +1,42 @@
+# Commissary checks
+
+Branch `commissary`, on top of 0.9.3. Five commissary garages (`data/commissaries.json`): rent a space per vehicle at the bay, order stock by phone, delivery at 08:00 the next day, Restock at the bay, daily rent, and a $250 fine from the City for a food vehicle out of its bay at 04:00. The bay positions are guesses from the map outlines and are the main thing to check. Fresh **FT** save, other gameplay mods off. New debug keys (holding Ctrl and Alt): **F6** where every bay is from you, **F7** deliver paid orders now, **F8** what the 04:00 check would say now (no fines). Console: `foodtrucks_commissary_where`, `foodtrucks_commissary_deliver`, `foodtrucks_commissary_night`.
+
+## 1. Automated (me)
+
+- [ ] `dotnet test` passes; `tools/build-mod.sh --generate` builds; installed after the mod was parked for any recording.
+- [ ] After the session: the log lines in section 3.
+
+## 2. In game (about 20 minutes)
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Load a save from an earlier build that has a food vehicle, after 04:00 | A City of New York text about the new overnight rule, and no fine for the night that passed before this build |
+| 2 | City map, Street food line, "Commissaries" | Five buildings lit in purple: Industry City, Garment District, Hell's Kitchen's edge, Lower Manhattan, Murray Hill. Do they look like garages a food vendor would use? Name any that don't |
+| 3 | Ctrl+F6 truck, Ctrl+Shift+F6, drive to the nearest lit commissary and park at the kerb by its door. Ctrl+Alt+F6 | A new contact ("… Commissary") with a welcome text. The notice says "in the bay". If not, the distance tells me how far off the bay is: Ctrl+F8 where a vehicle could legally park, and I put that point in the data |
+| 4 | In the truck at the bay, press "Commissary" on the panel | The button shows only in the bay. The list offers "Rent a space at …: $1,250.00 a month". Rent it: a message, and a rent transaction of about $41 today |
+| 5 | Call the commissary's contact, press "Order stock" | The call ends with "Pick what you need", the phone closes and a list opens over the city: every food and machine with its box price and what is in stock. Pick hot dogs, then 3 boxes (the list shows goods + delivery = total), then confirm. A text confirms the order for 08:00 tomorrow and the money goes. Does the call come back cleanly on the phone afterwards? If the list doesn't open, or opens behind something, say so: the same lists are on the Commissary button at the bay ("Order stock for delivery to …") |
+| 5b | At the bay, Commissary, "Order stock for delivery to …"; order a hot dog grill | The same three lists, from the panel |
+| 6 | Ctrl+Alt+F7 (or sleep to after 08:00) | A text per order: "Your delivery is in" |
+| 7 | At the bay, "Commissary", "Restock" | The grill and the food go into the truck's cargo (the item panel counts them). A box bigger than the stock limit loads in part and the rest stays ("… items left in stock here") |
+| 8 | Leave the truck in the bay, push a cart elsewhere and walk away; sleep past 04:00 | The truck isn't fined; the cart is: a City text "Your Food cart wasn't in a commissary bay at 04:00", and a fine transaction of $250 |
+| 8b | If the save rents or owns a building: leave a cart at its door (within 15 m), and a truck inside a warehouse you rent, if you have one; sleep past 04:00 | Neither is fined (Ctrl+Alt+F8 before 04:00 says "at your own building") |
+| 9 | Next day, Econoview's income statement | Under the truck: "Commissary rent"; under the cart: "Overnight fines"; in the Street food group: "Delivery fees". The statement's Total still equals the day summary's profit |
+| 10 | Rent a space for the cart at a second commissary, then move the truck's space there from the panel at that bay; give one up | Messages for each; the rent keeps coming daily for the spaces left |
+| 11 | With stock left at a commissary, run the uninstall step (Ctrl+Shift+F12 twice) | "Commissary stock and open orders paid back: $…", the commissary contacts are gone |
+
+## 3. Log lines (me)
+
+- `Commissaries loaded: 5 garages; rent cart $300, truck $1250 a month, overnight fine $250, bay radius 15 m.`
+- `Commissary: 5 of 5 garages found in the city.` and one `Commissary <id> (<address>): bay at x …, z … (nearest entrance).` per garage; the state line after it.
+- `Map filters: Street food line with 8 filters.`; `Cart buttons added to the item panel.`
+- `Overnight check: starts on day …`, then one `Overnight check through day N: <vehicle> in its bay / out …; K fines.` per night and an `Overnight fine: …` line per fine.
+- `Commissary <id>: unlocked on day … (visited)`; `… rented a space …`, `moved its space …`, `gave up its space …`.
+- `Commissary rent: <vehicle> at <id> for day N, $… paid.` once per space per day.
+- `Commissary order at <id>: list of N items shown.`; - `Commissary order N: …`, `Commissary delivery: order N, …`, `Commissary restock: … loaded …; … units didn't fit and stay; … left in stock.`
+- `Uninstall: commissary refund …` after row 11.
+- No new Harmony patches; the earlier `Patch …: Active.` lines are unchanged. No `Commissary:` error lines.
+
 # Playtest fixes and truck equipment (0.9.3)
 
 Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, crew serving a window the player opened, the cart's final model with its equipment on the counter and parked cars kept off it, the player inside the truck at the hatch, and the Street food fleet page in BizMan. New in 0.9.3: popcorn, cotton candy, slushies and kabobs (the game's own items, on its concessions case, slushi machine and industrial grill; the grill and fryer are now separate pieces), fitted equipment on show in the truck, and a taller truck: the roof is 0.20 m higher and the serving window sits 0.60 m higher, so the player and crew stand on the truck's floor with their faces in the window. Also new: the mod's own items, dumplings, tacos, chopped cheese and grilled corn and the dumpling steamer, griddle and corn grill (rows 46 to 50); nothing sells or buys them yet, so **Ctrl+F5** puts a set into the food vehicle next to you. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.

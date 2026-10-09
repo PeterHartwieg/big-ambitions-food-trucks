@@ -45,5 +45,24 @@ namespace FoodTrucks
                 return booked;
             }
         }
+
+        // Pays money out today only if the player has it (the game refuses otherwise, with its "not enough money"
+        // notice when asked), reporting whether the transaction was booked.
+        public static bool TryPayOut(long cents, TransactionInfo info, bool showNotification)
+        {
+            if (cents <= 0) throw new ArgumentOutOfRangeException(nameof(cents));
+            var transactions = SaveGameManager.Current.Transactions;
+            var lastBefore = transactions.Count > 0 ? transactions.Last() : null;
+            try
+            {
+                return GameManager.ChangeMoneySafe(-cents / 100f, info, null, null, force: false, showNotification: showNotification);
+            }
+            catch (Exception ex)
+            {
+                var booked = transactions.Count > 0 && !ReferenceEquals(transactions.Last(), lastBefore);
+                Log.Error($"Payment out of {CartSelling.Money(cents)} threw ({(booked ? "booked" : "not booked")}): {ex}");
+                return booked;
+            }
+        }
     }
 }

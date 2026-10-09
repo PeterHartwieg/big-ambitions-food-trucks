@@ -9,10 +9,15 @@ using UnityEngine.UI;
 namespace FoodTrucks
 {
     // The cart's and truck's own buttons in the item panel while the player pushes the cart or drives the
-    // truck: "Open here", "Prices", "Hires" and "Clean". Copies of the panel's Sleep button with their own click handlers.
+    // truck: "Open here", "Prices", "Hires", "Clean", and "Commissary" while the vehicle stands in a commissary's
+    // bay. Copies of the panel's Sleep button with their own click handlers.
     internal static class CartButton
     {
         private static readonly List<Button> buttons = new List<Button>();
+        private static Button? commissaryButton;
+        // The panel shows a food vehicle now; the Commissary button shows only then (Commissary checks the bay).
+        private static bool onFoodVehicle;
+        private static bool atBay;
 
         public static void OnSetVehicle(ItemPanelUI panel, VehicleController? vehicle)
         {
@@ -24,23 +29,42 @@ namespace FoodTrucks
                 return;
             }
             Ensure(panel);
+            onFoodVehicle = true;
             foreach (var button in buttons)
                 if (button != null) button.gameObject.SetActive(true);
+            SetCommissary();
         }
 
         public static void Hide()
         {
+            onFoodVehicle = false;
             foreach (var button in buttons)
                 if (button != null) button.gameObject.SetActive(false);
+            SetCommissary();
+        }
+
+        // Called twice a second with whether the player's food vehicle stands in a commissary's bay.
+        public static void ShowCommissary(bool inBay)
+        {
+            if (atBay == inBay) return;
+            atBay = inBay;
+            SetCommissary();
+        }
+
+        private static void SetCommissary()
+        {
+            if (commissaryButton != null) commissaryButton.gameObject.SetActive(onFoodVehicle && atBay);
         }
 
         private static void Ensure(ItemPanelUI panel)
         {
             // The panel is rebuilt with each city scene; Unity's null check sees the old copies as gone.
-            if (buttons.Count > 0 && buttons.TrueForAll(b => b != null)) return;
+            if (buttons.Count > 0 && buttons.TrueForAll(b => b != null) && commissaryButton != null) return;
             foreach (var old in buttons)
                 if (old != null) UnityEngine.Object.Destroy(old.gameObject);
+            if (commissaryButton != null) UnityEngine.Object.Destroy(commissaryButton.gameObject);
             buttons.Clear();
+            commissaryButton = null;
             var template = panel.sleepButton;
             if (template == null)
             {
@@ -48,14 +72,15 @@ namespace FoodTrucks
                 return;
             }
             var after = panel.parkButton.transform.GetSiblingIndex();
-            Add(template, "FoodTrucks.OpenButton", "foodtrucks:itempanel_open", () => CartSelling.OpenHere(panel), after + 1);
-            Add(template, "FoodTrucks.PricesButton", "foodtrucks:itempanel_prices", PriceDialog.Show, after + 2);
-            Add(template, "FoodTrucks.HiresButton", "foodtrucks:itempanel_hires", () => StaffDialog.Show(panel), after + 3);
-            Add(template, "FoodTrucks.CleanButton", "foodtrucks:itempanel_clean", CartSelling.CleanHere, after + 4);
+            buttons.Add(Add(template, "FoodTrucks.OpenButton", "foodtrucks:itempanel_open", () => CartSelling.OpenHere(panel), after + 1));
+            buttons.Add(Add(template, "FoodTrucks.PricesButton", "foodtrucks:itempanel_prices", PriceDialog.Show, after + 2));
+            buttons.Add(Add(template, "FoodTrucks.HiresButton", "foodtrucks:itempanel_hires", () => StaffDialog.Show(panel), after + 3));
+            buttons.Add(Add(template, "FoodTrucks.CleanButton", "foodtrucks:itempanel_clean", CartSelling.CleanHere, after + 4));
+            commissaryButton = Add(template, "FoodTrucks.CommissaryButton", "foodtrucks:itempanel_commissary", () => Commissary.ShowPanel(panel), after + 5);
             Log.Info("Cart buttons added to the item panel.");
         }
 
-        private static void Add(Button template, string name, string labelKey, Action onClick, int siblingIndex)
+        private static Button Add(Button template, string name, string labelKey, Action onClick, int siblingIndex)
         {
             var button = UnityEngine.Object.Instantiate(template, template.transform.parent);
             button.name = name;
@@ -75,7 +100,7 @@ namespace FoodTrucks
             }
             else Log.Error($"{name}: no Label child; the button shows the Sleep text.");
             button.transform.SetSiblingIndex(siblingIndex);
-            buttons.Add(button);
+            return button;
         }
     }
 }

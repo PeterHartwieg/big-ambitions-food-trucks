@@ -26,8 +26,10 @@ namespace FoodTrucks
             var deliveries = PendingDeliveries(game);
             if (vehicles.Count == 0 && deliveries == 0)
             {
-                // Nothing to take back, but the bookings contact and its gigs still go.
+                // Nothing to take back, but the bookings contact and its gigs, and the commissaries with their stock, still go.
                 Catering.RemoveContact();
+                try { Commissary.RemoveForUninstall(); }
+                catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
                 CartSelling.Notify("foodtrucks:notification_uninstall_none");
                 return;
             }
@@ -60,6 +62,8 @@ namespace FoodTrucks
             CartSelling.CloseAllQuietly();
             HireCrew.ReleaseAll();
             Catering.RemoveContact();
+            try { Commissary.RemoveForUninstall(); }
+            catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
             long refundCents = 0;
             long unpaidCents = 0;
             var removed = 0;

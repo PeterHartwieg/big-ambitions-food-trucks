@@ -1,0 +1,32 @@
+{
+  "_notes": "Commissary garages (design: Commissary and new foods). Keys starting with an underscore are notes; the loader ignores them.",
+  "schemaVersion": 1,
+  "_commissaries": "Each is a garage in an industrial or mixed block, picked from tools/balance/city.json (9 October 2026): warehouses without a fixed business where the block has one, else a unit on the neighbourhood's edge street. id is lower-case letters, digits and dashes and is part of the commissary's phone contact (foodtrucks-commissary-<id>, which en.json names). name is a locale key. address is street#number. The loading bay is the kerb by the building's nearest entrance; a vehicle within rules.json's commissary.bayRadiusMetres of it stands in the bay. An optional bay {x, z} (world metres, as Ctrl+F8 logs them) moves the bay to a measured point, for a garage whose entrance faces a no-parking kerb. Positions are approximate until checked in game.",
+  "commissaries": [
+    {
+      "id": "industry-city",
+      "name": "foodtrucks:commissary_industry-city",
+      "address": "ba:street_twentysecondstreet#6"
+    },
+    {
+      "id": "garment-district",
+      "name": "foodtrucks:commissary_garment-district",
+      "address": "ba:street_secondstreet#51"
+    },
+    {
+      "id": "hells-kitchen",
+      "name": "foodtrucks:commissary_hells-kitchen",
+      "address": "ba:street_firststreet#24"
+    },
+    {
+      "id": "lower-manhattan",
+      "name": "foodtrucks:commissary_lower-manhattan",
+      "address": "ba:street_twelfthstreet#5"
+    },
+    {
+      "id": "murray-hill",
+      "name": "foodtrucks:commissary_murray-hill",
+      "address": "ba:street_fifthstreet#12"
+    }
+  ]
+}

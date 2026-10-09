@@ -119,6 +119,7 @@ namespace FoodTrucks
             runtimeObject.AddComponent<DebugActions>();
             runtimeObject.AddComponent<CartParts>();
             runtimeObject.AddComponent<VehicleDisplays>();
+            runtimeObject.AddComponent<Commissary>();
             try { PrefabFixes.Apply(); }
             catch (Exception ex) { Log.Error("Prefab fixes: " + ex); }
             try { CartParts.LogLanes(); }
@@ -130,6 +131,8 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("City of New York: " + ex); }
             try { Catering.Attach(); }
             catch (Exception ex) { Log.Error("Catering: " + ex); }
+            try { Commissary.Attach(); }
+            catch (Exception ex) { Log.Error("Commissary: " + ex); }
             // The Bakery mod's goods sell from the display case and the coffee machine when it is installed.
             try
             {
@@ -157,6 +160,7 @@ namespace FoodTrucks
             World.Reset();
             CityLicensing.Detach();
             Catering.Detach();
+            Commissary.Detach();
             MapFilters.Clear();
             TruckHatch.Forget();
             WindowCrew.Reset();

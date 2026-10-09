@@ -1,6 +1,8 @@
 #nullable enable
 using System;
 using System.IO;
+using System.Linq;
+using FoodTrucks.Core.Commissary;
 using FoodTrucks.Core.Demand;
 using FoodTrucks.Core.Pitches;
 using FoodTrucks.Core.Rules;
@@ -16,6 +18,8 @@ namespace FoodTrucks
         public static RuleTables? Rules { get; private set; }
         // pitches.json: premium spots, city events and partnerships.
         public static PitchTables? Pitches { get; private set; }
+        // commissaries.json: the commissary garages.
+        public static CommissaryTables? Commissaries { get; private set; }
         public static string? Error { get; private set; }
 
         public static void Load(string modRootPath)
@@ -23,6 +27,7 @@ namespace FoodTrucks
             Tables = null;
             Rules = null;
             Pitches = null;
+            Commissaries = null;
             Error = null;
             try
             {
@@ -53,6 +58,18 @@ namespace FoodTrucks
             {
                 Pitches = null;
                 Log.Error("Pitches not loaded; no premium spots, events or partnerships. " + ex.Message);
+            }
+            // Apart too: without commissaries there is no renting, ordering or overnight check.
+            try
+            {
+                Commissaries = CommissaryTables.Parse(Read(Path.Combine(modRootPath, "data"), "commissaries.json"));
+                var rules = Rules!.Commissary;
+                Log.Info($"Commissaries loaded: {Commissaries.Sites.Count} garages; rent {string.Join(", ", rules.RentPerMonthCents.Select(p => $"{p.Key} ${p.Value / 100}"))} a month, overnight fine ${rules.OvernightFineCents / 100}, bay radius {rules.BayRadiusMetres} m.");
+            }
+            catch (Exception ex)
+            {
+                Commissaries = null;
+                Log.Error("Commissaries not loaded; no renting, ordering or overnight check. " + ex.Message);
             }
         }
 

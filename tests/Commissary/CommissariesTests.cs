@@ -250,13 +250,24 @@ public class CommissariesTests
     [InlineData("inside")]
     [InlineData("late")]
     [InlineData("transit")]
+    [InlineData("property")]
     public void EachNightExemptionPreventsAFine(string exemption)
     {
         var state = Rented();
         var vehicle = new CommissaryVehicle { VehicleId = "cart", AtOwnCommissaryBay = exemption == "bay",
-            PlayerInside = exemption == "inside", OnLateStop = exemption == "late", InTransit = exemption == "transit" };
+            PlayerInside = exemption == "inside", OnLateStop = exemption == "late", InTransit = exemption == "transit",
+            AtPlayerProperty = exemption == "property" };
         Assert.Empty(Commissaries.NightCheck(state, Rules, 8, 240, new[] { vehicle }));
         Assert.Equal(8, state.NightCheckedThroughDay);
+    }
+
+    [Fact]
+    public void ThePlayersOwnPropertyExemptsAVehicleWithoutASpace()
+    {
+        var state = new CommissaryState();
+        Assert.Empty(Commissaries.NightCheck(state, Rules, 8, 240,
+            new[] { new CommissaryVehicle { VehicleId = "cart", AtPlayerProperty = true } }));
+        Assert.Single(Commissaries.NightCheck(state, Rules, 9, 240, new[] { new CommissaryVehicle { VehicleId = "cart" } }));
     }
 
     [Fact]
