@@ -1,13 +1,13 @@
-# Playtest fixes (0.9.1)
+# Playtest fixes (0.9.2)
 
-The fixes from the first 0.9.0 playtest: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, the cart's final model, and parked cars kept off a cart. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
+Build `0.9.2`. The fixes from both 0.9.0 playtest sessions: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, crew serving a window the player opened, the cart's final model with parked cars kept off it, the player inside the truck at the hatch, and the Street food fleet page in BizMan. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
 
 ## 1. Automated (me)
 
 - [ ] `dotnet test` passes; `tools/build-mod.sh --generate` builds; installed after the mod was parked for any recording.
 - [ ] After the session: the log lines in section 3.
 
-## 2. In game (about 25 minutes)
+## 2. In game (about 45 minutes)
 
 | # | Do | Look for |
 |---|---|---|
@@ -25,25 +25,25 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 | 12 | Leave it open over a full hour and past midnight, then check the next morning's transactions and Econoview | An unassigned wage for the worker covering the hours the window was open (one hour for each hour it was open on the hour, or opened before half past). In Econoview it is under the truck's Crew wages |
 | 13 | Give the worker a route, open the truck yourself during a stop's hours and keep it open past the stop's end | The route leaves the truck where you opened it; the worker keeps serving. The day's wage counts each hour once, not twice for the overlap |
 | 14 | Open the truck with the worker off sick, or with no crew | "Nobody's at the truck's window" once you walk away, as before |
-| 11 | Look at a cart standing on the street, from the side and from above | The new cart: grey box, red and orange umbrella, two spoked wheels. The texture is on (not plain white or pink). Both wheels touch the ground, the feet at the front too |
-| 12 | Grab the cart and push it around, forwards and back | Both hands on the push bar, not inside it or in the air. The wheels turn the right way as it rolls and stop when you stop. Hover and click on the cart still work; walking into it, you stop at the wheels |
-| 13 | Load stock into the cart and look at the counter | The cardboard boxes sit on the counter, not sunk into it or floating |
-| 14 | Open the cart for business, then grab it again | The front steam-well lid opens and shuts again when you grab it. With boxes on the counter, does the open lid cross the middle boxes? |
-| 15 | Leave a cart in a parking lane by the road, walk more than 80 m away and wait for the next hour, or sleep a night; come back | No parked car stands on or in the cart. Nobody's car parks into it with auto-park either |
-| 11 | Ctrl+F6 truck, Ctrl+Shift+F6, fit a grill, load hot dogs. Park legally with the hatch to the pavement, "Open here" | You stand inside at the hatch, facing the pavement, not outside. A panel "At the serving hatch" with Step out, Close the window and Drive. Can you see yourself through the open hatch, or does the roof hide you? Screenshot |
-| 12 | Press WASD, click the pavement, scroll the camera | You don't move or slide through the truck. The camera turns as usual |
-| 13 | Wait for a few customers | They are served (sales come in) with you inside; the "Nobody's at the window" message doesn't show |
-| 14 | Press Escape | You step out behind the truck, on the pavement or the parking lane, not inside the body. The window stays open; walk 10 m away: it pauses; come back: it serves |
-| 15 | "Open here" again (drive a metre and park), then Drive in the panel | You step out by the driver's door and get in; the window closes as when driving off |
-| 16 | Open again, then Close the window | The usual closing message; you step out |
-| 17 | Open again, save from the menu while at the hatch, load that save | Saving works. After loading you stand outside behind the truck, the window still open and serving |
-| 18 | With a hire on shift at the truck (Ctrl+Shift+F9, put them on the truck with a stop here), open | The hire stands beside you at the hatch, not in your place. Step out: they move to the middle |
-| 19 | Open, then sleep or skip time from the phone, if anything lets you | After the skip you stand outside by the truck |
-| 11 | With a cart or truck that sold something today, open BizMan | The business list ends with "Street food", "Food carts and trucks", the week's average profit and "N of M open". No cart or truck owned: no such line. Its location button is hidden and satisfaction reads "-" |
-| 12 | Try BizMan's filters: a neighbourhood, a business type, "Businesses", "Real estate", and a search for "street" | Neighbourhood, building and business type filters and "Real estate" hide the line; "Businesses" and the search keep it. The list keeps working |
-| 13 | Click "Street food" | A "Street food" section opens below the warehouses and the list scrolls to it: a card per vehicle, built like a warehouse card. Does it look right, or does anything of the warehouse card show (its buttons, column headings saying "Driver" or "Days left")? |
-| 14 | Read a card | Name; "Open at …" or "Closed, at …" (or on the way to a stop, or with the private driver); Today and Last 7 days with sales and profit; Health; Crew; Route; each item with "N sold" today and "N left". Do the sales match Econoview's? The location button sets the GPS to the vehicle's address |
-| 15 | Open a business from the list, go back, close and reopen BizMan | The section is closed again; your own businesses and warehouses open and look as before |
+| 15 | Look at a cart standing on the street, from the side and from above | The new cart: grey box, red and orange umbrella, two spoked wheels. The texture is on (not plain white or pink). Both wheels touch the ground, the feet at the front too |
+| 16 | Grab the cart and push it around, forwards and back | Both hands on the push bar, not inside it or in the air. The wheels turn the right way as it rolls and stop when you stop. Hover and click on the cart still work; walking into it, you stop at the wheels |
+| 17 | Load stock into the cart and look at the counter | The cardboard boxes sit on the counter, not sunk into it or floating |
+| 18 | Open the cart for business, then grab it again | The front steam-well lid opens and shuts again when you grab it. With boxes on the counter, does the open lid cross the middle boxes? |
+| 19 | Leave a cart in a parking lane by the road, walk more than 80 m away and wait for the next hour, or sleep a night; come back | No parked car stands on or in the cart. Nobody's car parks into it with auto-park either |
+| 20 | Ctrl+F6 truck, Ctrl+Shift+F6, fit a grill, load hot dogs. Park legally with the hatch to the pavement, "Open here" | You stand inside at the hatch, facing the pavement, not outside. A panel "At the serving hatch" with Step out, Close the window and Drive. Can you see yourself through the open hatch, or does the roof hide you? Screenshot |
+| 21 | Press WASD, click the pavement, scroll the camera | You don't move or slide through the truck. The camera turns as usual |
+| 22 | Wait for a few customers | They are served (sales come in) with you inside; the "Nobody's at the window" message doesn't show |
+| 23 | Press Escape | You step out behind the truck, on the pavement or the parking lane, not inside the body. The window stays open; walk 10 m away: it pauses; come back: it serves |
+| 24 | "Open here" again (drive a metre and park), then Drive in the panel | You step out by the driver's door and get in; the window closes as when driving off |
+| 25 | Open again, then Close the window | The usual closing message; you step out |
+| 26 | Open again, save from the menu while at the hatch, load that save | Saving works. After loading you stand outside behind the truck, the window still open and serving |
+| 27 | With a hire on shift at the truck (Ctrl+Shift+F9, put them on the truck with a stop here), open | The hire stands beside you at the hatch, not in your place. Step out: they move to the middle |
+| 28 | Open, then sleep or skip time from the phone, if anything lets you | After the skip you stand outside by the truck |
+| 29 | With a cart or truck that sold something today, open BizMan | The business list ends with "Street food", "Food carts and trucks", the week's average profit and "N of M open". No cart or truck owned: no such line. Its location button is hidden and satisfaction reads "-" |
+| 30 | Try BizMan's filters: a neighbourhood, a business type, "Businesses", "Real estate", and a search for "street" | Neighbourhood, building and business type filters and "Real estate" hide the line; "Businesses" and the search keep it. The list keeps working |
+| 31 | Click "Street food" | A "Street food" section opens below the warehouses and the list scrolls to it: a card per vehicle, built like a warehouse card. Does it look right, or does anything of the warehouse card show (its buttons, column headings saying "Driver" or "Days left")? |
+| 32 | Read a card | Name; "Open at …" or "Closed, at …" (or on the way to a stop, or with the private driver); Today and Last 7 days with sales and profit; Health; Crew; Route; each item with "N sold" today and "N left". Do the sales match Econoview's? The location button sets the GPS to the vehicle's address |
+| 33 | Open a business from the list, go back, close and reopen BizMan | The section is closed again; your own businesses and warehouses open and look as before |
 
 ## 3. Log lines (me)
 
@@ -53,12 +53,12 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 - `Patch …LoadSalaryRows: Active.`, `Patch …LoadOngoingExpenseRows: Active.`, `…LoadFeeRows: Active.` and `Patch EmployeeInstance.PayWage(BuildingRegistration): Active.` (with the parking patches); `Econoview: crew wages and parking move from the game's rows to the vehicles.`
 - `Sale: …` lines arrive as customers leave the window.
 - `Crew: <name> paid for HH:00 on day N (open window, truck …)` once per hour the crew served a window you opened; none for route hours, and never two for the same hour and worker.
-- `Patch VehicleHelper.DestroyBlockingVehicles(GameObject, VehicleType, Transform, Boolean): Active.`; at load, `Parking lanes: cart … seen; body collider 0.96 x 1.50 m …` for each cart (or `in hand now …` for one being pushed); after row 15, any `Parking lanes: cleared … parked … cars from cart …`; no `Cart … has no Cart_Lid` error.
+- `Patch VehicleHelper.DestroyBlockingVehicles(GameObject, VehicleType, Transform, Boolean): Active.`; at load, `Parking lanes: cart … seen; body collider 0.96 x 1.50 m …` for each cart (or `in hand now …` for one being pushed); after row 19, any `Parking lanes: cleared … parked … cars from cart …`; no `Cart … has no Cart_Lid` error.
 - `Patch PlayerHelper.SaveCurrentPosition: Active.`
-- One `Truck window: player placed at the hatch of truck …` line per open (or `… player left outside …: <reason>`), and `Truck window: player stepped out of truck … (<reason>)` for each way out; no `the NavMesh warp failed`. Row 17: `Truck window: saved at the hatch …`.
+- One `Truck window: player placed at the hatch of truck …` line per open (or `… player left outside …: <reason>`), and `Truck window: player stepped out of truck … (<reason>)` for each way out; no `the NavMesh warp failed`. Row 26: `Truck window: saved at the hatch …`.
 - No `Tried to set navigation blocker` warnings or NullReferenceExceptions around the rows above.
 - `Patch BusinessScrollerController.PopulateAllModels: Active.`, `Patch BizManFilterToggle.PassesFilter: Active.`, `Patch BusinessCellView.SetData: Active.`, `Patch BizManList.OpenBusiness: Active.`, `Patch BizManList.OnDisable: Active.`; `BizMan: the Street food line and fleet section are on.`
-- After row 13: `BizMan: fleet section copied from the warehouse section (card at …).` and the `BizMan: fleet section label …` / `fleet card label …` lines (they name the copied headings, to fix any that still say warehouse). No `BizMan Street food (…), line taken out` error.
+- After row 31: `BizMan: fleet section copied from the warehouse section (card at …).` and the `BizMan: fleet section label …` / `fleet card label …` lines (they name the copied headings, to fix any that still say warehouse). No `BizMan Street food (…), line taken out` error.
 
 # Milestone 7 checks: catering and Bakery
 
