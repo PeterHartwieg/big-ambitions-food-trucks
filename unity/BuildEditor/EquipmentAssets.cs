@@ -17,6 +17,7 @@ namespace FoodTrucks.BuildEditor
         {
             "CoffeeStation", "CornGrill", "CottonCandyMachine", "DrinksCooler", "DumplingSteamer",
             "Griddle", "KabobGrill", "MerchRack", "PopcornMachine", "SlushieMachine",
+            "BurgerStation", "HotDogRoller", "IceCreamCabinet", "PastryCase", "PizzaOven",
         };
 
         public static void Generate(string vehiclesFolder)

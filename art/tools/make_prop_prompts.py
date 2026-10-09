@@ -48,6 +48,32 @@ EQUIPMENT = {
         "bright paper and ribbon, two snow globes and small generic city souvenirs (a tiny taxi, a mini skyline "
         "block), plus a cylinder holder at one side with four folded umbrellas in different colours standing in it. "
         "No text, flags or logos."),
+    # Compact versions of the base game's own equipment, to sit on the cart beside the game's look. Each run gets
+    # the game's item icon attached as a reference (kept outside the repo).
+    "HotDogRoller": ("Compact hot dog roller grill", 0.40,
+        "A compact version of the game's own hot dog grill (see the attached reference picture of the game's item): "
+        "a brushed-steel roller grill with rows of shiny rollers carrying hot dogs, a sloped glass-free top, a front "
+        "panel with a black inset strip (blank, no lettering) and two control knobs, a pull-out drip tray, short legs. "
+        "Same proportions, colours and level of detail as the reference, only smaller."),
+    "BurgerStation": ("Compact burger station", 0.45,
+        "A compact burger station that combines the game's industrial grill and fryer (see the attached reference "
+        "pictures): on the left two thirds a char-grill with dark ribbed grates, a steel front with three red-and-black "
+        "knobs; on the right third a small deep fryer with one wire basket hanging over its oil well and a small "
+        "control panel. Same brushed steel, colours and level of detail as the references."),
+    "IceCreamCabinet": ("Compact ice cream cabinet", 0.50,
+        "A compact version of the game's own ice cream counter (see the attached reference picture): a white-and-steel "
+        "cabinet with horizontal steel stripes on the front, a curved glass hood with a red frame on top, and a row of "
+        "four tubs of coloured ice cream (vanilla, strawberry, chocolate, mint) inside the well; paint the glass as a "
+        "frame only so the tubs show. No lettering. Same colours and style as the reference, only smaller."),
+    "PizzaOven": ("Compact pizza oven", 0.50,
+        "A compact version of the game's own pizza oven (see the attached reference picture): a two-deck steel deck "
+        "oven with dark glass doors and steel handles, a small control panel at the right of each deck, a flat steel "
+        "top, standing on a short steel frame. Same proportions, colours and level of detail as the reference, scaled "
+        "to sit on a cart."),
+    "PastryCase": ("Compact pastry display case", 0.55,
+        "A compact version of the game's own bakery showcase (see the attached reference picture): a steel base with "
+        "small drawers, three sloped wooden shelves in a thin white frame with a wooden top, the shelves holding "
+        "croissants, donuts and cupcakes in neat rows. Same materials, colours and style as the reference, only smaller."),
 }
 
 # Handheld products, like the game's own food items: sold over the counter and carried in wholesale boxes.

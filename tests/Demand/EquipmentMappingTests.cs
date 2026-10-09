@@ -96,11 +96,11 @@ public class EquipmentMappingTests
     [Theory]
     [InlineData("coffeemachine", "CoffeeStation")]
     [InlineData("cooler", "DrinksCooler")]
-    [InlineData("hotdoggrill", null)]
-    [InlineData("burgerstation", null)]
-    [InlineData("icecreamcounter", null)]
-    [InlineData("pizzaoven", null)]
-    [InlineData("displaycase", null)]
+    [InlineData("hotdoggrill", "HotDogRoller")]
+    [InlineData("burgerstation", "BurgerStation")]
+    [InlineData("icecreamcounter", "IceCreamCabinet")]
+    [InlineData("pizzaoven", "PizzaOven")]
+    [InlineData("displaycase", "PastryCase")]
     public void ShippedDisplayModels(string id, string? display)
     {
         Assert.Equal(display, ShippedData.Tables.Equipment(id)!.Display);
