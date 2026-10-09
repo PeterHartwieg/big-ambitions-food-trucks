@@ -75,7 +75,7 @@ Ten compact pieces for the cart's counter spots, one folder each in `equipment/`
 
 `tools/build-mod.sh` copies each FBX and texture into `unity/FoodTrucks/Vehicles/EquipmentArt/`, and `EquipmentAssets` makes an HDRP/Lit material and a prefab per model there (body mesh only, no collider). Only the `.meta` files, materials and prefabs are committed. `data/economy.json`'s `display` field picks a piece's model by name: the coffee machine shows `CoffeeStation`, the cooler `DrinksCooler`. The other eight models wait for their foods. The hot dog grill, burger station, ice cream counter, pizza oven and display case have no compact model yet and show nothing; giving one a `display` is all that's needed once it exists.
 
-On the cart, `CartDisplays` puts the first fitted piece on `EquipmentFront` and the second on `EquipmentRear`, turned 90° to face the side the queue forms on while the cart is open, and the cart's right side otherwise.
+On the cart, `CartDisplays` puts the first fitted piece on `EquipmentFront` and the second on `EquipmentRear` (each keeps its spot while fitted), turned 90° to face the side the queue forms on while the cart is open, and the cart's right side otherwise.
 
 ## Food truck
 

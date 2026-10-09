@@ -10,7 +10,7 @@ using UnityEngine;
 namespace FoodTrucks
 {
     // Fitted equipment on a cart's counter: the first fitted piece on the front spot, the second on the rear
-    // (CartAssets' EquipmentFront and EquipmentRear). economy.json's "display" names each piece's model in the
+    // (CartAssets' EquipmentFront and EquipmentRear); a piece keeps its spot while it stays fitted. economy.json's "display" names each piece's model in the
     // bundle; a piece without one leaves its spot empty. Every half second it compares each cart's fitted pieces
     // with what it shows, so fitting, removing and loading need no hooks. While the cart is open the pieces face
     // the side its queue forms on (CartQueueView's choice); closed, or with no line laid out, they face right.
@@ -34,6 +34,8 @@ namespace FoodTrucks
         private sealed class Shown
         {
             public VehicleController? Controller;
+            public Transform? Body;
+            public int Layer = -1;
             public Renderer[] Renderers = Array.Empty<Renderer>();
             public bool Visible = true;
             public Transform?[] Spots = new Transform?[2];
@@ -73,9 +75,16 @@ namespace FoodTrucks
                 seen.Add(key);
                 if (!shown.TryGetValue(key, out var entry))
                 {
-                    entry = new Shown { Controller = controller };
+                    entry = new Shown { Controller = controller, Body = controller.transform.Find("Cart_Body") };
                     for (var i = 0; i < SpotNames.Length; i++) entry.Spots[i] = controller.transform.Find(SpotNames[i]);
                     shown[key] = entry;
+                    // A cart that left the game's list and came back must not get a second set of pieces.
+                    foreach (var spot in entry.Spots)
+                    {
+                        if (spot == null) continue;
+                        foreach (Transform child in spot)
+                            if (child.name.StartsWith("Display_", StringComparison.Ordinal)) Destroy(child.gameObject);
+                    }
                     if (entry.Spots.Any(s => s == null)) Log.Error($"Cart displays: cart {cart.id} has no equipment spots (a cart from an older build).");
                 }
                 if (entry.Spots.Any(s => s == null)) continue;
@@ -83,17 +92,37 @@ namespace FoodTrucks
                 var fitted = CargoRules.FittedEquipment(tables, CargoLimit.Lines(cart));
                 var open = StreetSales.Find(FoodTrucksSession.CurrentState, cart.id)?.IsOpen == true;
                 var side = open ? CartQueueView.QueueSide(cart.id) ?? 1 : 1;
+                // A piece keeps the spot it took while it stays fitted; new pieces fill the empty spots in cargo order.
+                var remaining = fitted.ToList();
+                var wanted = new string?[SpotNames.Length];
+                for (var i = 0; i < wanted.Length; i++)
+                    if (entry.Pieces[i] != null && remaining.Remove(entry.Pieces[i]!)) wanted[i] = entry.Pieces[i];
+                for (var i = 0; i < wanted.Length; i++)
+                {
+                    if (wanted[i] != null || remaining.Count == 0) continue;
+                    wanted[i] = remaining[0];
+                    remaining.RemoveAt(0);
+                }
                 for (var i = 0; i < SpotNames.Length; i++)
                 {
-                    var piece = i < fitted.Count ? fitted[i] : null;
+                    var piece = wanted[i];
                     if (piece != entry.Pieces[i] || (piece != null && entry.Objects[i] == null && Display(tables, piece) != null))
                     {
                         if (entry.Objects[i] != null) Destroy(entry.Objects[i]);
                         entry.Objects[i] = piece == null ? null : Place(cart.id, i, piece, Display(tables, piece), entry.Spots[i]!);
                         entry.Pieces[i] = piece;
                         entry.Side = 0;
+                        entry.Layer = -1;
                         Collect(entry);
                     }
+                }
+                // The game moves the cart's renderers to the player vehicles layer while it is pushed and back after.
+                var layer = entry.Body != null ? entry.Body.gameObject.layer : controller.gameObject.layer;
+                if (entry.Layer != layer)
+                {
+                    entry.Layer = layer;
+                    foreach (var renderer in entry.Renderers)
+                        if (renderer != null) renderer.gameObject.layer = layer;
                 }
                 if (entry.Side != side)
                 {
