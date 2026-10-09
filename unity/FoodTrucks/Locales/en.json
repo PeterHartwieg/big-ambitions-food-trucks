@@ -238,5 +238,10 @@
     "foodtrucks:mapfilter_catering": "Catering bookings",
     "foodtrucks:dialog_bookings_no_truck": "We only book food trucks with a vending permit. Call again when you have one.",
     "foodtrucks:notification_catering_no_crew": "Nobody is with the {vehicle} to serve the guests: its crew, or you.",
-    "foodtrucks:message_bookings_unpaid": "The gig at {place} is done, but the payment didn't go through."
+    "foodtrucks:message_bookings_unpaid": "The gig at {place} is done, but the payment didn't go through.",
+    "foodtrucks:activity_hatch_title": "At the serving hatch",
+    "foodtrucks:activity_hatch_serving": "You serve the line from inside the truck.",
+    "foodtrucks:activity_hatch_step_out": "Step out",
+    "foodtrucks:activity_hatch_close": "Close the window",
+    "foodtrucks:activity_hatch_drive": "Drive"
 }

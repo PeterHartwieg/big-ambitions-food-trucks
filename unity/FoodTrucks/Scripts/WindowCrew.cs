@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Entities;
+using FoodTrucks.Core.Fleet;
 using Helpers;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -19,9 +20,23 @@ namespace FoodTrucks
         // A cart's worker stands behind it, opposite the window place.
         private const float CartBehind = 0.85f;
         // Inside the truck, behind the hatch: right of the middle, on the truck's floor (a guess at its height),
-        // spread along the window when there are several.
+        // spread along the window when there are several. The player at the hatch (TruckWindow) stands here too,
+        // in the middle place, and the crew move aside (Core WindowPlaces).
         private static readonly Vector3 TruckPlace = new Vector3(0.45f, 0.45f, -1.10f);
         private const float TruckSpacing = 0.6f;
+
+        // A place behind the truck's hatch, `along` metres towards the cab from the hatch's middle, facing out.
+        internal static (Vector3 Position, Quaternion Rotation) TruckSpot(Transform vehicle, double along)
+        {
+            var position = vehicle.TransformPoint(TruckPlace + new Vector3(0f, 0f, (float)along));
+            var facing = vehicle.right;
+            facing.y = 0f;
+            return (position, facing.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(facing) : vehicle.rotation);
+        }
+
+        // The player's place at a truck's hatch: the middle one, whoever else is there.
+        internal static (Vector3 Position, Quaternion Rotation) PlayerSpot(Transform vehicle) =>
+            TruckSpot(vehicle, WindowPlaces.Offsets(0, player: true, TruckSpacing).Player ?? 0);
 
         private sealed class Worker
         {
@@ -58,7 +73,8 @@ namespace FoodTrucks
                     var worker = Spawn(vehicleId, employee);
                     if (worker != null) shown.Add(worker);
                 }
-                for (var i = 0; i < shown.Count; i++) Stand(shown[i], vehicle, kind, windowPlace, i, shown.Count);
+                var places = WindowPlaces.Offsets(shown.Count, TruckWindow.PlayerAt(vehicleId), TruckSpacing).Crew;
+                for (var i = 0; i < shown.Count; i++) Stand(shown[i], vehicle, kind, windowPlace, places[i]);
                 if (shown.Count == 0) workers.Remove(vehicleId);
             }
             catch (Exception ex)
@@ -110,27 +126,20 @@ namespace FoodTrucks
             return new Worker(employee.id, owner, character);
         }
 
-        private static void Stand(Worker worker, Transform vehicle, string kind, Vector3? windowPlace, int index, int count)
+        private static void Stand(Worker worker, Transform vehicle, string kind, Vector3? windowPlace, double along)
         {
-            Vector3 position;
-            Vector3 facing;
             if (kind == "truck")
             {
-                var local = TruckPlace + new Vector3(0f, 0f, (index - (count - 1) / 2f) * TruckSpacing);
-                position = vehicle.TransformPoint(local);
-                facing = vehicle.right;
+                var spot = TruckSpot(vehicle, along);
+                worker.Character.ForceToPosition(spot.Position);
+                worker.Character.ForceToRotation(spot.Rotation);
+                return;
             }
-            else
-            {
-                var outward = windowPlace.HasValue ? windowPlace.Value - vehicle.position : vehicle.right;
-                outward.y = 0f;
-                outward = outward.sqrMagnitude > 1e-4f ? outward.normalized : vehicle.right;
-                position = vehicle.position - outward * CartBehind;
-                facing = outward;
-            }
-            facing.y = 0f;
-            worker.Character.ForceToPosition(position);
-            if (facing.sqrMagnitude > 1e-4f) worker.Character.ForceToRotation(Quaternion.LookRotation(facing));
+            var outward = windowPlace.HasValue ? windowPlace.Value - vehicle.position : vehicle.right;
+            outward.y = 0f;
+            outward = outward.sqrMagnitude > 1e-4f ? outward.normalized : vehicle.right;
+            worker.Character.ForceToPosition(vehicle.position - outward * CartBehind);
+            worker.Character.ForceToRotation(Quaternion.LookRotation(outward));
         }
 
         private static int Seed(string id)

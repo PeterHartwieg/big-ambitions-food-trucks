@@ -78,6 +78,9 @@ namespace FoodTrucks
             Patch(typeof(EducationDoorController), "StartLearning", Type.EmptyTypes, typeof(FoodSafetyCourse),
                 prefix: nameof(FoodSafetyCourse.StartLearningPrefix));
 
+            // Truck window: a save made at the hatch puts the player outside by the truck, not inside its body.
+            Patch(typeof(PlayerHelper), "SaveCurrentPosition", Type.EmptyTypes, typeof(TruckWindow), postfix: nameof(TruckWindow.SavePositionPostfix));
+
             // Cargo limit: food up to the vehicle's units, equipment up to its slots.
             Patch(typeof(VehicleInstance), "MergeIntoCargo", new[] { typeof(CargoInstance) },
                 typeof(CargoLimit), prefix: nameof(CargoLimit.MergePrefix), finalizer: nameof(CargoLimit.MergeFinalizer));

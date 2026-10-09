@@ -1,13 +1,13 @@
 # Playtest fixes (0.9.1)
 
-The fixes from the first 0.9.0 playtest: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, and the street food breakdown in Econoview. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
+The fixes from the first 0.9.0 playtest: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, and serving from inside the truck (branch `truck-window`). Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
 
 ## 1. Automated (me)
 
 - [ ] `dotnet test` passes; `tools/build-mod.sh --generate` builds; installed after the mod was parked for any recording.
 - [ ] After the session: the log lines in section 3.
 
-## 2. In game (about 15 minutes)
+## 2. In game (about 25 minutes)
 
 | # | Do | Look for |
 |---|---|---|
@@ -21,6 +21,15 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 | 8 | Watch a few sales | Each customer waits at the window for the order. The money and the sale message come as they walk away, not as they step up |
 | 9 | After a day with sales, open Econoview's income statement | "Street food" is a group. It opens into one row per vehicle (and "Vendor licence" or "Event places" if you paid for them); a vehicle opens into Sales, Stock sold, Crew wages and so on |
 | 10 | Same day, with a hired crew or paid parking | "Unassigned staff wages" and "Parking fees" are lower by the vehicles' share, which shows under each vehicle instead. The statement's Total equals the day summary's profit for that day |
+| 11 | Ctrl+F6 truck, Ctrl+Shift+F6, fit a grill, load hot dogs. Park legally with the hatch to the pavement, "Open here" | You stand inside at the hatch, facing the pavement, not outside. A panel "At the serving hatch" with Step out, Close the window and Drive. Can you see yourself through the open hatch, or does the roof hide you? Screenshot |
+| 12 | Press WASD, click the pavement, scroll the camera | You don't move or slide through the truck. The camera turns as usual |
+| 13 | Wait for a few customers | They are served (sales come in) with you inside; the "Nobody's at the window" message doesn't show |
+| 14 | Press Escape | You step out behind the truck, on the pavement or the parking lane, not inside the body. The window stays open; walk 10 m away: it pauses; come back: it serves |
+| 15 | "Open here" again (drive a metre and park), then Drive in the panel | You step out by the driver's door and get in; the window closes as when driving off |
+| 16 | Open again, then Close the window | The usual closing message; you step out |
+| 17 | Open again, save from the menu while at the hatch, load that save | Saving works. After loading you stand outside behind the truck, the window still open and serving |
+| 18 | With a hire on shift at the truck (Ctrl+Shift+F9, put them on the truck with a stop here), open | The hire stands beside you at the hatch, not in your place. Step out: they move to the middle |
+| 19 | Open, then sleep or skip time from the phone, if anything lets you | After the skip you stand outside by the truck |
 
 ## 3. Log lines (me)
 
@@ -29,6 +38,9 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 - `Queue view: line at cart …` and `… line removed …` lines, and the session total on unload.
 - `Patch …LoadSalaryRows: Active.`, `Patch …LoadOngoingExpenseRows: Active.`, `…LoadFeeRows: Active.` and `Patch EmployeeInstance.PayWage(BuildingRegistration): Active.` (with the parking patches); `Econoview: crew wages and parking move from the game's rows to the vehicles.`
 - `Sale: …` lines arrive as customers leave the window.
+- `Patch PlayerHelper.SaveCurrentPosition: Active.`
+- One `Truck window: player placed at the hatch of truck …` line per open (or `… player left outside …: <reason>`), and `Truck window: player stepped out of truck … (<reason>)` for each way out; no `the NavMesh warp failed`. Row 17: `Truck window: saved at the hatch …`.
+- No `Tried to set navigation blocker` warnings or NullReferenceExceptions around the rows above.
 
 # Milestone 7 checks: catering and Bakery
 
