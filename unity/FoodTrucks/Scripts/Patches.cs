@@ -77,6 +77,7 @@ namespace FoodTrucks
             // Hires: the game's employees as a vehicle's crew. Their shift hours count as worked (paid at midnight),
             // a route counts as their task, and the "unassigned" to-do stays away while they have a vehicle.
             Patch(typeof(EmployeeHelper), "RunHourly", Type.EmptyTypes, typeof(Patches), prefix: nameof(CountCrewHour), postfix: nameof(AfterGameCount));
+            Patch(typeof(EmployeeHelper), "PayDailyWages", Type.EmptyTypes, nameof(CloseCrewDay), prefix: true);
             Patch(AccessTools.TypeByName("AI.Employees.NoTaskAssignedComplaint"), "ConditionToComplainMet", new[] { typeof(EmployeeInstance) }, nameof(CrewHasTask));
             Patch(AccessTools.TypeByName("AI.Employees.NoTaskAssignedComplaint"), "ComplaintHandled", new[] { typeof(EmployeeInstance) }, nameof(CrewTaskHandled));
             Patch(AccessTools.TypeByName("UI.Tasks.TasksUI"), "CreateTodoTask", null, nameof(SkipCrewUnassignedTask), prefix: true);
@@ -224,6 +225,13 @@ namespace FoodTrucks
         private static void CountCrewHour()
         {
             try { HireCrew.CountHour(); }
+            catch (Exception ex) { Log.Error(ex); }
+        }
+
+        // The day's last crew hours, into the closing day, before the game pays wages at midnight.
+        private static void CloseCrewDay()
+        {
+            try { HireCrew.BeforePayroll(); }
             catch (Exception ex) { Log.Error(ex); }
         }
 

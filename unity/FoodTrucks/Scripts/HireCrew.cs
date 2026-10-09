@@ -195,9 +195,10 @@ namespace FoodTrucks
         }
 
         // Before the game's hourly employee run, which counts the hour that is starting for anyone on a work
-        // shift: the same hour counts for each crew member on route shift for at least half of it. Hours at a window
-        // the player opened are counted as the sales reach them (CountServing). The game pays worked hours at
-        // midnight, as unassigned wages. [code, unverified in game]
+        // shift. First the hour that just ended is closed: the sales are caught up to this hour's start and each hire
+        // who served a window the player opened in that hour's first half is paid it (CrewPay.CloseHours). Then the
+        // hour that is starting counts for each crew member on route shift for at least half of it. The game pays
+        // worked hours at midnight, as unassigned wages. [code, unverified in game]
         public static void CountHour()
         {
             gameCountBefore = null;
@@ -216,6 +217,7 @@ namespace FoodTrucks
             CrewLog.Begin(state, TimeHelper.CurrentDay);
             var hour = CrewPay.HourOf(hourStart);
             CrewPay.Prune(state, hour);
+            CloseHours(state, hourStart, TimeHelper.CurrentDay);
             foreach (var vehicle in state.Vehicles)
             {
                 if (vehicle.Crew == null || vehicle.Crew.Count == 0 || runner == null) continue;
@@ -229,7 +231,9 @@ namespace FoodTrucks
                 // The game clears these only when a building's shifts change, so they should hold; once an hour is cheap.
                 SetWeeklyWork(vehicle);
                 if (runner.PlannedShiftMinutes(vehicle, hourStart, hourStart + 60, planX, planZ, HireRoutes.GameSpeed()) < CrewPay.HalfHour) continue;
-                foreach (var employee in Present(vehicle)) PayHour(state, vehicle, employee, hour, "route");
+                foreach (var employee in Present(vehicle))
+                    if (!employee.IsAssignedToAnyBusiness() && CrewPay.TryPay(state, employee.id, hour))
+                        CountOn(state, vehicle.VehicleId, employee, TimeHelper.CurrentDay);
             }
             // What every employee has worked today before the game's own count, to see whose hour the game counts.
             gameCountHour = hour;
@@ -260,31 +264,72 @@ namespace FoodTrucks
             if (changed) FoodTrucksSession.MarkChanged();
         }
 
-        // A window the player opened pays the crew who serve it for each hour they serve in the first half of. Called
-        // by the sales as they reach each minute with the window still open, so the hours follow the sales in order:
-        // a window sold out or closed before an hour began never earns it, however far a time skip jumps. Whether the
-        // hire has the hour already is their paid-hour marker's to say (the route's count, another window, the game).
-        public static void CountServing(SaveState state, VehicleState vehicle, IEnumerable<EmployeeInstance> serving, long minute)
+        // The crew serving a window the player opened, noted by the sales as they reach each minute with the window
+        // open (CartSelling.Tick). Nothing is paid here: the hour is decided when it is over (CloseHours).
+        public static void Served(SaveState state, VehicleState vehicle, IEnumerable<EmployeeInstance> serving, long minute)
         {
             if (!FoodTrucksSession.CanWrite || !CrewPay.OpenHourDue(vehicle, minute)) return;
-            var hour = CrewPay.HourOf(minute);
             foreach (var employee in serving)
-                if (CrewPay.Unpaid(state, employee.id, hour)) PayHour(state, vehicle, employee, hour, "open window");
+            {
+                if (!CrewPay.Unpaid(state, employee.id, CrewPay.HourOf(minute))) continue;
+                CrewPay.Served(state, employee.id, vehicle.VehicleId, minute);
+                FoodTrucksSession.MarkChanged();
+            }
         }
 
-        // One paid hour on the game's counters, so the midnight payroll pays it, logged with its vehicle for Econoview's
-        // crew wages (StreetFoodBooks.WagePostfix). Once per hire and hour (CrewPay.TryPay), whichever vehicle.
-        private static void PayHour(SaveState state, VehicleState vehicle, EmployeeInstance employee, long hour, string why)
+        // Before the game's midnight payroll (EmployeeHelper.PayDailyWages, in GameManager.NewDay after the day has
+        // turned): the sales are caught up to midnight and the day's last hour is closed into the closing day, so its
+        // wage is paid with that day's and its hour is logged on it.
+        public static void BeforePayroll()
         {
-            if (employee.IsAssignedToAnyBusiness() || !CrewPay.TryPay(state, employee.id, hour)) return;
-            employee.workedHoursToday++;
-            CrewLog.AddHour(state, TimeHelper.CurrentDay, employee.id, vehicle.VehicleId);
-            employee.workedHoursThisWeek++;
-            employee.AddWorkedDay();
-            FoodTrucksSession.MarkChanged();
-            if (why != "route")
-                Log.Info($"Crew: {Name(employee)} paid for {hour % 24:D2}:00 on day {hour / 24 + 1} ({why}, {vehicle.VehicleType} {vehicle.VehicleId}).");
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || !FoodTrucksSession.CanWrite) return;
+            CloseHours(state, HireSchedules.Absolute(TimeHelper.CurrentDay, 0), TimeHelper.CurrentDay - 1);
         }
+
+        // Catches the sales up to `boundary` (an hour's start) and pays each hire the earlier hours they earned at a
+        // window the player opened, onto the counters of payrollDay (the day whose midnight payroll pays them).
+        private static void CloseHours(SaveState state, long boundary, int payrollDay)
+        {
+            CartSelling.CatchUpTo(boundary);
+            foreach (var (employeeId, vehicleId, hour) in CrewPay.CloseHours(state, CrewPay.HourOf(boundary)))
+            {
+                FoodTrucksSession.MarkChanged();
+                var employee = Find(employeeId);
+                // Let go, or given a building job, before the hour was over: the hour isn't theirs to be paid by the mod.
+                if (employee == null || employee.isBeingReplaced || employee.IsAssignedToAnyBusiness()) continue;
+                CountOn(state, vehicleId, employee, payrollDay);
+                Log.Info($"Crew: {Name(employee)} paid for {hour % 24:D2}:00 on day {CrewPay.DayOfHour(hour)} (open window, {vehicleId}).");
+            }
+        }
+
+        // One paid hour on the game's counters, so payrollDay's midnight payroll pays it, logged with its vehicle for
+        // Econoview's crew wages (StreetFoodBooks.WagePostfix). The caller has marked the hour paid (CrewPay).
+        private static void CountOn(SaveState state, string vehicleId, EmployeeInstance employee, int payrollDay)
+        {
+            employee.workedHoursToday++;
+            CrewLog.AddHour(state, payrollDay, employee.id, vehicleId);
+            employee.workedHoursThisWeek++;
+            WorkedOn(employee, payrollDay);
+            FoodTrucksSession.MarkChanged();
+        }
+
+        // The game's AddWorkedDay counts today; an hour closed at midnight belongs to the day that just ended.
+        private static void WorkedOn(EmployeeInstance employee, int day)
+        {
+            if (day == SaveGameManager.Current.Day)
+            {
+                employee.AddWorkedDay();
+                return;
+            }
+            if (lastWorkedDay == null) return;
+            if ((int)lastWorkedDay.GetValue(employee) == day) return;
+            lastWorkedDay.SetValue(employee, day);
+            employee.workedDays++;
+        }
+
+        private static readonly System.Reflection.FieldInfo? lastWorkedDay =
+            typeof(EmployeeInstance).GetField("lastWorkedDay", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 
         // Absolute game minutes as Core counts them: (day - 1) × 1440 + minute of the day. Inside the game's
         // hourly loop the minute can still hold hours not yet counted, so it is capped at the hour's end.

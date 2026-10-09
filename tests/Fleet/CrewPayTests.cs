@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Collections.Generic;
 using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
@@ -161,19 +162,101 @@ public class CrewPayTests
     }
 
     [Fact]
-    public void OldPaidHoursArePruned()
+    public void OldMarkersArePrunedAfterADay()
     {
         var state = new SaveState();
         CrewPay.TryPay(state, "e1", 10);
-        CrewPay.TryPay(state, "e2", 49);
-        CrewPay.TryPay(state, "e3", 50);
+        CrewPay.TryPay(state, "e2", 26);
+        CrewPay.Served(state, "e3", "t1", 10 * 60 + 5);
+        CrewPay.Served(state, "e4", "t1", 30 * 60 + 5);
 
         CrewPay.Prune(state, 50);
 
         Assert.False(state.CrewPaidHour.ContainsKey("e1"));
-        // The previous hour stays: the sales may still be catching up on it.
         Assert.True(state.CrewPaidHour.ContainsKey("e2"));
-        Assert.True(state.CrewPaidHour.ContainsKey("e3"));
+        Assert.False(state.CrewServedHour.ContainsKey("e3"));
+        Assert.True(state.CrewServedHour.ContainsKey("e4"));
+    }
+
+    [Fact]
+    public void ServingInTheFirstHalfEarnsTheHourWhenItEnds()
+    {
+        var state = new SaveState();
+        CrewPay.Served(state, "e1", "t1", At(3, 13, 29));
+        CrewPay.Served(state, "e2", "t1", At(3, 13, 30));
+
+        // Nothing is decided while the hour runs.
+        Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 13))));
+        var paid = CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 14)));
+
+        Assert.Equal(new[] { ("e1", "t1", CrewPay.HourOf(At(3, 13))) }, paid);
+        // Decided once.
+        Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 15))));
+        Assert.Empty(state.CrewServedHour);
+    }
+
+    [Fact]
+    public void ASkipAcrossAnHourAndARouteStartPaysBothInOrder()
+    {
+        // A skip from 12:59 to 14:01 with a route starting at 14:00: at 13:00 the sales are caught up (nothing served
+        // yet), at 14:00 the sales reach 14:00 first, so 13:10's serving is decided before the route stamps 14:00.
+        var state = new SaveState();
+        Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 13))));
+        CrewPay.Served(state, "e1", "t1", At(3, 13, 10));
+        Assert.Single(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 14))));
+        Assert.True(CrewPay.TryPay(state, "e1", CrewPay.HourOf(At(3, 14))));
+    }
+
+    [Fact]
+    public void AnHourTheRouteOrTheGameCountedIsNotPaidAgainAsAnOpenHour()
+    {
+        var state = new SaveState();
+        var hour = CrewPay.HourOf(At(3, 12));
+        CrewPay.TryPay(state, "route", hour);
+        CrewPay.GameCounted(state, "shop", hour);
+        CrewPay.Served(state, "route", "t1", At(3, 12, 10));
+        CrewPay.Served(state, "shop", "t1", At(3, 12, 10));
+        CrewPay.Served(state, "late", "t1", At(3, 12, 10));
+
+        var paid = CrewPay.CloseHours(state, hour + 1);
+
+        Assert.Equal(new[] { "late" }, paid.Select(p => p.EmployeeId));
+    }
+
+    [Fact]
+    public void AnHourMarkedLongAgoStillCountsAsPaidUntilPruned()
+    {
+        // With the decisions in order, an older marker never blocks a later hour, and a marker from earlier today
+        // still blocks its own hour while the sales replay sits in it.
+        var state = new SaveState();
+        var eleven = CrewPay.HourOf(At(3, 11));
+        CrewPay.TryPay(state, "e1", eleven);
+        CrewPay.Prune(state, eleven + 3);
+        CrewPay.Served(state, "e1", "t1", At(3, 11, 10));
+
+        Assert.Empty(CrewPay.CloseHours(state, eleven + 3));
+    }
+
+    [Fact]
+    public void TheLastHourBeforeMidnightBelongsToTheClosingDay()
+    {
+        var state = new SaveState();
+        CrewPay.Served(state, "e1", "t1", At(3, 23, 10));
+
+        var paid = CrewPay.CloseHours(state, CrewPay.HourOf(At(4, 0)));
+
+        Assert.Equal(3, CrewPay.DayOfHour(paid.Single().Hour));
+        Assert.Equal(4, CrewPay.DayOfHour(CrewPay.HourOf(At(4, 0))));
+    }
+
+    [Fact]
+    public void TheFirstVehicleInAnHourKeepsIt()
+    {
+        var state = new SaveState();
+        CrewPay.Served(state, "e1", "t1", At(3, 12, 5));
+        CrewPay.Served(state, "e1", "t2", At(3, 12, 20));
+
+        Assert.Equal("t1", CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 13))).Single().VehicleId);
     }
 
     [Fact]
@@ -182,15 +265,18 @@ public class CrewPayTests
         var codec = new SaveCodec();
         var state = new SaveState();
         CrewPay.TryPay(state, "e1", 87);
+        CrewPay.Served(state, "e2", "t1", 88 * 60 + 5);
 
         var loaded = codec.Load(codec.Serialize(state));
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
         Assert.False(CrewPay.Unpaid(loaded.State!, "e1", 87));
         Assert.True(CrewPay.Unpaid(loaded.State!, "e1", 88));
+        Assert.Equal(("t1", 88L), (loaded.State!.CrewServedHour["e2"].VehicleId, loaded.State!.CrewServedHour["e2"].Hour));
 
         var old = codec.Load("{\"schemaVersion\":1,\"licence\":{}}");
         Assert.Equal(LoadStatus.Loaded, old.Status);
         Assert.Empty(old.State!.CrewPaidHour);
+        Assert.Empty(old.State!.CrewServedHour);
         Assert.True(CrewPay.TryPay(old.State!, "e1", 87));
     }
 }

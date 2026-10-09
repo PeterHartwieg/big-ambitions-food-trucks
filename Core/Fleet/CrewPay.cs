@@ -10,8 +10,11 @@ namespace FoodTrucks.Core.Fleet
     //
     // Two kinds of hour are paid. A route hour: the planned shift covers at least half of it, counted as the hour
     // starts (HireCrew.CountHour, as before). An open hour: a window the player opened is paid to the crew who serve
-    // it for each hour they serve in the first half of. It is counted as the sales catch up, minute by minute, so a
-    // window that sold out or closed before the hour began never earns it. Each hire is paid at most once per hour,
+    // it for each hour they serve at some minute of its first half. The sales note who served (Served) as they reach
+    // each minute; the hour is decided once, when it is over (CloseHours): at the next hour's start, or at midnight
+    // just before the game's payroll, after the sales have been caught up to that moment. So the decisions come in
+    // the order of the hours, interleaved with the game's own hourly count: hour h's open pay is decided before hour
+    // h + 1's route pay is stamped and before the game counts h + 1. Each hire is paid at most once per hour,
     // whichever comes first and on whichever vehicle, and not at all for an hour the game itself already counted
     // (a shop shift worked at the hour's start before the hire joined a crew).
     public static class CrewPay
@@ -54,6 +57,39 @@ namespace FoodTrucks.Core.Fleet
             return (chosen.Where(p => p.IsCrew).Select(p => p.Who).ToList(), chosen.Select(p => p.Skill).ToList());
         }
 
+        // The day an hour belongs to: (hour / 24) + 1.
+        public static int DayOfHour(long hour) => (int)Math.Floor(hour / 24.0) + 1;
+
+        // The sales reached this minute of a window the player opened with the hire serving it: a minute of an
+        // hour's first half earns that hour, decided when the hour is over. The first vehicle in the hour keeps it.
+        public static void Served(SaveState state, string employeeId, string vehicleId, long minute)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            if (string.IsNullOrEmpty(employeeId) || string.IsNullOrEmpty(vehicleId)) return;
+            var hour = HourOf(minute);
+            if (minute - hour * 60 >= HalfHour) return;
+            if (state.CrewServedHour.TryGetValue(employeeId, out var served) && served != null && served.Hour == hour) return;
+            state.CrewServedHour[employeeId] = new CrewServed { Hour = hour, VehicleId = vehicleId };
+        }
+
+        // Decides every noted hour before `beforeHour` (the hour now starting, or midnight's): each one the hire
+        // hasn't been paid or counted for is paid now (marked, and returned for the game's counters, in hour order);
+        // the rest are dropped. Called with the sales caught up to the start of `beforeHour`.
+        public static List<(string EmployeeId, string VehicleId, long Hour)> CloseHours(SaveState state, long beforeHour)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            var due = state.CrewServedHour.Where(p => p.Value != null && p.Value.Hour < beforeHour)
+                .OrderBy(p => p.Value.Hour).ThenBy(p => p.Key, StringComparer.Ordinal).ToList();
+            var paid = new List<(string EmployeeId, string VehicleId, long Hour)>();
+            foreach (var pair in due)
+            {
+                state.CrewServedHour.Remove(pair.Key);
+                if (TryPay(state, pair.Key, pair.Value.Hour)) paid.Add((pair.Key, pair.Value.VehicleId, pair.Value.Hour));
+            }
+            foreach (var id in state.CrewServedHour.Where(p => p.Value == null).Select(p => p.Key).ToList()) state.CrewServedHour.Remove(id);
+            return paid;
+        }
+
         // Whether the hire's hour is still free: neither the mod nor the game counted it.
         public static bool Unpaid(SaveState state, string employeeId, long hour)
         {
@@ -81,13 +117,16 @@ namespace FoodTrucks.Core.Fleet
             if (Unpaid(state, employeeId, hour)) state.CrewPaidHour[employeeId] = hour;
         }
 
-        // An entry before the hour asked about says nothing, so only the last two hours are kept (the sales may still
-        // be catching up on the previous one).
+        // Markers more than a day old are dropped (a hire let go, or off the crew). One value per hire, so it stays small.
         public static void Prune(SaveState state, long currentHour)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
-            foreach (var id in state.CrewPaidHour.Where(p => p.Value < currentHour - 1).Select(p => p.Key).ToList())
+            foreach (var id in state.CrewPaidHour.Where(p => p.Value < currentHour - KeepHours).Select(p => p.Key).ToList())
                 state.CrewPaidHour.Remove(id);
+            foreach (var id in state.CrewServedHour.Where(p => p.Value == null || p.Value.Hour < currentHour - KeepHours).Select(p => p.Key).ToList())
+                state.CrewServedHour.Remove(id);
         }
+
+        public const int KeepHours = 24;
     }
 }

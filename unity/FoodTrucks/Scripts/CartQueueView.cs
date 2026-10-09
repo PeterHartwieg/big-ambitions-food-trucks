@@ -215,7 +215,7 @@ namespace FoodTrucks
                 var controller = ControllerOf(game, line.VehicleId);
                 if (vehicle == null || controller == null) continue;
                 var kind = FoodTrucksMod.KindOf(controller.vehicleInstance?.vehicleTypeName) ?? "cart";
-                WindowCrew.Sync(line.VehicleId, controller.transform, kind, line.WindowPlace, HireCrew.OnShift(vehicle, now));
+                WindowCrew.Sync(line.VehicleId, controller.transform, kind, line.WindowPlace, HireCrew.OnShift(vehicle, now), CartSelling.ServingNow(vehicle, kind));
             }
         }
 
