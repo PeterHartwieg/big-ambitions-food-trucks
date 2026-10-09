@@ -1,0 +1,6 @@
+00:00.019  color_management | Using OCIO=/Applications/Blender.app/Contents/Resources/5.2/datafiles/colormanagement/config.ocio
+00:00.606  blend            | Read blend: "/Users/peterhartwieg/Coding_Projects/big-ambitions-food-trucks/.claude/worktrees/milestone-7/art/products/Kabob/Kabob.blend"
+Blender 5.2.2 LTS (hash d13f752e3b9c built 2026-09-15 01:49:19)
+FBX version: 7400
+SCORE PASS /Users/peterhartwieg/Coding_Projects/big-ambitions-food-trucks/.claude/worktrees/milestone-7/art/products/Kabob/score.json
+

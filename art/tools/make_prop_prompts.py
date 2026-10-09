@@ -90,6 +90,19 @@ PRODUCTS = {
     "Dumplings": ("Dumplings",
         "Six pleated dumplings, half of them pan-fried golden on the bottom, in a small white paper or foam takeout "
         "tray, with a small sauce cup."),
+    "Popcorn": ("Popcorn",
+        "A striped paper popcorn bucket (red and white vertical stripes, no text), slightly tapered, overflowing "
+        "with a heaped dome of white-yellow popped kernels. About 0.15 m tall."),
+    "CottonCandy": ("Cotton candy",
+        "A puffy pink cloud of cotton candy wound on a white paper cone or wooden stick, the cloud roughly "
+        "egg-shaped and soft-looking (a few large lumpy lobes, not noise). At most 0.25 m tall with the stick."),
+    "Kabob": ("Kabob",
+        "One street-cart kabob: a wooden skewer with chunks of grilled chicken or lamb, pieces of red and green "
+        "pepper and onion between them, grill marks on the meat, the skewer lying across a small paper tray. At "
+        "most 0.24 m long."),
+    "Slushie": ("Slushie",
+        "A clear plastic cup of bright blue-red layered frozen slush (icy, slightly mounded top) with a domed lid "
+        "and a straw. About 0.15 m tall, no text or logo on the cup."),
 }
 
 EXPORT = '''  ```python

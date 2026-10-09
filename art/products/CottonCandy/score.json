@@ -1,0 +1,229 @@
+{
+  "spec": "spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "CottonCandy_Body",
+      "CottonCandy_Collision"
+    ],
+    "per_object": {
+      "CottonCandy_Body": {
+        "triangles": 576,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.0439,
+          -0.0287,
+          0.0
+        ],
+        "bbox_max": [
+          0.0455,
+          0.0347,
+          0.1447
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "CottonCandy_Collision": {
+        "triangles": 36,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.0508,
+          -0.0462,
+          0.0
+        ],
+        "bbox_max": [
+          0.0508,
+          0.0462,
+          0.151
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 576,
+    "visible_bbox_min": [
+      -0.0439,
+      -0.0287,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.0455,
+      0.0347,
+      0.1447
+    ],
+    "visible_dims": [
+      0.0894,
+      0.0634,
+      0.1447
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_CottonCandy"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.8331,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_CottonCandy_BaseColor.png": [
+        256,
+        256
+      ]
+    },
+    "blend_size_mb": 0.12
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "CottonCandy_Body",
+      "CottonCandy_Collision"
+    ],
+    "per_object": {
+      "CottonCandy_Body": {
+        "triangles": 576,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.0439,
+          -0.0287,
+          -0.0
+        ],
+        "bbox_max": [
+          0.0455,
+          0.0347,
+          0.1447
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "CottonCandy_Collision": {
+        "triangles": 36,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.0508,
+          -0.0462,
+          -0.0
+        ],
+        "bbox_max": [
+          0.0508,
+          0.0462,
+          0.151
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 576,
+    "visible_bbox_min": [
+      -0.0439,
+      -0.0287,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.0455,
+      0.0347,
+      0.1447
+    ],
+    "visible_dims": [
+      0.0894,
+      0.0634,
+      0.1447
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_CottonCandy"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.8331,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.05
+  },
+  "failures": [],
+  "passed": true
+}

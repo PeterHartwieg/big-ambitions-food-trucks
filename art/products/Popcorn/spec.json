@@ -1,0 +1,59 @@
+{
+  "name": "Popcorn",
+  "fbx": "Popcorn.fbx",
+  "visible_budget": 600,
+  "position_tolerance_m": 0.005,
+  "uv_layers": 1,
+  "uv_min_fill": 0.4,
+  "textures": [
+    {
+      "file": "T_Popcorn_BaseColor.png",
+      "size": 256
+    }
+  ],
+  "objects": {
+    "Popcorn_Body": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "max_tris": 600
+    },
+    "Popcorn_Collision": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "collision": true,
+      "max_tris": 40
+    }
+  },
+  "envelope": {
+    "x": [
+      -0.13,
+      0.13
+    ],
+    "y": [
+      -0.13,
+      0.13
+    ],
+    "z": [
+      0,
+      0.15
+    ]
+  },
+  "near_points": [
+    {
+      "label": "stands on the floor at the origin",
+      "object": "Popcorn_Body",
+      "point": [
+        0,
+        0,
+        0
+      ],
+      "max_dist": 0.01
+    }
+  ]
+}

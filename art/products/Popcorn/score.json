@@ -1,0 +1,229 @@
+{
+  "spec": "spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "Popcorn_Body",
+      "Popcorn_Collision"
+    ],
+    "per_object": {
+      "Popcorn_Body": {
+        "triangles": 588,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.052,
+          -0.0526,
+          0.0
+        ],
+        "bbox_max": [
+          0.052,
+          0.0521,
+          0.1484
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "Popcorn_Collision": {
+        "triangles": 36,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.064,
+          -0.0609,
+          0.0
+        ],
+        "bbox_max": [
+          0.064,
+          0.0609,
+          0.15
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 588,
+    "visible_bbox_min": [
+      -0.052,
+      -0.0526,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.052,
+      0.0521,
+      0.1484
+    ],
+    "visible_dims": [
+      0.104,
+      0.1047,
+      0.1484
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_Popcorn"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5238,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_Popcorn_BaseColor.png": [
+        256,
+        256
+      ]
+    },
+    "blend_size_mb": 0.12
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "Popcorn_Body",
+      "Popcorn_Collision"
+    ],
+    "per_object": {
+      "Popcorn_Body": {
+        "triangles": 588,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.052,
+          -0.0526,
+          -0.0
+        ],
+        "bbox_max": [
+          0.052,
+          0.0521,
+          0.1484
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "Popcorn_Collision": {
+        "triangles": 36,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.064,
+          -0.0609,
+          -0.0
+        ],
+        "bbox_max": [
+          0.064,
+          0.0609,
+          0.15
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 588,
+    "visible_bbox_min": [
+      -0.052,
+      -0.0526,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.052,
+      0.0521,
+      0.1484
+    ],
+    "visible_dims": [
+      0.104,
+      0.1047,
+      0.1484
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_Popcorn"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5238,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.07
+  },
+  "failures": [],
+  "passed": true
+}
