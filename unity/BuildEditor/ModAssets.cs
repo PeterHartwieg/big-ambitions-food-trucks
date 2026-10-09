@@ -32,6 +32,7 @@ namespace FoodTrucks.BuildEditor
                 EnsureFolder(VehiclesFolder);
                 EnsureManifest();
                 TruckAssets.GenerateTruck(VehiclesFolder, TruckTypeName);
+                EquipmentAssets.Generate(VehiclesFolder);
                 CartAssets.GenerateCart(VehiclesFolder, CartTypeName);
                 AssetDatabase.SaveAssets();
                 Debug.Log("[FoodTrucksBuild] OK: generated assets.");

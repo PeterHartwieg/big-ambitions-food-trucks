@@ -91,6 +91,11 @@ namespace FoodTrucks
         public static bool Showing(string vehicleId) =>
             instance != null && instance.enabled && instance.lines.TryGetValue(vehicleId, out var line) && line.HasPlaces;
 
+        // The side of the vehicle its open line forms on (1 right, -1 left), or null while no line is laid out
+        // (the vehicle is closed, far from the player, or has no walkable place beside it).
+        public static int? QueueSide(string vehicleId) =>
+            instance != null && instance.lines.TryGetValue(vehicleId, out var line) && line.Side != 0 ? line.Side : (int?)null;
+
         // The cart closed: everyone in line walks off, then the line goes.
         public static void Closed(string vehicleId) => instance?.Retire(vehicleId);
 
@@ -319,6 +324,8 @@ namespace FoodTrucks
         // lets them go unseen (dropped, removed, closed), so CartSelling never holds a sale for good.
         public Action<long>? Paid { get; set; }
         public bool HasPlaces => places.Count > 0;
+        // The vehicle's side the line forms on: 1 right, -1 left, 0 with no places.
+        public int Side { get; private set; }
         // Where the first customer stands, for the crew behind the window.
         public Vector3? WindowPlace => places.Count > 0 ? places[0] : (Vector3?)null;
         public int Count => people.Count + leaving.Count;
@@ -327,11 +334,11 @@ namespace FoodTrucks
         // Places for the window, the queue limit and a few more behind them.
         public static QueueLine Create(string vehicleId, Transform cart, int queueLimit, ServiceState service, WindowShape shape)
         {
-            var (places, look, ends, detail) = Layout(cart, queueLimit + 1 + ExtraPlaces, shape);
+            var (places, look, ends, detail, side) = Layout(cart, queueLimit + 1 + ExtraPlaces, shape);
             var root = new GameObject("FoodTrucks.Queue." + vehicleId);
             root.AddComponent<QueueLineRoot>();
             Log.Info($"Queue view: line at cart {vehicleId}: {detail}.");
-            return new QueueLine(vehicleId, root, places, look, ends, service);
+            return new QueueLine(vehicleId, root, places, look, ends, service) { Side = side };
         }
 
         private void ReleaseServed()
@@ -559,7 +566,7 @@ namespace FoodTrucks
         // The line runs from a window place beside the vehicle along its length, on whichever of the window's
         // sides and in whichever direction keeps the most places on walkable pavement, out of parking lanes and
         // off the road. No walkable window place at all: the line has no places and shows nobody.
-        private static (List<Vector3> Places, Vector3 Look, List<Vector3> Ends, string Detail) Layout(Transform cart, int count, WindowShape shape)
+        private static (List<Vector3> Places, Vector3 Look, List<Vector3> Ends, string Detail, int Side) Layout(Transform cart, int count, WindowShape shape)
         {
             var forward = Direction(cart.forward);
             var right = Direction(cart.right);
@@ -593,7 +600,7 @@ namespace FoodTrucks
                     }
                 }
             }
-            if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the window at {center}; nobody shown");
+            if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the window at {center}; nobody shown", 0);
 
             // Ways in and out: points on the pavement a little way along in both directions, reachable from the window.
             var ends = new List<Vector3>();
@@ -617,7 +624,7 @@ namespace FoodTrucks
             }
             var detail = $"{best.Count} of {count} places on the {(bestSide > 0 ? "right" : "left")} side towards the {(bestDirection > 0 ? "front" : "back")}, " +
                          $"{ends.Count} ways in and out";
-            return (best, center, ends, detail);
+            return (best, center, ends, detail, bestSide);
         }
 
         // The nearest walkable place out of parking lanes beside the window, from Sideways out to Reach.

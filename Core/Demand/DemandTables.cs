@@ -344,7 +344,7 @@ namespace FoodTrucks.Core.Demand
             foreach (var entry in r.Entries(r.Object(root, "equipment")))
             {
                 var obj = AsObject(r, entry);
-                r.OnlyKeys(obj, "products", "gameItems");
+                r.OnlyKeys(obj, "products", "gameItems", "display");
                 var list = r.List(obj, "products");
                 if (list.Count == 0) throw r.Fail(list.Path, "must list at least one product");
                 var items = new List<string>();
@@ -369,7 +369,16 @@ namespace FoodTrucks.Core.Demand
                         gameItems.Add(item);
                     }
                 }
-                equipmentTable.Add(entry.Name, new EquipmentInfo(entry.Name, items, gameItems));
+                // The model shown on a cart's counter spot: a name under Vehicles/EquipmentArt in the bundle.
+                string? display = null;
+                if (obj["display"] != null)
+                {
+                    var path = DataReader.PathOf(obj, "display");
+                    display = r.Text(obj["display"]!, path);
+                    foreach (var c in display)
+                        if (!char.IsLetterOrDigit(c) && c != '_') throw r.Fail(path, "must be a model name (letters, digits, _)");
+                }
+                equipmentTable.Add(entry.Name, new EquipmentInfo(entry.Name, items, gameItems, display));
             }
 
             vehicleTable = new Dictionary<string, VehicleInfo>(StringComparer.Ordinal);
@@ -684,17 +693,20 @@ namespace FoodTrucks.Core.Demand
 
     public sealed class EquipmentInfo
     {
-        internal EquipmentInfo(string id, IReadOnlyList<string> products, IReadOnlyList<string> gameItems)
+        internal EquipmentInfo(string id, IReadOnlyList<string> products, IReadOnlyList<string> gameItems, string? display = null)
         {
             Id = id;
             Products = products;
             GameItems = gameItems;
+            Display = display;
         }
 
         public string Id { get; }
         public IReadOnlyList<string> Products { get; }
         // Vanilla item names that fit this piece of equipment. Missing gameItems means none.
         public IReadOnlyList<string> GameItems { get; }
+        // The display model on a cart's counter, or null to show nothing on the spot.
+        public string? Display { get; }
     }
 
     public sealed class VehicleInfo

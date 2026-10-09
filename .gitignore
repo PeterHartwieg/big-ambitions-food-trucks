@@ -31,6 +31,8 @@ art/**/*.log
 unity/FoodTrucks/Vehicles/TruckArt/*.fbx
 unity/FoodTrucks/Vehicles/TruckArt/*.png
 
-# The cart art, likewise; the originals are in art/cart.
+# The cart and equipment art, likewise; the originals are in art/cart and art/equipment.
 unity/FoodTrucks/Vehicles/CartArt/*.fbx
 unity/FoodTrucks/Vehicles/CartArt/*.png
+unity/FoodTrucks/Vehicles/EquipmentArt/*.fbx
+unity/FoodTrucks/Vehicles/EquipmentArt/*.png
