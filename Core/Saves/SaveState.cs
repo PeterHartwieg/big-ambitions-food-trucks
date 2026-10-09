@@ -36,6 +36,9 @@ namespace FoodTrucks.Core.Saves
         // The first payroll day whose hours are all in CrewHours, set once by the first version that logs them
         // (additive field: null in older saves). Wages for earlier days go to the crew the hire is on at payment.
         public int? CrewHoursSince { get; set; }
+        // The last game hour ((day - 1) × 24 + hour) each hire was paid for as crew, so an hour that is both a route
+        // hour and an hour at a window the player opened is paid once (additive field: older saves read none).
+        public Dictionary<string, long> CrewPaidHour { get; set; } = new Dictionary<string, long>(StringComparer.Ordinal);
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

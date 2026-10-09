@@ -192,6 +192,8 @@ namespace FoodTrucks.Core.Saves
 
             if (state.CrewHours == null || state.CrewHours.Any(h => h == null || string.IsNullOrEmpty(h.EmployeeId) || string.IsNullOrEmpty(h.VehicleId) || h.Hours <= 0))
                 throw new JsonSerializationException("CrewHours must name the employee and vehicle, with at least one hour.");
+            if (state.CrewPaidHour == null || state.CrewPaidHour.Keys.Any(string.IsNullOrEmpty))
+                throw new JsonSerializationException("CrewPaidHour must name its employees.");
 
             var days = new HashSet<int>();
             long total = 0;
