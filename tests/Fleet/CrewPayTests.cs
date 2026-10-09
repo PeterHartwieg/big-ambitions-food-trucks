@@ -410,4 +410,33 @@ public class CrewPayTests
         Assert.True(CrewLog.HasHours(state, 2, "e1"));
         Assert.True(CrewLog.HasHours(state, 3, "e2"));
     }
+
+    [Fact]
+    public void ARetirementInAMidnightSkipPaysNoHourAfterMidnight()
+    {
+        // A skip from 23:59 to 00:10 in one frame: the payroll closes 23:00 into the closing day, then the game's daily
+        // run retires the worker with the clock already at 00:10. The sales go only to 00:00, so no service is noted
+        // after midnight and nothing for 00:00 is owed.
+        var state = new SaveState();
+        CrewPay.Served(state, "e1", "t1", At(3, 23, 10));
+        var midnight = At(4, 0);
+        Assert.Single(CrewPay.CloseHours(state, CrewPay.HourOf(midnight), Credit));
+
+        var limit = CrewPay.CatchUpLimit(inGameTick: true, midnight, At(4, 0, 10));
+        Assert.Equal(midnight, limit);
+        // The sales catch up to `limit`: the last minute they reach is 23:59, never 00:00.
+        for (var minute = At(3, 23, 59); minute < limit; minute++) CrewPay.Served(state, "e1", "t1", minute);
+
+        var owed = CrewPay.Owed(state, "e1", 4);
+        Assert.Equal(0, owed.Hours);
+        Assert.Null(owed.PendingHour);
+        Assert.Empty(state.CrewServedHour);
+    }
+
+    [Fact]
+    public void AChangeThePlayerMakesCatchesUpToTheLiveMinute()
+    {
+        Assert.Equal(At(3, 12, 20), CrewPay.CatchUpLimit(inGameTick: false, At(3, 12), At(3, 12, 20)));
+        Assert.Equal(At(3, 12), CrewPay.CatchUpLimit(inGameTick: true, At(3, 12), At(3, 12, 20)));
+    }
 }
