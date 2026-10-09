@@ -30,6 +30,8 @@ namespace FoodTrucks
             { LedgerLine.Wages, "foodtrucks:econoview_line_wages" },
             { LedgerLine.Parking, "foodtrucks:econoview_line_parking" },
             { LedgerLine.Permit, "foodtrucks:econoview_line_permit" },
+            { LedgerLine.CommissaryRent, "foodtrucks:econoview_line_commissary" },
+            { LedgerLine.OvernightFine, "foodtrucks:econoview_line_overnight_fines" },
         };
 
         private static MethodInfo? createRow;
@@ -83,7 +85,7 @@ namespace FoodTrucks
         }
 
         // Econoview's "Street food" group, after the other income. Its children: a row per vehicle (closed, opening into
-        // its lines), then the fleet's licence and event places, then anything from before the breakdown.
+        // its lines), then the fleet's licence, event places and commissary delivery fees, then anything from before the breakdown.
         public static void IncomeRows(object __instance)
         {
             try
@@ -106,6 +108,8 @@ namespace FoodTrucks
                     Row(__instance, Sign(statement.Licence), "foodtrucks:econoview_row_licence", statement.Licence, group);
                 if (statement.EventPlaces.Any(v => v != 0))
                     Row(__instance, Sign(statement.EventPlaces), "foodtrucks:econoview_row_events", statement.EventPlaces, group);
+                if (statement.DeliveryFees.Any(v => v != 0))
+                    Row(__instance, Sign(statement.DeliveryFees), "foodtrucks:econoview_row_delivery_fees", statement.DeliveryFees, group);
                 if (statement.NotBrokenDown.Any(v => v != 0))
                     Row(__instance, Sign(statement.NotBrokenDown), "foodtrucks:econoview_row_earlier", statement.NotBrokenDown, group);
             }

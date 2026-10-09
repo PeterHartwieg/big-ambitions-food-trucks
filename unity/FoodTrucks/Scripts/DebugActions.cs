@@ -17,7 +17,7 @@ using Vehicles.VehicleTypes;
 namespace FoodTrucks
 {
     // Debug and maintenance actions: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
-    // Ctrl+F12 catering gig here, Ctrl+Shift+F12 uninstall step. Also console commands when the game runs with -console.
+    // Ctrl+F12 catering gig here, Ctrl+Shift+F12 uninstall step, Ctrl+Alt+F6 commissary bays, Ctrl+Alt+F7 commissary deliveries now, Ctrl+Alt+F8 overnight check dry run. Also console commands when the game runs with -console.
     internal sealed class DebugActions : MonoBehaviour
     {
         private static readonly Action SpawnTruckAction = () => SpawnVehicle(FoodTrucksMod.TruckTypeName);
@@ -35,6 +35,10 @@ namespace FoodTrucks
         private static readonly Action UninstallAction = Uninstall.Request;
         private static readonly Action EventAction = () => CityPitches.EventHereForTesting(PlayerHelper.GetPosition());
         private static readonly Action GigAction = () => Catering.GigHereForTesting(PlayerHelper.GetPosition());
+        private static readonly Action CommissaryWhereAction = () => Run("commissary bays", Commissary.WhereForTesting);
+        private static readonly Action CommissaryDeliverAction = () => Run("commissary deliveries", Commissary.DeliverForTesting);
+        private static readonly Action CommissaryNightAction = () => Run("overnight check", Commissary.NightForTesting);
+        // (The three above carry their own guard, as the console calls them directly.)
 
         private void OnEnable()
         {
@@ -54,9 +58,12 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_demand", "Food Trucks: the demand model's reading for the cart next to you", DemandAction);
                 CommandHelper.AddCommand("foodtrucks_status", "Food Trucks: show the mod's save data", StatusAction);
                 CommandHelper.AddCommand("foodtrucks_uninstall", "Food Trucks: remove and refund all Food Trucks vehicles (run twice to confirm)", UninstallAction);
+                CommandHelper.AddCommand("foodtrucks_commissary_where", "Food Trucks: log where every commissary bay is from you and your vehicle", CommissaryWhereAction);
+                CommandHelper.AddCommand("foodtrucks_commissary_deliver", "Food Trucks: deliver every paid commissary order now (throwaway saves only)", CommissaryDeliverAction);
+                CommandHelper.AddCommand("foodtrucks_commissary_night", "Food Trucks: what the 04:00 overnight check would say now, without fines", CommissaryNightAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+F12 catering gig here, Ctrl+Shift+F12 uninstall step.");
+            Log.Info("Debug actions ready: Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+F12 catering gig here, Ctrl+Shift+F12 uninstall step, Ctrl+Alt+F6 commissary bays, Ctrl+Alt+F7 commissary deliveries now, Ctrl+Alt+F8 overnight check dry run.");
         }
 
         private void OnDisable()
@@ -77,6 +84,9 @@ namespace FoodTrucks
                 CommandHelper.RemoveCommand(DemandAction);
                 CommandHelper.RemoveCommand(HireAction);
                 CommandHelper.RemoveCommand(UninstallAction);
+                CommandHelper.RemoveCommand(CommissaryWhereAction);
+                CommandHelper.RemoveCommand(CommissaryDeliverAction);
+                CommandHelper.RemoveCommand(CommissaryNightAction);
             }
             catch (Exception ex) { Log.Error(ex); }
         }
@@ -86,6 +96,13 @@ namespace FoodTrucks
             var keyboard = Keyboard.current;
             if (keyboard == null || SaveGameManager.Current == null || GameManager.ShouldBlockKeyboardShortcuts()) return;
             if (!keyboard.ctrlKey.isPressed) return;
+            if (keyboard.altKey.isPressed)
+            {
+                if (keyboard.f6Key.wasPressedThisFrame) Run("commissary bays", CommissaryWhereAction);
+                else if (keyboard.f7Key.wasPressedThisFrame) Run("commissary deliveries", CommissaryDeliverAction);
+                else if (keyboard.f8Key.wasPressedThisFrame) Run("overnight check", CommissaryNightAction);
+                return;
+            }
 
             if (keyboard.f6Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("licence", LicenceAction);
             else if (keyboard.f6Key.wasPressedThisFrame) Run("spawn truck", SpawnTruckAction);
