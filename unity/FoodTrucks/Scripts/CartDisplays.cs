@@ -14,7 +14,9 @@ namespace FoodTrucks
     // bundle; a piece without one leaves its spot empty. Every half second it compares each cart's fitted pieces
     // with what it shows, so fitting, removing and loading need no hooks. While the cart is open the pieces face
     // the side its queue forms on (CartQueueView's choice); closed, or with no line laid out, they face right.
-    // The models have no colliders.
+    // The models have no colliders. They follow the cart's visible flag every frame: the game hides a vehicle
+    // (EntityController.Hide, e.g. on another floor of a multi-floor building) by disabling only the renderers
+    // in its own list, which the pieces aren't in.
     internal sealed class CartDisplays : MonoBehaviour
     {
         private const float CheckSeconds = 0.5f;
@@ -31,6 +33,9 @@ namespace FoodTrucks
 
         private sealed class Shown
         {
+            public VehicleController? Controller;
+            public Renderer[] Renderers = Array.Empty<Renderer>();
+            public bool Visible = true;
             public Transform?[] Spots = new Transform?[2];
             public string?[] Pieces = new string?[2];
             public GameObject?[] Objects = new GameObject?[2];
@@ -47,6 +52,8 @@ namespace FoodTrucks
 
         private void Update()
         {
+            try { SyncVisibility(); }
+            catch (Exception ex) { Log.Error("Cart displays: " + ex); }
             if (Time.unscaledTime < nextCheck) return;
             nextCheck = Time.unscaledTime + CheckSeconds;
             try { Check(); }
@@ -66,7 +73,7 @@ namespace FoodTrucks
                 seen.Add(key);
                 if (!shown.TryGetValue(key, out var entry))
                 {
-                    entry = new Shown();
+                    entry = new Shown { Controller = controller };
                     for (var i = 0; i < SpotNames.Length; i++) entry.Spots[i] = controller.transform.Find(SpotNames[i]);
                     shown[key] = entry;
                     if (entry.Spots.Any(s => s == null)) Log.Error($"Cart displays: cart {cart.id} has no equipment spots (a cart from an older build).");
@@ -85,6 +92,7 @@ namespace FoodTrucks
                         entry.Objects[i] = piece == null ? null : Place(cart.id, i, piece, Display(tables, piece), entry.Spots[i]!);
                         entry.Pieces[i] = piece;
                         entry.Side = 0;
+                        Collect(entry);
                     }
                 }
                 if (entry.Side != side)
@@ -98,6 +106,26 @@ namespace FoodTrucks
             }
             // Carts despawned or sold: their pieces went with them; forget them.
             foreach (var key in shown.Keys.Where(k => !seen.Contains(k)).ToList()) shown.Remove(key);
+        }
+
+        private void SyncVisibility()
+        {
+            foreach (var entry in shown.Values)
+            {
+                var visible = entry.Controller == null || entry.Controller.visible;
+                if (visible == entry.Visible) continue;
+                entry.Visible = visible;
+                foreach (var renderer in entry.Renderers)
+                    if (renderer != null) renderer.enabled = visible;
+            }
+        }
+
+        // The pieces' renderers, set to the cart's current visibility (a new piece on a hidden cart starts hidden).
+        private static void Collect(Shown entry)
+        {
+            entry.Renderers = entry.Objects.Where(go => go != null).SelectMany(go => go!.GetComponentsInChildren<Renderer>(true)).ToArray();
+            entry.Visible = entry.Controller == null || entry.Controller.visible;
+            foreach (var renderer in entry.Renderers) renderer.enabled = entry.Visible;
         }
 
         private static string? Display(FoodTrucks.Core.Demand.DemandTables tables, string piece) => tables.Equipment(piece)?.Display;
