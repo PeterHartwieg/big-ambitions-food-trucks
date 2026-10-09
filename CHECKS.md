@@ -15,10 +15,12 @@ Branch `commissary`, on top of 0.9.3. Five commissary garages (`data/commissarie
 | 2 | City map, Street food line, "Commissaries" | Five buildings lit in purple: Industry City, Garment District, Hell's Kitchen's edge, Lower Manhattan, Murray Hill. Do they look like garages a food vendor would use? Name any that don't |
 | 3 | Ctrl+F6 truck, Ctrl+Shift+F6, drive to the nearest lit commissary and park at the kerb by its door. Ctrl+Alt+F6 | A new contact ("… Commissary") with a welcome text. The notice says "in the bay". If not, the distance tells me how far off the bay is: Ctrl+F8 where a vehicle could legally park, and I put that point in the data |
 | 4 | In the truck at the bay, press "Commissary" on the panel | The button shows only in the bay. The list offers "Rent a space at …: $1,250.00 a month". Rent it: a message, and a rent transaction of about $41 today |
-| 5 | Call the commissary's contact. "Food", press Next a few times, then "Order a box"; then "Machines", order a hot dog grill | Each item with its box size, price and delivery fee; a text confirming each order for 08:00 tomorrow; the money goes. Does the call read well? Is the food list too long to page through? |
+| 5 | Call the commissary's contact, press "Order stock" | The call ends with "Pick what you need", the phone closes and a list opens over the city: every food and machine with its box price and what is in stock. Pick hot dogs, then 3 boxes (the list shows goods + delivery = total), then confirm. A text confirms the order for 08:00 tomorrow and the money goes. Does the call come back cleanly on the phone afterwards? If the list doesn't open, or opens behind something, say so: the same lists are on the Commissary button at the bay ("Order stock for delivery to …") |
+| 5b | At the bay, Commissary, "Order stock for delivery to …"; order a hot dog grill | The same three lists, from the panel |
 | 6 | Ctrl+Alt+F7 (or sleep to after 08:00) | A text per order: "Your delivery is in" |
 | 7 | At the bay, "Commissary", "Restock" | The grill and the food go into the truck's cargo (the item panel counts them). A box bigger than the stock limit loads in part and the rest stays ("… items left in stock here") |
 | 8 | Leave the truck in the bay, push a cart elsewhere and walk away; sleep past 04:00 | The truck isn't fined; the cart is: a City text "Your Food cart wasn't in a commissary bay at 04:00", and a fine transaction of $250 |
+| 8b | If the save rents or owns a building: leave a cart at its door (within 15 m), and a truck inside a warehouse you rent, if you have one; sleep past 04:00 | Neither is fined (Ctrl+Alt+F8 before 04:00 says "at your own building") |
 | 9 | Next day, Econoview's income statement | Under the truck: "Commissary rent"; under the cart: "Overnight fines"; in the Street food group: "Delivery fees". The statement's Total still equals the day summary's profit |
 | 10 | Rent a space for the cart at a second commissary, then move the truck's space there from the panel at that bay; give one up | Messages for each; the rent keeps coming daily for the spaces left |
 | 11 | With stock left at a commissary, run the uninstall step (Ctrl+Shift+F12 twice) | "Commissary stock and open orders paid back: $…", the commissary contacts are gone |
@@ -31,7 +33,7 @@ Branch `commissary`, on top of 0.9.3. Five commissary garages (`data/commissarie
 - `Overnight check: starts on day …`, then one `Overnight check through day N: <vehicle> in its bay / out …; K fines.` per night and an `Overnight fine: …` line per fine.
 - `Commissary <id>: unlocked on day … (visited)`; `… rented a space …`, `moved its space …`, `gave up its space …`.
 - `Commissary rent: <vehicle> at <id> for day N, $… paid.` once per space per day.
-- `Commissary order N: …`, `Commissary delivery: order N, …`, `Commissary restock: … loaded …; … units didn't fit and stay; … left in stock.`
+- `Commissary order at <id>: list of N items shown.`; - `Commissary order N: …`, `Commissary delivery: order N, …`, `Commissary restock: … loaded …; … units didn't fit and stay; … left in stock.`
 - `Uninstall: commissary refund …` after row 11.
 - No new Harmony patches; the earlier `Patch …: Active.` lines are unchanged. No `Commissary:` error lines.
 

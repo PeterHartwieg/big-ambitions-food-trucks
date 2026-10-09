@@ -205,7 +205,7 @@ namespace FoodTrucks.Core.Commissary
             var fines = new List<CommissaryFine>();
             foreach (var vehicle in fleet)
             {
-                if (vehicle.PlayerInside || vehicle.OnLateStop || vehicle.InTransit ||
+                if (vehicle.PlayerInside || vehicle.OnLateStop || vehicle.InTransit || vehicle.AtPlayerProperty ||
                     (vehicle.AtOwnCommissaryBay && state.Spaces.Any(s => s.VehicleId == vehicle.VehicleId))) continue;
                 for (var day = first; day <= latest; day++)
                     fines.Add(new CommissaryFine { VehicleId = vehicle.VehicleId, Day = (int)day, Cents = rules.OvernightFineCents });

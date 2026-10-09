@@ -109,6 +109,8 @@ namespace FoodTrucks.Core.Commissary
         public bool PlayerInside { get; set; }
         public bool OnLateStop { get; set; }
         public bool InTransit { get; set; }
+        // Parked at or inside a building the player rents or owns (Peter, 9 October 2026): not fined, with or without a space.
+        public bool AtPlayerProperty { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

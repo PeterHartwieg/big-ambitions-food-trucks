@@ -86,7 +86,7 @@
     ]
   },
 
-  "_commissary": "Rent is whole cents per vehicle kind per month, charged per game day as monthly x 12 / 365 rounded to cents, including the rental day. Orders cost goods plus deliveryFeeShare, rounded once per order, and always arrive the next day at deliveryMinute (08:00). Separate FIFO stock batches keep their goods price. At nightCheckMinute (04:00), vehicles away from their own rented bay pay overnightFineCents unless the player is inside, a hired late stop is still running, or they are in transit. Across skipped nights the current flags apply. bayRadiusMetres is for the game adapter's bay check.",
+  "_commissary": "Rent is whole cents per vehicle kind per month, charged per game day as monthly x 12 / 365 rounded to cents, including the rental day. Orders cost goods plus deliveryFeeShare, rounded once per order, and always arrive the next day at deliveryMinute (08:00). Separate FIFO stock batches keep their goods price. At nightCheckMinute (04:00), vehicles away from their own rented bay pay overnightFineCents unless the player is inside, a hired late stop is still running, they are in transit, or they are parked at or inside a building the player rents or owns. Across skipped nights the current flags apply. bayRadiusMetres is for the game adapter's bay check.",
   "commissary": {
     "rentPerMonthCents": { "cart": 30000, "truck": 125000 },
     "overnightFineCents": 25000,
