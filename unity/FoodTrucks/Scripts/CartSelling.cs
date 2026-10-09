@@ -461,6 +461,32 @@ namespace FoodTrucks
             instance.Close(vehicle, "foodtrucks:notification_hire_closed", minute);
         }
 
+        // Sells every window the player opened up to that game minute, exactly as the frames would have: called inside
+        // the game's tick before crew pay is decided for the hour that just ended, so a sell-out or a closing before it
+        // counts. Windows the crew opened are the route's to catch up.
+        internal static void CatchUpTo(double minute)
+        {
+            var self = instance;
+            var state = FoodTrucksSession.CurrentState;
+            if (self == null || state == null || !FoodTrucksSession.CanWrite || !self.enabled) return;
+            try
+            {
+                foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && !RunByRoute(v)).ToList())
+                    self.Advance(state, vehicle, minute, int.MaxValue);
+            }
+            catch (Exception ex) { Log.Error("Sales catch-up before crew pay: " + ex); }
+        }
+
+        // The crew who serve at the window now (the player at the window may take a place); all on shift while closed.
+        internal static List<EmployeeInstance> ServingNow(VehicleState vehicle, string kind)
+        {
+            var now = HireCrew.Now();
+            if (!vehicle.IsOpen) return HireCrew.OnShift(vehicle, now);
+            var cart = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId);
+            var atWindow = cart != null && !Skipping && PlayerIsAtCart(cart);
+            return HireCrew.Team(vehicle, now, atWindow ? ServiceRules.EffectiveSkill(PlayerSkill(), 100) : (double?)null, kind).Crew;
+        }
+
         // Sells at a window the crew runs up to that game minute, in steps the simulator takes at once.
         internal static void AdvanceTo(VehicleState vehicle, double minute)
         {
@@ -784,9 +810,9 @@ namespace FoodTrucks
             if (elapsed > SalesTick.MaxCatchUpMinutes) return;
             // Minutes sold outside a partner venue count towards its day.
             if (window.Servers > 0) Partners.Worked(state, vehicle, spot, (long)Math.Floor(from), elapsed);
-            // The crew serving a window the player opened earns this minute's hour, in order with the sales: a window
-            // that sold out or closed before the hour began never reaches it.
-            HireCrew.CountServing(state, vehicle, window.Crew, (long)Math.Floor(from));
+            // The crew serving a window the player opened, noted as the sales reach this minute: a minute of an hour's
+            // first half earns that hour, decided when it is over (HireCrew.CountHour, BeforePayroll).
+            HireCrew.Served(state, vehicle, window.Crew, (long)Math.Floor(from));
 
             // A cart opened before 0.4.0 has no queue yet; it starts one now.
             vehicle.Service ??= SalesSimulator.Open(Seed(cart.id));

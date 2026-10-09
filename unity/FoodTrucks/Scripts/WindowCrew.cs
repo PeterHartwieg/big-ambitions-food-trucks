@@ -19,6 +19,7 @@ namespace FoodTrucks
         private const string CharacterPrefab = "Characters/HumanDefinitionLow";
         // A cart's worker stands behind it, opposite the window place.
         private const float CartBehind = 0.85f;
+        private const float CartBeside = 0.9f;
         // Inside the truck, behind the hatch: right of the middle, on the truck's floor (a guess at its height),
         // spread along the window when there are several. The player at the hatch (TruckWindow) stands here too,
         // in the middle place, and the crew move aside (Core WindowPlaces).
@@ -77,7 +78,10 @@ namespace FoodTrucks
         private static bool failed;
 
         // Shows exactly these employees at the vehicle's window. windowPlace is where the first customer stands.
-        public static void Sync(string vehicleId, Transform vehicle, string kind, Vector3? windowPlace, IReadOnlyList<EmployeeInstance> crew)
+        // serving: those of them who serve (CrewPay.Team); they take the places at the window and the rest wait
+        // (inside the truck, beside the cart). Null when all of them do.
+        public static void Sync(string vehicleId, Transform vehicle, string kind, Vector3? windowPlace, IReadOnlyList<EmployeeInstance> crew,
+            IReadOnlyCollection<EmployeeInstance>? serving = null)
         {
             if (failed) return;
             try
@@ -94,10 +98,17 @@ namespace FoodTrucks
                     var worker = Spawn(vehicleId, employee);
                     if (worker != null) shown.Add(worker);
                 }
-                var places = TruckPlaces(shown.Count, TruckWindow.PlayerAt(vehicleId));
+                var servingIds = serving == null ? null : new HashSet<string>(serving.Select(e => e.id));
+                bool Serves(Worker w) => servingIds == null || servingIds.Contains(w.EmployeeId);
+                var order = shown.OrderBy(w => Serves(w) ? 0 : 1).ToList();
+                var atWindow = order.Count(Serves);
+                var places = TruckPlaces(atWindow, TruckWindow.PlayerAt(vehicleId));
                 var idle = 0;
-                for (var i = 0; i < shown.Count; i++)
-                    Stand(shown[i], vehicle, kind, windowPlace, places[i], places[i].HasValue ? -1 : idle++);
+                for (var i = 0; i < order.Count; i++)
+                {
+                    var place = i < atWindow ? places[i] : null;
+                    Stand(order[i], vehicle, kind, windowPlace, place, place.HasValue ? -1 : idle++, i < atWindow);
+                }
                 if (shown.Count == 0) workers.Remove(vehicleId);
             }
             catch (Exception ex)
@@ -150,7 +161,7 @@ namespace FoodTrucks
         }
 
         // along: the place at the hatch; null with idleIndex for one waiting inside the truck.
-        private static void Stand(Worker worker, Transform vehicle, string kind, Vector3? windowPlace, double? along, int idleIndex)
+        private static void Stand(Worker worker, Transform vehicle, string kind, Vector3? windowPlace, double? along, int idleIndex, bool serves)
         {
             if (kind == "truck")
             {
@@ -162,7 +173,9 @@ namespace FoodTrucks
             var outward = windowPlace.HasValue ? windowPlace.Value - vehicle.position : vehicle.right;
             outward.y = 0f;
             outward = outward.sqrMagnitude > 1e-4f ? outward.normalized : vehicle.right;
-            worker.Character.ForceToPosition(vehicle.position - outward * CartBehind);
+            // One not serving (the player took the place) waits beside the cart.
+            var beside = serves ? Vector3.zero : Vector3.Cross(Vector3.up, outward) * (CartBeside * (idleIndex + 1));
+            worker.Character.ForceToPosition(vehicle.position - outward * CartBehind + beside);
             worker.Character.ForceToRotation(Quaternion.LookRotation(outward));
         }
 

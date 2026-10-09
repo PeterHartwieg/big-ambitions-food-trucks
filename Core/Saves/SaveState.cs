@@ -39,6 +39,9 @@ namespace FoodTrucks.Core.Saves
         // The last game hour ((day - 1) × 24 + hour) each hire was paid for as crew, so an hour that is both a route
         // hour and an hour at a window the player opened is paid once (additive field: older saves read none).
         public Dictionary<string, long> CrewPaidHour { get; set; } = new Dictionary<string, long>(StringComparer.Ordinal);
+        // The hour in whose first half each hire last served a window the player opened, and on which vehicle, until
+        // that hour is over and decided (CrewPay.CloseHours; additive field: older saves read none).
+        public Dictionary<string, CrewServed> CrewServedHour { get; set; } = new Dictionary<string, CrewServed>(StringComparer.Ordinal);
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -137,6 +140,15 @@ namespace FoodTrucks.Core.Saves
     }
 
     // Hours one hire was counted as working on one vehicle on one payroll day (the game's day the hours fell in).
+    public class CrewServed
+    {
+        public long Hour { get; set; }
+        public string VehicleId { get; set; } = string.Empty;
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
     public class CrewHours
     {
         public int Day { get; set; }
