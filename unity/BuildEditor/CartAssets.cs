@@ -1,6 +1,8 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.AI;
@@ -8,7 +10,8 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks.BuildEditor
 {
-    // Placeholder push cart with its ground-level origin at the body centre / wheel axle.
+    // The push cart with the final model from art/cart (art/README.md, "Food cart"); tools/build-mod.sh copies
+    // the FBX and texture into Vehicles/CartArt first. Its ground-level origin is at the body centre / wheel axle.
     // HandTruck.EnterVehicle parents the cart at the player root, then a negative playerOffsetWhenActive
     // moves that root forward while keeping the player model in place. The cart turns around its centre,
     // with the pusher's feet PusherDistance behind it and the body facing +z.
@@ -24,6 +27,19 @@ namespace FoodTrucks.BuildEditor
         private const float GripReach = 0.65f;
         private const float HandleZ = -0.75f;
         private const float PusherDistance = -HandleZ + GripReach;
+
+        // The root collider and nav obstacle, widened to the wheels; the umbrella stays outside it.
+        private static readonly Vector3 BodyCenter = new Vector3(0f, 0.6f, 0f);
+        private static readonly Vector3 BodySize = new Vector3(0.96f, 1.2f, 1.5f);
+
+        // The FBX nodes the prefab shows, with the positions art/README.md gives (checked against the file).
+        private static readonly (string Name, Vector3 Position)[] Parts =
+        {
+            ("Cart_Body", Vector3.zero),
+            ("Cart_Wheel_L", new Vector3(-0.455f, 0.25f, 0f)),
+            ("Cart_Wheel_R", new Vector3(0.455f, 0.25f, 0f)),
+            ("Cart_Lid", new Vector3(0f, 0.95f, 0.025f)),
+        };
 
         public static void GenerateCart(string folder, string typeName)
         {
@@ -58,7 +74,8 @@ namespace FoodTrucks.BuildEditor
             SetTags(type, HandVehicleTag);
             EditorUtility.SetDirty(type);
 
-            var root = BuildCart(type);
+            var artFolder = folder + "/CartArt";
+            var root = BuildCart(type, Meshes(artFolder), ArtMaterial(artFolder));
             try
             {
                 PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
@@ -82,7 +99,7 @@ namespace FoodTrucks.BuildEditor
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static GameObject BuildCart(VehicleType type)
+        private static GameObject BuildCart(VehicleType type, Dictionary<string, (Mesh Mesh, Vector3 Position)> meshes, Material material)
         {
             var root = new GameObject("FoodCart");
             root.tag = "Vehicle";
@@ -90,8 +107,8 @@ namespace FoodTrucks.BuildEditor
 
             // Clickable collider on the root: the mouse raycast looks for the controller on the hit object itself.
             var collider = root.AddComponent<BoxCollider>();
-            collider.center = new Vector3(0f, 0.6f, 0f);
-            collider.size = new Vector3(0.8f, 1.2f, 1.5f);
+            collider.center = BodyCenter;
+            collider.size = BodySize;
 
             var obstacle = root.AddComponent<NavMeshObstacle>();
             obstacle.shape = NavMeshObstacleShape.Box;
@@ -105,17 +122,34 @@ namespace FoodTrucks.BuildEditor
             audio.loop = true;
             audio.spatialBlend = 1f;
 
-            var renderers = new List<Renderer>
+            var renderers = new List<Renderer>();
+            foreach (var (name, _) in Parts)
             {
-                Box(root.transform, "Body", new Vector3(0f, 0.6f, 0f), new Vector3(0.8f, 0.7f, 1.4f), new Color(0.85f, 0.25f, 0.2f)),
-                Box(root.transform, "Canopy", new Vector3(0f, 1.25f, 0f), new Vector3(0.95f, 0.05f, 1.55f), new Color(0.95f, 0.9f, 0.8f)),
-                Box(root.transform, "Handle", new Vector3(0f, GripHeight, HandleZ), new Vector3(0.75f, 0.04f, 0.04f), Color.gray),
-                // Two uprights from the body's top edge (0.95 m) up to the handle.
-                Box(root.transform, "HandlePostLeft", new Vector3(-0.36f, (0.95f + GripHeight) / 2f, HandleZ), new Vector3(0.04f, GripHeight - 0.95f, 0.04f), Color.gray),
-                Box(root.transform, "HandlePostRight", new Vector3(0.36f, (0.95f + GripHeight) / 2f, HandleZ), new Vector3(0.04f, GripHeight - 0.95f, 0.04f), Color.gray),
-                Box(root.transform, "WheelLeft", new Vector3(-0.42f, 0.18f, 0f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
-                Box(root.transform, "WheelRight", new Vector3(0.42f, 0.18f, 0f), new Vector3(0.06f, 0.36f, 0.36f), Color.black),
-            };
+                var part = new GameObject(name);
+                part.layer = root.layer;
+                part.transform.SetParent(root.transform, false);
+                part.transform.localPosition = meshes[name].Position;
+                part.AddComponent<MeshFilter>().sharedMesh = meshes[name].Mesh;
+                var renderer = part.AddComponent<MeshRenderer>();
+                renderer.sharedMaterial = material;
+                renderers.Add(renderer);
+            }
+
+            // The parking lanes keep a spot free only for player vehicles with a collider at this path
+            // (ParkingLaneGenerator.AddPlayerVehicleObstacles reads it through VehicleHelper.TryGetBodyColliderBounds).
+            // A trigger on Ignore Raycast, so it neither blocks anything nor catches the mouse; the root collider
+            // stays the one the game clicks and switches off while pushing. CartParts switches this one with it.
+            var holder = new GameObject("CarHolder").transform;
+            holder.SetParent(root.transform, false);
+            var colliders = new GameObject("Colliders").transform;
+            colliders.SetParent(holder, false);
+            var body = new GameObject("BodyCollider");
+            body.layer = LayerMask.NameToLayer("Ignore Raycast");
+            body.transform.SetParent(colliders, false);
+            var bodyCollider = body.AddComponent<BoxCollider>();
+            bodyCollider.isTrigger = true;
+            bodyCollider.center = BodyCenter;
+            bodyCollider.size = BodySize;
 
             // One child per cargo slot; HandTruck shows the first N children for N cargo entries.
             var boxes = new GameObject("BoxPlaceholder").transform;
@@ -156,6 +190,68 @@ namespace FoodTrucks.BuildEditor
             return root;
         }
 
+        private static string ProjectRoot => Path.GetDirectoryName(Application.dataPath)!;
+
+        // Meshes and node positions from the FBX; a node away from art/README.md's table fails the build,
+        // since every attachment point above was placed against that table.
+        private static Dictionary<string, (Mesh Mesh, Vector3 Position)> Meshes(string artFolder)
+        {
+            var fbxPath = artFolder + "/FoodCart.fbx";
+            if (!File.Exists(Path.Combine(ProjectRoot, fbxPath)))
+                throw new InvalidOperationException($"{fbxPath} missing; tools/build-mod.sh copies it from art/cart.");
+            var importer = (ModelImporter)AssetImporter.GetAtPath(fbxPath);
+            if (importer.isReadable || importer.importAnimation || importer.materialImportMode != ModelImporterMaterialImportMode.None || importer.globalScale != 1f)
+            {
+                importer.isReadable = false;
+                importer.importAnimation = false;
+                importer.materialImportMode = ModelImporterMaterialImportMode.None;
+                importer.globalScale = 1f;
+                importer.SaveAndReimport();
+            }
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(fbxPath);
+            var found = model.GetComponentsInChildren<MeshFilter>(true).ToDictionary(f => f.name, f => (f.sharedMesh, f.transform.localPosition, f.transform.localRotation));
+            var meshes = new Dictionary<string, (Mesh, Vector3)>();
+            foreach (var (name, expected) in Parts)
+            {
+                if (!found.TryGetValue(name, out var node)) throw new InvalidOperationException($"{fbxPath} lacks {name}.");
+                if ((node.localPosition - expected).magnitude > 0.005f || Quaternion.Angle(node.localRotation, Quaternion.identity) > 0.5f)
+                    throw new InvalidOperationException($"{name} in {fbxPath} is at {node.localPosition:F3}, rotation {node.localRotation.eulerAngles:F1}; art/README.md has {expected:F3}, rotation 0.");
+                meshes[name] = (node.sharedMesh, node.localPosition);
+                var b = node.sharedMesh.bounds;
+                Debug.Log($"[FoodTrucksBuild] Cart mesh {name}: {node.sharedMesh.triangles.Length / 3} tris, at {node.localPosition:F3}, bounds {(b.min + node.localPosition):F3} to {(b.max + node.localPosition):F3}.");
+            }
+            return meshes;
+        }
+
+        // One HDRP/Lit material with the base colour map, for all four meshes (art/README.md, swap step 2).
+        private static Material ArtMaterial(string artFolder)
+        {
+            var texturePath = artFolder + "/T_FoodCart_BaseColor.png";
+            var importer = (TextureImporter)AssetImporter.GetAtPath(texturePath)
+                           ?? throw new InvalidOperationException($"{texturePath} missing; tools/build-mod.sh copies it from art/cart.");
+            if (importer.textureType != TextureImporterType.Default || !importer.sRGBTexture)
+            {
+                importer.textureType = TextureImporterType.Default;
+                importer.sRGBTexture = true;
+                importer.SaveAndReimport();
+            }
+            var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
+            var path = artFolder + "/M_FoodCart.mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                var shader = Shader.Find("HDRP/Lit") ?? throw new InvalidOperationException("HDRP/Lit shader not found.");
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            material.SetColor("_BaseColor", Color.white);
+            material.SetTexture("_BaseColorMap", texture);
+            material.SetFloat("_SupportDecals", 0f);
+            material.EnableKeyword("_DISABLE_DECALS");
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
         private static Renderer Box(Transform parent, string name, Vector3 position, Vector3 size, Color color)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -172,7 +268,7 @@ namespace FoodTrucks.BuildEditor
 
         private static readonly Dictionary<Color, Material> Materials = new Dictionary<Color, Material>();
 
-        // HDRP Lit materials saved next to the prefab, one per colour.
+        // HDRP Lit materials saved next to the prefab, one per colour (now only the cargo boxes').
         private static Material Material(Color color)
         {
             if (Materials.TryGetValue(color, out var existing) && existing != null) return existing;

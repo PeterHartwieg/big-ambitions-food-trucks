@@ -1,6 +1,6 @@
 # Playtest fixes (0.9.1)
 
-The fixes from the first 0.9.0 playtest: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, and crew serving a window the player opened. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
+The fixes from the first 0.9.0 playtest: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, the cart's final model, and parked cars kept off a cart. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
 
 ## 1. Automated (me)
 
@@ -25,6 +25,11 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 | 12 | Leave it open over a full hour and past midnight, then check the next morning's transactions and Econoview | An unassigned wage for the worker covering the hours the window was open (one hour for each hour it was open on the hour, or opened before half past). In Econoview it is under the truck's Crew wages |
 | 13 | Give the worker a route, open the truck yourself during a stop's hours and keep it open past the stop's end | The route leaves the truck where you opened it; the worker keeps serving. The day's wage counts each hour once, not twice for the overlap |
 | 14 | Open the truck with the worker off sick, or with no crew | "Nobody's at the truck's window" once you walk away, as before |
+| 11 | Look at a cart standing on the street, from the side and from above | The new cart: grey box, red and orange umbrella, two spoked wheels. The texture is on (not plain white or pink). Both wheels touch the ground, the feet at the front too |
+| 12 | Grab the cart and push it around, forwards and back | Both hands on the push bar, not inside it or in the air. The wheels turn the right way as it rolls and stop when you stop. Hover and click on the cart still work; walking into it, you stop at the wheels |
+| 13 | Load stock into the cart and look at the counter | The cardboard boxes sit on the counter, not sunk into it or floating |
+| 14 | Open the cart for business, then grab it again | The front steam-well lid opens and shuts again when you grab it. With boxes on the counter, does the open lid cross the middle boxes? |
+| 15 | Leave a cart in a parking lane by the road, walk more than 80 m away and wait for the next hour, or sleep a night; come back | No parked car stands on or in the cart. Nobody's car parks into it with auto-park either |
 
 ## 3. Log lines (me)
 
@@ -34,6 +39,7 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 - `Patch …LoadSalaryRows: Active.`, `Patch …LoadOngoingExpenseRows: Active.`, `…LoadFeeRows: Active.` and `Patch EmployeeInstance.PayWage(BuildingRegistration): Active.` (with the parking patches); `Econoview: crew wages and parking move from the game's rows to the vehicles.`
 - `Sale: …` lines arrive as customers leave the window.
 - `Crew: <name> paid for HH:00 on day N (open window, truck …)` once per hour the crew served a window you opened; none for route hours, and never two for the same hour and worker.
+- `Patch VehicleHelper.DestroyBlockingVehicles(GameObject, VehicleType, Transform, Boolean): Active.`; at load, `Parking lanes: cart … seen; body collider 0.96 x 1.50 m …` for each cart (or `in hand now …` for one being pushed); after row 15, any `Parking lanes: cleared … parked … cars from cart …`; no `Cart … has no Cart_Lid` error.
 
 # Milestone 7 checks: catering and Bakery
 

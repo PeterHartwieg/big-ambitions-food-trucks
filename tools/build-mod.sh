@@ -57,6 +57,10 @@ cp "$REPO/Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll" "$DEPS/FoodTrucks
 TRUCK_ART="$MOD_DIR/Vehicles/TruckArt"
 mkdir -p "$TRUCK_ART"
 rsync -a --checksum "$REPO/art/truck/FoodTruck.fbx" "$REPO"/art/truck/T_FoodTruck_*.png "$TRUCK_ART/"
+# The cart's, the same way.
+CART_ART="$MOD_DIR/Vehicles/CartArt"
+mkdir -p "$CART_ART"
+rsync -a --checksum "$REPO/art/cart/FoodCart.fbx" "$REPO/art/cart/T_FoodCart_BaseColor.png" "$CART_ART/"
 
 # Link the mod folder and the build helpers into the SDK project.
 link() { # link <target> <link path>
