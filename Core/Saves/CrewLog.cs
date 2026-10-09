@@ -22,6 +22,27 @@ namespace FoodTrucks.Core.Saves
                 entry.Hours++;
         }
 
+        // Notes that hours are logged from now on. Called as hours are counted; the first call sets the marker to the
+        // next day, since hours counted earlier today (before this version ran) weren't logged.
+        public static void Begin(SaveState state, int today)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            state.CrewHoursSince ??= today + 1;
+        }
+
+        // The vehicles a paid wage belongs to. Days covered by the log go by its hours alone: no logged hours
+        // means no vehicle's wage (say, hours worked in one of the player's shops before joining a crew).
+        // Days from before the log go to the crew the hire is on at payment (crewVehicleId), if any.
+        public static List<(string VehicleId, long Cents)> Attribute(SaveState? state, int day, string employeeId, long paidCents,
+            double workedHours, string? crewVehicleId)
+        {
+            var split = Split(state, day, employeeId, paidCents, workedHours);
+            if (split.Count > 0 || state == null || paidCents <= 0) return split;
+            if (state.CrewHoursSince.HasValue && day >= state.CrewHoursSince.Value) return split;
+            if (!string.IsNullOrEmpty(crewVehicleId)) split.Add((crewVehicleId!, paidCents));
+            return split;
+        }
+
         public static bool HasHours(SaveState? state, int day, string employeeId) =>
             state != null && state.CrewHours.Any(h => h != null && h.Day == day && string.Equals(h.EmployeeId, employeeId, StringComparison.Ordinal));
 

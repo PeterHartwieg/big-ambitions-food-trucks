@@ -33,6 +33,9 @@ namespace FoodTrucks.Core.Saves
         // Hours each hire worked on each vehicle per payroll day, so the wage the game pays at midnight is split
         // over the vehicles worked (additive field: older saves read none). Dropped once the wage is paid.
         public List<CrewHours> CrewHours { get; set; } = new List<CrewHours>();
+        // The first payroll day whose hours are all in CrewHours, set once by the first version that logs them
+        // (additive field: null in older saves). Wages for earlier days go to the crew the hire is on at payment.
+        public int? CrewHoursSince { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

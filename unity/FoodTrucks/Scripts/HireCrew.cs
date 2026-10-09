@@ -204,6 +204,7 @@ namespace FoodTrucks
             var runner = rules == null ? null : new HireRunner(rules.Fleet);
             // Hours whose wage was never paid (a hire let go before midnight) don't stay in the save.
             CrewLog.Prune(state, TimeHelper.CurrentDay - 2);
+            CrewLog.Begin(state, TimeHelper.CurrentDay);
             foreach (var vehicle in state.Vehicles)
             {
                 if (vehicle.Crew == null || vehicle.Crew.Count == 0 || runner == null) continue;

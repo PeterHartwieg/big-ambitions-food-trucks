@@ -27,7 +27,7 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 - `Patch EducationDoorController.StartLearning: Active.`; `Food Safety course: added at the Market Demands door, 360 minutes at $25 an hour.`
 - No `Food Safety course:` error lines; no `Queue view:` NullReferenceException on quitting.
 - `Queue view: line at cart …` and `… line removed …` lines, and the session total on unload.
-- `Patch …LoadOngoingExpenseRows: Active.` and `…LoadFeeRows: Active.` (with the other Econoview and wage patches); `Econoview: crew wages and parking move from the game's rows to the vehicles.`
+- `Patch …LoadSalaryRows: Active.`, `Patch …LoadOngoingExpenseRows: Active.`, `…LoadFeeRows: Active.` and `Patch EmployeeInstance.PayWage(BuildingRegistration): Active.` (with the parking patches); `Econoview: crew wages and parking move from the game's rows to the vehicles.`
 - `Sale: …` lines arrive as customers leave the window.
 
 # Milestone 7 checks: catering and Bakery
