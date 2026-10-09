@@ -78,6 +78,12 @@ namespace FoodTrucks
             // a route counts as their task, and the "unassigned" to-do stays away while they have a vehicle.
             Patch(typeof(EmployeeHelper), "RunHourly", Type.EmptyTypes, typeof(Patches), prefix: nameof(CountCrewHour), postfix: nameof(AfterGameCount));
             Patch(typeof(EmployeeHelper), "PayDailyWages", Type.EmptyTypes, nameof(CloseCrewDay), prefix: true);
+            // A change of employment settles what the mod owes a hire on the spot, before the game's own payout: a building
+            // or warehouse job (the game clears the old shifts first), a replacement, resigning, fired or retired.
+            Patch(typeof(EmployeeHelper), "UnassignEmployeeFromAllWorkshifts", new[] { typeof(EmployeeInstance) }, nameof(SettleOnShiftsCleared), prefix: true);
+            Patch(typeof(EmployeeInstance), "ResignBeforeReplacement", Type.EmptyTypes, nameof(SettleOnReplacement), prefix: true);
+            Patch(typeof(EmployeeInstance), "Resign", Type.EmptyTypes, nameof(SettleOnResign), prefix: true);
+            Patch(typeof(EmployeeInstance), "RemoveEmployee", Type.EmptyTypes, nameof(SettleOnRemove), prefix: true);
             Patch(AccessTools.TypeByName("AI.Employees.NoTaskAssignedComplaint"), "ConditionToComplainMet", new[] { typeof(EmployeeInstance) }, nameof(CrewHasTask));
             Patch(AccessTools.TypeByName("AI.Employees.NoTaskAssignedComplaint"), "ComplaintHandled", new[] { typeof(EmployeeInstance) }, nameof(CrewTaskHandled));
             Patch(AccessTools.TypeByName("UI.Tasks.TasksUI"), "CreateTodoTask", null, nameof(SkipCrewUnassignedTask), prefix: true);
@@ -225,6 +231,17 @@ namespace FoodTrucks
         private static void CountCrewHour()
         {
             try { HireCrew.CountHour(); }
+            catch (Exception ex) { Log.Error(ex); }
+        }
+
+        private static void SettleOnShiftsCleared(EmployeeInstance employeeInstance) => SettleLeaving(employeeInstance, "shifts cleared");
+        private static void SettleOnReplacement(EmployeeInstance __instance) => SettleLeaving(__instance, "set to be replaced");
+        private static void SettleOnResign(EmployeeInstance __instance) => SettleLeaving(__instance, "resigning");
+        private static void SettleOnRemove(EmployeeInstance __instance) => SettleLeaving(__instance, "leaving");
+
+        private static void SettleLeaving(EmployeeInstance? employee, string why)
+        {
+            try { if (employee != null) HireCrew.SettleLeaving(employee, why); }
             catch (Exception ex) { Log.Error(ex); }
         }
 

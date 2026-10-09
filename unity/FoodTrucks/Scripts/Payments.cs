@@ -27,5 +27,23 @@ namespace FoodTrucks
                 return credited;
             }
         }
+
+        // Pays money out the same way (a cost booked on `day`), reporting whether the transaction was booked.
+        public static bool PayOut(long cents, TransactionInfo info, int day)
+        {
+            if (cents <= 0) throw new ArgumentOutOfRangeException(nameof(cents));
+            var transactions = SaveGameManager.Current.Transactions;
+            var lastBefore = transactions.Count > 0 ? transactions.Last() : null;
+            try
+            {
+                return GameManager.ChangeMoneySafe(-cents / 100f, info, day, null, force: true);
+            }
+            catch (Exception ex)
+            {
+                var booked = transactions.Count > 0 && !ReferenceEquals(transactions.Last(), lastBefore);
+                Log.Error($"Payment out of {CartSelling.Money(cents)} threw ({(booked ? "booked" : "not booked")}): {ex}");
+                return booked;
+            }
+        }
     }
 }

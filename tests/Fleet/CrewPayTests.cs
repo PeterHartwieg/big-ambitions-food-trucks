@@ -343,4 +343,71 @@ public class CrewPayTests
         Assert.Empty(CrewPay.CloseHours(state, noon + 2, Credit));
         Assert.Empty(state.CrewServedHour);
     }
+
+    // A crew member who worked the 12:00 route hour on t1 (on today's counters) and served a window the player
+    // opened on t2 at 13:10, whose employment changes at 13:40.
+    private static SaveState WorkedTodayAndServing(out long one)
+    {
+        var state = new SaveState();
+        var noon = CrewPay.HourOf(At(3, 12));
+        CrewPay.TryPay(state, "e1", noon);
+        CrewLog.AddHour(state, 3, "e1", "t1");
+        CrewPay.Served(state, "e1", "t2", At(3, 13, 10));
+        one = noon + 1;
+        return state;
+    }
+
+    [Theory]
+    [InlineData("shop")]
+    [InlineData("warehouse driver")]
+    [InlineData("replacement")]
+    [InlineData("fired")]
+    public void LeavingTheCrewPaysEverythingOwedOnceOnTheVehicles(string change)
+    {
+        // Every change of employment settles the same way; the game's own payout afterwards finds nothing of the mod's.
+        Assert.NotNull(change);
+        var state = WorkedTodayAndServing(out var one);
+
+        var owed = CrewPay.Owed(state, "e1", 3);
+        Assert.Equal(new[] { ("t1", 1), ("t2", 1) }, owed.ByVehicle);
+        Assert.Equal(1, owed.OnCounters);
+        Assert.Equal(one, owed.PendingHour);
+        Assert.Equal(2, owed.Hours);
+
+        CrewPay.Settled(state, "e1", 3, owed);
+
+        // Paid exactly once: nothing owed again, the midnight split has no hours for it, the next decision pays nothing.
+        Assert.Equal(0, CrewPay.Owed(state, "e1", 3).Hours);
+        Assert.False(CrewLog.HasHours(state, 3, "e1"));
+        Assert.Empty(CrewPay.CloseHours(state, one + 1, Credit));
+        Assert.False(CrewPay.Unpaid(state, "e1", one));
+    }
+
+    [Fact]
+    public void AnHourTheGameCountedIsNotOwed()
+    {
+        var state = new SaveState();
+        var noon = CrewPay.HourOf(At(3, 12));
+        CrewPay.Served(state, "e1", "t1", At(3, 12, 10));
+        CrewPay.GameCounted(state, "e1", noon);
+
+        var owed = CrewPay.Owed(state, "e1", 3);
+        Assert.Equal(0, owed.Hours);
+        CrewPay.Settled(state, "e1", 3, owed);
+        Assert.Empty(state.CrewServedHour);
+    }
+
+    [Fact]
+    public void OtherDaysAndOtherHiresAreLeftAlone()
+    {
+        var state = new SaveState();
+        CrewLog.AddHour(state, 2, "e1", "t1");
+        CrewLog.AddHour(state, 3, "e2", "t1");
+
+        var owed = CrewPay.Owed(state, "e1", 3);
+        Assert.Equal(0, owed.Hours);
+        CrewPay.Settled(state, "e1", 3, owed);
+        Assert.True(CrewLog.HasHours(state, 2, "e1"));
+        Assert.True(CrewLog.HasHours(state, 3, "e2"));
+    }
 }
