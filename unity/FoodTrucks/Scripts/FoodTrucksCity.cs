@@ -21,6 +21,9 @@ namespace FoodTrucks
         public Task OnLoadAsync(ModContext context)
         {
             loaded = true;
+            // The game clears its icon address list on every city load; the mod's item icons go back in.
+            try { ModItems.RegisterIcons("city load"); }
+            catch (Exception ex) { Log.Error("Item icons: " + ex); }
             // GlobalEvents.Init() clears subscribers before each city load, so subscribe per city scope.
             GlobalEvents.RegisterOnGameLoadedLateCallback(OnCityReady);
             GlobalEvents.onSaveGame += OnSaveGame;
@@ -31,6 +34,9 @@ namespace FoodTrucks
         private void OnCityReady()
         {
             if (!loaded || LoadScene.isLoading || SaveGameManager.Current == null) return;
+            // Again once the city is ready, in case the address list was rebuilt after this mod's city load.
+            try { ModItems.RegisterIcons("city ready"); }
+            catch (Exception ex) { Log.Error("Item icons: " + ex); }
             try { FoodTrucksSession.Attach(SaveGameManager.Current); }
             catch (Exception ex) { Log.Error(ex); }
         }

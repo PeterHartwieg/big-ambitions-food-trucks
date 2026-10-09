@@ -64,9 +64,13 @@ rsync -a --checksum "$REPO/art/cart/FoodCart.fbx" "$REPO/art/cart/T_FoodCart_Bas
 # And the equipment models shown on the cart's counter, one folder each in art/equipment.
 EQUIPMENT_ART="$MOD_DIR/Vehicles/EquipmentArt"
 mkdir -p "$EQUIPMENT_ART"
+# Each FBX goes in as <Name>_Model.fbx: the game finds a mod item's prefab by file name in any bundle, so no
+# asset may share a machine item's name (griddle, corngrill, dumplingsteamer). Copies under the old name go.
 for dir in "$REPO"/art/equipment/*/; do
   name="$(basename "$dir")"
-  rsync -a --checksum "$dir$name.fbx" "$dir/T_${name}_BaseColor.png" "$EQUIPMENT_ART/"
+  rm -f "$EQUIPMENT_ART/$name.fbx" "$EQUIPMENT_ART/$name.fbx.meta"
+  rsync -a --checksum "$dir$name.fbx" "$EQUIPMENT_ART/${name}_Model.fbx"
+  rsync -a --checksum "$dir/T_${name}_BaseColor.png" "$EQUIPMENT_ART/"
 done
 
 # Link the mod folder and the build helpers into the SDK project.

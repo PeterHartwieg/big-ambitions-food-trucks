@@ -61,11 +61,11 @@ tools/build-mod.sh --generate
 tools/install-remote.sh <ssh host of the Windows game PC>
 ```
 
-Debug keys (holding Ctrl): **F6** free food truck, **Shift+F6** a free vendor licence and permits for every food vehicle, **F7** free food cart, **F8** mark a point for drawing a park zone, **F9** the demand model's reading for the cart next to you, **Shift+F9** hire a customer service worker (skill 60) without a recruitment campaign, **F11** log the grip while pushing, **Shift+F7** a vanilla hand truck, **Shift+F8** record $200,000 of street food today without moving money, **F10** status, **Shift+F10** issue the tax statement now (throwaway saves only), **Shift+F12** the uninstall step.
+Debug keys (holding Ctrl): **F5** one box of each of the mod's new foods and one of each new machine into the food vehicle next to you, counted as bought at their own prices so the uninstall refund includes them (throwaway saves only; console `foodtrucks_new_items`), **F6** free food truck, **Shift+F6** a free vendor licence and permits for every food vehicle, **F7** free food cart, **F8** mark a point for drawing a park zone, **F9** the demand model's reading for the cart next to you, **Shift+F9** hire a customer service worker (skill 60) without a recruitment campaign, **F11** log the grip while pushing, **Shift+F7** a vanilla hand truck, **Shift+F8** record $200,000 of street food today without moving money, **F10** status, **Shift+F10** issue the tax statement now (throwaway saves only), **Shift+F12** the uninstall step.
 
 `tools/park-remote.sh park|restore` moves the installed mod out of `ModsLocal` and back, and `tools/fetch-log-remote.sh <label>` copies the game's log; both are for the in-game checks in [CHECKS.md](CHECKS.md).
 
-`build-mod.sh` links `unity/FoodTrucks` into the SDK's `Assets/Mods` and `unity/BuildEditor` into its `Assets/Editor`, generates the vehicle assets, and runs the SDK's own packager. Harmony 2.4.2 (MIT) is downloaded from NuGet with a pinned checksum and shipped in `Dependencies/`.
+`build-mod.sh` links `unity/FoodTrucks` into the SDK's `Assets/Mods` and `unity/BuildEditor` into its `Assets/Editor`, generates the vehicle and item assets, and runs the SDK's own packager. Harmony 2.4.2 (MIT) is downloaded from NuGet with a pinned checksum and shipped in `Dependencies/`.
 
 ## Licence
 

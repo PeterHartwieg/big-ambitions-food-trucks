@@ -19,6 +19,9 @@ public class EquipmentMappingTests
     [InlineData("cooler", "ba:itemname_drinksfridge")]
     [InlineData("cooler", "ba:itemname_largedrinksfridge")]
     [InlineData("displaycase", "ba:itemname_bakeryshowcase")]
+    [InlineData("dumplingsteamer", "foodtrucks:itemname_dumplingsteamer")]
+    [InlineData("griddle", "foodtrucks:itemname_griddle")]
+    [InlineData("corngrill", "foodtrucks:itemname_corngrill")]
     public void VanillaItemsMapToTheirEquipment(string id, string item)
     {
         var piece = ShippedData.Tables.EquipmentForGameItem(item);
@@ -106,6 +109,9 @@ public class EquipmentMappingTests
     [InlineData("icecreamcounter", "IceCreamCabinet")]
     [InlineData("pizzaoven", "PizzaOven")]
     [InlineData("displaycase", "PastryCase")]
+    [InlineData("dumplingsteamer", "DumplingSteamer")]
+    [InlineData("griddle", "Griddle")]
+    [InlineData("corngrill", "CornGrill")]
     public void ShippedDisplayModels(string id, string? display)
     {
         Assert.Equal(display, ShippedData.Tables.Equipment(id)!.Display);
