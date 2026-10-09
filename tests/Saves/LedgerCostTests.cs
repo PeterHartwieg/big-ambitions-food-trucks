@@ -13,8 +13,8 @@ public class LedgerCostTests
         SalesLedger.Record(state, 3, 1_165);
         SalesLedger.RecordCost(state, 3, 445);
 
-        Assert.Equal(720, SalesLedger.ProfitCents(state, 3));
-        Assert.Equal(0, SalesLedger.ProfitCents(state, 4));
+        Assert.Equal(720, SalesLedger.DayProfitCents(state, 3));
+        Assert.Equal(0, SalesLedger.DayProfitCents(state, 4));
         Assert.Equal(1_165, SalesLedger.SumCents(state, 3, 3));
     }
 
@@ -24,7 +24,7 @@ public class LedgerCostTests
         var state = new SaveState();
         SalesLedger.RecordCost(state, 2, 100);
 
-        Assert.Equal(-100, SalesLedger.ProfitCents(state, 2));
+        Assert.Equal(-100, SalesLedger.DayProfitCents(state, 2));
         Assert.Single(state.DailySales);
     }
 

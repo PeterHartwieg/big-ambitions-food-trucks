@@ -161,19 +161,6 @@ namespace FoodTrucks.Core.Saves
             return total;
         }
 
-        // Sales less the wholesale cost of what was sold, for one day.
-        public static long ProfitCents(SaveState? state, int day)
-        {
-            if (state == null) return 0;
-            long profit = 0;
-            foreach (var entry in state.DailySales)
-            {
-                if (entry != null && entry.Day == day)
-                    profit = checked(profit + entry.RevenueCents - entry.CostCents);
-            }
-            return profit;
-        }
-
         // Inclusive on both ends, like the game's tax period.
         public static long SumCents(SaveState? state, int firstDay, int lastDay)
         {

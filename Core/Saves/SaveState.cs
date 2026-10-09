@@ -30,6 +30,9 @@ namespace FoodTrucks.Core.Saves
         public Dictionary<string, List<PlaceHold>> PremiumHolds { get; set; } = new Dictionary<string, List<PlaceHold>>(StringComparer.Ordinal);
         // Vehicles partnered with the player's own venues.
         public List<PartnershipState> Partnerships { get; set; } = new List<PartnershipState>();
+        // Hours each hire worked on each vehicle per payroll day, so the wage the game pays at midnight is split
+        // over the vehicles worked (additive field: older saves read none). Dropped once the wage is paid.
+        public List<CrewHours> CrewHours { get; set; } = new List<CrewHours>();
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -119,6 +122,18 @@ namespace FoodTrucks.Core.Saves
         // What the day summary added to the game's total profit for this day, kept when the day is marked.
         // Null for days marked by older versions, which added sales less stock cost (SalesLedger.SummaryCents).
         public long? SummaryCents { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    // Hours one hire was counted as working on one vehicle on one payroll day (the game's day the hours fell in).
+    public class CrewHours
+    {
+        public int Day { get; set; }
+        public string EmployeeId { get; set; } = string.Empty;
+        public string VehicleId { get; set; } = string.Empty;
+        public int Hours { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

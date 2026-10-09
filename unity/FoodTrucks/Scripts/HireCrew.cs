@@ -202,6 +202,8 @@ namespace FoodTrucks
             // still be catching up on the minutes before this hour. A day not planned yet is previewed.
             var rules = DemandData.Rules;
             var runner = rules == null ? null : new HireRunner(rules.Fleet);
+            // Hours whose wage was never paid (a hire let go before midnight) don't stay in the save.
+            CrewLog.Prune(state, TimeHelper.CurrentDay - 2);
             foreach (var vehicle in state.Vehicles)
             {
                 if (vehicle.Crew == null || vehicle.Crew.Count == 0 || runner == null) continue;
@@ -219,6 +221,8 @@ namespace FoodTrucks
                 {
                     if (employee == null || employee.isAbsent || employee.trainingSession != null || employee.isBeingReplaced || employee.IsAssignedToAnyBusiness()) continue;
                     employee.workedHoursToday++;
+                    // Which vehicle this paid hour was on, for Econoview's crew wages (StreetFoodBooks.WagePostfix).
+                    CrewLog.AddHour(state, TimeHelper.CurrentDay, employee.id, vehicle.VehicleId);
                     employee.workedHoursThisWeek++;
                     employee.AddWorkedDay();
                 }
