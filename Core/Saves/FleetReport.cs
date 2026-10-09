@@ -77,8 +77,10 @@ namespace FoodTrucks.Core.Saves
             return money;
         }
 
-        // The whole business's profit over the last seven days, for its line in BizMan's list: the vehicles'
-        // profit less the licence and event places. A day from before the breakdown counts its sales less stock.
+        // The whole business's profit over the last seven days, for its line in BizMan's list, on the same terms as
+        // Econoview's Street food total: the day's sales and stock from its totals (which also hold whatever was
+        // recorded before the per-vehicle breakdown began, even on a day that has both), less the itemised crew
+        // wages, parking and permits, the licence and event places.
         public static long WeekProfitCents(SaveState? state, int today)
         {
             if (state?.DailySales == null) return 0;
@@ -86,13 +88,9 @@ namespace FoodTrucks.Core.Saves
             foreach (var entry in state.DailySales)
             {
                 if (entry == null || entry.Day > today || entry.Day <= today - WeekDays) continue;
-                var vehicles = (entry.ByVehicle ?? new List<VehicleDay>()).Where(v => v != null).ToList();
-                if (vehicles.Count == 0)
-                    total += entry.RevenueCents - entry.CostCents;
-                else
-                    foreach (var day in vehicles)
-                        total += Sum(day.SalesCents, day.CateringCents) - Sum(Sum(day.StockCents, day.WagesCents), Sum(day.ParkingCents, day.PermitCents));
-                total -= entry.LicenceCents + entry.EventPlacesCents;
+                total += entry.RevenueCents - entry.CostCents - entry.LicenceCents - entry.EventPlacesCents;
+                foreach (var day in entry.ByVehicle ?? new List<VehicleDay>())
+                    if (day != null) total -= Sum(Sum(day.WagesCents, day.ParkingCents), day.PermitCents);
             }
             return total;
         }

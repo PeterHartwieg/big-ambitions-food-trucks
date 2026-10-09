@@ -115,4 +115,24 @@ public class FleetReportTests
 
         Assert.Equal(2_500 - 1_000 - 700 + 1_200, FleetReport.WeekProfitCents(state, 9));
     }
+
+    [Fact]
+    public void ADayBegunBeforeTheBreakdownKeepsItsEarlierProfitOnceVehiclesAreRecorded()
+    {
+        var state = new SaveState();
+        // Recorded by an older version: $100 of sales and $30 of stock, no vehicles.
+        state.DailySales.Add(new DailySales { Day = 5, RevenueCents = 10_000, CostCents = 3_000 });
+        // The same day, after the update: a $20 wage, then a $5 sale with $2 of stock.
+        SalesLedger.RecordLine(state, 5, "cart", LedgerLine.Wages, 2_000);
+        StreetSales.Record(state, "cart", 5, 500, 1);
+        SalesLedger.RecordCost(state, 5, "cart", 200);
+
+        Assert.Equal(7_000 - 2_000 + 300, FleetReport.WeekProfitCents(state, 5));
+        // The vehicle shows only what was itemised.
+        Assert.Equal(500 - 200 - 2_000, FleetReport.Vehicle(state, "cart", 5).TodayProfitCents);
+        // And the total matches what Econoview's Street food group adds up to once the day is in the summary.
+        SalesLedger.MarkInSummary(state, 5);
+        var statement = StreetFoodStatement.Build(state, new[] { 5 }, new[] { 2_000L }, new[] { 0L });
+        Assert.Equal(statement.Total[0], FleetReport.WeekProfitCents(state, 5));
+    }
 }

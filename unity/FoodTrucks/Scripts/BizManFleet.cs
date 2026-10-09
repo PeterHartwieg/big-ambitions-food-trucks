@@ -8,10 +8,13 @@ using Entities;
 using Extensions;
 using FoodTrucks.Core.Saves;
 using HarmonyLib;
+using Helpers;
 using Localizor;
 using Localizor.LanguageChangeEvent;
 using Streets;
 using UI;
+using UI.Guiders;
+using UI.Notification;
 using UI.Smartphone.Apps.BizMan;
 using UnityEngine;
 using UnityEngine.UI;
@@ -126,8 +129,9 @@ namespace FoodTrucks
             }
             catch (Exception ex)
             {
+                // Left out this time; the list is mid-filter, so it is only dropped from the next load on.
                 __result = false;
-                if (logged.Add("filter")) Log.Error(ex);
+                Fail("filter", ex);
             }
             return false;
         }
@@ -152,7 +156,8 @@ namespace FoodTrucks
             }
             catch (Exception ex)
             {
-                if (logged.Add("cell")) Log.Error(ex);
+                // The cell is being drawn; the line is dropped from the next load on.
+                Fail("cell", ex);
             }
         }
 
@@ -282,10 +287,9 @@ namespace FoodTrucks
             if (destination != null)
             {
                 destination.onClick = new Button.ButtonClickedEvent();
-                var address = instance.Address;
-                var canGo = !withDriver && vehicle?.Transit == null && !string.IsNullOrEmpty(instance.streetName);
+                var canGo = !withDriver && vehicle?.Transit == null;
                 destination.gameObject.SetActive(canGo);
-                if (canGo) destination.onClick.AddListener(() => Guard(() => InstanceBehavior<UIs>.Instance.fullMenu.bizMan.business.SetDestination(address)));
+                if (canGo) destination.onClick.AddListener(() => Guard(() => GoTo(instance, name)));
             }
             Hide(card, "ManageDrivers");
             Hide(card, "ShowFullInventory");
@@ -357,6 +361,26 @@ namespace FoodTrucks
                 fill(row, i);
                 row.gameObject.SetActive(true);
             }
+        }
+
+        // The GPS to the vehicle. In 1.0 a vehicle's street address names the building or garage it is in and is
+        // empty outdoors, so an indoor vehicle gets the game's own address destination (as a business's button
+        // does) and an outdoor one a point: where it stands, or where the save has it when it isn't spawned.
+        private static void GoTo(VehicleInstance instance, string name)
+        {
+            if (!string.IsNullOrEmpty(instance.streetName))
+            {
+                InstanceBehavior<UIs>.Instance.fullMenu.bizMan.business.SetDestination(instance.Address);
+                return;
+            }
+            var controller = VehicleHelper.GetVehicleController(instance);
+            var position = controller != null ? controller.transform.position : (Vector3)instance.position;
+            var references = InstanceBehavior<GlobalReferences>.Instance;
+            // A point can't be kept as the save's destination, which is an address; the old one would come back.
+            SaveGameManager.Current.customDestination = null;
+            GuidersManager.SetGuiderTarget(position, name, references.vehiclePOIIcon, references.vehiclePOIBackgroundColor, DirectionGuiderType.Destination);
+            Notifications.Show(NotificationType.Success, "notification_destination_set", new Dictionary<string, string> { { "address", name } });
+            InstanceBehavior<UIs>.Instance.fullMenu.Toggle(show: false);
         }
 
         private static string Where(VehicleInstance instance, VehicleState? vehicle, bool withDriver)
