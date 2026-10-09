@@ -290,6 +290,16 @@ AI trucks are a later version. Until then, this rule only applies between the pl
 
 Decided while building the Core (8 October 2026): "one block" is 80 m; each open neighbour with something to sell adds 10% footfall, at most 30%. The split is by item, not category: hot dogs and burgers are both fast food, but the cart and the truck sell different things. A category's share is the average over the vehicle's items in it of 1 ÷ (1 + the neighbours selling that item). The split applies after the menu's ranking of its categories, so losing hot dog customers never makes the pizza oven count double.
 
+## Commissary and new foods
+
+Decided by Peter, 9 October 2026, for the eight new foods. These are new game items, and the game delivers only to the player's buildings.
+
+- **Commissaries.** A few fixed commissary garages around the city (in data, like the premium spots), each with a loading bay. The player rents a space in person, at the commissary's bay, for each vehicle: $300 a month per cart, $1,250 per truck (NYC figures, `docs/research/nyc-food-trucks-2026-10-07.md`), charged as a tax-deductible expense. The first visit unlocks the commissary's phone contact, as the game's own contacts unlock.
+- **Ordering.** By text to that contact, for the vehicles with a space there: the new foods, the game's own foods and the new machines, at wholesale price plus a delivery fee. Orders arrive at 8:00 the next morning into the commissary's stock (kept in the save). Parked at the bay, the vehicle's Restock button loads stock into its cargo, up to its stock limit and cargo slots.
+- **Overnight rule (soft).** A food vehicle that isn't within its commissary's bay at 04:00 is fined $250, more than a parking ticket, as a text from the City of New York. Not fined: a vehicle the player is in (sleeping in the truck), one whose hired route is still on a late stop, and one taken off the map in transit. Without a commissary space every vehicle out at 04:00 is fined, so carts without one pay too: the fine is the push to rent.
+- **New foods.** Dumplings, tacos, chopped cheese, grilled corn, popcorn, cotton candy, kabobs and slushies, with their machines (dumpling steamer, griddle, corn grill, popcorn machine, cotton candy machine, kabob grill, slushie machine) as real game furniture items. Street food only in version 1: they are sold only through the commissary, and the game's own shops don't stock them.
+- **Hires.** A crewed route can start at the commissary and restock there (follow-up; designed when the commissary is built).
+
 ## Economy calibration
 
 The target is game money, not NYC money:
@@ -352,7 +362,7 @@ The official mod API is thin: business and vehicle registration, options, asset 
 
 **Version 1.** Cart and truck, licence with course, a permit per vehicle, equipment as inventory, anywhere-legal plus premium and event pitches, the thematic demand model with weather and seasons, live crowds from nightclubs, theatres, offices and factories (opening hours for all venues, real counts for the player's own), the Street food map filters, partnerships with the player's own venues, visible queues, catering gigs, health grades, regulars, same-food competition between the player's vehicles, per-save state. The player works the window; hires can serve alone and drive a vehicle along a schedule.
 
-**Later.** A commissary as the vehicles' home base: rented storage that wholesalers deliver to, where vehicles restock and park overnight, as NYC requires. Partnerships with AI venues. Equipment placement inside the truck. AI food trucks (possibly through BusinessBridge). Waiting list and grey-market permits as settings. Time-restricted streets.
+**Later.** Partnerships with AI venues. Equipment placement inside the truck. AI food trucks (possibly through BusinessBridge). Waiting list and grey-market permits as settings. Time-restricted streets.
 
 ## Answered design questions
 

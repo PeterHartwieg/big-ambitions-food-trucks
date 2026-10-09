@@ -181,6 +181,7 @@ namespace FoodTrucks.Core.Saves
             if (state.Catering == null)
                 throw new JsonSerializationException("Catering must not be null.");
             FoodTrucks.Core.Catering.CateringValidation.Validate(state.Catering);
+            FoodTrucks.Core.Commissary.CommissaryValidation.Validate(state.Commissary);
             if (state.Events == null || state.Events.Events == null || state.Events.Events.Any(e =>
                     e == null || e.Kind == null || e.PlaceId == null || !ValidHolds(e.Holds) ||
                     e.Booked < 0 || e.Places < 0 || e.FeeCents < 0 || e.Start < 0 || e.End < e.Start) ||
@@ -215,7 +216,8 @@ namespace FoodTrucks.Core.Saves
                 if (sale.LicenceCents < 0)
                     throw new JsonSerializationException("DailySales LicenceCents must not be negative.");
                 if (sale.ByVehicle == null || sale.ByVehicle.Any(v => v == null || string.IsNullOrEmpty(v.VehicleId) ||
-                        v.SalesCents < 0 || v.CateringCents < 0 || v.StockCents < 0 || v.WagesCents < 0 || v.ParkingCents < 0 || v.PermitCents < 0) ||
+                        v.SalesCents < 0 || v.CateringCents < 0 || v.StockCents < 0 || v.WagesCents < 0 || v.ParkingCents < 0 || v.PermitCents < 0 ||
+                        v.CommissaryRentCents < 0 || v.OvernightFineCents < 0) ||
                     sale.ByVehicle.Select(v => v.VehicleId).Distinct(StringComparer.Ordinal).Count() != sale.ByVehicle.Count)
                     throw new JsonSerializationException("DailySales ByVehicle must be one entry per named vehicle, amounts not negative.");
                 total = checked(total + sale.RevenueCents);

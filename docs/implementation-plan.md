@@ -352,6 +352,24 @@ Each slot gets a mount point on the cart model, kept clear of the push bar, the 
 
 Placing equipment freely ("tetris") stays a later version. The Food Safety course stays at 6 hours for $25 an hour (Peter, 9 October 2026).
 
+## New foods (Peter, 9 October 2026)
+
+Eight foods for the spare equipment models, as new game items, the way the Bakery mod adds its goods (`ItemsGetter.RegisterModItem` from the mod's own bundle; the game gives each its own market demand and, if the mod is removed, takes the items out of the save and refunds them [code, 1.0]):
+
+| Food | Equipment | Food model |
+|---|---|---|
+| Dumplings | Dumpling steamer (`DumplingSteamer`) | `art/products/Dumplings` |
+| Tacos, chopped cheese | Griddle (`Griddle`) | `art/products/Tacos`, `ChoppedCheese` |
+| Grilled corn | Corn grill (`CornGrill`) | `art/products/CornCob` |
+| Popcorn | Popcorn machine (`PopcornMachine`) | to model |
+| Cotton candy | Cotton candy machine (`CottonCandyMachine`) | to model |
+| Kabobs | Kabob grill (`KabobGrill`) | to model |
+| Slushies | Slushie machine (`SlushieMachine`) | to model |
+
+**Spike** [code, 1.0] (9 October 2026). The game's wholesale ordering refuses a player with no business (`WholesaleStoreManagerDialog.NoBusinesses`), every delivery contract names a building (`DeliveryContract.businessAddress`, `ItemHelper.DeliverCargoToBuilding` at 8:00), and Square Appliances' phone orders (`FurnitureDeliveryContract`) also go only to buildings. The Bakery mod lives with that: its goods and machines are in those catalogues only. A vehicle's cargo is a list of `CargoInstance` (item name, amount up to the item's box size, price per unit), filled by `VehicleInstance.TryToAddToCargo`, so the mod can put bought goods straight into it. A machine is an `Item` asset (`isFurniture`, `stackType` WorkSurface, `boxSize` 1) with `<id>.prefab` holding an `ItemController`, built from the SDK's GigaCounter example; a product needs only its `Item` asset and an icon. Icons go into the game's private icon caches by reflection, as the Bakery mod does, at every load. If the mod is removed, the game's `CompatibilityItemValidator` takes unknown items out of vehicle cargo and buildings and refunds them; pending orders of ours must be cleared by the uninstall step.
+
+Decisions (Peter): the machines are real game items; everything is bought through a commissary (the design's "Commissary and new foods" section): rent a space in person, order by text to its contact, delivery at 8:00 into its stock, Restock at the bay; a $250 fine for a vehicle out at 04:00. Street food only in version 1. Prices, demand categories and box sizes come from the balance calculator (`tools/balance`, `docs/balance/new-foods.md`).
+
 ## Checklists
 
 Every milestone ends with three lists in the mod's `CHECKS.md`, split by who can check what (decided 8 October 2026, after two long sessions where the useful finds came from playing, not from scripted rows):

@@ -12,7 +12,9 @@ namespace FoodTrucks.Core.Saves
         Stock,
         Wages,
         Parking,
-        Permit
+        Permit,
+        CommissaryRent,
+        OvernightFine
     }
 
     public static class SalesLedger
@@ -79,6 +81,8 @@ namespace FoodTrucks.Core.Saves
                 case LedgerLine.Wages: vehicle.WagesCents = Add(vehicle.WagesCents, cents); break;
                 case LedgerLine.Parking: vehicle.ParkingCents = Add(vehicle.ParkingCents, cents); break;
                 case LedgerLine.Permit: vehicle.PermitCents = Add(vehicle.PermitCents, cents); break;
+                case LedgerLine.CommissaryRent: vehicle.CommissaryRentCents = Add(vehicle.CommissaryRentCents, cents); break;
+                case LedgerLine.OvernightFine: vehicle.OvernightFineCents = Add(vehicle.OvernightFineCents, cents); break;
                 default: throw new ArgumentOutOfRangeException(nameof(line));
             }
         }
@@ -115,6 +119,25 @@ namespace FoodTrucks.Core.Saves
                 : (entry.EventPlacesCents < long.MinValue - cents ? long.MinValue : entry.EventPlacesCents + cents);
         }
 
+        // Call only after the game payment succeeds (including a retry), on the day it was paid.
+        public static void RecordCommissaryRent(SaveState state, int day, string vehicleId, long cents) =>
+            RecordLine(state, day, vehicleId, LedgerLine.CommissaryRent, cents);
+
+        public static void RecordOvernightFine(SaveState state, int day, string vehicleId, long cents) =>
+            RecordLine(state, day, vehicleId, LedgerLine.OvernightFine, cents);
+
+        // Fleet-wide, like event places: a payment adds its fee, a refund passes a negative amount.
+        // The goods price is carried into cargo and recorded by RecordCost only when those goods sell.
+        public static void RecordDeliveryFees(SaveState state, int day, long cents)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            if (cents == 0) return;
+            var entry = GetOrAddDay(state, day);
+            entry.DeliveryFeesCents = cents > 0
+                ? Add(entry.DeliveryFeesCents, cents)
+                : (entry.DeliveryFeesCents < long.MinValue - cents ? long.MinValue : entry.DeliveryFeesCents + cents);
+        }
+
         // Marks a day as counted in the game's financial summary, keeping the amount that was added.
         public static void MarkInSummary(SaveState state, int day)
         {
@@ -132,7 +155,8 @@ namespace FoodTrucks.Core.Saves
             state != null && state.DailySales.Any(d => d != null && d.Day == day && d.InSummary);
 
         // What the day summary adds for a day the mod knows of: sales and catering, less the stock sold, the
-        // permits, the licence and event places. Crew wages and parking aren't in it: the game's summary has them.
+        // permits, commissary rent, overnight fines, the licence, event places and delivery fees. Crew wages
+        // and parking aren't in it: the game's summary has them.
         public static long DayProfitCents(SaveState? state, int day)
         {
             if (state == null) return 0;
@@ -140,9 +164,9 @@ namespace FoodTrucks.Core.Saves
             foreach (var entry in state.DailySales)
             {
                 if (entry == null || entry.Day != day) continue;
-                profit = checked(profit + entry.RevenueCents - entry.CostCents - entry.LicenceCents - entry.EventPlacesCents);
+                profit = checked(profit + entry.RevenueCents - entry.CostCents - entry.LicenceCents - entry.EventPlacesCents - entry.DeliveryFeesCents);
                 foreach (var vehicle in entry.ByVehicle)
-                    if (vehicle != null) profit = checked(profit - vehicle.PermitCents);
+                    if (vehicle != null) profit = checked(profit - vehicle.PermitCents - vehicle.CommissaryRentCents - vehicle.OvernightFineCents);
             }
             return profit;
         }

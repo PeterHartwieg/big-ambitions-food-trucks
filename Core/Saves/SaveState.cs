@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using FoodTrucks.Core.Catering;
+using FoodTrucks.Core.Commissary;
 using FoodTrucks.Core.Pitches;
 using FoodTrucks.Core.Reputation;
 
@@ -24,6 +25,9 @@ namespace FoodTrucks.Core.Saves
         // Offers, booked gigs and the booking reputation. Its random state is seeded by the game side
         // on first use (CateringState.New); 0 until then.
         public CateringState Catering { get; set; } = new CateringState();
+        // Visited commissaries, spaces, orders, stock and failed payments (older saves read an empty state).
+        [JsonProperty(NullValueHandling = NullValueHandling.Include)]
+        public CommissaryState Commissary { get; set; } = new CommissaryState();
         // The city's events and the player's bookings (additive field: older saves read none).
         public EventsState Events { get; set; } = new EventsState();
         // Who held each premium spot when, by spot ID (Holds).
@@ -131,6 +135,8 @@ namespace FoodTrucks.Core.Saves
         public long LicenceCents { get; set; }
         // Event places booked that day, less places paid back; below 0 on a day with more refunds than bookings.
         public long EventPlacesCents { get; set; }
+        // Delivery fees paid that day, less refunded fees; goods become cost of goods only when sold.
+        public long DeliveryFeesCents { get; set; }
         // What the day summary added to the game's total profit for this day, kept when the day is marked.
         // Null for days marked by older versions, which added sales less stock cost (SalesLedger.SummaryCents).
         public long? SummaryCents { get; set; }
@@ -176,6 +182,8 @@ namespace FoodTrucks.Core.Saves
         public long ParkingCents { get; set; }
         // The vehicle's vending permit.
         public long PermitCents { get; set; }
+        public long CommissaryRentCents { get; set; }
+        public long OvernightFineCents { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

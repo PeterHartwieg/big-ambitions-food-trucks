@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using FoodTrucks.Core.Catering;
+using FoodTrucks.Core.Commissary;
 using FoodTrucks.Core.Demand;
 using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Reputation;
@@ -17,7 +18,7 @@ namespace FoodTrucks.Core.Rules
 
         private RuleTables(DataReader r, JObject root)
         {
-            r.OnlyKeys(root, "schemaVersion", "queue", "service", "health", "regulars", "competition", "fleet", "catering", "liveCrowds");
+            r.OnlyKeys(root, "schemaVersion", "queue", "service", "health", "regulars", "competition", "fleet", "catering", "liveCrowds", "commissary");
             r.SchemaVersion(root, SchemaVersion);
             Queue = QueueRules.Read(r, r.Object(root, "queue"));
             Service = ServiceRules.Read(r, r.Object(root, "service"));
@@ -26,6 +27,7 @@ namespace FoodTrucks.Core.Rules
             Competition = CompetitionRules.Read(r, r.Object(root, "competition"));
             Fleet = FleetRules.Read(r, r.Object(root, "fleet"));
             Catering = CateringRules.Read(r, r.Object(root, "catering"));
+            Commissary = CommissaryRules.Read(r, r.Object(root, "commissary"));
             LiveCrowds = LiveCrowds.Read(r, r.Object(root, "liveCrowds"));
         }
 
@@ -36,6 +38,7 @@ namespace FoodTrucks.Core.Rules
         public CompetitionRules Competition { get; }
         public FleetRules Fleet { get; }
         public CateringRules Catering { get; }
+        public CommissaryRules Commissary { get; }
         public LiveCrowds LiveCrowds { get; }
 
         public static RuleTables Parse(string? json)

@@ -36,6 +36,7 @@ namespace FoodTrucks.Core.Saves
             Total = new long[columns];
             Licence = new long[columns];
             EventPlaces = new long[columns];
+            DeliveryFees = new long[columns];
             NotBrokenDown = new long[columns];
             MovedWages = new long[columns];
             MovedParking = new long[columns];
@@ -45,6 +46,7 @@ namespace FoodTrucks.Core.Saves
         public List<StatementVehicle> Vehicles { get; } = new List<StatementVehicle>();
         public long[] Licence { get; }
         public long[] EventPlaces { get; }
+        public long[] DeliveryFees { get; }
         public long[] NotBrokenDown { get; }
         // Costs to take off the game's rows, 0 or more.
         public long[] MovedWages { get; }
@@ -52,7 +54,7 @@ namespace FoodTrucks.Core.Saves
 
         public bool IsEmpty =>
             Total.All(v => v == 0) && Vehicles.Count == 0 && Licence.All(v => v == 0) &&
-            EventPlaces.All(v => v == 0) && NotBrokenDown.All(v => v == 0);
+            EventPlaces.All(v => v == 0) && DeliveryFees.All(v => v == 0) && NotBrokenDown.All(v => v == 0);
 
         // days: each column's day number (0 for a column without a summary). gameWagesCents and gameParkingCents:
         // the game's stored unassigned staff wages and parking fees for each column, as costs of 0 or more.
@@ -89,18 +91,21 @@ namespace FoodTrucks.Core.Saves
                 {
                     if (!vehicles.TryGetValue(day.VehicleId, out var vehicle))
                         vehicles[day.VehicleId] = vehicle = new StatementVehicle(day.VehicleId, columns);
-                    itemised = checked(itemised + day.SalesCents + day.CateringCents - day.StockCents - day.PermitCents);
+                    itemised = checked(itemised + day.SalesCents + day.CateringCents - day.StockCents - day.PermitCents - day.CommissaryRentCents - day.OvernightFineCents);
                     Put(vehicle, LedgerLine.Sales, c, day.SalesCents);
                     Put(vehicle, LedgerLine.Catering, c, day.CateringCents);
                     Put(vehicle, LedgerLine.Stock, c, -day.StockCents);
                     if (moveWages) Put(vehicle, LedgerLine.Wages, c, -day.WagesCents);
                     if (moveParking) Put(vehicle, LedgerLine.Parking, c, -day.ParkingCents);
                     Put(vehicle, LedgerLine.Permit, c, -day.PermitCents);
+                    Put(vehicle, LedgerLine.CommissaryRent, c, -day.CommissaryRentCents);
+                    Put(vehicle, LedgerLine.OvernightFine, c, -day.OvernightFineCents);
                 }
 
                 statement.Licence[c] = -entry.LicenceCents;
                 statement.EventPlaces[c] = -entry.EventPlacesCents;
-                itemised = checked(itemised - entry.LicenceCents - entry.EventPlacesCents);
+                statement.DeliveryFees[c] = -entry.DeliveryFeesCents;
+                itemised = checked(itemised - entry.LicenceCents - entry.EventPlacesCents - entry.DeliveryFeesCents);
                 statement.NotBrokenDown[c] = checked(SalesLedger.SummaryCents(state, days[c]) - itemised);
             }
 
@@ -112,7 +117,7 @@ namespace FoodTrucks.Core.Saves
             }
             for (var c = 0; c < columns; c++)
             {
-                var total = checked(statement.Licence[c] + statement.EventPlaces[c] + statement.NotBrokenDown[c]);
+                var total = checked(statement.Licence[c] + statement.EventPlaces[c] + statement.DeliveryFees[c] + statement.NotBrokenDown[c]);
                 foreach (var vehicle in statement.Vehicles) total = checked(total + vehicle.Total[c]);
                 statement.Total[c] = total;
             }

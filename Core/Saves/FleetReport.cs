@@ -49,8 +49,8 @@ namespace FoodTrucks.Core.Saves
     }
 
     // The numbers on BizMan's fleet page, from the per-vehicle ledger. Sales are street sales and catering fees;
-    // profit takes off the stock sold, crew wages, parking and the permit. The game pays wages at midnight into
-    // the day before, so today's profit has no wages in it until the day is over.
+    // profit takes off the stock sold, crew wages, parking, the permit, commissary rent and overnight fines.
+    // The game pays wages at midnight into the day before, so today's profit has no wages in it until the day is over.
     public static class FleetReport
     {
         public const int WeekDays = 7;
@@ -66,7 +66,8 @@ namespace FoodTrucks.Core.Saves
                 {
                     if (day == null || !string.Equals(day.VehicleId, vehicleId, StringComparison.Ordinal)) continue;
                     var sales = Sum(day.SalesCents, day.CateringCents);
-                    var profit = sales - Sum(Sum(day.StockCents, day.WagesCents), Sum(day.ParkingCents, day.PermitCents));
+                    var profit = sales - Sum(Sum(day.StockCents, day.WagesCents),
+                        Sum(Sum(day.ParkingCents, day.PermitCents), Sum(day.CommissaryRentCents, day.OvernightFineCents)));
                     money.WeekSalesCents = Sum(money.WeekSalesCents, sales);
                     money.WeekProfitCents += profit;
                     if (entry.Day != today) continue;
@@ -80,7 +81,7 @@ namespace FoodTrucks.Core.Saves
         // The whole business's profit over the last seven days, for its line in BizMan's list, on the same terms as
         // Econoview's Street food total: the day's sales and stock from its totals (which also hold whatever was
         // recorded before the per-vehicle breakdown began, even on a day that has both), less the itemised crew
-        // wages, parking and permits, the licence and event places.
+        // wages, parking, permits, commissary rent and overnight fines, the licence, event places and delivery fees.
         public static long WeekProfitCents(SaveState? state, int today)
         {
             if (state?.DailySales == null) return 0;
@@ -88,9 +89,10 @@ namespace FoodTrucks.Core.Saves
             foreach (var entry in state.DailySales)
             {
                 if (entry == null || entry.Day > today || entry.Day <= today - WeekDays) continue;
-                total += entry.RevenueCents - entry.CostCents - entry.LicenceCents - entry.EventPlacesCents;
+                total += entry.RevenueCents - entry.CostCents - entry.LicenceCents - entry.EventPlacesCents - entry.DeliveryFeesCents;
                 foreach (var day in entry.ByVehicle ?? new List<VehicleDay>())
-                    if (day != null) total -= Sum(Sum(day.WagesCents, day.ParkingCents), day.PermitCents);
+                    if (day != null) total -= Sum(Sum(day.WagesCents, day.ParkingCents),
+                        Sum(day.PermitCents, Sum(day.CommissaryRentCents, day.OvernightFineCents)));
             }
             return total;
         }
