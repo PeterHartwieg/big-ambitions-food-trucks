@@ -194,7 +194,7 @@ namespace FoodTrucks
         private static string Sign(long[] cents) => cents.Sum() >= 0 ? "Success" : "Danger";
 
         // "Food cart", "Food truck", numbered when the player has more than one of a kind, in the order of their IDs.
-        private static Dictionary<string, string> VehicleNames()
+        internal static Dictionary<string, string> VehicleNames()
         {
             var names = new Dictionary<string, string>(StringComparer.Ordinal);
             // Vehicles left with the private driver wait in the game's own list.

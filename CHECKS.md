@@ -1,6 +1,6 @@
 # Playtest fixes (0.9.1)
 
-The fixes from the first 0.9.0 playtest: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, and the street food breakdown in Econoview. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
+The fixes from the first 0.9.0 playtest: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, and the Street food line and fleet section in BizMan. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
 
 ## 1. Automated (me)
 
@@ -21,6 +21,11 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 | 8 | Watch a few sales | Each customer waits at the window for the order. The money and the sale message come as they walk away, not as they step up |
 | 9 | After a day with sales, open Econoview's income statement | "Street food" is a group. It opens into one row per vehicle (and "Vendor licence" or "Event places" if you paid for them); a vehicle opens into Sales, Stock sold, Crew wages and so on |
 | 10 | Same day, with a hired crew or paid parking | "Unassigned staff wages" and "Parking fees" are lower by the vehicles' share, which shows under each vehicle instead. The statement's Total equals the day summary's profit for that day |
+| 11 | With a cart or truck that sold something today, open BizMan | The business list ends with "Street food", "Food carts and trucks", the week's average profit and "N of M open". No cart or truck owned: no such line. Its location button is hidden and satisfaction reads "-" |
+| 12 | Try BizMan's filters: a neighbourhood, a business type, "Businesses", "Real estate", and a search for "street" | Neighbourhood, building and business type filters and "Real estate" hide the line; "Businesses" and the search keep it. The list keeps working |
+| 13 | Click "Street food" | A "Street food" section opens below the warehouses and the list scrolls to it: a card per vehicle, built like a warehouse card. Does it look right, or does anything of the warehouse card show (its buttons, column headings saying "Driver" or "Days left")? |
+| 14 | Read a card | Name; "Open at …" or "Closed, at …" (or on the way to a stop, or with the private driver); Today and Last 7 days with sales and profit; Health; Crew; Route; each item with "N sold" today and "N left". Do the sales match Econoview's? The location button sets the GPS to the vehicle's address |
+| 15 | Open a business from the list, go back, close and reopen BizMan | The section is closed again; your own businesses and warehouses open and look as before |
 
 ## 3. Log lines (me)
 
@@ -29,6 +34,8 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 - `Queue view: line at cart …` and `… line removed …` lines, and the session total on unload.
 - `Patch …LoadSalaryRows: Active.`, `Patch …LoadOngoingExpenseRows: Active.`, `…LoadFeeRows: Active.` and `Patch EmployeeInstance.PayWage(BuildingRegistration): Active.` (with the parking patches); `Econoview: crew wages and parking move from the game's rows to the vehicles.`
 - `Sale: …` lines arrive as customers leave the window.
+- `Patch BusinessScrollerController.PopulateAllModels: Active.`, `Patch BizManFilterToggle.PassesFilter: Active.`, `Patch BusinessCellView.SetData: Active.`, `Patch BizManList.OpenBusiness: Active.`, `Patch BizManList.OnDisable: Active.`; `BizMan: the Street food line and fleet section are on.`
+- After row 13: `BizMan: fleet section copied from the warehouse section (card at …).` and the `BizMan: fleet section label …` / `fleet card label …` lines (they name the copied headings, to fix any that still say warehouse). No `BizMan Street food (…), line taken out` error.
 
 # Milestone 7 checks: catering and Bakery
 

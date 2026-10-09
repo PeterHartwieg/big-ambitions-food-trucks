@@ -1009,6 +1009,7 @@ namespace FoodTrucks
             // Record before touching the cargo: emptying a stack runs the game's cargo listeners,
             // and the ledger must not miss a paid sale if one of them throws. Neither call can fail here.
             StreetSales.Record(state, vehicle.VehicleId, day, cents, 1);
+            SoldCounts.Record(vehicle, day, itemName, 1);
             // Food on board for days counts against the health grade (design: Health grades).
             // Food ages by calendar day; a stale sale marks the working day of the minute it was sold.
             var soldAt = (long)Math.Floor(at ?? HireCrew.NowExact());

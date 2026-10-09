@@ -543,6 +543,7 @@ namespace FoodTrucks
                     }
                     taken += n;
                     want -= n;
+                    SoldCounts.Record(vehicle, day, item, n);
                     try
                     {
                         truck.ReduceFromCargo(entry, n);

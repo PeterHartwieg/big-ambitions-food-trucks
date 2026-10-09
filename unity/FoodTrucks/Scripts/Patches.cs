@@ -12,6 +12,7 @@ using BigAmbitions.Items;
 using HarmonyLib;
 using Helpers;
 using UI.ItemPanel;
+using UI.Smartphone.Apps.BizMan;
 
 namespace FoodTrucks
 {
@@ -57,6 +58,16 @@ namespace FoodTrucks
             Patch(typeof(ParkingSimulator), "RunHourly", Type.EmptyTypes, typeof(StreetFoodBooks),
                 prefix: nameof(StreetFoodBooks.ParkingHourlyPrefix), postfix: nameof(StreetFoodBooks.ParkingHourlyPostfix));
             StreetFoodBooks.CheckMoves();
+
+            // BizMan: a Street food line at the end of the business list that opens a fleet section. The line has no
+            // building registration, so the filter, the cell and the click are patched to keep it away from code
+            // that needs one; it only shows when all four patches are active (BizManFleet.CheckReady).
+            Patch(typeof(BusinessScrollerController), "PopulateAllModels", null, typeof(BizManFleet), postfix: nameof(BizManFleet.PopulatePostfix));
+            Patch(typeof(BizManFilterToggle), "PassesFilter", null, typeof(BizManFleet), prefix: nameof(BizManFleet.FilterPrefix));
+            Patch(typeof(BusinessCellView), "SetData", null, typeof(BizManFleet), postfix: nameof(BizManFleet.CellPostfix));
+            Patch(typeof(BizManList), "OpenBusiness", null, typeof(BizManFleet), prefix: nameof(BizManFleet.OpenPrefix));
+            Patch(typeof(BizManList), "OnDisable", Type.EmptyTypes, typeof(BizManFleet), postfix: nameof(BizManFleet.ListClosedPostfix));
+            BizManFleet.CheckReady();
 
             // City map: a Street food line of filters (buildings that bring crowds, the player's vehicles).
             Patch(typeof(CityMapFilters), "InitializeFilters", Type.EmptyTypes, typeof(MapFilters), postfix: nameof(MapFilters.InitializePostfix));

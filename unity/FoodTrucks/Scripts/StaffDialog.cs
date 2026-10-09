@@ -203,7 +203,7 @@ namespace FoodTrucks
             }), "foodtrucks:hires_days_header", null!);
         }
 
-        private static string DaysKey(List<DayOfWeek>? days)
+        internal static string DaysKey(List<DayOfWeek>? days)
         {
             var set = new HashSet<DayOfWeek>(days ?? new List<DayOfWeek>());
             foreach (var (key, choice) in DayChoices)

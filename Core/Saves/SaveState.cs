@@ -100,6 +100,9 @@ namespace FoodTrucks.Core.Saves
         public Dictionary<string, List<StockBatch>> StockBatches { get; set; } = new Dictionary<string, List<StockBatch>>(StringComparer.Ordinal);
         // The premium spot this open window holds (first come among the player's vehicles); null when none.
         public string? PremiumSpot { get; set; }
+        // Units of each item sold today and yesterday, for BizMan's fleet page (SoldCounts; additive field: older
+        // saves read none). Older days are dropped as new sales come in.
+        public List<SoldDay> Sold { get; set; } = new List<SoldDay>();
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -277,6 +280,15 @@ namespace FoodTrucks.Core.Saves
     {
         public string SpotKey { get; set; } = string.Empty;
         public int Minutes { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    public class SoldDay
+    {
+        public int Day { get; set; }
+        public Dictionary<string, int> Units { get; set; } = new Dictionary<string, int>(StringComparer.Ordinal);
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
