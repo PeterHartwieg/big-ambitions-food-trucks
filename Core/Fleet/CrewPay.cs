@@ -103,6 +103,45 @@ namespace FoodTrucks.Core.Fleet
             return paid;
         }
 
+        // What the mod owes a hire whose employment is changing (a building job, a replacement, fired or resigning),
+        // to be paid on the spot as an unassigned crew wage: the hours already on today's counters for vehicles
+        // (CrewLog; the game would otherwise pay them with a building's wage, a delivery driver's fixed day, or not at
+        // all) and a noted hour not yet decided (the running one, or one whose credit failed). By vehicle, in ID order.
+        public static CrewOwed Owed(SaveState state, string employeeId, int today)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            var byVehicle = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var onCounters = 0;
+            foreach (var entry in state.CrewHours.Where(h => h != null && h.Day == today && h.Hours > 0 &&
+                         string.Equals(h.EmployeeId, employeeId, StringComparison.Ordinal)))
+            {
+                byVehicle.TryGetValue(entry.VehicleId, out var hours);
+                byVehicle[entry.VehicleId] = hours + entry.Hours;
+                onCounters += entry.Hours;
+            }
+            long? pending = null;
+            if (!string.IsNullOrEmpty(employeeId) && state.CrewServedHour.TryGetValue(employeeId, out var served) && served != null &&
+                Unpaid(state, employeeId, served.Hour))
+            {
+                pending = served.Hour;
+                byVehicle.TryGetValue(served.VehicleId, out var hours);
+                byVehicle[served.VehicleId] = hours + 1;
+            }
+            return new CrewOwed(byVehicle.Select(p => (p.Key, p.Value)).ToList(), onCounters, pending);
+        }
+
+        // After the owed hours are paid: today's logged hours are done with, the noted hour is stamped paid and its
+        // note dropped, so neither the next decision nor the midnight payroll's split pays them again.
+        public static void Settled(SaveState state, string employeeId, int today, CrewOwed owed)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            if (string.IsNullOrEmpty(employeeId)) return;
+            CrewLog.Consume(state, today, employeeId);
+            if (owed.PendingHour.HasValue) TryPay(state, employeeId, owed.PendingHour.Value);
+            if (state.CrewServedHour.TryGetValue(employeeId, out var served) && (served == null || !Unpaid(state, employeeId, served.Hour)))
+                state.CrewServedHour.Remove(employeeId);
+        }
+
         // Whether the hire's hour is still free: neither the mod nor the game counted it.
         public static bool Unpaid(SaveState state, string employeeId, long hour)
         {
@@ -141,5 +180,23 @@ namespace FoodTrucks.Core.Fleet
         }
 
         public const int KeepHours = 24;
+    }
+
+    public readonly struct CrewOwed
+    {
+        public CrewOwed(List<(string VehicleId, int Hours)> byVehicle, int onCounters, long? pendingHour)
+        {
+            ByVehicle = byVehicle;
+            OnCounters = onCounters;
+            PendingHour = pendingHour;
+        }
+
+        // Hours owed per vehicle.
+        public List<(string VehicleId, int Hours)> ByVehicle { get; }
+        // How many of them are on the game's counters already (to be taken off when paid on the spot).
+        public int OnCounters { get; }
+        // The noted hour among them, if any.
+        public long? PendingHour { get; }
+        public int Hours => ByVehicle?.Sum(v => v.Hours) ?? 0;
     }
 }

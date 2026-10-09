@@ -295,23 +295,76 @@ namespace FoodTrucks
             Settle(state, CrewPay.HourOf(boundary), payrollDay);
         }
 
-        // Credits each earned hour before `beforeHour` onto the game's counters. An hour once earned is paid even if
-        // the hire has since been given a building job (the game then pays it with the building's wage at midnight)
-        // or is being replaced (paid when they leave); only one no longer employed can't be, and their note waits
-        // until it is a day old. An hour the game counted itself is never credited again (CrewPay.Unpaid).
+        // Credits each earned hour before `beforeHour` onto the game's counters, for hires still unassigned. One whose
+        // employment changed without the mod seeing it (SettleLeaving normally runs first) is paid on the spot instead.
+        // Only one no longer employed can't be paid; their note waits until it is a day old. An hour the game counted
+        // itself is never credited again (CrewPay.Unpaid).
         private static void Settle(SaveState state, long beforeHour, int payrollDay)
         {
             CrewPay.CloseHours(state, beforeHour, (employeeId, vehicleId, hour) =>
             {
                 var employee = Find(employeeId);
                 if (employee == null) return false;
+                if (employee.IsAssignedToAnyBusiness() || employee.isBeingReplaced) return SettleLeaving(employee, "found at the hour's end");
                 CountOn(state, vehicleId, employee, payrollDay);
-                Log.Info($"Crew: {Name(employee)} paid for {hour % 24:D2}:00 on day {CrewPay.DayOfHour(hour)} (open window, {vehicleId})" +
-                         $"{(employee.IsAssignedToAnyBusiness() ? ", now in a building's wage" : "")}.");
+                Log.Info($"Crew: {Name(employee)} paid for {hour % 24:D2}:00 on day {CrewPay.DayOfHour(hour)} (open window, {vehicleId}).");
                 return true;
             });
             FoodTrucksSession.MarkChanged();
         }
+
+        // Before the game changes a hire's employment (a building or warehouse job, set to be replaced, resigning,
+        // fired or retired; the Harmony prefixes in Patches run before the game's own payout): everything the mod owes
+        // them is paid on the spot as an unassigned wage at their hourly wage, the hours on today's counters for
+        // vehicles and an earned hour not yet decided, the running one included. Each vehicle's share goes into its
+        // crew wages. The hours on the counters come off them and the markers are stamped, so neither the game's
+        // payout nor the next decision pays them again. False when nothing could be paid (and so nothing changed).
+        public static bool SettleLeaving(EmployeeInstance employee, string why)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || !FoodTrucksSession.CanWrite || employee == null || string.IsNullOrEmpty(employee.id) || SaveGameManager.Current == null)
+                return false;
+            if (!IsCrew(employee) && !state.CrewServedHour.ContainsKey(employee.id) && !CrewLog.HasHours(state, TimeHelper.CurrentDay, employee.id))
+                return true;
+            // An hour served so far counts only once the sales have reached it.
+            if (IsCrew(employee)) CartSelling.CatchUpTo(NowExact());
+            var today = TimeHelper.CurrentDay;
+            var owed = CrewPay.Owed(state, employee.id, today);
+            if (owed.Hours == 0)
+            {
+                CrewPay.Settled(state, employee.id, today, owed);
+                return true;
+            }
+            var shares = owed.ByVehicle.Select(v => (v.VehicleId, Cents: (long)Math.Round(v.Hours * (double)employee.hourlyWage * 100.0))).ToList();
+            var cents = shares.Sum(v => v.Cents);
+            if (cents > 0)
+            {
+                var info = new TransactionInfo(UnassignedWage, "ba:transactioncategory_salaryexpenses",
+                    new Dictionary<string, string> { { "employee", Name(employee) }, { "businessName", "Unassigned" } });
+                info.SetTaxDeductibleName("econoview_row_salaries");
+                if (!Payments.PayOut(cents, info, today))
+                {
+                    Log.Error($"Crew: {Name(employee)}'s {owed.Hours} owed hours ({why}) couldn't be paid; left for later.");
+                    return false;
+                }
+            }
+            employee.workedHoursToday = Math.Max(0, employee.workedHoursToday - owed.OnCounters);
+            if (owed.PendingHour.HasValue)
+            {
+                employee.workedHoursThisWeek++;
+                WorkedOn(employee, today);
+            }
+            CrewPay.Settled(state, employee.id, today, owed);
+            foreach (var (vehicleId, share) in shares.Where(v => v.Cents > 0))
+                if (!SalesLedger.RecordGameCost(state, today, vehicleId, LedgerLine.Wages, share))
+                    Log.Info($"Econoview: wage of {CartSelling.Money(share)} for {Name(employee)} on day {today} came after that day's summary; Econoview leaves it out.");
+            FoodTrucksSession.MarkChanged();
+            Log.Info($"Crew: {Name(employee)} paid {CartSelling.Money(cents)} for {owed.Hours} hours on leaving the crew's pay ({why}): " +
+                     string.Join(", ", owed.ByVehicle.Select(v => $"{v.Hours} on {v.VehicleId}")) + ".");
+            return true;
+        }
+
+        private const string UnassignedWage = "ba:transaction_unassignedwage";
 
         // The uninstall step, before the crew is released: the sales are caught up to now and every hour the crew has
         // earned so far, the running one included, is credited onto today's counters, so it is paid at midnight even
