@@ -1,3 +1,35 @@
+# Playtest fixes (0.9.1)
+
+The fixes from the first 0.9.0 playtest: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, and the street food breakdown in Econoview. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
+
+## 1. Automated (me)
+
+- [ ] `dotnet test` passes; `tools/build-mod.sh --generate` builds; installed after the mod was parked for any recording.
+- [ ] After the session: the log lines in section 3.
+
+## 2. In game (about 15 minutes)
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Go to the business school, use the Market Demands door | A question: which course? Buttons "Food Safety course" and "Market Demands". Does it read well? |
+| 2 | Press Escape; use the door again and open the phone; use it again and press "Market Demands" | Escape and the phone close the question with nothing else. "Market Demands" opens its usual study panel; cancel it |
+| 3 | Use the door again, press "Food Safety course" | The study panel says "Food Safety course" and $25 an hour, with up to 6 hours on the slider. Cancel it: no money gone |
+| 4 | Phone, your profile's education page | "Food Safety course" listed with the others, 6 hours to go |
+| 5 | Study it through (Start, then skip time) and use the door once more | Tuition paid, the course completed. The door goes straight to Market Demands without asking |
+| 6 | Phone the City of New York, buy the licence | The licence is sold. (Before row 5, the refusal names the business school's Market Demands classroom) |
+| 7 | Open a cart at a busy spot and watch the line form | People walk up and take their place in the order they arrive. Nobody stands at the back while someone ahead of them is still walking up, and nobody is served before reaching the window |
+| 8 | Watch a few sales | Each customer waits at the window for the order. The money and the sale message come as they walk away, not as they step up |
+| 9 | After a day with sales, open Econoview's income statement | "Street food" is a group. It opens into one row per vehicle (and "Vendor licence" or "Event places" if you paid for them); a vehicle opens into Sales, Stock sold, Crew wages and so on |
+| 10 | Same day, with a hired crew or paid parking | "Unassigned staff wages" and "Parking fees" are lower by the vehicles' share, which shows under each vehicle instead. The statement's Total equals the day summary's profit for that day |
+
+## 3. Log lines (me)
+
+- `Patch EducationDoorController.StartLearning: Active.`; `Food Safety course: added at the Market Demands door, 360 minutes at $25 an hour.`
+- No `Food Safety course:` error lines; no `Queue view:` NullReferenceException on quitting.
+- `Queue view: line at cart …` and `… line removed …` lines, and the session total on unload.
+- `Patch …LoadOngoingExpenseRows: Active.` and `…LoadFeeRows: Active.` (with the other Econoview and wage patches); `Econoview: crew wages and parking move from the game's rows to the vehicles.`
+- `Sale: …` lines arrive as customers leave the window.
+
 # Milestone 7 checks: catering and Bakery
 
 Build `0.9.0`. Catering gigs for trucks, offered by a new "Street Food Bookings" contact, and the Bakery mod's goods when that mod is installed. On top of 0.8.0 (its list is below). Fresh **FT** save, other gameplay mods off; the Bakery mod on for row 5 only. Debug: **Ctrl+F12** books a gig at the nearest place from in 30 minutes.
