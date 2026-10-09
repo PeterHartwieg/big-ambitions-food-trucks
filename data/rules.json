@@ -51,14 +51,15 @@
     "maxFootfallBonus": 0.30
   },
 
-  "_fleet": "The vendor licence lasts licenceDays and can be renewed in its last renewWindowDays; the City of New York sells it by phone for licenceFee dollars, and a permit for each cart or truck for permitFee. Both fees are tax-deductible and placeholders until the balance pass. There is no cap on the number of permits. travel is the game's own timing [code, unverified in game]: a taxi takes 0.04 game minutes per straight-line metre, and a cart moves at the 1.2 m/s walking pace, so a hire pushing a cart covers about 72 m per game hour at normal speed. A vehicle within stopRadiusMetres of a stop is at it; further away, the hire moves it there first. How many work a window at once is the vehicle's staff in economy.json.",
+  "_fleet": "The vendor licence lasts licenceDays and can be renewed in its last renewWindowDays; the City of New York sells it by phone for licenceFee dollars, and a permit for each cart or truck for permitFee. Both fees are tax-deductible and placeholders until the balance pass. There is no cap on the number of permits. travel is the game's own timing [code, unverified in game]: a taxi takes 0.04 game minutes per straight-line metre, and a cart moves at the 1.2 m/s walking pace, so a hire pushing a cart covers about 72 m per game hour at normal speed. A vehicle within stopRadiusMetres of a stop is at it; further away, the hire moves it there first. How many work a window at once is the vehicle's staff in economy.json. course is the Food Safety course the licence needs: the game has the course's name but no door for it, so the mod offers it at the business school's Market Demands door for hours hours at pricePerHour whole dollars an hour, with no course needed before it.",
   "fleet": {
     "licenceDays": 60,
     "renewWindowDays": 10,
     "licenceFee": 250,
     "permitFee": 500,
     "travel": { "driveMinutesPerMetre": 0.04, "pushMetresPerSecond": 1.2, "roadFactor": 1.0 },
-    "schedules": { "maxStops": 6, "latestCloseMinute": 1620, "stopRadiusMetres": 25 }
+    "schedules": { "maxStops": 6, "latestCloseMinute": 1620, "stopRadiusMetres": 25 },
+    "course": { "hours": 6, "pricePerHour": 25 }
   },
 
   "_catering": "Gig offers arrive by text message from a bookings contact; only vehicleTypes cater. A mature fleet (maturityServed items sold) gets offersPerDayAtMaturity offers a day on average, scaled by the booking reputation, at most maxOffersPerDay. Each gig is leadDays ahead and must be accepted within replyDays. The vehicle must arrive by the start plus graceMinutes with the required category on the menu and guests x unitsPerGuest units of it, and stay to the end. The fee is guests x unitsPerGuest x the category's reference price x feeMarkup, paid on completion. A failed gig takes reputation.failure off the booking reputation, a completed one adds reputation.success. Every number is a guess.",

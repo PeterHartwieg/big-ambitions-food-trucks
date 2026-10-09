@@ -80,6 +80,13 @@ public class LicensingTests
     }
 
     [Fact]
+    public void TheFoodSafetyCourseTakesSixHoursAtTwentyFiveDollars()
+    {
+        Assert.Equal(360, ShippedData.Rules.Fleet.CourseMinutes);
+        Assert.Equal(25, ShippedData.Rules.Fleet.CoursePricePerHour);
+    }
+
+    [Fact]
     public void TheCityWritesWhenRenewalOpensAndWhenTheLicenceRunsOut()
     {
         var licence = new LicenceState();

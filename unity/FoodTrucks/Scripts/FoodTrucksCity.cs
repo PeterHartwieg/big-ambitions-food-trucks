@@ -108,6 +108,9 @@ namespace FoodTrucks
             runtimeObject.AddComponent<DebugActions>();
             try { PrefabFixes.Apply(); }
             catch (Exception ex) { Log.Error("Prefab fixes: " + ex); }
+            // The game refills its course list when its data loads, so the course goes back in at every load.
+            try { FoodSafetyCourse.Register(); }
+            catch (Exception ex) { Log.Error("Food Safety course: " + ex); }
             try { CityLicensing.Attach(); }
             catch (Exception ex) { Log.Error("City of New York: " + ex); }
             try { Catering.Attach(); }
