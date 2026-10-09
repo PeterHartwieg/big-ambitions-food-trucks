@@ -94,6 +94,12 @@ namespace FoodTrucks
         // The cart closed: everyone in line walks off, then the line goes.
         public static void Closed(string vehicleId) => instance?.Retire(vehicleId);
 
+        // Looks again at the next frame: the player went to or left a truck's hatch, so the crew move.
+        public static void Recheck()
+        {
+            if (instance != null) instance.nextCheck = 0f;
+        }
+
         // Removes every person at once: time skips, the uninstall step, leaving the city.
         public static void ClearAll() => instance?.RemoveAll("cleared");
 

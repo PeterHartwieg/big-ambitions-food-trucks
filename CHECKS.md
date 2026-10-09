@@ -7,7 +7,7 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 - [ ] `dotnet test` passes; `tools/build-mod.sh --generate` builds; installed after the mod was parked for any recording.
 - [ ] After the session: the log lines in section 3.
 
-## 2. In game (about 15 minutes)
+## 2. In game (about 25 minutes)
 
 | # | Do | Look for |
 |---|---|---|
@@ -30,6 +30,15 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 | 13 | Load stock into the cart and look at the counter | The cardboard boxes sit on the counter, not sunk into it or floating |
 | 14 | Open the cart for business, then grab it again | The front steam-well lid opens and shuts again when you grab it. With boxes on the counter, does the open lid cross the middle boxes? |
 | 15 | Leave a cart in a parking lane by the road, walk more than 80 m away and wait for the next hour, or sleep a night; come back | No parked car stands on or in the cart. Nobody's car parks into it with auto-park either |
+| 11 | Ctrl+F6 truck, Ctrl+Shift+F6, fit a grill, load hot dogs. Park legally with the hatch to the pavement, "Open here" | You stand inside at the hatch, facing the pavement, not outside. A panel "At the serving hatch" with Step out, Close the window and Drive. Can you see yourself through the open hatch, or does the roof hide you? Screenshot |
+| 12 | Press WASD, click the pavement, scroll the camera | You don't move or slide through the truck. The camera turns as usual |
+| 13 | Wait for a few customers | They are served (sales come in) with you inside; the "Nobody's at the window" message doesn't show |
+| 14 | Press Escape | You step out behind the truck, on the pavement or the parking lane, not inside the body. The window stays open; walk 10 m away: it pauses; come back: it serves |
+| 15 | "Open here" again (drive a metre and park), then Drive in the panel | You step out by the driver's door and get in; the window closes as when driving off |
+| 16 | Open again, then Close the window | The usual closing message; you step out |
+| 17 | Open again, save from the menu while at the hatch, load that save | Saving works. After loading you stand outside behind the truck, the window still open and serving |
+| 18 | With a hire on shift at the truck (Ctrl+Shift+F9, put them on the truck with a stop here), open | The hire stands beside you at the hatch, not in your place. Step out: they move to the middle |
+| 19 | Open, then sleep or skip time from the phone, if anything lets you | After the skip you stand outside by the truck |
 
 ## 3. Log lines (me)
 
@@ -40,6 +49,9 @@ The fixes from the first 0.9.0 playtest: the Food Safety course at the business 
 - `Sale: …` lines arrive as customers leave the window.
 - `Crew: <name> paid for HH:00 on day N (open window, truck …)` once per hour the crew served a window you opened; none for route hours, and never two for the same hour and worker.
 - `Patch VehicleHelper.DestroyBlockingVehicles(GameObject, VehicleType, Transform, Boolean): Active.`; at load, `Parking lanes: cart … seen; body collider 0.96 x 1.50 m …` for each cart (or `in hand now …` for one being pushed); after row 15, any `Parking lanes: cleared … parked … cars from cart …`; no `Cart … has no Cart_Lid` error.
+- `Patch PlayerHelper.SaveCurrentPosition: Active.`
+- One `Truck window: player placed at the hatch of truck …` line per open (or `… player left outside …: <reason>`), and `Truck window: player stepped out of truck … (<reason>)` for each way out; no `the NavMesh warp failed`. Row 17: `Truck window: saved at the hatch …`.
+- No `Tried to set navigation blocker` warnings or NullReferenceExceptions around the rows above.
 
 # Milestone 7 checks: catering and Bakery
 

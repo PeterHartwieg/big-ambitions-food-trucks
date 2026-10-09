@@ -106,6 +106,7 @@ namespace FoodTrucks
             runtimeObject = new GameObject("FoodTrucks.Runtime");
             Object.DontDestroyOnLoad(runtimeObject);
             runtimeObject.AddComponent<CartSelling>();
+            runtimeObject.AddComponent<TruckWindow>();
             runtimeObject.AddComponent<CartQueueView>();
             runtimeObject.AddComponent<HireRoutes>();
             runtimeObject.AddComponent<Catering>();

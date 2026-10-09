@@ -272,6 +272,8 @@ namespace FoodTrucks
             Say(key, kind, ("units", plan.StockUnits.ToString()), ("rate", ExpectedSales(plan, service).ToString("F0")),
                 ("grade", GradeText(vehicle)), ("crew", HireCrew.Names(serving)));
             if (pitch != null) Say(pitch.Value.Key, kind, pitch.Value.Data);
+            // From the driver's seat to the hatch: the player serves from inside the truck.
+            if (kind == "truck") TruckWindow.Enter(cart.id);
         }
 
         // Where the player stands with the vehicle now, as a pitch: null when it could open here, else the
@@ -567,6 +569,14 @@ namespace FoodTrucks
                 if (vehicle != null && vehicle.IsOpen && FoodTrucksSession.CanWrite) Close(vehicle, "foodtrucks:notification_closed");
             }
             catch (Exception ex) { Log.Error(ex); }
+        }
+
+        // The player closes the window from the truck's hatch.
+        internal static void CloseByPlayer(string vehicleId)
+        {
+            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
+            if (instance == null || vehicle == null || !vehicle.IsOpen || !FoodTrucksSession.CanWrite) return;
+            instance.Close(vehicle, "foodtrucks:notification_closed");
         }
 
         // at: the game minute the window closes, when the sales clock is catching up behind the live one.
@@ -979,6 +989,8 @@ namespace FoodTrucks
         {
             if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking) return false;
             if (SaveGameManager.Current.ActiveVehicleId == cart.id) return false;
+            // At the truck's hatch, inside it. Otherwise within reach of the window, at the cart or the truck.
+            if (TruckWindow.PlayerAt(cart.id)) return true;
             var controller = VehicleHelper.GetVehicleController(cart);
             if (controller == null) return false;
             return Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position) <= WorkingDistance;

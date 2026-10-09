@@ -52,6 +52,8 @@ namespace FoodTrucks
         // can never refund the same vehicle twice.
         private static void Run(GameInstance game, List<VehicleInstance> vehicles)
         {
+            // Out of the truck's hatch before the truck goes.
+            TruckWindow.StepOutNow("uninstall");
             CartSelling.CloseAllQuietly();
             HireCrew.ReleaseAll();
             Catering.RemoveContact();
