@@ -61,7 +61,7 @@ public class CrewPayTests
 
         Assert.True(CrewPay.OnShift(truck, At(3, 12)));
         Assert.False(CrewPay.PlayerWindow(truck));
-        Assert.False(CrewPay.OpenHourDue(truck, At(3, 12), 0));
+        Assert.False(CrewPay.OpenHourDue(truck, At(3, 12)));
     }
 
     [Fact]
@@ -69,19 +69,72 @@ public class CrewPayTests
     {
         var truck = Truck(open: true);
 
-        Assert.True(CrewPay.OpenHourDue(truck, At(3, 15), 0));
-        Assert.True(CrewPay.OpenHourDue(truck, At(3, 15, 29), 0));
-        Assert.False(CrewPay.OpenHourDue(truck, At(3, 15, 30), 0));
-        Assert.False(CrewPay.OpenHourDue(truck, At(3, 15, 59), 0));
+        Assert.True(CrewPay.OpenHourDue(truck, At(3, 15)));
+        Assert.True(CrewPay.OpenHourDue(truck, At(3, 15, 29)));
+        Assert.False(CrewPay.OpenHourDue(truck, At(3, 15, 30)));
+        Assert.False(CrewPay.OpenHourDue(truck, At(3, 15, 59)));
     }
 
     [Fact]
-    public void AnHourTheRoutePaysIsNotAnOpenHour()
+    public void AWindowSoldOutBeforeTheHourNeverEarnsIt()
     {
+        // The sales reach 12:59, sell out and close; the minute 13:00 is never reached with the window open.
         var truck = Truck(open: true);
+        Assert.False(CrewPay.OpenHourDue(truck, At(3, 12, 59)));
+        truck.IsOpen = false;
+        Assert.False(CrewPay.OpenHourDue(truck, At(3, 13)));
+    }
 
-        Assert.False(CrewPay.OpenHourDue(truck, At(3, 15, 10), 30));
-        Assert.True(CrewPay.OpenHourDue(truck, At(3, 15, 10), 29));
+    [Fact]
+    public void RouteHoursDoNotDecideAnOpenHourTheMarkerDoes()
+    {
+        // A 12-14 route, and a hire added at 12:10 to a window the player opened: the route's count at 12:00 didn't
+        // include them, so the hour is theirs to earn.
+        var state = new SaveState();
+        var truck = Truck(open: true);
+        Leg(truck, At(3, 12), At(3, 14));
+        var hour = CrewPay.HourOf(At(3, 12, 10));
+
+        Assert.True(CrewPay.OpenHourDue(truck, At(3, 12, 10)));
+        Assert.True(CrewPay.Unpaid(state, "late", hour));
+        // One the route did count at 12:00 isn't counted again.
+        CrewPay.TryPay(state, "e1", hour);
+        Assert.False(CrewPay.Unpaid(state, "e1", hour));
+    }
+
+    [Fact]
+    public void AnHourTheGameCountedIsNotCountedAgain()
+    {
+        // A shop worker counted by the game at 12:00, then unassigned and put on an open truck at 12:10.
+        var state = new SaveState();
+        var hour = CrewPay.HourOf(At(3, 12));
+        CrewPay.GameCounted(state, "shop", hour);
+
+        Assert.False(CrewPay.Unpaid(state, "shop", hour));
+        Assert.False(CrewPay.TryPay(state, "shop", hour));
+        Assert.True(CrewPay.TryPay(state, "shop", hour + 1));
+        // It never moves a marker back.
+        CrewPay.GameCounted(state, "shop", hour);
+        Assert.Equal(hour + 1, state.CrewPaidHour["shop"]);
+    }
+
+    [Fact]
+    public void OnlyTheCrewWhoServeArePaid()
+    {
+        var crew = new[] { ("a", 40.0), ("b", 70.0), ("c", 55.0) };
+
+        var alone = CrewPay.Team(crew, null, 2);
+        Assert.Equal(new[] { "b", "c" }, alone.Crew);
+        Assert.Equal(new[] { 70.0, 55.0 }, alone.Skills);
+
+        // The player at the window takes a place from the weakest.
+        var withPlayer = CrewPay.Team(crew, 60.0, 2);
+        Assert.Equal(new[] { "b" }, withPlayer.Crew);
+        Assert.Equal(new[] { 70.0, 60.0 }, withPlayer.Skills);
+
+        // On a tie the crew member serves, as before.
+        Assert.Equal(new[] { "a" }, CrewPay.Team(new[] { ("a", 50.0) }, 50.0, 1).Crew);
+        Assert.Empty(CrewPay.Team(new[] { ("a", 40.0) }, 90.0, 1).Crew);
     }
 
     [Fact]
@@ -112,12 +165,15 @@ public class CrewPayTests
     {
         var state = new SaveState();
         CrewPay.TryPay(state, "e1", 10);
-        CrewPay.TryPay(state, "e2", 100);
+        CrewPay.TryPay(state, "e2", 49);
+        CrewPay.TryPay(state, "e3", 50);
 
         CrewPay.Prune(state, 50);
 
         Assert.False(state.CrewPaidHour.ContainsKey("e1"));
+        // The previous hour stays: the sales may still be catching up on it.
         Assert.True(state.CrewPaidHour.ContainsKey("e2"));
+        Assert.True(state.CrewPaidHour.ContainsKey("e3"));
     }
 
     [Fact]

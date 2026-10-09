@@ -52,9 +52,13 @@ namespace FoodTrucks
         public static List<EmployeeInstance> OnShift(VehicleState vehicle, long now) =>
             CrewPay.OnShift(vehicle, now) ? Present(vehicle) : new List<EmployeeInstance>();
 
-        // Who serves at the window with the player away: the best of the crew on shift, up to the vehicle's staff.
-        public static List<EmployeeInstance> Serving(VehicleState vehicle, long now) =>
-            OnShift(vehicle, now).OrderByDescending(Effective).Take(Limit(vehicle.VehicleType)).ToList();
+        // Who serves at the window: the best of the crew on shift and the player (their skill, when at the window), up
+        // to the vehicle's staff. Only the crew chosen here serve, and only they are paid for serving.
+        public static (List<EmployeeInstance> Crew, List<double> Skills) Team(VehicleState vehicle, long now, double? playerSkill, string? kind = null) =>
+            CrewPay.Team(OnShift(vehicle, now).Select(e => (e, Effective(e))), playerSkill, Limit(kind ?? vehicle.VehicleType));
+
+        // Who serves at the window with the player away.
+        public static List<EmployeeInstance> Serving(VehicleState vehicle, long now) => Team(vehicle, now, null).Crew;
 
         public static string Names(IEnumerable<EmployeeInstance> employees) => string.Join(", ", employees.Select(Name));
 
@@ -191,11 +195,12 @@ namespace FoodTrucks
         }
 
         // Before the game's hourly employee run, which counts the hour that is starting for anyone on a work
-        // shift: the same hour counts for each crew member on shift for at least half of it, and for the crew at a
-        // window the player opened (CrewPay). The game pays worked hours at midnight, as unassigned wages.
-        // [code, unverified in game]
+        // shift: the same hour counts for each crew member on route shift for at least half of it. Hours at a window
+        // the player opened are counted as the sales reach them (CountServing). The game pays worked hours at
+        // midnight, as unassigned wages. [code, unverified in game]
         public static void CountHour()
         {
+            gameCountBefore = null;
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite) return;
             // Anyone who left or took a building job since the last check isn't counted here.
@@ -210,7 +215,7 @@ namespace FoodTrucks
             CrewLog.Prune(state, TimeHelper.CurrentDay - 2);
             CrewLog.Begin(state, TimeHelper.CurrentDay);
             var hour = CrewPay.HourOf(hourStart);
-            CrewPay.Prune(state, hour - 48);
+            CrewPay.Prune(state, hour);
             foreach (var vehicle in state.Vehicles)
             {
                 if (vehicle.Crew == null || vehicle.Crew.Count == 0 || runner == null) continue;
@@ -223,24 +228,47 @@ namespace FoodTrucks
                 var (planX, planZ) = HireRunner.PlanFrom(vehicle, standing.x, standing.z);
                 // The game clears these only when a building's shifts change, so they should hold; once an hour is cheap.
                 SetWeeklyWork(vehicle);
-                var routeMinutes = runner.PlannedShiftMinutes(vehicle, hourStart, hourStart + 60, planX, planZ, HireRoutes.GameSpeed());
-                // A window the player opened, open as the hour starts, pays its crew this hour too.
-                var why = routeMinutes >= CrewPay.HalfHour ? "route" : CrewPay.OpenHourDue(vehicle, hourStart, routeMinutes) ? "open window" : null;
-                if (why == null) continue;
-                foreach (var employee in Present(vehicle)) PayHour(state, vehicle, employee, hour, why);
+                if (runner.PlannedShiftMinutes(vehicle, hourStart, hourStart + 60, planX, planZ, HireRoutes.GameSpeed()) < CrewPay.HalfHour) continue;
+                foreach (var employee in Present(vehicle)) PayHour(state, vehicle, employee, hour, "route");
             }
+            // What every employee has worked today before the game's own count, to see whose hour the game counts.
+            gameCountHour = hour;
+            gameCountBefore = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var employee in SaveGameManager.Current?.EmployeeInstances ?? new List<EmployeeInstance>())
+                if (employee != null && !string.IsNullOrEmpty(employee.id)) gameCountBefore[employee.id] = employee.workedHoursToday;
         }
 
-        // A window the player opened pays its crew for each hour they serve in the first half of. The hourly count
-        // catches a window open as the hour starts; this, called as the window sells, catches one opened (or a crew
-        // member who joined) later in the first half. An hour the route pays already doesn't count again.
-        public static void CountServing(SaveState state, VehicleState vehicle)
+        private static Dictionary<string, int>? gameCountBefore;
+        private static long gameCountHour;
+
+        // After the game's hourly employee run: an employee whose worked hours went up was counted by the game for
+        // this hour (a building shift, EmployeeInstance.RunHourly). That hour is the game's: if they join a crew
+        // later in it, serving doesn't count it again. Kept in the save with the mod's own paid hours.
+        public static void AfterGameCount()
         {
-            if (!FoodTrucksSession.CanWrite || !CrewPay.PlayerWindow(vehicle)) return;
-            var now = Now();
-            var hour = CrewPay.HourOf(now);
-            if (!CrewPay.OpenHourDue(vehicle, now, HireRunner.ShiftMinutes(vehicle, hour * 60, hour * 60 + 60))) return;
-            foreach (var employee in OnShift(vehicle, now))
+            var before = gameCountBefore;
+            gameCountBefore = null;
+            var state = FoodTrucksSession.CurrentState;
+            if (before == null || state == null || !FoodTrucksSession.CanWrite) return;
+            var changed = false;
+            foreach (var employee in SaveGameManager.Current?.EmployeeInstances ?? new List<EmployeeInstance>())
+            {
+                if (employee == null || !before.TryGetValue(employee.id ?? "", out var worked) || employee.workedHoursToday <= worked) continue;
+                if (CrewPay.Unpaid(state, employee.id, gameCountHour)) changed = true;
+                CrewPay.GameCounted(state, employee.id, gameCountHour);
+            }
+            if (changed) FoodTrucksSession.MarkChanged();
+        }
+
+        // A window the player opened pays the crew who serve it for each hour they serve in the first half of. Called
+        // by the sales as they reach each minute with the window still open, so the hours follow the sales in order:
+        // a window sold out or closed before an hour began never earns it, however far a time skip jumps. Whether the
+        // hire has the hour already is their paid-hour marker's to say (the route's count, another window, the game).
+        public static void CountServing(SaveState state, VehicleState vehicle, IEnumerable<EmployeeInstance> serving, long minute)
+        {
+            if (!FoodTrucksSession.CanWrite || !CrewPay.OpenHourDue(vehicle, minute)) return;
+            var hour = CrewPay.HourOf(minute);
+            foreach (var employee in serving)
                 if (CrewPay.Unpaid(state, employee.id, hour)) PayHour(state, vehicle, employee, hour, "open window");
         }
 

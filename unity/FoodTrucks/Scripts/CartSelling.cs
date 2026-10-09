@@ -5,6 +5,7 @@ using System.Linq;
 using BigAmbitions.Characters.Skills;
 using BigAmbitions.DayNightCycle;
 using BigAmbitions.Items;
+using Entities;
 using FoodTrucks.Core.Common;
 using FoodTrucks.Core.Demand;
 using FoodTrucks.Core.Fleet;
@@ -510,8 +511,9 @@ namespace FoodTrucks
         // The player has no satisfaction of their own in the game, so their skill counts in full.
         private readonly struct Window
         {
-            public Window(int servers, double skill, double speed, ServiceMood mood, int queueLimit)
+            public Window(int servers, double skill, double speed, ServiceMood mood, int queueLimit, List<EmployeeInstance> crew)
             {
+                Crew = crew;
                 Servers = servers;
                 Skill = skill;
                 Speed = speed;
@@ -524,18 +526,18 @@ namespace FoodTrucks
             public double Speed { get; }
             public ServiceMood Mood { get; }
             public int QueueLimit { get; }
+            // The crew among those serving (the player may take a place): they alone are paid for serving.
+            public List<EmployeeInstance> Crew { get; }
         }
 
         // Everyone at the window: the crew on shift, each at skill × satisfaction / 100, and the player at
         // their own skill when they stand there. They serve at the team's mean speed (ServiceRules.Team).
         private static Window Service(RuleTables rules, string kind, VehicleState vehicle, bool playerAtWindow, long? minute = null)
         {
-            var skills = HireCrew.OnShift(vehicle, minute ?? HireCrew.Now()).Select(HireCrew.Effective).ToList();
-            if (playerAtWindow) skills.Add(ServiceRules.EffectiveSkill(PlayerSkill(), 100));
             // No more than the vehicle's staff fit at the window: the best of them serve.
-            skills = skills.OrderByDescending(s => s).Take(HireCrew.Limit(kind)).ToList();
+            var (crew, skills) = HireCrew.Team(vehicle, minute ?? HireCrew.Now(), playerAtWindow ? ServiceRules.EffectiveSkill(PlayerSkill(), 100) : (double?)null, kind);
             var team = rules.Service.Team(skills);
-            return new Window(skills.Count, team.Skill, team.Speed, team.Mood, rules.Service.QueueLimit(kind, rules.Queue.MaxQueue));
+            return new Window(skills.Count, team.Skill, team.Speed, team.Mood, rules.Service.QueueLimit(kind, rules.Queue.MaxQueue), crew);
         }
 
         // The player's customer service skill [code, unverified in game]: the first character in the save is
@@ -681,11 +683,7 @@ namespace FoodTrucks
             {
                 TrackStock(state);
                 foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && !RunByRoute(v)).ToList())
-                {
                     Advance(state, vehicle, HireCrew.NowExact());
-                    // A crew serving the window the player opened is paid for the hours they serve (HireCrew.CountHour).
-                    if (vehicle.IsOpen) HireCrew.CountServing(state, vehicle);
-                }
             }
             catch (Exception ex)
             {
@@ -786,6 +784,9 @@ namespace FoodTrucks
             if (elapsed > SalesTick.MaxCatchUpMinutes) return;
             // Minutes sold outside a partner venue count towards its day.
             if (window.Servers > 0) Partners.Worked(state, vehicle, spot, (long)Math.Floor(from), elapsed);
+            // The crew serving a window the player opened earns this minute's hour, in order with the sales: a window
+            // that sold out or closed before the hour began never reaches it.
+            HireCrew.CountServing(state, vehicle, window.Crew, (long)Math.Floor(from));
 
             // A cart opened before 0.4.0 has no queue yet; it starts one now.
             vehicle.Service ??= SalesSimulator.Open(Seed(cart.id));
