@@ -72,6 +72,8 @@ Decided while building the Core (8 October 2026; numbers in `data/rules.json`): 
 
 Slots and stock are inventory counts in version 1. The tetris layout replaces the slot count later; the item list stays the same.
 
+Decided 9 October 2026 (Peter): the cart shows its fitted equipment on the counter, one piece per slot, using the game's own item model where it suits a cart and a small model of our own where it doesn't. Planned for Milestone 8; see the implementation plan.
+
 ## Equipment and menu
 
 Each piece of equipment unlocks products. The menu is whatever the fitted equipment allows, so slots force a trade-off between a wide menu and a fast one.

@@ -294,6 +294,15 @@ The first playable slice. It touches every risky layer at once: bundle, vehicle,
 - Final cart, truck and equipment models from the winning Blender pipeline, swapped into the existing prefabs.
 - Workshop packaging, README with the evidence section, a private upload, a check on a clean install, then public.
 
+**State, 9 October 2026.** The truck's final model has been in the build since Milestone 4. The cart's final model (`art/cart/FoodCart.fbx`) is committed and passes its scorer, but the game still builds the cart from placeholder boxes (`CartAssets.BuildCart`); `art/README.md` has its placement table, with every attachment point matched to the code.
+
+**Visible equipment (Peter, 9 October 2026).** Fitted equipment is still inventory only, so a cart looks the same whatever it serves. For the cart, the fitted pieces show on the counter, in its two slots, as a mix of:
+
+- the game's own item model, where it fits a cart's counter (to check per item: size, and whether it reads from the street);
+- a small model of our own from the Blender pipeline, where the game's item is shop-sized or looks wrong on a cart (the industrial coffee machine and the drinks fridges are the likely ones).
+
+Each slot gets a mount point on the cart model, kept clear of the push bar, the umbrella pole and the box zone that `art/README.md` lists. The truck is not decided yet: the game's items inside behind the hatch is the simple option. Placing equipment freely ("tetris") stays a later version.
+
 ## Checklists
 
 Every milestone ends with three lists in the mod's `CHECKS.md`, split by who can check what (decided 8 October 2026, after two long sessions where the useful finds came from playing, not from scripted rows):
