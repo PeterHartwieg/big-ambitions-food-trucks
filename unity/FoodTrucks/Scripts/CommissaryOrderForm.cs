@@ -57,6 +57,9 @@ namespace FoodTrucks
             // The form instance this order belongs to: the first commissary form the patches see after Begin. A form
             // from an earlier step of the call (its picker callbacks, say) is someone else's and is left alone.
             public DeliveryContractSettingsBase? Form { get; set; }
+            // The entries this form put in the item list beside the phone, kept here rather than read from the form:
+            // closing the phone destroys the conversation, the form with it, while the list and its entries stay.
+            public List<ItemsListEntry> Entries { get; set; } = new List<ItemsListEntry>();
         }
 
         private static Open? open;
@@ -127,23 +130,21 @@ namespace FoodTrucks
         {
             var current = open;
             open = null;
-            if (current?.Form == null) return;
+            if (current == null || current.Entries.Count == 0) return;
             try
             {
                 var list = InstanceBehavior<UIs>.Instance?.itemsList;
-                if (list == null || !OwnsList(current.Form, list)) return;
+                if (list == null || !OwnsList(current.Entries, list)) return;
                 list.Clear();
                 list.Toggle(newState: false);
             }
             catch (Exception ex) { Fail("closing the item list", ex); }
         }
 
-        // Whether the item list still holds this form's entries (another screen may have filled it since).
-        private static bool OwnsList(DeliveryContractSettingsBase form, ItemsList list)
-        {
-            var entries = entriesField?.Invoke(form);
-            return entries != null && entries.Values.Any(e => e != null && e.ItemsListEntry != null && e.ItemsListEntry.transform.IsChildOf(list.transform));
-        }
+        // Whether the item list still holds entries this form put there (another screen may have filled it since,
+        // which destroys them). Works after the form itself is gone.
+        private static bool OwnsList(List<ItemsListEntry> entries, ItemsList list) =>
+            entries.Any(e => e != null && e.transform.IsChildOf(list.transform));
 
         // Every frame (Commissary.Update): a form whose call has gone (the phone closed, another call) is left. The
         // game's ContactsApp hangs up on closing without calling the entry's OnCancel, so this is the only notice.
@@ -166,8 +167,6 @@ namespace FoodTrucks
 
         internal static Line? Find(string item) => open?.Lines.FirstOrDefault(l => l.Item == item);
 
-        // Whether this is the form the open order belongs to (the read-back reads it).
-        internal static bool IsCurrent(DeliveryContractSettingsBase? form) => form != null && open?.Form is { } bound && ReferenceEquals(bound, form);
 
         // The form's rows as Core's order requests: an amount is a number of boxes.
         internal static List<CommissaryOrderRequest> Requests(DeliveryContractSettingsBase form)
@@ -239,6 +238,8 @@ namespace FoodTrucks
                 var current = open;
                 if (current == null || !IsOurs(__instance)) return;
                 var entries = entriesField!(__instance);
+                // The game has just filled the list for this form: these entries are the ones to clear on leaving.
+                current.Entries = entries.Values.Where(e => e != null && e.ItemsListEntry != null).Select(e => e.ItemsListEntry).ToList();
                 var shown = current.Lines.Where(l => entries.TryGetValue(l.Item, out var e) && e != null).Select(l => (Line: l, Entry: entries[l.Item])).ToList();
                 // The game lists them by item key; they take the same places in the list, in the catalogue's order.
                 var first = shown.Count == 0 ? 0 : shown.Min(s => s.Entry.ItemsListEntry.transform.GetSiblingIndex());

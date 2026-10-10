@@ -173,9 +173,13 @@ namespace FoodTrucks
             return true;
         }
 
+        // The order form's call can end with the phone closed, which tells no one: its item list is closed then. Checked
+        // in Update and again in LateUpdate, so a phone closed anywhere in a frame (input, UI events, other scripts'
+        // Update) is seen before the next frame's clicks reach the list.
+        private void LateUpdate() => CommissaryOrderForm.Watch();
+
         private void Update()
         {
-            // The order form's call can end with the phone closed, which tells no one: its item list is closed then.
             CommissaryOrderForm.Watch();
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
