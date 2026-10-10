@@ -72,6 +72,16 @@ public class StorageTests
         Assert.Equal(1, stack.Allowed);
         Assert.Equal(LoadRefusal.SecondStorage, stack.Refusal);
 
+        // Full slots still give the storage reason: a cart with a grill and a cabinet, a full truck.
+        var fullCart = Core.Selling.Storage.Check(Tables, "cart", one, Storage, 1, false);
+        Assert.Equal(LoadRefusal.SecondStorage, fullCart.Refusal);
+        Assert.Equal(0, fullCart.Allowed);
+        var fullTruck = new[] { L(HotDogGrill, 1), L(Grill, 1), L(Fryer, 1), L(Storage, 1) };
+        Assert.Equal(LoadRefusal.SecondStorage, Core.Selling.Storage.Check(Tables, "truck", fullTruck, Storage, 1, false).Refusal);
+        // Without a cabinet, full slots are full slots.
+        Assert.Equal(LoadRefusal.EquipmentSlots,
+            Core.Selling.Storage.Check(Tables, "cart", new[] { L(HotDogGrill, 1), L(Grill, 1) }, Storage, 1, false).Refusal);
+
         // A save that somehow holds two still counts once.
         var two = Core.Selling.Storage.Of(Tables, "truck", new[] { L(HotDogGrill, 1), L(Storage, 2) })!;
         Assert.Equal(2, two.StoragePieces);
