@@ -379,7 +379,7 @@ namespace FoodTrucks
             people.Clear();
             leaving.Clear();
             if (root != null) Object.Destroy(root);
-            if (count > 0) Log.Info($"Queue view: cart {VehicleId} line removed with {count} people ({reason}).");
+            if (count > 0 || WalkSummary().Length > 0) Log.Info($"Queue view: cart {VehicleId} line removed with {count} people ({reason}){WalkSummary()}.");
         }
 
         // One frame. Spawns at most `room` people; returns how many it spawned.
@@ -424,6 +424,7 @@ namespace FoodTrucks
             // walk would cross a driving lane, and they aren't shown again.
             foreach (var pair in people.ToList())
             {
+                if (pair.Value != null) NoteWalking(pair.Key, pair.Value);
                 if (pair.Value != null && !pair.Value.Tick()) continue;
                 if (pair.Value != null && pair.Value.UnsafeWalk)
                 {
@@ -447,6 +448,33 @@ namespace FoodTrucks
             }
             return spawned;
         }
+
+        // Spinning on the pavement (0.9.7 playtest) left no trace in the log. A customer who circled their place is
+        // logged the first time in a line, with how far off they stopped; one walking to new targets more often than
+        // a line ever needs (a place each time the line moves up, plus walking up and leaving) is logged once.
+        private const int ManyWalks = 16;
+        private int circled, circledWarped, manyWalksLogged;
+        private float worstMiss;
+        private int mostWalks;
+
+        private void NoteWalking(long id, QueuePerson person)
+        {
+            if (person.Walks > mostWalks) mostWalks = person.Walks;
+            if (person.Walks == ManyWalks + 1 && manyWalksLogged++ < 3)
+                Log.Info($"Queue view: cart {VehicleId}: customer {id} has walked to {person.Walks} targets; the line keeps moving them (re-pathing).");
+            if (!(person.Circled is { } circle)) return;
+            person.Circled = null;
+            circled++;
+            if (circle.Warped) circledWarped++;
+            if (circle.Miss > worstMiss) worstMiss = circle.Miss;
+            if (circled == 1)
+                Log.Info($"Queue view: cart {VehicleId}: a customer circled their place {circle.Miss:F2} m off without getting closer; " +
+                         $"{(circle.Warped ? "put there" : "stopped where they were")}.");
+        }
+
+        private string WalkSummary() =>
+            circled == 0 && mostWalks <= ManyWalks ? "" :
+                $"; {circled} stopped after circling their place ({circledWarped} put there, worst {worstMiss:F2} m off), at most {mostWalks} walks by one customer";
 
         // Served customers first (they reached the window before anyone still waiting), then the orders
         // being made, then the queue; lineCount says how many those are. After them, the customers Core has
@@ -720,8 +748,15 @@ namespace FoodTrucks
         // Someone who can't reach their place in this time is put there; someone leaving is removed.
         private const float StuckSeconds = 20f;
         private const float LeaveSeconds = 30f;
-        // How close to a place counts as being there.
-        private const float ArriveMetres = 0.35f;
+        // How close to a place counts as being there: the game's own MoveToPosition default for its characters.
+        private const float ArriveMetres = 0.5f;
+        // The agent stops this far short of its place (the prefab's 0.10 m is about a third of its 0.30 m radius).
+        private const float StoppingMetres = 0.3f;
+        // Someone near their place who gets no closer for this long is circling it (avoidance with the people around,
+        // or a place a hair off the agent's NavMesh): they stop where they are, or are put there when still far off.
+        private const float CircleSeconds = 1.5f;
+        private const float CircleNearMetres = 1.5f;
+        private const float CircleStopMetres = 0.9f;
         private const float TurnDegreesPerSecond = 360f;
 
         private static bool expressionFailed;
@@ -739,6 +774,14 @@ namespace FoodTrucks
         private TrafficLanes? lanes;
         private float walkStarted;
         private float standingSince;
+        // The closest this walk has come to its target, and when it last got closer.
+        private float bestDistance;
+        private float closerSince;
+
+        // Walks started since the person appeared (each new target, re-paths included).
+        public int Walks { get; private set; }
+        // Set when a walk ended by circling: how far from the place they stopped, and whether they were put there.
+        public (float Miss, bool Warped)? Circled { get; set; }
 
         public static NavMeshQueryFilter Filter => new NavMeshQueryFilter { agentTypeID = PlayerAgentTypeId, areaMask = NavMesh.AllAreas };
         // The walking pace of the first customer's NavMesh agent; null until one exists.
@@ -785,10 +828,14 @@ namespace FoodTrucks
                 return false;
             }
             character.SetWalkingSpeed(ThirdPersonCharacter.WalkingSpeed.Walk);
+            var prefabStopping = agent.stoppingDistance;
+            agent.stoppingDistance = Mathf.Max(agent.stoppingDistance, StoppingMetres);
+            agent.autoBraking = true;
             if (!agentLogged)
             {
                 agentLogged = true;
-                Log.Info($"Queue view: customer agent speed {agent.speed:F2} m/s, stopping distance {agent.stoppingDistance:F2} m, radius {agent.radius:F2} m.");
+                Log.Info($"Queue view: customer agent speed {agent.speed:F2} m/s, stopping distance {prefabStopping:F2} m (now {agent.stoppingDistance:F2}), radius {agent.radius:F2} m, " +
+                         $"acceleration {agent.acceleration:F1}, angular speed {agent.angularSpeed:F0}, avoidance {agent.obstacleAvoidanceType}; arrives within {ArriveMetres:F2} m.");
                 if (agent.speed > 0.1f) WalkMetresPerSecond = agent.speed;
             }
             return true;
@@ -826,13 +873,30 @@ namespace FoodTrucks
             if (agent == null || !agent.isActiveAndEnabled) return true;
             if (walking)
             {
-                var near = FlatDistance(character.transform.position, target) <= ArriveMetres;
+                var distance = FlatDistance(character.transform.position, target);
+                if (distance < bestDistance - 0.05f)
+                {
+                    bestDistance = distance;
+                    closerSince = Time.time;
+                }
+                var near = distance <= ArriveMetres;
                 var reached = near || (agent.isOnNavMesh && !agent.pathPending && agent.hasPath &&
                                        agent.pathStatus == NavMeshPathStatus.PathComplete &&
-                                       agent.remainingDistance <= agent.stoppingDistance + 0.1f && FlatDistance(character.transform.position, target) <= 1f);
+                                       agent.remainingDistance <= agent.stoppingDistance + 0.1f && distance <= 1f);
+                // Close to the target and no closer for a while: circling it (avoidance, or a target the agent can't
+                // stand on exactly). This is what showed as people spinning on the pavement (0.9.7 playtest).
+                // A walk round an obstacle can stay this close in a straight line, so the path left must be short too.
+                var circling = !noPath && distance <= CircleNearMetres && Time.time - closerSince > CircleSeconds &&
+                               (!agent.hasPath || agent.remainingDistance <= CircleNearMetres + 0.5f);
                 var stuck = noPath || Time.time - walkStarted > (leavingNow ? LeaveSeconds : StuckSeconds);
-                if (leavingNow) return reached || stuck;
+                if (leavingNow) return reached || stuck || circling;
                 if (reached) Stop();
+                else if (circling)
+                {
+                    var warped = distance > CircleStopMetres && agent.Warp(target);
+                    Circled = (distance, warped);
+                    Stop();
+                }
                 else if (stuck)
                 {
                     // Put them in their place rather than leave them standing somewhere else.
@@ -862,12 +926,16 @@ namespace FoodTrucks
             walking = true;
             noPath = false;
             walkStarted = Time.time;
+            closerSince = Time.time;
+            bestDistance = FlatDistance(character.transform.position, to);
+            Walks++;
             if (!agent.isOnNavMesh)
             {
                 noPath = true;
                 return;
             }
             agent.isStopped = false;
+            agent.updateRotation = true;
             var path = new NavMeshPath();
             if (agent.CalculatePath(to, path) && path.status == NavMeshPathStatus.PathComplete)
             {
@@ -900,6 +968,8 @@ namespace FoodTrucks
                 agent.ResetPath();
                 agent.velocity = Vector3.zero;
             }
+            // Standing, only Tick turns them (towards the person ahead or the window); the agent doesn't.
+            agent.updateRotation = false;
             character.LookTarget = Vector3.zero;
             character.Move(Vector3.zero);
         }
