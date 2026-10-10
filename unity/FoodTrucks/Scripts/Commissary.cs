@@ -706,11 +706,11 @@ namespace FoodTrucks
                     Log.Info($"Commissary {siteId}: the bay's Order stock opens its conversation.");
                     SaveGameManager.Current.PlayerDefaults.contactsLastName = contact.id;
                     SaveGameManager.Current.PlayerDefaults.contactsLastCategoryName = contact.category;
-                    var app = InstanceBehavior<UIs>.Instance.fullMenu.contactsApp;
-                    // Already open on another screen: OnEnable won't run again, so show the conversation directly.
-                    var wasOpen = app != null && app.isActiveAndEnabled;
+                    // FullMenu.SelectApp turns every app off and the chosen one back on, so the app's OnEnable runs and
+                    // opens contactsLastName even when Contacts was already showing; its OnDisable on the way cancels
+                    // a call already running there. With unsaved BizMan settings ShowApp only asks first: Contacts
+                    // isn't showing, so the pending call gives up quietly (below) and the player presses CALL after answering.
                     InstanceBehavior<UIs>.Instance.fullMenu.ShowApp(AppName.Contacts);
-                    if (wasOpen && app!.selectedContact?.id != contact.id) app.OpenAppWithContact(contact);
                     pendingCall = (siteId, contact, Time.frameCount, Time.unscaledTime + PendingCallSeconds);
                 }
                 catch (Exception ex)
@@ -741,6 +741,7 @@ namespace FoodTrucks
                     Time.frameCount > frame + 1)
                 {
                     pendingCall = null;
+                    // Rare: switching apps cancelled any call in Contacts, but one may have started since.
                     if (DialogController.current != null)
                     {
                         Log.Info($"Commissary {siteId}: a call is already on; the bay's Order stock leaves the conversation open.");
@@ -752,6 +753,12 @@ namespace FoodTrucks
                 }
                 if (Time.unscaledTime < until && (app == null || app.isActiveAndEnabled || Time.frameCount <= frame + 2)) return;
                 pendingCall = null;
+                if (app != null && !app.isActiveAndEnabled)
+                {
+                    // The player's own doing: the phone closed, another app chosen, or BizMan's unsaved-settings question.
+                    Log.Info($"Commissary {siteId}: the bay's call was dropped: Contacts isn't showing (the phone was closed or left for another app).");
+                    return;
+                }
                 Log.Error($"Commissary {siteId}: the bay's call didn't start: the conversation never came up " +
                           $"(app {(app == null ? "missing" : app.isActiveAndEnabled ? "open" : "closed")}, panel field {(ConversationPanelField == null ? "missing" : "found")}).");
                 CartSelling.Notify("foodtrucks:notification_commissary_call", ("commissary", NameOf(siteId)));
