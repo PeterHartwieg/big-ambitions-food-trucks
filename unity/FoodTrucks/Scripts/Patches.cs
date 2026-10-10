@@ -107,6 +107,9 @@ namespace FoodTrucks
 
             // Truck window: a save made at the hatch puts the player outside by the truck, not inside its body.
             Patch(typeof(PlayerHelper), "SaveCurrentPosition", Type.EmptyTypes, typeof(TruckWindow), postfix: nameof(TruckWindow.SavePositionPostfix));
+            // Truck window: "Back to the hatch" in the truck's overlay, next to the game's Enter vehicle.
+            Patch(typeof(Player.HUD.ItemInfoOverlays.VehicleOverlay), "UpdateOverlay", new[] { typeof(EntityController) },
+                typeof(HatchButton), postfix: nameof(HatchButton.UpdateOverlayPostfix));
 
             // Commissary orders: the game's phone order form (as Square Appliances shows it) in a commissary's conversation,
             // made the commissary's: its address and delivery time, boxes at wholesale, Core's fee and total. Only while

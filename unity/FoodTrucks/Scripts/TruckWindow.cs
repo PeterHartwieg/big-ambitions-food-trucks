@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using FoodTrucks.Core.Saves;
 using Helpers;
@@ -12,6 +13,7 @@ using UI;
 using UI.Elements;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.Events;
 
 namespace FoodTrucks
 {
@@ -30,6 +32,10 @@ namespace FoodTrucks
     //
     // A save made at the hatch records the step-out point as the player's position (a postfix on
     // PlayerHelper.SaveCurrentPosition), so a load puts them outside by the truck, never inside its body.
+    //
+    // Back to the hatch: on foot by an open truck, its overlay (click the truck: the game's "Enter vehicle" and
+    // "Manage storage" buttons) has a "Back to the hatch" button (HatchButton). The player walks to the rear door
+    // and is placed at the hatch again as after Open, with the window and its line left as they are.
     internal sealed class TruckWindow : MonoBehaviour
     {
         // A blocker value of our own, so the game's activities never unset it for us (the set holds any value).
@@ -61,6 +67,8 @@ namespace FoodTrucks
         private Coroutine? entering;
         // The truck whose hatch the player is on the way to (after Open, until placed or left outside).
         private string? enteringId;
+        // Why the player last left each truck's hatch this session, for the "nobody at the window" log line.
+        private readonly Dictionary<string, string> leftBecause = new Dictionary<string, string>(StringComparer.Ordinal);
 
         // Out of energy: the game sends an exhausted player to hospital, which an open activity panel stops, and
         // it fires its own out-of-energy cancel only when energy crosses the line, not when it is already below.
@@ -119,6 +127,51 @@ namespace FoodTrucks
         // The uninstall step: out of the truck before it goes.
         public static void StepOutNow(string reason) => instance?.StepOut(reason, drive: false);
 
+        // Why nobody is at this truck's hatch, for the log: the last step-out's reason this session, else the load.
+        public static string WhyNotAtHatch(string id) =>
+            instance != null && instance.leftBecause.TryGetValue(id, out var why) ? "the player left the hatch: " + why
+                : "the player hasn't been at the hatch since the save was loaded (a save made there puts them outside)";
+
+        // "Back to the hatch" is offered for this vehicle: an open truck, the player on foot, empty-handed, not at a
+        // hatch or on the way to one.
+        public static bool CanGoBack(VehicleInstance? truck)
+        {
+            var self = instance;
+            if (self == null || truck == null || self.vehicleId != null || self.entering != null) return false;
+            if (FoodTrucksMod.KindOf(truck.vehicleTypeName) != "truck") return false;
+            if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId) || PlayerHelper.ItemInstanceInHands != null) return false;
+            return StreetSales.Find(FoodTrucksSession.CurrentState, truck.id)?.IsOpen == true;
+        }
+
+        // The overlay's "Back to the hatch": walk to the rear door (the game's own storage spot), then be placed at the
+        // hatch as after Open. The window stays open and its line waits; nothing is closed or reopened.
+        public static void BackToHatch(VehicleController controller)
+        {
+            var self = instance;
+            var id = controller.vehicleInstance?.id;
+            if (self == null || id == null || !CanGoBack(controller.vehicleInstance))
+            {
+                Log.Info($"Truck window: back to the hatch of {id ?? "(no truck)"} refused: {(self == null ? "no runtime" : "not offered now")}.");
+                return;
+            }
+            var player = PlayerHelper.PlayerController;
+            if (player == null) return;
+            var target = controller.GetManageStoragePosition();
+            Log.Info($"Truck window: back to the hatch of truck {id}: walking to {target}.");
+            void Arrive()
+            {
+                if (self == null) return;
+                try { self.Place(id, "back to the hatch"); }
+                catch (Exception ex)
+                {
+                    Log.Error("Truck window, back to the hatch: " + ex);
+                    self.StepOut("error while placing", drive: false);
+                }
+            }
+            if (Vector3.Distance(player.transform.position, target) <= 1.5f) Arrive();
+            else player.SetGoal(target, new UnityAction(Arrive));
+        }
+
         private IEnumerator EnterWhenOut(string id)
         {
             var start = Time.frameCount;
@@ -140,7 +193,7 @@ namespace FoodTrucks
             }
             entering = null;
             enteringId = null;
-            try { Place(id); }
+            try { Place(id, "open"); }
             catch (Exception ex)
             {
                 Log.Error("Truck window, placing the player: " + ex);
@@ -148,7 +201,7 @@ namespace FoodTrucks
             }
         }
 
-        private void Place(string id)
+        private void Place(string id, string how)
         {
             var game = SaveGameManager.Current;
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
@@ -157,6 +210,7 @@ namespace FoodTrucks
             var ui = InstanceBehavior<UIs>.Instance?.playerActivityUI;
             string? why = null;
             if (game == null || vehicle == null || !vehicle.IsOpen) why = "the window closed first";
+            else if (!string.IsNullOrEmpty(game.ActiveVehicleId)) why = "the player is in a vehicle";
             else if (controller == null) why = "the truck is gone";
             else if (player == null || ui == null) why = "no player or activity panel";
             else if (vehicleId != null) why = "already at a hatch";
@@ -168,7 +222,8 @@ namespace FoodTrucks
             if (why != null)
             {
                 if (why == "out of energy") CartSelling.Notify("foodtrucks:notification_hatch_too_tired");
-                Log.Info($"Truck window: {id} open, player left outside at {PlayerHelper.PlayerController?.transform.position}: {why}.");
+                Log.Info($"Truck window: {id} open ({how}), player left outside at {PlayerHelper.PlayerController?.transform.position}: {why}.");
+                leftBecause[id] = "not placed (" + why + ")";
                 return;
             }
 
@@ -181,7 +236,8 @@ namespace FoodTrucks
             if (ui!.GetCurrentActivity != newActivity)
             {
                 Destroy(newPlace);
-                Log.Info($"Truck window: {id} open, player left outside at {fallbackExit}: the game refused the activity panel.");
+                Log.Info($"Truck window: {id} open ({how}), player left outside at {fallbackExit}: the game refused the activity panel.");
+                leftBecause[id] = "not placed (the game refused the activity panel)";
                 return;
             }
             place = newPlace;
@@ -193,7 +249,8 @@ namespace FoodTrucks
             stateFrame = Time.frameCount;
             player.AttachToObject(newPlace.transform, Blocker);
             CartQueueView.Recheck();
-            Log.Info($"Truck window: player placed at the hatch of truck {id} at {spot.Position}, facing {spot.Rotation.eulerAngles.y:F0} degrees " +
+            leftBecause.Remove(id);
+            Log.Info($"Truck window: player placed at the hatch of truck {id} ({how}) at {spot.Position}, facing {spot.Rotation.eulerAngles.y:F0} degrees " +
                      $"(attached like the game's scooter ride: kinematic, collider and NavMesh agent off, navigation blocked; " +
                      $"activity panel shown); steps out at {Exit(controller, driverFirst: false)}.");
         }
@@ -274,6 +331,7 @@ namespace FoodTrucks
             var controller = ControllerOf(id);
             var exit = controller != null ? Exit(controller, drive) : fallbackExit;
             var warped = Release(reason, move: true, exitOverride: exit);
+            leftBecause[id] = reason;
             CartQueueView.Recheck();
             Log.Info($"Truck window: player stepped out of truck {id} at {exit} ({reason}){(warped ? "" : "; the NavMesh warp failed")}.");
             if (drive && controller != null) StartCoroutine(DriveWhenFree(controller));
@@ -391,7 +449,17 @@ namespace FoodTrucks
             StepOut("closed the window", drive: false);
         }
 
-        internal void OnFinishedByGame() => StepOut("the game ended the activity", drive: false);
+        // The game ends the activity after a time skip (it calls Perform first, in the same frame), when the player
+        // runs out of energy, and on Unstuck (which moves the player off our place first) or other game events.
+        internal void OnFinishedByGame(bool afterTimeSkip)
+        {
+            string reason;
+            if (afterTimeSkip) reason = "a time skip ended the activity";
+            else if (Exhausted()) reason = "out of energy";
+            else if (attached != null && place != null && attached.transform.parent != place.transform) reason = "Unstuck or another game move took the player off the hatch";
+            else reason = "the game ended the activity";
+            StepOut(reason, drive: false);
+        }
 
         internal void OnCancelledWhileStarting() => StepOut("cancelled while starting", drive: false);
     }
@@ -404,6 +472,8 @@ namespace FoodTrucks
         private readonly string vehicleId;
         private PlayerActivityState state = PlayerActivityState.NotStarted;
         private PlayerActivityState beforeFinishing = PlayerActivityState.NotStarted;
+        // The frame the game last called Perform: a time skip's end calls it just before Finish.
+        private int performedFrame = -1;
 
         public HatchActivity(TruckWindow owner, string vehicleId)
         {
@@ -445,12 +515,13 @@ namespace FoodTrucks
 
         public void Perform(int minutes)
         {
+            performedFrame = Time.frameCount;
         }
 
         // The game ends it: after a time skip, out of energy, Unstuck.
         public void Finish()
         {
-            owner.OnFinishedByGame();
+            owner.OnFinishedByGame(performedFrame == Time.frameCount);
             MarkFinished();
         }
 

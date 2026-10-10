@@ -795,7 +795,16 @@ namespace FoodTrucks
             var window = Service(rules, CartDemand.KindOf(cart), vehicle, atWindow, (long)Math.Floor(from));
             if (window.Servers == 0)
             {
-                if (pausedNoticeShown.Add(vehicle.VehicleId)) Say("foodtrucks:notification_paused", KindOf(vehicle));
+                if (pausedNoticeShown.Add(vehicle.VehicleId))
+                {
+                    var kind = KindOf(vehicle);
+                    if (kind == "truck")
+                    {
+                        Say("foodtrucks:notification_paused_truck", kind);
+                        Log.Info($"Window {vehicle.VehicleId}: nobody serving the truck; {(inSkip ? "a time skip" : TruckWindow.WhyNotAtHatch(vehicle.VehicleId))}.");
+                    }
+                    else Say("foodtrucks:notification_paused", kind);
+                }
             }
             else
             {
