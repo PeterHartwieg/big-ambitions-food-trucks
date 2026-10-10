@@ -19,4 +19,5 @@ grilledcorn products/CornCob
 dumplingsteamer equipment/DumplingSteamer
 griddle equipment/Griddle
 corngrill equipment/CornGrill
+storagecabinet equipment/StorageCabinet
 LIST

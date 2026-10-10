@@ -86,6 +86,9 @@ namespace FoodTrucks.BuildEditor
             new Machine("dumplingsteamer", "DumplingSteamer", 2000f, 20, "dumplings"),
             new Machine("griddle", "Griddle", 2000f, 20, "tacos", "choppedcheese"),
             new Machine("corngrill", "CornGrill", 1200f, 30, "grilledcorn"),
+            // Extra Storage (plan, "Storage per piece"): serves no food, doubles every fitted piece's storage. Priced
+            // below the cheapest machine (docs/balance/storage-per-piece.md).
+            new Machine("storagecabinet", "StorageCabinet", 900f, 0),
         };
 
         public static void Generate()
@@ -122,7 +125,8 @@ namespace FoodTrucks.BuildEditor
                 var item = LoadOrCreate(machine.Model);
                 var s = new SerializedObject(item);
                 // A showcase shelf, as the game's grills: it holds and shows the foods it makes.
-                Common(s, machine.Id, ItemType.ShowcaseShelf, machine.Price);
+                // Extra Storage shows nothing: a plain decoration type, so no game system treats it as a shelf.
+                Common(s, machine.Id, machine.Shows.Length == 0 ? ItemType.Decoration : ItemType.ShowcaseShelf, machine.Price);
                 Set(s, "boxSize", 1);
                 // Street food only in version 1: not furniture, so the game offers no "Place" for it in a building
                 // (CargoItemUi, PackageOverlay and ItemPanelUI all require isFurniture). It still rides in cargo as equipment.
@@ -132,7 +136,7 @@ namespace FoodTrucks.BuildEditor
                 Set(s, "addedCustomersPerHour", machine.CustomersPerHour);
                 Set(s, "cargoCapacityMultiplier", 0.2f);
                 Set(s, "stackType", (int)AttachmentPointType.WorkSurface);
-                Set(s, "defaultShelfItemName", Prefix + machine.Shows[0]);
+                Set(s, "defaultShelfItemName", machine.Shows.Length == 0 ? string.Empty : Prefix + machine.Shows[0]);
                 SetStrings(s, "itemsThatCanShowcase", machine.Shows.Select(f => Prefix + f).ToArray());
                 Set(s, "maxWholesaleOrderAmount", 5000);
                 Set(s, "maxOrderAmountPerImporter", 5000);
@@ -141,7 +145,7 @@ namespace FoodTrucks.BuildEditor
                 s.ApplyModifiedPropertiesWithoutUndo();
                 MachinePrefab(machine);
                 Icon(machine.Id);
-                Debug.Log($"[FoodTrucksBuild] Item {Prefix}{machine.Id}: ${machine.Price}, shows {string.Join(", ", machine.Shows)}.");
+                Debug.Log($"[FoodTrucksBuild] Item {Prefix}{machine.Id}: ${machine.Price}, shows {(machine.Shows.Length == 0 ? "nothing" : string.Join(", ", machine.Shows))}.");
             }
         }
 

@@ -1,0 +1,229 @@
+{
+  "spec": "spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "StorageCabinet_Body",
+      "StorageCabinet_Collision"
+    ],
+    "per_object": {
+      "StorageCabinet_Body": {
+        "triangles": 580,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.196,
+          -0.1756,
+          0.0
+        ],
+        "bbox_max": [
+          0.196,
+          0.17,
+          0.6
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "StorageCabinet_Collision": {
+        "triangles": 12,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.196,
+          -0.177,
+          0.0
+        ],
+        "bbox_max": [
+          0.196,
+          0.17,
+          0.6
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 580,
+    "visible_bbox_min": [
+      -0.196,
+      -0.1756,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.196,
+      0.17,
+      0.6
+    ],
+    "visible_dims": [
+      0.392,
+      0.3456,
+      0.6
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_StorageCabinet"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.6969,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_StorageCabinet_BaseColor.png": [
+        512,
+        512
+      ]
+    },
+    "blend_size_mb": 0.12
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "StorageCabinet_Body",
+      "StorageCabinet_Collision"
+    ],
+    "per_object": {
+      "StorageCabinet_Body": {
+        "triangles": 580,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.196,
+          -0.1756,
+          -0.0
+        ],
+        "bbox_max": [
+          0.196,
+          0.17,
+          0.6
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "StorageCabinet_Collision": {
+        "triangles": 12,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.196,
+          -0.177,
+          -0.0
+        ],
+        "bbox_max": [
+          0.196,
+          0.17,
+          0.6
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 580,
+    "visible_bbox_min": [
+      -0.196,
+      -0.1756,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.196,
+      0.17,
+      0.6
+    ],
+    "visible_dims": [
+      0.392,
+      0.3456,
+      0.6
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "M_StorageCabinet"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.6969,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.04
+  },
+  "failures": [],
+  "passed": true
+}
