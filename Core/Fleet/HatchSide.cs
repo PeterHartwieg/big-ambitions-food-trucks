@@ -58,24 +58,34 @@ namespace FoodTrucks.Core.Fleet
         // Rows from just outside the truck's side (half its width is 1.10 m) out to 5 m. A truck legally parked
         // in a lane at the kerb has the pavement within about 3 m of its centre line; 5 m leaves room for one
         // parked well away from the kerb or at a slant. A driving lane beside a parked truck has its centre
-        // about 3 to 4 m out, so the road side reads road from the first rows.
+        // about 3 to 5 m out, so the road side reads road within the rows.
         public static readonly double[] Offsets = { 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0 };
 
         // Points along the hatch, metres forward of the truck's middle: its two ends and middle, as the
         // hatch's opening runs z -2.00 to -0.20 in the model (art/README.md).
         public static readonly double[] Along = { -1.9, -1.1, -0.3 };
 
-        // A point this close to a driving lane's centre line (the traffic system's waypoints) is road. Lanes
-        // are about 3 to 3.5 m wide, so this covers a lane without reaching the kerb beyond a parking lane.
-        public const double LaneHalfWidthMetres = 1.5;
+        // A point this close to a driving lane's centre line (the traffic system's waypoints) is road: half of a
+        // 3.5 m lane, so an ordinary lane reads road across its whole width.
+        public const double LaneHalfWidthMetres = 1.75;
+
+        // A walkable point closer than this to a driving lane's centre, and not road by the rule above, says nothing
+        // either way: it may be the outer part of a wide lane (4 to 5 m), a parking lane the game's parking colliders
+        // miss, or waypoints running off the lane's middle, and the NavMesh covers all of those as it covers the
+        // pavement. On the road side of a parked truck everything between the truck and the lane's centre is within
+        // about 2.8 m of it (a 5 m lane beside a 3 m parking strip, the truck at the kerb's 1.2 m); legal kerbside
+        // pavement is at least 3.5 m from the nearest lane's centre (a 3 m lane beside a 2 m strip).
+        public const double RoadsideMetres = 3.25;
 
         // A point's ground, from what the game knows there. Road first: the driving lanes (or the game's road
         // layer, which is known only on bridges) are road even where the NavMesh lets people walk, and the
-        // NavMesh covers the street as well as the pavement. A parking lane or a crosswalk is neither.
+        // NavMesh covers the street as well as the pavement. A parking lane, a crosswalk or the strip beside a
+        // driving lane is neither. Without lanes (no traffic data) every walkable point is pavement, as before 0.9.6.
         public static Ground Classify(double? laneMetres, bool roadLayer, bool parkingLane, bool crosswalk, bool walkable)
         {
             if (roadLayer || (laneMetres is { } lane && lane <= LaneHalfWidthMetres)) return Ground.Road;
             if (parkingLane || crosswalk || !walkable) return Ground.Unknown;
+            if (laneMetres is { } near && near <= RoadsideMetres) return Ground.Unknown;
             return Ground.Pavement;
         }
 

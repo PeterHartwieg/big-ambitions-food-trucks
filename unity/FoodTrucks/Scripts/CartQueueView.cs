@@ -590,6 +590,8 @@ namespace FoodTrucks
                     {
                         var place = PlaceBeside(center, right * side, forward * (direction * k * Spacing), shape, filter, lanes);
                         if (place == null) break;
+                        // People move up from place to place: no step between two of them may cross a driving lane.
+                        if (shape.PavementOnly && placed.Count > 0 && CrossesRoad(placed[placed.Count - 1], place.Value, lanes)) break;
                         if (Legality.RoadBelow(place.Value)) roads++;
                         placed.Add(place.Value);
                     }
@@ -606,27 +608,27 @@ namespace FoodTrucks
             if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the window at {center}; nobody shown", 0);
 
             // Ways in and out: points on the pavement a little way along in both directions, reachable from the window.
+            // A truck's customers come along the pavement on the hatch side: a way whose path crosses a driving lane
+            // (from the far pavement, or round an obstacle through the street) isn't used.
             var ends = new List<Vector3>();
             var path = new NavMeshPath();
+            var unsafeWays = 0;
             foreach (var along in new[] { 11f, -9f, 15f, -13f, 19f, -17f })
             {
                 var wanted = center + forward * (bestDirection * along) + right * (bestSide * UnityEngine.Random.Range(shape.Sideways - 0.45f, shape.Reach + 1.35f));
-                if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter)) continue;
-                if (shape.PavementOnly && OnStreet(hit.position, lanes)) continue;
-                if (!NavMesh.CalculatePath(hit.position, best[0], filter, path) || path.status != NavMeshPathStatus.PathComplete) continue;
-                ends.Add(hit.position);
+                if (WayIn(wanted, best[0], shape, filter, lanes, path, ref unsafeWays) is { } way) ends.Add(way);
             }
             for (var attempt = 0; ends.Count < 2 && attempt < 8; attempt++)
             {
                 var angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
-                var wanted = center + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * UnityEngine.Random.Range(9f, 16f);
-                if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter)) continue;
-                if (shape.PavementOnly && OnStreet(hit.position, lanes)) continue;
-                if (!NavMesh.CalculatePath(hit.position, best[0], filter, path) || path.status != NavMeshPathStatus.PathComplete) continue;
-                ends.Add(hit.position);
+                var offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+                // A truck's fallback ways stay on the hatch side's half too.
+                if (shape.PavementOnly && Vector3.Dot(offset, right * bestSide) < 0f) offset -= 2f * Vector3.Dot(offset, right * bestSide) * (right * bestSide);
+                var wanted = center + offset * UnityEngine.Random.Range(9f, 16f);
+                if (WayIn(wanted, best[0], shape, filter, lanes, path, ref unsafeWays) is { } way) ends.Add(way);
             }
             var detail = $"{best.Count} of {count} places on the {(bestSide > 0 ? "right" : "left")} side towards the {(bestDirection > 0 ? "front" : "back")}, " +
-                         $"{ends.Count} ways in and out";
+                         $"{ends.Count} ways in and out{(unsafeWays > 0 ? $" ({unsafeWays} crossing a driving lane left out)" : "")}";
             return (best, center, ends, detail, bestSide);
         }
 
@@ -644,11 +646,44 @@ namespace FoodTrucks
             return null;
         }
 
-        // Road, a crosswalk or a parking lane: no place for a truck's customers to stand or walk in from. The
-        // driving lanes are the test that holds on streets; the road layer is known only on bridges.
+        // A way in for a customer: a NavMesh point near the wanted one, off the street, with a complete path to the
+        // line's first place that (for a truck) crosses no driving lane. Null when there is none.
+        private static Vector3? WayIn(Vector3 wanted, Vector3 first, WindowShape shape, NavMeshQueryFilter filter, TrafficLanes lanes, NavMeshPath path, ref int unsafeWays)
+        {
+            if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter)) return null;
+            if (shape.PavementOnly && OnStreet(hit.position, lanes)) return null;
+            if (!NavMesh.CalculatePath(hit.position, first, filter, path) || path.status != NavMeshPathStatus.PathComplete) return null;
+            if (shape.PavementOnly)
+            {
+                var corners = path.corners;
+                for (var i = 1; i < corners.Length; i++)
+                    if (CrossesRoad(corners[i - 1], corners[i], lanes))
+                    {
+                        unsafeWays++;
+                        return null;
+                    }
+            }
+            return hit.position;
+        }
+
+        // Not pavement for a truck's customers to stand on or walk in from: HatchSide's reading, as for the hatch
+        // check, so a driving lane, the strip beside one (a wide lane's edge, a parking lane the colliders miss), a
+        // parking lane, a crosswalk and the road layer are all out. Without traffic data only the last three count.
         private static bool OnStreet(Vector3 position, TrafficLanes lanes) =>
-            Legality.InParkingLane(position) || Legality.RoadBelow(position) || Legality.NearCrosswalk(position, 0.5f) ||
-            lanes.Distance(position) <= HatchSide.LaneHalfWidthMetres;
+            HatchSide.Classify(lanes.Distance(position), Legality.RoadBelow(position), Legality.InParkingLane(position),
+                Legality.NearCrosswalk(position, 0.5f), walkable: true) != Ground.Pavement;
+
+        // Whether walking straight from a to b goes over a driving lane or the road layer, sampled every half metre.
+        private static bool CrossesRoad(Vector3 a, Vector3 b, TrafficLanes lanes)
+        {
+            var steps = Mathf.Max(1, Mathf.CeilToInt(FlatDistance(a, b) / 0.5f));
+            for (var i = 0; i <= steps; i++)
+            {
+                var point = Vector3.Lerp(a, b, i / (float)steps);
+                if (lanes.Distance(point) <= HatchSide.LaneHalfWidthMetres || Legality.RoadBelow(point)) return true;
+            }
+            return false;
+        }
 
         private static Vector3 Direction(Vector3 v)
         {

@@ -19,6 +19,7 @@ public class HatchSideTests
         public bool LanesKnown = true;       // false: the traffic system had no waypoints near
         public double SlantDegrees;          // the truck turned this much off the kerb's line
         public double[]? ExtraLanes;         // driving lane centres anywhere, e.g. a median's other side
+        public bool ParkingSeen = true;      // false: the game's parking colliders miss the parking lane entirely
 
         private int Towards => Kerb > 0 ? -1 : 1; // from the kerb into the street
 
@@ -35,7 +36,7 @@ public class HatchSideTests
             var x = sideways + along * Math.Tan(SlantDegrees * Math.PI / 180);
             double? lane = LanesKnown ? LaneCentres().Select(c => Math.Abs(x - c)).DefaultIfEmpty(double.MaxValue).Min() : null;
             var beyondKerb = Kerb > 0 ? x >= Kerb : x <= Kerb;
-            var parking = !beyondKerb && Math.Abs(x - Kerb) < ParkingWidth;
+            var parking = ParkingSeen && !beyondKerb && Math.Abs(x - Kerb) < ParkingWidth;
             return HatchSide.Classify(lane, roadLayer: false, parkingLane: parking, crosswalk: false, walkable: true);
         }
 
@@ -161,8 +162,52 @@ public class HatchSideTests
         Assert.Equal(Ground.Unknown, HatchSide.Classify(2.0, false, parkingLane: true, crosswalk: false, walkable: true));
         Assert.Equal(Ground.Unknown, HatchSide.Classify(null, false, false, crosswalk: true, walkable: true));
         Assert.Equal(Ground.Unknown, HatchSide.Classify(null, false, false, false, walkable: false));
-        Assert.Equal(Ground.Pavement, HatchSide.Classify(1.6, false, false, false, true));
+        Assert.Equal(Ground.Road, HatchSide.Classify(1.7, false, false, false, true));
+        Assert.Equal(Ground.Unknown, HatchSide.Classify(2.0, false, false, false, true));
+        Assert.Equal(Ground.Unknown, HatchSide.Classify(HatchSide.RoadsideMetres, false, false, false, true));
+        Assert.Equal(Ground.Pavement, HatchSide.Classify(3.5, false, false, false, true));
         Assert.Equal(Ground.Pavement, HatchSide.Classify(null, false, false, false, true));
+    }
+
+    public static IEnumerable<object[]> Streets()
+    {
+        foreach (var lane in new[] { 3.0, 3.5, 4.0, 4.5, 5.0 })
+            foreach (var parking in new[] { 2.0, 2.2, 2.4, 2.6, 2.8, 3.0 })
+                foreach (var seen in new[] { true, false })
+                    yield return new object[] { lane, parking, seen };
+    }
+
+    // The strip between a parking lane and a wide driving lane's middle is walkable and in no parking lane the game
+    // knows of; it read as pavement in the first 0.9.6 build, so a hatch to the road opened on wide streets.
+    [Theory]
+    [MemberData(nameof(Streets))]
+    public void TheHatchToTheRoadIsRefusedOnEveryStreetWidth(double laneWidth, double parkingWidth, bool parkingSeen)
+    {
+        foreach (var kerb in new[] { -1.1, -1.2, -1.6, -2.0 })
+            foreach (var slant in new[] { 0.0, 10.0, -20.0 })
+            {
+                var street = new Street { Kerb = kerb, LaneWidth = laneWidth, ParkingWidth = parkingWidth, ParkingSeen = parkingSeen, SlantDegrees = slant };
+                Assert.True(street.Verdict() == HatchVerdict.WrongWay,
+                    $"kerb {kerb}, slant {slant}: {street.Verdict()} (hatch side {street.Side(1)}, other side {street.Side(-1)})");
+            }
+    }
+
+    [Theory]
+    [MemberData(nameof(Streets))]
+    public void KerbsideParkingOpensOnEveryStreetWidth(double laneWidth, double parkingWidth, bool parkingSeen)
+    {
+        // From flush against the kerb out to the far edge of the space: the truck's middle up to 1 m past the
+        // parking strip's edge, its outer side then over the driving lane (WindowShape's reach of 3.4 m), or 0.6 m
+        // past it at a 20° slant. Further out on a 3 m lane, the lane's middle runs under the truck's own side and
+        // reads road on both sides: "no pavement".
+        foreach (var kerb in new[] { 1.2, 1.6, 2.0, 2.4, 2.8, 3.0, 3.4 })
+            foreach (var slant in new[] { 0.0, 10.0, -10.0, 20.0, -20.0 })
+            {
+                if (kerb > parkingWidth + (Math.Abs(slant) > 10 ? 0.6 : 1.0) + 1e-9) continue;
+                var street = new Street { Kerb = kerb, LaneWidth = laneWidth, ParkingWidth = parkingWidth, ParkingSeen = parkingSeen, SlantDegrees = slant };
+                Assert.True(street.Verdict() == HatchVerdict.Pavement,
+                    $"kerb {kerb}, slant {slant}: {street.Verdict()} (hatch side {street.Side(1)}, other side {street.Side(-1)})");
+            }
     }
 
     [Fact]
