@@ -50,7 +50,7 @@ namespace FoodTrucks.BuildEditor
         public static void GenerateTruck(string vehiclesFolder, string typeName)
         {
             var artFolder = vehiclesFolder + "/TruckArt";
-            var fbxPath = artFolder + "/FoodTruck.fbx";
+            var fbxPath = artFolder + "/FoodTruck_Model.fbx";
             if (!File.Exists(Path.Combine(ProjectRoot, fbxPath)))
                 throw new InvalidOperationException($"{fbxPath} missing; tools/build-mod.sh copies it from art/truck.");
             ConfigureImports(artFolder);
@@ -180,7 +180,7 @@ namespace FoodTrucks.BuildEditor
         // Read/Write meshes for the game's damage deformation; the normal map as a normal map.
         private static void ConfigureImports(string artFolder)
         {
-            var model = (ModelImporter)AssetImporter.GetAtPath(artFolder + "/FoodTruck.fbx");
+            var model = (ModelImporter)AssetImporter.GetAtPath(artFolder + "/FoodTruck_Model.fbx");
             if (!model.isReadable || model.importAnimation || model.materialImportMode != ModelImporterMaterialImportMode.None)
             {
                 model.isReadable = true;

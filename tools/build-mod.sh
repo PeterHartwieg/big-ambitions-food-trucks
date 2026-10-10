@@ -54,13 +54,19 @@ cp "$REPO/Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll" "$DEPS/FoodTrucks
 
 # The truck's final model and textures from art/, copied in so the generator can build the prefab.
 # Only their .meta files are committed (stable GUIDs for the prefab); the binaries stay in art/.
+# The game finds a vehicle's prefab by file name in any bundle, so the model goes in as FoodTruck_Model.fbx:
+# under its own name it could be picked instead of FoodTruck.prefab, and spawning it fails.
 TRUCK_ART="$MOD_DIR/Vehicles/TruckArt"
 mkdir -p "$TRUCK_ART"
-rsync -a --checksum "$REPO/art/truck/FoodTruck.fbx" "$REPO"/art/truck/T_FoodTruck_*.png "$TRUCK_ART/"
+rm -f "$TRUCK_ART/FoodTruck.fbx" "$TRUCK_ART/FoodTruck.fbx.meta"
+rsync -a --checksum "$REPO/art/truck/FoodTruck.fbx" "$TRUCK_ART/FoodTruck_Model.fbx"
+rsync -a --checksum "$REPO"/art/truck/T_FoodTruck_*.png "$TRUCK_ART/"
 # The cart's, the same way.
 CART_ART="$MOD_DIR/Vehicles/CartArt"
 mkdir -p "$CART_ART"
-rsync -a --checksum "$REPO/art/cart/FoodCart.fbx" "$REPO/art/cart/T_FoodCart_BaseColor.png" "$CART_ART/"
+rm -f "$CART_ART/FoodCart.fbx" "$CART_ART/FoodCart.fbx.meta"
+rsync -a --checksum "$REPO/art/cart/FoodCart.fbx" "$CART_ART/FoodCart_Model.fbx"
+rsync -a --checksum "$REPO/art/cart/T_FoodCart_BaseColor.png" "$CART_ART/"
 # And the equipment models shown on the cart's counter, one folder each in art/equipment.
 EQUIPMENT_ART="$MOD_DIR/Vehicles/EquipmentArt"
 mkdir -p "$EQUIPMENT_ART"
@@ -106,6 +112,11 @@ cp "$REPO/README.md" "$REPO/LICENSE.txt" "$OUT/"
 # The demand and economy tables, read at startup from the mod folder so players can tune them.
 mkdir -p "$OUT/data"
 cp "$REPO"/data/*.json "$OUT/data/"
+# The game loads a prefab by file name from any bundle and may take another GameObject asset with the same name
+# instead (a vehicle's model rather than its prefab), so no model or other prefab may share a prefab's name.
+CLASHES="$(grep -iE '^- Assets/.*\.(prefab|fbx|obj|dae|blend)$' "$OUT/AssetBundles/Windows/foodtrucks.unity3d.manifest" \
+  | sed 's#.*/##; s#\.[^.]*$##' | tr 'A-Z' 'a-z' | sort | uniq -d)"
+[ -z "$CLASHES" ] || { echo "Bundle assets share a prefab's name: $CLASHES" >&2; exit 1; }
 ( cd "$OUT" && find . -type f | sort | xargs shasum -a 256 ) > "$REPO/build/FoodTrucks.sha256"
 echo "Built $OUT"
 cat "$REPO/build/FoodTrucks.sha256"

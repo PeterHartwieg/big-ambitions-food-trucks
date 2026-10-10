@@ -201,7 +201,7 @@ namespace FoodTrucks.BuildEditor
         // since every attachment point above was placed against that table.
         private static Dictionary<string, (Mesh Mesh, Vector3 Position)> Meshes(string artFolder)
         {
-            var fbxPath = artFolder + "/FoodCart.fbx";
+            var fbxPath = artFolder + "/FoodCart_Model.fbx";
             if (!File.Exists(Path.Combine(ProjectRoot, fbxPath)))
                 throw new InvalidOperationException($"{fbxPath} missing; tools/build-mod.sh copies it from art/cart.");
             var importer = (ModelImporter)AssetImporter.GetAtPath(fbxPath);
