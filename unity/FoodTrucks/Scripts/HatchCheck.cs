@@ -197,6 +197,27 @@ namespace FoodTrucks
             return best;
         }
 
+        // The nearest point on a lane's centre line (segments at least half a metre long) and the lane's flat direction
+        // there, or null without lanes.
+        public (Vector3 Point, Vector3 Direction)? Nearest(Vector3 point)
+        {
+            (Vector3, Vector3)? found = null;
+            var best = float.MaxValue;
+            var p = new Vector2(point.x, point.z);
+            foreach (var (a, b) in segments)
+            {
+                var a2 = new Vector2(a.x, a.z);
+                var ab = new Vector2(b.x, b.z) - a2;
+                if (ab.sqrMagnitude < 0.25f) continue;
+                var t = Mathf.Clamp01(Vector2.Dot(p - a2, ab) / ab.sqrMagnitude);
+                var d = (a2 + ab * t - p).magnitude;
+                if (d >= best) continue;
+                best = d;
+                found = (Vector3.Lerp(a, b, t), new Vector3(ab.x, 0f, ab.y).normalized);
+            }
+            return found;
+        }
+
         public bool Known => segments.Count > 0;
 
         public string Describe() => problem ?? $"{segments.Count} lane segments near";

@@ -29,7 +29,7 @@ namespace FoodTrucks
         private const string CommissariesKey = "foodtrucks:mapfilter_commissaries";
         private static readonly Color PitchColour = new Color(0.95f, 0.70f, 0.15f);
         private static readonly Color CateringColour = new Color(0.25f, 0.55f, 0.95f);
-        private static readonly Color CommissaryColour = new Color(0.60f, 0.35f, 0.85f);
+        internal static readonly Color CommissaryColour = new Color(0.60f, 0.35f, 0.85f);
         private static string KeyOf(string filter) => "foodtrucks:mapfilter_" + filter;
 
         // Each building filter's icon and colour: a business type the filter stands for.

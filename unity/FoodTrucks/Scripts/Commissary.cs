@@ -51,6 +51,7 @@ namespace FoodTrucks
         {
             Detach();
             uninstalled = false;
+            BayMarkers.Reset();
             var state = FoodTrucksSession.CurrentState;
             var sites = Sites;
             if (sites == null || Rules == null)
@@ -210,8 +211,14 @@ namespace FoodTrucks
                 if (visit != null) Unlock(state, visit, "visited");
             }
             var vehicle = VehicleHelper.GetCurrentVehicle();
-            var atBay = vehicle != null && FoodTrucksMod.KindOf(vehicle.vehicleTypeName) != null && SiteAt(PositionOf(vehicle)) != null;
+            var inFoodVehicle = vehicle != null && FoodTrucksMod.KindOf(vehicle.vehicleTypeName) != null;
+            var atBay = inFoodVehicle && SiteAt(PositionOf(vehicle!)) != null;
             CartButton.ShowCommissary(atBay);
+            var sites = Sites;
+            var rules = Rules;
+            if (sites != null && rules != null)
+                BayMarkers.Update(sites, rules.BayRadiusMetres, PlayerHelper.GetPosition(), inFoodVehicle,
+                    BuildingManager.IsInsideBuilding || Parking.UndergroundParking.UndergroundParkingManager.IsInsideParking);
         }
 
         // Once a game minute (or once after a skip): unpaid charges tried again, spaces of vehicles gone given up,
@@ -912,6 +919,7 @@ namespace FoodTrucks
             }
             uninstalled = true;
             CartButton.ShowCommissary(false);
+            BayMarkers.RemoveAll();
             CommissaryOrderForm.Forget(Sites?.Sites.Select(s => ContactPrefix + s.Id) ?? Enumerable.Empty<string>());
             var removed = SaveGameManager.Current?.Contacts.RemoveAll(c => c != null && c.id != null && c.id.StartsWith(ContactPrefix, StringComparison.Ordinal)) ?? 0;
             if (removed > 0) Log.Info($"Uninstall: {removed} commissary contacts removed.");
