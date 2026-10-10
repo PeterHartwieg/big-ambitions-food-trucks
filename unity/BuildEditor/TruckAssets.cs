@@ -13,7 +13,8 @@ namespace FoodTrucks.BuildEditor
 {
     // The food truck: the SDK's example car with the final truck model from art/truck (art/README.md,
     // "Food truck"). tools/build-mod.sh copies the FBX and textures into Vehicles/TruckArt first.
-    // Physics values the art doesn't give (mass, suspension, engine) are first guesses for a step van.
+    // Driving: the game's own delivery truck (DeliveryTruck in its 1.0 prefabs bundle), a touch slower. See the
+    // Driving block below and art/README.md, "Driving".
     internal static class TruckAssets
     {
         private const string ExampleVehicleType = "Assets/Mods/Example-Vehicle/TurboHonza.asset";
@@ -22,9 +23,28 @@ namespace FoodTrucks.BuildEditor
 
         private const float TruckPrice = 15000f; // Placeholder until the balance pass near the end.
         private const int CargoSlots = 16;
-        private const float Mass = 3500f;
-        // Of the example car's 1,400 kg: springs, dampers and tyre load scale with the weight.
-        private const float WeightRatio = Mass / 1400f;
+
+        // Driving, from the game's 1.0 vehicle prefabs (read with UnityPy, art/README.md "Driving"). The game gives
+        // every car and truck the same 1,400 kg rigidbody, its delivery truck included, and sets speed by gearing
+        // and power instead, so the truck keeps the example car's mass, springs and dampers (the delivery truck's
+        // too: 5,000 N, 5,000, load rating 7,000). The delivery truck has 46 kW with forced induction (x1.2), final
+        // drive 15.25 on 0.43 m wheels (50 km/h at the 10,000 rpm limiter) and 2,500 N m brakes; the freight truck
+        // 35 kW with forced induction. Ours: 40 kW without it, so it pulls a little less than either (it carries a
+        // kitchen), the delivery truck's power curve (less low-end than the example car's), and a final drive for
+        // the same 50 km/h on our 0.38 m wheels. The 1.0 game reads VehicleType.maxSpeed only for the showroom and
+        // the bridge skip's fuel, and enginePower and brakeForce not at all; they mirror the prefab, as most of the game's do.
+        private const float Mass = 1400f;
+        private const float EnginePower = 40f; // kW, NWH engine maxPower
+        private const float FinalGearRatio = 13.5f; // top gear 2.108: 10,000 rpm at 50 km/h on 0.38 m wheels
+        private const int TopSpeed = 50; // km/h
+        private const float BrakeTorque = 2500f; // N m, the delivery truck's (same mass, same stopping)
+        // The delivery truck's power curve: power fraction over rpm / rev limiter, with its tangents.
+        private static readonly Keyframe[] PowerCurve =
+        {
+            new Keyframe(0f, 0f, 0f, 0f),
+            new Keyframe(0.27655029f, 0.3147766f, 2.8613956f, 2.8613956f),
+            new Keyframe(1f, 1f, 0f, 0f),
+        };
 
         private static readonly (string Wheel, string Mesh, Vector3 Hub)[] Wheels =
         {
@@ -68,9 +88,9 @@ namespace FoodTrucks.BuildEditor
             type.price = TruckPrice;
             type.maxCargoCapacity = CargoSlots;
             type.maxFuel = 80f;
-            type.maxSpeed = 50;
-            type.enginePower = 45f * WeightRatio;
-            type.brakeForce = 2500f * WeightRatio;
+            type.maxSpeed = TopSpeed;
+            type.enginePower = EnginePower;
+            type.brakeForce = BrakeTorque;
             type.taxDeductible = true;
             EditorUtility.SetDirty(type);
 
@@ -142,18 +162,22 @@ namespace FoodTrucks.BuildEditor
                     wheelController.transform.localPosition = hub + new Vector3(0f, 0.164f, 0f);
                     Set(wheelController, "wheel.radius", 0.38f);
                     Set(wheelController, "wheel.width", 0.23f);
-                    Scale(wheelController, "spring.maxForce", WeightRatio);
-                    Scale(wheelController, "damper.bumpRate", WeightRatio);
-                    Scale(wheelController, "damper.reboundRate", WeightRatio);
-                    Scale(wheelController, "loadRating", WeightRatio);
                 }
 
                 root.GetComponent<Rigidbody>().mass = Mass;
                 Set(root, "baseMass", Mass);
                 Set(root, "combinedMass", Mass);
                 Set(root, "dimensions", new Vector3(2.20f, 3.10f, 5.80f));
-                // Low, as on the example car (0.3 m on a 1.4 m body), so the tall box doesn't roll over.
-                Set(root, "centerOfMass", new Vector3(0f, 0.6f, -0.2f));
+                // Low, as on the game's delivery truck (0.4 m on its 3.0 m body), so the tall box doesn't roll
+                // over; a little behind the middle for the kitchen.
+                Set(root, "centerOfMass", new Vector3(0f, 0.4f, -0.2f));
+                Set(root, "powertrain.engine.maxPower", EnginePower);
+                Apply(root, "powertrain.engine.forcedInduction.useForcedInduction", p => p.boolValue = false);
+                Apply(root, "powertrain.engine.powerCurve", p => p.animationCurveValue = new AnimationCurve(PowerCurve));
+                Set(root, "powertrain.transmission.finalGearRatio", FinalGearRatio);
+                Set(root, "brakes.maxTorque", BrakeTorque);
+                // Off on every game vehicle too; the game's SetMaxSpeed console command writes this value.
+                Set(root, "module.speedLimit", TopSpeed);
                 Set(root, "module.capacity", type.maxFuel);
                 Set(root, "module.amount", type.maxFuel);
 
@@ -295,9 +319,6 @@ namespace FoodTrucks.BuildEditor
 
         private static void Set(GameObject owner, string path, Vector3 value) =>
             Apply(owner, path, p => p.vector3Value = value);
-
-        private static void Scale(GameObject owner, string path, float factor) =>
-            Apply(owner, path, p => p.floatValue *= factor);
 
         private static void Append(GameObject owner, string path, Object value) =>
             Apply(owner, path, p =>

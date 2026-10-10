@@ -111,7 +111,21 @@ Wheelbase 3.60 m (the example car: 2.70 m), track 1.74 m (1.50 m).
 | `Spotlights` | (0, 1.78, 2.28): the car's height, 0.375 m behind the front as on the car [inference] ((0, 1.78, 1.93)) |
 | `SmokeBrokenCar` | (0, 1.00, 2.20), under the hood [suggested] ((0, 0.85, 1.64)) |
 | Spoiler box colliders | remove; the truck has no spoiler |
-| Rigidbody mass and `centerOfMass` | not an art value; a step van is several times the car's 1,400 kg |
+| Rigidbody mass and `centerOfMass` | not art values; see "Driving" below |
+
+**Driving** (`TruckAssets`, 10 October 2026, after Peter found 0.9.7's truck as quick as a sports car). The game's 1.0 vehicle prefabs (`defaultlocalgroup_assets_prefabs` and `_vehicletypes` bundles, read with UnityPy on a copy outside the repo) give every car and truck the same 1,400 kg rigidbody with no drag, the same gears (5.748, 3.786, 2.778, 2.108), the same 10,000 rpm limiter and the same springs and dampers on the vans and trucks (5,000 N, 5,000, load rating 7,000). They differ in engine power, power curve, final drive and wheel size, so top speed is the limiter in top gear. The NWH speed limiter is off on every one; its limit mostly repeats the type's `maxSpeed`. `VehicleType.enginePower` and `brakeForce` mostly repeat the prefab's engine power and brake torque (not on the Mersaidi Dash or the Limo), but nothing in the 1.0 game reads them; `maxSpeed` feeds the showroom and the bridge skip's fuel. Before this, the truck was the example car scaled to 3,500 kg with its engine left at 120 kW, final drive 8.51 (80 km/h at the limiter) and brakes at 2,500 N m.
+
+| | Power (kW) | Turbo | Final drive | Wheel radius | Top (limiter) | Brakes (N m) | Centre of mass | Type speed / power / brakes |
+|---|---|---|---|---|---|---|---|---|
+| HonzaMimic (starter car) | 45 | no | 8.51 | 0.305 | 64 km/h | 2,500 | (0, 0.3, 0) | 60 / 45 / 2,500 |
+| UMCDesert, MersaidiDash (vans) | 55 | no | 11.14 | 0.403 | 65 km/h | 2,500 | (0, 0.6, 0.09 / 0.8) | 50, 65 / 55, 70 / 2,500 |
+| VordV150 (pickup) | 130 | no | 7.62 | 0.403 | 95 km/h | 4,000 | (0, 0.3, 0) | 80 / 130 / 4,000 |
+| DeliveryTruck (box truck) | 46 | x1.2 | 15.25 | 0.43 | 50 km/h | 2,500 | (0, 0.4, 0.68) | 55 / 46 / 2,500 |
+| FreightTruckT1 (semi) | 35 | x1.2 | 15.25 | 0.542 | 64 km/h | 2,500 | (0, 0.4, 0.68) | 50 / 35 / 2,500 |
+| Food truck, 0.9.7 as played | 120 | no | 8.51 | 0.38 | 80 km/h | 2,500 at 3,500 kg | (0, 0.6, −0.2) | 50 / 112.5 / 6,250 |
+| Food truck now | 40 | no | 13.5 | 0.38 | 50 km/h | 2,500 | (0, 0.4, −0.2) | 50 / 40 / 2,500 |
+
+The DeliveryTruck is the nearest match for a step van. The food truck takes its mass, suspension, power curve (less power at low revs than the example car's), brakes and centre-of-mass height, its top speed through a final drive suited to our smaller wheels, and a little less power than both trucks (40 kW without the turbo against their 55 and 42 kW with it), so it pulls like the semi and tops out like the delivery truck. Turbo "x1.2" is NWH's forced induction `powerGainMultiplier` [inference: full boost multiplies power by it]. Top speeds are 10,000 rpm in top gear converted to wheel speed [code reading, unverified in game]; the game's own type speeds are a little higher than that for the trucks. The springs, dampers and load rating go back to the example car's, which are the vans' and trucks'. Status: pending in game (CHECKS, "Truck driving").
 
 **Serving window** (for the window interaction later): opening at x = 1.10, y 1.80…2.82, z −2.00…−0.20, centre (1.10, 2.31, −1.10), at least 0.30 m deep. Stainless shelf on the outside, top at y 1.75, x 1.10…1.26. A 1.8 m person on the compartment floor (y 0.94) has eyes at 2.62 and the top of the head at 2.74, both inside the opening. The worktop inside is at y 1.65…1.75 on cabinets down to the floor. Behind the hatch the aisle is clear for standing crew: nothing inside (worktop, cabinets, griddle station, its shelf, hood) reaches past x 0.43, and the parked sliding panes stay at x ≥ 0.754, so three 0.30 m deep bodies side by side at x 0.59 (x 0.44…0.74, z −2.00…−0.20, y 0.95…2.74) touch nothing.
 

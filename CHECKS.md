@@ -1,3 +1,13 @@
+# Truck driving (0.9.7)
+
+The truck now drives like the game's delivery truck instead of the example sports car: the delivery truck's weight, suspension, power curve and brakes, 40 kW and a 50 km/h top speed (art/README.md, "Driving"). Same 0.9.7 build, same **FT** save.
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Ctrl+K truck. On a long straight, beside the game's delivery truck (the 40-slot box truck from a truck dealership; the Honza Mimic too if one is at hand), floor it from standstill to top speed, then brake hard to a stop. Do it twice on the flat and once uphill | The food truck pulls a little slower than the Delivery Truck and clearly slower than the Honza, tops out at about 50 km/h on the speedometer (the Honza about 64), and stops in about the Delivery Truck's distance without locking or nosing over. Corners at 40 km/h and a kerb at speed don't tip it. Does it now feel like a loaded step van? Too slow anywhere (hills, merging)? |
+
+Log lines: none new. In the game's console (`-console`), `GetEnginePower` in the truck reads 40, `GetBrakeForce` 2500 and `GetMaxSpeed` 50.
+
 # Storage per piece (0.9.7)
 
 Each fitted piece of equipment now holds its own food: 40 units a piece on a cart, 80 on a truck (a coffee counts a quarter, a pastry half). A piece that serves two foods (the grill: burgers and kabobs; the concessions case: popcorn and cotton candy) shares its room between them. The new **Extra Storage** cabinet takes one equipment place, serves nothing and doubles every piece (cart 80, truck 160); a second one is refused. Food with no fitted piece to hold it doesn't load. The commissary still sells whole boxes; Restock fills each piece from the commissary's stock and leaves the rest there. Also in this build: the bay's "Order stock for delivery to …" starts the call properly (it showed the commissary's first line with no buttons). Build `0.9.7` on branch `milestone-8`, with the first review round's fixes (rows 14 to 18); the log says 0.9.7. Fresh **FT** save, other gameplay mods off.
@@ -27,7 +37,7 @@ Log lines:
 
 - At startup: `Patch CargoItemUi.SetUp(CargoItem, ICargoHolder, Boolean): Active.`, `Patch CargoItemUi.OnSellClick(CargoItem, CargoInstance): Active.`, `Patch ICargoHolder.TryToMergeAndMoveCargoBetweenHolders(ICargoHolder, ICargoHolder): Active.` and `Item foodtrucks:itemname_storagecabinet: registered (machine, price 900, …)`.
 - Rows 1 to 5: `Cargo limit: <item> into <vehicle type> <id> capped at N (no fitted <piece> holds it | <piece> holds 40 units | 4 equipment slots | one Extra Storage counts).`
-- Row 7: `Commissary restock: truck <id> at <site> loaded …; no piece for …; K units refused by the cargo and kept; L units left in stock; storage hotdoggrill 80/80; griddle 80/80.` "refused by the cargo" should be 0: Restock only asks for what fits.
+- Row 7: `Commissary restock: truck <id> at <site> loaded …; [no piece for …;] K units refused by the cargo and kept; L units left in stock; storage hotdoggrill 80/80; griddle 80/80.` "refused by the cargo" should be 0: Restock only asks for what fits.
 - Row 10: `Commissary <id>: the bay's Order stock opens its conversation.` then `Commissary <id>: the bay's call started once the conversation was up (N frames).` A `the bay's call didn't start` error means the conversation never showed with Contacts open. Closing the phone early logs Info: `the bay's call was dropped: Contacts isn't showing …`.
 - Ctrl+L: each vehicle's stock now ends with its pieces, e.g. `stock 62 (hotdoggrill 62/80; storage x2)`.
 - Catering offers: each offer's guests are capped by its own category: the most food items one truck holds of it (80 a piece on a truck, 160 with Extra Storage, a coffee machine 320 cups, a concessions case 320 popcorn and cotton candy).
