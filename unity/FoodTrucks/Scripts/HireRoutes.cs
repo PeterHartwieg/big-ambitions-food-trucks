@@ -62,6 +62,17 @@ namespace FoodTrucks
             return result;
         }
 
+        // The player has the vehicle (got in, or grabbed the cart): where the crew parked it no longer counts as the
+        // crew's placement (HireRunner.ParkedFor), even if it comes back within a few metres, turned round. Only an
+        // untouched crew placement keeps that pass. Called on the game's onEnterVehicle, whatever crew or route it has.
+        internal static void PlayerTook(VehicleState vehicle)
+        {
+            if (vehicle.Arrival == null || !FoodTrucksSession.CanWrite) return;
+            vehicle.Arrival = null;
+            FoodTrucksSession.MarkChanged();
+            Log.Info($"Route: the player took {vehicle.VehicleType} {vehicle.VehicleId}; where the crew parked it no longer counts as at its stop.");
+        }
+
         // Runs an action on the next frame, after the game's list picker has closed its current list.
         public static void Later(Action action)
         {
@@ -271,14 +282,9 @@ namespace FoodTrucks
             if (!indoors) indoorsShown.Remove(vehicle.VehicleId);
             // After a load, nobody knows when the player last used it: as if just now, so nothing drives off at once.
             if (held || !lastHeld.ContainsKey(vehicle.VehicleId)) lastHeld[vehicle.VehicleId] = t;
-            // The player has it: where the crew parked it no longer counts as the crew's placement (HireRunner.ParkedFor),
-            // even if it comes back within a few metres, turned round. Only an untouched crew placement keeps that pass.
-            if (held && vehicle.Arrival != null)
-            {
-                vehicle.Arrival = null;
-                FoodTrucksSession.MarkChanged();
-                Log.Info($"Route: the player took {vehicle.VehicleType} {vehicle.VehicleId}; where the crew parked it no longer counts as at its stop.");
-            }
+            // The game's enter event clears the crew's arrival (PlayerTook, from CartSelling); this catches a vehicle the
+            // player already had when the save loaded.
+            if (held) PlayerTook(vehicle);
             var canSell = true;
             var hasStock = true;
             var stayPut = false;
@@ -424,9 +430,9 @@ namespace FoodTrucks
 
         // Whether a truck standing there would be refused for its hatch (HatchCheck): such a space is taken
         // the other way round. Anything else stands as the lane has it, as an unclear spot opens anyway.
-        private static bool HatchRefused(Vector3 position, Quaternion rotation, out HatchCheck.Result result)
+        private static bool HatchRefused(Vector3 position, Quaternion rotation, TrafficLanes lanes, out HatchCheck.Result result)
         {
-            result = HatchCheck.Probe(position, rotation);
+            result = HatchCheck.Probe(position, rotation, lanes);
             return !result.Opens;
         }
 
@@ -578,16 +584,19 @@ namespace FoodTrucks
                 .Select(l => l.Lane);
             // A space that reads road by the hatch either way round (a median) is kept only in case no lane offers better.
             (Vector3, Quaternion, string?)? refused = null;
+            // The driving lanes for every space tried, read once (the traffic system's search scans the whole city).
+            TrafficLanes? traffic = null;
             foreach (var lane in lanes)
             {
                 if (!lane.TryGetRandomFreeSpotForPlayerVehicle(out var position, out var rotation, 1 << LayerHelper.VehiclesLayerIndex)) continue;
                 if (Vector3.Distance(position, target) > maxMetres) continue;
                 // The hatch has to face the pavement: a lane's rotation can point either way along the kerb. The
                 // game's slot test is sized for a car, so the truck's own hull is checked, the way it will stand.
-                if (HatchRefused(position, rotation, out var hatch))
+                traffic ??= TrafficLanes.Near(target, maxMetres + HatchCheck.LaneSearchMetres);
+                if (HatchRefused(position, rotation, traffic, out var hatch))
                 {
                     var turned = rotation * Quaternion.Euler(0f, 180f, 0f);
-                    if (HatchRefused(position, turned, out var turnedHatch))
+                    if (HatchRefused(position, turned, traffic, out var turnedHatch))
                     {
                         Log.Info($"Route: the space at {position} has road by the hatch either way round ({hatch}; turned: {turnedHatch}); trying the next lane.");
                         if (refused == null && !Taken(position, rotation, "truck")) refused = (position, rotation, lane.neighbourhood);

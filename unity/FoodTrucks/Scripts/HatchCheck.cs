@@ -18,7 +18,7 @@ namespace FoodTrucks
     {
         // The lanes are gathered from waypoints within this distance; a lane passing the truck has waypoints
         // a few metres apart, so its nearest ones are well within it.
-        private const float LaneSearchMetres = 25f;
+        internal const float LaneSearchMetres = 25f;
 
         public sealed class Result
         {
@@ -54,11 +54,13 @@ namespace FoodTrucks
                 $"{Verdict}: hatch side {Hatch}; other side {Opposite}; {Lanes}; {Kerb}";
         }
 
-        public static Result Probe(Vector3 position, Quaternion rotation)
+        // nearby: lanes already read for a wider area (FreeParking reads them once for every space it tries); the
+        // traffic system's search scans every waypoint in the city, so one read per call is enough.
+        public static Result Probe(Vector3 position, Quaternion rotation, TrafficLanes? nearby = null)
         {
             var forward = Flat(rotation * Vector3.forward);
             var right = Flat(rotation * Vector3.right);
-            var lanes = TrafficLanes.Near(position, LaneSearchMetres);
+            var lanes = nearby != null ? nearby.Within(position, LaneSearchMetres) : TrafficLanes.Near(position, LaneSearchMetres);
             var hatch = Side(position, forward, right, 1, lanes, out var hatchKerb);
             var opposite = Side(position, forward, right, -1, lanes, out var oppositeKerb);
             var verdict = HatchSide.Decide(hatch, opposite);
@@ -173,6 +175,16 @@ namespace FoodTrucks
         }
 
         public bool Known => segments.Count > 0;
+
+        // The segments of these lanes within radius of a point (either end), as Near(centre, radius) would find them,
+        // when these were read for a wider area that covers it. Unknown lanes stay unknown.
+        public TrafficLanes Within(Vector3 centre, float radius)
+        {
+            if (segments.Count == 0) return this;
+            var c = new Vector2(centre.x, centre.z);
+            var kept = segments.Where(s => (new Vector2(s.A.x, s.A.z) - c).magnitude <= radius || (new Vector2(s.B.x, s.B.z) - c).magnitude <= radius).ToList();
+            return new TrafficLanes(kept, kept.Count == 0 ? $"no traffic lanes within {radius:F0} m" : null);
+        }
 
         public string Describe() => problem ?? $"{segments.Count} lane segments near";
     }

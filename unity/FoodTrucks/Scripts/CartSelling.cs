@@ -614,6 +614,8 @@ namespace FoodTrucks
                 // Driving off or grabbing the cart closes the window.
                 TruckHatch.Set(controller, false);
                 var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, cart.id);
+                // Where the crew parked it stops counting as at its stop, whether or not it has a crew or a route now.
+                if (vehicle != null) HireRoutes.PlayerTook(vehicle);
                 if (vehicle != null && vehicle.IsOpen && FoodTrucksSession.CanWrite) Close(vehicle, "foodtrucks:notification_closed");
             }
             catch (Exception ex) { Log.Error(ex); }
