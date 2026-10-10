@@ -295,14 +295,22 @@ namespace FoodTrucks
                     Log.Info($"Pitch: truck {cart.id} at {position}: parking {parking}.");
                     return parking == ParkingState.NotAvailable ? "foodtrucks:legality_truck_moving" : "foodtrucks:legality_truck_parking";
                 }
-                // The hatch is on the right: with it towards the road, the line would form in the traffic.
-                if (controller == null)
+                // The hatch is on the right: with it towards the road, the line would form in the traffic. Without the
+                // player in it, the truck's own controller says where it stands.
+                var truck = controller != null ? controller.transform : null;
+                if (truck == null)
+                {
+                    var own = VehicleHelper.GetVehicleController(cart);
+                    if (own != null) truck = own.transform;
+                }
+                if (truck == null)
                 {
                     Log.Info($"Pitch: truck {cart.id} at {position}: parking {parking}; hatch not checked (no vehicle controller).");
                     return null;
                 }
-                var hatch = HatchCheck.Probe(controller.transform);
-                Log.Info($"Pitch: truck {cart.id} at {position}, heading {controller.transform.eulerAngles.y:F0}: parking {parking}; " +
+                position = truck.position;
+                var hatch = HatchCheck.Probe(truck);
+                Log.Info($"Pitch: truck {cart.id} at {position}, heading {truck.eulerAngles.y:F0}: parking {parking}; " +
                          $"hatch {hatch}; {(hatch.Opens ? "may open" : "refused")}.");
                 return hatch.RefusalKey;
             }

@@ -22,9 +22,10 @@ namespace FoodTrucks
 
         public sealed class Result
         {
-            public Result(HatchVerdict verdict, SideReading hatch, SideReading opposite, string lanes, string kerb)
+            public Result(HatchVerdict verdict, SideReading hatch, SideReading opposite, string lanes, string kerb, bool lanesKnown)
             {
                 Verdict = verdict;
+                LanesKnown = lanesKnown;
                 Hatch = hatch;
                 Opposite = opposite;
                 Lanes = lanes;
@@ -36,6 +37,9 @@ namespace FoodTrucks
             public SideReading Opposite { get; }
             public string Lanes { get; }
             public string Kerb { get; }
+            // False when the reading had no traffic data (the manager not ready, or no lane near) and fell back to
+            // the NavMesh alone; such a reading isn't kept (HireRoutes.Hatch).
+            public bool LanesKnown { get; }
             public bool Opens => HatchSide.Opens(Verdict);
 
             // Null when the truck may open, else the message saying why not.
@@ -60,7 +64,7 @@ namespace FoodTrucks
             var verdict = HatchSide.Decide(hatch, opposite);
             // The pavement's height over the truck's wheels, for seeing in the log whether kerbs are raised.
             var kerb = $"first pavement {Height(hatchKerb)} on the hatch side, {Height(oppositeKerb)} on the other";
-            return new Result(verdict, hatch, opposite, lanes.Describe(), kerb);
+            return new Result(verdict, hatch, opposite, lanes.Describe(), kerb, lanes.Known);
         }
 
         public static Result Probe(Transform truck) => Probe(truck.position, truck.rotation);

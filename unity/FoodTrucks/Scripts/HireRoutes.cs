@@ -48,14 +48,17 @@ namespace FoodTrucks
         // Trucks already logged as standing the wrong way for a stop: vehicle, stop, day.
         private readonly HashSet<(string, int, int)> hatchShown = new HashSet<(string, int, int)>();
 
-        // Whether a truck's hatch faces the pavement where it stands (HatchCheck), read again once it moves.
+        // Whether a truck's hatch faces the pavement where it stands (HatchCheck), read again once it moves. A reading
+        // without traffic data (the traffic system not ready yet after a load, say) isn't kept: it is the NavMesh
+        // alone, which reads the street as pavement, so it is read again until the lanes are there.
         internal static HatchCheck.Result Hatch(string vehicleId, Transform truck)
         {
             if (hatches.TryGetValue(vehicleId, out var last) && Vector3.Distance(last.Position, truck.position) < 0.3f &&
                 Quaternion.Angle(last.Rotation, truck.rotation) < 3f)
                 return last.Result;
             var result = HatchCheck.Probe(truck);
-            hatches[vehicleId] = (truck.position, truck.rotation, result);
+            if (result.LanesKnown) hatches[vehicleId] = (truck.position, truck.rotation, result);
+            else hatches.Remove(vehicleId);
             return result;
         }
 
@@ -268,6 +271,14 @@ namespace FoodTrucks
             if (!indoors) indoorsShown.Remove(vehicle.VehicleId);
             // After a load, nobody knows when the player last used it: as if just now, so nothing drives off at once.
             if (held || !lastHeld.ContainsKey(vehicle.VehicleId)) lastHeld[vehicle.VehicleId] = t;
+            // The player has it: where the crew parked it no longer counts as the crew's placement (HireRunner.ParkedFor),
+            // even if it comes back within a few metres, turned round. Only an untouched crew placement keeps that pass.
+            if (held && vehicle.Arrival != null)
+            {
+                vehicle.Arrival = null;
+                FoodTrucksSession.MarkChanged();
+                Log.Info($"Route: the player took {vehicle.VehicleType} {vehicle.VehicleId}; where the crew parked it no longer counts as at its stop.");
+            }
             var canSell = true;
             var hasStock = true;
             var stayPut = false;
@@ -565,6 +576,8 @@ namespace FoodTrucks
                 .Where(l => l.Distance <= reach * reach)
                 .OrderBy(l => l.Distance)
                 .Select(l => l.Lane);
+            // A space that reads road by the hatch either way round (a median) is kept only in case no lane offers better.
+            (Vector3, Quaternion, string?)? refused = null;
             foreach (var lane in lanes)
             {
                 if (!lane.TryGetRandomFreeSpotForPlayerVehicle(out var position, out var rotation, 1 << LayerHelper.VehiclesLayerIndex)) continue;
@@ -573,13 +586,21 @@ namespace FoodTrucks
                 // game's slot test is sized for a car, so the truck's own hull is checked, the way it will stand.
                 if (HatchRefused(position, rotation, out var hatch))
                 {
-                    rotation *= Quaternion.Euler(0f, 180f, 0f);
+                    var turned = rotation * Quaternion.Euler(0f, 180f, 0f);
+                    if (HatchRefused(position, turned, out var turnedHatch))
+                    {
+                        Log.Info($"Route: the space at {position} has road by the hatch either way round ({hatch}; turned: {turnedHatch}); trying the next lane.");
+                        if (refused == null && !Taken(position, rotation, "truck")) refused = (position, rotation, lane.neighbourhood);
+                        continue;
+                    }
+                    rotation = turned;
                     Log.Info($"Route: the space at {position} would put the hatch to the road ({hatch}); the truck takes it the other way round.");
                 }
                 if (Taken(position, rotation, "truck")) continue;
                 return (position, rotation, lane.neighbourhood);
             }
-            return null;
+            if (refused != null) Log.Info($"Route: no space near {target} opens; the truck takes the one at {refused.Value.Item1} and the crew says why it can't open.");
+            return refused;
         }
 
         private static string CrewNames(VehicleState vehicle) =>
