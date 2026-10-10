@@ -1,6 +1,6 @@
 {
   "_notes": "Products, equipment, vehicles and the price curve, tuned by the accepted cart balance study (8 October 2026). Calculated proposals; not yet checked in game. Keys starting with an underscore are notes; the loader ignores them.",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
 
   "_products": "Base-game items the vehicles can sell: the demand category each belongs to and how many in-game minutes one takes to serve. An order takes the longest service time of its items. Optional stockWeight is the share of one stock unit occupied by an item (default 1.0): coffee and tea 0.25, pastries 0.5. The bakeryxx items come from the optional Bakery mod (its item IDs, read from its DLL); without that mod they never reach a vehicle and change nothing. The foodtrucks: items are the mod's own foods (dumplings, tacos, chopped cheese, grilled corn), registered by the mod and bought through the commissary (docs/balance/new-foods.md).",
   "products": {
@@ -32,6 +32,7 @@
   },
 
   "_equipment": "The mod's own equipment IDs, the products each unlocks and the vanilla items that fit them. Carry a game item to the vehicle and click it to fit it; it stays in cargo and shares the game's cargo slots with food. Vanilla item IDs come from the game's code; their presence in the 1.0 assets is unverified. Each listed game item fits one piece. Coffee maps only to the industrial coffee machine; the cheap machine is office equipment. With the Bakery mod, its bread counter fits as a display case and its bistro machine as a coffee machine, and its goods sell from them. The game's industrial grill and fryer are separate pieces, as in the game (grill: burgers and kabobs; fryer: fries); fitted pieces are read from the cargo, so splitting the old burger station needs no save change. Popcorn and cotton candy share the game's concessions display case, slushies its slushi machine (9 October 2026, docs/balance/new-foods.md). The dumpling steamer, griddle and corn grill are the mod's own machines (foodtrucks: items).",
+  "_equipmentStorage": "Storage per piece (Peter, 10 October 2026): each fitted piece holds vehicles.<kind>.unitsPerPiece weighted units of the foods it serves, shared among them (grill: burgers and kabobs; concessions: popcorn and cotton candy). Each food is served by one piece only. A piece with storageFactor (the mod's Extra storage cabinet) serves no food, takes a slot and multiplies every fitted piece's storage; a second one adds nothing and the vehicle refuses it.",
   "_equipmentDisplay": "display: the model shown on a cart's counter spot when the piece is fitted, by name from the mod's Vehicles/EquipmentArt (BurgerStation, CoffeeStation, CornGrill, CottonCandyMachine, DrinksCooler, DumplingSteamer, Griddle, HotDogRoller, IceCreamCabinet, KabobGrill, MerchRack, PastryCase, PizzaOven, PopcornMachine, SlushieMachine). No display: the spot stays empty.",
   "equipment": {
     "hotdoggrill": { "products": ["ba:itemname_hotdog"], "gameItems": ["ba:itemname_hotdoggrill"], "display": "HotDogRoller" },
@@ -46,13 +47,14 @@
     "icecreamcounter": { "products": ["ba:itemname_icecream"], "gameItems": ["ba:itemname_icecreamcounter"], "display": "IceCreamCabinet" },
     "pizzaoven": { "products": ["ba:itemname_pizza"], "gameItems": ["ba:itemname_pizzaoven"], "display": "PizzaOven" },
     "cooler": { "products": ["ba:itemname_sodacan", "ba:itemname_water"], "gameItems": ["ba:itemname_drinksfridge", "ba:itemname_largedrinksfridge"], "display": "DrinksCooler" },
-    "displaycase": { "products": ["ba:itemname_croissant", "ba:itemname_donut", "ba:itemname_cupcake", "bakeryxx:itemname_bread", "bakeryxx:itemname_bun", "bakeryxx:itemname_chocolatecookie"], "gameItems": ["ba:itemname_bakeryshowcase", "bakeryxx:itemname_breadcounter"], "display": "PastryCase" }
+    "displaycase": { "products": ["ba:itemname_croissant", "ba:itemname_donut", "ba:itemname_cupcake", "bakeryxx:itemname_bread", "bakeryxx:itemname_bun", "bakeryxx:itemname_chocolatecookie"], "gameItems": ["ba:itemname_bakeryshowcase", "bakeryxx:itemname_breadcounter"], "display": "PastryCase" },
+    "storage": { "products": [], "gameItems": ["foodtrucks:itemname_storagecabinet"], "display": "StorageCabinet", "storageFactor": 2 }
   },
 
-  "_vehicles": "stockUnits limits weighted food load, separate from the game's cargo slots, which count boxes. Cart 80, truck 160: 80 hot dogs or 320 coffees fit in a cart; mixed loads share the same limit.",
+  "_vehicles": "unitsPerPiece is the weighted food each fitted piece holds, separate from the game's cargo slots, which count boxes. Cart 40, truck 80 per piece (Peter, 10 October 2026): a cart's hot dog grill holds 40 hot dogs, a coffee machine 160 coffees; with the Extra storage piece 80 and 320. Foods without a fitted piece can't be loaded.",
   "vehicles": {
-    "cart": { "equipmentSlots": 2, "staff": 1, "stockUnits": 80 },
-    "truck": { "equipmentSlots": 4, "staff": 3, "stockUnits": 160 }
+    "cart": { "equipmentSlots": 2, "staff": 1, "unitsPerPiece": 40 },
+    "truck": { "equipmentSlots": 4, "staff": 3, "unitsPerPiece": 80 }
   },
 
   "_priceCurve": "Share of customers who still buy at a price, as [price / reference price, share] points; straight lines between them, flat beyond the ends. Smoothed from the game's shop rule (read in the decompile, unverified in game): a customer buys up to max(class index, neighbourhood average index) times the reference price, with class indices 1.2, 1.4 and 1.7. assumedPriceIndex is the neighbourhood average the points are drawn for (a 50/35/15 class mix gives about 1.35); the adapter rescales other neighbourhoods onto it. The 0.8 point is the mod's own small bonus for undercutting.",

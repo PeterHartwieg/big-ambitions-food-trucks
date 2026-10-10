@@ -55,36 +55,9 @@ namespace FoodTrucks.Core.Selling
             return fitted;
         }
 
-        // Core enforces unit and equipment limits; the game still enforces shared cargo slots.
+        // Core enforces storage per piece and equipment slots (Storage.Check); the game still enforces shared cargo slots.
         public static int AllowedUnits(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo,
-            string? incomingItem, int incomingAmount, bool incomingHasNestedCargo)
-        {
-            if (tables == null) throw new ArgumentNullException(nameof(tables));
-            if (cargo == null) throw new ArgumentNullException(nameof(cargo));
-            var amount = Math.Max(0, incomingAmount);
-            var vehicle = tables.Vehicle(vehicleType);
-            if (amount == 0 || vehicle == null) return amount;
-            // Equipment takes a slot whether or not it carries stock inside it (a stocked drinks fridge).
-            if (tables.EquipmentForGameItem(incomingItem) != null)
-                return StockLimit.CanLoad(EquipmentUnits(tables, cargo), amount, vehicle.EquipmentSlots);
-            if (incomingHasNestedCargo) return amount;
-            var product = tables.Product(incomingItem);
-            if (product != null)
-                return StockLimit.CanLoad(FoodLoad(tables, cargo), amount, vehicle.StockUnits, product.StockWeight);
-            return amount;
-        }
-
-        private static int EquipmentUnits(DemandTables tables, IEnumerable<CargoLine> cargo)
-        {
-            if (tables == null) throw new ArgumentNullException(nameof(tables));
-            if (cargo == null) throw new ArgumentNullException(nameof(cargo));
-            var units = 0;
-            foreach (var line in cargo)
-            {
-                if (tables.EquipmentForGameItem(line.ItemName) != null && line.Amount > 0)
-                    units = (int)Math.Min(int.MaxValue, (long)units + line.Amount);
-            }
-            return units;
-        }
+            string? incomingItem, int incomingAmount, bool incomingHasNestedCargo) =>
+            Storage.Check(tables, vehicleType, cargo, incomingItem, incomingAmount, incomingHasNestedCargo).Allowed;
     }
 }

@@ -10,7 +10,7 @@ namespace FoodTrucks.Core.Demand
     public sealed class DemandTables
     {
         public const int DemandSchemaVersion = 1;
-        public const int EconomySchemaVersion = 1;
+        public const int EconomySchemaVersion = 2;
         public const int ZonesSchemaVersion = 1;
 
         internal static readonly string[] DaypartKeys = { "early", "morning", "lunch", "afternoon", "evening", "late", "night" };
@@ -30,6 +30,7 @@ namespace FoodTrucks.Core.Demand
         private readonly Dictionary<string, ProductInfo> products;
         private readonly Dictionary<string, EquipmentInfo> equipment;
         private readonly Dictionary<string, EquipmentInfo> equipmentByGameItem;
+        private readonly Dictionary<string, EquipmentInfo> equipmentByProduct;
         private readonly Dictionary<string, VehicleInfo> vehicles;
 
         public double PassersPerHour { get; }
@@ -138,8 +139,12 @@ namespace FoodTrucks.Core.Demand
 
             ReadEconomy(economyReader, economy, out products, out equipment, out vehicles, out var curve);
             equipmentByGameItem = new Dictionary<string, EquipmentInfo>(StringComparer.Ordinal);
+            equipmentByProduct = new Dictionary<string, EquipmentInfo>(StringComparer.Ordinal);
             foreach (var piece in equipment.Values)
+            {
                 foreach (var item in piece.GameItems) equipmentByGameItem.Add(item, piece);
+                foreach (var item in piece.Products) equipmentByProduct.Add(item, piece);
+            }
             PriceCurve = curve;
             Zones = ReadZones(zonesReader, zones);
         }
@@ -210,6 +215,10 @@ namespace FoodTrucks.Core.Demand
 
         public EquipmentInfo? EquipmentForGameItem(string? itemName) =>
             itemName != null && equipmentByGameItem.TryGetValue(itemName, out var piece) ? piece : null;
+
+        // The one piece that serves and stores a product (the loader allows at most one), or null.
+        public EquipmentInfo? EquipmentForProduct(string? itemName) =>
+            itemName != null && equipmentByProduct.TryGetValue(itemName, out var piece) ? piece : null;
 
         public VehicleInfo? Vehicle(string? type) => type != null && vehicles.TryGetValue(type, out var vehicle) ? vehicle : null;
 
@@ -341,18 +350,28 @@ namespace FoodTrucks.Core.Demand
 
             equipmentTable = new Dictionary<string, EquipmentInfo>(StringComparer.Ordinal);
             var gameItemOwners = new Dictionary<string, string>(StringComparer.Ordinal);
+            var productOwners = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var entry in r.Entries(r.Object(root, "equipment")))
             {
                 var obj = AsObject(r, entry);
-                r.OnlyKeys(obj, "products", "gameItems", "display");
+                r.OnlyKeys(obj, "products", "gameItems", "display", "storageFactor");
+                // A storage piece (storageFactor) serves no food and multiplies the storage of every fitted piece.
+                var storageFactor = obj["storageFactor"] == null ? 1.0 : r.Number(obj, "storageFactor", 1.0, 10);
+                if (obj["storageFactor"] != null && storageFactor <= 1.0)
+                    throw r.Fail(DataReader.PathOf(obj, "storageFactor"), "must be above 1");
                 var list = r.List(obj, "products");
-                if (list.Count == 0) throw r.Fail(list.Path, "must list at least one product");
+                if (storageFactor > 1.0 && list.Count > 0) throw r.Fail(list.Path, "must be empty for a storage piece (storageFactor)");
+                if (storageFactor <= 1.0 && list.Count == 0) throw r.Fail(list.Path, "must list at least one product");
                 var items = new List<string>();
                 foreach (var token in list)
                 {
                     var item = r.Text(token, token.Path);
                     if (!productTable.ContainsKey(item)) throw r.Fail(token.Path, $"names '{item}', which is not listed in products");
                     if (items.Contains(item)) throw r.Fail(token.Path, $"lists '{item}' twice");
+                    // Each food is stored in one kind of piece, so a vehicle's storage splits cleanly by piece.
+                    if (productOwners.TryGetValue(item, out var productOwner))
+                        throw r.Fail(token.Path, $"lists '{item}', which equipment '{productOwner}' already serves");
+                    productOwners.Add(item, entry.Name);
                     items.Add(item);
                 }
                 var gameItems = new List<string>();
@@ -378,16 +397,16 @@ namespace FoodTrucks.Core.Demand
                     foreach (var c in display)
                         if (!char.IsLetterOrDigit(c) && c != '_') throw r.Fail(path, "must be a model name (letters, digits, _)");
                 }
-                equipmentTable.Add(entry.Name, new EquipmentInfo(entry.Name, items, gameItems, display));
+                equipmentTable.Add(entry.Name, new EquipmentInfo(entry.Name, items, gameItems, display, storageFactor));
             }
 
             vehicleTable = new Dictionary<string, VehicleInfo>(StringComparer.Ordinal);
             foreach (var entry in r.Entries(r.Object(root, "vehicles")))
             {
                 var obj = AsObject(r, entry);
-                r.OnlyKeys(obj, "equipmentSlots", "staff", "stockUnits");
+                r.OnlyKeys(obj, "equipmentSlots", "staff", "unitsPerPiece");
                 vehicleTable.Add(entry.Name, new VehicleInfo(entry.Name, r.Integer(obj, "equipmentSlots", 1, 64), r.Integer(obj, "staff", 1, 64),
-                    r.Integer(obj, "stockUnits", 1, 100000)));
+                    r.Integer(obj, "unitsPerPiece", 1, 100000)));
             }
 
             var curveObj = r.Object(root, "priceCurve");
@@ -693,9 +712,11 @@ namespace FoodTrucks.Core.Demand
 
     public sealed class EquipmentInfo
     {
-        internal EquipmentInfo(string id, IReadOnlyList<string> products, IReadOnlyList<string> gameItems, string? display = null)
+        internal EquipmentInfo(string id, IReadOnlyList<string> products, IReadOnlyList<string> gameItems, string? display = null,
+            double storageFactor = 1.0)
         {
             Id = id;
+            StorageFactor = storageFactor;
             Products = products;
             GameItems = gameItems;
             Display = display;
@@ -707,13 +728,16 @@ namespace FoodTrucks.Core.Demand
         public IReadOnlyList<string> GameItems { get; }
         // The display model on a cart's counter, or null to show nothing on the spot.
         public string? Display { get; }
+        // Above 1 for a storage piece: it serves no food and multiplies every fitted piece's storage. One counts.
+        public double StorageFactor { get; }
+        public bool IsStorage => StorageFactor > 1.0;
     }
 
     public sealed class VehicleInfo
     {
-        internal VehicleInfo(string type, int equipmentSlots, int staff, int stockUnits)
+        internal VehicleInfo(string type, int equipmentSlots, int staff, int unitsPerPiece)
         {
-            StockUnits = stockUnits;
+            UnitsPerPiece = unitsPerPiece;
             Type = type;
             EquipmentSlots = equipmentSlots;
             Staff = staff;
@@ -721,9 +745,9 @@ namespace FoodTrucks.Core.Demand
 
         public string Type { get; }
         public int EquipmentSlots { get; }
-        // Food the vehicle holds, in units, whatever the game's box slots allow: one wholesale box
-        // can hold hundreds of units.
-        public int StockUnits { get; }
+        // Food each fitted piece of equipment holds, in weighted units, whatever the game's box slots allow
+        // (one wholesale box can hold hundreds of units). A storage piece multiplies it (Storage).
+        public int UnitsPerPiece { get; }
         public int Staff { get; }
     }
 }

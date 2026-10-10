@@ -23,7 +23,7 @@ public class StockLimitTests
     [Fact]
     public void ACartLoadedFromABigBoxSellsOutAtItsLimit()
     {
-        var capacity = ShippedData.Tables.Vehicle("cart")!.StockUnits;
+        var capacity = ShippedData.Tables.Vehicle("cart")!.UnitsPerPiece;
         var stock = StockLimit.CanLoad(0, 500, capacity);
         var sales = 0;
         var progress = 0.0;
@@ -45,9 +45,10 @@ public class StockLimitTests
         var cart = ShippedData.Tables.Vehicle("cart")!;
         var truck = ShippedData.Tables.Vehicle("truck")!;
 
-        // One person serves 12 to 20 an hour: 80 units last 4 to 7 hours.
-        Assert.Equal(80, cart.StockUnits);
-        Assert.Equal(160, truck.StockUnits);
-        Assert.InRange(cart.StockUnits / 20.0, 3, 8);
+        // Storage per piece (Peter, 10 October 2026). One person serves 12 to 20 an hour: a cart with one food
+        // piece and the storage piece holds 80 units, 4 to 7 hours.
+        Assert.Equal(40, cart.UnitsPerPiece);
+        Assert.Equal(80, truck.UnitsPerPiece);
+        Assert.InRange(cart.UnitsPerPiece * 2 / 20.0, 3, 8);
     }
 }

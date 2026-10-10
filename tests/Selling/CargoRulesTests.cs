@@ -14,31 +14,39 @@ public class CargoRulesTests
     private const string Grill = "ba:itemname_hotdoggrill";
     private const string Fridge = "ba:itemname_drinksfridge";
     private const string Coffee = "ba:itemname_cupofcoffee";
+    private const string Tea = "ba:itemname_cupoftea";
+    private const string CoffeeMachine = "ba:itemname_industrialcoffeemachine";
+    private const string Storage = "foodtrucks:itemname_storagecabinet";
 
     [Fact]
-    public void EightyStockUnitsHoldThreeHundredTwentyCoffees()
+    public void ACartsCoffeeMachineHoldsOneHundredSixtyCoffees()
     {
         var tables = ShippedData.Tables;
-        Assert.Equal(320, CargoRules.AllowedUnits(tables, "cart", Array.Empty<CargoLine>(), Coffee, 500, false));
-        var full = new[] { new CargoLine(Coffee, 320, false) };
-        Assert.Equal(80, CargoRules.FoodUnits(tables, full));
+        var machine = new CargoLine(CoffeeMachine, 1, false);
+        Assert.Equal(160, CargoRules.AllowedUnits(tables, "cart", new[] { machine }, Coffee, 500, false));
+        var full = new[] { machine, new CargoLine(Coffee, 160, false) };
+        Assert.Equal(40, CargoRules.FoodUnits(tables, full));
         Assert.Equal(0, CargoRules.AllowedUnits(tables, "cart", full, Coffee, 1, false));
-        Assert.Equal(1, CargoRules.AllowedUnits(tables, "cart", new[] { new CargoLine(Coffee, 319, false) }, Coffee, 10, false));
+        Assert.Equal(1, CargoRules.AllowedUnits(tables, "cart", new[] { machine, new CargoLine(Coffee, 159, false) }, Coffee, 10, false));
+        Assert.Equal(320, CargoRules.AllowedUnits(tables, "cart", new[] { machine, new CargoLine(Storage, 1, false) }, Coffee, 500, false));
     }
 
     [Fact]
     public void MixedFoodSharesWeightedCapacityAndKeepsFractionalRoom()
     {
+        // Each piece keeps its own room: hot dogs fill only the grill, coffee and tea share the machine.
         var cargo = new[]
         {
-            new CargoLine(HotDog, 60, false), new CargoLine(Coffee, 3, false),
+            new CargoLine(Grill, 1, false), new CargoLine(CoffeeMachine, 1, false), new CargoLine(Storage, 1, false),
+            new CargoLine(HotDog, 60, false), new CargoLine(Coffee, 3, false), new CargoLine(Tea, 2, false),
             new CargoLine("ba:itemname_croissant", 3, false)
         };
-        Assert.Equal(62.25, CargoRules.FoodLoad(ShippedData.Tables, cargo));
+        Assert.Equal(62.75, CargoRules.FoodLoad(ShippedData.Tables, cargo));
         Assert.Equal(63, CargoRules.FoodUnits(ShippedData.Tables, cargo));
-        Assert.Equal(71, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, Coffee, 500, false));
-        Assert.Equal(17, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, HotDog, 500, false));
-        Assert.Equal(35, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, "ba:itemname_donut", 500, false));
+        Assert.Equal(635, CargoRules.AllowedUnits(ShippedData.Tables, "truck", cargo, Coffee, 1000, false));
+        Assert.Equal(100, CargoRules.AllowedUnits(ShippedData.Tables, "truck", cargo, HotDog, 500, false));
+        Assert.Equal(20, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, HotDog, 500, false));
+        Assert.Equal(0, CargoRules.AllowedUnits(ShippedData.Tables, "truck", cargo, "ba:itemname_donut", 500, false));
     }
 
     [Theory]
@@ -56,18 +64,18 @@ public class CargoRulesTests
         var tables = DemandTables.Parse(ShippedData.Demand, economy.ToString(), ShippedData.Zones);
         for (var existing = 0; existing <= 80; existing++)
         {
-            var cargo = new List<CargoLine> { new(HotDog, existing, false), new(Coffee, 1, false) };
+            var cargo = new List<CargoLine> { new(CoffeeMachine, 1, false), new(Tea, existing * 2, false), new(Coffee, 1, false) };
             var before = CargoRules.FoodLoad(tables, cargo);
             var allowed = CargoRules.AllowedUnits(tables, "cart", cargo, Coffee, int.MaxValue, false);
-            if (before > 80)
+            if (before > 40)
             {
                 Assert.Equal(0, allowed);
                 continue;
             }
             cargo.Add(new CargoLine(Coffee, allowed, false));
-            Assert.True(CargoRules.FoodLoad(tables, cargo) <= 80);
+            Assert.True(CargoRules.FoodLoad(tables, cargo) <= 40);
             if (allowed < int.MaxValue)
-                Assert.True(before + (allowed + 1.0) * weight > 80 || before == 80);
+                Assert.True(before + (allowed + 1.0) * weight > 40 || before == 40);
         }
     }
 
@@ -89,7 +97,7 @@ public class CargoRulesTests
     [Fact]
     public void FoodUnitsSaturatesRatherThanOverflowing()
     {
-        var cargo = new[] { new CargoLine(HotDog, int.MaxValue, false), new CargoLine(HotDog, 1, false) };
+        var cargo = new[] { new CargoLine(Grill, 1, false), new CargoLine(HotDog, int.MaxValue, false), new CargoLine(HotDog, 1, false) };
 
         Assert.Equal(int.MaxValue, CargoRules.FoodUnits(ShippedData.Tables, cargo));
         Assert.Equal(0, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, HotDog, 500, false));
@@ -112,20 +120,21 @@ public class CargoRulesTests
 
     [Theory]
     [InlineData("cart", 0, 10, 10)]
-    [InlineData("cart", 60, 10, 10)]
-    [InlineData("cart", 60, 500, 20)]
-    [InlineData("cart", 80, 500, 0)]
+    [InlineData("cart", 30, 10, 10)]
+    [InlineData("cart", 30, 500, 10)]
+    [InlineData("cart", 40, 500, 0)]
     [InlineData("cart", 100, 500, 0)]
-    [InlineData("truck", 60, 500, 100)]
-    [InlineData("cart", -5, 500, 80)]
+    [InlineData("truck", 60, 500, 20)]
+    [InlineData("cart", -5, 500, 40)]
     [InlineData("unknown", 80, 500, 500)]
     [InlineData(null, 80, 500, 500)]
-    public void FoodLoadsOnlyWhatFits(string? vehicle, int stock, int incoming, int allowed)
+    public void FoodLoadsOnlyWhatFitsItsPiece(string? vehicle, int stock, int incoming, int allowed)
     {
+        // Water belongs to the cooler; hot dogs in the grill and nested stock don't take its room.
         var cargo = new[]
         {
-            new CargoLine(HotDog, stock, false), new CargoLine(Grill, 2, false),
-            new CargoLine(HotDog, 500, true), new CargoLine("ba:itemname_box", 80, false)
+            new CargoLine("ba:itemname_water", stock, false), new CargoLine(Fridge, 1, false), new CargoLine(HotDog, 30, false),
+            new CargoLine(Grill, 1, false), new CargoLine("ba:itemname_water", 500, true), new CargoLine("ba:itemname_box", 80, false)
         };
 
         Assert.Equal(allowed, CargoRules.AllowedUnits(ShippedData.Tables, vehicle, cargo,
@@ -229,7 +238,8 @@ public class CargoRulesTests
         IEnumerable<CargoLine> Cargo()
         {
             Assert.Equal(1, ++enumerations);
-            yield return new CargoLine(HotDog, 60, false);
+            yield return new CargoLine(Grill, 1, false);
+            yield return new CargoLine(HotDog, 20, false);
         }
 
         Assert.Equal(20, CargoRules.AllowedUnits(ShippedData.Tables, "cart", Cargo(), HotDog, 500, false));
