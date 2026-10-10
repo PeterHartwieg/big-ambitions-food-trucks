@@ -27,8 +27,9 @@ namespace FoodTrucks.Core.Selling
         // Whole items of each of the pool's foods in the cargo, foods with none left out.
         public IReadOnlyDictionary<string, int> Units { get; }
         public double Room => Math.Max(0, Capacity - Load);
-        // Whole weighted units for display: the load rounded up, as CargoRules.FoodUnits does.
-        public int LoadUnits => (int)Math.Min(int.MaxValue, Math.Ceiling(Load));
+        // Whole weighted units for display, rounded down: a piece reads full ("40/40") only when nothing more fits,
+        // so a coffee machine with 159 cups (39.75 units) reads 39/40.
+        public int LoadUnits => (int)Math.Min(int.MaxValue, Math.Floor(Load + 1e-9));
     }
 
     // A vehicle's storage as its cargo stands: one pool per kind of fitted food piece, in fitting order.
@@ -236,6 +237,30 @@ namespace FoodTrucks.Core.Selling
                     if (food.Planned > 0) load[food.Item] = food.Planned;
             }
             return new RestockPlan(load, notHeld);
+        }
+
+        // The spare pieces a restock fits from the stock on offer: an Extra Storage first, only into a vehicle that has
+        // none (one at most), then the others in item order, each as far as the slots take it. Nothing is planned that Check would
+        // refuse, so a restock never shows a refusal for a piece it chose not to fit.
+        public static IReadOnlyDictionary<string, int> FitPieces(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo,
+            IReadOnlyDictionary<string, int> available)
+        {
+            if (tables == null) throw new ArgumentNullException(nameof(tables));
+            if (cargo == null) throw new ArgumentNullException(nameof(cargo));
+            if (available == null) throw new ArgumentNullException(nameof(available));
+            var fit = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (tables.Vehicle(vehicleType) == null) return fit;
+            var lines = cargo.ToList();
+            foreach (var pair in available.OrderBy(p => tables.EquipmentForGameItem(p.Key)?.IsStorage == true ? 0 : 1)
+                         .ThenBy(p => p.Key, StringComparer.Ordinal))
+            {
+                if (pair.Value <= 0 || tables.EquipmentForGameItem(pair.Key) == null) continue;
+                var allowed = Check(tables, vehicleType, lines, pair.Key, pair.Value, false).Allowed;
+                if (allowed <= 0) continue;
+                fit[pair.Key] = allowed;
+                lines.Add(new CargoLine(pair.Key, allowed, false));
+            }
+            return fit;
         }
 
         // Whole food items of each demand category the vehicle can hold, from the pieces fitted now: each pool's

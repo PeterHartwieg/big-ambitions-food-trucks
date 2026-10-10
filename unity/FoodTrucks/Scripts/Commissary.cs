@@ -566,7 +566,7 @@ namespace FoodTrucks
         }
 
         // Loads the commissary's stock into the vehicle (storage per piece; plan, "Storage per piece"). Equipment first,
-        // oldest first, as far as the slots take it (CargoLimit), so a piece fitted here already holds food. Then Core's
+        // the spare pieces that fit (an Extra Storage only if the vehicle has none), so a piece fitted here already holds food. Then Core's
         // Storage.Restock plans the food: each fitted piece is filled from its foods, a shared piece split evenly by
         // weight and topped up from the other food. Foods with no fitted piece stay here, and the message says so.
         // Whatever doesn't go in goes back to the commissary's stock in its place.
@@ -580,8 +580,9 @@ namespace FoodTrucks
 
             var loaded = new Dictionary<string, int>(StringComparer.Ordinal);
             var back = 0L;
-            var pieces = InStock(state, siteId).Where(p => tables.EquipmentForGameItem(p.Key) != null)
-                .ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+            // Only spare pieces that fit (Core's Storage.FitPieces): never a second Extra Storage, never past the slots,
+            // so a Restock shows no refusal for a piece it chose to leave here.
+            var pieces = Storage.FitPieces(tables, kind, CargoLimit.Lines(vehicle), InStock(state, siteId));
             if (pieces.Count > 0) back += Load(state, vehicle, siteId, pieces, loaded);
 
             var foods = InStock(state, siteId).Where(p => tables.EquipmentForGameItem(p.Key) == null)
@@ -597,7 +598,14 @@ namespace FoodTrucks
             Log.Info($"Commissary restock: {kind} {World.Short(vehicleId)} at {siteId} loaded {(loaded.Count == 0 ? "nothing" : string.Join(", ", loaded.Select(p => $"{p.Value} {p.Key}")))}; " +
                      $"no piece for {(plan.NotHeld.Count == 0 ? "none" : string.Join(", ", plan.NotHeld))}; {back} units refused by the cargo and kept; " +
                      $"{left} units left in stock; storage {(view == null ? "?" : StoragePanel.Summary(vehicle, view))}.");
-            var text = string.Join(", ", loaded.Select(p => $"{p.Value} {LocalizorManager.GetLocalization(p.Key, null)}"));
+            // Fitted pieces are named first ("fitted Griddle"), then the foods with their counts.
+            var fitted = loaded.Where(p => tables.EquipmentForGameItem(p.Key) != null)
+                .Select(p => (p.Value > 1 ? p.Value + " " : "") + LocalizorManager.GetLocalization(p.Key, null)).ToList();
+            var foodText = string.Join(", ", loaded.Where(p => tables.EquipmentForGameItem(p.Key) == null)
+                .Select(p => $"{p.Value} {LocalizorManager.GetLocalization(p.Key, null)}"));
+            var text = fitted.Count == 0 ? foodText
+                : LocalizorManager.GetLocalization("foodtrucks:commissary_restock_fitted", null).Replace("{pieces}", string.Join(", ", fitted))
+                  + (foodText.Length > 0 ? "; " + foodText : "");
             var notHeld = string.Join(", ", plan.NotHeld.Select(i => LocalizorManager.GetLocalization(i, null)));
             if (loaded.Count == 0 && plan.NotHeld.Count == 0)
                 CartSelling.Say("foodtrucks:notification_commissary_restock_full", kind, ("left", left.ToString()));

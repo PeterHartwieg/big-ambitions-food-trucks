@@ -330,6 +330,7 @@
     "foodtrucks:notification_commissary_moved": "The {vehicle}'s space moved from {from} to {commissary}.",
     "foodtrucks:notification_commissary_released": "The {vehicle} gave up its space at {commissary}.",
     "foodtrucks:notification_commissary_restocked": "Loaded into the {vehicle}: {loaded}. {left} items left in stock here.",
+    "foodtrucks:commissary_restock_fitted": "fitted {pieces}",
     "foodtrucks:notification_commissary_restock_full": "Nothing more fits in the {vehicle}. {left} items stay in stock here.",
     "foodtrucks:notification_commissary_restocked_notheld": "Loaded into the {vehicle}: {loaded}. Nothing on it holds {notheld}, so that stays here. {left} items left in stock here.",
     "foodtrucks:notification_commissary_restock_notheld": "Nothing on the {vehicle} holds {notheld}: fit its equipment first. {left} items stay in stock here.",

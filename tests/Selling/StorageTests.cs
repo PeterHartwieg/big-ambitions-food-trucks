@@ -241,6 +241,36 @@ public class StorageTests
     }
 
     [Fact]
+    public void LoadUnitsRoundDownSoAPieceReadsFullOnlyWhenFull()
+    {
+        const string Coffee = "ba:itemname_cupofcoffee";
+        const string Machine = "ba:itemname_industrialcoffeemachine";
+        var almost = Assert.Single(Core.Selling.Storage.Of(Tables, "cart", new[] { L(Machine, 1), L(Coffee, 159) })!.Pools);
+        Assert.Equal(39, almost.LoadUnits);
+        Assert.Equal(1, Core.Selling.Storage.Check(Tables, "cart", new[] { L(Machine, 1), L(Coffee, 159) }, Coffee, 5, false).Allowed);
+        Assert.Equal(40, Assert.Single(Core.Selling.Storage.Of(Tables, "cart", new[] { L(Machine, 1), L(Coffee, 160) })!.Pools).LoadUnits);
+    }
+
+    [Fact]
+    public void RestockFitsOnlyThePiecesThatGoIn()
+    {
+        const string Griddle = "foodtrucks:itemname_griddle";
+        var stock = new Dictionary<string, int> { [Storage] = 2, [Griddle] = 3, [Grill] = 1, [HotDog] = 500 };
+
+        // A truck with a hot dog grill and a cabinet: no second cabinet, the griddle and grill fill the two free slots.
+        var truck = Core.Selling.Storage.FitPieces(Tables, "truck", new[] { L(HotDogGrill, 1), L(Storage, 1) }, stock);
+        Assert.Equal(new Dictionary<string, int> { [Griddle] = 1, [Grill] = 1 }, truck);
+
+        // A bare truck: one cabinet first, then the slots left in item order (grill, then two griddles).
+        var bare = Core.Selling.Storage.FitPieces(Tables, "truck", Array.Empty<CargoLine>(), stock);
+        Assert.Equal(new Dictionary<string, int> { [Storage] = 1, [Grill] = 1, [Griddle] = 2 }, bare);
+
+        // A full cart takes nothing, food is never a piece, an unknown vehicle takes nothing.
+        Assert.Empty(Core.Selling.Storage.FitPieces(Tables, "cart", new[] { L(HotDogGrill, 1), L(Storage, 1) }, stock));
+        Assert.Empty(Core.Selling.Storage.FitPieces(Tables, "boat", Array.Empty<CargoLine>(), stock));
+    }
+
+    [Fact]
     public void CategoryCapacityCountsWholeItemsPerCategory()
     {
         // Hot dog grill, grill and griddle are all fast food (the grill's kabobs are street meals); the cooler is cold drinks.

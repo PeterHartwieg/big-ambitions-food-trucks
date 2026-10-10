@@ -314,7 +314,7 @@ namespace FoodTrucks
                 foreach (var pool in storage.Pools)
                     rows.Add((StoragePanel.PieceName(instance, pool.Piece),
                         Format("foodtrucks:bizman_fleet_storage_units", ("load", pool.LoadUnits.ToString()), ("capacity", pool.Capacity.ToString())),
-                        "", pool.LoadUnits >= pool.Capacity));
+                        "", false));
                 if (storage.StoragePieces > 0)
                     rows.Add((Text("foodtrucks:bizman_fleet_storage_extra"), Text("foodtrucks:bizman_fleet_storage_doubles"), "", false));
             }
