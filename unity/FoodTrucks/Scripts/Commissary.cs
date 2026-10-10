@@ -601,13 +601,16 @@ namespace FoodTrucks
             // Fitted pieces are named first ("fitted Griddle"), then the foods with their counts.
             var fitted = loaded.Where(p => tables.EquipmentForGameItem(p.Key) != null)
                 .Select(p => (p.Value > 1 ? p.Value + " " : "") + LocalizorManager.GetLocalization(p.Key, null)).ToList();
-            var foodText = string.Join(", ", loaded.Where(p => tables.EquipmentForGameItem(p.Key) == null)
-                .Select(p => $"{p.Value} {LocalizorManager.GetLocalization(p.Key, null)}"));
+            var foodText = string.Join(", ", FoodParts(tables, vehicle, view, loaded, rest));
             var text = fitted.Count == 0 ? foodText
                 : LocalizorManager.GetLocalization("foodtrucks:commissary_restock_fitted", null).Replace("{pieces}", string.Join(", ", fitted))
                   + (foodText.Length > 0 ? "; " + foodText : "");
             var notHeld = string.Join(", ", plan.NotHeld.Select(i => LocalizorManager.GetLocalization(i, null)));
-            if (loaded.Count == 0 && plan.NotHeld.Count == 0)
+            // Nothing loaded because the pieces are full: which ones, "the Hotdog Grill holds 80".
+            var full = view == null ? new List<string>() : view.Pools.Where(p => Capped(tables, p, rest)).Select(p => CapNote(vehicle, p).Trim('(', ')')).ToList();
+            if (loaded.Count == 0 && plan.NotHeld.Count == 0 && full.Count > 0)
+                CartSelling.Say("foodtrucks:notification_commissary_restock_full_why", kind, ("why", string.Join("; ", full)), ("left", left.ToString()));
+            else if (loaded.Count == 0 && plan.NotHeld.Count == 0)
                 CartSelling.Say("foodtrucks:notification_commissary_restock_full", kind, ("left", left.ToString()));
             else if (loaded.Count == 0)
                 CartSelling.Say("foodtrucks:notification_commissary_restock_notheld", kind, ("notheld", notHeld), ("left", left.ToString()));
@@ -615,6 +618,40 @@ namespace FoodTrucks
                 CartSelling.Say("foodtrucks:notification_commissary_restocked", kind, ("loaded", text), ("left", left.ToString()));
             else
                 CartSelling.Say("foodtrucks:notification_commissary_restocked_notheld", kind, ("loaded", text), ("notheld", notHeld), ("left", left.ToString()));
+        }
+
+        // The foods loaded, "80 Hotdog (the Hotdog Grill holds 80)": a food whose piece is now full while more of its
+        // foods stay in stock says why the load stopped there; for a shared piece the note follows the last of its foods.
+        private static List<string> FoodParts(FoodTrucks.Core.Demand.DemandTables tables, VehicleInstance vehicle, StorageView? view,
+            Dictionary<string, int> loaded, List<CommissaryStockLine>? stock)
+        {
+            var foods = loaded.Where(p => tables.EquipmentForGameItem(p.Key) == null).ToList();
+            var parts = new List<string>();
+            for (var i = 0; i < foods.Count; i++)
+            {
+                var text = $"{foods[i].Value} {LocalizorManager.GetLocalization(foods[i].Key, null)}";
+                var pool = view?.PoolFor(tables, foods[i].Key);
+                var lastOfPool = pool != null && !foods.Skip(i + 1).Any(f => view!.PoolFor(tables, f.Key)?.EquipmentId == pool.EquipmentId);
+                if (pool != null && lastOfPool && Capped(tables, pool, stock)) text += " " + CapNote(vehicle, pool);
+                parts.Add(text);
+            }
+            return parts;
+        }
+
+        // "(the Hotdog Grill holds 80)", or "(2 Hotdog Grills hold 160)".
+        private static string CapNote(VehicleInstance vehicle, StoragePool pool) =>
+            LocalizorManager.GetLocalization(pool.Pieces > 1 ? "foodtrucks:commissary_restock_capped_many" : "foodtrucks:commissary_restock_capped", null)
+                .Replace("{piece}", StoragePanel.PieceName(vehicle, pool.Piece)).Replace("{count}", pool.Pieces.ToString())
+                .Replace("{capacity}", pool.Capacity.ToString());
+
+        // A piece is full for its foods still in stock here: not even one more of the lightest of them fits.
+        private static bool Capped(FoodTrucks.Core.Demand.DemandTables tables, StoragePool pool, List<CommissaryStockLine>? stock)
+        {
+            if (stock == null) return false;
+            var waiting = pool.Piece.Products.Where(p => stock.Any(l => l.ItemName == p && l.Units > 0)).ToList();
+            if (waiting.Count == 0) return false;
+            var lightest = waiting.Min(p => tables.Product(p)?.StockWeight ?? 1.0);
+            return pool.Room + 1e-9 < lightest;
         }
 
         // What this commissary holds of each item.
