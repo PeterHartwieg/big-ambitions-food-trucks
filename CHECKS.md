@@ -1,6 +1,38 @@
+# Hatch side and debug keys (0.9.6)
+
+Build `0.9.6`: 0.9.5 plus two playtest fixes. "Open here" on a truck now checks that the hatch faces the pavement: it reads the traffic system's driving lanes beside the truck, so a hatch to the road is refused even though the NavMesh lets people walk on the street. A crew's route parks a truck that stands the wrong way at a stop again, turned round. The debug keys moved off F4 to F10 and F12 (Camera Tools' Hide UI, the game's `-console` keys, quick save and menu) onto letters: **Ctrl+K** truck, **Ctrl+Alt+K** licence and permits, **Ctrl+J** cart, **Ctrl+Alt+J** hand truck, **Ctrl+U** new items, **Ctrl+Alt+U** hire, **Ctrl+L** status, **Ctrl+Alt+L** demand here, **Ctrl+G** grip, **Ctrl+Alt+G** zone point, **Ctrl+V** city event, **Ctrl+Alt+V** catering gig, **Ctrl+X** tax statement, **Ctrl+Alt+X** tax fixture, **Ctrl+F3** / **Ctrl+Alt+F3** / **Ctrl+Shift+F3** commissary bays, deliveries and overnight check, **Ctrl+Shift+F11** twice for the uninstall step. Fresh **FT** save, other gameplay mods off; Camera Tools may stay on for rows 8 and 9.
+
+## 1. Automated (me)
+
+- [ ] `dotnet test` passes; `tools/build-mod.sh` builds; installed after the mod was parked for any recording.
+- [ ] After the session: the log lines in section 3.
+
+## 2. In game (about 20 minutes)
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Ctrl+K truck, Ctrl+Alt+K, fit a grill, load hot dogs. Park in a parking space at the kerb with the hatch (right side) to the pavement, close to the kerb. "Open here" | It opens as before; the line forms on the pavement by the hatch |
+| 2 | Same street, park with the hatch to the pavement but well away from the kerb (as far out as the space lets you), or at a slant. "Open here" | It still opens. If it's refused, tell me how far from the kerb the truck stood |
+| 3 | Drive off, turn round and park in a space with the hatch to the road (pavement on the driver's side). "Open here" | Refused: "The hatch faces the road. Park with the serving side to the pavement." You stay in the driver's seat; nothing opens |
+| 4 | Try row 3 on a one-way street with parking on the left, and on a wide avenue | Same refusal with the hatch to the road; opens with the hatch to the pavement |
+| 5 | If you find parking in the middle of a street (a median), park there and "Open here" | Either "There's only road by the hatch…" or it opens. Tell me which, and whether the line ends up on the road |
+| 6 | Open properly (row 1) and watch the people walking up | They come along the pavement, not down the street, and stand on the hatch side |
+| 7 | Put a worker on the truck (Ctrl+Alt+U), add a stop where it stands (hatch to the pavement), with hours starting soon. Then park it at the same stop with the hatch to the road, walk more than 15 m away and wait an in-game hour | The crew moves the truck and opens at a space nearby with the hatch to the pavement; no "The crew can't open" message |
+| 8 | Press each debug key from the list above once, Camera Tools on, the game started without `-console` | Each does its action, the UI stays visible, no quick save and no menu pops up |
+| 9 | Ctrl+Shift+F11 once in a save without Food Trucks vehicles | The "Press again within 10 seconds" question; nothing else |
+
+## 3. Log lines (me)
+
+- `Debug actions ready: Ctrl+K food truck, Ctrl+Alt+K licence and permits, …, Ctrl+Shift+F11 uninstall step.`
+- One `Pitch: truck <id> at (…), heading …: parking Legal; hatch <verdict>: hatch side pavement … m, road … m; other side pavement … m, road … m; N lane segments near; first pavement +0.xx m on the hatch side, … on the other; may open|refused.` per "Open here". Row 1: `Pavement` with the hatch side's pavement at about 1.5 to 3 m and no road before it. Row 3: `WrongWay`, road at 1.5 to 2.5 m on the hatch side. If any row reads `traffic system not running` or `no traffic lanes within 25 m`, the check fell back to the NavMesh alone: tell me where.
+- The first-pavement heights say whether the game's kerbs are raised (a positive few centimetres) or flat; for a later, second signal.
+- `Route: truck <id> at … stands with its hatch to the road for stop N (…); the crew parks it again …` once in row 7, then `Route: the space at … would put the hatch to the road (…); the truck takes it the other way round.` if the space it picks needs turning.
+- `Queue view: line at cart <id>: … places on the right side …` for the truck, as before.
+- No new Harmony patches; the `Patch …: Active.` lines are unchanged.
+
 # Commissary checks (0.9.4)
 
-Build `0.9.4`: 0.9.3 plus the commissary and the new items. Five commissary garages (`data/commissaries.json`): rent a space per vehicle at the bay, order stock by phone, delivery at 08:00 the next day, Restock at the bay, daily rent, and a $250 fine from the City for a food vehicle out of its bay at 04:00. The bay positions are guesses from the map outlines and are the main thing to check. Fresh **FT** save, other gameplay mods off. New debug keys (holding Ctrl and Alt): **F6** where every bay is from you, **F7** deliver paid orders now, **F8** what the 04:00 check would say now (no fines). Console: `foodtrucks_commissary_where`, `foodtrucks_commissary_deliver`, `foodtrucks_commissary_night`.
+Build `0.9.4`: 0.9.3 plus the commissary and the new items. Five commissary garages (`data/commissaries.json`): rent a space per vehicle at the bay, order stock by phone, delivery at 08:00 the next day, Restock at the bay, daily rent, and a $250 fine from the City for a food vehicle out of its bay at 04:00. The bay positions are guesses from the map outlines and are the main thing to check. Fresh **FT** save, other gameplay mods off. Debug keys (as of 0.9.6): **Ctrl+F3** where every bay is from you, **Ctrl+Alt+F3** deliver paid orders now, **Ctrl+Shift+F3** what the 04:00 check would say now (no fines). Console: `foodtrucks_commissary_where`, `foodtrucks_commissary_deliver`, `foodtrucks_commissary_night`.
 
 ## 1. Automated (me)
 
@@ -13,18 +45,18 @@ Build `0.9.4`: 0.9.3 plus the commissary and the new items. Five commissary gara
 |---|---|---|
 | 1 | Load a save from an earlier build that has a food vehicle, after 04:00 | A City of New York text about the new overnight rule, and no fine for the night that passed before this build |
 | 2 | City map, Street food line, "Commissaries" | Five buildings lit in purple: Industry City, Garment District, Hell's Kitchen's edge, Lower Manhattan, Murray Hill. Do they look like garages a food vendor would use? Name any that don't |
-| 3 | Ctrl+F6 truck, Ctrl+Shift+F6, drive to the nearest lit commissary and park at the kerb by its door. Ctrl+Alt+F6 | A new contact ("… Commissary") with a welcome text. The notice says "in the bay". If not, the distance tells me how far off the bay is: Ctrl+F8 where a vehicle could legally park, and I put that point in the data |
+| 3 | Ctrl+K truck, Ctrl+Alt+K, drive to the nearest lit commissary and park at the kerb by its door. Ctrl+F3 | A new contact ("… Commissary") with a welcome text. The notice says "in the bay". If not, the distance tells me how far off the bay is: Ctrl+Alt+G where a vehicle could legally park, and I put that point in the data |
 | 4 | In the truck at the bay, press "Commissary" on the panel | The button shows only in the bay. The list offers "Rent a space at …: $1,250.00 a month". Rent it: a message, and a rent transaction of about $41 today |
 | 5 | Call the commissary's contact, press "Order stock" | The call ends with "Pick what you need", the phone closes and a list opens over the city: every food and machine with its box price and what is in stock. Pick hot dogs, then 3 boxes (the list shows goods + delivery = total), then confirm. A text confirms the order for 08:00 tomorrow and the money goes. Does the call come back cleanly on the phone afterwards? If the list doesn't open, or opens behind something, say so: the same lists are on the Commissary button at the bay ("Order stock for delivery to …") |
 | 5b | At the bay, Commissary, "Order stock for delivery to …"; order a hot dog grill | The same three lists, from the panel |
-| 6 | Ctrl+Alt+F7 (or sleep to after 08:00) | A text per order: "Your delivery is in" |
+| 6 | Ctrl+Alt+F3 (or sleep to after 08:00) | A text per order: "Your delivery is in" |
 | 7 | At the bay, "Commissary", "Restock" | The grill and the food go into the truck's cargo (the item panel counts them). A box bigger than the stock limit loads in part and the rest stays ("… items left in stock here") |
 | 8 | Leave the truck in the bay, push a cart elsewhere and walk away; sleep past 04:00 | The truck isn't fined; the cart is: a City text "Your Food cart wasn't in a commissary bay at 04:00", and a fine transaction of $250 |
-| 8b | If the save rents or owns a building: leave a cart at its door (within 15 m), and a truck inside a warehouse you rent, if you have one; sleep past 04:00 | Neither is fined (Ctrl+Alt+F8 before 04:00 says "at your own building") |
+| 8b | If the save rents or owns a building: leave a cart at its door (within 15 m), and a truck inside a warehouse you rent, if you have one; sleep past 04:00 | Neither is fined (Ctrl+Shift+F3 before 04:00 says "at your own building") |
 | 9 | Next day, Econoview's income statement | Under the truck: "Commissary rent"; under the cart: "Overnight fines"; in the Street food group: "Delivery fees". The statement's Total still equals the day summary's profit |
 | 10 | Rent a space for the cart at a second commissary, then move the truck's space there from the panel at that bay; give one up | Messages for each; the rent keeps coming daily for the spaces left |
-| 11 | With stock left at a commissary, run the uninstall step (Ctrl+Shift+F12 twice) | "Commissary stock and open orders paid back: $…", the commissary contacts are gone. Drive past a commissary afterwards: no contact or welcome text comes back. Econoview's tax page: the commissary deduction is lower by the refund |
-| 11b | In a save with no Food Trucks vehicles, press Ctrl+Shift+F12 once | A question first ("… Press again within 10 seconds"); nothing happens until the second press |
+| 11 | With stock left at a commissary, run the uninstall step (Ctrl+Shift+F11 twice) | "Commissary stock and open orders paid back: $…", the commissary contacts are gone. Drive past a commissary afterwards: no contact or welcome text comes back. Econoview's tax page: the commissary deduction is lower by the refund |
+| 11b | In a save with no Food Trucks vehicles, press Ctrl+Shift+F11 once | A question first ("… Press again within 10 seconds"); nothing happens until the second press |
 | 12 | If you have a business: buy a new machine (griddle, say) at a commissary, restock it into the cart, push the cart into your business and try to place the machine | No "Place" button for it: the machines are street food only. It stays in the cart's cargo. Tell me if the game places it anyway |
 | 13 | Give a truck a route whose last stop runs past 04:00, with little stock, and sleep through | If it sells out and closes before 04:00, it is fined like any vehicle out; if still open at 04:00, it isn't |
 
@@ -42,7 +74,7 @@ Build `0.9.4`: 0.9.3 plus the commissary and the new items. Five commissary gara
 
 # Playtest fixes and truck equipment (0.9.3)
 
-Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, crew serving a window the player opened, the cart's final model with its equipment on the counter and parked cars kept off it, the player inside the truck at the hatch, and the Street food fleet page in BizMan. New in 0.9.3: popcorn, cotton candy, slushies and kabobs (the game's own items, on its concessions case, slushi machine and industrial grill; the grill and fryer are now separate pieces), fitted equipment on show in the truck, and a taller truck: the roof is 0.20 m higher and the serving window sits 0.60 m higher, so the player and crew stand on the truck's floor with their faces in the window. Also new: the mod's own items, dumplings, tacos, chopped cheese and grilled corn and the dumpling steamer, griddle and corn grill (rows 46 to 50); nothing sells or buys them yet, so **Ctrl+F5** puts a set into the food vehicle next to you. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
+Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety course at the business school, the queue in arrival order with the money at the end of the wait, the street food breakdown in Econoview, crew serving a window the player opened, the cart's final model with its equipment on the counter and parked cars kept off it, the player inside the truck at the hatch, and the Street food fleet page in BizMan. New in 0.9.3: popcorn, cotton candy, slushies and kabobs (the game's own items, on its concessions case, slushi machine and industrial grill; the grill and fryer are now separate pieces), fitted equipment on show in the truck, and a taller truck: the roof is 0.20 m higher and the serving window sits 0.60 m higher, so the player and crew stand on the truck's floor with their faces in the window. Also new: the mod's own items, dumplings, tacos, chopped cheese and grilled corn and the dumpling steamer, griddle and corn grill (rows 46 to 50); nothing sells or buys them yet, so **Ctrl+U** puts a set into the food vehicle next to you. Fresh **FT** save, other gameplay mods off. The Milestone 7 list below still applies.
 
 ## 1. Automated (me)
 
@@ -63,14 +95,14 @@ Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety cour
 | 8 | Watch a few sales | Each customer waits at the window for the order. The money and the sale message come as they walk away, not as they step up |
 | 9 | After a day with sales, open Econoview's income statement | "Street food" is a group. It opens into one row per vehicle (and "Vendor licence" or "Event places" if you paid for them); a vehicle opens into Sales, Stock sold, Crew wages and so on |
 | 10 | Same day, with a hired crew or paid parking | "Unassigned staff wages" and "Parking fees" are lower by the vehicles' share, which shows under each vehicle instead. The statement's Total equals the day summary's profit for that day |
-| 11 | Put a worker on the truck with no route (Ctrl+Shift+F9 hires one), open it yourself and walk away | The open message says "<name> serves at the window". The worker stands behind the hatch and customers are served; no "Nobody's at the truck's window" |
+| 11 | Put a worker on the truck with no route (Ctrl+Alt+U hires one), open it yourself and walk away | The open message says "<name> serves at the window". The worker stands behind the hatch and customers are served; no "Nobody's at the truck's window" |
 | 12 | Leave it open over a full hour and past midnight, then check the next morning's transactions and Econoview | An unassigned wage for the worker covering the hours the window was open (one hour for each hour the window was open at some minute before half past it; none for an hour it sold out or closed before). The 23:00 hour is in the closing day's wage, not the next day's. In Econoview it is under the truck's Crew wages |
 | 13 | Give the worker a route, open the truck yourself during a stop's hours and keep it open past the stop's end | The route leaves the truck where you opened it; the worker keeps serving. The day's wage counts each hour once, not twice for the overlap |
 | 14 | Open the truck with the worker off sick, or with no crew | "Nobody's at the truck's window" once you walk away, as before |
 | 15 | Put three workers on the truck (staff 3), one weaker than you at customer service, with no route (or outside its hours); open it and stand at the window from before an hour until after half past it (say 9:50 to 10:40), then walk away | While you stand there the weakest worker waits inside the truck and the others are at the hatch beside you; after you walk off all three are at the hatch. The log has no `paid for 10:00` line for the weakest worker, and one for each of the other two |
 | 16 | Sleep through the night with the truck open and little stock | The wage the next morning stops at the hour the truck sold out, not at the hour you woke. Sleeping past midnight, the hours before midnight are in the closing day's wage |
 | 17 | With a worker serving a truck you opened (no route) since before 12:00, at 12:10 assign them to one of your shops (and, in another try, a warehouse as a delivery driver; or set them to be replaced by a headhunter; or fire them) | At once an unassigned wage for that worker in the transactions, covering today's hours on the truck including 12:00 (log: `Crew: <name> paid $… for N hours on leaving the crew's pay …`). Next day's Econoview: that wage under the truck's Crew wages. No second payment for the same hours at midnight |
-| 18 | Serve with a worker from 12:00, run the uninstall step (Ctrl+Shift+F12 twice) at about 12:20, keep playing to the next morning | The worker's wage includes 12:00 (log: `paid for 12:00` before the uninstall lines) |
+| 18 | Serve with a worker from 12:00, run the uninstall step (Ctrl+Shift+F11 twice) at about 12:20, keep playing to the next morning | The worker's wage includes 12:00 (log: `paid for 12:00` before the uninstall lines) |
 | 19 | Look at a cart standing on the street, from the side and from above | The new cart: grey box, red and orange umbrella, two spoked wheels. The texture is on (not plain white or pink). Both wheels touch the ground, the feet at the front too |
 | 20 | Grab the cart and push it around, forwards and back | Both hands on the push bar, not inside it or in the air. The wheels turn the right way as it rolls and stop when you stop. Hover and click on the cart still work; walking into it, you stop at the wheels |
 | 21 | Load stock into the cart (food and an industrial coffee machine) and look at the counter | No cardboard boxes anywhere on or around the cart; the item panel still counts the stock. The coffee machine stands on the front spot behind the umbrella pole, on the counter (not sunk in or floating), facing the cart's right side |
@@ -79,14 +111,14 @@ Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety cour
 | 24 | Fit a hot dog grill, then in turn a burger station, ice cream counter, pizza oven and display case | Each shows its compact model on the spot, close to the game's own item in look. Do they sit right and read from the street? |
 | 25 | Take the front piece out of the cargo, then save and load | The piece goes from the counter at once; the rear piece stays where it is. After loading, the fitted pieces are back on the counter, filling the spots in cargo order (a lone rear piece moves to the front then). If you can, leave the equipped cart on one floor of a multi-floor building and go to another floor: the pieces hide with the cart, none float |
 | 26 | Leave a cart in a parking lane by the road, walk more than 80 m away and wait for the next hour, or sleep a night; come back | No parked car stands on or in the cart. Nobody's car parks into it with auto-park either |
-| 27 | Ctrl+F6 truck, Ctrl+Shift+F6, fit a grill, load hot dogs. Park legally with the hatch to the pavement, "Open here" | You stand inside at the hatch, facing the pavement, not outside. A panel "At the serving hatch" with Step out [Esc], Close the window and Drive (no key shown on the last two; F and Enter do nothing). Can you see yourself through the open hatch, or does the roof hide you? Screenshot |
+| 27 | Ctrl+K truck, Ctrl+Alt+K, fit a grill, load hot dogs. Park legally with the hatch to the pavement, "Open here" | You stand inside at the hatch, facing the pavement, not outside. A panel "At the serving hatch" with Step out [Esc], Close the window and Drive (no key shown on the last two; F and Enter do nothing). Can you see yourself through the open hatch, or does the roof hide you? Screenshot |
 | 28 | Press WASD, click the pavement, scroll the camera | You don't move or slide through the truck. The camera turns as usual |
 | 29 | Wait for a few customers | They are served (sales come in) with you inside; the "Nobody's at the window" message doesn't show |
 | 30 | Press Escape | You step out behind the truck, on the pavement or the parking lane, not inside the body. The window stays open; walk 10 m away: it pauses; come back: it serves |
 | 31 | "Open here" again (drive a metre and park), then Drive in the panel | You step out by the driver's door and get in; the window closes as when driving off |
 | 32 | Open again, then Close the window | The usual closing message; you step out |
 | 33 | Open again, save from the menu while at the hatch, load that save | Saving works. After loading you stand outside behind the truck, the window still open and serving. Accepted: while you stand at the hatch the game counts the save as changed (its saved position is the step-out point), so its recovery autosave runs at every interval and quitting may ask about unsaved changes |
-| 34 | With a hire on shift at the truck (Ctrl+Shift+F9, put them on the truck with a stop here), open | The hire stands beside you at the hatch, not in your place, and inside the hatch's opening. With three hires, two stand either side of you and the third waits further back in the truck. Step out: they spread across the opening |
+| 34 | With a hire on shift at the truck (Ctrl+Alt+U, put them on the truck with a stop here), open | The hire stands beside you at the hatch, not in your place, and inside the hatch's opening. With three hires, two stand either side of you and the third waits further back in the truck. Step out: they spread across the opening |
 | 35 | Open, then sleep or skip time from the phone, if anything lets you | After the skip you stand outside by the truck |
 | 36 | Drive until your energy runs out (or run it down first), then park and "Open here" | The window opens, but you stay outside with "You're too tired to work the hatch." At the hatch, if energy runs out you step out with the same message, and the game's usual exhaustion follows |
 | 37 | With a cart or truck that sold something today, open BizMan | The business list ends with "Street food", "Food carts and trucks", the week's average profit and "N of M open". No cart or truck owned: no such line. Its location button is hidden and satisfaction reads "-" |
@@ -98,11 +130,11 @@ Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety cour
 | 43 | Open at the hatch, with a hire on shift; look from the pavement, then from the camera at the hatch | From the pavement: your and the hire's heads and shoulders fill the window, nobody stands inside the griddle, the worktop or an equipment piece. The taller truck looks right from the street (window at about eye height, the step from the cab to the higher box roof). At the hatch, the camera doesn't clip through the roof |
 | 44 | Buy a slushi machine and a concessions display case at Red Carpet Decor (6 Broadway Street), slushies, popcorn and cotton candy at a wholesaler; fit both on a cart in Hell's Kitchen or Midtown on a summer afternoon near a park or theatre, open | The cart sells all three; the counter shows the popcorn machine and the slushie machine. Do the prices and the pace feel right for snacks? |
 | 45 | Fit an industrial grill on a cart, load burgers and kabobs; then fit only a fryer with fries | With the grill, burgers and kabobs both sell; with the fryer alone, only fries. A cart that had the old burger station (grill and fryer) keeps selling all three |
-| 46 | Spawn a truck (Ctrl+F6), stand next to it and press **Ctrl+F5** | A message lists what went in: all three new machines (dumpling steamer, griddle, corn grill), then the foods until the truck's 160 units are full. Open the truck's item panel: each new item has its own picture, not a cardboard box, and its name. Do the pictures look like the game's own item icons (angle, light, size)? Screenshot |
+| 46 | Spawn a truck (Ctrl+K), stand next to it and press **Ctrl+U** | A message lists what went in: all three new machines (dumpling steamer, griddle, corn grill), then the foods until the truck's 160 units are full. Open the truck's item panel: each new item has its own picture, not a cardboard box, and its name. Do the pictures look like the game's own item icons (angle, light, size)? Screenshot |
 | 47 | Look into the truck through the hatch | Three of the new machines on show (hatch ends and back counter), each its compact model. Do they sit right? |
-| 48 | Ctrl+Shift+F6, park legally, open at a weekday lunch spot in Midtown or Lower Manhattan; watch half an hour | Dumplings, tacos and chopped cheese sell, at prices like the hot dog's. Do the pace and prices feel right? |
-| 49 | Spawn a cart (Ctrl+F7), push it, press Ctrl+F5; look at the counter; open at a park on a summer afternoon if you can | Two machines fit (the third is refused with the equipment-full warning), shown on the counter's spots facing the queue. Grilled corn or the griddle's food sells. Pick up a machine box from the cargo: is the box in your hands the game's usual cardboard box? |
-| 50 | With new items in a cart's cargo, run the uninstall step (Ctrl+Shift+F12 twice) | The refund includes the new items at their prices (machines $2,000 / $2,000 / $1,200, foods at wholesale per unit) |
+| 48 | Ctrl+Alt+K, park legally, open at a weekday lunch spot in Midtown or Lower Manhattan; watch half an hour | Dumplings, tacos and chopped cheese sell, at prices like the hot dog's. Do the pace and prices feel right? |
+| 49 | Spawn a cart (Ctrl+J), push it, press Ctrl+U; look at the counter; open at a park on a summer afternoon if you can | Two machines fit (the third is refused with the equipment-full warning), shown on the counter's spots facing the queue. Grilled corn or the griddle's food sells. Pick up a machine box from the cargo: is the box in your hands the game's usual cardboard box? |
+| 50 | With new items in a cart's cargo, run the uninstall step (Ctrl+Shift+F11 twice) | The refund includes the new items at their prices (machines $2,000 / $2,000 / $1,200, foods at wholesale per unit) |
 
 ## 3. Log lines (me)
 
@@ -126,7 +158,7 @@ Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety cour
 
 # Milestone 7 checks: catering and Bakery
 
-Build `0.9.0`. Catering gigs for trucks, offered by a new "Street Food Bookings" contact, and the Bakery mod's goods when that mod is installed. On top of 0.8.0 (its list is below). Fresh **FT** save, other gameplay mods off; the Bakery mod on for row 5 only. Debug: **Ctrl+F12** books a gig at the nearest place from in 30 minutes.
+Build `0.9.0`. Catering gigs for trucks, offered by a new "Street Food Bookings" contact, and the Bakery mod's goods when that mod is installed. On top of 0.8.0 (its list is below). Fresh **FT** save, other gameplay mods off; the Bakery mod on for row 5 only. Debug: **Ctrl+Alt+V** books a gig at the nearest place from in 30 minutes.
 
 ## 1. Automated (me)
 
@@ -137,7 +169,7 @@ Build `0.9.0`. Catering gigs for trucks, offered by a new "Street Food Bookings"
 
 | # | Do | Look for |
 |---|---|---|
-| 1 | Ctrl+F6 truck, Ctrl+Shift+F6, fit a grill, load 50 hot dogs. Ctrl+F12 near an office | "Debug: catering gig at …". Is "Street Food Bookings" in the contacts? |
+| 1 | Ctrl+K truck, Ctrl+Alt+K, fit a grill, load 50 hot dogs. Ctrl+Alt+V near an office | "Debug: catering gig at …". Is "Street Food Bookings" in the contacts? |
 | 2 | Drive to the building named, park in front within the half hour | "Catering: the truck serves the guests until …". Open the window too: it sells only the hot dogs beyond the gig's 40 |
 | 3 | Wait the hour by the truck (or sleep) | A text "Thanks for the catering … paid" and a catering transaction; 40 hot dogs fewer in the cargo |
 | 4 | Play or sleep a few in-game days with the truck having sold some food | Offer texts from Street Food Bookings. Call: take one. Does the dialog read well? |
@@ -151,7 +183,7 @@ Build `0.9.0`. Catering gigs for trucks, offered by a new "Street Food Bookings"
 
 # Milestone 6 checks: depth (second half)
 
-Build `0.8.0`. Premium spots, the city's events and partner deals with your own venues, on top of 0.7.0 (whose list is below and comes first if time is short). Fresh **FT** save, other gameplay mods off. Debug keys as before, plus **Ctrl+Shift+F11**: a city event at the nearest event place from now for three hours, with one place booked.
+Build `0.8.0`. Premium spots, the city's events and partner deals with your own venues, on top of 0.7.0 (whose list is below and comes first if time is short). Fresh **FT** save, other gameplay mods off. Debug keys as before, plus **Ctrl+V**: a city event at the nearest event place from now for three hours, with one place booked.
 
 ## 1. Automated (me)
 
@@ -165,7 +197,7 @@ Build `0.8.0`. Premium spots, the city's events and partner deals with your own 
 | 1 | Open the city map, Street food line, "Premium spots and events" | About 17 buildings lit in gold, two or three per neighbourhood. Do any look like silly places for a food cart? Name them and I drop them |
 | 2 | Push a cart to a lit building and open within about 40 m of its door | A second message names the spot ("Fifth Street office row: the cart has the spot …"). Open a second vehicle next to it: "your cart already has the spot" |
 | 3 | Wait or sleep a few days | A text from the City of New York about a weekend market or street festival. Call the city: "Event places", book one. Does the dialog read well? |
-| 4 | Ctrl+Shift+F11 near a lit event place, then open a cart within about 60 m | "The cart has its place at the …"; more customers than before. A second vehicle there is refused ("Your booked places at this event are taken by your other vehicles"); after an unbooked event (a real one you didn't book) the message is "The street is taken by a city event" |
+| 4 | Ctrl+V near a lit event place, then open a cart within about 60 m | "The cart has its place at the …"; more customers than before. A second vehicle there is refused ("Your booked places at this event are taken by your other vehicles"); after an unbooked event (a real one you didn't book) the message is "The street is taken by a city event" |
 | 5 | If the save owns a nightclub, theatre, cinema or office: park within 50 m, Hires | "Sign a street food partner deal with …". Sign it; open there in the evening |
 | 6 | Sleep to the next morning after the partner sold an hour outside a nightclub, theatre or cinema | The venue's facility satisfaction a few points up in BizMan (5 points; the log line gives before and after) |
 
@@ -208,7 +240,7 @@ Build `0.7.0`. Health grades, regulars, competition between your own vehicles, a
 
 Build `0.6.0`. The game's own employees can run a cart or truck: the "Hires" button on the vehicle's panel puts an unassigned employee on it and builds a route of stops with opening hours. The crew drives (or pushes) to each stop, opens, closes at the stop's time and moves on, and the game pays them at midnight. The player still restocks. 0.6.0 includes Milestone 4, which hasn't been played yet either: its list is below and can share the session.
 
-Use a fresh save whose name starts with **FT**, never the series save. Other gameplay mods off. Debug keys, holding Ctrl: **F6** free truck, **Shift+F6** free licence and permits, **F7** free cart, **Shift+F9** hire a customer service worker (skill 60).
+Use a fresh save whose name starts with **FT**, never the series save. Other gameplay mods off. Debug keys: **Ctrl+K** free truck, **Ctrl+Alt+K** free licence and permits, **Ctrl+J** free cart, **Ctrl+Alt+U** hire a customer service worker (skill 60).
 
 ## 1. Automated (me)
 
@@ -220,14 +252,14 @@ Use a fresh save whose name starts with **FT**, never the series save. Other gam
 
 | # | Do | Look for |
 |---|---|---|
-| 1 | Ctrl+F6 for a truck, Ctrl+Shift+F6, load a grill and hot dogs. Ctrl+Shift+F9 twice | Two new employees in My Employees, both "Unassigned". Is there an "unassigned employee" task for each? |
+| 1 | Ctrl+K for a truck, Ctrl+Alt+K, load a grill and hot dogs. Ctrl+Alt+U twice | Two new employees in My Employees, both "Unassigned". Is there an "unassigned employee" task for each? |
 | 2 | Sit in the truck, press Hires | The list shows both employees with skill, satisfaction and wage. Put one on the truck. Does their "unassigned" task go away? |
 | 3 | Stop in a legal parking space at a lunch spot. Hires, "Add this spot to the route", open 11:00, close 14:00. Drive about 500 m to another legal space, add a second stop 15:00 to 18:00 | Do the hour lists read well? The messages say "Stop added" with the hours |
 | 4 | Drive to a third place, step out and walk 30 m away. Wait (or sleep) until about 10:30 (at least an in-game hour after you last drove it: the crew leaves a vehicle the player has just used where it is) | Before 11:00 the truck disappears ("sets off … arriving about 11:00"), then appears in a parking space near stop 1 with its hatch to the pavement, and the crew opens it. Did it land in a sensible spot? |
 | 5 | Walk to stop 1 while it's open | The worker stands inside behind the hatch, dressed as an employee; customers queue and pay. Does the worker look right (height in the window, facing out)? |
 | 6 | Sleep through to the next morning | The truck sold through the afternoon at stop 2 (the summary message for each stop), then was off duty. Is there an unassigned wage for the employee in Econoview or the transactions, dated the day they worked? |
 | 6b | Next day during stop 1's hours: drive the truck (it closes as you take it) to a wholesaler, step out and go in to buy boxes | The truck waits outside while you shop, then you load it. Walk away: within about an in-game hour of your last drive the crew takes it back to stop 1 and opens |
-| 7 | If you have time: Ctrl+F7 for a cart, load it, put the second employee on it, add a stop where it stands with hours starting in a few minutes, then push it 30 m away and let go | The cart goes back to its stop (a few minutes' walk) and opens there with the worker standing behind it |
+| 7 | If you have time: Ctrl+J for a cart, load it, put the second employee on it, add a stop where it stands with hours starting in a few minutes, then push it 30 m away and let go | The cart goes back to its stop (a few minutes' walk) and opens there with the worker standing behind it |
 | 8 | If you have time: in My Employees, assign the truck's employee to one of your buildings (if the save has one) | The truck's crew loses them with a message, and the truck stops at the next stop |
 
 For the trailer: item 5 is the new shot, the crew at the hatch with a queue. Anything odd, write it down or note the in-game time.
@@ -242,13 +274,13 @@ For the trailer: item 5 is the new shot, the crew at the hatch with a queue. Any
 - Wages: the save's transactions show `ba:transaction_unassignedwage` for the crew at about the shift's hours times their wage.
 - No `Hire routes`, `Hires`, `Window crew` or `Crew` errors.
 
-Not checked this time, on purpose: a late stop past midnight (Core tests cover it), three crew in one truck, crew satisfaction over weeks (the route's hours feed the game's job demands; watch for "no task" complaints later), the uninstall step with a crew (run Ctrl+Shift+F12 at the end if you like and I check the log).
+Not checked this time, on purpose: a late stop past midnight (Core tests cover it), three crew in one truck, crew satisfaction over weeks (the route's hours feed the game's job demands; watch for "no task" complaints later), the uninstall step with a crew (run Ctrl+Shift+F11 at the end if you like and I check the log).
 
 # Still open: Milestone 4 checks (truck, licence and city systems)
 
 Build `0.5.0`. The food truck is in, with the final model: buy it at General US Trucks, drive it, stop in a parking space and open from the driving panel. Selling now needs a vendor licence and a permit for each vehicle, both bought by phone from the City of New York (the contact that sends parking tickets). The licence needs the Food Safety course. The city map has a "Street food" filter line. You look at how it looks and handles; I read the rest from `Player.log`.
 
-This build changes save data (licence, permits, vehicle types) and replaces the test truck, so use a fresh save. Don't reopen an older FT save that still has a Ctrl+F6 test truck: that vehicle type is gone, and a save with an unknown vehicle breaks. A save from 0.4.0 or earlier gets no help: its cart needs a licence and a permit like any other.
+This build changes save data (licence, permits, vehicle types) and replaces the test truck, so use a fresh save. Don't reopen an older FT save that still has a Ctrl+F6 test truck (from 0.4.0 or earlier): that vehicle type is gone, and a save with an unknown vehicle breaks. A save from 0.4.0 or earlier gets no help: its cart needs a licence and a permit like any other.
 
 ### 1. Automated (me)
 
@@ -258,13 +290,13 @@ This build changes save data (licence, permits, vehicle types) and replaces the 
 
 ### 2. In game (about 15 to 20 minutes, one launch)
 
-A new save whose name starts with **FT**, never the series save. Other gameplay mods off. Debug keys, holding Ctrl: **F6** free food truck, **Shift+F6** free licence and permits (skips the course), **F7** free food cart, **F9** demand here.
+A new save whose name starts with **FT**, never the series save. Other gameplay mods off. Debug keys: **Ctrl+K** free food truck, **Ctrl+Alt+K** free licence and permits (skips the course), **Ctrl+J** free food cart, **Ctrl+Alt+L** demand here.
 
 | # | Do | Look for |
 |---|---|---|
 | 1 | Without the course: phone the City of New York and try to buy a licence | Does the city show up in the contacts with a call button? The call offers a licence, and refuses it without the Food Safety course. Do the texts read well? |
-| 2 | Ctrl+F6 for a truck, then drive it a few blocks, park, reverse, take a corner fast | How does it look on the road (wheels on the ground, size, lights, mirrors) and how does it handle? Too floaty, too slow, tips over? |
-| 3 | Ctrl+Shift+F6, then load a grill and hot dogs into the truck (box in hand, click the truck). Stop in a parking space at a lunch spot and press Open here | You step out, the hatch on the right swings up, and people line up on the pavement beside the hatch, not in the road or behind the truck. Do they face the hatch? |
+| 2 | Ctrl+K for a truck, then drive it a few blocks, park, reverse, take a corner fast | How does it look on the road (wheels on the ground, size, lights, mirrors) and how does it handle? Too floaty, too slow, tips over? |
+| 3 | Ctrl+Alt+K, then load a grill and hot dogs into the truck (box in hand, click the truck). Stop in a parking space at a lunch spot and press Open here | You step out, the hatch on the right swings up, and people line up on the pavement beside the hatch, not in the road or behind the truck. Do they face the hatch? |
 | 4 | Stand at the hatch for a few minutes, then drive off | Sales come in as they reach the hatch. Driving off closes the hatch and the line walks away |
 | 5 | Try Open here while moving, in the road outside a parking space, and parked with the hatch towards the road (on the left side of a one-way street) | The truck refuses each time and says why |
 | 6 | Open the city map, turn on the Street food filters one by one | Offices, factories and warehouses, nightlife, theatres and cinemas light up; "Your food carts" puts a marker on each cart, green while open (trucks have the game's usual car marker; a cart bought or spawned this session also has the game's marker, always shown, and the filter only turns it green). Does any of it look wrong (homes lit as offices, say)? |
@@ -283,4 +315,4 @@ For the trailer: item 3 is the new shot. Anything off, write it down or note the
 - Parking: the day's `ba:transaction_publicparking` charge and any ticket for the truck show in the save's transactions (Econoview).
 - No `City of New York` or `City reminder` errors.
 
-Not checked this time, on purpose: delivery of a truck to a warehouse (refused, as for the cart), the licence reminder texts (they need 50 in-game days; Core tests cover the days), the uninstall step with a truck (same code path as the cart; run Ctrl+Shift+F12 at the end if you like and I check the log).
+Not checked this time, on purpose: delivery of a truck to a warehouse (refused, as for the cart), the licence reminder texts (they need 50 in-game days; Core tests cover the days), the uninstall step with a truck (same code path as the cart; run Ctrl+Shift+F11 at the end if you like and I check the log).

@@ -16,8 +16,11 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks
 {
-    // Debug and maintenance actions: Ctrl+F5 new items into the food vehicle here, Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement,
-    // Ctrl+F12 catering gig here, Ctrl+Shift+F12 uninstall step, Ctrl+Alt+F6 commissary bays, Ctrl+Alt+F7 commissary deliveries now, Ctrl+Alt+F8 overnight check dry run. Also console commands when the game runs with -console.
+    // Debug and maintenance actions, on the keys in the Keys table below, and console commands when the game runs
+    // with -console. The keys hold Ctrl and use letters the game doesn't bind (its bindings ignore modifiers, so
+    // Ctrl+M would open the map as well) and that sit in the same place on QWERTY and QWERTZ. No F4 or F6 to F10:
+    // the Camera Tools mod offers those for its Hide UI, and the game itself takes F7 (hide the HUD) and F8 (free
+    // camera) when it runs with -console. F1, F2, F5 and F12 are the game's help, bug report, quick save and menu.
     internal sealed class DebugActions : MonoBehaviour
     {
         private static readonly Action SpawnTruckAction = () => SpawnVehicle(FoodTrucksMod.TruckTypeName);
@@ -41,6 +44,35 @@ namespace FoodTrucks
         private static readonly Action CommissaryDeliverAction = () => Run("commissary deliveries", Commissary.DeliverForTesting);
         private static readonly Action CommissaryNightAction = () => Run("overnight check", Commissary.NightForTesting);
         // (The three above carry their own guard, as the console calls them directly.)
+
+        // Each key: Ctrl, Ctrl+Alt or Ctrl+Shift, matched exactly. Letters go with Ctrl and Ctrl+Alt only: other
+        // mods take Ctrl+Shift letters (a free camera's Ctrl+Shift+G, an objectives panel's Ctrl+Shift+J and K).
+        // The commissary's three are on F3, and the uninstall step on Ctrl+Shift+F11, out of the way; it still
+        // needs a second press.
+        private static readonly (Key Key, bool Shift, bool Alt, string Name, string Label, Action Action)[] Keys =
+        {
+            (Key.K, false, false, "spawn truck", "food truck", SpawnTruckAction),
+            (Key.K, false, true, "licence", "licence and permits", LicenceAction),
+            (Key.J, false, false, "spawn cart", "food cart", SpawnCartAction),
+            (Key.J, false, true, "spawn hand truck", "vanilla hand truck", SpawnHandTruckAction),
+            (Key.U, false, false, "new items", "new items into the food vehicle here", NewItemsAction),
+            (Key.U, false, true, "hire", "hire a worker", HireAction),
+            (Key.L, false, false, "status", "status", StatusAction),
+            (Key.L, false, true, "demand here", "demand here", DemandAction),
+            (Key.G, false, false, "grip", "grip log", GripAction),
+            (Key.G, false, true, "zone point", "zone point", ZonePointAction),
+            (Key.V, false, false, "event here", "city event here", EventAction),
+            (Key.V, false, true, "gig here", "catering gig here", GigAction),
+            (Key.X, false, false, "tax statement", "tax statement now", TaxStatementAction),
+            (Key.X, false, true, "tax fixture", "tax fixture", TaxFixtureAction),
+            (Key.F3, false, false, "commissary bays", "commissary bays", CommissaryWhereAction),
+            (Key.F3, false, true, "commissary deliveries", "commissary deliveries now", CommissaryDeliverAction),
+            (Key.F3, true, false, "overnight check", "overnight check dry run", CommissaryNightAction),
+            (Key.F11, true, false, "uninstall", "uninstall step", UninstallAction)
+        };
+
+        private static string KeyText((Key Key, bool Shift, bool Alt, string Name, string Label, Action Action) k) =>
+            $"Ctrl+{(k.Shift ? "Shift+" : "")}{(k.Alt ? "Alt+" : "")}{k.Key}";
 
         private void OnEnable()
         {
@@ -66,7 +98,7 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_commissary_night", "Food Trucks: what the 04:00 overnight check would say now, without fines", CommissaryNightAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: Ctrl+F5 new items into the food vehicle here, Ctrl+F6 food truck, Ctrl+Shift+F6 licence and permits, Ctrl+F7 food cart, Ctrl+Shift+F7 vanilla hand truck, Ctrl+F11 grip log, Ctrl+Shift+F11 city event here, Ctrl+F8 zone point, Ctrl+Shift+F8 tax fixture, Ctrl+F9 demand here, Ctrl+Shift+F9 hire a worker, Ctrl+F10 status, Ctrl+Shift+F10 tax statement now, Ctrl+F12 catering gig here, Ctrl+Shift+F12 uninstall step, Ctrl+Alt+F6 commissary bays, Ctrl+Alt+F7 commissary deliveries now, Ctrl+Alt+F8 overnight check dry run.");
+            Log.Info("Debug actions ready: " + string.Join(", ", Keys.Select(k => $"{KeyText(k)} {k.Label}")) + ".");
         }
 
         private void OnDisable()
@@ -100,29 +132,14 @@ namespace FoodTrucks
             var keyboard = Keyboard.current;
             if (keyboard == null || SaveGameManager.Current == null || GameManager.ShouldBlockKeyboardShortcuts()) return;
             if (!keyboard.ctrlKey.isPressed) return;
-            if (keyboard.altKey.isPressed)
+            var shift = keyboard.shiftKey.isPressed;
+            var alt = keyboard.altKey.isPressed;
+            foreach (var k in Keys)
             {
-                if (keyboard.f6Key.wasPressedThisFrame) Run("commissary bays", CommissaryWhereAction);
-                else if (keyboard.f7Key.wasPressedThisFrame) Run("commissary deliveries", CommissaryDeliverAction);
-                else if (keyboard.f8Key.wasPressedThisFrame) Run("overnight check", CommissaryNightAction);
+                if (k.Shift != shift || k.Alt != alt || !keyboard[k.Key].wasPressedThisFrame) continue;
+                Run(k.Name, k.Action);
                 return;
             }
-
-            if (keyboard.f5Key.wasPressedThisFrame && !keyboard.shiftKey.isPressed) NewItemsAction();
-            else if (keyboard.f6Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("licence", LicenceAction);
-            else if (keyboard.f6Key.wasPressedThisFrame) Run("spawn truck", SpawnTruckAction);
-            else if (keyboard.f7Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("spawn hand truck", SpawnHandTruckAction);
-            else if (keyboard.f7Key.wasPressedThisFrame) Run("spawn cart", SpawnCartAction);
-            else if (keyboard.f11Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("event here", EventAction);
-            else if (keyboard.f11Key.wasPressedThisFrame) Run("grip", GripAction);
-            else if (keyboard.f8Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax fixture", TaxFixtureAction);
-            else if (keyboard.f8Key.wasPressedThisFrame) Run("zone point", ZonePointAction);
-            else if (keyboard.f9Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("hire", HireAction);
-            else if (keyboard.f9Key.wasPressedThisFrame) Run("demand here", DemandAction);
-            else if (keyboard.f10Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("tax statement", TaxStatementAction);
-            else if (keyboard.f10Key.wasPressedThisFrame) Run("status", StatusAction);
-            else if (keyboard.f12Key.wasPressedThisFrame && keyboard.shiftKey.isPressed) Run("uninstall", UninstallAction);
-            else if (keyboard.f12Key.wasPressedThisFrame) Run("gig here", GigAction);
         }
 
         private static void Run(string name, Action action)
