@@ -66,11 +66,17 @@ public sealed class Planner
             stay.Result.Add(r);
             if (r.SoldOutAt == null) break;
             var trip = Mode == RestockMode.BoxInHand ? 2 : travel.Restock(city, spot, spot).Minutes;
-            if (trip == int.MaxValue || r.SoldOutAt.Value + trip + 30 > to) break;
+            if (trip == int.MaxValue || r.SoldOutAt.Value + trip + 30 > to)
+            {
+                // No time for a trip: the other pieces keep selling what they hold until closing.
+                stay.Result.Add(Selling.Run(cart, spot, r.SoldOutAt.Value, to, c, stock));
+                break;
+            }
             stay.Restocks++;
             stay.RestockMinutes += trip;
             t = r.SoldOutAt.Value + trip;
-            stock = Selling.Load(cart, spot, t, to, c);
+            // As Core's Restock: what is on board stays, each piece takes only what fits in its room.
+            stock = Selling.TopUp(cart, spot, t, to, c, stock);
         }
         stay.Left = new Dictionary<string, double>(stock);
         return stay;
@@ -86,9 +92,9 @@ public sealed class Planner
     }
 
     // Pitches in order, each with a window. The cart arrives full at the first. Between pitches it keeps
-    // its stock and goes straight on when at least half is left; otherwise it goes through the nearest
-    // wholesaler and arrives full. Staying at the same pitch costs no walk. A walk that runs into the next
-    // window starts that pitch late.
+    // its stock and goes straight on when every piece still holds at least half its room; otherwise it goes
+    // through the nearest wholesaler and tops every piece up (for pieces with one food that is a full load).
+    // Staying at the same pitch costs no walk. A walk that runs into the next window starts that pitch late.
     public DayResult? Route(IReadOnlyList<Spot> spots, IReadOnlyList<(int From, int To)> windows, Conditions c)
     {
         var day = new DayResult();
@@ -99,9 +105,8 @@ public sealed class Planner
             var full = true;
             if (i > 0)
             {
-                var left = cart.Load(stock!);
                 var move = 0;
-                if (left >= cart.StockUnits / 2.0)
+                if (cart.PieceLoads(stock!).Values.All(l => l >= cart.PerPiece / 2.0))
                 {
                     full = false;
                     if (spots[i] != spots[i - 1]) move = travel.Minutes(spots[i - 1].Distance(spots[i]));
@@ -121,7 +126,14 @@ public sealed class Planner
             var from = Math.Max((t + 4) / 5 * 5, windows[i].From);
             if (from >= windows[i].To - 30) return null;
             Stay stay;
-            if (full)
+            // A refill tops up what is left; only a shared piece's split can differ from a full load.
+            if (full && i > 0 && cart.HasSharedPiece)
+            {
+                stock = Selling.TopUp(cart, spots[i], from, windows[i].To, c, stock!);
+                stay = SellAt(spots[i], from, windows[i].To, c, stock);
+                stock = new Dictionary<string, double>(stay.Left);
+            }
+            else if (full)
             {
                 stay = SellFull(spots[i], from, windows[i].To, c);
                 stock = new Dictionary<string, double>(stay.Left);

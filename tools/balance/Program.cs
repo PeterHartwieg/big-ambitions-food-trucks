@@ -660,7 +660,8 @@ if (opts.Wants("storage"))
     o.AppendLine();
     foreach (var (with, without) in new[]
              {
-                 ("hot dog grill + Extra Storage", "hot dog grill"), ("coffee machine + Extra Storage", "coffee machine + display case"),
+                 ("hot dog grill + Extra Storage", "hot dog grill"), ("hot dog grill + Extra Storage", "hot dog grill + cooler"),
+                 ("coffee machine + Extra Storage", "coffee machine + display case"),
                  ("grill (burgers, kabobs) + Extra Storage", "grill (burgers, kabobs)"),
                  ("truck: hot dog, coffee, display case + Extra Storage", "truck: hot dog, coffee, display case, cooler"),
              })

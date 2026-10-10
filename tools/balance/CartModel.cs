@@ -180,6 +180,11 @@ public sealed class Cart
     public double WeightOf(string item) => tables.Product(item)?.StockWeight ?? 1.0;
     // Stock measured against the unit limit.
     public double Load(IReadOnlyDictionary<string, double> stock) => stock.Sum(p => p.Value * WeightOf(p.Key));
+    // Each piece's weighted load, every piece on the menu listed.
+    public Dictionary<string, double> PieceLoads(IReadOnlyDictionary<string, double> stock) =>
+        PieceOf.GroupBy(p => p.Value).ToDictionary(g => g.Key, g => g.Sum(p => stock.GetValueOrDefault(p.Key) * WeightOf(p.Key)), StringComparer.Ordinal);
+    // A piece holding more than one menu item.
+    public bool HasSharedPiece => PieceOf.GroupBy(p => p.Value).Any(g => g.Count() > 1);
     public IReadOnlyList<string> Menu { get; }
     public int Staff { get; }
     // All the pieces' storage together.
@@ -418,6 +423,27 @@ public static class Selling
                     : cart.PerPiece * dry.Sold.GetValueOrDefault(i) / weighted;
         }
         return load;
+    }
+
+    // A restock with stock on board, as Core's Restock: nothing is taken off, and each piece's free room is filled
+    // towards the spot's best split (Load). Each item gets its shortfall against that split, scaled down so the
+    // piece's room is filled exactly; an item already above its share gets nothing.
+    public static Dictionary<string, double> TopUp(Cart cart, Spot spot, int from, int to, Conditions c, IReadOnlyDictionary<string, double> stock)
+    {
+        var ideal = Load(cart, spot, from, to, c);
+        var result = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var i in cart.Menu) result[i] = Math.Max(0, stock.GetValueOrDefault(i));
+        foreach (var piece in cart.Menu.GroupBy(i => cart.PieceOf[i]))
+        {
+            var items = piece.ToList();
+            var room = cart.PerPiece - items.Sum(i => result[i] * cart.WeightOf(i));
+            if (room <= 1e-9) continue;
+            var shortfall = items.ToDictionary(i => i, i => Math.Max(0, (ideal[i] - result[i]) * cart.WeightOf(i)));
+            var total = shortfall.Values.Sum();
+            if (total <= 1e-9) continue;
+            foreach (var i in items) result[i] += shortfall[i] * room / total / cart.WeightOf(i);
+        }
+        return result;
     }
 
     public static Dictionary<string, double> Unlimited(Cart cart) => cart.Menu.ToDictionary(i => i, _ => 1e9, StringComparer.Ordinal);
