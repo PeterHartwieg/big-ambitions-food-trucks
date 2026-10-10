@@ -241,13 +241,25 @@ public class StorageTests
     }
 
     [Fact]
-    public void LargestCategoryCapacityAddsThePiecesOfOneCategory()
+    public void CategoryCapacityCountsWholeItemsPerCategory()
     {
-        // Hot dogs and burgers are both fast food: two pieces' room.
-        Assert.Equal(160, Core.Selling.Storage.LargestCategoryCapacity(Tables, "truck", new[] { L(HotDogGrill, 1), L(Grill, 1) }));
-        Assert.Equal(320, Core.Selling.Storage.LargestCategoryCapacity(Tables, "truck", new[] { L(HotDogGrill, 1), L(Grill, 1), L(Storage, 1) }));
-        Assert.Equal(0, Core.Selling.Storage.LargestCategoryCapacity(Tables, "truck", new[] { L(Storage, 1) }));
-        Assert.Equal(0, Core.Selling.Storage.LargestCategoryCapacity(Tables, "boat", new[] { L(Grill, 1) }));
+        // Hot dog grill, grill and griddle are all fast food (the grill's kabobs are street meals); the cooler is cold drinks.
+        var truck = new[] { L(HotDogGrill, 1), L(Grill, 1), L("foodtrucks:itemname_griddle", 1), L("ba:itemname_drinksfridge", 1) };
+        var units = Core.Selling.Storage.CategoryCapacity(Tables, "truck", truck);
+        Assert.Equal(240, units["fastfood"]);
+        Assert.Equal(80, units["colddrinks"]);
+        Assert.Equal(80, units["streetmeal"]);
+        Assert.Equal(480, Core.Selling.Storage.CategoryCapacity(Tables, "truck", truck.Append(L(Storage, 1)))["fastfood"]);
+
+        // A coffee machine's 80 units are 320 cups at 0.25 each.
+        Assert.Equal(320, Core.Selling.Storage.CategoryCapacity(Tables, "truck", new[] { L("ba:itemname_industrialcoffeemachine", 1) })["coffee"]);
+        // Popcorn and cotton candy share the concessions case, both at 0.25: 320 snacks; a corn grill adds 160 more at 0.5.
+        Assert.Equal(320, Core.Selling.Storage.CategoryCapacity(Tables, "truck", new[] { L(Concessions, 1) })["snacks"]);
+        Assert.Equal(480, Core.Selling.Storage.CategoryCapacity(Tables, "truck", new[] { L(Concessions, 1), L("foodtrucks:itemname_corngrill", 1) })["snacks"]);
+        Assert.Equal(160, Core.Selling.Storage.CategoryCapacity(Tables, "cart", new[] { L(Concessions, 1) })["snacks"]);
+
+        Assert.Empty(Core.Selling.Storage.CategoryCapacity(Tables, "truck", new[] { L(Storage, 1) }));
+        Assert.Empty(Core.Selling.Storage.CategoryCapacity(Tables, "boat", new[] { L(Grill, 1) }));
     }
 
     [Theory]

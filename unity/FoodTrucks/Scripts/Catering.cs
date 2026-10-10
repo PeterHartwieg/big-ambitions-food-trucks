@@ -183,9 +183,8 @@ namespace FoodTrucks
                 Places = places,
                 EligibleVehicles = caterers.Count,
                 LifetimeServed = state.Vehicles.Sum(v => (long)v.LifetimeSales),
-                // Storage per piece: the most one truck holds of a single category, from the pieces fitted today.
-                MaxUnits = caterers.Count == 0 ? (int?)null
-                    : caterers.Max(v => FoodTrucks.Core.Selling.Storage.LargestCategoryCapacity(tables, v.Kind, CargoLimit.Lines(v.Vehicle))),
+                // Storage per piece: for each category, the most food items one truck holds of it, from the pieces fitted today.
+                CategoryUnits = CategoryUnits(tables, caterers),
                 ReferencePriceCents = prices
             };
             var offers = CateringOffers.ForDay(rules, state.Catering, context);
@@ -196,6 +195,15 @@ namespace FoodTrucks
                 Log.Info($"Catering offer {offer.Id}: {offer.Kind} at {offer.PlaceId} on day {offer.GigDay} {Clock(offer.StartMinute)} for {offer.DurationMinutes} min, {offer.Guests} guests, {offer.RequiredCategory}, {CartSelling.Money(offer.FeeCents)}; reply by day {offer.ReplyByDay}.");
                 GameManager.SendTextMessage(Bookings(), "foodtrucks:message_bookings_offer", Describe(offer));
             }
+        }
+
+        private static Dictionary<string, int> CategoryUnits(DemandTables tables, IEnumerable<(VehicleInstance Vehicle, VehicleState State, string Kind)> caterers)
+        {
+            var units = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var (vehicle, _, kind) in caterers)
+                foreach (var pair in FoodTrucks.Core.Selling.Storage.CategoryCapacity(tables, kind, CargoLimit.Lines(vehicle)))
+                    units[pair.Key] = units.TryGetValue(pair.Key, out var known) ? Math.Max(known, pair.Value) : pair.Value;
+            return units;
         }
 
         // Every building whose own type or business points to one area: a place for that area's gigs.

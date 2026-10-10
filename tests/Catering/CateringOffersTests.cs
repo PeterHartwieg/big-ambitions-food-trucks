@@ -195,7 +195,7 @@ public class CateringOffersTests
         for (var day = 1; day <= 100; day++)
         {
             var context = Context(day);
-            context.MaxUnits = 160;
+            context.CategoryUnits = new Dictionary<string, int> { ["fastfood"] = 160, ["pizza"] = 160 };
             CateringOffers.ForDay(rules, state, context);
         }
         Assert.NotEmpty(state.Offers);
@@ -208,12 +208,36 @@ public class CateringOffersTests
     {
         var rules = new CateringRules(offersPerDayAtMaturity: 60);
         var context = Context();
-        context.MaxUnits = 39;
+        context.CategoryUnits = new Dictionary<string, int> { ["fastfood"] = 39, ["pizza"] = 39 };
         Assert.Empty(CateringOffers.ForDay(rules, CateringState.New(42), context));
-        context.MaxUnits = 0;
+        context.CategoryUnits = new Dictionary<string, int>();
         Assert.Empty(CateringOffers.ForDay(rules, CateringState.New(42), context));
-        context.MaxUnits = -1;
+        context.CategoryUnits = new Dictionary<string, int> { ["fastfood"] = -1 };
         Assert.Throws<ArgumentOutOfRangeException>(() => CateringOffers.ForDay(rules, CateringState.New(42), context));
+    }
+
+    // A truck with three fast-food pieces and a cooler holds 240 fast food but only 80 cold drinks. Cold drinks are
+    // only wanted at events (100 guests and up), so that truck never gets a cold-drinks gig; with 150 it gets ones
+    // capped at 150 while fast-food events still go up to 200.
+    [Theory]
+    [InlineData(80)]
+    [InlineData(150)]
+    public void EachOfferIsCappedByItsOwnCategory(int coldDrinks)
+    {
+        var rules = new CateringRules(offersPerDayAtMaturity: 60);
+        var state = CateringState.New(42);
+        var units = new Dictionary<string, int> { ["fastfood"] = 240, ["colddrinks"] = coldDrinks };
+        for (var day = 1; day <= 200; day++)
+        {
+            var context = Context(day);
+            context.ReferencePriceCents = new Dictionary<string, long> { ["fastfood"] = 1165, ["colddrinks"] = 300 };
+            context.CategoryUnits = units;
+            CateringOffers.ForDay(rules, state, context);
+        }
+        Assert.Contains(state.Offers, o => o.RequiredCategory == "fastfood" && o.Guests > 150);
+        Assert.All(state.Offers, o => Assert.InRange(o.Guests, 1, units[o.RequiredCategory]));
+        if (coldDrinks < 100) Assert.DoesNotContain(state.Offers, o => o.RequiredCategory == "colddrinks");
+        else Assert.Contains(state.Offers, o => o.RequiredCategory == "colddrinks");
     }
 
     [Fact]

@@ -19,7 +19,9 @@ namespace FoodTrucks.Core.Catering
         public IReadOnlyList<CateringPlace> Places { get; set; } = Array.Empty<CateringPlace>();
         public int EligibleVehicles { get; set; }
         public long LifetimeServed { get; set; }
-        public int? MaxUnits { get; set; }
+        // Whole food items of each category the best-stocked eligible vehicle can hold (the most any single one holds,
+        // not a fleet total). Null means no limit; a category missing from a non-null map holds nothing.
+        public IReadOnlyDictionary<string, int>? CategoryUnits { get; set; }
         // Only categories an eligible vehicle can sell belong here.
         public IReadOnlyDictionary<string, long> ReferencePriceCents { get; set; } = new Dictionary<string, long>();
     }
@@ -47,11 +49,18 @@ namespace FoodTrucks.Core.Catering
             if (context.Places == null || context.ReferencePriceCents == null) throw new ArgumentException("Offer places and prices must not be null.", nameof(context));
             if (context.Places.Any(p => p == null || string.IsNullOrEmpty(p.PlaceId))) throw new ArgumentException("Offer places need IDs.", nameof(context));
             if (context.ReferencePriceCents.Values.Any(p => p < 0)) throw new ArgumentException("Reference prices must not be negative.", nameof(context));
-            if (context.MaxUnits < 0) throw new ArgumentOutOfRangeException(nameof(context.MaxUnits));
+            if (context.CategoryUnits != null && context.CategoryUnits.Values.Any(u => u < 0)) throw new ArgumentOutOfRangeException(nameof(context.CategoryUnits));
             state.LastOfferDay = context.Day;
             if (context.EligibleVehicles <= 0 || context.LifetimeServed <= 0 || rules.MaxOffersPerDay == 0) return Array.Empty<CateringOffer>();
 
-            var maxGuests = context.MaxUnits.HasValue ? (int)Math.Min(1000, Math.Floor(context.MaxUnits.Value / rules.UnitsPerGuest)) : 1000;
+            int MaxGuests(string category)
+            {
+                if (context.CategoryUnits == null) return 1000;
+                var units = context.CategoryUnits.TryGetValue(category, out var u) ? u : 0;
+                return (int)Math.Min(1000, Math.Floor(units / rules.UnitsPerGuest));
+            }
+            // A category fits a kind when a vehicle sells it and one vehicle holds enough of it for the smallest gig.
+            bool Fits(CateringKind k, string category) => context.ReferencePriceCents.ContainsKey(category) && MaxGuests(category) >= k.Guests.Min;
             var random = new SeededRandom(state.RandomState);
             var mean = rules.OffersPerDayAtMaturity * Math.Min(1, context.LifetimeServed / (double)rules.MaturityServed) * state.BookingReputation;
             var count = Poisson(random, mean, rules.MaxOffersPerDay);
@@ -60,9 +69,9 @@ namespace FoodTrucks.Core.Catering
             {
                 var gigDay = checked(context.Day + Integer(random, rules.LeadDays));
                 var weekday = GameDays.Weekday(gigDay);
-                var kinds = rules.Kinds.Where(k => k.Guests.Min <= maxGuests && k.Days.Contains(weekday)
+                var kinds = rules.Kinds.Where(k => k.Days.Contains(weekday)
                     && context.Places.Any(p => k.Areas.Contains(p.Area, StringComparer.Ordinal))
-                    && k.Categories.Keys.Any(context.ReferencePriceCents.ContainsKey)).OrderBy(k => k.Id, StringComparer.Ordinal).ToList();
+                    && k.Categories.Keys.Any(c => Fits(k, c))).OrderBy(k => k.Id, StringComparer.Ordinal).ToList();
                 if (kinds.Count == 0) continue;
                 var kind = Pick(kinds, k => k.Weight, random);
                 var places = context.Places.Where(p => kind.Areas.Contains(p.Area, StringComparer.Ordinal))
@@ -70,9 +79,10 @@ namespace FoodTrucks.Core.Catering
                 var place = places[Integer(random, (0, places.Count - 1))];
                 var start = (int)Math.Min(1425, RoundQuarter(Integer(random, kind.Start)));
                 var duration = (int)Math.Min(2147483640L, Math.Max(15, RoundQuarter(Integer(random, kind.DurationMinutes))));
-                var guests = Integer(random, (kind.Guests.Min, Math.Min(kind.Guests.Max, maxGuests)));
-                var categories = kind.Categories.Where(c => context.ReferencePriceCents.ContainsKey(c.Key)).OrderBy(c => c.Key, StringComparer.Ordinal).ToList();
+                // The category first, then the guests that one vehicle can feed from it.
+                var categories = kind.Categories.Where(c => Fits(kind, c.Key)).OrderBy(c => c.Key, StringComparer.Ordinal).ToList();
                 var category = Pick(categories, c => c.Value, random).Key;
+                var guests = Integer(random, (kind.Guests.Min, Math.Min(kind.Guests.Max, MaxGuests(category))));
                 var fee = checked((long)Math.Round(guests * rules.UnitsPerGuest * context.ReferencePriceCents[category] * rules.FeeMarkup, MidpointRounding.AwayFromZero));
                 var replyDay = Math.Min(checked(context.Day + rules.ReplyDays), gigDay);
                 var offer = new CateringOffer

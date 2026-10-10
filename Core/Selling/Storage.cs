@@ -238,16 +238,21 @@ namespace FoodTrucks.Core.Selling
             return new RestockPlan(load, notHeld);
         }
 
-        // The most weighted units the vehicle can hold of any one demand category: the pools serving it added up.
-        public static int LargestCategoryCapacity(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo)
+        // Whole food items of each demand category the vehicle can hold, from the pieces fitted now: each pool's
+        // room in items of its lightest food of that category (catering counts items, not weighted units), the
+        // pools serving one category added up. Categories no fitted piece serves are left out.
+        public static IReadOnlyDictionary<string, int> CategoryCapacity(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo)
         {
-            var view = Of(tables, vehicleType, cargo);
-            if (view == null) return 0;
             var byCategory = new Dictionary<string, long>(StringComparer.Ordinal);
-            foreach (var pool in view.Pools)
-                foreach (var category in pool.Piece.Products.Select(p => tables.Product(p)!.Category).Distinct(StringComparer.Ordinal))
-                    byCategory[category] = (byCategory.TryGetValue(category, out var c) ? c : 0) + pool.Capacity;
-            return byCategory.Count == 0 ? 0 : (int)Math.Min(int.MaxValue, byCategory.Values.Max());
+            var view = Of(tables, vehicleType, cargo);
+            if (view != null)
+                foreach (var pool in view.Pools)
+                    foreach (var group in pool.Piece.Products.Select(p => tables.Product(p)!).GroupBy(p => p.Category, StringComparer.Ordinal))
+                    {
+                        var items = (long)Math.Floor(pool.Capacity / group.Min(p => p.StockWeight) + 1e-9);
+                        byCategory[group.Key] = (byCategory.TryGetValue(group.Key, out var c) ? c : 0) + items;
+                    }
+            return byCategory.ToDictionary(p => p.Key, p => (int)Math.Min(int.MaxValue, p.Value), StringComparer.Ordinal);
         }
 
         private static int EquipmentPieces(DemandTables tables, IEnumerable<CargoLine> cargo)
