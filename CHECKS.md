@@ -1,6 +1,6 @@
-# Commissary checks
+# Commissary checks (0.9.4)
 
-Branch `commissary`, on top of 0.9.3. Five commissary garages (`data/commissaries.json`): rent a space per vehicle at the bay, order stock by phone, delivery at 08:00 the next day, Restock at the bay, daily rent, and a $250 fine from the City for a food vehicle out of its bay at 04:00. The bay positions are guesses from the map outlines and are the main thing to check. Fresh **FT** save, other gameplay mods off. New debug keys (holding Ctrl and Alt): **F6** where every bay is from you, **F7** deliver paid orders now, **F8** what the 04:00 check would say now (no fines). Console: `foodtrucks_commissary_where`, `foodtrucks_commissary_deliver`, `foodtrucks_commissary_night`.
+Build `0.9.4`: 0.9.3 plus the commissary and the new items. Five commissary garages (`data/commissaries.json`): rent a space per vehicle at the bay, order stock by phone, delivery at 08:00 the next day, Restock at the bay, daily rent, and a $250 fine from the City for a food vehicle out of its bay at 04:00. The bay positions are guesses from the map outlines and are the main thing to check. Fresh **FT** save, other gameplay mods off. New debug keys (holding Ctrl and Alt): **F6** where every bay is from you, **F7** deliver paid orders now, **F8** what the 04:00 check would say now (no fines). Console: `foodtrucks_commissary_where`, `foodtrucks_commissary_deliver`, `foodtrucks_commissary_night`.
 
 ## 1. Automated (me)
 
