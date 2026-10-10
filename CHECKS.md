@@ -1,3 +1,30 @@
+# Playtest fixes (0.9.8)
+
+Fixes from the 0.9.7 playtest of 10 October 2026, and a painted bay at each commissary. Built on branch `milestone-8`; the version isn't bumped, so the log still says 0.9.7. Fresh **FT** save, other gameplay mods off.
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Commissary call, Order stock, ADD ITEM, add a box, then press the form's ORDER while the item list is still open | The list closes and the commissary reads the order back at once. Do it again with HANG UP, and with the phone's own CLOSE [ESCAPE]: each works with the list open and closes it. In 0.9.7 none of the three reacted until the list's X or Esc |
+| 2 | Square Appliances' order form (needs an address of your own), ADD ITEM, then click the form's ORDER with its list open | Unchanged from the game: nothing happens until the list is closed. Only the commissary's list lets clicks through |
+| 3 | Open a truck at a busy spot with a line of 5 or more and watch the people walk up, move up and leave for 15 minutes | Nobody spins or circles on the pavement. Someone who can't quite reach their place stops a step short and faces the window. Anyone still spinning: note where they stand (at the front, in the middle, walking up) |
+| 4 | Truck panel with a hot dog grill and hot dogs loaded; then a cart with the same | Each slot's orange "i" is at the bottom right; the amount ("80/80" on the grill, "80" and "x1" on the hot dogs) is readable at the bottom left. Hovering the "i" shows the storage tooltip as before. Does the "i" sit well there, clear of everything? |
+| 5 | In Contacts, look at Street Food Bookings, the City of New York and a commissary | None of the three has the red X any more. DELETE ALL in their category leaves them. Play through the afternoon of day 1: Street Food Bookings stays |
+| 6 | Truck in the bay: Commissary, "Order stock for delivery to …", then HANG UP | The call ends: CALL turns green and "Never mind, I'm no longer interested" appears under the call at once. Same after a call started with CALL, and for the bookings and City calls |
+| 7 | Restock a truck with one hot dog grill from 1,500 hot dogs in stock | "Loaded into the truck: fitted Hotdog Grill; 80 Hotdog (the Hotdog Grill holds 80). 1420 items left in stock here." Restock again: "Nothing more fits in the truck: the Hotdog Grill holds 80. 1420 items stay in stock here." |
+| 8 | Walk towards the Hell's Kitchen commissary (First Street 22) | Within about 100 m a purple painted bay shows on the road by its door: an outline along the parking lane with COMMISSARY written in it. Walk away: it goes past 100 m. Is it easy to see in daylight and at night? Does it look like road paint? |
+| 9 | Drive the truck there (Ctrl+K, then drive) and park wholly inside the paint, both ends | The Commissary button shows on the panel and Ctrl+F3 says "in the bay" anywhere inside the paint. Just outside one end it says "outside the bay". Does a truck fit inside the paint at a legal parking space? |
+| 10 | Drive and park on the painted bay | Nothing blocks the truck; cars and people pass over the paint. The paint shows from farther away while you drive or push a food vehicle |
+| 11 | Visit the other four commissaries (or teleport near them) | Each has its paint by its door. Tell me any where it is missing, on the wrong street, or sits on the pavement or across the driving lane |
+
+Log lines:
+
+- Row 1: `Commissary orders: the item list's backdrop (<names>) lets clicks through to the phone while the commissary's list is open.` once a session, then `Commissary order at <site>: its item list is closed (read back | hung up | the call ended).` A `no full-screen backdrop under the item list` line means the click blocker is elsewhere; tell me if ORDER still does nothing.
+- Row 3: at the first customer, `Queue view: customer agent speed 1.20 m/s, stopping distance 0.10 m (now 0.30), radius 0.30 m, acceleration …, angular speed …, avoidance …; arrives within 0.50 m.` If anyone circled: `Queue view: cart <id>: a customer circled their place 0.62 m off without getting closer; stopped where they were.` once per line, and the line's removal says `…; N stopped after circling their place (K put there, worst … m off), at most M walks by one customer`. `customer <id> has walked to 17 targets` means the line itself keeps sending someone to new places.
+- Row 4: `Storage panel: the cargo slots' info button moves to the bottom right on food vehicles (… px from the edge, … px, slot … px), clear of the amount.`
+- Startup: `Patch ContactScrollerController.LoadContact: Active.` and `Patch ContactsHelper.GetPermanentIds: Active.` A morning with the bookings contact missing logs `Catering: the bookings contact was missing from the phone; added again.`
+- Row 6: `Commissary call: foodtrucks-commissary-<site> hung up (started from the bay | started with CALL); the call is over, CALL is ready.`
+- Rows 8 to 11: one `Commissary marker <site>: bay paint at x …, z …, along … degrees, 1 stretch of 19.2 m (-9.6…+9.6 m) on the parking lane … m from the driving lane, … m wide; the door stands 11.5 m from the lane's middle, so the 15 m bay reaches 9.6 m either way along the kerb; a 5.8 m truck fits wholly inside.` per commissary when first drawn. A `doesn't reach the street` error means no parked vehicle there is ever in the bay. From the 0.9.7 log, Hell's Kitchen's door is about 11.5 m from where the truck parked, so the bay covers about 19 m of kerb, centred on the door: the truck at z 221.1 was in (13.7 m), at z 214.0 out (18.4 m), and the player's first spot 16 m out.
+
 # Truck driving (0.9.7)
 
 The truck now drives like the game's delivery truck instead of the example sports car: the delivery truck's weight, suspension, power curve and brakes, 40 kW and a 50 km/h top speed (art/README.md, "Driving"). Same 0.9.7 build, same **FT** save.
