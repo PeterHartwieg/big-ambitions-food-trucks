@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Rules;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
@@ -250,9 +251,9 @@ namespace FoodTrucks
         // space has its hatch side over the lane, and the line starts at the kerb instead.
         public float Reach { get; }
         public float Along { get; }
-        // No place on the road layer or on a crosswalk: a truck's hatch side may face the street, a cart's
-        // two sides are always on the pavement it stands on. The road layer read "no" at every pavement spot
-        // logged so far; whether it covers streets is unverified.
+        // No place on a driving lane, the road layer or a crosswalk: a truck's line forms beside the street, a
+        // cart's two sides are always on the pavement it stands on. The driving lanes come from the traffic
+        // system (TrafficLanes); the road layer is known only on bridges.
         public bool PavementOnly { get; }
         public int[] Sides { get; }
 
@@ -572,6 +573,8 @@ namespace FoodTrucks
             var right = Direction(cart.right);
             var center = cart.position + forward * shape.Along;
             var filter = QueuePerson.Filter;
+            // The driving lanes, so a truck's line and its ways in stay off the street the NavMesh also covers.
+            var lanes = shape.PavementOnly ? TrafficLanes.Near(center, 30f) : TrafficLanes.None;
 
             var best = new List<Vector3>();
             var bestScore = int.MinValue;
@@ -585,7 +588,7 @@ namespace FoodTrucks
                     var roads = 0;
                     for (var k = 0; k < count; k++)
                     {
-                        var place = PlaceBeside(center, right * side, forward * (direction * k * Spacing), shape, filter);
+                        var place = PlaceBeside(center, right * side, forward * (direction * k * Spacing), shape, filter, lanes);
                         if (place == null) break;
                         if (Legality.RoadBelow(place.Value)) roads++;
                         placed.Add(place.Value);
@@ -609,7 +612,7 @@ namespace FoodTrucks
             {
                 var wanted = center + forward * (bestDirection * along) + right * (bestSide * UnityEngine.Random.Range(shape.Sideways - 0.45f, shape.Reach + 1.35f));
                 if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter)) continue;
-                if (shape.PavementOnly && (Legality.InParkingLane(hit.position) || Legality.RoadBelow(hit.position) || Legality.NearCrosswalk(hit.position, 0.5f))) continue;
+                if (shape.PavementOnly && OnStreet(hit.position, lanes)) continue;
                 if (!NavMesh.CalculatePath(hit.position, best[0], filter, path) || path.status != NavMeshPathStatus.PathComplete) continue;
                 ends.Add(hit.position);
             }
@@ -618,7 +621,7 @@ namespace FoodTrucks
                 var angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
                 var wanted = center + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * UnityEngine.Random.Range(9f, 16f);
                 if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter)) continue;
-                if (shape.PavementOnly && (Legality.InParkingLane(hit.position) || Legality.RoadBelow(hit.position) || Legality.NearCrosswalk(hit.position, 0.5f))) continue;
+                if (shape.PavementOnly && OnStreet(hit.position, lanes)) continue;
                 if (!NavMesh.CalculatePath(hit.position, best[0], filter, path) || path.status != NavMeshPathStatus.PathComplete) continue;
                 ends.Add(hit.position);
             }
@@ -628,28 +631,24 @@ namespace FoodTrucks
         }
 
         // The nearest walkable place out of parking lanes beside the window, from Sideways out to Reach.
-        private static Vector3? PlaceBeside(Vector3 center, Vector3 outward, Vector3 along, WindowShape shape, NavMeshQueryFilter filter)
+        private static Vector3? PlaceBeside(Vector3 center, Vector3 outward, Vector3 along, WindowShape shape, NavMeshQueryFilter filter, TrafficLanes lanes)
         {
             for (var sideways = shape.Sideways; sideways <= shape.Reach + 0.01f; sideways += 0.4f)
             {
                 var wanted = center + outward * sideways + along;
                 if (!NavMesh.SamplePosition(wanted, out var hit, 0.6f, filter) || FlatDistance(hit.position, wanted) > 0.45f) continue;
                 if (Legality.InParkingLane(hit.position)) continue;
-                if (shape.PavementOnly && (Legality.RoadBelow(hit.position) || Legality.NearCrosswalk(hit.position, 0.5f))) continue;
+                if (shape.PavementOnly && OnStreet(hit.position, lanes)) continue;
                 return hit.position;
             }
             return null;
         }
 
-        // Whether the vehicle's window has pavement beside it, for refusing a truck parked with its hatch to the road.
-        public static bool HasWindowPlace(Transform vehicle, string kind)
-        {
-            var shape = WindowShape.For(kind);
-            var forward = Direction(vehicle.forward);
-            var right = Direction(vehicle.right);
-            var center = vehicle.position + forward * shape.Along;
-            return shape.Sides.Any(side => PlaceBeside(center, right * side, Vector3.zero, shape, QueuePerson.Filter) != null);
-        }
+        // Road, a crosswalk or a parking lane: no place for a truck's customers to stand or walk in from. The
+        // driving lanes are the test that holds on streets; the road layer is known only on bridges.
+        private static bool OnStreet(Vector3 position, TrafficLanes lanes) =>
+            Legality.InParkingLane(position) || Legality.RoadBelow(position) || Legality.NearCrosswalk(position, 0.5f) ||
+            lanes.Distance(position) <= HatchSide.LaneHalfWidthMetres;
 
         private static Vector3 Direction(Vector3 v)
         {

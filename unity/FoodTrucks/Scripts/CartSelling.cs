@@ -290,16 +290,21 @@ namespace FoodTrucks
             {
                 // A truck sells from a legal parking space: the game's own check, the one parking fees use.
                 var parking = panel.vehicleInfo != null ? panel.vehicleInfo.currentParkingState : ParkingState.NotAvailable;
-                Log.Info($"Pitch: truck {cart.id} at {position}: parking {parking}.");
                 if (parking != ParkingState.Legal)
-                    return parking == ParkingState.NotAvailable ? "foodtrucks:legality_truck_moving" : "foodtrucks:legality_truck_parking";
-                // The hatch is on the right: with it towards the road, nobody could reach the window.
-                if (controller != null && !QueueLine.HasWindowPlace(controller.transform, kind))
                 {
-                    Log.Info($"Pitch: truck {cart.id} has no pavement beside its hatch.");
-                    return "foodtrucks:legality_truck_hatch";
+                    Log.Info($"Pitch: truck {cart.id} at {position}: parking {parking}.");
+                    return parking == ParkingState.NotAvailable ? "foodtrucks:legality_truck_moving" : "foodtrucks:legality_truck_parking";
                 }
-                return null;
+                // The hatch is on the right: with it towards the road, the line would form in the traffic.
+                if (controller == null)
+                {
+                    Log.Info($"Pitch: truck {cart.id} at {position}: parking {parking}; hatch not checked (no vehicle controller).");
+                    return null;
+                }
+                var hatch = HatchCheck.Probe(controller.transform);
+                Log.Info($"Pitch: truck {cart.id} at {position}, heading {controller.transform.eulerAngles.y:F0}: parking {parking}; " +
+                         $"hatch {hatch}; {(hatch.Opens ? "may open" : "refused")}.");
+                return hatch.RefusalKey;
             }
             var legality = Legality.Check(position);
             Log.Info($"Pitch: cart {cart.id} at {position}: {legality.Detail}; road layer below: {(legality.RoadBelow ? "yes" : "no")}.");
@@ -445,7 +450,14 @@ namespace FoodTrucks
                 if (!legality.Legal) return legality.RuleKey;
             }
             else if (cart.parkingState != ParkingState.Legal) return "foodtrucks:legality_truck_parking";
-            else if (!QueueLine.HasWindowPlace(controller.transform, kind)) return "foodtrucks:legality_truck_hatch";
+            else
+            {
+                // The route parks its truck with the hatch to the pavement and moves one that stands the wrong
+                // way (HireRoutes.Where), so a refusal here is mostly a stop with no pavement at all. The route
+                // logs the reading with its refusal, once a day.
+                var hatch = HireRoutes.Hatch(vehicle.VehicleId, controller.transform);
+                if (!hatch.Opens) return hatch.RefusalKey;
+            }
             var eventProblem = CityPitches.EventProblem(state, cart.id, position, minute);
             if (eventProblem != null) return eventProblem;
             self.StartSelling(vehicle, cart, controller, position, kind, stop, minute);

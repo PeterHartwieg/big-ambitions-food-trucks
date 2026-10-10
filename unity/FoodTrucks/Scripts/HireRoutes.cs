@@ -42,6 +42,22 @@ namespace FoodTrucks
         // The crew doesn't drive a vehicle away within this long of the player using it, or with the player this close.
         private const long StayPutMinutes = 60;
         private const float StayPutMetres = 15f;
+        // Each truck's last hatch reading, kept while it stands still: the route asks every game minute.
+        private static readonly Dictionary<string, (Vector3 Position, Quaternion Rotation, HatchCheck.Result Result)> hatches =
+            new Dictionary<string, (Vector3, Quaternion, HatchCheck.Result)>();
+        // Trucks already logged as standing the wrong way for a stop: vehicle, stop, day.
+        private readonly HashSet<(string, int, int)> hatchShown = new HashSet<(string, int, int)>();
+
+        // Whether a truck's hatch faces the pavement where it stands (HatchCheck), read again once it moves.
+        internal static HatchCheck.Result Hatch(string vehicleId, Transform truck)
+        {
+            if (hatches.TryGetValue(vehicleId, out var last) && Vector3.Distance(last.Position, truck.position) < 0.3f &&
+                Quaternion.Angle(last.Rotation, truck.rotation) < 3f)
+                return last.Result;
+            var result = HatchCheck.Probe(truck);
+            hatches[vehicleId] = (truck.position, truck.rotation, result);
+            return result;
+        }
 
         // Runs an action on the next frame, after the game's list picker has closed its current list.
         public static void Later(Action action)
@@ -258,6 +274,21 @@ namespace FoodTrucks
             if (!held && !indoors && !vehicle.IsOpen && vehicle.Transit == null && HireRunner.Want(vehicle, t) != null)
             {
                 canSell = KindOf(vehicle) == "truck" ? instance.parkingState == ParkingState.Legal : Legality.Check(position).Legal;
+                // A truck left at a stop with its hatch to the road can't sell there: the crew parks it again,
+                // turned the right way (FreeParking), rather than open with the line in the traffic or wait
+                // there all day. One the crew parked itself counts as at its stop anyway (HireRunner).
+                if (canSell && KindOf(vehicle) == "truck" && controller != null)
+                {
+                    var hatch = Hatch(vehicle.VehicleId, controller.transform);
+                    if (hatch.Verdict == HatchVerdict.WrongWay)
+                    {
+                        canSell = false;
+                        var want = HireRunner.Want(vehicle, t);
+                        if (want != null && hatchShown.Add((vehicle.VehicleId, want.StopIndex, HireRunner.DayOf(t))))
+                            Log.Info($"Route: truck {vehicle.VehicleId} at {position} stands with its hatch to the road for stop {want.StopIndex + 1} " +
+                                     $"({hatch}); the crew parks it again unless it's theirs to leave.");
+                    }
+                }
                 var tables = DemandData.Tables;
                 hasStock = tables == null || CartDemand.StockOf(instance, CartDemand.MenuOf(tables, instance).Menu).Count > 0;
                 // The player just stepped out (to buy stock, say) or stands right by it: it stays where it is.
@@ -380,16 +411,12 @@ namespace FoodTrucks
             Physics.CheckBox(position + rotation * (kind == "truck" ? TruckCentre : CartCentre), kind == "truck" ? TruckHalfSize : CartHalfSize,
                 rotation, 1 << LayerHelper.VehiclesLayerIndex);
 
-        // Whether a truck standing there would have pavement by its hatch: the queue's own test, on a stand-in.
-        private static bool HatchFacesPavement(Vector3 position, Quaternion rotation)
+        // Whether a truck standing there would be refused for its hatch (HatchCheck): such a space is taken
+        // the other way round. Anything else stands as the lane has it, as an unclear spot opens anyway.
+        private static bool HatchRefused(Vector3 position, Quaternion rotation, out HatchCheck.Result result)
         {
-            var probe = new GameObject("FoodTrucks.HatchProbe");
-            try
-            {
-                probe.transform.SetPositionAndRotation(position, rotation);
-                return QueueLine.HasWindowPlace(probe.transform, "truck");
-            }
-            finally { Object.Destroy(probe); }
+            result = HatchCheck.Probe(position, rotation);
+            return !result.Opens;
         }
 
         // As the game's own vehicle sale does, traffic forgets the colliders before the vehicle goes.
@@ -544,7 +571,11 @@ namespace FoodTrucks
                 if (Vector3.Distance(position, target) > maxMetres) continue;
                 // The hatch has to face the pavement: a lane's rotation can point either way along the kerb. The
                 // game's slot test is sized for a car, so the truck's own hull is checked, the way it will stand.
-                if (!HatchFacesPavement(position, rotation)) rotation *= Quaternion.Euler(0f, 180f, 0f);
+                if (HatchRefused(position, rotation, out var hatch))
+                {
+                    rotation *= Quaternion.Euler(0f, 180f, 0f);
+                    Log.Info($"Route: the space at {position} would put the hatch to the road ({hatch}); the truck takes it the other way round.");
+                }
                 if (Taken(position, rotation, "truck")) continue;
                 return (position, rotation, lane.neighbourhood);
             }
@@ -572,6 +603,7 @@ namespace FoodTrucks
             lock (later) later.Clear();
             laneCache = null;
             recoveryWaitShown.Clear();
+            hatches.Clear();
         }
 
         private static VehicleInstance? Instance(string id) =>
