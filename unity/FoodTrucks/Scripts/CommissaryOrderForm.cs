@@ -54,6 +54,9 @@ namespace FoodTrucks
             public string ContactId { get; }
             public string SiteId { get; }
             public IReadOnlyList<Line> Lines { get; }
+            // The form instance this order belongs to: the first commissary form the patches see after Begin. A form
+            // from an earlier step of the call (its picker callbacks, say) is someone else's and is left alone.
+            public DeliveryContractSettingsBase? Form { get; set; }
         }
 
         private static Open? open;
@@ -111,20 +114,60 @@ namespace FoodTrucks
         // Before the conversation shows the form: what it sells, for the game's form to list.
         internal static void Begin(string contactId, string siteId, IReadOnlyList<Line> lines)
         {
+            End();
             open = new Open(contactId, siteId, lines);
             ContractItemsForSaleService.SetItemsForContact(contactId, lines.Select(l => l.Item));
         }
 
-        internal static void End() => open = null;
+        // Leaving the form (read back, hung up, the call closed, a new form): the item list beside the phone is the
+        // form's, so it is closed and emptied, and its entries' callbacks go with them. The game's own furniture
+        // order leaves it open until Esc; for the commissary it would keep changing a form whose order is already
+        // read back, and after the call ends adding a row reaches DialogController.current, which is null by then.
+        internal static void End()
+        {
+            var current = open;
+            open = null;
+            if (current?.Form == null) return;
+            try
+            {
+                var list = InstanceBehavior<UIs>.Instance?.itemsList;
+                if (list == null || !OwnsList(current.Form, list)) return;
+                list.Clear();
+                list.Toggle(newState: false);
+            }
+            catch (Exception ex) { Fail("closing the item list", ex); }
+        }
+
+        // Whether the item list still holds this form's entries (another screen may have filled it since).
+        private static bool OwnsList(DeliveryContractSettingsBase form, ItemsList list)
+        {
+            var entries = entriesField?.Invoke(form);
+            return entries != null && entries.Values.Any(e => e != null && e.ItemsListEntry != null && e.ItemsListEntry.transform.IsChildOf(list.transform));
+        }
+
+        // Every frame (Commissary.Update): a form whose call has gone (the phone closed, another call) is left. The
+        // game's ContactsApp hangs up on closing without calling the entry's OnCancel, so this is the only notice.
+        internal static void Watch()
+        {
+            var current = open;
+            if (current == null) return;
+            var dialog = DialogController.current;
+            if (dialog != null && dialog.contact?.id == current.ContactId) return;
+            Log.Info($"Commissary order at {current.SiteId}: the call ended with the order form open; its item list is closed.");
+            End();
+        }
 
         // After the uninstall step the contacts are gone; so is what they sold.
         internal static void Forget(IEnumerable<string> contactIds)
         {
-            open = null;
+            End();
             foreach (var id in contactIds) ContractItemsForSaleService.RemoveContact(id);
         }
 
         internal static Line? Find(string item) => open?.Lines.FirstOrDefault(l => l.Item == item);
+
+        // Whether this is the form the open order belongs to (the read-back reads it).
+        internal static bool IsCurrent(DeliveryContractSettingsBase? form) => form != null && open?.Form is { } bound && ReferenceEquals(bound, form);
 
         // The form's rows as Core's order requests: an amount is a number of boxes.
         internal static List<CommissaryOrderRequest> Requests(DeliveryContractSettingsBase form)
@@ -139,10 +182,14 @@ namespace FoodTrucks
             return list;
         }
 
+        // The commissary's form now open: a furniture form in the commissary's call, and the instance the order is
+        // bound to (the first one seen after Begin; the base Start runs SetUpInventoryList before Start's postfix).
         private static bool IsOurs(DeliveryContractSettingsBase form)
         {
             var current = open;
-            return current != null && form is FurnitureDeliveryContractSettings && DialogController.current?.contact?.id == current.ContactId;
+            if (current == null || !(form is FurnitureDeliveryContractSettings) || DialogController.current?.contact?.id != current.ContactId) return false;
+            if (current.Form is null) current.Form = form;
+            return ReferenceEquals(current.Form, form);
         }
 
         private static void Fail(string where, Exception ex)

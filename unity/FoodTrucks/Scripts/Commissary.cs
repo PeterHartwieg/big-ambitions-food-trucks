@@ -175,6 +175,8 @@ namespace FoodTrucks
 
         private void Update()
         {
+            // The order form's call can end with the phone closed, which tells no one: its item list is closed then.
+            CommissaryOrderForm.Watch();
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
             var sites = Sites;
@@ -674,8 +676,20 @@ namespace FoodTrucks
             var unpaid = false;
             foreach (var order in orders)
             {
-                var paid = Payments.TryPayOut(order.TotalCents, OrderInfo(siteId), showNotification: true);
-                if (paid) SalesLedger.RecordDeliveryFees(state, today, order.FeeCents);
+                // Core has booked every order already: one whose payment throws is held as unpaid like a refused one,
+                // so it isn't delivered free and the orders after it are still paid.
+                bool paid;
+                try { paid = Payments.TryPayOut(order.TotalCents, OrderInfo(siteId), showNotification: true); }
+                catch (Exception ex)
+                {
+                    Log.Error($"Commissary order {order.Id}: payment failed, held until paid: {ex}");
+                    paid = false;
+                }
+                if (paid)
+                {
+                    try { SalesLedger.RecordDeliveryFees(state, today, order.FeeCents); }
+                    catch (Exception ex) { Log.Error($"Commissary order {order.Id}: paid, but its delivery fee wasn't recorded for Econoview: {ex}"); }
+                }
                 else
                 {
                     state.Commissary.Charges.Add(new CommissaryCharge
@@ -968,6 +982,8 @@ namespace FoodTrucks
                     CartSelling.Notify("foodtrucks:notification_commissary_order_too_many", ("max", CommissaryOrdering.MaxBoxesPerOrder.ToString()));
                     return null;
             }
+            // The order is read back as it stands now: the form and its item list are done with ("Change" opens a fresh one).
+            CommissaryOrderForm.End();
             var items = string.Join("<br>", quote.Lines.Select(LineText));
             Current.contact.ReceivePlayerMessage(new TextMessage("foodtrucks:message_commissary_order_player", new Dictionary<string, string> { { "items", items } }, read: true));
             var data = new
