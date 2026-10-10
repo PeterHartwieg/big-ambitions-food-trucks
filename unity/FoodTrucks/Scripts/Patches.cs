@@ -121,6 +121,11 @@ namespace FoodTrucks
             Patch(store, "UpdateItemsListTitle", Type.EmptyTypes, typeof(CommissaryOrderForm), postfix: nameof(CommissaryOrderForm.TitlePostfix));
             CommissaryOrderForm.CheckReady();
 
+            // The mod's contacts (Street Food Bookings, commissaries, the City) have no delete button and survive "Delete all".
+            Patch(typeof(UI.Smartphone.Apps.Contacts.ContactScrollerController), "LoadContact", null, typeof(ModContacts),
+                postfix: nameof(ModContacts.LoadContactPostfix));
+            Patch(typeof(ContactsHelper), "GetPermanentIds", Type.EmptyTypes, typeof(ModContacts), postfix: nameof(ModContacts.PermanentIdsPostfix));
+
             // Storage per piece in the vehicle's cargo slots: each piece's "62/80" and a tooltip with its foods.
             Patch(typeof(UI.PlayerHUD.CargoItemUi), "SetUp", new[] { typeof(CargoItem), typeof(ICargoHolder), typeof(bool) },
                 typeof(StoragePanel), postfix: nameof(StoragePanel.CargoSlotPostfix));

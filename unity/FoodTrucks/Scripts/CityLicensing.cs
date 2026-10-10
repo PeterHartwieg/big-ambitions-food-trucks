@@ -19,7 +19,7 @@ namespace FoodTrucks
     // and the mod's own dialog. Core's Licensing decides; this only asks, charges and writes.
     internal static class CityLicensing
     {
-        private const string ContactId = "the_city_of_new_york";
+        internal const string ContactId = "the_city_of_new_york";
         private const string ContactDescription = "government";
         // An unused CallDialogType value; the factory is a plain dictionary and nothing enumerates the enum.
         private const CallDialogType DialogType = (CallDialogType)9101;
