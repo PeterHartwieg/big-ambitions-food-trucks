@@ -21,7 +21,7 @@ Each fitted piece of equipment now holds its own food: 40 units a piece on a car
 | 15 | On the cart's item panel, press sell on the grill's slot (it reads "40/40") | The question reads "Sell Hotdog Grill for $…?", without "(40/40)". Cancel: the slot still reads 40/40 |
 | 16 | A cart with a coffee machine: load coffee one cup at a time near the top (or a box, then sell one cup) | At 159 cups the slot reads 39/40, not 40/40; at 160 it reads 40/40 |
 | 17 | BizMan, the fleet section, with a piece full | The piece's row has no red text |
-| 18 | A truck with three fast-food pieces (hot dog grill, grill, griddle) and a cooler; wait for catering offers (Ctrl+Alt+V for a gig) | No offer asks for cold drinks: cold drinks are only wanted at events of 100 guests and up, and the cooler holds 80. Fast-food offers go up to 200 guests |
+| 18 | A truck with a catering permit and three fast-food pieces (hot dog grill, grill, griddle) and a cooler, as the only caterer, in a save whose vehicles have sold a few hundred items (offers come at most once every two days or so, and fewer before 500 items sold). Sleep to the next day several times and read the Street Food Bookings offers (Ctrl+Alt+V books a fixed 40-guest test gig and skips the offers, so it checks nothing here) | No offer asks for cold drinks: cold drinks are only wanted at events of 100 guests and up, and the cooler holds 80. Fast-food offers go up to 200 guests. The log's `Catering offer N: …` lines show the same |
 
 Log lines:
 
