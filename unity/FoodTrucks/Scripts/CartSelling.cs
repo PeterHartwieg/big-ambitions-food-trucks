@@ -27,13 +27,14 @@ namespace FoodTrucks
     // Selling: Open parks the cart where it stands (or the truck where it stopped, in a legal parking space),
     // if the player has a vendor licence, the vehicle a permit, and the fitted equipment gives a menu. While it is open, Core's SalesSimulator runs every in-game minute: customers arrive at the rate
     // the demand model gives for the spot and the hour (CartDemand), queue at the window and give up after
-    // a while. The player serves while they stay close, at the speed of their customer service skill;
-    // away from the window nobody serves, so the queue waits and thins out. Each customer buys one main
+    // a while. The player serves at the speed of their customer service skill while they stay close to a cart or
+    // stand at a truck's hatch; otherwise only a crew serves, and without one the queue waits and thins out. Each customer buys one main
     // item and sometimes a cold drink; each item takes one unit of cargo and pays the cart's price with
     // the mod's label. CartQueueView shows the queue as people near the player. Grabbing the cart closes it.
     internal sealed class CartSelling : MonoBehaviour
     {
-        // The player works the window, so sales pause when they walk further away than this.
+        // The player works a cart's window, so its sales pause when they walk further away than this. A truck's
+        // window is worked only from its hatch (TruckWindow), however close the player stands outside.
         private const float WorkingDistance = 8f;
 
         // Real-time throttle for the tick; sales themselves follow in-game minutes.
@@ -1034,15 +1035,15 @@ namespace FoodTrucks
             return controller != null && Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position) <= 100f;
         }
 
+        // Core decides (PlayerServing): a truck only from its hatch (or while the player is being placed there
+        // after Open), a cart within reach of its window.
         private static bool PlayerIsAtCart(VehicleInstance cart)
         {
             if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking) return false;
             if (SaveGameManager.Current.ActiveVehicleId == cart.id) return false;
-            // At the truck's hatch, inside it. Otherwise within reach of the window, at the cart or the truck.
-            if (TruckWindow.PlayerAt(cart.id)) return true;
             var controller = VehicleHelper.GetVehicleController(cart);
-            if (controller == null) return false;
-            return Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position) <= WorkingDistance;
+            double? distance = controller == null ? (double?)null : Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position);
+            return PlayerServing.Serves(CartDemand.KindOf(cart), TruckWindow.PlayerServes(cart.id), distance, WorkingDistance);
         }
 
         // One item at the cart's price. Returns the cents paid, or -1 if nothing was sold.
