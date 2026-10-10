@@ -596,7 +596,7 @@ namespace FoodTrucks
             var left = state.Commissary.Stock.TryGetValue(siteId, out var rest) ? rest.Sum(x => (long)x.Units) : 0;
             var view = Storage.Of(tables, kind, CargoLimit.Lines(vehicle));
             Log.Info($"Commissary restock: {kind} {World.Short(vehicleId)} at {siteId} loaded {(loaded.Count == 0 ? "nothing" : string.Join(", ", loaded.Select(p => $"{p.Value} {p.Key}")))}; " +
-                     $"no piece for {(plan.NotHeld.Count == 0 ? "none" : string.Join(", ", plan.NotHeld))}; {back} units refused by the cargo and kept; " +
+                     (plan.NotHeld.Count == 0 ? "" : $"no piece for {string.Join(", ", plan.NotHeld)}; ") + $"{back} units refused by the cargo and kept; " +
                      $"{left} units left in stock; storage {(view == null ? "?" : StoragePanel.Summary(vehicle, view))}.");
             // Fitted pieces are named first ("fitted Griddle"), then the foods with their counts.
             var fitted = loaded.Where(p => tables.EquipmentForGameItem(p.Key) != null)
