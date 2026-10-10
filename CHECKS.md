@@ -29,6 +29,32 @@ Build `0.9.6`: 0.9.5 plus two playtest fixes. "Open here" on a truck now checks 
 - `Route: truck <id> at … stands with its hatch to the road for stop N (…); the crew parks it again …` once in row 7, then `Route: the space at … would put the hatch to the road (…); the truck takes it the other way round.` if the space it picks needs turning.
 - `Queue view: line at cart <id>: … places on the right side …` for the truck, as before.
 - No new Harmony patches; the `Patch …: Active.` lines are unchanged.
+# Commissary orders by text (0.9.6)
+
+Ordering now stays in the commissary's conversation on the phone. "Order stock" shows the game's own phone order form, the one Square Appliances shows in its conversation, filled with the commissary's foods and machines: the address is the commissary, the time is tomorrow at 08:00, amounts are boxes (at most 10 an order), prices are box prices. "Order" makes the commissary read the order back with its total; "Confirm order" books and pays it. The bay's "Order stock for delivery to …" opens the same conversation. The Hell's Kitchen commissary moved from First Street 24 (a retail unit, with a random shop in it each game) to the apartment building at First Street 22, by the wholesaler. Use a disposable save with a vehicle that has a commissary space.
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Call a commissary where a vehicle has a space; press "Order stock" | The phone stays open. The conversation shows the order form: delivery address = the commissary's name, delivery time = tomorrow 08:00, both fixed. Delivery fee $0.00 and total $0.00. Any label on the form that still reads like a furniture store? Name it |
+| 2 | Press the form's add button | The item list beside the phone: foods first, then machines, each as "Hot dog, box of … (0 here)" with the box price. Its title reads "<Commissary>: 0/10 boxes". Search works |
+| 3 | Add hot dogs, raise them to 3; add a griddle | Each row shows its box price; the amount counts boxes. The fee is 10% of the goods, the total goods + fee. You can't go past 10 boxes in all (the list title counts them) |
+| 4 | Press "Order" | The commissary answers: "So that's: 3 boxes of Hot dog (… items, $… a box), 1 box of Griddle …, $… plus $… delivery, $… in all, here at 08:00 tomorrow." Buttons: Hang up, Change, Confirm order. No money has moved |
+| 5 | Press "Change" | A fresh order form. Order 1 box of something and press "Order" again |
+| 6 | Press "Confirm order" | The money goes (a transaction "Commissary order from …" per item), the commissary's answer lists one "Ordered: …" line per item. "Order more" opens the form again. Hang up; reopen the conversation: the order and the commissary's texts are in its history |
+| 7 | Press "Order" on an empty form | A notice "Add at least one box to the order"; the form stays |
+| 8 | Drive a vehicle into a commissary bay, press "Commissary", then "Order stock for delivery to … (opens its texts)" | The phone opens on that commissary's conversation and the call starts; same flow as above |
+| 9 | Spend down to less than an order's total, then order and confirm | The answer says the payment didn't go through and the order is held; it is paid and delivered later, as before |
+| 10 | Call a furniture store (Square Appliances or another) and open its order form | It is the game's usual form: your buildings, its delivery times, its prices, $250 delivery. Nothing of the commissary's |
+| 11 | City map, Street food line, "Commissaries"; drive to Hell's Kitchen's | It lights First Street 22, next to the wholesaler at First Street 18. Is there a kerb by its door where the truck parks legally? Ctrl+F3 at the kerb should say "in the bay" |
+| 12 | Load a save that rented a space at the Hell's Kitchen commissary on 0.9.5 | The space is still there (state line in the log), the rent keeps coming, and the vehicle in the new bay isn't fined at 04:00 |
+
+Log lines:
+
+- At startup: `Patch DeliveryContractSettingsBase.Start: Active.`, the same for `SetUpInventoryList`, `AddItemToList(String)`, `UpdateTotalPrice`, `FurnitureDeliveryContractSettings.get_MaxContractAmount` and `UpdateItemsListTitle`, then `Commissary orders: the order form in the commissary's conversation is on.`
+- At load: `Commissary hells-kitchen (ba:street_firststreet#22): bay at x …, z … (nearest entrance).` A line `Commissary <id> (<address>): the building has a business in this game (…)` only where a rival's factory landed in a garage.
+- Rows 1 to 6: `Commissary order at <id>: the order form lists N items.`, `Commissary order at <id>: read back N boxes (…), $… plus $… delivery.`, one `Commissary order N: B boxes, U <item> at <id> for $… plus $… delivery, paid; due day D at 08:00.` per item.
+- Row 8: `Commissary <id>: the bay's Order stock opens its conversation.`
+- No `Commissary order form, …` errors.
 
 # Commissary checks (0.9.4)
 

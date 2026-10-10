@@ -24,6 +24,15 @@ public class CommissaryTablesTests
         Assert.All(tables.Sites, s => Assert.Null(s.Bay));
     }
 
+    // Saves keep a space, an order and stock by commissary ID only, so an address can move but an ID must stay.
+    [Fact]
+    public void ShippedIdsStayTheOnesSavesUse()
+    {
+        Assert.Equal(new[] { "industry-city", "garment-district", "hells-kitchen", "lower-manhattan", "murray-hill" },
+            Shipped.Sites.Select(s => s.Id));
+        Assert.Equal("ba:street_firststreet#22", Shipped.Site("hells-kitchen")!.Address);
+    }
+
     [Theory]
     [InlineData("\"id\": \"industry-city\"", "\"id\": \"Industry City\"", "lower-case letters")]
     [InlineData("\"id\": \"garment-district\"", "\"id\": \"industry-city\"", "must be unique")]

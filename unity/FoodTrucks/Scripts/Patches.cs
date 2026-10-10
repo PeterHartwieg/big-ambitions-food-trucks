@@ -108,6 +108,19 @@ namespace FoodTrucks
             // Truck window: a save made at the hatch puts the player outside by the truck, not inside its body.
             Patch(typeof(PlayerHelper), "SaveCurrentPosition", Type.EmptyTypes, typeof(TruckWindow), postfix: nameof(TruckWindow.SavePositionPostfix));
 
+            // Commissary orders: the game's phone order form (as Square Appliances shows it) in a commissary's conversation,
+            // made the commissary's: its address and delivery time, boxes at wholesale, Core's fee and total. Only while
+            // the form shows for a commissary contact; the order form is used only when all six are active.
+            var form = typeof(UI.Dialog.DeliveryContractSettingsBase);
+            var store = typeof(UI.Dialog.FurnitureDeliveryContractSettings);
+            Patch(form, "Start", Type.EmptyTypes, typeof(CommissaryOrderForm), postfix: nameof(CommissaryOrderForm.StartPostfix));
+            Patch(form, "SetUpInventoryList", Type.EmptyTypes, typeof(CommissaryOrderForm), postfix: nameof(CommissaryOrderForm.InventoryPostfix));
+            Patch(form, "AddItemToList", new[] { typeof(string) }, typeof(CommissaryOrderForm), postfix: nameof(CommissaryOrderForm.AddItemPostfix));
+            Patch(form, "UpdateTotalPrice", Type.EmptyTypes, typeof(CommissaryOrderForm), postfix: nameof(CommissaryOrderForm.TotalPostfix));
+            Patch(store, "get_MaxContractAmount", Type.EmptyTypes, typeof(CommissaryOrderForm), postfix: nameof(CommissaryOrderForm.MaxAmountPostfix));
+            Patch(store, "UpdateItemsListTitle", Type.EmptyTypes, typeof(CommissaryOrderForm), postfix: nameof(CommissaryOrderForm.TitlePostfix));
+            CommissaryOrderForm.CheckReady();
+
             // Cargo limit: food up to the vehicle's units, equipment up to its slots.
             Patch(typeof(VehicleInstance), "MergeIntoCargo", new[] { typeof(CargoInstance) },
                 typeof(CargoLimit), prefix: nameof(CargoLimit.MergePrefix), finalizer: nameof(CargoLimit.MergeFinalizer));
