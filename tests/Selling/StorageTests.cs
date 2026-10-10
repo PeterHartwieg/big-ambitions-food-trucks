@@ -270,6 +270,27 @@ public class StorageTests
         Assert.Empty(Core.Selling.Storage.FitPieces(Tables, "boat", Array.Empty<CargoLine>(), stock));
     }
 
+    // Review 0.9.7 round 2: with an edited weight where division rounds up past the loader's limit, catering must
+    // never advertise more than Check will load.
+    [Theory]
+    [InlineData(0.54421768707483)]
+    [InlineData(0.3)]
+    [InlineData(0.7)]
+    [InlineData(1.0 / 3)]
+    public void AdvertisedCategoryCapacityCanBeLoaded(double weight)
+    {
+        var economy = JObject.Parse(ShippedData.Economy);
+        ((JObject)economy.SelectToken("products")![HotDog]!)["stockWeight"] = weight;
+        var tables = DemandTables.Parse(ShippedData.Demand, economy.ToString(), ShippedData.Zones);
+        foreach (var (vehicle, storage) in new[] { ("cart", false), ("truck", false), ("truck", true) })
+        {
+            var cargo = new List<CargoLine> { L(HotDogGrill, 1) };
+            if (storage) cargo.Add(L(Storage, 1));
+            var advertised = Core.Selling.Storage.CategoryCapacity(tables, vehicle, cargo)["fastfood"];
+            Assert.Equal(advertised, Core.Selling.Storage.Check(tables, vehicle, cargo, HotDog, advertised + 10, false).Allowed);
+        }
+    }
+
     [Fact]
     public void CategoryCapacityCountsWholeItemsPerCategory()
     {

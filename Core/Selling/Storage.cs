@@ -263,9 +263,15 @@ namespace FoodTrucks.Core.Selling
             return fit;
         }
 
-        // Whole food items of each demand category the vehicle can hold, from the pieces fitted now: each pool's
-        // room in items of its lightest food of that category (catering counts items, not weighted units), the
-        // pools serving one category added up. Categories no fitted piece serves are left out.
+        // Whole food items of each demand category the vehicle can hold, from the pieces fitted now: each pool's room
+        // in items of its lightest food of that category, counted by the loader's own rule (StockLimit.CanLoad, so no
+        // advertised item fails to load), the pools serving one category added up. Categories no fitted piece serves
+        // are left out.
+        // The lightest food makes this an upper bound for a shared piece whose foods of one category weigh differently.
+        // Shipped data has one such piece only with the Bakery mod: the display case holds 160 croissants on a truck
+        // but 80 bread. Kept on purpose: a gig takes any food of its category and the player picks the stock, so the
+        // heaviest weight would hide gigs a lighter load can serve; a truck short of food at the gig is NotReady, and
+        // the player can restock and come back before the deadline.
         public static IReadOnlyDictionary<string, int> CategoryCapacity(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo)
         {
             var byCategory = new Dictionary<string, long>(StringComparer.Ordinal);
@@ -274,10 +280,10 @@ namespace FoodTrucks.Core.Selling
                 foreach (var pool in view.Pools)
                     foreach (var group in pool.Piece.Products.Select(p => tables.Product(p)!).GroupBy(p => p.Category, StringComparer.Ordinal))
                     {
-                        var items = (long)Math.Floor(pool.Capacity / group.Min(p => p.StockWeight) + 1e-9);
-                        byCategory[group.Key] = (byCategory.TryGetValue(group.Key, out var c) ? c : 0) + items;
+                        long items = StockLimit.CanLoad(0, int.MaxValue, pool.Capacity, group.Min(p => p.StockWeight));
+                        byCategory[group.Key] = Math.Min(int.MaxValue, (byCategory.TryGetValue(group.Key, out var c) ? c : 0) + items);
                     }
-            return byCategory.ToDictionary(p => p.Key, p => (int)Math.Min(int.MaxValue, p.Value), StringComparer.Ordinal);
+            return byCategory.ToDictionary(p => p.Key, p => (int)p.Value, StringComparer.Ordinal);
         }
 
         private static int EquipmentPieces(DemandTables tables, IEnumerable<CargoLine> cargo)
