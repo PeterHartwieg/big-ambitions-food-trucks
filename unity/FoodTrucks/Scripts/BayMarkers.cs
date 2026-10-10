@@ -259,31 +259,31 @@ namespace FoodTrucks
             var triangles = new List<int>();
             var half = width / 2f;
             var footY = local.MultiplyPoint3x4(Vector3.zero).y;
-            var heights = new Dictionary<int, float>();
-            float Sample(int key)
+            var heights = new Dictionary<(int, int), float>();
+            float Sample(int key, float z)
             {
-                // The road's height at a whole metre along the bay: the highest of its middle line and both edges, so a
-                // cambered lane doesn't swallow the outer line.
-                if (heights.TryGetValue(key, out var h)) return h;
-                h = Mathf.Max(Ground(local.MultiplyPoint3x4(new Vector3(key, 0f, -half)), groundY),
-                              Ground(local.MultiplyPoint3x4(new Vector3(key, 0f, 0f)), groundY),
-                              Ground(local.MultiplyPoint3x4(new Vector3(key, 0f, half)), groundY)) - footY + Lift;
-                heights[key] = h;
+                // The road's height at a whole metre along the bay, at this vertex's own distance across it: a kerb or
+                // camber under one edge lifts only that edge's vertices (review round 2; a first version took the
+                // highest of three samples for the whole width, so a kerb under one edge lifted the other too).
+                var cell = (key, Mathf.RoundToInt(z * 100f));
+                if (heights.TryGetValue(cell, out var h)) return h;
+                h = Ground(local.MultiplyPoint3x4(new Vector3(key, 0f, z)), groundY) - footY + Lift;
+                heights[cell] = h;
                 return h;
             }
-            float Height(float x)
+            float Height(float x, float z)
             {
                 var a = Mathf.FloorToInt(x);
                 var t = x - a;
-                return t < 0.001f ? Sample(a) : Mathf.Lerp(Sample(a), Sample(a + 1), t);
+                return t < 0.001f ? Sample(a, z) : Mathf.Lerp(Sample(a, z), Sample(a + 1, z), t);
             }
             void Quad(float x0, float z0, float x1, float z1)
             {
                 var i = vertices.Count;
-                vertices.Add(new Vector3(x0, Height(x0), z0));
-                vertices.Add(new Vector3(x0, Height(x0), z1));
-                vertices.Add(new Vector3(x1, Height(x1), z1));
-                vertices.Add(new Vector3(x1, Height(x1), z0));
+                vertices.Add(new Vector3(x0, Height(x0, z0), z0));
+                vertices.Add(new Vector3(x0, Height(x0, z1), z1));
+                vertices.Add(new Vector3(x1, Height(x1, z1), z1));
+                vertices.Add(new Vector3(x1, Height(x1, z0), z0));
                 triangles.AddRange(new[] { i, i + 1, i + 2, i, i + 2, i + 3 });
             }
             void Edge(float from, float to, float z0, float z1)
