@@ -882,6 +882,9 @@ namespace FoodTrucks
         // the rest dropped, and the contacts go with the mod.
         public static void RemoveForUninstall()
         {
+            // Set first: if the refund or a payment below throws, the mod's contacts still lose their protection
+            // (ModContacts) and the bookings contact isn't added again in the morning (Catering.OnNewDay).
+            uninstalled = true;
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
             if (state != null && rules != null && FoodTrucksSession.CanWrite)
@@ -917,7 +920,6 @@ namespace FoodTrucks
                 Log.Info($"Uninstall: commissary refund {CartSelling.Money(paidBack ? refund.Total : 0)} (goods {CartSelling.Money(refund.GoodsCents)}, delivery fees {CartSelling.Money(refund.FeeCents)}); {spaces} spaces given up.");
                 if (paidBack) CartSelling.Notify("foodtrucks:notification_uninstall_commissary", ("refund", CartSelling.Money(refund.Total)));
             }
-            uninstalled = true;
             CartButton.ShowCommissary(false);
             BayMarkers.RemoveAll();
             CommissaryOrderForm.Forget(Sites?.Sites.Select(s => ContactPrefix + s.Id) ?? Enumerable.Empty<string>());

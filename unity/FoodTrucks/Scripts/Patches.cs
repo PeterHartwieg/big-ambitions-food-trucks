@@ -121,7 +121,7 @@ namespace FoodTrucks
             Patch(store, "UpdateItemsListTitle", Type.EmptyTypes, typeof(CommissaryOrderForm), postfix: nameof(CommissaryOrderForm.TitlePostfix));
             CommissaryOrderForm.CheckReady();
 
-            // The mod's contacts (Street Food Bookings, commissaries, the City) have no delete button and survive "Delete all".
+            // The mod's own contacts (Street Food Bookings, the commissaries) have no delete button and survive "Delete all".
             Patch(typeof(UI.Smartphone.Apps.Contacts.ContactScrollerController), "LoadContact", null, typeof(ModContacts),
                 postfix: nameof(ModContacts.LoadContactPostfix));
             Patch(typeof(ContactsHelper), "GetPermanentIds", Type.EmptyTypes, typeof(ModContacts), postfix: nameof(ModContacts.PermanentIdsPostfix));
