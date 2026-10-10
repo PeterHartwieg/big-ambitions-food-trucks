@@ -182,6 +182,7 @@ namespace FoodTrucks
         private void Update()
         {
             CommissaryOrderForm.Watch();
+            StartPendingCall();
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
             var sites = Sites;
@@ -687,21 +688,80 @@ namespace FoodTrucks
 
         // The bay's "Order stock": the phone opens on the commissary's conversation and calls it, so ordering happens
         // in one place, the conversation's order form.
+        //
+        // Not ContactsApp.OpenAndStartCall: it presses CALL one frame after opening the app, but the app shows the
+        // conversation in a coroutine (ShowContactConversationIEnumerator) that waits a frame and then lays out the
+        // history. When the call wins that race (the phone opened from the world, as here), the call's first entry, with
+        // its Hang up and Order stock buttons, is placed before the history is laid out and ends up out of sight, and
+        // the call can't be continued or hung up [code, 1.0; 0.9.6 playtest]. So the phone opens on the conversation
+        // (the game's own OpenAppWithContact path through the app's OnEnable), and the call starts through the CALL
+        // button's own path (ContactsApp.StartCall) once the conversation panel is up with this contact.
         private static void CallToOrder(string siteId)
         {
             HireRoutes.Later(() =>
             {
                 try
                 {
+                    var contact = ContactFor(siteId);
                     Log.Info($"Commissary {siteId}: the bay's Order stock opens its conversation.");
-                    ContactsApp.OpenAndStartCall(ContactFor(siteId));
+                    SaveGameManager.Current.PlayerDefaults.contactsLastName = contact.id;
+                    SaveGameManager.Current.PlayerDefaults.contactsLastCategoryName = contact.category;
+                    var app = InstanceBehavior<UIs>.Instance.fullMenu.contactsApp;
+                    // Already open on another screen: OnEnable won't run again, so show the conversation directly.
+                    var wasOpen = app != null && app.isActiveAndEnabled;
+                    InstanceBehavior<UIs>.Instance.fullMenu.ShowApp(AppName.Contacts);
+                    if (wasOpen && app!.selectedContact != contact) app.OpenAppWithContact(contact);
+                    pendingCall = (siteId, contact, Time.frameCount, Time.unscaledTime + PendingCallSeconds);
                 }
                 catch (Exception ex)
                 {
+                    pendingCall = null;
                     Log.Error("Commissary order, opening the phone: " + ex);
                     CartSelling.Notify("foodtrucks:notification_commissary_call", ("commissary", NameOf(siteId)));
                 }
             });
+        }
+
+        private const float PendingCallSeconds = 5f;
+        private static (string SiteId, Contact Contact, int Frame, float Until)? pendingCall;
+        private static readonly System.Reflection.FieldInfo? ConversationPanelField =
+            typeof(ContactsApp).GetField("conversationPanel", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        // Starts the bay's call once the phone shows the commissary's conversation: the panel is up with this contact,
+        // which the app's coroutine sets in the same step that lays out the history, and a frame has passed since.
+        private static void StartPendingCall()
+        {
+            if (pendingCall == null) return;
+            var (siteId, contact, frame, until) = pendingCall.Value;
+            try
+            {
+                var app = InstanceBehavior<UIs>.Instance?.fullMenu?.contactsApp;
+                var panel = app == null ? null : ConversationPanelField?.GetValue(app) as GameObject;
+                if (app != null && app.isActiveAndEnabled && app.selectedContact == contact && panel != null && panel.activeSelf &&
+                    Time.frameCount > frame + 1)
+                {
+                    pendingCall = null;
+                    if (DialogController.current != null)
+                    {
+                        Log.Info($"Commissary {siteId}: a call is already on; the bay's Order stock leaves the conversation open.");
+                        return;
+                    }
+                    app.StartCall();
+                    Log.Info($"Commissary {siteId}: the bay's call started once the conversation was up ({Time.frameCount - frame} frames).");
+                    return;
+                }
+                if (Time.unscaledTime < until && (app == null || app.isActiveAndEnabled || Time.frameCount <= frame + 2)) return;
+                pendingCall = null;
+                Log.Error($"Commissary {siteId}: the bay's call didn't start: the conversation never came up " +
+                          $"(app {(app == null ? "missing" : app.isActiveAndEnabled ? "open" : "closed")}, panel field {(ConversationPanelField == null ? "missing" : "found")}).");
+                CartSelling.Notify("foodtrucks:notification_commissary_call", ("commissary", NameOf(siteId)));
+            }
+            catch (Exception ex)
+            {
+                pendingCall = null;
+                Log.Error("Commissary order, starting the call: " + ex);
+                CartSelling.Notify("foodtrucks:notification_commissary_call", ("commissary", NameOf(siteId)));
+            }
         }
 
         // A quote placed as Core's orders, each paid now; a refused payment books the order anyway, held until paid
