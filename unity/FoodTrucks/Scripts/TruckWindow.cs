@@ -59,6 +59,8 @@ namespace FoodTrucks
         private Vector3 fallbackExit;
         private int stateFrame;
         private Coroutine? entering;
+        // The truck whose hatch the player is on the way to (after Open, until placed or left outside).
+        private string? enteringId;
 
         // Out of energy: the game sends an exhausted player to hospital, which an open activity panel stops, and
         // it fires its own out-of-energy cancel only when energy crosses the line, not when it is already below.
@@ -70,6 +72,12 @@ namespace FoodTrucks
 
         // The player stands at this truck's hatch.
         public static bool PlayerAt(string id) => instance != null && instance.vehicleId == id && instance.place != null;
+
+        // The player serves this truck's window: at its hatch, or on the way there in the frames after Open, so
+        // the window doesn't report nobody at it before the player is placed. Only the hatch serves a truck
+        // (Core PlayerServing); a player who stepped out doesn't, however close.
+        public static bool PlayerServes(string id) =>
+            PlayerAt(id) || (instance != null && instance.entering != null && instance.enteringId == id);
 
         private void OnEnable()
         {
@@ -104,6 +112,7 @@ namespace FoodTrucks
                 return;
             }
             if (self.entering != null) self.StopCoroutine(self.entering);
+            self.enteringId = truckId;
             self.entering = self.StartCoroutine(self.EnterWhenOut(truckId));
         }
 
@@ -121,6 +130,7 @@ namespace FoodTrucks
                     // The game found no way out and put the player back in the seat.
                     Log.Info($"Truck window: {id}: the player is back in the driver's seat; not placed at the hatch.");
                     entering = null;
+                    enteringId = null;
                     yield break;
                 }
                 var waited = Time.frameCount - start;
@@ -129,6 +139,7 @@ namespace FoodTrucks
                 if (waited >= MaxWaitFrames) break;
             }
             entering = null;
+            enteringId = null;
             try { Place(id); }
             catch (Exception ex)
             {

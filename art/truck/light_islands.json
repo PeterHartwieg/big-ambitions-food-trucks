@@ -1,787 +1,127 @@
 [
   {
     "object": "Truck_Body",
-    "face": 988,
-    "class": "head",
-    "uv_center": [
-      0.12109375,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 989,
-    "class": "head",
-    "uv_center": [
-      0.12890625,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 990,
+    "face": 1220,
     "class": "head",
     "uv_center": [
       0.13671875,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 991,
+    "face": 1221,
     "class": "head",
     "uv_center": [
       0.14453125,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 992,
+    "face": 1222,
     "class": "head",
     "uv_center": [
       0.15234375,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 993,
+    "face": 1223,
     "class": "head",
     "uv_center": [
       0.16015625,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 994,
+    "face": 1224,
     "class": "head",
     "uv_center": [
       0.16796875,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 995,
+    "face": 1225,
     "class": "head",
     "uv_center": [
       0.17578125,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 996,
+    "face": 1226,
     "class": "head",
     "uv_center": [
       0.18359375,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 997,
+    "face": 1227,
     "class": "head",
     "uv_center": [
       0.19140625,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 998,
+    "face": 1228,
     "class": "head",
     "uv_center": [
       0.19921875,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 999,
+    "face": 1229,
     "class": "head",
     "uv_center": [
       0.20703125,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1000,
+    "face": 1230,
     "class": "head",
     "uv_center": [
       0.21484375,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1001,
+    "face": 1231,
     "class": "head",
     "uv_center": [
       0.22265625,
-      0.56640625
+      0.58203125
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1002,
-    "class": "head",
-    "uv_center": [
-      0.23046875,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1003,
-    "class": "head",
-    "uv_center": [
-      0.23828125,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1004,
-    "class": "head",
-    "uv_center": [
-      0.24609375,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1005,
-    "class": "head",
-    "uv_center": [
-      0.25390625,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1006,
-    "class": "head",
-    "uv_center": [
-      0.26171875,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1007,
-    "class": "head",
-    "uv_center": [
-      0.26953125,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1028,
-    "class": "head",
-    "uv_center": [
-      0.43359375,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1029,
-    "class": "head",
-    "uv_center": [
-      0.44140625,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1030,
-    "class": "head",
-    "uv_center": [
-      0.44921875,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1031,
-    "class": "head",
-    "uv_center": [
-      0.45703125,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1032,
-    "class": "head",
-    "uv_center": [
-      0.46484375,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1033,
-    "class": "head",
-    "uv_center": [
-      0.47265625,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1034,
-    "class": "head",
-    "uv_center": [
-      0.48046875,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1035,
-    "class": "head",
-    "uv_center": [
-      0.48828125,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1036,
-    "class": "head",
-    "uv_center": [
-      0.49609375,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1037,
-    "class": "head",
-    "uv_center": [
-      0.50390625,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1038,
-    "class": "head",
-    "uv_center": [
-      0.51171875,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1039,
-    "class": "head",
-    "uv_center": [
-      0.51953125,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1040,
-    "class": "head",
-    "uv_center": [
-      0.52734375,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1041,
-    "class": "head",
-    "uv_center": [
-      0.53515625,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1042,
-    "class": "head",
-    "uv_center": [
-      0.54296875,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1043,
-    "class": "head",
-    "uv_center": [
-      0.55078125,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1044,
-    "class": "head",
-    "uv_center": [
-      0.55859375,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1045,
-    "class": "head",
-    "uv_center": [
-      0.56640625,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1046,
-    "class": "head",
-    "uv_center": [
-      0.57421875,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1047,
-    "class": "head",
-    "uv_center": [
-      0.58203125,
-      0.56640625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1048,
-    "class": "right",
-    "uv_center": [
-      0.58984375,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1049,
-    "class": "right",
-    "uv_center": [
-      0.59765625,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1050,
-    "class": "right",
-    "uv_center": [
-      0.60546875,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1051,
-    "class": "right",
-    "uv_center": [
-      0.61328125,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1052,
-    "class": "right",
-    "uv_center": [
-      0.62109375,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1053,
-    "class": "right",
-    "uv_center": [
-      0.62890625,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1054,
-    "class": "right",
-    "uv_center": [
-      0.63671875,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1055,
-    "class": "right",
-    "uv_center": [
-      0.64453125,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1056,
-    "class": "right",
-    "uv_center": [
-      0.65234375,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1057,
-    "class": "right",
-    "uv_center": [
-      0.66015625,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1058,
-    "class": "right",
-    "uv_center": [
-      0.66796875,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1059,
-    "class": "right",
-    "uv_center": [
-      0.67578125,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1060,
-    "class": "right",
-    "uv_center": [
-      0.68359375,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1061,
-    "class": "right",
-    "uv_center": [
-      0.69140625,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1062,
-    "class": "right",
-    "uv_center": [
-      0.69921875,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1063,
-    "class": "right",
-    "uv_center": [
-      0.70703125,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1064,
-    "class": "right",
-    "uv_center": [
-      0.71484375,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1065,
-    "class": "right",
-    "uv_center": [
-      0.72265625,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1066,
-    "class": "right",
-    "uv_center": [
-      0.73046875,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1067,
-    "class": "right",
-    "uv_center": [
-      0.73828125,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1074,
-    "class": "right",
-    "uv_center": [
-      0.79296875,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1075,
-    "class": "right",
-    "uv_center": [
-      0.80078125,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1076,
-    "class": "right",
-    "uv_center": [
-      0.80859375,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1077,
-    "class": "right",
-    "uv_center": [
-      0.81640625,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1078,
-    "class": "right",
-    "uv_center": [
-      0.82421875,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1079,
-    "class": "right",
-    "uv_center": [
-      0.83203125,
-      0.56640625
-    ],
-    "mask": "EM_2.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1080,
-    "class": "tail",
-    "uv_center": [
-      0.83984375,
-      0.56640625
-    ],
-    "mask": "EM_1.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1081,
-    "class": "tail",
-    "uv_center": [
-      0.84765625,
-      0.56640625
-    ],
-    "mask": "EM_1.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1082,
-    "class": "tail",
-    "uv_center": [
-      0.85546875,
-      0.56640625
-    ],
-    "mask": "EM_1.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1083,
-    "class": "tail",
-    "uv_center": [
-      0.86328125,
-      0.56640625
-    ],
-    "mask": "EM_1.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1084,
-    "class": "tail",
-    "uv_center": [
-      0.87109375,
-      0.56640625
-    ],
-    "mask": "EM_1.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1085,
-    "class": "tail",
-    "uv_center": [
-      0.87890625,
-      0.56640625
-    ],
-    "mask": "EM_1.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1086,
-    "class": "reverse",
-    "uv_center": [
-      0.88671875,
-      0.56640625
-    ],
-    "mask": "EM_1.B"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1087,
-    "class": "reverse",
-    "uv_center": [
-      0.89453125,
-      0.56640625
-    ],
-    "mask": "EM_1.B"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1088,
-    "class": "reverse",
-    "uv_center": [
-      0.90234375,
-      0.56640625
-    ],
-    "mask": "EM_1.B"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1089,
-    "class": "reverse",
-    "uv_center": [
-      0.91015625,
-      0.56640625
-    ],
-    "mask": "EM_1.B"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1090,
-    "class": "reverse",
-    "uv_center": [
-      0.91796875,
-      0.56640625
-    ],
-    "mask": "EM_1.B"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1091,
-    "class": "reverse",
-    "uv_center": [
-      0.92578125,
-      0.56640625
-    ],
-    "mask": "EM_1.B"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1258,
+    "face": 1232,
     "class": "head",
     "uv_center": [
       0.23046875,
@@ -791,10 +131,70 @@
   },
   {
     "object": "Truck_Body",
-    "face": 1259,
+    "face": 1233,
     "class": "head",
     "uv_center": [
       0.23828125,
+      0.58203125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1234,
+    "class": "head",
+    "uv_center": [
+      0.24609375,
+      0.58203125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1235,
+    "class": "head",
+    "uv_center": [
+      0.25390625,
+      0.58203125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1236,
+    "class": "head",
+    "uv_center": [
+      0.26171875,
+      0.58203125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1237,
+    "class": "head",
+    "uv_center": [
+      0.26953125,
+      0.58203125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1238,
+    "class": "head",
+    "uv_center": [
+      0.27734375,
+      0.58203125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1239,
+    "class": "head",
+    "uv_center": [
+      0.28515625,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -804,7 +204,7 @@
     "face": 1260,
     "class": "head",
     "uv_center": [
-      0.24609375,
+      0.44921875,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -814,7 +214,7 @@
     "face": 1261,
     "class": "head",
     "uv_center": [
-      0.25390625,
+      0.45703125,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -824,7 +224,7 @@
     "face": 1262,
     "class": "head",
     "uv_center": [
-      0.26171875,
+      0.46484375,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -834,7 +234,7 @@
     "face": 1263,
     "class": "head",
     "uv_center": [
-      0.26953125,
+      0.47265625,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -844,7 +244,7 @@
     "face": 1264,
     "class": "head",
     "uv_center": [
-      0.27734375,
+      0.48046875,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -854,7 +254,7 @@
     "face": 1265,
     "class": "head",
     "uv_center": [
-      0.28515625,
+      0.48828125,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -864,7 +264,7 @@
     "face": 1266,
     "class": "head",
     "uv_center": [
-      0.29296875,
+      0.49609375,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -874,7 +274,7 @@
     "face": 1267,
     "class": "head",
     "uv_center": [
-      0.30078125,
+      0.50390625,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -884,7 +284,7 @@
     "face": 1268,
     "class": "head",
     "uv_center": [
-      0.30859375,
+      0.51171875,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -894,7 +294,7 @@
     "face": 1269,
     "class": "head",
     "uv_center": [
-      0.31640625,
+      0.51953125,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -904,7 +304,7 @@
     "face": 1270,
     "class": "head",
     "uv_center": [
-      0.32421875,
+      0.52734375,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -914,7 +314,7 @@
     "face": 1271,
     "class": "head",
     "uv_center": [
-      0.33203125,
+      0.53515625,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -924,7 +324,7 @@
     "face": 1272,
     "class": "head",
     "uv_center": [
-      0.33984375,
+      0.54296875,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -934,7 +334,7 @@
     "face": 1273,
     "class": "head",
     "uv_center": [
-      0.34765625,
+      0.55078125,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -944,7 +344,7 @@
     "face": 1274,
     "class": "head",
     "uv_center": [
-      0.35546875,
+      0.55859375,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -954,7 +354,7 @@
     "face": 1275,
     "class": "head",
     "uv_center": [
-      0.36328125,
+      0.56640625,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -964,7 +364,7 @@
     "face": 1276,
     "class": "head",
     "uv_center": [
-      0.37109375,
+      0.57421875,
       0.58203125
     ],
     "mask": "EM_1.R"
@@ -974,66 +374,6 @@
     "face": 1277,
     "class": "head",
     "uv_center": [
-      0.37890625,
-      0.58203125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1298,
-    "class": "head",
-    "uv_center": [
-      0.54296875,
-      0.58203125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1299,
-    "class": "head",
-    "uv_center": [
-      0.55078125,
-      0.58203125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1300,
-    "class": "head",
-    "uv_center": [
-      0.55859375,
-      0.58203125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1301,
-    "class": "head",
-    "uv_center": [
-      0.56640625,
-      0.58203125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1302,
-    "class": "head",
-    "uv_center": [
-      0.57421875,
-      0.58203125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1303,
-    "class": "head",
-    "uv_center": [
       0.58203125,
       0.58203125
     ],
@@ -1041,7 +381,7 @@
   },
   {
     "object": "Truck_Body",
-    "face": 1304,
+    "face": 1278,
     "class": "head",
     "uv_center": [
       0.58984375,
@@ -1051,7 +391,7 @@
   },
   {
     "object": "Truck_Body",
-    "face": 1305,
+    "face": 1279,
     "class": "head",
     "uv_center": [
       0.59765625,
@@ -1061,1988 +401,2528 @@
   },
   {
     "object": "Truck_Body",
-    "face": 1306,
-    "class": "head",
+    "face": 1280,
+    "class": "right",
     "uv_center": [
       0.60546875,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1307,
-    "class": "head",
+    "face": 1281,
+    "class": "right",
     "uv_center": [
       0.61328125,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1308,
-    "class": "head",
+    "face": 1282,
+    "class": "right",
     "uv_center": [
       0.62109375,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1309,
-    "class": "head",
+    "face": 1283,
+    "class": "right",
     "uv_center": [
       0.62890625,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1310,
-    "class": "head",
+    "face": 1284,
+    "class": "right",
     "uv_center": [
       0.63671875,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1311,
-    "class": "head",
+    "face": 1285,
+    "class": "right",
     "uv_center": [
       0.64453125,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1312,
-    "class": "head",
+    "face": 1286,
+    "class": "right",
     "uv_center": [
       0.65234375,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1313,
-    "class": "head",
+    "face": 1287,
+    "class": "right",
     "uv_center": [
       0.66015625,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1314,
-    "class": "head",
+    "face": 1288,
+    "class": "right",
     "uv_center": [
       0.66796875,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1315,
-    "class": "head",
+    "face": 1289,
+    "class": "right",
     "uv_center": [
       0.67578125,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1316,
-    "class": "head",
+    "face": 1290,
+    "class": "right",
     "uv_center": [
       0.68359375,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1317,
-    "class": "head",
+    "face": 1291,
+    "class": "right",
     "uv_center": [
       0.69140625,
       0.58203125
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1292,
+    "class": "right",
+    "uv_center": [
+      0.69921875,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1293,
+    "class": "right",
+    "uv_center": [
+      0.70703125,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1294,
+    "class": "right",
+    "uv_center": [
+      0.71484375,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1295,
+    "class": "right",
+    "uv_center": [
+      0.72265625,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1296,
+    "class": "right",
+    "uv_center": [
+      0.73046875,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1297,
+    "class": "right",
+    "uv_center": [
+      0.73828125,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1298,
+    "class": "right",
+    "uv_center": [
+      0.74609375,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1299,
+    "class": "right",
+    "uv_center": [
+      0.75390625,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1306,
+    "class": "right",
+    "uv_center": [
+      0.80859375,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1307,
+    "class": "right",
+    "uv_center": [
+      0.81640625,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1308,
+    "class": "right",
+    "uv_center": [
+      0.82421875,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1309,
+    "class": "right",
+    "uv_center": [
+      0.83203125,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1310,
+    "class": "right",
+    "uv_center": [
+      0.83984375,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1311,
+    "class": "right",
+    "uv_center": [
+      0.84765625,
+      0.58203125
+    ],
+    "mask": "EM_2.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1312,
+    "class": "tail",
+    "uv_center": [
+      0.85546875,
+      0.58203125
+    ],
+    "mask": "EM_1.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1313,
+    "class": "tail",
+    "uv_center": [
+      0.86328125,
+      0.58203125
+    ],
+    "mask": "EM_1.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1314,
+    "class": "tail",
+    "uv_center": [
+      0.87109375,
+      0.58203125
+    ],
+    "mask": "EM_1.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1315,
+    "class": "tail",
+    "uv_center": [
+      0.87890625,
+      0.58203125
+    ],
+    "mask": "EM_1.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1316,
+    "class": "tail",
+    "uv_center": [
+      0.88671875,
+      0.58203125
+    ],
+    "mask": "EM_1.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1317,
+    "class": "tail",
+    "uv_center": [
+      0.89453125,
+      0.58203125
+    ],
+    "mask": "EM_1.G"
   },
   {
     "object": "Truck_Body",
     "face": 1318,
-    "class": "left",
-    "uv_center": [
-      0.69921875,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1319,
-    "class": "left",
-    "uv_center": [
-      0.70703125,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1320,
-    "class": "left",
-    "uv_center": [
-      0.71484375,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1321,
-    "class": "left",
-    "uv_center": [
-      0.72265625,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1322,
-    "class": "left",
-    "uv_center": [
-      0.73046875,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1323,
-    "class": "left",
-    "uv_center": [
-      0.73828125,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1324,
-    "class": "left",
-    "uv_center": [
-      0.74609375,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1325,
-    "class": "left",
-    "uv_center": [
-      0.75390625,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1326,
-    "class": "left",
-    "uv_center": [
-      0.76171875,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1327,
-    "class": "left",
-    "uv_center": [
-      0.76953125,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1328,
-    "class": "left",
-    "uv_center": [
-      0.77734375,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1329,
-    "class": "left",
-    "uv_center": [
-      0.78515625,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1330,
-    "class": "left",
-    "uv_center": [
-      0.79296875,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1331,
-    "class": "left",
-    "uv_center": [
-      0.80078125,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1332,
-    "class": "left",
-    "uv_center": [
-      0.80859375,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1333,
-    "class": "left",
-    "uv_center": [
-      0.81640625,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1334,
-    "class": "left",
-    "uv_center": [
-      0.82421875,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1335,
-    "class": "left",
-    "uv_center": [
-      0.83203125,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1336,
-    "class": "left",
-    "uv_center": [
-      0.83984375,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1337,
-    "class": "left",
-    "uv_center": [
-      0.84765625,
-      0.58203125
-    ],
-    "mask": "EM_2.G"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 1344,
-    "class": "left",
+    "class": "reverse",
     "uv_center": [
       0.90234375,
       0.58203125
     ],
-    "mask": "EM_2.G"
+    "mask": "EM_1.B"
   },
   {
     "object": "Truck_Body",
-    "face": 1345,
-    "class": "left",
+    "face": 1319,
+    "class": "reverse",
     "uv_center": [
       0.91015625,
       0.58203125
     ],
-    "mask": "EM_2.G"
+    "mask": "EM_1.B"
   },
   {
     "object": "Truck_Body",
-    "face": 1346,
-    "class": "left",
+    "face": 1320,
+    "class": "reverse",
     "uv_center": [
       0.91796875,
       0.58203125
     ],
-    "mask": "EM_2.G"
+    "mask": "EM_1.B"
   },
   {
     "object": "Truck_Body",
-    "face": 1347,
-    "class": "left",
+    "face": 1321,
+    "class": "reverse",
     "uv_center": [
       0.92578125,
       0.58203125
     ],
-    "mask": "EM_2.G"
+    "mask": "EM_1.B"
   },
   {
     "object": "Truck_Body",
-    "face": 1348,
-    "class": "left",
+    "face": 1322,
+    "class": "reverse",
     "uv_center": [
       0.93359375,
       0.58203125
     ],
-    "mask": "EM_2.G"
+    "mask": "EM_1.B"
   },
   {
     "object": "Truck_Body",
-    "face": 1349,
-    "class": "left",
+    "face": 1323,
+    "class": "reverse",
     "uv_center": [
       0.94140625,
       0.58203125
     ],
+    "mask": "EM_1.B"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1490,
+    "class": "head",
+    "uv_center": [
+      0.24609375,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1491,
+    "class": "head",
+    "uv_center": [
+      0.25390625,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1492,
+    "class": "head",
+    "uv_center": [
+      0.26171875,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1493,
+    "class": "head",
+    "uv_center": [
+      0.26953125,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1494,
+    "class": "head",
+    "uv_center": [
+      0.27734375,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1495,
+    "class": "head",
+    "uv_center": [
+      0.28515625,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1496,
+    "class": "head",
+    "uv_center": [
+      0.29296875,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1497,
+    "class": "head",
+    "uv_center": [
+      0.30078125,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1498,
+    "class": "head",
+    "uv_center": [
+      0.30859375,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1499,
+    "class": "head",
+    "uv_center": [
+      0.31640625,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1500,
+    "class": "head",
+    "uv_center": [
+      0.32421875,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1501,
+    "class": "head",
+    "uv_center": [
+      0.33203125,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1502,
+    "class": "head",
+    "uv_center": [
+      0.33984375,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1503,
+    "class": "head",
+    "uv_center": [
+      0.34765625,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1504,
+    "class": "head",
+    "uv_center": [
+      0.35546875,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1505,
+    "class": "head",
+    "uv_center": [
+      0.36328125,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1506,
+    "class": "head",
+    "uv_center": [
+      0.37109375,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1507,
+    "class": "head",
+    "uv_center": [
+      0.37890625,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1508,
+    "class": "head",
+    "uv_center": [
+      0.38671875,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1509,
+    "class": "head",
+    "uv_center": [
+      0.39453125,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1530,
+    "class": "head",
+    "uv_center": [
+      0.55859375,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1531,
+    "class": "head",
+    "uv_center": [
+      0.56640625,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1532,
+    "class": "head",
+    "uv_center": [
+      0.57421875,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1533,
+    "class": "head",
+    "uv_center": [
+      0.58203125,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1534,
+    "class": "head",
+    "uv_center": [
+      0.58984375,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1535,
+    "class": "head",
+    "uv_center": [
+      0.59765625,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1536,
+    "class": "head",
+    "uv_center": [
+      0.60546875,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1537,
+    "class": "head",
+    "uv_center": [
+      0.61328125,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1538,
+    "class": "head",
+    "uv_center": [
+      0.62109375,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1539,
+    "class": "head",
+    "uv_center": [
+      0.62890625,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1540,
+    "class": "head",
+    "uv_center": [
+      0.63671875,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1541,
+    "class": "head",
+    "uv_center": [
+      0.64453125,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1542,
+    "class": "head",
+    "uv_center": [
+      0.65234375,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1543,
+    "class": "head",
+    "uv_center": [
+      0.66015625,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1544,
+    "class": "head",
+    "uv_center": [
+      0.66796875,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1545,
+    "class": "head",
+    "uv_center": [
+      0.67578125,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1546,
+    "class": "head",
+    "uv_center": [
+      0.68359375,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1547,
+    "class": "head",
+    "uv_center": [
+      0.69140625,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1548,
+    "class": "head",
+    "uv_center": [
+      0.69921875,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1549,
+    "class": "head",
+    "uv_center": [
+      0.70703125,
+      0.59765625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1550,
+    "class": "left",
+    "uv_center": [
+      0.71484375,
+      0.59765625
+    ],
     "mask": "EM_2.G"
   },
   {
     "object": "Truck_Body",
-    "face": 1350,
-    "class": "tail",
+    "face": 1551,
+    "class": "left",
+    "uv_center": [
+      0.72265625,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1552,
+    "class": "left",
+    "uv_center": [
+      0.73046875,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1553,
+    "class": "left",
+    "uv_center": [
+      0.73828125,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1554,
+    "class": "left",
+    "uv_center": [
+      0.74609375,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1555,
+    "class": "left",
+    "uv_center": [
+      0.75390625,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1556,
+    "class": "left",
+    "uv_center": [
+      0.76171875,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1557,
+    "class": "left",
+    "uv_center": [
+      0.76953125,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1558,
+    "class": "left",
+    "uv_center": [
+      0.77734375,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1559,
+    "class": "left",
+    "uv_center": [
+      0.78515625,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1560,
+    "class": "left",
+    "uv_center": [
+      0.79296875,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1561,
+    "class": "left",
+    "uv_center": [
+      0.80078125,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1562,
+    "class": "left",
+    "uv_center": [
+      0.80859375,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1563,
+    "class": "left",
+    "uv_center": [
+      0.81640625,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1564,
+    "class": "left",
+    "uv_center": [
+      0.82421875,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1565,
+    "class": "left",
+    "uv_center": [
+      0.83203125,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1566,
+    "class": "left",
+    "uv_center": [
+      0.83984375,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1567,
+    "class": "left",
+    "uv_center": [
+      0.84765625,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1568,
+    "class": "left",
+    "uv_center": [
+      0.85546875,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1569,
+    "class": "left",
+    "uv_center": [
+      0.86328125,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1576,
+    "class": "left",
+    "uv_center": [
+      0.91796875,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1577,
+    "class": "left",
+    "uv_center": [
+      0.92578125,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1578,
+    "class": "left",
+    "uv_center": [
+      0.93359375,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1579,
+    "class": "left",
+    "uv_center": [
+      0.94140625,
+      0.59765625
+    ],
+    "mask": "EM_2.G"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 1580,
+    "class": "left",
     "uv_center": [
       0.94921875,
-      0.58203125
+      0.59765625
     ],
-    "mask": "EM_1.G"
+    "mask": "EM_2.G"
   },
   {
     "object": "Truck_Body",
-    "face": 1351,
-    "class": "tail",
+    "face": 1581,
+    "class": "left",
     "uv_center": [
       0.95703125,
-      0.58203125
+      0.59765625
     ],
-    "mask": "EM_1.G"
+    "mask": "EM_2.G"
   },
   {
     "object": "Truck_Body",
-    "face": 1352,
+    "face": 1582,
     "class": "tail",
     "uv_center": [
       0.96484375,
-      0.58203125
+      0.59765625
     ],
     "mask": "EM_1.G"
   },
   {
     "object": "Truck_Body",
-    "face": 1353,
+    "face": 1583,
     "class": "tail",
     "uv_center": [
       0.97265625,
-      0.58203125
+      0.59765625
     ],
     "mask": "EM_1.G"
   },
   {
     "object": "Truck_Body",
-    "face": 1354,
+    "face": 1584,
     "class": "tail",
     "uv_center": [
       0.98046875,
-      0.58203125
+      0.59765625
     ],
     "mask": "EM_1.G"
   },
   {
     "object": "Truck_Body",
-    "face": 1355,
+    "face": 1585,
     "class": "tail",
     "uv_center": [
       0.98828125,
-      0.58203125
+      0.59765625
     ],
     "mask": "EM_1.G"
   },
   {
     "object": "Truck_Body",
-    "face": 1356,
-    "class": "reverse",
+    "face": 1586,
+    "class": "tail",
     "uv_center": [
       0.99609375,
-      0.58203125
+      0.59765625
     ],
-    "mask": "EM_1.B"
+    "mask": "EM_1.G"
   },
   {
     "object": "Truck_Body",
-    "face": 1357,
-    "class": "reverse",
+    "face": 1587,
+    "class": "tail",
     "uv_center": [
       0.00390625,
-      0.58984375
+      0.60546875
     ],
-    "mask": "EM_1.B"
+    "mask": "EM_1.G"
   },
   {
     "object": "Truck_Body",
-    "face": 1358,
+    "face": 1588,
     "class": "reverse",
     "uv_center": [
       0.01171875,
-      0.58984375
+      0.60546875
     ],
     "mask": "EM_1.B"
   },
   {
     "object": "Truck_Body",
-    "face": 1359,
+    "face": 1589,
     "class": "reverse",
     "uv_center": [
       0.01953125,
-      0.58984375
+      0.60546875
     ],
     "mask": "EM_1.B"
   },
   {
     "object": "Truck_Body",
-    "face": 1360,
+    "face": 1590,
     "class": "reverse",
     "uv_center": [
       0.02734375,
-      0.58984375
+      0.60546875
     ],
     "mask": "EM_1.B"
   },
   {
     "object": "Truck_Body",
-    "face": 1361,
+    "face": 1591,
     "class": "reverse",
     "uv_center": [
       0.03515625,
-      0.58984375
+      0.60546875
     ],
     "mask": "EM_1.B"
   },
   {
     "object": "Truck_Body",
-    "face": 1622,
-    "class": "marker",
+    "face": 1592,
+    "class": "reverse",
     "uv_center": [
-      0.07421875,
+      0.04296875,
       0.60546875
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_1.B"
   },
   {
     "object": "Truck_Body",
-    "face": 1623,
-    "class": "marker",
+    "face": 1593,
+    "class": "reverse",
     "uv_center": [
-      0.08203125,
+      0.05078125,
       0.60546875
     ],
-    "mask": "EM_1.R"
+    "mask": "EM_1.B"
   },
   {
     "object": "Truck_Body",
-    "face": 1624,
+    "face": 1854,
     "class": "marker",
     "uv_center": [
       0.08984375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1625,
+    "face": 1855,
     "class": "marker",
     "uv_center": [
       0.09765625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1626,
+    "face": 1856,
     "class": "marker",
     "uv_center": [
       0.10546875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1627,
+    "face": 1857,
     "class": "marker",
     "uv_center": [
       0.11328125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1628,
+    "face": 1858,
     "class": "marker",
     "uv_center": [
       0.12109375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1629,
+    "face": 1859,
     "class": "marker",
     "uv_center": [
       0.12890625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1630,
+    "face": 1860,
     "class": "marker",
     "uv_center": [
       0.13671875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1631,
+    "face": 1861,
     "class": "marker",
     "uv_center": [
       0.14453125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1632,
+    "face": 1862,
     "class": "marker",
     "uv_center": [
       0.15234375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1633,
+    "face": 1863,
     "class": "marker",
     "uv_center": [
       0.16015625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1634,
+    "face": 1864,
     "class": "marker",
     "uv_center": [
       0.16796875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1635,
+    "face": 1865,
     "class": "marker",
     "uv_center": [
       0.17578125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1636,
+    "face": 1866,
     "class": "marker",
     "uv_center": [
       0.18359375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1637,
+    "face": 1867,
     "class": "marker",
     "uv_center": [
       0.19140625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1638,
+    "face": 1868,
     "class": "marker",
     "uv_center": [
       0.19921875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1639,
+    "face": 1869,
     "class": "marker",
     "uv_center": [
       0.20703125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1640,
+    "face": 1870,
     "class": "marker",
     "uv_center": [
       0.21484375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1641,
+    "face": 1871,
     "class": "marker",
     "uv_center": [
       0.22265625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1662,
+    "face": 1872,
     "class": "marker",
     "uv_center": [
-      0.38671875,
-      0.60546875
+      0.23046875,
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1663,
+    "face": 1873,
     "class": "marker",
     "uv_center": [
-      0.39453125,
-      0.60546875
+      0.23828125,
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1664,
+    "face": 1894,
     "class": "marker",
     "uv_center": [
       0.40234375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1665,
+    "face": 1895,
     "class": "marker",
     "uv_center": [
       0.41015625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1666,
+    "face": 1896,
     "class": "marker",
     "uv_center": [
       0.41796875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1667,
+    "face": 1897,
     "class": "marker",
     "uv_center": [
       0.42578125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1668,
+    "face": 1898,
     "class": "marker",
     "uv_center": [
       0.43359375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1669,
+    "face": 1899,
     "class": "marker",
     "uv_center": [
       0.44140625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1670,
+    "face": 1900,
     "class": "marker",
     "uv_center": [
       0.44921875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1671,
+    "face": 1901,
     "class": "marker",
     "uv_center": [
       0.45703125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1672,
+    "face": 1902,
     "class": "marker",
     "uv_center": [
       0.46484375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1673,
+    "face": 1903,
     "class": "marker",
     "uv_center": [
       0.47265625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1674,
+    "face": 1904,
     "class": "marker",
     "uv_center": [
       0.48046875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1675,
+    "face": 1905,
     "class": "marker",
     "uv_center": [
       0.48828125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1676,
+    "face": 1906,
     "class": "marker",
     "uv_center": [
       0.49609375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1677,
+    "face": 1907,
     "class": "marker",
     "uv_center": [
       0.50390625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1678,
+    "face": 1908,
     "class": "marker",
     "uv_center": [
       0.51171875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1679,
+    "face": 1909,
     "class": "marker",
     "uv_center": [
       0.51953125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1680,
+    "face": 1910,
     "class": "marker",
     "uv_center": [
       0.52734375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1681,
+    "face": 1911,
     "class": "marker",
     "uv_center": [
       0.53515625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1702,
+    "face": 1912,
     "class": "marker",
     "uv_center": [
-      0.69921875,
-      0.60546875
+      0.54296875,
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1703,
+    "face": 1913,
     "class": "marker",
     "uv_center": [
-      0.70703125,
-      0.60546875
+      0.55078125,
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1704,
+    "face": 1934,
     "class": "marker",
     "uv_center": [
       0.71484375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1705,
+    "face": 1935,
     "class": "marker",
     "uv_center": [
       0.72265625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1706,
+    "face": 1936,
     "class": "marker",
     "uv_center": [
       0.73046875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1707,
+    "face": 1937,
     "class": "marker",
     "uv_center": [
       0.73828125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1708,
+    "face": 1938,
     "class": "marker",
     "uv_center": [
       0.74609375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1709,
+    "face": 1939,
     "class": "marker",
     "uv_center": [
       0.75390625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1710,
+    "face": 1940,
     "class": "marker",
     "uv_center": [
       0.76171875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1711,
+    "face": 1941,
     "class": "marker",
     "uv_center": [
       0.76953125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1712,
+    "face": 1942,
     "class": "marker",
     "uv_center": [
       0.77734375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1713,
+    "face": 1943,
     "class": "marker",
     "uv_center": [
       0.78515625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1714,
+    "face": 1944,
     "class": "marker",
     "uv_center": [
       0.79296875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1715,
+    "face": 1945,
     "class": "marker",
     "uv_center": [
       0.80078125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1716,
+    "face": 1946,
     "class": "marker",
     "uv_center": [
       0.80859375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1717,
+    "face": 1947,
     "class": "marker",
     "uv_center": [
       0.81640625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1718,
+    "face": 1948,
     "class": "marker",
     "uv_center": [
       0.82421875,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1719,
+    "face": 1949,
     "class": "marker",
     "uv_center": [
       0.83203125,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1720,
+    "face": 1950,
     "class": "marker",
     "uv_center": [
       0.83984375,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1721,
+    "face": 1951,
     "class": "marker",
     "uv_center": [
       0.84765625,
-      0.60546875
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1742,
+    "face": 1952,
     "class": "marker",
     "uv_center": [
-      0.01171875,
-      0.61328125
+      0.85546875,
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1743,
+    "face": 1953,
     "class": "marker",
     "uv_center": [
-      0.01953125,
-      0.61328125
+      0.86328125,
+      0.62109375
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1744,
+    "face": 1974,
     "class": "marker",
     "uv_center": [
       0.02734375,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1745,
+    "face": 1975,
     "class": "marker",
     "uv_center": [
       0.03515625,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1746,
+    "face": 1976,
     "class": "marker",
     "uv_center": [
       0.04296875,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1747,
+    "face": 1977,
     "class": "marker",
     "uv_center": [
       0.05078125,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1748,
+    "face": 1978,
     "class": "marker",
     "uv_center": [
       0.05859375,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1749,
+    "face": 1979,
     "class": "marker",
     "uv_center": [
       0.06640625,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1750,
+    "face": 1980,
     "class": "marker",
     "uv_center": [
       0.07421875,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1751,
+    "face": 1981,
     "class": "marker",
     "uv_center": [
       0.08203125,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1752,
+    "face": 1982,
     "class": "marker",
     "uv_center": [
       0.08984375,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1753,
+    "face": 1983,
     "class": "marker",
     "uv_center": [
       0.09765625,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1754,
+    "face": 1984,
     "class": "marker",
     "uv_center": [
       0.10546875,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1755,
+    "face": 1985,
     "class": "marker",
     "uv_center": [
       0.11328125,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1756,
+    "face": 1986,
     "class": "marker",
     "uv_center": [
       0.12109375,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1757,
+    "face": 1987,
     "class": "marker",
     "uv_center": [
       0.12890625,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1758,
+    "face": 1988,
     "class": "marker",
     "uv_center": [
       0.13671875,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1759,
+    "face": 1989,
     "class": "marker",
     "uv_center": [
       0.14453125,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1760,
+    "face": 1990,
     "class": "marker",
     "uv_center": [
       0.15234375,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1761,
+    "face": 1991,
     "class": "marker",
     "uv_center": [
       0.16015625,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1782,
+    "face": 1992,
     "class": "marker",
     "uv_center": [
-      0.32421875,
-      0.61328125
+      0.16796875,
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1783,
+    "face": 1993,
     "class": "marker",
     "uv_center": [
-      0.33203125,
-      0.61328125
+      0.17578125,
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1784,
+    "face": 2014,
     "class": "marker",
     "uv_center": [
       0.33984375,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1785,
+    "face": 2015,
     "class": "marker",
     "uv_center": [
       0.34765625,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1786,
+    "face": 2016,
     "class": "marker",
     "uv_center": [
       0.35546875,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1787,
+    "face": 2017,
     "class": "marker",
     "uv_center": [
       0.36328125,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1788,
+    "face": 2018,
     "class": "marker",
     "uv_center": [
       0.37109375,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1789,
+    "face": 2019,
     "class": "marker",
     "uv_center": [
       0.37890625,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1790,
+    "face": 2020,
     "class": "marker",
     "uv_center": [
       0.38671875,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1791,
+    "face": 2021,
     "class": "marker",
     "uv_center": [
       0.39453125,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1792,
+    "face": 2022,
     "class": "marker",
     "uv_center": [
       0.40234375,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1793,
+    "face": 2023,
     "class": "marker",
     "uv_center": [
       0.41015625,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1794,
+    "face": 2024,
     "class": "marker",
     "uv_center": [
       0.41796875,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1795,
+    "face": 2025,
     "class": "marker",
     "uv_center": [
       0.42578125,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1796,
+    "face": 2026,
     "class": "marker",
     "uv_center": [
       0.43359375,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1797,
+    "face": 2027,
     "class": "marker",
     "uv_center": [
       0.44140625,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1798,
+    "face": 2028,
     "class": "marker",
     "uv_center": [
       0.44921875,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1799,
+    "face": 2029,
     "class": "marker",
     "uv_center": [
       0.45703125,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1800,
+    "face": 2030,
     "class": "marker",
     "uv_center": [
       0.46484375,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 1801,
+    "face": 2031,
     "class": "marker",
     "uv_center": [
       0.47265625,
-      0.61328125
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 2254,
-    "class": "marker",
-    "uv_center": [
-      0.98046875,
-      0.63671875
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2255,
-    "class": "marker",
-    "uv_center": [
-      0.98828125,
-      0.63671875
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2256,
-    "class": "marker",
-    "uv_center": [
-      0.99609375,
-      0.63671875
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2257,
-    "class": "marker",
-    "uv_center": [
-      0.00390625,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2258,
-    "class": "marker",
-    "uv_center": [
-      0.01171875,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2259,
-    "class": "marker",
-    "uv_center": [
-      0.01953125,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2266,
-    "class": "marker",
-    "uv_center": [
-      0.07421875,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2267,
-    "class": "marker",
-    "uv_center": [
-      0.08203125,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2268,
-    "class": "marker",
-    "uv_center": [
-      0.08984375,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2269,
-    "class": "marker",
-    "uv_center": [
-      0.09765625,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2270,
-    "class": "marker",
-    "uv_center": [
-      0.10546875,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2271,
-    "class": "marker",
-    "uv_center": [
-      0.11328125,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2278,
-    "class": "marker",
-    "uv_center": [
-      0.16796875,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2279,
-    "class": "marker",
-    "uv_center": [
-      0.17578125,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2280,
-    "class": "marker",
-    "uv_center": [
-      0.18359375,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2281,
-    "class": "marker",
-    "uv_center": [
-      0.19140625,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2282,
-    "class": "marker",
-    "uv_center": [
-      0.19921875,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2283,
-    "class": "marker",
-    "uv_center": [
-      0.20703125,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2290,
-    "class": "marker",
-    "uv_center": [
-      0.26171875,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2291,
-    "class": "marker",
-    "uv_center": [
-      0.26953125,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2292,
-    "class": "marker",
-    "uv_center": [
-      0.27734375,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2293,
-    "class": "marker",
-    "uv_center": [
-      0.28515625,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2294,
-    "class": "marker",
-    "uv_center": [
-      0.29296875,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2295,
-    "class": "marker",
-    "uv_center": [
-      0.30078125,
-      0.64453125
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2534,
-    "class": "marker",
-    "uv_center": [
-      0.16796875,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2535,
-    "class": "marker",
-    "uv_center": [
-      0.17578125,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2536,
-    "class": "marker",
-    "uv_center": [
-      0.18359375,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2537,
-    "class": "marker",
-    "uv_center": [
-      0.19140625,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2538,
-    "class": "marker",
-    "uv_center": [
-      0.19921875,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2539,
-    "class": "marker",
-    "uv_center": [
-      0.20703125,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2546,
-    "class": "marker",
-    "uv_center": [
-      0.26171875,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2547,
-    "class": "marker",
-    "uv_center": [
-      0.26953125,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2548,
-    "class": "marker",
-    "uv_center": [
-      0.27734375,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2549,
-    "class": "marker",
-    "uv_center": [
-      0.28515625,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2550,
-    "class": "marker",
-    "uv_center": [
-      0.29296875,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2551,
-    "class": "marker",
-    "uv_center": [
-      0.30078125,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2558,
-    "class": "marker",
-    "uv_center": [
-      0.35546875,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2559,
-    "class": "marker",
-    "uv_center": [
-      0.36328125,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2560,
-    "class": "marker",
-    "uv_center": [
-      0.37109375,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2561,
-    "class": "marker",
-    "uv_center": [
-      0.37890625,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2562,
-    "class": "marker",
-    "uv_center": [
-      0.38671875,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2563,
-    "class": "marker",
-    "uv_center": [
-      0.39453125,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2570,
-    "class": "marker",
-    "uv_center": [
-      0.44921875,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2571,
-    "class": "marker",
-    "uv_center": [
-      0.45703125,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2572,
-    "class": "marker",
-    "uv_center": [
-      0.46484375,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2573,
-    "class": "marker",
-    "uv_center": [
-      0.47265625,
-      0.66015625
-    ],
-    "mask": "EM_1.R"
-  },
-  {
-    "object": "Truck_Body",
-    "face": 2574,
+    "face": 2032,
     "class": "marker",
     "uv_center": [
       0.48046875,
-      0.66015625
+      0.62890625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 2575,
+    "face": 2033,
     "class": "marker",
     "uv_center": [
       0.48828125,
+      0.62890625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2468,
+    "class": "marker",
+    "uv_center": [
+      0.87109375,
+      0.65234375
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2469,
+    "class": "marker",
+    "uv_center": [
+      0.87890625,
+      0.65234375
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2470,
+    "class": "marker",
+    "uv_center": [
+      0.88671875,
+      0.65234375
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2471,
+    "class": "marker",
+    "uv_center": [
+      0.89453125,
+      0.65234375
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2472,
+    "class": "marker",
+    "uv_center": [
+      0.90234375,
+      0.65234375
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2473,
+    "class": "marker",
+    "uv_center": [
+      0.91015625,
+      0.65234375
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2480,
+    "class": "marker",
+    "uv_center": [
+      0.96484375,
+      0.65234375
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2481,
+    "class": "marker",
+    "uv_center": [
+      0.97265625,
+      0.65234375
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2482,
+    "class": "marker",
+    "uv_center": [
+      0.98046875,
+      0.65234375
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2483,
+    "class": "marker",
+    "uv_center": [
+      0.98828125,
+      0.65234375
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2484,
+    "class": "marker",
+    "uv_center": [
+      0.99609375,
+      0.65234375
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2485,
+    "class": "marker",
+    "uv_center": [
+      0.00390625,
       0.66015625
     ],
     "mask": "EM_1.R"
   },
   {
     "object": "Truck_Body",
-    "face": 2808,
-    "class": "worklight",
+    "face": 2492,
+    "class": "marker",
+    "uv_center": [
+      0.05859375,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2493,
+    "class": "marker",
+    "uv_center": [
+      0.06640625,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2494,
+    "class": "marker",
+    "uv_center": [
+      0.07421875,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2495,
+    "class": "marker",
+    "uv_center": [
+      0.08203125,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2496,
+    "class": "marker",
+    "uv_center": [
+      0.08984375,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2497,
+    "class": "marker",
+    "uv_center": [
+      0.09765625,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2504,
+    "class": "marker",
+    "uv_center": [
+      0.15234375,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2505,
+    "class": "marker",
+    "uv_center": [
+      0.16015625,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2506,
+    "class": "marker",
+    "uv_center": [
+      0.16796875,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2507,
+    "class": "marker",
+    "uv_center": [
+      0.17578125,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2508,
+    "class": "marker",
+    "uv_center": [
+      0.18359375,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2509,
+    "class": "marker",
+    "uv_center": [
+      0.19140625,
+      0.66015625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2748,
+    "class": "marker",
+    "uv_center": [
+      0.05859375,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2749,
+    "class": "marker",
+    "uv_center": [
+      0.06640625,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2750,
+    "class": "marker",
+    "uv_center": [
+      0.07421875,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2751,
+    "class": "marker",
+    "uv_center": [
+      0.08203125,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2752,
+    "class": "marker",
+    "uv_center": [
+      0.08984375,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2753,
+    "class": "marker",
+    "uv_center": [
+      0.09765625,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2760,
+    "class": "marker",
+    "uv_center": [
+      0.15234375,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2761,
+    "class": "marker",
+    "uv_center": [
+      0.16015625,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2762,
+    "class": "marker",
+    "uv_center": [
+      0.16796875,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2763,
+    "class": "marker",
+    "uv_center": [
+      0.17578125,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2764,
+    "class": "marker",
+    "uv_center": [
+      0.18359375,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2765,
+    "class": "marker",
+    "uv_center": [
+      0.19140625,
+      0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 2772,
+    "class": "marker",
     "uv_center": [
       0.24609375,
       0.67578125
@@ -3051,8 +2931,8 @@
   },
   {
     "object": "Truck_Body",
-    "face": 2809,
-    "class": "worklight",
+    "face": 2773,
+    "class": "marker",
     "uv_center": [
       0.25390625,
       0.67578125
@@ -3061,8 +2941,8 @@
   },
   {
     "object": "Truck_Body",
-    "face": 2810,
-    "class": "worklight",
+    "face": 2774,
+    "class": "marker",
     "uv_center": [
       0.26171875,
       0.67578125
@@ -3071,8 +2951,8 @@
   },
   {
     "object": "Truck_Body",
-    "face": 2811,
-    "class": "worklight",
+    "face": 2775,
+    "class": "marker",
     "uv_center": [
       0.26953125,
       0.67578125
@@ -3081,8 +2961,8 @@
   },
   {
     "object": "Truck_Body",
-    "face": 2812,
-    "class": "worklight",
+    "face": 2776,
+    "class": "marker",
     "uv_center": [
       0.27734375,
       0.67578125
@@ -3091,8 +2971,8 @@
   },
   {
     "object": "Truck_Body",
-    "face": 2813,
-    "class": "worklight",
+    "face": 2777,
+    "class": "marker",
     "uv_center": [
       0.28515625,
       0.67578125
@@ -3101,8 +2981,8 @@
   },
   {
     "object": "Truck_Body",
-    "face": 2820,
-    "class": "worklight",
+    "face": 2784,
+    "class": "marker",
     "uv_center": [
       0.33984375,
       0.67578125
@@ -3111,8 +2991,8 @@
   },
   {
     "object": "Truck_Body",
-    "face": 2821,
-    "class": "worklight",
+    "face": 2785,
+    "class": "marker",
     "uv_center": [
       0.34765625,
       0.67578125
@@ -3121,8 +3001,8 @@
   },
   {
     "object": "Truck_Body",
-    "face": 2822,
-    "class": "worklight",
+    "face": 2786,
+    "class": "marker",
     "uv_center": [
       0.35546875,
       0.67578125
@@ -3131,8 +3011,8 @@
   },
   {
     "object": "Truck_Body",
-    "face": 2823,
-    "class": "worklight",
+    "face": 2787,
+    "class": "marker",
     "uv_center": [
       0.36328125,
       0.67578125
@@ -3141,8 +3021,8 @@
   },
   {
     "object": "Truck_Body",
-    "face": 2824,
-    "class": "worklight",
+    "face": 2788,
+    "class": "marker",
     "uv_center": [
       0.37109375,
       0.67578125
@@ -3151,11 +3031,131 @@
   },
   {
     "object": "Truck_Body",
-    "face": 2825,
-    "class": "worklight",
+    "face": 2789,
+    "class": "marker",
     "uv_center": [
       0.37890625,
       0.67578125
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3022,
+    "class": "worklight",
+    "uv_center": [
+      0.13671875,
+      0.69140625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3023,
+    "class": "worklight",
+    "uv_center": [
+      0.14453125,
+      0.69140625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3024,
+    "class": "worklight",
+    "uv_center": [
+      0.15234375,
+      0.69140625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3025,
+    "class": "worklight",
+    "uv_center": [
+      0.16015625,
+      0.69140625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3026,
+    "class": "worklight",
+    "uv_center": [
+      0.16796875,
+      0.69140625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3027,
+    "class": "worklight",
+    "uv_center": [
+      0.17578125,
+      0.69140625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3034,
+    "class": "worklight",
+    "uv_center": [
+      0.23046875,
+      0.69140625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3035,
+    "class": "worklight",
+    "uv_center": [
+      0.23828125,
+      0.69140625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3036,
+    "class": "worklight",
+    "uv_center": [
+      0.24609375,
+      0.69140625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3037,
+    "class": "worklight",
+    "uv_center": [
+      0.25390625,
+      0.69140625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3038,
+    "class": "worklight",
+    "uv_center": [
+      0.26171875,
+      0.69140625
+    ],
+    "mask": "EM_1.R"
+  },
+  {
+    "object": "Truck_Body",
+    "face": 3039,
+    "class": "worklight",
+    "uv_center": [
+      0.26953125,
+      0.69140625
     ],
     "mask": "EM_1.R"
   }

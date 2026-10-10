@@ -13,7 +13,7 @@
     ],
     "per_object": {
       "Truck_Body": {
-        "triangles": 6492,
+        "triangles": 6328,
         "origin": [
           0.0,
           0.0,
@@ -280,7 +280,7 @@
         "max_vertex_outside_face_plane_m": 4e-05
       }
     },
-    "visible_triangles": 8256,
+    "visible_triangles": 8092,
     "visible_bbox_min": [
       -1.26,
       -2.65,
@@ -312,12 +312,12 @@
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
-      "fill": 0.5796,
+      "fill": 0.5781,
       "overlap_fraction": 0.0
     },
     "uv1": {
       "uv_coords_outside_0_1": 0,
-      "fill": 0.5796,
+      "fill": 0.5781,
       "overlap_fraction": 0.0
     },
     "textures": {
@@ -361,7 +361,7 @@
     ],
     "per_object": {
       "Truck_Body": {
-        "triangles": 6492,
+        "triangles": 6328,
         "origin": [
           0.0,
           0.0,
@@ -628,7 +628,7 @@
         "max_vertex_outside_face_plane_m": 4e-05
       }
     },
-    "visible_triangles": 8256,
+    "visible_triangles": 8092,
     "visible_bbox_min": [
       -1.26,
       -2.65,
@@ -660,15 +660,15 @@
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
-      "fill": 0.5796,
+      "fill": 0.5781,
       "overlap_fraction": 0.0
     },
     "uv1": {
       "uv_coords_outside_0_1": 0,
-      "fill": 0.5796,
+      "fill": 0.5781,
       "overlap_fraction": 0.0
     },
-    "fbx_size_mb": 0.61
+    "fbx_size_mb": 0.6
   },
   "failures": [],
   "passed": true

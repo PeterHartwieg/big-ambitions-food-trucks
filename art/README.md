@@ -79,13 +79,13 @@ On the cart, `VehicleDisplays` puts the first fitted piece on `EquipmentFront` a
 
 ## Food truck
 
-Replaces the example car's meshes inside the copied `TurboHonza` prefab (`ModAssets.GenerateTruck`). This is version 4: version 3's step-van shape (detail and shaping passes, modelled after the reference photos) with a taller food compartment and the serving window raised to a standing person's face. `truck/v1/` and `truck/v2/` keep the earlier versions.
+Replaces the example car's meshes inside the copied `TurboHonza` prefab (`ModAssets.GenerateTruck`). This is version 5: version 3's step-van shape (detail and shaping passes, modelled after the reference photos), version 4's taller food compartment and raised serving window, and since 10 October 2026 the cooking line on the back wall (below). `truck/v1/` and `truck/v2/` keep the earlier versions.
 
 **Meshes** (`truck/FoodTruck.fbx`, all nodes at rotation 0, scale 1, two UV channels):
 
 | Node | Replaces | Position | Notes |
 |---|---|---|---|
-| `Truck_Body` | `CarHolder/Body/CheapSaloon` | (0, 0, 0) | 6,492 tris. Body x ±1.10 (mirrors and shelf to −1.25 / +1.26), y 0.20…3.10 (cab roof 2.90, compartment roof 3.10, ceiling inside 2.96) with roof units to 3.25, z −3.15…2.65 (5.80 m) |
+| `Truck_Body` | `CarHolder/Body/CheapSaloon` | (0, 0, 0) | 6,328 tris. Body x ±1.10 (mirrors and shelf to −1.25 / +1.26), y 0.20…3.10 (cab roof 2.90, compartment roof 3.10, ceiling inside 2.96) with roof units to 3.25, z −3.15…2.65 (5.80 m) |
 | `Truck_Wheel_FL` | `Wheels/FrontLeft` | (−0.87, 0.38, 1.80) | 0.76 m diameter (radius 0.38), 0.23 m wide, 400 tris |
 | `Truck_Wheel_FR` | `Wheels/FrontRight` | (0.87, 0.38, 1.80) | |
 | `Truck_Wheel_RL` | `Wheels/RearLeft` | (−0.87, 0.38, −1.80) | |
@@ -127,17 +127,33 @@ Wheelbase 3.60 m (the example car: 2.70 m), track 1.74 m (1.50 m).
 
 The DeliveryTruck is the nearest match for a step van. The food truck takes its mass, suspension, power curve (less power at low revs than the example car's), brakes and centre-of-mass height, its top speed through a final drive suited to our smaller wheels, and a little less power than both trucks (40 kW without the turbo against their 55 and 42 kW with it), so it pulls like the semi and tops out like the delivery truck. Turbo "x1.2" is NWH's forced induction `powerGainMultiplier` [inference: full boost multiplies power by it]. Top speeds are 10,000 rpm in top gear converted to wheel speed [code reading, unverified in game]; the game's own type speeds are a little higher than that for the trucks. The springs, dampers and load rating go back to the example car's, which are the vans' and trucks'. Status: pending in game (CHECKS, "Truck driving").
 
-**Serving window** (for the window interaction later): opening at x = 1.10, y 1.80…2.82, z −2.00…−0.20, centre (1.10, 2.31, −1.10), at least 0.30 m deep. Stainless shelf on the outside, top at y 1.75, x 1.10…1.26. A 1.8 m person on the compartment floor (y 0.94) has eyes at 2.62 and the top of the head at 2.74, both inside the opening. The worktop inside is at y 1.65…1.75 on cabinets down to the floor. Behind the hatch the aisle is clear for standing crew: nothing inside (worktop, cabinets, griddle station, its shelf, hood) reaches past x 0.43, and the parked sliding panes stay at x ≥ 0.754, so three 0.30 m deep bodies side by side at x 0.59 (x 0.44…0.74, z −2.00…−0.20, y 0.95…2.74) touch nothing.
+**Serving window**: opening at x = 1.10, y 1.80…2.82, z −2.00…−0.20, centre (1.10, 2.31, −1.10), at least 0.30 m deep. Stainless shelf on the outside, top at y 1.75, x 1.10…1.26. A 1.8 m person on the compartment floor (y 0.94) has eyes at 2.62 and the top of the head at 2.74, both inside the opening.
 
-**Equipment spots** (built by `TruckAssets`, not in the FBX). The compartment's floor is at y 0.94; the crew and the player at the hatch stand on it (`WindowCrew`). Each spot is turned +90° about Y, so a piece's front (+Z) faces out of the hatch. Clearances measured against `Truck_Body` in Blender for a 0.40 × 0.36 × 0.70 m piece:
+**Interior** (version 5, Peter, 10 October 2026: "cooking line on the back wall, like real step vans"). In 0.9.7 a griddle station with its shelf and hood filled the cab half of the window and two pieces stood scaled down on a ledge in the hatch, facing the street; from the pavement the player looked half hidden and the grill small and backwards. Now, inside wall to inside wall (x 1.02 to −1.02):
 
-| Spot | Position | Scale | Notes |
-|---|---|---|---|
-| `EquipmentHatchRear` | (0.955, 1.805, −1.83) | 0.72 | Rear end of the hatch, in the recess between the sliding panes' track (x 0.815) and the hatch (x 1.10): 0.26 m deep, so the piece is scaled to 0.26 × 0.29 m, up to 0.50 m tall. The recess is clear from the sill (y 1.805) to 2.505 for z −1.97…−0.23 |
-| `EquipmentHatchFront` | (0.955, 1.805, −0.37) | 0.72 | Cab end of the hatch, as above |
-| `EquipmentBackRear` | (−0.28, 1.75, −1.80) | 1 | On the worktop (top y 1.75), behind the crew, clear of the shelves (x ≤ −0.49) and the hood |
-| `EquipmentBackFront` | (−0.28, 1.75, −1.35) | 1 | As above; further towards the cab the workstation is in the way |
-| `Truck_Ledge` | x 0.82…1.10, y 1.78…1.805, z −1.98…−0.22 | | Steel ledge under the hatch's two spots (`M_TruckLedge`, plain HDRP/Lit). The sill alone is only 0.12 m deep |
+| Part | Unity position | Notes |
+|---|---|---|
+| Serving counter | x 0.78…1.02, z −2.00…−0.20, top y 1.80 | A shallow steel cabinet under the window whose top meets the sill. Nothing stands on it or above it, so the opening is clear (`spec.json` "serving window opening") |
+| Sliding panes | x 0.955…1.01, z −2.935…−2.00 | Parked in a pocket against the wall past the opening's rear end, on tracks along the counter and over the pocket |
+| Hand sink | x 0.43…1.02, z −0.12…0.88, top 1.75 | Hatch side, cab end, before the opening starts |
+| Aisle | x −0.40…0.78 | The player and crew stand at x 0.59 (`WindowCrew`): three 0.30 m bodies side by side (x 0.44…0.74, z −2.00…−0.20, y 0.95…2.74) and the waiting places behind them (z −2.95…−2.00) touch nothing |
+| Back counter | x −1.00…−0.40, z −2.12…0.88, top 1.75 | Cabinet to the floor with door seams, toe kick and handles; steel backsplash to y 2.64 |
+| Hood | x −1.02…−0.36, z −2.10…−0.04, y 2.64…2.92 | Slanted front, filters underneath |
+| Fridge | x −1.00…−0.55, z −2.92…−2.15, to y 2.70 | Reach-in, beside the rear doors |
+| Shelf | x −1.00…−0.62, z 0.10…0.88, y 2.30 | Dry goods over the cab end of the line, clear of the hood |
+
+From the pavement the player and crew fill the window chest up, with the hood and the top of the line behind them (`truck/renders/interior-pavement-open.png`); the pieces themselves show from the game's higher camera and between people.
+
+**Equipment spots** (built by `TruckAssets`, not in the FBX). Four spots on the back counter, full size (scale 1), each turned +90° about Y so a piece's front (+Z) faces the cook and the hatch. They are 0.45 m apart along the truck and centred on the window, so a 0.40 m piece leaves 5 cm between neighbours, and they fill from the middle out. A 0.40 × 0.36 m piece covers x −0.44…−0.80, between the counter's front edge and the backsplash (−0.985); the tallest model (MerchRack, 0.65 m) reaches y 2.40, under the hood's lowest edge (2.64). `truck/review_interior.py` places the real models and checks them against `Truck_Body` and each other; all sixteen are clear, the Extra Storage cabinet (`StorageCabinet`, 0.60 m) included.
+
+| Spot | Position | Fills |
+|---|---|---|
+| `EquipmentLine1` | (−0.62, 1.75, −0.425) | third |
+| `EquipmentLine2` | (−0.62, 1.75, −0.875) | first |
+| `EquipmentLine3` | (−0.62, 1.75, −1.325) | second |
+| `EquipmentLine4` | (−0.62, 1.75, −1.775) | fourth |
+
+The 0.9.3 to 0.9.7 layout (two spots at the hatch's ends, scaled 0.72 on a steel ledge, `Truck_Ledge`, and two on the old worktop) is gone, ledge included.
 
 **Material:** duplicate `M_HonzaCar.mat` (the game's `SH_Vehicle` graph) and swap each texture for its counterpart. Import settings as for the example: Read/Write on for the meshes (the damage component deforms them [inference, as in the tooling research]), `T_FoodTruck_N` as a normal map (not sRGB), the others as default textures.
 

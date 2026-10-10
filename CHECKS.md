@@ -25,6 +25,35 @@ Log lines:
 - Row 6: `Commissary call: foodtrucks-commissary-<site> hung up (started from the bay | started with CALL); the call is over, CALL is ready.`
 - Rows 8 to 11: one `Commissary marker <site>: bay paint at x …, z …, along … degrees, 1 stretch of 19.2 m (-9.6…+9.6 m) on the parking lane … m from the driving lane, … m wide; the door stands 11.5 m from the lane's middle, so the 15 m bay reaches 9.6 m either way along the kerb; a 5.8 m truck fits wholly inside.` per commissary when first drawn. A `doesn't reach the street` error means no parked vehicle there is ever in the bay. From the 0.9.7 log, Hell's Kitchen's door is about 11.5 m from where the truck parked, so the bay covers about 19 m of kerb, centred on the door: the truck at z 221.1 was in (13.7 m), at z 214.0 out (18.4 m), and the player's first spot 16 m out.
 
+# Truck interior (0.9.8)
+
+The truck's kitchen is rebuilt: the cooking line now runs along the back wall, opposite the hatch, and all four fitted pieces stand there full size, facing you at the hatch. The hatch side has only a clear serving counter, the sliding windows park past the opening's rear end, and the 0.9.7 ledge with its two small pieces is gone. Renders: `art/truck/renders/interior-*.png`. Fresh **FT** save, other gameplay mods off; the log says 0.9.7 (version not bumped).
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Ctrl+K truck. Park legally with the hatch to the pavement, "Open here", then stand on the pavement 2 to 3 m from the hatch and look in (walk out with Step out, or look with the camera from outside) | The window is clear from end to end: no unit, shelf or glass pane in it. Through it: the serving counter at the sill, behind it the aisle, and along the back wall a steel counter under a hood, with a fridge at the rear end. Screenshot |
+| 2 | Close the window and look from the pavement | The hatch shuts flush; nothing pokes through the closed hatch or the walls |
+| 3 | Open again and stay at the hatch; look from the game camera | You stand at the middle of the window, seen from the chest up, nothing in front of you. Screenshot |
+| 4 | Put three workers on the truck (staff 3, Ctrl+Alt+U) and open with you at the hatch; then step out | With you: two crew beside you in the window and the third waiting further back by the fridge; nobody stands inside the counter, the sink or the fridge. After you step out: three crew across the window. Faces visible from the pavement |
+| 5 | Fit four pieces, Extra Storage among them (Ctrl+U fills the slots; the first piece is Extra Storage). Look through the window with the hatch open, and from the cab end and the rear end | All four stand on the back counter in a row, full size, each facing the hatch (controls, doors and glass towards you), the first two right behind the middle of the window. None pokes into the wall, the hood, the fridge or a neighbour. How do they read from the street? Too small, too hidden? |
+| 6 | Take one piece out of the cargo, then save and load | The piece leaves the counter at once; the others keep their places. After loading the pieces fill the counter from the middle out |
+
+Log lines: `Vehicle displays: truck … line 2 spot, …`, `… line 3 spot, …`, `… line 1 spot, …`, `… line 4 spot, …`, once each. No `lacks equipment spots` error.
+
+# Truck serves only from the hatch (0.9.8)
+
+A truck now sells only while you stand at its serving hatch or a crew member serves there. Stepping out stops it, however close you stay; a cart is unchanged (standing by it serves). Same **FT** save, other gameplay mods off.
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Truck with stock and no crew: "Open here", wait for a couple of sales | You stand at the hatch and sales come in; no "Nobody's at the truck's window" right after opening |
+| 2 | Press Escape (Step out) and stay right by the truck for a few in-game minutes | At once "Nobody's at the truck's window. Customers wait a while, then walk on." The hatch stays open; nobody is served; after about 20 minutes the waiting customers give up and walk off (angry emoji). No sales |
+| 3 | Get in and "Open here" again | You are back at the hatch and sales resume |
+| 4 | With one worker on the truck (Ctrl+Alt+U, no route): open, stand at the hatch a while, then step out | The worker serves beside you, then on alone after you step out; no "Nobody's at …" message. The log has a `paid for` line for each hour the worker served |
+| 5 | Cart: open it and walk 5 m away, then 15 m | Still serving at 5 m; at 15 m "Nobody's at the cart's window", as before |
+
+Log lines: `Truck window: player stepped out of truck … (stepped out)`; no sale messages for that truck until you are back at the hatch.
+
 # Truck driving (0.9.7)
 
 The truck now drives like the game's delivery truck instead of the example sports car: the delivery truck's weight, suspension, power curve and brakes, 40 kW and a 50 km/h top speed (art/README.md, "Driving"). Same 0.9.7 build, same **FT** save.
@@ -198,8 +227,8 @@ Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety cour
 | 11 | Put a worker on the truck with no route (Ctrl+Alt+U hires one), open it yourself and walk away | The open message says "<name> serves at the window". The worker stands behind the hatch and customers are served; no "Nobody's at the truck's window" |
 | 12 | Leave it open over a full hour and past midnight, then check the next morning's transactions and Econoview | An unassigned wage for the worker covering the hours the window was open (one hour for each hour the window was open at some minute before half past it; none for an hour it sold out or closed before). The 23:00 hour is in the closing day's wage, not the next day's. In Econoview it is under the truck's Crew wages |
 | 13 | Give the worker a route, open the truck yourself during a stop's hours and keep it open past the stop's end | The route leaves the truck where you opened it; the worker keeps serving. The day's wage counts each hour once, not twice for the overlap |
-| 14 | Open the truck with the worker off sick, or with no crew | "Nobody's at the truck's window" once you walk away, as before |
-| 15 | Put three workers on the truck (staff 3), one weaker than you at customer service, with no route (or outside its hours); open it and stand at the window from before an hour until after half past it (say 9:50 to 10:40), then walk away | While you stand there the weakest worker waits inside the truck and the others are at the hatch beside you; after you walk off all three are at the hatch. The log has no `paid for 10:00` line for the weakest worker, and one for each of the other two |
+| 14 | Open the truck with the worker off sick, or with no crew | "Nobody's at the truck's window" once you step out of the hatch (since 0.9.8; before, once you walked away) |
+| 15 | Put three workers on the truck (staff 3), one weaker than you at customer service, with no route (or outside its hours); open it and stand at the window from before an hour until after half past it (say 9:50 to 10:40), then step out | While you stand there the weakest worker waits inside the truck and the others are at the hatch beside you; after you step out all three are at the hatch. The log has no `paid for 10:00` line for the weakest worker, and one for each of the other two |
 | 16 | Sleep through the night with the truck open and little stock | The wage the next morning stops at the hour the truck sold out, not at the hour you woke. Sleeping past midnight, the hours before midnight are in the closing day's wage |
 | 17 | With a worker serving a truck you opened (no route) since before 12:00, at 12:10 assign them to one of your shops (and, in another try, a warehouse as a delivery driver; or set them to be replaced by a headhunter; or fire them) | At once an unassigned wage for that worker in the transactions, covering today's hours on the truck including 12:00 (log: `Crew: <name> paid $… for N hours on leaving the crew's pay …`). Next day's Econoview: that wage under the truck's Crew wages. No second payment for the same hours at midnight |
 | 18 | Serve with a worker from 12:00, run the uninstall step (Ctrl+Shift+F11 twice) at about 12:20, keep playing to the next morning | The worker's wage includes 12:00 (log: `paid for 12:00` before the uninstall lines) |
@@ -214,10 +243,10 @@ Build `0.9.3`. The fixes from both 0.9.0 playtest sessions: the Food Safety cour
 | 27 | Ctrl+K truck, Ctrl+Alt+K, fit a grill, load hot dogs. Park legally with the hatch to the pavement, "Open here" | You stand inside at the hatch, facing the pavement, not outside. A panel "At the serving hatch" with Step out [Esc], Close the window and Drive (no key shown on the last two; F and Enter do nothing). Can you see yourself through the open hatch, or does the roof hide you? Screenshot |
 | 28 | Press WASD, click the pavement, scroll the camera | You don't move or slide through the truck. The camera turns as usual |
 | 29 | Wait for a few customers | They are served (sales come in) with you inside; the "Nobody's at the window" message doesn't show |
-| 30 | Press Escape | You step out behind the truck, on the pavement or the parking lane, not inside the body. The window stays open; walk 10 m away: it pauses; come back: it serves |
+| 30 | Press Escape | You step out behind the truck, on the pavement or the parking lane, not inside the body. The window stays open. Since 0.9.8 it stops serving as soon as you step out, however close you stay ("Nobody's at the truck's window"); before, it served while you were within 10 m |
 | 31 | "Open here" again (drive a metre and park), then Drive in the panel | You step out by the driver's door and get in; the window closes as when driving off |
 | 32 | Open again, then Close the window | The usual closing message; you step out |
-| 33 | Open again, save from the menu while at the hatch, load that save | Saving works. After loading you stand outside behind the truck, the window still open and serving. Accepted: while you stand at the hatch the game counts the save as changed (its saved position is the step-out point), so its recovery autosave runs at every interval and quitting may ask about unsaved changes |
+| 33 | Open again, save from the menu while at the hatch, load that save | Saving works. After loading you stand outside behind the truck, the window still open; since 0.9.8 it no longer serves until you are back at the hatch (drive and open again), unless a crew serves. Accepted: while you stand at the hatch the game counts the save as changed (its saved position is the step-out point), so its recovery autosave runs at every interval and quitting may ask about unsaved changes |
 | 34 | With a hire on shift at the truck (Ctrl+Alt+U, put them on the truck with a stop here), open | The hire stands beside you at the hatch, not in your place, and inside the hatch's opening. With three hires, two stand either side of you and the third waits further back in the truck. Step out: they spread across the opening |
 | 35 | Open, then sleep or skip time from the phone, if anything lets you | After the skip you stand outside by the truck |
 | 36 | Drive until your energy runs out (or run it down first), then park and "Open here" | The window opens, but you stay outside with "You're too tired to work the hatch." At the hatch, if energy runs out you step out with the same message, and the game's usual exhaustion follows |
