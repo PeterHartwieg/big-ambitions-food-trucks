@@ -48,30 +48,37 @@ namespace FoodTrucks
         // Each key: Ctrl, Ctrl+Alt or Ctrl+Shift, matched exactly. Letters go with Ctrl and Ctrl+Alt only: other
         // mods take Ctrl+Shift letters (a free camera's Ctrl+Shift+G, an objectives panel's Ctrl+Shift+J and K).
         // The commissary's three are on F3, and the uninstall step on Ctrl+Shift+F11, out of the way; it still
-        // needs a second press.
-        private static readonly (Key Key, bool Shift, bool Alt, string Name, string Label, Action Action)[] Keys =
+        // needs a second press. Twice: the actions that write into the save something a real game wouldn't (a tax
+        // statement, ledger money, an event or a gig) run only on a second press within ConfirmSeconds, so a cut or
+        // paste reflex (Ctrl+X, Ctrl+V) does nothing to a save on its own.
+        private static readonly (Key Key, bool Shift, bool Alt, string Name, string Label, bool Twice, Action Action)[] Keys =
         {
-            (Key.K, false, false, "spawn truck", "food truck", SpawnTruckAction),
-            (Key.K, false, true, "licence", "licence and permits", LicenceAction),
-            (Key.J, false, false, "spawn cart", "food cart", SpawnCartAction),
-            (Key.J, false, true, "spawn hand truck", "vanilla hand truck", SpawnHandTruckAction),
-            (Key.U, false, false, "new items", "new items into the food vehicle here", NewItemsAction),
-            (Key.U, false, true, "hire", "hire a worker", HireAction),
-            (Key.L, false, false, "status", "status", StatusAction),
-            (Key.L, false, true, "demand here", "demand here", DemandAction),
-            (Key.G, false, false, "grip", "grip log", GripAction),
-            (Key.G, false, true, "zone point", "zone point", ZonePointAction),
-            (Key.V, false, false, "event here", "city event here", EventAction),
-            (Key.V, false, true, "gig here", "catering gig here", GigAction),
-            (Key.X, false, false, "tax statement", "tax statement now", TaxStatementAction),
-            (Key.X, false, true, "tax fixture", "tax fixture", TaxFixtureAction),
-            (Key.F3, false, false, "commissary bays", "commissary bays", CommissaryWhereAction),
-            (Key.F3, false, true, "commissary deliveries", "commissary deliveries now", CommissaryDeliverAction),
-            (Key.F3, true, false, "overnight check", "overnight check dry run", CommissaryNightAction),
-            (Key.F11, true, false, "uninstall", "uninstall step", UninstallAction)
+            (Key.K, false, false, "spawn truck", "food truck", false, SpawnTruckAction),
+            (Key.K, false, true, "licence", "licence and permits", false, LicenceAction),
+            (Key.J, false, false, "spawn cart", "food cart", false, SpawnCartAction),
+            (Key.J, false, true, "spawn hand truck", "vanilla hand truck", false, SpawnHandTruckAction),
+            (Key.U, false, false, "new items", "new items into the food vehicle here", false, NewItemsAction),
+            (Key.U, false, true, "hire", "hire a worker", false, HireAction),
+            (Key.L, false, false, "status", "status", false, StatusAction),
+            (Key.L, false, true, "demand here", "demand here", false, DemandAction),
+            (Key.G, false, false, "grip", "grip log", false, GripAction),
+            (Key.G, false, true, "zone point", "zone point", false, ZonePointAction),
+            (Key.V, false, false, "event here", "city event here", true, EventAction),
+            (Key.V, false, true, "gig here", "catering gig here", true, GigAction),
+            (Key.X, false, false, "tax statement", "tax statement now", true, TaxStatementAction),
+            (Key.X, false, true, "tax fixture", "tax fixture", true, TaxFixtureAction),
+            (Key.F3, false, false, "commissary bays", "commissary bays", false, CommissaryWhereAction),
+            (Key.F3, false, true, "commissary deliveries", "commissary deliveries now", false, CommissaryDeliverAction),
+            (Key.F3, true, false, "overnight check", "overnight check dry run", false, CommissaryNightAction),
+            (Key.F11, true, false, "uninstall", "uninstall step", false, UninstallAction)
         };
 
-        private static string KeyText((Key Key, bool Shift, bool Alt, string Name, string Label, Action Action) k) =>
+        // As the uninstall step's: a second press of the same key within this many seconds runs a Twice action.
+        private const float ConfirmSeconds = 10f;
+        private static string? armedName;
+        private static float armedUntil = -1f;
+
+        private static string KeyText((Key Key, bool Shift, bool Alt, string Name, string Label, bool Twice, Action Action) k) =>
             $"Ctrl+{(k.Shift ? "Shift+" : "")}{(k.Alt ? "Alt+" : "")}{k.Key}";
 
         private void OnEnable()
@@ -98,7 +105,7 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_commissary_night", "Food Trucks: what the 04:00 overnight check would say now, without fines", CommissaryNightAction);
             }
             catch (Exception ex) { Log.Error("Console commands not registered: " + ex.Message); }
-            Log.Info("Debug actions ready: " + string.Join(", ", Keys.Select(k => $"{KeyText(k)} {k.Label}")) + ".");
+            Log.Info("Debug actions ready: " + string.Join(", ", Keys.Select(k => $"{KeyText(k)}{(k.Twice ? " twice" : "")} {k.Label}")) + ".");
         }
 
         private void OnDisable()
@@ -137,6 +144,16 @@ namespace FoodTrucks
             foreach (var k in Keys)
             {
                 if (k.Shift != shift || k.Alt != alt || !keyboard[k.Key].wasPressedThisFrame) continue;
+                if (k.Twice && (armedName != k.Name || Time.unscaledTime > armedUntil))
+                {
+                    armedName = k.Name;
+                    armedUntil = Time.unscaledTime + ConfirmSeconds;
+                    Log.Info($"Debug: {KeyText(k)} {k.Label} asked once; it runs on a second press within {ConfirmSeconds:F0} seconds.");
+                    Notify($"Food Trucks debug: {k.Label}, changes this save. Press {KeyText(k)} again within {ConfirmSeconds:F0} seconds.");
+                    return;
+                }
+                armedName = null;
+                armedUntil = -1f;
                 Run(k.Name, k.Action);
                 return;
             }
