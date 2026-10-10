@@ -710,7 +710,7 @@ namespace FoodTrucks
                     // Already open on another screen: OnEnable won't run again, so show the conversation directly.
                     var wasOpen = app != null && app.isActiveAndEnabled;
                     InstanceBehavior<UIs>.Instance.fullMenu.ShowApp(AppName.Contacts);
-                    if (wasOpen && app!.selectedContact != contact) app.OpenAppWithContact(contact);
+                    if (wasOpen && app!.selectedContact?.id != contact.id) app.OpenAppWithContact(contact);
                     pendingCall = (siteId, contact, Time.frameCount, Time.unscaledTime + PendingCallSeconds);
                 }
                 catch (Exception ex)
@@ -737,7 +737,7 @@ namespace FoodTrucks
             {
                 var app = InstanceBehavior<UIs>.Instance?.fullMenu?.contactsApp;
                 var panel = app == null ? null : ConversationPanelField?.GetValue(app) as GameObject;
-                if (app != null && app.isActiveAndEnabled && app.selectedContact == contact && panel != null && panel.activeSelf &&
+                if (app != null && app.isActiveAndEnabled && app.selectedContact?.id == contact.id && panel != null && panel.activeSelf &&
                     Time.frameCount > frame + 1)
                 {
                     pendingCall = null;
