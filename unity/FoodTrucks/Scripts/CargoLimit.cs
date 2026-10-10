@@ -107,6 +107,50 @@ namespace FoodTrucks
             return false;
         }
 
+        // Prefix on ICargoHolder.TryToMergeAndMoveCargoBetweenHolders (a hand truck or a box in hand unloaded into a
+        // vehicle). The game moves the stacks last-first, so food loaded onto a hand truck after its grill would reach
+        // the vehicle before the grill and be refused for want of it. Into a food vehicle, the equipment that fits goes
+        // first, each stack moved the way the game moves it; the original then moves the rest.
+        public static void MoveEquipmentFirstPrefix(ICargoHolder fromHolder, ICargoHolder toHolder, out bool __state)
+        {
+            __state = false;
+            try
+            {
+                var tables = DemandData.Tables;
+                if (tables == null || !(toHolder is VehicleInstance vehicle) || VehicleKind(vehicle) == null || fromHolder == null) return;
+                var cargo = fromHolder.GetCargoInstances();
+                if (cargo == null) return;
+                var equipment = cargo.Where(c => c != null && tables.EquipmentForGameItem(c.itemName) != null).ToList();
+                // Food after equipment only matters when both are in the load.
+                if (equipment.Count == 0 || equipment.Count == cargo.Count(c => c != null)) return;
+                for (var i = equipment.Count - 1; i >= 0; i--)
+                {
+                    var stack = equipment[i];
+                    // A piece that won't fit whole is left to the original, so its refusal shows once.
+                    if (Allowed(vehicle, stack) != null) continue;
+                    var amount = stack.amount;
+                    toHolder.MergeIntoCargo(stack);
+                    if (stack.amount <= 0 || toHolder.TryToAddToCargo(stack))
+                    {
+                        __state = true;
+                        fromHolder.RemoveFromCargo(stack);
+                    }
+                    else if (amount > stack.amount)
+                    {
+                        __state = true;
+                        fromHolder.OnItemsInCargoUpdated()?.Invoke();
+                    }
+                }
+            }
+            catch (Exception ex) { Log.Error("Cargo limit: equipment-first unload: " + ex); }
+        }
+
+        // Something moved in the prefix counts as a move, as it would have inside the original.
+        public static void MoveEquipmentFirstPostfix(ref bool __result, bool __state)
+        {
+            if (__state) __result = true;
+        }
+
         private static void Refused(VehicleInstance vehicle, string itemName, LoadCheck check)
         {
             var tables = DemandData.Tables;

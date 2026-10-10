@@ -124,12 +124,18 @@ namespace FoodTrucks
             // Storage per piece in the vehicle's cargo slots: each piece's "62/80" and a tooltip with its foods.
             Patch(typeof(UI.PlayerHUD.CargoItemUi), "SetUp", new[] { typeof(CargoItem), typeof(ICargoHolder), typeof(bool) },
                 typeof(StoragePanel), postfix: nameof(StoragePanel.CargoSlotPostfix));
+            // Its sell question reads the amount label: "Sell Hotdog Grill", not "Sell (62/80) Hotdog Grill".
+            Patch(typeof(UI.PlayerHUD.CargoItemUi), "OnSellClick", new[] { typeof(CargoItem), typeof(CargoInstance) },
+                typeof(StoragePanel), prefix: nameof(StoragePanel.SellPrefix), finalizer: nameof(StoragePanel.SellFinalizer));
 
             // Cargo limit: food up to the room in the fitted piece that holds it, equipment up to its slots.
             Patch(typeof(VehicleInstance), "MergeIntoCargo", new[] { typeof(CargoInstance) },
                 typeof(CargoLimit), prefix: nameof(CargoLimit.MergePrefix), finalizer: nameof(CargoLimit.MergeFinalizer));
             Patch(typeof(VehicleInstance), "TryToAddToCargo", new[] { typeof(CargoInstance) },
                 typeof(CargoLimit), prefix: nameof(CargoLimit.AddPrefix));
+            // A hand truck or box unloaded into a food vehicle: its equipment goes in before its food.
+            Patch(typeof(ICargoHolder), "TryToMergeAndMoveCargoBetweenHolders", new[] { typeof(ICargoHolder), typeof(ICargoHolder) },
+                typeof(CargoLimit), prefix: nameof(CargoLimit.MoveEquipmentFirstPrefix), postfix: nameof(CargoLimit.MoveEquipmentFirstPostfix));
         }
 
         public static void Remove()

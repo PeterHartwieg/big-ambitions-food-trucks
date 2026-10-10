@@ -94,10 +94,9 @@ namespace FoodTrucks
                     var pool = view.Pools.FirstOrDefault(p => p.EquipmentId == piece.Id);
                     if (pool == null) return;
                     lines = PoolLines(vehicle, tables, pool);
-                    var text = amountLabel.GetType().GetProperty("text", BindingFlags.Instance | BindingFlags.Public);
-                    if (text != null && text.PropertyType == typeof(string))
+                    if (TextProperty(amountLabel) != null)
                     {
-                        text.SetValue(amountLabel, $"{pool.LoadUnits}/{pool.Capacity}");
+                        SetText(amountLabel, $"{pool.LoadUnits}/{pool.Capacity}");
                         amountLabel.gameObject.SetActive(true);
                     }
                 }
@@ -121,6 +120,49 @@ namespace FoodTrucks
                 }
             }
         }
+
+        // OnSellClick builds its question from the amount label ("Sell (62/80) Hotdog Grill?"). For that moment the label
+        // shows what the game would (the slot's item count, shown only above 1); the finalizer puts "62/80" back.
+        internal static void SellPrefix(CargoItemUi __instance, CargoItem cargoItem, out (string Text, bool Active)? __state)
+        {
+            __state = null;
+            try
+            {
+                if (AmountField == null || HolderField == null || cargoItem == null) return;
+                if (!(HolderField.GetValue(__instance) is VehicleInstance) || !(AmountField.GetValue(__instance) is Graphic label)) return;
+                var text = TextOf(label);
+                if (text == null || !text.Contains("/")) return;
+                __state = (text, label.gameObject.activeSelf);
+                var count = cargoItem.cargoInstances.Sum(c => c.amount);
+                SetText(label, count.ToString());
+                label.gameObject.SetActive(count > 1);
+            }
+            catch (Exception ex) { Log.Error("Storage panel: sell label: " + ex); }
+        }
+
+        internal static Exception? SellFinalizer(Exception? __exception, CargoItemUi __instance, (string Text, bool Active)? __state)
+        {
+            try
+            {
+                if (__state.HasValue && AmountField?.GetValue(__instance) is Graphic label)
+                {
+                    SetText(label, __state.Value.Text);
+                    label.gameObject.SetActive(__state.Value.Active);
+                }
+            }
+            catch (Exception ex) { Log.Error("Storage panel: sell label: " + ex); }
+            return __exception;
+        }
+
+        private static PropertyInfo? TextProperty(Graphic label)
+        {
+            var text = label.GetType().GetProperty("text", BindingFlags.Instance | BindingFlags.Public);
+            return text != null && text.PropertyType == typeof(string) ? text : null;
+        }
+
+        private static string? TextOf(Graphic label) => TextProperty(label)?.GetValue(label) as string;
+
+        private static void SetText(Graphic label, string value) => TextProperty(label)?.SetValue(label, value);
 
         private static bool failed;
 
