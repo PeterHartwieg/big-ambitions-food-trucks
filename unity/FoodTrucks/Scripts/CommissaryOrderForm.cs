@@ -70,6 +70,8 @@ namespace FoodTrucks
         // TextMesh Pro labels, read as plain components so this assembly needn't reference TextMesh Pro.
         private static System.Reflection.FieldInfo? feeTextField, totalTextField;
         private static AccessTools.FieldRef<DeliveryContractSettingsBase, Dictionary<string, DeliveryItemEntry>>? entriesField;
+        // The item list's own entries (ItemsList._entriesList), emptied at once by Clear; null if the field is gone.
+        private static AccessTools.FieldRef<ItemsList, List<ItemsListEntry>>? listEntriesField;
 
         // The patches that make the store's form the commissary's, by method; the form is used only when all are active.
         internal static readonly (Type Type, string Method)[] Needed =
@@ -94,6 +96,12 @@ namespace FoodTrucks
                 feeTextField = AccessTools.Field(typeof(DeliveryContractSettingsBase), "deliveryFeeText") ?? throw new MissingFieldException(nameof(DeliveryContractSettingsBase), "deliveryFeeText");
                 totalTextField = AccessTools.Field(typeof(DeliveryContractSettingsBase), "totalPriceText") ?? throw new MissingFieldException(nameof(DeliveryContractSettingsBase), "totalPriceText");
                 entriesField = AccessTools.FieldRefAccess<DeliveryContractSettingsBase, Dictionary<string, DeliveryItemEntry>>("_itemsListEntries");
+                try { listEntriesField = AccessTools.FieldRefAccess<ItemsList, List<ItemsListEntry>>("_entriesList"); }
+                catch (Exception ex)
+                {
+                    listEntriesField = null;
+                    Log.Error("Commissary orders: the item list's entries can't be read; leaving the form checks the entries themselves: " + ex.Message);
+                }
                 var missing = Needed.Where(n => !Patched(n.Type, n.Method)).Select(n => $"{n.Type.Name}.{n.Method}").ToList();
                 ready = missing.Count == 0;
                 Log.Info(ready
@@ -141,10 +149,16 @@ namespace FoodTrucks
             catch (Exception ex) { Fail("closing the item list", ex); }
         }
 
-        // Whether the item list still holds entries this form put there (another screen may have filled it since,
-        // which destroys them). Works after the form itself is gone.
-        private static bool OwnsList(List<ItemsListEntry> entries, ItemsList list) =>
-            entries.Any(e => e != null && e.transform.IsChildOf(list.transform));
+        // Whether the item list still holds entries this form put there. Another screen that refilled it since has
+        // cleared them: ItemsList.Clear empties its own entry list at once, while the Destroy it calls only takes
+        // effect at the frame's end, so the list's entry list is what counts, not whether ours compare null yet. Works
+        // after the form itself is gone.
+        private static bool OwnsList(List<ItemsListEntry> entries, ItemsList list)
+        {
+            var listed = listEntriesField?.Invoke(list);
+            if (listed != null) return entries.Any(e => e != null && listed.Contains(e));
+            return entries.Any(e => e != null && e.gameObject.activeSelf && e.transform.IsChildOf(list.transform));
+        }
 
         // Every frame (Commissary.Update): a form whose call has gone (the phone closed, another call) is left. The
         // game's ContactsApp hangs up on closing without calling the entry's OnCancel, so this is the only notice.
