@@ -429,8 +429,7 @@ if (opts.Wants("pricing"))
     o.AppendLine();
     o.AppendLine("| Price | Hot dog price | Bought / customers | Served/h | Profit/h |");
     o.AppendLine("|---|---|---|---|---|");
-    // Midtown's best hot dog pitch (the storage study's), so the wholesaler trips are real ones.
-    var office = spots.First(s => s.Name == "4 fifthstreet" && s.Hood == "ba:neighborhood_midtown");
+    var office = new Spot("office", AreaMix.Single("office"), "ba:neighborhood_midtown", "", 0, 0);
     foreach (var (label, c) in new (string, Conditions)[]
              {
                  ("default", Cond(pricing: Pricing.Default, factor: 1)),
