@@ -44,8 +44,8 @@ public sealed class Planner
         this.cart = cart; this.city = city; this.travel = travel;
     }
 
-    // Sell at one spot from `from` to `to`, restocking whenever the cart sells out and there is time to
-    // come back and sell for at least half an hour.
+    // Sell at one spot from `from` to `to`, restocking whenever an item sells out (its piece is empty) and there is
+    // time to come back and sell for at least half an hour.
     private readonly Dictionary<(Spot, int, int, Conditions), Stay> cache = new();
 
     // SellAt with a full cart, remembered: route searches ask for the same pitch and arrival time often.
@@ -62,7 +62,7 @@ public sealed class Planner
         var t = from;
         while (t < to)
         {
-            var r = Selling.Run(cart, spot, t, to, c, stock);
+            var r = Selling.Run(cart, spot, t, to, c, stock, untilOneOut: true);
             stay.Result.Add(r);
             if (r.SoldOutAt == null) break;
             var trip = Mode == RestockMode.BoxInHand ? 2 : travel.Restock(city, spot, spot).Minutes;

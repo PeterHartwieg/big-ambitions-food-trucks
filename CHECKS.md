@@ -1,3 +1,32 @@
+# Storage per piece (0.9.7)
+
+Each fitted piece of equipment now holds its own food: 40 units a piece on a cart, 80 on a truck (a coffee counts a quarter, a pastry half). A piece that serves two foods (the grill: burgers and kabobs; the concessions case: popcorn and cotton candy) shares its room between them. The new **Extra Storage** cabinet takes one equipment place, serves nothing and doubles every piece (cart 80, truck 160); a second one is refused. Food with no fitted piece to hold it doesn't load. The commissary still sells whole boxes; Restock fills each piece from the commissary's stock and leaves the rest there. Also in this build: the bay's "Order stock for delivery to …" starts the call properly (it showed the commissary's first line with no buttons). Fresh **FT** save, other gameplay mods off. Not a version bump yet: the log still says 0.9.6.
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Ctrl+J cart. Carry a box of hot dogs to it before fitting anything | Refused: "Nothing on this cart holds Hotdog. Fit a Hotdog Grill first." The box stays in your hands |
+| 2 | Fit a hot dog grill, then load the box of 500 | 40 hot dogs go in, the rest stays in your hands, with "The Hotdog Grill is full: it holds 40 units …". The cart's panel: the grill's slot reads 40/40; hover it for "Hotdog Grill: 40/40 units" and "Hotdog: 40". Does the slot and its tooltip look like the game's own? |
+| 3 | Ctrl+U by the cart (Extra Storage comes first), then load hot dogs again | Extra Storage goes in and shows on the counter as a steel cabinet. Hot dogs top up to 80; the grill's slot reads 80/80. Hover the Extra Storage slot: "Extra Storage: doubles every piece's storage (80 units a piece)". How does the cabinet look on the cart? |
+| 4 | Carry a second Extra Storage to a truck that has one (Ctrl+K, Ctrl+U twice) | "One Extra Storage is enough: a second adds nothing …"; the second stays out |
+| 5 | Truck with a grill: load burgers, then kabobs | Both share the grill's 80 (160 with Extra Storage); the tooltip lists both foods |
+| 6 | At a commissary bay, order hot dogs, a griddle and Extra Storage; read the order form | Foods read "Hotdog, box of 500 (… here)"; the griddle and Extra Storage read "Griddle (0 here)", "Extra Storage (0 here)" at their price per piece, no "box of". The title counts "boxes and pieces". The read-back says "Griddle, $2,000.00", not "1 box of Griddle" |
+| 7 | Deliver (Ctrl+Alt+F3), then Restock a truck with a hot dog grill, a griddle in stock and tacos and chopped cheese in stock | Restock fits the griddle first, then fills the grill with hot dogs and the griddle half tacos, half chopped cheese. Foods with no piece on board stay: "… Nothing on it holds …, so that stays here." |
+| 8 | Sell the truck's tacos down, take the griddle out (carry it off), then Restock again | The leftover tacos stay in the truck and aren't on the menu; Restock doesn't load more tacos and says nothing holds them. Hover the tacos' slot: "No equipment on board holds Tacos …" |
+| 9 | A save from 0.9.6 with a cart holding 80 hot dogs | The 80 stay; the grill's slot reads 80/40 and its tooltip says nothing more loads until some is sold. Nothing is deleted or refunded |
+| 10 | Truck in a commissary bay: "Commissary", then "Order stock for delivery to … (opens its texts)". Try it on foot by the truck and from the driver's seat | The phone opens on the conversation, the commissary's line appears with Hang up and Order stock under it, and the call goes on as from the CALL button. Hang up works |
+| 11 | In the order form, open the item list (add button), then press the phone's own CLOSE [ESCAPE] button; then press Esc. Do the same in Square Appliances' furniture order form | Tell me whether the phone's CLOSE button does nothing in both while the list is open (the game's own behaviour, left alone) or only in ours. Esc should close the list first in both |
+| 12 | BizMan, the fleet section | Each vehicle's card lists its pieces, e.g. "Hotdog Grill 62/80 units", and "Extra Storage: Doubles storage" |
+| 13 | Play a cart with one piece at a busy spot for a couple of hours | Does selling out in about 3 to 4 hours (without Extra Storage) feel too fast? |
+
+Log lines:
+
+- At startup: `Patch CargoItemUi.SetUp(CargoItem, ICargoHolder, Boolean): Active.` and `Item foodtrucks:itemname_storagecabinet: registered (machine, price 900, …)`.
+- Rows 1 to 5: `Cargo limit: <item> into <vehicle type> <id> capped at N (no fitted <piece> holds it | <piece> holds 40 units | 4 equipment slots | one Extra Storage counts).`
+- Row 7: `Commissary restock: truck <id> at <site> loaded …; no piece for …; K units refused by the cargo and kept; L units left in stock; storage hotdoggrill 80/80; griddle 80/80.` "refused by the cargo" should be 0: Restock only asks for what fits.
+- Row 10: `Commissary <id>: the bay's Order stock opens its conversation.` then `Commissary <id>: the bay's call started once the conversation was up (N frames).` A `the bay's call didn't start` error means the conversation never showed.
+- Ctrl+L: each vehicle's stock now ends with its pieces, e.g. `stock 62 (hotdoggrill 62/80; storage x2)`.
+- Catering offers: guest counts now follow the largest single category a truck holds (80 a piece, 160 with Extra Storage).
+
 # Hatch side and debug keys (0.9.6)
 
 Build `0.9.6`: 0.9.5 plus two playtest fixes. "Open here" on a truck now checks that the hatch faces the pavement: it reads the traffic system's driving lanes beside the truck, so a hatch to the road is refused even though the NavMesh lets people walk on the street. A crew's route parks a truck that stands the wrong way at a stop again, turned round. The debug keys moved off F4 to F10 and F12 (Camera Tools' Hide UI, the game's `-console` keys, quick save and menu) onto letters: **Ctrl+K** truck, **Ctrl+Alt+K** licence and permits, **Ctrl+J** cart, **Ctrl+Alt+J** hand truck, **Ctrl+U** new items, **Ctrl+Alt+U** hire, **Ctrl+L** status, **Ctrl+Alt+L** demand here, **Ctrl+G** grip, **Ctrl+Alt+G** zone point, **Ctrl+V** city event, **Ctrl+Alt+V** catering gig, **Ctrl+X** tax statement, **Ctrl+Alt+X** tax fixture (these four only on a second press within 10 seconds), **Ctrl+F3** / **Ctrl+Alt+F3** / **Ctrl+Shift+F3** commissary bays, deliveries and overnight check, **Ctrl+Shift+F11** twice for the uninstall step. Fresh **FT** save, other gameplay mods off; Camera Tools may stay on for rows 8 and 9.

@@ -46,7 +46,7 @@ Milestone 1 selling, checked in the same session: loading by click and at the sh
 
 Open from the session:
 
-- One box of hot dogs holds 500 units, so six slots last days. The cart needs its own unit limit.
+- One box of hot dogs holds 500 units, so six slots last days. The cart needs its own unit limit. *Done:* Milestone 2 gave each vehicle one shared limit (cart 80, truck 160 units). Since the storage-per-piece build (0.9.7, pending: not yet seen in game) each fitted piece of equipment holds its own foods instead: 40 units a piece on a cart, 80 on a truck, a coffee counting a quarter and a pastry half. A piece serving two foods shares its room, the Extra Storage cabinet doubles every piece, and food with no piece to hold it doesn't load. The vehicle's cargo slots show each piece's load (62/80) with a tooltip.
 - The game's day summary shows $0 profit: it counts only businesses in rented buildings.
 - Driving past the open cart in a vehicle within 8 m counts as working it. A workstation the player stands at may be better.
 - F6 hid the UI while spawning the test truck. It was the Camera Tools mod's Hide UI hotkey, which can be F4, F6 to F10, Home, Insert, Delete, Page Up or Down or a number key and ignores Ctrl. The game's own F7 (hide the HUD) and F8 (free camera) also ignore Ctrl but work only when the game runs with `-console`. Since 0.9.6 the debug keys avoid all of these (pending: not yet seen in game).

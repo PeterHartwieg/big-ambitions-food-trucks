@@ -146,7 +146,9 @@ public sealed class Cart
     private readonly DemandModel model;
     private readonly GamePrices prices;
 
-    public Cart(DemandTables tables, GamePrices prices, IReadOnlyList<string> menu, string name, int? stockUnits = null,
+    // Storage per piece (Core's Storage): each menu item is held by the one piece that serves it, each piece holds
+    // the vehicle's unitsPerPiece, and with the Extra Storage piece (storage) every piece holds its factor more.
+    public Cart(DemandTables tables, GamePrices prices, IReadOnlyList<string> menu, string name, bool storage = false,
         int? staff = null, string kind = Kind)
     {
         VehicleKind = kind;
@@ -155,10 +157,21 @@ public sealed class Cart
         model = new DemandModel(tables);
         Menu = menu;
         Name = name;
-        var vehicle = tables.Vehicle(Kind) ?? throw new InvalidOperationException("economy.json has no cart.");
+        Storage = storage;
+        var vehicle = tables.Vehicle(kind) ?? throw new InvalidOperationException($"economy.json has no {kind}.");
         Staff = staff ?? vehicle.Staff;
-        StockUnits = stockUnits ?? vehicle.StockUnits;
+        var factor = storage ? tables.EquipmentIds.Select(tables.Equipment).Where(e => e!.IsStorage).Max(e => e!.StorageFactor) : 1.0;
+        PerPiece = FoodTrucks.Core.Selling.Storage.Capacity(vehicle.UnitsPerPiece, 1, factor);
+        PieceOf = menu.ToDictionary(i => i, i => tables.EquipmentForProduct(i)?.Id ?? throw new InvalidOperationException($"No equipment serves {i}."),
+            StringComparer.Ordinal);
+        StockUnits = PieceOf.Values.Distinct().Count() * PerPiece;
     }
+
+    public bool Storage { get; }
+    // Weighted units each piece holds.
+    public int PerPiece { get; }
+    // The piece that holds each menu item.
+    public IReadOnlyDictionary<string, string> PieceOf { get; }
 
     public string Name { get; }
     // "cart" or "truck" in rules.json's queue limits.
@@ -169,6 +182,7 @@ public sealed class Cart
     public double Load(IReadOnlyDictionary<string, double> stock) => stock.Sum(p => p.Value * WeightOf(p.Key));
     public IReadOnlyList<string> Menu { get; }
     public int Staff { get; }
+    // All the pieces' storage together.
     public int StockUnits { get; }
     public DemandTables Tables => tables;
     public GamePrices Prices => prices;
@@ -299,6 +313,8 @@ public sealed class StopResult
     public double Cost;
     public double Customers;
     public int? SoldOutAt;
+    // When the first menu item ran out (its piece empty), even if others still sell.
+    public int? FirstOutAt;
     public double Profit => Revenue - Cost;
     public double Units => Sold.Values.Sum();
 
@@ -326,13 +342,21 @@ public static class Selling
     // Sells from `stock` at the spot from minute `from` to `to` (minutes since 00:00 of the day, past 1440 is
     // after midnight). Each served customer takes the plan's best-accepted item for their category by the
     // buyer shares, and the plan's add-on drink at its rate, as CartSelling.ServeCustomer does. Stops when nothing on
-    // the menu is left.
-    public static StopResult Run(Cart cart, Spot spot, int from, int to, Conditions c, Dictionary<string, double> stock)
+    // the menu is left, or with untilOneOut when the first item that had stock runs out (storage per piece: one
+    // piece empties while the others still sell, and the player goes to restock then).
+    public static StopResult Run(Cart cart, Spot spot, int from, int to, Conditions c, Dictionary<string, double> stock,
+        bool untilOneOut = false)
     {
         var r = new StopResult();
+        var stocked = cart.Menu.Where(i => stock.GetValueOrDefault(i) > 1e-6).ToList();
         for (var t = from; t < to; t += StepMinutes)
         {
             var step = Math.Min(StepMinutes, to - t);
+            if (r.FirstOutAt == null && stocked.Any(i => stock.GetValueOrDefault(i) <= 1e-6))
+            {
+                r.FirstOutAt = t;
+                if (untilOneOut) { r.SoldOutAt = t; break; }
+            }
             var plan = cart.Plan(spot, t, c, stock);
             if (plan == HourPlan.None) { r.SoldOutAt = t; break; }
             if (!r.ByDaypart.TryGetValue(plan.Daypart, out var d)) r.ByDaypart[plan.Daypart] = d = new DaypartTotals();
@@ -376,16 +400,24 @@ public static class Selling
         d.Units += units; d.Revenue += revenue; d.Cost += cost;
     }
 
-    // Splits the cart's unit limit across its menu by what the stop would sell with unlimited stock.
+    // Fills each piece's storage (storage per piece). A piece serving several menu items is split by what the stop
+    // would sell with unlimited stock, each item counting at its stock weight; the player picks the boxes, so this is
+    // the best split, where the commissary's Restock splits evenly.
     public static Dictionary<string, double> Load(Cart cart, Spot spot, int from, int to, Conditions c)
     {
         var unlimited = cart.Menu.ToDictionary(i => i, _ => 1e9, StringComparer.Ordinal);
         var dry = Run(cart, spot, from, to, c, unlimited);
-        var total = dry.Units;
-        if (total <= 0) return cart.Menu.ToDictionary(i => i, i => cart.StockUnits / cart.Menu.Count / cart.WeightOf(i), StringComparer.Ordinal);
-        // Fill the unit limit in the proportions the stop sells, each item counting at its stock weight.
-        var weighted = cart.Menu.Sum(i => dry.Sold.GetValueOrDefault(i) * cart.WeightOf(i));
-        return cart.Menu.ToDictionary(i => i, i => cart.StockUnits * dry.Sold.GetValueOrDefault(i) / weighted, StringComparer.Ordinal);
+        var load = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var piece in cart.Menu.GroupBy(i => cart.PieceOf[i]))
+        {
+            var items = piece.ToList();
+            var weighted = items.Sum(i => dry.Sold.GetValueOrDefault(i) * cart.WeightOf(i));
+            foreach (var i in items)
+                load[i] = weighted <= 0
+                    ? cart.PerPiece / (double)items.Count / cart.WeightOf(i)
+                    : cart.PerPiece * dry.Sold.GetValueOrDefault(i) / weighted;
+        }
+        return load;
     }
 
     public static Dictionary<string, double> Unlimited(Cart cart) => cart.Menu.ToDictionary(i => i, _ => 1e9, StringComparer.Ordinal);

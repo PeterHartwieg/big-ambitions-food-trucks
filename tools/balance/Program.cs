@@ -30,17 +30,17 @@ Conditions Cond(DayOfWeek day = DayOfWeek.Wednesday, bool rain = false, Pricing?
 var conditions = new[] { Cond(), Cond(rain: true), Cond(DayOfWeek.Saturday), Cond(DayOfWeek.Saturday, true) };
 
 const string HotDog = "ba:itemname_hotdog", Soda = "ba:itemname_sodacan", Coffee = "ba:itemname_cupofcoffee", Croissant = "ba:itemname_croissant";
-Cart MakeCart(string[] menu, string name, int? units = null, int? staff = null, string kind = Cart.Kind) => new(tables, prices, menu, name, units, staff, kind);
+Cart MakeCart(string[] menu, string name, bool storage = false, int? staff = null, string kind = Cart.Kind) => new(tables, prices, menu, name, storage, staff, kind);
 var carts = new Dictionary<string, (Cart Cart, string[] Equipment)>
 {
     ["hotdog"] = (MakeCart(new[] { HotDog }, "hot dog grill"), new[] { "hotdoggrill" }),
     ["hotdog+cooler"] = (MakeCart(new[] { HotDog, Soda }, "hot dog grill + cooler"), new[] { "hotdoggrill", "cooler" }),
     ["hotdog+coffee"] = (MakeCart(new[] { HotDog, Coffee }, "hot dog grill + coffee machine"), new[] { "hotdoggrill", "coffeemachine" }),
     ["coffee+bakery"] = (MakeCart(new[] { Coffee, Croissant }, "coffee machine + display case (croissants)"), new[] { "coffeemachine", "displaycase" }),
-    // Not a vehicle in the data yet: a truck stand-in with the truck's 160 units, the player and one hire at the
-    // window, and a grill, coffee machine, display case and cooler (four slots).
-    ["truck-like"] = (MakeCart(new[] { HotDog, Coffee, Croissant, Soda }, "truck stand-in: 2 at the window, 160 units, 4 items",
-        tables.Vehicle("truck")?.StockUnits ?? 160, 2, "truck"), new[] { "hotdoggrill", "coffeemachine", "displaycase", "cooler" }),
+    // A truck stand-in: the truck's storage per piece, the player and one hire at the window, and a grill, coffee
+    // machine, display case and cooler (four slots).
+    ["truck-like"] = (MakeCart(new[] { HotDog, Coffee, Croissant, Soda }, "truck stand-in: 2 at the window, 4 pieces",
+        false, 2, "truck"), new[] { "hotdoggrill", "coffeemachine", "displaycase", "cooler" }),
 };
 // The new street foods (new-foods-proposal.json), and the vanilla ice cream counter for comparison. A cart is
 // added only when the data and prices know all its items, so runs without the patch are unchanged.
@@ -73,7 +73,7 @@ foreach (var (key, menu, name, equipment, truck) in new (string, string[], strin
 {
     if (!menu.All(i => tables.Product(i) != null && prices.Items.ContainsKey(i)) || !equipment.All(prices.Equipment.ContainsKey)) continue;
     carts[key] = truck
-        ? (MakeCart(menu, name, tables.Vehicle("truck")?.StockUnits ?? 160, 2, "truck"), equipment)
+        ? (MakeCart(menu, name, false, 2, "truck"), equipment)
         : (MakeCart(menu, name), equipment);
 }
 // Each cart's 16-hour day and the ways a route may split it (staying put is one of them).
@@ -117,7 +117,8 @@ o.AppendLine($"# Cart balance run");
 o.AppendLine();
 o.AppendLine($"Data: {opts.Data}{(opts.Patch != null ? $" patched with {opts.Patch}" : "")}. Pricing: {opts.Pricing}{(opts.PriceFactor != 1 ? $" × {opts.PriceFactor}" : "")}. Market demand: {opts.Market}. " +
              $"Restock: {opts.Restock}. Pushing speed: {opts.MetresPerSecond} m/s ({opts.MetresPerSecond * 60:0} m per in-game hour). " +
-             $"Cart: {tables.Vehicle("cart")!.StockUnits} units, {tables.Vehicle("cart")!.Staff} staff. passersPerHour {tables.PassersPerHour}. Month: May.");
+             $"Cart: {tables.Vehicle("cart")!.UnitsPerPiece} units a piece, {tables.Vehicle("cart")!.Staff} staff; truck {tables.Vehicle("truck")!.UnitsPerPiece} a piece; " +
+             $"Extra Storage doubles them. passersPerHour {tables.PassersPerHour}. Month: May.");
 o.AppendLine();
 
 if (opts.Wants("archetypes"))
@@ -603,6 +604,71 @@ if (opts.Wants("foods"))
     o.AppendLine("| Cart | Midtown office lunch, weekday May | Hell's Kitchen residential evening, weekday May | Hell's Kitchen nightlife late, Saturday May | Midtown park afternoon, weekday May | same, Saturday July | same, weekday January |");
     o.AppendLine("|---|---|---|---|---|---|---|");
     foreach (var key in keys) o.AppendLine(rateRows[key]);
+    o.AppendLine();
+}
+
+// Storage per piece (Peter, 10 October 2026): what a piece's storage does to a day. Each vehicle at its best spot
+// city-wide on a dry weekday in May, from the morning full: when the first item runs out, when everything has,
+// how many restocks the day takes, and the day's profit with restock trips and with restocking in place.
+if (opts.Wants("storage"))
+{
+    var cases = new (string Label, string[] Menu, string[] Equipment, string Kind, bool Storage)[]
+    {
+        ("hot dog grill", new[] { HotDog }, new[] { "hotdoggrill" }, "cart", false),
+        ("hot dog grill + Extra Storage", new[] { HotDog }, new[] { "hotdoggrill", "storage" }, "cart", true),
+        ("hot dog grill + cooler", new[] { HotDog, Soda }, new[] { "hotdoggrill", "cooler" }, "cart", false),
+        ("coffee machine + display case", new[] { Coffee, Croissant }, new[] { "coffeemachine", "displaycase" }, "cart", false),
+        ("coffee machine + Extra Storage", new[] { Coffee }, new[] { "coffeemachine", "storage" }, "cart", true),
+        ("grill (burgers, kabobs)", new[] { Burger, Kabob }, new[] { "grill" }, "cart", false),
+        ("grill (burgers, kabobs) + Extra Storage", new[] { Burger, Kabob }, new[] { "grill", "storage" }, "cart", true),
+        ("truck: hot dog, coffee, display case, cooler", new[] { HotDog, Coffee, Croissant, Soda }, new[] { "hotdoggrill", "coffeemachine", "displaycase", "cooler" }, "truck", false),
+        ("truck: hot dog, coffee, display case + Extra Storage", new[] { HotDog, Coffee, Croissant }, new[] { "hotdoggrill", "coffeemachine", "displaycase", "storage" }, "truck", true),
+    };
+    var c = Cond();
+    o.AppendLine("## Storage per piece: a day at the best spot (dry weekday, May)");
+    o.AppendLine();
+    o.AppendLine($"Cart {tables.Vehicle("cart")!.UnitsPerPiece} units a piece, truck {tables.Vehicle("truck")!.UnitsPerPiece}; Extra Storage doubles every piece. " +
+                 "Full at the day's start. First out: the first item to run out; all out: nothing left. Restocks: trips the day takes " +
+                 $"({(opts.Restock == RestockMode.Wholesaler ? "to the nearest wholesaler and back, a stand-in for the commissary" : "in place")}). " +
+                 "Profit in place: the same day if a restock took no walk.");
+    o.AppendLine();
+    o.AppendLine("| Vehicle | Holds | Best spot | Units a day | First out | All out | Restocks | Profit | Profit in place |");
+    o.AppendLine("|---|---|---|---|---|---|---|---|---|");
+    var results = new System.Collections.Concurrent.ConcurrentDictionary<int, string>();
+    var profits = new System.Collections.Concurrent.ConcurrentDictionary<string, double>();
+    Parallel.For(0, cases.Length, n =>
+    {
+        var (label, menu, equipment, kind, storage) = cases[n];
+        if (!menu.All(i => tables.Product(i) != null && prices.Items.ContainsKey(i))) return;
+        var cart = MakeCart(menu, label, storage, kind == "truck" ? 2 : null, kind);
+        // The day of the cart it is most like: coffee carts open at 06:00, others at 09:00; trucks 07:00 to 23:00.
+        var (dFrom, dTo, _) = kind == "truck" ? days["truck-like"] : menu.Contains(Coffee) ? days["coffee+bakery"] : days["hotdog+cooler"];
+        var planner = PlannerFor(cart);
+        var best = spots.Select(s => (s, d: planner.SingleSpot(s, dFrom, dTo, c))).OrderByDescending(x => x.d.Total.Profit).First();
+        var first = Selling.Run(cart, best.s, dFrom, dTo, c, Selling.Load(cart, best.s, dFrom, dTo, c));
+        var inPlace = new Planner(cart, city, travel) { Mode = RestockMode.BoxInHand }.SingleSpot(best.s, dFrom, dTo, c);
+        string At(int? m) => m == null ? "never" : $"{Clock(m.Value)} ({(m.Value - dFrom) / 60.0:0.0} h)";
+        var holds = string.Join(", ", menu.GroupBy(i => cart.PieceOf[i]).Select(g => $"{cart.PerPiece} {g.Key}"));
+        results[n] = $"| {label} | {holds} | {best.s.Name} ({H(best.s.Hood)}) | {best.d.Total.Units:0} | {At(first.FirstOutAt)} | {At(first.SoldOutAt)} | " +
+                     $"{best.d.Restocks} | {Money(best.d.Total.Profit)} | {Money(inPlace.Total.Profit)} |";
+        profits[label] = best.d.Total.Profit;
+    });
+    foreach (var row in results.OrderBy(r => r.Key)) o.AppendLine(row.Value);
+    o.AppendLine();
+    var price = prices.Equipment.TryGetValue("storage", out var p) ? p : 900;
+    o.AppendLine($"Extra Storage at ${Money(price)}: days to pay back from the extra profit a day at the best spot.");
+    o.AppendLine();
+    foreach (var (with, without) in new[]
+             {
+                 ("hot dog grill + Extra Storage", "hot dog grill"), ("coffee machine + Extra Storage", "coffee machine + display case"),
+                 ("grill (burgers, kabobs) + Extra Storage", "grill (burgers, kabobs)"),
+                 ("truck: hot dog, coffee, display case + Extra Storage", "truck: hot dog, coffee, display case, cooler"),
+             })
+    {
+        if (!profits.TryGetValue(with, out var a) || !profits.TryGetValue(without, out var b)) continue;
+        var gain = a - b;
+        o.AppendLine($"- {with} against {without}: {(gain >= 0 ? "+" : "")}{Money(gain)} a day" + (gain > 0 ? $", paid back in {price / gain:0.0} days." : "."));
+    }
     o.AppendLine();
 }
 
