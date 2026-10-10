@@ -128,21 +128,13 @@ public sealed class Planner
             Stay stay;
             // A refill tops up what is left; only a shared piece's split can differ from a full load.
             if (full && i > 0 && cart.HasSharedPiece)
-            {
-                stock = Selling.TopUp(cart, spots[i], from, windows[i].To, c, stock!);
-                stay = SellAt(spots[i], from, windows[i].To, c, stock);
-                stock = new Dictionary<string, double>(stay.Left);
-            }
+                stay = SellAt(spots[i], from, windows[i].To, c, Selling.TopUp(cart, spots[i], from, windows[i].To, c, stock!));
             else if (full)
-            {
                 stay = SellFull(spots[i], from, windows[i].To, c);
-                stock = new Dictionary<string, double>(stay.Left);
-            }
             else
-            {
-                stock = new Dictionary<string, double>(stock!);
-                stay = SellAt(spots[i], from, windows[i].To, c, stock);
-            }
+                stay = SellAt(spots[i], from, windows[i].To, c, new Dictionary<string, double>(stock!));
+            // What the stay ended with, after any restock inside it: the next pitch judges this, never the stock it began with.
+            stock = new Dictionary<string, double>(stay.Left);
             day.Stays.Add(stay);
             day.Total.Add(stay.Result);
             t = windows[i].To;

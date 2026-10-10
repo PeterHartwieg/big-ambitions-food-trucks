@@ -429,7 +429,8 @@ if (opts.Wants("pricing"))
     o.AppendLine();
     o.AppendLine("| Price | Hot dog price | Bought / customers | Served/h | Profit/h |");
     o.AppendLine("|---|---|---|---|---|");
-    var office = new Spot("office", AreaMix.Single("office"), "ba:neighborhood_midtown", "", 0, 0);
+    // Midtown's best hot dog pitch (the storage study's), so the wholesaler trips are real ones.
+    var office = spots.First(s => s.Name == "4 fifthstreet" && s.Hood == "ba:neighborhood_midtown");
     foreach (var (label, c) in new (string, Conditions)[]
              {
                  ("default", Cond(pricing: Pricing.Default, factor: 1)),
@@ -670,6 +671,35 @@ if (opts.Wants("storage"))
         var gain = a - b;
         o.AppendLine($"- {with} against {without}: {(gain >= 0 ? "+" : "")}{Money(gain)} a day" + (gain > 0 ? $", paid back in {price / gain:0.0} days." : "."));
     }
+    o.AppendLine();
+}
+
+// Regression checks for the calculator itself; a failure throws. Route (review 0.9.7, round 2): a middle stop that
+// starts without a refill and restocks inside its stay must hand its end stock to the next stop, so a refill is
+// counted only after a stay that really ended with a piece below half.
+if (opts.Wants("checks"))
+{
+    var cart = carts["hotdog+cooler"].Cart;
+    var planner = PlannerFor(cart);
+    var c = Cond();
+    var windows = new[] { (9 * 60, 10 * 60), (10 * 60, 13 * 60 + 50), (13 * 60 + 50, 14 * 60 + 50) };
+    bool BelowHalf(Dictionary<string, double> stock) => cart.PieceLoads(stock).Values.Any(l => l < cart.PerPiece / 2.0);
+    // The first pitch, in name order, where the case happens: the first stop leaves every piece above half (no refill),
+    // the middle stop restocks inside its stay and ends above half too, so the third stop needs no refill.
+    var found = spots.OrderBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.Hood, StringComparer.Ordinal).Select(s =>
+    {
+        var first = planner.SellFull(s, windows[0].Item1, windows[0].Item2, c);
+        if (BelowHalf(first.Left)) return null;
+        var middle = planner.SellAt(s, windows[1].Item1, windows[1].Item2, c, new Dictionary<string, double>(first.Left));
+        return middle.Restocks > 0 && !BelowHalf(middle.Left) ? (s, middle) : ((Spot, Stay)?)null;
+    }).FirstOrDefault(x => x != null) ?? throw new InvalidOperationException("Check route: no pitch restocks inside the middle stop; pick other windows.");
+    var (spot, mid) = found;
+    var day = planner.Route(new[] { spot, spot, spot }, windows, c);
+    o.AppendLine("## Calculator checks");
+    o.AppendLine();
+    o.AppendLine($"- Route, three stops at {spot.Name} ({H(spot.Hood)}), 09:00, 10:00 and 13:50: the middle stop restocks {mid.Restocks} times and ends with " +
+                 string.Join(", ", mid.Left.Select(p => $"{p.Value:0.##} {p.Key}")) + $"; route refills {(day == null ? "none (no route)" : day.Refills.ToString())}, expected 0.");
+    if (day == null || day.Refills != 0) throw new InvalidOperationException("Check route: the route refilled after a stop that ended above half.");
     o.AppendLine();
 }
 

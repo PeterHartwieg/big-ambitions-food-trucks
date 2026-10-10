@@ -41,7 +41,7 @@ Best routes over the same 16-hour day (`--reports compare`, the study's ladder; 
 | Coffee machine + display case | $2,393 | $2,180 | $2,202 |
 | Truck stand-in (four pieces) | $4,123 | $4,201 | $4,130 |
 
-The routes moved because a route now refills when any one piece is below half. The carts gain: a hot dog cart that used to go on with half its sodas and almost no hot dogs now refills first, and the hot dog grill + cooler route comes out $83 above the shared limit. The truck loses $71, most likely because one of its four pieces now drops below half well before the four together do, so it stops for stock more often. Both are within a few percent, and no row changes the conclusions below.
+The routes moved because a route now refills when any one piece is below half. The carts gain: a hot dog cart that used to go on with half its sodas and almost no hot dogs now refills first, and the hot dog grill + cooler route comes out $83 above the shared limit. The truck loses $71, most likely because one of its four pieces now drops below half well before the four together do, so it stops for stock more often. Both are within a few percent, and no row changes the conclusions below. Review round 2 fixed a route that judged the next pitch on the stock a stay began with when that stay had restocked inside it; `--reports checks` now covers that case. The ladder above came out the same to the dollar after the fix.
 
 ## What it means
 
