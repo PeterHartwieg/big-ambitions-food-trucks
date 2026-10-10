@@ -69,6 +69,10 @@ namespace FoodTrucks
         private string? enteringId;
         // Why the player last left each truck's hatch this session, for the "nobody at the window" log line.
         private readonly Dictionary<string, string> leftBecause = new Dictionary<string, string>(StringComparer.Ordinal);
+        // The walk to a rear door for Back to the hatch: the game's goal callback we set, while it is still the
+        // player's goal. Another click replaces or clears the game's goal, which ends ours.
+        private UnityAction? returnWalk;
+        private static readonly System.Reflection.FieldInfo? GoalActionField = HarmonyLib.AccessTools.Field(typeof(PlayerController), "_goalAction");
 
         // Out of energy: the game sends an exhausted player to hospital, which an open activity panel stops, and
         // it fires its own out-of-energy cancel only when energy crosses the line, not when it is already below.
@@ -137,7 +141,7 @@ namespace FoodTrucks
         public static bool CanGoBack(VehicleInstance? truck)
         {
             var self = instance;
-            if (self == null || truck == null || self.vehicleId != null || self.entering != null) return false;
+            if (self == null || truck == null || self.vehicleId != null || self.entering != null || self.Returning()) return false;
             if (FoodTrucksMod.KindOf(truck.vehicleTypeName) != "truck") return false;
             if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId) || PlayerHelper.ItemInstanceInHands != null) return false;
             return StreetSales.Find(FoodTrucksSession.CurrentState, truck.id)?.IsOpen == true;
@@ -157,10 +161,11 @@ namespace FoodTrucks
             var player = PlayerHelper.PlayerController;
             if (player == null) return;
             var target = controller.GetManageStoragePosition();
-            Log.Info($"Truck window: back to the hatch of truck {id}: walking to {target}.");
+            UnityAction? walk = null;
             void Arrive()
             {
                 if (self == null) return;
+                if (ReferenceEquals(self.returnWalk, walk)) self.returnWalk = null;
                 try { self.Place(id, "back to the hatch"); }
                 catch (Exception ex)
                 {
@@ -168,8 +173,41 @@ namespace FoodTrucks
                     self.StepOut("error while placing", drive: false);
                 }
             }
-            if (Vector3.Distance(player.transform.position, target) <= 1.5f) Arrive();
-            else player.SetGoal(target, new UnityAction(Arrive));
+            if (Vector3.Distance(player.transform.position, target) <= 1.5f)
+            {
+                Log.Info($"Truck window: back to the hatch of truck {id}: at the rear door already.");
+                Arrive();
+                return;
+            }
+            // As the game's own Manage storage walk: an unreachable rear door is fine right beside the truck (2.5 m),
+            // and otherwise refused with a notice, since the game would run the goal at once wherever the player stands.
+            if (!player.ExistsRoute(target))
+            {
+                if (Vector3.Distance(player.transform.position, controller.transform.position) <= 2.5f)
+                {
+                    Log.Info($"Truck window: back to the hatch of truck {id}: no path to the rear door at {target}, but the player is beside the truck.");
+                    Arrive();
+                    return;
+                }
+                Log.Info($"Truck window: back to the hatch of truck {id}: no path to the rear door at {target}; refused.");
+                CartSelling.Notify("foodtrucks:notification_hatch_unreachable");
+                return;
+            }
+            Log.Info($"Truck window: back to the hatch of truck {id}: walking to {target}.");
+            walk = new UnityAction(Arrive);
+            self.returnWalk = walk;
+            player.SetGoal(target, walk);
+        }
+
+        // A Back to the hatch walk is under way: our callback is still the player's goal.
+        private bool Returning()
+        {
+            if (returnWalk == null) return false;
+            var player = PlayerHelper.PlayerController;
+            var goal = player == null ? null : GoalActionField?.GetValue(player) as UnityAction;
+            var pending = GoalActionField == null ? player != null && player.hasOnGoalReachedAction : ReferenceEquals(goal, returnWalk);
+            if (!pending) returnWalk = null;
+            return pending;
         }
 
         private IEnumerator EnterWhenOut(string id)
@@ -222,6 +260,7 @@ namespace FoodTrucks
             if (why != null)
             {
                 if (why == "out of energy") CartSelling.Notify("foodtrucks:notification_hatch_too_tired");
+                else if (how == "back to the hatch") CartSelling.Notify("foodtrucks:notification_hatch_back_failed");
                 Log.Info($"Truck window: {id} open ({how}), player left outside at {PlayerHelper.PlayerController?.transform.position}: {why}.");
                 leftBecause[id] = "not placed (" + why + ")";
                 return;
@@ -247,6 +286,10 @@ namespace FoodTrucks
             attached = player;
             truckAt = controller.transform.position;
             stateFrame = Time.frameCount;
+            // Any walk still pending (an earlier Back to the hatch, or another interaction's goal) is dropped, so its
+            // callback can't run after the player steps out again (review round 2).
+            player.ResetNavigation();
+            returnWalk = null;
             player.AttachToObject(newPlace.transform, Blocker);
             CartQueueView.Recheck();
             leftBecause.Remove(id);
@@ -472,8 +515,10 @@ namespace FoodTrucks
         private readonly string vehicleId;
         private PlayerActivityState state = PlayerActivityState.NotStarted;
         private PlayerActivityState beforeFinishing = PlayerActivityState.NotStarted;
-        // The frame the game last called Perform: a time skip's end calls it just before Finish.
+        // The frame the game last called Perform, and the minutes it passed: the game calls it every running minute
+        // with 1, and at a time skip's end, just before Finish, with the whole skip.
         private int performedFrame = -1;
+        private int performedMinutes;
 
         public HatchActivity(TruckWindow owner, string vehicleId)
         {
@@ -516,12 +561,13 @@ namespace FoodTrucks
         public void Perform(int minutes)
         {
             performedFrame = Time.frameCount;
+            performedMinutes = minutes;
         }
 
         // The game ends it: after a time skip, out of energy, Unstuck.
         public void Finish()
         {
-            owner.OnFinishedByGame(performedFrame == Time.frameCount);
+            owner.OnFinishedByGame(performedFrame == Time.frameCount && performedMinutes > 1);
             MarkFinished();
         }
 

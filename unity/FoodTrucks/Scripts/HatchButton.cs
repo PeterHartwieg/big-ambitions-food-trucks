@@ -43,7 +43,6 @@ namespace FoodTrucks
                 var show = controller != null && TruckWindow.CanGoBack(controller.vehicleInstance);
                 shownFor = show ? controller : null;
                 if (button.gameObject.activeSelf != show) button.gameObject.SetActive(show);
-                if (show) button.transform.SetSiblingIndex(enter.transform.GetSiblingIndex());
             }
             catch (Exception ex)
             {
@@ -76,6 +75,8 @@ namespace FoodTrucks
             }
             else Log.Error("Back to the hatch: the copied button has no label; it shows the game's text.");
             button.gameObject.SetActive(false);
+            // Placed once, just before Enter vehicle: setting it on every update swapped the two each time.
+            button.transform.SetSiblingIndex(enter.transform.GetSiblingIndex());
             if (!logged)
             {
                 logged = true;

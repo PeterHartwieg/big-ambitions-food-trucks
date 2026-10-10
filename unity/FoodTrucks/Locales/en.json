@@ -281,6 +281,8 @@
     "foodtrucks:bizman_fleet_left": "{count} left",
     "foodtrucks:bizman_fleet_nothing": "No food on board, nothing sold today",
     "foodtrucks:notification_hatch_too_tired": "You're too tired to work the hatch. Get some rest first.",
+    "foodtrucks:notification_hatch_unreachable": "You can't reach the truck's rear door from here.",
+    "foodtrucks:notification_hatch_back_failed": "You couldn't get back to the hatch. Stand by the truck and try again.",
     "foodtrucks:itemname_dumplings": "Dumplings",
     "foodtrucks:itemname_dumplings_description": "Steamed dumplings, six to a tray. A filling street meal for lunch and late nights.",
     "foodtrucks:itemname_tacos": "Tacos",
