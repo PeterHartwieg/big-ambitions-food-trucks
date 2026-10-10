@@ -50,3 +50,14 @@ The serving window was too low for the interior: a 1.8 m person on the floor (z 
 Triangles: Truck_Body 6,400 → 6,492 (budget 6,500), hatch 164, wheels 400 each, visible 8,256, collision 122 → 126. UV fill 58%. Scorer: `SCORE PASS` (blend and FBX). Renders: `renders/review-sheet.png` (hatch open), `renders/review-sheet-closed.png`, single views in `renders/review/`. Not yet re-imported into Unity.
 
 Follow-up the same day: cleared the aisle behind the hatch. The griddle station and its knobs, its shelf and the hood now stop at x −0.42 (were −0.59, −0.50, −0.45); the worktop at −0.43 and the cabinet at −0.42. A box x −0.74…−0.44, y 0.20…2.00, z 0.95…2.74 (three crew bodies at Unity x 0.59) is clear of Truck_Body; the inner sliding pane stays at x ≥ −0.754. Truck_Body 6,492 tris, `SCORE PASS`.
+
+## Cooking line on the back wall, 10 October 2026 (version 5)
+
+Playtest of 0.9.7: from the pavement the griddle station, its shelf and the hood filled the cab half of the window, the parked sliding panes tinted the other half, and the hatch-end pieces stood scaled to 0.72 facing the street. Peter's decision: the cooking line on the back wall, facing the cook, as in real step vans. Edited `build_truck.py` by hand (Opus 5.5 subagent), rebuilt headless with `Blender -b art/truck/FoodTruck.blend --python art/truck/build_truck.py` from the worktree root.
+
+- Out: the griddle station and its knobs, the shelf with its tanks, the old hood, the back-wall tanks and shelves, the 1.4 m deep worktop and its cabinet, the small back counter and its two boxes.
+- In (`add_interior`): a shallow serving counter under the window (top 1.80, flush with the sill); a hand sink at the cab end of the hatch side, before the opening; a back counter along the opposite wall (front edge Blender x 0.40, top 1.75, y −0.88…2.12) with backsplash, toe kick, door seams and handles; a slanted hood over it (x 0.36…1.02, z 2.64…2.92); a reach-in fridge by the rear doors; a dry-goods shelf at the cab end.
+- Sliding panes: parked in a pocket against the wall past the opening's rear end (y 2.04…2.93), with a bottom track along the counter and a top track over the pocket only.
+- Unity side: the four equipment spots moved to the back counter at full size and `Truck_Ledge` was removed (`TruckAssets`).
+
+Triangles: Truck_Body 6,492 → 6,328, hatch 164, wheels 400 each, collision 126. Scorer: `SCORE PASS`. `review_interior.py` places the real equipment models on the four spots and stand-in people at the hatch, checks them against Truck_Body with BVH overlap (all sixteen models clear, the crew's places and waiting places clear) and renders `renders/interior-*.png`: from the pavement at eye height with the hatch open (three people, and the player alone), obliquely, closed, from a game-like camera, and inside along the aisle.

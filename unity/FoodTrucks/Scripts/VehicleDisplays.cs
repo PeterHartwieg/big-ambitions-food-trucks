@@ -10,13 +10,14 @@ using UnityEngine;
 namespace FoodTrucks
 {
     // Fitted equipment on show. On a cart's counter: the first fitted piece on the front spot, the second on the
-    // rear (CartAssets' EquipmentFront and EquipmentRear). In a truck: the first two at the hatch's two ends, the
-    // next two on the back counter (TruckAssets' spots, which carry the turn to the hatch and the scale). A piece
+    // rear (CartAssets' EquipmentFront and EquipmentRear). In a truck: all four on the back counter opposite the
+    // hatch, full size, the cooking line, filled from the middle out (TruckAssets' spots, which carry the turn
+    // that has each piece face the cook and the hatch). A piece
     // keeps its spot while it stays fitted. economy.json's "display" names each piece's model in the bundle; a
     // piece without one leaves its spot empty. Every half second it compares each vehicle's fitted pieces with
     // what it shows, so fitting, removing and loading need no hooks. While a cart is open the pieces face the side
     // its queue forms on (CartQueueView's choice); closed, or with no line laid out, they face right. A truck's
-    // always face out of the hatch. The models have no colliders. They follow the vehicle's visible flag every
+    // always face the hatch. The models have no colliders. They follow the vehicle's visible flag every
     // frame: the game hides a vehicle (EntityController.Hide, e.g. on another floor of a multi-floor building) by
     // disabling only the renderers in its own list, which the pieces aren't in.
     internal sealed class VehicleDisplays : MonoBehaviour
@@ -47,8 +48,8 @@ namespace FoodTrucks
         private static readonly Layout Cart = new Layout("cart", "Cart_Body", turns: true,
             new[] { "EquipmentFront", "EquipmentRear" }, new[] { "front", "rear" });
         private static readonly Layout Truck = new Layout("truck", "CarHolder/Body/CheapSaloon", turns: false,
-            new[] { "EquipmentHatchRear", "EquipmentHatchFront", "EquipmentBackRear", "EquipmentBackFront" },
-            new[] { "hatch rear", "hatch front", "back rear", "back front" });
+            new[] { "EquipmentLine2", "EquipmentLine3", "EquipmentLine1", "EquipmentLine4" },
+            new[] { "line 2", "line 3", "line 1", "line 4" });
 
         // By the controller's instance ID: a vehicle spawned again (out of range and back) has a new one.
         private readonly Dictionary<int, Shown> shown = new Dictionary<int, Shown>();

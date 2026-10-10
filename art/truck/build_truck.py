@@ -4,6 +4,8 @@ TRUCK_STAGE: geometry, textures, final, or all (default rebuild + textures + exp
 Hatch is saved closed; +80 degrees about local Y displays the serving awning.
 Marker/work lights have independent UV islands using EM_1.R (headlight circuit).
 The original wheel geometry, pivots, opening and FBX settings are unchanged.
+Version 5: the cooking line (back counter, four equipment spots, hood) on the back wall; the hatch side keeps
+a low serving counter, and the sliding panes park in a pocket past the opening.
 """
 import bpy, bmesh, math, os, json
 import numpy as np
@@ -35,6 +37,9 @@ class Builder:
  def box(self, lo, hi, tag):
   x,y,z=lo; X,Y,Z=hi
   self.part([(x,y,z),(X,y,z),(X,Y,z),(x,Y,z),(x,y,Z),(X,y,Z),(X,Y,Z),(x,Y,Z)],[(0,3,2,1),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7),(4,5,6,7)],tag)
+ def hexa(self, corners, tag):
+  # Eight corners in box order: bottom (x,y),(X,y),(X,Y),(x,Y), then the top four.
+  self.part(corners,[(0,3,2,1),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7),(4,5,6,7)],tag)
  def prism(self, xmin,xmax, yz,tag):
   n=len(yz); verts=[(x,y,z) for x in (xmin,xmax) for y,z in yz]
   faces=[(i,(i+1)%n,(i+1)%n+n,i+n) for i in range(n)]
@@ -204,34 +209,17 @@ def add_working_details(b):
  for y in (.43,1.77):
   b.box((-1.16,y-.10,2.90),(-1.105,y+.10,2.96),'plastic')
   b.box((-1.164,y-.073,2.902),(-1.158,y+.073,2.937),'worklight')
- # Sliding window panes sit inside the room beyond the required clear recess.
- # Both pane frames parked on rear half, leaving front half open.
- for x,ya,yb in [(-.795,1.10,1.94),(-.77,1.04,1.88)]:
+ # Sliding window panes (version 5): both slid past the opening's rear end into a pocket against the wall,
+ # so nothing stands between the people at the hatch and the street. Tracks run along the hatch counter
+ # (bottom, flush with it) and over the pocket only (top), outside the window's clear box.
+ for x,ya,yb in [(-1.00,2.06,2.90),(-.975,2.04,2.88)]:
   for y in (ya,yb):b.box((x,y,W(1.24)),(x+.016,y+.026,W(2.105)),'steel')
   for z in (W(1.235),W(2.075)):b.box((x,ya,z),(x+.016,yb+.026,z+.028),'steel')
-  # Tint face in the parked outer pane only; separate inner-pane frame stays visible.
-  if x<-.78:b.box((x+.004,ya+.026,W(1.27)),(x+.009,yb,W(2.075)),'glass')
- b.box((-.815,.20,W(1.205)),(-.785,2.00,W(1.235)),'steel')
- # Interior stainless workstation, hood, shelves and flat cooking surface, raised 0.60m with the worktop.
- F=.60
- # Trimmed so nothing reaches past x=-0.42: the aisle behind the hatch stays clear for standing crew.
- b.box((-.40,.28,1.16+F),(.21,.99,1.33+F),'plastic')
- b.box((-.38,.30,1.33+F),(.19,.97,1.38+F),'steel')
- for y in (.37,.47,.57,.67,.77,.87):b.box((-.36,y,1.379+F),(.17,y+.023,1.39+F),'plastic')
- for y in (.40,.63,.86):b.cyl((-.41,y,1.27+F),.028,.016,(1,0,0),'rubber',8)
- b.prism(-.42,.80,[(.22,2.02+F),(1.06,2.02+F),(1.06,2.21+F),(.22,2.21+F)],'steel')
- b.box((-.42,.27,2.019+F),(.61,1.01,2.027+F),'trim')
- b.box((.87,.22,1.35+F),(.925,1.05,2.10+F),'tank')
- b.box((-.42,.26,1.70+F),(.25,.95,1.745+F),'steel')
- for y in (.40,.71):
-  b.cyl((-.05,y,1.827+F),.063,.16,(0,0,1),'tank',8)
-  b.cyl((-.05,y,1.913+F),.066,.014,(0,0,1),'plastic',8)
- for z in (1.64+F,1.95+F):
-  b.box((.49,1.23,z),(.90,2.58,z+.045),'steel')
-  for y in (1.25,2.49):b.box((.865,y,z-.15),(.90,y+.035,z),'trim')
- for y in (1.38,1.68,1.98):
-  b.cyl((.68,y,1.75+F),.074,.16,(0,0,1),'tank',8)
-  b.cyl((.68,y,1.833+F),.077,.016,(0,0,1),'plastic',8)
+  if x<-.99:b.box((x+.004,ya+.026,W(1.27)),(x+.009,yb,W(2.075)),'glass')
+ b.box((-1.01,2.00,W(1.205)),(-.955,2.935,W(1.235)),'steel')
+ b.box((-1.01,2.00,W(2.105)),(-.955,2.935,W(2.105)+.03),'steel')
+ # Interior (version 5, 10 October 2026): the cooking line stands on the back wall, opposite the hatch, as in a
+ # real step van; see add_interior. The hatch side keeps only a low serving counter under the window.
  # Front bumper recess, corner protectors and hood pressed seam.
  b.box((-.29,-2.649,.50),(.29,-2.64,.62),'rubber')
  b.box((-.24,-2.65,.518),(.24,-2.649,.60),'tank')
@@ -263,6 +251,51 @@ def add_working_details(b):
  b.box((-.34,1.20,2.973+R),(.34,1.214,3.007+R),'interior')
  # Rounded cap has its own marker rail; rear drip rail sits below rollover.
  b.softbox((-1.02,3.025,2.77+R),(1.02,3.044,2.805+R),'steel',.009)
+
+# The kitchen inside (Blender coordinates; Unity = (-x, z, -y)). Hatch wall inner face x -1.02, back wall 1.02,
+# floor top 0.94, ceiling 2.96, cab bulkhead y -0.91, rear wall 2.96. The player and crew stand in the aisle at
+# x -0.59 (bodies x -0.74..-0.44, y 0.20..2.00, up to z 2.74; waiting crew further back to y 2.95).
+BACK_FRONT=.40   # back counter's front edge
+COUNTER_TOP=1.75 # worktop height, 0.81 m above the floor
+# Four equipment spots on the back counter, full size, facing the hatch (-X): a 0.40 x 0.36 m piece centred at
+# x 0.62 covers x 0.44..0.80; along the truck they are 0.45 m apart, centred on the window (y 1.10).
+LINE_X=.62
+LINE_Y=(.425,.875,1.325,1.775)
+def add_interior(b):
+ T=COUNTER_TOP
+ # Serving counter under the hatch: a shallow cabinet whose top meets the sill (1.80), nothing above it.
+ b.box((-1.02,.20,.94),(-.80,2.00,T),'steel')
+ b.box((-1.02,.20,T),(-.78,2.00,1.80),'steel')
+ b.box((-.806,.20,.99),(-.80,2.00,1.03),'trim')
+ for y in (.80,1.40):b.box((-.806,y-.006,1.05),(-.80,y+.006,1.70),'trim')
+ # Hand sink at the cab end of the hatch side, before the window starts (y < 0.20).
+ b.box((-1.02,-.88,.94),(-.45,.12,T-.05),'steel')
+ b.box((-1.02,-.88,T-.05),(-.43,.12,T),'steel')
+ b.box((-.90,-.62,T-.004),(-.56,-.14,T+.001),'interior')
+ b.rod((-.98,-.38,T),(-.98,-.38,T+.30),.014,'steel',8)
+ b.rod((-.98,-.38,T+.30),(-.80,-.38,T+.26),.012,'steel',8)
+ for y in (-.40,.00):b.box((-.456,y-.006,.99),(-.45,y+.006,1.62),'trim')
+ # Back counter: cabinet to the floor, worktop, backsplash, toe kick and door seams, cab bulkhead to the fridge.
+ b.box((BACK_FRONT+.02,-.88,.94),(1.00,2.12,T-.05),'steel')
+ b.box((BACK_FRONT,-.88,T-.05),(1.00,2.12,T),'steel')
+ b.box((BACK_FRONT+.02,-.88,.94),(BACK_FRONT+.06,2.12,1.00),'interior')
+ for y in (-.40,.20,.80,1.40,2.00):b.box((BACK_FRONT+.014,y-.006,1.03),(BACK_FRONT+.02,y+.006,T-.10),'trim')
+ for y in (.10,.70,1.30,1.90):b.box((BACK_FRONT+.006,y-.08,T-.16),(BACK_FRONT+.02,y+.08,T-.14),'plastic')
+ b.box((.985,-.88,T),(1.02,2.12,2.64),'steel')
+ # Hood over the line: slanted front from x 0.36 at the bottom (z 2.64) to 0.50 at the top (2.92), filters below.
+ y0,y1=.04,2.10
+ b.hexa([(.36,y0,2.64),(1.02,y0,2.64),(1.02,y1,2.64),(.36,y1,2.64),(.50,y0,2.92),(1.02,y0,2.92),(1.02,y1,2.92),(.50,y1,2.92)],'steel')
+ b.box((.40,y0+.04,2.635),(.98,y1-.04,2.64),'trim')
+ for y in (.55,1.10,1.65):b.box((.40,y-.008,2.628),(.98,y+.008,2.635),'plastic')
+ # Reach-in fridge at the rear end of the back wall, beside the rear doors (y 2.15..2.92).
+ b.box((.55,2.15,.94),(1.00,2.92,2.70),'steel')
+ b.box((.544,2.18,1.02),(.55,2.89,1.80),'trim')
+ b.box((.544,2.18,1.84),(.55,2.89,2.62),'trim')
+ b.box((.536,2.22,1.40),(.544,2.25,1.70),'plastic')
+ b.box((.536,2.22,1.94),(.544,2.25,2.24),'plastic')
+ # Dry-goods shelf over the cab bulkhead end of the line, clear of the hood.
+ b.box((.62,-.88,2.30),(1.00,-.10,2.33),'steel')
+ for y in (-.80,-.50,-.25):b.box((.70,y,2.33),(.92,y+.18,2.52),'plastic')
 
 def add_hatch_details(h):
  # Underside teal bands and paired diagonal folding stays, all move with the hatch.
@@ -334,11 +367,7 @@ def make_geometry(detail=False):
  b.box((-1.115,.20,WIN_LO-.03),(-1.01,2.,WIN_LO),'steel')
  b.box((-1.115,.20,WIN_HI),(-1.01,2.,WIN_HI+.04),'steel')
  b.box((-1.26,.25,WIN_LO-.095),(-1.10,1.95,WIN_LO-.05),'steel')
- # Worktop at counter height for the raised window, on a stainless cabinet down to the floor.
- b.box((-.43,-.70,1.65),(.98,2.80,1.75),'steel')
- b.box((-.42,-.68,.94),(.93,2.78,1.65),'steel')
- for y in (.65,1.55):b.box((-.426,y-.006,.99),(-.42,y+.006,1.60),'trim')
- b.box((.93,-.80,1.75),(.99,2.85,2.94),'interior')
+ add_interior(b)
  # Hinge rail spans specified line.
  b.cyl((-1.10,1.10,WIN_HI),.018,1.86,(0,1,0),'steel',12)
  if detail:
@@ -388,9 +417,6 @@ def make_geometry(detail=False):
   b.softbox((-.85,3.04,.56),(.85,3.15,.595),'steel',.017,1)
   b.cyl((1.105,2.30,.98),.076,.018,(1,0,0),'rubber',16)
   b.cyl((1.118,2.30,.98),.060,.012,(1,0,0),'steel',16)
-  # Small interior back counter / backsplash, enough to read through open hatch.
-  b.box((.74,-.30,1.75),(.86,2.50,1.93),'steel')
-  for y in (.43,1.75): b.box((.56,y,1.75),(.73,y+.30,1.94),'plastic')
   # Shelf supports outside the recess, well above the rear wheel envelope.
   for y in (.34,1.84): b.rod((-1.105,y,1.57),(-1.235,y,1.70),.014,'steel')
  if detail: add_working_details(b)
