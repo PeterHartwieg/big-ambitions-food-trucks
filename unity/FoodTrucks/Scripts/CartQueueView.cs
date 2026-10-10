@@ -469,7 +469,7 @@ namespace FoodTrucks
             if (circle.Miss > worstMiss) worstMiss = circle.Miss;
             if (circled == 1)
                 Log.Info($"Queue view: cart {VehicleId}: a customer circled their place {circle.Miss:F2} m off without getting closer; " +
-                         $"{(circle.Warped ? "put there" : "stopped where they were")}.");
+                         $"{(circle.Warped ? "put there" : "stopped where they were (their place is off the NavMesh)")}.");
         }
 
         private string WalkSummary() =>
@@ -753,14 +753,17 @@ namespace FoodTrucks
         // The agent stops this far short of its place (the prefab's 0.10 m is about a third of its 0.30 m radius).
         private const float StoppingMetres = 0.3f;
         // Someone near their place who gets no closer for this long is circling it (avoidance with the people around,
-        // or a place a hair off the agent's NavMesh): they stop where they are, or are put there when still far off.
+        // or a place a hair off the agent's NavMesh). Within ArriveMetres they have already arrived; farther off they
+        // are put on their place once nobody else stands on it, and keep walking until then. Stopping where they are
+        // up to 0.9 m off (0.9.8) left them on the next place back, since places are about 0.8 m apart.
         private const float CircleSeconds = 1.5f;
         private const float CircleNearMetres = 1.5f;
-        private const float CircleStopMetres = 0.9f;
         private const float TurnDegreesPerSecond = 360f;
 
         private static bool expressionFailed;
         private static bool agentLogged;
+        // Every customer on screen, for checking that a place is free before putting someone on it.
+        private static readonly HashSet<QueuePerson> live = new HashSet<QueuePerson>();
 
         private ThirdPersonCharacter? character;
         private Vector3 target;
@@ -801,6 +804,7 @@ namespace FoodTrucks
             owner.transform.SetParent(parent, false);
             var person = owner.AddComponent<QueuePerson>();
             person.lanes = lanes;
+            live.Add(person);
             try
             {
                 if (person.Initialize(start)) return person;
@@ -891,9 +895,15 @@ namespace FoodTrucks
                 var stuck = noPath || Time.time - walkStarted > (leavingNow ? LeaveSeconds : StuckSeconds);
                 if (leavingNow) return reached || stuck || circling;
                 if (reached) Stop();
+                else if ((circling || stuck) && !PlaceFree(agent.radius))
+                {
+                    // Someone else still stands there (the person before them leaving it): keep walking, and try again
+                    // next frame. Whoever is there walks on or is removed within LeaveSeconds.
+                }
                 else if (circling)
                 {
-                    var warped = distance > CircleStopMetres && agent.Warp(target);
+                    // Put on their place; a place the agent can't be put on (off its NavMesh) leaves them where they are.
+                    var warped = agent.Warp(target);
                     Circled = (distance, warped);
                     Stop();
                 }
@@ -968,7 +978,10 @@ namespace FoodTrucks
                 agent.ResetPath();
                 agent.velocity = Vector3.zero;
             }
-            // Standing, only Tick turns them (towards the person ahead or the window); the agent doesn't.
+            // Standing, only Tick turns them (towards the person ahead or the window); the agent doesn't. This holds
+            // because isStopped is set above: the game's ThirdPersonCharacter.HandleNpcMovement sets updateRotation back
+            // to true every frame unless the agent is stopped (off the NavMesh it skips that path altogether). Keep
+            // isStopped = true here, or standing customers turn with the agent again.
             agent.updateRotation = false;
             character.LookTarget = Vector3.zero;
             character.Move(Vector3.zero);
@@ -986,10 +999,22 @@ namespace FoodTrucks
             }
         }
 
+        // Nobody else's body overlaps someone standing on the target.
+        private bool PlaceFree(float radius)
+        {
+            foreach (var other in live)
+            {
+                if (other == this || other == null || other.character == null) continue;
+                if (FlatDistance(other.character.transform.position, target) < radius * 2f) return false;
+            }
+            return true;
+        }
+
         private static float FlatDistance(Vector3 a, Vector3 b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
 
         private void OnDestroy()
         {
+            live.Remove(this);
             character = null;
         }
     }
