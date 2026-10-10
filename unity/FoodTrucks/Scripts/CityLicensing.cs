@@ -222,7 +222,7 @@ namespace FoodTrucks
                     : default,
                 OnSecondOption = second,
                 SecondOptionTextOverride = secondText,
-                OnCancel = Current.CancelDialog,
+                OnCancel = PhoneCall.HangUpAction,
                 onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
             };
         }
@@ -236,7 +236,7 @@ namespace FoodTrucks
             ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_city_permits", (object?)null),
             OnSecondOption = Guard(() => Event(0)),
             SecondOptionTextOverride = "foodtrucks:dialog_city_events",
-            OnCancel = Current.CancelDialog,
+            OnCancel = PhoneCall.HangUpAction,
             onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
         };
 
@@ -276,7 +276,7 @@ namespace FoodTrucks
                 ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_city_event_book", new { fee }),
                 OnSecondOption = bookable.Count > 1 ? Guard(() => Event(index + 1)) : Guard(Start),
                 SecondOptionTextOverride = bookable.Count > 1 ? "foodtrucks:dialog_city_event_next" : "foodtrucks:dialog_city_back",
-                OnCancel = Current.CancelDialog,
+                OnCancel = PhoneCall.HangUpAction,
                 onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
             };
         }
@@ -363,7 +363,7 @@ namespace FoodTrucks
                 ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_city_permit_buy", new { fee }),
                 OnSecondOption = missing.Count > 1 ? Guard(() => Permit(index + 1)) : Guard(Start),
                 SecondOptionTextOverride = missing.Count > 1 ? "foodtrucks:dialog_city_permit_next" : "foodtrucks:dialog_city_back",
-                OnCancel = Current.CancelDialog,
+                OnCancel = PhoneCall.HangUpAction,
                 onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
             };
         }

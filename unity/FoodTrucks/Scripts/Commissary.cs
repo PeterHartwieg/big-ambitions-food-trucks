@@ -732,6 +732,8 @@ namespace FoodTrucks
 
         private const float PendingCallSeconds = 5f;
         private static (string SiteId, Contact Contact, int Frame, float Until)? pendingCall;
+        // The frame in which the bay's "Order stock" last pressed CALL, for the hang-up log line.
+        internal static int BayCallFrame = -1;
         private static readonly System.Reflection.FieldInfo? ConversationPanelField =
             typeof(ContactsApp).GetField("conversationPanel", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 
@@ -755,6 +757,7 @@ namespace FoodTrucks
                         Log.Info($"Commissary {siteId}: a call is already on; the bay's Order stock leaves the conversation open.");
                         return;
                     }
+                    BayCallFrame = Time.frameCount;
                     app.StartCall();
                     Log.Info($"Commissary {siteId}: the bay's call started once the conversation was up ({Time.frameCount - frame} frames).");
                     return;
@@ -972,8 +975,12 @@ namespace FoodTrucks
     // (CommissaryOrderForm), the commissary reads the order back with its total, and "Confirm order" places it.
     internal sealed class CommissaryDialog : Dialog
     {
+        // Whether the call now on was started by the bay's "Order stock" (its StartCall runs this constructor in the same frame).
+        private static bool startedFromBay;
+
         public CommissaryDialog()
         {
+            startedFromBay = Commissary.BayCallFrame == Time.frameCount;
             try { DialogController.current.ShowEntry(Start()); }
             catch (Exception ex)
             {
@@ -1003,8 +1010,11 @@ namespace FoodTrucks
         // Hanging up, from any step.
         private static void HangUp()
         {
-            CommissaryOrderForm.End();
-            Current?.CancelDialog();
+            CommissaryOrderForm.End("hung up");
+            var id = Current?.contact?.id;
+            var over = PhoneCall.HangUp();
+            Log.Info($"Commissary call: {id ?? "?"} hung up ({(startedFromBay ? "started from the bay" : "started with CALL")}); " +
+                     $"{(over ? "the call is over, CALL is ready" : "a call is still on")}.");
         }
 
         private static TextMessage HangUpMessage() => new TextMessage("ba:messagetype_contacts_message_player_cancel_call");
@@ -1103,7 +1113,7 @@ namespace FoodTrucks
                     return null;
             }
             // The order is read back as it stands now: the form and its item list are done with ("Change" opens a fresh one).
-            CommissaryOrderForm.End();
+            CommissaryOrderForm.End("read back");
             var items = string.Join("<br>", quote.Lines.Select(LineText));
             Current.contact.ReceivePlayerMessage(new TextMessage("foodtrucks:message_commissary_order_player", new Dictionary<string, string> { { "items", items } }, read: true));
             var data = new
@@ -1164,7 +1174,7 @@ namespace FoodTrucks
                 Current.contact.SendMessage(new TextMessage(key, data, read: true));
                 texts.Add(LocalizorManager.Localize(key, data).ToString());
             }
-            CommissaryOrderForm.End();
+            CommissaryOrderForm.End("order placed");
             return new DialogEntry
             {
                 messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_text", new { text = string.Join("<br>", texts) }),
@@ -1178,7 +1188,7 @@ namespace FoodTrucks
 
         private static DialogEntry Closing(string key, object? data)
         {
-            CommissaryOrderForm.End();
+            CommissaryOrderForm.End("call closing");
             Current.contact.SendMessage(new TextMessage(key, data == null ? null : ToDictionary(data), read: true, isNewInteraction: true));
             return new DialogEntry
             {

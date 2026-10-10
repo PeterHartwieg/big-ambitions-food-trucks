@@ -125,7 +125,7 @@ namespace FoodTrucks
         // Before the conversation shows the form: what it sells, for the game's form to list.
         internal static void Begin(string contactId, string siteId, IReadOnlyList<Line> lines)
         {
-            End();
+            End("a new order form");
             open = new Open(contactId, siteId, lines);
             ContractItemsForSaleService.SetItemsForContact(contactId, lines.Select(l => l.Item));
         }
@@ -134,48 +134,119 @@ namespace FoodTrucks
         // form's, so it is closed and emptied, and its entries' callbacks go with them. The game's own furniture
         // order leaves it open until Esc; for the commissary it would keep changing a form whose order is already
         // read back, and after the call ends adding a row reaches DialogController.current, which is null by then.
-        internal static void End()
+        internal static void End(string why)
         {
             var current = open;
             open = null;
-            if (current == null || current.Entries.Count == 0) return;
+            RestoreBackdrop();
+            if (current == null) return;
             try
             {
                 var list = InstanceBehavior<UIs>.Instance?.itemsList;
-                if (list == null || !OwnsList(current.Entries, list)) return;
+                if (list == null) return;
+                var shown = list.gameObject.activeSelf;
+                if (!OwnsList(current, list))
+                {
+                    if (shown) Log.Info($"Commissary order at {current.SiteId}: the item list shows another screen's items; left as it is ({why}).");
+                    return;
+                }
                 list.Clear();
                 list.Toggle(newState: false);
+                Log.Info($"Commissary order at {current.SiteId}: its item list is {(shown ? "closed" : "emptied (it was already closed)")} ({why}).");
             }
             catch (Exception ex) { Fail("closing the item list", ex); }
         }
 
-        // Whether the item list still holds entries this form put there. Another screen that refilled it since has
-        // cleared them: ItemsList.Clear empties its own entry list at once, while the Destroy it calls only takes
-        // effect at the frame's end, so the list's entry list is what counts, not whether ours compare null yet. Works
-        // after the form itself is gone.
-        private static bool OwnsList(List<ItemsListEntry> entries, ItemsList list)
+        // Whether the item list still holds entries this form put there: those kept when the game last filled it for
+        // this form and, while the form is still there, the form's own current ones. Another screen that refilled the
+        // list since has cleared them: ItemsList.Clear empties its own entry list at once, while the Destroy it calls
+        // only takes effect at the frame's end, so the list's entry list is what counts, not whether ours compare null
+        // yet. Works after the form itself is gone.
+        private static bool OwnsList(Open current, ItemsList list)
         {
+            var mine = new List<ItemsListEntry>(current.Entries);
+            var form = current.Form;
+            if (form != null && entriesField != null)
+                mine.AddRange(entriesField(form).Values.Where(e => e != null && e.ItemsListEntry != null).Select(e => e.ItemsListEntry));
             var listed = listEntriesField?.Invoke(list);
-            if (listed != null) return entries.Any(e => e != null && listed.Contains(e));
-            return entries.Any(e => e != null && e.gameObject.activeSelf && e.transform.IsChildOf(list.transform));
+            if (listed != null) return mine.Any(e => e != null && listed.Contains(e));
+            return mine.Any(e => e != null && e.gameObject.activeSelf && e.transform.IsChildOf(list.transform));
         }
 
-        // Every frame (Commissary.Update): a form whose call has gone (the phone closed, another call) is left. The
-        // game's ContactsApp hangs up on closing without calling the entry's OnCancel, so this is the only notice.
+        // The item list opens over the phone with a full-screen backdrop that takes every click, so the form's Order
+        // and Hang up and the phone's Close did nothing until the list was closed with its X or Esc (0.9.7 playtest,
+        // step 13: one read-back, after the X; no button reacted while the list was open). While the commissary's list
+        // is open its backdrop lets clicks through, so those buttons work and close the list (End). It looks the same;
+        // the game's own furniture stores keep theirs.
+        private static readonly List<UnityEngine.UI.Graphic> passedThrough = new List<UnityEngine.UI.Graphic>();
+        private static bool backdropLogged;
+
+        private static void LetClicksThrough(ItemsList list)
+        {
+            if (passedThrough.Count > 0) return;
+            var root = list.GetComponentInParent<Canvas>()?.rootCanvas?.transform as RectTransform;
+            if (root == null) return;
+            var screen = Area(root);
+            var found = new List<string>();
+            foreach (var graphic in list.GetComponentsInChildren<UnityEngine.UI.Graphic>(includeInactive: false))
+            {
+                if (graphic == null || !graphic.raycastTarget || screen <= 0f || Area(graphic.rectTransform) < 0.8f * screen) continue;
+                graphic.raycastTarget = false;
+                passedThrough.Add(graphic);
+                found.Add(graphic.name);
+            }
+            if (backdropLogged) return;
+            backdropLogged = true;
+            Log.Info(found.Count > 0
+                ? $"Commissary orders: the item list's backdrop ({string.Join(", ", found)}) lets clicks through to the phone while the commissary's list is open."
+                : "Commissary orders: no full-screen backdrop under the item list; if Order stays blocked while the list is open, something else blocks it.");
+        }
+
+        private static void RestoreBackdrop()
+        {
+            foreach (var graphic in passedThrough)
+                if (graphic != null) graphic.raycastTarget = true;
+            passedThrough.Clear();
+        }
+
+        private static float Area(RectTransform rect)
+        {
+            var corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            return Mathf.Abs((corners[2].x - corners[0].x) * (corners[2].y - corners[0].y));
+        }
+
+        // Every frame (Commissary.Update and LateUpdate): a form whose call has gone (the phone closed, another call) is
+        // left; the game's ContactsApp hangs up on closing without calling the entry's OnCancel, so this is the only
+        // notice. While the commissary's list is open, its backdrop lets clicks through to the phone.
         internal static void Watch()
         {
             var current = open;
-            if (current == null) return;
+            if (current == null)
+            {
+                if (passedThrough.Count > 0) RestoreBackdrop();
+                return;
+            }
             var dialog = DialogController.current;
-            if (dialog != null && dialog.contact?.id == current.ContactId) return;
-            Log.Info($"Commissary order at {current.SiteId}: the call ended with the order form open; its item list is closed.");
-            End();
+            if (dialog == null || dialog.contact?.id != current.ContactId)
+            {
+                Log.Info($"Commissary order at {current.SiteId}: the call ended with the order form open.");
+                End("the call ended");
+                return;
+            }
+            try
+            {
+                var list = InstanceBehavior<UIs>.Instance?.itemsList;
+                if (list != null && list.gameObject.activeInHierarchy && OwnsList(current, list)) LetClicksThrough(list);
+                else if (passedThrough.Count > 0) RestoreBackdrop();
+            }
+            catch (Exception ex) { Fail("item list backdrop", ex); }
         }
 
         // After the uninstall step the contacts are gone; so is what they sold.
         internal static void Forget(IEnumerable<string> contactIds)
         {
-            End();
+            End("uninstall step");
             foreach (var id in contactIds) ContractItemsForSaleService.RemoveContact(id);
         }
 

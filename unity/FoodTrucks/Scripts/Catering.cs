@@ -705,7 +705,7 @@ namespace FoodTrucks
                 ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_bookings_accept", (object?)null),
                 OnSecondOption = Guard(() => Decline(id, index)),
                 SecondOptionTextOverride = "foodtrucks:dialog_bookings_decline",
-                OnCancel = Current.CancelDialog,
+                OnCancel = PhoneCall.HangUpAction,
                 onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
             };
         }
