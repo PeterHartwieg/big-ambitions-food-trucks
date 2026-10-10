@@ -8,6 +8,7 @@ using Entities;
 using FoodTrucks.Core.Commissary;
 using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
+using FoodTrucks.Core.Selling;
 using Helpers;
 using Localizor;
 using UI;
@@ -563,20 +564,66 @@ namespace FoodTrucks
             CartSelling.Say("foodtrucks:notification_commissary_released", kind, ("commissary", NameOf(siteId)));
         }
 
-        // Loads the commissary's stock into the vehicle, oldest first, as far as its cargo slots and stock limit
-        // (CargoLimit) take it; what doesn't fit goes back to the commissary's stock in its place.
+        // Loads the commissary's stock into the vehicle (storage per piece; plan, "Storage per piece"). Equipment first,
+        // oldest first, as far as the slots take it (CargoLimit), so a piece fitted here already holds food. Then Core's
+        // Storage.Restock plans the food: each fitted piece is filled from its foods, a shared piece split evenly by
+        // weight and topped up from the other food. Foods with no fitted piece stay here, and the message says so.
+        // Whatever doesn't go in goes back to the commissary's stock in its place.
         private static void Restock(string vehicleId, string kind, string siteId)
         {
             var state = FoodTrucksSession.CurrentState;
-            if (state == null || !FoodTrucksSession.CanWrite) return;
+            var tables = DemandData.Tables;
+            if (state == null || tables == null || !FoodTrucksSession.CanWrite) return;
             var vehicle = SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v != null && v.id == vehicleId);
             if (vehicle == null || !state.Commissary.Stock.TryGetValue(siteId, out var stock) || stock.Count == 0) return;
-            var wanted = new Dictionary<string, int>(StringComparer.Ordinal);
-            foreach (var line in stock) wanted[line.ItemName] = (int)Math.Min(int.MaxValue, (wanted.TryGetValue(line.ItemName, out var w) ? w : 0) + (long)line.Units);
-            var taken = Commissaries.Restock(state.Commissary, siteId, wanted);
-            FoodTrucksSession.MarkChanged();
-            var back = new List<CommissaryStockLine>();
+
             var loaded = new Dictionary<string, int>(StringComparer.Ordinal);
+            var back = 0L;
+            var pieces = InStock(state, siteId).Where(p => tables.EquipmentForGameItem(p.Key) != null)
+                .ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+            if (pieces.Count > 0) back += Load(state, vehicle, siteId, pieces, loaded);
+
+            var foods = InStock(state, siteId).Where(p => tables.EquipmentForGameItem(p.Key) == null)
+                .ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+            var plan = Storage.Restock(tables, kind, CargoLimit.Lines(vehicle), foods);
+            if (plan.Load.Count > 0) back += Load(state, vehicle, siteId, plan.Load, loaded);
+            FoodTrucksSession.MarkChanged();
+
+            try { GameEvent.Invoke("ba:gameevent_itemcargochanged"); }
+            catch (Exception ex) { Log.Error("Commissary restock, cargo event: " + ex); }
+            var left = state.Commissary.Stock.TryGetValue(siteId, out var rest) ? rest.Sum(x => (long)x.Units) : 0;
+            var view = Storage.Of(tables, kind, CargoLimit.Lines(vehicle));
+            Log.Info($"Commissary restock: {kind} {World.Short(vehicleId)} at {siteId} loaded {(loaded.Count == 0 ? "nothing" : string.Join(", ", loaded.Select(p => $"{p.Value} {p.Key}")))}; " +
+                     $"no piece for {(plan.NotHeld.Count == 0 ? "none" : string.Join(", ", plan.NotHeld))}; {back} units refused by the cargo and kept; " +
+                     $"{left} units left in stock; storage {(view == null ? "?" : StoragePanel.Summary(vehicle, view))}.");
+            var text = string.Join(", ", loaded.Select(p => $"{p.Value} {LocalizorManager.GetLocalization(p.Key, null)}"));
+            var notHeld = string.Join(", ", plan.NotHeld.Select(i => LocalizorManager.GetLocalization(i, null)));
+            if (loaded.Count == 0 && plan.NotHeld.Count == 0)
+                CartSelling.Say("foodtrucks:notification_commissary_restock_full", kind, ("left", left.ToString()));
+            else if (loaded.Count == 0)
+                CartSelling.Say("foodtrucks:notification_commissary_restock_notheld", kind, ("notheld", notHeld), ("left", left.ToString()));
+            else if (plan.NotHeld.Count == 0)
+                CartSelling.Say("foodtrucks:notification_commissary_restocked", kind, ("loaded", text), ("left", left.ToString()));
+            else
+                CartSelling.Say("foodtrucks:notification_commissary_restocked_notheld", kind, ("loaded", text), ("notheld", notHeld), ("left", left.ToString()));
+        }
+
+        // What this commissary holds of each item.
+        private static Dictionary<string, int> InStock(SaveState state, string siteId)
+        {
+            var wanted = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (!state.Commissary.Stock.TryGetValue(siteId, out var stock)) return wanted;
+            foreach (var line in stock) wanted[line.ItemName] = (int)Math.Min(int.MaxValue, (wanted.TryGetValue(line.ItemName, out var w) ? w : 0) + (long)line.Units);
+            return wanted;
+        }
+
+        // Takes the wanted units out of stock, oldest first, loads them through TryToAddToCargo (so CargoLimit still has the
+        // last word) and returns what didn't go in to its batch. Returns the units returned.
+        private static long Load(SaveState state, VehicleInstance vehicle, string siteId, IReadOnlyDictionary<string, int> wanted,
+            Dictionary<string, int> loaded)
+        {
+            var taken = Commissaries.Restock(state.Commissary, siteId, wanted);
+            var back = new List<CommissaryStockLine>();
             foreach (var line in taken)
             {
                 var moved = 0;
@@ -597,14 +644,7 @@ namespace FoodTrucks
                     });
             }
             if (back.Count > 0) Commissaries.ReturnToStock(state.Commissary, siteId, back);
-            try { GameEvent.Invoke("ba:gameevent_itemcargochanged"); }
-            catch (Exception ex) { Log.Error("Commissary restock, cargo event: " + ex); }
-            var left = state.Commissary.Stock.TryGetValue(siteId, out var rest) ? rest.Sum(x => (long)x.Units) : 0;
-            Log.Info($"Commissary restock: {kind} {World.Short(vehicleId)} at {siteId} loaded {(loaded.Count == 0 ? "nothing" : string.Join(", ", loaded.Select(p => $"{p.Value} {p.Key}")))}; " +
-                     $"{back.Sum(b => (long)b.Units)} units didn't fit and stay; {left} units left in stock.");
-            var text = loaded.Count == 0 ? "" : string.Join(", ", loaded.Select(p => $"{p.Value} {LocalizorManager.GetLocalization(p.Key, null)}"));
-            if (loaded.Count == 0) CartSelling.Say("foodtrucks:notification_commissary_restock_full", kind, ("left", left.ToString()));
-            else CartSelling.Say("foodtrucks:notification_commissary_restocked", kind, ("loaded", text), ("left", left.ToString()));
+            return back.Sum(b => (long)b.Units);
         }
 
         private static string Format(string key, params string[] values) => string.Format(LocalizorManager.GetLocalization(key, null), values);
@@ -630,7 +670,8 @@ namespace FoodTrucks
                 if (price <= 0f) price = item.DefaultMarketPrice * (SaveGameManager.Current?.gameVariables.marketPriceMultiplier ?? 1f);
                 var cents = (long)Math.Round(price * 100.0);
                 if (cents <= 0) continue;
-                list.Add((name, Math.Max(1, item.boxSize), cents));
+                // Equipment is sold by the piece, whatever box the game packs it in; food by the game's whole box.
+                list.Add((name, machines ? 1 : Math.Max(1, item.boxSize), cents));
             }
             return list.OrderBy(i => LocalizorManager.GetLocalization(i.Item1, null), StringComparer.CurrentCulture).ToList();
         }
@@ -1014,10 +1055,16 @@ namespace FoodTrucks
             };
         }
 
-        // "3 boxes of Dumplings (240)", "1 box of Griddle (1)".
-        private static string LineText(CommissaryQuoteLine line) =>
-            string.Format(LocalizorManager.GetLocalization(line.Boxes == 1 ? "foodtrucks:commissary_order_line_one" : "foodtrucks:commissary_order_line", null),
+        // "3 boxes of Dumplings (240 items, $408 a box)"; equipment by the piece: "Griddle × 2, $2,000 each".
+        private static string LineText(CommissaryQuoteLine line)
+        {
+            var piece = DemandData.Tables?.EquipmentForGameItem(line.ItemName) != null;
+            var key = piece
+                ? line.Boxes == 1 ? "foodtrucks:commissary_order_piece_one" : "foodtrucks:commissary_order_piece"
+                : line.Boxes == 1 ? "foodtrucks:commissary_order_line_one" : "foodtrucks:commissary_order_line";
+            return string.Format(LocalizorManager.GetLocalization(key, null),
                 line.Boxes, LocalizorManager.GetLocalization(line.ItemName, null), line.Units, CartSelling.Money(line.BoxPriceCents));
+        }
 
         // Confirmed: Core books the orders and the money moves; each order's text, as before, goes into the conversation.
         private static DialogEntry? Placed(string siteId, CommissaryQuote quote)

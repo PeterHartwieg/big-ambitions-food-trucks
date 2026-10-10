@@ -217,6 +217,12 @@ namespace FoodTrucks
             Notify(message);
         }
 
+        private static string StorageSummary(VehicleInstance vehicle)
+        {
+            var view = StoragePanel.Of(vehicle);
+            return view == null ? "no storage data" : StoragePanel.Summary(vehicle, view);
+        }
+
         private static VehicleInstance? FoodVehicleHere()
         {
             if (SaveGameManager.Current.ActiveVehicleId != null)
@@ -356,7 +362,7 @@ namespace FoodTrucks
                 if (kind == null) continue;
                 var record = StreetSales.Find(state, vehicle.id);
                 message += $" {(kind == "truck" ? "Truck" : "Cart")} {Short(vehicle.id)}: {(record?.IsOpen == true ? "open" : "closed")}, " +
-                           $"{(record?.HasPermit == true ? "permit" : "no permit")}, stock {CartSelling.StockUnits(vehicle)}, " +
+                           $"{(record?.HasPermit == true ? "permit" : "no permit")}, stock {CartSelling.StockUnits(vehicle)} ({StorageSummary(vehicle)}), " +
                            $"{record?.LifetimeSales ?? 0} sales, {CartSelling.Money(record?.LifetimeRevenueCents ?? 0)} lifetime.";
             }
             Log.Info(message);

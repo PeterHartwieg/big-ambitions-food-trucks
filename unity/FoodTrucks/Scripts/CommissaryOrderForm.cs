@@ -211,8 +211,9 @@ namespace FoodTrucks
         }
 
         // The rows' item, box size and stock, as the item list shows them; the price beside it is the box price.
+        // Equipment reads plainly, by the piece ("Hot dog grill (1 here)"); food keeps "Hot dog, box of 500 (… here)".
         private static LanguageChangeEventDataHolder Label(Line line) =>
-            LocalizorManager.Localize("foodtrucks:commissary_form_item", new
+            LocalizorManager.Localize(DemandData.Tables?.EquipmentForGameItem(line.Item) != null ? "foodtrucks:commissary_form_piece" : "foodtrucks:commissary_form_item", new
             {
                 item = LocalizorManager.GetLocalization(line.Item, null),
                 box = line.Box.ToString(),

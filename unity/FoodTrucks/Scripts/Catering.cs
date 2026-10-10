@@ -183,7 +183,9 @@ namespace FoodTrucks
                 Places = places,
                 EligibleVehicles = caterers.Count,
                 LifetimeServed = state.Vehicles.Sum(v => (long)v.LifetimeSales),
-                MaxUnits = caterers.Count == 0 ? (int?)null : caterers.Max(v => tables.Vehicle(v.Kind)?.StockUnits ?? 0),
+                // Storage per piece: the most one truck holds of a single category, from the pieces fitted today.
+                MaxUnits = caterers.Count == 0 ? (int?)null
+                    : caterers.Max(v => FoodTrucks.Core.Selling.Storage.LargestCategoryCapacity(tables, v.Kind, CargoLimit.Lines(v.Vehicle))),
                 ReferencePriceCents = prices
             };
             var offers = CateringOffers.ForDay(rules, state.Catering, context);

@@ -307,6 +307,17 @@ namespace FoodTrucks
                     Format("foodtrucks:bizman_fleet_crew_count", ("count", crew.Count.ToString()), ("limit", HireCrew.Limit(kind).ToString())), false),
                 (Text("foodtrucks:bizman_fleet_route"), Route(vehicle), "", false),
             };
+            // Storage per piece: one row per fitted food piece, "Hot Dog Grill  62/80 units", and the Extra Storage.
+            var storage = StoragePanel.Of(instance);
+            if (storage != null)
+            {
+                foreach (var pool in storage.Pools)
+                    rows.Add((StoragePanel.PieceName(instance, pool.Piece),
+                        Format("foodtrucks:bizman_fleet_storage_units", ("load", pool.LoadUnits.ToString()), ("capacity", pool.Capacity.ToString())),
+                        "", pool.LoadUnits >= pool.Capacity));
+                if (storage.StoragePieces > 0)
+                    rows.Add((Text("foodtrucks:bizman_fleet_storage_extra"), Text("foodtrucks:bizman_fleet_storage_doubles"), "", false));
+            }
             Rows(card, "VehicleSlotsList/VehicleSlotEntry", rows.Count, (row, i) =>
             {
                 var (label, first, second, loss) = rows[i];

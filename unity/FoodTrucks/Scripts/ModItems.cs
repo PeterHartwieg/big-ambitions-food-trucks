@@ -10,7 +10,8 @@ using UnityEngine;
 namespace FoodTrucks
 {
     // The mod's own game items (plan, "New foods"): dumplings, tacos, chopped cheese and grilled corn, and the
-    // dumpling steamer, griddle and corn grill that make them. Built by the build editor's ItemAssets.
+    // dumpling steamer, griddle and corn grill that make them, and the Extra Storage cabinet (plan, "Storage per
+    // piece"). Built by the build editor's ItemAssets.
     //
     // Registered once at mod load, as the Bakery mod registers its goods; the game re-adds registered mod items
     // whenever it reloads its item list (ItemsGetter.OnItemsLoaded). Icons go into the game's private icon caches
@@ -29,9 +30,10 @@ namespace FoodTrucks
             Prefix + "dumplings", Prefix + "tacos", Prefix + "choppedcheese", Prefix + "grilledcorn",
         };
 
+        // Extra Storage first, so Ctrl+U fits it before the machines fill a cart's two slots.
         public static readonly string[] Machines =
         {
-            Prefix + "dumplingsteamer", Prefix + "griddle", Prefix + "corngrill",
+            Prefix + "storagecabinet", Prefix + "dumplingsteamer", Prefix + "griddle", Prefix + "corngrill",
         };
 
         // Item name, asset file in Items/.
@@ -44,6 +46,7 @@ namespace FoodTrucks
             (Prefix + "dumplingsteamer", "DumplingSteamer"),
             (Prefix + "griddle", "Griddle"),
             (Prefix + "corngrill", "CornGrill"),
+            (Prefix + "storagecabinet", "StorageCabinet"),
         };
 
         private static readonly List<string> registered = new List<string>();

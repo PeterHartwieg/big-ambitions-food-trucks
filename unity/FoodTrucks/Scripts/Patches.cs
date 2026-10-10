@@ -121,7 +121,11 @@ namespace FoodTrucks
             Patch(store, "UpdateItemsListTitle", Type.EmptyTypes, typeof(CommissaryOrderForm), postfix: nameof(CommissaryOrderForm.TitlePostfix));
             CommissaryOrderForm.CheckReady();
 
-            // Cargo limit: food up to the vehicle's units, equipment up to its slots.
+            // Storage per piece in the vehicle's cargo slots: each piece's "62/80" and a tooltip with its foods.
+            Patch(typeof(UI.PlayerHUD.CargoItemUi), "SetUp", new[] { typeof(CargoItem), typeof(ICargoHolder), typeof(bool) },
+                typeof(StoragePanel), postfix: nameof(StoragePanel.CargoSlotPostfix));
+
+            // Cargo limit: food up to the room in the fitted piece that holds it, equipment up to its slots.
             Patch(typeof(VehicleInstance), "MergeIntoCargo", new[] { typeof(CargoInstance) },
                 typeof(CargoLimit), prefix: nameof(CargoLimit.MergePrefix), finalizer: nameof(CargoLimit.MergeFinalizer));
             Patch(typeof(VehicleInstance), "TryToAddToCargo", new[] { typeof(CargoInstance) },
