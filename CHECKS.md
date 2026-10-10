@@ -16,9 +16,9 @@ Build `0.9.6`: 0.9.5 plus two playtest fixes. "Open here" on a truck now checks 
 | 3 | Drive off, turn round and park in a space with the hatch to the road (pavement on the driver's side). "Open here" | Refused: "The hatch faces the road. Park with the serving side to the pavement." You stay in the driver's seat; nothing opens |
 | 4 | Try row 3 on a one-way street with parking on the left, and on a wide avenue (wide lanes, a wide parking strip) | Same refusal with the hatch to the road; opens with the hatch to the pavement. On the avenue, also park as far from the kerb as the space allows with the hatch to the pavement: it should still open |
 | 5 | If you find parking in the middle of a street (a median), park there and "Open here" | Either "There's only road by the hatch…" or it opens. Tell me which, and whether the line ends up on the road |
-| 6 | Open properly (row 1) and watch the people walking up | They come along the pavement, not down the street, and stand on the hatch side |
+| 6 | Open properly (row 1) and watch the people walking up, moving up and leaving | They come and go along the pavement, not down the street, and stand on the hatch side. Nobody walks across the street to or from the line |
 | 7 | Put a worker on the truck (Ctrl+Alt+U), add a stop where it stands (hatch to the pavement), with hours starting soon. Then park it at the same stop with the hatch to the road, walk more than 15 m away and wait an in-game hour | The crew moves the truck and opens at a space nearby with the hatch to the pavement; no "The crew can't open" message |
-| 7b | After row 7 (the crew parked it), get in, turn it round in the same space so the hatch faces the road, get out, walk away and wait an hour | The crew moves it again, as in row 7, rather than trying to open there |
+| 7b | After row 7 (the crew parked it), get in, turn it round in the same space so the hatch faces the road, get out, walk away and wait an hour. Again with the worker taken off the truck before you get in and put back after | The crew moves it again, as in row 7, rather than trying to open there |
 | 8 | Press each debug key from the list above once, Camera Tools on, the game started without `-console` | Each does its action, the UI stays visible, no quick save and no menu pops up. Ctrl+V, Ctrl+Alt+V, Ctrl+X and Ctrl+Alt+X only show "Press … again within 10 seconds" the first time; a second press runs them |
 | 9 | Ctrl+Shift+F11 once in a save without Food Trucks vehicles | The "Press again within 10 seconds" question; nothing else |
 
@@ -29,7 +29,7 @@ Build `0.9.6`: 0.9.5 plus two playtest fixes. "Open here" on a truck now checks 
 - The first-pavement heights say whether the game's kerbs are raised (a positive few centimetres) or flat; for a later, second signal.
 - `Route: truck <id> at … stands with its hatch to the road for stop N (…); the crew parks it again …` once in row 7, then `Route: the space at … would put the hatch to the road (…); the truck takes it the other way round.` if the space it picks needs turning. A space refused both ways round logs `… has road by the hatch either way round …; trying the next lane.`
 - Row 7b: `Route: the player took truck <id>; where the crew parked it no longer counts as at its stop.` when you get in.
-- `Queue view: line at cart <id>: … places on the right side …, N ways in and out` for the truck, as before; `(K crossing a driving lane left out)` after it when some ways were dropped.
+- `Queue view: line at cart <id>: … places on the right side …, N ways in and out` for the truck, as before; `(K crossing a driving lane left out)` after it when some ways were dropped. `Queue view: cart <id>: a customer's walk would cross a driving lane; taken out of view.` should be rare; tell me if it repeats at one place.
 - No new Harmony patches for the hatch check (the commissary's six are listed in its section below).
 # Commissary orders by text (0.9.6)
 
@@ -49,7 +49,7 @@ Ordering now stays in the commissary's conversation on the phone. "Order stock" 
 | 10 | Call a furniture store (Square Appliances or another) and open its order form | It is the game's usual form: your buildings, its delivery times, its prices, $250 delivery. Nothing of the commissary's |
 | 11 | City map, Street food line, "Commissaries"; drive to Hell's Kitchen's | It lights First Street 22, next to the wholesaler at First Street 18. Is there a kerb by its door where the truck parks legally? Ctrl+F3 at the kerb should say "in the bay" |
 | 12 | Load a save that rented a space at the Hell's Kitchen commissary on 0.9.5 | The space is still there (state line in the log), the rent keeps coming, and the vehicle in the new bay isn't fined at 04:00. A vehicle still standing at First Street 24 (the old bay) is fined once at 04:00; move it to First Street 22. That is expected, since 0.9.5 never shipped |
-| 13 | Open the order form, press its add button so the item list shows, add an item, then press "Order" | The item list beside the phone closes when the commissary reads the order back. Again with the list open: hang up; and again: close the phone. Each time the list closes and nothing errors when you click where it was |
+| 13 | Open the order form, press its add button so the item list shows, add an item, then press "Order" | The item list beside the phone closes when the commissary reads the order back. Again with the list open: hang up; and again: close the phone with its button. Each time the list closes and nothing errors when you click where it was |
 
 Log lines:
 
