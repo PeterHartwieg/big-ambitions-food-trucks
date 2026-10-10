@@ -1,6 +1,6 @@
 # Hatch side and debug keys (0.9.6)
 
-Build `0.9.6`: 0.9.5 plus two playtest fixes. "Open here" on a truck now checks that the hatch faces the pavement: it reads the traffic system's driving lanes beside the truck, so a hatch to the road is refused even though the NavMesh lets people walk on the street. A crew's route parks a truck that stands the wrong way at a stop again, turned round. The debug keys moved off F4 to F10 and F12 (Camera Tools' Hide UI, the game's `-console` keys, quick save and menu) onto letters: **Ctrl+K** truck, **Ctrl+Alt+K** licence and permits, **Ctrl+J** cart, **Ctrl+Alt+J** hand truck, **Ctrl+U** new items, **Ctrl+Alt+U** hire, **Ctrl+L** status, **Ctrl+Alt+L** demand here, **Ctrl+G** grip, **Ctrl+Alt+G** zone point, **Ctrl+V** city event, **Ctrl+Alt+V** catering gig, **Ctrl+X** tax statement, **Ctrl+Alt+X** tax fixture, **Ctrl+F3** / **Ctrl+Alt+F3** / **Ctrl+Shift+F3** commissary bays, deliveries and overnight check, **Ctrl+Shift+F11** twice for the uninstall step. Fresh **FT** save, other gameplay mods off; Camera Tools may stay on for rows 8 and 9.
+Build `0.9.6`: 0.9.5 plus two playtest fixes. "Open here" on a truck now checks that the hatch faces the pavement: it reads the traffic system's driving lanes beside the truck, so a hatch to the road is refused even though the NavMesh lets people walk on the street. A crew's route parks a truck that stands the wrong way at a stop again, turned round. The debug keys moved off F4 to F10 and F12 (Camera Tools' Hide UI, the game's `-console` keys, quick save and menu) onto letters: **Ctrl+K** truck, **Ctrl+Alt+K** licence and permits, **Ctrl+J** cart, **Ctrl+Alt+J** hand truck, **Ctrl+U** new items, **Ctrl+Alt+U** hire, **Ctrl+L** status, **Ctrl+Alt+L** demand here, **Ctrl+G** grip, **Ctrl+Alt+G** zone point, **Ctrl+V** city event, **Ctrl+Alt+V** catering gig, **Ctrl+X** tax statement, **Ctrl+Alt+X** tax fixture (these four only on a second press within 10 seconds), **Ctrl+F3** / **Ctrl+Alt+F3** / **Ctrl+Shift+F3** commissary bays, deliveries and overnight check, **Ctrl+Shift+F11** twice for the uninstall step. Fresh **FT** save, other gameplay mods off; Camera Tools may stay on for rows 8 and 9.
 
 ## 1. Automated (me)
 
@@ -14,21 +14,23 @@ Build `0.9.6`: 0.9.5 plus two playtest fixes. "Open here" on a truck now checks 
 | 1 | Ctrl+K truck, Ctrl+Alt+K, fit a grill, load hot dogs. Park in a parking space at the kerb with the hatch (right side) to the pavement, close to the kerb. "Open here" | It opens as before; the line forms on the pavement by the hatch |
 | 2 | Same street, park with the hatch to the pavement but well away from the kerb (as far out as the space lets you), or at a slant. "Open here" | It still opens. If it's refused, tell me how far from the kerb the truck stood |
 | 3 | Drive off, turn round and park in a space with the hatch to the road (pavement on the driver's side). "Open here" | Refused: "The hatch faces the road. Park with the serving side to the pavement." You stay in the driver's seat; nothing opens |
-| 4 | Try row 3 on a one-way street with parking on the left, and on a wide avenue | Same refusal with the hatch to the road; opens with the hatch to the pavement |
+| 4 | Try row 3 on a one-way street with parking on the left, and on a wide avenue (wide lanes, a wide parking strip) | Same refusal with the hatch to the road; opens with the hatch to the pavement. On the avenue, also park as far from the kerb as the space allows with the hatch to the pavement: it should still open |
 | 5 | If you find parking in the middle of a street (a median), park there and "Open here" | Either "There's only road by the hatch…" or it opens. Tell me which, and whether the line ends up on the road |
 | 6 | Open properly (row 1) and watch the people walking up | They come along the pavement, not down the street, and stand on the hatch side |
 | 7 | Put a worker on the truck (Ctrl+Alt+U), add a stop where it stands (hatch to the pavement), with hours starting soon. Then park it at the same stop with the hatch to the road, walk more than 15 m away and wait an in-game hour | The crew moves the truck and opens at a space nearby with the hatch to the pavement; no "The crew can't open" message |
-| 8 | Press each debug key from the list above once, Camera Tools on, the game started without `-console` | Each does its action, the UI stays visible, no quick save and no menu pops up |
+| 7b | After row 7 (the crew parked it), get in, turn it round in the same space so the hatch faces the road, get out, walk away and wait an hour | The crew moves it again, as in row 7, rather than trying to open there |
+| 8 | Press each debug key from the list above once, Camera Tools on, the game started without `-console` | Each does its action, the UI stays visible, no quick save and no menu pops up. Ctrl+V, Ctrl+Alt+V, Ctrl+X and Ctrl+Alt+X only show "Press … again within 10 seconds" the first time; a second press runs them |
 | 9 | Ctrl+Shift+F11 once in a save without Food Trucks vehicles | The "Press again within 10 seconds" question; nothing else |
 
 ## 3. Log lines (me)
 
-- `Debug actions ready: Ctrl+K food truck, Ctrl+Alt+K licence and permits, …, Ctrl+Shift+F11 uninstall step.`
-- One `Pitch: truck <id> at (…), heading …: parking Legal; hatch <verdict>: hatch side pavement … m, road … m; other side pavement … m, road … m; N lane segments near; first pavement +0.xx m on the hatch side, … on the other; may open|refused.` per "Open here". Row 1: `Pavement` with the hatch side's pavement at about 1.5 to 3 m and no road before it. Row 3: `WrongWay`, road at 1.5 to 2.5 m on the hatch side. If any row reads `traffic system not running` or `no traffic lanes within 25 m`, the check fell back to the NavMesh alone: tell me where.
+- `Debug actions ready: Ctrl+K food truck, Ctrl+Alt+K licence and permits, …, Ctrl+V twice city event here, …, Ctrl+Shift+F11 uninstall step.`
+- One `Pitch: truck <id> at (…), heading …: parking Legal; hatch <verdict>: hatch side pavement … m, road … m; other side pavement … m, road … m; N lane segments near; first pavement +0.xx m on the hatch side, … on the other; may open|refused.` per "Open here". Row 1: `Pavement` with the hatch side's pavement at about 1.5 to 3 m and no road before it. Row 3: `WrongWay`, road at 1.5 to 3.5 m on the hatch side and no pavement before it. If any row reads `traffic system not running` or `no traffic lanes within 25 m`, the check fell back to the NavMesh alone: tell me where.
 - The first-pavement heights say whether the game's kerbs are raised (a positive few centimetres) or flat; for a later, second signal.
-- `Route: truck <id> at … stands with its hatch to the road for stop N (…); the crew parks it again …` once in row 7, then `Route: the space at … would put the hatch to the road (…); the truck takes it the other way round.` if the space it picks needs turning.
-- `Queue view: line at cart <id>: … places on the right side …` for the truck, as before.
-- No new Harmony patches; the `Patch …: Active.` lines are unchanged.
+- `Route: truck <id> at … stands with its hatch to the road for stop N (…); the crew parks it again …` once in row 7, then `Route: the space at … would put the hatch to the road (…); the truck takes it the other way round.` if the space it picks needs turning. A space refused both ways round logs `… has road by the hatch either way round …; trying the next lane.`
+- Row 7b: `Route: the player took truck <id>; where the crew parked it no longer counts as at its stop.` when you get in.
+- `Queue view: line at cart <id>: … places on the right side …, N ways in and out` for the truck, as before; `(K crossing a driving lane left out)` after it when some ways were dropped.
+- No new Harmony patches for the hatch check (the commissary's six are listed in its section below).
 # Commissary orders by text (0.9.6)
 
 Ordering now stays in the commissary's conversation on the phone. "Order stock" shows the game's own phone order form, the one Square Appliances shows in its conversation, filled with the commissary's foods and machines: the address is the commissary, the time is tomorrow at 08:00, amounts are boxes (at most 10 an order), prices are box prices. "Order" makes the commissary read the order back with its total; "Confirm order" books and pays it. The bay's "Order stock for delivery to …" opens the same conversation. The Hell's Kitchen commissary moved from First Street 24 (a retail unit, with a random shop in it each game) to the apartment building at First Street 22, by the wholesaler. Use a disposable save with a vehicle that has a commissary space.
@@ -46,7 +48,8 @@ Ordering now stays in the commissary's conversation on the phone. "Order stock" 
 | 9 | Spend down to less than an order's total, then order and confirm | The answer says the payment didn't go through and the order is held; it is paid and delivered later, as before |
 | 10 | Call a furniture store (Square Appliances or another) and open its order form | It is the game's usual form: your buildings, its delivery times, its prices, $250 delivery. Nothing of the commissary's |
 | 11 | City map, Street food line, "Commissaries"; drive to Hell's Kitchen's | It lights First Street 22, next to the wholesaler at First Street 18. Is there a kerb by its door where the truck parks legally? Ctrl+F3 at the kerb should say "in the bay" |
-| 12 | Load a save that rented a space at the Hell's Kitchen commissary on 0.9.5 | The space is still there (state line in the log), the rent keeps coming, and the vehicle in the new bay isn't fined at 04:00 |
+| 12 | Load a save that rented a space at the Hell's Kitchen commissary on 0.9.5 | The space is still there (state line in the log), the rent keeps coming, and the vehicle in the new bay isn't fined at 04:00. A vehicle still standing at First Street 24 (the old bay) is fined once at 04:00; move it to First Street 22. That is expected, since 0.9.5 never shipped |
+| 13 | Open the order form, press its add button so the item list shows, add an item, then press "Order" | The item list beside the phone closes when the commissary reads the order back. Again with the list open: hang up; and again: close the phone. Each time the list closes and nothing errors when you click where it was |
 
 Log lines:
 
@@ -55,6 +58,7 @@ Log lines:
 - Rows 1 to 6: `Commissary order at <id>: the order form lists N items.`, `Commissary order at <id>: read back N boxes (…), $… plus $… delivery.`, one `Commissary order N: B boxes, U <item> at <id> for $… plus $… delivery, paid; due day D at 08:00.` per item.
 - Row 8: `Commissary <id>: the bay's Order stock opens its conversation.`
 - No `Commissary order form, …` errors.
+- Row 13, phone closed: `Commissary order at <id>: the call ended with the order form open; its item list is closed.`
 
 # Commissary checks (0.9.4)
 
@@ -73,8 +77,7 @@ Build `0.9.4`: 0.9.3 plus the commissary and the new items. Five commissary gara
 | 2 | City map, Street food line, "Commissaries" | Five buildings lit in purple: Industry City, Garment District, Hell's Kitchen's edge, Lower Manhattan, Murray Hill. Do they look like garages a food vendor would use? Name any that don't |
 | 3 | Ctrl+K truck, Ctrl+Alt+K, drive to the nearest lit commissary and park at the kerb by its door. Ctrl+F3 | A new contact ("… Commissary") with a welcome text. The notice says "in the bay". If not, the distance tells me how far off the bay is: Ctrl+Alt+G where a vehicle could legally park, and I put that point in the data |
 | 4 | In the truck at the bay, press "Commissary" on the panel | The button shows only in the bay. The list offers "Rent a space at …: $1,250.00 a month". Rent it: a message, and a rent transaction of about $41 today |
-| 5 | Call the commissary's contact, press "Order stock" | The call ends with "Pick what you need", the phone closes and a list opens over the city: every food and machine with its box price and what is in stock. Pick hot dogs, then 3 boxes (the list shows goods + delivery = total), then confirm. A text confirms the order for 08:00 tomorrow and the money goes. Does the call come back cleanly on the phone afterwards? If the list doesn't open, or opens behind something, say so: the same lists are on the Commissary button at the bay ("Order stock for delivery to …") |
-| 5b | At the bay, Commissary, "Order stock for delivery to …"; order a hot dog grill | The same three lists, from the panel |
+| 5 | Order 3 boxes of hot dogs and a hot dog grill from the commissary | Superseded in 0.9.6: ordering is in the commissary's conversation; follow rows 1 to 9 of "Commissary orders by text (0.9.6)" above. The list-picker ordering these rows used to check is gone |
 | 6 | Ctrl+Alt+F3 (or sleep to after 08:00) | A text per order: "Your delivery is in" |
 | 7 | At the bay, "Commissary", "Restock" | The grill and the food go into the truck's cargo (the item panel counts them). A box bigger than the stock limit loads in part and the rest stays ("… items left in stock here") |
 | 8 | Leave the truck in the bay, push a cart elsewhere and walk away; sleep past 04:00 | The truck isn't fined; the cart is: a City text "Your Food cart wasn't in a commissary bay at 04:00", and a fine transaction of $250 |
@@ -94,7 +97,7 @@ Build `0.9.4`: 0.9.3 plus the commissary and the new items. Five commissary gara
 - `Overnight check: starts on day …`, then one `Overnight check through day N: <vehicle> in its bay / out …; K fines.` per night and an `Overnight fine: …` line per fine.
 - `Commissary <id>: unlocked on day … (visited)`; `… rented a space …`, `moved its space …`, `gave up its space …`.
 - `Commissary rent: <vehicle> at <id> for day N, $… paid.` once per space per day.
-- `Commissary order at <id>: list of N items shown.`; - `Commissary order N: …`, `Commissary delivery: order N, …`, `Commissary restock: … loaded …; … units didn't fit and stay; … left in stock.`
+- `Commissary order N: …` (the ordering lines are now those of the 0.9.6 section), `Commissary delivery: order N, …`, `Commissary restock: … loaded …; … units didn't fit and stay; … left in stock.`
 - `Uninstall: commissary refund …` after row 11. Also `Uninstall: $… of this tax year's commissary deduction taken back for the refund.` and `Uninstall: N market entries and M market events for the mod's foods removed.` (both 0 normally).
 - No new Harmony patches; the earlier `Patch …: Active.` lines are unchanged. No `Commissary:` error lines.
 
