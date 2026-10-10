@@ -54,8 +54,8 @@ namespace FoodTrucks
                 $"{Verdict}: hatch side {Hatch}; other side {Opposite}; {Lanes}; {Kerb}";
         }
 
-        // nearby: lanes already read for a wider area (FreeParking reads them once for every space it tries); the
-        // traffic system's search scans every waypoint in the city, so one read per call is enough.
+        // nearby: a TrafficLanes.Read for a wider area that covers this position (FreeParking reads once for every space
+        // it tries); narrowed here as Near would read for the position itself.
         public static Result Probe(Vector3 position, Quaternion rotation, TrafficLanes? nearby = null)
         {
             var forward = Flat(rotation * Vector3.forward);
@@ -110,21 +110,31 @@ namespace FoodTrucks
     // traffic system isn't running, which leaves the NavMesh alone to decide, as before.
     internal sealed class TrafficLanes
     {
-        // Waypoints on a bridge or under one don't count for the street below.
-        private const float HeightMetres = 3f;
+        // Waypoints on a bridge or under one don't count for the street below (Core's LaneReach.HeightMetres).
+        private const float HeightMetres = (float)LaneReach.HeightMetres;
 
+        // Each waypoint read, with its segments to the waypoints it links to (and itself, so a lone one still counts).
+        private readonly List<(Vector3 Point, List<(Vector3 A, Vector3 B)> Segments)> waypoints;
         private readonly List<(Vector3 A, Vector3 B)> segments;
         private readonly string? problem;
 
-        private TrafficLanes(List<(Vector3, Vector3)> segments, string? problem)
+        private TrafficLanes(List<(Vector3, List<(Vector3, Vector3)>)> waypoints, string? problem)
         {
-            this.segments = segments;
+            this.waypoints = waypoints;
+            segments = waypoints.SelectMany(w => w.Item2).ToList();
             this.problem = problem;
         }
 
-        public static readonly TrafficLanes None = new TrafficLanes(new List<(Vector3, Vector3)>(), "traffic system not running");
+        public static readonly TrafficLanes None = new TrafficLanes(new List<(Vector3, List<(Vector3, Vector3)>)>(), "traffic system not running");
 
-        public static TrafficLanes Near(Vector3 centre, float radius)
+        // The lanes a probe at centre counts: waypoints closer than radius (3D, as the game's own search measures)
+        // and within HeightMetres of the centre's height.
+        public static TrafficLanes Near(Vector3 centre, float radius) => Read(centre, radius).Within(centre, radius);
+
+        // Every waypoint closer than radius, at any height, for narrowing per point later (Within). A read for a
+        // search area covers each point within spaceMetres of its centre when radius is spaceMetres plus the probe's
+        // radius (Core's LaneReach.CoverRadius): the traffic system scans every waypoint in the city per read.
+        public static TrafficLanes Read(Vector3 centre, float radius)
         {
             try
             {
@@ -135,26 +145,39 @@ namespace FoodTrucks
                 // The game's search calls the filter for every waypoint within the radius; it collects them all.
                 manager.GetClosestWaypoint(centre, radius, w =>
                 {
-                    if (w != null && Mathf.Abs(w.position.y - centre.y) <= HeightMetres) near.Add(w);
+                    if (w != null) near.Add(w);
                     return false;
                 });
-                var found = new List<(Vector3, Vector3)>();
+                var found = new List<(Vector3, List<(Vector3, Vector3)>)>();
                 foreach (var waypoint in near)
                 {
+                    var own = new List<(Vector3, Vector3)>();
                     foreach (var index in (waypoint.neighbors ?? new List<int>()).Concat(waypoint.prev ?? new List<int>()))
                     {
                         var other = manager.GetWaypoint(index);
-                        if (other != null) found.Add((waypoint.position, other.position));
+                        if (other != null) own.Add((waypoint.position, other.position));
                     }
                     // A waypoint on its own still marks a lane.
-                    found.Add((waypoint.position, waypoint.position));
+                    own.Add((waypoint.position, waypoint.position));
+                    found.Add((waypoint.position, own));
                 }
-                return new TrafficLanes(found, found.Count == 0 ? $"no traffic lanes within {radius:F0} m" : null);
+                return new TrafficLanes(found, null);
             }
             catch (Exception ex)
             {
-                return new TrafficLanes(new List<(Vector3, Vector3)>(), "traffic lanes unreadable: " + ex.Message);
+                return new TrafficLanes(new List<(Vector3, List<(Vector3, Vector3)>)>(), "traffic lanes unreadable: " + ex.Message);
             }
+        }
+
+        // The waypoints a probe at centre counts, from a wider read: closer than radius as the game measures it
+        // (squared 3D distance under radius squared) and within HeightMetres of centre's height. Near uses this too,
+        // so a probe given a wider read sees exactly what a probe reading for itself would.
+        public TrafficLanes Within(Vector3 centre, float radius)
+        {
+            if (problem != null) return this;
+            var limit = radius * radius;
+            var kept = waypoints.Where(w => Vector3.SqrMagnitude(centre - w.Point) < limit && Mathf.Abs(w.Point.y - centre.y) <= HeightMetres).ToList();
+            return new TrafficLanes(kept, kept.Count == 0 ? $"no traffic lanes within {radius:F0} m" : null);
         }
 
         // Flat distance from the point to the nearest lane's centre line, or null without lanes.
@@ -175,16 +198,6 @@ namespace FoodTrucks
         }
 
         public bool Known => segments.Count > 0;
-
-        // The segments of these lanes within radius of a point (either end), as Near(centre, radius) would find them,
-        // when these were read for a wider area that covers it. Unknown lanes stay unknown.
-        public TrafficLanes Within(Vector3 centre, float radius)
-        {
-            if (segments.Count == 0) return this;
-            var c = new Vector2(centre.x, centre.z);
-            var kept = segments.Where(s => (new Vector2(s.A.x, s.A.z) - c).magnitude <= radius || (new Vector2(s.B.x, s.B.z) - c).magnitude <= radius).ToList();
-            return new TrafficLanes(kept, kept.Count == 0 ? $"no traffic lanes within {radius:F0} m" : null);
-        }
 
         public string Describe() => problem ?? $"{segments.Count} lane segments near";
     }

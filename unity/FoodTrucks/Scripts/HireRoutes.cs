@@ -584,7 +584,8 @@ namespace FoodTrucks
                 .Select(l => l.Lane);
             // A space that reads road by the hatch either way round (a median) is kept only in case no lane offers better.
             (Vector3, Quaternion, string?)? refused = null;
-            // The driving lanes for every space tried, read once (the traffic system's search scans the whole city).
+            // The driving lanes for every space tried, read once at any height (the traffic system's search scans the
+            // whole city); each probe keeps those within its own reach and height, as its own read would.
             TrafficLanes? traffic = null;
             foreach (var lane in lanes)
             {
@@ -592,7 +593,7 @@ namespace FoodTrucks
                 if (Vector3.Distance(position, target) > maxMetres) continue;
                 // The hatch has to face the pavement: a lane's rotation can point either way along the kerb. The
                 // game's slot test is sized for a car, so the truck's own hull is checked, the way it will stand.
-                traffic ??= TrafficLanes.Near(target, maxMetres + HatchCheck.LaneSearchMetres);
+                traffic ??= TrafficLanes.Read(target, (float)LaneReach.CoverRadius(maxMetres, HatchCheck.LaneSearchMetres));
                 if (HatchRefused(position, rotation, traffic, out var hatch))
                 {
                     var turned = rotation * Quaternion.Euler(0f, 180f, 0f);
