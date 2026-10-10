@@ -69,19 +69,16 @@ namespace FoodTrucks
         // slot is mirrored (same inset from the right edge as it had from the left), so it keeps its size and height.
         private static class InfoButton
         {
-            // The game's placement of each moved button, by the button's id.
-            private static readonly Dictionary<int, (UnityEngine.Vector2 AnchorMin, UnityEngine.Vector2 AnchorMax, UnityEngine.Vector2 Pivot, UnityEngine.Vector2 Position)> moved =
-                new Dictionary<int, (UnityEngine.Vector2, UnityEngine.Vector2, UnityEngine.Vector2, UnityEngine.Vector2)>();
             private static bool logged;
 
             public static void MoveRight(LocalizedListTooltip tooltip)
             {
                 if (!(tooltip.transform is UnityEngine.RectTransform rect) || !(rect.parent is UnityEngine.RectTransform parent)) return;
-                var id = rect.GetInstanceID();
-                if (moved.ContainsKey(id)) return;
-                // Slots are made and thrown away with the panel: forget the ones gone before adding one.
-                if (moved.Count > 200) moved.Clear();
-                moved[id] = (rect.anchorMin, rect.anchorMax, rect.pivot, rect.anchoredPosition);
+                // A moved button carries the game's placement on itself, so it is never moved twice and goes with its slot.
+                var saved = rect.GetComponent<MovedInfoButton>();
+                if (saved != null && saved.Moved) return;
+                if (saved == null) saved = rect.gameObject.AddComponent<MovedInfoButton>();
+                saved.Save(rect);
                 // Its left edge's inset in the parent, kept as the right edge's inset.
                 // Anchored to the left edge (as on the game's slot), that is its anchored x less its pivot's share, whatever
                 // size the slot's layout gives it later; otherwise read from where it stands now.
@@ -100,12 +97,9 @@ namespace FoodTrucks
 
             public static void Restore(LocalizedListTooltip tooltip)
             {
-                if (!(tooltip.transform is UnityEngine.RectTransform rect) || !moved.TryGetValue(rect.GetInstanceID(), out var saved)) return;
-                moved.Remove(rect.GetInstanceID());
-                rect.anchorMin = saved.AnchorMin;
-                rect.anchorMax = saved.AnchorMax;
-                rect.pivot = saved.Pivot;
-                rect.anchoredPosition = saved.Position;
+                if (!(tooltip.transform is UnityEngine.RectTransform rect)) return;
+                var saved = rect.GetComponent<MovedInfoButton>();
+                if (saved != null && saved.Moved) saved.Restore(rect);
             }
         }
 
@@ -224,6 +218,32 @@ namespace FoodTrucks
             var text = LocalizorManager.GetLocalization(key, null);
             foreach (var (k, v) in values) text = text.Replace("{" + k + "}", v);
             return text;
+        }
+    }
+
+    // On a cargo slot's info button that StoragePanel moved: the game's placement, put back when the slot is reused.
+    internal sealed class MovedInfoButton : UnityEngine.MonoBehaviour
+    {
+        private UnityEngine.Vector2 anchorMin, anchorMax, pivot, position;
+
+        public bool Moved { get; private set; }
+
+        public void Save(UnityEngine.RectTransform rect)
+        {
+            anchorMin = rect.anchorMin;
+            anchorMax = rect.anchorMax;
+            pivot = rect.pivot;
+            position = rect.anchoredPosition;
+            Moved = true;
+        }
+
+        public void Restore(UnityEngine.RectTransform rect)
+        {
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.pivot = pivot;
+            rect.anchoredPosition = position;
+            Moved = false;
         }
     }
 }
