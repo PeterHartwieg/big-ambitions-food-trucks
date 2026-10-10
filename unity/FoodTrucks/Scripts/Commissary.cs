@@ -66,6 +66,7 @@ namespace FoodTrucks
             {
                 var bay = Bays(site)?.FirstOrDefault();
                 if (bay != null) Log.Info($"Commissary {site.Id} ({site.Address}): bay at x {bay.Value.X:F1}, z {bay.Value.Z:F1}{(site.Bay != null ? " (set in data)" : " (nearest entrance)")}.");
+                LogBusinessAt(site);
             }
             if (state == null) return;
             var commissary = state.Commissary;
@@ -78,6 +79,23 @@ namespace FoodTrucks
         }
 
         public static void Detach() => attached = false;
+
+        // A new game gives random AI shops to retail and office units and a rival's factory to a few random warehouses
+        // (CityGenerator.PopulateBuildings, SetupRivalFactories); homes never get one. The garages are picked to avoid
+        // that, but a rival factory can still land in one, so the log says when a garage's building has a business.
+        private static void LogBusinessAt(CommissarySite site)
+        {
+            try
+            {
+                var (street, number) = CommissaryTables.SplitAddress(site.Address);
+                var registration = SaveGameManager.Current?.BuildingRegistrations.FirstOrDefault(r => r != null && r.StreetName == street && r.StreetNumber == number);
+                var business = registration?.businessTypeName;
+                if (string.IsNullOrEmpty(business) || business == "ba:businesstype_empty") return;
+                Log.Info($"Commissary {site.Id} ({site.Address}): the building has a business in this game ({business}" +
+                         $"{(string.IsNullOrEmpty(registration!.BusinessName) ? "" : ", " + registration.BusinessName)}{(registration.RentedByPlayer ? ", yours" : "")}); the bay works the same.");
+            }
+            catch (Exception ex) { Log.Error("Commissary, building check: " + ex.Message); }
+        }
 
         private static string Join(IEnumerable<string> values)
         {
@@ -487,7 +505,7 @@ namespace FoodTrucks
                 ? (Format("foodtrucks:commissary_option_restock", units.ToString()), () => Restock(id, kind, siteId))
                 : (Format("foodtrucks:commissary_option_nostock", Name(site)), () => CartSelling.Say("foodtrucks:notification_commissary_nostock", kind, ("commissary", Name(site)))));
             if (state.Commissary.Spaces.Any(s => s.CommissaryId == siteId))
-                options.Add((Format("foodtrucks:commissary_option_order", Name(site)), () => OrderPicker(siteId, closePhone: false)));
+                options.Add((Format("foodtrucks:commissary_option_order", Name(site)), () => CallToOrder(siteId)));
             var labels = options.Select(o => o.Label).ToList();
             DropdownSelector.Show(labels, chosen =>
             {
@@ -611,148 +629,70 @@ namespace FoodTrucks
             return list.OrderBy(i => LocalizorManager.GetLocalization(i.Item1, null), StringComparer.CurrentCulture).ToList();
         }
 
-        // Boxes the count list offers.
-        private const int MaxBoxes = 10;
+        // What the commissary's order form lists: the catalogue with what this commissary holds of each item.
+        internal static List<CommissaryOrderForm.Line> FormLines(SaveState state, string siteId)
+        {
+            var stock = state.Commissary.Stock.TryGetValue(siteId, out var lines) ? lines : new List<CommissaryStockLine>();
+            return Catalogue(false).Concat(Catalogue(true))
+                .Select(c => new CommissaryOrderForm.Line(c.Item, c.Box, c.UnitCents, stock.Where(l => l.ItemName == c.Item).Sum(l => (long)l.Units)))
+                .ToList();
+        }
 
-        // Ordering with the game's list picker: the item (foods, then machines), the number of boxes, then a confirmation.
-        // Each list opens a frame after the last one closed, since the picker hides itself after calling back. From the
-        // phone, the phone closes first, so the picker never has to show over it.
-        internal static void OrderPicker(string siteId, bool closePhone)
+        // The bay's "Order stock": the phone opens on the commissary's conversation and calls it, so ordering happens
+        // in one place, the conversation's order form.
+        private static void CallToOrder(string siteId)
         {
             HireRoutes.Later(() =>
             {
-                if (closePhone && UI.Smartphone.FullMenu.IsOpen)
+                try
                 {
-                    try { InstanceBehavior<UIs>.Instance?.fullMenu?.Toggle(show: false); }
-                    catch (Exception ex) { Log.Error("Commissary order, closing the phone: " + ex); }
+                    Log.Info($"Commissary {siteId}: the bay's Order stock opens its conversation.");
+                    ContactsApp.OpenAndStartCall(ContactFor(siteId));
                 }
-                HireRoutes.Later(() => PickItem(siteId));
+                catch (Exception ex)
+                {
+                    Log.Error("Commissary order, opening the phone: " + ex);
+                    CartSelling.Notify("foodtrucks:notification_commissary_call", ("commissary", NameOf(siteId)));
+                }
             });
         }
 
-        // Null when ordering here can go ahead, else the notification key saying why not.
-        private static string? OrderProblem(SaveState? state, string siteId)
-        {
-            if (state == null || Rules == null || !FoodTrucksSession.CanWrite || uninstalled) return "foodtrucks:notification_data_readonly";
-            if (DropdownSelector.onShow == null) return "foodtrucks:notification_prices_unavailable";
-            if (!state.Commissary.Unlocked.Contains(siteId) || !state.Commissary.Spaces.Any(s => s.CommissaryId == siteId))
-                return "foodtrucks:notification_commissary_no_space";
-            return null;
-        }
-
-        private static void PickItem(string siteId)
-        {
-            var state = FoodTrucksSession.CurrentState;
-            var problem = OrderProblem(state, siteId);
-            if (problem != null)
-            {
-                if (problem == "foodtrucks:notification_prices_unavailable") Log.Error("Commissary order: the game's list picker isn't available in this scene.");
-                CartSelling.Notify(problem, ("commissary", NameOf(siteId)));
-                return;
-            }
-            var catalogue = Catalogue(false).Concat(Catalogue(true)).ToList();
-            if (catalogue.Count == 0)
-            {
-                CartSelling.Notify("foodtrucks:notification_commissary_nothing");
-                return;
-            }
-            var stock = state!.Commissary.Stock.TryGetValue(siteId, out var lines) ? lines : new List<CommissaryStockLine>();
-            var options = new List<(string Label, string Item)>();
-            foreach (var (item, box, unit) in catalogue)
-            {
-                var here = stock.Where(l => l.ItemName == item).Sum(l => (long)l.Units);
-                options.Add((Format("foodtrucks:commissary_order_item", LocalizorManager.GetLocalization(item, null), box.ToString(),
-                    CartSelling.Money(box * unit), here.ToString()), item));
-            }
-            for (var i = 0; i < options.Count; i++)
-                if (options.Take(i).Any(o => o.Label == options[i].Label)) options[i] = ($"{options[i].Label} ({i + 1})", options[i].Item);
-            Log.Info($"Commissary order at {siteId}: list of {options.Count} items shown.");
-            DropdownSelector.Show(options.Select(o => o.Label).ToList(), chosen =>
-            {
-                var match = options.FirstOrDefault(o => o.Label == chosen);
-                if (match.Item != null) HireRoutes.Later(() => PickCount(siteId, match.Item));
-            }, "foodtrucks:commissary_order_header", "foodtrucks:commissary_order_body");
-        }
-
-        private static void PickCount(string siteId, string itemName)
+        // A quote placed as Core's orders, each paid now; a refused payment books the order anyway, held until paid
+        // (Core's pending charge). Returns each order with whether it was paid.
+        internal static List<(CommissaryOrder Order, bool Paid)> PlaceQuote(string siteId, CommissaryQuote quote)
         {
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
-            var entry = Catalogue(false).Concat(Catalogue(true)).FirstOrDefault(c => c.Item == itemName);
-            if (OrderProblem(state, siteId) != null || rules == null || entry.Item == null) return;
-            var name = LocalizorManager.GetLocalization(itemName, null);
-            var options = new List<(string Label, int Boxes)>();
-            for (var boxes = 1; boxes <= MaxBoxes; boxes++)
-            {
-                var goods = (long)boxes * entry.Box * entry.UnitCents;
-                var fee = rules.FeeCents(goods);
-                options.Add((Format(boxes == 1 ? "foodtrucks:commissary_order_count_one" : "foodtrucks:commissary_order_count",
-                    boxes.ToString(), ((long)boxes * entry.Box).ToString(), CartSelling.Money(goods), CartSelling.Money(fee), CartSelling.Money(goods + fee)), boxes));
-            }
-            DropdownSelector.Show(options.Select(o => o.Label).ToList(), chosen =>
-            {
-                var match = options.FirstOrDefault(o => o.Label == chosen);
-                if (match.Boxes > 0) HireRoutes.Later(() => Confirm(siteId, itemName, match.Boxes));
-            }, "foodtrucks:commissary_order_count_header", null);
-        }
-
-        private static void Confirm(string siteId, string itemName, int boxes)
-        {
-            var state = FoodTrucksSession.CurrentState;
-            var rules = Rules;
-            var entry = Catalogue(false).Concat(Catalogue(true)).FirstOrDefault(c => c.Item == itemName);
-            if (OrderProblem(state, siteId) != null || rules == null || entry.Item == null) return;
-            var goods = (long)boxes * entry.Box * entry.UnitCents;
-            var total = CartSelling.Money(goods + rules.FeeCents(goods));
-            var yes = Format(boxes == 1 ? "foodtrucks:commissary_order_confirm_one" : "foodtrucks:commissary_order_confirm", boxes.ToString(), LocalizorManager.GetLocalization(itemName, null), total,
-                NameOf(siteId), CityPitches.Clock(rules.DeliveryMinute));
-            var no = LocalizorManager.GetLocalization("foodtrucks:commissary_order_cancel", null);
-            DropdownSelector.Show(new List<string> { yes, no }, chosen =>
-            {
-                if (chosen != yes)
-                {
-                    Log.Info($"Commissary order at {siteId}: {boxes} boxes of {itemName} not ordered.");
-                    return;
-                }
-                try { PlaceOrder(siteId, itemName, boxes); }
-                catch (Exception ex) { Log.Error("Commissary order: " + ex); }
-            }, "foodtrucks:commissary_order_confirm_header", null);
-        }
-
-        // The boxes at the item's wholesale price now plus the delivery fee, as one order, paid now. A refused payment
-        // books the order anyway, held until paid (Core's pending charge).
-        private static void PlaceOrder(string siteId, string itemName, int boxes)
-        {
-            var state = FoodTrucksSession.CurrentState;
-            var rules = Rules;
-            var entry = Catalogue(false).Concat(Catalogue(true)).FirstOrDefault(c => c.Item == itemName);
-            if (OrderProblem(state, siteId) != null || rules == null || entry.Item == null) return;
+            var placed = new List<(CommissaryOrder, bool)>();
+            if (state == null || rules == null || uninstalled || !FoodTrucksSession.CanWrite) return placed;
             var now = HireCrew.Now();
             var day = (int)(now / 1440) + 1;
             var minute = (int)(now % 1440);
-            var order = Commissaries.Order(state!.Commissary, rules, siteId, itemName, checked(boxes * entry.Box), entry.UnitCents, (day, minute));
+            var orders = CommissaryOrdering.Place(state.Commissary, rules, siteId, quote, (day, minute));
             FoodTrucksSession.MarkChanged();
             var today = SaveGameManager.Current.Day;
-            var paid = Payments.TryPayOut(order.TotalCents, OrderInfo(siteId), showNotification: true);
-            if (paid) SalesLedger.RecordDeliveryFees(state, today, order.FeeCents);
-            else
+            var unpaid = false;
+            foreach (var order in orders)
             {
-                state.Commissary.Charges.Add(new CommissaryCharge
+                var paid = Payments.TryPayOut(order.TotalCents, OrderInfo(siteId), showNotification: true);
+                if (paid) SalesLedger.RecordDeliveryFees(state, today, order.FeeCents);
+                else
                 {
-                    CommissaryId = siteId, Day = today, Cents = order.TotalCents, OrderId = order.Id, FeeCents = order.FeeCents
-                });
-                // Core marks the order as waiting for its payment.
-                Deliver(state, rules, day, minute);
+                    state.Commissary.Charges.Add(new CommissaryCharge
+                    {
+                        CommissaryId = siteId, Day = today, Cents = order.TotalCents, OrderId = order.Id, FeeCents = order.FeeCents
+                    });
+                    unpaid = true;
+                }
+                var boxes = quote.Lines.FirstOrDefault(l => l.ItemName == order.ItemName)?.Boxes ?? 0;
+                Log.Info($"Commissary order {order.Id}: {boxes} boxes, {order.Units} {order.ItemName} at {siteId} for {CartSelling.Money(order.GoodsCents)} " +
+                         $"plus {CartSelling.Money(order.FeeCents)} delivery, {(paid ? "paid" : "unpaid (not enough money), held until paid")}; " +
+                         $"due day {order.DeliverDay} at {CityPitches.Clock(rules.DeliveryMinute)}.");
+                placed.Add((order, paid));
             }
-            Log.Info($"Commissary order {order.Id}: {boxes} boxes, {order.Units} {itemName} at {siteId} for {CartSelling.Money(order.GoodsCents)} plus {CartSelling.Money(order.FeeCents)} delivery, " +
-                     $"{(paid ? "paid" : "unpaid (not enough money), held until paid")}; due day {order.DeliverDay} at {CityPitches.Clock(rules.DeliveryMinute)}.");
-            GameManager.SendTextMessage(ContactFor(siteId), paid ? "foodtrucks:message_commissary_ordered" : "foodtrucks:message_commissary_ordered_unpaid", new Dictionary<string, string>
-            {
-                { "units", order.Units.ToString() },
-                { "item", LocalizorManager.GetLocalization(itemName, null) },
-                { "total", CartSelling.Money(order.TotalCents) },
-                { "time", CityPitches.Clock(rules.DeliveryMinute) }
-            });
+            // Core marks the unpaid orders as waiting for their payment.
+            if (unpaid) Deliver(state, rules, day, minute);
+            return placed;
         }
 
         // ---- The uninstall step ----
@@ -798,6 +738,7 @@ namespace FoodTrucks
             }
             uninstalled = true;
             CartButton.ShowCommissary(false);
+            CommissaryOrderForm.Forget(Sites?.Sites.Select(s => ContactPrefix + s.Id) ?? Enumerable.Empty<string>());
             var removed = SaveGameManager.Current?.Contacts.RemoveAll(c => c != null && c.id != null && c.id.StartsWith(ContactPrefix, StringComparison.Ordinal)) ?? 0;
             if (removed > 0) Log.Info($"Uninstall: {removed} commissary contacts removed.");
         }
@@ -893,7 +834,8 @@ namespace FoodTrucks
         }
     }
 
-    // A commissary's call: what it holds for you, then "Order stock", which ends the call and opens the ordering lists.
+    // A commissary's call, all in its conversation: what it holds for you, then "Order stock" opens the order form
+    // (CommissaryOrderForm), the commissary reads the order back with its total, and "Confirm order" places it.
     internal sealed class CommissaryDialog : Dialog
     {
         public CommissaryDialog()
@@ -924,6 +866,15 @@ namespace FoodTrucks
             }
         };
 
+        // Hanging up, from any step.
+        private static void HangUp()
+        {
+            CommissaryOrderForm.End();
+            Current?.CancelDialog();
+        }
+
+        private static TextMessage HangUpMessage() => new TextMessage("ba:messagetype_contacts_message_player_cancel_call");
+
         // The commissary this contact belongs to.
         private static CommissarySite? Site()
         {
@@ -932,46 +883,160 @@ namespace FoodTrucks
             return DemandData.Commissaries?.Site(id.Substring(Commissary.ContactPrefix.Length));
         }
 
-        private static DialogEntry Start()
+        // Null when this commissary takes an order now, else the closing line saying why not.
+        private static DialogEntry? Refusal(CommissarySite? site)
         {
             var state = FoodTrucksSession.CurrentState;
-            var site = Site();
-            if (state == null || site == null || DemandData.Rules == null || !FoodTrucksSession.CanWrite)
+            if (state == null || site == null || DemandData.Rules?.Commissary == null || !FoodTrucksSession.CanWrite || Commissary.Uninstalled)
                 return Closing("foodtrucks:dialog_commissary_unavailable", null);
-            var commissary = state.Commissary;
-            var spaces = commissary.Spaces.Count(s => s.CommissaryId == site.Id);
-            if (!commissary.Unlocked.Contains(site.Id) || spaces == 0)
+            if (!CommissaryOrdering.CanOrder(state.Commissary, site.Id))
                 return Closing("foodtrucks:dialog_commissary_no_space", new { commissary = Commissary.Name(site) });
-            var stock = commissary.Stock.TryGetValue(site.Id, out var lines) ? lines.Sum(l => (long)l.Units) : 0;
-            var orders = commissary.Orders.Count(o => o.CommissaryId == site.Id);
+            if (!CommissaryOrderForm.Ready)
+            {
+                Log.Error("Commissary call: no order form (see the Commissary orders line at startup).");
+                return Closing("foodtrucks:dialog_commissary_unavailable", null);
+            }
+            return null;
+        }
+
+        private static DialogEntry Start()
+        {
+            var site = Site();
+            var refusal = Refusal(site);
+            if (refusal != null) return refusal;
+            var commissary = FoodTrucksSession.CurrentState!.Commissary;
+            var data = new
+            {
+                commissary = Commissary.Name(site!),
+                spaces = commissary.Spaces.Count(s => s.CommissaryId == site!.Id).ToString(),
+                stock = (commissary.Stock.TryGetValue(site!.Id, out var lines) ? lines.Sum(l => (long)l.Units) : 0).ToString(),
+                orders = commissary.Orders.Count(o => o.CommissaryId == site.Id).ToString()
+            };
+            Current.contact.SendMessage(new TextMessage("foodtrucks:dialog_commissary_start", ToDictionary(data), read: true, isNewInteraction: true));
             return new DialogEntry
             {
-                messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_start", new
-                {
-                    commissary = Commissary.Name(site),
-                    spaces = spaces.ToString(),
-                    stock = stock.ToString(),
-                    orders = orders.ToString()
-                }),
+                messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_start", data),
                 Template = DialogEntry.TemplateType.Text,
-                OnConfirm = Guard(() => PickItems(site.Id)),
+                OnConfirm = Guard(() => Form(site.Id)),
                 ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_order_stock", (object?)null),
-                OnCancel = Current.CancelDialog,
-                onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
+                OnCancel = HangUp,
+                onCancelMessage = HangUpMessage()
             };
         }
 
-        // The call ends with a line, the phone closes, and the game's list picker opens over the city (as the Prices
-        // and Hires buttons use it). The picker is never shown over the open phone.
-        private static DialogEntry PickItems(string siteId)
+        // The game's phone order form, filled with what the commissary sells (CommissaryOrderForm).
+        private static DialogEntry? Form(string siteId)
         {
-            var entry = Closing("foodtrucks:dialog_commissary_picking", null);
-            Commissary.OrderPicker(siteId, closePhone: true);
-            return entry;
+            var site = DemandData.Commissaries?.Site(siteId);
+            var refusal = Refusal(site);
+            if (refusal != null) return refusal;
+            var lines = Commissary.FormLines(FoodTrucksSession.CurrentState!, siteId);
+            if (lines.Count == 0)
+            {
+                Log.Error($"Commissary order at {siteId}: nothing to sell (no catalogue item is a game item with a price).");
+                return Closing("foodtrucks:dialog_commissary_nothing", null);
+            }
+            CommissaryOrderForm.Begin(Current.contact.id, siteId, lines);
+            Log.Info($"Commissary order at {siteId}: the order form lists {lines.Count} items.");
+            return new DialogEntry
+            {
+                headerKey = "foodtrucks:dialog_commissary_order_header",
+                Template = DialogEntry.TemplateType.Input,
+                InputTemplate = DialogEntry.InputTemplateName.FurnitureDeliverySettings,
+                ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_order_check", (object?)null),
+                OnConfirm = Guard(() => FormSet(siteId)),
+                OnCancel = HangUp,
+                onCancelMessage = HangUpMessage()
+            };
+        }
+
+        // The form sent: the commissary reads the order back with its total. Nothing is booked or paid yet.
+        private static DialogEntry? FormSet(string siteId)
+        {
+            var site = DemandData.Commissaries?.Site(siteId);
+            var refusal = Refusal(site);
+            if (refusal != null) return refusal;
+            var rules = DemandData.Rules!.Commissary!;
+            var form = Current.GetInputComponent<UI.Dialog.FurnitureDeliveryContractSettings>();
+            var quote = CommissaryOrdering.Quote(rules, CommissaryOrderForm.Requests(form));
+            switch (quote.Problem)
+            {
+                case CommissaryQuoteProblem.Empty:
+                    CartSelling.Notify("foodtrucks:notification_commissary_order_empty");
+                    return null;
+                case CommissaryQuoteProblem.TooManyBoxes:
+                    CartSelling.Notify("foodtrucks:notification_commissary_order_too_many", ("max", CommissaryOrdering.MaxBoxesPerOrder.ToString()));
+                    return null;
+            }
+            var items = string.Join("<br>", quote.Lines.Select(LineText));
+            Current.contact.ReceivePlayerMessage(new TextMessage("foodtrucks:message_commissary_order_player", new Dictionary<string, string> { { "items", items } }, read: true));
+            var data = new
+            {
+                items,
+                goods = CartSelling.Money(quote.GoodsCents),
+                fee = CartSelling.Money(quote.FeeCents),
+                total = CartSelling.Money(quote.TotalCents),
+                time = CityPitches.Clock(rules.DeliveryMinute)
+            };
+            Current.contact.SendMessage(new TextMessage("foodtrucks:dialog_commissary_quote", ToDictionary(data), read: true));
+            Log.Info($"Commissary order at {siteId}: read back {quote.Boxes} boxes ({string.Join(", ", quote.Lines.Select(l => $"{l.Boxes} {l.ItemName}"))}), " +
+                     $"{CartSelling.Money(quote.GoodsCents)} plus {CartSelling.Money(quote.FeeCents)} delivery.");
+            return new DialogEntry
+            {
+                messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_quote", data),
+                Template = DialogEntry.TemplateType.Text,
+                OnConfirm = Guard(() => Placed(siteId, quote)),
+                ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_order_confirm", (object?)null),
+                OnSecondOption = Guard(() => Form(siteId)),
+                SecondOptionTextOverride = "foodtrucks:dialog_commissary_order_change",
+                OnCancel = HangUp,
+                onCancelMessage = HangUpMessage()
+            };
+        }
+
+        // "3 boxes of Dumplings (240)", "1 box of Griddle (1)".
+        private static string LineText(CommissaryQuoteLine line) =>
+            string.Format(LocalizorManager.GetLocalization(line.Boxes == 1 ? "foodtrucks:commissary_order_line_one" : "foodtrucks:commissary_order_line", null),
+                line.Boxes, LocalizorManager.GetLocalization(line.ItemName, null), line.Units, CartSelling.Money(line.BoxPriceCents));
+
+        // Confirmed: Core books the orders and the money moves; each order's text, as before, goes into the conversation.
+        private static DialogEntry? Placed(string siteId, CommissaryQuote quote)
+        {
+            var site = DemandData.Commissaries?.Site(siteId);
+            var refusal = Refusal(site);
+            if (refusal != null) return refusal;
+            var rules = DemandData.Rules!.Commissary!;
+            var placed = Commissary.PlaceQuote(siteId, quote);
+            if (placed.Count == 0) return Closing("foodtrucks:dialog_commissary_unavailable", null);
+            var texts = new List<string>();
+            foreach (var (order, paid) in placed)
+            {
+                var key = paid ? "foodtrucks:message_commissary_ordered" : "foodtrucks:message_commissary_ordered_unpaid";
+                var data = new Dictionary<string, string>
+                {
+                    { "units", order.Units.ToString() },
+                    { "item", LocalizorManager.GetLocalization(order.ItemName, null) },
+                    { "total", CartSelling.Money(order.TotalCents) },
+                    { "time", CityPitches.Clock(rules.DeliveryMinute) }
+                };
+                Current.contact.SendMessage(new TextMessage(key, data, read: true));
+                texts.Add(LocalizorManager.Localize(key, data).ToString());
+            }
+            CommissaryOrderForm.End();
+            return new DialogEntry
+            {
+                messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_text", new { text = string.Join("<br>", texts) }),
+                Template = DialogEntry.TemplateType.Text,
+                OnConfirm = Guard(() => Form(siteId)),
+                ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_order_more", (object?)null),
+                OnCancel = HangUp,
+                onCancelMessage = HangUpMessage()
+            };
         }
 
         private static DialogEntry Closing(string key, object? data)
         {
+            CommissaryOrderForm.End();
             Current.contact.SendMessage(new TextMessage(key, data == null ? null : ToDictionary(data), read: true, isNewInteraction: true));
             return new DialogEntry
             {
