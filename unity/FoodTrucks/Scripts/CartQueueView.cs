@@ -431,6 +431,13 @@ namespace FoodTrucks
                     unseen.Add(pair.Key);
                     Log.Info($"Queue view: cart {VehicleId}: a customer's walk would cross a driving lane; taken out of view.");
                 }
+                else if (pair.Value != null && pair.Value.Blocked)
+                {
+                    // Two people each standing on the other's place never get free: the one who waited too long goes
+                    // from view, so the other can take their place. Their sale (if served) is paid below.
+                    unseen.Add(pair.Key);
+                    Log.Info($"Queue view: cart {VehicleId}: customer {pair.Key} waited {QueuePerson.BlockedSeconds:F0} s for someone to clear their place; taken out of view.");
+                }
                 if (pair.Value != null) Object.Destroy(pair.Value.gameObject);
                 people.Remove(pair.Key);
                 if (served.Remove(pair.Key)) Release(pair.Key);
@@ -758,6 +765,9 @@ namespace FoodTrucks
         // up to 0.9 m off (0.9.8) left them on the next place back, since places are about 0.8 m apart.
         private const float CircleSeconds = 1.5f;
         private const float CircleNearMetres = 1.5f;
+        // Waiting longer than this for someone to clear their place, the person is taken out of view (QueueLine):
+        // two customers each near the other's place would otherwise wait for good (review round 2).
+        internal const float BlockedSeconds = 10f;
         private const float TurnDegreesPerSecond = 360f;
 
         private static bool expressionFailed;
@@ -793,6 +803,10 @@ namespace FoodTrucks
         public bool Arrived => hasTarget && !walking;
         // Their last walk would have crossed a driving lane, so they didn't take it: the line takes them out of view.
         public bool UnsafeWalk { get; private set; }
+        // Waited BlockedSeconds for their place to be free: the line takes them out of view.
+        public bool Blocked { get; private set; }
+        // When they started waiting for their place to be free, or negative.
+        private float blockedSince = -1f;
         // Where the character stands; the owner object itself stays at the world origin.
         public Vector3 Position => character != null ? character.transform.position : transform.position;
         // How long they have stood at their current place.
@@ -872,7 +886,7 @@ namespace FoodTrucks
         // One frame. Returns true when the person is done: a leaving one has gone, or the character was removed.
         public bool Tick()
         {
-            if (character == null || UnsafeWalk) return true;
+            if (character == null || UnsafeWalk || Blocked) return true;
             var agent = character.navmeshAgent;
             if (agent == null || !agent.isActiveAndEnabled) return true;
             if (walking)
@@ -894,11 +908,19 @@ namespace FoodTrucks
                                (!agent.hasPath || agent.remainingDistance <= CircleNearMetres + 0.5f);
                 var stuck = noPath || Time.time - walkStarted > (leavingNow ? LeaveSeconds : StuckSeconds);
                 if (leavingNow) return reached || stuck || circling;
+                if (!((circling || stuck) && !reached)) blockedSince = -1f;
                 if (reached) Stop();
                 else if ((circling || stuck) && !PlaceFree(agent.radius))
                 {
-                    // Someone else still stands there (the person before them leaving it): keep walking, and try again
-                    // next frame. Whoever is there walks on or is removed within LeaveSeconds.
+                    // Someone else still stands there (usually the person before them leaving it): keep walking, and try
+                    // again next frame, for at most BlockedSeconds.
+                    if (blockedSince < 0f) blockedSince = Time.time;
+                    else if (Time.time - blockedSince > BlockedSeconds)
+                    {
+                        Blocked = true;
+                        return true;
+                    }
+                    return false;
                 }
                 else if (circling)
                 {
@@ -937,6 +959,7 @@ namespace FoodTrucks
             noPath = false;
             walkStarted = Time.time;
             closerSince = Time.time;
+            blockedSince = -1f;
             bestDistance = FlatDistance(character.transform.position, to);
             Walks++;
             if (!agent.isOnNavMesh)
