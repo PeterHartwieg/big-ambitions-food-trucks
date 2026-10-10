@@ -293,6 +293,11 @@ namespace FoodTrucks
         private readonly List<Vector3> places;
         private readonly Vector3 windowLook;
         private readonly List<Vector3> ends;
+        // A truck's line: the driving lanes near it, so every walk a customer starts is checked against them
+        // (QueuePerson.Walk). Null for a cart, whose customers walk as before.
+        private readonly TrafficLanes? lanes;
+        // Customers taken out of view because their next walk would cross a driving lane: not shown again.
+        private readonly HashSet<long> unseen = new HashSet<long>();
         private readonly GameObject root;
         private readonly Dictionary<long, QueuePerson> people = new Dictionary<long, QueuePerson>();
         private readonly List<QueuePerson> leaving = new List<QueuePerson>();
@@ -306,9 +311,10 @@ namespace FoodTrucks
         // After repeated spawn failures, nobody is spawned until then, a new line's first batch included.
         private float blockedUntil;
 
-        private QueueLine(string vehicleId, GameObject root, List<Vector3> places, Vector3 windowLook, List<Vector3> ends, ServiceState service)
+        private QueueLine(string vehicleId, GameObject root, List<Vector3> places, Vector3 windowLook, List<Vector3> ends, ServiceState service, TrafficLanes? lanes)
         {
             VehicleId = vehicleId;
+            this.lanes = lanes;
             this.root = root;
             this.places = places;
             this.windowLook = windowLook;
@@ -335,11 +341,11 @@ namespace FoodTrucks
         // Places for the window, the queue limit and a few more behind them.
         public static QueueLine Create(string vehicleId, Transform cart, int queueLimit, ServiceState service, WindowShape shape)
         {
-            var (places, look, ends, detail, side) = Layout(cart, queueLimit + 1 + ExtraPlaces, shape);
+            var (places, look, ends, detail, side, lanes) = Layout(cart, queueLimit + 1 + ExtraPlaces, shape);
             var root = new GameObject("FoodTrucks.Queue." + vehicleId);
             root.AddComponent<QueueLineRoot>();
             Log.Info($"Queue view: line at cart {vehicleId}: {detail}.");
-            return new QueueLine(vehicleId, root, places, look, ends, service) { Side = side };
+            return new QueueLine(vehicleId, root, places, look, ends, service, shape.PavementOnly ? lanes : null) { Side = side };
         }
 
         private void ReleaseServed()
@@ -385,6 +391,7 @@ namespace FoodTrucks
             {
                 var order = Order(out var lineCount);
                 var inLine = new HashSet<long>(order);
+                unseen.RemoveWhere(id => !inLine.Contains(id));
                 // Anyone no longer in line or walking up leaves: gave up, found the queue full, walked on, or
                 // the window closed on them.
                 foreach (var id in people.Keys.Where(id => !inLine.Contains(id)).ToList())
@@ -397,6 +404,7 @@ namespace FoodTrucks
                     var id = order[i];
                     if (!people.TryGetValue(id, out var person))
                     {
+                        if (unseen.Contains(id)) continue;
                         if (room - spawned <= 0 || Time.time < blockedUntil || (!fresh && Time.time < nextSpawn)) continue;
                         // Only the first few walking up are shown; the rest appear as they get closer.
                         if (i >= lineCount && i - lineCount >= MaxShownApproaching) continue;
@@ -412,10 +420,16 @@ namespace FoodTrucks
                 FinishAtWindow(order);
             }
 
-            // People whose character the game removed are dropped, so nobody waits behind them.
+            // People whose character the game removed are dropped, so nobody waits behind them; so are those whose next
+            // walk would cross a driving lane, and they aren't shown again.
             foreach (var pair in people.ToList())
             {
                 if (pair.Value != null && !pair.Value.Tick()) continue;
+                if (pair.Value != null && pair.Value.UnsafeWalk)
+                {
+                    unseen.Add(pair.Key);
+                    Log.Info($"Queue view: cart {VehicleId}: a customer's walk would cross a driving lane; taken out of view.");
+                }
                 if (pair.Value != null) Object.Destroy(pair.Value.gameObject);
                 people.Remove(pair.Key);
                 if (served.Remove(pair.Key)) Release(pair.Key);
@@ -513,7 +527,7 @@ namespace FoodTrucks
             else if (walkSeconds != null) start = EndFor(walkSeconds.Value, places[place]);
             else if (fresh) start = places[place];
             else start = ends[UnityEngine.Random.Range(0, ends.Count)];
-            var person = QueuePerson.Create(root.transform, id, start);
+            var person = QueuePerson.Create(root.transform, id, start, lanes);
             if (person == null)
             {
                 // A missing prefab or NavMesh won't fix itself: wait a while instead of filling the log.
@@ -567,7 +581,7 @@ namespace FoodTrucks
         // The line runs from a window place beside the vehicle along its length, on whichever of the window's
         // sides and in whichever direction keeps the most places on walkable pavement, out of parking lanes and
         // off the road. No walkable window place at all: the line has no places and shows nobody.
-        private static (List<Vector3> Places, Vector3 Look, List<Vector3> Ends, string Detail, int Side) Layout(Transform cart, int count, WindowShape shape)
+        private static (List<Vector3> Places, Vector3 Look, List<Vector3> Ends, string Detail, int Side, TrafficLanes Lanes) Layout(Transform cart, int count, WindowShape shape)
         {
             var forward = Direction(cart.forward);
             var right = Direction(cart.right);
@@ -605,7 +619,7 @@ namespace FoodTrucks
                     }
                 }
             }
-            if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the window at {center}; nobody shown", 0);
+            if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the window at {center}; nobody shown", 0, lanes);
 
             // Ways in and out: points on the pavement a little way along in both directions, reachable from the window.
             // A truck's customers come along the pavement on the hatch side: a way whose path crosses a driving lane
@@ -629,7 +643,7 @@ namespace FoodTrucks
             }
             var detail = $"{best.Count} of {count} places on the {(bestSide > 0 ? "right" : "left")} side towards the {(bestDirection > 0 ? "front" : "back")}, " +
                          $"{ends.Count} ways in and out{(unsafeWays > 0 ? $" ({unsafeWays} crossing a driving lane left out)" : "")}";
-            return (best, center, ends, detail, bestSide);
+            return (best, center, ends, detail, bestSide, lanes);
         }
 
         // The nearest walkable place out of parking lanes beside the window, from Sideways out to Reach.
@@ -653,15 +667,10 @@ namespace FoodTrucks
             if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter)) return null;
             if (shape.PavementOnly && OnStreet(hit.position, lanes)) return null;
             if (!NavMesh.CalculatePath(hit.position, first, filter, path) || path.status != NavMeshPathStatus.PathComplete) return null;
-            if (shape.PavementOnly)
+            if (shape.PavementOnly && CrossesRoad(path.corners, lanes))
             {
-                var corners = path.corners;
-                for (var i = 1; i < corners.Length; i++)
-                    if (CrossesRoad(corners[i - 1], corners[i], lanes))
-                    {
-                        unsafeWays++;
-                        return null;
-                    }
+                unsafeWays++;
+                return null;
             }
             return hit.position;
         }
@@ -672,6 +681,15 @@ namespace FoodTrucks
         private static bool OnStreet(Vector3 position, TrafficLanes lanes) =>
             HatchSide.Classify(lanes.Distance(position), Legality.RoadBelow(position), Legality.InParkingLane(position),
                 Legality.NearCrosswalk(position, 0.5f), walkable: true) != Ground.Pavement;
+
+        // Whether a NavMesh path (its corners) goes over a driving lane or the road layer anywhere.
+        internal static bool CrossesRoad(Vector3[] corners, TrafficLanes lanes)
+        {
+            if (corners.Length == 1) return CrossesRoad(corners[0], corners[0], lanes);
+            for (var i = 1; i < corners.Length; i++)
+                if (CrossesRoad(corners[i - 1], corners[i], lanes)) return true;
+            return false;
+        }
 
         // Whether walking straight from a to b goes over a driving lane or the road layer, sampled every half metre.
         private static bool CrossesRoad(Vector3 a, Vector3 b, TrafficLanes lanes)
@@ -717,6 +735,8 @@ namespace FoodTrucks
         private bool leavingNow;
         // No complete path to the target: a person in line is put there, a leaving one removed.
         private bool noPath;
+        // A truck's customer: the driving lanes every walk is checked against; null for a cart's.
+        private TrafficLanes? lanes;
         private float walkStarted;
         private float standingSince;
 
@@ -725,16 +745,19 @@ namespace FoodTrucks
         public static float? WalkMetresPerSecond { get; private set; }
 
         public bool Arrived => hasTarget && !walking;
+        // Their last walk would have crossed a driving lane, so they didn't take it: the line takes them out of view.
+        public bool UnsafeWalk { get; private set; }
         // Where the character stands; the owner object itself stays at the world origin.
         public Vector3 Position => character != null ? character.transform.position : transform.position;
         // How long they have stood at their current place.
         public float SecondsStanding => walking || !hasTarget ? 0f : Time.time - standingSince;
 
-        public static QueuePerson? Create(Transform parent, long id, Vector3 start)
+        public static QueuePerson? Create(Transform parent, long id, Vector3 start, TrafficLanes? lanes = null)
         {
             var owner = new GameObject("FoodTrucks.Customer." + id);
             owner.transform.SetParent(parent, false);
             var person = owner.AddComponent<QueuePerson>();
+            person.lanes = lanes;
             try
             {
                 if (person.Initialize(start)) return person;
@@ -798,7 +821,7 @@ namespace FoodTrucks
         // One frame. Returns true when the person is done: a leaving one has gone, or the character was removed.
         public bool Tick()
         {
-            if (character == null) return true;
+            if (character == null || UnsafeWalk) return true;
             var agent = character.navmeshAgent;
             if (agent == null || !agent.isActiveAndEnabled) return true;
             if (walking)
@@ -846,7 +869,18 @@ namespace FoodTrucks
             }
             agent.isStopped = false;
             var path = new NavMeshPath();
-            if (agent.CalculatePath(to, path) && path.status == NavMeshPathStatus.PathComplete) agent.SetPath(path);
+            if (agent.CalculatePath(to, path) && path.status == NavMeshPathStatus.PathComplete)
+            {
+                // A truck's customer never walks over a driving lane: the walk isn't taken, and the person goes from
+                // view (QueueLine.Tick), arriving, moving up or leaving alike. No warp or other way round instead.
+                if (lanes != null && QueueLine.CrossesRoad(path.corners, lanes))
+                {
+                    agent.ResetPath();
+                    UnsafeWalk = true;
+                    return;
+                }
+                agent.SetPath(path);
+            }
             else
             {
                 agent.ResetPath();
