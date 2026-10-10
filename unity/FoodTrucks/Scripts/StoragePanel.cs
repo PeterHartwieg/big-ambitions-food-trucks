@@ -63,6 +63,51 @@ namespace FoodTrucks
         private static readonly FieldInfo? HolderField = AccessTools.Field(typeof(CargoItemUi), "_currentCargoHolder");
         private static readonly FieldInfo? AmountField = AccessTools.Field(typeof(CargoItemUi), "amountLabel");
         private static readonly FieldInfo? TooltipField = AccessTools.Field(typeof(CargoItemUi), "bundleItemsTooltip");
+        private static readonly FieldInfo? PriceField = AccessTools.Field(typeof(CargoItemUi), "priceLabel");
+
+        // The cargo slot's info button, moved from the bottom left to the bottom right on our slots. Its place in the
+        // slot is mirrored (same inset from the right edge as it had from the left), so it keeps its size and height.
+        private static class InfoButton
+        {
+            // The game's placement of each moved button, by the button's id.
+            private static readonly Dictionary<int, (UnityEngine.Vector2 AnchorMin, UnityEngine.Vector2 AnchorMax, UnityEngine.Vector2 Pivot, UnityEngine.Vector2 Position)> moved =
+                new Dictionary<int, (UnityEngine.Vector2, UnityEngine.Vector2, UnityEngine.Vector2, UnityEngine.Vector2)>();
+            private static bool logged;
+
+            public static void MoveRight(LocalizedListTooltip tooltip)
+            {
+                if (!(tooltip.transform is UnityEngine.RectTransform rect) || !(rect.parent is UnityEngine.RectTransform parent)) return;
+                var id = rect.GetInstanceID();
+                if (moved.ContainsKey(id)) return;
+                // Slots are made and thrown away with the panel: forget the ones gone before adding one.
+                if (moved.Count > 200) moved.Clear();
+                moved[id] = (rect.anchorMin, rect.anchorMax, rect.pivot, rect.anchoredPosition);
+                // Its left edge's inset in the parent, kept as the right edge's inset.
+                // Anchored to the left edge (as on the game's slot), that is its anchored x less its pivot's share, whatever
+                // size the slot's layout gives it later; otherwise read from where it stands now.
+                var left = rect.anchorMin.x == 0f && rect.anchorMax.x == 0f
+                    ? rect.anchoredPosition.x - rect.pivot.x * rect.rect.width
+                    : rect.localPosition.x + rect.rect.xMin - parent.rect.xMin;
+                rect.anchorMin = new UnityEngine.Vector2(1f, rect.anchorMin.y);
+                rect.anchorMax = new UnityEngine.Vector2(1f, rect.anchorMax.y);
+                rect.pivot = new UnityEngine.Vector2(1f, rect.pivot.y);
+                rect.anchoredPosition = new UnityEngine.Vector2(-left, rect.anchoredPosition.y);
+                if (logged) return;
+                logged = true;
+                Log.Info($"Storage panel: the cargo slots' info button moves to the bottom right on food vehicles ({left:F0} px from the edge, " +
+                         $"{rect.rect.width:F0} x {rect.rect.height:F0} px, slot {parent.rect.width:F0} x {parent.rect.height:F0} px), clear of the amount.");
+            }
+
+            public static void Restore(LocalizedListTooltip tooltip)
+            {
+                if (!(tooltip.transform is UnityEngine.RectTransform rect) || !moved.TryGetValue(rect.GetInstanceID(), out var saved)) return;
+                moved.Remove(rect.GetInstanceID());
+                rect.anchorMin = saved.AnchorMin;
+                rect.anchorMax = saved.AnchorMax;
+                rect.pivot = saved.Pivot;
+                rect.anchoredPosition = saved.Position;
+            }
+        }
 
         // Postfix on CargoItemUi.SetUp: the vehicle's cargo slot for a piece or a food gets the piece's storage.
         internal static void CargoSlotPostfix(CargoItemUi __instance, CargoItem cargoItem)
@@ -77,6 +122,8 @@ namespace FoodTrucks
                 }
                 var amountLabel = AmountField.GetValue(__instance) as Graphic;
                 var tooltip = TooltipField.GetValue(__instance) as LocalizedListTooltip;
+                // A slot reused for something else gets its info button back where the game put it.
+                if (tooltip != null) InfoButton.Restore(tooltip);
                 if (!(HolderField.GetValue(__instance) is VehicleInstance vehicle) || cargoItem == null || amountLabel == null || tooltip == null) return;
                 var tables = DemandData.Tables;
                 var view = Of(vehicle);
@@ -108,7 +155,13 @@ namespace FoodTrucks
                         : new List<string> { Format("foodtrucks:storage_unheld", ("food", LocalizorManager.GetLocalization(cargoItem.itemName, null))) };
                 }
                 else return;
+                // The game shows this info button only on a bundle's slot, where the amount and the "x2" count are
+                // hidden, so it sits over them at the slot's bottom left; on our slots both show ("x1", "80/80"). It
+                // moves to the bottom right, which a paid slot leaves empty; an unpaid slot shows its price there and
+                // gets no button (the tooltip comes back once it is paid).
+                if (PriceField?.GetValue(__instance) is UnityEngine.Component price && price.gameObject.activeSelf) return;
                 tooltip.list = lines;
+                InfoButton.MoveRight(tooltip);
                 tooltip.gameObject.SetActive(true);
             }
             catch (Exception ex)
