@@ -31,26 +31,38 @@ namespace FoodTrucks
 
         private sealed class Marker
         {
-            public Marker(string siteId, GameObject? root, Vector3 at)
+            public Marker(GameObject? root, Mesh? mesh, Vector3 at)
             {
-                SiteId = siteId;
                 Root = root;
+                Mesh = mesh;
                 Drawn = root != null;
                 At = at;
             }
 
-            public string SiteId { get; }
-            // Null when the bay doesn't reach the kerb: nothing is drawn, and it isn't tried again this session.
+            // Null when the bay doesn't reach the kerb or has no usable parking: nothing is drawn, and it isn't tried
+            // again this session.
             public GameObject? Root { get; }
+            // The marker's own mesh, destroyed with it (a Mesh made at run time isn't freed with its GameObject).
+            public Mesh? Mesh { get; }
             // Drawn once; a drawn marker whose object is gone (the scene reloaded under it) is drawn again.
             public bool Drawn { get; }
             public Vector3 At { get; }
+
+            public void Destroy()
+            {
+                if (Root != null) Object.Destroy(Root);
+                if (Mesh != null) Object.Destroy(Mesh);
+            }
         }
 
-        private static readonly Dictionary<string, List<Marker>> markers = new Dictionary<string, List<Marker>>(StringComparer.Ordinal);
+        // Each site's markers by bay (its index among the site's distinct bay points): a bay drawn stays drawn while
+        // another of the same site waits for its traffic lanes.
+        private static readonly Dictionary<string, Dictionary<int, Marker>> markers = new Dictionary<string, Dictionary<int, Marker>>(StringComparer.Ordinal);
         // A bay whose traffic lanes aren't there yet (the traffic system still starting) is tried again after a while:
         // reading the lanes scans every waypoint in the city.
         private const float RetrySeconds = 10f;
+        // Bay points closer than this (two entrances side by side) draw one bay.
+        private const float SameBayMetres = 3f;
         private static readonly Dictionary<string, float> retryAt = new Dictionary<string, float>(StringComparer.Ordinal);
         private static Material? material;
         private static bool failed;
@@ -63,23 +75,31 @@ namespace FoodTrucks
             {
                 foreach (var site in sites.Sites)
                 {
-                    var bays = Commissary.Bays(site)?.ToList();
-                    if (bays == null || bays.Count == 0) continue;
+                    var bays = Distinct(Commissary.Bays(site));
+                    if (bays.Count == 0) continue;
+                    if (!markers.TryGetValue(site.Id, out var bySite)) markers[site.Id] = bySite = new Dictionary<int, Marker>();
                     // Drawn from the parking colliders and the road around it, so only with the player within a few
                     // hundred metres, where the street is loaded; farther than that the paint is too small to see anyway.
                     var near = bays.Any(b => Flat(player, b) <= (inFoodVehicle ? MakeMetresDriving : ShowMetres + (float)radius));
-                    if (!markers.TryGetValue(site.Id, out var list) || list.Any(m => m.Drawn && m.Root == null))
+                    // Not made yet (or the scene was reloaded under them): made once the player is near or driving,
+                    // when the traffic lanes they are drawn from are there.
+                    var missing = Enumerable.Range(0, bays.Count).Where(i => !bySite.TryGetValue(i, out var m) || (m.Drawn && m.Root == null)).ToList();
+                    if (missing.Count > 0 && near && !(retryAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at))
                     {
-                        // Not made yet (or the scene was reloaded under them): made once the player is near or driving,
-                        // when the traffic lanes they are drawn from are there.
-                        if (!near) continue;
-                        if (retryAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at) continue;
                         retryAt[site.Id] = Time.unscaledTime + RetrySeconds;
-                        var made = Make(site, bays, radius, player);
-                        if (made == null) continue;
-                        markers[site.Id] = list = made;
+                        var doors = World.EntrancesOf(site.Address);
+                        foreach (var i in missing)
+                        {
+                            if (bySite.TryGetValue(i, out var gone))
+                            {
+                                gone.Destroy();
+                                bySite.Remove(i);
+                            }
+                            var made = Make(site, bays[i], doors, radius, player);
+                            if (made != null) bySite[i] = made;
+                        }
                     }
-                    foreach (var marker in list)
+                    foreach (var marker in bySite.Values)
                     {
                         if (marker.Root == null) continue;
                         var show = !inside && (inFoodVehicle || Flat(player, marker.At) <= ShowMetres);
@@ -98,8 +118,7 @@ namespace FoodTrucks
         // After the uninstall step and on unload.
         public static void RemoveAll()
         {
-            foreach (var marker in markers.Values.SelectMany(l => l))
-                if (marker.Root != null) Object.Destroy(marker.Root);
+            foreach (var marker in markers.Values.SelectMany(m => m.Values)) marker.Destroy();
             markers.Clear();
         }
 
@@ -111,23 +130,28 @@ namespace FoodTrucks
             failed = false;
         }
 
-        private static List<Marker>? Make(CommissarySite site, List<(double X, double Z)> bays, double radius, Vector3 player)
+        // The site's bay points, without those within SameBayMetres of an earlier one (compared at the points
+        // themselves, not where their paint ended up on the road).
+        private static List<(double X, double Z)> Distinct(IEnumerable<(double X, double Z)>? bays)
         {
-            var doors = World.EntrancesOf(site.Address);
-            var made = new List<Marker>();
+            var kept = new List<(double X, double Z)>();
+            if (bays == null) return kept;
             foreach (var bay in bays)
-            {
-                // The bay point's height: its entrance's, else the player's (a point set in data has no height).
-                var door = doors == null || doors.Length == 0 ? (Vector3?)null : doors.OrderBy(d => Flat(d, bay)).First();
-                var y = door != null && Flat(door.Value, bay) < 1.0 ? door.Value.y : player.y;
-                var at = new Vector3((float)bay.X, y, (float)bay.Z);
-                var lanes = TrafficLanes.Near(at, 40f);
-                if (!lanes.Known) return null;
-                // Two entrances side by side draw one bay.
-                if (made.Any(m => Flat(m.At, at) < 3f)) continue;
-                made.Add(Draw(site, at, (float)radius, lanes));
-            }
-            return made;
+                if (!kept.Any(k => Math.Sqrt((k.X - bay.X) * (k.X - bay.X) + (k.Z - bay.Z) * (k.Z - bay.Z)) < SameBayMetres)) kept.Add(bay);
+            return kept;
+        }
+
+        // One bay's marker, or null while its traffic lanes aren't known (tried again later). Nothing is created
+        // before every check has passed.
+        private static Marker? Make(CommissarySite site, (double X, double Z) bay, Vector3[]? doors, double radius, Vector3 player)
+        {
+            // The bay point's height: its entrance's, else the player's (a point set in data has no height).
+            var door = doors == null || doors.Length == 0 ? (Vector3?)null : doors.OrderBy(d => Flat(d, bay)).First();
+            var y = door != null && Flat(door.Value, bay) < 1.0 ? door.Value.y : player.y;
+            var at = new Vector3((float)bay.X, y, (float)bay.Z);
+            var lanes = TrafficLanes.Near(at, 40f);
+            if (!lanes.Known) return null;
+            return Draw(site, at, (float)radius, lanes);
         }
 
         private static Marker Draw(CommissarySite site, Vector3 bay, float radius, TrafficLanes lanes)
@@ -136,13 +160,24 @@ namespace FoodTrucks
             if (nearest == null)
             {
                 Log.Error($"Commissary marker {site.Id}: no driving lane near the bay at x {bay.x:F1}, z {bay.z:F1}; nothing drawn.");
-                return new Marker(site.Id, null, bay);
+                return new Marker(null, null, bay);
             }
-            var (lanePoint, along) = nearest.Value;
+            var (lanePoint, laneDirection) = nearest.Value;
             // Across the street, from the lane towards the door (the pavement side).
             var toDoor = bay - lanePoint;
             toDoor.y = 0f;
-            var across = (toDoor - Vector3.Dot(toDoor, along) * along).normalized;
+            var across = toDoor - Vector3.Dot(toDoor, laneDirection) * laneDirection;
+            across.y = 0f;
+            if (across.sqrMagnitude < 0.01f)
+            {
+                Log.Error($"Commissary marker {site.Id}: the bay at x {bay.x:F1}, z {bay.z:F1} is on the driving lane itself; nothing drawn.");
+                return new Marker(null, null, bay);
+            }
+            across.Normalize();
+            // Along the street, as the paint's local +x (the root faces -across): the kerb is probed along the same signed
+            // axis as the paint is drawn, so a stretch found on one side of the door is painted on that side.
+            var axis = BayLayout.PaintAxis(across.x, across.z);
+            var along = new Vector3((float)axis.X, 0f, (float)axis.Z);
             var laneToDoor = Vector3.Dot(toDoor, across);
             var groundY = lanePoint.y;
 
@@ -168,67 +203,79 @@ namespace FoodTrucks
                 Log.Error($"Commissary marker {site.Id}: the bay ({radius:F0} m round x {bay.x:F1}, z {bay.z:F1}) doesn't reach the street: " +
                           $"the parking lane's middle is {fromDoor:F1} m from it{(parkingFound ? "" : " (no parking lane found; assumed " + DefaultParkingOffset + " m from the driving lane)")}. " +
                           "No vehicle parked there is in the bay; set a bay point in commissaries.json. Nothing drawn.");
-                return new Marker(site.Id, null, bay);
+                return new Marker(null, null, bay);
             }
             var reach = Mathf.Sqrt(radius * radius - fromDoor * fromDoor);
 
             // The stretches of parking lane within reach (every half metre along it); the whole reach without parking colliders.
-            var spans = new List<(float From, float To)>();
-            if (parkingFound)
+            var stretches = BayLayout.Stretches(parkingFound, reach, x => Legality.InParkingLane(foot + along * (float)x, 0.3f));
+            if (stretches.Source == BayStretchSource.NoneUsable)
             {
-                float? start = null;
-                for (var x = -reach; x <= reach + 0.01f; x += 0.5f)
-                {
-                    var inLane = Legality.InParkingLane(foot + along * x, 0.3f);
-                    if (inLane && start == null) start = x;
-                    if ((!inLane || x + 0.5f > reach + 0.01f) && start != null)
-                    {
-                        var end = inLane ? Mathf.Min(x, reach) : x - 0.5f;
-                        if (end - start.Value >= 2f) spans.Add((start.Value, end));
-                        start = null;
-                    }
-                }
+                Log.Error($"Commissary marker {site.Id}: the parking lane {offset:F1} m from the driving lane has no stretch of {BayLayout.MinStretchMetres:F0} m or more " +
+                          $"within the bay ({reach:F1} m either way of x {foot.x:F1}, z {foot.z:F1}); nothing drawn.");
+                return new Marker(null, null, bay);
             }
-            if (spans.Count == 0) spans.Add((-reach, reach));
+            var spans = stretches.Spans.Select(s => ((float)s.From, (float)s.To)).ToList();
 
-            var root = new GameObject("FoodTrucks.CommissaryBay." + site.Id);
-            root.transform.position = foot;
             // Local +z points to the road and +x along it, so the word reads from the pavement.
-            root.transform.rotation = Quaternion.LookRotation(-across, Vector3.up);
-            var longest = spans.OrderByDescending(s => s.To - s.From).First();
-            var mesh = BuildMesh(root.transform, spans, width, longest, groundY);
-            var filter = root.AddComponent<MeshFilter>();
-            filter.sharedMesh = mesh;
-            var renderer = root.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = Material();
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            renderer.receiveShadows = true;
-            root.SetActive(false);
+            var rotation = Quaternion.LookRotation(-across, Vector3.up);
+            var longest = spans.OrderByDescending(s => s.Item2 - s.Item1).First();
+            var mesh = BuildMesh(Matrix4x4.TRS(foot, rotation, Vector3.one), spans, width, longest, groundY);
+            GameObject? root = null;
+            try
+            {
+                root = new GameObject("FoodTrucks.CommissaryBay." + site.Id);
+                root.SetActive(false);
+                root.transform.SetPositionAndRotation(foot, rotation);
+                var filter = root.AddComponent<MeshFilter>();
+                filter.sharedMesh = mesh;
+                var renderer = root.AddComponent<MeshRenderer>();
+                renderer.sharedMaterial = Material();
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = true;
+            }
+            catch
+            {
+                if (root != null) Object.Destroy(root);
+                Object.Destroy(mesh);
+                throw;
+            }
 
-            var length = spans.Sum(s => s.To - s.From);
-            var fits = spans.Any(s => s.To - s.From >= TruckLengthMetres);
+            var length = spans.Sum(s => s.Item2 - s.Item1);
+            var fits = spans.Any(s => s.Item2 - s.Item1 >= TruckLengthMetres);
             Log.Info($"Commissary marker {site.Id}: bay paint at x {foot.x:F1}, z {foot.z:F1}, along {Mathf.Atan2(along.x, along.z) * Mathf.Rad2Deg:F0} degrees, " +
-                     $"{spans.Count} {(spans.Count == 1 ? "stretch" : "stretches")} of {length:F1} m ({string.Join(", ", spans.Select(s => $"{s.From:+0.0;-0.0}…{s.To:+0.0;-0.0} m"))}) " +
+                     $"{spans.Count} {(spans.Count == 1 ? "stretch" : "stretches")} of {length:F1} m ({string.Join(", ", spans.Select(s => $"{s.Item1:+0.0;-0.0}…{s.Item2:+0.0;-0.0} m"))}) " +
                      $"{(parkingFound ? $"on the parking lane {offset:F1} m from the driving lane, {width:F1} m wide" : "with no parking lane found (drawn " + DefaultParkingOffset + " m from the driving lane)")}; " +
                      $"the door stands {fromDoor:F1} m from the lane's middle, so the {radius:F0} m bay reaches {reach:F1} m either way along the kerb; " +
                      $"a {TruckLengthMetres:F1} m truck {(fits ? "fits wholly inside" : "can't stand wholly inside: park its middle on the paint")}.");
-            return new Marker(site.Id, root, foot);
+            return new Marker(root, mesh, foot);
         }
 
-        // The outline of each stretch and the word on the longest, as flat quads following the road's height.
-        private static Mesh BuildMesh(Transform root, List<(float From, float To)> spans, float width, (float From, float To) longest, float groundY)
+        // The outline of each stretch and the word on the longest, as flat quads following the road's height: long edges
+        // are cut at every metre, where the road is sampled.
+        private static Mesh BuildMesh(Matrix4x4 local, List<(float From, float To)> spans, float width, (float From, float To) longest, float groundY)
         {
             var vertices = new List<Vector3>();
             var triangles = new List<int>();
+            var half = width / 2f;
+            var footY = local.MultiplyPoint3x4(Vector3.zero).y;
             var heights = new Dictionary<int, float>();
-            float Height(float x)
+            float Sample(int key)
             {
-                // The road's height under the bay's middle line, sampled every metre.
-                var key = Mathf.RoundToInt(x);
+                // The road's height at a whole metre along the bay: the highest of its middle line and both edges, so a
+                // cambered lane doesn't swallow the outer line.
                 if (heights.TryGetValue(key, out var h)) return h;
-                h = Ground(root.TransformPoint(new Vector3(key, 0f, 0f)), groundY) - root.position.y + Lift;
+                h = Mathf.Max(Ground(local.MultiplyPoint3x4(new Vector3(key, 0f, -half)), groundY),
+                              Ground(local.MultiplyPoint3x4(new Vector3(key, 0f, 0f)), groundY),
+                              Ground(local.MultiplyPoint3x4(new Vector3(key, 0f, half)), groundY)) - footY + Lift;
                 heights[key] = h;
                 return h;
+            }
+            float Height(float x)
+            {
+                var a = Mathf.FloorToInt(x);
+                var t = x - a;
+                return t < 0.001f ? Sample(a) : Mathf.Lerp(Sample(a), Sample(a + 1), t);
             }
             void Quad(float x0, float z0, float x1, float z1)
             {
@@ -239,11 +286,15 @@ namespace FoodTrucks
                 vertices.Add(new Vector3(x1, Height(x1), z0));
                 triangles.AddRange(new[] { i, i + 1, i + 2, i, i + 2, i + 3 });
             }
-            var half = width / 2f;
+            void Edge(float from, float to, float z0, float z1)
+            {
+                var cuts = BayLayout.Cuts(from, to);
+                for (var k = 0; k + 1 < cuts.Count; k++) Quad((float)cuts[k], z0, (float)cuts[k + 1], z1);
+            }
             foreach (var (from, to) in spans)
             {
-                Quad(from, -half, to, -half + LineMetres);
-                Quad(from, half - LineMetres, to, half);
+                Edge(from, to, -half, -half + LineMetres);
+                Edge(from, to, half - LineMetres, half);
                 Quad(from, -half + LineMetres, from + LineMetres, half - LineMetres);
                 Quad(to - LineMetres, -half + LineMetres, to, half - LineMetres);
             }
