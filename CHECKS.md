@@ -1,3 +1,23 @@
+# Art look (next build)
+
+The surface-look pass of 11 October 2026 (art/README.md, "Surface look"): every model now has the game's kind of material (base colour with baked grime, a mask with metallic, occlusion and smoothness, a normal map with rounded edges) and smoothed normals. Also new: the umbrella furls when the cart isn't selling, a cash register on the cart and in the truck, no street dirt on the mod's vehicles, and icons for every equipment piece. Fresh **FT** save, other gameplay mods off. Screenshots for rows 1 to 4.
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | By day, put the cart with a hot dog grill and a coffee piece fitted next to the game's own hot dog grill and coffee machine (a shop that sells them, or your own store), and look from the pavement | Our steel reads like theirs: light, slightly metallic, with soft highlights on rounded edges, not a flat bright surface with sharp edges. Crevices under lids and round knobs are darker. Colours aren't louder than the game's |
+| 2 | The same by night under a street lamp | Our pieces don't glow brighter than the game's items next to them; steel goes darker, like theirs |
+| 3 | Park the truck next to the game's delivery truck or a van, by day and by night | Rounded edges and corners on the cab and box catch the light; panels show faint shading near seams and wheel arches; the paint isn't brighter than the van's. Tell me if any part looks too dark, too shiny or blotchy |
+| 4 | Look at the icons of the mod's items (Extra Storage cabinet, griddle, corn grill, dumpling steamer, dumplings, tacos, chopped cheese, grilled corn) in a shop list or the inventory, next to the game's | Icons look like the game's: the item seen from the front left and a little above, the same size in the frame, no background |
+| 5 | Park the cart over a dirty stretch of street (litter or stains on the asphalt) and walk round it; then park the truck over one | No dirt or litter shows on the cart's body, counter, wheels, umbrella, equipment or register, nor on the truck's body. Dirt still shows on the street around them |
+| 6 | Push the cart, set it down, open it for business, close it, and save and load while it's open | The umbrella is furled round the pole (a striped roll with a strap) while pushed, set down and closed, opens when the cart opens, furls when it closes, and is open again after loading the open cart. While pushing, the furled umbrella doesn't touch the player |
+| 7 | Look at the cart's counter from the street, with two pieces fitted | A small dark cash register stands on the front right corner by the umbrella pole, facing the door side, clear of both pieces, the pole and the push bar |
+| 8 | Open the truck and stand at the hatch; look in from the pavement | The register stands on the serving counter at the cab end of the window, facing the street; you and the crew don't stand in it |
+| 9 | (Equipment icons) Open the commissary's order list once it uses them | Each compact piece shows its own icon (art/equipment/<Name>/Icon_<Name>.png), not the game's icon of the full-size machine |
+
+Log lines:
+
+- Row 6: `Cart umbrella: cart <id> open, selling.` and `Cart umbrella: cart <id> furled, not selling.`, once per cart and state per session. `Cart umbrella: cart <id> has no Cart_Canopy / Cart_Canopy_Furled` is an error: an old prefab got loaded.
+
 # Playtest fixes (0.9.9)
 
 Fixes from the 0.9.8 agent run of 11 October 2026 (log `build/logs/game/agent-098-092245`), with the review round 4 fixes. Build 0.9.9 on branch `milestone-8`; the log says 0.9.9. Fresh **FT** save, other gameplay mods off. Rows 1 to 6 here replace the 0.9.8 rows 8 to 11 below (bay paint by the door).
