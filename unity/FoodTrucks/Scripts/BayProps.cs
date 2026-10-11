@@ -123,20 +123,41 @@ namespace FoodTrucks
             public Func<Transform, GameObject?> Make { get; }
         }
 
+        // What placing the props came to: the log line, and whether to try again later (the street not ready, or a
+        // vehicle or the player standing where a prop would go) rather than settle for what fitted.
+        public readonly struct Outcome
+        {
+            public Outcome(string line, bool tryAgain) { Line = line; TryAgain = tryAgain; }
+            public string Line { get; }
+            public bool TryAgain { get; }
+        }
+
+        // Why a prop doesn't fit somewhere; Transient when something that moves (a vehicle, the player) is in the way.
+        private readonly struct Refusal
+        {
+            public Refusal(string why, bool transient) { Why = why; Transient = transient; }
+            public string Why { get; }
+            public bool Transient { get; }
+        }
+
         // The props by the door, against the facade on either side of it. Each is placed only where it fits: on the
-        // NavMesh, touching nothing, clear of the door, not on the road, and with WalkwayMetres of walkable pavement left
-        // in front of it. Those that don't fit are left out; the log says which and why.
-        public static string ByTheDoor(Transform parent, Vector3 door, TrafficLanes lanes)
+        // NavMesh, touching nothing, clear of every entrance (the commissary's and its neighbours'), not on the road,
+        // and with WalkwayMetres of walkable pavement left in front of it. Those that don't fit are left out; the log
+        // says which and why.
+        public static Outcome ByTheDoor(Transform parent, Vector3 door, TrafficLanes lanes)
         {
             var nearest = lanes.Nearest(door);
-            if (nearest == null) return "no props (no driving lane near the door to tell the street from the building)";
+            if (nearest == null) return new Outcome("no props (no driving lane near the door to tell the street from the building)", false);
             var outward = nearest.Value.Point - door;
             outward.y = 0f;
-            if (outward.sqrMagnitude < 0.01f) return "no props (the door stands on a driving lane)";
+            if (outward.sqrMagnitude < 0.01f) return new Outcome("no props (the door stands on a driving lane)", false);
             outward.Normalize();
-            // The facade: back along the outward line from the pavement, at waist height.
+            // The facade: back along the outward line from the pavement, at waist height. Only its position across the
+            // pavement and its facing count; the props' heights come from the ground under each (Fits).
             var from = door + outward * 3f + Vector3.up * 1.0f;
-            var facade = Physics.Raycast(from, -outward, out var hit, 4.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) ? hit.point : door;
+            var facade = door;
+            if (Physics.Raycast(from, -outward, out var hit, 4.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                facade = new Vector3(hit.point.x, door.y, hit.point.z);
             if (hit.collider != null)
             {
                 var normal = hit.normal;
@@ -144,6 +165,8 @@ namespace FoodTrucks
                 if (normal.sqrMagnitude > 0.5f && Vector3.Angle(normal, outward) < 35f) outward = normal.normalized;
             }
             var along = new Vector3(outward.z, 0f, -outward.x);
+            // Every entrance near enough to matter: the commissary's other doors and its neighbours'.
+            var entrances = World.DoorPositions().Where(d => Flat(d - door) < 20f).ToList();
             var props = new[]
             {
                 new Prop("pallet", GamePallet),
@@ -153,6 +176,7 @@ namespace FoodTrucks
             };
             var placed = new List<string>();
             var skipped = new List<string>();
+            var tryAgain = false;
             var reach = new Dictionary<int, float> { [1] = DoorClearMetres, [-1] = DoorClearMetres };
             foreach (var prop in props)
             {
@@ -170,14 +194,19 @@ namespace FoodTrucks
                     var rotation = Quaternion.LookRotation(outward, Vector3.up) * turn;
                     var alongSize = Mathf.Max(size.x, size.z);
                     var depth = Mathf.Min(size.x, size.z);
-                    string? why = null;
+                    Refusal? why = null;
+                    var transient = false;
                     var ok = false;
                     foreach (var side in new[] { 1, -1 })
                     {
                         var s = side * (reach[side] + alongSize / 2f);
                         var at = facade + outward * (depth / 2f + 0.12f) + along * s;
-                        why = Fits(at, rotation, centre, size, outward, depth, lanes, out var ground);
-                        if (why != null) continue;
+                        why = Fits(at, rotation, centre, size, outward, depth, lanes, entrances, parent, out var ground);
+                        if (why != null)
+                        {
+                            transient |= why.Value.Transient;
+                            continue;
+                        }
                         at.y = ground;
                         made.transform.SetPositionAndRotation(at - rotation * new Vector3(centre.x, 0f, centre.z), rotation);
                         reach[side] += alongSize + 0.35f;
@@ -187,7 +216,8 @@ namespace FoodTrucks
                     }
                     if (!ok)
                     {
-                        skipped.Add($"{prop.Name} ({why})");
+                        skipped.Add($"{prop.Name} ({why?.Why})");
+                        tryAgain |= transient;
                         Object.Destroy(made);
                         continue;
                     }
@@ -197,29 +227,85 @@ namespace FoodTrucks
                 {
                     if (made != null) Object.Destroy(made);
                     skipped.Add($"{prop.Name} ({ex.GetType().Name}: {ex.Message})");
+                    tryAgain = true;
                 }
             }
-            return $"props by the door at x {door.x:F1}, z {door.z:F1}: {(placed.Count == 0 ? "none" : string.Join(", ", placed))}" +
-                   (skipped.Count > 0 ? "; left out: " + string.Join(", ", skipped) : "");
+            // None on the NavMesh at all: the street's navigation may still be loading.
+            if (placed.Count == 0 && skipped.Count > 0 && skipped.All(x => x.Contains(NotOnNavMesh))) tryAgain = true;
+            return new Outcome($"props by the door at x {door.x:F1}, z {door.z:F1}: {(placed.Count == 0 ? "none" : string.Join(", ", placed))}" +
+                               (skipped.Count > 0 ? "; left out: " + string.Join(", ", skipped) : ""), tryAgain);
         }
 
-        // Null when the prop fits there, else why not. `ground` is the pavement's height under it.
-        private static string? Fits(Vector3 at, Quaternion rotation, Vector3 centre, Vector3 size, Vector3 outward, float depth, TrafficLanes lanes, out float ground)
+        private const string NotOnNavMesh = "not on the pavement's NavMesh";
+
+        // Null when the prop fits there, else why not. `ground` is the pavement's height under it, found from the door's
+        // height (the facade ray's hit is a metre up) before both NavMesh probes.
+        private static Refusal? Fits(Vector3 at, Quaternion rotation, Vector3 centre, Vector3 size, Vector3 outward, float depth, TrafficLanes lanes,
+            List<Vector3> entrances, Transform ownProps, out float ground)
         {
-            ground = at.y;
-            if (!NavMesh.SamplePosition(at, out var nav, 0.6f, NavMesh.AllAreas)) return "not on the pavement's NavMesh";
+            ground = GroundUnder(at, ownProps);
+            at.y = ground;
+            if (!NavMesh.SamplePosition(at, out var nav, 0.6f, NavMesh.AllAreas)) return new Refusal(NotOnNavMesh, false);
             ground = nav.position.y;
+            at.y = ground;
             var road = lanes.Distance(at);
-            if (road != null && road.Value < RoadBandMetres + depth / 2f) return $"{road.Value:F1} m from a driving lane";
+            if (road != null && road.Value < RoadBandMetres + depth / 2f) return new Refusal($"{road.Value:F1} m from a driving lane", false);
+            // Clear of every entrance: none within DoorClearMetres of the footprint (the facade's own door is already
+            // that far away along it).
+            var footprint = new Vector2(Mathf.Max(size.x, size.z) / 2f, depth / 2f);
+            foreach (var entrance in entrances)
+            {
+                var local = Quaternion.Inverse(Quaternion.LookRotation(outward, Vector3.up)) * (entrance - at);
+                var dx = Mathf.Max(0f, Mathf.Abs(local.x) - footprint.x);
+                var dz = Mathf.Max(0f, Mathf.Abs(local.z) - footprint.y);
+                if (Mathf.Abs(local.y) < 3f && new Vector2(dx, dz).magnitude < DoorClearMetres - 0.05f)
+                    return new Refusal($"next to the entrance at x {entrance.x:F1}, z {entrance.z:F1}", false);
+            }
             var front = at + outward * (depth / 2f + WalkwayMetres);
+            front.y = GroundUnder(front, ownProps);
             if (!NavMesh.SamplePosition(front, out var walk, 0.4f, NavMesh.AllAreas) || Mathf.Abs(walk.position.y - ground) > 0.3f)
-                return "no walkway left in front";
+                return new Refusal("no walkway left in front", false);
             var halves = size / 2f - new Vector3(0.03f, 0f, 0.03f);
             halves.y = Mathf.Max(0.05f, halves.y - 0.1f);
             var middle = new Vector3(at.x, ground + 0.15f + halves.y, at.z);
-            if (Physics.CheckBox(middle, halves, rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return "something stands there";
-            return null;
+            // Pedestrians walk on and the carving obstacle steers them round; a vehicle or the player standing there is
+            // waited for (tried again later); anything else is in the way for good.
+            var transient = false;
+            foreach (var other in Physics.OverlapBox(middle, halves, rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            {
+                if (other == null) continue;
+                var person = other.GetComponentInParent<ThirdPersonCharacter>() != null || ((1 << other.gameObject.layer) & (int)LayerHelper.humanLayerMask) != 0;
+                if (person && !IsPlayer(other)) continue;
+                if (person || other.GetComponentInParent<VehicleController>() != null || (other.attachedRigidbody != null && !other.attachedRigidbody.isKinematic))
+                {
+                    transient = true;
+                    continue;
+                }
+                return new Refusal("something stands there", false);
+            }
+            return transient ? new Refusal("a vehicle or the player stands there", true) : (Refusal?)null;
         }
+
+        private static bool IsPlayer(Collider collider) =>
+            Flat(collider.transform.position - PlayerHelper.GetPosition()) < 1.5f;
+
+        // The pavement's height under a point near the door's height: the highest surface within half a metre above it,
+        // or below, that isn't a person, a vehicle or one of the props already placed.
+        private static float GroundUnder(Vector3 point, Transform ownProps)
+        {
+            var best = float.MinValue;
+            foreach (var hit in Physics.RaycastAll(point + Vector3.up * 0.5f, Vector3.down, 2.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            {
+                var c = hit.collider;
+                if (c == null || c.transform.IsChildOf(ownProps)) continue;
+                if (c.GetComponentInParent<VehicleController>() != null || c.GetComponentInParent<ThirdPersonCharacter>() != null) continue;
+                if (c.attachedRigidbody != null && !c.attachedRigidbody.isKinematic) continue;
+                if (hit.point.y > best) best = hit.point.y;
+            }
+            return best > float.MinValue ? best : point.y;
+        }
+
+        private static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
 
         // The game's DeliveryPallet with the bottom two layers of its boxes (the prefab stacks four), as plain meshes.
         private static GameObject? GamePallet(Transform parent)
@@ -277,6 +363,7 @@ namespace FoodTrucks
             made.SetActive(false);
             made.transform.SetParent(parent, false);
             var bounds = new Bounds();
+            var first = true;
             for (var i = 0; i < parts.Count; i++)
             {
                 var (mesh, mats, m) = parts[i];
@@ -286,15 +373,20 @@ namespace FoodTrucks
                 part.transform.localRotation = m.rotation;
                 part.transform.localScale = m.lossyScale;
                 part.AddComponent<MeshFilter>().sharedMesh = mesh;
-                part.AddComponent<MeshRenderer>().sharedMaterials = mats;
+                var partRenderer = part.AddComponent<MeshRenderer>();
+                partRenderer.sharedMaterials = mats;
+                // Street dirt decals skip it, as they skip every bay piece and the game's vehicles (SurfaceLook.NoStreetDecals).
+                partRenderer.renderingLayerMask = BayMarkers.NoDecalsRenderingLayers;
                 var b = mesh.bounds;
                 var corners = new List<Vector3>();
                 for (var c = 0; c < 8; c++)
                     corners.Add(m.MultiplyPoint3x4(b.center + Vector3.Scale(b.extents, new Vector3((c & 1) == 0 ? -1 : 1, (c & 2) == 0 ? -1 : 1, (c & 4) == 0 ? -1 : 1))));
                 foreach (var corner in corners)
                 {
-                    if (i == 0 && corner == corners[0]) bounds = new Bounds(corner, Vector3.zero);
+                    // The first corner of all starts the bounds; a flat mesh repeats corners, so never compare them.
+                    if (first) bounds = new Bounds(corner, Vector3.zero);
                     else bounds.Encapsulate(corner);
+                    first = false;
                 }
             }
             // Stand it on the ground: its lowest point at the object's origin.

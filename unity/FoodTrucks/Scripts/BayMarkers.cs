@@ -39,12 +39,13 @@ namespace FoodTrucks
 
         private sealed class Marker
         {
-            public Marker(GameObject? root, Mesh? mesh, Vector3 at)
+            public Marker(GameObject? root, Mesh? mesh, Vector3 at, Vector3? door = null)
             {
                 Root = root;
                 Mesh = mesh;
                 Drawn = root != null;
                 At = at;
+                Door = door;
             }
 
             // Null when the bay has no usable zone: nothing is drawn, and it isn't tried again this session.
@@ -54,6 +55,8 @@ namespace FoodTrucks
             // Drawn once; a drawn marker whose object is gone (the scene reloaded under it) is drawn again.
             public bool Drawn { get; }
             public Vector3 At { get; }
+            // The commissary's entrance nearest this bay, where its props go.
+            public Vector3? Door { get; }
 
             public void Destroy()
             {
@@ -106,8 +109,16 @@ namespace FoodTrucks
         private static readonly Dictionary<string, float> retryAt = new Dictionary<string, float>(StringComparer.Ordinal);
         private static Material? material;
         private static bool failed;
-        // Commissaries whose props by the door are made (with the first of their markers drawn).
+        // HDRP rendering layer 0 only, as the game's vehicles have: street dirt decals (decal layer 0, bit 8) skip the bay's
+        // paint and everything made for it at run time (the build sets the bundle's bay pieces the same way, SurfaceLook.NoStreetDecals).
+        internal const uint NoDecalsRenderingLayers = 1;
+        // Commissaries whose props by the door are decided: placed, or refused for good, or out of tries.
         private static readonly HashSet<string> propsMade = new HashSet<string>(StringComparer.Ordinal);
+        // Tries so far for commissaries whose props are not decided yet, and when the next may run. A try that found the
+        // street not ready, or a vehicle or the player in a prop's place, is undone and run again while the player is near.
+        private static readonly Dictionary<string, (int Tries, float At)> propsTries = new Dictionary<string, (int, float)>(StringComparer.Ordinal);
+        private const int MaxPropTries = 6;
+        private const float PropRetrySeconds = 10f;
 
         // Twice a second from Commissary.Look: markers made when first needed, then shown or hidden.
         public static void Update(CommissaryTables sites, double radius, Vector3 player, bool inFoodVehicle, bool inside)
@@ -135,8 +146,8 @@ namespace FoodTrucks
                             {
                                 gone.Destroy();
                                 bySite.Remove(i);
-                                // Its props may have gone with it: the next marker drawn makes them again.
-                                if (gone.Drawn) propsMade.Remove(site.Id);
+                                // Its props may have gone with it: they are made again.
+                                if (gone.Drawn) ForgetProps(site.Id);
                             }
                             var made = Make(site, i, bays[i], doors, (float)radius, player);
                             if (made != null) bySite[i] = made;
@@ -149,6 +160,7 @@ namespace FoodTrucks
                         var show = !inside;
                         if (marker.Root.activeSelf != show) marker.Root.SetActive(show);
                     }
+                    if (near && !inside) FurnishProps(site, bySite);
                 }
             }
             catch (Exception ex)
@@ -165,6 +177,7 @@ namespace FoodTrucks
             foreach (var marker in markers.Values.SelectMany(m => m.Values)) marker.Destroy();
             markers.Clear();
             propsMade.Clear();
+            propsTries.Clear();
         }
 
         // Called on each load: a new city gets new markers.
@@ -183,7 +196,7 @@ namespace FoodTrucks
             {
                 foreach (var marker in bySite.Values) marker.Destroy();
                 markers.Remove(siteId);
-                propsMade.Remove(siteId);
+                ForgetProps(siteId);
             }
             zones.Remove(siteId);
             retryAt.Remove(siteId);
@@ -317,6 +330,8 @@ namespace FoodTrucks
                 renderer.sharedMaterial = Material();
                 renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 renderer.receiveShadows = true;
+                // Made at run time, so not covered by the build's setting: no street dirt on the paint either.
+                renderer.renderingLayerMask = NoDecalsRenderingLayers;
                 float GroundAt(Vector3 p) => Ground(p, groundY);
                 var parent = root.transform;
                 // The furniture is looks only: one that fails is logged and the paint stays.
@@ -327,19 +342,11 @@ namespace FoodTrucks
                 }
                 Furnish("lettering", () => BayProps.Lettering(parent, longest, width, GroundAt));
                 Furnish("sign", () => BayProps.Sign(parent, site.Id, longest, width, GroundAt, groundY));
-                // One set of props per commissary, by the door nearest its first bay drawn.
-                if (door != null && propsMade.Add(site.Id))
-                    Furnish("props", () =>
-                    {
-                        var doorLanes = TrafficLanes.Near(door.Value, 40f);
-                        return doorLanes.Known ? BayProps.ByTheDoor(parent, door.Value, doorLanes) : "no props (no traffic lanes near the door)";
-                    });
             }
             catch
             {
                 if (root != null) Object.Destroy(root);
                 Object.Destroy(mesh);
-                propsMade.Remove(site.Id);
                 throw;
             }
 
@@ -352,7 +359,53 @@ namespace FoodTrucks
                      $"the paint lies within the {radius:F0} m bay ({zone.Reach:F1} m either way along); " +
                      $"a {TruckLengthMetres:F1} m truck {(fits ? "fits wholly inside" : "can't stand wholly inside")}; " +
                      string.Join("; ", furniture) + ".");
-            return new Marker(root, mesh, foot);
+            return new Marker(root, mesh, foot, door);
+        }
+
+        // One set of props per commissary, by the door nearest its first drawn bay, under that bay's marker. Decided once it
+        // is placed or refused for good; a try the street wasn't ready for, or that found a vehicle or the player in a
+        // prop's place, is undone and run again PropRetrySeconds later while the player is near, MaxPropTries in all.
+        private static void FurnishProps(CommissarySite site, Dictionary<int, Marker> bySite)
+        {
+            if (propsMade.Contains(site.Id)) return;
+            var host = bySite.OrderBy(p => p.Key).Select(p => p.Value).FirstOrDefault(m => m.Root != null && m.Door != null);
+            if (host == null) return;
+            propsTries.TryGetValue(site.Id, out var tries);
+            if (tries.Tries > 0 && Time.unscaledTime < tries.At) return;
+            var door = host.Door!.Value;
+            var old = host.Root!.transform.Find(PropsName);
+            if (old != null) Object.Destroy(old.gameObject);
+            var holder = new GameObject(PropsName);
+            holder.transform.SetParent(host.Root.transform, false);
+            BayProps.Outcome outcome;
+            try
+            {
+                var doorLanes = TrafficLanes.Near(door, 40f);
+                outcome = doorLanes.Known
+                    ? BayProps.ByTheDoor(holder.transform, door, doorLanes)
+                    : new BayProps.Outcome("no props yet (no traffic lanes near the door)", true);
+            }
+            catch (Exception ex) { outcome = new BayProps.Outcome($"no props ({ex.GetType().Name}: {ex.Message})", true); }
+            var attempt = tries.Tries + 1;
+            if (outcome.TryAgain && attempt < MaxPropTries)
+            {
+                // Undone in full, so a later try never stacks a second set on the first.
+                Object.Destroy(holder);
+                propsTries[site.Id] = (attempt, Time.unscaledTime + PropRetrySeconds);
+                Log.Info($"Commissary props {site.Id}, try {attempt}: {outcome.Line}; trying again in {PropRetrySeconds:F0} s.");
+                return;
+            }
+            propsMade.Add(site.Id);
+            propsTries.Remove(site.Id);
+            Log.Info($"Commissary props {site.Id}{(attempt > 1 ? $", try {attempt}" : "")}: {outcome.Line}.");
+        }
+
+        private const string PropsName = "Props";
+
+        private static void ForgetProps(string siteId)
+        {
+            propsMade.Remove(siteId);
+            propsTries.Remove(siteId);
         }
 
         // The outline of each stretch, as flat quads following the road's height: long edges are cut at every metre, where
