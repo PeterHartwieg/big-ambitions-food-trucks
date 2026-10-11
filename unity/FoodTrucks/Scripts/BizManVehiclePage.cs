@@ -378,6 +378,9 @@ namespace FoodTrucks
                 AddRow(Text("foodtrucks:bizman_page_days"), dayKeys.Select(Text).ToList(), dayKeys.IndexOf(currentDays), canWrite,
                     chosen => ChooseDays(id, dayKeys[chosen]));
                 if (count > 1) AddLabel(Text("foodtrucks:bizman_page_route_hint"));
+                // A route saved under older rules that fails today's: the crew doesn't run it, and the page says why.
+                var problem = vehicle == null ? ScheduleProblem.None : new HireRunner(rules.Fleet).RouteProblem(vehicle);
+                if (problem != ScheduleProblem.None) AddLabel(Text(RouteStops.ProblemKey(problem)));
                 AddStops(id, schedule, canWrite);
             }
             else AddLabel(Text(StopPicker.Ready ? "foodtrucks:bizman_page_route_empty" : "foodtrucks:bizman_page_route_empty_nomap"));
@@ -578,8 +581,16 @@ namespace FoodTrucks
         {
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
             var choice = StaffDialog.DayChoices.FirstOrDefault(c => c.Key == key);
-            if (vehicle?.Schedule == null || choice.Days == null || !FoodTrucksSession.CanWrite) return;
-            vehicle.Schedule.Days = choice.Days.ToList();
+            var rules = DemandData.Rules;
+            if (vehicle?.Schedule == null || choice.Days == null || rules == null || !FoodTrucksSession.CanWrite) return;
+            var problem = RouteEditor.SetDays(new HireSchedules(rules.Fleet), vehicle, choice.Days);
+            if (problem != ScheduleProblem.None)
+            {
+                Log.Info($"Route: days {key} for {id} refused: {problem}.");
+                CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
+                RefreshLater();
+                return;
+            }
             RouteStops.Changed(vehicle);
             Log.Info($"Route: {id} runs {(choice.Days.Length == 0 ? "every day" : string.Join(", ", choice.Days))} (BizMan page).");
             RefreshLater();

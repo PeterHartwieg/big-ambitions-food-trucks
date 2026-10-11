@@ -35,6 +35,8 @@ namespace FoodTrucks
         private readonly HashSet<(string, int, int)> refusalsShown = new HashSet<(string, int, int)>();
         // The game minute each vehicle's route has been run up to. Not saved: after a load it starts now.
         private readonly Dictionary<string, long> routedUntil = new Dictionary<string, long>();
+        // Vehicles whose route fails the rules, logged once per problem.
+        private readonly Dictionary<string, ScheduleProblem> routeProblems = new Dictionary<string, ScheduleProblem>();
         private readonly HashSet<string> broken = new HashSet<string>();
         private readonly HashSet<string> indoorsShown = new HashSet<string>();
         // The game minute the player last pushed or drove each vehicle.
@@ -303,7 +305,15 @@ namespace FoodTrucks
             // The same starting point as the payroll's preview (HireRunner.PlanFrom).
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
             var (planX, planZ) = HireRunner.PlanFrom(vehicle, position.x, position.z);
-            runner!.EnsurePlan(vehicle, t, planX, planZ, GameSpeed());
+            // A route that fails today's rules (saved under older ones) gets no plan: said once in the log.
+            var problem = runner!.RouteProblem(vehicle);
+            if (problem == ScheduleProblem.None) routeProblems.Remove(vehicle.VehicleId);
+            else if (!routeProblems.TryGetValue(vehicle.VehicleId, out var known) || known != problem)
+            {
+                routeProblems[vehicle.VehicleId] = problem;
+                Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} has no plan: its route fails the rules ({problem}); the crew waits until a stop is changed on the BizMan page.");
+            }
+            runner.EnsurePlan(vehicle, t, planX, planZ, GameSpeed());
             for (var i = 0; i < MaxSteps; i++)
             {
                 // Read after planning: the checks below depend on the leg the plan has running.

@@ -79,6 +79,16 @@ namespace FoodTrucks.Core.Fleet
 
         public static int DayOf(long minute) => (int)(Math.Floor(minute / 1440.0) + 1);
 
+        // Why the vehicle's route gets no plan: None when it has no stops or is valid. A route saved under older rules can
+        // fail today's (a stop running into the next morning's, say); the game side logs it and BizMan shows it.
+        public ScheduleProblem RouteProblem(VehicleState vehicle)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            var schedule = vehicle.Schedule;
+            if (schedule?.Stops == null || schedule.Stops.Count == 0) return ScheduleProblem.None;
+            return schedules.Validate(schedule);
+        }
+
         // A crewed vehicle with a valid route gets a plan for the day that contains `now`, starting from where
         // it will be: the last stop of a plan still running past midnight, or where it stands. A plan made in
         // the middle of the day starts now, so stops already over are skipped. Old plans are dropped.
@@ -360,6 +370,23 @@ namespace FoodTrucks.Core.Fleet
         // New opening hours for one stop (the BizMan page's time pickers). The stops stay in time order, so the stop
         // can move in the list; plans and the open window's stop follow it. The route is unchanged when the result
         // is invalid.
+        // New days for the route; refused, and nothing changed, when the stops don't fit them (a night running into a
+        // morning that now follows a working day).
+        public static ScheduleProblem SetDays(HireSchedules schedules, VehicleState vehicle, IEnumerable<DayOfWeek> days)
+        {
+            if (schedules == null) throw new ArgumentNullException(nameof(schedules));
+            if (vehicle?.Schedule == null) throw new ArgumentNullException(nameof(vehicle));
+            var list = (days ?? Enumerable.Empty<DayOfWeek>()).Distinct().ToList();
+            var schedule = vehicle.Schedule;
+            if (schedule.Stops != null && schedule.Stops.Count > 0)
+            {
+                var problem = schedules.Validate(new HireSchedule { Days = list, Stops = schedule.Stops.ToList() });
+                if (problem != ScheduleProblem.None) return problem;
+            }
+            schedule.Days = list;
+            return ScheduleProblem.None;
+        }
+
         public static ScheduleProblem SetTimes(HireSchedules schedules, VehicleState vehicle, int index, int open, int close)
         {
             if (schedules == null) throw new ArgumentNullException(nameof(schedules));
@@ -425,9 +452,10 @@ namespace FoodTrucks.Core.Fleet
         {
             if (step <= 0) throw new ArgumentOutOfRangeException(nameof(step));
             var others = Others(schedule, except);
+            var overnight = HireSchedules.RunsOnConsecutiveDays(schedule);
             var times = new List<int>();
             for (var open = 0; open < 1440; open += step)
-                if (open + step <= latestClose && Free(others, open, open + step)) times.Add(open);
+                if (open + step <= latestClose && Free(others, open, open + step, overnight)) times.Add(open);
             return times;
         }
 
@@ -436,11 +464,12 @@ namespace FoodTrucks.Core.Fleet
         {
             if (step <= 0) throw new ArgumentOutOfRangeException(nameof(step));
             var others = Others(schedule, except);
+            var overnight = HireSchedules.RunsOnConsecutiveDays(schedule);
             var times = new List<int>();
             // At most a day long, so it never runs into its own opening the next day.
             for (var close = open + step; close <= latestClose && close <= open + 1440; close += step)
             {
-                if (!Free(others, open, close)) break;
+                if (!Free(others, open, close, overnight)) break;
                 times.Add(close);
             }
             return times;
@@ -461,12 +490,13 @@ namespace FoodTrucks.Core.Fleet
         private static List<ScheduleStop> Others(HireSchedule? schedule, int? except) =>
             (schedule?.Stops ?? new List<ScheduleStop>()).Where((s, i) => s != null && i != except).ToList();
 
-        // [open, close) meets none of the other stops' hours, on the same day or across midnight (a stop running past
-        // midnight meets the next day's early stops). Touching ends are fine, as Validate has it.
-        private static bool Free(List<ScheduleStop> others, int open, int close) =>
+        // [open, close) meets none of the other stops' hours, on the same day or, on a route that runs two days in a row,
+        // across midnight (a stop running past midnight meets the next day's early stops). Touching ends are fine, as
+        // Validate has it.
+        private static bool Free(List<ScheduleStop> others, int open, int close, bool overnight) =>
             others.All(s => Apart(open, close, s.OpenAt, s.CloseAt) &&
-                            Apart(open, close, s.OpenAt + 1440, s.CloseAt + 1440) &&
-                            Apart(open, close, s.OpenAt - 1440, s.CloseAt - 1440));
+                            (!overnight || (Apart(open, close, s.OpenAt + 1440, s.CloseAt + 1440) &&
+                                            Apart(open, close, s.OpenAt - 1440, s.CloseAt - 1440))));
 
         private static bool Apart(int open, int close, int otherOpen, int otherClose) => close <= otherOpen || open >= otherClose;
 

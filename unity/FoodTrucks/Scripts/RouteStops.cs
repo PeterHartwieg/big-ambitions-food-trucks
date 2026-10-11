@@ -166,6 +166,12 @@ namespace FoodTrucks
             return best?.building?.Address?.ToFormattedString();
         }
 
+        // What the BizMan page says about a route that fails today's rules (HireRunner.RouteProblem).
+        internal static string ProblemKey(ScheduleProblem problem) =>
+            problem == ScheduleProblem.Overlap ? "foodtrucks:bizman_page_route_invalid_overlap"
+            : problem == ScheduleProblem.BadTimes ? "foodtrucks:bizman_page_route_invalid_times"
+            : "foodtrucks:bizman_page_route_invalid";
+
         // The game's list picker calls back without a guard: nothing may throw out of a choice.
         private static Action<string> Guard(Action<string> choice) => chosen =>
         {

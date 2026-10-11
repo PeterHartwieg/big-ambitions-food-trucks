@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
 
@@ -139,11 +140,20 @@ namespace FoodTrucks.Core.Fleet
                 if (stop.CloseAt - stop.OpenAt > 1440) return ScheduleProblem.BadTimes;
                 if (i > 0 && stop.OpenAt < schedule.Stops[i - 1].CloseAt) return ScheduleProblem.Overlap;
             }
-            // The last stop running past midnight must close by the time the first one opens the next day.
+            // The last stop running past midnight must close by the time the first one opens the next day, on a route that
+            // runs two days in a row (with days off between, the night never meets a working morning).
             var first = schedule.Stops[0];
             var last = schedule.Stops[schedule.Stops.Count - 1];
-            if (last.CloseAt > first.OpenAt + 1440) return ScheduleProblem.Overlap;
+            if (RunsOnConsecutiveDays(schedule) && last.CloseAt > first.OpenAt + 1440) return ScheduleProblem.Overlap;
             return ScheduleProblem.None;
+        }
+
+        // Whether the route runs on some day and the day after it (every day when Days is empty).
+        public static bool RunsOnConsecutiveDays(HireSchedule? schedule)
+        {
+            var days = schedule?.Days;
+            if (days == null || days.Count == 0) return true;
+            return days.Any(d => days.Contains((DayOfWeek)(((int)d + 1) % 7)));
         }
 
         public bool RunsOn(HireSchedule schedule, DayOfWeek weekday) =>

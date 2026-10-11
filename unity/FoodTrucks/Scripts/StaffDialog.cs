@@ -151,8 +151,15 @@ namespace FoodTrucks
             {
                 var state = FoodTrucksSession.CurrentState;
                 var vehicle = StreetSales.Find(state, vehicleId);
-                if (vehicle?.Schedule == null || !options.TryGetValue(chosen, out var days) || !FoodTrucksSession.CanWrite) return;
-                vehicle.Schedule.Days = days.ToList();
+                var rules = DemandData.Rules;
+                if (vehicle?.Schedule == null || rules == null || !options.TryGetValue(chosen, out var days) || !FoodTrucksSession.CanWrite) return;
+                var problem = RouteEditor.SetDays(new HireSchedules(rules.Fleet), vehicle, days);
+                if (problem != ScheduleProblem.None)
+                {
+                    Log.Info($"Route: days for {vehicleId} refused: {problem}.");
+                    CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
+                    return;
+                }
                 RouteStops.Changed(vehicle);
                 Log.Info($"Route: {vehicleId} runs {(days.Length == 0 ? "every day" : string.Join(", ", days))}.");
             }), "foodtrucks:hires_days_header", null!);

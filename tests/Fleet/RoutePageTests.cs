@@ -152,6 +152,44 @@ public class RoutePageTests
     }
 
     [Fact]
+    public void TheOvernightRuleAppliesOnlyWhenTheRouteRunsTwoDaysInARow()
+    {
+        var stops = new[] { Stop("early", 100, 60, 4 * 60), Stop("bars", 200, 22 * 60, 26 * 60) };
+        // Monday, Wednesday and Friday: no night runs into a working morning.
+        var alternate = new HireSchedule { Days = { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday }, Stops = stops.ToList() };
+        Assert.Equal(ScheduleProblem.None, schedules.Validate(alternate));
+        Assert.Contains(60, RouteEditor.OpenTimes(new HireSchedule { Days = alternate.Days, Stops = { stops[1] } }, Step, rules.LatestCloseMinute));
+        // Monday to Friday: Monday night runs into Tuesday's early stop.
+        var weekdays = new HireSchedule { Days = { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday }, Stops = stops.ToList() };
+        Assert.Equal(ScheduleProblem.Overlap, schedules.Validate(weekdays));
+        // Saturday and Sunday run in a row (Saturday into Sunday).
+        Assert.True(HireSchedules.RunsOnConsecutiveDays(new HireSchedule { Days = { DayOfWeek.Saturday, DayOfWeek.Sunday } }));
+        Assert.True(HireSchedules.RunsOnConsecutiveDays(new HireSchedule { Days = { DayOfWeek.Saturday, DayOfWeek.Sunday, DayOfWeek.Monday } }));
+        Assert.False(HireSchedules.RunsOnConsecutiveDays(new HireSchedule { Days = { DayOfWeek.Saturday } }));
+    }
+
+    [Fact]
+    public void NewDaysThatTheStopsDontFitAreRefusedAndARouteThatFailsSaysWhy()
+    {
+        var truck = Truck(Stop("early", 100, 60, 4 * 60), Stop("bars", 200, 22 * 60, 26 * 60));
+        truck.Schedule!.Days = new List<DayOfWeek> { DayOfWeek.Monday, DayOfWeek.Wednesday };
+        var runner = new HireRunner(rules);
+        Assert.Equal(ScheduleProblem.None, runner.RouteProblem(truck));
+
+        Assert.Equal(ScheduleProblem.Overlap, RouteEditor.SetDays(schedules, truck, Array.Empty<DayOfWeek>()));
+        Assert.Equal(new[] { DayOfWeek.Monday, DayOfWeek.Wednesday }, truck.Schedule.Days);
+        Assert.Equal(ScheduleProblem.None, RouteEditor.SetDays(schedules, truck, new[] { DayOfWeek.Friday }));
+        Assert.Equal(new[] { DayOfWeek.Friday }, truck.Schedule.Days);
+
+        // A route saved under the old rules (every day, a night into the morning): no plan, and the reason.
+        truck.Schedule.Days = new List<DayOfWeek>();
+        Assert.Equal(ScheduleProblem.Overlap, runner.RouteProblem(truck));
+        runner.EnsurePlan(truck, HireSchedules.Absolute(1, 0), 0, 0);
+        Assert.Empty(truck.Shifts!);
+        Assert.Equal(ScheduleProblem.None, runner.RouteProblem(Truck()));
+    }
+
+    [Fact]
     public void ANewOpeningTimeKeepsTheStopsLengthWhereItFits()
     {
         var route = new HireSchedule { Stops = { Stop("office", 100, 11 * 60, 14 * 60), Stop("bars", 200, 18 * 60, 23 * 60) } };
