@@ -149,6 +149,9 @@ namespace FoodTrucks
 
         // The overlay's "Back to the hatch": walk to the rear door (the game's own storage spot), then be placed at the
         // hatch as after Open. The window stays open and its line waits; nothing is closed or reopened.
+        // How far from the truck's middle the player may be placed at its hatch.
+        private const float PlaceMetres = 8f;
+
         public static void BackToHatch(VehicleController controller)
         {
             var self = instance;
@@ -179,11 +182,13 @@ namespace FoodTrucks
                 Arrive();
                 return;
             }
-            // As the game's own Manage storage walk: an unreachable rear door is fine right beside the truck (2.5 m),
-            // and otherwise refused with a notice, since the game would run the goal at once wherever the player stands.
+            // An unreachable rear door is fine within Place's own reach of the truck (PlaceMetres; review round 4: 0.9.8
+            // took the game's 2.5 m from the truck's middle, so a player at the rear corner of a truck backed against a
+            // wall was refused although Place would accept them), and otherwise refused with a notice, since the game
+            // would run the goal at once wherever the player stands.
             if (!player.ExistsRoute(target))
             {
-                if (Vector3.Distance(player.transform.position, controller.transform.position) <= 2.5f)
+                if (Vector3.Distance(player.transform.position, controller.transform.position) <= PlaceMetres)
                 {
                     Log.Info($"Truck window: back to the hatch of truck {id}: no path to the rear door at {target}, but the player is beside the truck.");
                     Arrive();
@@ -256,7 +261,7 @@ namespace FoodTrucks
             else if (PlayerHelper.ItemInstanceInHands != null) why = "the player holds something";
             else if (Exhausted()) why = "out of energy";
             else if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking) why = "indoors";
-            else if (Vector3.Distance(player.transform.position, controller.transform.position) > 8f) why = "the player is not by the truck";
+            else if (Vector3.Distance(player.transform.position, controller.transform.position) > PlaceMetres) why = "the player is not by the truck";
             if (why != null)
             {
                 if (why == "out of energy") CartSelling.Notify("foodtrucks:notification_hatch_too_tired");
