@@ -118,14 +118,19 @@ namespace FoodTrucks
         private readonly List<(Vector3 A, Vector3 B)> segments;
         private readonly string? problem;
 
-        private TrafficLanes(List<(Vector3, List<(Vector3, Vector3)>)> waypoints, string? problem)
+        private TrafficLanes(List<(Vector3, List<(Vector3, Vector3)>)> waypoints, string? problem, bool unavailable = false)
         {
+            Unavailable = unavailable;
             this.waypoints = waypoints;
             segments = waypoints.SelectMany(w => w.Item2).ToList();
             this.problem = problem;
         }
 
-        public static readonly TrafficLanes None = new TrafficLanes(new List<(Vector3, List<(Vector3, Vector3)>)>(), "traffic system not running");
+        public static readonly TrafficLanes None = new TrafficLanes(new List<(Vector3, List<(Vector3, Vector3)>)>(), "traffic system not running", unavailable: true);
+
+        // The lanes couldn't be read (the traffic system not running, or the read threw), as opposed to a read that found
+        // none near: a caller that decides something lasting waits and tries again (review round 9).
+        public bool Unavailable { get; }
 
         // The lanes a probe at centre counts: waypoints closer than radius (3D, as the game's own search measures)
         // and within HeightMetres of the centre's height.
@@ -165,7 +170,7 @@ namespace FoodTrucks
             }
             catch (Exception ex)
             {
-                return new TrafficLanes(new List<(Vector3, List<(Vector3, Vector3)>)>(), "traffic lanes unreadable: " + ex.Message);
+                return new TrafficLanes(new List<(Vector3, List<(Vector3, Vector3)>)>(), "traffic lanes unreadable: " + ex.Message, unavailable: true);
             }
         }
 

@@ -56,6 +56,7 @@ namespace FoodTrucks
             resolveAt.Clear();
             resolveCursor = 0;
             notReadyLogged.Clear();
+            errorLogged.Clear();
             Legality.ResetLanes();
             var state = FoodTrucksSession.CurrentState;
             var sites = Sites;
@@ -150,7 +151,12 @@ namespace FoodTrucks
         // A bay that couldn't be resolved (the city's parking lanes not loaded) is tried again after this long.
         private const float ResolveRetrySeconds = 5f;
         private static readonly Dictionary<string, float> resolveAt = new Dictionary<string, float>(StringComparer.Ordinal);
+        // Messages logged once per load, keyed by commissary and reason (review round 9: one key per commissary hid a
+        // second reason). Readiness notes and errors are kept apart.
         private static readonly HashSet<string> notReadyLogged = new HashSet<string>(StringComparer.Ordinal);
+        private static readonly HashSet<string> errorLogged = new HashSet<string>(StringComparer.Ordinal);
+
+        private static bool Once(HashSet<string> logged, string siteId, string reason) => logged.Add(siteId + "|" + reason);
 
         // Resolves one commissary's bay if it isn't yet: true when it is resolved (now or before). `force` skips the
         // retry wait (the 04:00 check).
@@ -165,7 +171,7 @@ namespace FoodTrucks
             resolveAt[site.Id] = Time.unscaledTime + ResolveRetrySeconds;
             if (!Legality.ParkingSceneReady())
             {
-                if (notReadyLogged.Add(site.Id))
+                if (Once(notReadyLogged, site.Id, "parking lanes"))
                     Log.Info($"Commissary {site.Id}: bay not resolved yet ({why}): the city's parking lanes aren't loaded; tried again every {ResolveRetrySeconds:F0} s.");
                 return false;
             }
@@ -195,7 +201,12 @@ namespace FoodTrucks
                     if (from.Kind == WalkStart.NotReady)
                     {
                         // The traffic system isn't running yet, so the door can't be checked: not resolved, tried again.
-                        if (notReadyLogged.Add(site.Id))
+                        if (from.Why.Length > 0)
+                        {
+                            if (Once(errorLogged, site.Id, "traffic read"))
+                                Log.Error($"Commissary {site.Id}: bay not resolved yet ({why}): the traffic lanes couldn't be read ({from.Why}); tried again every {ResolveRetrySeconds:F0} s.");
+                        }
+                        else if (Once(notReadyLogged, site.Id, "traffic"))
                             Log.Info($"Commissary {site.Id}: bay not resolved yet ({why}): the traffic system isn't ready to check the door's street; tried again every {ResolveRetrySeconds:F0} s.");
                         return false;
                     }
@@ -229,7 +240,7 @@ namespace FoodTrucks
             // after a search over colliders that were there.
             if (colliders == 0)
             {
-                if (notReadyLogged.Add(site.Id))
+                if (Once(notReadyLogged, site.Id, "no colliders"))
                     Log.Info($"Commissary {site.Id}: bay not resolved yet ({why}): no parking lanes round it yet; tried again every {ResolveRetrySeconds:F0} s.");
                 return false;
             }
@@ -271,6 +282,8 @@ namespace FoodTrucks
                 if (!UnityEngine.AI.NavMesh.SamplePosition(door, out var doorHit, 3f, areas)) return (WalkStart.Unknown, door, "");
                 if (!GleyTrafficSystem.TrafficManager.HasInstance || !GleyTrafficSystem.TrafficManager.IsInitialized) return (WalkStart.NotReady, door, "");
                 var lanes = TrafficLanes.Near(door, 40f);
+                // A read that failed isn't "no street near": not ready, tried again, never saved (review round 9).
+                if (lanes.Unavailable) return (WalkStart.NotReady, door, lanes.Describe());
                 var lane = lanes.Nearest(door);
                 if (lane == null) return (WalkStart.CutOff, doorHit.position, "no driving lane within 40 m: " + lanes.Describe());
                 if (!UnityEngine.AI.NavMesh.SamplePosition(lane.Value.Point, out var streetHit, 3f, areas))
@@ -288,7 +301,7 @@ namespace FoodTrucks
             }
             catch (Exception ex)
             {
-                if (notReadyLogged.Add(siteId)) Log.Error($"Commissary {siteId}: the door's walk check failed ({ex.Message}); tried again later.");
+                if (Once(errorLogged, siteId, "walk check: " + ex.GetType().Name)) Log.Error($"Commissary {siteId}: the door's walk check failed ({ex.Message}); tried again later.");
                 return (WalkStart.NotReady, door, "");
             }
         }
