@@ -332,11 +332,31 @@ namespace FoodTrucks
                 for (var i = 0; i < shown.Count; i++)
                 {
                     var (line, entry) = shown[i];
-                    entry.Init(Label(line), ItemHelper.GetIconWithFallback(line.Item), line.BoxCents / 100f);
+                    entry.Init(Label(line), Icon(line.Item), line.BoxCents / 100f);
                     entry.ItemsListEntry.transform.SetSiblingIndex(first + i);
                 }
             }
             catch (Exception ex) { Fail("item list", ex); }
+        }
+
+        // An equipment item shows the compact model a vehicle actually carries (economy.json's `display`), rendered by the
+        // art pipeline as Vehicles/EquipmentArt/Icons/Icon_<display>.png in the mod's bundle, not the game's icon of the
+        // full-size counter (Peter, 11 October 2026). Only this list: the game's own shops keep their icons. Without the
+        // sprite (art not merged yet) the game's icon shows, logged once per piece.
+        private const string IconFolder = "Assets/Mods/FoodTrucks/Vehicles/EquipmentArt/Icons/";
+        private static readonly Dictionary<string, Sprite?> icons = new Dictionary<string, Sprite?>(StringComparer.Ordinal);
+
+        private static Sprite Icon(string item)
+        {
+            var display = DemandData.Tables?.EquipmentForGameItem(item)?.Display;
+            if (string.IsNullOrEmpty(display)) return ItemHelper.GetIconWithFallback(item);
+            if (!icons.TryGetValue(display!, out var sprite))
+            {
+                sprite = FoodTrucksMod.Bundle?.LoadAsset<Sprite>(IconFolder + "Icon_" + display + ".png");
+                icons[display!] = sprite;
+                if (sprite == null) Log.Info($"Commissary order form: no icon Icon_{display} in the mod's bundle; {item} shows the game's icon.");
+            }
+            return sprite != null ? sprite : ItemHelper.GetIconWithFallback(item);
         }
 
         // A new row: its price is the box price.
