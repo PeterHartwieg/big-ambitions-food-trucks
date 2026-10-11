@@ -183,19 +183,26 @@ namespace FoodTrucks
                 if (probe.Count == 0) continue;
                 // From an entrance, a place the door's pedestrians can't reach within a short walk (the street behind the
                 // building, Core WalkRule) is passed over for good; a point set in data is trusted. The walk starts at the
-                // door's NavMesh point, or, when that is cut off from the street (a loading dock, a fenced forecourt), at
-                // the nearest pavement point that does reach it (review round 7: round 6 searched again without the walk
-                // check, which also let a complete but too long walk, the street behind, through).
+                // door's NavMesh point, which must itself have a short walk to the street; if it hasn't, nothing is guessed
+                // (review round 8: a replacement start near the door could be behind the building): that origin gives no
+                // bay and asks for a measured point.
                 Func<double, double, bool>? reach = null;
                 var tooLong = 0;
                 var noRoute = 0;
                 if (site.Bay == null && door != null)
                 {
                     var from = WalkFrom(site.Id, door.Value);
+                    if (from.Kind == WalkStart.NotReady)
+                    {
+                        // The traffic system isn't running yet, so the door can't be checked: not resolved, tried again.
+                        if (notReadyLogged.Add(site.Id))
+                            Log.Info($"Commissary {site.Id}: bay not resolved yet ({why}): the traffic system isn't ready to check the door's street; tried again every {ResolveRetrySeconds:F0} s.");
+                        return false;
+                    }
                     if (from.Kind == WalkStart.CutOff)
                     {
-                        Log.Error($"Commissary {site.Id}: the door at x {door.Value.x:F1}, z {door.Value.z:F1} is on NavMesh cut off from the street, and no pavement " +
-                                  "within 12 m of it reaches the street; no bay is searched from it. Set a measured bay point in commissaries.json.");
+                        Log.Error($"Commissary {site.Id}: the door at x {door.Value.x:F1}, z {door.Value.z:F1} has no short walk to the street ({from.Why}); " +
+                                  "no bay from this entrance. Set a measured bay point in data/commissaries.json.");
                         continue;
                     }
                     if (from.Kind != WalkStart.Unknown)
@@ -244,47 +251,45 @@ namespace FoodTrucks
 
         private enum WalkStart
         {
-            // The door's own NavMesh point reaches the street (or the street can't be found to check).
+            // The door's own NavMesh point has a short walk to the street.
             Door,
-            // The door's point is cut off; a pavement point near it reaches the street.
-            Pavement,
             // The door isn't on the NavMesh at all: nothing is known about walks from it.
             Unknown,
-            // The door's point is cut off and no pavement within 12 m reaches the street.
+            // The door's point has no short walk to the street, or the street can't be found: no bay from it.
             CutOff,
+            // The traffic system isn't running yet: the door can't be checked now.
+            NotReady,
         }
 
-        // Where the walk check starts for a door. The street is the NavMesh by the nearest driving lane.
-        private static (WalkStart Kind, Vector3 Point) WalkFrom(string siteId, Vector3 door)
+        // Where the walk check starts for a door: its NavMesh point, if that has a short walk (Core WalkRule) to the
+        // street, the NavMesh by the nearest driving lane within 40 m.
+        private static (WalkStart Kind, Vector3 Point, string Why) WalkFrom(string siteId, Vector3 door)
         {
             try
             {
                 const int areas = UnityEngine.AI.NavMesh.AllAreas;
-                if (!UnityEngine.AI.NavMesh.SamplePosition(door, out var doorHit, 3f, areas)) return (WalkStart.Unknown, door);
-                var lane = TrafficLanes.Near(door, 40f).Nearest(door);
-                if (lane == null || !UnityEngine.AI.NavMesh.SamplePosition(lane.Value.Point, out var streetHit, 3f, areas)) return (WalkStart.Door, doorHit.position);
+                if (!UnityEngine.AI.NavMesh.SamplePosition(door, out var doorHit, 3f, areas)) return (WalkStart.Unknown, door, "");
+                if (!GleyTrafficSystem.TrafficManager.HasInstance || !GleyTrafficSystem.TrafficManager.IsInitialized) return (WalkStart.NotReady, door, "");
+                var lanes = TrafficLanes.Near(door, 40f);
+                var lane = lanes.Nearest(door);
+                if (lane == null) return (WalkStart.CutOff, doorHit.position, "no driving lane within 40 m: " + lanes.Describe());
+                if (!UnityEngine.AI.NavMesh.SamplePosition(lane.Value.Point, out var streetHit, 3f, areas))
+                    return (WalkStart.CutOff, doorHit.position, $"no NavMesh by the driving lane at x {lane.Value.Point.x:F1}, z {lane.Value.Point.z:F1}");
                 var path = new UnityEngine.AI.NavMeshPath();
-                bool Reaches(Vector3 p) => UnityEngine.AI.NavMesh.CalculatePath(p, streetHit.position, areas, path) && path.status == UnityEngine.AI.NavMeshPathStatus.PathComplete;
-                if (Reaches(doorHit.position)) return (WalkStart.Door, doorHit.position);
-                for (var r = 2f; r <= 12f; r += 1f)
-                {
-                    for (var k = 0; k < 16; k++)
-                    {
-                        var angle = k * Mathf.PI / 8f;
-                        var wanted = door + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * r;
-                        if (!UnityEngine.AI.NavMesh.SamplePosition(wanted, out var hit, 1f, areas) || new Vector2(hit.position.x - wanted.x, hit.position.z - wanted.z).magnitude > 1.2f) continue;
-                        if (!Reaches(hit.position)) continue;
-                        Log.Info($"Commissary {siteId}: the door's NavMesh point at x {doorHit.position.x:F1}, z {doorHit.position.z:F1} doesn't reach the street; " +
-                                 $"the walk check starts from the pavement at x {hit.position.x:F1}, z {hit.position.z:F1}, {r:F0} m from the door.");
-                        return (WalkStart.Pavement, hit.position);
-                    }
-                }
-                return (WalkStart.CutOff, doorHit.position);
+                var complete = UnityEngine.AI.NavMesh.CalculatePath(doorHit.position, streetHit.position, areas, path) &&
+                               path.status == UnityEngine.AI.NavMeshPathStatus.PathComplete;
+                var length = 0f;
+                for (var i = 1; complete && i < path.corners.Length; i++) length += Vector3.Distance(path.corners[i - 1], path.corners[i]);
+                var verdict = WalkRule.Classify(true, true, complete, length, Vector3.Distance(doorHit.position, streetHit.position));
+                if (verdict == WalkVerdict.Short) return (WalkStart.Door, doorHit.position, "");
+                return (WalkStart.CutOff, doorHit.position, verdict == WalkVerdict.TooLong
+                    ? $"the walk to the street at x {streetHit.position.x:F1}, z {streetHit.position.z:F1} is {length:F0} m"
+                    : $"no route to the street at x {streetHit.position.x:F1}, z {streetHit.position.z:F1}");
             }
             catch (Exception ex)
             {
-                Log.Error($"Commissary {siteId}: the walk check's start couldn't be found ({ex.Message}); walks from the door count as unknown.");
-                return (WalkStart.Unknown, door);
+                if (notReadyLogged.Add(siteId)) Log.Error($"Commissary {siteId}: the door's walk check failed ({ex.Message}); tried again later.");
+                return (WalkStart.NotReady, door, "");
             }
         }
 
