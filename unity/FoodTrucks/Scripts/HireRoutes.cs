@@ -311,7 +311,7 @@ namespace FoodTrucks
             else if (!routeProblems.TryGetValue(vehicle.VehicleId, out var known) || known != problem)
             {
                 routeProblems[vehicle.VehicleId] = problem;
-                Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} has no plan: its route fails the rules ({problem}); the crew waits until a stop is changed on the BizMan page.");
+                Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} has no plan: its route fails the rules ({problem}); the crew waits until the route is changed on the BizMan page.");
             }
             runner.EnsurePlan(vehicle, t, planX, planZ, GameSpeed());
             for (var i = 0; i < MaxSteps; i++)
