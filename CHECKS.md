@@ -1,3 +1,35 @@
+# Crew and routes in BizMan
+
+The vehicle panel's Hires dialog becomes a page in BizMan (Peter, 11 October 2026). Built on top of `milestone-8` (branch `worktree-agent-abec0297f63eaec2b`); no version bump yet, so the log still says the milestone-8 version. Fresh **FT** save with one truck, one cart and three unassigned employees with customer service; own at least one nightclub or office near where the truck stands. Other gameplay mods off. The page is built from copies of the game's own BizMan parts and nobody has seen it yet, so screenshots of every step help.
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | BizMan, Street food line, click the truck's card | The truck's page replaces the list: a Back button, the truck's name, where it is, "Crew: 0 of 3", three crew rows, "Route: 0 of 6 stops", Add stop on the map, Partner venue. Screenshot it. Back returns to the fleet section with the other businesses above it |
+| 2 | In crew row 1, open the dropdown | Unassigned, then each unassigned employee with customer service, satisfaction and wage. Pick one: the notice says they joined, the row keeps them, and they are gone from rows 2 and 3. Pick Unassigned: they leave. Close the phone at any point and reopen: the change stuck |
+| 3 | Drive the truck, press Hires on its panel | BizMan opens on the truck's page, not the old list picker |
+| 4 | On the truck's page, Add stop on the map. Click a building on a street with parking | The phone closes, the map opens with "Click a building…". The building's card shows "Add as a stop" in place of Set destination. Click it: a yellow "New stop" marker appears at the kerb within 40 m and a question names the address and distance. Confirm: the map closes, then Opens at and Closes at offer only free half hours. The page reopens with the stop |
+| 5 | Repeat row 4 on a building with no parking lane nearby (a park, a pier) and once on a far-away building | "No legal parking space within 40 m…" for the first. For the far one either a spot or "The streets round … aren't loaded yet" |
+| 6 | Add a second stop the same way, then on the page change stop 1's opening time to after stop 2's | The list re-sorts, the times shown match, and Closes at keeps the stop's length where it fits. A time that overlaps the other stop isn't offered |
+| 7 | Drag stop 2 above stop 1 | The places swap and the time slots stay where they were. Tell me if the drag doesn't start (the log names the drag handle) |
+| 8 | Remove a stop with its remove button | A confirm question, then the stop goes. Cancel leaves it |
+| 9 | Change Days to Monday to Friday | The fleet card's Route line says so after Back |
+| 10 | Put a crew member on the truck, sleep to a stop's opening | The crew drives to the snapped spot, parks with the hatch to the pavement and opens. Screenshot the truck at the stop |
+| 11 | Same for the cart: a map stop, a crew member, wait for the opening | The marker and the cart stand on the pavement by the kerb, not in the lane or by a door. The cart opens there |
+| 12 | Push the cart, stop on a good pitch, press Add stop here on its panel | The old exact-spot flow: times asked, stop added where it stands |
+| 13 | On the truck's page, Partner venue dropdown, with the truck parked within 50 m of your venue | Your venue is offered; pick it, then No partner. The notices say signed and ended |
+| 14 | Open the map yourself (M), click a building | Set destination as usual, no Add as a stop |
+
+Log lines:
+
+- Startup: `Patch BuildingResume.SetButtons: Active.` and `Map pick: on ("Add as a stop" in the building card).`
+- Row 1: `BizMan: vehicle page built from the warehouse driver row (…) and the logistics plan (…; stop rows dragged by …); it sits in … (laid out by its parent | sized by itself, scrolling | no scroll view).` Send me the whole line. Then `BizMan: vehicle page for truck <id>.` An error `BizMan vehicle page: <part> isn't where 1.0 had it. The vehicle panel's Hires button opens the old crew and route dialog instead.` means a copied part is missing; Hires then logs `Hires: the BizMan vehicle page isn't available; the old crew and route dialog opens for <id>.` and opens the old dialog.
+- Row 2: `Crew: <name> (…) on truck <id>.` and `Crew: <id> off truck <id> (unassigned on the BizMan page).`
+- Row 4: `Map pick: started for truck <id>.`, `Map pick: "Add as a stop" copied from the building card's Set destination button.`, `Map pick: truck stop by <address> at x …, y …, z …, heading …, … m from the entrance; legal parking, Pavement: hatch side …; … parking colliders, … lane segments near (… ms).` Tell me the ms. Then `Map pick: ended for <id> (stop picked).` and `Route: stop … at x …, z …, heading … hh:mm-hh:mm added to truck <id>; 1 stops.`
+- Row 5: `Map pick: no truck spot by <address> (entrance x …, z …): no legal place with the hatch to the pavement within 40 m (…)`, or `neither parking lanes nor traffic lanes within reach`.
+- Rows 6 to 8: `Route: stop 1 of <id> now hh:mm-hh:mm (BizMan page).`, `Route: stop 2 of <id> moved to 1; the times stay in their slots (BizMan page).`, `Route: stop 1 removed from truck <id>.`
+- Row 10: the usual `Route: truck <id> arrived at …: …, N m from the stop.` N under 10 m means the snapped spot was free.
+- Row 11: `Map pick: cart stop by <address> …; by a parking lane, pavement on the right … m out, cart … m out` or `by the nearest driving lane (no parking lane fits)`.
+
 # Playtest fixes (0.9.9)
 
 Fixes from the 0.9.8 agent run of 11 October 2026 (log `build/logs/game/agent-098-092245`), with the review round 4 fixes. Build 0.9.9 on branch `milestone-8`; the log says 0.9.9. Fresh **FT** save, other gameplay mods off. Rows 1 to 6 here replace the 0.9.8 rows 8 to 11 below (bay paint by the door).
