@@ -1,3 +1,26 @@
+# Playtest fixes (0.9.9)
+
+Fixes from the 0.9.8 agent run of 11 October 2026 (log `build/logs/game/agent-098-092245`). Build 0.9.9 on branch `milestone-8`; the log says 0.9.9. Fresh **FT** save, other gameplay mods off. The 0.9.8 rows 8 to 11 below (bay paint by the door) are replaced by rows 1 to 4 here.
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Walk or drive to the Hell's Kitchen commissary (First Street 22) | The purple paint lies on the parking lane across the street from the garage door (the west kerb, where trucks park), not by the door. No paint on the road or on the kerb by the door |
+| 2 | Drive the truck there and park inside the paint, hatch to the pavement | The panel shows LEGAL, not ILLEGAL. Ctrl+F3 says "in the bay". The Commissary button shows. Leave it there past 04:00: no fine for the truck |
+| 3 | Park at a legal space on the same kerb just past the end of the paint, then on the garage's own kerb by the door | Ctrl+F3 says "outside the bay" for both (the bay counts the truck's middle, 15 m round the bay point). Does the bay feel in the right place for this garage? |
+| 4 | Visit the other four commissaries (or teleport near them) | Each has its paint on a parking lane near the garage. Park a truck on it: LEGAL and "in the bay". Tell me any with no paint, or paint far from the garage (more than half a block) |
+| 5 | Open a truck at a busy spot and watch a line of 5 or more for 15 minutes | The customers stand in one straight line along the pavement from the hatch, a step (about 1 m) apart, running towards the truck's back where there is room, all at the same distance from the truck and clear of its side. Nobody circles their place. Screenshot from the pavement |
+| 6 | Step out of the truck and let the line give up (about 20 minutes) | Each customer who gives up shows the game's red angry emoji over their head as they walk off |
+| 7 | Truck with a griddle full (160/160), tacos in stock at the commissary, and hot dogs too (no hot dog grill fitted): Restock | "Nothing on the truck holds Hotdog: fit its equipment first. Tacos: the Griddle is full (160/160). … items stay in stock here." With nothing missing a piece: "Nothing more fits in the truck. Tacos: the Griddle is full (160/160). …" |
+
+Not changed: the first Step out's "Nobody's at the truck's window" notice. The 0.9.8 log has its line at the first Step out (line 291), so it most likely showed and the agent missed it; row 2 of "Truck serves only from the hatch (0.9.8)" still checks it.
+
+Log lines:
+
+- Rows 1 to 4: after load, one `Commissary <site>: bay on legal parking at x …, z …, … m from x …, z … (set in data | entrance), the lane along … degrees.` per bay. For Hell's Kitchen the start is the data point (x 393.2, z 217.6), so the distance should be about 0 m. Then, near each one, `Commissary marker <site>: bay paint at x …, z …, along … degrees, 1 stretch of … m (…) on legal parking … m wide, its middle … m across from the bay point (… m from the driving lane); the 15 m bay reaches … m either way along the lane; a 5.8 m truck fits wholly inside.` A `no legal parking within 30 m of …` error means that garage has no bay and no paint; its data needs a measured bay point. A `no legal parking within 30 m of its bay yet (search 1 of 3)` line before a success is fine.
+- Row 5: `Queue view: line at cart <id>: 14 of 14 places on the right side towards the back, 1.0 m apart, 2.0 m out from the middle (widest 2.0 m), 5 ways in and out.` A widest value well above the first means the line had to step out round something; tell me where. At the line's removal: `0 stopped after circling their place` or few.
+- Row 6: once a session, `Queue view: customers' emoji runner added (the character prefab has none).` No `NullReferenceException … ThirdPersonCharacter+<ShowExpression>` in the log.
+- Row 7: `Commissary restock: full pieces: Tacos: the Griddle is full (160/160).` after the usual restock line.
+
 # Playtest fixes (0.9.8)
 
 Fixes from the 0.9.7 playtest of 10 October 2026, and a painted bay at each commissary. Build 0.9.8 on branch `milestone-8`, with the first review round's fixes; the log says 0.9.8. Fresh **FT** save, other gameplay mods off.
