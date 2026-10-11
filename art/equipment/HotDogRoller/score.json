@@ -100,7 +100,7 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_HotDogRoller"
+      "HotDogRoller_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
@@ -113,7 +113,7 @@
         512
       ]
     },
-    "blend_size_mb": 0.17
+    "blend_size_mb": 0.16
   },
   "fbx": {
     "label": "fbx",
@@ -215,7 +215,7 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_HotDogRoller"
+      "HotDogRoller_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,

@@ -100,7 +100,7 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_DrinksCooler"
+      "DrinksCooler_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
@@ -113,7 +113,7 @@
         512
       ]
     },
-    "blend_size_mb": 0.14
+    "blend_size_mb": 0.13
   },
   "fbx": {
     "label": "fbx",
@@ -215,14 +215,14 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_DrinksCooler"
+      "DrinksCooler_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
       "fill": 0.5647,
       "overlap_fraction": 0.0
     },
-    "fbx_size_mb": 0.08
+    "fbx_size_mb": 0.11
   },
   "failures": [],
   "passed": true

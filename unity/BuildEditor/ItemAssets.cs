@@ -258,18 +258,20 @@ namespace FoodTrucks.BuildEditor
         }
 
         // The icon PNG, committed, imported as a single sprite for bundle.LoadAsset<Sprite>.
-        private static void Icon(string id)
+        private static void Icon(string id) => IconImport($"{IconFolder}/{id}.png");
+
+        // An icon imported as the game's item icons are: a sprite with alpha, up to 512 px, no mip maps.
+        internal static void IconImport(string path)
         {
-            var path = $"{IconFolder}/{id}.png";
             if (!File.Exists(Path.Combine(Path.GetDirectoryName(Application.dataPath)!, path)))
-                throw new InvalidOperationException($"{path} missing; render it with art/tools/render_icon.py.");
+                throw new InvalidOperationException($"{path} missing; render it with art/tools/render_icons.sh.");
             var importer = (TextureImporter)AssetImporter.GetAtPath(path);
             importer.textureType = TextureImporterType.Sprite;
             importer.spriteImportMode = SpriteImportMode.Single;
             importer.alphaIsTransparency = true;
             importer.mipmapEnabled = false;
             importer.sRGBTexture = true;
-            importer.maxTextureSize = 256;
+            importer.maxTextureSize = 512;
             importer.textureCompression = TextureImporterCompression.CompressedHQ;
             importer.SaveAndReimport();
         }

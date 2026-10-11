@@ -308,7 +308,7 @@
       "rear-right wheel arch": 0
     },
     "materials": [
-      "FoodTruck_Vehicle"
+      "FoodTruck_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
@@ -346,7 +346,7 @@
         2048
       ]
     },
-    "blend_size_mb": 0.24
+    "blend_size_mb": 0.25
   },
   "fbx": {
     "label": "fbx",
@@ -656,7 +656,7 @@
       "rear-right wheel arch": 0
     },
     "materials": [
-      "FoodTruck_Vehicle"
+      "FoodTruck_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
@@ -668,7 +668,7 @@
       "fill": 0.5781,
       "overlap_fraction": 0.0
     },
-    "fbx_size_mb": 0.6
+    "fbx_size_mb": 0.82
   },
   "failures": [],
   "passed": true

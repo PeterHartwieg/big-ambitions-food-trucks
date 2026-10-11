@@ -100,7 +100,7 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_Griddle"
+      "Griddle_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
@@ -113,7 +113,7 @@
         512
       ]
     },
-    "blend_size_mb": 0.15
+    "blend_size_mb": 0.14
   },
   "fbx": {
     "label": "fbx",
@@ -215,14 +215,14 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_Griddle"
+      "Griddle_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
       "fill": 0.7004,
       "overlap_fraction": 0.0
     },
-    "fbx_size_mb": 0.1
+    "fbx_size_mb": 0.11
   },
   "failures": [],
   "passed": true

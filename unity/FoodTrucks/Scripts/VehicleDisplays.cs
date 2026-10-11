@@ -70,6 +70,8 @@ namespace FoodTrucks
             public string?[] Pieces = Array.Empty<string?>();
             public GameObject?[] Objects = Array.Empty<GameObject?>();
             public int Side;
+            // The cart's umbrella: 1 open, 0 furled, -1 not set yet, -2 the model has no canopies.
+            public int Umbrella = -1;
         }
 
         private void OnDisable()
@@ -127,6 +129,7 @@ namespace FoodTrucks
                 var fitted = CargoRules.FittedEquipment(tables, CargoLimit.Lines(vehicle));
                 var open = layout.Turns && StreetSales.Find(FoodTrucksSession.CurrentState, vehicle.id)?.IsOpen == true;
                 var side = !layout.Turns ? 0 : open ? CartQueueView.QueueSide(vehicle.id) ?? 1 : 1;
+                if (layout == Cart) Umbrella(entry, vehicle.id, open);
                 // A piece keeps the spot it took while it stays fitted; new pieces fill the empty spots in cargo order.
                 var remaining = fitted.ToList();
                 var wanted = new string?[entry.Spots.Length];
@@ -171,6 +174,27 @@ namespace FoodTrucks
             }
             // Vehicles despawned or sold: their pieces went with them; forget them.
             foreach (var key in shown.Keys.Where(k => !seen.Contains(k)).ToList()) shown.Remove(key);
+        }
+
+        // The cart's umbrella is open only while it sells; closed, pushed, parked or loaded it is furled round the pole
+        // (CartAssets' Cart_Canopy and Cart_Canopy_Furled). One log line per cart and state per session.
+        private void Umbrella(Shown entry, string vehicleId, bool open)
+        {
+            var state = open ? 1 : 0;
+            if (entry.Umbrella == state || entry.Umbrella == -2 || entry.Controller == null) return;
+            var canopy = entry.Controller.transform.Find("Cart_Canopy");
+            var furled = entry.Controller.transform.Find("Cart_Canopy_Furled");
+            if (canopy == null || furled == null)
+            {
+                entry.Umbrella = -2;
+                Log.Error($"Cart umbrella: cart {vehicleId} has no Cart_Canopy / Cart_Canopy_Furled (a cart from an older build).");
+                return;
+            }
+            canopy.gameObject.SetActive(open);
+            furled.gameObject.SetActive(!open);
+            entry.Umbrella = state;
+            if (logged.Add($"umbrella:{vehicleId}:{state}"))
+                Log.Info($"Cart umbrella: cart {vehicleId} {(open ? "open, selling" : "furled, not selling")}.");
         }
 
         private void SyncVisibility()

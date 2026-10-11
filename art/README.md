@@ -4,9 +4,11 @@ The final food cart and food truck for Milestone 8, built in Blender 5.2 and exp
 
 | Folder | Contents |
 |---|---|
-| `cart/` | `FoodCart.blend`, `FoodCart.fbx`, `T_FoodCart_BaseColor.png`, `spec.json`, `prompt.md`, `build_cart.py`, `score.json`, `renders/`, `run-log.md` |
-| `truck/` | `FoodTruck.blend`, `FoodTruck.fbx`, six `T_FoodTruck_*.png` textures, the same support files |
-| `tools/` | `score.py` (checks a model against its `spec.json`), `render_views.py` (four fixed review renders) |
+| `cart/` | `FoodCart.blend`, `FoodCart.fbx`, `T_FoodCart_BaseColor.png` (flat source) and `T_FoodCart_BC/_M/_N.png` (shipped), `look.json`, `spec.json`, `prompt.md`, `build_cart.py`, `score.json`, `renders/`, `run-log.md` |
+| `truck/` | `FoodTruck.blend`, `FoodTruck.fbx`, the `T_FoodTruck_*.png` textures, the same support files |
+| `equipment/`, `products/` | One folder per compact piece or food, laid out like `cart/`; each equipment folder also has `Icon_<Name>.png` |
+| `props/` | Fixed props on the vehicles: `CashRegister/` |
+| `tools/` | `score.py` (checks a model against its `spec.json`), `game_look.py` and `apply_look.sh` (surface look, below), `render_look.py` (day and night look renders), `render_icon.py` and `render_icons.sh` (item icons), `render_views.py` (four fixed review renders) |
 | `start.blend` | The empty start scene: metres and a 1.8 m wireframe person, `HumanRef_1.8m` |
 
 ## Pipeline
@@ -19,6 +21,58 @@ blender -b art/cart/FoodCart.blend --python art/tools/render_views.py -- art/car
 ```
 
 The scorer checks triangle budgets per object, origins and wheel hubs, hinge lines, applied transforms, clean geometry, a strictly convex collider, one material, UVs (no overlap, inside 0–1, at least 40% fill), texture sizes, attachment points that must lie on the mesh, zones that must stay empty, and a clean FBX re-import with unchanged counts and origins.
+
+After a build script, every model goes through the surface-look step, which also re-exports the FBX and runs the scorer:
+
+```bash
+art/tools/apply_look.sh art/equipment/Griddle      # one model; no arguments: the cart, the truck, all equipment and products
+art/tools/render_icons.sh                           # equipment icons and the mod's item icons
+```
+
+## Surface look
+
+Peter, 11 October 2026, after playing: our models had "a very bright surface with very 'edgy' edges; other objects in the game feel like they have more texture". The game's 1.0 props were read from its `defaultlocalgroup_assets_prefabs` and `sharedtextures` bundles with UnityPy (copies outside the repo; reference renders in the gitignored `build/game-ref/look/`). The comparable items were the hot dog heater, industrial grill, coffee machine, fryer, pizza oven, drinks fridges, cotton candy cart, van and delivery truck.
+
+| | The game's props | Ours before |
+|---|---|---|
+| Material | HDRP/Lit (or its own shader graphs) with base colour, mask and normal maps on every prop | HDRP/Lit with a base colour map only |
+| Metallic | Steel is metallic 1 (mask R) | 0 everywhere |
+| Smoothness | Per texel from mask A: steel 0.31 to 0.50, plastics and paint 0.30 to 0.65, vehicle paint up to 0.95 | 0.5 everywhere |
+| Ambient occlusion | Baked into mask G: median 0.4 to 0.95, crevices down to 0 to 0.2 | None |
+| Normal map | Baked from high-poly: 25 to 50% of texels tilted more than 5 degrees (rounded edges, panel lines) | None (the truck's was flat) |
+| Mesh normals | Smooth across shallow angles: no split normals under 60 degrees, 20 to 46% of corners split | Flat-shaded: every corner split, cylinders faceted |
+| Chamfers | 6 to 23% of edge length in short bevel edges | 1 to 4% |
+| Base colour | Steel albedo 0.65 to 0.85 (sRGB) with fine noise or brushing; colours muted (saturation 0.02 to 0.25 on machines) | Flat fills, colours at saturation 0.25 to 0.6 |
+| Texture size | 256 px for props up to 1 m, 512 for carts and fryers, 1,024 for vehicles | 512 for 0.4 m pieces, 1,024 cart, 2,048 truck |
+| Triangles | Hot dog heater 3,400 (0.9 m), industrial grill 1,060, cotton candy cart 3,850, van 4,600, delivery truck 5,800 | In range |
+
+The game imports its mask maps as sRGB (`m_ColorSpace` 1), so ours are too; only the AO in G changes with that. Its vehicles render with `renderingLayerMask` 1 and its props in buildings with 257 (bit 8 is HDRP's default decal layer); see "Street dirt" below.
+
+**What `game_look.py` does.** It works on the saved `.blend` and the build script's flat `T_<Name>_BaseColor.png` (the truck: `T_FoodTruck_D.png` and `_MaskMap.png`), which it leaves alone, so it can run again.
+
+1. Normals: edges sharper than 60 degrees stay hard; shallower ones (cylinder facets, the box chamfers the build scripts already make) are smoothed, and a face-area weighted-normal pass keeps big faces flat.
+2. Bakes on the model's own UVs with Cycles: ambient occlusion (distance a quarter of the model's size, 0.06 to 0.6 m), a tangent-space normal map of rounded edges (Bevel node, radius 1.8 texels, 2.5 to 15 mm), and an edge mask and two noise layers in object space, so nothing breaks at UV seams.
+3. Sorts each texel into a class by its flat colour: steel (saturation under 0.16, value 0.40 to 0.92), dark plastic and rubber (value under 0.22), white, coloured paint, food (the products), glass and fabric. A `look.json` beside the model overrides a palette colour, e.g. the cart's umbrella cloth is fabric and its blue-grey trims are steel.
+4. Writes `T_<Name>_BC.png` (colours graded into the game's range: paint value × 0.86 + 0.03 and saturation × 0.8, steel 0.52 + 0.40 × value at saturation × 0.35; occlusion darkens crevices by up to 30%; ±3.5% coarse and ±2.5% fine variation; edges 22% lighter), `T_<Name>_M.png` (R metallic; G 0.12 + 0.88 × AO; B 0; A the class smoothness ±12% noise, less in crevices and on edges) and `T_<Name>_N.png`, all at the source's size.
+5. Re-exports the FBX with the prompts' export settings, saves the `.blend` with a preview material using the three maps, and `apply_look.sh` runs the scorer.
+
+| Class | Metallic | Smoothness (before noise) |
+|---|---|---|
+| steel | 1 | 0.42 |
+| dark | 0 | 0.30 |
+| white | 0 | 0.45 |
+| paint | 0 | 0.40 |
+| food | 0 | 0.35 |
+| glass | 0 | 0.80 |
+| fabric | 0 | 0.20 |
+
+The truck keeps its own mask's classes: metallic where it was, chrome down to 0.50, paint at most 0.72, glass as it was.
+
+**Rules for new models.** Build with flat part colours and non-overlapping UVs as before (every face its own atlas cell works best for baking), then run `apply_look.sh`. Keep textures at 256 px for foods and small props, 512 for counter pieces, 1,024 for the cart and 2,048 for the truck. Give boxes a one-segment chamfer of 2 to 6 mm and cylinders 8 or more sides; the look step rounds the rest. Steel is a light, low-saturation grey in the palette; anything else that should shine or stay matte goes in `look.json`. Unity side: `SurfaceLook.LitMaterial` makes the HDRP/Lit material from the three maps (keywords `_MASKMAP`, `_NORMALMAP`, remaps at 0 to 1, decals off), and the model importers import the FBX normals and calculate Mikk tangents, which the normal maps were baked against.
+
+**Renders.** `tools/render_look.py` renders models on a pavement plane under a sky and sun (day) or two warm street lamps (night). Ours-only renders are in each folder's `renders/look-*.png`; the side-by-side comparisons with the game's items stay outside the repo.
+
+**Street dirt.** The game's street dirt and litter are HDRP decal projectors on decal layer 0. `SurfaceLook.NoStreetDecals` sets every renderer of the cart, the truck, the display pieces and the register to rendering layer mask 1, as the game's vehicles have, on top of the materials' `_DISABLE_DECALS`. The machine items (`ItemAssets`) keep Unity's default 257, as the game's own furniture does.
 
 ## Axes
 
@@ -42,7 +96,9 @@ Replaces the box renderers in `CartAssets.BuildCart`. Everything the code places
 
 | Node | Position | Notes |
 |---|---|---|
-| `Cart_Body` | (0, 0, 0) | Box, counter, handle, fenders, feet, umbrella. 2,948 tris. Extents x −0.80…0.80 (umbrella), y 0…2.30, z −0.77…1.40 |
+| `Cart_Body` | (0, 0, 0) | Box, counter, handle, fenders, feet, umbrella pole. 2,180 tris. Extents x −0.50…0.50, y 0…2.30, z −0.77…0.70 |
+| `Cart_Canopy` | (0, 0, 0) | The open umbrella canopy and its ribs, 768 tris, x −0.80…0.80, y 2.02…2.29, z −0.20…1.40. Shown only while the cart is open for business |
+| `Cart_Canopy_Furled` | (0, 0, 0) | The canopy closed round the pole, strapped, 288 tris, within 0.075 m of the pole, y 1.44…2.27. Shown while the cart is closed, pushed, parked or loaded. The scorer keeps it out of the pusher zone and 0.30 m or more ahead of the push bar |
 | `Cart_Wheel_L` | (−0.455, 0.25, 0) | 0.50 m diameter, 0.05 m wide, spins about local X. 388 tris |
 | `Cart_Wheel_R` | (0.455, 0.25, 0) | Same |
 | `Cart_Lid` | (0, 0.95, 0.025) | Steam-well lid, hinge along local X; open at localEulerAngles.x = −100 (checked in Unity). Stays closed under the front equipment spot (plan, "Cart counter layout"). 88 tris |
@@ -60,20 +116,23 @@ The body box itself is x ±0.40, z ±0.70, counter top at y 0.95, underside at a
 | `BoxPlaceholder` | (0, 0.5, 0), inside the body, no boxes | The game only switches the placeholder's children on by the cargo count, so an empty one shows nothing and the cargo logic is unchanged |
 | `EquipmentFront` | (0, 0.963, 0.30) | Equipment spot behind the umbrella pole, just above the closed lid (top 0.962). A 0.40 × 0.36 m piece turned to any angle stays within 0.27 m of the spot: z 0.03…0.57, clear of the pole at z 0.60 |
 | `EquipmentRear` | (0, 0.963, −0.30) | Spot in front of the push bar: z −0.57…−0.03 at any angle, 0.18 m clear of the bar and the hands at z −0.75. The counter is empty here up to 1.17 m (lids flush), and the pieces (up to 0.70 m tall) stay under the canopy's 2.00 m rim |
+| `Cash_Register` | (0.29, 0.95, 0.615), turned +90° about Y | The cash register (`props/CashRegister`), facing the cart's right (+X, the door side). Footprint x 0.22…0.36, z 0.54…0.69, top 1.13: 0.33 m from `EquipmentFront` (a piece reaches 0.27 m), 0.19 m from the pole, 1.3 m from the hands. Always shown |
+
+**Umbrella.** `VehicleDisplays` shows `Cart_Canopy` while the cart is open (`StreetSales` `IsOpen`) and `Cart_Canopy_Furled` otherwise, checked every half second, so opening, closing and loading a save all switch it. It logs `Cart umbrella: cart <id> open, selling` or `furled, not selling` once per cart and state per session. The prefab starts furled.
 
 **Swap steps:**
 
-1. Import `FoodCart.fbx` with Read/Write off and scale 1, `T_FoodCart_BaseColor.png` as sRGB.
-2. One HDRP/Lit material with `_BaseColorMap` = `T_FoodCart_BaseColor` (base colour white) for all four visible meshes.
-3. In `BuildCart`, instead of the seven `Box(...)` calls, instantiate the four visible mesh nodes under the root on layer `Vehicles` and pass their renderers to `renderers`. Leave out `Cart_Collision`, or keep it disabled for later.
+1. Import `FoodCart.fbx` with Read/Write off, scale 1, normals imported and Mikk tangents.
+2. One HDRP/Lit material from `T_FoodCart_BC`, `_M` and `_N` (`SurfaceLook.LitMaterial`) for all visible meshes.
+3. In `BuildCart`, instead of the seven `Box(...)` calls, instantiate the visible mesh nodes under the root on layer `Vehicles` and pass their renderers, and the register's, to `renderers`. Leave out `Cart_Collision`, or keep it disabled for later.
 4. Widen the root `BoxCollider` and the `NavMeshObstacle` to cover the wheels: centre (0, 0.6, 0), size (0.96, 1.2, 1.5). The umbrella stays outside the collider, so people can walk under it.
 5. Optional: spin the wheels about local X with the rolling speed (done, `CartParts`). The lid no longer opens: equipment stands over it.
 
 ## Equipment
 
-Sixteen compact pieces for the cart's counter spots, one folder each in `equipment/` (`<Name>.fbx` with `<Name>_Body` and `<Name>_Collision`, and `T_<Name>_BaseColor.png`). Each fits 0.40 × 0.36 m, origin at the bottom centre, front (Blender −Y) facing the customer, which is +Z in Unity. Heights 0.40 to 0.70 m.
+Sixteen compact pieces for the cart's counter spots, one folder each in `equipment/` (`<Name>.fbx` with `<Name>_Body` and `<Name>_Collision`, the flat source `T_<Name>_BaseColor.png`, the shipped maps `T_<Name>_BC/_M/_N.png` and the icon `Icon_<Name>.png`). Each fits 0.40 × 0.36 m, origin at the bottom centre, front (Blender −Y) facing the customer, which is +Z in Unity. Heights 0.40 to 0.70 m.
 
-`tools/build-mod.sh` copies each FBX (as `<Name>_Model.fbx`) and texture into `unity/FoodTrucks/Vehicles/EquipmentArt/`, and `EquipmentAssets` makes an HDRP/Lit material and a `<Name>_Display.prefab` per model there (body mesh only, no collider). Only the `.meta` files, materials and prefabs are committed. The suffixes keep these files from sharing a name with the mod's machine items (`griddle`, `corngrill`, `dumplingsteamer`): the game finds an item's prefab by file name in any mod's bundle. The dumpling steamer, griddle and corn grill are also game items; `ItemAssets` builds their item prefabs in `unity/FoodTrucks/Items/Prefabs` from the same models. Item icons for the mod's eight items come from `art/tools/render_icons.sh` (Blender, 256 × 256, transparent, from the FBX and texture), written to `unity/FoodTrucks/Items/Icons` and committed. `data/economy.json`'s `display` field picks a piece's model by name: the coffee machine shows `CoffeeStation`, the cooler `DrinksCooler`, the hot dog grill `HotDogRoller`, the burger station `BurgerStation`, the ice cream counter `IceCreamCabinet`, the pizza oven `PizzaOven` and the display case `PastryCase`. The new foods' pieces show `PopcornMachine`, `SlushieMachine`, `DumplingSteamer`, `Griddle` and `CornGrill`; `CottonCandyMachine`, `KabobGrill` and `MerchRack` have no piece. The last five of the first fifteen were modelled with the game's own item icons attached as references (kept outside the repo), so they match the game's look at cart size. `StorageCabinet`, a steel cabinet with two doors and an open shelf of cartons, is the Extra Storage piece and also a game item (`foodtrucks:itemname_storagecabinet`, plan "Storage per piece"). A piece without a `display` shows nothing.
+`tools/build-mod.sh` copies each FBX (as `<Name>_Model.fbx`) and its three maps into `unity/FoodTrucks/Vehicles/EquipmentArt/` and its icon into `EquipmentArt/Icons/`, and `EquipmentAssets` makes an HDRP/Lit material, a `<Name>_Display.prefab` (body mesh only, no collider) and an icon sprite per model there. Only the `.meta` files, materials and prefabs are committed. The suffixes keep these files from sharing a name with the mod's machine items (`griddle`, `corngrill`, `dumplingsteamer`): the game finds an item's prefab by file name in any mod's bundle. The dumpling steamer, griddle and corn grill are also game items; `ItemAssets` builds their item prefabs in `unity/FoodTrucks/Items/Prefabs` from the same models. `art/tools/render_icons.sh` renders the icons in the game's item icon style (512 × 512, transparent, the front and the left side seen from 26° to the left and 24° above, the model filling 86% of the frame, measured on the game's `HotdogGrill` and `IndustrialGrill` icons), with the surface maps. It writes `Icon_<Name>.png` into every equipment folder (the order lists' pictures, loaded from the bundle as `Assets/Mods/FoodTrucks/Vehicles/EquipmentArt/Icons/Icon_<Name>.png`; the prefix keeps them apart from every prefab and item name) and the mod's eight item icons into `unity/FoodTrucks/Items/Icons`, which are committed. `data/economy.json`'s `display` field picks a piece's model by name: the coffee machine shows `CoffeeStation`, the cooler `DrinksCooler`, the hot dog grill `HotDogRoller`, the burger station `BurgerStation`, the ice cream counter `IceCreamCabinet`, the pizza oven `PizzaOven` and the display case `PastryCase`. The new foods' pieces show `PopcornMachine`, `SlushieMachine`, `DumplingSteamer`, `Griddle` and `CornGrill`; `CottonCandyMachine`, `KabobGrill` and `MerchRack` have no piece. The last five of the first fifteen were modelled with the game's own item icons attached as references (kept outside the repo), so they match the game's look at cart size. `StorageCabinet`, a steel cabinet with two doors and an open shelf of cartons, is the Extra Storage piece and also a game item (`foodtrucks:itemname_storagecabinet`, plan "Storage per piece"). A piece without a `display` shows nothing.
 
 On the cart, `VehicleDisplays` puts the first fitted piece on `EquipmentFront` and the second on `EquipmentRear` (each keeps its spot while fitted), turned 90° to face the side the queue forms on while the cart is open, and the cart's right side otherwise.
 
@@ -133,7 +192,7 @@ The DeliveryTruck is the nearest match for a step van. The food truck takes its 
 
 | Part | Unity position | Notes |
 |---|---|---|
-| Serving counter | x 0.78…1.02, z −2.00…−0.20, top y 1.80 | A shallow steel cabinet under the window whose top meets the sill. Nothing stands on it or above it, so the opening is clear (`spec.json` "serving window opening") |
+| Serving counter | x 0.78…1.02, z −2.00…−0.20, top y 1.80 | A shallow steel cabinet under the window whose top meets the sill. Nothing in the FBX stands on it or above it, so the opening is clear (`spec.json` "serving window opening"). `TruckAssets` puts the cash register (`Cash_Register`, `props/CashRegister`) on it at the cab end of the window: (0.905, 1.80, −0.305), turned +90° to face the street, footprint x 0.84…0.97, z −0.38…−0.23, top 1.98, beside the crew's places (x 0.44…0.74) |
 | Sliding panes | x 0.955…1.01, z −2.935…−2.00 | Parked in a pocket against the wall past the opening's rear end, on tracks along the counter and over the pocket |
 | Hand sink | x 0.43…1.02, z −0.12…0.88, top 1.75 | Hatch side, cab end, before the opening starts |
 | Aisle | x −0.40…0.78 | The player and crew stand at x 0.59 (`WindowCrew`): three 0.30 m bodies side by side (x 0.44…0.74, z −2.00…−0.20, y 0.95…2.74) and the waiting places behind them (z −2.95…−2.00) touch nothing |
@@ -159,9 +218,9 @@ The 0.9.3 to 0.9.7 layout (two spots at the hatch's ends, scaled 0.72 on a steel
 
 | Slot | Texture | Contents |
 |---|---|---|
-| `_BaseColorMap`, `_MainTex` | `T_FoodTruck_D` | Base colour; alpha 1 on painted panels [inference: the example's alpha looks like a paint mask] |
-| `_MaskMap` | `T_FoodTruck_MaskMap` | R metallic, G AO, B 0, A smoothness |
-| `_NormalMap` | `T_FoodTruck_N` | Flat |
+| `_BaseColorMap`, `_MainTex` | `T_FoodTruck_BC` | Base colour from `game_look.py` (source `T_FoodTruck_D`); alpha 1 on painted panels [inference: the example's alpha looks like a paint mask] |
+| `_MaskMap` | `T_FoodTruck_M` | R metallic, G AO, B 0, A smoothness, from `game_look.py` (source `T_FoodTruck_MaskMap`) |
+| `_NormalMap` | `T_FoodTruck_N` | Rounded edges baked by `game_look.py` |
 | `_EmissionTexture`, `_FrontLights`, `_BackLights`, `_BlinkerLeft`, `_BlinkerRight` | `T_FoodTruck_E` | Light colours |
 | `_EmissionMask` | `T_FoodTruck_EM_1` | R headlights plus the amber marker and work lights, G tail/brake, B reverse |
 | `_IndicatorsMask` | `T_FoodTruck_EM_2` | R right blinkers and side repeaters, G left ones |
@@ -183,6 +242,9 @@ The loading bay's street furniture (0.9.10, plan "Commissary bay look"), built b
 | `BayDumpster.fbx` | A 2-yard dumpster, green with black lids | 1.91 × 1.28 × 1.29 m |
 
 Props have their origin at the bottom centre and the front at Unity +z. `tools/build-mod.sh` copies the FBX files (as `<Name>_Model.fbx`) and textures into `unity/FoodTrucks/Commissary/BayArt/`, and `CommissaryAssets` makes HDRP/Lit materials (remapped from the Blender material names; the paint takes the street's dirt decals, the rest don't) and `<Name>_Display.prefab`s there; each prop prefab has a box collider and a carving NavMeshObstacle of its bounds. In game the pallet and the hand truck are the game's own `DeliveryPallet` (bottom two layers of boxes) and `Vehicles/PlayerVehicles/HandTruck` meshes when those load; the mod's models stand in otherwise. The game has no dumpster or roll cage.
+## Cash register
+
+`props/CashRegister/`: a compact point-of-sale register after the game's `ConcessionsStandRegister` and checkout counters (charcoal drawer, lighter deck, a screen on a short post facing the customer, a card terminal, a receipt slot). 0.15 × 0.13 m, 0.18 m tall, 424 tris, 256 px maps, front −Y, origin at the bottom centre. Built by `build_cash_register.py` (headless, `--factory-startup`), then `apply_look.sh`. `tools/build-mod.sh` copies it into `Vehicles/PropArt` as `CashRegister_Model.fbx`, and `PropAssets` adds it to the cart and the truck as a plain mesh child (`Cash_Register`, no collider) in the vehicle's `renderers` list. Positions are in the cart and truck tables above.
 
 ## Status
 

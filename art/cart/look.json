@@ -1,0 +1,8 @@
+{
+  "classes": [
+    {"rgb": [0.78, 0.065, 0.095], "class": "fabric"},
+    {"rgb": [0.99, 0.64, 0.075], "class": "fabric"},
+    {"rgb": [0.37, 0.43, 0.47], "class": "steel"},
+    {"rgb": [0.21, 0.26, 0.29], "class": "steel"}
+  ]
+}

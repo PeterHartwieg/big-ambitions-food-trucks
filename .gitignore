@@ -21,6 +21,7 @@ unity/FoodTrucks/Dependencies.meta
 # Art: only the finals and the review sheets are kept in git (Peter, 8 October 2026).
 art/**/renders/*
 !art/**/renders/review-sheet.png
+!art/**/renders/look-*.png
 art/truck/v1/
 art/truck/v2/
 art/**/__pycache__/
@@ -40,3 +41,6 @@ unity/FoodTrucks/Vehicles/EquipmentArt/*.png
 # The commissary bay's art, likewise; the originals are in art/commissary.
 unity/FoodTrucks/Commissary/BayArt/*.fbx
 unity/FoodTrucks/Commissary/BayArt/*.png
+unity/FoodTrucks/Vehicles/EquipmentArt/Icons/*.png
+unity/FoodTrucks/Vehicles/PropArt/*.fbx
+unity/FoodTrucks/Vehicles/PropArt/*.png
