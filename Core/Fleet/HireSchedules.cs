@@ -53,9 +53,9 @@ namespace FoodTrucks.Core.Fleet
         TooManyStops,
         EmptySpotKey,
         BadPosition,
-        // Opening at or after closing, before midnight, or closing after the latest close.
+        // Opening at or after closing, before midnight, closing after the latest close, or open longer than a day.
         BadTimes,
-        // A stop opens before the one before it closes.
+        // A stop opens before the one before it closes, or the last one runs past midnight into the first one's next day.
         Overlap
     }
 
@@ -135,8 +135,14 @@ namespace FoodTrucks.Core.Fleet
                     return ScheduleProblem.BadPosition;
                 if (stop.OpenAt < 0 || stop.OpenAt >= 1440 || stop.CloseAt <= stop.OpenAt || stop.CloseAt > rules.LatestCloseMinute)
                     return ScheduleProblem.BadTimes;
+                // A day at most: a longer stop would run into its own opening the next day.
+                if (stop.CloseAt - stop.OpenAt > 1440) return ScheduleProblem.BadTimes;
                 if (i > 0 && stop.OpenAt < schedule.Stops[i - 1].CloseAt) return ScheduleProblem.Overlap;
             }
+            // The last stop running past midnight must close by the time the first one opens the next day.
+            var first = schedule.Stops[0];
+            var last = schedule.Stops[schedule.Stops.Count - 1];
+            if (last.CloseAt > first.OpenAt + 1440) return ScheduleProblem.Overlap;
             return ScheduleProblem.None;
         }
 

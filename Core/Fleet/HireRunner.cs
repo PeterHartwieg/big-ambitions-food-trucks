@@ -437,7 +437,8 @@ namespace FoodTrucks.Core.Fleet
             if (step <= 0) throw new ArgumentOutOfRangeException(nameof(step));
             var others = Others(schedule, except);
             var times = new List<int>();
-            for (var close = open + step; close <= latestClose; close += step)
+            // At most a day long, so it never runs into its own opening the next day.
+            for (var close = open + step; close <= latestClose && close <= open + 1440; close += step)
             {
                 if (!Free(others, open, close)) break;
                 times.Add(close);
@@ -460,9 +461,14 @@ namespace FoodTrucks.Core.Fleet
         private static List<ScheduleStop> Others(HireSchedule? schedule, int? except) =>
             (schedule?.Stops ?? new List<ScheduleStop>()).Where((s, i) => s != null && i != except).ToList();
 
-        // [open, close) meets none of the other stops' hours. Touching ends are fine, as Validate has it.
+        // [open, close) meets none of the other stops' hours, on the same day or across midnight (a stop running past
+        // midnight meets the next day's early stops). Touching ends are fine, as Validate has it.
         private static bool Free(List<ScheduleStop> others, int open, int close) =>
-            others.All(s => close <= s.OpenAt || open >= s.CloseAt);
+            others.All(s => Apart(open, close, s.OpenAt, s.CloseAt) &&
+                            Apart(open, close, s.OpenAt + 1440, s.CloseAt + 1440) &&
+                            Apart(open, close, s.OpenAt - 1440, s.CloseAt - 1440));
+
+        private static bool Apart(int open, int close, int otherOpen, int otherClose) => close <= otherOpen || open >= otherClose;
 
         private static ScheduleStop Copy(ScheduleStop stop, int open, int close) => new ScheduleStop
         {

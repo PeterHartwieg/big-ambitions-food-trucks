@@ -112,6 +112,46 @@ public class RoutePageTests
     }
 
     [Fact]
+    public void ThePickersSeeAStopRunningPastMidnightAsTheNextDaysToo()
+    {
+        // The bars run 22:00 to 02:00 the next morning.
+        var route = new HireSchedule { Stops = { Stop("bars", 200, 22 * 60, 26 * 60) } };
+
+        var opens = RouteEditor.OpenTimes(route, Step, rules.LatestCloseMinute);
+        Assert.DoesNotContain(60, opens);
+        Assert.DoesNotContain(90, opens);
+        Assert.Contains(2 * 60, opens);
+        // From 00:00 nothing fits before the bars' carry-over ends at 02:00.
+        Assert.Empty(RouteEditor.CloseTimes(route, 0, Step, rules.LatestCloseMinute));
+        // An early stop from 02:00 runs up to the bars' opening, not into the night.
+        Assert.Equal(22 * 60, RouteEditor.CloseTimes(route, 2 * 60, Step, rules.LatestCloseMinute).Last());
+    }
+
+    [Fact]
+    public void AStopIsNeverOfferedLongerThanADay()
+    {
+        var closes = RouteEditor.CloseTimes(new HireSchedule(), 0, Step, rules.LatestCloseMinute);
+        Assert.Equal(24 * 60, closes.Last());
+    }
+
+    [Fact]
+    public void RoutesThatRunIntoTheNextDayAreRefused()
+    {
+        // The last stop's carry-over into the first stop's next day.
+        var wrap = new HireSchedule { Stops = { Stop("early", 100, 60, 4 * 60), Stop("bars", 200, 22 * 60, 26 * 60) } };
+        Assert.Equal(ScheduleProblem.Overlap, schedules.Validate(wrap));
+        // Touching ends are fine.
+        wrap.Stops[0].OpenAt = 2 * 60;
+        Assert.Equal(ScheduleProblem.None, schedules.Validate(wrap));
+        // A stop open longer than a day runs into its own opening.
+        Assert.Equal(ScheduleProblem.BadTimes, schedules.Validate(new HireSchedule { Stops = { Stop("all day", 100, 0, 25 * 60) } }));
+        // And the editor refuses both, changing nothing.
+        var truck = Truck(Stop("early", 100, 2 * 60, 4 * 60), Stop("bars", 200, 22 * 60, 23 * 60));
+        Assert.Equal(ScheduleProblem.Overlap, RouteEditor.SetTimes(schedules, truck, 1, 22 * 60, 26 * 60 + 30));
+        Assert.Equal(23 * 60, truck.Schedule!.Stops[1].CloseAt);
+    }
+
+    [Fact]
     public void ANewOpeningTimeKeepsTheStopsLengthWhereItFits()
     {
         var route = new HireSchedule { Stops = { Stop("office", 100, 11 * 60, 14 * 60), Stop("bars", 200, 18 * 60, 23 * 60) } };
