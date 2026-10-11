@@ -37,21 +37,47 @@ namespace FoodTrucks
         private static float nextSummary;
         private static bool failed;
 
+        // Every resolved bay point, kept for BayPointSeconds, so the hook on every lane in the city costs a few distance
+        // checks.
+        private const float BayPointSeconds = 1f;
+        private const float LaneReachMetres = 120f;
+        private static List<(double X, double Z)> bayPoints = new List<(double X, double Z)>();
+        private static float bayPointsUntil = float.MinValue;
+
+        private static bool NearAnyBay(Vector3 lane)
+        {
+            var now = Time.unscaledTime;
+            if (now >= bayPointsUntil)
+            {
+                bayPointsUntil = now + BayPointSeconds;
+                bayPoints = DemandData.Commissaries?.Sites.SelectMany(s => Commissary.ResolvedBays(s) ?? new List<CommissaryBayPoint>())
+                    .Select(b => (b.X, b.Z)).ToList() ?? new List<(double X, double Z)>();
+            }
+            var reach = (DemandData.Rules?.Commissary?.BayRadiusMetres ?? 15) + LaneReachMetres;
+            return bayPoints.Any(b => Flat(lane, b.X, b.Z) <= reach);
+        }
+
         public static void Reset()
         {
+            bayPointsUntil = float.MinValue;
             clean.Clear();
             counts.Clear();
             failed = false;
         }
 
         // A bay was resolved again: sweep it on the next look.
-        public static void Forget(string siteId) => clean.Remove(siteId);
+        public static void Forget(string siteId)
+        {
+            clean.Remove(siteId);
+            bayPointsUntil = float.MinValue;
+        }
 
         // Prefix on ParkingLaneGenerator.GenerateParkedVehicles: the lane's cars before it runs.
         public static void GeneratingPrefix(ParkingLaneGenerator __instance, out HashSet<GameObject>? __state)
         {
             __state = null;
-            if (failed || __instance == null) return;
+            // Most of the city's lanes are far from every bay: nothing is noted for them (review round 6).
+            if (failed || __instance == null || !NearAnyBay(__instance.transform.position)) return;
             try { __state = new HashSet<GameObject>(__instance.transform.Cast<Transform>().Select(t => t.gameObject)); }
             catch (Exception) { __state = null; }
         }
@@ -72,7 +98,7 @@ namespace FoodTrucks
                     var bays = Commissary.ResolvedBays(site);
                     if (bays == null || bays.Count == 0) continue;
                     // A lane runs up to about a block; only lanes near the bay can reach into it.
-                    if (!bays.Any(b => Flat(lane, b.X, b.Z) <= rules.BayRadiusMetres + 120f)) continue;
+                    if (!bays.Any(b => Flat(lane, b.X, b.Z) <= rules.BayRadiusMetres + LaneReachMetres)) continue;
                     var zones = BayMarkers.ZonesOf(site, (float)rules.BayRadiusMetres);
                     if (zones.Count == 0) continue;
                     var released = 0;
