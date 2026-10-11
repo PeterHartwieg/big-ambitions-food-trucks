@@ -23,6 +23,43 @@ namespace FoodTrucks.Core.Commissary
         // retries, recording the expense in SalesLedger only when the game actually takes the money.
         public List<CommissaryFine> Fines { get; set; } = new List<CommissaryFine>();
         public List<CommissaryCharge> Charges { get; set; } = new List<CommissaryCharge>();
+        // Each commissary's bay as resolved in this city (CommissaryBays): the points the search started from and where
+        // it found legal parking, so a load decides "in the bay" from the same points without searching again.
+        public Dictionary<string, CommissaryBaySet> Bays { get; set; } = new Dictionary<string, CommissaryBaySet>(StringComparer.Ordinal);
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    public class CommissaryBaySet
+    {
+        // BaySnap.RuleVersion when it was searched: a newer rule searches again.
+        public int Rule { get; set; }
+        // Where the search started (the data point, else the building's entrances), in order.
+        public List<CommissaryPoint> Origins { get; set; } = new List<CommissaryPoint>();
+        // The bays found on legal parking; empty when the search found none (that commissary has no bay).
+        public List<CommissaryBayPoint> Points { get; set; } = new List<CommissaryBayPoint>();
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    public class CommissaryPoint
+    {
+        public double X { get; set; }
+        public double Z { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    public class CommissaryBayPoint
+    {
+        public double X { get; set; }
+        public double Z { get; set; }
+        // The way the parking lane runs there.
+        public double AlongX { get; set; }
+        public double AlongZ { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -201,6 +238,17 @@ namespace FoodTrucks.Core.Commissary
                 throw new JsonSerializationException("Commissary pending payments must name their vehicle and day, with amounts not negative.");
             if (state.RentPaidThroughDay < 0 || state.NightCheckedThroughDay < 0)
                 throw new JsonSerializationException("Commissary day cursors must not be negative.");
+            // A resolved bay is only a cache of the city: a malformed one is dropped and searched again.
+            state.Bays ??= new Dictionary<string, CommissaryBaySet>(StringComparer.Ordinal);
+            foreach (var id in state.Bays.Keys.ToList())
+            {
+                var set = state.Bays[id];
+                if (string.IsNullOrWhiteSpace(id) || !CommissaryBays.WellFormed(set))
+                {
+                    Preserve(state, "_discardedBays", set, set?.ExtensionData);
+                    state.Bays.Remove(id);
+                }
+            }
             // Older saves have no AwaitingPayment flag. Observe their debts before the adapter can retry them.
             var unpaid = new HashSet<long>(state.Charges.Where(c => c.OrderId.HasValue).Select(c => c.OrderId!.Value));
             foreach (var order in state.Orders.Where(o => unpaid.Contains(o.Id))) order.AwaitingPayment = true;

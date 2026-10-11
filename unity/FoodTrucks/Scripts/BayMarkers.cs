@@ -9,23 +9,27 @@ using Object = UnityEngine.Object;
 namespace FoodTrucks
 {
     // A painted bay on the road at each commissary (Peter, 10 October 2026: "nothing shows where the bay is"). A vehicle
-    // is in the bay when its middle is within the bay radius (rules.json) of the bay point, which Commissary has snapped
-    // to the nearest legal parking (BaySnap). The paint covers the stretches of legal parking along that lane whose
-    // middle is within the radius, so a vehicle standing wholly inside the paint is in the bay and legally parked. A
-    // bay with no legal parking found gets no paint (0.9.8 drew an assumed lane on a no-parking kerb). The game draws no parking or loading zones of its own in the street (its
-    // parking lanes are invisible colliders and its delivery spots are inside buildings), so the bay is drawn like road
-    // paint: an outline and the word COMMISSARY in the commissary colour of the map filter, lit like the road. It is one
-    // flat mesh a few centimetres above the road with no collider, so it blocks no vehicle and changes no NavMesh.
-    // It shows while the player is within ShowMetres of it, or anywhere while driving or pushing a food vehicle.
+    // is in the bay when the game calls it legally parked and its middle is within the bay radius (rules.json) of a
+    // resolved bay point (Commissary.InBay; review round 4). The bay's zone (BayZone) is the stretches of the bay point's
+    // parking lane that are legal parking across the paint's whole width, every half metre, and lie wholly within the
+    // radius; the paint outlines that zone, so a vehicle standing wholly inside the paint is legally parked and in the
+    // bay. A bay with no legal parking gets no zone and no paint (0.9.8 drew an assumed lane on a no-parking kerb). The
+    // game draws no parking or loading zones of its own in the street (its parking lanes are invisible colliders and its
+    // delivery spots are inside buildings), so the bay is drawn like road paint: an outline and the word COMMISSARY in
+    // the commissary colour of the map filter, lit like the road. It is one flat mesh a few centimetres above the road
+    // with no collider, so it blocks no vehicle and changes no NavMesh. It shows while the player is within ShowMetres
+    // of it, or anywhere while driving or pushing a food vehicle. BayParking keeps the zone free of parked cars.
     internal static class BayMarkers
     {
         private const float ShowMetres = 100f;
         private const float MakeMetresDriving = 300f;
         private const float LineMetres = 0.15f;
         private const float Lift = 0.025f;
-        // How far either way across the lane the paint looks for the lane's edges.
-        private const float AcrossProbeMetres = 2.0f;
         private const float TruckLengthMetres = 5.8f;
+        // The paint's width: the lane's, at most this.
+        private const float MaxWidthMetres = 3.0f;
+        // The edge probes stand this far inside the paint's edges.
+        private const float EdgeInsetMetres = 0.1f;
         private static readonly Color Paint = MapFilters.CommissaryColour;
 
         private sealed class Marker
@@ -38,8 +42,7 @@ namespace FoodTrucks
                 At = at;
             }
 
-            // Null when the bay doesn't reach the kerb or has no usable parking: nothing is drawn, and it isn't tried
-            // again this session.
+            // Null when the bay has no usable zone: nothing is drawn, and it isn't tried again this session.
             public GameObject? Root { get; }
             // The marker's own mesh, destroyed with it (a Mesh made at run time isn't freed with its GameObject).
             public Mesh? Mesh { get; }
@@ -54,9 +57,44 @@ namespace FoodTrucks
             }
         }
 
-        // Each site's markers by bay (its index among the site's distinct bay points): a bay drawn stays drawn while
-        // another of the same site waits for its traffic lanes.
+        // One bay's zone in the lane's own frame: Foot on the lane's middle line, Along the lane (the bay point's
+        // direction), the paint's Width, and the stretches as metres along from Foot.
+        internal sealed class BayZone
+        {
+            public BayZone(Vector3 foot, Vector3 along, float width, List<(float From, float To)> spans, float offset, float reach)
+            {
+                Foot = foot;
+                Along = along;
+                Width = width;
+                Spans = spans;
+                Offset = offset;
+                Reach = reach;
+            }
+
+            public Vector3 Foot { get; }
+            public Vector3 Along { get; }
+            public Vector3 Across => new Vector3(Along.z, 0f, -Along.x);
+            public float Width { get; }
+            public List<(float From, float To)> Spans { get; }
+            // The lane's middle across from the bay point, and how far the zone may reach either way along it.
+            public float Offset { get; }
+            public float Reach { get; }
+
+            // Whether a point lies in one of the stretches (flat), with `margin` metres added all round.
+            public bool Contains(Vector3 point, float margin)
+            {
+                var d = point - Foot;
+                var a = Vector3.Dot(d, Along);
+                var c = Vector3.Dot(d, Across);
+                if (Mathf.Abs(c) > Width / 2f + margin) return false;
+                return Spans.Any(s => a >= s.From - margin && a <= s.To + margin);
+            }
+        }
+
+        // Each site's markers by bay (its index among the site's resolved bay points).
         private static readonly Dictionary<string, Dictionary<int, Marker>> markers = new Dictionary<string, Dictionary<int, Marker>>(StringComparer.Ordinal);
+        // Each site's zones by bay, worked out once per load (null: none usable). BayParking reads them too.
+        private static readonly Dictionary<string, Dictionary<int, BayZone?>> zones = new Dictionary<string, Dictionary<int, BayZone?>>(StringComparer.Ordinal);
         // A bay whose traffic lanes aren't there yet (the traffic system still starting) is tried again after a while:
         // reading the lanes scans every waypoint in the city.
         private const float RetrySeconds = 10f;
@@ -72,15 +110,13 @@ namespace FoodTrucks
             {
                 foreach (var site in sites.Sites)
                 {
-                    // Only bays on legal parking are painted; Commissary logs a bay that has none.
-                    var bays = Commissary.SnappedBays(site);
+                    // Only resolved bays on legal parking are painted; Commissary logs a commissary that has none.
+                    var bays = Commissary.ResolvedBays(site);
                     if (bays == null || bays.Count == 0) continue;
                     if (!markers.TryGetValue(site.Id, out var bySite)) markers[site.Id] = bySite = new Dictionary<int, Marker>();
                     // Drawn from the parking colliders and the road around it, so only with the player within a few
                     // hundred metres, where the street is loaded; farther than that the paint is too small to see anyway.
                     var near = bays.Any(b => Flat(player, (b.X, b.Z)) <= (inFoodVehicle ? MakeMetresDriving : ShowMetres + (float)radius));
-                    // Not made yet (or the scene was reloaded under them): made once the player is near or driving,
-                    // when the traffic lanes they are drawn from are there.
                     var missing = Enumerable.Range(0, bays.Count).Where(i => !bySite.TryGetValue(i, out var m) || (m.Drawn && m.Root == null)).ToList();
                     if (missing.Count > 0 && near && !(retryAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at))
                     {
@@ -93,7 +129,7 @@ namespace FoodTrucks
                                 gone.Destroy();
                                 bySite.Remove(i);
                             }
-                            var made = Make(site, bays[i], doors, radius, player);
+                            var made = Make(site, i, bays[i], doors, (float)radius, player);
                             if (made != null) bySite[i] = made;
                         }
                     }
@@ -124,74 +160,137 @@ namespace FoodTrucks
         public static void Reset()
         {
             RemoveAll();
+            zones.Clear();
             retryAt.Clear();
             failed = false;
         }
 
+        // A commissary's bay was resolved again: its markers and zones are made afresh.
+        public static void Forget(string siteId)
+        {
+            if (markers.TryGetValue(siteId, out var bySite))
+            {
+                foreach (var marker in bySite.Values) marker.Destroy();
+                markers.Remove(siteId);
+            }
+            zones.Remove(siteId);
+            retryAt.Remove(siteId);
+        }
+
+        // The site's zones (worked out now if not yet; null entries have none). Empty while the bay isn't resolved.
+        internal static List<BayZone> ZonesOf(CommissarySite site, float radius)
+        {
+            var bays = Commissary.ResolvedBays(site);
+            var list = new List<BayZone>();
+            if (bays == null) return list;
+            var doors = World.EntrancesOf(site.Address);
+            if (!zones.TryGetValue(site.Id, out var bySite)) zones[site.Id] = bySite = new Dictionary<int, BayZone?>();
+            for (var i = 0; i < bays.Count; i++)
+            {
+                if (!bySite.TryGetValue(i, out var zone))
+                {
+                    // Probed round the nearest entrance's height (the probe reads the lane's own height from its collider).
+                    var y = doors == null || doors.Length == 0 ? 0f : doors.OrderBy(d => Flat(d, (bays[i].X, bays[i].Z))).First().y;
+                    zone = Zone(site, bays[i], radius, y, out var problem);
+                    if (zone == null) Log.Error($"Commissary marker {site.Id}: {problem}; no paint and no parked-car keep-out there.");
+                    bySite[i] = zone;
+                }
+                if (zone != null) list.Add(zone);
+            }
+            return list;
+        }
+
+        // The bay's zone: the lane's middle and width across the bay point, then every half metre along the lane the
+        // middle and both edges of the paint (EdgeInsetMetres inside) on legal parking, with the truck lined up with the
+        // lane (the game's probe box turned the same way). A lane that bends or narrows ends the stretch there.
+        private static BayZone? Zone(CommissarySite site, CommissaryBayPoint bay, float radius, float y, out string problem)
+        {
+            var along = new Vector3((float)bay.AlongX, 0f, (float)bay.AlongZ).normalized;
+            var across = new Vector3(along.z, 0f, -along.x);
+            var at = new Vector3((float)bay.X, y, (float)bay.Z);
+            var probe = new Legality.ParkingProbe(at, radius + 5f);
+            bool Legal(Vector3 p) => probe.Legal(p.x, p.z, along.x, along.z);
+            var centred = BaySnap.Centred(at.x, at.z, (along.x, along.z), (x, z, ax, az) => probe.Legal(x, z, ax, az));
+            if (centred == null)
+            {
+                problem = $"no legal parking under the bay at x {at.x:F1}, z {at.z:F1}";
+                return null;
+            }
+            // The legal run across, edge to edge (the probe box finds the lane 0.1 m beyond each edge).
+            float first = 0f, last = 0f;
+            for (var s = 0f; s >= -(float)BaySnap.CentreProbeMetres && Legal(at + across * (s - 0.05f)); s -= 0.05f) first = s - 0.05f;
+            for (var s = 0f; s <= (float)BaySnap.CentreProbeMetres && Legal(at + across * (s + 0.05f)); s += 0.05f) last = s + 0.05f;
+            var offset = (first + last) / 2f;
+            var width = Mathf.Min(last - first - 2f * Legality.WheelBoxHalfWidth, MaxWidthMetres);
+            var foot = at + across * offset;
+            var half = width / 2f;
+            // The whole paint lies within the radius of the bay point, so a vehicle wholly inside it is within it.
+            var reach = Mathf.Sqrt(Mathf.Max(0f, radius * radius - (Mathf.Abs(offset) + half) * (Mathf.Abs(offset) + half)));
+            var edge = half - EdgeInsetMetres;
+            var stretches = BayLayout.Stretches(reach, x =>
+            {
+                var p = foot + along * (float)x;
+                return Legal(p) && Legal(p + across * edge) && Legal(p - across * edge);
+            });
+            if (stretches.Source == BayStretchSource.NoneUsable)
+            {
+                problem = $"the parking lane at x {foot.x:F1}, z {foot.z:F1} has no stretch of {BayLayout.MinStretchMetres:F0} m or more that is legal parking across " +
+                          $"{width:F1} m within the bay ({reach:F1} m either way)";
+                return null;
+            }
+            problem = "";
+            return new BayZone(foot, along, width, stretches.Spans.Select(sp => ((float)sp.From, (float)sp.To)).ToList(), offset, reach);
+        }
+
         // One bay's marker, or null while its traffic lanes aren't known (tried again later). Nothing is created
         // before every check has passed.
-        private static Marker? Make(CommissarySite site, BaySnapResult bay, Vector3[]? doors, double radius, Vector3 player)
+        private static Marker? Make(CommissarySite site, int index, CommissaryBayPoint bay, Vector3[]? doors, float radius, Vector3 player)
         {
-            // The bay's height: its nearest entrance's (the bay is on the street by it), else the player's.
+            // The bay's height: its nearest entrance's, else the player's (the zone's probes use the lane's own height).
             var door = doors == null || doors.Length == 0 ? (Vector3?)null : doors.OrderBy(d => Flat(d, (bay.X, bay.Z))).First();
             var y = door?.y ?? player.y;
             var at = new Vector3((float)bay.X, y, (float)bay.Z);
             var lanes = TrafficLanes.Near(at, 40f);
             if (!lanes.Known) return null;
-            return Draw(site, at, new Vector3((float)bay.AlongX, 0f, (float)bay.AlongZ).normalized, (float)radius, lanes);
+            ZonesOf(site, radius);
+            var zone = zones.TryGetValue(site.Id, out var bySite) && bySite.TryGetValue(index, out var z) ? z : null;
+            if (zone == null) return new Marker(null, null, at);
+            return Draw(site, zone, at, door, radius, lanes);
         }
 
-        private static Marker Draw(CommissarySite site, Vector3 bay, Vector3 laneAlong, float radius, TrafficLanes lanes)
+        private static Marker Draw(CommissarySite site, BayZone zone, Vector3 bay, Vector3? door, float radius, TrafficLanes lanes)
         {
-            // Across the parking lane, towards the pavement: away from the nearest driving lane.
-            var across = new Vector3(laneAlong.z, 0f, -laneAlong.x);
-            var nearest = lanes.Nearest(bay);
+            // The pavement side: away from the nearest driving lane; with none near, towards the garage's door (review
+            // round 4), so COMMISSARY reads from the pavement either way.
+            var across = zone.Across;
+            var nearest = lanes.Nearest(zone.Foot);
             var groundY = bay.y;
             if (nearest != null)
             {
-                var fromLane = bay - nearest.Value.Point;
+                var fromLane = zone.Foot - nearest.Value.Point;
                 fromLane.y = 0f;
                 if (Vector3.Dot(fromLane, across) < 0f) across = -across;
                 groundY = nearest.Value.Point.y;
             }
-            // Along the street, as the paint's local +x (the root faces -across): the lane is probed along the same signed
-            // axis as the paint is drawn, so a stretch found on one side of the bay point is painted on that side.
+            else if (door != null)
+            {
+                var toDoor = door.Value - zone.Foot;
+                toDoor.y = 0f;
+                if (Vector3.Dot(toDoor, across) < 0f) across = -across;
+            }
+            // Along the street, as the paint's local +x (the root faces -across). The zone's stretches are measured along
+            // its own direction; when the paint's axis runs the other way they are mirrored, so each is painted where it was found.
             var axis = BayLayout.PaintAxis(across.x, across.z);
             var along = new Vector3((float)axis.X, 0f, (float)axis.Z);
-
-            // The parking lane's edges across the bay point, by the same legality test the bay was found with.
-            float first = float.NaN, last = float.NaN;
-            for (var s = -AcrossProbeMetres; s <= AcrossProbeMetres + 0.001f; s += 0.1f)
-            {
-                if (!Legality.LegalParkingAt(bay + across * s)) continue;
-                if (float.IsNaN(first)) first = s;
-                last = s;
-            }
-            if (float.IsNaN(first))
-            {
-                Log.Error($"Commissary marker {site.Id}: no legal parking under the bay at x {bay.x:F1}, z {bay.z:F1}; nothing drawn.");
-                return new Marker(null, null, bay);
-            }
-            var offset = (first + last) / 2f;
-            // The probe box (0.1 m either side) finds the lane a little beyond its edges.
-            var width = Mathf.Clamp(last - first - 0.2f, 2.0f, 3.0f);
-            var foot = bay + across * offset;
+            var mirrored = Vector3.Dot(along, zone.Along) < 0f;
+            var spans = zone.Spans.Select(sp => mirrored ? (-sp.To, -sp.From) : (sp.From, sp.To)).OrderBy(sp => sp.Item1).ToList();
+            var foot = zone.Foot;
             foot.y = groundY;
-            var reach = Mathf.Sqrt(Mathf.Max(0f, radius * radius - offset * offset));
-
-            // The stretches of legal parking within reach (every half metre along the lane's middle).
-            var stretches = BayLayout.Stretches(reach, x => Legality.LegalParkingAt(foot + along * (float)x + Vector3.up * (bay.y - groundY)));
-            if (stretches.Source == BayStretchSource.NoneUsable)
-            {
-                Log.Error($"Commissary marker {site.Id}: the parking lane at x {foot.x:F1}, z {foot.z:F1} has no stretch of legal parking of {BayLayout.MinStretchMetres:F0} m or more " +
-                          $"within the bay ({reach:F1} m either way); nothing drawn.");
-                return new Marker(null, null, bay);
-            }
-            var spans = stretches.Spans.Select(s => ((float)s.From, (float)s.To)).ToList();
+            var width = zone.Width;
 
             // Local +z points to the road and +x along it, so the word reads from the pavement.
             var rotation = Quaternion.LookRotation(-across, Vector3.up);
-            var longest = spans.OrderByDescending(s => s.Item2 - s.Item1).First();
+            var longest = spans.OrderByDescending(sp => sp.Item2 - sp.Item1).First();
             var mesh = BuildMesh(Matrix4x4.TRS(foot, rotation, Vector3.one), spans, width, longest, groundY);
             GameObject? root = null;
             try
@@ -213,14 +312,14 @@ namespace FoodTrucks
                 throw;
             }
 
-            var length = spans.Sum(s => s.Item2 - s.Item1);
-            var fits = spans.Any(s => s.Item2 - s.Item1 >= TruckLengthMetres);
+            var length = spans.Sum(sp => sp.Item2 - sp.Item1);
+            var fits = spans.Any(sp => sp.Item2 - sp.Item1 >= TruckLengthMetres);
             Log.Info($"Commissary marker {site.Id}: bay paint at x {foot.x:F1}, z {foot.z:F1}, along {Mathf.Atan2(along.x, along.z) * Mathf.Rad2Deg:F0} degrees, " +
-                     $"{spans.Count} {(spans.Count == 1 ? "stretch" : "stretches")} of {length:F1} m ({string.Join(", ", spans.Select(s => $"{s.Item1:+0.0;-0.0}…{s.Item2:+0.0;-0.0} m"))}) " +
-                     $"on legal parking {width:F1} m wide, its middle {offset:+0.0;-0.0} m across from the bay point" +
-                     $"{(nearest != null ? $" ({Vector3.Dot(foot - nearest.Value.Point, across):F1} m from the driving lane)" : " (no driving lane near)")}; " +
-                     $"the {radius:F0} m bay reaches {reach:F1} m either way along the lane; " +
-                     $"a {TruckLengthMetres:F1} m truck {(fits ? "fits wholly inside" : "can't stand wholly inside: park its middle on the paint")}.");
+                     $"{spans.Count} {(spans.Count == 1 ? "stretch" : "stretches")} of {length:F1} m ({string.Join(", ", spans.Select(sp => $"{sp.Item1:+0.0;-0.0}…{sp.Item2:+0.0;-0.0} m"))}), " +
+                     $"{width:F2} m wide, legal parking at its middle and both edges every half metre; the lane's middle {zone.Offset:+0.00;-0.00} m across from the bay point" +
+                     $"{(nearest != null ? $", {Mathf.Abs(Vector3.Dot(foot - nearest.Value.Point, across)):F1} m from the driving lane" : ", no driving lane near (faces the door)")}; " +
+                     $"the paint lies within the {radius:F0} m bay ({zone.Reach:F1} m either way along); " +
+                     $"a {TruckLengthMetres:F1} m truck {(fits ? "fits wholly inside" : "can't stand wholly inside")}.");
             return new Marker(root, mesh, foot);
         }
 

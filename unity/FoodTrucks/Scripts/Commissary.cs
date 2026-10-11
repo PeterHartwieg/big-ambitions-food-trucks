@@ -52,9 +52,9 @@ namespace FoodTrucks
             Detach();
             uninstalled = false;
             BayMarkers.Reset();
-            snapped.Clear();
-            snapTries.Clear();
-            snapAt.Clear();
+            resolveAt.Clear();
+            notReadyLogged.Clear();
+            laneCache = null;
             var state = FoodTrucksSession.CurrentState;
             var sites = Sites;
             if (sites == null || Rules == null)
@@ -64,13 +64,17 @@ namespace FoodTrucks
             }
             CallDialogFactory.RegisterDialog(DialogType, () => new CommissaryDialog());
             attached = true;
-            var found = sites.Sites.Count(s => Bays(s) != null);
+            var found = sites.Sites.Count(s => Origins(s) != null);
             Log.Info($"Commissary: {found} of {sites.Sites.Count} garages found in the city" +
-                     (found < sites.Sites.Count ? " (missing: " + string.Join(", ", sites.Sites.Where(s => Bays(s) == null).Select(s => s.Address)) + ")" : "") + ".");
+                     (found < sites.Sites.Count ? " (missing: " + string.Join(", ", sites.Sites.Where(s => Origins(s) == null).Select(s => s.Address)) + ")" : "") + ".");
             foreach (var site in sites.Sites)
             {
-                var bay = Bays(site)?.FirstOrDefault();
-                if (bay != null) Log.Info($"Commissary {site.Id} ({site.Address}): bay searched from x {bay.Value.X:F1}, z {bay.Value.Z:F1}{(site.Bay != null ? " (set in data)" : " (nearest entrance)")}.");
+                var origin = Origins(site)?.FirstOrDefault();
+                var resolved = ResolvedBays(site);
+                if (origin != null)
+                    Log.Info($"Commissary {site.Id} ({site.Address}): bay searched from x {origin.Value.X:F1}, z {origin.Value.Z:F1}{(site.Bay != null ? " (set in data)" : " (nearest entrance)")}; " +
+                             (resolved == null ? "not resolved yet." : resolved.Count == 0 ? "no legal parking found (kept in the save)." :
+                                 "resolved at " + string.Join("; ", resolved.Select(p => $"x {p.X:F1}, z {p.Z:F1}")) + " (from the save)."));
                 LogBusinessAt(site);
             }
             if (state == null) return;
@@ -108,98 +112,176 @@ namespace FoodTrucks
             return list.Count == 0 ? "none" : string.Join(", ", list);
         }
 
-        // The bay's points: each snapped to the nearest legal parking (SnapBays), else, until that is done or where it
-        // found none, the points it searches from. Null while the city has no such building.
-        internal static IEnumerable<(double X, double Z)>? Bays(CommissarySite site)
+        // Where the bay search starts: the point set in data, else the building's entrances. Null while the city has no
+        // such building.
+        internal static List<(double X, double Z)>? Origins(CommissarySite site)
         {
-            if (snapped.TryGetValue(site.Id, out var bays)) return bays.Select(b => (b.X, b.Z));
-            return Origins(site);
+            if (site.Bay != null) return new List<(double X, double Z)> { site.Bay.Value };
+            return World.EntrancesOf(site.Address)?.Select(d => ((double)d.x, (double)d.z)).ToList();
         }
 
-        // The bays on legal parking, or null while not snapped (or none found: then nothing is painted).
-        internal static IReadOnlyList<BaySnapResult>? SnappedBays(CommissarySite site) => snapped.TryGetValue(site.Id, out var bays) ? bays : null;
+        // ---- Bays (review round 4, the coordinator's design) ----
+        // Peter (11 October 2026): "The purple area is not on a parking spot". Each commissary's bay is resolved once
+        // per city: from each origin, the nearest place within BaySnap.MaxMetres where a food truck stands legally parked
+        // by the game's own wheel test, centred across its lane (Core BaySnap). The result goes into the save
+        // (CommissaryState.Bays), with the origins and the rule version it was searched with, so a load decides from the
+        // same points without searching. A vehicle is in the bay when the game's wheel test calls it legally parked and
+        // its middle is within the bay radius of a resolved point (Core CommissaryBays.InBay); the paint, Ctrl+F3, the
+        // Commissary button, the visit unlock and the 04:00 check all ask InBay or the resolved points. An unresolved
+        // commissary decides nothing: no unlock, no button, no paint, and the 04:00 check waits for it.
 
-        // Where the bay search starts: the point set in data, else the building's entrances.
-        private static IEnumerable<(double X, double Z)>? Origins(CommissarySite site)
+        // The resolved bay points, or null while not resolved. Empty when the search found no legal parking.
+        internal static IReadOnlyList<CommissaryBayPoint>? ResolvedBays(CommissarySite site)
         {
-            if (site.Bay != null) return new[] { site.Bay.Value };
-            return World.EntrancesOf(site.Address)?.Select(d => ((double)d.x, (double)d.z));
+            var state = FoodTrucksSession.CurrentState;
+            var origins = Origins(site);
+            if (state == null || origins == null || origins.Count == 0) return null;
+            return CommissaryBays.Current(state.Commissary, site.Id, origins)?.Points;
         }
 
-        // Peter (11 October 2026): "The purple area is not on a parking spot". 0.9.8 took the bay as the door and drew
-        // the paint by the nearest driving lane; at Hell's Kitchen the garage faces a no-parking kerb across a one-way
-        // street, so the paint went on the road and a truck parked on it was ILLEGAL. Each bay point now moves to the
-        // nearest place within BaySnap.MaxMetres where a truck stands legally parked by the game's own wheel test
-        // (Legality.LegalParkingAt), and that point is the bay for "in the bay", the 04:00 check, Ctrl+F3 and the paint.
-        private static readonly Dictionary<string, BaySnapResult[]> snapped = new Dictionary<string, BaySnapResult[]>(StringComparer.Ordinal);
-        private static readonly Dictionary<string, int> snapTries = new Dictionary<string, int>(StringComparer.Ordinal);
-        private static readonly Dictionary<string, float> snapAt = new Dictionary<string, float>(StringComparer.Ordinal);
-        // A search that finds nothing is tried again with the player near (in case the street wasn't ready), this often.
-        private const int SnapTriesMax = 3;
-        private const float SnapRetrySeconds = 10f;
-        private const float SnapNearMetres = 300f;
+        private static IEnumerable<(double X, double Z)>? ResolvedPoints(CommissarySite site) => ResolvedBays(site)?.Select(p => (p.X, p.Z));
+
         // Two bays closer than this (entrances side by side) are one.
         private const double SameBayMetres = 3;
+        // The search reads the parking colliders this far round its origin.
+        private const float ProbeMetres = (float)BaySnap.MaxMetres + 8f;
+        // A bay that couldn't be resolved (the city's parking lanes not loaded) is tried again after this long.
+        private const float ResolveRetrySeconds = 5f;
+        private static readonly Dictionary<string, float> resolveAt = new Dictionary<string, float>(StringComparer.Ordinal);
+        private static readonly HashSet<string> notReadyLogged = new HashSet<string>(StringComparer.Ordinal);
+        private static WheelFootprint? footprint;
+        private static ParkingLaneGenerator[]? laneCache;
 
-        private static void SnapBays(CommissaryTables sites, Vector3 player)
+        // The truck's wheels from its prefab (the WheelController transforms, relative to the truck's middle), else
+        // Core's copy of TruckAssets' numbers.
+        private static WheelFootprint Footprint()
+        {
+            if (footprint != null) return footprint;
+            try
+            {
+                var prefab = FoodTrucksMod.Bundle?.LoadAsset<GameObject>(FoodTrucksMod.TruckPrefabPath);
+                var wheels = prefab == null ? Array.Empty<Transform>() : Legality.WheelsOf(prefab.transform);
+                if (wheels.Length >= 3)
+                {
+                    var offsets = wheels.Select(w => prefab!.transform.InverseTransformPoint(w.position)).Select(p => ((double)p.z, (double)p.x)).ToList();
+                    footprint = new WheelFootprint(offsets);
+                    Log.Info($"Commissary bays: the truck's wheels from its prefab: {string.Join(", ", offsets.Select(o => $"({o.Item1:+0.00;-0.00} along, {o.Item2:+0.00;-0.00} across)"))}.");
+                    return footprint;
+                }
+                Log.Error($"Commissary bays: the truck prefab has {wheels.Length} wheel controllers; using TruckAssets' wheels (±1.80 m along, ±0.87 m across).");
+            }
+            catch (Exception ex) { Log.Error("Commissary bays, the truck's wheels: " + ex.Message + "; using TruckAssets' wheels."); }
+            footprint = WheelFootprint.Truck;
+            return footprint;
+        }
+
+        // The city's parking lanes exist and are active (they belong to the city scene).
+        private static bool ParkingLoaded()
+        {
+            if (laneCache == null || laneCache.Any(l => l == null))
+                laneCache = UnityEngine.Object.FindObjectsByType<ParkingLaneGenerator>(FindObjectsSortMode.None);
+            return laneCache.Any(l => l != null && l.gameObject.activeInHierarchy);
+        }
+
+        // Resolves one commissary's bay if it isn't yet: true when it is resolved (now or before). `force` skips the
+        // retry wait (the 04:00 check).
+        private static bool Resolve(CommissarySite site, string why, bool force)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            var origins = Origins(site);
+            if (state == null || origins == null || origins.Count == 0) return false;
+            if (CommissaryBays.Current(state.Commissary, site.Id, origins) != null) return true;
+            if (!FoodTrucksSession.CanWrite) return false;
+            if (!force && resolveAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at) return false;
+            resolveAt[site.Id] = Time.unscaledTime + ResolveRetrySeconds;
+            if (!ParkingLoaded())
+            {
+                if (notReadyLogged.Add(site.Id))
+                    Log.Info($"Commissary {site.Id}: bay not resolved yet ({why}): the city's parking lanes aren't loaded; tried again every {ResolveRetrySeconds:F0} s.");
+                return false;
+            }
+            var doors = World.EntrancesOf(site.Address);
+            var found = new List<(BaySnapResult Bay, (double X, double Z) From)>();
+            var start = Time.realtimeSinceStartup;
+            foreach (var origin in origins)
+            {
+                var door = doors == null || doors.Length == 0 ? (Vector3?)null : doors.OrderBy(d => Flat(d, origin)).First();
+                var centre = new Vector3((float)origin.X, door?.y ?? PlayerHelper.GetPosition().y, (float)origin.Z);
+                var probe = new Legality.ParkingProbe(centre, ProbeMetres);
+                if (probe.Truncated) Log.Error($"Commissary {site.Id}: more than 512 parking colliders round x {origin.X:F1}, z {origin.Z:F1}; some were left out of the search.");
+                if (probe.Count == 0) continue;
+                // From an entrance, a place the pedestrians can't reach from the door within a short walk (the street
+                // behind the building) is passed over; a point set in data is trusted.
+                Func<double, double, bool>? reach = site.Bay == null && door != null ? (x, z) => Walkable(door.Value, x, z) : (Func<double, double, bool>?)null;
+                var bay = BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Footprint(), BaySnap.MaxMetres, reach);
+                if (bay != null && !found.Any(f => BaySnap.Distance(f.Bay.X, f.Bay.Z, bay.X, bay.Z) < SameBayMetres))
+                    found.Add((bay, origin));
+            }
+            CommissaryBays.Store(state.Commissary, site.Id, origins, found.Select(f => f.Bay));
+            FoodTrucksSession.MarkChanged();
+            BayMarkers.Forget(site.Id);
+            var ms = (Time.realtimeSinceStartup - start) * 1000f;
+            foreach (var (bay, from) in found)
+                Log.Info($"Commissary {site.Id}: bay on legal parking at x {bay.X:F1}, z {bay.Z:F1}, {bay.Distance:F1} m from x {from.X:F1}, z {from.Z:F1} " +
+                         $"({(site.Bay != null ? "set in data" : "entrance")}), the lane along {Math.Atan2(bay.AlongX, bay.AlongZ) * 180 / Math.PI:F0} degrees; " +
+                         $"resolved {why} in {ms:F0} ms and kept in the save.");
+            if (found.Count == 0)
+                Log.Error($"Commissary {site.Id}: no legal parking for a truck within {BaySnap.MaxMetres:F0} m of {string.Join("; ", origins.Select(o => $"x {o.X:F1}, z {o.Z:F1}"))} " +
+                          $"(resolved {why} in {ms:F0} ms). It has no bay: no vehicle is ever in it, no paint is drawn and its rented vehicles aren't fined at 04:00. " +
+                          "Set a measured bay point in commissaries.json.");
+            return true;
+        }
+
+        // A place the door's pedestrians reach on foot within a short walk: the NavMesh path from the door to the
+        // pavement nearest the place is at most 1.6 times the straight line plus 15 m. Unknown (no NavMesh near either
+        // end) counts as reachable.
+        private static bool Walkable(Vector3 door, double x, double z)
+        {
+            try
+            {
+                var place = new Vector3((float)x, door.y, (float)z);
+                if (!UnityEngine.AI.NavMesh.SamplePosition(door, out var from, 3f, UnityEngine.AI.NavMesh.AllAreas)) return true;
+                if (!UnityEngine.AI.NavMesh.SamplePosition(place, out var to, 4f, UnityEngine.AI.NavMesh.AllAreas)) return true;
+                var path = new UnityEngine.AI.NavMeshPath();
+                if (!UnityEngine.AI.NavMesh.CalculatePath(from.position, to.position, UnityEngine.AI.NavMesh.AllAreas, path) ||
+                    path.status != UnityEngine.AI.NavMeshPathStatus.PathComplete) return true;
+                var length = 0f;
+                for (var i = 1; i < path.corners.Length; i++) length += Vector3.Distance(path.corners[i - 1], path.corners[i]);
+                var straight = Vector3.Distance(from.position, to.position);
+                return length <= straight * 1.6f + 15f;
+            }
+            catch (Exception) { return true; }
+        }
+
+        // Twice a second from Look: at most one unresolved commissary per call, so searches spread across frames.
+        private static void ResolveOne(CommissaryTables sites)
         {
             foreach (var site in sites.Sites)
             {
-                if (snapped.ContainsKey(site.Id)) continue;
-                snapTries.TryGetValue(site.Id, out var tries);
-                if (tries >= SnapTriesMax) continue;
-                var origins = Origins(site)?.ToList();
-                if (origins == null || origins.Count == 0) continue;
-                if (tries > 0)
-                {
-                    if (snapAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at) continue;
-                    if (origins.Min(o => Flat(player, o)) > SnapNearMetres) continue;
-                }
-                snapTries[site.Id] = ++tries;
-                snapAt[site.Id] = Time.unscaledTime + SnapRetrySeconds;
-                var doors = World.EntrancesOf(site.Address);
-                var found = new List<(BaySnapResult Bay, (double X, double Z) From)>();
-                foreach (var origin in origins)
-                {
-                    // Probed at the nearest entrance's height (a point set in data has none); the probe box reaches a
-                    // metre either way.
-                    var y = doors == null || doors.Length == 0 ? player.y : doors.OrderBy(d => Flat(d, origin)).First().y;
-                    var bay = BaySnap.Nearest(origin.X, origin.Z,
-                        (x, z) => Legality.LegalParkingAt(new Vector3((float)x, y, (float)z)),
-                        (x, z) => Legality.ParkingAxesAt(new Vector3((float)x, y, (float)z)));
-                    if (bay != null && !found.Any(f => Math.Sqrt((f.Bay.X - bay.X) * (f.Bay.X - bay.X) + (f.Bay.Z - bay.Z) * (f.Bay.Z - bay.Z)) < SameBayMetres))
-                        found.Add((bay, origin));
-                }
-                if (found.Count > 0)
-                {
-                    snapped[site.Id] = found.Select(f => f.Bay).ToArray();
-                    foreach (var (bay, from) in found)
-                        Log.Info($"Commissary {site.Id}: bay on legal parking at x {bay.X:F1}, z {bay.Z:F1}, {bay.Distance:F1} m from x {from.X:F1}, z {from.Z:F1} " +
-                                 $"({(site.Bay != null ? "set in data" : "entrance")}), the lane along {Math.Atan2(bay.AlongX, bay.AlongZ) * 180 / Math.PI:F0} degrees.");
-                    continue;
-                }
-                if (tries < SnapTriesMax)
-                {
-                    Log.Info($"Commissary {site.Id}: no legal parking within {BaySnap.MaxMetres:F0} m of its bay yet (search {tries} of {SnapTriesMax}); tried again with the player near.");
-                    continue;
-                }
-                Log.Error($"Commissary {site.Id}: no legal parking within {BaySnap.MaxMetres:F0} m of {string.Join("; ", origins.Select(o => $"x {o.X:F1}, z {o.Z:F1}"))} " +
-                          $"after {SnapTriesMax} searches. The bay stays there and no paint is drawn; set a measured bay point in commissaries.json.");
+                if (ResolvedBays(site) != null) continue;
+                Resolve(site, "after load", force: false);
+                return;
             }
         }
 
         private static float Flat(Vector3 a, (double X, double Z) b) => new Vector2(a.x - (float)b.X, a.z - (float)b.Z).magnitude;
 
-        private static bool CityReady(CommissaryTables sites) => sites.Sites.Any(s => Bays(s) != null);
+        private static bool CityReady(CommissaryTables sites) => sites.Sites.Any(s => Origins(s) != null);
 
-        // The commissary whose bay a position is in.
-        internal static CommissarySite? SiteAt(Vector3 position, float extraMetres = 0f)
+        // The commissary whose resolved bay a position is within (radius plus extraMetres) of: the visit unlock.
+        internal static CommissarySite? SiteNear(Vector3 position, float extraMetres)
         {
             var sites = Sites;
             var rules = Rules;
             if (sites == null || rules == null) return null;
-            return sites.At(Bays, position.x, position.z, rules.BayRadiusMetres + extraMetres);
+            return sites.At(ResolvedPoints, position.x, position.z, rules.BayRadiusMetres + extraMetres);
         }
+
+        // The commissary whose bay the vehicle is in (legally parked, its middle within the radius), or null.
+        internal static CommissarySite? SiteOf(VehicleInstance vehicle) => Sites?.Sites.FirstOrDefault(s => InBay(vehicle, s, out _));
+
+        // A commissary searched with no legal parking found: it has no bay, and its vehicles aren't fined.
+        private static bool NoBay(CommissarySite site) => ResolvedBays(site) is { Count: 0 };
 
         private static Vector3 PositionOf(VehicleInstance vehicle)
         {
@@ -207,13 +289,19 @@ namespace FoodTrucks
             return controller != null ? controller.transform.position : (Vector3)vehicle.position;
         }
 
-        // Parked in the open (not in a building or garage) and within the commissary's bay.
-        private static bool InBay(VehicleInstance vehicle, CommissarySite site)
+        // Parked in the open (not in a building or garage), legally parked by the game's test, and its middle within
+        // the radius of the commissary's resolved bay.
+        internal static bool InBay(VehicleInstance vehicle, CommissarySite site, out string why)
         {
             var rules = Rules;
-            if (rules == null || !string.IsNullOrEmpty(vehicle.streetName)) return false;
+            var points = ResolvedBays(site);
+            if (rules == null || points == null) { why = "bay not resolved"; return false; }
+            if (!string.IsNullOrEmpty(vehicle.streetName)) { why = "inside a building"; return false; }
             var position = PositionOf(vehicle);
-            return CommissaryTables.Distance(Bays(site), position.x, position.z) <= rules.BayRadiusMetres;
+            if (!CommissaryBays.WithinRadius(points, position.x, position.z, rules.BayRadiusMetres)) { why = "outside the radius"; return false; }
+            var legal = Legality.VehicleLegallyParked(vehicle, out var how);
+            why = legal ? "legally parked (" + how + ")" : "not legally parked (" + how + ")";
+            return CommissaryBays.InBay(points, position.x, position.z, rules.BayRadiusMetres, legal);
         }
 
         internal static string Name(CommissarySite site) => LocalizorManager.GetLocalization(site.Name, null);
@@ -283,23 +371,23 @@ namespace FoodTrucks
         // Twice a second: the player at a bay unlocks it; the panel's Commissary button shows while the vehicle is in a bay.
         private static void Look(SaveState state)
         {
-            // The street's parking colliders are probed from outside only (an interior may hide the city).
-            if (Sites != null && !BuildingManager.IsInsideBuilding && !Parking.UndergroundParking.UndergroundParkingManager.IsInsideParking)
-                SnapBays(Sites, PlayerHelper.GetPosition());
+            if (Sites != null) ResolveOne(Sites);
             if (!BuildingManager.IsInsideBuilding)
             {
-                var visit = SiteAt(PlayerHelper.GetPosition(), VisitExtraMetres);
+                var visit = SiteNear(PlayerHelper.GetPosition(), VisitExtraMetres);
                 if (visit != null) Unlock(state, visit, "visited");
             }
             var vehicle = VehicleHelper.GetCurrentVehicle();
             var inFoodVehicle = vehicle != null && FoodTrucksMod.KindOf(vehicle.vehicleTypeName) != null;
-            var atBay = inFoodVehicle && SiteAt(PositionOf(vehicle!)) != null;
+            var atBay = inFoodVehicle && SiteOf(vehicle!) != null;
             CartButton.ShowCommissary(atBay);
             var sites = Sites;
             var rules = Rules;
             if (sites != null && rules != null)
-                BayMarkers.Update(sites, rules.BayRadiusMetres, PlayerHelper.GetPosition(), inFoodVehicle,
-                    BuildingManager.IsInsideBuilding || Parking.UndergroundParking.UndergroundParkingManager.IsInsideParking);
+            {
+                var inside = BuildingManager.IsInsideBuilding || Parking.UndergroundParking.UndergroundParkingManager.IsInsideParking;
+                BayMarkers.Update(sites, rules.BayRadiusMetres, PlayerHelper.GetPosition(), inFoodVehicle, inside);
+            }
         }
 
         // Once a game minute (or once after a skip): unpaid charges tried again, spaces of vehicles gone given up,
@@ -450,11 +538,26 @@ namespace FoodTrucks
             // Nothing to check until 04:00 has passed since the last check.
             var latest = minute >= rules.NightCheckMinute ? day : day - 1;
             if (latest <= commissary.NightCheckedThroughDay.Value) return;
+            // Every commissary with a rented space is resolved first, wherever the player is; one that can't be yet (the
+            // city's parking lanes not loaded) holds the check until it is, rather than deciding from another point.
+            var waiting = commissary.Spaces.Select(sp => sites.Site(sp.CommissaryId)).Where(site => site != null).Distinct()
+                .Where(site => !Resolve(site!, "for the 04:00 check", force: true)).Select(site => site!.Id).ToList();
+            if (waiting.Count > 0)
+            {
+                if (nightWaitLogged != latest)
+                {
+                    nightWaitLogged = latest;
+                    Log.Info($"Overnight check through day {latest} waits: the bay of {string.Join(", ", waiting)} isn't resolved yet (parking lanes not loaded).");
+                }
+                return;
+            }
+            var unresolvedOther = sites.Sites.Where(site => ResolvedBays(site) == null).Select(site => site.Id).ToList();
             var flags = Flags(state, sites, fleet, now);
             var fines = Commissaries.NightCheck(commissary, rules, day, minute, flags);
             FoodTrucksSession.MarkChanged();
             Log.Info($"Overnight check through day {commissary.NightCheckedThroughDay}: " +
-                     (flags.Count == 0 ? "no food vehicles" : string.Join("; ", flags.Select(Describe))) + $"; {fines.Count} fines.");
+                     (flags.Count == 0 ? "no food vehicles" : string.Join("; ", flags.Select(Describe))) + $"; {fines.Count} fines" +
+                     (unresolvedOther.Count > 0 ? $" (bays not resolved, no space rented there: {string.Join(", ", unresolvedOther)})" : "") + ".");
             foreach (var fine in fines)
             {
                 var paid = fine.Cents <= 0 || Payments.TryPayOut(fine.Cents, FineInfo(), showNotification: false);
@@ -470,6 +573,8 @@ namespace FoodTrucks
                 });
             }
         }
+
+        private int nightWaitLogged = -1;
 
         private static string Describe(CommissaryVehicle v) =>
             $"{World.Short(v.VehicleId)} {(v.AtOwnCommissaryBay ? "in its bay" : "out")}{(v.PlayerInside ? ", player inside" : "")}{(v.OnLateStop ? ", late stop" : "")}{(v.InTransit ? ", in transit" : "")}{(v.AtPlayerProperty ? ", at your own building" : "")}";
@@ -522,7 +627,7 @@ namespace FoodTrucks
                 list.Add(new CommissaryVehicle
                 {
                     VehicleId = vehicle.id,
-                    AtOwnCommissaryBay = site != null && !withDriver.Contains(vehicle.id) && InBay(vehicle, site),
+                    AtOwnCommissaryBay = site != null && !withDriver.Contains(vehicle.id) && (NoBay(site) || InBay(vehicle, site, out _)),
                     PlayerInside = game.ActiveVehicleId == vehicle.id || TruckWindow.PlayerAt(vehicle.id),
                     // Only a window the crew has open at a stop right now: a route that sold out and closed early is out like any other.
                     OnLateStop = saved != null && saved.IsOpen && saved.HireStop != null,
@@ -572,10 +677,12 @@ namespace FoodTrucks
                 CartSelling.Notify("foodtrucks:notification_data_readonly");
                 return;
             }
-            var site = SiteAt(PositionOf(cart));
+            var site = SiteOf(cart);
             if (site == null)
             {
-                CartSelling.Say("foodtrucks:notification_commissary_not_here", kind);
+                // Within a bay's radius but not legally parked: say so, rather than "not here".
+                var near = Sites?.Sites.FirstOrDefault(s => CommissaryBays.WithinRadius(ResolvedBays(s), PositionOf(cart).x, PositionOf(cart).z, rules.BayRadiusMetres));
+                CartSelling.Say(near != null ? "foodtrucks:notification_commissary_park_legally" : "foodtrucks:notification_commissary_not_here", kind);
                 return;
             }
             if (DropdownSelector.onShow == null)
@@ -1057,17 +1164,26 @@ namespace FoodTrucks
             var cart = VehicleHelper.GetCurrentVehicle();
             var vehicle = cart != null && FoodTrucksMod.KindOf(cart.vehicleTypeName) != null ? PositionOf(cart) : (Vector3?)null;
             var from = vehicle ?? player;
-            var nearest = sites.Sites.OrderBy(s => CommissaryTables.Distance(Bays(s), from.x, from.z)).First();
+            var nearest = sites.Sites.OrderBy(s => CommissaryTables.Distance(ResolvedPoints(s), from.x, from.z)).First();
             foreach (var site in sites.Sites)
             {
-                var bay = Bays(site)?.FirstOrDefault();
-                Log.Info($"Debug: commissary {site.Id} ({site.Address}) bay {(bay == null ? "not found" : $"x {bay.Value.X:F1}, z {bay.Value.Z:F1}")}, " +
-                         $"{CommissaryTables.Distance(Bays(site), player.x, player.z):F0} m from the player" +
-                         (vehicle != null ? $", {CommissaryTables.Distance(Bays(site), vehicle.Value.x, vehicle.Value.z):F0} m from the vehicle" : "") + ".");
+                var bays = ResolvedBays(site);
+                Log.Info($"Debug: commissary {site.Id} ({site.Address}) bay {(bays == null ? "not resolved" : bays.Count == 0 ? "none (no legal parking)" : string.Join("; ", bays.Select(b => $"x {b.X:F1}, z {b.Z:F1}")))}, " +
+                         $"{CommissaryTables.Distance(ResolvedPoints(site), player.x, player.z):F0} m from the player" +
+                         (vehicle != null ? $", {CommissaryTables.Distance(ResolvedPoints(site), vehicle.Value.x, vehicle.Value.z):F0} m from the vehicle" : "") + ".");
             }
-            var distance = CommissaryTables.Distance(Bays(nearest), from.x, from.z);
-            Log.Info($"Debug: at x {from.x:F1}, z {from.z:F1}; nearest commissary {nearest.Id}, {distance:F0} m (bay radius {rules.BayRadiusMetres} m).");
-            CartSelling.Notify("foodtrucks:notification", ("message", $"Nearest commissary: {Name(nearest)}, {distance:F0} m ({(distance <= rules.BayRadiusMetres ? "in the bay" : "outside the bay")})."));
+            var distance = CommissaryTables.Distance(ResolvedPoints(nearest), from.x, from.z);
+            // In the bay is the same test the 04:00 check uses: the vehicle legally parked and its middle within the radius.
+            string standing;
+            if (ResolvedBays(nearest) == null) standing = "bay not resolved yet";
+            else if (cart == null || vehicle == null) standing = distance <= rules.BayRadiusMetres ? "on foot, within the bay's radius" : "outside the bay";
+            else
+            {
+                var inBay = InBay(cart, nearest, out var why);
+                standing = inBay ? "in the bay" : distance <= rules.BayRadiusMetres ? "outside the bay: " + why : "outside the bay";
+            }
+            Log.Info($"Debug: at x {from.x:F1}, z {from.z:F1}; nearest commissary {nearest.Id}, {distance:F0} m (bay radius {rules.BayRadiusMetres} m): {standing}.");
+            CartSelling.Notify("foodtrucks:notification", ("message", $"Nearest commissary: {Name(nearest)}, {distance:F0} m ({standing})."));
         }
 
         // Orders paid for arrive now, as if it were their 08:00 (throwaway saves).

@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Helpers;
 using UnityEngine;
@@ -72,25 +73,134 @@ namespace FoodTrucks
             return hits.Any(h => h != null && h.GetComponentInParent<ParkingLaneGenerator>() != null);
         }
 
-        // Legal parking for a wheel standing at this point, by the game's own rule (CarController.UpdateParkingZone): a
-        // small box round the wheel touches the parking layer, and the first lane it finds isn't a disabled bay. The box
-        // is taller than the game's (it is sized by the wheel there) so a point at pavement or road height both reach.
-        public static bool LegalParkingAt(Vector3 point)
+        // ---- The game's parking test (CarController.UpdateParkingZone, 1.0) ----
+        // For each wheel: OverlapBox at the wheel's position less 0.1 m along its up, half extents (0.1, 2 x radius,
+        // 0.1), turned with the wheel, on the parking-area layer; legal when the first collider found belongs to a
+        // ParkingLaneGenerator that isn't a disabled bay. Every wheel has to pass.
+        public const float WheelBoxHalfWidth = 0.1f;
+        // The food truck's wheel radius (unity/BuildEditor/TruckAssets.cs, WheelController radius 0.38).
+        public const float TruckWheelRadius = 0.38f;
+        private static readonly Collider[] probeHits = new Collider[16];
+
+        // The game's test for one wheel box. `halfHeight` is the game's 2 x wheel radius for a real wheel; a search
+        // probe uses the lane's own height and a taller box instead (ParkingProbe).
+        public static bool LegalWheelAt(Vector3 point, Quaternion rotation, float halfHeight)
         {
-            var hits = Physics.OverlapBox(point, new Vector3(0.1f, 1.0f, 0.1f), Quaternion.identity, LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide);
-            if (hits.Length == 0 || hits[0] == null) return false;
-            var lane = hits[0].GetComponentInParent<ParkingLaneGenerator>();
+            var count = Physics.OverlapBoxNonAlloc(point, new Vector3(WheelBoxHalfWidth, halfHeight, WheelBoxHalfWidth), probeHits, rotation,
+                LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide);
+            if (count == 0 || probeHits[0] == null) return false;
+            var lane = probeHits[0].GetComponentInParent<ParkingLaneGenerator>();
             return lane != null && !lane.isHandicapParking;
         }
 
-        // The flat axes of the parking collider at this point (its box's forward and right), the ways a vehicle parked
-        // there can line up. Empty off parking.
-        public static (double X, double Z)[] ParkingAxesAt(Vector3 point)
+        // Legal parking for a wheel standing at this point, the box turned with a vehicle facing `along` (flat).
+        public static bool LegalParkingAt(Vector3 point, Vector3 along)
         {
-            var hits = Physics.OverlapBox(point, new Vector3(0.1f, 1.0f, 0.1f), Quaternion.identity, LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide);
-            if (hits.Length == 0 || hits[0] == null) return Array.Empty<(double, double)>();
-            var t = hits[0].transform;
-            return new[] { ((double)t.forward.x, (double)t.forward.z), ((double)t.right.x, (double)t.right.z) };
+            along.y = 0f;
+            var rotation = along.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(along.normalized, Vector3.up) : Quaternion.identity;
+            return LegalWheelAt(point, rotation, 1.0f);
+        }
+
+        // Any parking collider within `radius` of the point (any height within 50 m): the city's parking lanes are there.
+        public static bool ParkingNear(Vector3 point, float radius)
+        {
+            var count = Physics.OverlapBoxNonAlloc(point, new Vector3(radius, 50f, radius), probeHits, Quaternion.identity,
+                LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide);
+            for (var i = 0; i < count; i++)
+                if (probeHits[i] != null && probeHits[i].GetComponentInParent<ParkingLaneGenerator>() != null) return true;
+            return false;
+        }
+
+        // The wheels of a food truck as the game tests them: its WheelController transforms (named "<wheel>_WheelController"
+        // by TruckAssets). Empty for a vehicle without them.
+        public static Transform[] WheelsOf(Transform vehicle) =>
+            vehicle.GetComponentsInChildren<Transform>(true).Where(t => t.name.EndsWith("_WheelController", StringComparison.Ordinal)).ToArray();
+
+        // Whether the vehicle stands legally parked by the game's own test, and how that was decided. A truck runs the
+        // wheel test on its live wheels; a cart (a hand truck, which the game never tests) counts with its middle on
+        // legal parking; a vehicle not in the world, or with the street's parking lanes not loaded round it, takes
+        // the parking state the game last saved for it.
+        public static bool VehicleLegallyParked(VehicleInstance vehicle, out string how)
+        {
+            var controller = VehicleHelper.GetVehicleController(vehicle);
+            if (controller == null)
+            {
+                how = "the game's saved parking state";
+                return vehicle.parkingState == ParkingState.Legal;
+            }
+            var position = controller.transform.position;
+            if (!ParkingNear(position, 6f))
+            {
+                how = "the game's saved parking state (no parking lanes loaded here)";
+                return vehicle.parkingState == ParkingState.Legal;
+            }
+            var wheels = WheelsOf(controller.transform);
+            if (wheels.Length > 0)
+            {
+                how = "the game's wheel test";
+                foreach (var wheel in wheels)
+                    if (!LegalWheelAt(wheel.position - wheel.up * 0.1f, wheel.rotation, TruckWheelRadius * 2f)) return false;
+                return true;
+            }
+            how = "its middle on legal parking";
+            return LegalParkingAt(position, controller.transform.forward);
+        }
+
+        // The search's view of the parking lanes round one point: the parking colliders within reach, read once, so
+        // each probe first checks them cheaply and then runs the game's wheel test at the lane's own height (a raised
+        // door or a sloping street doesn't put the probe above or below the lane).
+        internal sealed class ParkingProbe
+        {
+            private static readonly Collider[] found = new Collider[512];
+            private readonly List<(Collider Collider, Bounds Bounds)> lanes = new List<(Collider, Bounds)>();
+
+            public ParkingProbe(Vector3 centre, float radius)
+            {
+                var count = Physics.OverlapBoxNonAlloc(centre, new Vector3(radius, 50f, radius), found, Quaternion.identity,
+                    LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide);
+                for (var i = 0; i < count; i++)
+                {
+                    var c = found[i];
+                    if (c == null || !c.enabled || c.GetComponentInParent<ParkingLaneGenerator>() == null) continue;
+                    lanes.Add((c, c.bounds));
+                }
+                Truncated = count >= found.Length;
+            }
+
+            public int Count => lanes.Count;
+            public bool Truncated { get; }
+
+            // The parking collider under (x, z), with the height to probe it at, or null.
+            private (Collider Collider, float Y, float HalfHeight)? Under(double x, double z)
+            {
+                foreach (var (c, b) in lanes)
+                {
+                    if (x < b.min.x - 0.15 || x > b.max.x + 0.15 || z < b.min.z - 0.15 || z > b.max.z + 0.15) continue;
+                    var p = new Vector3((float)x, b.center.y, (float)z);
+                    var closest = c.ClosestPoint(p);
+                    if (new Vector2(closest.x - p.x, closest.z - p.z).sqrMagnitude > 0.15f * 0.15f) continue;
+                    return (c, b.center.y, Mathf.Max(1.0f, b.extents.y + 0.3f));
+                }
+                return null;
+            }
+
+            public bool Legal(double x, double z, double alongX, double alongZ)
+            {
+                var under = Under(x, z);
+                if (under == null) return false;
+                var along = new Vector3((float)alongX, 0f, (float)alongZ);
+                var rotation = along.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(along.normalized, Vector3.up) : Quaternion.identity;
+                return LegalWheelAt(new Vector3((float)x, under.Value.Y, (float)z), rotation, under.Value.HalfHeight);
+            }
+
+            // The lane's axes at (x, z): its collider's forward and right. None off parking.
+            public IEnumerable<(double X, double Z)> Axes(double x, double z)
+            {
+                var under = Under(x, z);
+                if (under == null) return Array.Empty<(double, double)>();
+                var t = under.Value.Collider.transform;
+                return new[] { ((double)t.forward.x, (double)t.forward.z), ((double)t.right.x, (double)t.right.z) };
+            }
         }
 
         public static bool RoadBelow(Vector3 position)
