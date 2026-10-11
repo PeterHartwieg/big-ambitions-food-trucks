@@ -6,6 +6,7 @@ using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Rules;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
+using HarmonyLib;
 using Helpers;
 using Parking.UndergroundParking;
 using UI;
@@ -1010,10 +1011,51 @@ namespace FoodTrucks
             character.Move(Vector3.zero);
         }
 
+        // 0.9.8 threw a NullReferenceException inside the game's ShowExpression for every customer who gave up (23 in
+        // the 11 October 2026 log, from Leave): an NPC's emoji runs on the character's serialized
+        // npcExpressionsSingleCoroutineStarterStopper, which the HumanDefinitionLow prefab leaves empty (the game's own
+        // NPCs that show emojis get theirs elsewhere). The exception is thrown inside the coroutine, where Unity logs it,
+        // so the catch below never saw it. The stopper is now added and set before the first emoji; without it, none.
+        private static readonly AccessTools.FieldRef<ThirdPersonCharacter, SingleCoroutineStarterStopper>? stopperField = StopperField();
+        private static bool stopperLogged;
+
+        private static AccessTools.FieldRef<ThirdPersonCharacter, SingleCoroutineStarterStopper>? StopperField()
+        {
+            try { return AccessTools.FieldRefAccess<ThirdPersonCharacter, SingleCoroutineStarterStopper>("npcExpressionsSingleCoroutineStarterStopper"); }
+            catch (Exception ex)
+            {
+                Log.Error("Queue view: the characters' emoji runner field isn't there (" + ex.Message + "); no customer emojis.");
+                return null;
+            }
+        }
+
+        private bool ReadyToExpress()
+        {
+            if (character == null || character.head == null || stopperField == null) return false;
+            if (stopperField(character) != null) return true;
+            var stopper = character.gameObject.GetComponent<SingleCoroutineStarterStopper>() ?? character.gameObject.AddComponent<SingleCoroutineStarterStopper>();
+            stopperField(character) = stopper;
+            if (!stopperLogged)
+            {
+                stopperLogged = true;
+                Log.Info("Queue view: customers' emoji runner added (the character prefab has none).");
+            }
+            return stopperField(character) != null;
+        }
+
         private void Express(CharacterEmojiName emoji)
         {
-            if (character == null || expressionFailed) return;
-            try { StartCoroutine(character.ShowExpression(emoji, 2f)); }
+            if (character == null || expressionFailed || !character.gameObject.activeInHierarchy) return;
+            try
+            {
+                if (!ReadyToExpress())
+                {
+                    expressionFailed = true;
+                    Log.Error("Queue view: customer expressions unavailable: the character has no emoji runner or head.");
+                    return;
+                }
+                StartCoroutine(character.ShowExpression(emoji, 2f));
+            }
             catch (Exception ex)
             {
                 // Once is enough: the queue works without them.
