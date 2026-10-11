@@ -75,7 +75,9 @@ namespace FoodTrucks.Core.Commissary
                     var along = (X: ax / length, Z: az / length);
                     if (!legal(px, pz, along.X, along.Z)) continue;
                     var place = Centred(px, pz, along, legal) ?? (px, pz);
-                    if (!Fits(place.X, place.Z, along, probes, legal))
+                    // Centring can move a place past the search's limit (review round 5): the place itself must be
+                    // within maxMetres, else the grid cell is tried as it is.
+                    if (Distance(x, z, place.X, place.Z) > maxMetres + 1e-9 || !Fits(place.X, place.Z, along, probes, legal))
                     {
                         if (place.X == px && place.Z == pz) continue;
                         place = (px, pz);
@@ -207,6 +209,11 @@ namespace FoodTrucks.Core.Commissary
             return set.Points.All(p => p != null && Finite(p.X) && Finite(p.Z) && Finite(p.AlongX) && Finite(p.AlongZ) &&
                                        Math.Abs(Math.Sqrt(p.AlongX * p.AlongX + p.AlongZ * p.AlongZ) - 1) < 0.01);
         }
+
+        // Whether a vehicle of this kind has to be legally parked to be in a bay. A truck does; a cart (pushed by hand,
+        // never parked in a lane by the game, which has no parking test for it) counts by its middle alone, on the
+        // pavement or in the lane (Peter, 11 October 2026, review round 5).
+        public static bool RequiresLegalParking(string? kind) => kind != "cart";
 
         // In the bay: legally parked by the game's wheel test, and the middle within the radius of a bay point.
         public static bool InBay(IEnumerable<CommissaryBayPoint>? points, double x, double z, double radius, bool legallyParked) =>

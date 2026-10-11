@@ -55,7 +55,7 @@ namespace FoodTrucks
             BayParking.Reset();
             resolveAt.Clear();
             notReadyLogged.Clear();
-            laneCache = null;
+            Legality.ResetLanes();
             var state = FoodTrucksSession.CurrentState;
             var sites = Sites;
             if (sites == null || Rules == null)
@@ -151,7 +151,6 @@ namespace FoodTrucks
         private static readonly Dictionary<string, float> resolveAt = new Dictionary<string, float>(StringComparer.Ordinal);
         private static readonly HashSet<string> notReadyLogged = new HashSet<string>(StringComparer.Ordinal);
         private static WheelFootprint? footprint;
-        private static ParkingLaneGenerator[]? laneCache;
 
         // The truck's wheels from its prefab (the WheelController transforms, relative to the truck's middle), else
         // Core's copy of TruckAssets' numbers.
@@ -176,14 +175,6 @@ namespace FoodTrucks
             return footprint;
         }
 
-        // The city's parking lanes exist and are active (they belong to the city scene).
-        private static bool ParkingLoaded()
-        {
-            if (laneCache == null || laneCache.Any(l => l == null))
-                laneCache = UnityEngine.Object.FindObjectsByType<ParkingLaneGenerator>(FindObjectsSortMode.None);
-            return laneCache.Any(l => l != null && l.gameObject.activeInHierarchy);
-        }
-
         // Resolves one commissary's bay if it isn't yet: true when it is resolved (now or before). `force` skips the
         // retry wait (the 04:00 check).
         private static bool Resolve(CommissarySite site, string why, bool force)
@@ -195,7 +186,7 @@ namespace FoodTrucks
             if (!FoodTrucksSession.CanWrite) return false;
             if (!force && resolveAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at) return false;
             resolveAt[site.Id] = Time.unscaledTime + ResolveRetrySeconds;
-            if (!ParkingLoaded())
+            if (!Legality.ParkingSceneReady())
             {
                 if (notReadyLogged.Add(site.Id))
                     Log.Info($"Commissary {site.Id}: bay not resolved yet ({why}): the city's parking lanes aren't loaded; tried again every {ResolveRetrySeconds:F0} s.");
@@ -204,12 +195,14 @@ namespace FoodTrucks
             var doors = World.EntrancesOf(site.Address);
             var found = new List<(BaySnapResult Bay, (double X, double Z) From)>();
             var start = Time.realtimeSinceStartup;
+            var colliders = 0;
             foreach (var origin in origins)
             {
                 var door = doors == null || doors.Length == 0 ? (Vector3?)null : doors.OrderBy(d => Flat(d, origin)).First();
                 var centre = new Vector3((float)origin.X, door?.y ?? PlayerHelper.GetPosition().y, (float)origin.Z);
                 var probe = new Legality.ParkingProbe(centre, ProbeMetres);
                 if (probe.Truncated) Log.Error($"Commissary {site.Id}: more than 512 parking colliders round x {origin.X:F1}, z {origin.Z:F1}; some were left out of the search.");
+                colliders += probe.Count;
                 if (probe.Count == 0) continue;
                 // From an entrance, a place the pedestrians can't reach from the door within a short walk (the street
                 // behind the building) is passed over; a point set in data is trusted.
@@ -217,6 +210,15 @@ namespace FoodTrucks
                 var bay = BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Footprint(), BaySnap.MaxMetres, reach);
                 if (bay != null && !found.Any(f => BaySnap.Distance(f.Bay.X, f.Bay.Z, bay.X, bay.Z) < SameBayMetres))
                     found.Add((bay, origin));
+            }
+            // No parking collider at all round any origin: more likely the street isn't there yet than a commissary
+            // without parking, so nothing is stored and it is tried again (review round 5). "No bay" is stored only
+            // after a search over colliders that were there.
+            if (colliders == 0)
+            {
+                if (notReadyLogged.Add(site.Id))
+                    Log.Info($"Commissary {site.Id}: bay not resolved yet ({why}): no parking lanes round it yet; tried again every {ResolveRetrySeconds:F0} s.");
+                return false;
             }
             CommissaryBays.Store(state.Commissary, site.Id, origins, found.Select(f => f.Bay));
             FoodTrucksSession.MarkChanged();
@@ -234,9 +236,9 @@ namespace FoodTrucks
             return true;
         }
 
-        // A place the door's pedestrians reach on foot within a short walk: the NavMesh path from the door to the
-        // pavement nearest the place is at most 1.6 times the straight line plus 15 m. Unknown (no NavMesh near either
-        // end) counts as reachable.
+        // A place the door's pedestrians reach on foot within a short walk: a complete NavMesh path from the door to the
+        // pavement nearest the place, at most 1.6 times the straight line plus 15 m. Unknown (no NavMesh near either end)
+        // counts as reachable; a failed or partial path between two ends that are both there doesn't.
         private static bool Walkable(Vector3 door, double x, double z)
         {
             try
@@ -245,8 +247,9 @@ namespace FoodTrucks
                 if (!UnityEngine.AI.NavMesh.SamplePosition(door, out var from, 3f, UnityEngine.AI.NavMesh.AllAreas)) return true;
                 if (!UnityEngine.AI.NavMesh.SamplePosition(place, out var to, 4f, UnityEngine.AI.NavMesh.AllAreas)) return true;
                 var path = new UnityEngine.AI.NavMeshPath();
+                // Both ends are on the NavMesh: no complete path between them is a known failure (review round 5).
                 if (!UnityEngine.AI.NavMesh.CalculatePath(from.position, to.position, UnityEngine.AI.NavMesh.AllAreas, path) ||
-                    path.status != UnityEngine.AI.NavMeshPathStatus.PathComplete) return true;
+                    path.status != UnityEngine.AI.NavMeshPathStatus.PathComplete) return false;
                 var length = 0f;
                 for (var i = 1; i < path.corners.Length; i++) length += Vector3.Distance(path.corners[i - 1], path.corners[i]);
                 var straight = Vector3.Distance(from.position, to.position);
@@ -291,8 +294,8 @@ namespace FoodTrucks
             return controller != null ? controller.transform.position : (Vector3)vehicle.position;
         }
 
-        // Parked in the open (not in a building or garage), legally parked by the game's test, and its middle within
-        // the radius of the commissary's resolved bay.
+        // Parked in the open (not in a building or garage), its middle within the radius of the commissary's resolved
+        // bay, and (a truck) legally parked by the game's test. A cart counts by its middle alone (Peter, review round 5).
         internal static bool InBay(VehicleInstance vehicle, CommissarySite site, out string why)
         {
             var rules = Rules;
@@ -301,6 +304,11 @@ namespace FoodTrucks
             if (!string.IsNullOrEmpty(vehicle.streetName)) { why = "inside a building"; return false; }
             var position = PositionOf(vehicle);
             if (!CommissaryBays.WithinRadius(points, position.x, position.z, rules.BayRadiusMetres)) { why = "outside the radius"; return false; }
+            if (!CommissaryBays.RequiresLegalParking(FoodTrucksMod.KindOf(vehicle.vehicleTypeName)))
+            {
+                why = "a cart within the radius";
+                return true;
+            }
             var legal = Legality.VehicleLegallyParked(vehicle, out var how);
             why = legal ? "legally parked (" + how + ")" : "not legally parked (" + how + ")";
             return CommissaryBays.InBay(points, position.x, position.z, rules.BayRadiusMetres, legal);

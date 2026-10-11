@@ -142,6 +142,25 @@ public class BaySnapTests
     }
 
     [Fact]
+    public void CentringNeverMovesThePlacePastTheLimit()
+    {
+        // Review round 5: from (0, 0), a lane from x 30 to 32.4 admits the grid cell (30, 0); centred it would be
+        // (31.2, 0), past the 30 m limit. Nothing is found there; a place found is always within the limit.
+        Assert.Null(BaySnap.Nearest(0, 0, Lane(30, 32.4, -20, 20), BothAxes, WheelFootprint.Truck));
+        var found = BaySnap.Nearest(0, 0, Lane(27.0, 29.4, -20, 20), BothAxes, WheelFootprint.Truck);
+        Assert.NotNull(found);
+        Assert.True(found!.Distance <= BaySnap.MaxMetres);
+        Assert.Equal(28.2, found.X, 1);
+    }
+
+    [Fact]
+    public void ATruckNeedsLegalParkingACartDoesNot()
+    {
+        Assert.True(CommissaryBays.RequiresLegalParking("truck"));
+        Assert.False(CommissaryBays.RequiresLegalParking("cart"));
+    }
+
+    [Fact]
     public void NoLegalParkingWithinReachFindsNothing()
     {
         Assert.Null(BaySnap.Nearest(0, 0, Lane(40, 42.4, -20, 20), BothAxes, WheelFootprint.Truck));

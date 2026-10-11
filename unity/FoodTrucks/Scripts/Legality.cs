@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using FoodTrucks.Core.Commissary;
 using Helpers;
 using UnityEngine;
 
@@ -116,23 +117,33 @@ namespace FoodTrucks
         public static Transform[] WheelsOf(Transform vehicle) =>
             vehicle.GetComponentsInChildren<Transform>(true).Where(t => t.name.EndsWith("_WheelController", StringComparison.Ordinal)).ToArray();
 
-        // Whether the vehicle stands legally parked by the game's own test, and how that was decided. A truck runs the
-        // wheel test on its live wheels; a cart (a hand truck, which the game never tests) counts with its middle on
-        // legal parking; a vehicle not in the world, or with the street's parking lanes not loaded round it, takes
-        // the parking state the game last saved for it.
+        // The city's parking lanes (they belong to the city scene): whether any is there and active. Looked up again while
+        // none is, every LaneCache.RefreshSeconds (review round 5).
+        private static readonly LaneCache<ParkingLaneGenerator> laneCache = new LaneCache<ParkingLaneGenerator>();
+
+        public static bool ParkingSceneReady() =>
+            laneCache.Ready(Time.unscaledTime, () => UnityEngine.Object.FindObjectsByType<ParkingLaneGenerator>(FindObjectsSortMode.None),
+                l => l != null, l => l.gameObject.activeInHierarchy);
+
+        public static void ResetLanes() => laneCache.Clear();
+
+        // Whether the vehicle stands legally parked by the game's own test, and how that was decided. With the city's
+        // parking lanes there, a truck runs the wheel test on its live wheels, and no parking under a wheel is illegal
+        // (review round 5: 0.9.9 took "no lane within 6 m" for unloaded scenery and used the stale saved state); a
+        // vehicle not in the world is tested at its saved position, by its middle. Only while the lanes aren't loaded
+        // does it take the parking state the game last saved for it.
         public static bool VehicleLegallyParked(VehicleInstance vehicle, out string how)
         {
+            if (!ParkingSceneReady())
+            {
+                how = "the game's saved parking state (the city's parking lanes aren't loaded)";
+                return vehicle.parkingState == ParkingState.Legal;
+            }
             var controller = VehicleHelper.GetVehicleController(vehicle);
             if (controller == null)
             {
-                how = "the game's saved parking state";
-                return vehicle.parkingState == ParkingState.Legal;
-            }
-            var position = controller.transform.position;
-            if (!ParkingNear(position, 6f))
-            {
-                how = "the game's saved parking state (no parking lanes loaded here)";
-                return vehicle.parkingState == ParkingState.Legal;
+                how = "its saved position on legal parking (not in the world)";
+                return LegalParkingAt((Vector3)vehicle.position, Vector3.zero);
             }
             var wheels = WheelsOf(controller.transform);
             if (wheels.Length > 0)
@@ -143,7 +154,7 @@ namespace FoodTrucks
                 return true;
             }
             how = "its middle on legal parking";
-            return LegalParkingAt(position, controller.transform.forward);
+            return LegalParkingAt(controller.transform.position, controller.transform.forward);
         }
 
         // The search's view of the parking lanes round one point: the parking colliders within reach, read once, so
