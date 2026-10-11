@@ -1,7 +1,7 @@
 {
   "_notes": "Commissary garages (design: Commissary and new foods). Keys starting with an underscore are notes; the loader ignores them.",
   "schemaVersion": 1,
-  "_commissaries": "Each is a garage in an industrial or mixed block, picked from tools/balance/city.json. A new game gives random AI shops to retail and office units and a rival's factory to a few random warehouses, and never a business to a home (the game's CityGenerator, 1.0). So a commissary is a warehouse, or a residential building where the neighbourhood has no warehouse: Hell's Kitchen's is First Street 22, by the wholesaler at First Street 18 (10 October 2026; First Street 24, a retail unit, held a liquor store in one game and a nightclub in another). A rival factory can still land in one of the warehouses; the log says so at load, and the bay works the same. Changing an address is safe for saves: they keep only the id. id is lower-case letters, digits and dashes and is part of the commissary's phone contact (foodtrucks-commissary-<id>, which en.json names). name is a locale key. address is street#number. The loading bay is the kerb by the building's nearest entrance; a vehicle within rules.json's commissary.bayRadiusMetres of it stands in the bay. An optional bay {x, z} (world metres, as the zone point key Ctrl+Alt+G logs them) moves the bay to a measured point, for a garage whose entrance faces a no-parking kerb. Positions are approximate until checked in game.",
+  "_commissaries": "Each is a garage in an industrial or mixed block, picked from tools/balance/city.json. A new game gives random AI shops to retail and office units and a rival's factory to a few random warehouses, and never a business to a home (the game's CityGenerator, 1.0). So a commissary is a warehouse, or a residential building where the neighbourhood has no warehouse: Hell's Kitchen's is First Street 22, by the wholesaler at First Street 18 (10 October 2026; First Street 24, a retail unit, held a liquor store in one game and a nightclub in another). A rival factory can still land in one of the warehouses; the log says so at load, and the bay works the same. Changing an address is safe for saves: they keep only the id. id is lower-case letters, digits and dashes and is part of the commissary's phone contact (foodtrucks-commissary-<id>, which en.json names). name is a locale key. address is street#number. The loading bay is the nearest legal parking (the game's own wheel test) to the building's nearest entrance, searched up to 30 m out; a vehicle within rules.json's commissary.bayRadiusMetres of it stands in the bay. An optional bay {x, z} (world metres, as the zone point key Ctrl+Alt+G logs them) starts that search at a measured point instead, for a garage whose entrance faces a no-parking kerb. Hell's Kitchen's is one: its door (x 404.5, z 228.4) faces a kerb with no parking across a one-way street, and a truck parked legally on the far kerb at x 392.95, z 221.10 and x 393.39, z 214.04 (logs of 10 October 2026), so its bay is the middle of that stretch. Positions are approximate until checked in game.",
   "commissaries": [
     {
       "id": "industry-city",
@@ -16,7 +16,8 @@
     {
       "id": "hells-kitchen",
       "name": "foodtrucks:commissary_hells-kitchen",
-      "address": "ba:street_firststreet#22"
+      "address": "ba:street_firststreet#22",
+      "bay": { "x": 393.2, "z": 217.6 }
     },
     {
       "id": "lower-manhattan",

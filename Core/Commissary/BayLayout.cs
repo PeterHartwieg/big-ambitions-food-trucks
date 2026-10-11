@@ -21,12 +21,12 @@ namespace FoodTrucks.Core.Commissary
             return (-acrossZ / length, acrossX / length);
         }
 
-        // The stretches of parking lane to paint within `reach` either way of the door. With no parking colliders found
-        // near the door at all, the street has no marked parking there and the whole reach is assumed. With parking found
-        // but no stretch of at least MinStretchMetres within reach, nothing is painted.
-        public static BayStretches Stretches(bool parkingFound, double reach, Func<double, bool> inParkingLane)
+        // The stretches of legal parking to paint within `reach` either way of the bay point. Without a stretch of at
+        // least MinStretchMetres within reach, nothing is painted: paint is never drawn where the game has no legal
+        // parking (0.9.8 drew an assumed lane on a no-parking kerb; Peter, 11 October 2026: "The purple area is not on
+        // a parking spot").
+        public static BayStretches Stretches(double reach, Func<double, bool> inParkingLane)
         {
-            if (!parkingFound) return new BayStretches(BayStretchSource.Assumed, new[] { (-reach, reach) });
             var spans = new List<(double From, double To)>();
             double? start = null;
             var steps = (int)Math.Floor(2 * reach / StepMetres + 1e-6);
@@ -62,8 +62,6 @@ namespace FoodTrucks.Core.Commissary
     {
         // From the game's parking colliders.
         Probed,
-        // No parking colliders near the door: the whole reach.
-        Assumed,
         // Parking found, but no stretch long enough within reach: nothing painted.
         NoneUsable,
     }

@@ -38,7 +38,7 @@ public class BayLayoutTests
                 var t = wx * kerb.X + wz * kerb.Z;
                 return t >= -0.01 && t <= 8.01;
             }
-            var found = BayLayout.Stretches(true, 12, x => Parking(axis.X * x, axis.Z * x));
+            var found = BayLayout.Stretches(12, x => Parking(axis.X * x, axis.Z * x));
             Assert.Equal(BayStretchSource.Probed, found.Source);
             var (from, to) = Assert.Single(found.Spans);
             Assert.Equal(8, to - from, 6);
@@ -49,18 +49,19 @@ public class BayLayoutTests
     }
 
     [Fact]
-    public void NoParkingCollidersAssumesTheWholeReach()
+    public void NoParkingAnywhereDrawsNothing()
     {
-        var found = BayLayout.Stretches(false, 9.6, _ => throw new InvalidOperationException("not probed"));
-        Assert.Equal(BayStretchSource.Assumed, found.Source);
-        Assert.Equal((-9.6, 9.6), Assert.Single(found.Spans));
+        // 0.9.8 assumed a whole bay here and painted it on a no-parking kerb.
+        var found = BayLayout.Stretches(9.6, _ => false);
+        Assert.Equal(BayStretchSource.NoneUsable, found.Source);
+        Assert.Empty(found.Spans);
     }
 
     [Fact]
     public void ParkingTooShortEverywhereDrawsNothing()
     {
-        // A 1 m fragment near a corner: parking was found, so no full-length bay is made up.
-        var found = BayLayout.Stretches(true, 10, x => x >= 4 && x <= 5);
+        // A 1 m fragment near a corner: no full-length bay is made up.
+        var found = BayLayout.Stretches(10, x => x >= 4 && x <= 5);
         Assert.Equal(BayStretchSource.NoneUsable, found.Source);
         Assert.Empty(found.Spans);
     }
@@ -68,7 +69,7 @@ public class BayLayoutTests
     [Fact]
     public void StretchesAreSplitAtGapsAndClippedToTheReach()
     {
-        var found = BayLayout.Stretches(true, 10, x => x < -2 || x > 1);
+        var found = BayLayout.Stretches(10, x => x < -2 || x > 1);
         Assert.Equal(new[] { (-10.0, -2.5), (1.5, 10.0) }, found.Spans.ToArray());
     }
 

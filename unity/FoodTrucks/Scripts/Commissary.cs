@@ -52,6 +52,9 @@ namespace FoodTrucks
             Detach();
             uninstalled = false;
             BayMarkers.Reset();
+            snapped.Clear();
+            snapTries.Clear();
+            snapAt.Clear();
             var state = FoodTrucksSession.CurrentState;
             var sites = Sites;
             if (sites == null || Rules == null)
@@ -67,7 +70,7 @@ namespace FoodTrucks
             foreach (var site in sites.Sites)
             {
                 var bay = Bays(site)?.FirstOrDefault();
-                if (bay != null) Log.Info($"Commissary {site.Id} ({site.Address}): bay at x {bay.Value.X:F1}, z {bay.Value.Z:F1}{(site.Bay != null ? " (set in data)" : " (nearest entrance)")}.");
+                if (bay != null) Log.Info($"Commissary {site.Id} ({site.Address}): bay searched from x {bay.Value.X:F1}, z {bay.Value.Z:F1}{(site.Bay != null ? " (set in data)" : " (nearest entrance)")}.");
                 LogBusinessAt(site);
             }
             if (state == null) return;
@@ -105,12 +108,87 @@ namespace FoodTrucks
             return list.Count == 0 ? "none" : string.Join(", ", list);
         }
 
-        // The bay's points: the one set in data, else the building's entrances. Null while the city has no such building.
+        // The bay's points: each snapped to the nearest legal parking (SnapBays), else, until that is done or where it
+        // found none, the points it searches from. Null while the city has no such building.
         internal static IEnumerable<(double X, double Z)>? Bays(CommissarySite site)
+        {
+            if (snapped.TryGetValue(site.Id, out var bays)) return bays.Select(b => (b.X, b.Z));
+            return Origins(site);
+        }
+
+        // The bays on legal parking, or null while not snapped (or none found: then nothing is painted).
+        internal static IReadOnlyList<BaySnapResult>? SnappedBays(CommissarySite site) => snapped.TryGetValue(site.Id, out var bays) ? bays : null;
+
+        // Where the bay search starts: the point set in data, else the building's entrances.
+        private static IEnumerable<(double X, double Z)>? Origins(CommissarySite site)
         {
             if (site.Bay != null) return new[] { site.Bay.Value };
             return World.EntrancesOf(site.Address)?.Select(d => ((double)d.x, (double)d.z));
         }
+
+        // Peter (11 October 2026): "The purple area is not on a parking spot". 0.9.8 took the bay as the door and drew
+        // the paint by the nearest driving lane; at Hell's Kitchen the garage faces a no-parking kerb across a one-way
+        // street, so the paint went on the road and a truck parked on it was ILLEGAL. Each bay point now moves to the
+        // nearest place within BaySnap.MaxMetres where a truck stands legally parked by the game's own wheel test
+        // (Legality.LegalParkingAt), and that point is the bay for "in the bay", the 04:00 check, Ctrl+F3 and the paint.
+        private static readonly Dictionary<string, BaySnapResult[]> snapped = new Dictionary<string, BaySnapResult[]>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, int> snapTries = new Dictionary<string, int>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, float> snapAt = new Dictionary<string, float>(StringComparer.Ordinal);
+        // A search that finds nothing is tried again with the player near (in case the street wasn't ready), this often.
+        private const int SnapTriesMax = 3;
+        private const float SnapRetrySeconds = 10f;
+        private const float SnapNearMetres = 300f;
+        // Two bays closer than this (entrances side by side) are one.
+        private const double SameBayMetres = 3;
+
+        private static void SnapBays(CommissaryTables sites, Vector3 player)
+        {
+            foreach (var site in sites.Sites)
+            {
+                if (snapped.ContainsKey(site.Id)) continue;
+                snapTries.TryGetValue(site.Id, out var tries);
+                if (tries >= SnapTriesMax) continue;
+                var origins = Origins(site)?.ToList();
+                if (origins == null || origins.Count == 0) continue;
+                if (tries > 0)
+                {
+                    if (snapAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at) continue;
+                    if (origins.Min(o => Flat(player, o)) > SnapNearMetres) continue;
+                }
+                snapTries[site.Id] = ++tries;
+                snapAt[site.Id] = Time.unscaledTime + SnapRetrySeconds;
+                var doors = World.EntrancesOf(site.Address);
+                var found = new List<(BaySnapResult Bay, (double X, double Z) From)>();
+                foreach (var origin in origins)
+                {
+                    // Probed at the nearest entrance's height (a point set in data has none); the probe box reaches a
+                    // metre either way.
+                    var y = doors == null || doors.Length == 0 ? player.y : doors.OrderBy(d => Flat(d, origin)).First().y;
+                    var bay = BaySnap.Nearest(origin.X, origin.Z,
+                        (x, z) => Legality.LegalParkingAt(new Vector3((float)x, y, (float)z)),
+                        (x, z) => Legality.ParkingAxesAt(new Vector3((float)x, y, (float)z)));
+                    if (bay != null && !found.Any(f => Math.Sqrt((f.Bay.X - bay.X) * (f.Bay.X - bay.X) + (f.Bay.Z - bay.Z) * (f.Bay.Z - bay.Z)) < SameBayMetres))
+                        found.Add((bay, origin));
+                }
+                if (found.Count > 0)
+                {
+                    snapped[site.Id] = found.Select(f => f.Bay).ToArray();
+                    foreach (var (bay, from) in found)
+                        Log.Info($"Commissary {site.Id}: bay on legal parking at x {bay.X:F1}, z {bay.Z:F1}, {bay.Distance:F1} m from x {from.X:F1}, z {from.Z:F1} " +
+                                 $"({(site.Bay != null ? "set in data" : "entrance")}), the lane along {Math.Atan2(bay.AlongX, bay.AlongZ) * 180 / Math.PI:F0} degrees.");
+                    continue;
+                }
+                if (tries < SnapTriesMax)
+                {
+                    Log.Info($"Commissary {site.Id}: no legal parking within {BaySnap.MaxMetres:F0} m of its bay yet (search {tries} of {SnapTriesMax}); tried again with the player near.");
+                    continue;
+                }
+                Log.Error($"Commissary {site.Id}: no legal parking within {BaySnap.MaxMetres:F0} m of {string.Join("; ", origins.Select(o => $"x {o.X:F1}, z {o.Z:F1}"))} " +
+                          $"after {SnapTriesMax} searches. The bay stays there and no paint is drawn; set a measured bay point in commissaries.json.");
+            }
+        }
+
+        private static float Flat(Vector3 a, (double X, double Z) b) => new Vector2(a.x - (float)b.X, a.z - (float)b.Z).magnitude;
 
         private static bool CityReady(CommissaryTables sites) => sites.Sites.Any(s => Bays(s) != null);
 
@@ -205,6 +283,9 @@ namespace FoodTrucks
         // Twice a second: the player at a bay unlocks it; the panel's Commissary button shows while the vehicle is in a bay.
         private static void Look(SaveState state)
         {
+            // The street's parking colliders are probed from outside only (an interior may hide the city).
+            if (Sites != null && !BuildingManager.IsInsideBuilding && !Parking.UndergroundParking.UndergroundParkingManager.IsInsideParking)
+                SnapBays(Sites, PlayerHelper.GetPosition());
             if (!BuildingManager.IsInsideBuilding)
             {
                 var visit = SiteAt(PlayerHelper.GetPosition(), VisitExtraMetres);

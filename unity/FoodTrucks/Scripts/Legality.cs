@@ -72,6 +72,27 @@ namespace FoodTrucks
             return hits.Any(h => h != null && h.GetComponentInParent<ParkingLaneGenerator>() != null);
         }
 
+        // Legal parking for a wheel standing at this point, by the game's own rule (CarController.UpdateParkingZone): a
+        // small box round the wheel touches the parking layer, and the first lane it finds isn't a disabled bay. The box
+        // is taller than the game's (it is sized by the wheel there) so a point at pavement or road height both reach.
+        public static bool LegalParkingAt(Vector3 point)
+        {
+            var hits = Physics.OverlapBox(point, new Vector3(0.1f, 1.0f, 0.1f), Quaternion.identity, LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide);
+            if (hits.Length == 0 || hits[0] == null) return false;
+            var lane = hits[0].GetComponentInParent<ParkingLaneGenerator>();
+            return lane != null && !lane.isHandicapParking;
+        }
+
+        // The flat axes of the parking collider at this point (its box's forward and right), the ways a vehicle parked
+        // there can line up. Empty off parking.
+        public static (double X, double Z)[] ParkingAxesAt(Vector3 point)
+        {
+            var hits = Physics.OverlapBox(point, new Vector3(0.1f, 1.0f, 0.1f), Quaternion.identity, LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide);
+            if (hits.Length == 0 || hits[0] == null) return Array.Empty<(double, double)>();
+            var t = hits[0].transform;
+            return new[] { ((double)t.forward.x, (double)t.forward.z), ((double)t.right.x, (double)t.right.z) };
+        }
+
         public static bool RoadBelow(Vector3 position)
         {
             try

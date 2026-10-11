@@ -21,7 +21,11 @@ public class CommissaryTablesTests
         Assert.InRange(tables.Sites.Count, 4, 6);
         Assert.Equal(tables.Sites.Count, tables.Sites.Select(s => s.Address).Distinct().Count());
         Assert.All(tables.Sites, s => Assert.StartsWith("foodtrucks:commissary_", s.Name));
-        Assert.All(tables.Sites, s => Assert.Null(s.Bay));
+        // Only Hell's Kitchen has a measured bay: its garage faces a no-parking kerb (the 0.9.8 agent run, 11 October 2026).
+        Assert.Equal(new[] { "hells-kitchen" }, tables.Sites.Where(s => s.Bay != null).Select(s => s.Id).ToArray());
+        var bay = tables.Site("hells-kitchen")!.Bay!.Value;
+        Assert.Equal(393.2, bay.X, 6);
+        Assert.Equal(217.6, bay.Z, 6);
     }
 
     // Saves keep a space, an order and stock by commissary ID only, so an address can move but an ID must stay.
