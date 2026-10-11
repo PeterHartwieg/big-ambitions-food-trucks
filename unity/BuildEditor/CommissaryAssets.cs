@@ -13,6 +13,9 @@ namespace FoodTrucks.BuildEditor
     // the LOADING ZONE lettering, the kerb sign with one plate material per commissary, and the props by the door.
     // tools/build-mod.sh copies each FBX (as <Name>_Model.fbx) and texture into Commissary/BayArt; this makes the
     // HDRP/Lit materials and one <Name>_Display.prefab per model there. BayMarkers and BayProps load them by path.
+    // The sign and the props have the surface look (SurfaceLook.LitMaterial from their T_<Name>_BC/_M/_N); the road
+    // paint keeps its own flat material. Every piece leaves the decal layer (SurfaceLook.NoStreetDecals), so the
+    // street's dirt decals skip the whole bay set.
     // The lettering and the sign have no collider; each prop has a box collider and a carving NavMeshObstacle of its
     // footprint, so people walk round it.
     internal static class CommissaryAssets
@@ -23,30 +26,33 @@ namespace FoodTrucks.BuildEditor
         public static void Generate()
         {
             ModAssets.EnsureFolder(Folder);
-            // Road paint takes the street's dirt decals like the asphalt round it, so it isn't cleaner than the road.
-            var paint = Lit($"{Folder}/M_BayPaint.mat", $"{Folder}/T_BayPaint_BaseColor.png", smoothness: 0.2f, decals: true);
-            Display("BayLettering", new Dictionary<string, Material> { ["M_BayPaint"] = paint }, collider: false);
+            // No street dirt on any bay piece (review round 1 of 0.9.10): the paint material refuses decals, the lettering
+            // prefab leaves the decal layer like every bay piece (Display), and BayMarkers sets the outline it draws with
+            // this material to the same rendering layer at run time.
+            var paint = Lit($"{Folder}/M_BayPaint.mat", $"{Folder}/T_BayPaint_BaseColor.png", smoothness: 0.2f);
+            Display("BayLettering", new Dictionary<string, Material> { ["M_BayPaint"] = paint }, collider: false, look: false);
 
-            var pole = Lit($"{Folder}/M_BaySignPole.mat", $"{Folder}/T_BaySignPole_BaseColor.png", smoothness: 0.45f, metallic: 0.6f);
-            var plate = Lit($"{Folder}/M_BaySign.mat", $"{Folder}/T_BaySign_BaseColor.png", smoothness: 0.4f);
-            Display("BaySign", new Dictionary<string, Material> { ["M_BaySignPole"] = pole, ["M_BaySign"] = plate }, collider: false);
-            // One plate per commissary, named on it; BayProps swaps it in by the commissary's id.
-            foreach (var texture in Directory.GetFiles(Path.Combine(ProjectRoot, Folder), "T_BaySign_*_BaseColor.png"))
+            // The sign: pole and plate share one atlas. One plate material per commissary, named on it (the same UVs,
+            // its own T_BaySign_<id>_BC); BayProps swaps it onto the plate by the commissary's id.
+            var sign = SurfaceLook.LitMaterial($"{Folder}/M_BaySign.mat", Folder, "BaySign");
+            Display("BaySign", new Dictionary<string, Material> { ["BaySign_GameLook"] = sign }, collider: false, look: true);
+            foreach (var texture in Directory.GetFiles(Path.Combine(ProjectRoot, Folder), "T_BaySign_*_BC.png"))
             {
-                var id = Path.GetFileName(texture).Substring("T_BaySign_".Length).Replace("_BaseColor.png", "");
-                Lit($"{Folder}/M_BaySign_{id}.mat", $"{Folder}/T_BaySign_{id}_BaseColor.png", smoothness: 0.4f);
+                var id = Path.GetFileName(texture).Substring("T_BaySign_".Length).Replace("_BC.png", "");
+                SurfaceLook.LitMaterial($"{Folder}/M_BaySign_{id}.mat", Folder, "BaySign", baseColour: $"BaySign_{id}");
             }
 
-            var materials = new Dictionary<string, Material>();
-            foreach (var name in new[] { "Wood", "Crate", "Produce", "Greens", "Carton", "Steel", "Dumpster", "DumpsterLid" })
-                materials["M_Bay" + name] = Lit($"{Folder}/M_Bay{name}.mat", $"{Folder}/T_Bay{name}_BaseColor.png",
-                    smoothness: name == "Steel" ? 0.4f : 0.15f, metallic: name == "Steel" ? 0.5f : 0f);
-            foreach (var name in Props) Display(name, materials, collider: true);
+            foreach (var name in Props)
+            {
+                var material = SurfaceLook.LitMaterial($"{Folder}/M_{name}.mat", Folder, name);
+                Display(name, new Dictionary<string, Material> { [name + "_GameLook"] = material }, collider: true, look: true);
+            }
         }
 
         // <name>_Display.prefab from <name>_Model.fbx: every mesh of the model with the FBX's materials remapped to ours
-        // (by the Blender material names), at the model's own transforms.
-        private static void Display(string name, Dictionary<string, Material> remap, bool collider)
+        // (by the Blender material names: game_look.py's <Name>_GameLook), at the model's own transforms. look: the
+        // FBX's own normals and Mikk tangents, which the normal map was baked against.
+        private static void Display(string name, Dictionary<string, Material> remap, bool collider, bool look)
         {
             var fbx = $"{Folder}/{name}_Model.fbx";
             if (!File.Exists(Path.Combine(ProjectRoot, fbx)))
@@ -57,6 +63,7 @@ namespace FoodTrucks.BuildEditor
             importer.globalScale = 1f;
             importer.materialImportMode = ModelImporterMaterialImportMode.ImportStandard;
             importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
+            if (look) SurfaceLook.NormalsAsBaked(importer);
             foreach (var pair in remap)
                 importer.AddRemap(new AssetImporter.SourceAssetIdentifier(typeof(Material), pair.Key), pair.Value);
             importer.SaveAndReimport();
@@ -101,6 +108,7 @@ namespace FoodTrucks.BuildEditor
                     obstacle.carving = true;
                     obstacle.carveOnlyStationary = true;
                 }
+                SurfaceLook.NoStreetDecals(root);
                 PrefabUtility.SaveAsPrefabAsset(root, $"{Folder}/{name}_Display.prefab");
             }
             finally
@@ -109,7 +117,7 @@ namespace FoodTrucks.BuildEditor
             }
         }
 
-        // An HDRP/Lit material with the texture as its base colour map (sRGB), opaque.
+        // The road paint's HDRP/Lit material: the texture as its base colour map (sRGB), opaque, flat smoothness.
         private static Material Lit(string path, string texturePath, float smoothness, float metallic = 0f, bool decals = false)
         {
             var importer = (TextureImporter)AssetImporter.GetAtPath(texturePath)

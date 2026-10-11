@@ -1,0 +1,51 @@
+{
+ "name": "BayRollCage",
+ "fbx": "BayRollCage.fbx",
+ "visible_budget": 800,
+ "position_tolerance_m": 0.005,
+ "uv_layers": 1,
+ "uv_min_fill": 0.3,
+ "textures": [
+  {
+   "file": "T_BayRollCage_BaseColor.png",
+   "size": 512
+  }
+ ],
+ "objects": {
+  "BayRollCage_Body": {
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "max_tris": 760
+  }
+ },
+ "envelope": {
+  "x": [
+   -0.37,
+   0.37
+  ],
+  "y": [
+   -0.43,
+   0.43
+  ],
+  "z": [
+   -0.01,
+   1.723
+  ]
+ },
+ "look": {
+  "classes": [
+   {
+    "rgb": [
+     0.62,
+     0.47,
+     0.3
+    ],
+    "class": "fabric",
+    "tolerance": 0.07
+   }
+  ]
+ }
+}

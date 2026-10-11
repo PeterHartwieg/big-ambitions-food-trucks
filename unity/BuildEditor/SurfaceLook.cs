@@ -18,13 +18,12 @@ namespace FoodTrucks.BuildEditor
         // bundle (MeshRenderer.m_RenderingLayerMask).
         public const uint VehicleRenderingLayers = 1;
 
-        // An HDRP/Lit material at path with the model's three maps from folder (T_<name>_BC/_M/_N.png).
-        public static Material LitMaterial(string path, string folder, string name)
+        // An HDRP/Lit material at path with the model's three maps from folder (T_<name>_BC/_M/_N.png). baseColour
+        // names another base colour map on the same UVs (T_<baseColour>_BC.png), e.g. the commissary sign's plates.
+        public static Material LitMaterial(string path, string folder, string name, string? baseColour = null)
         {
-            var bc = Texture($"{folder}/T_{name}_BC.png", TextureImporterType.Default, srgb: true);
-            // sRGB, as the game imports its own mask maps (m_ColorSpace 1 on T_HotdogHeater_Mask Map, Van_Mask and
-            // the rest): only the AO in G is affected, the values were measured and set as stored bytes.
-            var mask = Texture($"{folder}/T_{name}_M.png", TextureImporterType.Default, srgb: true);
+            var bc = Texture($"{folder}/T_{baseColour ?? name}_BC.png", TextureImporterType.Default, srgb: true);
+            var mask = MaskTexture($"{folder}/T_{name}_M.png");
             var normal = Texture($"{folder}/T_{name}_N.png", TextureImporterType.NormalMap, srgb: false);
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (material == null)
@@ -75,14 +74,23 @@ namespace FoodTrucks.BuildEditor
             return true;
         }
 
-        private static Texture2D Texture(string path, TextureImporterType type, bool srgb)
+        // A mask map (R metallic, G AO, B unused, A smoothness), imported as sRGB on purpose. HDRP's docs say to
+        // import mask maps linear, but the game imports its own as sRGB: in the 1.0 prefabs bundle 349 of its 352
+        // mask maps have m_ColorSpace 1, the value its base colour maps carry (394 of 396), against 0 on its
+        // normal maps (356 of 358); T_HotdogHeater_Mask Map, IndustrialFryerMachine_M, Van_Mask and T_VanBig_M among
+        // them. game_look.py sets G against the game's stored bytes, so it must be decoded the same way to render the
+        // same. Only G is affected: R is 0 or 1, and alpha is never sRGB-decoded. maxSize caps the import (the truck).
+        public static Texture2D MaskTexture(string path, int maxSize = 0) => Texture(path, TextureImporterType.Default, srgb: true, maxSize);
+
+        public static Texture2D Texture(string path, TextureImporterType type, bool srgb, int maxSize = 0)
         {
             var importer = (TextureImporter)AssetImporter.GetAtPath(path)
                            ?? throw new InvalidOperationException($"{path} missing; tools/build-mod.sh copies it from art/ (art/tools/game_look.py makes it).");
-            if (importer.textureType != type || importer.sRGBTexture != srgb)
+            if (importer.textureType != type || importer.sRGBTexture != srgb || (maxSize > 0 && importer.maxTextureSize != maxSize))
             {
                 importer.textureType = type;
                 importer.sRGBTexture = srgb;
+                if (maxSize > 0) importer.maxTextureSize = maxSize;
                 importer.SaveAndReimport();
             }
             return AssetDatabase.LoadAssetAtPath<Texture2D>(path);

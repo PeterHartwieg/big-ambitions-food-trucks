@@ -1,0 +1,151 @@
+{
+  "spec": "BayRollCage.spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "BayRollCage_Body"
+    ],
+    "per_object": {
+      "BayRollCage_Body": {
+        "triangles": 684,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.36,
+          -0.42,
+          0.0
+        ],
+        "bbox_max": [
+          0.36,
+          0.42,
+          1.7126
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      }
+    },
+    "visible_triangles": 684,
+    "visible_bbox_min": [
+      -0.36,
+      -0.42,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.36,
+      0.42,
+      1.7126
+    ],
+    "visible_dims": [
+      0.72,
+      0.84,
+      1.7126
+    ],
+    "near_points": {},
+    "clear_boxes": {},
+    "materials": [
+      "BayRollCage_GameLook"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.3122,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_BayRollCage_BaseColor.png": [
+        512,
+        512
+      ]
+    },
+    "blend_size_mb": 2.15
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "BayRollCage_Body"
+    ],
+    "per_object": {
+      "BayRollCage_Body": {
+        "triangles": 684,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.36,
+          -0.42,
+          -0.0
+        ],
+        "bbox_max": [
+          0.36,
+          0.42,
+          1.7126
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      }
+    },
+    "visible_triangles": 684,
+    "visible_bbox_min": [
+      -0.36,
+      -0.42,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.36,
+      0.42,
+      1.7126
+    ],
+    "visible_dims": [
+      0.72,
+      0.84,
+      1.7126
+    ],
+    "near_points": {},
+    "clear_boxes": {},
+    "materials": [
+      "BayRollCage_GameLook"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.3122,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.06
+  },
+  "failures": [],
+  "passed": true
+}

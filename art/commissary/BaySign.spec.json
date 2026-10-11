@@ -1,0 +1,56 @@
+{
+ "name": "BaySign",
+ "fbx": "BaySign.fbx",
+ "visible_budget": 300,
+ "position_tolerance_m": 0.005,
+ "uv_layers": 1,
+ "uv_min_fill": 0.4,
+ "textures": [
+  {
+   "file": "T_BaySign_BaseColor.png",
+   "size": 512
+  }
+ ],
+ "objects": {
+  "BaySign_Pole": {
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "max_tris": 200
+  },
+  "BaySign_Plate": {
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "max_tris": 20
+  }
+ },
+ "envelope": {
+  "x": [
+   -0.21,
+   0.21
+  ],
+  "y": [
+   -0.054,
+   0.05
+  ],
+  "z": [
+   -0.01,
+   3.04
+  ]
+ },
+ "look": {
+  "classes": [],
+  "variants": [
+   "garment-district",
+   "hells-kitchen",
+   "industry-city",
+   "lower-manhattan",
+   "murray-hill"
+  ]
+ }
+}

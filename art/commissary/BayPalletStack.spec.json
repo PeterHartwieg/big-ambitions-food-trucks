@@ -1,0 +1,78 @@
+{
+ "name": "BayPalletStack",
+ "fbx": "BayPalletStack.fbx",
+ "visible_budget": 900,
+ "position_tolerance_m": 0.005,
+ "uv_layers": 1,
+ "uv_min_fill": 0.4,
+ "textures": [
+  {
+   "file": "T_BayPalletStack_BaseColor.png",
+   "size": 512
+  }
+ ],
+ "objects": {
+  "BayPalletStack_Body": {
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "max_tris": 880
+  }
+ },
+ "envelope": {
+  "x": [
+   -0.61,
+   0.61
+  ],
+  "y": [
+   -0.51,
+   0.51
+  ],
+  "z": [
+   -0.01,
+   0.878
+  ]
+ },
+ "look": {
+  "classes": [
+   {
+    "rgb": [
+     0.62,
+     0.51,
+     0.37
+    ],
+    "class": "fabric",
+    "tolerance": 0.13
+   },
+   {
+    "rgb": [
+     0.62,
+     0.47,
+     0.3
+    ],
+    "class": "fabric",
+    "tolerance": 0.07
+   },
+   {
+    "rgb": [
+     0.78,
+     0.22,
+     0.1
+    ],
+    "class": "food",
+    "tolerance": 0.2
+   },
+   {
+    "rgb": [
+     0.3,
+     0.52,
+     0.16
+    ],
+    "class": "food",
+    "tolerance": 0.13
+   }
+  ]
+ }
+}

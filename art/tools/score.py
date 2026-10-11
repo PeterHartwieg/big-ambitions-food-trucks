@@ -307,7 +307,9 @@ else:
 
 report["failures"] = failures
 report["passed"] = not failures
-out = os.path.join(FOLDER, "score.json")
+# One score file per spec: <Name>.spec.json scores into <Name>.score.json (folders holding several models).
+base = os.path.basename(spec_path)
+out = os.path.join(FOLDER, "score.json" if base == "spec.json" else base.replace(".spec.json", ".score.json"))
 with open(out, "w") as f:
     json.dump(report, f, indent=2)
 print("SCORE", "PASS" if not failures else f"FAIL ({len(failures)})", out)

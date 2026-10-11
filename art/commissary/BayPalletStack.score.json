@@ -1,0 +1,151 @@
+{
+  "spec": "BayPalletStack.spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "BayPalletStack_Body"
+    ],
+    "per_object": {
+      "BayPalletStack_Body": {
+        "triangles": 792,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.6,
+          -0.5,
+          0.0
+        ],
+        "bbox_max": [
+          0.6,
+          0.5,
+          0.868
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      }
+    },
+    "visible_triangles": 792,
+    "visible_bbox_min": [
+      -0.6,
+      -0.5,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.6,
+      0.5,
+      0.868
+    ],
+    "visible_dims": [
+      1.2,
+      1.0,
+      0.868
+    ],
+    "near_points": {},
+    "clear_boxes": {},
+    "materials": [
+      "BayPalletStack_GameLook"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.4928,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_BayPalletStack_BaseColor.png": [
+        512,
+        512
+      ]
+    },
+    "blend_size_mb": 2.15
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "BayPalletStack_Body"
+    ],
+    "per_object": {
+      "BayPalletStack_Body": {
+        "triangles": 792,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.6,
+          -0.5,
+          -0.0
+        ],
+        "bbox_max": [
+          0.6,
+          0.5,
+          0.868
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      }
+    },
+    "visible_triangles": 792,
+    "visible_bbox_min": [
+      -0.6,
+      -0.5,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.6,
+      0.5,
+      0.868
+    ],
+    "visible_dims": [
+      1.2,
+      1.0,
+      0.868
+    ],
+    "near_points": {},
+    "clear_boxes": {},
+    "materials": [
+      "BayPalletStack_GameLook"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.4928,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.05
+  },
+  "failures": [],
+  "passed": true
+}

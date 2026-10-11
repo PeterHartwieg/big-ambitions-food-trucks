@@ -8,6 +8,7 @@ The final food cart and food truck for Milestone 8, built in Blender 5.2 and exp
 | `truck/` | `FoodTruck.blend`, `FoodTruck.fbx`, the `T_FoodTruck_*.png` textures, the same support files |
 | `equipment/`, `products/` | One folder per compact piece or food, laid out like `cart/`; each equipment folder also has `Icon_<Name>.png` |
 | `props/` | Fixed props on the vehicles: `CashRegister/` |
+| `commissary/` | The commissary bay's road paint, lettering, sign and props (below) |
 | `tools/` | `score.py` (checks a model against its `spec.json`), `game_look.py` and `apply_look.sh` (surface look, below), `render_look.py` (day and night look renders), `render_icon.py` and `render_icons.sh` (item icons), `render_views.py` (four fixed review renders) |
 | `start.blend` | The empty start scene: metres and a 1.8 m wireframe person, `HumanRef_1.8m` |
 
@@ -25,7 +26,8 @@ The scorer checks triangle budgets per object, origins and wheel hubs, hinge lin
 After a build script, every model goes through the surface-look step, which also re-exports the FBX and runs the scorer:
 
 ```bash
-art/tools/apply_look.sh art/equipment/Griddle      # one model; no arguments: the cart, the truck, all equipment and products
+art/tools/apply_look.sh art/equipment/Griddle      # one model; no arguments: every model, the commissary's included
+art/tools/apply_look.sh art/commissary/BaySign.spec.json   # one of several models in a folder, named by its spec
 art/tools/render_icons.sh                           # equipment icons and the mod's item icons
 ```
 
@@ -46,7 +48,7 @@ Peter, 11 October 2026, after playing: our models had "a very bright surface wit
 | Texture size | 256 px for props up to 1 m, 512 for carts and fryers, 1,024 for vehicles | 512 for 0.4 m pieces, 1,024 cart, 2,048 truck |
 | Triangles | Hot dog heater 3,400 (0.9 m), industrial grill 1,060, cotton candy cart 3,850, van 4,600, delivery truck 5,800 | In range |
 
-The game imports its mask maps as sRGB (`m_ColorSpace` 1), so ours are too; only the AO in G changes with that. Its vehicles render with `renderingLayerMask` 1 and its props in buildings with 257 (bit 8 is HDRP's default decal layer); see "Street dirt" below.
+**Mask maps are imported as sRGB**, against HDRP's advice to import them linear, because the game does. Read again from the 1.0 `defaultlocalgroup_assets_prefabs` bundle with UnityPy on 11 October 2026: a built `Texture2D` has no sRGB texture format (BC7 and DXT5 are the same format either way); its `m_ColorSpace` carries the importer's sRGB flag. The game's base colour maps have 1 (394 of 396), its normal maps 0 (356 of 358), so 1 means sRGB, and 349 of its 352 mask maps (named `_M`, `_Mask`, `MaskMap` or `Mask Map`, dirt and emission masks left out) have 1, among them `T_HotdogHeater_Mask Map`, `T_IndustrialGrill_Mask Map`, `IndustrialFryerMachine_M`, `PizzaOven_M`, `T_CottonCandyCart_M`, `Van_Mask` and `T_VanBig_M` (the exceptions are `Wheel_MaskMap`, `T_SwimmingPoolProps_M` and `Fries_Fries_MaskMap`). The values in the table above are the game's stored bytes, and `game_look.py` writes ours in the same range, so the same sRGB decode renders them alike. Only G (AO) is decoded: R is 0 or 1 and alpha is never sRGB-decoded, so metallic and smoothness are as stored. `render_look.py` and the preview material decode the mask the same way. Our AO medians (stored 0.40 to 0.70 on the equipment) sit at the low end of the game's 0.40 to 1.0, so ours are a little darker in indirect light, not brighter; no change to the AO formula was needed for the colour space. The truck's G is 0.12 (AO 0) on large parts of its atlas that don't show dark from outside, probably faces inside the body; worth a look if its inside renders too dark in game. Its vehicles render with `renderingLayerMask` 1 and its props in buildings with 257 (bit 8 is HDRP's default decal layer); see "Street dirt" below.
 
 **What `game_look.py` does.** It works on the saved `.blend` and the build script's flat `T_<Name>_BaseColor.png` (the truck: `T_FoodTruck_D.png` and `_MaskMap.png`), which it leaves alone, so it can run again.
 
@@ -68,7 +70,7 @@ The game imports its mask maps as sRGB (`m_ColorSpace` 1), so ours are too; only
 
 The truck keeps its own mask's classes: metallic where it was, chrome down to 0.50, paint at most 0.72, glass as it was.
 
-**Rules for new models.** Build with flat part colours and non-overlapping UVs as before (every face its own atlas cell works best for baking), then run `apply_look.sh`. Keep textures at 256 px for foods and small props, 512 for counter pieces, 1,024 for the cart and 2,048 for the truck. Give boxes a one-segment chamfer of 2 to 6 mm and cylinders 8 or more sides; the look step rounds the rest. Steel is a light, low-saturation grey in the palette; anything else that should shine or stay matte goes in `look.json`. Unity side: `SurfaceLook.LitMaterial` makes the HDRP/Lit material from the three maps (keywords `_MASKMAP`, `_NORMALMAP`, remaps at 0 to 1, decals off), and the model importers import the FBX normals and calculate Mikk tangents, which the normal maps were baked against.
+**Rules for new models.** Build with flat part colours and non-overlapping UVs as before (every face its own atlas cell works best for baking), then run `apply_look.sh`. Keep textures at 256 px for foods and small props, 512 for counter pieces and the larger street props, 1,024 for the cart and 2,048 for the truck's base colour; Unity imports the truck's mask and normal map at 1,024 (below). Give boxes a one-segment chamfer of 2 to 6 mm and cylinders 8 or more sides; the look step rounds the rest. Steel is a light, low-saturation grey in the palette; anything else that should shine or stay matte goes in `look.json`. Unity side: `SurfaceLook.LitMaterial` makes the HDRP/Lit material from the three maps (keywords `_MASKMAP`, `_NORMALMAP`, remaps at 0 to 1, decals off), and the model importers import the FBX normals and calculate Mikk tangents, which the normal maps were baked against.
 
 **Renders.** `tools/render_look.py` renders models on a pavement plane under a sky and sun (day) or two warm street lamps (night). Ours-only renders are in each folder's `renders/look-*.png`; the side-by-side comparisons with the game's items stay outside the repo.
 
@@ -214,7 +216,7 @@ From the pavement the player and crew fill the window chest up, with the hood an
 
 The 0.9.3 to 0.9.7 layout (two spots at the hatch's ends, scaled 0.72 on a steel ledge, `Truck_Ledge`, and two on the old worktop) is gone, ledge included.
 
-**Material:** duplicate `M_HonzaCar.mat` (the game's `SH_Vehicle` graph) and swap each texture for its counterpart. Import settings as for the example: Read/Write on for the meshes (the damage component deforms them [inference, as in the tooling research]), `T_FoodTruck_N` as a normal map (not sRGB), the others as default textures.
+**Material:** duplicate `M_HonzaCar.mat` (the game's `SH_Vehicle` graph) and swap each texture for its counterpart. Import settings as for the example: Read/Write on for the meshes (the damage component deforms them [inference, as in the tooling research]), `T_FoodTruck_N` as a normal map (not sRGB), the others as default textures (the mask sRGB, as in "Surface look"). `TruckAssets` caps `T_FoodTruck_M` and `T_FoodTruck_N` at 1,024 px in the importer, as the game's vehicles have (`Van_N`, `T_VanBig_M`, `T_VanBig_N`: 1,024); the base colour stays 2,048 for its lettering and panel lines. The 2,048 px maps had made the truck's bundle 25 MB. The cap is in the importer, not in `game_look.py`, so the bakes keep their full-size sources and the step stays the same for every model. A Blender render with both maps box-filtered to 1,024 (normals renormalised) looked the same as at 2,048 from the street view.
 
 | Slot | Texture | Contents |
 |---|---|---|
@@ -229,19 +231,27 @@ The channel meanings come from mapping the example car's masks back onto its mes
 
 ## Commissary bay
 
-The loading bay's street furniture (0.9.10, plan "Commissary bay look"), built by `commissary/build_commissary.py` in Blender headless, no MCP: `blender -b --factory-startup --python art/commissary/build_commissary.py`, then `render_review.py` for the review renders in `commissary/renders/` (only `review-sheet.png` is kept). Nothing in it comes from the game: the textures are procedural, the lettering is Blender's own Inter font (SIL Open Font License), and the sign's names come from `data/commissaries.json` and `en.json`, so a renamed commissary needs the script run again.
+The loading bay's street furniture (0.9.10, plan "Commissary bay look"), built by `commissary/build_commissary.py` in Blender headless, no MCP:
+
+```bash
+blender -b --factory-startup --python art/commissary/build_commissary.py
+art/tools/apply_look.sh art/commissary/*.spec.json
+blender -b --factory-startup --python art/commissary/render_review.py
+```
+
+The build script writes the paint and the lettering, which are final, and `BayCommissary.blend` with the whole set. The sign and each prop then get the surface look like every other model: the script lays each one out on its own atlas (Smart UV Project and a tight repack for the props; by hand for the sign, so the plate gets 1.8 mm a texel and the pole 6 mm), bakes the part textures (wood, crates, produce, cartons, the plates) into a flat `T_<Name>_BaseColor.png`, and saves `<Name>.blend` and `<Name>.spec.json`. `apply_look.sh` then writes `T_<Name>_BC/_M/_N.png` and the FBX, and scores it. The spec's `look` entry sets the classes: wood and cardboard matte (fabric), produce as food, the dumpster's paint at 0.30 (dark), steel and the black lids by colour. The sign's spec also lists one variant per commissary: `game_look.py` grades each `T_BaySign_<id>_BaseColor.png` into `T_BaySign_<id>_BC.png` with the same bakes and mask. The part textures are only bake sources and are packed into `BayCommissary.blend`. Atlases are 512 px, the hand truck's 256. The roll cage's hundred thin bars leave its atlas about a third full, so its spec asks for 30% fill instead of 40%. `render_review.py` places the look versions for the review renders in `commissary/renders/`, and `render_look.py` made `renders/look-day.png` and `look-night.png`; those three are kept. Nothing in it comes from the game: the textures are procedural, the lettering is Blender's own Inter font (SIL Open Font License), and the sign's names come from `data/commissaries.json` and `en.json`, so a renamed commissary needs the script run again.
 
 | File | What | Size, origin |
 |---|---|---|
 | `T_BayPaint_BaseColor.png` | Worn road paint, 188 sRGB like the game's decal lines, with asphalt showing through scuffs and grit; tiles every 2 m | 512² |
 | `BayLettering.fbx` | LOADING ZONE as flat paint, condensed | 1 m cap height, 8.04 m long, origin in the middle; reads along Unity +x with the letters' tops to +z |
-| `BaySign.fbx`, `T_BaySign_<id>_BaseColor.png` | A galvanised pole, 3.0 m, with a 0.40 × 0.80 m plate from 1.90 m: COMMERCIAL VEHICLES ONLY, LOADING ZONE, a double arrow, FOOD VENDORS and the commissary's name in green. The plate faces Unity +z and reads from both sides | Origin at the pole's foot |
+| `BaySign.fbx`, `T_BaySign_BC/_M/_N.png`, `T_BaySign_<id>_BC.png` | A galvanised pole, 3.0 m, with a 0.40 × 0.80 m plate from 1.90 m: COMMERCIAL VEHICLES ONLY, LOADING ZONE, a double arrow, FOOD VENDORS and the commissary's name in green. The plate faces Unity +z and reads from both sides | Origin at the pole's foot |
 | `BayPalletStack.fbx` | Two pallets, four crates of produce, two cartons | 1.20 × 1.00 × 0.87 m |
 | `BayHandTruck.fbx` | A hand truck with two cartons | 0.52 × 0.50 × 1.23 m |
 | `BayRollCage.fbx` | A roll cage, part loaded | 0.72 × 0.84 × 1.71 m |
 | `BayDumpster.fbx` | A 2-yard dumpster, green with black lids | 1.91 × 1.28 × 1.29 m |
 
-Props have their origin at the bottom centre and the front at Unity +z. `tools/build-mod.sh` copies the FBX files (as `<Name>_Model.fbx`) and textures into `unity/FoodTrucks/Commissary/BayArt/`, and `CommissaryAssets` makes HDRP/Lit materials (remapped from the Blender material names; the paint takes the street's dirt decals, the rest don't) and `<Name>_Display.prefab`s there; each prop prefab has a box collider and a carving NavMeshObstacle of its bounds. In game the pallet and the hand truck are the game's own `DeliveryPallet` (bottom two layers of boxes) and `Vehicles/PlayerVehicles/HandTruck` meshes when those load; the mod's models stand in otherwise. The game has no dumpster or roll cage.
+Props have their origin at the bottom centre and the front at Unity +z. `tools/build-mod.sh` copies the FBX files (as `<Name>_Model.fbx`), the paint texture and the look step's `_BC`, `_M` and `_N` maps into `unity/FoodTrucks/Commissary/BayArt/`, and `CommissaryAssets` makes the materials and `<Name>_Display.prefab`s there. The sign and the props use `SurfaceLook.LitMaterial` (`M_<Name>`, and `M_BaySign_<id>` per commissary on the same mask and normal map, which `BayProps` swaps onto the plate) with the FBX's own normals; the paint keeps its flat road-line material, with decals off. Every prefab, the lettering's included, gets `SurfaceLook.NoStreetDecals`, and `BayMarkers` sets the outline it draws and the game meshes it copies to the same rendering layer at run time, so the dirt decals skip all bay pieces; each prop prefab has a box collider and a carving NavMeshObstacle of its bounds. In game the pallet and the hand truck are the game's own `DeliveryPallet` (bottom two layers of boxes) and `Vehicles/PlayerVehicles/HandTruck` meshes when those load; the mod's models stand in otherwise. The game has no dumpster or roll cage.
 ## Cash register
 
 `props/CashRegister/`: a compact point-of-sale register after the game's `ConcessionsStandRegister` and checkout counters (charcoal drawer, lighter deck, a screen on a short post facing the customer, a card terminal, a receipt slot). 0.15 × 0.13 m, 0.18 m tall, 424 tris, 256 px maps, front −Y, origin at the bottom centre. Built by `build_cash_register.py` (headless, `--factory-startup`), then `apply_look.sh`. `tools/build-mod.sh` copies it into `Vehicles/PropArt` as `CashRegister_Model.fbx`, and `PropAssets` adds it to the cart and the truck as a plain mesh child (`Cash_Register`, no collider) in the vehicle's `renderers` list. Positions are in the cart and truck tables above.

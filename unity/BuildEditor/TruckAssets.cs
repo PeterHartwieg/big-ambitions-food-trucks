@@ -202,7 +202,11 @@ namespace FoodTrucks.BuildEditor
 
         private static string ProjectRoot => Path.GetDirectoryName(Application.dataPath)!;
 
-        // Read/Write meshes for the game's damage deformation; the normal map as a normal map.
+        private const int VehicleMapSize = 1024;
+
+        // Read/Write meshes for the game's damage deformation; the normal map as a normal map. The mask (sRGB, as
+        // SurfaceLook.MaskTexture explains) and the normal map are capped at 1,024 px like the game's vehicle maps
+        // (Van_N, T_VanBig_M/_N); game_look.py writes them at the 2,048 px source size, which kept the bundle at 25 MB.
         private static void ConfigureImports(string artFolder)
         {
             var model = (ModelImporter)AssetImporter.GetAtPath(artFolder + "/FoodTruck_Model.fbx");
@@ -213,12 +217,8 @@ namespace FoodTrucks.BuildEditor
                 model.materialImportMode = ModelImporterMaterialImportMode.None;
                 model.SaveAndReimport();
             }
-            var normal = (TextureImporter)AssetImporter.GetAtPath(artFolder + "/T_FoodTruck_N.png");
-            if (normal.textureType != TextureImporterType.NormalMap)
-            {
-                normal.textureType = TextureImporterType.NormalMap;
-                normal.SaveAndReimport();
-            }
+            SurfaceLook.Texture(artFolder + "/T_FoodTruck_N.png", TextureImporterType.NormalMap, srgb: false, maxSize: VehicleMapSize);
+            SurfaceLook.MaskTexture(artFolder + "/T_FoodTruck_M.png", VehicleMapSize);
         }
 
         // Meshes by object name in the FBX (the names are fixed by art/truck/spec.json).

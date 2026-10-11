@@ -3,8 +3,13 @@
 Run headless from the repo root:
     blender -b --factory-startup --python art/commissary/build_commissary.py
 
-Writes into art/commissary/ (textures, FBX files, BayCommissary.blend) and renders a review scene into
-art/commissary/renders/. Nothing here is a game asset: shapes are modelled from scratch, textures are procedural or
+Writes into art/commissary/: the road paint texture and the lettering's FBX (both final), BayCommissary.blend (the
+whole set, for render_review.py), and for the sign and each prop a <Name>.blend, <Name>.spec.json and the flat atlas
+T_<Name>_BaseColor.png (the sign also one T_BaySign_<id>_BaseColor.png per commissary). Those then go through the
+surface-look step like every other model (art/README.md, "Commissary bay"):
+    art/tools/apply_look.sh art/commissary/*.spec.json
+which writes their T_<Name>_BC/_M/_N.png and FBX files. The per-part textures (wood, crates, the plates) are only
+bake sources: they are packed into BayCommissary.blend and not kept as files. Nothing here is a game asset: shapes are modelled from scratch, textures are procedural or
 rendered from Blender's own Inter font (SIL Open Font License), and the names on the signs come from data/ and the
 mod's en.json.
 
@@ -47,16 +52,22 @@ def periodic_noise(size, scale, rng):
     return n / max(n.max(), 1e-9)
 
 
-def save_png(name, rgb, alpha=None):
-    """rgb: H x W x 3 in sRGB 0..1, row 0 at the top. Saved as art/commissary/<name>."""
+def save_png(name, rgb, alpha=None, keep=True):
+    """rgb: H x W x 3 in sRGB 0..1, row 0 at the top. Saved as art/commissary/<name>; a bake source (keep=False) is
+    packed into the .blend instead and its file removed."""
     h, w, _ = rgb.shape
     img = bpy.data.images.new(name, w, h, alpha=alpha is not None)
     a = np.ones((h, w)) if alpha is None else alpha
     px = np.dstack([rgb, a])[::-1].astype(np.float32)  # Blender rows start at the bottom
     img.pixels.foreach_set(px.ravel())
-    img.filepath_raw = os.path.join(OUT, name)
+    path = os.path.join(OUT if keep else RENDERS, name)
+    img.filepath_raw = path
     img.file_format = 'PNG'
     img.save()
+    if not keep:
+        img.pack()
+        img.use_fake_user = True   # the named plates have no material until the sign's atlas bake
+        os.remove(path)
     return img
 
 
@@ -297,7 +308,7 @@ def sign_texture(file_name, place):
     for ob in list(scene.collection.objects):
         bpy.data.objects.remove(ob, do_unlink=True)
     bpy.data.scenes.remove(scene)
-    return save_png(file_name, np.clip(rgb, 0, 1))
+    return save_png(file_name, np.clip(rgb, 0, 1), keep=False)
 
 
 def pole_texture():
@@ -305,7 +316,7 @@ def pole_texture():
     n = periodic_noise(256, 3, RNG)[:, :64]
     g = 0.58 + 0.10 * (n - 0.5)
     rgb = np.dstack([g * 0.98, g, g * 1.02])
-    return save_png('T_BaySignPole_BaseColor.png', np.clip(rgb, 0, 1))
+    return save_png('T_BaySignPole_BaseColor.png', np.clip(rgb, 0, 1), keep=False)
 
 
 def sign_model(plate_mat, pole_mat):
@@ -372,13 +383,13 @@ def wood_texture():
     base = np.array([0.70, 0.58, 0.42])
     dark = np.array([0.45, 0.36, 0.25])
     rgb = base * (1 - t[..., None] * 0.6) + dark * (t[..., None] * 0.6)
-    return save_png('T_BayWood_BaseColor.png', np.clip(rgb, 0, 1))
+    return save_png('T_BayWood_BaseColor.png', np.clip(rgb, 0, 1), keep=False)
 
 
 def flat_texture(name, color, noise=0.06, size=128, scale=8):
     n = periodic_noise(size, scale, RNG)
     rgb = np.array(color)[None, None, :] * (1 - noise / 2 + noise * n[..., None])
-    return save_png(name, np.clip(rgb, 0, 1))
+    return save_png(name, np.clip(rgb, 0, 1), keep=False)
 
 
 def pallet(name, mat, at=(0, 0, 0)):
@@ -556,7 +567,6 @@ def build():
     pole_mat = material('M_BaySignPole', image=pole_img, roughness=0.5, metallic=0.6)
     plate_mat = material('M_BaySign', image=sign_imgs.get('hells-kitchen', sign_imgs['']), roughness=0.45)
     pole, plate = sign_model(plate_mat, pole_mat)
-    export_fbx(os.path.join(OUT, 'BaySign.fbx'), [pole, plate])
 
     tex = {
         'wood': wood_texture(),
@@ -570,14 +580,261 @@ def build():
     }
     mats = {k: material('M_Bay' + k.title().replace('_', ''), image=v, roughness=0.8) for k, v in tex.items()}
     built = props(mats)
-    for name, (body, size) in built.items():
-        export_fbx(os.path.join(OUT, f'{name}.fbx'), [body])
     with open(os.path.join(OUT, 'sizes.json'), 'w') as f:
         json.dump({n: [round(x, 3) for x in s] for n, (b, s) in built.items()}, f, indent=1)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, 'BayCommissary.blend'))
-    return letters, pole, plate, built, paint_mat, sign_imgs
+    return sorted(k for k in sign_imgs if k)
+
+# ---------------------------------------------------------------------------------------------- look sources
+
+# Per model: its objects, the atlas size (art/README.md: 256 px for small props, 512 for the larger ones and the
+# sign, whose plate gets most of it) and its surface classes for game_look.py. Colours are the bake's sRGB values;
+# tolerances cover each texture's noise. Wood and cardboard are matte (fabric's 0.20), the produce food, the dumpster
+# worn paint (dark's 0.30); steel and the black lids are classed by colour.
+WOOD = {'rgb': [0.62, 0.51, 0.37], 'class': 'fabric', 'tolerance': 0.13}
+CARTON = {'rgb': [0.62, 0.47, 0.30], 'class': 'fabric', 'tolerance': 0.07}
+PRODUCE = {'rgb': [0.78, 0.22, 0.10], 'class': 'food', 'tolerance': 0.20}
+GREENS = {'rgb': [0.30, 0.52, 0.16], 'class': 'food', 'tolerance': 0.13}
+MODELS = {
+    'BayPalletStack': dict(objects=['BayPalletStack_Body'], size=512, classes=[WOOD, CARTON, PRODUCE, GREENS]),
+    'BayHandTruck': dict(objects=['BayHandTruck_Body'], size=256, classes=[CARTON]),
+    # The cage's hundred 12 to 15 mm bars pack with more margin than face, so its atlas is only about a third full.
+    'BayRollCage': dict(objects=['BayRollCage_Body'], size=512, classes=[CARTON], min_fill=0.3),
+    'BayDumpster': dict(objects=['BayDumpster_Body'], size=512,
+                        classes=[{'rgb': [0.16, 0.30, 0.22], 'class': 'dark', 'tolerance': 0.10}]),
+    'BaySign': dict(objects=['BaySign_Pole', 'BaySign_Plate'], size=512, classes=[]),
+}
+
+
+def bake_material(src, target):
+    """An emission copy of src (its image on the tiled UVs, or its flat colour) with the bake target active."""
+    ma = bpy.data.materials.new(src.name + '_Bake')
+    ma.use_nodes = True
+    nt = ma.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    em = nt.nodes.new('ShaderNodeEmission')
+    nt.links.new(em.outputs[0], out.inputs['Surface'])
+    img = next((n.image for n in src.node_tree.nodes if n.type == 'TEX_IMAGE' and n.image), None)
+    if img is not None:
+        uv = nt.nodes.new('ShaderNodeUVMap')
+        uv.uv_map = 'Tiled'
+        tex = nt.nodes.new('ShaderNodeTexImage')
+        tex.image = img
+        nt.links.new(uv.outputs['UV'], tex.inputs['Vector'])
+        nt.links.new(tex.outputs['Color'], em.inputs['Color'])
+    else:
+        em.inputs['Color'].default_value = src.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value
+    t = nt.nodes.new('ShaderNodeTexImage')
+    t.image = target
+    nt.nodes.active = t
+    return ma
+
+
+def atlas_bake(obs, size, file_name):
+    """Bakes the objects' current materials into one size x size atlas on the UVMap layer; saves it as sRGB."""
+    sc = bpy.context.scene
+    target = bpy.data.images.new('AtlasBake', size, size, alpha=False, float_buffer=True)
+    target.colorspace_settings.name = 'Non-Color'
+    saved = [list(o.data.materials) for o in obs]
+    for o, mats in zip(obs, saved):
+        for i, m in enumerate(mats):
+            o.data.materials[i] = bake_material(m, target)
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in obs:
+        o.select_set(True)
+        o.data.uv_layers.active = o.data.uv_layers['UVMap']
+    bpy.context.view_layer.objects.active = obs[0]
+    sc.render.engine = 'CYCLES'
+    sc.cycles.device = 'CPU'
+    sc.cycles.samples = 4
+    bpy.ops.object.bake(type='EMIT', margin=4, margin_type='EXTEND', use_clear=True)
+    for o, mats in zip(obs, saved):
+        for i, m in enumerate(mats):
+            bake = o.data.materials[i]
+            o.data.materials[i] = m
+            bpy.data.materials.remove(bake)
+    lin = np.array(target.pixels[:], dtype=np.float32).reshape(size, size, 4)[..., :3]
+    bpy.data.images.remove(target)
+    srgb = np.where(lin <= 0.0031308, lin * 12.92, 1.055 * np.power(np.clip(lin, 0, None), 1 / 2.4) - 0.055)
+    out = bpy.data.images.new(file_name, size, size, alpha=False)
+    out.pixels.foreach_set(np.dstack([np.clip(srgb, 0, 1), np.ones((size, size))]).astype(np.float32).ravel())
+    out.filepath_raw = os.path.join(OUT, file_name)
+    out.file_format = 'PNG'
+    out.save()
+    return out
+
+
+def unwrap(obs, size):
+    """A new non-overlapping UV layer UVMap (Smart UV Project, 3 px margins) beside the tiled one, renamed Tiled."""
+    for o in obs:
+        o.data.uv_layers[0].name = 'Tiled'
+        o.data.uv_layers.new(name='UVMap')
+        o.data.uv_layers.active = o.data.uv_layers['UVMap']
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in obs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = obs[0]
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.smart_project(angle_limit=math.radians(66), margin_method='FRACTION', island_margin=3.0 / size,
+                             area_weight=0.0, correct_aspect=True, scale_to_bounds=False)
+    # Repack tighter (the roll cage's and the pallets' many thin boards and bars): rotated, by their outlines.
+    bpy.ops.uv.select_all(action='SELECT')
+    bpy.ops.uv.pack_islands(rotate=True, rotate_method='ANY', shape_method='CONCAVE', margin_method='FRACTION',
+                            margin=2.0 / size)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def unwrap_sign(pole, plate, size):
+    """The sign's atlas, laid out by hand so the plate's faces get most of it (about 1.8 mm a texel): front and back
+    side by side from the bottom left, the pole's side unrolled in a column on the right (3 m over the atlas's
+    height), and the plate's edges, the cap, the clamps and the discs shelf-packed in the strip above the plate."""
+    m = 3.0 / size                                  # margin, 3 texels
+    S = (1 - 3 * m - 0.07) / (2 * PLATE_W) * 0.98   # plate scale, UV per metre
+    S = min(S, (0.86 - 2 * m) / PLATE_H)
+    Sp = (1 - 2 * m) / (POLE_H + 0.03)              # pole scale
+    islands = []                                    # (object, [(poly index, [(u, v) per loop])], w, h)
+    for o in (pole, plate):
+        o.data.uv_layers[0].name = 'Tiled'
+        o.data.uv_layers.new(name='UVMap')
+        o.data.uv_layers.active = o.data.uv_layers['UVMap']
+    me = plate.data
+    x0, z0 = -PLATE_W / 2, PLATE_BOTTOM
+    groups = {}
+    for p in me.polygons:
+        n = p.normal
+        if abs(n.y) > 0.9:
+            key = 'front' if n.y < 0 else 'back'
+            uvs = [((me.vertices[v].co.x - x0) if key == 'front' else (PLATE_W / 2 - me.vertices[v].co.x),
+                    me.vertices[v].co.z - z0) for v in p.vertices]
+        elif abs(n.x) > 0.9:
+            key = 'side%+d' % round(n.x)
+            uvs = [(me.vertices[v].co.y, me.vertices[v].co.z) for v in p.vertices]
+        else:
+            key = 'end%+d' % round(n.z)
+            uvs = [(me.vertices[v].co.x, me.vertices[v].co.y) for v in p.vertices]
+        groups.setdefault(key, []).append((p.index, [(a * S, b * S) for a, b in uvs]))
+    placed = {}
+    # Front and back, fixed.
+    for key, ox in (('front', m), ('back', 2 * m + PLATE_W * S)):
+        placed[(plate.name, key)] = (ox, m)
+    small = [(plate, k, g) for k, g in groups.items() if k not in ('front', 'back')]
+    plate_groups = groups
+    # The pole: side faces unrolled per part (pole, cap, clamps), discs and annuli flat.
+    me = pole.data
+    pgroups = {}
+    for p in me.polygons:
+        vs = [me.vertices[v].co for v in p.vertices]
+        if abs(p.normal.z) < 0.5:
+            r = round(max(math.hypot(c.x, c.y) for c in vs), 3)
+            zmin = round(min(c.z for c in vs), 2)
+            key = ('side', r, zmin if r > 0.033 else 0)
+            th = [math.atan2(c.y, c.x) % (2 * math.pi) for c in vs]
+            if max(th) - min(th) > math.pi:
+                th = [t + 2 * math.pi if t < math.pi else t for t in th]
+            uvs = [(t * r * Sp, c.z * Sp) for t, c in zip(th, vs)]
+        else:
+            key = ('disc', round(vs[0].z, 3), 1 if p.normal.z > 0 else -1)
+            uvs = [(c.x * Sp, c.y * Sp) for c in vs]
+        pgroups.setdefault(key, []).append((p.index, uvs))
+    main = next(k for k in pgroups if k[0] == 'side' and k[2] == 0)
+    small += [(pole, k, g) for k, g in pgroups.items() if k != main]
+
+    def extent(g):
+        us = [u for _, l in g for u, _ in l]; vs = [v for _, l in g for _, v in l]
+        return min(us), min(vs), max(us) - min(us), max(vs) - min(vs)
+    w = extent(pgroups[main])[2]
+    placed[(pole.name, main)] = (1 - m - w, m)
+    # Shelf-pack the rest above the plate, each lying on its long side.
+    for i, (o, k, g) in enumerate(small):
+        _, _, gw, gh = extent(g)
+        if gh > gw:
+            g[:] = [(pi, [(v, u) for u, v in l]) for pi, l in g]
+    x, y, row = m, m + PLATE_H * S + m, 0.0
+    right = 1 - 2 * m - w
+    for o, k, g in sorted(small, key=lambda t: -extent(t[2])[3]):
+        _, _, gw, gh = extent(g)
+        if x + gw > right:
+            x, y, row = m, y + row + m, 0.0
+        placed[(o.name, k)] = (x, y)
+        x += gw + m
+        row = max(row, gh)
+    if y + row > 1 - m:
+        raise RuntimeError(f'sign atlas overflows: top {y + row:.3f}')
+    for o, gs in ((plate, plate_groups), (pole, pgroups)):
+        uv = o.data.uv_layers['UVMap'].data
+        for k, g in gs.items():
+            ox, oy = placed[(o.name, k)]
+            u0, v0, _, _ = extent(g)
+            for pi, l in g:
+                for li, (u, v) in zip(o.data.polygons[pi].loop_indices, l):
+                    uv[li].uv = (ox + u - u0, oy + v - v0)
+    print(f'[commissary] BaySign atlas: plate {S * size / 1000:.2f} px/mm ({1 / (S * size) * 1000:.1f} mm a texel), '
+          f'pole {1 / (Sp * size) * 1000:.1f} mm a texel, top {y + row:.3f}')
+
+
+def look_sources(sites):
+    """For the sign and each prop: a <Name>.blend holding only that model with one material on a baked atlas, its
+    flat source T_<Name>_BaseColor.png and a <Name>.spec.json for apply_look.sh and score.py."""
+    whole = os.path.join(OUT, 'BayCommissary.blend')
+    for name, cfg in MODELS.items():
+        bpy.ops.wm.open_mainfile(filepath=whole)
+        bpy.context.preferences.filepaths.save_version = 0
+        keep = [bpy.data.objects[n] for n in cfg['objects']]
+        for o in list(bpy.data.objects):
+            if o not in keep:
+                bpy.data.objects.remove(o, do_unlink=True)
+        size = cfg['size']
+        if name == 'BaySign':
+            unwrap_sign(bpy.data.objects['BaySign_Pole'], bpy.data.objects['BaySign_Plate'], size)
+        else:
+            unwrap(keep, size)
+        source = atlas_bake(keep, size, f'T_{name}_BaseColor.png')
+        variants = []
+        if name == 'BaySign':
+            # One atlas per commissary: the plate's own named image swapped in, the same UVs.
+            plate = next(o for o in keep if o.name.endswith('Plate'))
+            node = next(n for n in plate.data.materials[0].node_tree.nodes if n.type == 'TEX_IMAGE')
+            for sid in sites:
+                node.image = bpy.data.images[f'T_BaySign_{sid}_BaseColor.png']
+                atlas_bake(keep, size, f'T_BaySign_{sid}_BaseColor.png')
+                variants.append(sid)
+        ma = bpy.data.materials.new(name + '_Flat')
+        ma.use_nodes = True
+        tex = ma.node_tree.nodes.new('ShaderNodeTexImage')
+        tex.image = source
+        ma.node_tree.links.new(tex.outputs['Color'], ma.node_tree.nodes['Principled BSDF'].inputs['Base Color'])
+        tris, lo, hi = 0, np.full(3, 1e9), np.full(3, -1e9)
+        objects = {}
+        for o in keep:
+            o.data.uv_layers.remove(o.data.uv_layers['Tiled'])
+            o.data.materials.clear()
+            o.data.materials.append(ma)
+            n = len(o.data.polygons)
+            tris += n
+            pts = np.array([v.co for v in o.data.vertices])
+            lo, hi = np.minimum(lo, pts.min(0)), np.maximum(hi, pts.max(0))
+            objects[o.name] = {'origin': [0, 0, 0], 'max_tris': int(math.ceil(n * 1.1 / 10) * 10)}
+        bpy.ops.outliner.orphans_purge(do_recursive=True)
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, f'{name}.blend'))
+        look = {'classes': cfg['classes']}
+        if variants:
+            look['variants'] = variants
+        spec = {
+            'name': name, 'fbx': f'{name}.fbx', 'visible_budget': int(math.ceil(tris * 1.1 / 100) * 100),
+            'position_tolerance_m': 0.005, 'uv_layers': 1, 'uv_min_fill': cfg.get('min_fill', 0.4),
+            'textures': [{'file': f'T_{name}_BaseColor.png', 'size': size}],
+            'objects': objects,
+            'envelope': {k: [round(float(lo[i]) - 0.01, 3), round(float(hi[i]) + 0.01, 3)] for i, k in enumerate('xyz')},
+            'look': look,
+        }
+        with open(os.path.join(OUT, f'{name}.spec.json'), 'w') as f:
+            json.dump(spec, f, indent=1)
+        print(f'[commissary] {name}: atlas {size} px, {tris} tris, {len(variants)} plate variants')
 
 
 if __name__ == '__main__':
-    build()
-    print('[commissary] built')
+    sites = build()
+    look_sources(sites)
+    print('[commissary] built; now run art/tools/apply_look.sh art/commissary/*.spec.json')

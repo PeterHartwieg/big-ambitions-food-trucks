@@ -1,0 +1,51 @@
+{
+ "name": "BayHandTruck",
+ "fbx": "BayHandTruck.fbx",
+ "visible_budget": 300,
+ "position_tolerance_m": 0.005,
+ "uv_layers": 1,
+ "uv_min_fill": 0.4,
+ "textures": [
+  {
+   "file": "T_BayHandTruck_BaseColor.png",
+   "size": 256
+  }
+ ],
+ "objects": {
+  "BayHandTruck_Body": {
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "max_tris": 270
+  }
+ },
+ "envelope": {
+  "x": [
+   -0.27,
+   0.27
+  ],
+  "y": [
+   -0.26,
+   0.26
+  ],
+  "z": [
+   -0.01,
+   1.235
+  ]
+ },
+ "look": {
+  "classes": [
+   {
+    "rgb": [
+     0.62,
+     0.47,
+     0.3
+    ],
+    "class": "fabric",
+    "tolerance": 0.07
+   }
+  ]
+ }
+}

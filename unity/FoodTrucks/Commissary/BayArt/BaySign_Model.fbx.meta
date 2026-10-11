@@ -7,6 +7,11 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
+      name: BaySign_GameLook
+    second: {fileID: 2100000, guid: 4739a8c213aaf4116b4a5019dd6277fe, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
       name: M_BaySign
     second: {fileID: 2100000, guid: 4739a8c213aaf4116b4a5019dd6277fe, type: 2}
   - first:

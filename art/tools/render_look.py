@@ -11,7 +11,8 @@ scene.json:
               "label": "ours", "rotate_z": 0, "gap": 0.3}]}
 Items stand on a pavement plane in a row along X at real scale. Without a mask map an item renders like
 an HDRP/Lit material with only a base colour map: one smoothness and metallic for the whole surface.
-The mask's AO is applied at half strength to the base colour, standing in for HDRP's indirect occlusion.
+The mask's AO is applied at half strength to the base colour, standing in for HDRP's indirect occlusion; the
+mask is decoded as sRGB, as Unity samples it (art/README.md, "Surface look").
 """
 import bpy, json, math, os, sys
 from mathutils import Vector
@@ -39,7 +40,7 @@ def material(item, i):
         return n
     bc = tex(item["bc"], True)
     if item.get("m"):
-        m = tex(item["m"], False)
+        m = tex(item["m"], True)   # decoded as sRGB, as Unity samples the game's masks and ours (only G changes)
         sep = nt.nodes.new("ShaderNodeSeparateColor")
         nt.links.new(m.outputs["Color"], sep.inputs[0])
         mix = nt.nodes.new("ShaderNodeMix")

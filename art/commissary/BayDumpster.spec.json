@@ -1,0 +1,51 @@
+{
+ "name": "BayDumpster",
+ "fbx": "BayDumpster.fbx",
+ "visible_budget": 300,
+ "position_tolerance_m": 0.005,
+ "uv_layers": 1,
+ "uv_min_fill": 0.4,
+ "textures": [
+  {
+   "file": "T_BayDumpster_BaseColor.png",
+   "size": 512
+  }
+ ],
+ "objects": {
+  "BayDumpster_Body": {
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "max_tris": 220
+  }
+ },
+ "envelope": {
+  "x": [
+   -0.965,
+   0.965
+  ],
+  "y": [
+   -0.651,
+   0.651
+  ],
+  "z": [
+   -0.01,
+   1.297
+  ]
+ },
+ "look": {
+  "classes": [
+   {
+    "rgb": [
+     0.16,
+     0.3,
+     0.22
+    ],
+    "class": "dark",
+    "tolerance": 0.1
+   }
+  ]
+ }
+}

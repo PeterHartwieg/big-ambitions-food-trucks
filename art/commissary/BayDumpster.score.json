@@ -1,0 +1,151 @@
+{
+  "spec": "BayDumpster.spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "BayDumpster_Body"
+    ],
+    "per_object": {
+      "BayDumpster_Body": {
+        "triangles": 192,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.955,
+          -0.6412,
+          0.0
+        ],
+        "bbox_max": [
+          0.955,
+          0.6412,
+          1.2867
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      }
+    },
+    "visible_triangles": 192,
+    "visible_bbox_min": [
+      -0.955,
+      -0.6412,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.955,
+      0.6412,
+      1.2867
+    ],
+    "visible_dims": [
+      1.91,
+      1.2824,
+      1.2867
+    ],
+    "near_points": {},
+    "clear_boxes": {},
+    "materials": [
+      "BayDumpster_GameLook"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.6478,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_BayDumpster_BaseColor.png": [
+        512,
+        512
+      ]
+    },
+    "blend_size_mb": 2.13
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "BayDumpster_Body"
+    ],
+    "per_object": {
+      "BayDumpster_Body": {
+        "triangles": 192,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.955,
+          -0.6412,
+          -0.0
+        ],
+        "bbox_max": [
+          0.955,
+          0.6412,
+          1.2867
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      }
+    },
+    "visible_triangles": 192,
+    "visible_bbox_min": [
+      -0.955,
+      -0.6412,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.955,
+      0.6412,
+      1.2867
+    ],
+    "visible_dims": [
+      1.91,
+      1.2824,
+      1.2867
+    ],
+    "near_points": {},
+    "clear_boxes": {},
+    "materials": [
+      "BayDumpster_GameLook"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.6478,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.03
+  },
+  "failures": [],
+  "passed": true
+}

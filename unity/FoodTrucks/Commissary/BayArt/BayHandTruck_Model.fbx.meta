@@ -7,6 +7,11 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
+      name: BayHandTruck_GameLook
+    second: {fileID: 2100000, guid: de78a10783b9e404ba4a8b478ef8925e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
       name: M_BayCarton
     second: {fileID: 2100000, guid: 409a90884512348cc991390aec46ffc9, type: 2}
   - first:

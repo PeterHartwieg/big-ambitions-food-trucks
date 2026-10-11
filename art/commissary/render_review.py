@@ -3,7 +3,7 @@ them in game, on a stand-in street (procedural asphalt, a 15 cm kerb, a pavement
 
     blender -b --factory-startup --python art/commissary/render_review.py
 
-Run build_commissary.py first. Writes art/commissary/renders/review-*.png and review-sheet.png.
+Run build_commissary.py and art/tools/apply_look.sh art/commissary/*.spec.json first. Writes art/commissary/renders/review-*.png and review-sheet.png.
 Layout (Blender, metres): the street runs along X; the parking lane's middle is y = 0, the kerb at y = 1.25, the
 pavement from 1.25 to 5.25, the facade at y = 5.25 with the door at x = 0. The bay is the paint's 13 m stretch.
 """
@@ -18,6 +18,29 @@ scene = bpy.context.scene
 for ob in list(scene.objects):
     if not ob.name.endswith('_Body') and not ob.name.startswith('BaySign_'):
         bpy.data.objects.remove(ob, do_unlink=True)
+# The sign and the props as they ship: their surface-look versions (art/tools/apply_look.sh), when made.
+for name in ('BaySign', 'BayPalletStack', 'BayHandTruck', 'BayRollCage', 'BayDumpster'):
+    path = os.path.join(OUT, name + '.blend')
+    if not os.path.exists(path):
+        continue
+    with bpy.data.libraries.load(path) as (src, dst):
+        dst.objects = [n for n in src.objects if n.startswith(name + '_')]
+    for ob in dst.objects:
+        old = bpy.data.objects.get(ob.name.split('.')[0])
+        if old is not None and old is not ob:
+            name_ = old.name
+            bpy.data.objects.remove(old, do_unlink=True)
+            ob.name = name_
+        scene.collection.objects.link(ob)
+# The sign's plate shows Hell's Kitchen, as in game for that commissary.
+plate = bpy.data.objects['BaySign_Plate']
+named = os.path.join(OUT, 'T_BaySign_hells-kitchen_BC.png')
+if plate.data.materials and plate.data.materials[0].name.endswith('_GameLook') and os.path.exists(named):
+    m = plate.data.materials[0].copy()
+    for n in m.node_tree.nodes:
+        if n.type == 'TEX_IMAGE' and n.image and n.image.filepath.endswith('T_BaySign_BC.png'):
+            n.image = bpy.data.images.load(named)
+    plate.data.materials[0] = m
 
 LANE_W = 2.4          # the parking lane
 PAINT_W = 2.2         # BayZone width: the legal run less the probe boxes

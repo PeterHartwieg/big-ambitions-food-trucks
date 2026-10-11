@@ -102,7 +102,10 @@ for fbx in "$REPO"/art/commissary/*.fbx; do
   name="$(basename "$fbx" .fbx)"
   rsync -a --checksum "$fbx" "$BAY_ART/${name}_Model.fbx"
 done
-rsync -a --checksum "$REPO"/art/commissary/T_*.png "$BAY_ART/"
+# The road paint's own texture, and the look step's three maps for the sign (and its per-commissary plates) and the
+# props; the flat T_*_BaseColor.png sources that game_look.py reads stay in art/.
+rsync -a --checksum "$REPO"/art/commissary/T_BayPaint_BaseColor.png "$REPO"/art/commissary/T_*_BC.png \
+  "$REPO"/art/commissary/T_*_M.png "$REPO"/art/commissary/T_*_N.png "$BAY_ART/"
 
 # Link the mod folder and the build helpers into the SDK project.
 link() { # link <target> <link path>

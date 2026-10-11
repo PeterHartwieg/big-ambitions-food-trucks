@@ -2,6 +2,8 @@
 
 Usage (from the repo root, after the model's build script has saved its .blend):
   blender -b art/<kind>/<Name>/<Name>.blend --python art/tools/game_look.py -- art/<kind>/<Name>
+  blender -b art/commissary/<Name>.blend --python art/tools/game_look.py -- art/commissary art/commissary/<Name>.spec.json
+The second form is for folders that hold several models (the commissary): the spec names the model.
 
 What it does (art/README.md, "Surface look"):
   1. Normals: edges sharper than 60 degrees stay hard, everything shallower (cylinder facets, the
@@ -15,22 +17,26 @@ What it does (art/README.md, "Surface look"):
        T_<Name>_M.png   HDRP mask map: R metallic, G ambient occlusion, B 0, A smoothness
        T_<Name>_N.png   tangent-space normal map (OpenGL, Y up, as Unity expects)
      The source T_<Name>_BaseColor.png (flat part colours from the build script) is left alone, so the
-     step can run again. For the truck the sources are T_FoodTruck_D.png and T_FoodTruck_MaskMap.png.
+     step can run again. The mask's bytes are what the game stores: Unity imports it as sRGB, as the
+     game does its own (art/README.md, "Surface look"), so G is decoded on sampling; R is 0 or 1 and A
+     is never decoded. For the truck the sources are T_FoodTruck_D.png and T_FoodTruck_MaskMap.png.
   4. Re-exports the FBX with the export settings from the prompts and saves the .blend with a
      preview material that uses the new maps.
 
 Materials per texel come from the flat source colour (see classify) or, for the truck, from its
-source mask. A model folder can hold a look.json to override per colour, e.g.
+source mask. A model folder can hold a look.json (or the spec a "look" entry) to override per colour, e.g.
   {"classes": [{"rgb": [0.55, 0.78, 0.86], "class": "glass"}], "kind": "food"}
+"variants": ["a", "b"] also grades T_<Name>_a_BaseColor.png into T_<Name>_a_BC.png with the same bakes
+and mask (the commissary sign's plates, one per commissary, on the same UVs).
 """
 import bpy, json, math, os, sys
 import numpy as np
 
 ARGS = sys.argv[sys.argv.index("--") + 1:]
 FOLDER = os.path.abspath(ARGS[0])
-SPEC = json.load(open(os.path.join(FOLDER, "spec.json")))
+SPEC = json.load(open(ARGS[1] if len(ARGS) > 1 else os.path.join(FOLDER, "spec.json")))
 NAME = SPEC["name"]
-LOOK = json.load(open(os.path.join(FOLDER, "look.json"))) if os.path.exists(os.path.join(FOLDER, "look.json")) else {}
+LOOK = SPEC.get("look") or (json.load(open(os.path.join(FOLDER, "look.json"))) if os.path.exists(os.path.join(FOLDER, "look.json")) else {})
 VEHICLE = os.path.exists(os.path.join(FOLDER, f"T_{NAME}_D.png"))
 KIND = LOOK.get("kind", "vehicle" if VEHICLE else "food" if "/products/" in FOLDER else "prop")
 SMOOTH_ANGLE = math.radians(60.5)
@@ -299,7 +305,8 @@ def preview_material(bc_path, m_path, n_path):
         n.image.colorspace_settings.name = "sRGB" if colour else "Non-Color"
         n.image.alpha_mode = "CHANNEL_PACKED"
         return n
-    bc, m, nm = tex(bc_path, True), tex(m_path, False), tex(n_path, False)
+    # The mask decoded as sRGB, as Unity samples it (only G changes: R is 0 or 1, alpha is never decoded).
+    bc, m, nm = tex(bc_path, True), tex(m_path, True), tex(n_path, False)
     sep = nt.nodes.new("ShaderNodeSeparateColor")
     nt.links.new(m.outputs["Color"], sep.inputs[0])
     # HDRP uses AO for indirect light only; a half-strength multiply stands in for it here.
@@ -390,6 +397,11 @@ def main():
     save_px(bc, paths["BC"], True)
     save_px(mask, paths["M"], False)
     save_px(nrm, paths["N"], False)
+    for v in LOOK.get("variants", []):
+        vsrc = load_px(os.path.join(FOLDER, f"T_{NAME}_{v}_BaseColor.png"))[0]
+        vbc, _ = compose(vsrc, ao, edge, fine, coarse, classify(vsrc), src_mask)
+        save_px(vbc, os.path.join(FOLDER, f"T_{NAME}_{v}_BC.png"), True)
+        log(f"{NAME}: variant {v}: wrote T_{NAME}_{v}_BC.png")
     counts = {n: round(float((cls == i).mean()), 3) for i, n in enumerate(CLASSES) if (cls == i).any()}
     log(f"{NAME}: classes {counts}, AO p10/p50 {np.percentile(ao, 10):.2f}/{np.percentile(ao, 50):.2f}")
 
