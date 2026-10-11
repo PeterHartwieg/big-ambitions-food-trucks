@@ -266,6 +266,22 @@ namespace FoodTrucks
             Object.DestroyImmediate(rowTemplate.GetComponent<DriverStation>());
             listTemplate = Object.Instantiate(reorderable.gameObject, holder);
             listTemplate.name = "FoodTrucks.PageStops";
+            // A drag disables the list's layout group and adds, then removes, a LayoutElement on its object. Both references
+            // must be the copy's own (Instantiate remaps only references inside the copied object), or a drag on this page
+            // would change the game's logistics plan; and that object must have no LayoutElement of its own for the removal
+            // to take.
+            var copiedList = listTemplate.GetComponent<ReorderableList>() ?? throw Missing("the copied ReorderableList");
+            var listLayout = new List<string>();
+            foreach (var field in new[] { "verticalLayoutGroup", "contentSizeFitter" })
+            {
+                var value = Traverse.Create(copiedList).Field(field).GetValue<Component>();
+                if (value == null) { listLayout.Add($"{field} none"); continue; }
+                var path = BizManFleet.PathBelow(value.transform, listTemplate.transform) ??
+                           throw Missing($"the copied list's {field} inside the copy (it points to {PathTo(value.transform)})");
+                if (field == "verticalLayoutGroup" && value.GetComponent<LayoutElement>() != null)
+                    throw Missing("a list whose layout object has no LayoutElement of its own");
+                listLayout.Add($"{field} at '{path}'");
+            }
             var entry = listTemplate.transform.Find(entryPath) ?? throw Missing("the copied destination row");
             // The copy came with the plan's own rows, if it had been opened; the game's reset clears them off the template.
             entry.ResetTemplate();
@@ -282,7 +298,7 @@ namespace FoodTrucks
 
             var scroll = section.GetComponentInParent<ScrollRect>();
             Log.Info($"BizMan: vehicle page built from the warehouse driver row ({PathTo(station.transform)}) and the logistics plan " +
-                     $"({PathTo(plan.transform)}; stop rows dragged by {(handle == null ? "the whole row" : handlePath)}); it sits in {PathTo(parent)} " +
+                     $"({PathTo(plan.transform)}; stop rows dragged by {(handle == null ? "the whole row" : handlePath)}; the copied list's {string.Join(", ", listLayout)}); it sits in {PathTo(parent)} " +
                      $"({(parentLaysOut ? "laid out by its parent" : "sized by itself")}, {(scroll != null ? "scrolling" : "no scroll view")}).");
         }
 

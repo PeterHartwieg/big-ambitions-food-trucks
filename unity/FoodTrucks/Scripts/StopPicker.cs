@@ -194,9 +194,18 @@ namespace FoodTrucks
 
         private static void Accept(string id, Vector3 position, float heading)
         {
+            // A confirm answered after the map closed or the pick ended (or moved on to another vehicle) adds nothing.
+            if (vehicleId != id || !CityMap.IsOpen)
+            {
+                Log.Info($"Map pick: the confirm for {id} came after the pick {(vehicleId == null ? "ended" : "moved on")}{(CityMap.IsOpen ? "" : " (map closed)")}; nothing added.");
+                RemoveMarker();
+                return;
+            }
             End("stop picked");
             InstanceBehavior<CityManager>.Instance?.cityMap?.Close();
-            HireRoutes.Later(() => RouteStops.AskTimesAndAdd(id, position, heading, () => HireRoutes.Later(() => BizManVehiclePage.OpenFor(id))));
+            // Back to the vehicle's BizMan page whether a stop went in or the times were cancelled.
+            void Reopen() => HireRoutes.Later(() => BizManVehiclePage.OpenFor(id));
+            HireRoutes.Later(() => RouteStops.AskTimesAndAdd(id, position, heading, Reopen, Reopen));
         }
 
         // ---- The spot ----

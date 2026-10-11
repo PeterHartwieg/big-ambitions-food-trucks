@@ -22,38 +22,65 @@ namespace FoodTrucks
         internal static int LatestClose => DemandData.Rules?.Fleet.LatestCloseMinute ?? 27 * 60;
 
         // Asks when the crew opens and closes at a new stop, with the game's list picker, offering only times that fit
-        // between the route's other stops; then adds it. `added` runs after a stop went in.
-        public static void AskTimesAndAdd(string vehicleId, Vector3 position, float heading, Action? added = null)
+        // between the route's other stops; then adds it. `added` runs after a stop went in, `cancelled` when the player
+        // closes either picker without choosing.
+        public static void AskTimesAndAdd(string vehicleId, Vector3 position, float heading, Action? added = null, Action? cancelled = null)
         {
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
             var rules = DemandData.Rules;
             if (rules != null && vehicle?.Schedule != null && vehicle.Schedule.Stops.Count >= rules.Fleet.MaxStops)
             {
                 CartSelling.Notify("foodtrucks:notification_route_full", ("max", rules.Fleet.MaxStops.ToString()));
+                cancelled?.Invoke();
                 return;
             }
             var opens = RouteEditor.OpenTimes(vehicle?.Schedule, Step, LatestClose);
             if (opens.Count == 0)
             {
                 CartSelling.Notify("foodtrucks:notification_route_no_time");
+                cancelled?.Invoke();
                 return;
             }
             var times = opens.ToDictionary(StaffDialog.Clock, m => m);
+            var answered = false;
             DropdownSelector.Show(times.Keys.ToList(), Guard(chosen =>
             {
-                if (times.TryGetValue(chosen, out var open)) HireRoutes.Later(() => AskClose(vehicleId, position, heading, open, added));
+                answered = true;
+                if (times.TryGetValue(chosen, out var open)) HireRoutes.Later(() => AskClose(vehicleId, position, heading, open, added, cancelled));
+                else cancelled?.Invoke();
             }), "foodtrucks:hires_open_header", "foodtrucks:hires_open_body");
+            if (cancelled != null) WhenClosedUnanswered(() => answered, cancelled);
         }
 
-        private static void AskClose(string vehicleId, Vector3 position, float heading, int open, Action? added)
+        private static void AskClose(string vehicleId, Vector3 position, float heading, int open, Action? added, Action? cancelled)
         {
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
             var closes = RouteEditor.CloseTimes(vehicle?.Schedule, open, Step, LatestClose);
             var times = closes.ToDictionary(StaffDialog.Clock, m => m);
+            var answered = false;
             DropdownSelector.Show(times.Keys.ToList(), Guard(chosen =>
             {
+                answered = true;
                 if (times.TryGetValue(chosen, out var close) && Add(vehicleId, position, heading, open, close)) added?.Invoke();
+                else cancelled?.Invoke();
             }), "foodtrucks:hires_close_header", "foodtrucks:hires_close_body");
+            if (cancelled != null) WhenClosedUnanswered(() => answered, cancelled);
+        }
+
+        // The game's list picker has no cancel callback (DropdownSelectorUI.OnCancel only drops the confirm): checked each
+        // frame, a picker that closed without an answer runs `cancelled`.
+        private static void WhenClosedUnanswered(Func<bool> answered, Action cancelled)
+        {
+            HireRoutes.Later(() =>
+            {
+                if (answered()) return;
+                if (DropdownSelector.isOpen)
+                {
+                    WhenClosedUnanswered(answered, cancelled);
+                    return;
+                }
+                cancelled();
+            });
         }
 
         public static bool Add(string vehicleId, Vector3 position, float heading, int open, int close)
