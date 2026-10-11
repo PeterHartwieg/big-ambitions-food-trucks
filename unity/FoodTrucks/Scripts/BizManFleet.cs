@@ -32,7 +32,8 @@ namespace FoodTrucks
     // The fleet section is a copy of BizMan's own warehouse section, placed right after it in the same list, with
     // a copy of the warehouse card per vehicle: its name, address and two small tables (drivers, inventory) hold
     // the vehicle's whereabouts, money, grade, crew and route, and what it sold today and has left. Clicking the
-    // Street food line opens the section and scrolls to it; leaving the list closes it. If anything here fails,
+    // Street food line opens the section and scrolls to it; clicking a card opens that vehicle's page
+    // (BizManVehiclePage); leaving the list closes both. If anything here fails,
     // the line is taken out and BizMan carries on without it.
     internal static class BizManFleet
     {
@@ -171,18 +172,32 @@ namespace FoodTrucks
             return false;
         }
 
-        // Leaving the list closes the section.
+        // Leaving the list closes the section, and a vehicle's page with it.
         public static void ListClosedPostfix()
         {
+            BizManVehiclePage.Close();
             try { if (section != null) section.gameObject.SetActive(false); }
             catch (Exception ex) { Log.Error(ex); }
         }
 
         // ---- The fleet section ----
 
+        private static BizManList? openList;
+
+        // The section, built if it isn't yet (the vehicle page sits beside it); null if it can't be.
+        internal static Transform? EnsureSection(BizManList list) => ready && !broken && Ensure(list) ? section : null;
+
+        // Opens the section, filled afresh and scrolled to (the vehicle page's Back, and opening a page from elsewhere).
+        internal static void ShowSection(BizManList list)
+        {
+            try { Open(list); }
+            catch (Exception ex) { Fail("fleet section", ex, Traverse.Create(list).Field("businessScrollerController").GetValue<BusinessScrollerController>()); }
+        }
+
         private static void Open(BizManList list)
         {
             if (!Ensure(list) || section == null || cardTemplate == null) return;
+            openList = list;
             Fill();
             section.gameObject.SetActive(true);
             HireRoutes.Later(() =>
@@ -245,7 +260,7 @@ namespace FoodTrucks
             return true;
         }
 
-        private static string? PathBelow(Transform target, Transform root)
+        internal static string? PathBelow(Transform target, Transform root)
         {
             var parts = new List<string>();
             for (var t = target; t != null; t = t.parent)
@@ -278,9 +293,18 @@ namespace FoodTrucks
             var today = SaveGameManager.Current.Day;
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
 
-            // A click on the card does nothing; the warehouse card's would open a business page.
+            // A click on the card opens the vehicle's page (crew, route, partner); the warehouse card's would open a
+            // business page.
             var root = card.GetComponent<Button>();
-            if (root != null) root.onClick = new Button.ButtonClickedEvent();
+            if (root != null)
+            {
+                root.onClick = new Button.ButtonClickedEvent();
+                var id = instance.id;
+                root.onClick.AddListener(() => Guard(() =>
+                {
+                    if (openList != null) BizManVehiclePage.Show(openList, id);
+                }));
+            }
             SetText(card.Find("WarehouseName"), name);
             SetText(card.Find("Address"), Where(instance, vehicle, withDriver));
             var destination = card.Find("Address/SetDestinationButton")?.GetComponent<Button>();
@@ -394,7 +418,7 @@ namespace FoodTrucks
             InstanceBehavior<UIs>.Instance.fullMenu.Toggle(show: false);
         }
 
-        private static string Where(VehicleInstance instance, VehicleState? vehicle, bool withDriver)
+        internal static string Where(VehicleInstance instance, VehicleState? vehicle, bool withDriver)
         {
             if (vehicle?.Transit != null)
                 return vehicle.Transit.ToStopIndex is int stop
@@ -447,7 +471,7 @@ namespace FoodTrucks
 
         // Writes plain text into a label: through its localization component when it has one (so a language change
         // doesn't bring the template's key back), otherwise straight into the text component.
-        private static void SetText(Transform? target, string text)
+        internal static void SetText(Transform? target, string text)
         {
             if (target == null) return;
             var localized = target.GetComponent<TextLocalizationComponent>();

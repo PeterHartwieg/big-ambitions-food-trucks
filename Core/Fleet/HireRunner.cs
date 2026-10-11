@@ -357,6 +357,124 @@ namespace FoodTrucks.Core.Fleet
             if (vehicle.Schedule.Stops.Count == 0) vehicle.Schedule = null;
         }
 
+        // New opening hours for one stop (the BizMan page's time pickers). The stops stay in time order, so the stop
+        // can move in the list; plans and the open window's stop follow it. The route is unchanged when the result
+        // is invalid.
+        public static ScheduleProblem SetTimes(HireSchedules schedules, VehicleState vehicle, int index, int open, int close)
+        {
+            if (schedules == null) throw new ArgumentNullException(nameof(schedules));
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            var schedule = vehicle.Schedule;
+            if (schedule?.Stops == null || index < 0 || index >= schedule.Stops.Count) return ScheduleProblem.NoStops;
+            var before = schedule.Stops.ToList();
+            var stop = before[index];
+            var (oldOpen, oldClose) = (stop.OpenAt, stop.CloseAt);
+            stop.OpenAt = open;
+            stop.CloseAt = close;
+            // OrderBy is stable: stops with the same opening keep their order.
+            var sorted = before.OrderBy(s => s.OpenAt).ToList();
+            var problem = schedules.Validate(new HireSchedule { Days = schedule.Days, Stops = sorted });
+            if (problem != ScheduleProblem.None)
+            {
+                stop.OpenAt = oldOpen;
+                stop.CloseAt = oldClose;
+                return problem;
+            }
+            schedule.Stops = sorted;
+            Remap(vehicle, i => i >= 0 && i < before.Count ? sorted.IndexOf(before[i]) : -1);
+            return problem;
+        }
+
+        // Drag to reorder on the BizMan page: the places change order and the opening hours stay in their slots, so
+        // the stops stay in time order. A stop is its place: the open window's stop, plans and a trip on its way
+        // follow the place to its new slot, and the next replan sorts out what runs when.
+        public static ScheduleProblem MovePlace(HireSchedules schedules, VehicleState vehicle, int from, int to)
+        {
+            if (schedules == null) throw new ArgumentNullException(nameof(schedules));
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            var schedule = vehicle.Schedule;
+            if (schedule?.Stops == null || from < 0 || from >= schedule.Stops.Count || to < 0 || to >= schedule.Stops.Count)
+                return ScheduleProblem.NoStops;
+            if (from == to) return ScheduleProblem.None;
+            var before = schedule.Stops.ToList();
+            var slots = before.Select(s => (s.OpenAt, s.CloseAt)).ToList();
+            var moved = before.ToList();
+            var place = moved[from];
+            moved.RemoveAt(from);
+            moved.Insert(to, place);
+            var candidate = new HireSchedule
+            {
+                Days = schedule.Days,
+                Stops = moved.Select((s, i) => Copy(s, slots[i].OpenAt, slots[i].CloseAt)).ToList()
+            };
+            var problem = schedules.Validate(candidate);
+            if (problem != ScheduleProblem.None) return problem;
+            for (var i = 0; i < moved.Count; i++)
+            {
+                moved[i].OpenAt = slots[i].OpenAt;
+                moved[i].CloseAt = slots[i].CloseAt;
+            }
+            schedule.Stops = moved;
+            Remap(vehicle, i => i >= 0 && i < before.Count ? moved.IndexOf(before[i]) : -1);
+            return problem;
+        }
+
+        // Opening times, every `step` minutes of the day, at which a stop of at least `step` minutes fits between the
+        // route's other stops (all but `except`): what the time pickers offer.
+        public static List<int> OpenTimes(HireSchedule? schedule, int step, int latestClose, int? except = null)
+        {
+            if (step <= 0) throw new ArgumentOutOfRangeException(nameof(step));
+            var others = Others(schedule, except);
+            var times = new List<int>();
+            for (var open = 0; open < 1440; open += step)
+                if (open + step <= latestClose && Free(others, open, open + step)) times.Add(open);
+            return times;
+        }
+
+        // Closing times, every `step` minutes after `open`, up to the next stop's opening or the latest close.
+        public static List<int> CloseTimes(HireSchedule? schedule, int open, int step, int latestClose, int? except = null)
+        {
+            if (step <= 0) throw new ArgumentOutOfRangeException(nameof(step));
+            var others = Others(schedule, except);
+            var times = new List<int>();
+            for (var close = open + step; close <= latestClose; close += step)
+            {
+                if (!Free(others, open, close)) break;
+                times.Add(close);
+            }
+            return times;
+        }
+
+        // A new opening time for a stop keeps its length where it can: the closing moves with it, cut short at the
+        // next stop or the latest close, and never less than `step` after opening. Null when nothing fits.
+        public static int? CloseFor(HireSchedule? schedule, int index, int newOpen, int step, int latestClose)
+        {
+            var stop = schedule?.Stops?.ElementAtOrDefault(index);
+            var length = stop == null ? step : Math.Max(step, stop.CloseAt - stop.OpenAt);
+            var closes = CloseTimes(schedule, newOpen, step, latestClose, index);
+            if (closes.Count == 0) return null;
+            var wanted = newOpen + length;
+            return closes.Where(c => c <= wanted).DefaultIfEmpty(closes[0]).Max();
+        }
+
+        private static List<ScheduleStop> Others(HireSchedule? schedule, int? except) =>
+            (schedule?.Stops ?? new List<ScheduleStop>()).Where((s, i) => s != null && i != except).ToList();
+
+        // [open, close) meets none of the other stops' hours. Touching ends are fine, as Validate has it.
+        private static bool Free(List<ScheduleStop> others, int open, int close) =>
+            others.All(s => close <= s.OpenAt || open >= s.CloseAt);
+
+        private static ScheduleStop Copy(ScheduleStop stop, int open, int close) => new ScheduleStop
+        {
+            SpotKey = stop.SpotKey,
+            X = stop.X,
+            Y = stop.Y,
+            Z = stop.Z,
+            Heading = stop.Heading,
+            OpenAt = open,
+            CloseAt = close
+        };
+
         private static void Remap(VehicleState vehicle, Func<int, int> map)
         {
             foreach (var plan in vehicle.Shifts ?? new List<ShiftPlan>())

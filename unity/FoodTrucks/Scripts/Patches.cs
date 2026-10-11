@@ -69,6 +69,10 @@ namespace FoodTrucks
             Patch(typeof(BizManList), "OnDisable", Type.EmptyTypes, typeof(BizManFleet), postfix: nameof(BizManFleet.ListClosedPostfix));
             BizManFleet.CheckReady();
 
+            // City map pick: "Add as a stop" in a building's card while the BizMan vehicle page's map pick is on.
+            Patch(typeof(UI.InGameUI.BuildingResume), "SetButtons", Type.EmptyTypes, typeof(StopPicker), postfix: nameof(StopPicker.SetButtonsPostfix));
+            StopPicker.CheckReady();
+
             // City map: a Street food line of filters (buildings that bring crowds, the player's vehicles).
             Patch(typeof(CityMapFilters), "InitializeFilters", Type.EmptyTypes, typeof(MapFilters), postfix: nameof(MapFilters.InitializePostfix));
             Patch(typeof(CityMapFilters), "ApplyFilters", Type.EmptyTypes, typeof(MapFilters), postfix: nameof(MapFilters.ApplyPostfix));

@@ -13,14 +13,11 @@ using UI.ItemPanel;
 
 namespace FoodTrucks
 {
-    // The "Hires" button on the cart's and truck's panel: the crew and the route, with the game's list picker
-    // (the one the Prices button uses). Take on or let go of a worker, add the spot the vehicle stands on as a
-    // stop with its opening hours, remove a stop, pick the days the route runs.
+    // The old "Hires" dialog, now the fallback for the BizMan vehicle page (BizManVehiclePage): the crew and the
+    // route, with the game's list picker (the one the Prices button uses). Take on or let go of a worker, add the spot
+    // the vehicle stands on as a stop with its opening hours, remove a stop, pick the days the route runs.
     internal static class StaffDialog
     {
-        // Opening hours are picked in half hours.
-        private const int Step = 30;
-
         public static void Show(ItemPanelUI panel)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -81,12 +78,7 @@ namespace FoodTrucks
                     var index = i;
                     options.Add((Format("foodtrucks:hires_option_removestop", (i + 1).ToString(), Clock(stop.OpenAt), Clock(stop.CloseAt), Place(stop)), () =>
                     {
-                        if (vehicle.Schedule == null || index >= vehicle.Schedule.Stops.Count) return;
-                        // The crew closes a window open at the stop that goes.
-                        if (vehicle.IsOpen && vehicle.HireStop == index) CartSelling.CloseByCrew(vehicle, HireCrew.Now());
-                        RouteEditor.RemoveStop(vehicle, index);
-                        RouteChanged(vehicle);
-                        Log.Info($"Route: stop {index + 1} removed from {kind} {id}.");
+                        RouteStops.Remove(vehicle, index);
                     }));
                 }
                 options.Add((Format("foodtrucks:hires_option_days", Text(DaysKey(schedule.Days))), () => HireRoutes.Later(() => AskDays(id))));
@@ -121,12 +113,18 @@ namespace FoodTrucks
             }), "foodtrucks:hires_header", vehicle.Crew.Count == 0 ? "foodtrucks:hires_body_nocrew" : "foodtrucks:hires_body");
         }
 
-        // The stop is where the vehicle stands, if the vehicle could open here now.
-        private static void AddStopHere(ItemPanelUI panel, string vehicleId)
+        // The stop is where the vehicle stands, if the vehicle could open here now: the panel's "Add stop here", an
+        // exact spot (the map pick on the BizMan page snaps to a kerbside place instead).
+        internal static void AddStopHere(ItemPanelUI panel, string vehicleId)
         {
             var cart = VehicleHelper.GetCurrentVehicle();
             var controller = VehicleHelper.GetCurrentVehicleBase();
             if (cart == null || cart.id != vehicleId || controller == null) return;
+            if (!FoodTrucksSession.CanWrite)
+            {
+                CartSelling.Notify("foodtrucks:notification_data_readonly");
+                return;
+            }
             var problem = CartSelling.PitchProblem(panel, cart);
             if (problem != null)
             {
@@ -135,53 +133,10 @@ namespace FoodTrucks
             }
             var position = controller.transform.position;
             var heading = controller.transform.eulerAngles.y;
-            HireRoutes.Later(() => AskOpen(vehicleId, position, heading));
+            HireRoutes.Later(() => RouteStops.AskTimesAndAdd(vehicleId, position, heading));
         }
 
-        private static void AskOpen(string vehicleId, UnityEngine.Vector3 position, float heading)
-        {
-            var times = new Dictionary<string, int>();
-            for (var minute = 0; minute < 24 * 60; minute += Step) times[Clock(minute)] = minute;
-            DropdownSelector.Show(times.Keys.ToList(), Guard(chosen =>
-            {
-                if (times.TryGetValue(chosen, out var open)) HireRoutes.Later(() => AskClose(vehicleId, position, heading, open));
-            }), "foodtrucks:hires_open_header", "foodtrucks:hires_open_body");
-        }
-
-        private static void AskClose(string vehicleId, UnityEngine.Vector3 position, float heading, int open)
-        {
-            var latest = DemandData.Rules?.Fleet.LatestCloseMinute ?? 27 * 60;
-            var times = new Dictionary<string, int>();
-            for (var minute = open + Step; minute <= latest; minute += Step) times[Clock(minute)] = minute;
-            DropdownSelector.Show(times.Keys.ToList(), Guard(chosen =>
-            {
-                if (times.TryGetValue(chosen, out var close)) AddStop(vehicleId, position, heading, open, close);
-            }), "foodtrucks:hires_close_header", "foodtrucks:hires_close_body");
-        }
-
-        private static void AddStop(string vehicleId, UnityEngine.Vector3 position, float heading, int open, int close)
-        {
-            var state = FoodTrucksSession.CurrentState;
-            var rules = DemandData.Rules;
-            if (state == null || rules == null || !FoodTrucksSession.CanWrite) return;
-            var vehicle = StreetSales.GetOrAdd(state, vehicleId);
-            var x = position.x;
-            var z = position.z;
-            var stop = new ScheduleStop { SpotKey = SpotKey(x, z), X = x, Y = position.y, Z = z, Heading = heading, OpenAt = open, CloseAt = close };
-            var problem = RouteEditor.AddStop(new HireSchedules(rules.Fleet), vehicle, stop);
-            if (problem != ScheduleProblem.None)
-            {
-                Log.Info($"Route: stop {Clock(open)}-{Clock(close)} refused for {vehicleId}: {problem}.");
-                CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
-                return;
-            }
-            var schedule = vehicle.Schedule!;
-            RouteChanged(vehicle);
-            Log.Info($"Route: stop {SpotKey(x, z)} {Clock(open)}-{Clock(close)} added to {vehicle.VehicleType} {vehicleId}; {schedule.Stops.Count} stops.");
-            CartSelling.Notify("foodtrucks:notification_route_added", ("open", Clock(open)), ("close", Clock(close)), ("count", schedule.Stops.Count.ToString()));
-        }
-
-        private static readonly (string Key, DayOfWeek[] Days)[] DayChoices =
+        internal static readonly (string Key, DayOfWeek[] Days)[] DayChoices =
         {
             ("foodtrucks:hires_days_every", Array.Empty<DayOfWeek>()),
             ("foodtrucks:hires_days_weekdays", new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday }),
@@ -198,7 +153,7 @@ namespace FoodTrucks
                 var vehicle = StreetSales.Find(state, vehicleId);
                 if (vehicle?.Schedule == null || !options.TryGetValue(chosen, out var days) || !FoodTrucksSession.CanWrite) return;
                 vehicle.Schedule.Days = days.ToList();
-                RouteChanged(vehicle);
+                RouteStops.Changed(vehicle);
                 Log.Info($"Route: {vehicleId} runs {(days.Length == 0 ? "every day" : string.Join(", ", days))}.");
             }), "foodtrucks:hires_days_header", null!);
         }
@@ -217,13 +172,6 @@ namespace FoodTrucks
             try { choice(chosen); }
             catch (Exception ex) { Log.Error("Hires: " + ex); }
         };
-
-        private static void RouteChanged(VehicleState vehicle)
-        {
-            HireRunner.Replan(vehicle, HireCrew.Now());
-            HireCrew.SetWeeklyWork(vehicle);
-            FoodTrucksSession.MarkChanged();
-        }
 
         // A stop is a pitch: the same key regulars use (World.PitchKey).
         internal static string SpotKey(float x, float z) => World.PitchKey(FoodTrucksSession.CurrentState, x, z);

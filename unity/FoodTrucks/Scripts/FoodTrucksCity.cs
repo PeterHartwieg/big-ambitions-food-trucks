@@ -165,6 +165,8 @@ namespace FoodTrucks
             TruckHatch.Forget();
             WindowCrew.Reset();
             HireRoutes.Reset();
+            StopPicker.Reset();
+            BizManVehiclePage.Reset();
             if (runtimeObject != null) Object.Destroy(runtimeObject);
             runtimeObject = null;
             game = null;
