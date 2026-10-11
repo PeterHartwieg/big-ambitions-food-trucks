@@ -80,6 +80,7 @@ mkdir -p "$EQUIPMENT_ART/Icons"
 # asset may share a machine item's name (griddle, corngrill, dumplingsteamer). Copies under the old name go.
 for dir in "$REPO"/art/equipment/*/; do
   name="$(basename "$dir")"
+  [ -f "$dir$name.fbx" ] || continue  # e.g. art/equipment/renders
   rm -f "$EQUIPMENT_ART/$name.fbx" "$EQUIPMENT_ART/$name.fbx.meta" "$EQUIPMENT_ART/T_${name}_BaseColor.png"*
   rsync -a --checksum "$dir$name.fbx" "$EQUIPMENT_ART/${name}_Model.fbx"
   rsync -a --checksum "$dir"T_${name}_{BC,M,N}.png "$EQUIPMENT_ART/"
