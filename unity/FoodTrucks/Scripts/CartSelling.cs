@@ -163,7 +163,7 @@ namespace FoodTrucks
             var state = FoodTrucksSession.CurrentState;
             var crewed = new HashSet<string>(state?.Vehicles.Where(v => RunByRoute(v) || Crewed(v)).Select(v => v.VehicleId) ?? Enumerable.Empty<string>());
             foreach (var id in simulatedUntil.Keys.ToList())
-                if (!crewed.Contains(id)) simulatedUntil[id] = now;
+                if (!crewed.Contains(id)) simulatedUntil[id] = SalesClock.Start(now);
             if (state == null || !FoodTrucksSession.CanWrite) return;
             // Not counted as walking away at closing: the cart stays open.
             foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && v.Service != null && !crewed.Contains(v.VehicleId)))
@@ -340,7 +340,8 @@ namespace FoodTrucks
             vehicle.HireStop = hireStop;
             vehicle.SaleProgress = 0;
             vehicle.Service = SalesSimulator.Open(Seed(cart.id));
-            simulatedUntil[cart.id] = openedAt ?? HireCrew.NowExact();
+            // On a whole game minute, so its steps land on midnight exactly (SalesClock).
+            simulatedUntil[cart.id] = SalesClock.Start(openedAt ?? HireCrew.NowExact());
             pausedNoticeShown.Remove(cart.id);
             sinceOpen[cart.id] = (0, 0);
             lostSinceOpen.Remove(cart.id);
@@ -538,12 +539,10 @@ namespace FoodTrucks
             {
                 if (!simulatedUntil.TryGetValue(vehicle.VehicleId, out var from))
                 {
-                    simulatedUntil[vehicle.VehicleId] = until;
+                    simulatedUntil[vehicle.VehicleId] = SalesClock.Start(until);
                     return;
                 }
-                if (until - from < 1) return;
-                var nextHour = (Math.Floor(from / 60) + 1) * 60;
-                var end = Math.Min(until, Math.Max(from + 1, Math.Min(from + StepMinutes, nextHour)));
+                if (!(SalesClock.NextStep(from, until, StepMinutes) is { } end)) return;
                 Tick(state, vehicle, end);
                 // A tick that left the clock where it was (paused, or closed) ends the catch-up.
                 if (!simulatedUntil.TryGetValue(vehicle.VehicleId, out var after) || after <= from) return;
@@ -787,7 +786,7 @@ namespace FoodTrucks
             var now = until;
             if (!simulatedUntil.TryGetValue(vehicle.VehicleId, out var from))
             {
-                simulatedUntil[vehicle.VehicleId] = now;
+                simulatedUntil[vehicle.VehicleId] = SalesClock.Start(now);
                 return;
             }
             // Sleeping and other time skips run the clock without the player at the window; a crew keeps selling.
@@ -795,7 +794,7 @@ namespace FoodTrucks
             var inSkip = skipping || (timeMachine != null && timeMachine.isRunning);
             if (inSkip && !RunByRoute(vehicle) && !Crewed(vehicle))
             {
-                simulatedUntil[vehicle.VehicleId] = now;
+                simulatedUntil[vehicle.VehicleId] = SalesClock.Start(now);
                 return;
             }
             if (heldFailed.Remove(vehicle.VehicleId))
@@ -814,7 +813,7 @@ namespace FoodTrucks
             // Customers nobody can see any more, or who never reached the window, pay now.
             if (!CartQueueView.Showing(vehicle.VehicleId)) PayHeld(vehicle, null);
             else PayHeld(vehicle, h => now - h.Minute > MaxHeldMinutes);
-            var elapsed = (int)Math.Floor(now - from);
+            var elapsed = SalesClock.Elapsed(from, now);
             if (elapsed < 1) return;
             simulatedUntil[vehicle.VehicleId] = from + elapsed;
             var tables = DemandData.Tables;
