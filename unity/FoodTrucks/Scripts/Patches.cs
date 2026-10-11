@@ -107,7 +107,7 @@ namespace FoodTrucks
 
             // Commissary bays: parked cars the lanes put into a bay go back to their pool (BayParking).
             Patch(typeof(ParkingLaneGenerator), "GenerateParkedVehicles", new[] { typeof(int), typeof(bool) },
-                typeof(BayParking), postfix: nameof(BayParking.GeneratedPostfix));
+                typeof(BayParking), prefix: nameof(BayParking.GeneratingPrefix), postfix: nameof(BayParking.GeneratedPostfix));
 
             // Truck window: a save made at the hatch puts the player outside by the truck, not inside its body.
             Patch(typeof(PlayerHelper), "SaveCurrentPosition", Type.EmptyTypes, typeof(TruckWindow), postfix: nameof(TruckWindow.SavePositionPostfix));

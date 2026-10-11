@@ -13,10 +13,13 @@ namespace FoodTrucks
     // load, every game hour for a business's lane and at the daily regeneration), only beyond 80 m of the player unless
     // forced [code, 1.0]. Each car is a child of its lane, on the ParkedVehicles layer, and goes back with
     // ParkingSimulator.ReleaseParkedVehicle, as the mod's carts have cleared them since 0.9.2 (CartParts). Here:
-    // - a postfix on GenerateParkedVehicles releases the cars it just put into any commissary's bay zone (BayMarkers'
-    //   zone: the painted stretches), for every commissary whether rented or not;
+    // - a prefix on GenerateParkedVehicles notes the lane's cars, and the postfix releases only the cars that call
+    //   added inside any commissary's bay zone (BayMarkers' zone: the painted stretches), for every commissary whether
+    //   rented or not; a car already there (the game may skip a lane within 80 m of the player) is left to the sweep
+    //   (review round 5);
     // - once the bay is resolved, and each time the player comes within NearMetres, the zone is swept for cars already
-    //   standing there; a car on screen is left until it isn't, so none vanishes in view.
+    //   standing there; a car in the main camera's view is left until it isn't, so none vanishes in view.
+    // A car goes back as the game's own cleanup sends it: the lane's onReleaseVehicle first, then the pool.
     // Only the lanes' own parked cars: never a player vehicle (another layer), moving traffic (another layer) or the
     // delivery job's van (DeliveryJobStartController).
     internal static class BayParking
@@ -44,10 +47,20 @@ namespace FoodTrucks
         // A bay was resolved again: sweep it on the next look.
         public static void Forget(string siteId) => clean.Remove(siteId);
 
-        // Postfix on ParkingLaneGenerator.GenerateParkedVehicles: the cars this lane just parked inside a bay go back.
-        public static void GeneratedPostfix(ParkingLaneGenerator __instance)
+        // Prefix on ParkingLaneGenerator.GenerateParkedVehicles: the lane's cars before it runs.
+        public static void GeneratingPrefix(ParkingLaneGenerator __instance, out HashSet<GameObject>? __state)
         {
-            if (failed || __instance == null || Commissary.Uninstalled) return;
+            __state = null;
+            if (failed || __instance == null) return;
+            try { __state = new HashSet<GameObject>(__instance.transform.Cast<Transform>().Select(t => t.gameObject)); }
+            catch (Exception) { __state = null; }
+        }
+
+        // Postfix on ParkingLaneGenerator.GenerateParkedVehicles: the cars this call added inside a bay go back, unless
+        // on screen (then the bay is swept again later).
+        public static void GeneratedPostfix(ParkingLaneGenerator __instance, HashSet<GameObject>? __state)
+        {
+            if (failed || __instance == null || __state == null || Commissary.Uninstalled) return;
             try
             {
                 var sites = DemandData.Commissaries;
@@ -65,8 +78,13 @@ namespace FoodTrucks
                     var released = 0;
                     foreach (Transform child in __instance.transform.Cast<Transform>().ToList())
                     {
-                        if (!IsLaneCar(child.gameObject)) continue;
+                        if (__state.Contains(child.gameObject) || !IsLaneCar(child.gameObject)) continue;
                         if (!zones.Any(z => z.Contains(child.position, CarMarginMetres))) continue;
+                        if (OnScreen(child.gameObject))
+                        {
+                            clean.Remove(site.Id);
+                            continue;
+                        }
                         if (Release(child.gameObject)) released++;
                     }
                     if (released > 0) Count(site.Id, released, 0);
@@ -161,12 +179,23 @@ namespace FoodTrucks
             car.transform.parent != null && car.transform.parent.GetComponent<ParkingLaneGenerator>() != null &&
             car.GetComponent<Vehicles.DeliveryDriverJob.DeliveryJobStartController>() == null;
 
-        private static bool OnScreen(GameObject car) => car.GetComponentsInChildren<Renderer>().Any(r => r.isVisible);
+        // In the main camera's view (its frustum; review round 5: Renderer.isVisible is true for shadow passes too, so a
+        // car near the player was never cleared). No main camera: nothing is in view.
+        private static bool OnScreen(GameObject car)
+        {
+            var camera = GameManager.GetMainCamera();
+            if (camera == null) return false;
+            var planes = GeometryUtility.CalculateFrustumPlanes(camera);
+            return car.GetComponentsInChildren<Renderer>().Any(r => r.enabled && GeometryUtility.TestPlanesAABB(planes, r.bounds));
+        }
 
         private static bool Release(GameObject car)
         {
             try
             {
+                // As CleanupParkedVehicles does: the lane is told first (a multi-floor garage drops the car's renderers
+                // from its hiding lists), then the car goes back to its pool.
+                car.transform.parent?.GetComponent<ParkingLaneGenerator>()?.onReleaseVehicle?.Invoke(car);
                 ParkingSimulator.ReleaseParkedVehicle(car);
                 return true;
             }
