@@ -613,18 +613,33 @@ namespace FoodTrucks
                 : LocalizorManager.GetLocalization("foodtrucks:commissary_restock_fitted", null).Replace("{pieces}", string.Join(", ", fitted))
                   + (foodText.Length > 0 ? "; " + foodText : "");
             var notHeld = string.Join(", ", plan.NotHeld.Select(i => LocalizorManager.GetLocalization(i, null)));
-            // Nothing loaded because the pieces are full: which ones, "the Hotdog Grill holds 80".
-            var full = view == null ? new List<string>() : view.Pools.Where(p => Capped(tables, p, rest)).Select(p => CapNote(vehicle, p).Trim('(', ')')).ToList();
-            if (loaded.Count == 0 && plan.NotHeld.Count == 0 && full.Count > 0)
-                CartSelling.Say("foodtrucks:notification_commissary_restock_full_why", kind, ("why", string.Join("; ", full)), ("left", left.ToString()));
+            // Foods that stayed here because their piece is full, "Tacos: the Griddle is full (160/160)": each full piece
+            // none of whose foods went in this time (a piece that took some says so in the loaded list). 0.9.8 named only
+            // the foods nothing held and left a full Griddle unexplained (agent run, 11 October 2026).
+            var fullParts = view == null ? new List<string>()
+                : view.Pools.Where(p => Capped(tables, p, rest) && !p.Piece.Products.Any(loaded.ContainsKey)).Select(p => PieceFull(vehicle, p, rest)).ToList();
+            var full = fullParts.Count == 0 ? "" : " " + string.Join("; ", fullParts) + ".";
+            if (fullParts.Count > 0) Log.Info($"Commissary restock: full pieces:{full}");
+            if (loaded.Count == 0 && plan.NotHeld.Count == 0 && fullParts.Count > 0)
+                CartSelling.Say("foodtrucks:notification_commissary_restock_full_why", kind, ("full", full), ("left", left.ToString()));
             else if (loaded.Count == 0 && plan.NotHeld.Count == 0)
                 CartSelling.Say("foodtrucks:notification_commissary_restock_full", kind, ("left", left.ToString()));
             else if (loaded.Count == 0)
-                CartSelling.Say("foodtrucks:notification_commissary_restock_notheld", kind, ("notheld", notHeld), ("left", left.ToString()));
+                CartSelling.Say("foodtrucks:notification_commissary_restock_notheld", kind, ("notheld", notHeld), ("full", full), ("left", left.ToString()));
             else if (plan.NotHeld.Count == 0)
-                CartSelling.Say("foodtrucks:notification_commissary_restocked", kind, ("loaded", text), ("left", left.ToString()));
+                CartSelling.Say("foodtrucks:notification_commissary_restocked", kind, ("loaded", text), ("full", full), ("left", left.ToString()));
             else
-                CartSelling.Say("foodtrucks:notification_commissary_restocked_notheld", kind, ("loaded", text), ("notheld", notHeld), ("left", left.ToString()));
+                CartSelling.Say("foodtrucks:notification_commissary_restocked_notheld", kind, ("loaded", text), ("notheld", notHeld), ("full", full), ("left", left.ToString()));
+        }
+
+        // "Tacos, Chopped Cheese: the Griddle is full (160/160)": the piece's foods still in stock here.
+        private static string PieceFull(VehicleInstance vehicle, StoragePool pool, List<CommissaryStockLine>? stock)
+        {
+            var foods = pool.Piece.Products.Where(p => stock != null && stock.Any(l => l.ItemName == p && l.Units > 0))
+                .Select(p => LocalizorManager.GetLocalization(p, null));
+            return LocalizorManager.GetLocalization("foodtrucks:commissary_restock_piece_full", null)
+                .Replace("{foods}", string.Join(", ", foods)).Replace("{piece}", StoragePanel.PieceName(vehicle, pool.Piece))
+                .Replace("{load}", pool.LoadUnits.ToString()).Replace("{capacity}", pool.Capacity.ToString());
         }
 
         // The foods loaded, "80 Hotdog (the Hotdog Grill holds 80)": a food whose piece is now full while more of its
