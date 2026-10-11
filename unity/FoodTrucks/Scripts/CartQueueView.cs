@@ -238,8 +238,10 @@ namespace FoodTrucks
     // (art/README.md: opening at x 1.10, centre z -1.10), so its line is always on the right.
     internal sealed class WindowShape
     {
-        private WindowShape(float sideways, float reach, float along, int[] sides, bool pavementOnly)
+        private WindowShape(float sideways, float reach, float along, int[] sides, bool pavementOnly, float spacing, bool preferBack)
         {
+            Spacing = spacing;
+            PreferBack = preferBack;
             PavementOnly = pavementOnly;
             Sideways = sideways;
             Reach = reach;
@@ -257,9 +259,20 @@ namespace FoodTrucks
         // system (TrafficLanes); the road layer is known only on bridges.
         public bool PavementOnly { get; }
         public int[] Sides { get; }
+        // Metres between people in line.
+        public float Spacing { get; }
+        // Between two directions that place as many people, the one towards the vehicle's back.
+        public bool PreferBack { get; }
 
-        private static readonly WindowShape Cart = new WindowShape(1.05f, 1.05f, 0f, new[] { 1, -1 }, pavementOnly: false);
-        private static readonly WindowShape Truck = new WindowShape(1.80f, 3.40f, -1.10f, new[] { 1 }, pavementOnly: true);
+        // The truck (0.9.9; agent run of 11 October 2026: "a loose group, bunched close against the truck's side", two
+        // customers circling their places). Its body is 1.10 m either side of its middle (art/README.md, NavMeshObstacle),
+        // so 0.9.8's places 1.80 m out stood 0.7 m from the side, 0.8 m apart with 0.3 m agents, and each place took
+        // the nearest pavement on its own, so the line zigzagged between 1.8 and 3.4 m out. Now people stand a step
+        // apart (1.0 m) in one straight line 2.0 m out or further (Layout keeps one distance out for the whole line),
+        // and the line runs towards the truck's back, where the hatch (1.10 m behind the middle) is 2 m from the end
+        // of the body rather than 3.8 m, so most of it stands along open pavement.
+        private static readonly WindowShape Cart = new WindowShape(1.05f, 1.05f, 0f, new[] { 1, -1 }, pavementOnly: false, spacing: 0.8f, preferBack: false);
+        private static readonly WindowShape Truck = new WindowShape(2.00f, 3.40f, -1.10f, new[] { 1 }, pavementOnly: true, spacing: 1.0f, preferBack: true);
 
         public static WindowShape For(string kind) => kind == "truck" ? Truck : Cart;
     }
@@ -272,8 +285,6 @@ namespace FoodTrucks
     // One cart's line: the places along the pavement, the ways in and out, and the people.
     internal sealed class QueueLine
     {
-        // Metres between people in line.
-        private const float Spacing = 0.8f;
         // A served customer stands at the window at least this long, in game-speed seconds, before paying and
         // leaving: Core's service time already kept them there while the order was made (an in-game minute is
         // a second at normal speed), so this only matters for someone who got there after Core finished.
@@ -630,28 +641,34 @@ namespace FoodTrucks
             var bestScore = int.MinValue;
             var bestSide = 1;
             var bestDirection = 1;
+            var bestOut = 0f;
             foreach (var side in shape.Sides)
             {
+                // One distance out for the whole line: the nearest at which the window place is walkable pavement.
+                // Each later place keeps it where it can, and moves out (or back in) as little as it must.
+                var lineOut = FirstOut(center, right * side, shape, filter, lanes);
+                if (lineOut == null) continue;
                 foreach (var direction in new[] { 1, -1 })
                 {
                     var placed = new List<Vector3>();
                     var roads = 0;
                     for (var k = 0; k < count; k++)
                     {
-                        var place = PlaceBeside(center, right * side, forward * (direction * k * Spacing), shape, filter, lanes);
+                        var place = PlaceBeside(center, right * side, forward * (direction * k * shape.Spacing), lineOut.Value, shape, filter, lanes);
                         if (place == null) break;
                         // People move up from place to place: no step between two of them may cross a driving lane.
                         if (shape.PavementOnly && placed.Count > 0 && CrossesRoad(placed[placed.Count - 1], place.Value, lanes)) break;
                         if (Legality.RoadBelow(place.Value)) roads++;
                         placed.Add(place.Value);
                     }
-                    var score = placed.Count * 10 - roads * 3;
+                    var score = placed.Count * 10 - roads * 3 + (shape.PreferBack && direction < 0 ? 1 : 0);
                     if (score > bestScore)
                     {
                         best = placed;
                         bestScore = score;
                         bestSide = side;
                         bestDirection = direction;
+                        bestOut = lineOut.Value;
                     }
                 }
             }
@@ -678,22 +695,43 @@ namespace FoodTrucks
                 if (WayIn(wanted, best[0], shape, filter, lanes, path, ref unsafeWays) is { } way) ends.Add(way);
             }
             var detail = $"{best.Count} of {count} places on the {(bestSide > 0 ? "right" : "left")} side towards the {(bestDirection > 0 ? "front" : "back")}, " +
+                         $"{shape.Spacing:F1} m apart, {bestOut:F1} m out from the middle (widest {best.Max(p => Mathf.Abs(Vector3.Dot(p - center, right))):F1} m), " +
                          $"{ends.Count} ways in and out{(unsafeWays > 0 ? $" ({unsafeWays} crossing a driving lane left out)" : "")}";
             return (best, center, ends, detail, bestSide, lanes);
         }
 
-        // The nearest walkable place out of parking lanes beside the window, from Sideways out to Reach.
-        private static Vector3? PlaceBeside(Vector3 center, Vector3 outward, Vector3 along, WindowShape shape, NavMeshQueryFilter filter, TrafficLanes lanes)
+        // How far out from the vehicle's middle the line stands: the nearest distance from Sideways out to Reach at which
+        // the window place is walkable and (for a truck) pavement. Null with none.
+        private static float? FirstOut(Vector3 center, Vector3 outward, WindowShape shape, NavMeshQueryFilter filter, TrafficLanes lanes)
         {
-            for (var sideways = shape.Sideways; sideways <= shape.Reach + 0.01f; sideways += 0.4f)
+            for (var sideways = shape.Sideways; sideways <= shape.Reach + 0.01f; sideways += 0.2f)
+                if (PlaceAt(center + outward * sideways, shape, filter, lanes) != null) return sideways;
+            return null;
+        }
+
+        // A place in line `along` from the window: at the line's distance out if that is walkable, else the nearest
+        // walkable one within Sideways…Reach, trying the closest distances to the line's first.
+        private static Vector3? PlaceBeside(Vector3 center, Vector3 outward, Vector3 along, float lineOut, WindowShape shape, NavMeshQueryFilter filter, TrafficLanes lanes)
+        {
+            for (var shift = 0f; shift <= shape.Reach - shape.Sideways + 0.01f; shift += 0.2f)
             {
-                var wanted = center + outward * sideways + along;
-                if (!NavMesh.SamplePosition(wanted, out var hit, 0.6f, filter) || FlatDistance(hit.position, wanted) > 0.45f) continue;
-                if (Legality.InParkingLane(hit.position)) continue;
-                if (shape.PavementOnly && OnStreet(hit.position, lanes)) continue;
-                return hit.position;
+                foreach (var sideways in shift == 0f ? new[] { lineOut } : new[] { lineOut + shift, lineOut - shift })
+                {
+                    if (sideways < shape.Sideways - 0.01f || sideways > shape.Reach + 0.01f) continue;
+                    var place = PlaceAt(center + outward * sideways + along, shape, filter, lanes);
+                    if (place != null) return place;
+                }
             }
             return null;
+        }
+
+        // The NavMesh point at a wanted place, if it is walkable there (not a parking lane; for a truck, pavement).
+        private static Vector3? PlaceAt(Vector3 wanted, WindowShape shape, NavMeshQueryFilter filter, TrafficLanes lanes)
+        {
+            if (!NavMesh.SamplePosition(wanted, out var hit, 0.6f, filter) || FlatDistance(hit.position, wanted) > 0.45f) return null;
+            if (Legality.InParkingLane(hit.position)) return null;
+            if (shape.PavementOnly && OnStreet(hit.position, lanes)) return null;
+            return hit.position;
         }
 
         // A way in for a customer: a NavMesh point near the wanted one, off the street, with a complete path to the
