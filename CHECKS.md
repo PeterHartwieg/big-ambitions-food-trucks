@@ -1,6 +1,6 @@
 # Commissary look and payment (0.9.10)
 
-Peter's notes of 11 October 2026: commissary orders are paid on delivery, and the purple bay is now white road paint with a loading zone sign and props by the door. Build 0.9.10 on branch `milestone-8`; the log says 0.9.10. Fresh **FT** save, other gameplay mods off. The 0.9.9 rows below still hold, except that the paint is white with LOADING ZONE in it instead of purple.
+Peter's notes of 11 October 2026: commissary orders are paid on delivery, the purple bay is now white road paint with a loading zone sign and props by the door, and crews' sales are paid in after midnight like the game's shops. Build 0.9.10 on branch `milestone-8`; the log says 0.9.10. Fresh **FT** save, other gameplay mods off. The 0.9.9 rows below still hold, except that the paint is white with LOADING ZONE in it instead of purple.
 
 | # | Do | Look for |
 |---|---|---|
@@ -17,6 +17,11 @@ Peter's notes of 11 October 2026: commissary orders are paid on delivery, and th
 | 11 | Walk 150 m away from the bay and look back; go into a building next door and out again | The paint, sign and props stay where they are (no popping out at 100 m as the purple did). Indoors nothing shows through |
 | 12 | Visit the other four commissaries | Each has its paint, a sign with its own name, and props by its door. Tell me any where the sign or props are missing, stand somewhere odd (in the road, on a doorstep, floating, sunk) or block a path |
 | 13 | Call a commissary and open the order form's item list (ADD ITEM) | Food rows show the game's food icons as before. Equipment rows show the small model a cart or truck carries (once the art track's icons are merged; until then the game's icon, and one log line per piece). The furniture stores' own list still shows the game's icons |
+| 14 | Give a truck a crew and a route for the day, note your money in the morning and stay away from it (more than 100 m), awake, until evening | No sale notices and no closing notices for that truck all day; your money doesn't move with its sales. Econoview's Street food row for the truck shows today's sales as they happen |
+| 15 | Same day, stand by the crewed truck (within 100 m) but not at the hatch, and watch the line for a few minutes | The customers queue and are served, but no sale notices show and money doesn't move. Then step in at the hatch: from then on each sale shows its notice and is paid at once, as before |
+| 16 | Let midnight pass (awake) | Just after midnight your money goes up once per crewed vehicle, one transaction "Street food sales by the crew: <vehicle>, day N (… items)" each, dated the day before. The game's day summary and Econoview count the street food for that day as before (compare with row 14's Econoview figures) |
+| 17 | With two crewed trucks on routes, sleep through a whole working day (or skip time) | No pile of sale or closing notices when you wake. One transaction per truck for each midnight slept through. Does the game stutter less while sleeping than in 0.9.9 with the same trucks? |
+| 18 | Tax statement (Ctrl+X twice) after row 16, and the uninstall step in a throwaway save on a day with crew sales not yet paid in | The statement counts the crew's street food the same as in-person sales. The uninstall pays the waiting crew sales in at once (one transaction per vehicle and day) |
 
 Log lines:
 
@@ -24,6 +29,8 @@ Log lines:
 - At load: `Commissary state: … N orders on the way (paid on delivery), … M rent charges and K fines unpaid; …`.
 - Row 5: `Uninstall: commissary refund $… for the stock delivered; N open orders cancelled, unpaid; … spaces given up.`
 - Rows 6 to 12, once per bay when first drawn, the 0.9.9 marker line now ends with the furniture: `…; a 5.8 m truck fits wholly inside; LOADING ZONE 0.70 m high, 5.6 m long; sign at x …, z …, 0.40 m behind a kerb … m past the paint; props by the door at x …, z …: pallet +2.5 m along the facade, roll cage …, hand truck -2.5 m …, dumpster …` with `left out: <prop> (why)` for any that didn't fit, and `no sign (…)` or `no lettering (…)` when one wasn't placed. Tell me every "left out" and "no sign". `Commissary bay: the game's DeliveryPallet prefab not loaded …` or `… has no plain meshes to copy` means the mod's own model stood in. `Commissary bay: <name>_Display.prefab missing from the mod's bundle.` or `M_BayPaint missing` is a build error.
+- Rows 14, 15, 17: one line per crewed vehicle per game hour, `Crew sales: <id>, day N HH:00 hour: C customers, I items, $…, paid in after midnight; U units left.`, instead of one `Sale:` line per item. In-person sales keep their `Sale:` lines. A crew's window closing away from the player: `Truck <id>: closing notice not shown (the crew's window, the player away or asleep).`
+- Rows 16 to 18: `Crew sales paid in: <vehicle> (<id>), day N: I items, $….` once per vehicle and day, just after midnight (or at the uninstall step). `Crew sales: the game refused paying in …` should never appear.
 - Row 13: `Commissary order form: no icon Icon_<Name> in the mod's bundle; <item> shows the game's icon.` once per piece until the art track's icons are in.
 
 # Playtest fixes (0.9.9)
