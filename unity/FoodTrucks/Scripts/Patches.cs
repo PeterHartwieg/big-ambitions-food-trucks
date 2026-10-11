@@ -105,6 +105,10 @@ namespace FoodTrucks
                 new[] { typeof(UnityEngine.GameObject), typeof(Vehicles.VehicleTypes.VehicleType), typeof(UnityEngine.Transform), typeof(bool) },
                 typeof(CartParts), prefix: nameof(CartParts.DestroyBlockingPrefix));
 
+            // Commissary bays: parked cars the lanes put into a bay go back to their pool (BayParking).
+            Patch(typeof(ParkingLaneGenerator), "GenerateParkedVehicles", new[] { typeof(int), typeof(bool) },
+                typeof(BayParking), postfix: nameof(BayParking.GeneratedPostfix));
+
             // Truck window: a save made at the hatch puts the player outside by the truck, not inside its body.
             Patch(typeof(PlayerHelper), "SaveCurrentPosition", Type.EmptyTypes, typeof(TruckWindow), postfix: nameof(TruckWindow.SavePositionPostfix));
             // Truck window: "Back to the hatch" in the truck's overlay, next to the game's Enter vehicle.

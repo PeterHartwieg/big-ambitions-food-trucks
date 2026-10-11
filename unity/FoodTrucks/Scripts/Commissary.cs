@@ -52,6 +52,7 @@ namespace FoodTrucks
             Detach();
             uninstalled = false;
             BayMarkers.Reset();
+            BayParking.Reset();
             resolveAt.Clear();
             notReadyLogged.Clear();
             laneCache = null;
@@ -220,6 +221,7 @@ namespace FoodTrucks
             CommissaryBays.Store(state.Commissary, site.Id, origins, found.Select(f => f.Bay));
             FoodTrucksSession.MarkChanged();
             BayMarkers.Forget(site.Id);
+            BayParking.Forget(site.Id);
             var ms = (Time.realtimeSinceStartup - start) * 1000f;
             foreach (var (bay, from) in found)
                 Log.Info($"Commissary {site.Id}: bay on legal parking at x {bay.X:F1}, z {bay.Z:F1}, {bay.Distance:F1} m from x {from.X:F1}, z {from.Z:F1} " +
@@ -387,6 +389,7 @@ namespace FoodTrucks
             {
                 var inside = BuildingManager.IsInsideBuilding || Parking.UndergroundParking.UndergroundParkingManager.IsInsideParking;
                 BayMarkers.Update(sites, rules.BayRadiusMetres, PlayerHelper.GetPosition(), inFoodVehicle, inside);
+                BayParking.Update(sites, rules.BayRadiusMetres, PlayerHelper.GetPosition(), inside);
             }
         }
 
