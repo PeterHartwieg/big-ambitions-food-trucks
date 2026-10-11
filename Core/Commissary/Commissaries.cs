@@ -96,34 +96,44 @@ namespace FoodTrucks.Core.Commissary
             return order;
         }
 
-        // Failed order payments hold goods out of stock. The adapter calls Deliver after adding a failed
-        // charge, and again after removing it on payment: on observing settlement we schedule the next 08:00 (or configured
-        // delivery minute), today if still before it, tomorrow otherwise. Overdue paid orders still catch up.
-        public static IReadOnlyList<CommissaryOrder> Deliver(CommissaryState state, CommissaryRules rules, int nowDay, int nowMinute)
+        // Orders are paid on delivery, as the game's own wholesale and furniture deliveries are [code, 1.0:
+        // BusinessHelper.DeliverWholesaleContract, FurnitureDeliveryHelper.DeliverFurnitureContract]: each order due by
+        // now (its delivery day at the delivery minute, or an earlier day) is offered to pay, oldest first. Paid, its
+        // goods go into the commissary's stock; refused, the order is cancelled and nothing arrives, as the game drops a
+        // one-off delivery the player can't pay for. Orders not yet due are left alone.
+        public static CommissaryDeliveries Deliver(CommissaryState state, CommissaryRules rules, int nowDay, int nowMinute,
+            Func<CommissaryOrder, bool> pay)
         {
             Check(state, rules); Time(nowDay, nowMinute);
-            var unpaid = PendingOrderIds(state);
-            foreach (var order in state.Orders)
-            {
-                if (unpaid.Contains(order.Id)) order.AwaitingPayment = true;
-                else if (order.AwaitingPayment)
-                {
-                    order.DeliverDay = Math.Max(order.DeliverDay, nowMinute < rules.DeliveryMinute ? nowDay : checked(nowDay + 1));
-                    order.AwaitingPayment = false;
-                }
-            }
-            var due = state.Orders.Where(o => !unpaid.Contains(o.Id) &&
-                    (o.DeliverDay < nowDay || (o.DeliverDay == nowDay && nowMinute >= rules.DeliveryMinute)))
-                .OrderBy(o => o.DeliverDay).ThenBy(o => o.Id).ToList();
+            if (pay == null) throw new ArgumentNullException(nameof(pay));
+            var due = Due(state, rules, nowDay, nowMinute);
             _ = checked(state.NextBatchId + due.Count);
+            var delivered = new List<CommissaryOrder>();
+            var refused = new List<CommissaryOrder>();
             foreach (var order in due)
             {
+                // Each order leaves the list as soon as it is decided, so a payment that throws keeps the ones before it.
+                var paid = pay(order);
+                state.Orders.Remove(order);
+                if (!paid)
+                {
+                    refused.Add(order);
+                    continue;
+                }
                 Stock(state, order.CommissaryId).Add(new CommissaryStockLine { ItemName = order.ItemName, Units = order.Units,
                     UnitPriceCents = order.UnitPriceCents, BatchId = CommissaryValidation.NextBatch(state),
                     OrderMetadata = CopyExtra(order.ExtensionData) });
-                state.Orders.Remove(order);
+                delivered.Add(order);
             }
-            return due;
+            return new CommissaryDeliveries(delivered, refused);
+        }
+
+        // The orders due by now, oldest delivery day first, then in the order they were placed.
+        public static IReadOnlyList<CommissaryOrder> Due(CommissaryState state, CommissaryRules rules, int nowDay, int nowMinute)
+        {
+            Check(state, rules); Time(nowDay, nowMinute);
+            return state.Orders.Where(o => o.DeliverDay < nowDay || (o.DeliverDay == nowDay && nowMinute >= rules.DeliveryMinute))
+                .OrderBy(o => o.DeliverDay).ThenBy(o => o.Id).ToList();
         }
 
         public static IReadOnlyList<CommissaryStockLine> Restock(CommissaryState state, string commissaryId, IReadOnlyDictionary<string, int> wanted)
@@ -214,32 +224,20 @@ namespace FoodTrucks.Core.Commissary
             return fines;
         }
 
-        // Cancel unpaid orders and their charges without paying a refund. Rent/fine debts remain to settle.
-        // The adapter refunds Total in cash and books -FeeCents via SalesLedger.RecordDeliveryFees; goods
-        // have not been expensed. Delivered stock refunds goods only, since its delivery has been fulfilled.
+        // The uninstall step: delivered stock (paid on delivery) is refunded at its goods price; open orders haven't been
+        // paid, so they are cancelled with nothing to refund. Spaces are given up; rent and fine debts remain to settle.
         public static CommissaryRefund Refund(CommissaryState state)
         {
             Check(state);
-            var unpaid = PendingOrderIds(state);
-            var cancelled = new HashSet<long>(state.Orders.Select(o => o.Id));
-            long goods = 0, fees = 0;
+            long goods = 0;
             foreach (var line in state.Stock.Values.SelectMany(lines => lines)) goods = checked(goods + checked(line.Units * line.UnitPriceCents));
-            foreach (var order in state.Orders.Where(o => !unpaid.Contains(o.Id)))
-            {
-                goods = checked(goods + order.GoodsCents);
-                fees = checked(fees + order.FeeCents);
-            }
-            var refund = new CommissaryRefund(goods, fees);
+            var refund = new CommissaryRefund(goods, state.Orders.Count);
             state.Stock.Clear();
             state.Orders.Clear();
             state.Spaces.Clear();
             state.ReleasedRentPaidThroughDay.Clear();
-            state.Charges.RemoveAll(c => c.OrderId.HasValue && cancelled.Contains(c.OrderId.Value));
             return refund;
         }
-
-        private static HashSet<long> PendingOrderIds(CommissaryState state) =>
-            new HashSet<long>(state.Charges.Where(c => c.OrderId.HasValue).Select(c => c.OrderId!.Value));
 
         private static void Check(CommissaryState state, CommissaryRules rules)
         {

@@ -86,8 +86,8 @@ namespace FoodTrucks
             foreach (var id in commissary.Unlocked)
                 if (sites.Site(id) != null) ContactFor(id);
             Log.Info($"Commissary state: unlocked {Join(commissary.Unlocked)}; spaces {Join(commissary.Spaces.Select(s => $"{s.Kind} {World.Short(s.VehicleId)} at {s.CommissaryId}"))}; " +
-                     $"{commissary.Orders.Count} orders on the way, {commissary.Stock.Values.Sum(l => l.Sum(x => (long)x.Units))} units in stock, " +
-                     $"{commissary.Charges.Count} charges and {commissary.Fines.Count} fines unpaid; night checked through day {commissary.NightCheckedThroughDay?.ToString() ?? "(not started)"}.");
+                     $"{commissary.Orders.Count} orders on the way (paid on delivery), {commissary.Stock.Values.Sum(l => l.Sum(x => (long)x.Units))} units in stock, " +
+                     $"{commissary.Charges.Count} rent charges and {commissary.Fines.Count} fines unpaid; night checked through day {commissary.NightCheckedThroughDay?.ToString() ?? "(not started)"}.");
         }
 
         public static void Detach() => attached = false;
@@ -473,7 +473,7 @@ namespace FoodTrucks
         }
 
         // Once a game minute (or once after a skip): unpaid charges tried again, spaces of vehicles gone given up,
-        // rent charged, orders delivered, and the 04:00 check.
+        // rent charged, orders delivered and paid, and the 04:00 check.
         private void Step(SaveState state, CommissaryRules rules, CommissaryTables sites, long now)
         {
             var day = (int)(now / 1440) + 1;
@@ -485,29 +485,18 @@ namespace FoodTrucks
             NightCheck(state, rules, sites, now, day, minute);
         }
 
-        // Debts the game refused earlier (not enough money), tried again: rent and order payments, then fines.
+        // Debts the game refused earlier (not enough money), tried again: rent, then fines. Orders don't wait here: they
+        // are paid on delivery, and one the game refuses then is cancelled (Deliver).
         private static void PayPending(SaveState state, CommissaryRules rules, bool showNotification)
         {
             var commissary = state.Commissary;
             var today = SaveGameManager.Current.Day;
-            var settledOrder = false;
             foreach (var charge in commissary.Charges.ToList())
             {
-                if (charge.OrderId != null)
-                {
-                    if (!Payments.TryPayOut(charge.Cents, OrderInfo(charge.CommissaryId), showNotification)) continue;
-                    commissary.Charges.Remove(charge);
-                    SalesLedger.RecordDeliveryFees(state, today, charge.FeeCents);
-                    settledOrder = true;
-                    Log.Info($"Commissary: order {charge.OrderId} at {charge.CommissaryId} paid on a retry, {CartSelling.Money(charge.Cents)} (fee {CartSelling.Money(charge.FeeCents)}).");
-                }
-                else
-                {
-                    if (!Payments.TryPayOut(charge.Cents, RentInfo(charge.CommissaryId), showNotification)) continue;
-                    commissary.Charges.Remove(charge);
-                    SalesLedger.RecordCommissaryRent(state, today, charge.VehicleId, charge.Cents);
-                    Log.Info($"Commissary rent: {World.Short(charge.VehicleId)} at {charge.CommissaryId} for day {charge.Day}, {CartSelling.Money(charge.Cents)} paid on a retry.");
-                }
+                if (!Payments.TryPayOut(charge.Cents, RentInfo(charge.CommissaryId), showNotification)) continue;
+                commissary.Charges.Remove(charge);
+                SalesLedger.RecordCommissaryRent(state, today, charge.VehicleId, charge.Cents);
+                Log.Info($"Commissary rent: {World.Short(charge.VehicleId)} at {charge.CommissaryId} for day {charge.Day}, {CartSelling.Money(charge.Cents)} paid on a retry.");
                 FoodTrucksSession.MarkChanged();
             }
             foreach (var fine in commissary.Fines.ToList())
@@ -518,8 +507,6 @@ namespace FoodTrucks
                 FoodTrucksSession.MarkChanged();
                 Log.Info($"Overnight fine: {World.Short(fine.VehicleId)} for the night of day {fine.Day}, {CartSelling.Money(fine.Cents)} paid on a retry.");
             }
-            // Core schedules a delivery once it sees the debt gone.
-            if (settledOrder) Deliver(state, rules, (int)(HireCrew.Now() / 1440) + 1, (int)(HireCrew.Now() % 1440));
         }
 
         // The player's food vehicles, by ID: on the map and those with the private driver.
@@ -579,20 +566,48 @@ namespace FoodTrucks
             }
         }
 
+        // Orders due by now arrive and are paid, goods and delivery fee in one payment under the commissary's tax label, as
+        // the game's wholesale and furniture deliveries are paid when they arrive [code, 1.0: BusinessHelper.
+        // DeliverWholesaleContract, FurnitureDeliveryHelper.PayDelivery]. A payment the game refuses (not enough money)
+        // cancels that order and nothing arrives; the commissary texts why, as the game's stores do with their
+        // "not enough funds" message, and the order isn't tried again.
         internal static void Deliver(SaveState state, CommissaryRules rules, int day, int minute)
         {
-            var delivered = Commissaries.Deliver(state.Commissary, rules, day, minute);
-            if (delivered.Count == 0) return;
-            FoodTrucksSession.MarkChanged();
-            foreach (var order in delivered)
+            if (state.Commissary.Orders.Count == 0) return;
+            var today = SaveGameManager.Current.Day;
+            var run = Commissaries.Deliver(state.Commissary, rules, day, minute, order =>
             {
-                Log.Info($"Commissary delivery: order {order.Id}, {order.Units} {order.ItemName} at {order.CommissaryId} (ordered day {order.OrderedDay}, due day {order.DeliverDay}).");
+                // Payments.TryPayOut says whether the game booked the payment even when it throws. Nothing to pay is paid.
+                var paid = order.TotalCents <= 0 || Payments.TryPayOut(order.TotalCents, OrderInfo(order.CommissaryId), showNotification: false);
+                FoodTrucksSession.MarkChanged();
+                if (!paid) return false;
+                try { SalesLedger.RecordDeliveryFees(state, today, order.FeeCents); }
+                catch (Exception ex) { Log.Error($"Commissary order {order.Id}: paid, but its delivery fee wasn't recorded for Econoview: {ex}"); }
+                return true;
+            });
+            foreach (var order in run.Delivered)
+            {
+                Log.Info($"Commissary delivery: order {order.Id}, {order.Units} {order.ItemName} at {order.CommissaryId} (ordered day {order.OrderedDay}, due day {order.DeliverDay}), " +
+                         $"paid {CartSelling.Money(order.TotalCents)} on delivery (goods {CartSelling.Money(order.GoodsCents)}, fee {CartSelling.Money(order.FeeCents)}).");
                 if (state.Commissary.Unlocked.Contains(order.CommissaryId))
                     GameManager.SendTextMessage(ContactFor(order.CommissaryId), "foodtrucks:message_commissary_delivered", new Dictionary<string, string>
                     {
                         { "units", order.Units.ToString() },
                         { "item", LocalizorManager.GetLocalization(order.ItemName, null) },
-                        { "commissary", NameOf(order.CommissaryId) }
+                        { "commissary", NameOf(order.CommissaryId) },
+                        { "total", CartSelling.Money(order.TotalCents) }
+                    });
+            }
+            foreach (var order in run.Refused)
+            {
+                Log.Info($"Commissary delivery: order {order.Id}, {order.Units} {order.ItemName} at {order.CommissaryId} not delivered: " +
+                         $"the payment of {CartSelling.Money(order.TotalCents)} was refused (not enough money); the order is cancelled.");
+                if (state.Commissary.Unlocked.Contains(order.CommissaryId))
+                    GameManager.SendTextMessage(ContactFor(order.CommissaryId), "foodtrucks:message_commissary_delivery_unpaid", new Dictionary<string, string>
+                    {
+                        { "units", order.Units.ToString() },
+                        { "item", LocalizorManager.GetLocalization(order.ItemName, null) },
+                        { "total", CartSelling.Money(order.TotalCents) }
                     });
             }
         }
@@ -1111,60 +1126,30 @@ namespace FoodTrucks
             }
         }
 
-        // A quote placed as Core's orders, each paid now; a refused payment books the order anyway, held until paid
-        // (Core's pending charge). Returns each order with whether it was paid.
-        internal static List<(CommissaryOrder Order, bool Paid)> PlaceQuote(string siteId, CommissaryQuote quote)
+        // A quote placed as Core's orders. No money moves now: each order is paid when it arrives (Deliver).
+        internal static IReadOnlyList<CommissaryOrder> PlaceQuote(string siteId, CommissaryQuote quote)
         {
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
-            var placed = new List<(CommissaryOrder, bool)>();
-            if (state == null || rules == null || uninstalled || !FoodTrucksSession.CanWrite) return placed;
+            if (state == null || rules == null || uninstalled || !FoodTrucksSession.CanWrite) return Array.Empty<CommissaryOrder>();
             var now = HireCrew.Now();
             var day = (int)(now / 1440) + 1;
             var minute = (int)(now % 1440);
             var orders = CommissaryOrdering.Place(state.Commissary, rules, siteId, quote, (day, minute));
             FoodTrucksSession.MarkChanged();
-            var today = SaveGameManager.Current.Day;
-            var unpaid = false;
             foreach (var order in orders)
             {
-                // Core has booked every order already: one whose payment throws is held as unpaid like a refused one,
-                // so it isn't delivered free and the orders after it are still paid.
-                bool paid;
-                try { paid = Payments.TryPayOut(order.TotalCents, OrderInfo(siteId), showNotification: true); }
-                catch (Exception ex)
-                {
-                    Log.Error($"Commissary order {order.Id}: payment failed, held until paid: {ex}");
-                    paid = false;
-                }
-                if (paid)
-                {
-                    try { SalesLedger.RecordDeliveryFees(state, today, order.FeeCents); }
-                    catch (Exception ex) { Log.Error($"Commissary order {order.Id}: paid, but its delivery fee wasn't recorded for Econoview: {ex}"); }
-                }
-                else
-                {
-                    state.Commissary.Charges.Add(new CommissaryCharge
-                    {
-                        CommissaryId = siteId, Day = today, Cents = order.TotalCents, OrderId = order.Id, FeeCents = order.FeeCents
-                    });
-                    unpaid = true;
-                }
                 var boxes = quote.Lines.FirstOrDefault(l => l.ItemName == order.ItemName)?.Boxes ?? 0;
                 Log.Info($"Commissary order {order.Id}: {boxes} boxes, {order.Units} {order.ItemName} at {siteId} for {CartSelling.Money(order.GoodsCents)} " +
-                         $"plus {CartSelling.Money(order.FeeCents)} delivery, {(paid ? "paid" : "unpaid (not enough money), held until paid")}; " +
-                         $"due day {order.DeliverDay} at {CityPitches.Clock(rules.DeliveryMinute)}.");
-                placed.Add((order, paid));
+                         $"plus {CartSelling.Money(order.FeeCents)} delivery, paid on delivery; due day {order.DeliverDay} at {CityPitches.Clock(rules.DeliveryMinute)}.");
             }
-            // Core marks the unpaid orders as waiting for their payment.
-            if (unpaid) Deliver(state, rules, day, minute);
-            return placed;
+            return orders;
         }
 
         // ---- The uninstall step ----
 
-        // Stock and orders are paid back (goods and the fees of orders not delivered), debts the game takes now are paid,
-        // the rest dropped, and the contacts go with the mod.
+        // Delivered stock is paid back at its goods price; open orders are cancelled with nothing to pay back, since they
+        // are paid on delivery. Debts the game takes now are paid, the rest dropped, and the contacts go with the mod.
         public static void RemoveForUninstall()
         {
             // Set first: if the refund or a payment below throws, the mod's contacts still lose their protection
@@ -1188,7 +1173,6 @@ namespace FoodTrucks
                     paidBack = Payments.PayIn(refund.Total, info);
                     if (paidBack)
                     {
-                        SalesLedger.RecordDeliveryFees(state, SaveGameManager.Current.Day, -refund.FeeCents);
                         var reversed = ReverseDeduction(refund.Total);
                         Log.Info($"Uninstall: {CartSelling.Money(reversed)} of this tax year's commissary deduction taken back for the refund.");
                     }
@@ -1202,7 +1186,7 @@ namespace FoodTrucks
                 commissary.Fines.Clear();
                 commissary.Unlocked.Clear();
                 FoodTrucksSession.MarkChanged();
-                Log.Info($"Uninstall: commissary refund {CartSelling.Money(paidBack ? refund.Total : 0)} (goods {CartSelling.Money(refund.GoodsCents)}, delivery fees {CartSelling.Money(refund.FeeCents)}); {spaces} spaces given up.");
+                Log.Info($"Uninstall: commissary refund {CartSelling.Money(paidBack ? refund.Total : 0)} for the stock delivered; {refund.CancelledOrders} open orders cancelled, unpaid; {spaces} spaces given up.");
                 if (paidBack) CartSelling.Notify("foodtrucks:notification_uninstall_commissary", ("refund", CartSelling.Money(refund.Total)));
             }
             CartButton.ShowCommissary(false);
@@ -1268,7 +1252,7 @@ namespace FoodTrucks
             CartSelling.Notify("foodtrucks:notification", ("message", $"Nearest commissary: {Name(nearest)}, {distance:F0} m ({standing})."));
         }
 
-        // Orders paid for arrive now, as if it were their 08:00 (throwaway saves).
+        // Orders on the way arrive now and are paid, as if it were their 08:00 (throwaway saves).
         public static void DeliverForTesting()
         {
             var state = FoodTrucksSession.CurrentState;
@@ -1279,15 +1263,15 @@ namespace FoodTrucks
             var minute = (int)(now % 1440);
             var due = minute >= rules.DeliveryMinute ? day : day - 1;
             var count = 0;
-            foreach (var order in state.Commissary.Orders.Where(o => !o.AwaitingPayment && o.DeliverDay > due))
+            foreach (var order in state.Commissary.Orders.Where(o => o.DeliverDay > due))
             {
                 order.DeliverDay = due;
                 count++;
             }
             // Delivered (and so removed) in the same step, before any save could see the moved days.
             Deliver(state, rules, day, minute);
-            Log.Info($"Debug: {count} commissary orders brought forward and delivered.");
-            CartSelling.Notify("foodtrucks:notification", ("message", $"Debug: {count} commissary orders delivered now."));
+            Log.Info($"Debug: {count} commissary orders brought forward and delivered (paid on delivery).");
+            CartSelling.Notify("foodtrucks:notification", ("message", $"Debug: {count} commissary orders brought forward; see the commissary's texts."));
         }
 
         // What the 04:00 check would say now, without fining anyone.
@@ -1435,7 +1419,7 @@ namespace FoodTrucks
             };
         }
 
-        // The form sent: the commissary reads the order back with its total. Nothing is booked or paid yet.
+        // The form sent: the commissary reads the order back with its total, paid on delivery. Nothing is booked yet.
         private static DialogEntry? FormSet(string siteId)
         {
             var site = DemandData.Commissaries?.Site(siteId);
@@ -1492,7 +1476,7 @@ namespace FoodTrucks
                 line.Boxes, LocalizorManager.GetLocalization(line.ItemName, null), line.Units, CartSelling.Money(line.BoxPriceCents));
         }
 
-        // Confirmed: Core books the orders and the money moves; each order's text, as before, goes into the conversation.
+        // Confirmed: Core books the orders, to be paid on delivery; each order's text goes into the conversation.
         private static DialogEntry? Placed(string siteId, CommissaryQuote quote)
         {
             var site = DemandData.Commissaries?.Site(siteId);
@@ -1502,9 +1486,9 @@ namespace FoodTrucks
             var placed = Commissary.PlaceQuote(siteId, quote);
             if (placed.Count == 0) return Closing("foodtrucks:dialog_commissary_unavailable", null);
             var texts = new List<string>();
-            foreach (var (order, paid) in placed)
+            foreach (var order in placed)
             {
-                var key = paid ? "foodtrucks:message_commissary_ordered" : "foodtrucks:message_commissary_ordered_unpaid";
+                const string key = "foodtrucks:message_commissary_ordered";
                 var data = new Dictionary<string, string>
                 {
                     { "units", order.Units.ToString() },

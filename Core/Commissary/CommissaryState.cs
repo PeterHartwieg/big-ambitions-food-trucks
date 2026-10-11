@@ -88,9 +88,8 @@ namespace FoodTrucks.Core.Commissary
         public long UnitPriceCents { get; set; }
         public long FeeCents { get; set; }
         public int OrderedDay { get; set; }
+        // Paid when it arrives (Commissaries.Deliver), at the delivery minute of this day.
         public int DeliverDay { get; set; }
-        // Deliver has observed a failed payment; clearing the debt schedules the next delivery window.
-        public bool AwaitingPayment { get; set; }
         [JsonIgnore]
         public long GoodsCents => checked(Units * UnitPriceCents);
         [JsonIgnore]
@@ -114,16 +113,14 @@ namespace FoodTrucks.Core.Commissary
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
-    // Rent charges name a vehicle. An unpaid order payment instead names OrderId and includes its fee;
-    // the adapter books only FeeCents as a fleet expense when paid, leaving goods in the cargo cost.
+    // A day's rent for a vehicle's space that the game refused, tried again. Orders are paid on delivery and never wait
+    // here (Commissaries.Deliver).
     public class CommissaryCharge
     {
         public string VehicleId { get; set; } = string.Empty;
         public string CommissaryId { get; set; } = string.Empty;
         public int Day { get; set; }
         public long Cents { get; set; }
-        public long? OrderId { get; set; }
-        public long FeeCents { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -155,16 +152,30 @@ namespace FoodTrucks.Core.Commissary
 
     public sealed class CommissaryRefund
     {
+        // Delivered stock at its goods price; its delivery fees were for a delivery made and aren't refunded.
         public long GoodsCents { get; }
-        public long FeeCents { get; }
-        public long Total => checked(GoodsCents + FeeCents);
+        public long Total => GoodsCents;
+        // Open orders cancelled: not paid yet, so nothing to refund.
+        public int CancelledOrders { get; }
 
-        internal CommissaryRefund(long goodsCents, long feeCents)
+        internal CommissaryRefund(long goodsCents, int cancelledOrders)
         {
             GoodsCents = goodsCents;
-            FeeCents = feeCents;
-            _ = Total;
+            CancelledOrders = cancelledOrders;
         }
+    }
+
+    // What one delivery run did: the orders paid and put into stock, and those whose payment the game refused (cancelled).
+    public sealed class CommissaryDeliveries
+    {
+        internal CommissaryDeliveries(IReadOnlyList<CommissaryOrder> delivered, IReadOnlyList<CommissaryOrder> refused)
+        {
+            Delivered = delivered;
+            Refused = refused;
+        }
+
+        public IReadOnlyList<CommissaryOrder> Delivered { get; }
+        public IReadOnlyList<CommissaryOrder> Refused { get; }
     }
 
     public static class CommissaryValidation
@@ -232,9 +243,20 @@ namespace FoodTrucks.Core.Commissary
                 throw new JsonSerializationException("Commissary stock batch IDs must be unique.");
             state.Fines ??= new List<CommissaryFine>();
             state.Charges ??= new List<CommissaryCharge>();
+            // Before 0.9.10 an order paid at booking could wait here unpaid, naming no vehicle. Orders are paid on
+            // delivery now, so such a charge is set aside (kept in the save, not collected).
+            for (var i = state.Charges.Count - 1; i >= 0; i--)
+            {
+                var charge = state.Charges[i];
+                if (charge != null && string.IsNullOrWhiteSpace(charge.VehicleId) && charge.ExtensionData?.Keys.Any(k => string.Equals(k, "orderId", StringComparison.OrdinalIgnoreCase)) == true)
+                {
+                    Preserve(state, "_discardedCharges", charge, charge.ExtensionData);
+                    state.Charges.RemoveAt(i);
+                }
+            }
             if (state.Fines.Any(f => f == null || string.IsNullOrWhiteSpace(f.VehicleId) || f.Day < 1 || f.Cents < 0) ||
-                state.Charges.Any(c => c == null || (!c.OrderId.HasValue && string.IsNullOrWhiteSpace(c.VehicleId)) ||
-                    c.OrderId < 1 || string.IsNullOrWhiteSpace(c.CommissaryId) || c.Day < 1 || c.Cents < 0 || c.FeeCents < 0 || c.FeeCents > c.Cents))
+                state.Charges.Any(c => c == null || string.IsNullOrWhiteSpace(c.VehicleId) ||
+                    string.IsNullOrWhiteSpace(c.CommissaryId) || c.Day < 1 || c.Cents < 0))
                 throw new JsonSerializationException("Commissary pending payments must name their vehicle and day, with amounts not negative.");
             if (state.RentPaidThroughDay < 0 || state.NightCheckedThroughDay < 0)
                 throw new JsonSerializationException("Commissary day cursors must not be negative.");
@@ -249,9 +271,6 @@ namespace FoodTrucks.Core.Commissary
                     state.Bays.Remove(id);
                 }
             }
-            // Older saves have no AwaitingPayment flag. Observe their debts before the adapter can retry them.
-            var unpaid = new HashSet<long>(state.Charges.Where(c => c.OrderId.HasValue).Select(c => c.OrderId!.Value));
-            foreach (var order in state.Orders.Where(o => unpaid.Contains(o.Id))) order.AwaitingPayment = true;
         }
 
         internal static long NextBatch(CommissaryState state)

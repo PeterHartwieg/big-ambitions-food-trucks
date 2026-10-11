@@ -25,7 +25,7 @@ namespace FoodTrucks.Core.Commissary
         public int Boxes { get; }
     }
 
-    // A priced line: each line becomes one order, with its own delivery fee, exactly as Commissaries.Order charges it.
+    // A priced line: each line becomes one order, with its own delivery fee, exactly as Commissaries.Order prices it.
     public sealed class CommissaryQuoteLine
     {
         internal CommissaryQuoteLine(CommissaryOrderRequest request, long feeCents)
@@ -83,7 +83,8 @@ namespace FoodTrucks.Core.Commissary
     }
 
     // Ordering by phone (design: Commissary and new foods): the order form's lines priced into a quote, and a quote
-    // placed as one order per item. The game shows the form and moves the money; this decides the numbers.
+    // placed as one order per item. Placing books the orders and takes no money: each is paid when it arrives
+    // (Commissaries.Deliver), as the game's own deliveries are. The game shows the form and moves the money.
     public static class CommissaryOrdering
     {
         // Boxes one phone order takes, all items together.
@@ -127,7 +128,8 @@ namespace FoodTrucks.Core.Commissary
             return new CommissaryQuote(lines);
         }
 
-        // One order per line, all or none: the commissary must take orders and the quote must have no problem.
+        // One order per line, all or none: the commissary must take orders and the quote must have no problem. Nothing is
+        // paid here; the money moves on delivery.
         public static IReadOnlyList<CommissaryOrder> Place(CommissaryState state, CommissaryRules rules, string commissaryId,
             CommissaryQuote quote, (int Day, int Minute) now)
         {

@@ -41,7 +41,7 @@ public class CommissarySaveTests
         var fine = Assert.Single(Commissaries.NightCheck(state.Commissary, Rules, 3, 240, new[] { new CommissaryVehicle { VehicleId = "cart" } }));
         state.Commissary.Fines.Add(fine);
         Commissaries.Order(state.Commissary, Rules, "a", "taco", 10, 7, (3, 500));
-        Commissaries.Deliver(state.Commissary, Rules, 4, 480);
+        Commissaries.Deliver(state.Commissary, Rules, 4, 480, CommissariesTests.Paid);
         var pending = Commissaries.Order(state.Commissary, Rules, "a", "griddle", 1, 5000, (4, 481));
         var loaded = Codec.Load(Codec.Serialize(state));
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
@@ -61,26 +61,23 @@ public class CommissarySaveTests
     }
 
     [Fact]
-    public void FailedOrderPaymentsRoundTripWithTheirFeeSeparatedFromGoods()
+    public void AnOrderChargeFromBeforePayOnDeliveryIsSetAsideNotCollected()
     {
         var state = new SaveState { Commissary = CommissariesTests.Rented() };
         var order = Commissaries.Order(state.Commissary, Rules, "a", "taco", 10, 100, (1, 1));
-        state.Commissary.Charges.Add(new CommissaryCharge { OrderId = order.Id, CommissaryId = "a",
-            Day = 1, Cents = order.TotalCents, FeeCents = order.FeeCents });
-        var loaded = Codec.Load(Codec.Serialize(state));
+        var rent = Assert.Single(Commissaries.RentDue(state.Commissary, Rules, 1));
+        state.Commissary.Charges.Add(rent);
+        var json = JObject.Parse(Codec.Serialize(state));
+        ((JArray)json["commissary"]!["charges"]!).Add(JObject.Parse(
+            "{\"vehicleId\":\"\",\"commissaryId\":\"a\",\"day\":1,\"cents\":1100,\"orderId\":1,\"feeCents\":100}"));
+        json["commissary"]!["orders"]![0]!["awaitingPayment"] = true;
+        var loaded = Codec.Load(json.ToString());
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
-        var charge = loaded.State!.Commissary.Charges.Single();
-        Assert.Equal(order.Id, charge.OrderId);
-        Assert.Equal(1100, charge.Cents);
-        Assert.Equal(100, charge.FeeCents);
-        Assert.True(loaded.State.Commissary.Orders.Single().AwaitingPayment);
-        Assert.Empty(loaded.State.DailySales);
-        SalesLedger.RecordDeliveryFees(loaded.State, 2, charge.FeeCents);
-        loaded.State.Commissary.Charges.Clear();
-        Assert.Empty(Commissaries.Deliver(loaded.State.Commissary, Rules, 2, 600));
-        Assert.Equal(3, loaded.State.Commissary.Orders.Single().DeliverDay);
-        Assert.Single(Commissaries.Deliver(loaded.State.Commissary, Rules, 3, 480));
-        Assert.Equal(-100, SalesLedger.DayProfitCents(loaded.State, 2));
+        var c = loaded.State!.Commissary;
+        Assert.Equal(rent.VehicleId, Assert.Single(c.Charges).VehicleId);
+        Assert.Single((JArray)c.ExtensionData["_discardedCharges"]);
+        Assert.Equal(order.Id, Assert.Single(c.Orders).Id);
+        Assert.Single(Commissaries.Deliver(c, Rules, 2, 480, CommissariesTests.Paid).Delivered);
     }
 
     [Fact]
@@ -106,7 +103,7 @@ public class CommissarySaveTests
         Assert.Equal(5, (int)saved["fines"]![0]!["futureFine"]!);
         Assert.Equal(6, (int)saved["charges"]![0]!["futureCharge"]!);
         var state = loaded.State!;
-        Commissaries.Deliver(state.Commissary, Rules, 2, 480);
+        Commissaries.Deliver(state.Commissary, Rules, 2, 480, CommissariesTests.Paid);
         var taken = Commissaries.Restock(state.Commissary, "a", new Dictionary<string, int> { ["future-machine"] = 1 });
         Assert.Equal(4, (int)taken.Single().ExtensionData["futureLine"]);
         Commissaries.ReturnToStock(state.Commissary, "a", taken);
@@ -170,7 +167,7 @@ public class CommissarySaveTests
         """);
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
         var state = loaded.State!;
-        Assert.Equal(2, Commissaries.Deliver(state.Commissary, Rules, 2, 480).Count);
+        Assert.Equal(2, Commissaries.Deliver(state.Commissary, Rules, 2, 480, CommissariesTests.Paid).Delivered.Count);
         var taken = Commissaries.Restock(state.Commissary, "a", new Dictionary<string, int> { ["taco"] = 1 });
         Assert.Equal(99, (int)taken.Single().OrderMetadata["batchId"]);
         Commissaries.ReturnToStock(state.Commissary, "a", taken);

@@ -19,6 +19,8 @@ public class CommissariesTests
     internal static CommissaryStockLine Line(string item, int units, long price) =>
         new() { ItemName = item, Units = units, UnitPriceCents = price };
     private static Dictionary<string, int> Want(string item, int units) => new() { [item] = units };
+    // The game takes every payment.
+    internal static bool Paid(CommissaryOrder order) => true;
 
     [Fact]
     public void RentingRequiresAVisitAndOneVehicleHasOnlyOneSpace()
@@ -112,13 +114,13 @@ public class CommissariesTests
         var state = Rented(5);
         var order = Commissaries.Order(state, Rules, "a", "dumpling", 3, 5, (5, minute));
         Assert.Equal((1L, 5, 6, 15L, 2L, 17L), (order.Id, order.OrderedDay, order.DeliverDay, order.GoodsCents, order.FeeCents, order.TotalCents));
-        Assert.Empty(Commissaries.Deliver(state, Rules, 5, 1439));
-        Assert.Empty(Commissaries.Deliver(state, Rules, 6, 479));
-        Assert.Single(Commissaries.Deliver(state, Rules, 6, 480));
+        Assert.Empty(Commissaries.Deliver(state, Rules, 5, 1439, Paid).Delivered);
+        Assert.Empty(Commissaries.Deliver(state, Rules, 6, 479, Paid).Delivered);
+        Assert.Single(Commissaries.Deliver(state, Rules, 6, 480, Paid).Delivered);
         Assert.Equal(3, state.Stock["a"].Single().Units);
         Assert.Equal(5, state.Stock["a"].Single().UnitPriceCents);
         Assert.Empty(state.Orders);
-        Assert.Empty(Commissaries.Deliver(state, Rules, 6, 481));
+        Assert.Empty(Commissaries.Deliver(state, Rules, 6, 481, Paid).Delivered);
     }
 
     [Fact]
@@ -130,45 +132,60 @@ public class CommissariesTests
         var first = Commissaries.Order(state, Rules, "a", "taco", 2, 10, (1, 800));
         var second = Commissaries.Order(state, Rules, "b", "griddle", 1, 1000, (2, 800));
         var third = Commissaries.Order(state, Rules, "a", "taco", 3, 20, (4, 800));
-        Assert.Equal(new[] { first.Id, second.Id }, Commissaries.Deliver(state, Rules, 5, 100).Select(o => o.Id));
+        Assert.Equal(new[] { first.Id, second.Id }, Commissaries.Deliver(state, Rules, 5, 100, Paid).Delivered.Select(o => o.Id));
         Assert.Equal(third.Id, state.Orders.Single().Id);
         Assert.Single(state.Stock["a"]);
         Assert.Single(state.Stock["b"]);
-        Commissaries.Deliver(state, Rules, 5, 480);
+        Commissaries.Deliver(state, Rules, 5, 480, Paid);
         Assert.Equal(new long[] { 10, 20 }, state.Stock["a"].Select(l => l.UnitPriceCents));
     }
 
-    [Theory]
-    [InlineData(479, 5)]
-    [InlineData(480, 6)]
-    [InlineData(600, 6)]
-    public void UnpaidOrdersCannotBeLoadedAndDeliverAtTheNextEightAfterSettlement(int settledMinute, int deliveryDay)
+    [Fact]
+    public void OrdersArePaidOnDeliveryOldestFirstAndOnlyWhenDue()
     {
         var state = Rented();
-        var unpaid = Commissaries.Order(state, Rules, "a", "taco", 2, 100, (1, 100));
-        var paid = Commissaries.Order(state, Rules, "a", "dumpling", 1, 100, (1, 100));
-        var debt = new CommissaryCharge { OrderId = unpaid.Id, CommissaryId = "a", Day = 1,
-            Cents = unpaid.TotalCents, FeeCents = unpaid.FeeCents };
-        state.Charges.Add(debt);
-        Assert.Equal(paid.Id, Assert.Single(Commissaries.Deliver(state, Rules, 2, 480)).Id);
-        Assert.Empty(Commissaries.Restock(state, "a", Want("taco", 2)));
-        Assert.Equal(unpaid.Id, Assert.Single(state.Orders).Id);
-        Assert.Single(state.Charges);
+        var first = Commissaries.Order(state, Rules, "a", "taco", 2, 100, (1, 100));
+        var second = Commissaries.Order(state, Rules, "a", "dumpling", 1, 100, (1, 200));
+        var later = Commissaries.Order(state, Rules, "a", "taco", 1, 100, (2, 100));
+        var asked = new List<long>();
+        Assert.Empty(Commissaries.Deliver(state, Rules, 2, 479, o => { asked.Add(o.Id); return true; }).Delivered);
+        Assert.Empty(asked); // nothing is paid before it arrives
+        Assert.Equal(new[] { first.Id, second.Id }, Commissaries.Due(state, Rules, 2, 480).Select(o => o.Id));
+        var run = Commissaries.Deliver(state, Rules, 2, 480, o => { asked.Add(o.Id); return true; });
+        Assert.Equal(new[] { first.Id, second.Id }, asked);
+        Assert.Equal(new[] { first.Id, second.Id }, run.Delivered.Select(o => o.Id));
+        Assert.Empty(run.Refused);
+        Assert.Equal(later.Id, Assert.Single(state.Orders).Id);
+        Assert.Equal(3, state.Stock["a"].Sum(l => l.Units));
+    }
 
-        // A save and a long time skip must not let unpaid goods escape the hold.
-        var codec = new FoodTrucks.Core.Saves.SaveCodec();
-        var loaded = codec.Load(codec.Serialize(new FoodTrucks.Core.Saves.SaveState { Commissary = state }));
-        Assert.Equal(FoodTrucks.Core.Saves.LoadStatus.Loaded, loaded.Status);
-        state = loaded.State!.Commissary;
-        Assert.True(state.Orders.Single().AwaitingPayment);
-        Assert.Empty(Commissaries.Deliver(state, Rules, 5, 100));
-        state.Charges.Clear(); // adapter settled the payment
-        Assert.Empty(Commissaries.Deliver(state, Rules, 5, settledMinute));
-        Assert.Equal(deliveryDay, state.Orders.Single().DeliverDay);
-        Assert.Empty(Commissaries.Deliver(state, Rules, deliveryDay, 479));
-        Assert.Equal(unpaid.Id, Assert.Single(Commissaries.Deliver(state, Rules, deliveryDay, 480)).Id);
-        Assert.Equal(2, Assert.Single(Commissaries.Restock(state, "a", Want("taco", 2))).Units);
-        Assert.Empty(Commissaries.Deliver(state, Rules, deliveryDay, 481));
+    [Fact]
+    public void ARefusedPaymentCancelsThatOrderWithNothingDeliveredAndTheOthersStillArrive()
+    {
+        var state = Rented();
+        var refused = Commissaries.Order(state, Rules, "a", "machine", 1, 100000, (1, 100));
+        var paid = Commissaries.Order(state, Rules, "a", "dumpling", 1, 100, (1, 100));
+        var run = Commissaries.Deliver(state, Rules, 2, 480, o => o.Id != refused.Id);
+        Assert.Equal(refused.Id, Assert.Single(run.Refused).Id);
+        Assert.Equal(paid.Id, Assert.Single(run.Delivered).Id);
+        Assert.Empty(state.Orders); // the game drops a one-off delivery it can't charge; it isn't tried again
+        Assert.Equal("dumpling", Assert.Single(state.Stock["a"]).ItemName);
+        Assert.Empty(state.Charges);
+        Assert.Empty(Commissaries.Restock(state, "a", Want("machine", 1)));
+        Assert.Empty(Commissaries.Deliver(state, Rules, 3, 480, _ => throw new InvalidOperationException("nothing is due")).Delivered);
+    }
+
+    [Fact]
+    public void APaymentThatThrowsKeepsTheOrdersDecidedBeforeIt()
+    {
+        var state = Rented();
+        var first = Commissaries.Order(state, Rules, "a", "taco", 1, 100, (1, 100));
+        var second = Commissaries.Order(state, Rules, "a", "taco", 1, 100, (1, 100));
+        Assert.Throws<InvalidOperationException>(() =>
+            Commissaries.Deliver(state, Rules, 2, 480, o => o.Id == first.Id ? true : throw new InvalidOperationException()));
+        Assert.Single(state.Stock["a"]);
+        Assert.Equal(second.Id, Assert.Single(state.Orders).Id);
+        Assert.Equal(second.Id, Assert.Single(Commissaries.Deliver(state, Rules, 2, 481, Paid).Delivered).Id);
     }
 
     [Fact]
@@ -329,24 +346,24 @@ public class CommissariesTests
         var state = Rented();
         var rules = new CommissaryRules(nightCheckMinute: 300, deliveryMinute: 600, overnightFineCents: 99);
         Commissaries.Order(state, rules, "a", "taco", 1, 1, (1, 1));
-        Assert.Empty(Commissaries.Deliver(state, rules, 2, 599));
-        Assert.Single(Commissaries.Deliver(state, rules, 2, 600));
+        Assert.Empty(Commissaries.Deliver(state, rules, 2, 599, Paid).Delivered);
+        Assert.Single(Commissaries.Deliver(state, rules, 2, 600, Paid).Delivered);
         var vehicle = new[] { new CommissaryVehicle { VehicleId = "cart" } };
         Assert.Empty(Commissaries.NightCheck(state, rules, 2, 299, vehicle));
         Assert.Equal(99, Assert.Single(Commissaries.NightCheck(state, rules, 2, 300, vehicle)).Cents);
     }
 
     [Fact]
-    public void RefundIncludesUnsoldGoodsAndPendingOrderFeesAndReleasesSpaces()
+    public void RefundPaysBackDeliveredStockOnlyAndCancelsOpenOrdersUnpaid()
     {
         var state = Rented();
         Commissaries.ReturnToStock(state, "a", new[] { Line("taco", 3, 10), Line("taco", 2, 20) });
-        var order = Commissaries.Order(state, Rules, "a", "machine", 1, 1000, (1, 1));
+        Commissaries.Order(state, Rules, "a", "machine", 1, 1000, (1, 1));
         state.Fines.Add(new CommissaryFine { VehicleId = "cart", Day = 1, Cents = 25000 });
         var refund = Commissaries.Refund(state);
-        Assert.Equal(70 + order.GoodsCents, refund.GoodsCents);
-        Assert.Equal(order.FeeCents, refund.FeeCents);
-        Assert.Equal(70 + order.TotalCents, refund.Total);
+        Assert.Equal(70, refund.GoodsCents);
+        Assert.Equal(70, refund.Total); // the open order was never paid: nothing back for it
+        Assert.Equal(1, refund.CancelledOrders);
         Assert.Empty(state.Stock);
         Assert.Empty(state.Orders);
         Assert.Empty(state.Spaces);
@@ -356,32 +373,26 @@ public class CommissariesTests
     }
 
     [Fact]
-    public void RefundCancelsUnpaidOrdersAndTheirChargesButRetainsRentAndFineDebts()
+    public void RefundRetainsRentAndFineDebts()
     {
         var state = Rented();
         Commissaries.ReturnToStock(state, "a", new[] { Line("taco", 3, 10) });
-        var paid = Commissaries.Order(state, Rules, "a", "dumpling", 2, 100, (1, 1));
-        var unpaid = Commissaries.Order(state, Rules, "a", "machine", 1, 1000, (1, 1));
+        var delivered = Commissaries.Order(state, Rules, "a", "dumpling", 2, 100, (1, 1));
+        Commissaries.Deliver(state, Rules, 2, 480, Paid);
+        Commissaries.Order(state, Rules, "a", "machine", 1, 1000, (2, 600));
         var rent = Assert.Single(Commissaries.RentDue(state, Rules, 1));
         state.Charges.Add(rent);
-        var debt = new CommissaryCharge { OrderId = unpaid.Id, CommissaryId = "a", Day = 1,
-            Cents = unpaid.TotalCents, FeeCents = unpaid.FeeCents };
-        state.Charges.Add(debt);
         var fine = new CommissaryFine { VehicleId = "cart", Day = 1, Cents = 25000 };
         state.Fines.Add(fine);
-        var otherDebt = new CommissaryCharge { OrderId = 999, CommissaryId = "a", Day = 1, Cents = 100 };
-        state.Charges.Add(otherDebt); // obligations for orders we don't hold must not be silently cancelled
 
         var refund = Commissaries.Refund(state);
-        Assert.Equal(30 + paid.GoodsCents, refund.GoodsCents);
-        Assert.Equal(paid.FeeCents, refund.FeeCents);
-        Assert.Equal(30 + paid.TotalCents, refund.Total);
-        Assert.Equal(new[] { rent, otherDebt }, state.Charges);
+        Assert.Equal(30 + delivered.GoodsCents, refund.GoodsCents); // delivered goods, not their delivery fee
+        Assert.Equal(1, refund.CancelledOrders);
+        Assert.Same(rent, Assert.Single(state.Charges));
         Assert.Same(fine, Assert.Single(state.Fines));
         Assert.Empty(state.Orders);
         Assert.Empty(state.Stock);
         Assert.Empty(state.Spaces);
-        Assert.Equal(0, Commissaries.Refund(state).Total);
     }
 
     [Theory]
@@ -392,7 +403,7 @@ public class CommissariesTests
     {
         var state = Rented();
         Assert.Throws<ArgumentOutOfRangeException>(() => Commissaries.Order(state, Rules, "a", "taco", 1, 1, (day, minute)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Commissaries.Deliver(state, Rules, day, minute));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Commissaries.Deliver(state, Rules, day, minute, Paid));
         Assert.Throws<ArgumentOutOfRangeException>(() => Commissaries.NightCheck(state, Rules, day, minute, Array.Empty<CommissaryVehicle>()));
         Assert.Empty(state.Orders);
         Assert.Null(state.NightCheckedThroughDay);

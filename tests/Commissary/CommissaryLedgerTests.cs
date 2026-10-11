@@ -44,11 +44,11 @@ public class CommissaryLedgerTests
         var rules = new CommissaryRules();
         var order = Commissaries.Order(state.Commissary, rules, "a", "taco", 10, 100, (1, 100));
         Assert.Empty(state.DailySales);
-        SalesLedger.RecordDeliveryFees(state, 1, order.FeeCents);
+        SalesLedger.RecordDeliveryFees(state, 1, order.FeeCents); // as the adapter does when it is paid
         Assert.Empty(state.DailySales.Single().ByVehicle);
         Assert.Equal(0, state.DailySales.Single().CostCents);
         Assert.Equal(-100, SalesLedger.DayProfitCents(state, 1));
-        Commissaries.Deliver(state.Commissary, rules, 2, 480);
+        Commissaries.Deliver(state.Commissary, rules, 2, 480, CommissariesTests.Paid);
         var taken = Commissaries.Restock(state.Commissary, "a", new System.Collections.Generic.Dictionary<string, int> { ["taco"] = 4 });
         Assert.Equal(100, taken.Single().UnitPriceCents);
         Assert.Equal(0, state.DailySales.Single().CostCents);
@@ -74,26 +74,20 @@ public class CommissaryLedgerTests
     }
 
     [Fact]
-    public void RefundResultLetsAdapterReverseOnlyPaidPendingOrderFees()
+    public void FeesAreBookedOnTheDeliveryDayAndTheRefundLeavesThemBooked()
     {
         var state = new SaveState { Commissary = CommissariesTests.Rented() };
         var rules = new CommissaryRules();
         var delivered = Commissaries.Order(state.Commissary, rules, "a", "taco", 10, 100, (1, 100));
-        SalesLedger.RecordDeliveryFees(state, 1, delivered.FeeCents);
-        Commissaries.Deliver(state.Commissary, rules, 2, 480);
-        var pending = Commissaries.Order(state.Commissary, rules, "a", "machine", 1, 2000, (2, 500));
-        SalesLedger.RecordDeliveryFees(state, 2, pending.FeeCents);
-        var unpaid = Commissaries.Order(state.Commissary, rules, "a", "dumpling", 10, 300, (2, 500));
-        state.Commissary.Charges.Add(new CommissaryCharge { OrderId = unpaid.Id, CommissaryId = "a", Day = 2,
-            Cents = unpaid.TotalCents, FeeCents = unpaid.FeeCents });
+        Assert.Empty(state.DailySales); // booking takes no money
+        foreach (var order in Commissaries.Deliver(state.Commissary, rules, 2, 480, CommissariesTests.Paid).Delivered)
+            SalesLedger.RecordDeliveryFees(state, 2, order.FeeCents);
+        Commissaries.Order(state.Commissary, rules, "a", "machine", 1, 2000, (2, 500));
 
         var refund = Commissaries.Refund(state.Commissary);
-        Assert.Equal(delivered.GoodsCents + pending.GoodsCents, refund.GoodsCents);
-        Assert.Equal(pending.FeeCents, refund.FeeCents);
-        Assert.Equal(3200, refund.Total);
-        SalesLedger.RecordDeliveryFees(state, 3, -refund.FeeCents);
-        Assert.Equal(-200, state.DailySales.Single(d => d.Day == 3).DeliveryFeesCents);
-        Assert.Equal(200, SalesLedger.DayProfitCents(state, 3));
+        Assert.Equal(delivered.GoodsCents, refund.Total);
+        Assert.Equal(1, refund.CancelledOrders);
+        Assert.Equal(-delivered.FeeCents, SalesLedger.DayProfitCents(state, 2));
         Assert.Equal(-delivered.FeeCents, FleetReport.WeekProfitCents(state, 3));
         Assert.All(state.DailySales, d => Assert.Equal(0, d.CostCents));
         Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load(new SaveCodec().Serialize(state)).Status);
