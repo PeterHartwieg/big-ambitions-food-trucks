@@ -79,6 +79,15 @@ for dir in "$REPO"/art/equipment/*/; do
   rsync -a --checksum "$dir/T_${name}_BaseColor.png" "$EQUIPMENT_ART/"
 done
 
+# The commissary bay's paint, lettering, sign and props (art/commissary), the same way.
+BAY_ART="$MOD_DIR/Commissary/BayArt"
+mkdir -p "$BAY_ART"
+for fbx in "$REPO"/art/commissary/*.fbx; do
+  name="$(basename "$fbx" .fbx)"
+  rsync -a --checksum "$fbx" "$BAY_ART/${name}_Model.fbx"
+done
+rsync -a --checksum "$REPO"/art/commissary/T_*.png "$BAY_ART/"
+
 # Link the mod folder and the build helpers into the SDK project.
 link() { # link <target> <link path>
   if [ -L "$2" ]; then [ "$(readlink "$2")" = "$1" ] || { rm "$2"; ln -s "$1" "$2"; }

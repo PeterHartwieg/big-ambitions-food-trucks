@@ -8,20 +8,22 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // A painted bay on the road at each commissary (Peter, 10 October 2026: "nothing shows where the bay is"). A vehicle
+    // A painted loading bay on the road at each commissary (Peter, 10 October 2026: "nothing shows where the bay is"). A vehicle
     // is in the bay when the game calls it legally parked and its middle is within the bay radius (rules.json) of a
     // resolved bay point (Commissary.InBay; review round 4). The bay's zone (BayZone) is the stretches of the bay point's
     // parking lane that are legal parking across the paint's whole width, every half metre, and lie wholly within the
     // radius; the paint outlines that zone, so a vehicle standing wholly inside the paint is legally parked and in the
     // bay. A bay with no legal parking gets no zone and no paint (0.9.8 drew an assumed lane on a no-parking kerb). The
-    // game draws no parking or loading zones of its own in the street (its parking lanes are invisible colliders and its
-    // delivery spots are inside buildings), so the bay is drawn like road paint: an outline and the word COMMISSARY in
-    // the commissary colour of the map filter, lit like the road. It is one flat mesh a few centimetres above the road
-    // with no collider, so it blocks no vehicle and changes no NavMesh. It shows while the player is within ShowMetres
-    // of it, or anywhere while driving or pushing a food vehicle. BayParking keeps the zone free of parked cars.
+    // game's parking lanes are invisible colliders and its road paint is baked into the road textures or drawn as decal
+    // quads, none of them a loading zone, so the bay is drawn as the game's road paint looks (0.9.10, Peter: "the purple
+    // box breaks immersion"): a white outline in the game's paint colour, worn, and LOADING ZONE in the longest stretch,
+    // with a loading zone sign at the kerb and props by the door (BayProps). The paint is one flat mesh a few
+    // centimetres above the road with no collider, so it blocks no vehicle and changes no NavMesh. Once made it shows
+    // like any street paint, wherever the player is outside; it is made when first needed (within MakeMetres on foot,
+    // MakeMetresDriving in a food vehicle). BayParking keeps the zone free of parked cars.
     internal static class BayMarkers
     {
-        private const float ShowMetres = 100f;
+        private const float MakeMetres = 115f;
         private const float MakeMetresDriving = 300f;
         private const float LineMetres = 0.15f;
         private const float Lift = 0.025f;
@@ -30,7 +32,10 @@ namespace FoodTrucks
         private const float MaxWidthMetres = 3.0f;
         // The edge probes stand this far inside the paint's edges.
         private const float EdgeInsetMetres = 0.1f;
-        private static readonly Color Paint = MapFilters.CommissaryColour;
+        // The game's decal road paint: a flat 188 sRGB (T_Line_*, T_Crosswalk_*), the fallback's colour.
+        private static readonly Color Paint = new Color(0.74f, 0.74f, 0.72f);
+        // The paint texture repeats every this many metres.
+        private const float PaintTileMetres = 2f;
 
         private sealed class Marker
         {
@@ -101,6 +106,8 @@ namespace FoodTrucks
         private static readonly Dictionary<string, float> retryAt = new Dictionary<string, float>(StringComparer.Ordinal);
         private static Material? material;
         private static bool failed;
+        // Commissaries whose props by the door are made (with the first of their markers drawn).
+        private static readonly HashSet<string> propsMade = new HashSet<string>(StringComparer.Ordinal);
 
         // Twice a second from Commissary.Look: markers made when first needed, then shown or hidden.
         public static void Update(CommissaryTables sites, double radius, Vector3 player, bool inFoodVehicle, bool inside)
@@ -116,7 +123,7 @@ namespace FoodTrucks
                     if (!markers.TryGetValue(site.Id, out var bySite)) markers[site.Id] = bySite = new Dictionary<int, Marker>();
                     // Drawn from the parking colliders and the road around it, so only with the player within a few
                     // hundred metres, where the street is loaded; farther than that the paint is too small to see anyway.
-                    var near = bays.Any(b => Flat(player, (b.X, b.Z)) <= (inFoodVehicle ? MakeMetresDriving : ShowMetres + (float)radius));
+                    var near = bays.Any(b => Flat(player, (b.X, b.Z)) <= (inFoodVehicle ? MakeMetresDriving : MakeMetres));
                     var missing = Enumerable.Range(0, bays.Count).Where(i => !bySite.TryGetValue(i, out var m) || (m.Drawn && m.Root == null)).ToList();
                     if (missing.Count > 0 && near && !(retryAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at))
                     {
@@ -128,15 +135,18 @@ namespace FoodTrucks
                             {
                                 gone.Destroy();
                                 bySite.Remove(i);
+                                // Its props may have gone with it: the next marker drawn makes them again.
+                                if (gone.Drawn) propsMade.Remove(site.Id);
                             }
                             var made = Make(site, i, bays[i], doors, (float)radius, player);
                             if (made != null) bySite[i] = made;
                         }
                     }
+                    // Street paint and furniture: shown wherever the player is outside, hidden indoors.
                     foreach (var marker in bySite.Values)
                     {
                         if (marker.Root == null) continue;
-                        var show = !inside && (inFoodVehicle || Flat(player, marker.At) <= ShowMetres);
+                        var show = !inside;
                         if (marker.Root.activeSelf != show) marker.Root.SetActive(show);
                     }
                 }
@@ -154,6 +164,7 @@ namespace FoodTrucks
         {
             foreach (var marker in markers.Values.SelectMany(m => m.Values)) marker.Destroy();
             markers.Clear();
+            propsMade.Clear();
         }
 
         // Called on each load: a new city gets new markers.
@@ -172,6 +183,7 @@ namespace FoodTrucks
             {
                 foreach (var marker in bySite.Values) marker.Destroy();
                 markers.Remove(siteId);
+                propsMade.Remove(siteId);
             }
             zones.Remove(siteId);
             retryAt.Remove(siteId);
@@ -255,10 +267,10 @@ namespace FoodTrucks
             ZonesOf(site, radius);
             var zone = zones.TryGetValue(site.Id, out var bySite) && bySite.TryGetValue(index, out var z) ? z : null;
             if (zone == null) return new Marker(null, null, at);
-            return Draw(site, zone, at, door, radius, lanes);
+            return Draw(site, index, zone, at, door, radius, lanes);
         }
 
-        private static Marker Draw(CommissarySite site, BayZone zone, Vector3 bay, Vector3? door, float radius, TrafficLanes lanes)
+        private static Marker Draw(CommissarySite site, int index, BayZone zone, Vector3 bay, Vector3? door, float radius, TrafficLanes lanes)
         {
             // The pavement side: away from the nearest driving lane; with none near, towards the garage's door (review
             // round 4), so COMMISSARY reads from the pavement either way.
@@ -291,8 +303,9 @@ namespace FoodTrucks
             // Local +z points to the road and +x along it, so the word reads from the pavement.
             var rotation = Quaternion.LookRotation(-across, Vector3.up);
             var longest = spans.OrderByDescending(sp => sp.Item2 - sp.Item1).First();
-            var mesh = BuildMesh(Matrix4x4.TRS(foot, rotation, Vector3.one), spans, width, longest, groundY);
+            var mesh = BuildMesh(Matrix4x4.TRS(foot, rotation, Vector3.one), spans, width, groundY);
             GameObject? root = null;
+            var furniture = new List<string>();
             try
             {
                 root = new GameObject("FoodTrucks.CommissaryBay." + site.Id);
@@ -304,11 +317,29 @@ namespace FoodTrucks
                 renderer.sharedMaterial = Material();
                 renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 renderer.receiveShadows = true;
+                float GroundAt(Vector3 p) => Ground(p, groundY);
+                var parent = root.transform;
+                // The furniture is looks only: one that fails is logged and the paint stays.
+                void Furnish(string what, Func<string> make)
+                {
+                    try { furniture.Add(make()); }
+                    catch (Exception ex) { furniture.Add($"no {what} ({ex.GetType().Name}: {ex.Message})"); }
+                }
+                Furnish("lettering", () => BayProps.Lettering(parent, longest, width, GroundAt));
+                Furnish("sign", () => BayProps.Sign(parent, site.Id, longest, width, GroundAt, groundY));
+                // One set of props per commissary, by the door nearest its first bay drawn.
+                if (door != null && propsMade.Add(site.Id))
+                    Furnish("props", () =>
+                    {
+                        var doorLanes = TrafficLanes.Near(door.Value, 40f);
+                        return doorLanes.Known ? BayProps.ByTheDoor(parent, door.Value, doorLanes) : "no props (no traffic lanes near the door)";
+                    });
             }
             catch
             {
                 if (root != null) Object.Destroy(root);
                 Object.Destroy(mesh);
+                propsMade.Remove(site.Id);
                 throw;
             }
 
@@ -319,15 +350,17 @@ namespace FoodTrucks
                      $"{width:F2} m wide, legal parking at its middle and both edges every half metre; the lane's middle {zone.Offset:+0.00;-0.00} m across from the bay point" +
                      $"{(nearest != null ? $", {Mathf.Abs(Vector3.Dot(foot - nearest.Value.Point, across)):F1} m from the driving lane" : ", no driving lane near (faces the door)")}; " +
                      $"the paint lies within the {radius:F0} m bay ({zone.Reach:F1} m either way along); " +
-                     $"a {TruckLengthMetres:F1} m truck {(fits ? "fits wholly inside" : "can't stand wholly inside")}.");
+                     $"a {TruckLengthMetres:F1} m truck {(fits ? "fits wholly inside" : "can't stand wholly inside")}; " +
+                     string.Join("; ", furniture) + ".");
             return new Marker(root, mesh, foot);
         }
 
-        // The outline of each stretch and the word on the longest, as flat quads following the road's height: long edges
-        // are cut at every metre, where the road is sampled.
-        private static Mesh BuildMesh(Matrix4x4 local, List<(float From, float To)> spans, float width, (float From, float To) longest, float groundY)
+        // The outline of each stretch, as flat quads following the road's height: long edges are cut at every metre, where
+        // the road is sampled. UVs in metres over PaintTileMetres, so the worn paint texture repeats along the lines.
+        private static Mesh BuildMesh(Matrix4x4 local, List<(float From, float To)> spans, float width, float groundY)
         {
             var vertices = new List<Vector3>();
+            var uvs = new List<Vector2>();
             var triangles = new List<int>();
             var half = width / 2f;
             var footY = local.MultiplyPoint3x4(Vector3.zero).y;
@@ -356,6 +389,10 @@ namespace FoodTrucks
                 vertices.Add(new Vector3(x0, Height(x0, z1), z1));
                 vertices.Add(new Vector3(x1, Height(x1, z1), z1));
                 vertices.Add(new Vector3(x1, Height(x1, z0), z0));
+                uvs.Add(new Vector2(x0, z0) / PaintTileMetres);
+                uvs.Add(new Vector2(x0, z1) / PaintTileMetres);
+                uvs.Add(new Vector2(x1, z1) / PaintTileMetres);
+                uvs.Add(new Vector2(x1, z0) / PaintTileMetres);
                 triangles.AddRange(new[] { i, i + 1, i + 2, i, i + 2, i + 3 });
             }
             void Edge(float from, float to, float z0, float z1)
@@ -370,34 +407,9 @@ namespace FoodTrucks
                 Quad(from, -half + LineMetres, from + LineMetres, half - LineMetres);
                 Quad(to - LineMetres, -half + LineMetres, to, half - LineMetres);
             }
-            // COMMISSARY in a 5 x 7 pixel font, each row's runs of pixels one quad.
-            const string word = "COMMISSARY";
-            var room = longest.To - longest.From - 1.0f;
-            var pixel = Mathf.Min(0.16f, room / (word.Length * 6 - 1), (width - 0.8f) / 7f);
-            if (pixel >= 0.05f)
-            {
-                var left = (longest.From + longest.To) / 2f - pixel * (word.Length * 6 - 1) / 2f;
-                var bottom = -pixel * 7f / 2f;
-                for (var c = 0; c < word.Length; c++)
-                {
-                    var rows = Glyphs[word[c]];
-                    for (var r = 0; r < 7; r++)
-                    {
-                        var row = rows[r];
-                        // Row 0 is the top of the letter: furthest towards the road (+z).
-                        var z0 = bottom + (6 - r) * pixel;
-                        for (var k = 0; k < 5;)
-                        {
-                            if (row[k] != '#') { k++; continue; }
-                            var start = k;
-                            while (k < 5 && row[k] == '#') k++;
-                            Quad(left + (c * 6 + start) * pixel, z0, left + (c * 6 + k) * pixel, z0 + pixel);
-                        }
-                    }
-                }
-            }
             var mesh = new Mesh { name = "FoodTrucks.CommissaryBay" };
             mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
             mesh.SetTriangles(triangles, 0);
             mesh.SetNormals(Enumerable.Repeat(Vector3.up, vertices.Count).ToList());
             mesh.RecalculateBounds();
@@ -420,10 +432,14 @@ namespace FoodTrucks
             return best > float.MinValue ? best : laneY;
         }
 
-        // Road paint: the cart's own HDRP/Lit material, copied, with no texture and the commissary colour.
+        // Road paint: the mod's worn white (M_BayPaint, art/commissary), else the cart's HDRP/Lit material copied in the
+        // game's paint colour with no texture.
         private static Material Material()
         {
             if (material != null) return material;
+            var made = BayProps.Material("M_BayPaint");
+            if (made != null) return material = made;
+            Log.Error("Commissary markers: M_BayPaint missing from the mod's bundle; plain white paint instead.");
             var source = FoodTrucksMod.Bundle?.LoadAsset<GameObject>(FoodTrucksMod.CartPrefabPath)?.GetComponentsInChildren<Renderer>(true)
                 .Select(r => r.sharedMaterial).FirstOrDefault(m => m != null);
             material = source != null ? new Material(source) : new Material(Shader.Find("HDRP/Lit"));
@@ -431,7 +447,7 @@ namespace FoodTrucks
             if (material.HasProperty("_BaseColorMap")) material.SetTexture("_BaseColorMap", null);
             if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", Paint);
             if (material.HasProperty("_Color")) material.SetColor("_Color", Paint);
-            if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.25f);
+            if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.2f);
             if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0f);
             return material;
         }
@@ -439,16 +455,5 @@ namespace FoodTrucks
         private static float Flat(Vector3 a, (double X, double Z) b) => new Vector2(a.x - (float)b.X, a.z - (float)b.Z).magnitude;
         private static float Flat(Vector3 a, Vector3 b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
 
-        private static readonly Dictionary<char, string[]> Glyphs = new Dictionary<char, string[]>
-        {
-            ['C'] = new[] { ".###.", "#...#", "#....", "#....", "#....", "#...#", ".###." },
-            ['O'] = new[] { ".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###." },
-            ['M'] = new[] { "#...#", "##.##", "#.#.#", "#.#.#", "#...#", "#...#", "#...#" },
-            ['I'] = new[] { ".###.", "..#..", "..#..", "..#..", "..#..", "..#..", ".###." },
-            ['S'] = new[] { ".####", "#....", "#....", ".###.", "....#", "....#", "####." },
-            ['A'] = new[] { ".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#" },
-            ['R'] = new[] { "####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#" },
-            ['Y'] = new[] { "#...#", "#...#", ".#.#.", "..#..", "..#..", "..#..", "..#.." },
-        };
     }
 }

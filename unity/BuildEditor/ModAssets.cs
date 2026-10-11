@@ -36,6 +36,7 @@ namespace FoodTrucks.BuildEditor
                 // The machines' prefabs use the equipment models and materials made just before.
                 ItemAssets.Generate();
                 CartAssets.GenerateCart(VehiclesFolder, CartTypeName);
+                CommissaryAssets.Generate();
                 AssetDatabase.SaveAssets();
                 Debug.Log("[FoodTrucksBuild] OK: generated assets.");
             }

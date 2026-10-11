@@ -329,7 +329,7 @@
     "foodtrucks:commissary_option_restock": "Restock: {0} items in stock here",
     "foodtrucks:commissary_option_nostock": "Nothing in stock at {0} yet",
     "foodtrucks:notification_commissary_not_here": "Park the {vehicle} in a commissary's loading bay first.",
-    "foodtrucks:notification_commissary_park_legally": "Park the {vehicle} legally inside the purple bay: the bay counts only a vehicle that is legally parked.",
+    "foodtrucks:notification_commissary_park_legally": "Park the {vehicle} legally inside the white LOADING ZONE bay: the bay counts only a vehicle that is legally parked.",
     "foodtrucks:notification_commissary_nostock": "Nothing in stock at {commissary}. Call them to order; deliveries arrive at 08:00 the next day.",
     "foodtrucks:notification_commissary_rented": "The {vehicle} has a space at {commissary} for {rent} a month. Park it in the bay before 04:00.",
     "foodtrucks:notification_commissary_moved": "The {vehicle}'s space moved from {from} to {commissary}.",

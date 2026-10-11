@@ -36,3 +36,7 @@ unity/FoodTrucks/Vehicles/CartArt/*.fbx
 unity/FoodTrucks/Vehicles/CartArt/*.png
 unity/FoodTrucks/Vehicles/EquipmentArt/*.fbx
 unity/FoodTrucks/Vehicles/EquipmentArt/*.png
+
+# The commissary bay's art, likewise; the originals are in art/commissary.
+unity/FoodTrucks/Commissary/BayArt/*.fbx
+unity/FoodTrucks/Commissary/BayArt/*.png

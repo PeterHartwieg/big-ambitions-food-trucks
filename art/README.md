@@ -168,6 +168,22 @@ The 0.9.3 to 0.9.7 layout (two spots at the hatch's ends, scaled 0.72 on a steel
 
 The channel meanings come from mapping the example car's masks back onto its mesh: `EM_1` R lies on the headlights, G and B on the rear lights, `EM_2` R on the right side and G on the left [inference; not yet seen lit in game]. The dirt textures stay the example's (`SM_HonzaCar_Dirt*`); the second UV map is a non-overlapping copy of the first, for them.
 
+## Commissary bay
+
+The loading bay's street furniture (0.9.10, plan "Commissary bay look"), built by `commissary/build_commissary.py` in Blender headless, no MCP: `blender -b --factory-startup --python art/commissary/build_commissary.py`, then `render_review.py` for the review renders in `commissary/renders/` (only `review-sheet.png` is kept). Nothing in it comes from the game: the textures are procedural, the lettering is Blender's own Inter font (SIL Open Font License), and the sign's names come from `data/commissaries.json` and `en.json`, so a renamed commissary needs the script run again.
+
+| File | What | Size, origin |
+|---|---|---|
+| `T_BayPaint_BaseColor.png` | Worn road paint, 188 sRGB like the game's decal lines, with asphalt showing through scuffs and grit; tiles every 2 m | 512² |
+| `BayLettering.fbx` | LOADING ZONE as flat paint, condensed | 1 m cap height, 8.04 m long, origin in the middle; reads along Unity +x with the letters' tops to +z |
+| `BaySign.fbx`, `T_BaySign_<id>_BaseColor.png` | A galvanised pole, 3.0 m, with a 0.40 × 0.80 m plate from 1.90 m: COMMERCIAL VEHICLES ONLY, LOADING ZONE, a double arrow, FOOD VENDORS and the commissary's name in green. The plate faces Unity +z and reads from both sides | Origin at the pole's foot |
+| `BayPalletStack.fbx` | Two pallets, four crates of produce, two cartons | 1.20 × 1.00 × 0.87 m |
+| `BayHandTruck.fbx` | A hand truck with two cartons | 0.52 × 0.50 × 1.23 m |
+| `BayRollCage.fbx` | A roll cage, part loaded | 0.72 × 0.84 × 1.71 m |
+| `BayDumpster.fbx` | A 2-yard dumpster, green with black lids | 1.91 × 1.28 × 1.29 m |
+
+Props have their origin at the bottom centre and the front at Unity +z. `tools/build-mod.sh` copies the FBX files (as `<Name>_Model.fbx`) and textures into `unity/FoodTrucks/Commissary/BayArt/`, and `CommissaryAssets` makes HDRP/Lit materials (remapped from the Blender material names; the paint takes the street's dirt decals, the rest don't) and `<Name>_Display.prefab`s there; each prop prefab has a box collider and a carving NavMeshObstacle of its bounds. In game the pallet and the hand truck are the game's own `DeliveryPallet` (bottom two layers of boxes) and `Vehicles/PlayerVehicles/HandTruck` meshes when those load; the mod's models stand in otherwise. The game has no dumpster or roll cage.
+
 ## Status
 
 | | Cart | Truck |
