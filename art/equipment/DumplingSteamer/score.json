@@ -100,7 +100,7 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_DumplingSteamer"
+      "DumplingSteamer_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
@@ -113,7 +113,7 @@
         512
       ]
     },
-    "blend_size_mb": 0.16
+    "blend_size_mb": 0.15
   },
   "fbx": {
     "label": "fbx",
@@ -215,7 +215,7 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_DumplingSteamer"
+      "DumplingSteamer_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,

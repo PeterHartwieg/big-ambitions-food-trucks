@@ -60,23 +60,38 @@ TRUCK_ART="$MOD_DIR/Vehicles/TruckArt"
 mkdir -p "$TRUCK_ART"
 rm -f "$TRUCK_ART/FoodTruck.fbx" "$TRUCK_ART/FoodTruck.fbx.meta"
 rsync -a --checksum "$REPO/art/truck/FoodTruck.fbx" "$TRUCK_ART/FoodTruck_Model.fbx"
-rsync -a --checksum "$REPO"/art/truck/T_FoodTruck_*.png "$TRUCK_ART/"
+# The surface maps from art/tools/game_look.py (BC, M, N) and the lights; the build script's own D and MaskMap
+# are only its sources (art/README.md, "Surface look").
+for suffix in BC M N E EM_1 EM_2; do
+  rsync -a --checksum "$REPO/art/truck/T_FoodTruck_$suffix.png" "$TRUCK_ART/"
+done
+rm -f "$TRUCK_ART"/T_FoodTruck_D.png* "$TRUCK_ART"/T_FoodTruck_MaskMap.png*
 # The cart's, the same way.
 CART_ART="$MOD_DIR/Vehicles/CartArt"
 mkdir -p "$CART_ART"
-rm -f "$CART_ART/FoodCart.fbx" "$CART_ART/FoodCart.fbx.meta"
+rm -f "$CART_ART/FoodCart.fbx" "$CART_ART/FoodCart.fbx.meta" "$CART_ART"/T_FoodCart_BaseColor.png*
 rsync -a --checksum "$REPO/art/cart/FoodCart.fbx" "$CART_ART/FoodCart_Model.fbx"
-rsync -a --checksum "$REPO/art/cart/T_FoodCart_BaseColor.png" "$CART_ART/"
-# And the equipment models shown on the cart's counter, one folder each in art/equipment.
+rsync -a --checksum "$REPO"/art/cart/T_FoodCart_{BC,M,N}.png "$CART_ART/"
+# And the equipment models shown on the cart's counter, one folder each in art/equipment, with their order-list
+# icons (Icons/Icon_<Name>.png, from art/tools/render_icons.sh).
 EQUIPMENT_ART="$MOD_DIR/Vehicles/EquipmentArt"
-mkdir -p "$EQUIPMENT_ART"
+mkdir -p "$EQUIPMENT_ART/Icons"
 # Each FBX goes in as <Name>_Model.fbx: the game finds a mod item's prefab by file name in any bundle, so no
 # asset may share a machine item's name (griddle, corngrill, dumplingsteamer). Copies under the old name go.
 for dir in "$REPO"/art/equipment/*/; do
   name="$(basename "$dir")"
-  rm -f "$EQUIPMENT_ART/$name.fbx" "$EQUIPMENT_ART/$name.fbx.meta"
+  rm -f "$EQUIPMENT_ART/$name.fbx" "$EQUIPMENT_ART/$name.fbx.meta" "$EQUIPMENT_ART/T_${name}_BaseColor.png"*
   rsync -a --checksum "$dir$name.fbx" "$EQUIPMENT_ART/${name}_Model.fbx"
-  rsync -a --checksum "$dir/T_${name}_BaseColor.png" "$EQUIPMENT_ART/"
+  rsync -a --checksum "$dir"T_${name}_{BC,M,N}.png "$EQUIPMENT_ART/"
+  rsync -a --checksum "${dir}Icon_$name.png" "$EQUIPMENT_ART/Icons/"
+done
+# Fixed props on the vehicles (the cash register), one folder each in art/props, the same way.
+PROP_ART="$MOD_DIR/Vehicles/PropArt"
+mkdir -p "$PROP_ART"
+for dir in "$REPO"/art/props/*/; do
+  name="$(basename "$dir")"
+  rsync -a --checksum "$dir$name.fbx" "$PROP_ART/${name}_Model.fbx"
+  rsync -a --checksum "$dir"T_${name}_{BC,M,N}.png "$PROP_ART/"
 done
 
 # Link the mod folder and the build helpers into the SDK project.

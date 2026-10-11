@@ -4,6 +4,8 @@
     "label": "blend",
     "objects": [
       "Cart_Body",
+      "Cart_Canopy",
+      "Cart_Canopy_Furled",
       "Cart_Collision",
       "Cart_Lid",
       "Cart_Wheel_L",
@@ -11,19 +13,19 @@
     ],
     "per_object": {
       "Cart_Body": {
-        "triangles": 2948,
+        "triangles": 2180,
         "origin": [
           0.0,
           0.0,
           0.0
         ],
         "bbox_min": [
-          -0.8,
-          -1.4,
+          -0.499,
+          -0.7045,
           0.0
         ],
         "bbox_max": [
-          0.8,
+          0.499,
           0.77,
           2.3
         ],
@@ -163,6 +165,76 @@
           "-1": 1.108
         }
       },
+      "Cart_Canopy": {
+        "triangles": 768,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.8,
+          -1.4,
+          2.0208
+        ],
+        "bbox_max": [
+          0.8,
+          0.2,
+          2.288
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "Cart_Canopy_Furled": {
+        "triangles": 288,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.0745,
+          -0.6745,
+          1.44
+        ],
+        "bbox_max": [
+          0.0745,
+          -0.5255,
+          2.272
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
       "Cart_Collision": {
         "triangles": 84,
         "origin": [
@@ -200,7 +272,7 @@
         "max_vertex_outside_face_plane_m": 0.0
       }
     },
-    "visible_triangles": 3812,
+    "visible_triangles": 4100,
     "visible_bbox_min": [
       -0.8,
       -1.4,
@@ -227,14 +299,15 @@
       "cargo box zone above the counter": 0,
       "pusher zone behind the handle": 0,
       "headroom under the umbrella": 0,
-      "headroom under the umbrella (left)": 0
+      "headroom under the umbrella (left)": 0,
+      "furled umbrella clear of the push bar and the pusher's head": 0
     },
     "materials": [
-      "Cart_Atlas.002"
+      "FoodCart_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
-      "fill": 0.441,
+      "fill": 0.4178,
       "overlap_fraction": 0.0
     },
     "textures": {
@@ -243,12 +316,14 @@
         1024
       ]
     },
-    "blend_size_mb": 0.22
+    "blend_size_mb": 0.2
   },
   "fbx": {
     "label": "fbx",
     "objects": [
       "Cart_Body",
+      "Cart_Canopy",
+      "Cart_Canopy_Furled",
       "Cart_Collision",
       "Cart_Lid",
       "Cart_Wheel_L",
@@ -256,19 +331,19 @@
     ],
     "per_object": {
       "Cart_Body": {
-        "triangles": 2948,
+        "triangles": 2180,
         "origin": [
           0.0,
           0.0,
           0.0
         ],
         "bbox_min": [
-          -0.8,
-          -1.4,
+          -0.499,
+          -0.7045,
           -0.0
         ],
         "bbox_max": [
-          0.8,
+          0.499,
           0.77,
           2.3
         ],
@@ -408,6 +483,76 @@
           "-1": 1.108
         }
       },
+      "Cart_Canopy": {
+        "triangles": 768,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.8,
+          -1.4,
+          2.0208
+        ],
+        "bbox_max": [
+          0.8,
+          0.2,
+          2.288
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "Cart_Canopy_Furled": {
+        "triangles": 288,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.0745,
+          -0.6745,
+          1.44
+        ],
+        "bbox_max": [
+          0.0745,
+          -0.5255,
+          2.272
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
       "Cart_Collision": {
         "triangles": 84,
         "origin": [
@@ -445,7 +590,7 @@
         "max_vertex_outside_face_plane_m": 0.0
       }
     },
-    "visible_triangles": 3812,
+    "visible_triangles": 4100,
     "visible_bbox_min": [
       -0.8,
       -1.4,
@@ -472,17 +617,18 @@
       "cargo box zone above the counter": 0,
       "pusher zone behind the handle": 0,
       "headroom under the umbrella": 0,
-      "headroom under the umbrella (left)": 0
+      "headroom under the umbrella (left)": 0,
+      "furled umbrella clear of the push bar and the pusher's head": 0
     },
     "materials": [
-      "Cart_Atlas.002"
+      "FoodCart_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
-      "fill": 0.441,
+      "fill": 0.4178,
       "overlap_fraction": 0.0
     },
-    "fbx_size_mb": 0.24
+    "fbx_size_mb": 0.32
   },
   "failures": [],
   "passed": true

@@ -100,7 +100,7 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_Tacos"
+      "Tacos_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
@@ -113,7 +113,7 @@
         256
       ]
     },
-    "blend_size_mb": 0.13
+    "blend_size_mb": 0.12
   },
   "fbx": {
     "label": "fbx",
@@ -215,14 +215,14 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_Tacos"
+      "Tacos_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
       "fill": 0.5985,
       "overlap_fraction": 0.0
     },
-    "fbx_size_mb": 0.06
+    "fbx_size_mb": 0.07
   },
   "failures": [],
   "passed": true

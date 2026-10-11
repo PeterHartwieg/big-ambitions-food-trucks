@@ -60,6 +60,8 @@ namespace FoodTrucks.BuildEditor
         // covers x -0.44 to -0.80, between the counter's front edge (-0.40) and the backsplash (-0.985), and
         // the tallest (0.65 m) stays under the hood (2.64). Checked for all sixteen models with
         // art/truck/review_interior.py (art/README.md, "Equipment spots").
+        private static readonly Vector3 RegisterPosition = new Vector3(0.905f, 1.80f, -0.305f);
+
         private const float LineX = -0.62f;
         private const float CounterTop = 1.75f;
         private static readonly (string Name, Vector3 Position)[] EquipmentSpots =
@@ -181,6 +183,15 @@ namespace FoodTrucks.BuildEditor
                 var spoiler = root.transform.Find("Spoiler");
                 if (spoiler != null) Object.DestroyImmediate(spoiler.gameObject);
 
+                // The cash register on the serving counter at the window's cab end, facing the street (+X): its
+                // 0.13 x 0.15 m footprint covers x 0.84 to 0.97, z -0.38 to -0.23, up to y 1.98, beside the
+                // crew's places (x 0.44 to 0.74) and inside the opening's end (z -0.20). Body work for the game's
+                // lists, like the hatch.
+                var register = PropAssets.AddRegister(body.transform.parent, RegisterPosition, Quaternion.Euler(0f, 90f, 0f), body.layer);
+                Append(root, "renderers", register);
+                // No street dirt on the truck: its renderers leave the decal layer, as the game's vehicles do.
+                SurfaceLook.NoStreetDecals(root);
+
                 PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             }
             finally
@@ -195,7 +206,7 @@ namespace FoodTrucks.BuildEditor
         private static void ConfigureImports(string artFolder)
         {
             var model = (ModelImporter)AssetImporter.GetAtPath(artFolder + "/FoodTruck_Model.fbx");
-            if (!model.isReadable || model.importAnimation || model.materialImportMode != ModelImporterMaterialImportMode.None)
+            if (SurfaceLook.NormalsAsBaked(model) || !model.isReadable || model.importAnimation || model.materialImportMode != ModelImporterMaterialImportMode.None)
             {
                 model.isReadable = true;
                 model.importAnimation = false;
@@ -231,12 +242,14 @@ namespace FoodTrucks.BuildEditor
             var path = artFolder + "/M_FoodTruck.mat";
             var exampleFolder = Path.GetDirectoryName(ExampleMaterial)!.Replace('\\', '/');
             var text = File.ReadAllText(Path.Combine(ProjectRoot, ExampleMaterial));
-            foreach (var suffix in new[] { "D", "E", "EM_1", "EM_2", "MaskMap", "N" })
+            // The base colour and mask are game_look.py's (T_FoodTruck_BC, _M: graded colour with baked grime,
+            // occlusion and wear); the normal map is its baked rounded edges. art/README.md, "Surface look".
+            foreach (var (suffix, ours) in new[] { ("D", "BC"), ("E", "E"), ("EM_1", "EM_1"), ("EM_2", "EM_2"), ("MaskMap", "M"), ("N", "N") })
             {
                 var from = AssetDatabase.AssetPathToGUID($"{exampleFolder}/T_HonzaCar_{suffix}.png");
-                var to = AssetDatabase.AssetPathToGUID($"{artFolder}/T_FoodTruck_{suffix}.png");
+                var to = AssetDatabase.AssetPathToGUID($"{artFolder}/T_FoodTruck_{ours}.png");
                 if (string.IsNullOrEmpty(from) || string.IsNullOrEmpty(to))
-                    throw new InvalidOperationException($"Texture T_HonzaCar_{suffix} or T_FoodTruck_{suffix} not found.");
+                    throw new InvalidOperationException($"Texture T_HonzaCar_{suffix} or T_FoodTruck_{ours} not found.");
                 if (!text.Contains(from)) throw new InvalidOperationException($"{ExampleMaterial} doesn't use T_HonzaCar_{suffix}.");
                 text = text.Replace(from, to);
             }

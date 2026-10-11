@@ -100,7 +100,7 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_ChoppedCheese"
+      "ChoppedCheese_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
@@ -215,14 +215,14 @@
     },
     "clear_boxes": {},
     "materials": [
-      "M_ChoppedCheese"
+      "ChoppedCheese_GameLook"
     ],
     "uv0": {
       "uv_coords_outside_0_1": 0,
       "fill": 0.5547,
       "overlap_fraction": 0.0
     },
-    "fbx_size_mb": 0.06
+    "fbx_size_mb": 0.08
   },
   "failures": [],
   "passed": true

@@ -42,7 +42,17 @@ namespace FoodTrucks.BuildEditor
             ("Cart_Wheel_L", new Vector3(-0.455f, 0.25f, 0f)),
             ("Cart_Wheel_R", new Vector3(0.455f, 0.25f, 0f)),
             ("Cart_Lid", new Vector3(0f, 0.95f, 0.025f)),
+            // The umbrella's canopy, open while the cart sells and furled round the pole otherwise (CartParts).
+            ("Cart_Canopy", Vector3.zero),
+            ("Cart_Canopy_Furled", Vector3.zero),
         };
+
+        // The cash register (art/props/CashRegister) on the counter's front right corner, beside the umbrella
+        // pole and facing the cart's right (+X), the side its door is on. Its 0.13 x 0.15 m footprint covers
+        // x 0.22 to 0.36, z 0.54 to 0.69: 0.33 m from the front equipment spot (a piece reaches 0.27 m), 0.19 m
+        // from the pole, and far from the push bar and the hands at z -0.75 (art/README.md, "Food cart").
+        private static readonly Vector3 RegisterPosition = new Vector3(0.29f, 0.95f, 0.615f);
+        private static readonly Quaternion RegisterRotation = Quaternion.Euler(0f, 90f, 0f);
 
         public static void GenerateCart(string folder, string typeName)
         {
@@ -137,6 +147,9 @@ namespace FoodTrucks.BuildEditor
                 renderer.sharedMaterial = material;
                 renderers.Add(renderer);
             }
+            // Closed by default; CartParts opens the canopy while the cart is open for business.
+            root.transform.Find("Cart_Canopy").gameObject.SetActive(false);
+            renderers.Add(PropAssets.AddRegister(root.transform, RegisterPosition, RegisterRotation, root.layer));
 
             // The parking lanes keep a spot free only for player vehicles with a collider at this path
             // (ParkingLaneGenerator.AddPlayerVehicleObstacles reads it through VehicleHelper.TryGetBodyColliderBounds).
@@ -192,6 +205,7 @@ namespace FoodTrucks.BuildEditor
             SetArray(serialized, "renderers", renderers.ToArray());
             SetArray(serialized, "navMeshTargets", new UnityEngine.Object[] { navTarget });
             serialized.ApplyModifiedPropertiesWithoutUndo();
+            SurfaceLook.NoStreetDecals(root);
             return root;
         }
 
@@ -205,7 +219,7 @@ namespace FoodTrucks.BuildEditor
             if (!File.Exists(Path.Combine(ProjectRoot, fbxPath)))
                 throw new InvalidOperationException($"{fbxPath} missing; tools/build-mod.sh copies it from art/cart.");
             var importer = (ModelImporter)AssetImporter.GetAtPath(fbxPath);
-            if (importer.isReadable || importer.importAnimation || importer.materialImportMode != ModelImporterMaterialImportMode.None || importer.globalScale != 1f)
+            if (SurfaceLook.NormalsAsBaked(importer) || importer.isReadable || importer.importAnimation || importer.materialImportMode != ModelImporterMaterialImportMode.None || importer.globalScale != 1f)
             {
                 importer.isReadable = false;
                 importer.importAnimation = false;
@@ -228,37 +242,9 @@ namespace FoodTrucks.BuildEditor
             return meshes;
         }
 
-        // One HDRP/Lit material with the base colour map, for all four meshes (art/README.md, swap step 2).
+        // One HDRP/Lit material with the model's surface maps for every visible mesh (art/README.md, "Surface look").
         private static Material ArtMaterial(string artFolder) =>
-            LitMaterial(artFolder + "/M_FoodCart.mat", artFolder + "/T_FoodCart_BaseColor.png");
-
-        // An HDRP/Lit material at path, white with the texture as its base colour map (imported as sRGB).
-        internal static Material LitMaterial(string path, string texturePath)
-        {
-            var importer = (TextureImporter)AssetImporter.GetAtPath(texturePath)
-                           ?? throw new InvalidOperationException($"{texturePath} missing; tools/build-mod.sh copies it from art/.");
-            if (importer.textureType != TextureImporterType.Default || !importer.sRGBTexture)
-            {
-                importer.textureType = TextureImporterType.Default;
-                importer.sRGBTexture = true;
-                importer.SaveAndReimport();
-            }
-            var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
-            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (material == null)
-            {
-                var shader = Shader.Find("HDRP/Lit") ?? throw new InvalidOperationException("HDRP/Lit shader not found.");
-                material = new Material(shader);
-                AssetDatabase.CreateAsset(material, path);
-            }
-            material.SetColor("_BaseColor", Color.white);
-            material.SetTexture("_BaseColorMap", texture);
-            // Street dirt is drawn with HDRP decals, which land on any material that accepts them.
-            material.SetFloat("_SupportDecals", 0f);
-            material.EnableKeyword("_DISABLE_DECALS");
-            EditorUtility.SetDirty(material);
-            return material;
-        }
+            SurfaceLook.LitMaterial(artFolder + "/M_FoodCart.mat", artFolder, "FoodCart");
 
         private static Transform Point(Transform parent, string name, Vector3 position)
         {

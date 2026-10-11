@@ -1,7 +1,7 @@
 {
   "name": "FoodCart",
   "fbx": "FoodCart.fbx",
-  "visible_budget": 4000,
+  "visible_budget": 4400,
   "position_tolerance_m": 0.005,
   "uv_layers": 1,
   "uv_min_fill": 0.4,
@@ -59,6 +59,22 @@
         "opens_towards": "+z"
       },
       "max_tris": 100
+    },
+    "Cart_Canopy": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "max_tris": 1000
+    },
+    "Cart_Canopy_Furled": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "max_tris": 400
     },
     "Cart_Collision": {
       "collision": true,
@@ -136,7 +152,8 @@
       "label": "cargo box zone above the counter",
       "objects": [
         "Cart_Body",
-        "Cart_Lid"
+        "Cart_Lid",
+        "Cart_Canopy_Furled"
       ],
       "min": [
         -0.325,
@@ -154,7 +171,8 @@
       "objects": [
         "Cart_Body",
         "Cart_Wheel_L",
-        "Cart_Wheel_R"
+        "Cart_Wheel_R",
+        "Cart_Canopy_Furled"
       ],
       "min": [
         -0.4,
@@ -170,7 +188,8 @@
     {
       "label": "headroom under the umbrella",
       "objects": [
-        "Cart_Body"
+        "Cart_Body",
+        "Cart_Canopy"
       ],
       "min": [
         -0.8,
@@ -186,7 +205,8 @@
     {
       "label": "headroom under the umbrella (left)",
       "objects": [
-        "Cart_Body"
+        "Cart_Body",
+        "Cart_Canopy"
       ],
       "min": [
         0.05,
@@ -197,6 +217,22 @@
         0.8,
         0.2,
         1.98
+      ]
+    },
+    {
+      "label": "furled umbrella clear of the push bar and the pusher's head",
+      "objects": [
+        "Cart_Canopy_Furled"
+      ],
+      "min": [
+        -0.8,
+        -0.45,
+        0.9
+      ],
+      "max": [
+        0.8,
+        1.7,
+        2.4
       ]
     }
   ]

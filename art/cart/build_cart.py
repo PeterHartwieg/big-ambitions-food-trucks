@@ -11,7 +11,7 @@ OUT = 'art/cart'
 PALETTE = [(0.66,0.72,0.75,1), (0.37,0.43,0.47,1), (0.047,0.058,0.068,1),
            (0.78,0.065,0.095,1), (0.99,0.64,0.075,1), (0.80,0.85,0.86,1),
            (0.21,0.26,0.29,1)]
-NAMES = ['Cart_Body','Cart_Wheel_L','Cart_Wheel_R','Cart_Lid','Cart_Collision']
+NAMES = ['Cart_Body','Cart_Wheel_L','Cart_Wheel_R','Cart_Lid','Cart_Canopy','Cart_Canopy_Furled','Cart_Collision']
 os.makedirs(OUT+'/renders', exist_ok=True)
 
 class MeshBuild:
@@ -52,6 +52,15 @@ class MeshBuild:
         for i in range(sides):
             for j in range(p): faces.append((i*p+j,((i+1)%sides)*p+j,((i+1)%sides)*p+(j+1)%p,i*p+(j+1)%p))
         self.add(verts,faces,color)
+    def ring_z(self, centre, profile, sides, color):
+        # A closed ring round a vertical axis: profile is (radius, dz) pairs.
+        verts=[]; faces=[]; p=len(profile)
+        for i in range(sides):
+            t=i*2*math.pi/sides
+            for r,dz in profile: verts.append((centre[0]+r*math.cos(t), centre[1]+r*math.sin(t), centre[2]+dz))
+        for i in range(sides):
+            for j in range(p): faces.append((i*p+j,i*p+(j+1)%p,((i+1)%sides)*p+(j+1)%p,((i+1)%sides)*p+j))
+        self.add(verts,faces,color)
     def radial_bar(self, hub, angle, r0, r1, color=5):
         # Closed narrow rectangular spoke, with depth along X.
         u=Vector((0,math.cos(angle),math.sin(angle))); v=Vector((0,-math.sin(angle),math.cos(angle)))
@@ -77,7 +86,8 @@ def wheel(x,name):
     w.cyl((x-.024,0,.25),(x+.024,0,.25),.026,1,8)
     return w.obj(name,hub)
 
-def canopy(m):
+def canopy(m, c):
+    # The open canopy goes into c (its own object, shown while the cart sells), the pole into m.
     # Twelve alternating panels, each three facets wide. A closed thin shell.
     n=36; profile=[(.036,2.288),(.42,2.235),(.80,2.079),(.80,2.030)]
     verts=[]
@@ -98,10 +108,33 @@ def canopy(m):
         for i in range(n):
             k=(i+1)%n; a=j*n
             faces.append((a+i,a+k,stride+a+k,stride+a+i)); colors.append(3+(i//3)%2)
-    m.add(verts,faces,colors)
+    c.add(verts,faces,colors)
     m.cyl((0,-.60,.95),(0,-.60,2.294),.016,5,10)
     m.cyl((0,-.60,2.275),(0,-.60,2.300),.012,1,8)
     m.cyl((0,-.60,.95),(0,-.60,1.025),.029,1,10)
+
+def furled(f):
+    """The canopy closed round the pole (shown while the cart is closed, pushed or parked): twelve folded panels
+    in the open canopy's stripes, hanging from the top cap to 1.48 m, tied with a strap. Within 0.075 m of the pole,
+    so it clears the push bar (0.75 m behind the cart's centre, the pole 0.60 m ahead) and the pusher's head."""
+    n=12; profile=[(.020,1.48),(.040,1.62),(.062,1.84),(.072,2.04),(.066,2.18),(.040,2.255),(.016,2.272)]
+    verts=[]
+    for r,z in profile:
+        for i in range(n):
+            t=2*math.pi*(i+.5)/n
+            rr=r*(1.0 if i%2==0 else .86)   # pleats
+            verts.append((rr*math.cos(t),-.60+rr*math.sin(t),z))
+    faces=[]; colors=[]; L=len(profile)
+    for j in range(L-1):
+        for i in range(n):
+            k=(i+1)%n; faces.append((j*n+i,j*n+k,(j+1)*n+k,(j+1)*n+i)); colors.append(3+(i//2)%2)
+    for i in range(1,n-1):
+        faces.append((0,i+1,i)); colors.append(3)
+        top=(L-1)*n; faces.append((top,top+i,top+i+1)); colors.append(3)
+    f.add(verts,faces,colors)
+    # Strap round the folds, and the rib tips gathered at the bottom.
+    f.ring_z((0,-.60,1.80),[(.0675,-.016),(.0745,-.012),(.0745,.012),(.0675,.016)],12,2)
+    f.cyl((0,-.60,1.44),(0,-.60,1.50),.022,1,8)
 
 def fender(m,sign):
     # Swept steel strip, clear of the complete R=.25 wheel volume.
@@ -160,7 +193,7 @@ def build(stage):
     b.cyl((0,.59,.245),(0,.615,.025),.016,1,8)
     b.box((0,.615,.012),(.11,.09,.024),2,.006)
     b.box((0,.59,.239),(.085,.05,.028),5,.003)
-    canopy(b)
+    cano=MeshBuild(); canopy(b,cano)
     if stage!='blockout':
         for sign in (-1,1): fender(b,sign)
         # Lower front/rear folded seams and subtle side reinforcement.
@@ -182,7 +215,7 @@ def build(stage):
         # Fine ribs under canopy remain wholly above headroom.
         for i in range(12):
             t=i*math.pi/6
-            b.cyl((.036*math.cos(t),-.60+.036*math.sin(t),2.283),(.785*math.cos(t),-.60+.785*math.sin(t),2.074),.003,1,5)
+            cano.cyl((.036*math.cos(t),-.60+.036*math.sin(t),2.283),(.785*math.cos(t),-.60+.785*math.sin(t),2.074),.003,1,5)
     body=b.obj('Cart_Body')
     wl=wheel(.455,'Cart_Wheel_L'); wr=wheel(-.455,'Cart_Wheel_R')
     lid=MeshBuild()
@@ -206,7 +239,9 @@ def build(stage):
     mats=[]
     for i,c in enumerate(PALETTE):
         ma=bpy.data.materials.new('Cart_Review_'+str(i)); ma.diffuse_color=c; mats.append(ma)
-    visible=[body,wl,wr,li]
+    co_open=cano.obj('Cart_Canopy')
+    fu=MeshBuild(); furled(fu); co_furled=fu.obj('Cart_Canopy_Furled')
+    visible=[body,wl,wr,li,co_open,co_furled]
     for o in visible:
         for ma in mats: o.data.materials.append(ma)
         for p,a in zip(o.data.polygons,o.data.attributes['part_colour'].data): p.material_index=a.value
