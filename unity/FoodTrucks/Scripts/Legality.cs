@@ -121,11 +121,55 @@ namespace FoodTrucks
         // none is, every LaneCache.RefreshSeconds (review round 5).
         private static readonly LaneCache<ParkingLaneGenerator> laneCache = new LaneCache<ParkingLaneGenerator>();
 
-        public static bool ParkingSceneReady() =>
-            laneCache.Ready(Time.unscaledTime, () => UnityEngine.Object.FindObjectsByType<ParkingLaneGenerator>(FindObjectsSortMode.None),
-                l => l != null, l => l.gameObject.activeInHierarchy);
+        // The answer is kept for ReadyCacheSeconds (review round 6: each call scanned every lane in the city).
+        private const float ReadyCacheSeconds = 1f;
+        private static float readyUntil = float.MinValue;
+        private static bool readyAnswer;
 
-        public static void ResetLanes() => laneCache.Clear();
+        public static bool ParkingSceneReady()
+        {
+            var now = Time.unscaledTime;
+            if (now < readyUntil) return readyAnswer;
+            readyAnswer = laneCache.Ready(now, () => UnityEngine.Object.FindObjectsByType<ParkingLaneGenerator>(FindObjectsSortMode.None),
+                l => l != null, l => l.gameObject.activeInHierarchy);
+            readyUntil = now + ReadyCacheSeconds;
+            return readyAnswer;
+        }
+
+        public static void ResetLanes()
+        {
+            laneCache.Clear();
+            readyUntil = float.MinValue;
+        }
+
+        // The truck's wheel hubs relative to its middle, read once from its prefab's WheelController transforms, else
+        // TruckAssets' numbers (±0.87 m across, 0.38 m up, ±1.80 m along). BaySnap's footprint and the saved-pose test
+        // both use them.
+        private static Vector3[]? truckWheels;
+        private static WheelFootprint? truckFootprint;
+
+        public static Vector3[] TruckWheels()
+        {
+            if (truckWheels != null) return truckWheels;
+            try
+            {
+                var prefab = FoodTrucksMod.Bundle?.LoadAsset<GameObject>(FoodTrucksMod.TruckPrefabPath);
+                var wheels = prefab == null ? Array.Empty<Transform>() : WheelsOf(prefab.transform);
+                if (wheels.Length >= 3)
+                {
+                    truckWheels = wheels.Select(w => prefab!.transform.InverseTransformPoint(w.position)).ToArray();
+                    Log.Info($"Commissary bays: the truck's wheels from its prefab: {string.Join(", ", truckWheels.Select(p => $"({p.z:+0.00;-0.00} along, {p.x:+0.00;-0.00} across, {p.y:F2} up)"))}.");
+                    return truckWheels;
+                }
+                Log.Error($"Commissary bays: the truck prefab has {wheels.Length} wheel controllers; using TruckAssets' wheels (±1.80 m along, ±0.87 m across).");
+            }
+            catch (Exception ex) { Log.Error("Commissary bays, the truck's wheels: " + ex.Message + "; using TruckAssets' wheels."); }
+            truckWheels = WheelFootprint.Truck.Wheels.Select(w => new Vector3((float)w.Across, TruckWheelRadius, (float)w.Along)).ToArray();
+            return truckWheels;
+        }
+
+        public static WheelFootprint TruckFootprint() =>
+            truckFootprint ??= new WheelFootprint(TruckWheels().Select(w => ((double)w.z, (double)w.x)));
 
         // Whether the vehicle stands legally parked by the game's own test, and how that was decided. With the city's
         // parking lanes there, a truck runs the wheel test on its live wheels, and no parking under a wheel is illegal
@@ -142,8 +186,22 @@ namespace FoodTrucks
             var controller = VehicleHelper.GetVehicleController(vehicle);
             if (controller == null)
             {
-                how = "its saved position on legal parking (not in the world)";
-                return LegalParkingAt((Vector3)vehicle.position, Vector3.zero);
+                // Not in the world: the game's wheel test at the saved pose, each wheel where the live truck would have
+                // it (TruckFootprint placed by the saved position and heading; review round 6: 0.9.9 tested the middle
+                // only, so a truck parked across a lane passed).
+                how = "the game's wheel test at its saved pose (not in the world)";
+                var position = (Vector3)vehicle.position;
+                var rotation = (Quaternion)vehicle.rotation;
+                var forward = rotation * Vector3.forward;
+                if (new Vector2(forward.x, forward.z).sqrMagnitude < 1e-6f) forward = Vector3.forward;
+                var hubs = TruckWheels();
+                var placed = TruckFootprint().Place(position.x, position.z, forward.x, forward.z).ToList();
+                for (var i = 0; i < placed.Count; i++)
+                {
+                    var probe = new Vector3((float)placed[i].X, position.y + hubs[i].y, (float)placed[i].Z) - rotation * Vector3.up * 0.1f;
+                    if (!LegalWheelAt(probe, rotation, TruckWheelRadius * 2f)) return false;
+                }
+                return true;
             }
             var wheels = WheelsOf(controller.transform);
             if (wheels.Length > 0)

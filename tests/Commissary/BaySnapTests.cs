@@ -154,6 +154,63 @@ public class BaySnapTests
     }
 
     [Fact]
+    public void ASavedPosePlacesTheWheelsWhereALiveTruckHasThem()
+    {
+        // A live truck's wheel transforms are its local offsets turned by its yaw (Unity: x' = x cos + z sin,
+        // z' = -x sin + z cos for a yaw about +y). Place must give the same points for any heading.
+        foreach (var yaw in new[] { 0.0, 90.0, 37.0, 181.0, -120.0 })
+        {
+            var r = yaw * Math.PI / 180;
+            var forward = (X: Math.Sin(r), Z: Math.Cos(r));
+            var placed = WheelFootprint.Truck.Place(10, 20, forward.X, forward.Z).ToList();
+            var live = WheelFootprint.Truck.Wheels.Select(w =>
+            {
+                var lx = w.Across;
+                var lz = w.Along;
+                return (X: 10 + lx * Math.Cos(r) + lz * Math.Sin(r), Z: 20 - lx * Math.Sin(r) + lz * Math.Cos(r));
+            }).ToList();
+            for (var i = 0; i < live.Count; i++)
+            {
+                Assert.Equal(live[i].X, placed[i].X, 9);
+                Assert.Equal(live[i].Z, placed[i].Z, 9);
+            }
+        }
+    }
+
+    [Fact]
+    public void ATruckCrosswiseOnALaneFailsWithOrWithoutItsController()
+    {
+        // Review round 6: the middle of a truck parked across a 2.4 m lane is on parking; its wheels aren't. The
+        // saved-pose test (Place) and the live test (wheel transforms at the same pose) agree.
+        var legal = Lane(-1.2, 1.2, -20, 20);
+        foreach (var (fx, fz, expected) in new[] { (1.0, 0.0, false), (0.0, 1.0, true), (0.0, -1.0, true) })
+        {
+            var saved = WheelFootprint.Truck.Place(0, 0, fx, fz).All(p => legal(p.X, p.Z, fx, fz));
+            var r = Math.Atan2(fx, fz);
+            var live = WheelFootprint.Truck.Wheels.All(w =>
+                legal(w.Across * Math.Cos(r) + w.Along * Math.Sin(r), -w.Across * Math.Sin(r) + w.Along * Math.Cos(r), fx, fz));
+            Assert.Equal(expected, saved);
+            Assert.Equal(live, saved);
+            Assert.True(legal(0, 0, fx, fz));
+        }
+    }
+
+    [Fact]
+    public void AWaitingCommissaryDoesNotHoldUpTheNext()
+    {
+        // Review round 6: the first commissary is unresolved but its retry isn't due; the second can be resolved.
+        var pending = new[] { true, true, false };
+        var due = new[] { false, true, true };
+        Assert.Equal(1, ResolveOrder.Next(3, 0, i => pending[i] && due[i]));
+        // It goes round from where it left off, wrapping.
+        Assert.Equal(1, ResolveOrder.Next(3, 2, i => pending[i] && due[i]));
+        due[0] = true;
+        Assert.Equal(0, ResolveOrder.Next(3, 2, i => pending[i] && due[i]));
+        Assert.Equal(-1, ResolveOrder.Next(3, 0, _ => false));
+        Assert.Equal(-1, ResolveOrder.Next(0, 0, _ => true));
+    }
+
+    [Fact]
     public void ATruckNeedsLegalParkingACartDoesNot()
     {
         Assert.True(CommissaryBays.RequiresLegalParking("truck"));

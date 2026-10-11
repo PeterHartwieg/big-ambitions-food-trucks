@@ -20,6 +20,18 @@ namespace FoodTrucks.Core.Commissary
         // The adapter reads them from the truck prefab when it can; these are the fallback.
         public static WheelFootprint Truck { get; } = new WheelFootprint(new[] { (1.80, 0.87), (1.80, -0.87), (-1.80, 0.87), (-1.80, -0.87) });
 
+        // Where each wheel stands (flat) for a vehicle with its middle at (x, z) facing (alongX, alongZ): Along is the
+        // vehicle's forward (local +z), Across its right (local +x; Unity's right of a forward f is (f.z, -f.x)). The same
+        // as a live vehicle's wheel transforms at that pose, so a saved pose is tested exactly as a live truck is.
+        public IEnumerable<(double X, double Z)> Place(double x, double z, double alongX, double alongZ)
+        {
+            var length = Math.Sqrt(alongX * alongX + alongZ * alongZ);
+            if (length < 1e-9) throw new ArgumentException("A vehicle's direction needs a length.");
+            var f = (X: alongX / length, Z: alongZ / length);
+            var right = (X: f.Z, Z: -f.X);
+            return Wheels.Select(w => (x + f.X * w.Along + right.X * w.Across, z + f.Z * w.Along + right.Z * w.Across)).ToList();
+        }
+
         // Each wheel moved outwards by the clearances (away from the middle on each axis), so a place where these
         // probes pass leaves the real wheels that much room on every side.
         public WheelFootprint WithClearance(double along, double across) =>
@@ -112,9 +124,8 @@ namespace FoodTrucks.Core.Commissary
         // Every probe of the footprint, for a vehicle with its middle at (x, z) lined up with `along`, passes.
         public static bool Fits(double x, double z, (double X, double Z) along, WheelFootprint probes, Func<double, double, double, double, bool> legal)
         {
-            var across = (X: -along.Z, Z: along.X);
-            foreach (var (a, c) in probes.Wheels)
-                if (!legal(x + along.X * a + across.X * c, z + along.Z * a + across.Z * c, along.X, along.Z)) return false;
+            foreach (var (px, pz) in probes.Place(x, z, along.X, along.Z))
+                if (!legal(px, pz, along.X, along.Z)) return false;
             return true;
         }
 
@@ -164,6 +175,24 @@ namespace FoodTrucks.Core.Commissary
         public double AlongZ { get; }
         // From the search's start.
         public double Distance { get; }
+    }
+
+    // Picks the next commissary to resolve: the first pending one at or after `start`, wrapping round, or -1. A pending
+    // commissary whose retry isn't due is passed over, so one that waits doesn't hold up the others (review round 6).
+    public static class ResolveOrder
+    {
+        public static int Next(int count, int start, Func<int, bool> pendingAndDue)
+        {
+            if (pendingAndDue == null) throw new ArgumentNullException(nameof(pendingAndDue));
+            if (count <= 0) return -1;
+            start = ((start % count) + count) % count;
+            for (var k = 0; k < count; k++)
+            {
+                var i = (start + k) % count;
+                if (pendingAndDue(i)) return i;
+            }
+            return -1;
+        }
     }
 
     // The bays a save keeps, and what "in the bay" means (the coordinator's decision, review round 4): a vehicle is in a

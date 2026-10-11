@@ -54,6 +54,7 @@ namespace FoodTrucks
             BayMarkers.Reset();
             BayParking.Reset();
             resolveAt.Clear();
+            resolveCursor = 0;
             notReadyLogged.Clear();
             Legality.ResetLanes();
             var state = FoodTrucksSession.CurrentState;
@@ -150,30 +151,6 @@ namespace FoodTrucks
         private const float ResolveRetrySeconds = 5f;
         private static readonly Dictionary<string, float> resolveAt = new Dictionary<string, float>(StringComparer.Ordinal);
         private static readonly HashSet<string> notReadyLogged = new HashSet<string>(StringComparer.Ordinal);
-        private static WheelFootprint? footprint;
-
-        // The truck's wheels from its prefab (the WheelController transforms, relative to the truck's middle), else
-        // Core's copy of TruckAssets' numbers.
-        private static WheelFootprint Footprint()
-        {
-            if (footprint != null) return footprint;
-            try
-            {
-                var prefab = FoodTrucksMod.Bundle?.LoadAsset<GameObject>(FoodTrucksMod.TruckPrefabPath);
-                var wheels = prefab == null ? Array.Empty<Transform>() : Legality.WheelsOf(prefab.transform);
-                if (wheels.Length >= 3)
-                {
-                    var offsets = wheels.Select(w => prefab!.transform.InverseTransformPoint(w.position)).Select(p => ((double)p.z, (double)p.x)).ToList();
-                    footprint = new WheelFootprint(offsets);
-                    Log.Info($"Commissary bays: the truck's wheels from its prefab: {string.Join(", ", offsets.Select(o => $"({o.Item1:+0.00;-0.00} along, {o.Item2:+0.00;-0.00} across)"))}.");
-                    return footprint;
-                }
-                Log.Error($"Commissary bays: the truck prefab has {wheels.Length} wheel controllers; using TruckAssets' wheels (±1.80 m along, ±0.87 m across).");
-            }
-            catch (Exception ex) { Log.Error("Commissary bays, the truck's wheels: " + ex.Message + "; using TruckAssets' wheels."); }
-            footprint = WheelFootprint.Truck;
-            return footprint;
-        }
 
         // Resolves one commissary's bay if it isn't yet: true when it is resolved (now or before). `force` skips the
         // retry wait (the 04:00 check).
@@ -207,7 +184,21 @@ namespace FoodTrucks
                 // From an entrance, a place the pedestrians can't reach from the door within a short walk (the street
                 // behind the building) is passed over; a point set in data is trusted.
                 Func<double, double, bool>? reach = site.Bay == null && door != null ? (x, z) => Walkable(door.Value, x, z) : (Func<double, double, bool>?)null;
-                var bay = BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Footprint(), BaySnap.MaxMetres, reach);
+                var rejected = 0;
+                Func<double, double, bool>? counted = reach == null ? null : (x, z) =>
+                {
+                    if (reach(x, z)) return true;
+                    rejected++;
+                    return false;
+                };
+                var bay = BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres, counted);
+                // Every place found was turned down only by the walk check (a door sampled onto a NavMesh island, say):
+                // that is no proof the commissary has no bay, so the search runs again without it (review round 6).
+                if (bay == null && rejected > 0)
+                {
+                    Log.Info($"Commissary {site.Id}: all {rejected} places found from x {origin.X:F1}, z {origin.Z:F1} failed the walk check; searching again without it.");
+                    bay = BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres);
+                }
                 if (bay != null && !found.Any(f => BaySnap.Distance(f.Bay.X, f.Bay.Z, bay.X, bay.Z) < SameBayMetres))
                     found.Add((bay, origin));
             }
@@ -258,15 +249,20 @@ namespace FoodTrucks
             catch (Exception) { return true; }
         }
 
-        // Twice a second from Look: at most one unresolved commissary per call, so searches spread across frames.
+        // Twice a second from Look: at most one unresolved commissary per call, so searches spread across frames. They
+        // are taken in turn, and one whose retry isn't due is passed over, so a commissary that waits doesn't hold up
+        // the others (review round 6; Core ResolveOrder).
+        private static int resolveCursor;
+
         private static void ResolveOne(CommissaryTables sites)
         {
-            foreach (var site in sites.Sites)
-            {
-                if (ResolvedBays(site) != null) continue;
-                Resolve(site, "after load", force: false);
-                return;
-            }
+            var list = sites.Sites;
+            var now = Time.unscaledTime;
+            var next = ResolveOrder.Next(list.Count, resolveCursor, i =>
+                ResolvedBays(list[i]) == null && !(resolveAt.TryGetValue(list[i].Id, out var at) && now < at));
+            if (next < 0) return;
+            resolveCursor = next + 1;
+            Resolve(list[next], "after load", force: false);
         }
 
         private static float Flat(Vector3 a, (double X, double Z) b) => new Vector2(a.x - (float)b.X, a.z - (float)b.Z).magnitude;
