@@ -81,6 +81,8 @@ namespace FoodTrucks
         public const float WheelBoxHalfWidth = 0.1f;
         // The food truck's wheel radius (unity/BuildEditor/TruckAssets.cs, WheelController radius 0.38).
         public const float TruckWheelRadius = 0.38f;
+        // TruckAssets puts each WheelController 0.164 m above its hub.
+        private const float TruckWheelControllerUp = 0.38f + 0.164f;
         private static readonly Collider[] probeHits = new Collider[16];
 
         // The game's test for one wheel box. `halfHeight` is the game's 2 x wheel radius for a real wheel; a search
@@ -142,8 +144,8 @@ namespace FoodTrucks
             readyUntil = float.MinValue;
         }
 
-        // The truck's wheel hubs relative to its middle, read once from its prefab's WheelController transforms, else
-        // TruckAssets' numbers (±0.87 m across, 0.38 m up, ±1.80 m along). BaySnap's footprint and the saved-pose test
+        // The truck's wheel controllers relative to its middle, read once from its prefab's WheelController transforms,
+        // else TruckAssets' numbers (±0.87 m across, ±1.80 m along, 0.544 m up: the hub at 0.38 plus the controller's 0.164). BaySnap's footprint and the saved-pose test
         // both use them.
         private static Vector3[]? truckWheels;
         private static WheelFootprint? truckFootprint;
@@ -164,7 +166,7 @@ namespace FoodTrucks
                 Log.Error($"Commissary bays: the truck prefab has {wheels.Length} wheel controllers; using TruckAssets' wheels (±1.80 m along, ±0.87 m across).");
             }
             catch (Exception ex) { Log.Error("Commissary bays, the truck's wheels: " + ex.Message + "; using TruckAssets' wheels."); }
-            truckWheels = WheelFootprint.Truck.Wheels.Select(w => new Vector3((float)w.Across, TruckWheelRadius, (float)w.Along)).ToArray();
+            truckWheels = WheelFootprint.Truck.Wheels.Select(w => new Vector3((float)w.Across, TruckWheelControllerUp, (float)w.Along)).ToArray();
             return truckWheels;
         }
 
@@ -187,19 +189,16 @@ namespace FoodTrucks
             if (controller == null)
             {
                 // Not in the world: the game's wheel test at the saved pose, each wheel where the live truck would have
-                // it (TruckFootprint placed by the saved position and heading; review round 6: 0.9.9 tested the middle
-                // only, so a truck parked across a lane passed).
+                // it: position + rotation * hub, less 0.1 m along the truck's up, with the full saved rotation (Core
+                // PoseMath.WheelProbe; review round 6: 0.9.9 tested the middle only; round 7: pitch and roll count too).
                 how = "the game's wheel test at its saved pose (not in the world)";
                 var position = (Vector3)vehicle.position;
                 var rotation = (Quaternion)vehicle.rotation;
-                var forward = rotation * Vector3.forward;
-                if (new Vector2(forward.x, forward.z).sqrMagnitude < 1e-6f) forward = Vector3.forward;
-                var hubs = TruckWheels();
-                var placed = TruckFootprint().Place(position.x, position.z, forward.x, forward.z).ToList();
-                for (var i = 0; i < placed.Count; i++)
+                var q = ((double)rotation.x, (double)rotation.y, (double)rotation.z, (double)rotation.w);
+                foreach (var hub in TruckWheels())
                 {
-                    var probe = new Vector3((float)placed[i].X, position.y + hubs[i].y, (float)placed[i].Z) - rotation * Vector3.up * 0.1f;
-                    if (!LegalWheelAt(probe, rotation, TruckWheelRadius * 2f)) return false;
+                    var p = PoseMath.WheelProbe((position.x, position.y, position.z), q, (hub.x, hub.y, hub.z));
+                    if (!LegalWheelAt(new Vector3((float)p.X, (float)p.Y, (float)p.Z), rotation, TruckWheelRadius * 2f)) return false;
                 }
                 return true;
             }
