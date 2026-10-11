@@ -1,3 +1,31 @@
+# Commissary look and payment (0.9.10)
+
+Peter's notes of 11 October 2026: commissary orders are paid on delivery, and the purple bay is now white road paint with a loading zone sign and props by the door. Build 0.9.10 on branch `milestone-8`; the log says 0.9.10. Fresh **FT** save, other gameplay mods off. The 0.9.9 rows below still hold, except that the paint is white with LOADING ZONE in it instead of purple.
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Rent a space at a commissary, note your money, call it and order 2 boxes of something, read back, confirm | The read-back ends "… $… in all, paid on delivery here at 08:00 tomorrow". The confirmation says "Ordered: … for $…, paid on delivery". Your money doesn't change, and no transaction appears |
+| 2 | Wait for 08:00 (or press Ctrl+Alt+F3) | The commissary texts "Your delivery is in: … $… paid. Load it at the bay." Money goes down by goods plus fee in one transaction "Commissary order from …". Econoview shows the fee under delivery fees today. The stock is at the commissary |
+| 3 | Order again, then spend money until you have less than the order's total, and wait for 08:00 (or Ctrl+Alt+F3) | The commissary texts "We couldn't deliver … the payment of $… didn't go through. The order is cancelled; order again when you have the money." No money moves, no stock arrives, the call's start says 0 orders on the way, and nothing is taken later when you have money again |
+| 4 | Tax statement (Ctrl+X twice) after row 2 | The paid order is deductible under "Commissary rent and deliveries" |
+| 5 | With delivered stock at the commissary and one order still open, run the uninstall step (Ctrl+Shift+F11 twice) in a throwaway save | The notice pays back only the stock ("Commissary stock paid back: $… Open orders are cancelled; they were not paid yet."). Nothing comes back for the open order |
+| 6 | Walk to the Hell's Kitchen commissary (First Street 22) by day, then by night | On the parking lane across from the garage: a white outline like the city's own road lines, slightly worn, with LOADING ZONE in it reading from the pavement. No purple anywhere. Does the white match the street's lines, or is it brighter or greyer? Is the lettering readable, and does it look like paint rather than a sticker? |
+| 7 | Same place, on the pavement beside the paint | A grey pole just behind the kerb with a white sign: COMMERCIAL VEHICLES ONLY, LOADING ZONE, a red double arrow, FOOD VENDORS, Hell's Kitchen Commissary. Read it from the pavement and from the road. Is it the size of the city's other street signs? Does the pole stand on the pavement, not in the kerb or the road? |
+| 8 | At the garage's door | A pallet stacked with cardboard boxes, a wire roll cage with cartons, a hand truck with boxes and a green dumpster against the wall on either side of the door. Nothing stands in the doorway or out in the walking line. Do they look like the game's own things? Screenshot |
+| 9 | Walk into each prop, and watch pedestrians pass | You stop at it rather than walk through. People walk round them and in and out of the door; nobody gets stuck or walks through a prop |
+| 10 | Drive a truck into the bay, over the lettering and the sign's side of the paint | Nothing blocks the truck in the bay; it parks LEGAL inside the paint as in 0.9.9. Ctrl+F3 still says "in the bay" |
+| 11 | Walk 150 m away from the bay and look back; go into a building next door and out again | The paint, sign and props stay where they are (no popping out at 100 m as the purple did). Indoors nothing shows through |
+| 12 | Visit the other four commissaries | Each has its paint, a sign with its own name, and props by its door. Tell me any where the sign or props are missing, stand somewhere odd (in the road, on a doorstep, floating, sunk) or block a path |
+| 13 | Call a commissary and open the order form's item list (ADD ITEM) | Food rows show the game's food icons as before. Equipment rows show the small model a cart or truck carries (once the art track's icons are merged; until then the game's icon, and one log line per piece). The furniture stores' own list still shows the game's icons |
+
+Log lines:
+
+- Rows 1 to 3: `Commissary order N: 2 boxes, … at <site> for $… plus $… delivery, paid on delivery; due day D at 08:00.` At 08:00 `Commissary delivery: order N, … at <site> (ordered day …, due day D), paid $… on delivery (goods $…, fee $…).` or `Commissary delivery: order N, … not delivered: the payment of $… was refused (not enough money); the order is cancelled.` Ctrl+Alt+F3: `Debug: N commissary orders brought forward and delivered (paid on delivery).`
+- At load: `Commissary state: … N orders on the way (paid on delivery), … M rent charges and K fines unpaid; …`.
+- Row 5: `Uninstall: commissary refund $… for the stock delivered; N open orders cancelled, unpaid; … spaces given up.`
+- Rows 6 to 12, once per bay when first drawn, the 0.9.9 marker line now ends with the furniture: `…; a 5.8 m truck fits wholly inside; LOADING ZONE 0.70 m high, 5.6 m long; sign at x …, z …, 0.40 m behind a kerb … m past the paint; props by the door at x …, z …: pallet +2.5 m along the facade, roll cage …, hand truck -2.5 m …, dumpster …` with `left out: <prop> (why)` for any that didn't fit, and `no sign (…)` or `no lettering (…)` when one wasn't placed. Tell me every "left out" and "no sign". `Commissary bay: the game's DeliveryPallet prefab not loaded …` or `… has no plain meshes to copy` means the mod's own model stood in. `Commissary bay: <name>_Display.prefab missing from the mod's bundle.` or `M_BayPaint missing` is a build error.
+- Row 13: `Commissary order form: no icon Icon_<Name> in the mod's bundle; <item> shows the game's icon.` once per piece until the art track's icons are in.
+
 # Playtest fixes (0.9.9)
 
 Fixes from the 0.9.8 agent run of 11 October 2026 (log `build/logs/game/agent-098-092245`), with the review round 4 fixes. Build 0.9.9 on branch `milestone-8`; the log says 0.9.9. Fresh **FT** save, other gameplay mods off. Rows 1 to 6 here replace the 0.9.8 rows 8 to 11 below (bay paint by the door).
