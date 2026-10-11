@@ -46,6 +46,9 @@ namespace FoodTrucks.Core.Saves
         // The hour in whose first half each hire last served a window the player opened, and on which vehicle, until
         // that hour is over and decided (CrewPay.CloseHours; additive field: older saves read none).
         public Dictionary<string, CrewServed> CrewServedHour { get; set; } = new Dictionary<string, CrewServed>(StringComparer.Ordinal);
+        // Crew sales not paid in yet, per vehicle and day; paid in after midnight like the game's shops (CrewTakings;
+        // additive field: older saves read none).
+        public List<CrewTaking> CrewTakings { get; set; } = new List<CrewTaking>();
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

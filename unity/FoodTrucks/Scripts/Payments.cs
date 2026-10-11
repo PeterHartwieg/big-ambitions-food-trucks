@@ -11,14 +11,17 @@ namespace FoodTrucks
     // balance can't show a few dollars on a balance of tens of millions.
     internal static class Payments
     {
-        public static bool PayIn(long cents, TransactionInfo info)
+        public static bool PayIn(long cents, TransactionInfo info) => PayIn(cents, info, null);
+
+        // Money in, booked on `day` when given (the game books its shops' revenue into the day sold).
+        public static bool PayIn(long cents, TransactionInfo info, int? day)
         {
             if (cents <= 0) throw new ArgumentOutOfRangeException(nameof(cents));
             var transactions = SaveGameManager.Current.Transactions;
             var lastBefore = transactions.Count > 0 ? transactions.Last() : null;
             try
             {
-                return GameManager.ChangeMoneySafe(cents / 100f, info);
+                return GameManager.ChangeMoneySafe(cents / 100f, info, day);
             }
             catch (Exception ex)
             {

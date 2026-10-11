@@ -36,6 +36,9 @@ namespace FoodTrucks
                     return;
                 }
                 armedUntil = -1f;
+                // Crew sales of vehicles since sold still wait for midnight: paid in now.
+                try { CartSelling.PayAllCrewTakingsNow(); }
+                catch (Exception ex) { Log.Error("Uninstall: crew sales: " + ex); }
                 Catering.RemoveContact();
                 RemoveMarketEntries(game);
                 try { Commissary.RemoveForUninstall(); }
@@ -70,6 +73,9 @@ namespace FoodTrucks
             try { HireCrew.SettleAll(); }
             catch (Exception ex) { Log.Error("Uninstall: settling crew hours: " + ex); }
             CartSelling.CloseAllQuietly();
+            // The crew's sales waiting for midnight, today's too, are paid in before the mod goes.
+            try { CartSelling.PayAllCrewTakingsNow(); }
+            catch (Exception ex) { Log.Error("Uninstall: crew sales: " + ex); }
             HireCrew.ReleaseAll();
             RemoveMarketEntries(game);
             Catering.RemoveContact();

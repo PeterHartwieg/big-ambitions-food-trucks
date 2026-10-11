@@ -2,6 +2,7 @@
     "foodtrucks:vehicletype_foodcart": "Food cart",
     "foodtrucks:transaction_sale": "Street food sale: {itemName}",
     "foodtrucks:transaction_sale_label": "Street food",
+    "foodtrucks:transaction_crew_sales": "Street food sales by the crew: {vehicle}, day {day} ({sales} items)",
     "foodtrucks:itempanel_open": "Open here",
     "foodtrucks:overlay_back_to_hatch": "Back to the hatch",
     "foodtrucks:notification": "{message}",
