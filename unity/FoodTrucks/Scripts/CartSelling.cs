@@ -103,6 +103,7 @@ namespace FoodTrucks
 
             public long CustomerId { get; }
             public List<string> Items { get; }
+            // The game minute Core sold it at: its day is the day it is booked on, whenever it is paid (GameDays.SaleDay).
             public double Minute { get; }
             // Sold with the player at the window: paid and shown when the customer pays, as before. Otherwise the
             // crew's: the money waits for midnight (CrewTakings).
@@ -679,16 +680,21 @@ namespace FoodTrucks
                      $"walked away: {Lost(lost, CustomerExit.GaveUp)} tired of waiting, {Lost(lost, CustomerExit.QueueFull)} at a full queue, " +
                      $"{Lost(lost, CustomerExit.NothingLeft)} found nothing left, {Lost(lost, CustomerExit.Closed)} at closing; " +
                      $"lifetime {vehicle.LifetimeSales} sales, {Money(vehicle.LifetimeRevenueCents)}.");
-            // A crew's window closing far from the player or during a skip goes in the log only, like its sales: a night
-            // slept through would otherwise end in a pile of closing notices with their takings.
+            // A crew's routine close (the stop's hours over, an event taking the place) far from the player or during a skip
+            // goes in the log only, like its sales: a night slept through would otherwise end in a pile of closing notices.
+            // A close the player has to act on (sold out, the licence ended, the vehicle gone, an error) always shows.
             var closedCart = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId);
-            if (crewWindow && (Skipping || closedCart == null || !PlayerNear(closedCart)))
+            if (crewWindow && RoutineClose(messageKey) && (Skipping || closedCart == null || !PlayerNear(closedCart)))
             {
                 Log.Info($"{Title(kind)} {vehicle.VehicleId}: closing notice not shown (the crew's window, the player away or asleep).");
                 return;
             }
             Say(messageKey, kind, ("sales", totals.Sales.ToString()), ("revenue", Money(totals.Cents)));
         }
+
+        private static bool RoutineClose(string messageKey) =>
+            messageKey == "foodtrucks:notification_closed" || messageKey == "foodtrucks:notification_hire_closed" ||
+            messageKey == "foodtrucks:notification_event_closed";
 
         private static string KindOf(VehicleState vehicle) =>
             string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType;
@@ -750,10 +756,12 @@ namespace FoodTrucks
             if (state == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
             try
             {
-                PayCrewTakings(state, all: false);
                 TrackStock(state);
                 foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && !RunByRoute(v)).ToList())
                     Advance(state, vehicle, HireCrew.NowExact());
+                // Midnight pays the crews in (SettleClosingDay); this only retries what it couldn't pay, and takings
+                // loaded from a save, once each vehicle's sales have passed their day.
+                PayCrewTakings(state, all: false);
             }
             catch (Exception ex)
             {
@@ -883,13 +891,14 @@ namespace FoodTrucks
             foreach (var customer in result.Sales.GroupBy(s => s.CustomerId))
             {
                 var items = customer.Select(s => s.Item).ToList();
+                var soldAt = from + (customer.Max(s => s.Minute) - startMinute);
                 if (showing)
                 {
                     if (!held.TryGetValue(vehicle.VehicleId, out var list)) held[vehicle.VehicleId] = list = new List<HeldSale>();
-                    list.Add(new HeldSale(customer.Key, items, now, inPerson));
+                    list.Add(new HeldSale(customer.Key, items, soldAt, inPerson));
                 }
-                // Each order at the game minute it was made, for the working day of any stale food in it.
-                else if (!ServeCustomer(state, vehicle, cart, plan.Menu.Menu, items, inPerson, from + (customer.Max(s => s.Minute) - startMinute)))
+                // Each order at the game minute it was made: its day for the books, and the working day of any stale food in it.
+                else if (!ServeCustomer(state, vehicle, cart, plan.Menu.Menu, items, inPerson, soldAt))
                 {
                     failed = true;
                     break;
@@ -961,7 +970,7 @@ namespace FoodTrucks
                 // A sale that can't be paid (its stock taken out by hand, say) is dropped and logged; the cart
                 // closes with the error message on its next tick, as a failed sale always did.
                 bool ok;
-                try { ok = ServeCustomer(state, vehicle, cart, menu, sale.Items, sale.InPerson); }
+                try { ok = ServeCustomer(state, vehicle, cart, menu, sale.Items, sale.InPerson, sale.Minute); }
                 catch (Exception ex)
                 {
                     Log.Error($"Cart {vehicle.VehicleId}: paying held sale for customer {sale.CustomerId}: {ex}");
@@ -1098,12 +1107,16 @@ namespace FoodTrucks
         }
 
         // The crew's takings of earlier days paid in, one transaction per vehicle and day, into the day sold, as the game
-        // pays its shops their day's revenue after midnight (BusinessHelper.ProcessDailyOrders). Checked each sales tick,
-        // so a night slept through pays in as midnight passes. A payment the game refuses waits for the next tick.
+        // pays its shops their day's revenue at midnight (BusinessHelper.ProcessDailyOrders). A day is paid once that
+        // vehicle's sales have passed its end (SoldThroughOf). A payment the game refuses waits for the next tick.
         private static void PayCrewTakings(SaveState state, bool all)
         {
             var today = SaveGameManager.Current.Day;
-            var due = all ? CrewTakings.All(state) : CrewTakings.Due(state, today);
+            var self = instance;
+            // With the sales tick switched off nothing sells any more: whatever is waiting is paid.
+            Func<string, double>? soldThrough = null;
+            if (self != null && self.enabled) soldThrough = self.SoldThroughOf;
+            var due = all ? CrewTakings.All(state) : CrewTakings.Due(state, today, soldThrough);
             if (due.Count == 0) return;
             var names = StreetFoodBooks.VehicleNames();
             foreach (var taking in due)
@@ -1118,19 +1131,60 @@ namespace FoodTrucks
                 {
                     { "vehicle", name }, { "day", taking.Day.ToString() }, { "sales", taking.Sales.ToString() }
                 });
-                if (!Payments.PayIn(taking.Cents, info, taking.Day))
-                {
-                    if (payInRefusedLogged.Add(taking.VehicleId + "|" + taking.Day))
-                        Log.Error($"Crew sales: the game refused paying in {Money(taking.Cents)} for {taking.VehicleId}, day {taking.Day}; tried again.");
-                    continue;
-                }
+                // ChangeMoneySafe doesn't refuse money in; a payment that threw before booking is tried again next tick.
+                if (!Payments.PayIn(taking.Cents, info, taking.Day)) continue;
                 CrewTakings.Settled(state, taking);
                 FoodTrucksSession.MarkChanged();
                 Log.Info($"Crew sales paid in: {name} ({taking.VehicleId}), day {taking.Day}: {taking.Sales} items, {Money(taking.Cents)}.");
             }
         }
 
-        private static readonly HashSet<string> payInRefusedLogged = new HashSet<string>(StringComparer.Ordinal);
+        // The absolute game minute this vehicle has sold up to: its open window's sales clock, the route that may still
+        // open a window, and the earliest held sale still to be booked. Infinity when nothing lags.
+        private double SoldThroughOf(string vehicleId)
+        {
+            var through = double.PositiveInfinity;
+            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
+            if (vehicle != null && vehicle.IsOpen && simulatedUntil.TryGetValue(vehicleId, out var until)) through = Math.Min(through, until);
+            if (HireRoutes.RoutedUntil(vehicleId) is { } routed) through = Math.Min(through, routed);
+            if (held.TryGetValue(vehicleId, out var list) && list.Count > 0) through = Math.Min(through, list.Min(h => h.Minute));
+            return through;
+        }
+
+        // Inside the game's midnight processing (GameManager.NewDay, the day already turned): every route and every open
+        // window sells up to midnight, and the sales whose customers are still walking up are booked, so the closing
+        // day's books are complete before the game pays wages, runs the day summary and taxes and records the
+        // midnight bank balance. Called before payroll (HireCrew.BeforePayroll) and again before shop revenue
+        // (SettleClosingDay); the second call finds nothing left to do.
+        internal static void CatchUpDay(long midnight)
+        {
+            var self = instance;
+            var state = FoodTrucksSession.CurrentState;
+            if (self == null || state == null || !FoodTrucksSession.CanWrite) return;
+            try { HireRoutes.CatchUpTo(midnight); }
+            catch (Exception ex) { Log.Error("Routes catch-up at midnight: " + ex); }
+            CatchUpTo(midnight);
+            try
+            {
+                foreach (var id in self.held.Keys.ToList())
+                {
+                    var vehicle = StreetSales.Find(state, id);
+                    if (vehicle != null) self.PayHeld(vehicle, h => h.Minute < midnight);
+                }
+            }
+            catch (Exception ex) { Log.Error("Held sales at midnight: " + ex); }
+        }
+
+        // BusinessHelper.RunDaily prefix (Patches), where the game pays its shops their day's revenue: the closing
+        // day's crew takings, one payment per vehicle, before the daily summary and the midnight bank balance. Runs
+        // even when the sales tick has switched itself off; the tick's own check only retries leftovers.
+        internal static void SettleClosingDay()
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
+            CatchUpDay(HireSchedules.Absolute(TimeHelper.CurrentDay, 0));
+            PayCrewTakings(state, all: false);
+        }
 
         // Every crew taking paid in now, today's too (the uninstall step).
         internal static void PayAllCrewTakingsNow()
@@ -1171,7 +1225,8 @@ namespace FoodTrucks
                 Log.Error($"Sale refused: {itemName} has no market price.");
                 return -1;
             }
-            var day = SaveGameManager.Current.Day;
+            // Booked on the day of the minute it was sold, which lags the live day while sales catch up (Core: GameDays.SaleDay).
+            var day = GameDays.SaleDay(at, SaveGameManager.Current.Day);
             // Check the record can take the sale before any money moves.
             if (!StreetSales.CanRecord(state, vehicle.VehicleId, day, cents, 1) || (!inPerson && !CrewTakings.CanAccrue(state, vehicle.VehicleId, day, cents)))
             {
@@ -1188,7 +1243,7 @@ namespace FoodTrucks
             {
                 var label = LocalizorManager.GetLocalization(itemName, null);
                 var info = new TransactionInfo("foodtrucks:transaction_sale", new Dictionary<string, string> { { "itemName", label } });
-                if (!Payments.PayIn(cents, info))
+                if (!Payments.PayIn(cents, info, day))
                 {
                     Log.Error($"Sale refused by the game: {itemName} for {Money(cents)}.");
                     return -1;

@@ -90,6 +90,53 @@ namespace FoodTrucks
             if (instance == this) instance = null;
         }
 
+        // How far this vehicle's route has run, null when it isn't being run (no crew, stopped, or not started).
+        internal static long? RoutedUntil(string vehicleId) =>
+            instance != null && !instance.broken.Contains(vehicleId) && instance.routedUntil.TryGetValue(vehicleId, out var until) ? until : (long?)null;
+
+        // Inside the game's midnight processing (CartSelling.CatchUpDay): every running route steps up to `boundary`
+        // (midnight) the way its ticks would have, its window selling up to there, so the closing day's crew sales are
+        // all made before the day is finalised. The next tick goes on from the boundary.
+        internal static void CatchUpTo(long boundary)
+        {
+            var self = instance;
+            var state = FoodTrucksSession.CurrentState;
+            var rules = DemandData.Rules;
+            if (self == null || state == null || rules == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
+            self.runner ??= new HireRunner(rules.Fleet);
+            foreach (var vehicle in state.Vehicles.ToList())
+            {
+                if (self.broken.Contains(vehicle.VehicleId) || !self.routedUntil.TryGetValue(vehicle.VehicleId, out var from) || from >= boundary) continue;
+                try { self.RunTo(vehicle, from, boundary); }
+                catch (Exception ex)
+                {
+                    self.broken.Add(vehicle.VehicleId);
+                    Log.Error($"Hire routes: {vehicle.VehicleType} {vehicle.VehicleId} stopped at midnight: {ex}");
+                    CartSelling.Notify("foodtrucks:notification_routes_failed");
+                    try { if (vehicle.HireStop != null) CartSelling.CloseByCrew(vehicle, from); }
+                    catch (Exception closeEx) { Log.Error("Hire routes, closing: " + closeEx); }
+                }
+            }
+        }
+
+        // Run's steps from `from` up to, not including, `boundary`; the window sells up to the boundary.
+        private void RunTo(VehicleState vehicle, long from, long boundary)
+        {
+            var instance = Instance(vehicle.VehicleId);
+            if (instance == null) return;
+            var t = from;
+            for (var guard = 0; guard < 64; guard++)
+            {
+                StepAt(vehicle, instance, t);
+                var next = NextMoment(vehicle, t, boundary);
+                if (next >= boundary) break;
+                t = next;
+            }
+            CartSelling.AdvanceTo(vehicle, boundary);
+            routedUntil[vehicle.VehicleId] = boundary;
+            Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} caught up to minute {boundary} for the day's close.");
+        }
+
         private void Update()
         {
             RunLater();

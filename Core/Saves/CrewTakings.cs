@@ -56,11 +56,15 @@ namespace FoodTrucks.Core.Saves
             entry.Sales = sales;
         }
 
-        // Takings of days before `today`, oldest first: what midnight pays in.
-        public static IReadOnlyList<CrewTaking> Due(SaveState state, int today)
+        // Takings of days before `today`, oldest first: what midnight pays in. With soldThrough (the absolute game minute
+        // each vehicle has sold up to), a day is due only once that vehicle's sales have passed its end, so a catch-up
+        // still selling into it never splits its takings into two payments.
+        public static IReadOnlyList<CrewTaking> Due(SaveState state, int today, Func<string, double>? soldThrough = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
-            return state.CrewTakings.Where(t => t.Day < today).OrderBy(t => t.Day).ThenBy(t => t.VehicleId, StringComparer.Ordinal).ToList();
+            return state.CrewTakings
+                .Where(t => t.Day < today && (soldThrough == null || soldThrough(t.VehicleId) >= t.Day * 1440.0))
+                .OrderBy(t => t.Day).ThenBy(t => t.VehicleId, StringComparer.Ordinal).ToList();
         }
 
         // Every taking, today's too (the uninstall step pays them all in at once).

@@ -284,7 +284,10 @@ namespace FoodTrucks
         {
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite) return;
-            CloseHours(state, HireSchedules.Absolute(TimeHelper.CurrentDay, 0), TimeHelper.CurrentDay - 1);
+            var midnight = HireSchedules.Absolute(TimeHelper.CurrentDay, 0);
+            // Routes and windows sell up to midnight first, so the closing day's sales are all made (CartSelling.CatchUpDay).
+            CartSelling.CatchUpDay(midnight);
+            CloseHours(state, midnight, TimeHelper.CurrentDay - 1);
         }
 
         // Catches the sales up to `boundary` (an hour's start) and pays each hire the earlier hours they earned at a

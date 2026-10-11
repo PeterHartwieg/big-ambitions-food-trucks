@@ -82,6 +82,9 @@ namespace FoodTrucks
             // a route counts as their task, and the "unassigned" to-do stays away while they have a vehicle.
             Patch(typeof(EmployeeHelper), "RunHourly", Type.EmptyTypes, typeof(Patches), prefix: nameof(CountCrewHour), postfix: nameof(AfterGameCount));
             Patch(typeof(EmployeeHelper), "PayDailyWages", Type.EmptyTypes, nameof(CloseCrewDay), prefix: true);
+            // Crew takings: the closing day's crew sales are paid in where the game pays its shops' day (BusinessHelper.RunDaily
+            // in GameManager.NewDay), before the day summary, taxes and the midnight bank balance.
+            Patch(typeof(BusinessHelper), "RunDaily", Type.EmptyTypes, nameof(SettleCrewTakings), prefix: true);
             // A change of employment settles what the mod owes a hire on the spot, before the game's own payout: a building
             // or warehouse job (the game clears the old shifts first), a replacement, resigning, fired or retired.
             Patch(typeof(EmployeeHelper), "UnassignEmployeeFromAllWorkshifts", new[] { typeof(EmployeeInstance) }, nameof(SettleOnShiftsCleared), prefix: true);
@@ -301,6 +304,12 @@ namespace FoodTrucks
         {
             try { HireCrew.BeforePayroll(); }
             catch (Exception ex) { Log.Error(ex); }
+        }
+
+        private static void SettleCrewTakings()
+        {
+            try { CartSelling.SettleClosingDay(); }
+            catch (Exception ex) { Log.Error("Crew takings at midnight: " + ex); }
         }
 
         // The hours the game counted itself this hour (building shifts), so a crew's serving doesn't count them again.
