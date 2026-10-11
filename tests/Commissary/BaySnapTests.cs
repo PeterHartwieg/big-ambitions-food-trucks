@@ -196,6 +196,77 @@ public class BaySnapTests
     }
 
     [Fact]
+    public void ACompleteButTooLongWalkStaysRejected()
+    {
+        // Review round 7: the street behind a warehouse, 10 m away in a straight line but an 80 m walk round the block.
+        var behind = WalkRule.Classify(true, true, complete: true, pathMetres: 80, straightMetres: 10);
+        Assert.Equal(WalkVerdict.TooLong, behind);
+        Assert.False(WalkRule.Accepts(behind));
+        // The door's own street: a short walk.
+        Assert.True(WalkRule.Accepts(WalkRule.Classify(true, true, true, 14, 10)));
+        // The limit itself: 1.6 x 10 + 15 = 31 m.
+        Assert.True(WalkRule.Accepts(WalkRule.Classify(true, true, true, 31, 10)));
+        Assert.False(WalkRule.Accepts(WalkRule.Classify(true, true, true, 31.01, 10)));
+        // No route between two ends on the NavMesh: rejected. An end off the NavMesh: unknown, accepted.
+        Assert.Equal(WalkVerdict.NoRoute, WalkRule.Classify(true, true, false, 0, 10));
+        Assert.False(WalkRule.Accepts(WalkVerdict.NoRoute));
+        Assert.Equal(WalkVerdict.Unknown, WalkRule.Classify(false, true, false, 0, 10));
+        Assert.True(WalkRule.Accepts(WalkVerdict.Unknown));
+    }
+
+    // A unit quaternion for a rotation of `degrees` about the unit axis (x, y, z).
+    private static (double, double, double, double) AxisAngle(double x, double y, double z, double degrees)
+    {
+        var h = degrees * Math.PI / 360;
+        return (x * Math.Sin(h), y * Math.Sin(h), z * Math.Sin(h), Math.Cos(h));
+    }
+
+    private static (double, double, double, double) Multiply((double X, double Y, double Z, double W) a, (double X, double Y, double Z, double W) b) =>
+        (a.W * b.X + a.X * b.W + a.Y * b.Z - a.Z * b.Y,
+         a.W * b.Y - a.X * b.Z + a.Y * b.W + a.Z * b.X,
+         a.W * b.Z + a.X * b.Y - a.Y * b.X + a.Z * b.W,
+         a.W * b.W - a.X * b.X - a.Y * b.Y - a.Z * b.Z);
+
+    // The rotation matrix of a unit quaternion applied to v, written out independently of PoseMath.
+    private static (double, double, double) ByMatrix((double X, double Y, double Z, double W) q, (double X, double Y, double Z) v)
+    {
+        var (x, y, z, w) = q;
+        return ((1 - 2 * (y * y + z * z)) * v.X + 2 * (x * y - z * w) * v.Y + 2 * (x * z + y * w) * v.Z,
+                2 * (x * y + z * w) * v.X + (1 - 2 * (x * x + z * z)) * v.Y + 2 * (y * z - x * w) * v.Z,
+                2 * (x * z - y * w) * v.X + 2 * (y * z + x * w) * v.Y + (1 - 2 * (x * x + y * y)) * v.Z);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0)]
+    [InlineData(15, 0, 0)]
+    [InlineData(0, 0, 5)]
+    [InlineData(-8, 37, 4)]
+    [InlineData(6, 181, -12)]
+    public void ASavedPoseProbesTheWheelsWhereTheLiveTruckDoes(double pitch, double yaw, double roll)
+    {
+        // Review round 7: the live test probes each wheel transform at its world position less 0.1 m along its up; a
+        // truck pitched or rolled on a slope or kerb has its wheels there in 3D, not at a flat footprint plus the hub's height.
+        var q = Multiply(Multiply(AxisAngle(0, 1, 0, yaw), AxisAngle(1, 0, 0, pitch)), AxisAngle(0, 0, 1, roll));
+        var position = (12.0, 0.4, -7.0);
+        foreach (var hub in new[] { (0.87, 0.544, 1.80), (-0.87, 0.544, -1.80), (0.87, 0.544, -1.80) })
+        {
+            var world = ByMatrix(q, hub);
+            var up = ByMatrix(q, (0, 1, 0));
+            var live = (position.Item1 + world.Item1 - 0.1 * up.Item1, position.Item2 + world.Item2 - 0.1 * up.Item2, position.Item3 + world.Item3 - 0.1 * up.Item3);
+            var saved = PoseMath.WheelProbe(position, q, hub);
+            Assert.Equal(live.Item1, saved.X, 9);
+            Assert.Equal(live.Item2, saved.Y, 9);
+            Assert.Equal(live.Item3, saved.Z, 9);
+        }
+        if (pitch == 15)
+        {
+            // The flat placement plus the hub's height (0.9.9 before round 7) is well off a 15 degree pitch at the rear wheel.
+            var saved = PoseMath.WheelProbe(position, q, (0.87, 0.544, -1.80));
+            Assert.True(Math.Abs(saved.Y - (0.4 + 0.544 - 0.1)) > 0.3);
+        }
+    }
+
+    [Fact]
     public void AWaitingCommissaryDoesNotHoldUpTheNext()
     {
         // Review round 6: the first commissary is unresolved but its retry isn't due; the second can be resolved.

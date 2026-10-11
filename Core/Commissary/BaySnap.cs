@@ -124,8 +124,16 @@ namespace FoodTrucks.Core.Commissary
         // Every probe of the footprint, for a vehicle with its middle at (x, z) lined up with `along`, passes.
         public static bool Fits(double x, double z, (double X, double Z) along, WheelFootprint probes, Func<double, double, double, double, bool> legal)
         {
-            foreach (var (px, pz) in probes.Place(x, z, along.X, along.Z))
-                if (!legal(px, pz, along.X, along.Z)) return false;
+            // One wheel at a time, without a list (review round 7): the search calls this for many places.
+            var length = Math.Sqrt(along.X * along.X + along.Z * along.Z);
+            if (length < 1e-9) return false;
+            var f = (X: along.X / length, Z: along.Z / length);
+            var wheels = probes.Wheels;
+            for (var i = 0; i < wheels.Count; i++)
+            {
+                var (a, c) = wheels[i];
+                if (!legal(x + f.X * a + f.Z * c, z + f.Z * a - f.X * c, along.X, along.Z)) return false;
+            }
             return true;
         }
 
@@ -175,6 +183,62 @@ namespace FoodTrucks.Core.Commissary
         public double AlongZ { get; }
         // From the search's start.
         public double Distance { get; }
+    }
+
+    // The walk from a garage's door to a place the bay search found (review rounds 4 to 7). A complete NavMesh path at
+    // most 1.6 times the straight line plus 15 m is a short walk; a complete path longer than that is the street
+    // behind the building, rejected for good; no complete path between two ends that are both on the NavMesh is no
+    // route, rejected too. With either end off the NavMesh nothing is known, and the place is accepted.
+    public enum WalkVerdict
+    {
+        Short,
+        TooLong,
+        NoRoute,
+        Unknown,
+    }
+
+    public static class WalkRule
+    {
+        public const double Factor = 1.6;
+        public const double ExtraMetres = 15;
+
+        public static WalkVerdict Classify(bool fromOnNavMesh, bool toOnNavMesh, bool complete, double pathMetres, double straightMetres)
+        {
+            if (!fromOnNavMesh || !toOnNavMesh) return WalkVerdict.Unknown;
+            if (!complete) return WalkVerdict.NoRoute;
+            return pathMetres <= straightMetres * Factor + ExtraMetres ? WalkVerdict.Short : WalkVerdict.TooLong;
+        }
+
+        public static bool Accepts(WalkVerdict verdict) => verdict == WalkVerdict.Short || verdict == WalkVerdict.Unknown;
+    }
+
+    // A rigid pose's rotation applied to a vector, as Unity's Quaternion * Vector3 (x, y, z, w; unit quaternion).
+    // The saved-pose wheel test places each wheel with it (review round 7).
+    public static class PoseMath
+    {
+        public static (double X, double Y, double Z) Rotate((double X, double Y, double Z, double W) q, (double X, double Y, double Z) v)
+        {
+            // v' = v + 2w(u x v) + 2(u x (u x v)), u = (q.x, q.y, q.z).
+            var (ux, uy, uz, w) = q;
+            var cx = uy * v.Z - uz * v.Y;
+            var cy = uz * v.X - ux * v.Z;
+            var cz = ux * v.Y - uy * v.X;
+            var ccx = uy * cz - uz * cy;
+            var ccy = uz * cx - ux * cz;
+            var ccz = ux * cy - uy * cx;
+            return (v.X + 2 * (w * cx + ccx), v.Y + 2 * (w * cy + ccy), v.Z + 2 * (w * cz + ccz));
+        }
+
+        // Where the game probes a wheel of a vehicle at this pose: the wheel's world position (position + rotation * hub)
+        // less 0.1 m along the vehicle's up (CarController.UpdateParkingZone takes the wheel transform's up, which is
+        // the vehicle's for the food truck's wheel controllers).
+        public static (double X, double Y, double Z) WheelProbe((double X, double Y, double Z) position, (double X, double Y, double Z, double W) rotation,
+            (double X, double Y, double Z) hub)
+        {
+            var h = Rotate(rotation, hub);
+            var up = Rotate(rotation, (0, 1, 0));
+            return (position.X + h.X - 0.1 * up.X, position.Y + h.Y - 0.1 * up.Y, position.Z + h.Z - 0.1 * up.Z);
+        }
     }
 
     // Picks the next commissary to resolve: the first pending one at or after `start`, wrapping round, or -1. A pending

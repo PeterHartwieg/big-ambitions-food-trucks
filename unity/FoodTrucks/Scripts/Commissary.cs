@@ -181,24 +181,39 @@ namespace FoodTrucks
                 if (probe.Truncated) Log.Error($"Commissary {site.Id}: more than 512 parking colliders round x {origin.X:F1}, z {origin.Z:F1}; some were left out of the search.");
                 colliders += probe.Count;
                 if (probe.Count == 0) continue;
-                // From an entrance, a place the pedestrians can't reach from the door within a short walk (the street
-                // behind the building) is passed over; a point set in data is trusted.
-                Func<double, double, bool>? reach = site.Bay == null && door != null ? (x, z) => Walkable(door.Value, x, z) : (Func<double, double, bool>?)null;
-                var rejected = 0;
-                Func<double, double, bool>? counted = reach == null ? null : (x, z) =>
+                // From an entrance, a place the door's pedestrians can't reach within a short walk (the street behind the
+                // building, Core WalkRule) is passed over for good; a point set in data is trusted. The walk starts at the
+                // door's NavMesh point, or, when that is cut off from the street (a loading dock, a fenced forecourt), at
+                // the nearest pavement point that does reach it (review round 7: round 6 searched again without the walk
+                // check, which also let a complete but too long walk, the street behind, through).
+                Func<double, double, bool>? reach = null;
+                var tooLong = 0;
+                var noRoute = 0;
+                if (site.Bay == null && door != null)
                 {
-                    if (reach(x, z)) return true;
-                    rejected++;
-                    return false;
-                };
-                var bay = BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres, counted);
-                // Every place found was turned down only by the walk check (a door sampled onto a NavMesh island, say):
-                // that is no proof the commissary has no bay, so the search runs again without it (review round 6).
-                if (bay == null && rejected > 0)
-                {
-                    Log.Info($"Commissary {site.Id}: all {rejected} places found from x {origin.X:F1}, z {origin.Z:F1} failed the walk check; searching again without it.");
-                    bay = BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres);
+                    var from = WalkFrom(site.Id, door.Value);
+                    if (from.Kind == WalkStart.CutOff)
+                    {
+                        Log.Error($"Commissary {site.Id}: the door at x {door.Value.x:F1}, z {door.Value.z:F1} is on NavMesh cut off from the street, and no pavement " +
+                                  "within 12 m of it reaches the street; no bay is searched from it. Set a measured bay point in commissaries.json.");
+                        continue;
+                    }
+                    if (from.Kind != WalkStart.Unknown)
+                    {
+                        var walkStart = from.Point;
+                        reach = (x, z) =>
+                        {
+                            var verdict = Walk(walkStart, x, z);
+                            if (verdict == WalkVerdict.TooLong) tooLong++;
+                            if (verdict == WalkVerdict.NoRoute) noRoute++;
+                            return WalkRule.Accepts(verdict);
+                        };
+                    }
                 }
+                var bay = BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres, reach);
+                if (bay == null && tooLong + noRoute > 0)
+                    Log.Error($"Commissary {site.Id}: the only legal parking within {BaySnap.MaxMetres:F0} m of x {origin.X:F1}, z {origin.Z:F1} is out of a short walk from the door " +
+                              $"({tooLong} too long a walk, {noRoute} with no route); no bay from there. Set a measured bay point in commissaries.json.");
                 if (bay != null && !found.Any(f => BaySnap.Distance(f.Bay.X, f.Bay.Z, bay.X, bay.Z) < SameBayMetres))
                     found.Add((bay, origin));
             }
@@ -227,26 +242,68 @@ namespace FoodTrucks
             return true;
         }
 
-        // A place the door's pedestrians reach on foot within a short walk: a complete NavMesh path from the door to the
-        // pavement nearest the place, at most 1.6 times the straight line plus 15 m. Unknown (no NavMesh near either end)
-        // counts as reachable; a failed or partial path between two ends that are both there doesn't.
-        private static bool Walkable(Vector3 door, double x, double z)
+        private enum WalkStart
+        {
+            // The door's own NavMesh point reaches the street (or the street can't be found to check).
+            Door,
+            // The door's point is cut off; a pavement point near it reaches the street.
+            Pavement,
+            // The door isn't on the NavMesh at all: nothing is known about walks from it.
+            Unknown,
+            // The door's point is cut off and no pavement within 12 m reaches the street.
+            CutOff,
+        }
+
+        // Where the walk check starts for a door. The street is the NavMesh by the nearest driving lane.
+        private static (WalkStart Kind, Vector3 Point) WalkFrom(string siteId, Vector3 door)
         {
             try
             {
-                var place = new Vector3((float)x, door.y, (float)z);
-                if (!UnityEngine.AI.NavMesh.SamplePosition(door, out var from, 3f, UnityEngine.AI.NavMesh.AllAreas)) return true;
-                if (!UnityEngine.AI.NavMesh.SamplePosition(place, out var to, 4f, UnityEngine.AI.NavMesh.AllAreas)) return true;
+                const int areas = UnityEngine.AI.NavMesh.AllAreas;
+                if (!UnityEngine.AI.NavMesh.SamplePosition(door, out var doorHit, 3f, areas)) return (WalkStart.Unknown, door);
+                var lane = TrafficLanes.Near(door, 40f).Nearest(door);
+                if (lane == null || !UnityEngine.AI.NavMesh.SamplePosition(lane.Value.Point, out var streetHit, 3f, areas)) return (WalkStart.Door, doorHit.position);
                 var path = new UnityEngine.AI.NavMeshPath();
-                // Both ends are on the NavMesh: no complete path between them is a known failure (review round 5).
-                if (!UnityEngine.AI.NavMesh.CalculatePath(from.position, to.position, UnityEngine.AI.NavMesh.AllAreas, path) ||
-                    path.status != UnityEngine.AI.NavMeshPathStatus.PathComplete) return false;
-                var length = 0f;
-                for (var i = 1; i < path.corners.Length; i++) length += Vector3.Distance(path.corners[i - 1], path.corners[i]);
-                var straight = Vector3.Distance(from.position, to.position);
-                return length <= straight * 1.6f + 15f;
+                bool Reaches(Vector3 p) => UnityEngine.AI.NavMesh.CalculatePath(p, streetHit.position, areas, path) && path.status == UnityEngine.AI.NavMeshPathStatus.PathComplete;
+                if (Reaches(doorHit.position)) return (WalkStart.Door, doorHit.position);
+                for (var r = 2f; r <= 12f; r += 1f)
+                {
+                    for (var k = 0; k < 16; k++)
+                    {
+                        var angle = k * Mathf.PI / 8f;
+                        var wanted = door + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * r;
+                        if (!UnityEngine.AI.NavMesh.SamplePosition(wanted, out var hit, 1f, areas) || new Vector2(hit.position.x - wanted.x, hit.position.z - wanted.z).magnitude > 1.2f) continue;
+                        if (!Reaches(hit.position)) continue;
+                        Log.Info($"Commissary {siteId}: the door's NavMesh point at x {doorHit.position.x:F1}, z {doorHit.position.z:F1} doesn't reach the street; " +
+                                 $"the walk check starts from the pavement at x {hit.position.x:F1}, z {hit.position.z:F1}, {r:F0} m from the door.");
+                        return (WalkStart.Pavement, hit.position);
+                    }
+                }
+                return (WalkStart.CutOff, doorHit.position);
             }
-            catch (Exception) { return true; }
+            catch (Exception ex)
+            {
+                Log.Error($"Commissary {siteId}: the walk check's start couldn't be found ({ex.Message}); walks from the door count as unknown.");
+                return (WalkStart.Unknown, door);
+            }
+        }
+
+        // The walk from a start on the NavMesh to the pavement nearest a place (Core WalkRule).
+        private static WalkVerdict Walk(Vector3 from, double x, double z)
+        {
+            try
+            {
+                var place = new Vector3((float)x, from.y, (float)z);
+                if (!UnityEngine.AI.NavMesh.SamplePosition(place, out var to, 4f, UnityEngine.AI.NavMesh.AllAreas))
+                    return WalkRule.Classify(true, false, false, 0, 0);
+                var path = new UnityEngine.AI.NavMeshPath();
+                var complete = UnityEngine.AI.NavMesh.CalculatePath(from, to.position, UnityEngine.AI.NavMesh.AllAreas, path) &&
+                               path.status == UnityEngine.AI.NavMeshPathStatus.PathComplete;
+                var length = 0f;
+                for (var i = 1; complete && i < path.corners.Length; i++) length += Vector3.Distance(path.corners[i - 1], path.corners[i]);
+                return WalkRule.Classify(true, true, complete, length, Vector3.Distance(from, to.position));
+            }
+            catch (Exception) { return WalkVerdict.Unknown; }
         }
 
         // Twice a second from Look: at most one unresolved commissary per call, so searches spread across frames. They
