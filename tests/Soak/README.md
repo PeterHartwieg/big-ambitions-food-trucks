@@ -11,10 +11,14 @@ dotnet test tests/FoodTrucks.Core.Tests.csproj
 dotnet test tests/FoodTrucks.Core.Tests.csproj --filter Category=Soak
 dotnet test tests/FoodTrucks.Core.Tests.csproj --filter 'FullyQualifiedName~SixtyDays' --logger 'console;verbosity=detailed'
 FT_SOAK_LONG=1 dotnet test tests/FoodTrucks.Core.Tests.csproj --filter Category=SoakLong
+FT_SOAK_LONG=1 FT_SOAK_SEED=78 dotnet test tests/FoodTrucks.Core.Tests.csproj --filter Category=SoakLong
 ```
 
 The long test runs seeds 0–199 for 365 days each. It is reported **skipped** unless
 `FT_SOAK_LONG=1`; returning without running is not counted as a pass.
+`FT_SOAK_SEED` selects one non-negative Int32 seed instead of the full matrix;
+the long-run gate still applies. Each failing seed is written to test output and
+collected in the final failure message, so other seeds continue after a failure.
 To replay one short failure, temporarily select its seed in `Seeds`, or use
 VSTest's display-name filter for that theory row. `new SoakWorld(seed).Run(days)`
 is the common entry point for both lengths.
@@ -57,7 +61,10 @@ Checks include:
   midnight, or at uninstall for the last day. Sale-day and 28-day tax totals,
   per-vehicle revenue/cost and lifetime revenue match the independent sales book.
   Wages, rent, fines and delivery-fee ledger totals match accepted payments.
-- A route-opened window sells only within its planned open leg. Legs do not
+- A route-opened window sells within its stop's hours. An already-open window
+  can remain open during a replan's approach leg to that same stop, as
+  `HireRunner.Step` explicitly permits; this requires no actual transit and a
+  sale within the stop's hours. Legs do not
   overlap and stops never exceed 24 hours. Half-hour route edits use
   `RouteEditor`; rejected edits change nothing. Overnight edits preserve
   yesterday's committed late leg. Invalid older routes are loaded through
@@ -111,4 +118,9 @@ successfully but aborts at the socket handshake. The long run remains opt-in.
 
 Checked 12 October 2026: the isolated short matrix took 8.23 s (20 passed).
 The complete suite took 11.06 s wall time: 1,678 passed, zero failed, one skipped
-(the opt-in long soak). Core and the test project file are unchanged.
+(the opt-in long soak). Those figures precede the seed-78 harness correction.
+After that correction, seed 78 passed all 365 days in 11.05 s and the short
+matrix plus its focused replan regression passed in 10.33 s (21 tests).
+The corrected complete suite took 10.81 s wall time: 1,679 passed, zero failed,
+one skipped (the opt-in long soak).
+Core and the test project file are unchanged.
