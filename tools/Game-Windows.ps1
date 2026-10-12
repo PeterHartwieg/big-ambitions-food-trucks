@@ -13,9 +13,18 @@ $taskName = 'FoodTrucksTestLaunch'
 
 function Get-Game { Get-Process 'Big Ambitions' -ErrorAction SilentlyContinue }
 
+# True when the running game was started with the test flag, so it is ours to stop.
+function Test-TestGame {
+    $proc = Get-CimInstance Win32_Process -Filter "Name='Big Ambitions.exe'" -ErrorAction SilentlyContinue | Select-Object -First 1
+    return [bool]($proc -and $proc.CommandLine -match '-foodtrucks-test')
+}
+
 function Show-Status {
     $game = Get-Game
-    if ($game) { "Game: running (pid $($game.Id), started $($game.StartTime.ToString('HH:mm:ss')))." } else { 'Game: not running.' }
+    if ($game) {
+        $kind = if (Test-TestGame) { 'with -foodtrucks-test' } else { 'without the test flag' }
+        "Game: running (pid $($game.Id), started $($game.StartTime.ToString('HH:mm:ss')), $kind)."
+    } else { 'Game: not running.' }
     $local = Join-Path $root 'ModsLocal'
     $mods = @(Get-ChildItem $local -Directory -ErrorAction SilentlyContinue | ForEach-Object Name)
     "Local mods: $(if ($mods.Count) { $mods -join ', ' } else { 'none' })."
@@ -48,11 +57,12 @@ switch ($Action) {
         "Game started (pid $($game.Id)) with: $GameArgs"
     }
     'stop' {
+        # Only run-remote.sh stop --force gets here, after the bridge's quit didn't close the game.
         $game = Get-Game
         if (!$game) { 'Game: not running.'; break }
-        # The bridge's quit is tried first by run-remote.sh; this is the fallback.
+        if (!(Test-TestGame)) { throw 'The running game was started without -foodtrucks-test, so it is not a test session. Not stopped.' }
         $game | Stop-Process -Force
         $game | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue
-        'Game stopped (killed). Anything not saved in game is lost.'
+        'Game stopped (killed). Anything not saved in game is lost, and a save being written may be damaged.'
     }
 }

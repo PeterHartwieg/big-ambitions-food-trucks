@@ -6,10 +6,13 @@
 #   tunnel       open the ssh tunnel to the bridge (127.0.0.1:8322 on both ends), in the background
 #   tunnel-stop  close it
 #   wait         wait until the bridge answers /health (up to BA_BRIDGE_WAIT seconds, default 180)
-#   stop         ask the bridge to quit the game; kill it if it is still running after 30 s
+#   stop         ask the bridge to quit the game and wait up to 120 s for it to close; never kills
+#   stop --force the same, then kill the game if it is still running, but only a game started with -foodtrucks-test
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 ACTION="${1:?status, start, tunnel, tunnel-stop, wait or stop}"
+FORCE=false
+if [ "${2:-}" = "--force" ]; then FORCE=true; shift; fi
 HOST="${2:-${BA_GAME_HOST:?Pass the ssh host of the Windows game PC, or set BA_GAME_HOST}}"
 PORT=8322
 URL="http://127.0.0.1:$PORT"
@@ -61,14 +64,25 @@ case "$ACTION" in
     ;;
   wait) wait_bridge ;;
   stop)
-    if curl -fsS --max-time 5 -X POST -H 'Content-Type: application/json' -d '{"cmd":"quit","args":{}}' "$URL/call" >/dev/null 2>&1; then
-      echo "Asked the game to quit."
-      for _ in $(seq 10); do
-        sleep 3
-        remote status | grep -q 'Game: not running' && { echo "Game closed."; break; }
+    status="$(remote status)"
+    if grep -q 'Game: not running' <<<"$status"; then
+      echo "Game: not running."
+    elif ! grep -q 'with -foodtrucks-test' <<<"$status"; then
+      echo "The running game was started without -foodtrucks-test (not a test session). Not stopped." >&2; exit 1
+    else
+      # A lost reply doesn't mean the quit failed: the game may be finishing a save. Watch the process either way.
+      curl -sS --max-time 10 -X POST -H 'Content-Type: application/json' -d '{"cmd":"quit","args":{}}' "$URL/call" >/dev/null 2>&1 \
+        && echo "Asked the game to quit." || echo "No reply to quit (no tunnel, or the game is busy); watching the process."
+      closed=false
+      for _ in $(seq 24); do
+        sleep 5
+        if remote status | grep -q 'Game: not running'; then closed=true; break; fi
       done
+      if $closed; then echo "Game closed."
+      elif $FORCE; then remote stop
+      else echo "The game is still running after 120 s (saving, or the bridge isn't answering). Not killed: check the PC, or run stop --force." >&2; exit 1
+      fi
     fi
-    remote stop
     if tunnel_up; then kill "$(cat "$PIDFILE")"; rm -f "$PIDFILE"; echo "Tunnel closed."; fi
     ;;
   *) echo "Unknown action $ACTION" >&2; exit 2 ;;
