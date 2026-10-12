@@ -13,8 +13,19 @@
       }
     },
     {
-      "wait_event": "Test bridge: loading 'FT\\ bay\\-shots'",
-      "timeout_s": 180
+      "wait_state": "load.status",
+      "timeout_s": 300,
+      "not_equals": "pending"
+    },
+    {
+      "expect": "state",
+      "path": "load.status",
+      "equals": "done"
+    },
+    {
+      "expect": "state",
+      "path": "load.error",
+      "equals": null
     },
     {
       "wait_state": "scene",
@@ -68,10 +79,17 @@
       }
     },
     {
-      "sleep_s": 0.5
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
     },
     {
-      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+      "wait_state": "commissary.bays[site=industry-city].status",
+      "timeout_s": 300,
+      "equals": "resolved"
+    },
+    {
+      "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
     },
     {
       "shoot": {
@@ -102,10 +120,17 @@
       }
     },
     {
-      "sleep_s": 0.5
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
     },
     {
-      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+      "wait_state": "commissary.bays[site=garment-district].status",
+      "timeout_s": 300,
+      "equals": "resolved"
+    },
+    {
+      "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
     },
     {
       "shoot": {
@@ -136,10 +161,17 @@
       }
     },
     {
-      "sleep_s": 0.5
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
     },
     {
-      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+      "wait_state": "commissary.bays[site=hells-kitchen].status",
+      "timeout_s": 300,
+      "equals": "resolved"
+    },
+    {
+      "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
     },
     {
       "shoot": {
@@ -170,10 +202,17 @@
       }
     },
     {
-      "sleep_s": 0.5
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
     },
     {
-      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+      "wait_state": "commissary.bays[site=lower-manhattan].status",
+      "timeout_s": 300,
+      "equals": "resolved"
+    },
+    {
+      "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
     },
     {
       "shoot": {
@@ -204,10 +243,17 @@
       }
     },
     {
-      "sleep_s": 0.5
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
     },
     {
-      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+      "wait_state": "commissary.bays[site=murray-hill].status",
+      "timeout_s": 300,
+      "equals": "resolved"
+    },
+    {
+      "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
     },
     {
       "shoot": {
@@ -258,10 +304,17 @@
       }
     },
     {
-      "sleep_s": 0.5
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
     },
     {
-      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+      "wait_state": "commissary.bays[site=industry-city].status",
+      "timeout_s": 300,
+      "equals": "resolved"
+    },
+    {
+      "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
     },
     {
       "shoot": {
@@ -292,10 +345,17 @@
       }
     },
     {
-      "sleep_s": 0.5
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
     },
     {
-      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+      "wait_state": "commissary.bays[site=garment-district].status",
+      "timeout_s": 300,
+      "equals": "resolved"
+    },
+    {
+      "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
     },
     {
       "shoot": {
@@ -326,10 +386,17 @@
       }
     },
     {
-      "sleep_s": 0.5
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
     },
     {
-      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+      "wait_state": "commissary.bays[site=hells-kitchen].status",
+      "timeout_s": 300,
+      "equals": "resolved"
+    },
+    {
+      "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
     },
     {
       "shoot": {
@@ -360,10 +427,17 @@
       }
     },
     {
-      "sleep_s": 0.5
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
     },
     {
-      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+      "wait_state": "commissary.bays[site=lower-manhattan].status",
+      "timeout_s": 300,
+      "equals": "resolved"
+    },
+    {
+      "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
     },
     {
       "shoot": {
@@ -394,10 +468,17 @@
       }
     },
     {
-      "sleep_s": 0.5
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
     },
     {
-      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+      "wait_state": "commissary.bays[site=murray-hill].status",
+      "timeout_s": 300,
+      "equals": "resolved"
+    },
+    {
+      "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
     },
     {
       "shoot": {

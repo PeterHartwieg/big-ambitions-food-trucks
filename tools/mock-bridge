@@ -3,7 +3,7 @@ import argparse
 from collections import deque
 from datetime import datetime, timezone
 import copy
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
@@ -23,7 +23,12 @@ from ftlib.shots import ROOT
 
 SITES = [s['id'] for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']]
 TUNING = json.loads((ROOT / 'data/rules.json').read_text())
+ECONOMY = json.loads((ROOT / 'data/economy.json').read_text())
+# Prices and base-game box sizes are fake; the quote and per-item protocol are real.
 LOCALE = json.loads((ROOT / 'unity/FoodTrucks/Locales/en.json').read_text())
+
+CATALOG = {key: (LOCALE.get(key,key.split('itemname_')[-1].title()),500,1.5) for key in ECONOMY['products']}
+CATALOG.update({key:(LOCALE.get(key,key.split('itemname_')[-1].title()),1,750.) for e in ECONOMY['equipment'].values() for key in e['gameItems']})
 
 POSES = {'hatch-pavement', 'hatch-close', 'vehicle-side', 'vehicle-overhead', 'queue',
          'cart-counter', 'bay-pavement', 'bay-road', 'door'}
@@ -65,11 +70,19 @@ def png(path, width, height, colour):
 class Mock:
     def __init__(self, shots, clock_rate=1):
         self.clock_rate = clock_rate
+        self.ops_lock = threading.Lock()
+        self.call_gate = threading.Lock()
+        self.operations = {}
+        self.next_op = 1
+        self.operation_delays = {}
+        self.bay_status = {}
+        self.load = None
         self.pending = []
         self.last_ui = []
         self.activity_starting = False
         self.time_skip = False
         self.mod_loaded = True
+        self.can_write = True
         self.lock = threading.RLock()
         self.shots = Path(shots)
         self.ring = deque(maxlen=2000)
@@ -92,8 +105,8 @@ class Mock:
     def reset(self, name):
         self.state = {
             'save': name, 'scene': 'city',
-            'clock': {'day': 1, 'weekday': 'Monday', 'time': '07:00', 'paused': True, 'speed': 1},
-            'money': 20000.,
+            'clock': {'day': 1, 'weekday': 'Monday', 'time': '07:00', 'paused': True, 'speed': 1, 'run_until':None, 'arrived_at':None},
+            'money': 20000., 'transactions_today':[],
             'player': {'x': 0., 'y': 0., 'z': 0., 'heading': 0., 'in_vehicle': None, 'at_hatch': None, 'carrying': None},
             'licence': {'until_day': None, 'permits': 0, 'course_done': False},
             'vehicles': [], 'commissary': {'spaces': [], 'orders': [], 'stock': [], 'unpaid': {'rent': 0, 'fines': 0}},
@@ -119,9 +132,11 @@ class Mock:
     def restore(self, name, emit=True):
         if name not in self.saves:
             raise ValueError('No such mock save: use FT mock or save the current city first')
+        arrived_at=self.state['clock'].get('arrived_at')
         for key, val in copy.deepcopy(self.saves[name]).items():
             setattr(self, key, val)
         self.until = None
+        self.state['clock'].update(run_until=None,arrived_at=arrived_at)
         self.dialog = 'closed'
         self.pending = []
         self.state['player']['at_hatch']=None
@@ -156,11 +171,7 @@ class Mock:
                 v['commissary']['site'] = 'hells-kitchen'
                 v['pieces'] = [{'item':'griddle', 'units':160, 'cap':160}]
                 v['stock'] = [{'item':'Tacos', 'key':'foodtrucks:itemname_tacos', 'amount':160}]
-                if 'commissary-' in name:
-                    self.add_order('hells-kitchen', 2, emit=False)
                 if 'crew-' in name:
-                    v['crew'] = ['Mock worker 1']
-                    self.employees=[{'name':'Mock worker 1','label':LOCALE['foodtrucks:bizman_page_crew_option'].format(name='Mock worker 1',skill=60,satisfaction=100,wage='$10.00')}]
                     v['route'] = {'stops':1,'next':'stop 1, 08:30 to 24:00 at x 393.2, z 217.6'}
                     self.routes[v['id']] = (510,1440)
                 if 'truck-look' in name:
@@ -172,6 +183,63 @@ class Mock:
                     cart['stock'] = [{'item':'Hotdog','key':'ba:itemname_hotdog','amount':40}]
             self.store(name)
 
+    def finish_load(self, name):
+        self.restore(name, emit=False)
+        self.load={'name':name,'status':'done','error':None}
+        self.event(f"Test bridge: load '{name}' done: day {self.state['clock']['day']}, the mod's save data attached.")
+
+    def clock_held_by(self):
+        if self.time_skip: return 'time skip'
+        if self.activity_starting or self.state['player']['at_hatch']: return 'activity panel'
+        return None if self.dialog=='closed' else 'list picker' if self.dialog=='commissary' else self.dialog
+
+    def bays(self):
+        return [{'site':site,'status':self.bay_status.get(site,'resolved'),'point':{'x':393.2+i*100,'z':217.6,'along_x':0.,'along_z':1.} if self.bay_status.get(site,'resolved')=='resolved' else None,
+                 'entrance':{'x':393.2+i*100+5,'z':217.6}} for i,site in enumerate(SITES)]
+
+    def require_bay(self, site):
+        if self.bay_status.get(site)=='pending':
+            raise ValueError(f"The bay of {site} isn't resolved yet (the city's parking lanes load after the city); try again in a few seconds.")
+        if self.bay_status.get(site)=='failed':
+            raise ValueError(f'{site} has no bay: the search found no legal parking near it.')
+
+    def transaction(self, kind, amount, day=None, **data):
+        day=self.state['clock']['day'] if day is None else day
+        self.state['transactions_today'].append({'type':kind,'label':LOCALE[kind].format(day=day,**data),
+                                                'amount':round(amount,2),'day':day,'time':self.state['clock']['time']})
+
+    def operation(self, cmd, args):
+        if cmd=='op':
+            identifier=num(args,'id')
+            if identifier is None: return {'ok':False,'error':'op needs "id": the number a /call reply gave as "op".'}
+            with self.ops_lock:
+                op=self.operations.get(int(identifier))
+                if op is None: return {'ok':False,'error':f'No operation {identifier:g} (the bridge keeps the last 500).'}
+                return {'ok':True,'result':copy.deepcopy(op)}
+        with self.ops_lock:
+            identifier=self.next_op
+            self.next_op+=1
+            op={'id':identifier,'cmd':cmd,'status':'pending'}
+            self.operations[identifier]=op
+            while len(self.operations)>500: del self.operations[next(iter(self.operations))]
+        finished=threading.Event()
+        def work():
+            try:
+                with self.call_gate:
+                    with self.lock: result=copy.deepcopy(self.call(cmd,args))
+                # Deferred work lets the main thread and health/events keep running.
+                delay=self.operation_delays.get(cmd,.12 if cmd=='shoot' else 0)
+                if delay: time.sleep(delay)
+                with self.ops_lock: op.update(status='done',result=result)
+            except Exception as exc:
+                with self.ops_lock: op.update(status='failed',error=str(exc))
+            finally: finished.set()
+        threading.Thread(target=work,daemon=True).start()
+        if not finished.wait(max(.1,num(args,'timeout_s') or 10)):
+            return {'ok':False,'op':identifier,'error':f'timed out on the main thread; the command goes on: ask {{"cmd": "op", "args": {{"id": {identifier}}}}} for its outcome'}
+        with self.ops_lock:
+            return {'ok':op['status']=='done','op':identifier, **({'result':copy.deepcopy(op['result'])} if op['status']=='done' else {'error':op['error']})}
+
     def serving(self, v):
         player=self.state['player']
         if not v['open'] or player['in_vehicle']==v['id']: return 'nobody'
@@ -182,24 +250,34 @@ class Mock:
     def read_state(self):
         if self.state['scene'] == 'city':
             result=copy.deepcopy(self.state)
+            result['load']=copy.deepcopy(self.load)
+            result['transactions_today']=[t for t in result['transactions_today'] if t['day'] >= result['clock']['day']-1]
+            assigned={name for v in result['vehicles'] for name in v['crew']}
+            result['employees']=[{k:e[k] for k in ('id','name','skill','satisfaction','wage')} for e in self.employees if e['name'] not in assigned]
+            player=result['player']
+            player['activity']='driving' if player['in_vehicle'] and self.vehicle(player['in_vehicle'])['kind']=='truck' else 'pushing' if player['in_vehicle'] else 'starting' if self.activity_starting else 'at_hatch' if player['at_hatch'] else 'walking' if self.pending else 'on_foot'
+            player['clock_held_by']=self.clock_held_by()
+            result['commissary']['bays']=self.bays()
             result['clock']['speed']=round(result['clock']['speed'],2)
             result['money']=round(result['money'],2)
+            for order in result['commissary']['orders']:
+                for key in ('goods','fee'): order.pop(key,None)
             for v in result['vehicles']:
                 v['serving']=self.serving(v)
                 if v['kind']=='cart' and not v['open']: v['hatch_side']=None
             for position in [result['player'],*result['vehicles']]:
                 for key in ('x','y','z','heading'):
                     if position[key] is not None: position[key]=round(position[key],2)
-            if not self.mod_loaded: result.update(licence=None,vehicles=[],commissary=None,ledger_today=None)
+            if not self.mod_loaded: result.update(licence=None,vehicles=[],commissary=None,ledger_today=None,employees=[])
             return result
         return {'save': self.state['save'], 'scene':self.state['scene'], 'vehicles':[],
-                'notices_recent':self.state['notices_recent'],
+                'notices_recent':self.state['notices_recent'], 'load':copy.deepcopy(self.load), 'transactions_today':[], 'employees':[],
                 **{key:None for key in ('clock','money','player','licence','commissary','ledger_today')}}
 
     def health(self):
         c = self.state['clock'] if self.state['scene'] == 'city' else {}
         return dict(ok=True, mod_version='0.9.10', bridge_version=1, scene=self.state['scene'],
-                    save=self.state['save'], day=c.get('day'), time=c.get('time'), paused=c.get('paused'), frame=self.frame)
+                    save=self.state['save'], day=c.get('day'), time=c.get('time'), paused=c.get('paused'), frame=self.frame, load=copy.deepcopy(self.load))
 
     def events(self, since):
         since = max(since, 1)
@@ -218,7 +296,7 @@ class Mock:
     def spawn(self, kind):
         identifier = f'{kind}-{len(self.state["vehicles"])+1}'
         v = dict(id=identifier,kind=kind,name='Food '+kind,x=0.,y=0.,z=0.,heading=0.,legal=True,
-                 legal_reason='legal; nearest entrance 10.0 m',hatch_side='right' if kind=='truck' else None,
+                 legal_reason='wheel parking test: legal, mock wheels' if kind=='truck' else 'pavement rule: legal; nearest entrance 10.0 m',hatch_side='right' if kind=='truck' else None,
                  hatch_to_pavement=True if kind=='truck' else None, open=False,serving='nobody',crew=[],pieces=[],stock=[],
                  queue=None,commissary=None,route=None)
         self.state['vehicles'].append(v)
@@ -229,19 +307,23 @@ class Mock:
 
     def place_vehicle(self, v, site):
         index = SITES.index(site)
-        v.update(x=393.2+index*100,y=0.,z=217.6,heading=0.,legal=False,legal_reason='inside a parking lane')
+        v.update(x=393.2+index*100,y=0.,z=217.6,heading=0.,legal=v['kind']=='truck',legal_reason='wheel parking test: legal, mock wheels' if v['kind']=='truck' else 'pavement rule: inside a parking lane')
         space = next((s['site'] for s in self.state['commissary']['spaces'] if s['vehicle']==v['id']), None)
         v['commissary'] = {'site':space,'in_bay':True,'bay_site':site}
 
-    def add_order(self, site, boxes, emit=True):
+    def add_order(self, site, boxes, emit=True, item='ba:itemname_hotdog'):
         self.order_number += 1
-        order = {'n':self.order_number, 'site':site, 'items':f'{boxes*500} Hotdog',
-                 'item':'ba:itemname_hotdog','units':boxes*500,'total':round(boxes*750*(1+TUNING['commissary']['deliveryFeeShare']),2),
+        name,box,price=CATALOG[item]
+        units=boxes*box
+        goods=round(units*price,2)
+        fee=round(goods*TUNING['commissary']['deliveryFeeShare'],2)
+        order = {'n':self.order_number, 'site':site, 'items':f'{units} {name}',
+                 'item':item,'units':units,'goods':goods,'fee':fee,'total':round(goods+fee,2),
                  'due_day':self.state['clock']['day']+1}
         self.state['commissary']['orders'].append(order)
         if emit:
-            self.event(f"Commissary order {order['n']}: {boxes} boxes, {order['units']} Hotdog at {site} for ${boxes*750:.2f} plus ${order['total']-boxes*750:.2f} delivery, paid on delivery; due day {order['due_day']} at 08:00.")
-            self.event(LOCALE['foodtrucks:message_commissary_ordered'].format(units=order['units'],item='Hotdog',total=f"${order['total']:.2f}",time='08:00'), 'phone')
+            self.event(f"Commissary order {order['n']}: {boxes} boxes, {units} {name} at {site} for ${goods:.2f} plus ${fee:.2f} delivery, paid on delivery; due day {order['due_day']} at 08:00.")
+            self.event(LOCALE['foodtrucks:message_commissary_ordered'].format(units=units,item=name,total=f"${order['total']:.2f}",time='08:00'), 'phone')
         return order
 
     def deliver(self, force=False):
@@ -251,20 +333,21 @@ class Mock:
                 continue
             self.state['commissary']['orders'].remove(order)
             units=order['units']
-            fee=round(order['total']-order['total']/(1+TUNING['commissary']['deliveryFeeShare']),2)
-            goods=order['total']-fee
+            name=CATALOG[order['item']][0]
+            fee=order['fee']; goods=order['goods']
             if self.state['money'] < order['total']:
-                self.event(f"Commissary delivery: order {order['n']}, {units} Hotdog not delivered: the payment of ${order['total']:.2f} was refused (not enough money); the order is cancelled.")
-                self.event(f"We couldn't deliver {units} Hotdog: the payment of ${order['total']:.2f} didn't go through. The order is cancelled; order again when you have the money.", 'phone')
+                self.event(f"Commissary delivery: order {order['n']}, {units} {name} not delivered: the payment of ${order['total']:.2f} was refused (not enough money); the order is cancelled.")
+                self.event(f"We couldn't deliver {units} {name}: the payment of ${order['total']:.2f} didn't go through. The order is cancelled; order again when you have the money.", 'phone')
             else:
                 self.state['money'] -= order['total']
-                stock = next((s for s in self.state['commissary']['stock'] if s['site'] == order['site'] and s['item'] == 'Hotdog'), None)
+                self.transaction('foodtrucks:transaction_commissary_order', -order['total'], commissary=LOCALE['foodtrucks:commissary_'+order['site']])
+                stock = next((s for s in self.state['commissary']['stock'] if s['site'] == order['site'] and s['key'] == order['item']), None)
                 if stock:
                     stock['amount'] += units
                 else:
-                    self.state['commissary']['stock'].append({'site': order['site'], 'item': 'Hotdog', 'key':'ba:itemname_hotdog', 'amount': units})
-                self.event(f"Commissary delivery: order {order['n']}, {units} Hotdog at {order['site']} (ordered day {order['due_day']-1}, due day {order['due_day']}), paid ${order['total']:.2f} on delivery (goods ${goods:.2f}, fee ${fee:.2f}).")
-                self.event(LOCALE['foodtrucks:message_commissary_delivered'].format(units=units,item='Hotdog',commissary=LOCALE['foodtrucks:commissary_'+order['site']],total=f"${order['total']:.2f}"),'phone')
+                    self.state['commissary']['stock'].append({'site': order['site'], 'item': name, 'key':order['item'], 'amount': units})
+                self.event(f"Commissary delivery: order {order['n']}, {units} {name} at {order['site']} (ordered day {order['due_day']-1}, due day {order['due_day']}), paid ${order['total']:.2f} on delivery (goods ${goods:.2f}, fee ${fee:.2f}).")
+                self.event(LOCALE['foodtrucks:message_commissary_delivered'].format(units=units,item=name,commissary=LOCALE['foodtrucks:commissary_'+order['site']],total=f"${order['total']:.2f}"),'phone')
 
     def flush_hour(self, day, hour):
         for v in self.state['vehicles']:
@@ -288,6 +371,7 @@ class Mock:
                 total = self.takings.pop(v['id'], 0)
                 if total:
                     self.state['money'] += total * 13
+                    self.transaction('foodtrucks:transaction_crew_sales',total*13,day=day-1,vehicle=v['name'],sales=total)
                     self.event(f"Crew sales paid in: {v['name']} ({v['id']}), day {day-1}: {total} items, ${total*13:.2f}.", day=day-1)
             self.state['ledger_today'] = {'street_food': 0., 'crew_waiting': 0.}
             self.event(f'Day summary: day {day-1}.')
@@ -322,7 +406,7 @@ class Mock:
                         self.event(f"Sale: foodtrucks:itemname_tacos for $13.00 on day {day}, {stock['amount']} of it left.")
         if self.until is not None and self.absolute >= self.until:
             self.until = None
-            c.update(paused=True, speed=1)
+            c.update(paused=True, speed=1, run_until=None, arrived_at=f"day {c['day']} {c['time']}")
             self.event(f"Test bridge: run_until {self.until_text} reached at day {c['day']} {c['time']}; paused, speed 1.")
 
     def run_clock(self):
@@ -402,7 +486,8 @@ class Mock:
             identifier = int(args['id'])
             entry = next((b for b in self.last_ui if b['id']==identifier),None)
             if not entry: raise ValueError(f'No entry {identifier} in the last ui list; list again.')
-            if entry not in self.buttons():
+            current=next((b for b in self.buttons() if b['path']==entry['path'] and b['kind']==entry['kind']),None)
+            if current is None:
                 raise ValueError(f"Entry {identifier} ({entry['text']}) is no longer on screen; list again.")
         elif args.get('text') is not None:
             text = str(args['text'])
@@ -415,8 +500,9 @@ class Mock:
                 places = ', '.join(f"{b['id']} ({b['path']})" for b in matches)
                 raise ValueError(f'{len(matches)} entries read "{text}": {places}; click by id.')
             entry = matches[0]
+            current=entry
         else: raise ValueError('ui click needs "id" (from the last list) or "text".')
-        text = entry['text']
+        text = current['text']
         if entry['kind']=='option':
             self.choice = text
             if self.dialog=='crew':
@@ -464,8 +550,8 @@ class Mock:
         elif text==LOCALE['foodtrucks:bizman_page_back']: self.dialog='fleet'
         elif text in ('Hang up', 'Cancel'): self.dialog='closed'
         elif text==LOCALE['foodtrucks:itempanel_open']: self.operate(self.vehicle(),'open')
-        self.event(f'Test bridge: clicked "{text}" ({entry["path"]}).')
-        return {'clicked':text}
+        self.event(f'Test bridge: clicked "{entry["text"]}" ({entry["path"]}).')
+        return {'clicked':entry['text']}
 
     def at_hatch(self, v, how):
         self.activity_starting=False
@@ -476,6 +562,8 @@ class Mock:
     def operate(self, v, op):
         player = self.state['player']
         start=self.seq
+        cargo_before=copy.deepcopy(v['stock'])
+        space_before=(v['commissary'] or {}).get('site')
         if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
         label={'open':'Open here','exit':'Park','rent_bay':'Commissary','restock':'Commissary'}.get(op)
         if label and player['in_vehicle'] != v['id']:
@@ -543,7 +631,9 @@ class Mock:
                 monthly=TUNING['commissary']['rentPerMonthCents'][v['kind']]
                 charge=int(monthly*12/365+.5)/100
                 if previous is None:
-                    if self.state['money']>=charge: self.state['money']-=charge
+                    if self.state['money']>=charge:
+                        self.state['money']-=charge
+                        self.transaction('foodtrucks:transaction_commissary_rent',-charge,commissary=LOCALE['foodtrucks:commissary_'+site])
                     else: self.state['commissary']['unpaid']['rent']+=charge
                     text=LOCALE['foodtrucks:notification_commissary_rented'].format(vehicle=v['kind'],commissary=LOCALE['foodtrucks:commissary_'+site],rent=f'${monthly/100:,.2f}')
                 else:
@@ -568,9 +658,14 @@ class Mock:
                 if loaded: self.event(LOCALE['foodtrucks:notification_commissary_restocked'].format(vehicle=v['kind'],loaded=', '.join(loaded),full='',left=left),'notice')
                 else: self.event(LOCALE['foodtrucks:notification_commissary_restock_full'].format(vehicle=v['kind'],left=left),'notice')
         else: raise ValueError(f"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay.")
-        self.event(f"Test bridge: vehicle {v['id']} {op}.")
+        done = {'open':v['open'], 'close':not v['open'], 'step_out':player['at_hatch']!=v['id'],
+                'back_to_hatch':bool(self.pending) or player['at_hatch']==v['id'],
+                'enter':player['in_vehicle']==v['id'] or bool(self.pending), 'exit':player['in_vehicle']!=v['id'],
+                'restock':v['stock']!=cargo_before,
+                'rent_bay':(v['commissary'] or {}).get('site') is not None and (v['commissary'] or {}).get('site')!=space_before}[op]
+        self.event(f"Test bridge: vehicle {v['id']} {op}: {'done' if done else 'not done'}.")
         notices=[e['text'][8:] for e in self.ring if e['seq']>start and e['kind']=='notice']
-        return {'notices':notices,'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==v['id'])}
+        return {'done':done,'notices':notices,'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==v['id'])}
 
     def require_city(self, cmd):
         scene=self.state['scene']
@@ -583,7 +678,7 @@ class Mock:
             raise ValueError(f"{cmd} changes the save, and the loaded save '{name}' doesn't start with FT: load an FT save first.")
 
     def call(self, cmd, args):
-        if cmd in ('console','debug','time','money','teleport','vehicle','save'): self.require_ft(cmd)
+        if cmd in ('console','debug','time','money','teleport','vehicle','commissary','crew','save'): self.require_ft(cmd)
         if cmd=='state': return self.read_state()
         if cmd in ('load','save'):
             name=need(args,'name',"the save's name")
@@ -594,10 +689,14 @@ class Mock:
                 self.state['save']=name; self.store(name)
                 return {'name':name}
             if self.state['scene']=='loading': raise ValueError('The game is loading; wait until /health says menu or city.')
+            if self.load and self.load['status']=='pending': raise ValueError(f"A load of '{self.load['name']}' is under way; wait for it (state.load).")
+            if self.state['scene']=='city' and not (self.state['save'] or '').startswith('FT'):
+                raise ValueError(f"The loaded save '{self.state['save']}' doesn't start with FT, and leaving it would skip the game's question about unsaved changes: go to the main menu by hand, or load from an FT save.")
             if name not in self.saves: raise ValueError(f"No save named '{name}'. FT saves: {', '.join(self.saves) or 'none'}.")
+            self.load={'name':name,'status':'pending','error':None}
             self.state['scene']='loading'
             self.event(f"Test bridge: loading '{name}' (Mock character, day {self.saves[name]['state']['clock']['day']}).")
-            self.pending.append((time.monotonic()+.05,lambda:self.restore(name,emit=False)))
+            self.pending.append((time.monotonic()+.05,lambda:self.finish_load(name)))
             return {'loading':True,'name':name,'character':'Mock character'}
         if cmd=='new_game':
             name=args.get('name')
@@ -618,9 +717,10 @@ class Mock:
             if pause is None and speed is None and until is None: raise ValueError('time needs "pause", "speed" or "run_until".')
             if speed is not None and not 0<speed<=60: raise ValueError('speed must be above 0 and at most 60.')
             unpausing=until is not None or pause is False or (speed is not None and pause is not True)
-            if unpausing and (self.dialog!='closed' or self.activity_starting or self.state['player']['at_hatch'] is not None):
+            if unpausing and self.clock_held_by():
                 raise ValueError('A screen holds the clock (the phone, the map, a call, an activity or a menu): close it first (ui escape).')
             self.until=None
+            c.update(run_until=None,arrived_at=None)
             if until is not None:
                 day=until.get('day',c['day'])
                 try:
@@ -632,13 +732,14 @@ class Mock:
                 target=(day-1)*1440+mins
                 if target<=self.absolute: raise ValueError(f"{text} has passed already: it is day {c['day']} {c['time']}.")
                 self.until=target; self.until_text=text
+                c['run_until']=text
                 c.update(speed=speed if speed is not None else 1,paused=False)
                 self.event(f'Test bridge: running the clock at speed {c["speed"]} until {text}.')
             else:
                 if speed is not None: c['speed']=speed
                 if pause is not None: c['paused']=pause
                 elif speed is not None: c['paused']=False
-            return {key:round(c[key],2) if key=='speed' else c[key] for key in ('day','time','paused','speed','weekday')}
+            return copy.deepcopy(c)
         if cmd=='debug':
             start=self.seq
             action=need(args,'action',"the debug action's name")
@@ -652,7 +753,7 @@ class Mock:
                 v['stock']=[{'item':'Tacos','key':'foodtrucks:itemname_tacos','amount':160}]
             elif action=='hire':
                 name=f'Mock worker {len(self.employees)+1}'
-                self.employees.append({'name':name,'label':LOCALE['foodtrucks:bizman_page_crew_option'].format(name=name,skill=60,satisfaction=100,wage='$10.00')})
+                self.employees.append({'id':f'worker-{len(self.employees)+1}','name':name,'skill':60.,'satisfaction':100.,'wage':10.,'label':LOCALE['foodtrucks:bizman_page_crew_option'].format(name=name,skill=60,satisfaction=100,wage='$10.00')})
                 self.event(f'Debug: hired {name} (worker1), customer service 60, $10.00 an hour.')
                 self.event(f'Hired {name}, customer service 60.','notice')
             elif action=='commissary deliveries':
@@ -673,6 +774,7 @@ class Mock:
                 if kind in ('bay','commissary'):
                     if kind=='commissary' and who!='player': raise ValueError('commissary: places the player at the door; a vehicle goes to bay:<site>.')
                     if identifier not in SITES: raise ValueError(f"No commissary '{identifier}'. Commissaries: {', '.join(SITES)}.")
+                    if kind=='bay': self.require_bay(identifier)
                     x,z=393.2+SITES.index(identifier)*100,217.6
                 elif kind=='vehicle':
                     if who!='player': raise ValueError('vehicle: places the player beside a vehicle.')
@@ -694,6 +796,54 @@ class Mock:
             return {key:round(obj[key],2) for key in ('x','y','z','heading')}
         if cmd=='vehicle':
             return self.operate(self.vehicle(need(args,'id',"the food vehicle's id")),need(args,'op','open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay'))
+        if cmd=='commissary':
+            op=need(args,'op','order')
+            if op!='order': raise ValueError(f"Unknown commissary op '{op}': order.")
+            site=need(args,'site',"the commissary's id")
+            rows=args.get('items')
+            if not isinstance(rows,list) or not rows: raise ValueError('order needs "items": [ { "item", "boxes" } ].')
+            requests=[]
+            for row in rows:
+                if not isinstance(row,dict): continue
+                item=need(row,'item','an item key or name')
+                boxes=num(row,'boxes')
+                if boxes is None: raise ValueError('Each item needs "boxes".')
+                requests.append((item,max(0,int(boxes))))
+            if site not in SITES: raise ValueError(f'no commissary {site}')
+            if not self.mod_loaded or not self.can_write: raise ValueError("the commissary can't take orders now (data not loaded, read-only or uninstalled)")
+            if not any(s['site']==site for s in self.state['commissary']['spaces']):
+                raise ValueError(f"no space rented at {site} (or it isn't unlocked): rent a space first")
+            merged={}
+            for item,boxes in requests:
+                key=item if item in CATALOG else next((key for key,(name,_,_) in CATALOG.items() if name.casefold()==item.casefold()),None)
+                if key is None: raise ValueError(f"{item} isn't on the commissary's list")
+                if boxes: merged[key]=merged.get(key,0)+boxes
+            if not sum(merged.values()): raise ValueError('the order has no boxes')
+            if sum(merged.values())>10: raise ValueError('more than 10 boxes in one order')
+            orders=[self.add_order(site,boxes,item=item) for item,boxes in merged.items()]
+            return {'orders':[{k:order[k] for k in ('n','site','item','units','goods','fee','total','due_day')} for order in orders]}
+        if cmd=='crew':
+            op=need(args,'op','assign or unassign')
+            identifier=need(args,'vehicle',"the food vehicle's id")
+            employee_id=need(args,'employee_id',"the employee's id (state.employees)")
+            v=self.vehicle(identifier)
+            if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
+            if not self.can_write: raise ValueError("The mod's save data is read-only.")
+            employee=next((e for e in self.employees if e['id']==employee_id),None)
+            name=employee['name'] if employee else None
+            if op=='assign':
+                if name in v['crew']: raise ValueError(f'{employee_id} is on {identifier} already.')
+                if employee is None or any(name in other['crew'] for other in self.state['vehicles']):
+                    raise ValueError(f"{employee_id} isn't an unassigned hire (see state.employees).")
+                if len(v['crew']) >= (3 if v['kind']=='truck' else 1): raise ValueError(f"{identifier} has its full crew ({len(v['crew'])}).")
+                v['crew'].append(name)
+            elif op=='unassign':
+                if name not in v['crew']: raise ValueError(f"{employee_id} isn't on {identifier}.")
+                v['crew'].remove(name)
+            else: raise ValueError(f"Unknown crew op '{op}': assign or unassign.")
+            notice=LOCALE['foodtrucks:notification_crew_added' if op=='assign' else 'foodtrucks:notification_crew_letgo'].format(name=name,vehicle=v['kind'])
+            self.event(notice,'notice')
+            return {'done':True,'notices':[notice],'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==identifier)}
         if cmd=='ui':
             op=need(args,'op','list, click or escape')
             if op=='list':
@@ -731,6 +881,7 @@ class Mock:
                 if target.startswith(('bay:','commissary:')):
                     site=target.split(':',1)[1]
                     if site not in SITES: raise ValueError(f"No commissary '{site}'. Commissaries: {', '.join(SITES)}.")
+                    if target.startswith('bay:'): self.require_bay(site)
                 else:
                     self.vehicle(target)
                     if pose not in POSES: raise ValueError(f"A vehicle takes the poses hatch-pavement, hatch-close, vehicle-side, vehicle-overhead, queue and cart-counter, not {pose}.")
@@ -743,7 +894,7 @@ class Mock:
             self.event(f'Mock console: {line}')
             return {'output':[f'Mock console accepted: {line}']}
         if cmd=='quit': return {}
-        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, ui, shoot, save, load, new_game, quit.")
+        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, ui, shoot, save, load, new_game, quit, op.")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -788,9 +939,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body,dict): raise ValueError('The body is not a JSON object: expected an object.')
             if not body.get('cmd'): raise ValueError('The body has no "cmd".')
             args=body.get('args') if isinstance(body.get('args'),dict) else {}
-            with self.server.mock.lock:
-                result = copy.deepcopy(self.server.mock.call(body['cmd'],args))
-            self.reply({'ok':True,'result':result})
+            self.reply(self.server.mock.operation(body['cmd'],args))
             if body['cmd'] == 'quit':
                 threading.Timer(.5, self.server.shutdown).start()
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
@@ -809,7 +958,7 @@ def main():
     parser.add_argument('--clock-rate',type=float,default=1,help='Normal game minutes per real second, like Options game speed')
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='foodtrucks-mock-') as shots:
-        server = HTTPServer(('127.0.0.1',args.port),Handler)
+        server = ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
         server.mock = Mock(shots, args.clock_rate)
         thread = threading.Thread(target=server.mock.run_clock,daemon=True)
         thread.start()

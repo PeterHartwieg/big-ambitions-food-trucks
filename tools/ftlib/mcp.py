@@ -20,14 +20,16 @@ def tool(name, description, properties=None, required=()):
 STRING = {'type': 'string'}
 NUMBER = {'type': 'number', 'minimum': 0}
 TOOLS = [
-    tool('ft_health', 'Read bridge version, scene and clock.'),
-    tool('ft_state', 'Read game state, optionally at a dotted path or list filter.', {'path': STRING}),
-    tool('ft_call', 'Run a command as built in docs/test-bridge.md. new_game is unavailable: load an FT save made by hand. Vehicle open/exit/restock/rent_bay require driving or pushing it; enter and back_to_hatch reply before walking finishes, so poll state. Open/exit need unpaused time. Time speed is >0 to 60; run_until accepts +N days, then pauses at speed 1. Close clock-holding screens before unpausing.',
+    tool('ft_health', 'Read bridge version, scene, clock and load completion (load.status pending/done/failed). Answers during pending calls.'),
+    tool('ft_state', 'Read game state, optionally at a dotted path or list filter. Includes load progress, clock targets/arrival, player activity/clock holder, available hires, bay readiness and today/yesterday transactions.', {'path': STRING}),
+    tool('ft_call', 'Run a command as built in docs/test-bridge.md. new_game is unavailable: load an FT save made by hand. Vehicle open/exit/restock/rent_bay require driving or pushing it; enter and back_to_hatch reply before walking finishes, so poll player.activity and in_vehicle/at_hatch. Check vehicle/crew result.done. Use commissary order and crew assign/unassign with state.employees ids. load from a non-FT city is refused; wait for load.status done. Replies carry op ids; main-thread timeouts poll that op for up to 30s without repeating the command. Use ft_op to follow longer work. Open/exit need unpaused time. Time speed is >0 to 60; run_until accepts +N days, then stops exactly on the target and pauses at speed 1. Close clock-holding screens before unpausing.',
          {'cmd': STRING, 'args': {'type': 'object'}, 'timeout_s': NUMBER}, ('cmd',)),
     tool('ft_events', 'Read events numbered since and later (inclusive; default 1). Use next as the next cursor; dropped counts lost events. Optionally filter by regex.',
          {'since': {'type': 'integer', 'minimum': 0}, 'grep': STRING}),
+    tool('ft_op', 'Query a recorded operation without repeating it. Returns id, cmd and status pending/done/failed, with result or error when finished. The bridge keeps 500 operations; query replies have no new op id.',
+         {'id': {'type':'integer','minimum':1}}, ('id',)),
     tool('ft_wait_event', 'Wait for a new event matching a regex.', {'regex': STRING, 'timeout_s': NUMBER}, ('regex',)),
-    tool('ft_ui_list', 'List visible buttons, texts and all visible dropdown options, even when the dropdown is closed. Entries include kind and ids valid for this list.'),
+    tool('ft_ui_list', 'List visible buttons, texts and all visible dropdown options, even when the dropdown is closed. Entries include kind and ids from this list. Visibility does not check clipping or overlapping windows; refresh after changes.'),
     tool('ft_ui_click', 'Click a unique, case-insensitive button or option text, or an id from the last ui list. Selecting a list-picker option also needs its confirm button. Duplicate employee options need the correct row id.',
          {'text': STRING, 'id': {'type': 'integer'}}),
     tool('ft_shoot', 'In the city, render 8 frames into a separate camera and fetch the PNG. Use pose and target, or x/y/z with optional yaw/pitch/fov (default fov 60). Name: 1 to 80 letters/digits/._-. Width 16 to 3840, height 16 to 2160. Move near distant targets so their street is loaded.',
@@ -69,6 +71,8 @@ def call_tool(name, args, bridge):
         result = lookup(reply['result'], args.get('path', ''))
     elif name == 'ft_call':
         result = bridge.call(args['cmd'], args.get('args', {}), args.get('timeout_s', 10))
+    elif name == 'ft_op':
+        result = bridge.op(args['id'])
     elif name == 'ft_events':
         result = bridge.events(args.get('since', 0))
         if args.get('grep'):
@@ -126,6 +130,8 @@ def respond(request, bridge):
             message = str(exc).replace('\n', ' ')
             print(message, file=sys.stderr, flush=True)
             response['result'] = {'content': [{'type': 'text', 'text': message}], 'isError': True}
+            if isinstance(exc, BridgeError) and exc.reply:
+                response['result']['structuredContent'] = exc.reply
     else:
         response['error'] = {'code': -32601, 'message': f'Unknown method {method}: use initialize, tools/list, tools/call or ping'}
     return response

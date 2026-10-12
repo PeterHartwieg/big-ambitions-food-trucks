@@ -236,7 +236,7 @@ Rules: `must` (at least once), `never`, `count=N`, `count>=N`, `order` (the rege
 
 ## Using the Mac tools
 
-Make an FT save by hand once; `new_game` is unavailable. Run scenarios from the menu or a throwaway FT city: loading from the city discards its unsaved changes. Start the game with `-foodtrucks-test`. Open the tunnel, then check health in another terminal:
+Make an FT save by hand once; `new_game` is unavailable. Run scenarios from the menu or a throwaway FT city: loading from an FT city discards its unsaved changes; loading from a non-FT city is refused. Start the game with `-foodtrucks-test`. Open the tunnel, then check health in another terminal:
 
 ```sh
 export BA_GAME_HOST=homepc
@@ -244,6 +244,8 @@ ssh -N -L 8322:127.0.0.1:8322 "$BA_GAME_HOST"
 # In another terminal:
 tools/ft health
 tools/ft call load name='FT bridge'
+tools/ft state load
+# Wait for load.status done; failed includes error.
 tools/ft state
 ```
 
@@ -252,9 +254,12 @@ When available, `tools/run-remote.sh start` and `tools/run-remote.sh tunnel` han
 ```sh
 tools/ft state 'vehicles[kind=truck].id'
 tools/ft call time pause=true
-tools/ft call time run_until.day=+1 run_until.time=08:05 speed=20
+tools/ft call time run_until.day=+1 run_until.time=07:59 speed=20
 tools/ft call money --json '{"set":20000}'
 tools/ft --json call state
+tools/ft call commissary --json '{"op":"order","site":"hells-kitchen","items":[{"item":"ba:itemname_hotdog","boxes":2}]}'
+tools/ft call crew op=assign vehicle=TRUCK_ID employee_id=EMPLOYEE_ID
+tools/ft op 17
 tools/ft events --since 1 --follow --grep 'Commissary|Crew'
 tools/ft ui
 tools/ft shoot bay-day --pose bay-pavement --target bay:hells-kitchen --fetch build/shots
@@ -262,9 +267,9 @@ tools/ft shoot bay-day --pose bay-pavement --target bay:hells-kitchen --fetch bu
 
 Values in `key=value` are JSON when possible, otherwise strings. Dots build nested arguments. `--json` before `call` prints the raw reply; after `call` it supplies arguments. `call --raw` also prints the raw reply. `wait-event` watches new events. Event cursors are inclusive: request `since` and later, then use the reply's `next` unchanged.
 
-`open`, `exit`, `restock` and `rent_bay` require driving the truck or pushing the cart. Teleport the player beside it, call `vehicle enter`, and wait for `state.player.in_vehicle` to match its id. Unpause before `open` or `exit`. After `open` or `back_to_hatch`, wait for `player.at_hatch` for a truck. Close an open vehicle before teleporting it. `rent_bay` on a vehicle already rented at that bay refuses; `restock` with no stock succeeds with a notice.
+`open`, `exit`, `restock` and `rent_bay` require driving the truck or pushing the cart. Teleport the player beside it, call `vehicle enter`, and wait for `state.player.in_vehicle` to match its id. Unpause before `open` or `exit`. Check each vehicle reply's `done`. After `open` or `back_to_hatch`, wait for `player.activity: "at_hatch"` and the matching `player.at_hatch` for a truck. Enter replies can report done when the walk starts; wait for activity driving/pushing and the matching in_vehicle. Close an open vehicle before teleporting it. `rent_bay` on a vehicle already rented at that bay refuses; `restock` with no stock succeeds with a notice.
 
-Speed is above 0 and at most 60. The bridge handles `run_until.day: "+N"`, then pauses and restores speed 1. It may stop a frame late; do not assert an exact minute or stop at 07:59/23:59 before a payment boundary. Screens and activities can hold the clock. Escape closes the top screen or list picker; it refuses when nothing is open. List-picker options need their confirm button too. Duplicate text needs an id from the latest `ui list`.
+Speed is above 0 and at most 60. The bridge handles `run_until.day: "+N"`, then pauses and restores speed 1. It stops exactly on the target minute, including hour events for an HH:00 target. `clock.run_until` shows the pending target and `arrived_at` records completion until the next time call. Screens and activities can hold the clock; inspect `player.clock_held_by` before unpausing. Escape closes the top screen or list picker; it refuses when nothing is open. List-picker options need their confirm button too. Duplicate text needs an id from the latest `ui list`.
 
 ```sh
 tools/scenario list
@@ -272,11 +277,11 @@ tools/scenario validate tests/game/scenarios/commissary-pay-on-delivery.json
 tools/scenario run tests/game/scenarios/commissary-pay-on-delivery.json
 ```
 
-Each scenario's first note says how a person prepares its named FT save. Read that note before running. The scenario loads it, waits for the load log, city, save name and loaded mod data, then checks the available fields. The order fixtures hold a confirmed two-box order; the crew fixture holds an assigned crew and route; the art fixture holds equipment and vanilla references. Quantity inputs, crew row selection, map picks and reference placement are manual notes. They are not counted as automated passes. The mock includes these prepared saves so all six scenarios can be tested.
+Each scenario's first note says how a person prepares its named FT save. Read it before running. The scenario loads it and waits for `load.status` to leave pending, requires done with no error, then checks the city, save and mod data. The order fixtures have no confirmed orders; the scenario creates them. The crew fixture has a route but no crew; the scenario hires and assigns by employee id. The art fixture holds equipment and vanilla references. Phone quantity inputs, map picks and reference placement remain manual notes and do not count as automated passes. The phone counterpart uses the labels from `unity/FoodTrucks/Locales/en.json`; vanilla picker labels still need a live UI list. The mock includes these prepared saves.
 
-Reports land in `build/scenarios/<name>-<time>/`: failures first in `report.md`, plus `report.json`, `events.jsonl`, fetched PNGs and an offline contact sheet `index.html`. Use `--report-dir DIR` or `--keep-going` as needed. Mock pictures cannot establish an art check. Exact transactions, fees, wages and day-summary values still need review because state lacks transaction history. Truck `legal` currently reads the cart pavement rule; a legally parked truck in a bay can show false.
+Reports land in `build/scenarios/<name>-<time>/`: failures first in `report.md`, plus `report.json`, `events.jsonl`, fetched PNGs and an offline contact sheet `index.html`. Use `--report-dir DIR` or `--keep-going` as needed. Mock pictures cannot establish an art check. Payment checks use `transactions_today` (today and yesterday), signed amounts, dates and counts independently of other expenses. Truck legal uses the wheel test. Visual presentation, wages and day-summary details still need review. Bay shots poll `commissary.bays[site=...].status` for resolved.
 
-`expect` and `remember` read `state` or `result` (the last call's result). Remembered `$name` values are substituted exactly; `vehicle:$name` builds a player teleport target. Relative days go unchanged to the bridge. Event waits consume matches in order. `no_event` accepts `from_step` and `to_step` boundaries; step 0 is the run's start. Without them it checks the previous step through this one. A `wait_event` boundary is just after its match, so duplicate payments in one batch are detected. Lost events fail the run.
+`expect` and `remember` read `state` or `result` (the last call's result). For payment checks, `expect.where` filters a list by field equality and optional `pick` reads a path in that filtered list. `remember.scale` multiplies a numeric value, rounded to cents. `wait_event.captures` maps remembered names to named regex groups, parsing numbers (commas removed). Remembered `$name` values are substituted exactly; `vehicle:$name` builds a player teleport target. Relative days go unchanged to the bridge. Event waits consume matches in order. `no_event` accepts `from_step` and `to_step` boundaries; step 0 is the run's start. Without them it checks the previous step through this one. A `wait_event` boundary is just after its match, so duplicate payments in one batch are detected. Lost events fail the run.
 
 ```sh
 tools/check-log build/logs/game/<session>/Player.log 0.9.10 --rows 0.9.10/1,0.9.10/2
@@ -287,5 +292,7 @@ tools/mock-bridge --port 8322
 Row rules count only for selected `--rows`; `--rows all` checks every row. Rules without rows always count. Unknown versions get only the always-on checks. Conditional diagnostics use `count>=0` to report observed counts without requiring a fallback or retry.
 
 The mock mirrors the built command guards, errors, result shapes, null fields, asynchronous entry and inclusive events. It simulates the economy and writes valid PNG placeholders; it cannot model Unity navigation or rendering. Its normal clock is one game minute per real second; `--clock-rate 100` emulates a faster Options setting for tests without changing command speed semantics. Tests use a free loopback port and never connect to the game PC. In environments that forbid listening sockets, `FT_TEST_TRANSPORT=inprocess python3 -m unittest discover -s tools/tests` exercises the same HTTP handlers and JSON replies in memory, with MCP tested over stdio pipes. This does not verify socket transport.
+
+Every normal command reply carries an `op` id, also shown by readable `ft call` output and in MCP results/errors. `ft op N` and MCP `ft_op` query it without creating another operation. After a main-thread timeout the client polls that id for up to 30 seconds and returns the original result or failure. It never repeats the command. If it stays pending, query the id later. A transport failure before an id arrives has an unknown outcome; inspect the game log before repeating a mutation. The bridge keeps 500 operations. Invalid request bodies and op queries have no new op id.
 
 `.mcp.json` registers the stdio server as `foodtrucks-game`. It uses the same environment variables and fetches screenshots into `build/shots/`.

@@ -13,8 +13,19 @@
       }
     },
     {
-      "wait_event": "Test bridge: loading 'FT\\ truck\\-look\\-shots'",
-      "timeout_s": 180
+      "wait_state": "load.status",
+      "timeout_s": 300,
+      "not_equals": "pending"
+    },
+    {
+      "expect": "state",
+      "path": "load.status",
+      "equals": "done"
+    },
+    {
+      "expect": "state",
+      "path": "load.error",
+      "equals": null
     },
     {
       "wait_state": "scene",
@@ -83,6 +94,11 @@
       }
     },
     {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
+    },
+    {
       "call": "vehicle",
       "args": {
         "id": "$truck",
@@ -90,9 +106,19 @@
       }
     },
     {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
       "wait_state": "player.in_vehicle",
       "timeout_s": 300,
       "equals": "$truck"
+    },
+    {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "driving"
     },
     {
       "call": "time",
@@ -108,9 +134,19 @@
       }
     },
     {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
       "wait_state": "player.at_hatch",
       "timeout_s": 300,
       "equals": "$truck"
+    },
+    {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "at_hatch"
     },
     {
       "call": "time",
@@ -154,6 +190,16 @@
       }
     },
     {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
+    },
+    {
       "shoot": {
         "name": "truck-day-closed",
         "pose": "vehicle-side",
@@ -173,6 +219,11 @@
       }
     },
     {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
+    },
+    {
       "call": "vehicle",
       "args": {
         "id": "$cart",
@@ -180,9 +231,19 @@
       }
     },
     {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
       "wait_state": "player.in_vehicle",
       "timeout_s": 300,
       "equals": "$cart"
+    },
+    {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "pushing"
     },
     {
       "call": "time",
@@ -196,6 +257,11 @@
         "id": "$cart",
         "op": "open"
       }
+    },
+    {
+      "expect": "result",
+      "path": "done",
+      "equals": true
     },
     {
       "wait_state": "vehicles[kind=cart].open",
@@ -230,6 +296,16 @@
       }
     },
     {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
+    },
+    {
       "call": "time",
       "args": {
         "run_until": {
@@ -262,6 +338,11 @@
       }
     },
     {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
+    },
+    {
       "call": "vehicle",
       "args": {
         "id": "$truck",
@@ -269,9 +350,19 @@
       }
     },
     {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
       "wait_state": "player.in_vehicle",
       "timeout_s": 300,
       "equals": "$truck"
+    },
+    {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "driving"
     },
     {
       "call": "time",
@@ -287,9 +378,19 @@
       }
     },
     {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
       "wait_state": "player.at_hatch",
       "timeout_s": 300,
       "equals": "$truck"
+    },
+    {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "at_hatch"
     },
     {
       "call": "time",
@@ -333,6 +434,16 @@
       }
     },
     {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
+    },
+    {
       "shoot": {
         "name": "truck-night-closed",
         "pose": "vehicle-side",
@@ -352,6 +463,11 @@
       }
     },
     {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
+    },
+    {
       "call": "vehicle",
       "args": {
         "id": "$cart",
@@ -359,9 +475,19 @@
       }
     },
     {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
       "wait_state": "player.in_vehicle",
       "timeout_s": 300,
       "equals": "$cart"
+    },
+    {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "pushing"
     },
     {
       "call": "time",
@@ -375,6 +501,11 @@
         "id": "$cart",
         "op": "open"
       }
+    },
+    {
+      "expect": "result",
+      "path": "done",
+      "equals": true
     },
     {
       "wait_state": "vehicles[kind=cart].open",
@@ -407,6 +538,16 @@
         "id": "$cart",
         "op": "close"
       }
+    },
+    {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
+      "wait_state": "player.activity",
+      "timeout_s": 300,
+      "equals": "on_foot"
     }
   ]
 }

@@ -1,33 +1,40 @@
 # Mac review of the built test bridge
 
-Compared with the merged C# implementation, 12 October 2026. These are code findings, not checks in the game. The mock now models the built command rules and protocol. Its city, navigation, economy and pictures remain fake.
+Updated against `f1eaf4b` (12 October 2026), which addresses the earlier Mac review. These are code findings and mock tests, not checks in the game. No game-side code was changed in this pass.
+
+## What was fixed
+
+The numbers refer to the original findings.
+
+| Finding | Status in the game code |
+|---|---|
+| 1. Truck legality used the cart pavement rule | Fixed. Trucks use the wheel parking test; both kinds have a reason prefix. |
+| 2. Order quantities were unavailable | Automated order setup fixed through `commissary order`. The phone quantity input remains unavailable through `ui`. |
+| 3. Crew choices had duplicate text and no stable selector | Automated assignment fixed through `crew` and `state.employees` ids. Duplicate UI row text still needs ids. |
+| 4. List pickers require selection and confirmation | Still applies. The game's confirm label needs a live UI list. |
+| 5. Map picks, drags and equipment/reference placement | Still manual. No new commands cover these. |
+| 6. Load acknowledgement could accept the old city | Fixed through `load.status`, including a fresh mod-data attach when reloading the same name. Poll for done and inspect failed/error. |
+| 7. Walking and hatch startup had no completion phase | Fixed through `player.activity` and `clock_held_by`. Enter and hatch replies still precede arrival by design. |
+| 8. Clock overshoot at payment boundaries | Fixed through the bridge-only tick clamp and `clock.run_until/arrived_at`. Scenarios stop at 07:59 and 23:59. |
+| 9. Bays had no readiness query and door could use another entrance | Fixed through `commissary.bays` and the nearest-bay entrance for door views. |
+| 10. Transaction evidence was missing | Payment checks fixed through `transactions_today`, which includes yesterday too. Displayed wages, tax and day-summary presentation still need review. |
+| 11. Vehicle success could mask a panel refusal | Fixed through `result.done`. Walk-start success still needs an arrival wait. |
+| 12. Calls blocked health/events and timed-out mutations could be repeated | Fixed through separate HTTP request threads and retained operation outcomes. The client polls the original op after a main-thread timeout. |
+| 13. UI clipping/overlap and stale dropdown options | Still applies. `TestBridgeUi.Visible` checks canvases, alpha and screen bounds; id clicks check the component, not whether its option text/content still matches. |
+| 14. Loading from a non-FT city discarded unrelated changes | Fixed. The source city must be FT too. |
 
 ## Changed on the Mac
 
-- Event cursors are inclusive and `next` is after the newest event. The client and runner no longer skip the first event or duplicate a boundary event.
-- Relative `run_until` days go to the bridge unchanged. The mock enforces speed above 0 through 60, clock-holding screens, past targets and time-skip refusals. Completion pauses and restores speed 1. Its normal rate is one game minute per real second; tests choose a faster Options rate explicitly.
-- Vehicle commands enforce driving or pushing, paused Park/Open refusals, hatch eligibility and open-vehicle teleport refusals. Enter and hatch walks finish later. Panel refusals may be successful calls with notices and unchanged state.
-- The mock refuses `new_game`, supports load replies with name and character, and applies the built FT and scene guards. UI entries include kind, options need confirmation, stale ids refuse, and empty escape refuses.
-- State mirrors nulls, licence/course readings, stock keys, order item/units, route and queue availability, and commissary space/bay distinctions. Notice capture excludes older notices and phone texts.
-- Every scenario loads a named save prepared by a person. Unsupported setup is a NOTE. Entry and hatch operations wait for state. The scenarios wait for mod data too, and approach payment boundaries at normal speed with a margin.
-- MCP descriptions and screenshot limits describe the built behavior. The Mac usage section gives the fixture and cursor rules.
+- The mock supplies operation ids and retained pending/done/failed outcomes, concurrent HTTP requests, load progress, vehicle outcomes, crew assignment, per-item order quotes, transactions, employees, activity and bay state. Truck legality and exact clock targets follow the new implementation. Its prices, navigation and pictures remain fake.
+- `ftlib` recovers a main-thread timeout by querying its op for up to 30 seconds. It never resubmits the changing call. Longer work and failed recovery retain the op id for `ft op` or `ft_op`. A transport failure before an id arrives reports an unknown outcome.
+- All six scenarios wait for load completion and check vehicle outcomes and activity where relevant. Orders are created through the command, crew is hired and assigned by id, payment boundaries are exact, and bay shots poll readiness. Art references and routes remain prepared by hand.
+- Order payments are checked by signed quote amount, date, time, label and count. Refused deliveries have no transaction or retry. Crew revenue is checked by its exact paid-in log amount, previous-day date, vehicle label and single transaction, independently of simultaneous expenses. Small runner additions (`where`, `pick`, `scale`, named event `captures`) support those checks.
 
-## Input for the game side
+## Remaining input for the game side
 
-1. **Truck legality is misleading.** `TestBridgeState.Vehicle` runs `Legality.Check(position)` for both kinds. That is the cart pavement rule and returns false inside a parking lane. A truck legally parked in a bay can therefore have `legal: false`, while `commissary.in_bay: true`. Report the truck wheel parking result separately or use it for trucks.
-2. **Order quantities cannot be set through a declared input operation.** `TestBridgeUi` exposes buttons and `UI.Elements.Dropdown`, but no input fields. The order form reads row amounts. Adding an item twice is not a verified way to request two boxes. The order scenarios therefore load an already confirmed order; their order-time money and read-back checks are manual notes. A quantity operation or a test order action would make those checks automatic.
-3. **Crew options are duplicated and have no stable row selector.** The same employee text appears in multiple crew rows; text clicks deliberately refuse. Ids and hierarchy paths can distinguish them after inspection, but state has no list of unassigned hires and the scenario format has no discovery by row. The crew scenario uses an assigned worker in its prepared save. Stable control identifiers or crew assignment arguments would remove that manual step.
-4. **List pickers need two actions, and generic confirm text is outside the mod locale.** Selecting an option does not run it until the confirm button is pressed. The old assumed Crew 1 button is a row label, not a reliable selectable control. The mock models selection and confirmation separately. The game's own confirm and cancel labels still need one live UI list before scripting them.
-5. **Map picks, drag operations and equipment/reference placement are not exposed.** Clicking buttons alone cannot select an arbitrary building in the world or drag a route row. Debug new items cannot produce the hot dog grill, coffee machine and vanilla comparison items required by the art rows. These remain manual setup notes.
-6. **A load acknowledgement is not completion.** From the city, the old city and save can still be visible after the reply. Polling only for city can accept the old state, especially when reloading the same name. Scenarios wait for the load-start log and then city, save name and non-null licence data. A load operation id or completion event would be clearer. `new_game` being unavailable makes reusable prepared saves necessary.
-7. **Walking and activity startup have no completion state beyond indirect fields.** `enter` and `back_to_hatch` return before the walk ends. Open also starts the truck hatch coroutine. `player.at_hatch` can be set while the activity is still starting and holding the clock. The hatch scenario sets speed before entering the activity and waits for a sale before pausing. A walking/activity phase and clock-control availability field would help.
-8. **One frame of clock overshoot matters at payment boundaries.** A 07:59 or 23:59 target can cross the payment before a baseline check. Scenarios now approach 07:50 and 23:50 at speed 1. Exact observation at 23:59 is a manual note. A precise target guarantee, or the actual target/arrival in state, would help financial scenarios.
-9. **There is no readiness query for bays or distant world objects.** Teleport and shoot can refuse because a bay is unresolved or a vehicle is off the map. The camera does not load a distant street. Bay shots move the player near each site first and allow frames to pass. An explicit resolved/failed/pending bay status would allow polling instead of a fixed delay. Door uses the first entrance, while bay resolution may choose another entrance with a short street path, so those views may refer to different doors.
-10. **Transaction and day-summary evidence is missing.** Balance changes mix order payments, rent, parking, wages and other game payments. Midnight net money need not rise even when crew revenue was paid correctly. Scenarios use state and ordered log lines and leave exact transaction labels, dates, fees and totals for review. Exposing the relevant transactions would make those rows decisive.
-11. **A successful vehicle reply can still mean the panel refused.** `CartSelling.OpenHere` returns normally after many notices. Clients must check `state.open` or hatch state, not only `ok`. An explicit outcome would be easier to script. The mock preserves this distinction.
-12. **Calls block health/events and timeouts do not cancel work.** The HTTP loop handles one request at a time. A deferred save, shot or teleport holds later requests until its reply or timeout. After a timeout, the command still runs; blindly retrying a spawn or save is unsafe for a scenario. An operation id and status query would help recovery.
+- **The statement that every /call reply has op is too broad.** `cmd: op` queries return only ok/result (or ok/error), and malformed JSON, missing cmd and invalid op queries have no op. The client and mock follow the code. The contract should state those exceptions.
+- **The full phone order path is still not scriptable from the declared inputs.** Quantities are input fields; the bridge lists buttons and dropdowns only. The payment scenario records a manual phone counterpart using the mod's exact English locale labels, rather than assuming that adding an item twice sets two boxes. A quantity input command and one live list of the vanilla item/confirm controls would make that UI path repeatable.
+- **UI discovery still needs care.** Clipped or covered controls can be listed; id clicks can select a changed dropdown option. Refresh after changes. Generic confirm labels and duplicated crew rows are unchanged; the direct crew command avoids the latter.
+- **Prepared FT saves remain necessary.** New-game creation, route world/map picks, dragging and positioning equipment or vanilla comparison objects are outside the bridge. The scenario notes identify that setup explicitly.
 
-13. **UI visibility and stale options have limits.** `Visible` checks the canvas, alpha and screen bounds, but not scroll masks or overlapping windows. A control clipped by a scroll view or covered by a dialog can still appear. Id clicks check the old component's visibility, not whether a dropdown's options or text still match the last list. Refresh the list after changes.
-14. **Loading from a non-FT city is allowed.** The target name must start with FT, but `LoadFromCity` does not guard the currently loaded name and skips the unsaved-changes question. Run fixtures from the menu or a throwaway FT city. A source-save guard for city loads would protect unrelated unsaved progress.
-
-No game-side code was changed. Live UI, navigation, camera exposure and financial integration remain unverified.
+Live navigation, UI, camera exposure, clock clamping and financial integration remain unverified. The Mac suite passes with the in-memory HTTP handler transport. The normal loopback suite was attempted, but this sandbox refuses listening sockets with `Operation not permitted`; it needs a run outside that restriction.

@@ -4,7 +4,7 @@
   "needs": {},
   "steps": [
     {
-      "note": "Before running, prepare and save 'FT commissary-refused-payment' by hand: one rented truck, one confirmed two-box Hotdog order due tomorrow, no other orders or commissary stock, with the phone closed. Confirm the order with enough money; the scenario lowers the balance at 07:50 before delivery. The bridge cannot create a new game. This note is manual setup, not an automated check."
+      "note": "Prepare 'FT commissary-refused-payment' by hand: exactly one licensed, closed truck with a space rented and the commissary unlocked at Hell's Kitchen, on foot nearby before delivery hour, no open screens, other orders, commissary stock or order transactions in the last two days. Do not confirm an order beforehand. The scenario creates one; new_game is unavailable."
     },
     {
       "call": "load",
@@ -13,8 +13,19 @@
       }
     },
     {
-      "wait_event": "Test bridge: loading 'FT\\ commissary\\-refused\\-payment'",
-      "timeout_s": 180
+      "wait_state": "load.status",
+      "timeout_s": 300,
+      "not_equals": "pending"
+    },
+    {
+      "expect": "state",
+      "path": "load.status",
+      "equals": "done"
+    },
+    {
+      "expect": "state",
+      "path": "load.error",
+      "equals": null
     },
     {
       "wait_state": "scene",
@@ -22,14 +33,14 @@
       "equals": "city"
     },
     {
-      "wait_state": "save",
-      "timeout_s": 300,
+      "expect": "state",
+      "path": "save",
       "equals": "FT commissary-refused-payment"
     },
     {
       "wait_state": "licence",
-      "not_equals": null,
-      "timeout_s": 300
+      "timeout_s": 300,
+      "not_equals": null
     },
     {
       "call": "time",
@@ -40,24 +51,97 @@
     {
       "expect": "state",
       "path": "commissary.orders",
+      "length": 0
+    },
+    {
+      "expect": "state",
+      "path": "commissary.stock",
+      "length": 0
+    },
+    {
+      "expect": "state",
+      "path": "transactions_today",
+      "where": {
+        "type": "foodtrucks:transaction_commissary_order"
+      },
+      "length": 0
+    },
+    {
+      "remember": "order_money",
+      "from": "state",
+      "path": "money"
+    },
+    {
+      "call": "commissary",
+      "args": {
+        "op": "order",
+        "site": "hells-kitchen",
+        "items": [
+          {
+            "item": "ba:itemname_hotdog",
+            "boxes": 2
+          }
+        ]
+      }
+    },
+    {
+      "expect": "result",
+      "path": "orders",
       "length": 1
     },
     {
-      "remember": "due",
-      "from": "state",
-      "path": "commissary.orders.0.due_day"
+      "expect": "result",
+      "path": "orders.0.goods",
+      "greater": 0
     },
     {
-      "remember": "stock_before",
-      "from": "state",
-      "path": "commissary.stock"
+      "expect": "result",
+      "path": "orders.0.fee",
+      "greater": 0
+    },
+    {
+      "remember": "order_charge",
+      "from": "result",
+      "path": "orders.0.total",
+      "scale": -1
+    },
+    {
+      "remember": "due",
+      "from": "result",
+      "path": "orders.0.due_day"
+    },
+    {
+      "remember": "units",
+      "from": "result",
+      "path": "orders.0.units"
+    },
+    {
+      "expect": "state",
+      "path": "money",
+      "equals": "$order_money"
+    },
+    {
+      "expect": "state",
+      "path": "transactions_today",
+      "where": {
+        "type": "foodtrucks:transaction_commissary_order"
+      },
+      "length": 0
+    },
+    {
+      "expect": "state",
+      "path": "commissary.orders",
+      "length": 1
+    },
+    {
+      "wait_event": "Commissary order [0-9]+: .+paid on delivery; due day"
     },
     {
       "call": "time",
       "args": {
         "run_until": {
           "day": "$due",
-          "time": "07:00"
+          "time": "07:59"
         },
         "speed": 20
       }
@@ -69,28 +153,36 @@
     },
     {
       "expect": "state",
-      "path": "clock.speed",
-      "equals": 1
+      "path": "clock.run_until",
+      "equals": null
     },
     {
-      "call": "time",
-      "args": {
-        "run_until": {
-          "day": "$due",
-          "time": "07:50"
-        },
-        "speed": 1
-      }
+      "expect": "state",
+      "path": "clock.time",
+      "equals": "07:59"
     },
     {
-      "wait_state": "clock.paused",
-      "equals": true,
-      "timeout_s": 300
+      "expect": "state",
+      "path": "clock.arrived_at",
+      "matches": "^day [0-9]+ 07:59$"
     },
     {
       "expect": "state",
       "path": "clock.speed",
       "equals": 1
+    },
+    {
+      "expect": "state",
+      "path": "transactions_today",
+      "where": {
+        "type": "foodtrucks:transaction_commissary_order"
+      },
+      "length": 0
+    },
+    {
+      "expect": "state",
+      "path": "commissary.orders",
+      "length": 1
     },
     {
       "call": "money",
@@ -99,18 +191,18 @@
       }
     },
     {
-      "remember": "short_money",
+      "remember": "stock_before",
       "from": "state",
-      "path": "money"
+      "path": "commissary.stock"
     },
     {
       "call": "time",
       "args": {
         "run_until": {
           "day": "$due",
-          "time": "08:05"
+          "time": "08:00"
         },
-        "speed": 1
+        "speed": 20
       }
     },
     {
@@ -120,16 +212,26 @@
     },
     {
       "expect": "state",
+      "path": "clock.run_until",
+      "equals": null
+    },
+    {
+      "expect": "state",
+      "path": "clock.time",
+      "equals": "08:00"
+    },
+    {
+      "expect": "state",
+      "path": "clock.arrived_at",
+      "matches": "^day [0-9]+ 08:00$"
+    },
+    {
+      "expect": "state",
       "path": "clock.speed",
       "equals": 1
     },
     {
-      "wait_event": "Commissary delivery: order \\d+, .+ not delivered: the payment of \\$.+ was refused \\(not enough money\\); the order is cancelled\\."
-    },
-    {
-      "expect": "state",
-      "path": "money",
-      "equals": "$short_money"
+      "wait_event": "Commissary delivery: order .+ not delivered: .+ refused .+ cancelled\\."
     },
     {
       "expect": "state",
@@ -140,6 +242,19 @@
       "expect": "state",
       "path": "commissary.stock",
       "equals": "$stock_before"
+    },
+    {
+      "expect": "state",
+      "path": "transactions_today",
+      "where": {
+        "type": "foodtrucks:transaction_commissary_order"
+      },
+      "length": 0
+    },
+    {
+      "expect": "state",
+      "path": "money",
+      "equals": 1
     },
     {
       "call": "money",
@@ -152,9 +267,9 @@
       "args": {
         "run_until": {
           "day": "+1",
-          "time": "08:05"
+          "time": "08:00"
         },
-        "speed": 1
+        "speed": 20
       }
     },
     {
@@ -164,12 +279,30 @@
     },
     {
       "expect": "state",
+      "path": "clock.run_until",
+      "equals": null
+    },
+    {
+      "expect": "state",
+      "path": "clock.time",
+      "equals": "08:00"
+    },
+    {
+      "expect": "state",
+      "path": "clock.arrived_at",
+      "matches": "^day [0-9]+ 08:00$"
+    },
+    {
+      "expect": "state",
       "path": "clock.speed",
       "equals": 1
     },
     {
       "expect": "state",
-      "path": "commissary.orders",
+      "path": "transactions_today",
+      "where": {
+        "type": "foodtrucks:transaction_commissary_order"
+      },
       "length": 0
     },
     {
@@ -178,11 +311,11 @@
       "equals": "$stock_before"
     },
     {
-      "no_event": "Commissary delivery:.*paid \\$",
-      "from_step": 26
+      "no_event": "Commissary delivery:",
+      "from_step": 46
     },
     {
-      "note": "A person calls the commissary again to check zero orders on the way. The restore may pay outstanding rent or fines, so the later balance is not asserted."
+      "note": "A person checks the phone messages and day summary presentation. The automatic checks use exact transaction amounts, dates, labels and counts, independent of rent and other charges."
     }
   ]
 }

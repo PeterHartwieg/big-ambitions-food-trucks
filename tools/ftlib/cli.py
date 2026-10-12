@@ -32,6 +32,9 @@ def main():
     p.add_argument('--json', dest='arguments', metavar='OBJECT')
     p.add_argument('--raw', action='store_true', dest='call_raw', help='Print the raw reply (or put --json before call)')
     p.add_argument('--timeout', type=float, default=10)
+    p = sub.add_parser('op', help='Query an earlier operation without repeating it')
+    p.add_argument('id', type=int)
+    p.add_argument('--json', action='store_true', dest='raw', default=argparse.SUPPRESS)
     p = sub.add_parser('events')
     p.add_argument('--since', type=int, default=0)
     p.add_argument('--follow', action='store_true')
@@ -62,6 +65,8 @@ def main():
         elif args.command == 'call':
             reply = bridge.call(args.cmd, parse_args(args.pairs, args.arguments), args.timeout)
             args.raw = args.raw or args.call_raw
+        elif args.command == 'op':
+            reply = bridge.op(args.id)
         elif args.command == 'wait-event':
             cursor = bridge.events()['next']
             reply = bridge.wait_event(args.regex, args.timeout, cursor)
@@ -92,11 +97,14 @@ def main():
             print(json.dumps(reply, ensure_ascii=False, indent=2))
         else:
             if isinstance(reply, dict) and 'result' in reply:
-                reply = reply['result'] | ({'local_path': reply['local_path']} if 'local_path' in reply else {})
+                reply = reply['result'] | ({'op':reply['op']} if 'op' in reply else {}) | ({'local_path': reply['local_path']} if 'local_path' in reply else {})
             print(readable(reply))
         return 0
     except BridgeError as exc:
-        print(str(exc).replace('\n', ' '), file=sys.stderr)
+        if (args.raw or getattr(args,'call_raw',False)) and exc.reply:
+            print(json.dumps(exc.reply, ensure_ascii=False))
+        detail=f' (op {exc.op}; tools/ft op {exc.op})' if exc.op is not None else ''
+        print(str(exc).replace('\n', ' ') + detail, file=sys.stderr)
         return 1
     except (ValueError, OSError, re.error) as exc:
         print(f'Cannot run command: {exc}; check tools/ft --help and the command arguments'.replace('\n', ' '), file=sys.stderr)

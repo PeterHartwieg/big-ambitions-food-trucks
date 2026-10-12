@@ -164,8 +164,8 @@ class ParityTests(unittest.TestCase):
         self.mock.state['player']['x']=5
         self.assertEqual(self.mock.call('state',{})['vehicles'][1]['serving'],'player')
         self.mock.place_vehicle(self.v,'hells-kitchen')
-        self.assertFalse(self.v['legal']) # Legality.Check uses the cart pavement rule even for trucks.
-        self.assertEqual(self.v['legal_reason'],'inside a parking lane')
+        self.assertTrue(self.v['legal'])
+        self.assertTrue(self.v['legal_reason'].startswith('wheel parking test: legal'))
         self.assertEqual(self.v['commissary'],{'site':None,'in_bay':True,'bay_site':'hells-kitchen'})
         self.mock.selected=self.id
         self.mock.call('debug',{'action':'licence'})
@@ -175,7 +175,7 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(len(reply['notices']),1)
         self.assertNotIn('Notice:',reply['notices'][0])
         self.assertEqual(self.mock.call('debug',{'action':'status'})['notices'],[])
-        self.assertIn('item',self.mock.saves['FT commissary-pay-on-delivery']['state']['commissary']['orders'][0])
+        self.assertEqual(self.mock.saves['FT commissary-pay-on-delivery']['state']['commissary']['orders'],[])
 
     def test_ui_option_ids_and_selection_confirmation(self):
         self.mock.state['player']['in_vehicle']=self.id

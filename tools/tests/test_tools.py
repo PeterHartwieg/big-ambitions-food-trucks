@@ -330,7 +330,7 @@ class MCPTests(unittest.TestCase):
             process.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
             process.stdin.flush()
             listed=request('tools/list')
-            self.assertEqual(len(listed['result']['tools']),9)
+            self.assertEqual(len(listed['result']['tools']),10)
             self.assertEqual(request('ping')['result'],{})
             for name,arguments in [('ft_health',{}),('ft_state',{'path':'money'}),('ft_call',{'cmd':'money','args':{'set':1234}}),
                                    ('ft_events',{'since':0,'grep':'Version'}),('ft_ui_list',{})]:

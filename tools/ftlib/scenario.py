@@ -6,15 +6,15 @@ import re
 import time
 
 from .bridge import Bridge, BridgeError
-from .paths import CONDITIONS, lookup, meets
+from .paths import CONDITIONS, lookup, meets, value
 from .shots import ROOT, contact_sheet, fetch_shot
 
 KINDS = {'call', 'remember', 'expect', 'wait_event', 'wait_state', 'no_event', 'shoot', 'sleep_s', 'note'}
 FIELDS = {
     'call': {'args', 'expect_ok', 'timeout_s'},
-    'remember': {'from', 'path'},
-    'expect': {'path'} | CONDITIONS,
-    'wait_event': {'timeout_s'},
+    'remember': {'from', 'path', 'scale'},
+    'expect': {'path', 'where', 'pick'} | CONDITIONS,
+    'wait_event': {'timeout_s', 'captures'},
     'wait_state': {'timeout_s', 'poll_s'} | CONDITIONS,
     'no_event': {'from_step', 'to_step'},
     'shoot': set(), 'sleep_s': set(), 'note': set(),
@@ -53,6 +53,17 @@ def validate(document):
             raise ValueError(f'Step {index} needs a condition: use equals, less, length or another contract condition')
         if 'path' in step and not isinstance(step['path'], str):
             raise ValueError(f'Step {index} path must be a string')
+        if 'where' in step and (not isinstance(step['where'],dict) or any(not isinstance(k,str) for k in step['where'])):
+            raise ValueError(f'Step {index} where needs an object of field equality filters')
+        if 'pick' in step and (not isinstance(step['pick'],str) or 'where' not in step):
+            raise ValueError(f'Step {index} pick needs a path after where')
+        if 'scale' in step and (isinstance(step['scale'],bool) or not isinstance(step['scale'],(int,float)) or not math.isfinite(step['scale'])):
+            raise ValueError(f'Step {index} scale needs a finite number')
+        if kind=='wait_event' and 'captures' in step:
+            if not isinstance(step['captures'],dict) or any(not isinstance(k,str) or not isinstance(v,str) for k,v in step['captures'].items()):
+                raise ValueError(f'Step {index} captures maps variables to named regex groups')
+            groups=re.compile(step[kind]).groupindex
+            if set(step['captures'].values())-groups.keys(): raise ValueError(f'Step {index} captures names an absent regex group')
         if 'length' in step and (isinstance(step['length'], bool) or not isinstance(step['length'], int) or step['length'] < 0):
             raise ValueError(f'Step {index} length must be a nonnegative integer')
         for field in ('timeout_s', 'poll_s', 'sleep_s'):
@@ -130,16 +141,18 @@ class Runner:
             try:
                 reply = self.bridge.call(step[kind], args, step.get('timeout_s', 10))
             except BridgeError as exc:
-                self.last = {'ok': False, 'error': str(exc)}
+                self.last = exc.reply or {'ok': False, 'error': str(exc)}
                 if step.get('expect_ok') is False and exc.remote:
                     return {'expected': 'ok: false', 'seen': self.last}
                 raise
             self.last = reply['result']
             if step.get('expect_ok') is False:
                 raise ValueError(f'Expected ok: false for {step[kind]}, saw ok: true')
-            return {'expected': {'cmd': step[kind], 'args': args, 'ok': True}, 'seen': self.last}
+            return {'expected': {'cmd': step[kind], 'args': args, 'ok': True}, 'seen': self.last, 'op':reply.get('op')}
         if kind == 'remember':
             actual = lookup(self.source(step['from']), self.resolve(step.get('path', '')))
+            if 'scale' in step:
+                actual = round(actual * step['scale'], 2)
             self.variables[step[kind]] = actual
             return {'expected': f'remember ${step[kind]}', 'seen': actual}
         if kind in ('expect', 'wait_state'):
@@ -148,6 +161,10 @@ class Runner:
             deadline = time.monotonic() + step.get('timeout_s', 30)
             while True:
                 actual = lookup(self.source(step[kind] if kind == 'expect' else 'state'), path)
+                if 'where' in step:
+                    filters=self.resolve(step['where'])
+                    actual=[item for item in actual if all(lookup(item,k)==v for k,v in filters.items())]
+                    actual=lookup(actual,self.resolve(step.get('pick','')))
                 self.collect()
                 if meets(actual, conditions):
                     return {'expected': {'path': path, **conditions}, 'seen': actual}
@@ -161,6 +178,9 @@ class Runner:
                 self.collect()
                 event = next((e for e in self.events if e['seq'] > self.event_mark and regex.search(e['text'])), None)
                 if event:
+                    match=regex.search(event['text'])
+                    for name,group in step.get('captures',{}).items():
+                        self.variables[name]=value(match.group(group).replace(',',''))
                     self.event_mark = event['seq']
                     return {'expected': step[kind], 'seen': event}
                 if time.monotonic() >= deadline:
