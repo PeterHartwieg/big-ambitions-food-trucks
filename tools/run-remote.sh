@@ -3,7 +3,7 @@
 # Usage: tools/run-remote.sh <action> [ssh host]   (or set BA_GAME_HOST)
 #   status       is the game running, which local mods are in, is Food Trucks installed or parked
 #   start        start the game on the desktop with -console -foodtrucks-test, open the tunnel, wait for the bridge
-#   tunnel       open the ssh tunnel to the bridge (127.0.0.1:8322 on both ends), in the background
+#   tunnel       open the ssh tunnel to the bridge (127.0.0.1:8330 on both ends), in the background
 #   tunnel-stop  close it
 #   wait         wait until the bridge answers /health (up to BA_BRIDGE_WAIT seconds, default 180)
 #   stop         ask the bridge to quit the game and wait up to 120 s for it to close; never kills
@@ -14,7 +14,7 @@ ACTION="${1:?status, start, tunnel, tunnel-stop, wait or stop}"
 FORCE=false
 if [ "${2:-}" = "--force" ]; then FORCE=true; shift; fi
 HOST="${2:-${BA_GAME_HOST:?Pass the ssh host of the Windows game PC, or set BA_GAME_HOST}}"
-PORT=8322
+PORT=8330
 URL="http://127.0.0.1:$PORT"
 PIDFILE="$REPO/build/bridge-tunnel.pid"
 mkdir -p "$REPO/build"

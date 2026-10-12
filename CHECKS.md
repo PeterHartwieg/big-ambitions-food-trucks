@@ -1,12 +1,12 @@
 # Test bridge (next build)
 
-The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:8322` inside the game, only when it starts with `-foodtrucks-test`, plus a `Notice:` or `Phone:` log line for every notice and text the mod shows. Branch `tooling-game`; no version bump, so the log says 0.9.10. Built, never run. Start the game once without the flag (rows 1 and 2), then with it: `tools/run-remote.sh start` runs `steam.exe -applaunch 1331550 -console -foodtrucks-test` on homepc. From the Mac, `ssh -L 8322:127.0.0.1:8322 homepc` and `curl http://127.0.0.1:8322/health`. Use a throwaway save named **FT bridge**, made from a **new character** of its own (start a new game, save it as FT bridge). Never make an FT save by saving a series city under a new name: the bridge refuses any save whose character also has saves not starting with FT.
+The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:8330` inside the game, only when it starts with `-foodtrucks-test`, plus a `Notice:` or `Phone:` log line for every notice and text the mod shows. Branch `tooling-game`; no version bump, so the log says 0.9.10. Built, never run. Start the game once without the flag (rows 1 and 2), then with it: `tools/run-remote.sh start` runs `steam.exe -applaunch 1331550 -console -foodtrucks-test` on homepc. From the Mac, `ssh -L 8330:127.0.0.1:8330 homepc` and `curl http://127.0.0.1:8330/health`. Use a throwaway save named **FT bridge**, made from a **new character** of its own (start a new game, save it as FT bridge). Never make an FT save by saving a series city under a new name: the bridge refuses any save whose character also has saves not starting with FT.
 
 | # | Do | Look for |
 |---|---|---|
-| 1 | Start without the flag, load any FT save, play a minute | `Test bridge: off (the game was started without -foodtrucks-test).` once at startup. `curl http://127.0.0.1:8322/health` on homepc gets no answer. Everything else as in 0.9.10 |
+| 1 | Start without the flag, load any FT save, play a minute | `Test bridge: off (the game was started without -foodtrucks-test).` once at startup. `curl http://127.0.0.1:8330/health` on homepc gets no answer. Everything else as in 0.9.10 |
 | 2 | Same session: open a cart where it can't open, spawn a truck (Ctrl+K), call a commissary | Every notice on screen also appears in Player.log as `Notice: <the same text>`, and each commissary text as `Phone: <commissary name>: <text>`. Nothing looks different on screen |
-| 3 | Start with the flag, stay at the main menu, `curl …/health` | `Test bridge: listening on http://127.0.0.1:8322/ (session <8 hex>).` in the log. The reply has `"scene":"menu"`, `"save":null`, the mod version and a growing `frame` |
+| 3 | Start with the flag, stay at the main menu, `curl …/health` | `Test bridge: listening on http://127.0.0.1:8330/ (session <8 hex>).` in the log. The reply has `"scene":"menu"`, `"save":null`, the mod version and a growing `frame` |
 | 4 | Alt-tab away from the game for a minute, `curl …/health` twice | `frame` still grows (the game runs in the background) |
 | 5 | `load` `{"name":"FT bridge"}` from the menu, poll `/health` | `scene` goes `loading`, then `city` with the save's name, day and time. No question about mods |
 | 6 | `state` | Clock, money, player position, the licence, every food vehicle with its position, legality, stock and queue, the commissary. Compare a few values with the screen |
@@ -35,7 +35,7 @@ The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:832
 
 Log lines:
 
-- Startup: `Test bridge: listening on http://127.0.0.1:8322/ (session <8 hex>).` or `Test bridge: off (…)`; a taken port gives `Test bridge: could not listen on 127.0.0.1:8322 (…)` and the game goes on without the bridge.
+- Startup: `Test bridge: listening on http://127.0.0.1:8330/ (session <8 hex>).` or `Test bridge: off (…)`; a taken port gives `Test bridge: could not listen on 127.0.0.1:8330 (…)` and the game goes on without the bridge.
 - Every notice: `Notice: <text>`; every text: `Phone: <contact>: <text>`, the player's own read-back `Phone: <contact>: [player] <text>`. A raw key (`Notice: foodtrucks:… {…}`) means the locale file lacks the key: tell me.
 - Commands: `Test bridge: running the clock at speed N until day D HH:MM.`, `Test bridge: run_until day D HH:MM reached at day D HH:MM; paused, speed 1.`, `Test bridge: money set from … to ….`, `Test bridge: moving the player to x …`, `Test bridge: moved <type> <id> to x …`, `Test bridge: vehicle <id> <op>.`, `Test bridge: clicked "…" (…).`, `Test bridge: escape: ….`, `Test bridge: shot <name> (…): <path>.`, `Test bridge: saving as '…'.`, `Test bridge: loading '…' (…).`, `Test bridge: quitting the game.`
 - Any `Test bridge, refresh:` or `Test bridge, every frame:` error line: tell me.

@@ -12,7 +12,7 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // The test bridge (docs/test-bridge.md): HTTP on 127.0.0.1:8322 inside the game, so an agent on the Mac can drive and
+    // The test bridge (docs/test-bridge.md): HTTP on 127.0.0.1:8330 inside the game, so an agent on the Mac can drive and
     // read the game through an ssh tunnel. Only when the game was started with -foodtrucks-test; without the flag nothing
     // listens and the game behaves as before. It starts at the mod's initialisation load, so it answers at the main menu,
     // and stops when the mod unloads.
@@ -22,7 +22,7 @@ namespace FoodTrucks
     internal static class TestBridge
     {
         internal const string Flag = "-foodtrucks-test";
-        internal const int Port = 8322;
+        internal const int Port = 8330;
         internal const int BridgeVersion = 1;
 
         private static TestBridgeHttp? http;

@@ -23,7 +23,9 @@ def fetch_shot(source, directory, name=None):
         host = os.environ.get('BA_GAME_HOST')
         if not host:
             raise ValueError(f'Screenshot is on the game PC at {source}: set BA_GAME_HOST to its ssh host')
-        result = subprocess.run(['scp', '--', f'{host}:{source}', str(target)],
+        # The bridge reports a Windows path with backslashes, which scp to Windows OpenSSH doesn't accept.
+        remote = source.replace('\\', '/')
+        result = subprocess.run(['scp', '--', f'{host}:{remote}', str(target)],
                                 capture_output=True, text=True)
         if result.returncode:
             raise ValueError(f'Could not fetch screenshot {source}: check BA_GAME_HOST and ssh access ({result.stderr.strip()})')

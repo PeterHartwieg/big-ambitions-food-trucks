@@ -7,7 +7,7 @@ The pieces:
 | Piece | Where | What it does |
 |---|---|---|
 | Notice log | `unity/FoodTrucks/Scripts/` | Every notice and phone text the mod shows is also a `Notice:` or `Phone:` line in `Player.log` |
-| Test bridge | `unity/FoodTrucks/Scripts/TestBridge*.cs` | HTTP on `127.0.0.1:8322` inside the game, only when the game was launched with `-foodtrucks-test` |
+| Test bridge | `unity/FoodTrucks/Scripts/TestBridge*.cs` | HTTP on `127.0.0.1:8330` inside the game, only when the game was launched with `-foodtrucks-test` |
 | `tools/ft` | Mac | Command-line client for the bridge |
 | `tools/ft-mcp` | Mac | The same calls as an MCP server (stdio), registered in `.mcp.json` |
 | `tools/mock-bridge` | Mac | A fake bridge with canned state, for working on the client and scenarios without the game |
@@ -20,7 +20,7 @@ The pieces:
 ## Safety
 
 - The bridge starts only with `-foodtrucks-test` on the game's command line. Without it nothing listens, and the Workshop build behaves as before.
-- It binds `127.0.0.1` only. The Mac reaches it through `ssh -L 8322:127.0.0.1:8322 homepc` (`tools/run-remote.sh tunnel`).
+- It binds `127.0.0.1` only. The Mac reaches it through `ssh -L 8330:127.0.0.1:8330 homepc` (`tools/run-remote.sh tunnel`).
 - Commands that change a save (money, spawns, time jumps, debug actions) are for throwaway **FT** saves only. `load` and `new_game` refuse any save whose name doesn't start with `FT`, and the bridge refuses every changing command while the loaded save's name doesn't start with `FT`.
 
 ## Transport
@@ -140,7 +140,7 @@ Fields the game side can't fill yet are `null`, never left out, so scenarios can
 
 Built 12 October 2026 in `unity/FoodTrucks/Scripts/` (`Notices.cs`, `TestBridge*.cs`). Not yet run in game; every game call below comes from the 1.0 decompile, and the ones to check first are listed in CHECKS.md, "Test bridge". Where the build differs from the contract above, this section wins.
 
-**Startup.** One line at the mod's initialisation load: `Test bridge: listening on http://127.0.0.1:8322/ (session 3f9a1c07).` or `Test bridge: off (the game was started without -foodtrucks-test).` A taken port logs `Test bridge: could not listen on 127.0.0.1:8322 (…); … The bridge is off.` With the flag the bridge also sets `Application.runInBackground`, so the game keeps running when its window loses the focus. `Test bridge: stopped.` when the mod unloads.
+**Startup.** One line at the mod's initialisation load: `Test bridge: listening on http://127.0.0.1:8330/ (session 3f9a1c07).` or `Test bridge: off (the game was started without -foodtrucks-test).` A taken port logs `Test bridge: could not listen on 127.0.0.1:8330 (…); … The bridge is off.` With the flag the bridge also sets `Application.runInBackground`, so the game keeps running when its window loses the focus. `Test bridge: stopped.` when the mod unloads.
 
 **Notice log.** Every notice the mod shows is a `Notice: <text>` line and every text it sends a `Phone: <contact>: <text>` line, with the text resolved as the game shows it (`LocalizorManager.Localize(key, data)`). A key the game has no text for is logged as `<key> {name=value, …}`. The player's own line in a call (the commissary order read-back) is `Phone: <contact>: [player] <text>`. What the player sees is unchanged.
 
@@ -244,7 +244,7 @@ Make FT saves by hand from a new character of their own, never a series city sav
 
 ```sh
 export BA_GAME_HOST=homepc
-ssh -N -L 8322:127.0.0.1:8322 "$BA_GAME_HOST"
+ssh -N -L 8330:127.0.0.1:8330 "$BA_GAME_HOST"
 # In another terminal:
 tools/ft health
 tools/ft call load name='FT bridge'
@@ -253,7 +253,7 @@ tools/ft state load
 tools/ft state
 ```
 
-When available, `tools/run-remote.sh start` and `tools/run-remote.sh tunnel` handle launch and the tunnel. The client uses `BA_BRIDGE_URL`, default `http://127.0.0.1:8322`. `BA_GAME_HOST` is used only to fetch screenshots.
+When available, `tools/run-remote.sh start` and `tools/run-remote.sh tunnel` handle launch and the tunnel. The client uses `BA_BRIDGE_URL`, default `http://127.0.0.1:8330`. `BA_GAME_HOST` is used only to fetch screenshots.
 
 ```sh
 tools/ft state 'vehicles[kind=truck].id'
@@ -290,7 +290,7 @@ Reports land in `build/scenarios/<name>-<time>/`: failures first in `report.md`,
 ```sh
 tools/check-log build/logs/game/<session>/Player.log 0.9.10 --rows 0.9.10/1,0.9.10/2
 python3 -m unittest discover -s tools/tests
-tools/mock-bridge --port 8322
+tools/mock-bridge --port 8330
 ```
 
 Row rules count only for selected `--rows`; `--rows all` checks every row. Rules without rows always count. Every `[Mod:Food Trucks] ERROR: ` line (also the older unspaced prefix) fails the always-on error check; older logs keep the word and stack heuristics. Unknown versions get only the always-on checks. Conditional diagnostics use `count>=0` to report observed counts without requiring a fallback or retry.

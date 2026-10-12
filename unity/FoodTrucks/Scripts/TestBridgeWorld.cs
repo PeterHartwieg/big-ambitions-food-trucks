@@ -226,6 +226,11 @@ namespace FoodTrucks
             if (record?.IsOpen == true) throw new BridgeError($"Vehicle {id} is open for business: close it first (vehicle close).");
             var rotation = Quaternion.Euler(0f, heading ?? controller.transform.eulerAngles.y, 0f);
             VehicleHelper.TeleportVehicleToGround(controller, target, rotation);
+            // The game moves the rigidbody; the transform only follows at the next physics step, which a paused game
+            // doesn't take. Move it too, so the reply and the saved position are the new place.
+            var body = controller.GetComponent<Rigidbody>();
+            if (body != null) controller.transform.SetPositionAndRotation(body.position, body.rotation);
+            Physics.SyncTransforms();
             controller.SavePosition();
             var t = controller.transform;
             Log.Info($"Test bridge: moved {vehicle.vehicleTypeName} {id} to x {t.position.x:F1}, z {t.position.z:F1}, heading {t.eulerAngles.y:F0}.");

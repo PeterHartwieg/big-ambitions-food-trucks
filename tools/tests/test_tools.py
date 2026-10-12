@@ -408,7 +408,7 @@ class CLIAndShotsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             def fake_scp(args,**kwargs):
                 self.assertEqual(args[:2],['scp','--'])
-                self.assertEqual(args[2],r'homepc:C:\Users\Peter\shots\a b.png')
+                self.assertEqual(args[2],'homepc:C:/Users/Peter/shots/a b.png')  # Windows OpenSSH wants forward slashes
                 self.assertNotIn('shell',kwargs)
                 Path(args[-1]).write_bytes(b'\x89PNG\r\n\x1a\nmock')
                 return subprocess.CompletedProcess(args,0,'','')

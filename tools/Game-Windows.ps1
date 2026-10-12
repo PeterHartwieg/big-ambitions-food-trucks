@@ -41,7 +41,7 @@ switch ($Action) {
         if (Get-Game) { throw 'Big Ambitions is already running. Stop it first (run-remote.sh stop).' }
         if (!(Test-Path $steam)) { throw "Steam not found at $steam." }
         if (!(query user 2>$null | Select-String 'Active')) { throw 'Nobody is signed in on the game PC, so the game has no desktop to open on.' }
-        $user = "$env:USERDOMAIN\$env:USERNAME"
+        $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
         $launch = New-ScheduledTaskAction -Execute $steam -Argument "-applaunch $appId $GameArgs"
         $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
         Register-ScheduledTask -TaskName $taskName -Action $launch -Principal $principal -Force | Out-Null

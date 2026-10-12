@@ -31,7 +31,7 @@ def check_session(expected, reply):
 
 class Bridge:
     def __init__(self, url=None):
-        self.url = (url or os.environ.get('BA_BRIDGE_URL', 'http://127.0.0.1:8322')).rstrip('/')
+        self.url = (url or os.environ.get('BA_BRIDGE_URL', 'http://127.0.0.1:8330')).rstrip('/')
         self.http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         self.session = None
         self.reconnect_required = False
