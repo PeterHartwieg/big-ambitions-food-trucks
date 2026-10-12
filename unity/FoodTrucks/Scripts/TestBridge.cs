@@ -62,7 +62,7 @@ namespace FoodTrucks
                 TestBridgePump.Admit();
                 TestBridgeEvents.Hook();
                 pump = TestBridgePump.Install();
-                var server = new TestBridgeHttp(Port);
+                var server = new TestBridgeHttp(Port, TestBridgePump.Generation);
                 server.Start();
                 http = server;
                 Patches.ApplyTestBridge();

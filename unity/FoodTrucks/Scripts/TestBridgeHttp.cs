@@ -17,11 +17,18 @@ namespace FoodTrucks
     internal sealed class TestBridgeHttp
     {
         private readonly int port;
+        // The bridge generation this server was started under, fixed for its life: a request it accepts is refused at the
+        // main thread's queue once that generation has ended, even if a stop and a start came in between.
+        private readonly int generation;
         private HttpListener? listener;
         private Thread? thread;
         private volatile bool running;
 
-        public TestBridgeHttp(int port) => this.port = port;
+        public TestBridgeHttp(int port, int generation)
+        {
+            this.port = port;
+            this.generation = generation;
+        }
 
         public void Start()
         {
@@ -55,9 +62,6 @@ namespace FoodTrucks
                 HttpListenerContext context;
                 try { context = listener!.GetContext(); }
                 catch (Exception) { break; } // the listener was stopped
-                // The bridge generation this request came in under: a call that reaches the main thread's queue after a stop
-                // (and a start) is refused, never run under the new one.
-                var generation = TestBridgePump.Generation;
                 ThreadPool.QueueUserWorkItem(_ => Serve(context, generation));
             }
         }
