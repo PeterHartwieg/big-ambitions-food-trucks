@@ -1,0 +1,322 @@
+{
+  "name": "truck-look-shots",
+  "checks": "CHECKS.md, Art look, rows 1 to 3, 7 and 8; Truck interior (0.9.8), rows 1 and 3",
+  "needs": {
+    "scene": "city",
+    "save_prefix": "FT"
+  },
+  "steps": [
+    {
+      "call": "time",
+      "args": {
+        "pause": true
+      }
+    },
+    {
+      "call": "debug",
+      "args": {
+        "action": "spawn truck"
+      }
+    },
+    {
+      "remember": "truck",
+      "from": "state",
+      "path": "vehicles[kind=truck].id"
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "$truck",
+        "place": "bay:hells-kitchen"
+      }
+    },
+    {
+      "call": "debug",
+      "args": {
+        "action": "licence"
+      }
+    },
+    {
+      "call": "time",
+      "args": {
+        "pause": true
+      }
+    },
+    {
+      "call": "debug",
+      "args": {
+        "action": "spawn cart"
+      }
+    },
+    {
+      "remember": "cart",
+      "from": "state",
+      "path": "vehicles[kind=cart].id"
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "$cart",
+        "place": "bay:hells-kitchen"
+      }
+    },
+    {
+      "call": "debug",
+      "args": {
+        "action": "licence"
+      }
+    },
+    {
+      "note": "Art look rows 1 to 3, 7 and 8 and Truck interior rows 1 and 3 need visual review. The bridge can load new mod items but cannot fit the hot dog grill and coffee machine or spawn a vanilla comparison vehicle. Set up those references in the live save before taking comparison shots."
+    },
+    {
+      "call": "time",
+      "args": {
+        "run_until": {
+          "day": "+1",
+          "time": "12:00"
+        },
+        "speed": 20
+      }
+    },
+    {
+      "wait_state": "clock.paused",
+      "equals": true,
+      "timeout_s": 300
+    },
+    {
+      "expect": "state",
+      "path": "clock.time",
+      "equals": "12:00"
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "enter"
+      }
+    },
+    {
+      "call": "debug",
+      "args": {
+        "action": "new items"
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "open"
+      }
+    },
+    {
+      "shoot": {
+        "name": "truck-day-vehicle-side",
+        "pose": "vehicle-side",
+        "target": "$truck"
+      }
+    },
+    {
+      "shoot": {
+        "name": "truck-day-hatch-pavement",
+        "pose": "hatch-pavement",
+        "target": "$truck"
+      }
+    },
+    {
+      "shoot": {
+        "name": "truck-day-hatch-close",
+        "pose": "hatch-close",
+        "target": "$truck"
+      }
+    },
+    {
+      "shoot": {
+        "name": "truck-day-queue",
+        "pose": "queue",
+        "target": "$truck"
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "close"
+      }
+    },
+    {
+      "shoot": {
+        "name": "truck-day-closed",
+        "pose": "vehicle-side",
+        "target": "$truck"
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$cart",
+        "op": "enter"
+      }
+    },
+    {
+      "call": "debug",
+      "args": {
+        "action": "new items"
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$cart",
+        "op": "open"
+      }
+    },
+    {
+      "shoot": {
+        "name": "cart-day-vehicle-side",
+        "pose": "vehicle-side",
+        "target": "$cart"
+      }
+    },
+    {
+      "shoot": {
+        "name": "cart-day-cart-counter",
+        "pose": "cart-counter",
+        "target": "$cart"
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$cart",
+        "op": "close"
+      }
+    },
+    {
+      "call": "time",
+      "args": {
+        "run_until": {
+          "day": "+0",
+          "time": "22:00"
+        },
+        "speed": 20
+      }
+    },
+    {
+      "wait_state": "clock.paused",
+      "equals": true,
+      "timeout_s": 300
+    },
+    {
+      "expect": "state",
+      "path": "clock.time",
+      "equals": "22:00"
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "enter"
+      }
+    },
+    {
+      "call": "debug",
+      "args": {
+        "action": "new items"
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "open"
+      }
+    },
+    {
+      "shoot": {
+        "name": "truck-night-vehicle-side",
+        "pose": "vehicle-side",
+        "target": "$truck"
+      }
+    },
+    {
+      "shoot": {
+        "name": "truck-night-hatch-pavement",
+        "pose": "hatch-pavement",
+        "target": "$truck"
+      }
+    },
+    {
+      "shoot": {
+        "name": "truck-night-hatch-close",
+        "pose": "hatch-close",
+        "target": "$truck"
+      }
+    },
+    {
+      "shoot": {
+        "name": "truck-night-queue",
+        "pose": "queue",
+        "target": "$truck"
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "close"
+      }
+    },
+    {
+      "shoot": {
+        "name": "truck-night-closed",
+        "pose": "vehicle-side",
+        "target": "$truck"
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$cart",
+        "op": "enter"
+      }
+    },
+    {
+      "call": "debug",
+      "args": {
+        "action": "new items"
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$cart",
+        "op": "open"
+      }
+    },
+    {
+      "shoot": {
+        "name": "cart-night-vehicle-side",
+        "pose": "vehicle-side",
+        "target": "$cart"
+      }
+    },
+    {
+      "shoot": {
+        "name": "cart-night-cart-counter",
+        "pose": "cart-counter",
+        "target": "$cart"
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$cart",
+        "op": "close"
+      }
+    },
+    {
+      "note": "The hatch camera shows the interior and player at the counter. Camera poses exclude UI. Mock renders cannot establish any visual check as passed."
+    }
+  ]
+}

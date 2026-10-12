@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "foodtrucks-game": {
+      "command": "tools/ft-mcp"
+    }
+  }
+}

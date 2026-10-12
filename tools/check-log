@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ftlib.logcheck import check_log, format_report
+parser = argparse.ArgumentParser(description='Check a Food Trucks Player.log')
+parser.add_argument('path')
+parser.add_argument('version', nargs='?')
+parser.add_argument('--rows', help='Comma-separated row ids, or all; default checks only rules without rows')
+args = parser.parse_args()
+try:
+    report = check_log(args.path, args.version, args.rows)
+    print(format_report(report))
+    sys.exit(0 if report['ok'] else 1)
+except (OSError, ValueError) as exc:
+    sys.exit(f'Could not check log: {exc}; check the path and rule file')

@@ -1,0 +1,104 @@
+# id | rule | regex | row (optional)
+# Rows are opt-in. Use --rows all only after playing every row.
+patch.01.TaxCalculationHelper.GetBusinessIncome(Int32, Int32) | must | Patch\ TaxCalculationHelper\.GetBusinessIncome\(Int32,\ Int32\):\ Active\.
+patch.02.TaxCalculationHelper.GetBusinessSales(Int32, Int32) | must | Patch\ TaxCalculationHelper\.GetBusinessSales\(Int32,\ Int32\):\ Active\.
+patch.03.TaxCalculationHelper.GetBusinessIncomeTotal(Int32, Int32) | must | Patch\ TaxCalculationHelper\.GetBusinessIncomeTotal\(Int32,\ Int32\):\ Active\.
+patch.04.VehicleContractSettings.SetListOfVehiclesForSale | must | Patch\ VehicleContractSettings\.SetListOfVehiclesForSale:\ Active\.
+patch.05.VehicleStoreDialog.OnVehicleSettingsSet | must | Patch\ VehicleStoreDialog\.OnVehicleSettingsSet:\ Active\.
+patch.06.ItemPanelUI.SetVehicle(VehicleController) | must | Patch\ ItemPanelUI\.SetVehicle\(VehicleController\):\ Active\.
+patch.07.ItemPanelUI.SetItemInstance | must | Patch\ ItemPanelUI\.SetItemInstance:\ Active\.
+patch.08.ItemPanelUI.SetMiniGameMode | must | Patch\ ItemPanelUI\.SetMiniGameMode:\ Active\.
+patch.09.FinancialSummaryHelper.CreateFinancialSummary(Int32) | must | Patch\ FinancialSummaryHelper\.CreateFinancialSummary\(Int32\):\ Active\.
+patch.10.EconoViewIncomeStatementScrollerController.LoadSalaryRows | must | Patch\ EconoViewIncomeStatementScrollerController\.LoadSalaryRows:\ Active\.
+patch.11.EconoViewIncomeStatementScrollerController.LoadOngoingExpenseRows | must | Patch\ EconoViewIncomeStatementScrollerController\.LoadOngoingExpenseRows:\ Active\.
+patch.12.EconoViewIncomeStatementScrollerController.LoadFeeRows | must | Patch\ EconoViewIncomeStatementScrollerController\.LoadFeeRows:\ Active\.
+patch.13.EmployeeInstance.PayWage(BuildingRegistration) | must | Patch\ EmployeeInstance\.PayWage\(BuildingRegistration\):\ Active\.
+patch.14.ParkingSimulator.RunDaily | must | Patch\ ParkingSimulator\.RunDaily:\ Active\.
+patch.15.ParkingSimulator.RunHourly | must | Patch\ ParkingSimulator\.RunHourly:\ Active\.
+patch.16.BusinessScrollerController.PopulateAllModels | must | Patch\ BusinessScrollerController\.PopulateAllModels:\ Active\.
+patch.17.BizManFilterToggle.PassesFilter | must | Patch\ BizManFilterToggle\.PassesFilter:\ Active\.
+patch.18.BusinessCellView.SetData | must | Patch\ BusinessCellView\.SetData:\ Active\.
+patch.19.BizManList.OpenBusiness | must | Patch\ BizManList\.OpenBusiness:\ Active\.
+patch.20.BizManList.OnDisable | must | Patch\ BizManList\.OnDisable:\ Active\.
+patch.21.BuildingResume.SetButtons | must | Patch\ BuildingResume\.SetButtons:\ Active\.
+patch.22.CityMapFilters.InitializeFilters | must | Patch\ CityMapFilters\.InitializeFilters:\ Active\.
+patch.23.CityMapFilters.ApplyFilters | must | Patch\ CityMapFilters\.ApplyFilters:\ Active\.
+patch.24.CityMapFilters.ApplyFilters(CityBuildingController) | must | Patch\ CityMapFilters\.ApplyFilters\(CityBuildingController\):\ Active\.
+patch.25.EmployeeHelper.RunHourly | must | Patch\ EmployeeHelper\.RunHourly:\ Active\.
+patch.26.EmployeeHelper.PayDailyWages | must | Patch\ EmployeeHelper\.PayDailyWages:\ Active\.
+patch.27.BusinessHelper.RunDaily | must | Patch\ BusinessHelper\.RunDaily:\ Active\.
+patch.28.EmployeeHelper.UnassignEmployeeFromAllWorkshifts(EmployeeInstance) | must | Patch\ EmployeeHelper\.UnassignEmployeeFromAllWorkshifts\(EmployeeInstance\):\ Active\.
+patch.29.EmployeeInstance.ResignBeforeReplacement | must | Patch\ EmployeeInstance\.ResignBeforeReplacement:\ Active\.
+patch.30.EmployeeInstance.Resign | must | Patch\ EmployeeInstance\.Resign:\ Active\.
+patch.31.EmployeeInstance.RemoveEmployee | must | Patch\ EmployeeInstance\.RemoveEmployee:\ Active\.
+patch.32.GameManager.RunMainGameTick(Single) | must | Patch\ GameManager\.RunMainGameTick\(Single\):\ Active\.
+patch.33.NoTaskAssignedComplaint.ConditionToComplainMet(EmployeeInstance) | must | Patch\ NoTaskAssignedComplaint\.ConditionToComplainMet\(EmployeeInstance\):\ Active\.
+patch.34.NoTaskAssignedComplaint.ComplaintHandled(EmployeeInstance) | must | Patch\ NoTaskAssignedComplaint\.ComplaintHandled\(EmployeeInstance\):\ Active\.
+patch.35.TasksUI.CreateTodoTask | must | Patch\ TasksUI\.CreateTodoTask:\ Active\.
+patch.36.BusinessHelper.UpdateSatisfaction(BuildingRegistration) | must | Patch\ BusinessHelper\.UpdateSatisfaction\(BuildingRegistration\):\ Active\.
+patch.37.EducationDoorController.StartLearning | must | Patch\ EducationDoorController\.StartLearning:\ Active\.
+patch.38.VehicleHelper.DestroyBlockingVehicles(GameObject, VehicleType, Transform, Boolean) | must | Patch\ VehicleHelper\.DestroyBlockingVehicles\(GameObject,\ VehicleType,\ Transform,\ Boolean\):\ Active\.
+patch.39.ParkingLaneGenerator.GenerateParkedVehicles(Int32, Boolean) | must | Patch\ ParkingLaneGenerator\.GenerateParkedVehicles\(Int32,\ Boolean\):\ Active\.
+patch.40.PlayerHelper.SaveCurrentPosition | must | Patch\ PlayerHelper\.SaveCurrentPosition:\ Active\.
+patch.41.VehicleOverlay.UpdateOverlay(EntityController) | must | Patch\ VehicleOverlay\.UpdateOverlay\(EntityController\):\ Active\.
+patch.42.DeliveryContractSettingsBase.Start | must | Patch\ DeliveryContractSettingsBase\.Start:\ Active\.
+patch.43.DeliveryContractSettingsBase.SetUpInventoryList | must | Patch\ DeliveryContractSettingsBase\.SetUpInventoryList:\ Active\.
+patch.44.DeliveryContractSettingsBase.AddItemToList(String) | must | Patch\ DeliveryContractSettingsBase\.AddItemToList\(String\):\ Active\.
+patch.45.DeliveryContractSettingsBase.UpdateTotalPrice | must | Patch\ DeliveryContractSettingsBase\.UpdateTotalPrice:\ Active\.
+patch.46.FurnitureDeliveryContractSettings.get_MaxContractAmount | must | Patch\ FurnitureDeliveryContractSettings\.get_MaxContractAmount:\ Active\.
+patch.47.FurnitureDeliveryContractSettings.UpdateItemsListTitle | must | Patch\ FurnitureDeliveryContractSettings\.UpdateItemsListTitle:\ Active\.
+patch.48.ContactScrollerController.LoadContact | must | Patch\ ContactScrollerController\.LoadContact:\ Active\.
+patch.49.ContactsHelper.GetPermanentIds | must | Patch\ ContactsHelper\.GetPermanentIds:\ Active\.
+patch.50.CargoItemUi.SetUp(CargoItem, ICargoHolder, Boolean) | must | Patch\ CargoItemUi\.SetUp\(CargoItem,\ ICargoHolder,\ Boolean\):\ Active\.
+patch.51.CargoItemUi.OnSellClick(CargoItem, CargoInstance) | must | Patch\ CargoItemUi\.OnSellClick\(CargoItem,\ CargoInstance\):\ Active\.
+patch.52.VehicleInstance.MergeIntoCargo(CargoInstance) | must | Patch\ VehicleInstance\.MergeIntoCargo\(CargoInstance\):\ Active\.
+patch.53.VehicleInstance.TryToAddToCargo(CargoInstance) | must | Patch\ VehicleInstance\.TryToAddToCargo\(CargoInstance\):\ Active\.
+patch.54.ICargoHolder.TryToMergeAndMoveCargoBetweenHolders(ICargoHolder, ICargoHolder) | must | Patch\ ICargoHolder\.TryToMergeAndMoveCargoBetweenHolders\(ICargoHolder,\ ICargoHolder\):\ Active\.
+no.notActive | never | Patch .+: Not active
+commissary.state | must | Commissary state: .+? \d+ orders on the way \(paid on delivery\), .+? \d+ rent charges and \d+ fines unpaid; .+?
+map.on | must | Map pick: on \("Add as a stop" in the building card\)\.
+order.placed | must | Commissary order \d+: 2 boxes, .+? at .+? for \$.+? plus \$.+? delivery, paid on delivery; due day \d+ at 08:00\. | row 0.9.10/1,0.9.10/2,0.9.10/3
+order.delivered | must | Commissary delivery: order \d+, .+? at .+? \(ordered day .+?, due day \d+\), paid \$.+? on delivery \(goods \$.+?, fee \$.+?\)\. | row 0.9.10/2
+order.refused | must | Commissary delivery: order \d+, .+? not delivered: the payment of \$.+? was refused \(not enough money\); the order is cancelled\. | row 0.9.10/3
+order.debug | count>=0 | Debug: \d+ commissary orders brought forward and delivered \(paid on delivery\)\. | row 0.9.10/2,0.9.10/3
+uninstall.refund | must | Uninstall: commissary refund \$.+? for the stock delivered; \d+ open orders cancelled, unpaid; .+? spaces given up\. | row 0.9.10/5
+bay.paint | must | Commissary marker .+?; a 5\.8 m truck fits wholly inside; LOADING ZONE 0\.70 m high, 5\.6 m long; sign at x .+?, z .+?, 0\.40 m behind a kerb .+? m past the paint | row 0.9.10/6,0.9.10/7,0.9.10/12
+bay.noSign | never | no sign \(.+?\) | row 0.9.10/6,0.9.10/7,0.9.10/12
+bay.noLettering | never | no lettering \(.+?\) | row 0.9.10/6,0.9.10/7,0.9.10/12
+bay.props | must | Commissary props .+?: props by the door at x .+?, z .+?: pallet \+2\.5 m along the facade, roll cage .+?, hand truck -2\.5 m .+?, dumpster .+? | row 0.9.10/8,0.9.10/12
+bay.leftOut | count>=0 | left out: .+? \(.+?\) | row 0.9.10/8,0.9.10/12
+bay.neighbourDoor | count>=0 | \(next to the entrance at x .+?, z .+?\) | row 0.9.10/8,0.9.10/12
+bay.retry | count>=0 | Commissary props .+?, try \d+: .+?; trying again in 10 s\. | row 0.9.10/8,0.9.10/12
+bay.noTraffic | count>=0 | no props yet \(no traffic lanes near the door\) | row 0.9.10/8,0.9.10/12
+bay.occupied | count>=0 | a vehicle or the player stands there | row 0.9.10/8,0.9.10/12
+bay.palletFallback | count>=0 | Commissary bay: the game's DeliveryPallet prefab not loaded .+?|Commissary bay: .+?has no plain meshes to copy | row 0.9.10/8,0.9.10/12
+bay.missingPrefab | never | Commissary bay: .+?_Display\.prefab missing from the mod's bundle\.|M_BayPaint missing | row 0.9.10/6,0.9.10/8,0.9.10/12
+crew.hour | must | Crew sales: .+?, day \d+ \d\d:00 hour: \d+ customers, \d+ items, \$.+?, paid in after midnight; \d+ units left\. | row 0.9.10/14,0.9.10/15,0.9.10/17
+crew.quietClose | must | Truck .+?: closing notice not shown \(the crew's window, the player away or asleep\)\. | row 0.9.10/14,0.9.10/17
+crew.soldOut | count>=0 | closed \(foodtrucks:notification_sold_out\) | row 0.9.10/14,0.9.10/15,0.9.10/17
+player.sale | must | Sale: .+? | row 0.9.10/15
+route.oldOverlap | count>=0 | Route: truck .+? has no plan: its route fails the rules \(Overlap\); the crew waits until a stop is changed on the BizMan page\. | row bizman/6
+crew.catchUp | must | Route: truck .+? caught up to minute \d+ for the day's close\. | row 0.9.10/16,0.9.10/17,0.9.10/18
+crew.paid | must | Crew sales paid in: .+? \(.+?\), day \d+: \d+ items, \$.+?\. | row 0.9.10/16,0.9.10/17,0.9.10/18
+crew.order | order | Route: truck .+? caught up to minute \d+ for the day's close\. >> Crew sales paid in: .+? \(.+?\), day \d+: \d+ items, \$.+?\. | row 0.9.10/16,0.9.10/17,0.9.10/18
+crew.lastHour | must | Crew sales: .+?, day \d+ 23:00 hour: .+? | row 0.9.10/16
+order.iconFallback | count>=0 | Commissary order form: no icon Icon_.+? in the mod's bundle; .+? shows the game's icon\. | row 0.9.10/13
+bizman.build | must | BizMan: vehicle page built from the warehouse driver row \(.+?\) and the logistics plan \(.+?; stop rows dragged by .+?\); it sits in .+? \((?:laid out by its parent|sized by itself, scrolling|no scroll view)\)\. | row bizman/1
+bizman.page | must | BizMan: vehicle page for truck .+?\. | row bizman/1
+bizman.noFallback | never | BizMan vehicle page: .+? isn't where 1\.0 had it\.|the copied list's .+? inside the copy .+? isn't where 1\.0 had it | row bizman/1
+bizman.fallback | count>=0 | Hires: the BizMan vehicle page isn't available; the old crew and route dialog opens for .+?\. | row bizman/1
+bizman.crewAdded | must | Crew: .+? \(.+?\) on truck .+?\. | row bizman/2
+bizman.crewRemoved | must | Crew: .+? off truck .+? \(unassigned on the BizMan page\)\. | row bizman/2
+map.started | must | Map pick: started for truck .+?\. | row bizman/4
+map.copied | must | Map pick: "Add as a stop" copied from the building card's Set destination button\. | row bizman/4
+map.truckSpot | must | Map pick: truck stop by .+? at x .+?, y .+?, z .+?, heading .+?, .+? m from the entrance; legal parking, Pavement: hatch side .+?; .+? parking colliders, .+? lane segments near \(.+? ms\)\. | row bizman/4
+map.ended | must | Map pick: ended for .+? \(stop picked\)\. | row bizman/4
+route.added | must | Route: stop .+? at x .+?, z .+?, heading .+? \d\d:\d\d-\d\d:\d\d added to truck .+?; 1 stops\. | row bizman/4
+map.noSpot | must | Map pick: no truck spot by .+? \(entrance x .+?, z .+?\): no legal place with the hatch to the pavement within 40 m \(.+?\)|neither parking lanes nor traffic lanes within reach | row bizman/5
+route.times | must | Route: stop 1 of .+? now \d\d:\d\d-\d\d:\d\d \(BizMan page\)\. | row bizman/6
+route.moved | must | Route: stop 2 of .+? moved to 1; the times stay in their slots \(BizMan page\)\. | row bizman/7
+route.removed | must | Route: stop 1 removed from truck .+?\. | row bizman/8
+route.arrived | must | Route: truck .+? arrived at .+?: .+?, \d+(?:\.\d+)? m from the stop\. | row bizman/10
+map.cartSpot | must | Map pick: cart stop by .+?; by a parking lane, pavement on the right .+? m out, cart .+? m out|by the nearest driving lane \(no parking lane fits\) | row bizman/11
+bizman.layout | must | the copied list's verticalLayoutGroup at '', contentSizeFitter at ''|the copied list's .+?none | row bizman/1
+map.lateConfirm | must | Map pick: the confirm for .+? came after the pick ended \(map closed\); nothing added\. | row bizman/17
