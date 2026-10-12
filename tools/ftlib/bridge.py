@@ -18,10 +18,23 @@ class BridgeError(RuntimeError):
         self.restart = restart
 
 
+def check_session(expected, reply):
+    session = reply.get('session')
+    if not isinstance(session, str) or not session:
+        raise BridgeError('Bridge reply has no valid session: update the bridge before running checks')
+    if expected is not None and session != expected:
+        raise BridgeError('Bridge restarted: the session changed; events and remembered values from before are void; start a fresh scenario run', reply=reply, restart=True)
+    return session
+
+
 class Bridge:
     def __init__(self, url=None):
         self.url = (url or os.environ.get('BA_BRIDGE_URL', 'http://127.0.0.1:8322')).rstrip('/')
         self.http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        self.session = None
+
+    def reset_session(self):
+        self.session = None
 
     def _request(self, path, body=None, timeout_s=10):
         request = urllib.request.Request(self.url + path,
@@ -32,7 +45,8 @@ class Bridge:
                 reply = json.load(response)
         except urllib.error.HTTPError as exc:
             try:
-                reply = json.load(exc)
+                with exc:
+                    reply = json.load(exc)
             except (ValueError, OSError):
                 raise BridgeError(f'Bridge HTTP {exc.code}: inspect the game log and tools/ft health') from exc
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
@@ -43,6 +57,7 @@ class Bridge:
             raise BridgeError(f'Invalid JSON from {self.url}: check the tunnel points to the test bridge') from exc
         if not isinstance(reply, dict) or not isinstance(reply.get('ok'), bool):
             raise BridgeError('Invalid bridge reply: check the bridge version with tools/ft health')
+        self.session = check_session(self.session, reply)
         if not reply['ok']:
             raise BridgeError(reply.get('error', 'Bridge call failed: inspect the game log'), remote=True, reply=reply)
         return reply
@@ -59,18 +74,19 @@ class Bridge:
             try:
                 status = self.op(identifier)['result']
             except BridgeError as exc:
+                if exc.restart: raise
                 if exc.remote and str(exc) == 'the bridge stopped':
                     raise BridgeError(str(exc), remote=True, reply={**(exc.reply or {'ok':False,'error':str(exc)}), 'op':identifier}) from exc
-                raise BridgeError(f'Cannot recover operation {identifier}: {exc}; query tools/ft op {identifier} before repeating the command', reply={'ok':False,'op':identifier,'error':str(exc)}) from exc
+                raise BridgeError(f'Cannot recover operation {identifier}: {exc}; query tools/ft op {identifier} before repeating the command', reply={'ok':False,'session':self.session,'op':identifier,'error':str(exc)}) from exc
             if status['status'] == 'done':
-                return {'ok':True, 'op':identifier, 'result':status['result']}
+                return {'ok':True, 'session':self.session, 'op':identifier, 'result':status['result']}
             if status['status'] == 'failed':
-                reply = {'ok':False, 'op':identifier, 'error':status['error']}
+                reply = {'ok':False, 'session':self.session, 'op':identifier, 'error':status['error']}
                 raise BridgeError(status['error'], remote=True, reply=reply)
             if status['status'] != 'pending':
                 raise BridgeError(f'Unknown status for operation {identifier}: inspect tools/ft op {identifier}')
             if time.monotonic() >= deadline:
-                reply = {'ok':False,'op':identifier,'error':f'Operation {identifier} is still pending: use tools/ft op {identifier}; do not repeat the command'}
+                reply = {'ok':False,'session':self.session,'op':identifier,'error':f'Operation {identifier} is still pending: use tools/ft op {identifier}; do not repeat the command'}
                 raise BridgeError(reply['error'], reply=reply)
             time.sleep(min(.1, max(0, deadline-time.monotonic())))
 
@@ -91,6 +107,8 @@ class Bridge:
                 raise
         if not isinstance(reply.get('result'), dict):
             raise BridgeError('Invalid command result: inspect the game log and bridge version')
+        if cmd == 'op':
+            self.session = check_session(self.session, reply['result'])
         return reply
 
     def events(self, since=0):
