@@ -162,3 +162,56 @@ no.notActive | never | Patch .+: Not active
 ```
 
 Rules: `must` (at least once), `never`, `count=N`, `count>=N`, `order` (the regexes listed on one line separated by ` >> ` appear in that order). `tools/check-log <Player.log> [<version>]` also always reports every `Patch …: Active.` and `Not active` line, every mod error line and every exception that names a FoodTrucks type, and exits non-zero on any failed `must`, `never` or `count` rule. Without a version it takes the version from the log's `Version … loading.` line.
+
+## Using the Mac tools
+
+Start the game with `-foodtrucks-test` and load a fresh, empty FT save in the city. Open the tunnel in another terminal, then check health:
+
+```sh
+export BA_GAME_HOST=homepc
+ssh -N -L 8322:127.0.0.1:8322 "$BA_GAME_HOST"
+# In another terminal:
+tools/ft health
+```
+
+When available, `tools/run-remote.sh start` and `tools/run-remote.sh tunnel` handle the launch and tunnel. The client uses `BA_BRIDGE_URL`, default `http://127.0.0.1:8322`. `BA_GAME_HOST` is used only to fetch screenshots with scp.
+
+```sh
+tools/ft state 'vehicles[kind=truck].legal'
+tools/ft call debug action='spawn truck'
+tools/ft call time pause=true
+tools/ft call time run_until.day=4 run_until.time=08:05 speed=20
+tools/ft call money --json '{"set":20000}'
+tools/ft --json call state
+tools/ft events --follow --grep 'Commissary|Crew'
+tools/ft ui
+tools/ft click 'OPEN HERE'
+tools/ft shoot bay-day --pose bay-pavement --target bay:hells-kitchen --fetch build/shots
+```
+
+Values in `key=value` are JSON when possible, otherwise strings. Dots build nested arguments. `--json` before `call` prints the raw reply; after `call` it supplies the argument object. `call --raw` also prints the raw reply. `wait-event` watches new events from the moment it starts.
+
+```sh
+tools/scenario list
+tools/scenario validate tests/game/scenarios/commissary-pay-on-delivery.json
+tools/scenario run tests/game/scenarios/commissary-pay-on-delivery.json
+```
+
+Reports land in `build/scenarios/<name>-<time>/`. Open `report.md` for failures first and `index.html` for the offline contact sheet. The folder also holds `report.json`, `events.jsonl` and fetched PNGs. Use `--report-dir DIR` to choose a folder and `--keep-going` to continue after hard failures. A soft failure appears in the report but does not change the exit code. Screenshot notes need visual review; mock PNGs cannot check the art.
+
+Scenarios assume one fresh vehicle of each kind and English UI labels. The order and crew flows are provisional until tried in game. The order adds Hotdog twice to request two boxes. If the live form needs a quantity input instead, `ui click` needs that capability added on the game side. The art comparisons also need vanilla reference items prepared in the live save. Transaction history is not in state, so fees, wages and transaction labels still need review.
+
+A `run_until.day` string such as `"+1"` means the current day plus one; the runner sends an absolute day. `expect` and `remember` can read `state` or `result` (the last call's result). Event waits consume matches in order from the start of the run. `no_event` uses optional `from_step` and `to_step` boundaries, both inclusive step numbers with an exclusive starting event cursor. Step 0 is the start of the run. Without boundaries it checks the previous step through this one. A `wait_event` boundary is its matched event, so a later `no_event` can detect a second payout even when both arrived in one batch. Lost events fail the run.
+
+```sh
+tools/check-log build/logs/game/<session>/Player.log
+tools/check-log build/logs/game/<session>/Player.log 0.9.10 --rows 0.9.10/1,0.9.10/2
+python3 -m unittest discover -s tools/tests
+tools/mock-bridge --port 8322
+```
+
+Row rules count only for the comma-separated rows in `--rows`; `--rows all` checks every row. Rules without a row always count. Unknown log versions get only the always-on checks. Conditional diagnostics use `count>=0` so their observed counts are reported without requiring a fallback or retry to happen.
+
+The mock is local and keeps a running clock, orders, stock, crews and save snapshots. `run_until` advances quickly and pauses. It writes small valid PNG placeholders to a temporary folder. Tests use a free loopback port and never connect to the game PC. For environments that forbid listening sockets, `FT_TEST_TRANSPORT=inprocess python3 -m unittest discover -s tools/tests` exercises the same HTTP handlers and JSON replies in memory, with MCP still tested over stdio pipes. This does not verify socket transport.
+
+`.mcp.json` registers the stdio server as `foodtrucks-game`. It uses the same environment variables and fetches its screenshots into `build/shots/`.

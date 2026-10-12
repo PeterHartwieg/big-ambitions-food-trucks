@@ -1,0 +1,549 @@
+#!/usr/bin/env python3
+import argparse
+from collections import deque
+from datetime import datetime, timezone
+import copy
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import struct
+import sys
+import tempfile
+import threading
+import time
+from urllib.parse import parse_qs, urlsplit
+import zlib
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ftlib.logcheck import read_rules
+from ftlib.shots import ROOT
+
+SITES = [s['id'] for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']]
+POSES = {'hatch-pavement', 'hatch-close', 'vehicle-side', 'vehicle-overhead', 'queue',
+         'cart-counter', 'bay-pavement', 'bay-road', 'door'}
+
+
+def minute(text):
+    if not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', text):
+        raise ValueError('Invalid clock time: use HH:MM in 24-hour time')
+    hour, mins = map(int, text.split(':'))
+    return hour * 60 + mins
+
+
+def png(path, width, height, colour):
+    def chunk(kind, data):
+        return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data) & 0xffffffff)
+    pixels = b''.join(b'\0' + bytes(colour) * width for _ in range(height))
+    Path(path).write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!IIBBBBB', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b''))
+
+
+class Mock:
+    def __init__(self, shots):
+        self.lock = threading.RLock()
+        self.shots = Path(shots)
+        self.ring = deque(maxlen=2000)
+        self.seq = 0
+        self.frame = 0
+        self.stop = threading.Event()
+        self.saves = {}
+        self.reset('FT mock')
+        self.store('FT mock')
+        self.event('Version 0.9.10 loading.')
+        for rule in read_rules(ROOT / 'tests/game/logchecks/0.9.10.txt'):
+            if rule.id.startswith('patch.'):
+                self.event(re.sub(r'\\(.)', r'\1', rule.pattern))
+        self.event('Map pick: on ("Add as a stop" in the building card).')
+        self.event('Commissary state: mock; 0 orders on the way (paid on delivery), with 0 rent charges and 0 fines unpaid; ready.')
+
+    def reset(self, name):
+        self.state = {
+            'save': name, 'scene': 'city',
+            'clock': {'day': 1, 'weekday': 'Monday', 'time': '07:00', 'paused': True, 'speed': 1},
+            'money': 20000.,
+            'player': {'x': 0., 'y': 0., 'z': 0., 'heading': 0., 'in_vehicle': None, 'at_hatch': None, 'carrying': None},
+            'licence': {'until_day': 0, 'permits': 0, 'course_done': False},
+            'vehicles': [], 'commissary': {'spaces': [], 'orders': [], 'stock': [], 'unpaid': {'rent': 0, 'fines': 0}},
+            'ledger_today': {'street_food': 0., 'crew_waiting': 0.}, 'notices_recent': []}
+        self.absolute = 420
+        self.until = None
+        self.dialog = 'panel'
+        self.employees = []
+        self.selected = None
+        self.boxes = 0
+        self.order_number = 0
+        self.routes = {}
+        self.takings = {}
+        self.hours = {}
+
+    def store(self, name):
+        self.saves[name] = copy.deepcopy({key: getattr(self, key) for key in
+            ('state', 'absolute', 'employees', 'selected', 'order_number', 'routes', 'takings', 'hours')})
+
+    def restore(self, name):
+        if name not in self.saves:
+            raise ValueError('No such mock save: use FT mock or save the current city first')
+        for key, val in copy.deepcopy(self.saves[name]).items():
+            setattr(self, key, val)
+        self.until = None
+        self.dialog = 'panel'
+        self.state['clock']['paused'] = True
+
+    def event(self, text, kind='log', day=None, clock=None):
+        self.seq += 1
+        self.ring.append({'seq': self.seq, 'real': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                          'day': day or self.state['clock']['day'], 'time': clock or self.state['clock']['time'],
+                          'kind': kind, 'text': text})
+        if kind in ('notice', 'phone'):
+            self.state['notices_recent'] = (self.state['notices_recent'] + [text])[-20:]
+
+    def health(self):
+        c = self.state['clock']
+        return dict(ok=True, mod_version='0.9.10', bridge_version=1, scene=self.state['scene'],
+                    save=self.state['save'], day=c['day'], time=c['time'], paused=c['paused'], frame=self.frame)
+
+    def events(self, since):
+        oldest = self.ring[0]['seq'] if self.ring else self.seq + 1
+        return {'ok': True, 'next': self.seq, 'dropped': max(0, oldest - 1 - since),
+                'events': [event for event in self.ring if event['seq'] > since]}
+
+    def vehicle(self, identifier=None):
+        identifier = identifier or self.state['player']['in_vehicle'] or self.selected
+        found = next((v for v in self.state['vehicles'] if v['id'] == identifier), None)
+        if found is None:
+            raise ValueError('No such vehicle: run debug spawn truck and read state for its id')
+        return found
+
+    def deliver(self, force=False):
+        c = self.state['clock']
+        for order in list(self.state['commissary']['orders']):
+            if not force and (order['due_day'] > c['day'] or c['time'] < '08:00'):
+                continue
+            self.state['commissary']['orders'].remove(order)
+            if self.state['money'] < order['total']:
+                self.event(f"Commissary delivery: order {order['n']}, 1000 Hotdog not delivered: the payment of ${order['total']:.2f} was refused (not enough money); the order is cancelled.")
+                self.event(f"We couldn't deliver 1000 Hotdog: the payment of ${order['total']:.2f} didn't go through. The order is cancelled; order again when you have the money.", 'phone')
+            else:
+                self.state['money'] -= order['total']
+                stock = next((s for s in self.state['commissary']['stock'] if s['site'] == order['site'] and s['item'] == 'Hotdog'), None)
+                if stock:
+                    stock['amount'] += 1000
+                else:
+                    self.state['commissary']['stock'].append({'site': order['site'], 'item': 'Hotdog', 'amount': 1000})
+                self.event(f"Commissary delivery: order {order['n']}, 1000 Hotdog at {order['site']} (ordered day {order['due_day']-1}, due day {order['due_day']}), paid ${order['total']:.2f} on delivery (goods $1500.00, fee $44.84).")
+                self.event('Your delivery is in: 1000 Hotdog. $1544.84 paid. Load it at the bay.', 'phone')
+
+    def flush_hour(self, day, hour):
+        for v in self.state['vehicles']:
+            count = self.hours.pop(v['id'], 0)
+            if count:
+                self.event(f"Crew sales: {v['id']}, day {day} {hour:02d}:00 hour: {count} customers, {count} items, ${count*13:.2f}, paid in after midnight; {sum(s['amount'] for s in v['stock'])} units left.", day=day)
+
+    def tick(self):
+        before = self.absolute
+        self.absolute += 1
+        c = self.state['clock']
+        day = self.absolute // 1440 + 1
+        m = self.absolute % 1440
+        c.update(day=day, time=f'{m//60:02d}:{m%60:02d}', weekday=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'][(day-1)%7])
+        if m % 60 == 0:
+            self.flush_hour(before // 1440 + 1, (before % 1440) // 60)
+        if m == 0:
+            for v in self.state['vehicles']:
+                if v['crew'] and v['route']['stops']:
+                    self.event(f"Route: truck {v['id']} caught up to minute {self.absolute} for the day's close.")
+                total = self.takings.pop(v['id'], 0)
+                if total:
+                    self.state['money'] += total * 13
+                    self.event(f"Crew sales paid in: {v['name']} ({v['id']}), day {day-1}: {total} items, ${total*13:.2f}.", day=day-1)
+            self.state['ledger_today'] = {'street_food': 0., 'crew_waiting': 0.}
+            self.event(f'Day summary: day {day-1}.')
+        if m == 480:
+            self.deliver()
+        for v in self.state['vehicles']:
+            route = self.routes.get(v['id'])
+            if route and v['crew'] and self.state['player']['in_vehicle'] != v['id']:
+                active = route[0] <= m < route[1] if route[1] > route[0] else m >= route[0] or m < route[1]
+                if active and not v['open']:
+                    self.event(f"Route: truck {v['id']} leaves for stop 1, arriving about {c['time']}.")
+                    self.event(f"Route: truck {v['id']} arrived at stop 1: legal parking, 0 m from the stop.")
+                    v.update(open=True, serving='crew')
+                    self.event(f"Truck {v['id']} open by its crew at stop 1; 1 serving.")
+                elif not active and v['open']:
+                    v.update(open=False, serving='nobody')
+                    self.event(f"Truck {v['id']}: closing notice not shown (the crew's window, the player away or asleep).")
+            if v['open'] and v['serving'] != 'nobody' and m % 10 == 0:
+                stock = next((s for s in v['stock'] if s['amount'] > 0), None)
+                if stock:
+                    stock['amount'] -= 1
+                    if v['pieces']:
+                        v['pieces'][0]['units'] = sum(s['amount'] for s in v['stock'])
+                    self.state['ledger_today']['street_food'] += 13
+                    if v['serving'] == 'crew':
+                        self.state['ledger_today']['crew_waiting'] += 13
+                        self.takings[v['id']] = self.takings.get(v['id'], 0) + 1
+                        self.hours[v['id']] = self.hours.get(v['id'], 0) + 1
+                    else:
+                        self.state['money'] += 13
+                        self.event(f"Sale: foodtrucks:itemname_tacos for $13.00 on day {day}, {stock['amount']} of it left.")
+        if self.until is not None and self.absolute >= self.until:
+            self.until = None
+            c['paused'] = True
+
+    def run_clock(self):
+        previous = time.monotonic()
+        credit = 0.
+        while not self.stop.wait(.01):
+            now = time.monotonic()
+            with self.lock:
+                self.frame += 1
+                c = self.state['clock']
+                if c['paused']:
+                    credit = 0
+                else:
+                    credit += (now - previous) * c['speed'] * (100 if self.until is not None else 1)
+                    while credit >= 1 and not c['paused']:
+                        self.tick()
+                        credit -= 1
+            previous = now
+
+    def buttons(self):
+        labels = {
+            'panel': ['OPEN HERE', 'Hires', 'Add stop here', 'Commissary', 'Back to the hatch'],
+            'commissary': ["Order stock for delivery to Hell's Kitchen Commissary (opens its texts)", 'Restock'],
+            'phone': ['Order stock', 'Hang up'], 'order': ['ADD ITEM', 'ORDER', 'Hang up'],
+            'items': ['Hotdog, box of 500 (0 here)', 'ORDER'], 'confirm': ['Confirm order', 'Change', 'Hang up'],
+            'crew': ['Crew 1', 'Back'], 'workers': ['Unassigned'] + [e['label'] for e in self.employees],
+            'opens': ['08:30', '11:00', '22:00'], 'closes': ['00:00', '14:00', '02:00'], 'closed': []}[self.dialog]
+        return [{'id': i + 1, 'text': label, 'path': f'Mock/{self.dialog}/{i}'} for i,label in enumerate(labels)]
+
+    def click(self, args):
+        matches = [b for b in self.buttons() if b['id'] == args.get('id') or ('text' in args and b['text'].casefold() == str(args['text']).casefold())]
+        if len(matches) != 1:
+            raise ValueError('Button text is missing or not unique: use ui list and click its id')
+        text = matches[0]['text']
+        if text == 'Hires':
+            self.selected = self.vehicle()['id']
+            self.dialog = 'crew'
+        elif text == 'Crew 1':
+            self.dialog = 'workers'
+        elif self.dialog == 'workers':
+            v = self.vehicle(self.selected)
+            v['crew'] = [] if text == 'Unassigned' else [next(e['name'] for e in self.employees if e['label'] == text)]
+            if v['crew']:
+                self.event(f"Crew: {v['crew'][0]} (worker1) on truck {v['id']}.")
+            self.dialog = 'crew'
+        elif text == 'Add stop here':
+            self.selected = self.vehicle()['id']
+            self.dialog = 'opens'
+        elif self.dialog == 'opens':
+            self.open_minute = minute(text)
+            self.dialog = 'closes'
+        elif self.dialog == 'closes':
+            v = self.vehicle(self.selected)
+            self.routes[v['id']] = (self.open_minute, minute(text))
+            v['route']['stops'] = 1
+            self.event(f"Route: stop 1 at x {v['x']}, z {v['z']}, heading {v['heading']} {self.open_minute//60:02d}:{self.open_minute%60:02d}-{text} added to truck {v['id']}; 1 stops.")
+            self.dialog = 'panel'
+        elif text == 'Commissary':
+            self.dialog = 'commissary'
+        elif text.startswith('Order stock for delivery'):
+            self.dialog = 'phone'
+        elif text == 'Order stock':
+            if not self.state['commissary']['spaces']:
+                raise ValueError('No commissary space: rent_bay before ordering stock')
+            self.boxes = 0
+            self.dialog = 'order'
+        elif text == 'ADD ITEM':
+            self.dialog = 'items'
+        elif text.startswith('Hotdog, box'):
+            self.boxes += 1
+            self.dialog = 'order'
+        elif text == 'ORDER':
+            if self.boxes != 2:
+                raise ValueError('Mock orders need two boxes: add Hotdog twice')
+            self.dialog = 'confirm'
+        elif text == 'Confirm order':
+            self.order_number += 1
+            site = self.state['commissary']['spaces'][0]['site']
+            order = {'n': self.order_number, 'site': site, 'items': '2 boxes Hotdog', 'total': 1544.84,
+                     'due_day': self.state['clock']['day'] + 1}
+            self.state['commissary']['orders'].append(order)
+            self.event(f"Commissary order {order['n']}: 2 boxes, 1000 Hotdog at {site} for $1500.00 plus $44.84 delivery, paid on delivery; due day {order['due_day']} at 08:00.")
+            self.event('Ordered: 1000 Hotdog for $1544.84, paid on delivery.', 'phone')
+            self.dialog = 'phone'
+        elif text in ('OPEN HERE', 'Back to the hatch', 'Restock'):
+            self.operate(self.vehicle(), {'OPEN HERE':'open', 'Back to the hatch':'back_to_hatch', 'Restock':'restock'}[text])
+        elif text in ('Hang up', 'Back'):
+            self.dialog = 'panel'
+        elif text == 'Change':
+            self.dialog = 'order'
+        return {'clicked': text}
+
+    def operate(self, v, op):
+        player = self.state['player']
+        if op in ('open', 'back_to_hatch'):
+            if op == 'open' and not self.state['licence']['course_done']:
+                raise ValueError('No vendor licence: use debug licence on this FT test save')
+            if not v['legal'] or not v['hatch_to_pavement']:
+                raise ValueError('Illegal pitch: teleport the truck into a commissary bay')
+            if op == 'back_to_hatch' and not v['open']:
+                raise ValueError('Truck hatch is closed: open the truck first')
+            v.update(open=True, serving='player')
+            player.update(in_vehicle=None, at_hatch=v['id'])
+            if op == 'back_to_hatch':
+                self.event(f"Truck window: back to the hatch of truck {v['id']}: walking to the rear door.")
+            self.event(f"Truck window: player placed at the hatch of truck {v['id']} ({'back to the hatch' if op == 'back_to_hatch' else 'opened'}) at (0, 0, 0).")
+        elif op in ('step_out', 'exit'):
+            player.update(in_vehicle=None, at_hatch=None)
+            v['serving'] = 'crew' if v['crew'] else 'nobody'
+            self.event(f"Truck window: player stepped out of truck {v['id']} at (0, 0, 0) (stepped out).")
+            if not v['crew']:
+                self.event(f"Window {v['id']}: nobody serving the truck; the player left the hatch: stepped out.")
+                self.event("Nobody's at the truck's window. Customers wait a while, then walk on. Click the truck and choose Back to the hatch to serve again.", 'notice')
+        elif op == 'close':
+            v.update(open=False, serving='nobody')
+            player['at_hatch'] = None
+        elif op == 'enter':
+            player.update(in_vehicle=v['id'], at_hatch=None)
+            self.selected = v['id']
+            v.update(open=False, serving='nobody')
+            self.dialog = 'panel'
+        elif op == 'rent_bay':
+            site = v['commissary']['site']
+            if not site or not v['commissary']['in_bay']:
+                raise ValueError('Vehicle is outside a bay: teleport it to bay:hells-kitchen first')
+            if not any(s['vehicle'] == v['id'] for s in self.state['commissary']['spaces']):
+                self.state['commissary']['spaces'].append({'site':site, 'vehicle':v['id']})
+            self.dialog = 'commissary'
+        elif op == 'restock':
+            for stock in self.state['commissary']['stock']:
+                if stock['site'] == v['commissary']['site'] and stock['amount']:
+                    amount = min(160, stock['amount'])
+                    stock['amount'] -= amount
+                    v['pieces'] = [{'item':'hotdoggrill', 'units':amount, 'cap':160}]
+                    v['stock'] = [{'item':stock['item'], 'amount':amount}]
+        else:
+            raise ValueError('Unknown vehicle operation: use an operation from docs/test-bridge.md')
+        return {'notices': self.state['notices_recent'][-1:], 'state': v}
+
+    def call(self, cmd, args):
+        if cmd not in ('state', 'load', 'new_game') and not (cmd == 'ui' and args.get('op') == 'list') and cmd != 'shoot' and not self.state['save'].startswith('FT'):
+            raise ValueError('Changing commands need an FT save: load a throwaway save whose name starts with FT')
+        if cmd == 'state':
+            return self.state
+        if cmd in ('load', 'new_game', 'save'):
+            name = args['name']
+            if not name.startswith('FT'):
+                raise ValueError('Save name must start with FT: choose a throwaway test save')
+            if cmd == 'new_game':
+                self.reset(name)
+                self.store(name)
+            elif cmd == 'save':
+                self.state['save'] = name
+                self.store(name)
+            else:
+                self.restore(name)
+            return {'name':name} if cmd == 'save' else {'loading':True}
+        if cmd == 'money':
+            self.state['money'] = float(args['set'])
+            return {'money':self.state['money']}
+        if cmd == 'time':
+            c = self.state['clock']
+            if 'speed' in args:
+                speed = float(args['speed'])
+                if not 0 < speed <= 10000:
+                    raise ValueError('Invalid speed: use a positive speed up to 10000')
+                c['speed'] = speed
+                c['paused'] = False
+            if 'pause' in args:
+                c['paused'] = bool(args['pause'])
+                self.until = None
+            if 'run_until' in args:
+                until = args['run_until']
+                self.until = (int(until['day'])-1)*1440 + minute(until['time'])
+                if self.until < self.absolute:
+                    self.until = None
+                    raise ValueError('run_until is in the past: choose today later or the next day')
+                c['paused'] = self.until == self.absolute
+                if c['paused']:
+                    self.until = None
+            return c
+        if cmd == 'debug':
+            action = args['action']
+            if action in ('spawn truck', 'spawn cart'):
+                kind = action.split()[-1]
+                identifier = f'{kind}-{len(self.state["vehicles"])+1}'
+                v = dict(id=identifier,kind=kind,name='Food '+kind,x=0.,y=0.,z=0.,heading=0.,legal=True,
+                         legal_reason='mock legal parking',hatch_side='right',hatch_to_pavement=True,
+                         open=False,serving='nobody',crew=[],pieces=[],stock=[],queue={'length':0,'places':[]},
+                         commissary={'site':None,'in_bay':False},route={'stops':0,'next':None})
+                self.state['vehicles'].append(v)
+                self.selected = identifier
+                self.event(f'Spawned foodtrucks:vehicletype_food{kind}: id {identifier}, controller mock.')
+            elif action == 'licence':
+                self.state['licence'] = {'until_day':self.state['clock']['day']+60,'permits':len(self.state['vehicles']),'course_done':True}
+            elif action == 'new items':
+                v = self.vehicle()
+                v['pieces'] = [{'item':'griddle','units':160,'cap':160}]
+                v['stock'] = [{'item':'Tacos','amount':160}]
+            elif action == 'hire':
+                name = f'Mock worker {len(self.employees)+1}'
+                self.employees.append({'name':name,'label':f'{name}: customer service 60, satisfaction 100, $10.00 an hour'})
+                self.event(f'Debug: hired {name} (worker1), customer service 60, $10.00 an hour.')
+            elif action == 'commissary deliveries':
+                n = len(self.state['commissary']['orders'])
+                self.deliver(True)
+                self.event(f'Debug: {n} commissary orders brought forward and delivered (paid on delivery).')
+            elif action in ('status', 'demand here', 'commissary bays', 'overnight check', 'grip', 'zone point', 'tax statement', 'tax fixture', 'event here', 'gig here', 'uninstall'):
+                self.event(f'Debug: {action} completed in mock.')
+            elif action == 'spawn hand truck':
+                self.event('Debug: spawned vanilla hand truck in mock.')
+            else:
+                raise ValueError('Unknown debug action: use a Name from DebugActions, such as spawn truck or hire')
+            return {'action':action,'notices':self.state['notices_recent'][-1:]}
+        if cmd == 'teleport':
+            who = args['who']
+            obj = self.state['player'] if who == 'player' else self.vehicle(who)
+            if who == 'player':
+                previous = self.state['player']['at_hatch']
+                if previous:
+                    self.operate(self.vehicle(previous), 'step_out')
+                obj.update(in_vehicle=None, at_hatch=None)
+            place = args.get('place')
+            if place:
+                category, identifier = place.split(':',1)
+                if category in ('bay','commissary') and identifier in SITES:
+                    index = SITES.index(identifier)
+                    obj.update(x=393.2 + index*100, y=0., z=217.6, heading=0.)
+                    if who != 'player':
+                        obj['commissary'] = {'site':identifier,'in_bay':True}
+                elif category == 'vehicle':
+                    v = self.vehicle(identifier)
+                    obj.update(x=v['x']+3,y=0.,z=v['z'],heading=v['heading'])
+                else:
+                    raise ValueError('Unknown place: use bay:<site>, commissary:<site> or vehicle:<id>')
+            else:
+                obj.update(x=float(args['x']),y=0.,z=float(args['z']),heading=float(args.get('heading',0)))
+                if who != 'player':
+                    obj['commissary']['in_bay'] = False
+            return {key:obj[key] for key in ('x','y','z','heading')}
+        if cmd == 'vehicle':
+            return self.operate(self.vehicle(args['id']), args['op'])
+        if cmd == 'ui':
+            op = args['op']
+            if op == 'list':
+                texts = self.state['notices_recent'][-2:]
+                if self.dialog == 'confirm':
+                    texts = ['2 boxes Hotdog: $1544.84 in all, paid on delivery here at 08:00 tomorrow']
+                return {'buttons':self.buttons(),'texts':texts}
+            if op == 'click':
+                return self.click(args)
+            if op == 'escape':
+                closed = self.dialog
+                self.dialog = 'panel'
+                return {'closed':closed}
+            raise ValueError('Unknown ui operation: use list, click or escape')
+        if cmd == 'shoot':
+            if 'pose' in args and args['pose'] not in POSES:
+                raise ValueError('Unknown camera pose: use a pose from docs/test-bridge.md')
+            if 'pose' in args:
+                target = args['target']
+                if not any(target == v['id'] for v in self.state['vehicles']) and target not in {f'{kind}:{site}' for site in SITES for kind in ('bay','commissary')}:
+                    raise ValueError('Unknown shot target: read state for vehicle ids and commissary sites')
+            elif not all(k in args for k in ('x','y','z','yaw','pitch','fov')):
+                raise ValueError('Missing camera arguments: give pose and target or explicit camera coordinates')
+            name = re.sub(r'[^a-zA-Z0-9_.-]','_',args['name'])
+            path = self.shots / (name + '.png')
+            width, height = int(args.get('width',64)), int(args.get('height',36))
+            if not 1 <= width <= 4096 or not 1 <= height <= 4096:
+                raise ValueError('Invalid screenshot size: use dimensions from 1 to 4096')
+            colour = (180,190,200) if self.state['clock']['time'] < '20:00' else (35,45,65)
+            png(path,width,height,colour)
+            return {'path':str(path)}
+        if cmd == 'console':
+            self.event(f"Mock console: {args['line']}")
+            return {'output':[f"Mock console accepted: {args['line']}"]}
+        if cmd == 'quit':
+            self.state['scene'] = 'menu'
+            self.state['clock']['paused'] = True
+            return {}
+        raise ValueError('Unknown command: use a command from docs/test-bridge.md')
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        pass
+
+    def reply(self, data, status=200):
+        payload = json.dumps(data).encode()
+        self.send_response(status)
+        self.send_header('Content-Type','application/json; charset=utf-8')
+        self.send_header('Content-Length',str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def do_GET(self):
+        url = urlsplit(self.path)
+        try:
+            with self.server.mock.lock:
+                if url.path == '/health':
+                    result = self.server.mock.health()
+                elif url.path == '/events':
+                    result = self.server.mock.events(int(parse_qs(url.query).get('since',['0'])[0]))
+                else:
+                    raise ValueError('Unknown endpoint: use /health, /call or /events')
+                self.reply(result)
+        except (ValueError, TypeError) as exc:
+            self.reply({'ok':False,'error':f'Cannot read endpoint: {exc}; use /health or /events?since=<sequence>'})
+
+    def do_POST(self):
+        try:
+            if self.path != '/call':
+                raise ValueError('Unknown endpoint: post JSON commands to /call')
+            size = int(self.headers.get('Content-Length',0))
+            if not 0 < size <= 1048576:
+                raise ValueError('Invalid request size: send a JSON object smaller than 1 MB')
+            body = json.loads(self.rfile.read(size))
+            with self.server.mock.lock:
+                result = copy.deepcopy(self.server.mock.call(body['cmd'],body.get('args',{})))
+            self.reply({'ok':True,'result':result})
+            if body['cmd'] == 'quit':
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            message = f'Command failed: {exc}; check the arguments in docs/test-bridge.md'
+            self.reply({'ok':False,'error':message})
+
+
+def stop_server(signum, frame):
+    raise KeyboardInterrupt
+
+
+def main():
+    signal.signal(signal.SIGTERM, stop_server)
+    parser = argparse.ArgumentParser(description='Local fake Food Trucks bridge')
+    parser.add_argument('--port',type=int,default=8322)
+    args = parser.parse_args()
+    with tempfile.TemporaryDirectory(prefix='foodtrucks-mock-') as shots:
+        server = ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
+        server.mock = Mock(shots)
+        thread = threading.Thread(target=server.mock.run_clock,daemon=True)
+        thread.start()
+        print(f'Mock bridge at http://127.0.0.1:{server.server_port}',flush=True)
+        try:
+            server.serve_forever(poll_interval=.1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.mock.stop.set()
+            thread.join()
+            server.server_close()
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, ValueError) as exc:
+        sys.exit(f'Could not start mock bridge: {exc}; use a free --port')

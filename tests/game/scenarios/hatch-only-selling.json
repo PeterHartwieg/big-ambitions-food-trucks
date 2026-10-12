@@ -1,0 +1,219 @@
+{
+  "name": "hatch-only-selling",
+  "checks": "CHECKS.md, Truck serves only from the hatch (0.9.8), rows 1, 2 and 3",
+  "needs": {
+    "scene": "city",
+    "save_prefix": "FT"
+  },
+  "steps": [
+    {
+      "call": "time",
+      "args": {
+        "pause": true
+      }
+    },
+    {
+      "call": "debug",
+      "args": {
+        "action": "spawn truck"
+      }
+    },
+    {
+      "remember": "truck",
+      "from": "state",
+      "path": "vehicles[kind=truck].id"
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "$truck",
+        "place": "bay:hells-kitchen"
+      }
+    },
+    {
+      "call": "debug",
+      "args": {
+        "action": "licence"
+      }
+    },
+    {
+      "call": "time",
+      "args": {
+        "run_until": {
+          "day": "+1",
+          "time": "11:00"
+        },
+        "speed": 20
+      }
+    },
+    {
+      "wait_state": "clock.paused",
+      "equals": true,
+      "timeout_s": 300
+    },
+    {
+      "expect": "state",
+      "path": "clock.time",
+      "equals": "11:00"
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "enter"
+      }
+    },
+    {
+      "call": "debug",
+      "args": {
+        "action": "new items"
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "open"
+      }
+    },
+    {
+      "expect": "state",
+      "path": "vehicles[kind=truck].serving",
+      "equals": "player"
+    },
+    {
+      "call": "time",
+      "args": {
+        "run_until": {
+          "day": "+0",
+          "time": "12:00"
+        },
+        "speed": 20
+      }
+    },
+    {
+      "wait_state": "clock.paused",
+      "equals": true,
+      "timeout_s": 300
+    },
+    {
+      "expect": "state",
+      "path": "clock.time",
+      "equals": "12:00"
+    },
+    {
+      "wait_event": "Sale:"
+    },
+    {
+      "remember": "stock",
+      "from": "state",
+      "path": "vehicles[kind=truck].stock"
+    },
+    {
+      "remember": "street_food",
+      "from": "state",
+      "path": "ledger_today.street_food"
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "step_out"
+      }
+    },
+    {
+      "wait_event": "Truck window: player stepped out of truck .+ \\(stepped out\\)"
+    },
+    {
+      "wait_event": "Window .+: nobody serving the truck; the player left the hatch: stepped out\\."
+    },
+    {
+      "expect": "state",
+      "path": "vehicles[kind=truck].serving",
+      "equals": "nobody"
+    },
+    {
+      "expect": "state",
+      "path": "vehicles[kind=truck].open",
+      "equals": true
+    },
+    {
+      "call": "time",
+      "args": {
+        "run_until": {
+          "day": "+0",
+          "time": "12:30"
+        },
+        "speed": 20
+      }
+    },
+    {
+      "wait_state": "clock.paused",
+      "equals": true,
+      "timeout_s": 300
+    },
+    {
+      "expect": "state",
+      "path": "clock.time",
+      "equals": "12:30"
+    },
+    {
+      "expect": "state",
+      "path": "vehicles[kind=truck].stock",
+      "equals": "$stock"
+    },
+    {
+      "expect": "state",
+      "path": "ledger_today.street_food",
+      "equals": "$street_food"
+    },
+    {
+      "no_event": "Sale:",
+      "from_step": 18
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "back_to_hatch"
+      }
+    },
+    {
+      "wait_event": "Truck window: back to the hatch of truck .+: walking to .+"
+    },
+    {
+      "wait_event": "Truck window: player placed at the hatch of truck .+back to the hatch"
+    },
+    {
+      "expect": "state",
+      "path": "vehicles[kind=truck].serving",
+      "equals": "player"
+    },
+    {
+      "call": "time",
+      "args": {
+        "run_until": {
+          "day": "+0",
+          "time": "13:00"
+        },
+        "speed": 20
+      }
+    },
+    {
+      "wait_state": "clock.paused",
+      "equals": true,
+      "timeout_s": 300
+    },
+    {
+      "expect": "state",
+      "path": "clock.time",
+      "equals": "13:00"
+    },
+    {
+      "wait_event": "Sale:"
+    },
+    {
+      "note": "Rows 2 and 3 also need eyes: waiting customers give up, and the Back to the hatch button keeps its position and game styling."
+    }
+  ]
+}

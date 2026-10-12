@@ -1,0 +1,269 @@
+{
+  "name": "bay-shots",
+  "checks": "CHECKS.md, Commissary look and payment (0.9.10), rows 6 to 8 and 12",
+  "needs": {
+    "scene": "city",
+    "save_prefix": "FT"
+  },
+  "steps": [
+    {
+      "call": "time",
+      "args": {
+        "pause": true
+      }
+    },
+    {
+      "note": "Visual review only. Mock PNGs are placeholders. Judge paint, sign, props, doors and kerb placement from real game screenshots."
+    },
+    {
+      "call": "time",
+      "args": {
+        "run_until": {
+          "day": "+1",
+          "time": "12:00"
+        },
+        "speed": 20
+      }
+    },
+    {
+      "wait_state": "clock.paused",
+      "equals": true,
+      "timeout_s": 300
+    },
+    {
+      "expect": "state",
+      "path": "clock.time",
+      "equals": "12:00"
+    },
+    {
+      "shoot": {
+        "name": "industry-city-day-bay-pavement",
+        "pose": "bay-pavement",
+        "target": "bay:industry-city"
+      }
+    },
+    {
+      "shoot": {
+        "name": "industry-city-day-bay-road",
+        "pose": "bay-road",
+        "target": "bay:industry-city"
+      }
+    },
+    {
+      "shoot": {
+        "name": "industry-city-day-door",
+        "pose": "door",
+        "target": "commissary:industry-city"
+      }
+    },
+    {
+      "shoot": {
+        "name": "garment-district-day-bay-pavement",
+        "pose": "bay-pavement",
+        "target": "bay:garment-district"
+      }
+    },
+    {
+      "shoot": {
+        "name": "garment-district-day-bay-road",
+        "pose": "bay-road",
+        "target": "bay:garment-district"
+      }
+    },
+    {
+      "shoot": {
+        "name": "garment-district-day-door",
+        "pose": "door",
+        "target": "commissary:garment-district"
+      }
+    },
+    {
+      "shoot": {
+        "name": "hells-kitchen-day-bay-pavement",
+        "pose": "bay-pavement",
+        "target": "bay:hells-kitchen"
+      }
+    },
+    {
+      "shoot": {
+        "name": "hells-kitchen-day-bay-road",
+        "pose": "bay-road",
+        "target": "bay:hells-kitchen"
+      }
+    },
+    {
+      "shoot": {
+        "name": "hells-kitchen-day-door",
+        "pose": "door",
+        "target": "commissary:hells-kitchen"
+      }
+    },
+    {
+      "shoot": {
+        "name": "lower-manhattan-day-bay-pavement",
+        "pose": "bay-pavement",
+        "target": "bay:lower-manhattan"
+      }
+    },
+    {
+      "shoot": {
+        "name": "lower-manhattan-day-bay-road",
+        "pose": "bay-road",
+        "target": "bay:lower-manhattan"
+      }
+    },
+    {
+      "shoot": {
+        "name": "lower-manhattan-day-door",
+        "pose": "door",
+        "target": "commissary:lower-manhattan"
+      }
+    },
+    {
+      "shoot": {
+        "name": "murray-hill-day-bay-pavement",
+        "pose": "bay-pavement",
+        "target": "bay:murray-hill"
+      }
+    },
+    {
+      "shoot": {
+        "name": "murray-hill-day-bay-road",
+        "pose": "bay-road",
+        "target": "bay:murray-hill"
+      }
+    },
+    {
+      "shoot": {
+        "name": "murray-hill-day-door",
+        "pose": "door",
+        "target": "commissary:murray-hill"
+      }
+    },
+    {
+      "call": "time",
+      "args": {
+        "run_until": {
+          "day": "+0",
+          "time": "22:00"
+        },
+        "speed": 20
+      }
+    },
+    {
+      "wait_state": "clock.paused",
+      "equals": true,
+      "timeout_s": 300
+    },
+    {
+      "expect": "state",
+      "path": "clock.time",
+      "equals": "22:00"
+    },
+    {
+      "shoot": {
+        "name": "industry-city-night-bay-pavement",
+        "pose": "bay-pavement",
+        "target": "bay:industry-city"
+      }
+    },
+    {
+      "shoot": {
+        "name": "industry-city-night-bay-road",
+        "pose": "bay-road",
+        "target": "bay:industry-city"
+      }
+    },
+    {
+      "shoot": {
+        "name": "industry-city-night-door",
+        "pose": "door",
+        "target": "commissary:industry-city"
+      }
+    },
+    {
+      "shoot": {
+        "name": "garment-district-night-bay-pavement",
+        "pose": "bay-pavement",
+        "target": "bay:garment-district"
+      }
+    },
+    {
+      "shoot": {
+        "name": "garment-district-night-bay-road",
+        "pose": "bay-road",
+        "target": "bay:garment-district"
+      }
+    },
+    {
+      "shoot": {
+        "name": "garment-district-night-door",
+        "pose": "door",
+        "target": "commissary:garment-district"
+      }
+    },
+    {
+      "shoot": {
+        "name": "hells-kitchen-night-bay-pavement",
+        "pose": "bay-pavement",
+        "target": "bay:hells-kitchen"
+      }
+    },
+    {
+      "shoot": {
+        "name": "hells-kitchen-night-bay-road",
+        "pose": "bay-road",
+        "target": "bay:hells-kitchen"
+      }
+    },
+    {
+      "shoot": {
+        "name": "hells-kitchen-night-door",
+        "pose": "door",
+        "target": "commissary:hells-kitchen"
+      }
+    },
+    {
+      "shoot": {
+        "name": "lower-manhattan-night-bay-pavement",
+        "pose": "bay-pavement",
+        "target": "bay:lower-manhattan"
+      }
+    },
+    {
+      "shoot": {
+        "name": "lower-manhattan-night-bay-road",
+        "pose": "bay-road",
+        "target": "bay:lower-manhattan"
+      }
+    },
+    {
+      "shoot": {
+        "name": "lower-manhattan-night-door",
+        "pose": "door",
+        "target": "commissary:lower-manhattan"
+      }
+    },
+    {
+      "shoot": {
+        "name": "murray-hill-night-bay-pavement",
+        "pose": "bay-pavement",
+        "target": "bay:murray-hill"
+      }
+    },
+    {
+      "shoot": {
+        "name": "murray-hill-night-bay-road",
+        "pose": "bay-road",
+        "target": "bay:murray-hill"
+      }
+    },
+    {
+      "shoot": {
+        "name": "murray-hill-night-door",
+        "pose": "door",
+        "target": "commissary:murray-hill"
+      }
+    }
+  ]
+}
