@@ -98,6 +98,10 @@ namespace FoodTrucks
         public static int? QueueSide(string vehicleId) =>
             instance != null && instance.lines.TryGetValue(vehicleId, out var line) && line.Side != 0 ? line.Side : (int?)null;
 
+        // Where the open line's people stand, the window first, or null while no line is laid out (for the test bridge).
+        public static IReadOnlyList<Vector3>? PlacesOf(string vehicleId) =>
+            instance != null && instance.lines.TryGetValue(vehicleId, out var line) && line.HasPlaces ? line.Places : null;
+
         // The cart closed: everyone in line walks off, then the line goes.
         public static void Closed(string vehicleId) => instance?.Retire(vehicleId);
 
@@ -358,6 +362,7 @@ namespace FoodTrucks
         // lets them go unseen (dropped, removed, closed), so CartSelling never holds a sale for good.
         public Action<long>? Paid { get; set; }
         public bool HasPlaces => places.Count > 0;
+        public IReadOnlyList<Vector3> Places => places;
         // The vehicle's side the line forms on: 1 right, -1 left, 0 with no places.
         public int Side { get; private set; }
         // Where the first customer stands, for the crew behind the window.

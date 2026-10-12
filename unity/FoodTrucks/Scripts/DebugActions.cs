@@ -159,6 +159,22 @@ namespace FoodTrucks
             }
         }
 
+        // The test bridge's `debug`: one action by its Name, without the second press a Twice action asks for.
+        // False when no action has that name.
+        internal static bool RunByName(string name)
+        {
+            foreach (var k in Keys)
+            {
+                if (k.Name != name) continue;
+                Log.Info($"Debug: {k.Label} run by the test bridge.");
+                Run(k.Name, k.Action);
+                return true;
+            }
+            return false;
+        }
+
+        internal static IEnumerable<string> Names => Keys.Select(k => k.Name);
+
         private static void Run(string name, Action action)
         {
             try { action(); }
@@ -434,7 +450,7 @@ namespace FoodTrucks
 
         private static void Notify(string message)
         {
-            Notifications.Show(NotificationType.Info, "foodtrucks:notification",
+            Notices.Show(NotificationType.Info, "foodtrucks:notification",
                 new Dictionary<string, string> { { "message", message } }, 6f, trackOnSaveGame: false);
         }
     }

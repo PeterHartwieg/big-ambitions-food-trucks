@@ -204,7 +204,7 @@ namespace FoodTrucks
             foreach (var offer in offers)
             {
                 Log.Info($"Catering offer {offer.Id}: {offer.Kind} at {offer.PlaceId} on day {offer.GigDay} {Clock(offer.StartMinute)} for {offer.DurationMinutes} min, {offer.Guests} guests, {offer.RequiredCategory}, {CartSelling.Money(offer.FeeCents)}; reply by day {offer.ReplyByDay}.");
-                GameManager.SendTextMessage(Bookings(), "foodtrucks:message_bookings_offer", Describe(offer));
+                Notices.SendText(Bookings(), "foodtrucks:message_bookings_offer", Describe(offer));
             }
         }
 
@@ -336,7 +336,7 @@ namespace FoodTrucks
             {
                 FoodTrucksSession.MarkChanged();
                 Log.Info($"Catering gig {missed.Id} at {missed.PlaceId} failed: {missed.Failure}; booking reputation {state.Catering.BookingReputation:F2}.");
-                GameManager.SendTextMessage(Bookings(), "foodtrucks:message_bookings_missed", Describe(missed));
+                Notices.SendText(Bookings(), "foodtrucks:message_bookings_missed", Describe(missed));
             }
         }
 
@@ -397,7 +397,7 @@ namespace FoodTrucks
                     return true;
                 case GigCheckStatus.Failed:
                     Log.Info($"Catering gig {gig.Id} failed: {gig.Failure} ({kind} {vehicle.id} arrived {Clock((int)(minute % 1440))}).");
-                    GameManager.SendTextMessage(Bookings(), "foodtrucks:message_bookings_missed", Describe(gig));
+                    Notices.SendText(Bookings(), "foodtrucks:message_bookings_missed", Describe(gig));
                     return true;
                 default:
                     return false;
@@ -489,7 +489,7 @@ namespace FoodTrucks
             if (!result.Success)
             {
                 Log.Info($"Catering gig {gig.Id} failed: {gig.Failure}; booking reputation {state.Catering.BookingReputation:F2}.");
-                GameManager.SendTextMessage(Bookings(), "foodtrucks:message_bookings_missed", Describe(gig));
+                Notices.SendText(Bookings(), "foodtrucks:message_bookings_missed", Describe(gig));
                 return;
             }
             var day = SaveGameManager.Current.Day;
@@ -497,7 +497,7 @@ namespace FoodTrucks
             if (truck == null || vehicle == null || result.Units <= 0 || !StreetSales.CanRecordTotal(state, gig.VehicleId, day, result.FeeCents, result.Units))
             {
                 Log.Error($"Catering gig {gig.Id} completed but couldn't be paid: truck {(truck == null ? "gone" : "there")}, record {(vehicle == null ? "missing" : "full")}.");
-                GameManager.SendTextMessage(Bookings(), "foodtrucks:message_bookings_unpaid", Describe(gig));
+                Notices.SendText(Bookings(), "foodtrucks:message_bookings_unpaid", Describe(gig));
                 return;
             }
             // Serving at a gig is a day the truck worked, for the health grade and the inspector.
@@ -517,7 +517,7 @@ namespace FoodTrucks
                 Log.Error($"Catering gig {gig.Id}: the game refused the payment of {CartSelling.Money(fee)}; it will be tried again.");
             }
             Log.Info($"Catering gig {gig.Id} completed at {gig.PlaceId}: {taken} of {result.Units} {gig.RequiredCategory} served, {CartSelling.Money(paid ? fee : 0)} paid; booking reputation {state.Catering.BookingReputation:F2}.");
-            GameManager.SendTextMessage(Bookings(), paid ? "foodtrucks:message_bookings_paid" : "foodtrucks:message_bookings_unpaid", new Dictionary<string, string>(Describe(gig))
+            Notices.SendText(Bookings(), paid ? "foodtrucks:message_bookings_paid" : "foodtrucks:message_bookings_unpaid", new Dictionary<string, string>(Describe(gig))
             {
                 ["fee"] = CartSelling.Money(paid ? fee : 0)
             });
@@ -738,7 +738,7 @@ namespace FoodTrucks
                 return Closing(result.Failure == AcceptFailure.TooManyGigs ? "foodtrucks:dialog_bookings_too_many" : "foodtrucks:dialog_bookings_gone", null);
             }
             Log.Info($"Catering offer {offerId} taken: gig at {result.Gig!.PlaceId} on day {result.Gig.GigDay}.");
-            Current.contact.SendMessage(new TextMessage("foodtrucks:message_bookings_booked", Catering.Describe(result.Gig), read: true, isNewInteraction: true));
+            Notices.Send(Current.contact, new TextMessage("foodtrucks:message_bookings_booked", Catering.Describe(result.Gig), read: true, isNewInteraction: true));
             return Start(index);
         }
 
@@ -756,7 +756,7 @@ namespace FoodTrucks
 
         private static DialogEntry Closing(string key, object? data)
         {
-            Current.contact.SendMessage(new TextMessage(key, data == null ? null : ToDictionary(data), read: true, isNewInteraction: true));
+            Notices.Send(Current.contact, new TextMessage(key, data == null ? null : ToDictionary(data), read: true, isNewInteraction: true));
             return new DialogEntry
             {
                 messageData = LocalizorManager.Localize(key, data),

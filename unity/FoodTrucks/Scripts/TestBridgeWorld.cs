@@ -1,0 +1,301 @@
+#nullable enable
+using System;
+using System.Collections;
+using System.Linq;
+using FoodTrucks.Core.Commissary;
+using Helpers;
+using Newtonsoft.Json.Linq;
+using UI;
+using UnityEngine;
+using UnityEngine.AI;
+
+namespace FoodTrucks
+{
+    // The bridge's teleport and vehicle commands, and the places both they and shoot resolve: a commissary's bay and
+    // door, a vehicle's hatch side.
+    internal static partial class TestBridgeCommands
+    {
+        // ---- Places ----
+
+        // The food vehicle with this id, or a refusal naming the ones there are.
+        internal static VehicleInstance FoodVehicle(string id)
+        {
+            var game = SaveGameManager.Current;
+            var vehicle = game.VehicleInstances.FirstOrDefault(v => v != null && v.id == id && FoodTrucksMod.KindOf(v.vehicleTypeName) != null);
+            if (vehicle != null) return vehicle;
+            var ids = game.VehicleInstances.Where(v => v != null && FoodTrucksMod.KindOf(v.vehicleTypeName) != null).Select(v => v.id).ToList();
+            throw new BridgeError($"No food cart or truck with id '{id}'. Food vehicles: {(ids.Count == 0 ? "none" : string.Join(", ", ids))}.");
+        }
+
+        internal static VehicleController Spawned(VehicleInstance vehicle)
+        {
+            if (!string.IsNullOrEmpty(vehicle.streetName)) throw new BridgeError($"Vehicle {vehicle.id} is inside a building ({vehicle.streetName}).");
+            var controller = VehicleHelper.GetVehicleController(vehicle);
+            if (controller == null) throw new BridgeError($"Vehicle {vehicle.id} isn't on the map now (too far from the player, or in a garage).");
+            return controller;
+        }
+
+        internal static CommissarySite Site(string id)
+        {
+            var sites = DemandData.Commissaries ?? throw new BridgeError("The commissaries aren't loaded (data/commissaries.json).");
+            return sites.Site(id) ?? throw new BridgeError($"No commissary '{id}'. Commissaries: {string.Join(", ", sites.Sites.Select(s => s.Id))}.");
+        }
+
+        // The ground (the game's Ground layer) under a point, from high above.
+        internal static Vector3 Ground(float x, float z)
+        {
+            if (Physics.Raycast(new Vector3(x, 500f, z), Vector3.down, out var hit, 1000f, LayerHelper.groundLayerMask, QueryTriggerInteraction.Ignore))
+                return hit.point;
+            throw new BridgeError($"No ground found at x {x:F1}, z {z:F1}.");
+        }
+
+        // A commissary's bay: its first resolved point on the ground, the paint's direction, and the side its pavement is on
+        // (1 right of that direction, -1 left). The direction is the one a truck faces with its hatch (right) to the pavement,
+        // by the mod's own hatch check; the paint's own direction when neither reads as pavement.
+        internal static (Vector3 Point, Vector3 Along, int PavementSide) Bay(string siteId)
+        {
+            var site = Site(siteId);
+            var points = global::FoodTrucks.Commissary.ResolvedBays(site);
+            if (points == null) throw new BridgeError($"The bay of {siteId} isn't resolved yet (the city's parking lanes load after the city); try again in a few seconds.");
+            if (points.Count == 0) throw new BridgeError($"{siteId} has no bay: the search found no legal parking near it.");
+            var p = points[0];
+            var point = Ground((float)p.X, (float)p.Z);
+            var along = new Vector3((float)p.AlongX, 0f, (float)p.AlongZ);
+            if (along.sqrMagnitude < 1e-6f) along = Vector3.forward;
+            along.Normalize();
+            if (HatchCheck.Probe(point, Quaternion.LookRotation(along)).Opens) return (point, along, 1);
+            if (HatchCheck.Probe(point, Quaternion.LookRotation(-along)).Opens) return (point, -along, 1);
+            return (point, along, 1);
+        }
+
+        // A commissary's door (its building's first entrance) and the way out of the building from it.
+        internal static (Vector3 Door, Vector3 Out) Door(string siteId)
+        {
+            var site = Site(siteId);
+            var doors = World.EntrancesOf(site.Address);
+            if (doors == null || doors.Length == 0) throw new BridgeError($"The building of {siteId} ({site.Address}) isn't in this city.");
+            var door = doors[0];
+            var building = World.AllBuildings().FirstOrDefault(b => b.Doors.Contains(door)).Controller;
+            var outward = building != null ? door - building.transform.position : Vector3.forward;
+            outward.y = 0f;
+            if (outward.sqrMagnitude < 1e-4f) outward = Vector3.forward;
+            return (door, outward.normalized);
+        }
+
+        // A vehicle's hatch (a truck's serving window, a cart's window side) and the outward direction there.
+        internal static (Vector3 Hatch, Vector3 Out, Vector3 Forward) HatchOf(VehicleInstance vehicle, Transform transform)
+        {
+            var forward = transform.forward;
+            forward.y = 0f;
+            forward.Normalize();
+            if (FoodTrucksMod.KindOf(vehicle.vehicleTypeName) == "truck")
+            {
+                // The hatch is on the truck's right (art/README.md); the player's place behind it is its middle.
+                var right = transform.right;
+                right.y = 0f;
+                return (WindowCrew.PlayerSpot(transform).Position, right.normalized, forward);
+            }
+            var side = CartQueueView.QueueSide(vehicle.id) ?? 1;
+            var outward = transform.right * side;
+            outward.y = 0f;
+            return (transform.position, outward.normalized, forward);
+        }
+
+        private static float Heading(Vector3 direction) => Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
+
+        // ---- teleport ----
+
+        private const float TeleportSeconds = 30f;
+
+        private static object Teleport(JObject args)
+        {
+            var who = Need(args, "who", "\"player\" or a food vehicle's id");
+            var place = Str(args, "place");
+            var heading = (float?)Num(args, "heading");
+            Vector3 target;
+            if (place != null) (target, heading) = Place(place, who, heading);
+            else
+            {
+                var x = Num(args, "x") ?? throw new BridgeError("teleport needs \"x\" and \"z\", or \"place\".");
+                var z = Num(args, "z") ?? throw new BridgeError("teleport needs \"x\" and \"z\", or \"place\".");
+                target = Ground((float)x, (float)z);
+            }
+            return who == "player" ? TeleportPlayer(target, heading) : TeleportVehicle(who, target, heading);
+        }
+
+        private static (Vector3, float?) Place(string place, string who, float? heading)
+        {
+            var colon = place.IndexOf(':');
+            var kind = colon < 0 ? place : place.Substring(0, colon);
+            var id = colon < 0 ? "" : place.Substring(colon + 1);
+            switch (kind)
+            {
+                case "bay":
+                {
+                    var bay = Bay(id);
+                    return (bay.Point, heading ?? Heading(bay.Along));
+                }
+                case "commissary":
+                {
+                    if (who != "player") throw new BridgeError("commissary: places the player at the door; a vehicle goes to bay:<site>.");
+                    var (door, outward) = Door(id);
+                    // A step out from the door, facing it.
+                    return (door + outward * 1.5f, heading ?? Heading(-outward));
+                }
+                case "vehicle":
+                {
+                    if (who != "player") throw new BridgeError("vehicle: places the player beside a vehicle.");
+                    var vehicle = FoodVehicle(id);
+                    var controller = Spawned(vehicle);
+                    var (hatch, outward, _) = HatchOf(vehicle, controller.transform);
+                    var flat = controller.transform.position;
+                    var along = hatch - flat;
+                    // On the pavement beside the hatch: the hatch's place along the vehicle, 2 m out from its side.
+                    var halfWidth = FoodTrucksMod.KindOf(vehicle.vehicleTypeName) == "truck" ? 1.1f : 0.6f;
+                    var point = flat + Vector3.Project(along, controller.transform.forward) + outward * (halfWidth + 1.5f);
+                    return (point, heading ?? Heading(-outward));
+                }
+                default:
+                    throw new BridgeError($"Unknown place '{place}': use bay:<site>, commissary:<site> or vehicle:<id>.");
+            }
+        }
+
+        private static object TeleportPlayer(Vector3 target, float? heading)
+        {
+            var player = PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.");
+            if (!NavMesh.SamplePosition(target, out var hit, 3f, NavMesh.AllAreas))
+                throw new BridgeError($"No walkable ground within 3 m of x {target.x:F1}, z {target.z:F1}.");
+            var point = hit.position;
+            var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's runner is gone.");
+            var game = SaveGameManager.Current;
+            foreach (var v in game.VehicleInstances)
+                if (v != null && TruckWindow.PlayerAt(v.id)) TruckWindow.StepOutNow("moved by the test bridge");
+            var exited = false;
+            if (!string.IsNullOrEmpty(game.ActiveVehicleId))
+            {
+                VehicleHelper.GetCurrentVehicleBase()?.ExitVehicle();
+                exited = true;
+            }
+            var done = false;
+            IEnumerator Move()
+            {
+                // The game warps the player out of a car a frame after the seat is left (CarController.ExitVehicle).
+                if (exited)
+                {
+                    yield return null;
+                    yield return null;
+                }
+                yield return GameManager.SetPlayerPosition(point);
+                if (heading != null) player.transform.rotation = Quaternion.Euler(0f, heading.Value, 0f);
+                done = true;
+            }
+            pump.StartCoroutine(Move());
+            Log.Info($"Test bridge: moving the player to x {point.x:F1}, y {point.y:F1}, z {point.z:F1}.");
+            var deadline = UnityEngine.Time.realtimeSinceStartup + TeleportSeconds;
+            return new Deferred(() =>
+            {
+                if (!done)
+                {
+                    if (UnityEngine.Time.realtimeSinceStartup > deadline) throw new BridgeError($"The move didn't finish within {TeleportSeconds:F0} seconds.");
+                    return null;
+                }
+                var now = player.transform.position;
+                if (Vector3.Distance(now, point) > 3f)
+                    throw new BridgeError($"The game didn't move the player: they are at x {now.x:F1}, z {now.z:F1}.");
+                return Pose(now, player.transform.eulerAngles.y);
+            });
+        }
+
+        private static JToken TeleportVehicle(string id, Vector3 target, float? heading)
+        {
+            var vehicle = FoodVehicle(id);
+            var controller = Spawned(vehicle);
+            var record = FoodTrucks.Core.Saves.StreetSales.Find(FoodTrucksSession.CurrentState, id);
+            if (record?.IsOpen == true) throw new BridgeError($"Vehicle {id} is open for business: close it first (vehicle close).");
+            var rotation = Quaternion.Euler(0f, heading ?? controller.transform.eulerAngles.y, 0f);
+            VehicleHelper.TeleportVehicleToGround(controller, target, rotation);
+            controller.SavePosition();
+            var t = controller.transform;
+            Log.Info($"Test bridge: moved {vehicle.vehicleTypeName} {id} to x {t.position.x:F1}, z {t.position.z:F1}, heading {t.eulerAngles.y:F0}.");
+            return Pose(t.position, t.eulerAngles.y);
+        }
+
+        private static JObject Pose(Vector3 p, float heading) => new JObject
+        {
+            ["x"] = TestBridgeState.Round(p.x), ["y"] = TestBridgeState.Round(p.y), ["z"] = TestBridgeState.Round(p.z),
+            ["heading"] = TestBridgeState.Round(heading),
+        };
+
+        // ---- vehicle ----
+
+        private static JToken Vehicle(JObject args)
+        {
+            var id = Need(args, "id", "the food vehicle's id");
+            var op = Need(args, "op", "open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay");
+            var vehicle = FoodVehicle(id);
+            var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
+            var game = SaveGameManager.Current;
+            var panel = InstanceBehavior<UIs>.Instance?.playerHUD?.itemPanelUI;
+            void InIt(string what)
+            {
+                if (game.ActiveVehicleId != id) throw new BridgeError($"{what} is on the vehicle's panel, shown while the player drives the truck or pushes the cart: vehicle enter first.");
+            }
+            var notices = Notices.Capture(() =>
+            {
+                switch (op)
+                {
+                    case "open":
+                        InIt("Open here");
+                        if (panel == null) throw new BridgeError("The vehicle panel isn't there.");
+                        // Open parks through the game's Park button, which does nothing while the game is paused.
+                        if (Paused() == true) throw new BridgeError("Open parks with the game's Park button, which doesn't work while paused: unpause first (time).");
+                        CartSelling.OpenHere(panel);
+                        break;
+                    case "close":
+                        if (TruckWindow.PanelClose(id)) break;
+                        if (FoodTrucks.Core.Saves.StreetSales.Find(state, id)?.IsOpen != true) throw new BridgeError($"Vehicle {id} isn't open.");
+                        CartSelling.CloseByPlayer(id);
+                        break;
+                    case "step_out":
+                        if (!TruckWindow.PanelStepOut(id)) throw new BridgeError($"The player isn't at the hatch of {id}.");
+                        break;
+                    case "back_to_hatch":
+                        if (!TruckWindow.CanGoBack(vehicle))
+                            throw new BridgeError("Back to the hatch isn't offered now: it needs an open truck and the player on foot, empty-handed and not at a hatch.");
+                        TruckWindow.BackToHatch(Spawned(vehicle));
+                        break;
+                    case "enter":
+                        if (game.ActiveVehicleId == id) throw new BridgeError($"The player is in {id} already.");
+                        if (!string.IsNullOrEmpty(game.ActiveVehicleId)) throw new BridgeError($"The player is in another vehicle ({game.ActiveVehicleId}): vehicle exit first.");
+                        // The vehicle overlay's Enter vehicle button: walks there first when further than the game's reach.
+                        Spawned(vehicle).DriveVehicle();
+                        break;
+                    case "exit":
+                        InIt("Park");
+                        if (panel == null) throw new BridgeError("The vehicle panel isn't there.");
+                        panel.ClickPark();
+                        if (game.ActiveVehicleId == id)
+                            throw new BridgeError("The game's Park button refused: paused, no parking here, or the panel isn't showing.");
+                        break;
+                    case "restock":
+                        InIt("Commissary");
+                        Refused(global::FoodTrucks.Commissary.RunPanelOption(vehicle, "restock", "nostock"));
+                        break;
+                    case "rent_bay":
+                        InIt("Commissary");
+                        Refused(global::FoodTrucks.Commissary.RunPanelOption(vehicle, "rent", "move"));
+                        break;
+                    default:
+                        throw new BridgeError($"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay.");
+                }
+            });
+            Log.Info($"Test bridge: vehicle {id} {op}.");
+            return new JObject { ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
+        }
+
+        private static void Refused(string? why)
+        {
+            if (why != null) throw new BridgeError(why);
+        }
+    }
+}

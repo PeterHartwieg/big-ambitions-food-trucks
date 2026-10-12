@@ -180,7 +180,7 @@ namespace FoodTrucks
                     break;
             }
             Log.Info($"Cargo limit: {itemName} into {vehicle.vehicleTypeName} {vehicle.id} capped at {check.Allowed} ({why}).");
-            Notifications.Show(NotificationType.Warning, key,
+            Notices.Show(NotificationType.Warning, key,
                 new Dictionary<string, string>
                 {
                     { "units", check.Capacity.ToString() }, { "slots", info.EquipmentSlots.ToString() },
