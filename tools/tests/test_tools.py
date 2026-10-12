@@ -36,7 +36,7 @@ def line_from_pipe(process):
 
 class MockSession:
     def __enter__(self):
-        self.process = subprocess.Popen([str(TOOLS / 'mock-bridge'), '--port', '0'],
+        self.process = subprocess.Popen([str(TOOLS / 'mock-bridge'), '--port', '0', '--clock-rate', '100'],
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             self.url = line_from_pipe(self.process).strip().split()[-1]
@@ -155,15 +155,16 @@ class BridgeTests(unittest.TestCase):
         cls.session.__exit__(None,None,None)
 
     def setUp(self):
-        self.bridge.call('new_game',{'name':'FT unit'})
+        self.bridge.call('load',{'name':'FT bridge'})
+        self.bridge.wait_state('scene',{'equals':'city'},2)
 
     def test_clock_waits_and_event_cursor(self):
         self.assertEqual(self.bridge.health()['scene'],'city')
         cursor=self.bridge.events()['next']
         self.bridge.call('debug',{'action':'spawn truck'})
         event=self.bridge.wait_event('Spawned',1,cursor)
-        self.assertGreater(event['seq'],cursor)
-        self.assertTrue(self.bridge.events(event['seq'])['events']==[])
+        self.assertEqual(event['seq'],cursor)
+        self.assertTrue(self.bridge.events(event['seq']+1)['events'][0]['kind']=='notice')
         self.bridge.call('time',{'speed':50})
         self.bridge.wait_state('clock.time',{'not_equals':'07:00'},1,.02)
         self.bridge.call('time',{'pause':True})
@@ -175,9 +176,11 @@ class BridgeTests(unittest.TestCase):
         for cmd in ('load','new_game','save'):
             with self.assertRaisesRegex(BridgeError,'FT'):self.bridge.call(cmd,{'name':'Personal'})
         self.bridge.call('save',{'name':'FT save'})
-        self.assertEqual(self.bridge.call('load',{'name':'FT save'})['result'],{'loading':True})
+        self.assertEqual(self.bridge.call('load',{'name':'FT save'})['result'],{'loading':True,'name':'FT save','character':'Mock character'})
+        self.bridge.wait_state('scene',{'equals':'city'},2)
         self.bridge.call('money', {'set':1})
         self.bridge.call('load', {'name':'FT save'})
+        self.bridge.wait_state('scene',{'equals':'city'},2)
         self.assertEqual(self.bridge.call('state')['result']['money'],20000)
         self.assertIn('output',self.bridge.call('console',{'line':'IRSForcePayment 1'})['result'])
         with MockSession() as quitting:
@@ -189,7 +192,7 @@ class BridgeTests(unittest.TestCase):
         batch=self.bridge.events(initial)
         self.assertEqual(len(batch['events']),2000)
         self.assertGreaterEqual(batch['dropped'],5)
-        self.assertEqual(batch['events'][-1]['seq'],batch['next'])
+        self.assertEqual(batch['events'][-1]['seq']+1,batch['next'])
         with self.assertRaisesRegex(BridgeError,'Lost'):self.bridge.wait_event('not there',0,initial)
 
     def test_mock_save_guard_directly(self):
@@ -203,10 +206,10 @@ class BridgeTests(unittest.TestCase):
                 with self.subTest(cmd=cmd),self.assertRaisesRegex(ValueError,'FT save'):mock.call(cmd,args)
 
     def test_screenshot_png(self):
-        shot=self.bridge.call('shoot',{'name':'png-test','pose':'door','target':'commissary:hells-kitchen','width':17,'height':11})['result']['path']
+        shot=self.bridge.call('shoot',{'name':'png-test','pose':'door','target':'commissary:hells-kitchen','width':17,'height':16})['result']['path']
         data=Path(shot).read_bytes()
         self.assertEqual(data[:8],b'\x89PNG\r\n\x1a\n')
-        self.assertEqual(struct.unpack('!II',data[16:24]),(17,11))
+        self.assertEqual(struct.unpack('!II',data[16:24]),(17,16))
         pos=8
         compressed=b''
         while pos<len(data):
@@ -215,7 +218,7 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(struct.unpack('!I',data[pos+8+size:pos+12+size])[0],zlib.crc32(kind+payload)&0xffffffff)
             if kind==b'IDAT':compressed+=payload
             pos+=12+size
-        self.assertEqual(len(zlib.decompress(compressed)),11*(1+17*3))
+        self.assertEqual(len(zlib.decompress(compressed)),16*(1+17*3))
 
 
 class ScenarioTests(unittest.TestCase):
@@ -226,12 +229,12 @@ class ScenarioTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):cls.session.__exit__(None,None,None)
 
-    def setUp(self):self.session.bridge.call('new_game',{'name':'FT scenario'})
+    def setUp(self):self.session.bridge.call('load',{'name':'FT bridge'}); self.session.bridge.wait_state('scene',{'equals':'city'},2)
 
     def test_every_scenario_end_to_end(self):
         for path in sorted((ROOT/'tests/game/scenarios').glob('*.json')):
             with self.subTest(scenario=path.name),tempfile.TemporaryDirectory() as folder:
-                self.session.bridge.call('new_game',{'name':'FT '+path.stem})
+                self.session.bridge.call('load',{'name':'FT bridge'}); self.session.bridge.wait_state('scene',{'equals':'city'},2)
                 runner=Runner(self.session.bridge)
                 report,directory=runner.run(read_scenario(path),folder)
                 self.assertTrue(report['ok'],'; '.join(report['summary']))
@@ -244,8 +247,8 @@ class ScenarioTests(unittest.TestCase):
                 if path.stem=='crew-midnight-payout':
                     paid=[e for e in runner.events if e['text'].startswith('Crew sales paid in:')]
                     self.assertEqual(len(paid),1)
-                    self.assertIn('day 2:',paid[0]['text'])
-                    last_hour=next(e for e in runner.events if 'day 2 23:00 hour:' in e['text'])
+                    self.assertIn('day 1:',paid[0]['text'])
+                    last_hour=next(e for e in runner.events if 'day 1 23:00 hour:' in e['text'])
                     catch=next(e for e in runner.events if 'caught up to minute' in e['text'])
                     self.assertLess(last_hour['seq'],catch['seq'])
                     self.assertLess(catch['seq'],paid[0]['seq'])
@@ -333,12 +336,14 @@ class MCPTests(unittest.TestCase):
                                    ('ft_events',{'since':0,'grep':'Version'}),('ft_ui_list',{})]:
                 reply=request('tools/call',{'name':name,'arguments':arguments})
                 self.assertFalse(reply['result']['isError'],reply)
-            request('tools/call',{'name':'ft_call','arguments':{'cmd':'time','args':{'speed':10000}}})
+            request('tools/call',{'name':'ft_call','arguments':{'cmd':'time','args':{'speed':60}}})
             waited=request('tools/call',{'name':'ft_wait_event','arguments':{'regex':'Day summary:','timeout_s':2}})
             self.assertFalse(waited['result']['isError'],waited)
             request('tools/call',{'name':'ft_call','arguments':{'cmd':'time','args':{'pause':True}}})
             for action in ('spawn truck','licence'):
                 request('tools/call',{'name':'ft_call','arguments':{'cmd':'debug','args':{'action':action}}})
+            request('tools/call',{'name':'ft_call','arguments':{'cmd':'vehicle','args':{'id':'truck-1','op':'enter'}}})
+            request('tools/call',{'name':'ft_call','arguments':{'cmd':'time','args':{'pause':False}}})
             clicked=request('tools/call',{'name':'ft_ui_click','arguments':{'text':'OPEN HERE'}})
             self.assertFalse(clicked['result']['isError'],clicked)
             with tempfile.TemporaryDirectory() as folder:

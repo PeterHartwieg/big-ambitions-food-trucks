@@ -24,7 +24,9 @@ try:
         read_scenario(args.file)
         print('Valid scenario')
     else:
-        report, directory = Runner().run(read_scenario(args.file), args.report_dir, args.keep_going)
+        document = read_scenario(args.file)
+        if 'note' in document['steps'][0]: print('NOTE: ' + document['steps'][0]['note'], flush=True)
+        report, directory = Runner().run(document, args.report_dir, args.keep_going)
         print(f"{'PASS' if report['ok'] else 'FAIL'} {report['name']}: {directory / 'report.md'}")
         if not report['ok']:
             print('; '.join(report['summary']), file=sys.stderr)

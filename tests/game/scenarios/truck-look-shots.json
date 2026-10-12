@@ -1,21 +1,40 @@
 {
   "name": "truck-look-shots",
   "checks": "CHECKS.md, Art look, rows 1 to 3, 7 and 8; Truck interior (0.9.8), rows 1 and 3",
-  "needs": {
-    "scene": "city",
-    "save_prefix": "FT"
-  },
+  "needs": {},
   "steps": [
+    {
+      "note": "Before running, prepare and save 'FT truck-look-shots' by hand: one closed truck and one closed cart near each other, fitted with stock and the required equipment, licence and permits. A person fits the cart hot dog grill and coffee machine, positions vanilla reference items and a delivery van, then saves with all screens closed. The bridge cannot create a new game. This note is manual setup, not an automated check."
+    },
+    {
+      "call": "load",
+      "args": {
+        "name": "FT truck-look-shots"
+      }
+    },
+    {
+      "wait_event": "Test bridge: loading 'FT\\ truck\\-look\\-shots'",
+      "timeout_s": 180
+    },
+    {
+      "wait_state": "scene",
+      "timeout_s": 300,
+      "equals": "city"
+    },
+    {
+      "wait_state": "save",
+      "timeout_s": 300,
+      "equals": "FT truck-look-shots"
+    },
+    {
+      "wait_state": "licence",
+      "not_equals": null,
+      "timeout_s": 300
+    },
     {
       "call": "time",
       "args": {
         "pause": true
-      }
-    },
-    {
-      "call": "debug",
-      "args": {
-        "action": "spawn truck"
       }
     },
     {
@@ -24,50 +43,12 @@
       "path": "vehicles[kind=truck].id"
     },
     {
-      "call": "teleport",
-      "args": {
-        "who": "$truck",
-        "place": "bay:hells-kitchen"
-      }
-    },
-    {
-      "call": "debug",
-      "args": {
-        "action": "licence"
-      }
-    },
-    {
-      "call": "time",
-      "args": {
-        "pause": true
-      }
-    },
-    {
-      "call": "debug",
-      "args": {
-        "action": "spawn cart"
-      }
-    },
-    {
       "remember": "cart",
       "from": "state",
       "path": "vehicles[kind=cart].id"
     },
     {
-      "call": "teleport",
-      "args": {
-        "who": "$cart",
-        "place": "bay:hells-kitchen"
-      }
-    },
-    {
-      "call": "debug",
-      "args": {
-        "action": "licence"
-      }
-    },
-    {
-      "note": "Art look rows 1 to 3, 7 and 8 and Truck interior rows 1 and 3 need visual review. The bridge can load new mod items but cannot fit the hot dog grill and coffee machine or spawn a vanilla comparison vehicle. Set up those references in the live save before taking comparison shots."
+      "note": "Art look rows 1 to 3, 7 and 8 and Truck interior rows 1 and 3 are visual notes, not checked by mock images. No debug stock replaces the reference equipment prepared by the person."
     },
     {
       "call": "time",
@@ -81,13 +62,25 @@
     },
     {
       "wait_state": "clock.paused",
-      "equals": true,
-      "timeout_s": 300
+      "timeout_s": 300,
+      "equals": true
     },
     {
       "expect": "state",
-      "path": "clock.time",
-      "equals": "12:00"
+      "path": "clock.speed",
+      "equals": 1
+    },
+    {
+      "wait_state": "vehicles[kind=truck].heading",
+      "not_equals": null,
+      "timeout_s": 300
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "vehicle:$truck"
+      }
     },
     {
       "call": "vehicle",
@@ -97,9 +90,14 @@
       }
     },
     {
-      "call": "debug",
+      "wait_state": "player.in_vehicle",
+      "timeout_s": 300,
+      "equals": "$truck"
+    },
+    {
+      "call": "time",
       "args": {
-        "action": "new items"
+        "pause": false
       }
     },
     {
@@ -107,6 +105,17 @@
       "args": {
         "id": "$truck",
         "op": "open"
+      }
+    },
+    {
+      "wait_state": "player.at_hatch",
+      "timeout_s": 300,
+      "equals": "$truck"
+    },
+    {
+      "call": "time",
+      "args": {
+        "pause": true
       }
     },
     {
@@ -152,6 +161,18 @@
       }
     },
     {
+      "wait_state": "vehicles[kind=cart].heading",
+      "not_equals": null,
+      "timeout_s": 300
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "vehicle:$cart"
+      }
+    },
+    {
       "call": "vehicle",
       "args": {
         "id": "$cart",
@@ -159,9 +180,14 @@
       }
     },
     {
-      "call": "debug",
+      "wait_state": "player.in_vehicle",
+      "timeout_s": 300,
+      "equals": "$cart"
+    },
+    {
+      "call": "time",
       "args": {
-        "action": "new items"
+        "pause": false
       }
     },
     {
@@ -169,6 +195,17 @@
       "args": {
         "id": "$cart",
         "op": "open"
+      }
+    },
+    {
+      "wait_state": "vehicles[kind=cart].open",
+      "timeout_s": 300,
+      "equals": true
+    },
+    {
+      "call": "time",
+      "args": {
+        "pause": true
       }
     },
     {
@@ -204,13 +241,25 @@
     },
     {
       "wait_state": "clock.paused",
-      "equals": true,
-      "timeout_s": 300
+      "timeout_s": 300,
+      "equals": true
     },
     {
       "expect": "state",
-      "path": "clock.time",
-      "equals": "22:00"
+      "path": "clock.speed",
+      "equals": 1
+    },
+    {
+      "wait_state": "vehicles[kind=truck].heading",
+      "not_equals": null,
+      "timeout_s": 300
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "vehicle:$truck"
+      }
     },
     {
       "call": "vehicle",
@@ -220,9 +269,14 @@
       }
     },
     {
-      "call": "debug",
+      "wait_state": "player.in_vehicle",
+      "timeout_s": 300,
+      "equals": "$truck"
+    },
+    {
+      "call": "time",
       "args": {
-        "action": "new items"
+        "pause": false
       }
     },
     {
@@ -230,6 +284,17 @@
       "args": {
         "id": "$truck",
         "op": "open"
+      }
+    },
+    {
+      "wait_state": "player.at_hatch",
+      "timeout_s": 300,
+      "equals": "$truck"
+    },
+    {
+      "call": "time",
+      "args": {
+        "pause": true
       }
     },
     {
@@ -275,6 +340,18 @@
       }
     },
     {
+      "wait_state": "vehicles[kind=cart].heading",
+      "not_equals": null,
+      "timeout_s": 300
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "vehicle:$cart"
+      }
+    },
+    {
       "call": "vehicle",
       "args": {
         "id": "$cart",
@@ -282,9 +359,14 @@
       }
     },
     {
-      "call": "debug",
+      "wait_state": "player.in_vehicle",
+      "timeout_s": 300,
+      "equals": "$cart"
+    },
+    {
+      "call": "time",
       "args": {
-        "action": "new items"
+        "pause": false
       }
     },
     {
@@ -292,6 +374,17 @@
       "args": {
         "id": "$cart",
         "op": "open"
+      }
+    },
+    {
+      "wait_state": "vehicles[kind=cart].open",
+      "timeout_s": 300,
+      "equals": true
+    },
+    {
+      "call": "time",
+      "args": {
+        "pause": true
       }
     },
     {
@@ -314,9 +407,6 @@
         "id": "$cart",
         "op": "close"
       }
-    },
-    {
-      "note": "The hatch camera shows the interior and player at the counter. Camera poses exclude UI. Mock renders cannot establish any visual check as passed."
     }
   ]
 }

@@ -60,8 +60,6 @@ class Bridge:
         if isinstance(since, bool) or not isinstance(since, int) or since < 0:
             raise BridgeError('Invalid event cursor: use a nonnegative sequence number from events.next')
         reply = self._request(f'/events?since={since}')
-        if reply['next'] < since:
-            raise BridgeError('Bridge event cursor moved backwards: the game may have restarted; rerun from --since 0')
         return reply
 
     def wait_event(self, regex, timeout_s=30, since=0):

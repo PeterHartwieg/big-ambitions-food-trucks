@@ -216,31 +216,35 @@ Rules: `must` (at least once), `never`, `count=N`, `count>=N`, `order` (the rege
 
 ## Using the Mac tools
 
-Start the game with `-foodtrucks-test` and load a fresh, empty FT save in the city. Open the tunnel in another terminal, then check health:
+Make an FT save by hand once; `new_game` is unavailable. Run scenarios from the menu or a throwaway FT city: loading from the city discards its unsaved changes. Start the game with `-foodtrucks-test`. Open the tunnel, then check health in another terminal:
 
 ```sh
 export BA_GAME_HOST=homepc
 ssh -N -L 8322:127.0.0.1:8322 "$BA_GAME_HOST"
 # In another terminal:
 tools/ft health
+tools/ft call load name='FT bridge'
+tools/ft state
 ```
 
-When available, `tools/run-remote.sh start` and `tools/run-remote.sh tunnel` handle the launch and tunnel. The client uses `BA_BRIDGE_URL`, default `http://127.0.0.1:8322`. `BA_GAME_HOST` is used only to fetch screenshots with scp.
+When available, `tools/run-remote.sh start` and `tools/run-remote.sh tunnel` handle launch and the tunnel. The client uses `BA_BRIDGE_URL`, default `http://127.0.0.1:8322`. `BA_GAME_HOST` is used only to fetch screenshots.
 
 ```sh
-tools/ft state 'vehicles[kind=truck].legal'
-tools/ft call debug action='spawn truck'
+tools/ft state 'vehicles[kind=truck].id'
 tools/ft call time pause=true
-tools/ft call time run_until.day=4 run_until.time=08:05 speed=20
+tools/ft call time run_until.day=+1 run_until.time=08:05 speed=20
 tools/ft call money --json '{"set":20000}'
 tools/ft --json call state
-tools/ft events --follow --grep 'Commissary|Crew'
+tools/ft events --since 1 --follow --grep 'Commissary|Crew'
 tools/ft ui
-tools/ft click 'OPEN HERE'
 tools/ft shoot bay-day --pose bay-pavement --target bay:hells-kitchen --fetch build/shots
 ```
 
-Values in `key=value` are JSON when possible, otherwise strings. Dots build nested arguments. `--json` before `call` prints the raw reply; after `call` it supplies the argument object. `call --raw` also prints the raw reply. `wait-event` watches new events from the moment it starts.
+Values in `key=value` are JSON when possible, otherwise strings. Dots build nested arguments. `--json` before `call` prints the raw reply; after `call` it supplies arguments. `call --raw` also prints the raw reply. `wait-event` watches new events. Event cursors are inclusive: request `since` and later, then use the reply's `next` unchanged.
+
+`open`, `exit`, `restock` and `rent_bay` require driving the truck or pushing the cart. Teleport the player beside it, call `vehicle enter`, and wait for `state.player.in_vehicle` to match its id. Unpause before `open` or `exit`. After `open` or `back_to_hatch`, wait for `player.at_hatch` for a truck. Close an open vehicle before teleporting it. `rent_bay` on a vehicle already rented at that bay refuses; `restock` with no stock succeeds with a notice.
+
+Speed is above 0 and at most 60. The bridge handles `run_until.day: "+N"`, then pauses and restores speed 1. It may stop a frame late; do not assert an exact minute or stop at 07:59/23:59 before a payment boundary. Screens and activities can hold the clock. Escape closes the top screen or list picker; it refuses when nothing is open. List-picker options need their confirm button too. Duplicate text needs an id from the latest `ui list`.
 
 ```sh
 tools/scenario list
@@ -248,21 +252,20 @@ tools/scenario validate tests/game/scenarios/commissary-pay-on-delivery.json
 tools/scenario run tests/game/scenarios/commissary-pay-on-delivery.json
 ```
 
-Reports land in `build/scenarios/<name>-<time>/`. Open `report.md` for failures first and `index.html` for the offline contact sheet. The folder also holds `report.json`, `events.jsonl` and fetched PNGs. Use `--report-dir DIR` to choose a folder and `--keep-going` to continue after hard failures. A soft failure appears in the report but does not change the exit code. Screenshot notes need visual review; mock PNGs cannot check the art.
+Each scenario's first note says how a person prepares its named FT save. Read that note before running. The scenario loads it, waits for the load log, city, save name and loaded mod data, then checks the available fields. The order fixtures hold a confirmed two-box order; the crew fixture holds an assigned crew and route; the art fixture holds equipment and vanilla references. Quantity inputs, crew row selection, map picks and reference placement are manual notes. They are not counted as automated passes. The mock includes these prepared saves so all six scenarios can be tested.
 
-Scenarios assume one fresh vehicle of each kind and English UI labels. The order and crew flows are provisional until tried in game. The order adds Hotdog twice to request two boxes. If the live form needs a quantity input instead, `ui click` needs that capability added on the game side. The art comparisons also need vanilla reference items prepared in the live save. Transaction history is not in state, so fees, wages and transaction labels still need review.
+Reports land in `build/scenarios/<name>-<time>/`: failures first in `report.md`, plus `report.json`, `events.jsonl`, fetched PNGs and an offline contact sheet `index.html`. Use `--report-dir DIR` or `--keep-going` as needed. Mock pictures cannot establish an art check. Exact transactions, fees, wages and day-summary values still need review because state lacks transaction history. Truck `legal` currently reads the cart pavement rule; a legally parked truck in a bay can show false.
 
-A `run_until.day` string such as `"+1"` means the current day plus one; the runner sends an absolute day. `expect` and `remember` can read `state` or `result` (the last call's result). Event waits consume matches in order from the start of the run. `no_event` uses optional `from_step` and `to_step` boundaries, both inclusive step numbers with an exclusive starting event cursor. Step 0 is the start of the run. Without boundaries it checks the previous step through this one. A `wait_event` boundary is its matched event, so a later `no_event` can detect a second payout even when both arrived in one batch. Lost events fail the run.
+`expect` and `remember` read `state` or `result` (the last call's result). Remembered `$name` values are substituted exactly; `vehicle:$name` builds a player teleport target. Relative days go unchanged to the bridge. Event waits consume matches in order. `no_event` accepts `from_step` and `to_step` boundaries; step 0 is the run's start. Without them it checks the previous step through this one. A `wait_event` boundary is just after its match, so duplicate payments in one batch are detected. Lost events fail the run.
 
 ```sh
-tools/check-log build/logs/game/<session>/Player.log
 tools/check-log build/logs/game/<session>/Player.log 0.9.10 --rows 0.9.10/1,0.9.10/2
 python3 -m unittest discover -s tools/tests
 tools/mock-bridge --port 8322
 ```
 
-Row rules count only for the comma-separated rows in `--rows`; `--rows all` checks every row. Rules without a row always count. Unknown log versions get only the always-on checks. Conditional diagnostics use `count>=0` so their observed counts are reported without requiring a fallback or retry to happen.
+Row rules count only for selected `--rows`; `--rows all` checks every row. Rules without rows always count. Unknown versions get only the always-on checks. Conditional diagnostics use `count>=0` to report observed counts without requiring a fallback or retry.
 
-The mock is local and keeps a running clock, orders, stock, crews and save snapshots. `run_until` advances quickly and pauses. It writes small valid PNG placeholders to a temporary folder. Tests use a free loopback port and never connect to the game PC. For environments that forbid listening sockets, `FT_TEST_TRANSPORT=inprocess python3 -m unittest discover -s tools/tests` exercises the same HTTP handlers and JSON replies in memory, with MCP still tested over stdio pipes. This does not verify socket transport.
+The mock mirrors the built command guards, errors, result shapes, null fields, asynchronous entry and inclusive events. It simulates the economy and writes valid PNG placeholders; it cannot model Unity navigation or rendering. Its normal clock is one game minute per real second; `--clock-rate 100` emulates a faster Options setting for tests without changing command speed semantics. Tests use a free loopback port and never connect to the game PC. In environments that forbid listening sockets, `FT_TEST_TRANSPORT=inprocess python3 -m unittest discover -s tools/tests` exercises the same HTTP handlers and JSON replies in memory, with MCP tested over stdio pipes. This does not verify socket transport.
 
-`.mcp.json` registers the stdio server as `foodtrucks-game`. It uses the same environment variables and fetches its screenshots into `build/shots/`.
+`.mcp.json` registers the stdio server as `foodtrucks-game`. It uses the same environment variables and fetches screenshots into `build/shots/`.

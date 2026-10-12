@@ -1,11 +1,36 @@
 {
   "name": "bay-shots",
   "checks": "CHECKS.md, Commissary look and payment (0.9.10), rows 6 to 8 and 12",
-  "needs": {
-    "scene": "city",
-    "save_prefix": "FT"
-  },
+  "needs": {},
   "steps": [
+    {
+      "note": "Before running, prepare and save 'FT bay-shots' by hand: an FT city with the five commissaries, all screens closed. The bridge cannot create a new game. This note is manual setup, not an automated check."
+    },
+    {
+      "call": "load",
+      "args": {
+        "name": "FT bay-shots"
+      }
+    },
+    {
+      "wait_event": "Test bridge: loading 'FT\\ bay\\-shots'",
+      "timeout_s": 180
+    },
+    {
+      "wait_state": "scene",
+      "timeout_s": 300,
+      "equals": "city"
+    },
+    {
+      "wait_state": "save",
+      "timeout_s": 300,
+      "equals": "FT bay-shots"
+    },
+    {
+      "wait_state": "licence",
+      "not_equals": null,
+      "timeout_s": 300
+    },
     {
       "call": "time",
       "args": {
@@ -13,7 +38,7 @@
       }
     },
     {
-      "note": "Visual review only. Mock PNGs are placeholders. Judge paint, sign, props, doors and kerb placement from real game screenshots."
+      "note": "Visual review only. Mock PNGs are placeholders. A person judges paint, signs, props, door clearances and pedestrian collisions."
     },
     {
       "call": "time",
@@ -27,13 +52,26 @@
     },
     {
       "wait_state": "clock.paused",
-      "equals": true,
-      "timeout_s": 300
+      "timeout_s": 300,
+      "equals": true
     },
     {
       "expect": "state",
-      "path": "clock.time",
-      "equals": "12:00"
+      "path": "clock.speed",
+      "equals": 1
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "commissary:industry-city"
+      }
+    },
+    {
+      "sleep_s": 0.5
+    },
+    {
+      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
     },
     {
       "shoot": {
@@ -57,6 +95,19 @@
       }
     },
     {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "commissary:garment-district"
+      }
+    },
+    {
+      "sleep_s": 0.5
+    },
+    {
+      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+    },
+    {
       "shoot": {
         "name": "garment-district-day-bay-pavement",
         "pose": "bay-pavement",
@@ -76,6 +127,19 @@
         "pose": "door",
         "target": "commissary:garment-district"
       }
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "commissary:hells-kitchen"
+      }
+    },
+    {
+      "sleep_s": 0.5
+    },
+    {
+      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
     },
     {
       "shoot": {
@@ -99,6 +163,19 @@
       }
     },
     {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "commissary:lower-manhattan"
+      }
+    },
+    {
+      "sleep_s": 0.5
+    },
+    {
+      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+    },
+    {
       "shoot": {
         "name": "lower-manhattan-day-bay-pavement",
         "pose": "bay-pavement",
@@ -118,6 +195,19 @@
         "pose": "door",
         "target": "commissary:lower-manhattan"
       }
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "commissary:murray-hill"
+      }
+    },
+    {
+      "sleep_s": 0.5
+    },
+    {
+      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
     },
     {
       "shoot": {
@@ -152,13 +242,26 @@
     },
     {
       "wait_state": "clock.paused",
-      "equals": true,
-      "timeout_s": 300
+      "timeout_s": 300,
+      "equals": true
     },
     {
       "expect": "state",
-      "path": "clock.time",
-      "equals": "22:00"
+      "path": "clock.speed",
+      "equals": 1
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "commissary:industry-city"
+      }
+    },
+    {
+      "sleep_s": 0.5
+    },
+    {
+      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
     },
     {
       "shoot": {
@@ -182,6 +285,19 @@
       }
     },
     {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "commissary:garment-district"
+      }
+    },
+    {
+      "sleep_s": 0.5
+    },
+    {
+      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+    },
+    {
       "shoot": {
         "name": "garment-district-night-bay-pavement",
         "pose": "bay-pavement",
@@ -201,6 +317,19 @@
         "pose": "door",
         "target": "commissary:garment-district"
       }
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "commissary:hells-kitchen"
+      }
+    },
+    {
+      "sleep_s": 0.5
+    },
+    {
+      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
     },
     {
       "shoot": {
@@ -224,6 +353,19 @@
       }
     },
     {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "commissary:lower-manhattan"
+      }
+    },
+    {
+      "sleep_s": 0.5
+    },
+    {
+      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
+    },
+    {
       "shoot": {
         "name": "lower-manhattan-night-bay-pavement",
         "pose": "bay-pavement",
@@ -243,6 +385,19 @@
         "pose": "door",
         "target": "commissary:lower-manhattan"
       }
+    },
+    {
+      "call": "teleport",
+      "args": {
+        "who": "player",
+        "place": "commissary:murray-hill"
+      }
+    },
+    {
+      "sleep_s": 0.5
+    },
+    {
+      "note": "The camera cannot load a distant street. Teleport near this site first. An unresolved bay is a reported failure; allow the city to load and rerun if needed."
     },
     {
       "shoot": {
