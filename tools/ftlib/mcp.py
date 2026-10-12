@@ -20,7 +20,8 @@ def tool(name, description, properties=None, required=()):
 STRING = {'type': 'string'}
 NUMBER = {'type': 'number', 'minimum': 0}
 TOOLS = [
-    tool('ft_health', 'Read bridge session, version, scene, clock and load completion (load.status pending/done/failed). Answers during pending calls; read state.load.error for failure details. The client pins the first reply session and fails if the bridge restarts.'),
+    tool('ft_health', 'Read bridge session, version, scene, clock and load completion (load.status pending/done/failed). Answers during pending calls and after restarts; restarted/reconnect_required report a changed session. Health does not reconnect or allow mutations. Use ft_reconnect to begin a fresh session.'),
+    tool('ft_reconnect', 'Explicitly pin the current bridge session and discard old operation ids and event cursors. Use after ft_health reports a restart or a call detects one. Changing calls are refused locally until reconnect; every pinned call also sends expect_session so the bridge rejects a stale request before running it. Resume with events since=1 and fresh scenario values.'),
     tool('ft_state', 'Read game state, optionally at a dotted path or list filter. Includes load progress, clock targets/arrival, player activity/clock holder, available hires, bay readiness and today/yesterday transactions.', {'path': STRING}),
     tool('ft_call', 'Run a command as built in docs/test-bridge.md. new_game is unavailable: load an FT save made by hand. FT saves must have a character of their own. timeout_s is clamped to 1..600 seconds. Unpause before vehicle entry and other walks, including their waits. Vehicle open/exit/restock/rent_bay require driving or pushing it; enter and back_to_hatch reply before walking finishes, so poll player.activity and in_vehicle/at_hatch. Check vehicle/crew result.done; vehicle.why is null or a refused commissary choice. Save returns name, path and bytes only after verified serialization/compression and file output. Use commissary order and crew assign/unassign with state.employees ids. load from a non-FT city is refused; wait for load.status done. Replies carry op ids; main-thread timeouts poll that op for up to 30s without repeating the command. Use ft_op to follow longer work. Open/exit need unpaused time. Time speed is >0 to 60; run_until accepts +N days, then stops exactly on the target and pauses at speed 1. Close clock-holding screens before unpausing.',
          {'cmd': STRING, 'args': {'type': 'object'}, 'timeout_s': {'type':'number','description':'Clamped to 1..600 seconds.'}}, ('cmd',)),
@@ -66,6 +67,8 @@ def call_tool(name, args, bridge):
     image = None
     if name == 'ft_health':
         result = bridge.health()
+    elif name == 'ft_reconnect':
+        result = bridge.reconnect()
     elif name == 'ft_state':
         reply = bridge.call('state')
         result = lookup(reply['result'], args.get('path', ''))

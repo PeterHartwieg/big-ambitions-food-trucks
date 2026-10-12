@@ -275,18 +275,27 @@ class Mock:
         self.state['transactions_today'].append({'type':kind,'label':LOCALE[kind].format(day=day,**data),
                                                 'amount':round(amount,2),'day':day,'time':self.state['clock']['time']})
 
-    def operation(self, cmd, args):
+    def operation(self, cmd, args, expect_session=None):
+        def refusal():
+            if self.stopped: return {'ok':False,'session':self.session,'error':'the bridge stopped'}
+            if expect_session is not None and expect_session != self.session:
+                return {'ok':False,'session':self.session,'error':f'the bridge restarted (session {self.session}); reconnect first.'}
+        with self.ops_lock:
+            refused=refusal()
+            if refused: return refused
         if self.stopped: return {'ok':False,'session':self.session,'error':'the bridge stopped'}
         if cmd=='op':
             identifier=num(args,'id')
             if identifier is None: return {'ok':False,'session':self.session,'error':'op needs "id": the number a /call reply gave as "op".'}
             with self.ops_lock:
-                if self.stopped: return {'ok':False,'session':self.session,'error':'the bridge stopped'}
+                refused=refusal()
+                if refused: return refused
                 op=self.operations.get(int(identifier))
                 if op is None: return {'ok':False,'session':self.session,'error':f'No operation {identifier:g} (the bridge keeps the last 500).'}
                 return {'ok':True,'session':self.session,'result':copy.deepcopy(op)}
         with self.ops_lock:
-            if self.stopped: return {'ok':False,'session':self.session,'error':'the bridge stopped'}
+            refused=refusal()
+            if refused: return refused
             identifier=self.next_op
             self.next_op+=1
             session=self.session
@@ -1110,8 +1119,9 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body,dict): raise ValueError('The body is not a JSON object: expected an object.')
             if not body.get('cmd'): raise ValueError('The body has no "cmd".')
             args=body.get('args') if isinstance(body.get('args'),dict) else {}
-            self.reply(self.server.mock.operation(body['cmd'],args))
-            if body['cmd'] == 'quit':
+            result=self.server.mock.operation(body['cmd'],args,body.get('expect_session'))
+            self.reply(result)
+            if body['cmd'] == 'quit' and result['ok']:
                 threading.Timer(.5, self.server.shutdown).start()
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             message = str(exc)

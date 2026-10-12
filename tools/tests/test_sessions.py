@@ -61,7 +61,7 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(error.exception.reply['session'], session)
 
     def test_fast_restart_detected_from_every_endpoint_and_failure(self):
-        for endpoint in ('health', 'events', 'call', 'error', 'recover'):
+        for endpoint in ('events', 'call', 'error', 'recover'):
             with self.subTest(endpoint=endpoint):
                 self.bridge.reset_session()
                 original = self.bridge.call('state')
@@ -69,8 +69,7 @@ class SessionTests(unittest.TestCase):
                 old_session = self.bridge.session
                 self.restart_past(cursor)
                 with self.assertRaises(BridgeError) as error:
-                    if endpoint == 'health': self.bridge.health()
-                    elif endpoint == 'events': self.bridge.events(cursor)
+                    if endpoint == 'events': self.bridge.events(cursor)
                     elif endpoint == 'call': self.bridge.call('state')
                     elif endpoint == 'error': self.bridge.call('unknown')
                     else: self.bridge.recover(original['op'])

@@ -8,6 +8,8 @@ import urllib.request
 
 from .paths import lookup, meets, PathError
 
+RESTART_MESSAGE = 'Bridge restarted: events and remembered values from before are void; use ft_reconnect in MCP or start a fresh scenario run'
+
 
 class BridgeError(RuntimeError):
     def __init__(self, message, remote=False, reply=None, restart=False):
@@ -23,7 +25,7 @@ def check_session(expected, reply):
     if not isinstance(session, str) or not session:
         raise BridgeError('Bridge reply has no valid session: update the bridge before running checks')
     if expected is not None and session != expected:
-        raise BridgeError('Bridge restarted: the session changed; events and remembered values from before are void; start a fresh scenario run', reply=reply, restart=True)
+        raise BridgeError(RESTART_MESSAGE, reply=reply, restart=True)
     return session
 
 
@@ -32,11 +34,42 @@ class Bridge:
         self.url = (url or os.environ.get('BA_BRIDGE_URL', 'http://127.0.0.1:8322')).rstrip('/')
         self.http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         self.session = None
+        self.reconnect_required = False
+        self.operation_ids = set()
+        self.event_cursors = set()
+        self.stale_operations = set()
+        self.stale_cursors = set()
+
+    def discard_context(self):
+        self.stale_operations.update(self.operation_ids)
+        self.stale_cursors.update(self.event_cursors)
+        self.operation_ids.clear()
+        self.event_cursors.clear()
 
     def reset_session(self):
+        self.discard_context()
         self.session = None
+        self.reconnect_required = False
 
-    def _request(self, path, body=None, timeout_s=10):
+    def observe(self, reply, allow_restart=False):
+        try:
+            self.session = check_session(self.session, reply)
+        except BridgeError as exc:
+            if not exc.restart: raise
+            self.reconnect_required = True
+            self.discard_context()
+            if not allow_restart: raise
+
+    def reconnect(self):
+        reply = self._request('/health', allow_restart=True)
+        self.discard_context()
+        self.session = check_session(None, reply)
+        self.reconnect_required = False
+        return {**reply, 'reconnected':True, 'reconnect_required':False, 'events_since':1}
+
+    def _request(self, path, body=None, timeout_s=10, allow_restart=False):
+        if self.reconnect_required and path != '/health':
+            raise BridgeError(RESTART_MESSAGE, restart=True)
         request = urllib.request.Request(self.url + path,
                                          data=None if body is None else json.dumps(body, allow_nan=False).encode(),
                                          headers={'Content-Type': 'application/json'})
@@ -57,13 +90,19 @@ class Bridge:
             raise BridgeError(f'Invalid JSON from {self.url}: check the tunnel points to the test bridge') from exc
         if not isinstance(reply, dict) or not isinstance(reply.get('ok'), bool):
             raise BridgeError('Invalid bridge reply: check the bridge version with tools/ft health')
-        self.session = check_session(self.session, reply)
+        self.observe(reply, allow_restart)
+        if path == '/call' and not self.reconnect_required and reply.get('op') is not None:
+            self.operation_ids.add(reply['op'])
         if not reply['ok']:
             raise BridgeError(reply.get('error', 'Bridge call failed: inspect the game log'), remote=True, reply=reply)
         return reply
 
     def health(self):
-        return self._request('/health')
+        reply = self._request('/health', allow_restart=True)
+        if self.reconnect_required:
+            return {**reply, 'restarted':True, 'reconnect_required':True,
+                    'previous_session':self.session, 'message':RESTART_MESSAGE}
+        return reply
 
     def op(self, identifier):
         return self.call('op', {'id': identifier})
@@ -91,6 +130,11 @@ class Bridge:
             time.sleep(min(.1, max(0, deadline-time.monotonic())))
 
     def call(self, cmd, args=None, timeout_s=10, recovery_s=30):
+        if self.reconnect_required:
+            raise BridgeError(RESTART_MESSAGE, restart=True)
+        identifier = (args or {}).get('id')
+        if cmd == 'op' and isinstance(identifier, (int,float)) and identifier in self.stale_operations and identifier not in self.operation_ids:
+            raise BridgeError('Operation id is from before reconnect: discard it and use an id from the current session')
         arguments = dict(args or {})
         arguments.setdefault('timeout_s', timeout_s)
         limit = arguments['timeout_s']
@@ -98,8 +142,10 @@ class Bridge:
             raise BridgeError('Invalid timeout_s: use a finite number of seconds (clamped to 1..600)')
         limit = min(600, max(1, limit))
         arguments['timeout_s'] = limit
+        body = {'cmd':cmd, 'args':arguments}
+        if self.session is not None: body['expect_session'] = self.session
         try:
-            reply = self._request('/call', {'cmd': cmd, 'args': arguments}, limit + 2)
+            reply = self._request('/call', body, limit + 2)
         except BridgeError as exc:
             if cmd != 'op' and exc.remote and exc.op is not None and str(exc).startswith('timed out on the main thread;'):
                 reply = self.recover(exc.op, recovery_s)
@@ -108,15 +154,23 @@ class Bridge:
         if not isinstance(reply.get('result'), dict):
             raise BridgeError('Invalid command result: inspect the game log and bridge version')
         if cmd == 'op':
-            self.session = check_session(self.session, reply['result'])
+            self.observe(reply['result'])
+            self.operation_ids.add(reply['result']['id'])
         return reply
 
     def events(self, since=0):
+        if self.reconnect_required:
+            raise BridgeError(RESTART_MESSAGE, restart=True)
         if isinstance(since, bool) or not isinstance(since, int) or since < 0:
             raise BridgeError('Invalid event cursor: use a nonnegative sequence number from events.next')
+        if since > 1 and since in self.stale_cursors and since not in self.event_cursors:
+            raise BridgeError('Event cursor is from before reconnect: discard it and read events from since=1')
         reply = self._request(f'/events?since={since}')
         if reply['next'] < since:
+            self.reconnect_required = True
+            self.discard_context()
             raise BridgeError(f"Bridge restarted: events.next {reply['next']} is below cursor {since}; use a fresh cursor and rerun the scenario", restart=True)
+        self.event_cursors.add(reply['next'])
         return reply
 
     def wait_event(self, regex, timeout_s=30, since=0):
@@ -163,6 +217,10 @@ def client():
 
 def health():
     return client().health()
+
+
+def reconnect():
+    return client().reconnect()
 
 
 def call(cmd, args=None, timeout_s=10):
