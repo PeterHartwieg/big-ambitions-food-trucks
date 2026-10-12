@@ -54,6 +54,13 @@ namespace FoodTrucks
             var folder = Path.Combine(Application.persistentDataPath, "FoodTrucksTest", "shots");
             var path = Path.Combine(folder, name + ".png");
             var frames = 0;
+            void Release()
+            {
+                if (camera != null) camera.targetTexture = null;
+                if (holder != null) Object.Destroy(holder);
+                texture.Release();
+                Object.Destroy(texture);
+            }
             return new Deferred(() =>
             {
                 // The camera renders once a frame while enabled; the picture is read after a few.
@@ -70,16 +77,10 @@ namespace FoodTrucks
                     File.WriteAllBytes(path, image.EncodeToPNG());
                     Object.Destroy(image);
                 }
-                finally
-                {
-                    camera.targetTexture = null;
-                    Object.Destroy(holder);
-                    texture.Release();
-                    Object.Destroy(texture);
-                }
+                finally { Release(); }
                 Log.Info($"Test bridge: shot {name} ({width}x{height}) from x {position.x:F1}, y {position.y:F1}, z {position.z:F1}: {path}.");
                 return new JObject { ["path"] = path };
-            });
+            }, Release);
         }
 
         // The camera's place: an explicit pose (x, y, z, yaw, pitch, fov) or a named pose round a target.

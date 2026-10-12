@@ -1,6 +1,6 @@
 # Test bridge (next build)
 
-The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:8322` inside the game, only when it starts with `-foodtrucks-test`, plus a `Notice:` or `Phone:` log line for every notice and text the mod shows. Branch `tooling-game`; no version bump, so the log says 0.9.10. Built, never run. Start the game once without the flag (rows 1 and 2), then with it: add `-foodtrucks-test` to the Steam launch options next to `-console`, or start `Big Ambitions.exe -foodtrucks-test` (`tools/run-remote.sh` does this). From the Mac, `ssh -L 8322:127.0.0.1:8322 homepc` and `curl http://127.0.0.1:8322/health`. Use a throwaway save named **FT bridge**; the bridge refuses to change any other.
+The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:8322` inside the game, only when it starts with `-foodtrucks-test`, plus a `Notice:` or `Phone:` log line for every notice and text the mod shows. Branch `tooling-game`; no version bump, so the log says 0.9.10. Built, never run. Start the game once without the flag (rows 1 and 2), then with it: `tools/run-remote.sh start` runs `steam.exe -applaunch 1331550 -console -foodtrucks-test` on homepc. From the Mac, `ssh -L 8322:127.0.0.1:8322 homepc` and `curl http://127.0.0.1:8322/health`. Use a throwaway save named **FT bridge**, made from a **new character** of its own (start a new game, save it as FT bridge). Never make an FT save by saving a series city under a new name: the bridge refuses any save whose character also has saves not starting with FT.
 
 | # | Do | Look for |
 |---|---|---|
@@ -20,7 +20,7 @@ The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:832
 | 14 | `shoot` `{"name":"bay-day","pose":"bay-pavement","target":"bay:hells-kitchen"}`, `{"name":"truck-side","pose":"vehicle-side","target":"<truck id>"}`, `{"name":"door","pose":"door","target":"commissary:hells-kitchen"}` | PNGs in `…\LocalLow\Hovgaard Games\Big Ambitions\FoodTrucksTest\shots\`. Is the exposure like the game's view (not black, not blown out)? Any UI in them? The game's own view doesn't flicker or move while they're taken |
 | 15 | `console` `{"line":"help"}` | The reply's `output` holds the console's command list |
 | 16 | `save` `{"name":"FT bridge 2"}`, then `load` `{"name":"FT bridge"}` from the city | The save appears in the Load screen. The load goes to the main menu and on into the city without a question |
-| 17 | Load a non-FT save by hand, then try `money`, `time` and `save` | Each is refused: the save's name doesn't start with FT. `state` still answers |
+| 17 | Load by hand a disposable save whose name doesn't start with FT, never `HART. YT`; then try `money`, `time`, `save` and `ui click` | Each is refused: the save's name doesn't start with FT (`ui works only in a loaded FT city; use load from the main menu.` for the click). `state` still answers |
 | 18 | `GET /events?since=1` after a few of the rows above | Log lines, `notice` and `phone` events, and any Unity error; `next` grows. `new_game` returns `ok: false` saying why |
 | 20 | Start a `save` and at once `curl …/health` and `GET /events` | Both answer straight away while the save runs. The save's reply has an `op` number; `{"cmd":"op","args":{"id":N}}` says `done` |
 | 21 | `time` `{"run_until":{"day":"+0","time":"<the next hour>:59"},"speed":20}` | It stops paused on that :59 exactly, and `state.clock.arrived_at` says so. Then run to the next HH:00: the hour's events have run when it stops |
@@ -28,6 +28,9 @@ The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:832
 | 23 | `commissary` `{"op":"order","site":"hells-kitchen","items":[{"item":"<a food's name>","boxes":2}]}` with a space rented there | The same `Commissary order …` log lines as an order by phone, no money taken; the order is in `state.commissary.orders`. At 08:00 its payment shows in `state.transactions_today` |
 | 24 | Hire a worker (Ctrl+Alt+U), `state.employees`, then `crew` `assign` and `unassign` on the truck | The worker is listed, joins the truck (notice as from BizMan, `done: true`) and leaves again |
 | 25 | From a non-FT city, `load` `{"name":"FT bridge"}` | Refused, the reply says to go to the main menu or load from an FT save |
+| 26 | In FT bridge, open the pause menu (Esc), `ui list`, then click its Save button by id | Refused: `ui click refuses the game's save and load controls; use the save and load commands.` Resume and Options still click |
+| 27 | Save the FT bridge city by hand under a name without FT (same character), then `money` | Refused: `This save's character also has saves not starting with FT (…); make FT saves with a character of their own.` Delete that save afterwards |
+| 28 | `save` `{"name":"FT bridge"}` | The reply has the file's path and size; the log has `Test bridge: saved 'FT bridge', N bytes.` |
 | 19 | `quit` | The reply comes, then the game closes within a second or two |
 
 Log lines:
@@ -36,6 +39,7 @@ Log lines:
 - Every notice: `Notice: <text>`; every text: `Phone: <contact>: <text>`, the player's own read-back `Phone: <contact>: [player] <text>`. A raw key (`Notice: foodtrucks:… {…}`) means the locale file lacks the key: tell me.
 - Commands: `Test bridge: running the clock at speed N until day D HH:MM.`, `Test bridge: run_until day D HH:MM reached at day D HH:MM; paused, speed 1.`, `Test bridge: money set from … to ….`, `Test bridge: moving the player to x …`, `Test bridge: moved <type> <id> to x …`, `Test bridge: vehicle <id> <op>.`, `Test bridge: clicked "…" (…).`, `Test bridge: escape: ….`, `Test bridge: shot <name> (…): <path>.`, `Test bridge: saving as '…'.`, `Test bridge: loading '…' (…).`, `Test bridge: quitting the game.`
 - Any `Test bridge, refresh:` or `Test bridge, every frame:` error line: tell me.
+- Every mod error line now starts `ERROR: ` after the mod's prefix.
 - With the flag only: `Patch GameManager.RunMainGameTick(Single), test bridge: Active.` Loads end with `Test bridge: load '…' done: day D, the mod's save data attached.` (or `… failed: …`); vehicle ops log `Test bridge: vehicle <id> <op>: done.` or `not done.`
 
 Game calls to watch first (read in the decompile, never run): the HttpListener under the game's Mono; `GameManager.SetMinutesMultiplier` and `GameSpeedController.SetPlayerPause` for `time`; `GameManager.SetPlayerPosition` and `VehicleHelper.TeleportVehicleToGround` for `teleport`; `TransitionToSave` with `LoadScene.LoadTransitionToSave`, and `LoadScene.LoadMainMenuFromCity` run from the bridge's own object, for `load`; `CancelButtonHandler.HandleEscapeClick` for `escape`; the second camera with HDRP's camera data copied by reflection for `shoot`; TextMeshPro read by reflection for `ui` labels and texts.

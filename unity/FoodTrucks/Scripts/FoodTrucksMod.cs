@@ -143,8 +143,12 @@ namespace FoodTrucks
             Tell(kind, message);
         }
 
+        // Every error line starts with this marker, once, for log checks.
+        internal const string ErrorMarker = "ERROR: ";
+
         public static void Error(string message)
         {
+            if (!message.StartsWith(ErrorMarker, StringComparison.Ordinal)) message = ErrorMarker + message;
             writing = true;
             try
             {

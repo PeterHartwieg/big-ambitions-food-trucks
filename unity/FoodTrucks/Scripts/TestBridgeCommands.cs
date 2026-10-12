@@ -76,6 +76,40 @@ namespace FoodTrucks
             var name = SaveGameManager.Current?.SaveGameName;
             if (!IsFt(name))
                 throw new BridgeError($"{cmd} changes the save, and the loaded save '{name}' doesn't start with FT: load an FT save first.");
+            RequireFtCharacter(SaveGameManager.Current?.characterId);
+        }
+
+        // An FT save's character has FT saves only (the game's own recover saves aside): a series city saved under an FT
+        // name keeps its character, whose other saves the game's autosave and save dialog can reach.
+        private static readonly System.Text.RegularExpressions.Regex RecoverName =
+            new System.Text.RegularExpressions.Regex(@"^Recover (#\d+|Midnight)$");
+        private static readonly Dictionary<string, (float Until, string? Other)> characterChecks = new Dictionary<string, (float, string?)>();
+
+        internal static void RequireFtCharacter(string? characterId)
+        {
+            var other = NonFtSave(characterId);
+            if (other != null)
+                throw new BridgeError($"This save's character also has saves not starting with FT ({other}); make FT saves with a character of their own.");
+        }
+
+        // The first save in the character's folder whose name doesn't start with FT, recover saves aside; read again
+        // after a few seconds.
+        private static string? NonFtSave(string? characterId)
+        {
+            if (string.IsNullOrEmpty(characterId)) return null;
+            var now = UnityEngine.Time.realtimeSinceStartup;
+            if (characterChecks.TryGetValue(characterId!, out var known) && now < known.Until) return known.Other;
+            var folder = System.IO.Path.Combine(SaveGamePathHelper.CurrentVersionFolderPath(), characterId);
+            string? other = null;
+            if (System.IO.Directory.Exists(folder))
+                other = System.IO.Directory.GetFiles(folder)
+                    .Where(f => f.EndsWith(".hsg", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    .Select(System.IO.Path.GetFileNameWithoutExtension)
+                    .Where(n => !IsFt(n) && !RecoverName.IsMatch(n))
+                    .OrderBy(n => n, StringComparer.Ordinal)
+                    .FirstOrDefault();
+            characterChecks[characterId!] = (now + 5f, other);
+            return other;
         }
 
         internal static string? Str(JObject args, string key) =>
@@ -276,24 +310,65 @@ namespace FoodTrucks
 
         private const float SaveSeconds = 60f;
 
+        // What the game's save logged: serialisation runs in the call, compression on a thread of its own.
+        private sealed class SaveWatch
+        {
+            public volatile bool SerializeFailed;
+            public volatile bool Compressed;
+
+            public void OnLog(string condition, string stackTrace, LogType type)
+            {
+                if (condition.StartsWith("Save game serialization failed", StringComparison.Ordinal)) SerializeFailed = true;
+                else if (condition.StartsWith("Compressed to ", StringComparison.Ordinal)) Compressed = true;
+            }
+        }
+
+        // The save's real outcome: the game's serialisation and compression lines (SaveGameManager.SerializeSaveGame,
+        // CompressSaveGame), then the file itself, written since the call and not empty.
         private static object Save(JObject args)
         {
             var name = Need(args, "name", "the save's name");
             if (!IsFt(name)) throw new BridgeError($"The bridge saves only under names that start with FT, not '{name}'.");
             if (SaveGameManager.SavingGameInProgress) throw new BridgeError("A save is already being written; try again in a moment.");
-            if (!InstanceBehavior<GameManager>.Instance.SaveGame(name))
+            var started = DateTime.UtcNow.AddSeconds(-2);
+            var watch = new SaveWatch();
+            Application.logMessageReceivedThreaded += watch.OnLog;
+            bool accepted;
+            try { accepted = InstanceBehavior<GameManager>.Instance.SaveGame(name); }
+            catch
+            {
+                Application.logMessageReceivedThreaded -= watch.OnLog;
+                throw;
+            }
+            if (!accepted)
+            {
+                Application.logMessageReceivedThreaded -= watch.OnLog;
                 throw new BridgeError("The game refused to save here (inside the interior designer, placing an item, at school or on the casino boat?).");
-            Log.Info($"Test bridge: saving as '{name}'.");
+            }
+            var game = SaveGameManager.Current;
+            var saved = game.SaveGameName;
+            var path = System.IO.Path.Combine(SaveGamePathHelper.CurrentVersionFolderPath(), game.characterId,
+                saved + "." + (InstanceBehavior<GameManager>.Instance.useSaveGameTypeJson ? "json" : "hsg"));
+            Log.Info($"Test bridge: saving as '{saved}' ({path}).");
             var deadline = UnityEngine.Time.realtimeSinceStartup + SaveSeconds;
             return new Deferred(() =>
             {
                 if (SaveGameManager.SavingGameInProgress)
                 {
-                    if (UnityEngine.Time.realtimeSinceStartup > deadline) throw new BridgeError($"The save didn't finish within {SaveSeconds:F0} seconds.");
-                    return null;
+                    if (UnityEngine.Time.realtimeSinceStartup <= deadline) return null;
+                    Application.logMessageReceivedThreaded -= watch.OnLog;
+                    throw new BridgeError($"The save didn't finish within {SaveSeconds:F0} seconds.");
                 }
-                return new JObject { ["name"] = SaveGameManager.Current?.SaveGameName ?? name };
-            });
+                Application.logMessageReceivedThreaded -= watch.OnLog;
+                if (watch.SerializeFailed) throw new BridgeError("The game's save failed while writing the city (see Player.log: Save game serialization failed).");
+                if (!watch.Compressed) throw new BridgeError("The game's save failed while compressing (no \"Compressed to\" line).");
+                var file = new System.IO.FileInfo(path);
+                if (!file.Exists) throw new BridgeError($"The save file isn't there: {path}.");
+                if (file.LastWriteTimeUtc < started) throw new BridgeError($"The save file wasn't written by this save: {path}.");
+                if (file.Length == 0) throw new BridgeError($"The save file is empty: {path}.");
+                Log.Info($"Test bridge: saved '{saved}', {file.Length} bytes.");
+                return new JObject { ["name"] = saved, ["path"] = path, ["bytes"] = file.Length };
+            }, () => Application.logMessageReceivedThreaded -= watch.OnLog);
         }
 
         private static JToken Load(JObject args)
@@ -315,6 +390,8 @@ namespace FoodTrucks
                 var ft = saves.Where(s => s != null && IsFt(s.name)).Select(s => s.name).Distinct().ToList();
                 throw new BridgeError($"No save named '{name}'. FT saves: {(ft.Count == 0 ? "none" : string.Join(", ", ft))}.");
             }
+            RequireFtCharacter(save.characterId);
+            if (scene == "city") RequireFtCharacter(SaveGameManager.Current?.characterId);
             var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's runner is gone.");
             if (scene == "menu" && !InstanceBehavior<MainMenuController>.IsInitialized)
                 throw new BridgeError("load works from the main menu or the city, not the character creator.");
@@ -352,6 +429,19 @@ namespace FoodTrucks
             yield return null;
             yield return null;
             StartLoad(save);
+        }
+
+        // The bridge stops: nothing of this session's carries over to a start after a mod re-enable.
+        internal static void Reset()
+        {
+            if (runUntil != null && SaveGameManager.Current != null) SetSpeed(1);
+            runUntil = null;
+            arrivedAt = null;
+            LoadTarget = null;
+            LoadStatus = null;
+            loadError = null;
+            characterChecks.Clear();
+            TestBridgeUi.Forget();
         }
 
         // ---- Load progress: state.load and health.load ----

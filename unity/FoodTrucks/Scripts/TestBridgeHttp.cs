@@ -102,7 +102,7 @@ namespace FoodTrucks
             if (string.IsNullOrEmpty(cmd)) return TestBridge.Fail("The body has no \"cmd\".");
             var args = call["args"] as JObject ?? new JObject();
             var timeout = 10.0;
-            if (args["timeout_s"] is JValue t && (t.Type == JTokenType.Integer || t.Type == JTokenType.Float)) timeout = Math.Max(0.1, t.Value<double>());
+            if (args["timeout_s"] is JValue t && (t.Type == JTokenType.Integer || t.Type == JTokenType.Float)) timeout = Math.Min(600.0, Math.Max(1.0, t.Value<double>()));
             return TestBridge.Call(cmd!, args, timeout);
         }
 
@@ -151,6 +151,15 @@ namespace FoodTrucks
             if (Log.Writing) return;
             var text = type == UnityEngine.LogType.Exception && !string.IsNullOrEmpty(stackTrace) ? condition + "\n" + stackTrace : condition;
             Add("unity_error", text);
+        }
+
+        internal static void Clear()
+        {
+            lock (gate)
+            {
+                events.Clear();
+                next = 1;
+            }
         }
 
         internal static void Add(string kind, string text)

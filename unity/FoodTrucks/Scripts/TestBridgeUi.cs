@@ -55,14 +55,74 @@ namespace FoodTrucks
                 case "list":
                     return List();
                 case "click":
-                    if (TestBridgeCommands.Scene() == "city") TestBridgeCommands.RequireFtCity("ui click");
+                    RequireFtCity(op);
                     return Click(args);
                 case "escape":
-                    TestBridgeCommands.RequireFtCity("ui escape");
+                    RequireFtCity(op);
                     return Escape();
                 default:
                     throw new BridgeError($"Unknown ui op '{op}': list, click or escape.");
             }
+        }
+
+        internal const string NotFtCityText = "ui works only in a loaded FT city; use load from the main menu.";
+        internal const string SaveLoadText = "ui click refuses the game's save and load controls; use the save and load commands.";
+
+        private static void RequireFtCity(string op)
+        {
+            if (TestBridgeCommands.Scene() != "city" || !TestBridgeCommands.IsFt(SaveGameManager.Current?.SaveGameName)) throw new BridgeError(NotFtCityText);
+            TestBridgeCommands.RequireFtCity("ui " + op);
+        }
+
+        internal static void Forget() => last = new List<Entry>();
+
+        // The game's own save, load, delete and character controls, and the confirmations the pause menu opens, are
+        // left to the save and load commands: a click there could overwrite or delete a save that isn't FT.
+        private static readonly HashSet<string> SaveLoadOwners = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "LoadGame", "LoadGameCharacterEntryView", "LoadGameSaveEntryView", "SaveGameCompatibilityUI", "FuneralUI",
+        };
+
+        private static bool SaveOrLoadControl(Entry entry)
+        {
+            var target = (Component?)entry.Button ?? entry.Dropdown;
+            if (target == null) return false;
+            for (var t = target.transform; t != null; t = t.parent)
+                foreach (var c in t.GetComponents<MonoBehaviour>())
+                    if (c != null && SaveLoadOwners.Contains(c.GetType().Name)) return true;
+            var inPauseMenu = target.GetComponentInParent<UI.MiniMenu.MiniMenu>() != null;
+            // A confirmation while the pause menu is open is one of its own (overwrite a save, leave unsaved).
+            if (HudConfirm.isOpen && UI.MiniMenu.MiniMenu.IsOpen && target.GetComponentInParent<HudConfirmUi>() != null) return true;
+            if (entry.Button != null)
+            {
+                var click = entry.Button.onClick;
+                for (var i = 0; i < click.GetPersistentEventCount(); i++)
+                {
+                    var owner = click.GetPersistentTarget(i)?.GetType().Name ?? "";
+                    var method = click.GetPersistentMethodName(i) ?? "";
+                    if (SaveLoadOwners.Contains(owner)) return true;
+                    if (owner == "MiniMenu" && (method.IndexOf("Save", StringComparison.OrdinalIgnoreCase) >= 0 || method.IndexOf("Load", StringComparison.OrdinalIgnoreCase) >= 0))
+                        return true;
+                }
+            }
+            if (inPauseMenu)
+            {
+                var words = (target.name + " " + entry.Text).ToLowerInvariant();
+                if (words.Contains("save") || words.Contains("load")) return true;
+            }
+            return false;
+        }
+
+        // The control's label now, to check a click by id against the list it came from.
+        private static string CurrentText(Entry entry)
+        {
+            if (entry.Button != null) return Label(entry.Button.transform);
+            if (entry.Dropdown != null && OptionsField?.GetValue(entry.Dropdown) is List<string> options && entry.Option < options.Count)
+            {
+                var localize = LocalizeField?.GetValue(entry.Dropdown) is bool b && b;
+                return Clean(localize ? LocalizorManager.GetLocalization(options[entry.Option], null) : options[entry.Option]);
+            }
+            return "";
         }
 
         private static JToken List()
@@ -110,6 +170,8 @@ namespace FoodTrucks
                 entry = last.FirstOrDefault(e => e.Id == (int)id.Value) ?? throw new BridgeError($"No entry {id} in the last ui list; list again.");
                 var target = (Component?)entry.Button ?? entry.Dropdown;
                 if (target == null || !Visible(target.transform, out _)) throw new BridgeError($"Entry {id} ({entry.Text}) is no longer on screen; list again.");
+                var now = CurrentText(entry);
+                if (now != entry.Text) throw new BridgeError($"the control with id {entry.Id} now reads '{now}'; list again.");
             }
             else if (text != null)
             {
@@ -127,6 +189,7 @@ namespace FoodTrucks
                 entry = matches[0];
             }
             else throw new BridgeError("ui click needs \"id\" (from the last list) or \"text\".");
+            if (SaveOrLoadControl(entry)) throw new BridgeError(SaveLoadText);
 
             if (entry.Button != null)
             {
