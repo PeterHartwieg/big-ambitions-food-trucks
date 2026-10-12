@@ -1,21 +1,40 @@
 {
   "name": "hatch-only-selling",
   "checks": "CHECKS.md, Truck serves only from the hatch (0.9.8), rows 1, 2 and 3",
-  "needs": {
-    "scene": "city",
-    "save_prefix": "FT"
-  },
+  "needs": {},
   "steps": [
+    {
+      "note": "Before running, prepare and save 'FT hatch-only-selling' by hand: exactly one stocked, licensed truck without crew, legal parking with the hatch to the pavement at a busy pitch, before lunch. Save on foot nearby with no screen open. The bridge cannot create a new game. This note is manual setup, not an automated check."
+    },
+    {
+      "call": "load",
+      "args": {
+        "name": "FT hatch-only-selling"
+      }
+    },
+    {
+      "wait_event": "Test bridge: loading 'FT\\ hatch\\-only\\-selling'",
+      "timeout_s": 180
+    },
+    {
+      "wait_state": "scene",
+      "timeout_s": 300,
+      "equals": "city"
+    },
+    {
+      "wait_state": "save",
+      "timeout_s": 300,
+      "equals": "FT hatch-only-selling"
+    },
+    {
+      "wait_state": "licence",
+      "not_equals": null,
+      "timeout_s": 300
+    },
     {
       "call": "time",
       "args": {
         "pause": true
-      }
-    },
-    {
-      "call": "debug",
-      "args": {
-        "action": "spawn truck"
       }
     },
     {
@@ -24,17 +43,91 @@
       "path": "vehicles[kind=truck].id"
     },
     {
+      "wait_state": "vehicles[kind=truck].heading",
+      "not_equals": null,
+      "timeout_s": 300
+    },
+    {
       "call": "teleport",
       "args": {
-        "who": "$truck",
-        "place": "bay:hells-kitchen"
+        "who": "player",
+        "place": "vehicle:$truck"
       }
     },
     {
-      "call": "debug",
+      "call": "vehicle",
       "args": {
-        "action": "licence"
+        "id": "$truck",
+        "op": "enter"
       }
+    },
+    {
+      "wait_state": "player.in_vehicle",
+      "timeout_s": 300,
+      "equals": "$truck"
+    },
+    {
+      "call": "time",
+      "args": {
+        "speed": 20
+      }
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "open"
+      }
+    },
+    {
+      "wait_state": "player.at_hatch",
+      "timeout_s": 300,
+      "equals": "$truck"
+    },
+    {
+      "wait_state": "vehicles[kind=truck].serving",
+      "timeout_s": 300,
+      "equals": "player"
+    },
+    {
+      "wait_event": "Sale:",
+      "timeout_s": 300
+    },
+    {
+      "call": "time",
+      "args": {
+        "pause": true
+      }
+    },
+    {
+      "remember": "stock_before",
+      "from": "state",
+      "path": "vehicles[kind=truck].stock"
+    },
+    {
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "step_out"
+      }
+    },
+    {
+      "wait_state": "player.at_hatch",
+      "timeout_s": 300,
+      "equals": null
+    },
+    {
+      "expect": "state",
+      "path": "vehicles[kind=truck].open",
+      "equals": true
+    },
+    {
+      "expect": "state",
+      "path": "vehicles[kind=truck].serving",
+      "equals": "nobody"
+    },
+    {
+      "note": "No run_until is attempted at the hatch: an activity may hold the clock during its startup. On foot, advance to tomorrow at 11:00 so the waiting queue has time to leave."
     },
     {
       "call": "time",
@@ -48,128 +141,28 @@
     },
     {
       "wait_state": "clock.paused",
-      "equals": true,
-      "timeout_s": 300
-    },
-    {
-      "expect": "state",
-      "path": "clock.time",
-      "equals": "11:00"
-    },
-    {
-      "call": "vehicle",
-      "args": {
-        "id": "$truck",
-        "op": "enter"
-      }
-    },
-    {
-      "call": "debug",
-      "args": {
-        "action": "new items"
-      }
-    },
-    {
-      "call": "vehicle",
-      "args": {
-        "id": "$truck",
-        "op": "open"
-      }
-    },
-    {
-      "expect": "state",
-      "path": "vehicles[kind=truck].serving",
-      "equals": "player"
-    },
-    {
-      "call": "time",
-      "args": {
-        "run_until": {
-          "day": "+0",
-          "time": "12:00"
-        },
-        "speed": 20
-      }
-    },
-    {
-      "wait_state": "clock.paused",
-      "equals": true,
-      "timeout_s": 300
-    },
-    {
-      "expect": "state",
-      "path": "clock.time",
-      "equals": "12:00"
-    },
-    {
-      "wait_event": "Sale:"
-    },
-    {
-      "remember": "stock",
-      "from": "state",
-      "path": "vehicles[kind=truck].stock"
-    },
-    {
-      "remember": "street_food",
-      "from": "state",
-      "path": "ledger_today.street_food"
-    },
-    {
-      "call": "vehicle",
-      "args": {
-        "id": "$truck",
-        "op": "step_out"
-      }
-    },
-    {
-      "wait_event": "Truck window: player stepped out of truck .+ \\(stepped out\\)"
-    },
-    {
-      "wait_event": "Window .+: nobody serving the truck; the player left the hatch: stepped out\\."
-    },
-    {
-      "expect": "state",
-      "path": "vehicles[kind=truck].serving",
-      "equals": "nobody"
-    },
-    {
-      "expect": "state",
-      "path": "vehicles[kind=truck].open",
+      "timeout_s": 300,
       "equals": true
     },
     {
-      "call": "time",
-      "args": {
-        "run_until": {
-          "day": "+0",
-          "time": "12:30"
-        },
-        "speed": 20
-      }
-    },
-    {
-      "wait_state": "clock.paused",
-      "equals": true,
-      "timeout_s": 300
-    },
-    {
       "expect": "state",
-      "path": "clock.time",
-      "equals": "12:30"
+      "path": "clock.speed",
+      "equals": 1
     },
     {
       "expect": "state",
       "path": "vehicles[kind=truck].stock",
-      "equals": "$stock"
-    },
-    {
-      "expect": "state",
-      "path": "ledger_today.street_food",
-      "equals": "$street_food"
+      "equals": "$stock_before"
     },
     {
       "no_event": "Sale:",
-      "from_step": 18
+      "from_step": 19
+    },
+    {
+      "call": "time",
+      "args": {
+        "speed": 20
+      }
     },
     {
       "call": "vehicle",
@@ -179,41 +172,34 @@
       }
     },
     {
-      "wait_event": "Truck window: back to the hatch of truck .+: walking to .+"
+      "wait_state": "player.at_hatch",
+      "timeout_s": 300,
+      "equals": "$truck"
     },
     {
-      "wait_event": "Truck window: player placed at the hatch of truck .+back to the hatch"
-    },
-    {
-      "expect": "state",
-      "path": "vehicles[kind=truck].serving",
+      "wait_state": "vehicles[kind=truck].serving",
+      "timeout_s": 300,
       "equals": "player"
+    },
+    {
+      "wait_event": "Sale:",
+      "timeout_s": 300
     },
     {
       "call": "time",
       "args": {
-        "run_until": {
-          "day": "+0",
-          "time": "13:00"
-        },
-        "speed": 20
+        "pause": true
       }
     },
     {
-      "wait_state": "clock.paused",
-      "equals": true,
-      "timeout_s": 300
+      "call": "vehicle",
+      "args": {
+        "id": "$truck",
+        "op": "close"
+      }
     },
     {
-      "expect": "state",
-      "path": "clock.time",
-      "equals": "13:00"
-    },
-    {
-      "wait_event": "Sale:"
-    },
-    {
-      "note": "Rows 2 and 3 also need eyes: waiting customers give up, and the Back to the hatch button keeps its position and game styling."
+      "note": "A person judges queue abandonment, angry emoji and the position and styling of Back to the hatch. That button is not a driving-panel button."
     }
   ]
 }

@@ -66,13 +66,13 @@ def validate(document):
                     raise ValueError(f'Step {index} {field} needs a valid regex: {exc}') from exc
         if kind == 'no_event':
             start, end = step.get('from_step', max(0, index - 1)), step.get('to_step', index)
-            if any(isinstance(n, bool) or not isinstance(n, int) for n in (start, end)) or not 0 <= start <= end <= index:
-                raise ValueError(f'Step {index} no_event needs completed step boundaries: use 0 <= from_step <= to_step <= this step')
+            if any(isinstance(n, bool) or not isinstance(n, int) for n in (start, end)) or not (0 <= start <= end <= index and start < index):
+                raise ValueError(f'Step {index} no_event needs completed step boundaries: use an earlier from_step and to_step no later than this step')
         if kind == 'shoot':
             shot = step[kind]
             if not isinstance(shot, dict) or not isinstance(shot.get('name'), str):
                 raise ValueError(f'Step {index} shoot needs a name and camera arguments')
-            if not ({'pose', 'target'} <= shot.keys() or {'x', 'y', 'z', 'yaw', 'pitch', 'fov'} <= shot.keys()):
+            if not ({'pose', 'target'} <= shot.keys() or {'x', 'y', 'z'} <= shot.keys()):
                 raise ValueError(f'Step {index} shoot needs pose and target, or explicit camera coordinates')
     return document
 
@@ -101,6 +101,8 @@ class Runner:
             raise BridgeError(f"Scenario lost {batch['dropped']} events: rerun with a shorter scenario or poll more often")
 
     def resolve(self, obj):
+        if isinstance(obj, str) and obj.startswith('vehicle:$'):
+            return 'vehicle:' + str(self.resolve(obj[len('vehicle:'):]))
         if isinstance(obj, str) and obj.startswith('$'):
             if obj[1:] not in self.variables:
                 raise ValueError(f'Unknown remembered value {obj}: add its remember step first')
@@ -125,10 +127,6 @@ class Runner:
         kind = next(iter(KINDS.intersection(step)))
         if kind == 'call':
             args = self.resolve(step.get('args', {}))
-            if step['call'] == 'time' and 'run_until' in args:
-                day = args['run_until'].get('day')
-                if isinstance(day, str) and re.fullmatch(r'[+-]\d+', day):
-                    args['run_until']['day'] = self.bridge.call('state')['result']['clock']['day'] + int(day)
             try:
                 reply = self.bridge.call(step[kind], args, step.get('timeout_s', 10))
             except BridgeError as exc:
@@ -173,7 +171,7 @@ class Runner:
             start = self.boundaries[step.get('from_step', max(0, index - 1))]
             end = self.boundaries.get(step.get('to_step', index), self.cursor)
             pattern = re.compile(self.resolve(step[kind]))
-            matches = [e for e in self.events if start < e['seq'] <= end and pattern.search(e['text'])]
+            matches = [e for e in self.events if start <= e['seq'] < end and pattern.search(e['text'])]
             if matches:
                 raise ValueError(f'Expected no {step[kind]!r}, saw {matches[0]["text"]!r}')
             return {'expected': f'no {step[kind]} between cursors {start} and {end}', 'seen': 'no match'}
@@ -205,7 +203,7 @@ class Runner:
                 if (key == 'save_prefix' and (not isinstance(actual, str) or not actual.startswith(wanted))) or (key != 'save_prefix' and actual != wanted):
                     raise ValueError(f'Needs {key} {wanted!r}, saw {actual!r}: load a matching FT test save in the city')
             self.cursor = self.bridge.events(0)['next']
-            self.event_mark = self.cursor
+            self.event_mark = self.cursor - 1
             self.boundaries[0] = self.cursor
             for index, step in enumerate(document['steps'], 1):
                 record = {'step': index, 'kind': next(iter(KINDS.intersection(step))), 'status': 'PASS',
@@ -218,7 +216,7 @@ class Runner:
                     if not record['soft']:
                         report['ok'] = False
                 report['steps'].append(record)
-                self.boundaries[index] = self.event_mark if record['kind'] == 'wait_event' and record['status'] == 'PASS' else self.cursor
+                self.boundaries[index] = self.event_mark + 1 if record['kind'] == 'wait_event' and record['status'] == 'PASS' else self.cursor
                 if record['status'] == 'FAIL' and not record['soft'] and not keep_going:
                     break
         except (BridgeError, ValueError, OSError) as exc:

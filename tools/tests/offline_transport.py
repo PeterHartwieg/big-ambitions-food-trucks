@@ -48,14 +48,15 @@ class MemoryHTTP:
         NAMESPACE['Handler'](connection, ('127.0.0.1', 1), self.server)
         reply = connection.output.getvalue()
         headers, payload = reply.split(b'\r\n\r\n', 1)
-        assert b'200' in headers.split(b'\r\n',1)[0], headers
+        status=int(headers.split(b'\r\n',1)[0].split()[1])
+        if status!=200: raise urllib.error.HTTPError(request.full_url,status,'Mock HTTP error',{},io.BytesIO(payload))
         return io.BytesIO(payload)
 
 
 class OfflineSession:
     def __enter__(self):
         self.folder = tempfile.TemporaryDirectory(prefix='ft-offline-')
-        self.mock = NAMESPACE['Mock'](self.folder.name)
+        self.mock = NAMESPACE['Mock'](self.folder.name, clock_rate=100)
         self.url = 'http://127.0.0.1:1'
         self.bridge = Bridge(self.url)
         self.bridge.transport = 'inprocess test double'

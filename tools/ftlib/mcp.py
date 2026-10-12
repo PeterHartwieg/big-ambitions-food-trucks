@@ -22,17 +22,17 @@ NUMBER = {'type': 'number', 'minimum': 0}
 TOOLS = [
     tool('ft_health', 'Read bridge version, scene and clock.'),
     tool('ft_state', 'Read game state, optionally at a dotted path or list filter.', {'path': STRING}),
-    tool('ft_call', 'Run a command from docs/test-bridge.md on an FT test save.',
+    tool('ft_call', 'Run a command as built in docs/test-bridge.md. new_game is unavailable: load an FT save made by hand. Vehicle open/exit/restock/rent_bay require driving or pushing it; enter and back_to_hatch reply before walking finishes, so poll state. Open/exit need unpaused time. Time speed is >0 to 60; run_until accepts +N days, then pauses at speed 1. Close clock-holding screens before unpausing.',
          {'cmd': STRING, 'args': {'type': 'object'}, 'timeout_s': NUMBER}, ('cmd',)),
-    tool('ft_events', 'Read events after a sequence cursor, optionally matching a regex.',
+    tool('ft_events', 'Read events numbered since and later (inclusive; default 1). Use next as the next cursor; dropped counts lost events. Optionally filter by regex.',
          {'since': {'type': 'integer', 'minimum': 0}, 'grep': STRING}),
     tool('ft_wait_event', 'Wait for a new event matching a regex.', {'regex': STRING, 'timeout_s': NUMBER}, ('regex',)),
-    tool('ft_ui_list', 'List visible buttons, dropdown options and texts.'),
-    tool('ft_ui_click', 'Click one uniquely matching button text or one button id.',
+    tool('ft_ui_list', 'List visible buttons, texts and all visible dropdown options, even when the dropdown is closed. Entries include kind and ids valid for this list.'),
+    tool('ft_ui_click', 'Click a unique, case-insensitive button or option text, or an id from the last ui list. Selecting a list-picker option also needs its confirm button. Duplicate employee options need the correct row id.',
          {'text': STRING, 'id': {'type': 'integer'}}),
-    tool('ft_shoot', 'Take a PNG with a pose and target, or explicit camera coordinates. Fetch it and return the image.',
-         {'name': STRING, 'pose': STRING, 'target': STRING, 'width': {'type': 'integer', 'minimum': 1},
-          'height': {'type': 'integer', 'minimum': 1}, **{key: {'type': 'number'} for key in ('x', 'y', 'z', 'yaw', 'pitch', 'fov')}}, ('name',)),
+    tool('ft_shoot', 'In the city, render 8 frames into a separate camera and fetch the PNG. Use pose and target, or x/y/z with optional yaw/pitch/fov (default fov 60). Name: 1 to 80 letters/digits/._-. Width 16 to 3840, height 16 to 2160. Move near distant targets so their street is loaded.',
+         {'name': STRING, 'pose': STRING, 'target': STRING, 'width': {'type': 'integer', 'minimum': 16, 'maximum':3840},
+          'height': {'type': 'integer', 'minimum': 16, 'maximum':2160}, **{key: {'type': 'number'} for key in ('x', 'y', 'z', 'yaw', 'pitch', 'fov')}}, ('name',)),
     tool('ft_check_log', 'Check a local Player.log. Row rules count only when rows are selected.',
          {'path': STRING, 'version': STRING, 'rows': STRING}, ('path',)),
 ]
@@ -52,7 +52,7 @@ def validate_args(schema, args):
         valid = {'string': isinstance(val, str), 'object': isinstance(val, dict),
                  'integer': isinstance(val, int) and not isinstance(val, bool),
                  'number': isinstance(val, (int, float)) and not isinstance(val, bool)}[expected]
-        if not valid or (expected == 'number' and not math.isfinite(val)) or ('minimum' in field and val < field['minimum']):
+        if not valid or (expected == 'number' and not math.isfinite(val)) or ('minimum' in field and val < field['minimum']) or ('maximum' in field and val > field['maximum']):
             raise ValueError(f'Invalid {key}: use a {expected} within the limits in tools/list')
 
 
@@ -84,7 +84,7 @@ def call_tool(name, args, bridge):
             raise ValueError('Click needs one text or id: read ft_ui_list and choose one')
         result = bridge.call('ui', {'op': 'click', **args})
     elif name == 'ft_shoot':
-        if not ({'pose', 'target'} <= args.keys() or {'x', 'y', 'z', 'yaw', 'pitch', 'fov'} <= args.keys()):
+        if not ({'pose', 'target'} <= args.keys() or {'x', 'y', 'z'} <= args.keys()):
             raise ValueError('Shot needs pose and target, or explicit camera coordinates: use the contract poses')
         result = bridge.call('shoot', args)
         local = fetch_shot(result['result']['path'], ROOT / 'build/shots')
