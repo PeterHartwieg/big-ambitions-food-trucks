@@ -73,10 +73,18 @@ class Mock:
         self.ops_lock = threading.Lock()
         self.call_gate = threading.Lock()
         self.operations = {}
+        self.operation_waiters = {}
+        self.stopped = False
+        self.lifecycle = 0
         self.next_op = 1
         self.operation_delays = {}
         self.bay_status = {}
         self.load = None
+        self.save_failure = None
+        self.save_in_progress = False
+        self.character_creator = False
+        self.pause_menu_open = False
+        self.confirmation_open = False
         self.pending = []
         self.walks = []
         self.last_ui = []
@@ -101,6 +109,7 @@ class Mock:
         for rule in read_rules(ROOT / 'tests/game/logchecks/0.9.10.txt'):
             if rule.id.startswith('patch.'):
                 self.event(re.sub(r'\\(.)', r'\1', rule.pattern))
+        self.event('Patch GameManager.RunMainGameTick(Single), test bridge: Active.')
         self.event('Map pick: on ("Add as a stop" in the building card).')
         self.event('Commissary state: mock; 0 orders on the way (paid on delivery), with 0 rent charges and 0 fines unpaid; ready.')
 
@@ -132,6 +141,39 @@ class Mock:
         self.saves[name] = copy.deepcopy({key: getattr(self, key) for key in
             ('state', 'character', 'absolute', 'employees', 'selected', 'order_number', 'routes', 'takings', 'hours', 'phone_texts')})
 
+    def save_city(self, name):
+        if self.save_in_progress: raise ValueError('A save is already being written; try again in a moment.')
+        if self.save_failure=='refused':
+            raise ValueError('The game refused to save here (inside the interior designer, placing an item, at school or on the casino boat?).')
+        self.save_in_progress=True
+        try:
+            started=time.time()-2
+            self.state['save']=name
+            folder=self.shots/'saves'/re.sub(r'[^A-Za-z0-9._ -]','_',self.character)
+            path=folder/(re.sub(r'[^A-Za-z0-9._ -]','_',name)+'.hsg')
+            self.event(f"Test bridge: saving as '{name}' ({path}).")
+            try:
+                if self.save_failure=='serialization': raise ValueError('mock serialization failure')
+                data=json.dumps(self.state,allow_nan=False).encode()
+            except (ValueError,TypeError):
+                self.event('Save game serialization failed: mock failure','unity_error')
+                raise ValueError("The game's save failed while writing the city (see Player.log: Save game serialization failed).")
+            try:
+                if self.save_failure=='compression': raise ValueError('mock compression failure')
+                packed=zlib.compress(data)
+                folder.mkdir(parents=True,exist_ok=True)
+                path.write_bytes(packed)
+            except (OSError,ValueError,zlib.error):
+                raise ValueError('The game\'s save failed while compressing (no "Compressed to" line).')
+            if not path.is_file(): raise ValueError(f"The save file isn't there: {path}.")
+            if path.stat().st_mtime < started: raise ValueError(f"The save file wasn't written by this save: {path}.")
+            size=path.stat().st_size
+            if size==0: raise ValueError(f'The save file is empty: {path}.')
+            self.store(name)
+            self.event(f"Test bridge: saved '{name}', {size} bytes.")
+            return {'name':name,'path':str(path),'bytes':size}
+        finally: self.save_in_progress=False
+
     def restore(self, name, emit=True):
         if name not in self.saves:
             raise ValueError('No such mock save: use FT mock or save the current city first')
@@ -150,6 +192,7 @@ class Mock:
         if emit: self.event(f"Test bridge: loading '{name}' (Mock character, day {self.state['clock']['day']}).")
 
     def event(self, text, kind='log', day=None, clock=None):
+        if self.stopped: return
         if kind=='error' and not text.startswith('ERROR: '): text='ERROR: '+text
         self.seq += 1
         snapshot=self.state['clock'] if self.state['scene']=='city' else {}
@@ -200,12 +243,17 @@ class Mock:
 
     def clock_held_by(self):
         if self.time_skip: return 'time skip'
-        if self.activity_starting or self.state['player']['at_hatch']: return 'activity panel'
-        return None if self.dialog=='closed' else 'list picker' if self.dialog=='commissary' else self.dialog
+        screens=[]
+        if self.confirmation_open: screens.append('confirmation')
+        if self.pause_menu_open: screens.append('pause menu')
+        if self.dialog in ('crew','fleet'): screens.append('phone')
+        elif self.dialog not in ('closed','commissary','items','opens','closes'): screens.append('call')
+        if self.activity_starting or self.state['player']['at_hatch']: screens.append('activity panel')
+        return ', '.join(screens) if screens else None if self.dialog=='closed' else 'a screen'
 
     def bays(self):
         return [{'site':site,'status':self.bay_status.get(site,'resolved'),'point':{'x':393.2+i*100,'z':217.6,'along_x':0.,'along_z':1.} if self.bay_status.get(site,'resolved')=='resolved' else None,
-                 'entrance':{'x':393.2+i*100+5,'z':217.6}} for i,site in enumerate(SITES)]
+                 'entrance':{'x':393.2+i*100+5,'z':217.6} if self.bay_status.get(site,'resolved')=='resolved' else None} for i,site in enumerate(SITES)]
 
     def require_bay(self, site):
         if self.bay_status.get(site)=='pending':
@@ -219,6 +267,7 @@ class Mock:
                                                 'amount':round(amount,2),'day':day,'time':self.state['clock']['time']})
 
     def operation(self, cmd, args):
+        if self.stopped: return {'ok':False,'error':'the bridge stopped'}
         if cmd=='op':
             identifier=num(args,'id')
             if identifier is None: return {'ok':False,'error':'op needs "id": the number a /call reply gave as "op".'}
@@ -227,28 +276,67 @@ class Mock:
                 if op is None: return {'ok':False,'error':f'No operation {identifier:g} (the bridge keeps the last 500).'}
                 return {'ok':True,'result':copy.deepcopy(op)}
         with self.ops_lock:
+            if self.stopped: return {'ok':False,'error':'the bridge stopped'}
             identifier=self.next_op
             self.next_op+=1
             op={'id':identifier,'cmd':cmd,'status':'pending'}
             self.operations[identifier]=op
+            finished=threading.Event()
+            files=[]
+            self.operation_waiters[identifier]=(op,finished,files)
+            lifecycle=self.lifecycle
             while len(self.operations)>500: del self.operations[next(iter(self.operations))]
-        finished=threading.Event()
         def work():
             try:
                 with self.call_gate:
-                    with self.lock: result=copy.deepcopy(self.call(cmd,args))
+                    with self.lock:
+                        if self.stopped or lifecycle!=self.lifecycle: raise ValueError('the bridge stopped')
+                        result=copy.deepcopy(self.call(cmd,args))
+                        if cmd=='shoot': files.append(Path(result['path']))
                 # Deferred work lets the main thread and health/events keep running.
                 delay=self.operation_delays.get(cmd,.12 if cmd=='shoot' else 0)
-                if delay: time.sleep(delay)
-                with self.ops_lock: op.update(status='done',result=result)
+                if delay: finished.wait(delay)
+                with self.ops_lock:
+                    if op['status']=='pending': op.update(status='done',result=result)
             except Exception as exc:
-                with self.ops_lock: op.update(status='failed',error=str(exc))
-            finally: finished.set()
+                with self.ops_lock:
+                    if op['status']=='pending': op.update(status='failed',error=str(exc))
+            finally:
+                with self.ops_lock: self.operation_waiters.pop(identifier,None)
+                finished.set()
         threading.Thread(target=work,daemon=True).start()
         if not finished.wait(min(600,max(1,num(args,'timeout_s') if num(args,'timeout_s') is not None else 10))):
             return {'ok':False,'op':identifier,'error':f'timed out on the main thread; the command goes on: ask {{"cmd": "op", "args": {{"id": {identifier}}}}} for its outcome'}
         with self.ops_lock:
             return {'ok':op['status']=='done','op':identifier, **({'result':copy.deepcopy(op['result'])} if op['status']=='done' else {'error':op['error']})}
+
+    def unload(self):
+        with self.lock:
+            with self.ops_lock:
+                self.stopped=True
+                self.lifecycle+=1
+                for op,waiter,files in self.operation_waiters.values():
+                    if op['status']=='pending':
+                        op.update(status='failed',error='the bridge stopped')
+                        for path in files: path.unlink(missing_ok=True)
+                    waiter.set()
+                self.operations.clear()
+                self.operation_waiters.clear()
+            self.ring.clear()
+            self.seq=0
+            self.last_ui=[]
+            self.pending=[]
+            self.walks=[]
+            self.activity_starting=False
+            self.load=None
+            if self.until is not None: self.state['clock']['speed']=1
+            self.until=None
+            self.state['clock'].update(run_until=None,arrived_at=None)
+            self.pause_menu_open=False
+            self.confirmation_open=False
+
+    def start_bridge(self):
+        with self.lock: self.stopped=False
 
     def serving(self, v):
         player=self.state['player']
@@ -286,8 +374,10 @@ class Mock:
 
     def health(self):
         c = self.state['clock'] if self.state['scene'] == 'city' else {}
+        if self.stopped:
+            return dict(ok=True,mod_version='0.9.10',bridge_version=1,scene='menu',save=None,day=None,time=None,paused=None,frame=0,load=None)
         return dict(ok=True, mod_version='0.9.10', bridge_version=1, scene=self.state['scene'],
-                    save=self.state['save'], day=c.get('day'), time=c.get('time'), paused=c.get('paused'), frame=self.frame, load=copy.deepcopy(self.load))
+                    save=self.state['save'], day=c.get('day'), time=c.get('time'), paused=c.get('paused'), frame=self.frame, load=None if self.load is None else {k:self.load[k] for k in ('name','status')})
 
     def events(self, since):
         since = max(since, 1)
@@ -425,6 +515,10 @@ class Mock:
         while not self.stop.wait(.01):
             now = time.monotonic()
             with self.lock:
+                if self.stopped:
+                    credit=0
+                    previous=now
+                    continue
                 self.frame += 1
                 c = self.state['clock']
                 for due, action in list(self.pending):
@@ -503,8 +597,11 @@ class Mock:
             identifier = int(args['id'])
             entry = next((b for b in self.last_ui if b['id']==identifier),None)
             if not entry: raise ValueError(f'No entry {identifier} in the last ui list; list again.')
-            current=next((b for b in self.buttons() if b['path']==entry['path'] and b['kind']==entry['kind']),None)
+            buttons=self.buttons()
+            current=next((b for b in buttons if b['path']==entry['path'] and b['kind']==entry['kind']),None)
             if current is None:
+                if entry['kind']=='option' and any(b['kind']=='option' and b['path'].split('/option[')[0]==entry['path'].split('/option[')[0] for b in buttons):
+                    raise ValueError(f"the control with id {identifier} now reads ''; list again.")
                 raise ValueError(f"Entry {identifier} ({entry['text']}) is no longer on screen; list again.")
             if current['text'] != entry['text']:
                 raise ValueError(f"the control with id {identifier} now reads '{current['text']}'; list again.")
@@ -522,7 +619,10 @@ class Mock:
             current=entry
         else: raise ValueError('ui click needs "id" (from the last list) or "text".')
         text = current['text']
-        if re.search(r'(?:Save|Load|Delete|RemoveCharacter|Continue)(?:[ /]|$)',current['path'],re.I) or text.casefold() in ('save','save game','load','load game','delete','delete save','delete character','remove character','continue','overwrite'):
+        native=re.search(r'(?:LoadGame|SaveGameCompatibilityUI|FuneralUI)',current['path'])
+        in_pause=re.search(r'(?:MiniMenu|Pause)(?:/|$)',current['path'])
+        confirm=re.search(r'(?:HudConfirm|Confirmation)',current['path'])
+        if native or (in_pause and re.search(r'save|load',current['path']+' '+text,re.I)) or (self.pause_menu_open and self.confirmation_open and confirm):
             raise ValueError("ui click refuses the game's save and load controls; use the save and load commands.")
         if entry['kind']=='option':
             self.choice = text
@@ -583,6 +683,7 @@ class Mock:
     def operate(self, v, op):
         player = self.state['player']
         start=self.seq
+        why=None
         cargo_before=copy.deepcopy(v['stock'])
         space_before=(v['commissary'] or {}).get('site')
         if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
@@ -639,11 +740,14 @@ class Mock:
         elif op in ('rent_bay','restock'):
             c=v['commissary']
             if not self.can_write:
+                why='the Commissary button refused (see the notice)'
                 self.event(LOCALE['foodtrucks:notification_data_readonly'],'notice')
             elif not c or not c['in_bay']:
+                why='the Commissary button refused (see the notice)'
                 self.event(LOCALE['foodtrucks:notification_commissary_not_here'].format(vehicle=v['kind']),'notice')
             elif op=='rent_bay' and c['site']==c['bay_site']:
-                pass
+                offered='release, '+('restock' if any(stock['site']==c['bay_site'] and stock['amount']>0 for stock in self.state['commissary']['stock']) else 'nostock')+', order'
+                why=f'the Commissary button offers {offered} here, not rent or move'
             else:
                 self.commissary_panel(v,op)
         else: raise ValueError(f"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay.")
@@ -654,7 +758,7 @@ class Mock:
                 'rent_bay':(v['commissary'] or {}).get('site') is not None and (v['commissary'] or {}).get('site')!=space_before}[op]
         self.event(f"Test bridge: vehicle {v['id']} {op}: {'done' if done else 'not done'}.")
         notices=[e['text'][8:] for e in self.ring if e['seq']>start and e['kind']=='notice']
-        return {'done':done,'notices':notices,'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==v['id'])}
+        return {'done':done,'why':None if done else why,'notices':notices,'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==v['id'])}
 
     def commissary_panel(self, v, op):
         c=v['commissary']
@@ -708,16 +812,17 @@ class Mock:
 
     def require_character(self, character=None):
         character = self.character if character is None else character
-        other = next((name for name,save in self.saves.items() if save['character']==character and not name.startswith('FT')),None)
+        other = next(iter(sorted(name for name,save in self.saves.items() if save['character']==character and not name.startswith('FT') and not re.fullmatch(r'Recover (#\d+|Midnight)',name))),None)
         if other is not None:
             raise ValueError(f"This save's character also has saves not starting with FT ({other}); make FT saves with a character of their own.")
 
     def require_ui(self):
-        if self.state['scene']!='city' or not self.mod_loaded or not (self.state['save'] or '').startswith('FT'):
+        if self.state['scene']!='city' or not (self.state['save'] or '').startswith('FT'):
             raise ValueError('ui works only in a loaded FT city; use load from the main menu.')
         self.require_character()
 
     def call(self, cmd, args):
+        if self.stopped: raise ValueError('the bridge stopped')
         if cmd in ('console','debug','time','money','teleport','vehicle','commissary','crew','save'): self.require_ft(cmd)
         if cmd=='state': return self.read_state()
         if cmd in ('load','save'):
@@ -726,15 +831,15 @@ class Mock:
                 if cmd=='load': raise ValueError(f"The bridge loads only saves whose name starts with FT, not '{name}'.")
                 raise ValueError(f"The bridge saves only under names that start with FT, not '{name}'.")
             if cmd=='save':
-                self.state['save']=name; self.store(name)
-                return {'name':name}
+                return self.save_city(name)
             if self.state['scene']=='loading': raise ValueError('The game is loading; wait until /health says menu or city.')
             if self.load and self.load['status']=='pending': raise ValueError(f"A load of '{self.load['name']}' is under way; wait for it (state.load).")
             if self.state['scene']=='city' and not (self.state['save'] or '').startswith('FT'):
                 raise ValueError(f"The loaded save '{self.state['save']}' doesn't start with FT, and leaving it would skip the game's question about unsaved changes: go to the main menu by hand, or load from an FT save.")
             if name not in self.saves: raise ValueError(f"No save named '{name}'. FT saves: {', '.join(n for n in self.saves if n.startswith('FT')) or 'none'}.")
-            if self.state['scene']=='city': self.require_character()
             self.require_character(self.saves[name]['character'])
+            if self.state['scene']=='city': self.require_character()
+            if self.state['scene']=='menu' and self.character_creator: raise ValueError('load works from the main menu or the city, not the character creator.')
             self.load={'name':name,'status':'pending','error':None}
             self.state['scene']='loading'
             self.event(f"Test bridge: loading '{name}' (Mock character, day {self.saves[name]['state']['clock']['day']}).")
@@ -827,6 +932,8 @@ class Mock:
                 if x is None or z is None: raise ValueError('teleport needs "x" and "z", or "place".')
             if who!='player' and obj['open']: raise ValueError(f"Vehicle {who} is open for business: close it first (vehicle close).")
             if who=='player':
+                self.walks=[]
+                self.activity_starting=False
                 if obj['at_hatch']: self.operate(self.vehicle(obj['at_hatch']),'step_out')
                 obj.update(in_vehicle=None,at_hatch=None)
             if who!='player' and place and str(place).startswith('bay:'): self.place_vehicle(obj,identifier)
@@ -900,6 +1007,13 @@ class Mock:
                 return self.click(args)
             if op=='escape':
                 self.require_ui()
+                if self.dialog not in ('commissary','items','opens','closes'):
+                    if self.confirmation_open:
+                        self.confirmation_open=False
+                        return {'closed':'confirmation'}
+                    if self.pause_menu_open:
+                        self.pause_menu_open=False
+                        return {'closed':'pause menu'}
                 if self.dialog=='closed':
                     hatch=self.state['player']['at_hatch']
                     if hatch:
@@ -1010,6 +1124,7 @@ def main():
         except KeyboardInterrupt:
             pass
         finally:
+            server.mock.unload()
             server.mock.stop.set()
             thread.join()
             server.server_close()

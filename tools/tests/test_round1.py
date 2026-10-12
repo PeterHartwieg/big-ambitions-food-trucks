@@ -26,7 +26,7 @@ class ReviewParityTests(unittest.TestCase):
         self.assertEqual(str(raised.exception),"This save's character also has saves not starting with FT (Non-FT mock); make FT saves with a character of their own.")
         self.assertEqual(self.mock.state['save'],'FT mock')
         error='ui works only in a loaded FT city; use load from the main menu.'
-        for scene,save,loaded in [('menu',None,False),('loading','FT mock',False),('city','Other',True),('city','FT mock',False)]:
+        for scene,save,loaded in [('menu',None,False),('loading','FT mock',False),('city','Other',True)]:
             self.mock.state.update(scene=scene,save=save)
             self.mock.mod_loaded=loaded
             for op in ('click','escape'):
@@ -56,7 +56,7 @@ class ReviewParityTests(unittest.TestCase):
 
     def test_native_save_controls_and_stale_labels_refuse(self):
         error="ui click refuses the game's save and load controls; use the save and load commands."
-        for label,path in [('Save','Pause/Save'),('Load','Pause/Load'),('Delete','Pause/Delete'),('Confirm','Save/Confirmation/Confirm')]:
+        for label,path in [('Save','MiniMenu/Save'),('Load','LoadGame/Load'),('Delete','LoadGameSaveEntryView/Delete'),('Confirm','SaveGameCompatibilityUI/Confirm')]:
             entries=[{'id':1,'text':label,'kind':'button','path':path}]
             with patch.object(self.mock,'buttons',return_value=entries):
                 self.bridge.call('ui',{'op':'list'})

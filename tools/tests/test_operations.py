@@ -42,7 +42,8 @@ class OperationTests(unittest.TestCase):
         self.mock.event('during pending call')
         self.assertEqual(self.bridge.events(cursor)['events'][0]['text'],'during pending call')
         recovered=self.bridge.recover(identifier,2)
-        self.assertEqual(recovered['result'],{'name':'FT pending'})
+        self.assertEqual(recovered['result']['name'],'FT pending')
+        self.assertEqual(set(recovered['result']),{'name','path','bytes'})
 
     def test_pending_recovery_exposes_id_and_does_not_count_as_refusal(self):
         self.mock.operation_delays['save']=1.3
@@ -101,7 +102,8 @@ class OperationTests(unittest.TestCase):
         self.bridge.call('load',{'name':'FT bridge'})
         self.assertEqual(self.bridge.health()['load']['status'],'pending')
         self.bridge.wait_state('load.status',{'equals':'done'},2)
-        self.assertIsNone(self.bridge.health()['load']['error'])
+        self.assertNotIn('error',self.bridge.health()['load'])
+        self.assertIsNone(self.bridge.call('state')['result']['load']['error'])
         self.bridge.call('load',{'name':'FT bridge'})
         self.assertEqual(self.bridge.health()['load']['status'],'pending')
         self.bridge.wait_state('load.status',{'equals':'done'},2)

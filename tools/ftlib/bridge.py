@@ -10,11 +10,12 @@ from .paths import lookup, meets, PathError
 
 
 class BridgeError(RuntimeError):
-    def __init__(self, message, remote=False, reply=None):
+    def __init__(self, message, remote=False, reply=None, restart=False):
         super().__init__(message)
         self.remote = remote
         self.reply = reply
         self.op = (reply or {}).get('op')
+        self.restart = restart
 
 
 class Bridge:
@@ -58,6 +59,8 @@ class Bridge:
             try:
                 status = self.op(identifier)['result']
             except BridgeError as exc:
+                if exc.remote and str(exc) == 'the bridge stopped':
+                    raise BridgeError(str(exc), remote=True, reply={**(exc.reply or {'ok':False,'error':str(exc)}), 'op':identifier}) from exc
                 raise BridgeError(f'Cannot recover operation {identifier}: {exc}; query tools/ft op {identifier} before repeating the command', reply={'ok':False,'op':identifier,'error':str(exc)}) from exc
             if status['status'] == 'done':
                 return {'ok':True, 'op':identifier, 'result':status['result']}
@@ -94,6 +97,8 @@ class Bridge:
         if isinstance(since, bool) or not isinstance(since, int) or since < 0:
             raise BridgeError('Invalid event cursor: use a nonnegative sequence number from events.next')
         reply = self._request(f'/events?since={since}')
+        if reply['next'] < since:
+            raise BridgeError(f"Bridge restarted: events.next {reply['next']} is below cursor {since}; use a fresh cursor and rerun the scenario", restart=True)
         return reply
 
     def wait_event(self, regex, timeout_s=30, since=0):

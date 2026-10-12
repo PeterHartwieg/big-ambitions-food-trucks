@@ -66,6 +66,7 @@ class OfflineSession:
         return self
 
     def __exit__(self, *args):
+        self.mock.unload()
         self.mock.stop.set()
         self.thread.join(timeout=10)
         self.folder.cleanup()

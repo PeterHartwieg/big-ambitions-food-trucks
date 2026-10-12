@@ -109,7 +109,14 @@ class Runner:
         self.starts = {}
 
     def collect(self):
-        batch = self.bridge.events(self.cursor)
+        try:
+            batch = self.bridge.events(self.cursor)
+        except BridgeError as exc:
+            if exc.restart: self.coverage_lost = True
+            raise
+        if batch['next'] < self.cursor:
+            self.coverage_lost = True
+            raise BridgeError(f"Bridge restarted: events.next {batch['next']} is below cursor {self.cursor}; rerun the scenario", restart=True)
         self.events.extend(batch['events'])
         self.cursor = batch['next']
         if batch['dropped']:
@@ -147,6 +154,9 @@ class Runner:
                 reply = self.bridge.call(step[kind], args, step.get('timeout_s', 10))
             except BridgeError as exc:
                 self.last = exc.reply or {'ok': False, 'error': str(exc)}
+                if str(exc)=='the bridge stopped':
+                    self.coverage_lost=True
+                    raise
                 if step.get('expect_ok') is False and exc.remote:
                     return {'expected': 'ok: false', 'seen': self.last}
                 raise
