@@ -414,7 +414,7 @@ namespace FoodTrucks
             // A point can't be kept as the save's destination, which is an address; the old one would come back.
             SaveGameManager.Current.customDestination = null;
             GuidersManager.SetGuiderTarget(position, name, references.vehiclePOIIcon, references.vehiclePOIBackgroundColor, DirectionGuiderType.Destination);
-            Notifications.Show(NotificationType.Success, "notification_destination_set", new Dictionary<string, string> { { "address", name } });
+            Notices.Show(NotificationType.Success, "notification_destination_set", new Dictionary<string, string> { { "address", name } }, 4f);
             InstanceBehavior<UIs>.Instance.fullMenu.Toggle(show: false);
         }
 

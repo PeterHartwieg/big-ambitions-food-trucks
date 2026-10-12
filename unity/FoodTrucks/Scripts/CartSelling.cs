@@ -1202,6 +1202,9 @@ namespace FoodTrucks
             return controller != null && Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position) <= 100f;
         }
 
+        // For the test bridge's state: the player serves this window now, as the sales tick reads it.
+        internal static bool PlayerServesNow(VehicleInstance cart) => PlayerIsAtCart(cart);
+
         // Core decides (PlayerServing): a truck only from its hatch (or while the player is being placed there
         // after Open), a cart within reach of its window.
         private static bool PlayerIsAtCart(VehicleInstance cart)
@@ -1360,7 +1363,7 @@ namespace FoodTrucks
         {
             var values = new Dictionary<string, string>();
             foreach (var (k, v) in data) values[k] = v;
-            Notifications.Show(NotificationType.Info, key, values, 5f, notificationSound: false, trackOnSaveGame: false);
+            Notices.Show(NotificationType.Info, key, values, 5f, notificationSound: false, trackOnSaveGame: false);
         }
     }
 }

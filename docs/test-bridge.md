@@ -57,23 +57,23 @@ The bridge keeps the last 2,000 events in a ring buffer: every line the mod logs
 
 Positions are world metres (`x`, `y`, `z`); `heading` is degrees clockwise from +z, as the mod's log lines give them. Vehicle `id` is the game's vehicle id string, as the mod's log lines print it.
 
-| `cmd` | `args` | Does | `result` |
-|---|---|---|---|
-| `state` | `{}` | Reads everything below. Changes nothing | see "State" |
-| `console` | `{ "line": "IRSForcePayment 1" }` | Runs a line in the game's debug console (`DebugLogConsole.ExecuteCommand`) | `{ "output": ["lines the console logged during the call"] }` |
-| `debug` | `{ "action": "spawn truck" }` | Runs one of the mod's debug actions by its `Name` in `DebugActions` (the twice-confirmed ones run without the second press) | `{ "action": "…", "notices": ["…"] }` |
-| `time` | `{ "pause": true }`, `{ "speed": 4 }`, `{ "run_until": { "day": 4, "time": "04:05" }, "speed": 20 }` | Pauses, sets the game's speed, or runs the clock at `speed` until the time comes, then pauses. Time passes the normal way, so daily processing, the 04:00 check and midnight all run | `{ "day", "time", "paused", "speed" }` at once; poll `state` or `/health` to see `run_until` finish |
-| `money` | `{ "set": 50000 }` | Sets the player's money (a plain balance change, no transaction) | `{ "money" }` |
-| `teleport` | `{ "who": "player" \| "<vehicle id>", "x", "z", "heading"? }` or `{ "who", "place": "bay:<site>" \| "commissary:<site>" \| "vehicle:<id>" }` | Moves the player (on foot, out of any vehicle) or a mod vehicle. `y` comes from the ground. A vehicle lands on the road at that point; `bay:` puts a truck legally in the bay facing along the paint, `commissary:` puts the player at the garage door, `vehicle:` puts the player on the pavement beside the vehicle's hatch side | `{ "x", "y", "z", "heading" }` |
-| `vehicle` | `{ "id", "op": "open" \| "close" \| "step_out" \| "back_to_hatch" \| "enter" \| "exit" \| "restock" \| "rent_bay" }` | The same code the vehicle panel's button runs, with its checks and messages | `{ "notices": ["…"], "state": { the vehicle's entry from "state" } }` |
-| `ui` | `{ "op": "list" }` | Lists the visible, interactable buttons and dropdown options, and the visible text blocks of open dialogs and the phone | `{ "buttons": [ { "id": 3, "text": "OPEN HERE", "path": "…" } ], "texts": ["…"] }` |
-| `ui` | `{ "op": "click", "text": "OPEN HERE" }` or `{ "op": "click", "id": 3 }` | Invokes the button's `onClick` (text match is case-insensitive and must be unique) | `{ "clicked": "…" }` |
-| `ui` | `{ "op": "escape" }` | What Esc does: closes the top dialog, list or the phone | `{ "closed": "…" }` |
-| `shoot` | `{ "name": "bay-day", "pose": "<pose>", "target": "<vehicle id>" \| "bay:<site>" \| "commissary:<site>", "width": 1600, "height": 900 }` or `{ "name", "x", "y", "z", "yaw", "pitch", "fov" }` | Renders one frame from a camera of the bridge's own (the game's camera is untouched, no UI in the picture) and writes a PNG | `{ "path": "C:\\…\\FoodTrucksTest\\shots\\bay-day.png" }` |
-| `save` | `{ "name": "FT bridge" }` | Saves the city under that name | `{ "name" }` |
-| `load` | `{ "name": "FT bridge" }` | Loads a save from the main menu or from the city | `{ "loading": true }`; poll `/health` for `scene: "city"` |
-| `new_game` | `{ "name": "FT bridge" }` | Starts a new game from the main menu with defaults (story mode off if the game allows, Normal), skipping intros and pop-ups the bridge can close | `{ "loading": true }` |
-| `quit` | `{}` | Quits the game | `{}` |
+| `cmd` | `args` | Does | `result` | Status |
+|---|---|---|---|---|
+| `state` | `{}` | Reads everything below. Changes nothing | see "State" | built, not yet run in game |
+| `console` | `{ "line": "IRSForcePayment 1" }` | Runs a line in the game's debug console (`DebugLogConsole.ExecuteCommand`) | `{ "output": ["lines the console logged during the call"] }` | built, not yet run in game |
+| `debug` | `{ "action": "spawn truck" }` | Runs one of the mod's debug actions by its `Name` in `DebugActions` (the twice-confirmed ones run without the second press) | `{ "action": "…", "notices": ["…"] }` | built, not yet run in game |
+| `time` | `{ "pause": true }`, `{ "speed": 4 }`, `{ "run_until": { "day": 4, "time": "04:05" }, "speed": 20 }` | Pauses, sets the game's speed, or runs the clock at `speed` until the time comes, then pauses. Time passes the normal way, so daily processing, the 04:00 check and midnight all run | `{ "day", "time", "paused", "speed" }` at once; poll `state` or `/health` to see `run_until` finish | built, not yet run in game |
+| `money` | `{ "set": 50000 }` | Sets the player's money (a plain balance change, no transaction) | `{ "money" }` | built, not yet run in game |
+| `teleport` | `{ "who": "player" \| "<vehicle id>", "x", "z", "heading"? }` or `{ "who", "place": "bay:<site>" \| "commissary:<site>" \| "vehicle:<id>" }` | Moves the player (on foot, out of any vehicle) or a mod vehicle. `y` comes from the ground. A vehicle lands on the road at that point; `bay:` puts a truck legally in the bay facing along the paint, `commissary:` puts the player at the garage door, `vehicle:` puts the player on the pavement beside the vehicle's hatch side | `{ "x", "y", "z", "heading" }` | built, not yet run in game |
+| `vehicle` | `{ "id", "op": "open" \| "close" \| "step_out" \| "back_to_hatch" \| "enter" \| "exit" \| "restock" \| "rent_bay" }` | The same code the vehicle panel's button runs, with its checks and messages | `{ "notices": ["…"], "state": { the vehicle's entry from "state" } }` | built, not yet run in game |
+| `ui` | `{ "op": "list" }` | Lists the visible, interactable buttons and dropdown options, and the visible text blocks of open dialogs and the phone | `{ "buttons": [ { "id": 3, "text": "OPEN HERE", "path": "…" } ], "texts": ["…"] }` | built, not yet run in game |
+| `ui` | `{ "op": "click", "text": "OPEN HERE" }` or `{ "op": "click", "id": 3 }` | Invokes the button's `onClick` (text match is case-insensitive and must be unique) | `{ "clicked": "…" }` | built, not yet run in game |
+| `ui` | `{ "op": "escape" }` | What Esc does: closes the top dialog, list or the phone | `{ "closed": "…" }` | built, not yet run in game |
+| `shoot` | `{ "name": "bay-day", "pose": "<pose>", "target": "<vehicle id>" \| "bay:<site>" \| "commissary:<site>", "width": 1600, "height": 900 }` or `{ "name", "x", "y", "z", "yaw", "pitch", "fov" }` | Renders one frame from a camera of the bridge's own (the game's camera is untouched, no UI in the picture) and writes a PNG | `{ "path": "C:\\…\\FoodTrucksTest\\shots\\bay-day.png" }` | built, not yet run in game |
+| `save` | `{ "name": "FT bridge" }` | Saves the city under that name | `{ "name" }` | built, not yet run in game |
+| `load` | `{ "name": "FT bridge" }` | Loads a save from the main menu or from the city | `{ "loading": true }`; poll `/health` for `scene: "city"` | built, not yet run in game |
+| `new_game` | `{ "name": "FT bridge" }` | Starts a new game from the main menu with defaults (story mode off if the game allows, Normal), skipping intros and pop-ups the bridge can close | `{ "loading": true }` | not available: `ok: false` (see "Game side, as built") |
+| `quit` | `{}` | Quits the game | `{}` | built, not yet run in game |
 
 Poses for `shoot` (the camera is placed relative to the target and looks at it):
 
@@ -123,6 +123,57 @@ Poses for `shoot` (the camera is placed relative to the target and looks at it):
 ```
 
 Fields the game side can't fill yet are `null`, never left out, so scenarios can test for them.
+
+## Game side, as built
+
+Built 12 October 2026 in `unity/FoodTrucks/Scripts/` (`Notices.cs`, `TestBridge*.cs`). Not yet run in game; every game call below comes from the 1.0 decompile, and the ones to check first are listed in CHECKS.md, "Test bridge". Where the build differs from the contract above, this section wins.
+
+**Startup.** One line at the mod's initialisation load: `Test bridge: listening on http://127.0.0.1:8322/.` or `Test bridge: off (the game was started without -foodtrucks-test).` A taken port logs `Test bridge: could not listen on 127.0.0.1:8322 (…); … The bridge is off.` With the flag the bridge also sets `Application.runInBackground`, so the game keeps running when its window loses the focus. `Test bridge: stopped.` when the mod unloads.
+
+**Notice log.** Every notice the mod shows is a `Notice: <text>` line and every text it sends a `Phone: <contact>: <text>` line, with the text resolved as the game shows it (`LocalizorManager.Localize(key, data)`). A key the game has no text for is logged as `<key> {name=value, …}`. The player's own line in a call (the commissary order read-back) is `Phone: <contact>: [player] <text>`. What the player sees is unchanged.
+
+**FT guard.** `console`, `debug`, `time`, `money`, `teleport`, `vehicle`, `save` and `ui escape` need the city and a loaded save whose name starts with `FT`. `ui click` needs it in the city but works at the main menu. `state`, `ui list`, `shoot` and `quit` work with any save. `save`, `load` and `new_game` take only names that start with `FT`.
+
+**Scene.** `menu` covers the main menu and the character creator; `loading` covers the loading screen and the step between a save and the city; `city` is the city with a save loaded.
+
+**`/events`.** `since` is the first number wanted: the reply has the events numbered `since` and later, and `next` is the number after the newest. Numbers start at 1. The mod's own error lines arrive once, as `error`, not again as `unity_error`.
+
+**`/call` that finish later.** `save` (until the file is written), `teleport` of the player (until the move out of a building or vehicle ends) and `shoot` (8 frames) answer when they finish, within `timeout_s`. Past it the reply is `timed out on the main thread` and the work still finishes.
+
+**`time`.** `speed` multiplies the player's own game speed from Options (`GameManager.SetMinutesMultiplier`), from above 0 to 60; 1 is normal play. `speed` alone also unpauses. `run_until` takes `day` as a number or `"+N"` (days from today; default today) and `time` as `"HH:MM"`; it runs the clock at `speed` (default 1), checks every frame, and at the time pauses (the game's own pause, `SetPlayerPause`) and sets the speed back to 1. It stops within one frame's worth of game minutes after the time. Anything that unpauses is refused while a screen holds the clock (the phone, the map, a call, an activity, a menu) or a time skip runs. `state.clock.speed` reads the game's multiplier back.
+
+**`money`.** Writes the balance directly. The top bar follows on its next update.
+
+**`teleport`.** `y` is the highest surface of the game's Ground layer at `x`, `z`. The player goes through the game's `GameManager.SetPlayerPosition` (out of a building or garage first, then a NavMesh warp) after leaving the hatch or the driver's seat, and must land within 3 m of walkable ground. A vehicle goes through `VehicleHelper.TeleportVehicleToGround` and is refused while it is open. `bay:<site>` uses the bay's first resolved point and faces the truck the way that puts its hatch to the pavement (the mod's hatch check), else along the paint. `commissary:<site>` is for the player only and puts them 1.5 m out from the building's first entrance, facing it. `vehicle:<id>` is for the player only: 1.5 m out from the vehicle's side at the hatch (a truck's right, a cart's queue side), facing it.
+
+**`vehicle`.** `open`, `exit`, `restock` and `rent_bay` are buttons on the vehicle's panel, which shows only while the player drives the truck or pushes the cart, so they are refused otherwise (`enter` first). `open` and `exit` park with the game's Park button, which does nothing while the game is paused, so they are refused while paused. `close` is the hatch panel's Close when the player is at that truck's hatch, otherwise the close a grab runs (`CartSelling.CloseByPlayer`). `enter` is the vehicle overlay's Enter vehicle (`DriveVehicle`): further than 2.5 m away the player walks there first, and the reply comes before they arrive. `back_to_hatch` also replies at once and the player then walks to the rear door. `restock` runs the Commissary button's Restock (or its "nothing in stock" message); `rent_bay` runs its Rent or Move. `notices` has only the notices shown during the call.
+
+**`ui`.** Each entry has `kind`: `button` or `option`. Options are listed for every visible dropdown of the game's own kind (`UI.Elements.Dropdown`), open or not; clicking one selects it as its row would. The commissary's list picker is such a dropdown with a confirm button: click the option, then the confirm button. Ids number the last list, top to bottom; a click by id refuses an entry no longer on screen. A click by text lists the near matches when none or several fit. `texts` reads the open phone, call, confirmation, warning, list picker, pause menu, activity panel and the notices on screen; at the main menu, every canvas. `escape` runs the game's `CancelButtonHandler.HandleEscapeClick`, except for the list picker, which the game's Esc ignores and the bridge closes with its Cancel. With nothing open it refuses, because Esc would open the pause menu. It works in the city only.
+
+**`shoot`.** The camera copies the game camera's settings and HDRP camera data, renders 8 frames into its own texture, then the PNG is written and the camera removed. `fov` defaults to 60. Vehicle poses use the truck's hatch (on its right, at the player's place behind it) or the cart's queue side; `bay-pavement` stands 6 m from the bay on its pavement side, `bay-road` 15 m along and 3 m towards the road; `door` stands 6 m out from the commissary's first entrance.
+
+**`save`.** `GameManager.SaveGame(name)`, as the pause menu's Save; the reply comes when the file is written.
+
+**`load`.** Finds the newest save of that name in the current version's folder. From the main menu it runs what the Load screen's button runs (`TransitionToSave` then `LoadScene.LoadTransitionToSave`) without its two questions (a save never played with mods, a different mod list). From the city it goes to the main menu first as the pause menu's Main menu does (`LoadScene.LoadMainMenuFromCity`, without asking about unsaved changes) and loads from there.
+
+**`new_game`.** Not available: `ok: false`. The game makes a new game's character only in the character creator's screens (`MainMenuController.StartNewGame`, then the Intro scene sets the character and the save name), which the bridge can't fill in reliably. Start a game by hand once, save it under an FT name and use `load`.
+
+**`quit`.** Replies, then half a second later waits for any save being written and calls `Application.Quit`.
+
+**`state`.** As above, with these readings:
+
+- `clock`, `money`, `player`, `licence`, `commissary`, `ledger_today` are null outside the city; `licence` and the rest are null while the mod's save data isn't loaded.
+- `player.carrying` is the item name in the player's hands.
+- `licence.until_day` is null without a licence; `permits` counts vehicles with a permit; `course_done` is the game's diploma check for the Food Safety course.
+- A vehicle's `name` is its type's name; `heading` is null when it isn't on the map; `legal` and `legal_reason` are the mod's pavement rule for the spot (`Legality.Check`).
+- `hatch_side` is `right` for a truck (where its hatch is); for a cart it is the side its queue formed on, null while no line is laid out. `hatch_to_pavement` is the mod's hatch check for a truck, null for a cart.
+- `serving` is `player` when the sales tick counts the player at the window, `crew` when a crew member serves, else `nobody` (always `nobody` when closed).
+- `pieces[].item` is the equipment id from the demand tables. `stock[]` lists the cargo that isn't equipment: `item` the game's name, `key` the item key.
+- `queue` is null while closed. `length` is Core's customers at the window and in line; `places` are the spots the visible line uses (empty while it isn't shown), `occupied` for the first `length` of them.
+- `commissary` is null unless the vehicle has a space or stands in a bay; `site` is its space, `in_bay` whether it stands legally in any bay, `bay_site` which one.
+- `route.next` is a line of text, "stop N, HH:MM to HH:MM at x …, z …", for the first stop still to close today.
+- `commissary.orders[]` adds `item` and `units`; `total` is goods plus fee. `commissary.stock[]` adds `key`. `unpaid` sums the rent and fines the game refused.
+- `ledger_today.street_food` is today's street food revenue in the mod's ledger; `crew_waiting` is the crew's takings not yet paid in.
 
 ## Scenarios
 

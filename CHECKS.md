@@ -1,3 +1,38 @@
+# Test bridge (next build)
+
+The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:8322` inside the game, only when it starts with `-foodtrucks-test`, plus a `Notice:` or `Phone:` log line for every notice and text the mod shows. Branch `tooling-game`; no version bump, so the log says 0.9.10. Built, never run. Start the game once without the flag (rows 1 and 2), then with it: add `-foodtrucks-test` to the Steam launch options next to `-console`, or start `Big Ambitions.exe -foodtrucks-test` (`tools/run-remote.sh` does this). From the Mac, `ssh -L 8322:127.0.0.1:8322 homepc` and `curl http://127.0.0.1:8322/health`. Use a throwaway save named **FT bridge**; the bridge refuses to change any other.
+
+| # | Do | Look for |
+|---|---|---|
+| 1 | Start without the flag, load any FT save, play a minute | `Test bridge: off (the game was started without -foodtrucks-test).` once at startup. `curl http://127.0.0.1:8322/health` on homepc gets no answer. Everything else as in 0.9.10 |
+| 2 | Same session: open a cart where it can't open, spawn a truck (Ctrl+K), call a commissary | Every notice on screen also appears in Player.log as `Notice: <the same text>`, and each commissary text as `Phone: <commissary name>: <text>`. Nothing looks different on screen |
+| 3 | Start with the flag, stay at the main menu, `curl …/health` | `Test bridge: listening on http://127.0.0.1:8322/.` in the log. The reply has `"scene":"menu"`, `"save":null`, the mod version and a growing `frame` |
+| 4 | Alt-tab away from the game for a minute, `curl …/health` twice | `frame` still grows (the game runs in the background) |
+| 5 | `load` `{"name":"FT bridge"}` from the menu, poll `/health` | `scene` goes `loading`, then `city` with the save's name, day and time. No question about mods |
+| 6 | `state` | Clock, money, player position, the licence, every food vehicle with its position, legality, stock and queue, the commissary. Compare a few values with the screen |
+| 7 | `debug` `{"action":"spawn truck"}`, then `state` | A truck appears in front of you; the reply's `notices` has "Spawned …"; the truck is in `state.vehicles` |
+| 8 | `time` `{"pause":true}`, then `{"speed":4}`, then `{"run_until":{"day":"+0","time":"<an hour from now>"},"speed":10}` | The game pauses (pause overlay as with the pause key), then runs four times as fast, then runs fast and stops paused at that time, speed back to 1. Hourly things (the crew's hour lines, wages) happen on the way |
+| 9 | `money` `{"set":50000}` | The top bar shows $50,000; no transaction in the bank app |
+| 10 | `teleport` `{"who":"player","place":"commissary:hells-kitchen"}`, then `{"who":"<truck id>","place":"bay:hells-kitchen"}`, then `{"who":"player","place":"vehicle:<truck id>"}` | You stand by the garage door facing it; the truck stands in the bay paint, hatch to the pavement, legal; you stand on the pavement by its hatch. Try it once from inside a building too |
+| 11 | `vehicle` `enter` on the truck, `rent_bay`, `restock`, `exit`, then `enter` again, drive to a legal spot, `open`, `step_out`, `back_to_hatch`, `close` | Each does what its button does, with the same notices, and the reply's `state` follows. `open` while paused is refused with a message |
+| 12 | Open the phone, `ui` `{"op":"list"}`, click an app by text, `ui` `{"op":"escape"}` twice | The list has the phone's buttons with their labels and the phone's text under `texts`; the click opens the app; escape closes it, then the phone. With nothing open escape is refused |
+| 13 | At the commissary's Commissary button (list picker open), `ui list` | Its choices are listed as `option` entries; clicking one and then the confirm button runs it |
+| 14 | `shoot` `{"name":"bay-day","pose":"bay-pavement","target":"bay:hells-kitchen"}`, `{"name":"truck-side","pose":"vehicle-side","target":"<truck id>"}`, `{"name":"door","pose":"door","target":"commissary:hells-kitchen"}` | PNGs in `…\LocalLow\Hovgaard Games\Big Ambitions\FoodTrucksTest\shots\`. Is the exposure like the game's view (not black, not blown out)? Any UI in them? The game's own view doesn't flicker or move while they're taken |
+| 15 | `console` `{"line":"help"}` | The reply's `output` holds the console's command list |
+| 16 | `save` `{"name":"FT bridge 2"}`, then `load` `{"name":"FT bridge"}` from the city | The save appears in the Load screen. The load goes to the main menu and on into the city without a question |
+| 17 | Load a non-FT save by hand, then try `money`, `time` and `save` | Each is refused: the save's name doesn't start with FT. `state` still answers |
+| 18 | `GET /events?since=1` after a few of the rows above | Log lines, `notice` and `phone` events, and any Unity error; `next` grows. `new_game` returns `ok: false` saying why |
+| 19 | `quit` | The reply comes, then the game closes within a second or two |
+
+Log lines:
+
+- Startup: `Test bridge: listening on http://127.0.0.1:8322/.` or `Test bridge: off (…)`; a taken port gives `Test bridge: could not listen on 127.0.0.1:8322 (…)` and the game goes on without the bridge.
+- Every notice: `Notice: <text>`; every text: `Phone: <contact>: <text>`, the player's own read-back `Phone: <contact>: [player] <text>`. A raw key (`Notice: foodtrucks:… {…}`) means the locale file lacks the key: tell me.
+- Commands: `Test bridge: running the clock at speed N until day D HH:MM.`, `Test bridge: run_until day D HH:MM reached at day D HH:MM; paused, speed 1.`, `Test bridge: money set from … to ….`, `Test bridge: moving the player to x …`, `Test bridge: moved <type> <id> to x …`, `Test bridge: vehicle <id> <op>.`, `Test bridge: clicked "…" (…).`, `Test bridge: escape: ….`, `Test bridge: shot <name> (…): <path>.`, `Test bridge: saving as '…'.`, `Test bridge: loading '…' (…).`, `Test bridge: quitting the game.`
+- Any `Test bridge, refresh:` or `Test bridge, every frame:` error line: tell me.
+
+Game calls to watch first (read in the decompile, never run): the HttpListener under the game's Mono; `GameManager.SetMinutesMultiplier` and `GameSpeedController.SetPlayerPause` for `time`; `GameManager.SetPlayerPosition` and `VehicleHelper.TeleportVehicleToGround` for `teleport`; `TransitionToSave` with `LoadScene.LoadTransitionToSave`, and `LoadScene.LoadMainMenuFromCity` run from the bridge's own object, for `load`; `CancelButtonHandler.HandleEscapeClick` for `escape`; the second camera with HDRP's camera data copied by reflection for `shoot`; TextMeshPro read by reflection for `ui` labels and texts.
+
 # Commissary look and payment (0.9.10)
 
 Peter's notes of 11 October 2026: commissary orders are paid on delivery, the purple bay is now white road paint with a loading zone sign and props by the door, and crews' sales are paid in after midnight like the game's shops. Build 0.9.10 on branch `milestone-8`; the log says 0.9.10. Fresh **FT** save, other gameplay mods off. The 0.9.9 rows below still hold, except that the paint is white with LOADING ZONE in it instead of purple.

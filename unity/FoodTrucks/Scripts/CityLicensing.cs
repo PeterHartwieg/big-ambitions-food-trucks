@@ -83,7 +83,7 @@ namespace FoodTrucks
                 var key = reminder == LicenceReminder.Expired
                     ? "foodtrucks:message_city_licence_expired"
                     : "foodtrucks:message_city_licence_renewal";
-                GameManager.SendTextMessage(City(), key, new Dictionary<string, string>
+                Notices.SendText(City(), key, new Dictionary<string, string>
                 {
                     { "day", state.Licence.LicenceExpiresOnDay.ToString() },
                     { "fee", CartSelling.Money(DemandData.Rules!.Fleet.LicenceFeeCents) }
@@ -298,7 +298,7 @@ namespace FoodTrucks
             var kind = tables.Kind(city.Kind);
             var place = tables.Place(city.PlaceId);
             Log.Info($"City of New York: place {city.Booked} of {city.Places} booked at event {city.Id} ({city.Kind} at {city.PlaceId}, day {city.Day}) for {CartSelling.Money(city.FeeCents)}: {result}.");
-            Current.contact.SendMessage(new TextMessage("foodtrucks:message_city_event_booked", new Dictionary<string, string>
+            Notices.Send(Current.contact, new TextMessage("foodtrucks:message_city_event_booked", new Dictionary<string, string>
             {
                 { "event", kind == null ? city.Kind : CityPitches.Text(kind.Name) },
                 { "place", place == null ? city.PlaceId : CityPitches.Text(place.Name) },
@@ -330,7 +330,7 @@ namespace FoodTrucks
             licensing.Buy(state.Licence, day, course);
             FoodTrucksSession.MarkChanged();
             Log.Info($"City of New York: licence bought on day {day} for {CartSelling.Money(rules.LicenceFeeCents)}, valid to day {state.Licence.LicenceExpiresOnDay}.");
-            Current.contact.SendMessage(new TextMessage("foodtrucks:message_city_licence_issued",
+            Notices.Send(Current.contact, new TextMessage("foodtrucks:message_city_licence_issued",
                 new Dictionary<string, string> { { "day", state.Licence.LicenceExpiresOnDay.ToString() } }, read: true, isNewInteraction: true));
             return Start();
         }
@@ -383,7 +383,7 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
             var kind = StreetSales.Find(state, vehicleId)?.VehicleType ?? "cart";
             Log.Info($"City of New York: permit for {kind} {vehicleId} bought on day {day} for {CartSelling.Money(fee)}.");
-            Current.contact.SendMessage(new TextMessage("foodtrucks:message_city_permit_issued",
+            Notices.Send(Current.contact, new TextMessage("foodtrucks:message_city_permit_issued",
                 new Dictionary<string, string> { { "vehicle", LocalizorManager.GetLocalization("foodtrucks:noun_" + kind, null) } }, read: true, isNewInteraction: true));
             return Permit(index);
         }
@@ -404,7 +404,7 @@ namespace FoodTrucks
         // A last line from the city, then the call ends.
         private static DialogEntry Closing(string key)
         {
-            Current.contact.SendMessage(new TextMessage(key, null, read: true, isNewInteraction: true));
+            Notices.Send(Current.contact, new TextMessage(key, null, read: true, isNewInteraction: true));
             return new DialogEntry
             {
                 messageData = LocalizorManager.Localize(key, (object?)null),

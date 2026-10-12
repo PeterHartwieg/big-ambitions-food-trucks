@@ -70,6 +70,10 @@ namespace FoodTrucks
             }
 
             Patches.Apply();
+            // Only with -foodtrucks-test on the game's command line (docs/test-bridge.md); started here so it answers at
+            // the main menu.
+            try { TestBridge.Start(); }
+            catch (Exception ex) { Log.Error("Test bridge: " + ex); }
             return Task.CompletedTask;
         }
 
@@ -105,6 +109,8 @@ namespace FoodTrucks
 
         public Task OnUnloadAsync()
         {
+            try { TestBridge.Stop(); }
+            catch (Exception ex) { Log.Error("Test bridge: " + ex); }
             Patches.Remove();
             FoodSafetyCourse.Unregister();
             foreach (var typeName in registered)
@@ -121,19 +127,42 @@ namespace FoodTrucks
     {
         private static IModLogger? logger;
 
+        // Gets every line this class writes, with its kind ("log", "error", "notice", "phone"): the test bridge's events.
+        internal static Action<string, string>? Listener;
+
         public static void Init(IModLogger modLogger) => logger = modLogger;
 
         // The game's mod logger adds its own "[Mod:Food Trucks]" prefix.
-        public static void Info(string message)
+        public static void Info(string message) => Event("log", message);
+
+        // An info line of another kind for the listener (Notices: "notice", "phone").
+        public static void Event(string kind, string message)
         {
             if (logger != null) logger.Info(message);
             else Debug.Log("[Food Trucks] " + message);
+            Tell(kind, message);
         }
 
         public static void Error(string message)
         {
-            if (logger != null) logger.Error(message);
-            else Debug.LogError("[Food Trucks] " + message);
+            writing = true;
+            try
+            {
+                if (logger != null) logger.Error(message);
+                else Debug.LogError("[Food Trucks] " + message);
+            }
+            finally { writing = false; }
+            Tell("error", message);
+        }
+
+        // True while this class hands an error line to Unity, so the test bridge doesn't count it twice.
+        [ThreadStatic] private static bool writing;
+        internal static bool Writing => writing;
+
+        private static void Tell(string kind, string message)
+        {
+            try { Listener?.Invoke(kind, message); }
+            catch (Exception) { /* A listener never stops the mod's logging. */ }
         }
 
         public static void Error(Exception exception)

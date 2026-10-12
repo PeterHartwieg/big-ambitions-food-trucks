@@ -412,7 +412,7 @@ namespace FoodTrucks
             try { Contact.ShowAddedContactNotifications(); }
             catch (Exception ex) { Log.Error("Commissary, new contact notice: " + ex); }
             var rules = Rules!;
-            GameManager.SendTextMessage(contact, "foodtrucks:message_commissary_welcome", new Dictionary<string, string>
+            Notices.SendText(contact, "foodtrucks:message_commissary_welcome", new Dictionary<string, string>
             {
                 { "commissary", Name(site) },
                 { "cart", CartSelling.Money(rules.RentPerMonthCents.TryGetValue("cart", out var cart) ? cart : 0) },
@@ -557,7 +557,7 @@ namespace FoodTrucks
                 state.Commissary.Charges.Add(charge);
                 Log.Info($"Commissary rent: {World.Short(charge.VehicleId)} at {charge.CommissaryId} for day {charge.Day}, {CartSelling.Money(charge.Cents)} unpaid (not enough money); tried again.");
                 if (state.Commissary.Unlocked.Contains(charge.CommissaryId))
-                    GameManager.SendTextMessage(ContactFor(charge.CommissaryId), "foodtrucks:message_commissary_rent_unpaid", new Dictionary<string, string>
+                    Notices.SendText(ContactFor(charge.CommissaryId), "foodtrucks:message_commissary_rent_unpaid", new Dictionary<string, string>
                     {
                         { "rent", CartSelling.Money(charge.Cents) },
                         { "day", charge.Day.ToString() },
@@ -590,7 +590,7 @@ namespace FoodTrucks
                 Log.Info($"Commissary delivery: order {order.Id}, {order.Units} {order.ItemName} at {order.CommissaryId} (ordered day {order.OrderedDay}, due day {order.DeliverDay}), " +
                          $"paid {CartSelling.Money(order.TotalCents)} on delivery (goods {CartSelling.Money(order.GoodsCents)}, fee {CartSelling.Money(order.FeeCents)}).");
                 if (state.Commissary.Unlocked.Contains(order.CommissaryId))
-                    GameManager.SendTextMessage(ContactFor(order.CommissaryId), "foodtrucks:message_commissary_delivered", new Dictionary<string, string>
+                    Notices.SendText(ContactFor(order.CommissaryId), "foodtrucks:message_commissary_delivered", new Dictionary<string, string>
                     {
                         { "units", order.Units.ToString() },
                         { "item", LocalizorManager.GetLocalization(order.ItemName, null) },
@@ -603,7 +603,7 @@ namespace FoodTrucks
                 Log.Info($"Commissary delivery: order {order.Id}, {order.Units} {order.ItemName} at {order.CommissaryId} not delivered: " +
                          $"the payment of {CartSelling.Money(order.TotalCents)} was refused (not enough money); the order is cancelled.");
                 if (state.Commissary.Unlocked.Contains(order.CommissaryId))
-                    GameManager.SendTextMessage(ContactFor(order.CommissaryId), "foodtrucks:message_commissary_delivery_unpaid", new Dictionary<string, string>
+                    Notices.SendText(ContactFor(order.CommissaryId), "foodtrucks:message_commissary_delivery_unpaid", new Dictionary<string, string>
                     {
                         { "units", order.Units.ToString() },
                         { "item", LocalizorManager.GetLocalization(order.ItemName, null) },
@@ -625,7 +625,7 @@ namespace FoodTrucks
                 FoodTrucksSession.MarkChanged();
                 Log.Info($"Overnight check: starts on day {day} at {CityPitches.Clock(minute)}, checked through day {commissary.NightCheckedThroughDay}; {fleet.Count} food vehicles.");
                 if (fleet.Count > 0)
-                    GameManager.SendTextMessage(CityLicensing.City(), "foodtrucks:message_city_overnight_rule", new Dictionary<string, string>
+                    Notices.SendText(CityLicensing.City(), "foodtrucks:message_city_overnight_rule", new Dictionary<string, string>
                     {
                         { "fine", CartSelling.Money(rules.OvernightFineCents) },
                         { "time", CityPitches.Clock(rules.NightCheckMinute) }
@@ -661,7 +661,7 @@ namespace FoodTrucks
                 if (paid) SalesLedger.RecordOvernightFine(state, SaveGameManager.Current.Day, fine.VehicleId, fine.Cents);
                 else commissary.Fines.Add(fine);
                 Log.Info($"Overnight fine: {World.Short(fine.VehicleId)} out on the night of day {fine.Day}, {CartSelling.Money(fine.Cents)} {(paid ? "paid" : "unpaid (not enough money); tried again")}.");
-                GameManager.SendTextMessage(CityLicensing.City(), paid ? "foodtrucks:message_city_overnight_fine" : "foodtrucks:message_city_overnight_fine_unpaid", new Dictionary<string, string>
+                Notices.SendText(CityLicensing.City(), paid ? "foodtrucks:message_city_overnight_fine" : "foodtrucks:message_city_overnight_fine_unpaid", new Dictionary<string, string>
                 {
                     { "vehicle", VehicleName(state, fine.VehicleId) },
                     { "day", fine.Day.ToString() },
@@ -764,15 +764,40 @@ namespace FoodTrucks
 
         public static void ShowPanel(ItemPanelUI panel)
         {
+            var options = PanelOptions(VehicleHelper.GetCurrentVehicle(), forPicker: true);
+            if (options == null) return;
+            var labels = options.Select(o => o.Label).ToList();
+            DropdownSelector.Show(labels, chosen =>
+            {
+                try { options.FirstOrDefault(o => o.Label == chosen).Act?.Invoke(); }
+                catch (Exception ex) { Log.Error("Commissary button: " + ex); }
+            }, "foodtrucks:commissary_header", "foodtrucks:commissary_body");
+        }
+
+        // The test bridge's restock and rent_bay: the panel's checks and messages, then the first of its choices named in
+        // `ops` ("rent", "move", "release", "restock", "nostock", "order"). Null when it ran one; otherwise why not.
+        internal static string? RunPanelOption(VehicleInstance cart, params string[] ops)
+        {
+            var options = PanelOptions(cart, forPicker: false);
+            if (options == null) return "the Commissary button refused (see the notice)";
+            var choice = options.FirstOrDefault(o => ops.Contains(o.Op));
+            if (choice.Act == null) return $"the Commissary button offers {string.Join(", ", options.Select(o => o.Op))} here, not {string.Join(" or ", ops)}";
+            choice.Act();
+            return null;
+        }
+
+        // The Commissary button's choices for the vehicle, after its checks (each refusal shows its notice); null when
+        // it refused. forPicker: the game's list picker must be there to show them.
+        private static List<(string Op, string Label, Action Act)>? PanelOptions(VehicleInstance? cart, bool forPicker)
+        {
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
-            var cart = VehicleHelper.GetCurrentVehicle();
             var kind = FoodTrucksMod.KindOf(cart?.vehicleTypeName);
-            if (state == null || rules == null || cart == null || kind == null || uninstalled) return;
+            if (state == null || rules == null || cart == null || kind == null || uninstalled) return null;
             if (!FoodTrucksSession.CanWrite)
             {
                 CartSelling.Notify("foodtrucks:notification_data_readonly");
-                return;
+                return null;
             }
             var site = SiteOf(cart);
             if (site == null)
@@ -780,38 +805,33 @@ namespace FoodTrucks
                 // Within a bay's radius but not legally parked: say so, rather than "not here".
                 var near = Sites?.Sites.FirstOrDefault(s => CommissaryBays.WithinRadius(ResolvedBays(s), PositionOf(cart).x, PositionOf(cart).z, rules.BayRadiusMetres));
                 CartSelling.Say(near != null ? "foodtrucks:notification_commissary_park_legally" : "foodtrucks:notification_commissary_not_here", kind);
-                return;
+                return null;
             }
-            if (DropdownSelector.onShow == null)
+            if (forPicker && DropdownSelector.onShow == null)
             {
                 Log.Error("Commissary: the game's list picker isn't available in this scene.");
                 CartSelling.Notify("foodtrucks:notification_prices_unavailable");
-                return;
+                return null;
             }
             Unlock(state, site, "vehicle at the bay");
             var id = cart.id;
             var siteId = site.Id;
-            var options = new List<(string Label, Action Act)>();
+            var options = new List<(string Op, string Label, Action Act)>();
             var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == id);
             var rent = CartSelling.Money(rules.RentPerMonthCents.TryGetValue(kind, out var monthly) ? monthly : 0);
             if (space == null)
-                options.Add((Format("foodtrucks:commissary_option_rent", rent, Name(site)), () => Rent(id, kind, siteId)));
+                options.Add(("rent", Format("foodtrucks:commissary_option_rent", rent, Name(site)), () => Rent(id, kind, siteId)));
             else if (space.CommissaryId != siteId)
-                options.Add((Format("foodtrucks:commissary_option_move", NameOf(space.CommissaryId), Name(site), rent), () => Rent(id, kind, siteId)));
+                options.Add(("move", Format("foodtrucks:commissary_option_move", NameOf(space.CommissaryId), Name(site), rent), () => Rent(id, kind, siteId)));
             else
-                options.Add((Format("foodtrucks:commissary_option_release", Name(site)), () => Release(id, kind, siteId)));
+                options.Add(("release", Format("foodtrucks:commissary_option_release", Name(site)), () => Release(id, kind, siteId)));
             var units = state.Commissary.Stock.TryGetValue(siteId, out var lines) ? lines.Sum(l => (long)l.Units) : 0;
             options.Add(units > 0
-                ? (Format("foodtrucks:commissary_option_restock", units.ToString()), () => Restock(id, kind, siteId))
-                : (Format("foodtrucks:commissary_option_nostock", Name(site)), () => CartSelling.Say("foodtrucks:notification_commissary_nostock", kind, ("commissary", Name(site)))));
+                ? ("restock", Format("foodtrucks:commissary_option_restock", units.ToString()), () => Restock(id, kind, siteId))
+                : ("nostock", Format("foodtrucks:commissary_option_nostock", Name(site)), () => CartSelling.Say("foodtrucks:notification_commissary_nostock", kind, ("commissary", Name(site)))));
             if (state.Commissary.Spaces.Any(s => s.CommissaryId == siteId))
-                options.Add((Format("foodtrucks:commissary_option_order", Name(site)), () => CallToOrder(siteId)));
-            var labels = options.Select(o => o.Label).ToList();
-            DropdownSelector.Show(labels, chosen =>
-            {
-                try { options.FirstOrDefault(o => o.Label == chosen).Act?.Invoke(); }
-                catch (Exception ex) { Log.Error("Commissary button: " + ex); }
-            }, "foodtrucks:commissary_header", "foodtrucks:commissary_body");
+                options.Add(("order", Format("foodtrucks:commissary_option_order", Name(site)), () => CallToOrder(siteId)));
+            return options;
         }
 
         // Renting a space here, or moving the vehicle's space here; its first day's rent is charged at once.
@@ -1381,7 +1401,7 @@ namespace FoodTrucks
                 stock = (commissary.Stock.TryGetValue(site!.Id, out var lines) ? lines.Sum(l => (long)l.Units) : 0).ToString(),
                 orders = commissary.Orders.Count(o => o.CommissaryId == site.Id).ToString()
             };
-            Current.contact.SendMessage(new TextMessage("foodtrucks:dialog_commissary_start", ToDictionary(data), read: true, isNewInteraction: true));
+            Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_start", ToDictionary(data), read: true, isNewInteraction: true));
             return new DialogEntry
             {
                 messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_start", data),
@@ -1440,7 +1460,7 @@ namespace FoodTrucks
             // The order is read back as it stands now: the form and its item list are done with ("Change" opens a fresh one).
             CommissaryOrderForm.End("read back");
             var items = string.Join("<br>", quote.Lines.Select(LineText));
-            Current.contact.ReceivePlayerMessage(new TextMessage("foodtrucks:message_commissary_order_player", new Dictionary<string, string> { { "items", items } }, read: true));
+            Notices.SendFromPlayer(Current.contact, new TextMessage("foodtrucks:message_commissary_order_player", new Dictionary<string, string> { { "items", items } }, read: true));
             var data = new
             {
                 items,
@@ -1449,7 +1469,7 @@ namespace FoodTrucks
                 total = CartSelling.Money(quote.TotalCents),
                 time = CityPitches.Clock(rules.DeliveryMinute)
             };
-            Current.contact.SendMessage(new TextMessage("foodtrucks:dialog_commissary_quote", ToDictionary(data), read: true));
+            Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_quote", ToDictionary(data), read: true));
             Log.Info($"Commissary order at {siteId}: read back {quote.Boxes} boxes ({string.Join(", ", quote.Lines.Select(l => $"{l.Boxes} {l.ItemName}"))}), " +
                      $"{CartSelling.Money(quote.GoodsCents)} plus {CartSelling.Money(quote.FeeCents)} delivery.");
             return new DialogEntry
@@ -1496,7 +1516,7 @@ namespace FoodTrucks
                     { "total", CartSelling.Money(order.TotalCents) },
                     { "time", CityPitches.Clock(rules.DeliveryMinute) }
                 };
-                Current.contact.SendMessage(new TextMessage(key, data, read: true));
+                Notices.Send(Current.contact, new TextMessage(key, data, read: true));
                 texts.Add(LocalizorManager.Localize(key, data).ToString());
             }
             CommissaryOrderForm.End("order placed");
@@ -1514,7 +1534,7 @@ namespace FoodTrucks
         private static DialogEntry Closing(string key, object? data)
         {
             CommissaryOrderForm.End("call closing");
-            Current.contact.SendMessage(new TextMessage(key, data == null ? null : ToDictionary(data), read: true, isNewInteraction: true));
+            Notices.Send(Current.contact, new TextMessage(key, data == null ? null : ToDictionary(data), read: true, isNewInteraction: true));
             return new DialogEntry
             {
                 messageData = LocalizorManager.Localize(key, data),

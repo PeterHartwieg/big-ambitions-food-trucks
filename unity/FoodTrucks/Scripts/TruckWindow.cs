@@ -484,6 +484,22 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Truck window, save position: " + ex); }
         }
 
+        // The panel's Step out and Close window for the test bridge, as if clicked: false unless the player is at this
+        // truck's hatch.
+        internal static bool PanelStepOut(string id)
+        {
+            if (instance == null || !PlayerAt(id)) return false;
+            instance.OnStepOut();
+            return true;
+        }
+
+        internal static bool PanelClose(string id)
+        {
+            if (instance == null || !PlayerAt(id)) return false;
+            instance.OnClose(id);
+            return true;
+        }
+
         // Button handlers from the panel.
         internal void OnStepOut() => StepOut("stepped out", drive: false);
 

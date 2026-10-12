@@ -155,7 +155,7 @@ namespace FoodTrucks
                 var place = tables.Place(city.PlaceId)!;
                 Log.Info($"City event {city.Id}: {kind.Id} at {place.Id} ({place.Address}) on day {city.Day}, {Clock(city.Start)} to {Clock(city.End)}, {city.Places} places at {CartSelling.Money(city.FeeCents)}{(vendor ? "" : "; no text, no food vehicle")}.");
                 if (!vendor) continue;
-                GameManager.SendTextMessage(CityLicensing.City(), "foodtrucks:message_city_event", new Dictionary<string, string>
+                Notices.SendText(CityLicensing.City(), "foodtrucks:message_city_event", new Dictionary<string, string>
                 {
                     { "event", Text(kind.Name) },
                     { "place", Text(place.Name) },
@@ -173,7 +173,7 @@ namespace FoodTrucks
                 var kind = tables.Kind(city.Kind);
                 var place = tables.Place(city.PlaceId);
                 if (kind == null || place == null) continue;
-                GameManager.SendTextMessage(CityLicensing.City(), "foodtrucks:message_city_event_today", new Dictionary<string, string>
+                Notices.SendText(CityLicensing.City(), "foodtrucks:message_city_event_today", new Dictionary<string, string>
                 {
                     { "event", Text(kind.Name) },
                     { "place", Text(place.Name) },
@@ -202,7 +202,7 @@ namespace FoodTrucks
                 info.SetTaxDeductibleName("foodtrucks:transaction_cityfees_label");
                 GameManager.ChangeMoneySafe(refund / 100f, info, null, null, force: true, showNotification: true);
                 SalesLedger.RecordEventPlaces(state, SaveGameManager.Current.Day, -refund);
-                GameManager.SendTextMessage(CityLicensing.City(), "foodtrucks:message_city_event_cancelled", new Dictionary<string, string> { { "fee", CartSelling.Money(refund) } });
+                Notices.SendText(CityLicensing.City(), "foodtrucks:message_city_event_cancelled", new Dictionary<string, string> { { "fee", CartSelling.Money(refund) } });
             }
         }
 
