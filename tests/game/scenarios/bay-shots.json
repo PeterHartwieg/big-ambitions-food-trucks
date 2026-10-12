@@ -4,7 +4,7 @@
   "needs": {},
   "steps": [
     {
-      "note": "Before running, prepare and save 'FT bay-shots' by hand: an FT city with the five commissaries, all screens closed. The bridge cannot create a new game. This note is manual setup, not an automated check."
+      "note": "Use FT saves from a new character of their own, never a series city saved under a new name. Before running, prepare and save 'FT bay-shots' by hand: an FT city with the five commissaries, all screens closed. The bridge cannot create a new game. This note is manual setup, not an automated check."
     },
     {
       "call": "load",

@@ -4,7 +4,7 @@
   "needs": {},
   "steps": [
     {
-      "note": "Before running, prepare and save 'FT hatch-only-selling' by hand: exactly one stocked, licensed truck without crew, legal parking with the hatch to the pavement at a busy pitch, before lunch. Save on foot nearby with no screen open. The bridge cannot create a new game. This note is manual setup, not an automated check."
+      "note": "Use FT saves from a new character of their own, never a series city saved under a new name. Before running, prepare and save 'FT hatch-only-selling' by hand: exactly one licensed truck without crew, stocked with one food and enough for both hatch visits, legal parking with the hatch to the pavement at a busy pitch, before lunch. Save on foot nearby with no screen open. The bridge cannot create a new game. This note is manual setup, not an automated check."
     },
     {
       "call": "load",
@@ -71,6 +71,12 @@
       "equals": "on_foot"
     },
     {
+      "call": "time",
+      "args": {
+        "pause": false
+      }
+    },
+    {
       "call": "vehicle",
       "args": {
         "id": "$truck",
@@ -127,7 +133,8 @@
     },
     {
       "wait_event": "Sale:",
-      "timeout_s": 300
+      "timeout_s": 300,
+      "after_step": 19
     },
     {
       "call": "time",
@@ -202,13 +209,18 @@
     },
     {
       "no_event": "Sale:",
-      "from_step": 26
+      "from_step": 27
     },
     {
       "call": "time",
       "args": {
         "speed": 20
       }
+    },
+    {
+      "remember": "return_stock",
+      "from": "state",
+      "path": "vehicles[kind=truck].stock.0.amount"
     },
     {
       "call": "vehicle",
@@ -239,7 +251,13 @@
     },
     {
       "wait_event": "Sale:",
-      "timeout_s": 300
+      "timeout_s": 300,
+      "after_step": 41
+    },
+    {
+      "expect": "state",
+      "path": "vehicles[kind=truck].stock.0.amount",
+      "less": "$return_stock"
     },
     {
       "call": "time",

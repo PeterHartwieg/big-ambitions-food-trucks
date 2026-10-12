@@ -21,7 +21,7 @@ class OperationTests(unittest.TestCase):
         self.mock=self.session.mock
 
     def test_timeout_recovers_original_mutation_once(self):
-        self.mock.operation_delays['debug']=.25
+        self.mock.operation_delays['debug']=1.25
         with patch.object(self.mock,'call',wraps=self.mock.call) as calls:
             reply=self.bridge.call('debug',{'action':'spawn truck'},timeout_s=.1)
             self.assertEqual(len(self.mock.state['vehicles']),1)
@@ -32,7 +32,7 @@ class OperationTests(unittest.TestCase):
         self.assertEqual(status['result']['result'],reply['result'])
 
     def test_pending_call_keeps_health_events_and_status_available(self):
-        self.mock.operation_delays['save']=.3
+        self.mock.operation_delays['save']=1.3
         reply=self.mock.operation('save',{'name':'FT pending','timeout_s':.1})
         self.assertFalse(reply['ok'])
         identifier=reply['op']
@@ -45,7 +45,7 @@ class OperationTests(unittest.TestCase):
         self.assertEqual(recovered['result'],{'name':'FT pending'})
 
     def test_pending_recovery_exposes_id_and_does_not_count_as_refusal(self):
-        self.mock.operation_delays['save']=.3
+        self.mock.operation_delays['save']=1.3
         with self.assertRaises(BridgeError) as raised:
             self.bridge.call('save',{'name':'FT pending'},timeout_s=.1,recovery_s=0)
         self.assertIsNotNone(raised.exception.op)

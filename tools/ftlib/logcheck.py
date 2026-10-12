@@ -70,7 +70,8 @@ def always_on(text):
                 if not following.strip() or following.startswith('[Mod:'):
                     break
                 block.append(following)
-            if re.search(r'\b(?:ERROR|Error)\b|Exception', line) or any(re.search(r'LogError|(?:FoodTrucks\.Log|ModLogger)[:.]Error', part) for part in block):
+            marked = '[Mod:FoodTrucks] ERROR: ' in line
+            if marked or re.search(r'\b(?:ERROR|Error)\b|Exception', line) or any(re.search(r'LogError|(?:FoodTrucks\.Log|ModLogger)[:.]Error', part) for part in block):
                 errors.append(line)
         if re.search(r'\b\w*Exception\b', line):
             block = [line]

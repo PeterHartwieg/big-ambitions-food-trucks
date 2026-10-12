@@ -4,7 +4,7 @@
   "needs": {},
   "steps": [
     {
-      "note": "Before running, prepare and save 'FT truck-look-shots' by hand: one closed truck and one closed cart near each other, fitted with stock and the required equipment, licence and permits. A person fits the cart hot dog grill and coffee machine, positions vanilla reference items and a delivery van, then saves with all screens closed. The bridge cannot create a new game. This note is manual setup, not an automated check."
+      "note": "Use FT saves from a new character of their own, never a series city saved under a new name. Before running, prepare and save 'FT truck-look-shots' by hand: one closed truck and one closed cart near each other, fitted with stock and the required equipment, licence and permits. A person fits the cart hot dog grill and coffee machine, positions vanilla reference items and a delivery van, then saves with all screens closed. The bridge cannot create a new game. This note is manual setup, not an automated check."
     },
     {
       "call": "load",
@@ -97,6 +97,12 @@
       "wait_state": "player.activity",
       "timeout_s": 300,
       "equals": "on_foot"
+    },
+    {
+      "call": "time",
+      "args": {
+        "pause": false
+      }
     },
     {
       "call": "vehicle",
@@ -224,6 +230,12 @@
       "equals": "on_foot"
     },
     {
+      "call": "time",
+      "args": {
+        "pause": false
+      }
+    },
+    {
       "call": "vehicle",
       "args": {
         "id": "$cart",
@@ -341,6 +353,12 @@
       "wait_state": "player.activity",
       "timeout_s": 300,
       "equals": "on_foot"
+    },
+    {
+      "call": "time",
+      "args": {
+        "pause": false
+      }
     },
     {
       "call": "vehicle",
@@ -466,6 +484,12 @@
       "wait_state": "player.activity",
       "timeout_s": 300,
       "equals": "on_foot"
+    },
+    {
+      "call": "time",
+      "args": {
+        "pause": false
+      }
     },
     {
       "call": "vehicle",

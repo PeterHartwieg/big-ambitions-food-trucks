@@ -6,7 +6,7 @@ import re
 import time
 
 from .bridge import Bridge, BridgeError
-from .paths import CONDITIONS, lookup, meets, value
+from .paths import CONDITIONS, lookup, meets, value, PathError
 from .shots import ROOT, contact_sheet, fetch_shot
 
 KINDS = {'call', 'remember', 'expect', 'wait_event', 'wait_state', 'no_event', 'shoot', 'sleep_s', 'note'}
@@ -14,7 +14,7 @@ FIELDS = {
     'call': {'args', 'expect_ok', 'timeout_s'},
     'remember': {'from', 'path', 'scale'},
     'expect': {'path', 'where', 'pick'} | CONDITIONS,
-    'wait_event': {'timeout_s', 'captures'},
+    'wait_event': {'timeout_s', 'captures', 'after_step'},
     'wait_state': {'timeout_s', 'poll_s'} | CONDITIONS,
     'no_event': {'from_step', 'to_step'},
     'shoot': set(), 'sleep_s': set(), 'note': set(),
@@ -79,6 +79,10 @@ def validate(document):
             start, end = step.get('from_step', max(0, index - 1)), step.get('to_step', index)
             if any(isinstance(n, bool) or not isinstance(n, int) for n in (start, end)) or not (0 <= start <= end <= index and start < index):
                 raise ValueError(f'Step {index} no_event needs completed step boundaries: use an earlier from_step and to_step no later than this step')
+        if kind == 'wait_event' and 'after_step' in step:
+            boundary = step['after_step']
+            if isinstance(boundary, bool) or not isinstance(boundary, int) or not 0 <= boundary < index:
+                raise ValueError(f'Step {index} after_step needs an earlier completed step number (0 is the run start)')
         if kind == 'shoot':
             shot = step[kind]
             if not isinstance(shot, dict) or not isinstance(shot.get('name'), str):
@@ -102,6 +106,7 @@ class Runner:
         self.coverage_lost = False
         self.cursor = 0
         self.boundaries = {}
+        self.starts = {}
 
     def collect(self):
         batch = self.bridge.events(self.cursor)
@@ -160,13 +165,20 @@ class Runner:
             path = self.resolve(step.get('path', '') if kind == 'expect' else step[kind])
             deadline = time.monotonic() + step.get('timeout_s', 30)
             while True:
-                actual = lookup(self.source(step[kind] if kind == 'expect' else 'state'), path)
+                source = self.source(step[kind] if kind == 'expect' else 'state')
+                present = True
+                try:
+                    actual = lookup(source, path)
+                except PathError as exc:
+                    if kind != 'wait_state': raise
+                    actual = str(exc)
+                    present = False
                 if 'where' in step:
                     filters=self.resolve(step['where'])
                     actual=[item for item in actual if all(lookup(item,k)==v for k,v in filters.items())]
                     actual=lookup(actual,self.resolve(step.get('pick','')))
                 self.collect()
-                if meets(actual, conditions):
+                if present and meets(actual, conditions):
                     return {'expected': {'path': path, **conditions}, 'seen': actual}
                 if kind == 'expect' or time.monotonic() >= deadline:
                     raise ValueError(f'{path}: expected {conditions!r}, saw {actual!r}')
@@ -174,9 +186,11 @@ class Runner:
         if kind == 'wait_event':
             regex = re.compile(self.resolve(step[kind]))
             deadline = time.monotonic() + step.get('timeout_s', 30)
+            boundary = self.boundaries[step['after_step']] if 'after_step' in step else self.starts.get(index - 1, self.boundaries.get(0, 1))
+            since = max(self.event_mark + 1, boundary)
             while True:
                 self.collect()
-                event = next((e for e in self.events if e['seq'] > self.event_mark and regex.search(e['text'])), None)
+                event = next((e for e in self.events if e['seq'] >= since and regex.search(e['text'])), None)
                 if event:
                     match=regex.search(event['text'])
                     for name,group in step.get('captures',{}).items():
@@ -229,6 +243,8 @@ class Runner:
                 record = {'step': index, 'kind': next(iter(KINDS.intersection(step))), 'status': 'PASS',
                           'soft': step.get('soft', False), 'expected': step, 'seen': None}
                 try:
+                    self.collect()
+                    self.starts[index] = self.cursor
                     record.update(self.step(step, index, directory))
                     self.collect()
                 except (BridgeError, ValueError, OSError, TypeError, KeyError) as exc:
