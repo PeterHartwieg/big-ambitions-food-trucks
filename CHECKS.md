@@ -6,7 +6,7 @@ The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:832
 |---|---|---|
 | 1 | Start without the flag, load any FT save, play a minute | `Test bridge: off (the game was started without -foodtrucks-test).` once at startup. `curl http://127.0.0.1:8322/health` on homepc gets no answer. Everything else as in 0.9.10 |
 | 2 | Same session: open a cart where it can't open, spawn a truck (Ctrl+K), call a commissary | Every notice on screen also appears in Player.log as `Notice: <the same text>`, and each commissary text as `Phone: <commissary name>: <text>`. Nothing looks different on screen |
-| 3 | Start with the flag, stay at the main menu, `curl …/health` | `Test bridge: listening on http://127.0.0.1:8322/.` in the log. The reply has `"scene":"menu"`, `"save":null`, the mod version and a growing `frame` |
+| 3 | Start with the flag, stay at the main menu, `curl …/health` | `Test bridge: listening on http://127.0.0.1:8322/ (session <8 hex>).` in the log. The reply has `"scene":"menu"`, `"save":null`, the mod version and a growing `frame` |
 | 4 | Alt-tab away from the game for a minute, `curl …/health` twice | `frame` still grows (the game runs in the background) |
 | 5 | `load` `{"name":"FT bridge"}` from the menu, poll `/health` | `scene` goes `loading`, then `city` with the save's name, day and time. No question about mods |
 | 6 | `state` | Clock, money, player position, the licence, every food vehicle with its position, legality, stock and queue, the commissary. Compare a few values with the screen |
@@ -35,12 +35,12 @@ The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:832
 
 Log lines:
 
-- Startup: `Test bridge: listening on http://127.0.0.1:8322/.` or `Test bridge: off (…)`; a taken port gives `Test bridge: could not listen on 127.0.0.1:8322 (…)` and the game goes on without the bridge.
+- Startup: `Test bridge: listening on http://127.0.0.1:8322/ (session <8 hex>).` or `Test bridge: off (…)`; a taken port gives `Test bridge: could not listen on 127.0.0.1:8322 (…)` and the game goes on without the bridge.
 - Every notice: `Notice: <text>`; every text: `Phone: <contact>: <text>`, the player's own read-back `Phone: <contact>: [player] <text>`. A raw key (`Notice: foodtrucks:… {…}`) means the locale file lacks the key: tell me.
 - Commands: `Test bridge: running the clock at speed N until day D HH:MM.`, `Test bridge: run_until day D HH:MM reached at day D HH:MM; paused, speed 1.`, `Test bridge: money set from … to ….`, `Test bridge: moving the player to x …`, `Test bridge: moved <type> <id> to x …`, `Test bridge: vehicle <id> <op>.`, `Test bridge: clicked "…" (…).`, `Test bridge: escape: ….`, `Test bridge: shot <name> (…): <path>.`, `Test bridge: saving as '…'.`, `Test bridge: loading '…' (…).`, `Test bridge: quitting the game.`
 - Any `Test bridge, refresh:` or `Test bridge, every frame:` error line: tell me.
 - Every mod error line now starts `ERROR: ` after the mod's prefix.
-- With the flag only: `Patch GameManager.RunMainGameTick(Single), test bridge: Active.` Loads end with `Test bridge: load '…' done: day D, the mod's save data attached.` (or `… failed: …`); vehicle ops log `Test bridge: vehicle <id> <op>: done.` or `not done.`
+- With the flag only: `Patch GameManager.RunMainGameTick(Single), test bridge run_until: Active.` and three `Patch SaveGameSerializationHelper.…, test bridge save: Active.` lines. Loads end with `Test bridge: load '…' done: day D, the mod's save data attached.` (or `… failed: …`); vehicle ops log `Test bridge: vehicle <id> <op>: done.` or `not done.`
 
 Game calls to watch first (read in the decompile, never run): the HttpListener under the game's Mono; `GameManager.SetMinutesMultiplier` and `GameSpeedController.SetPlayerPause` for `time`; `GameManager.SetPlayerPosition` and `VehicleHelper.TeleportVehicleToGround` for `teleport`; `TransitionToSave` with `LoadScene.LoadTransitionToSave`, and `LoadScene.LoadMainMenuFromCity` run from the bridge's own object, for `load`; `CancelButtonHandler.HandleEscapeClick` for `escape`; the second camera with HDRP's camera data copied by reflection for `shoot`; TextMeshPro read by reflection for `ui` labels and texts.
 

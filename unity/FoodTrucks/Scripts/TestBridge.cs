@@ -3,6 +3,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using UI.Load;
@@ -29,6 +30,9 @@ namespace FoodTrucks
 
         internal static bool Running => http != null;
 
+        // A new random id at each start, in every reply: a client sees from a change that the game (or the mod) restarted.
+        internal static volatile string Session = "";
+
         // The values /health answers with, refreshed by the main thread every frame. Replaced whole, never changed.
         internal sealed class Snapshot
         {
@@ -54,7 +58,8 @@ namespace FoodTrucks
             if (http != null) return;
             try
             {
-                TestBridgePump.Stopped = false;
+                Session = Guid.NewGuid().ToString("N").Substring(0, 8);
+                TestBridgePump.Admit();
                 TestBridgeEvents.Hook();
                 pump = TestBridgePump.Install();
                 var server = new TestBridgeHttp(Port);
@@ -63,7 +68,7 @@ namespace FoodTrucks
                 Patches.ApplyTestBridge();
                 // An agent drives the game while its window may not have the focus.
                 Application.runInBackground = true;
-                Log.Info($"Test bridge: listening on http://127.0.0.1:{Port}/.");
+                Log.Info($"Test bridge: listening on http://127.0.0.1:{Port}/ (session {Session}).");
             }
             catch (Exception ex)
             {
@@ -181,7 +186,7 @@ namespace FoodTrucks
             {
                 if (!ops.TryGetValue((long)id.Value, out var op))
                     return Fail($"No operation {id} (the bridge keeps the last {OpsKept}).");
-                var result = new JObject { ["id"] = op.Id, ["cmd"] = op.Cmd, ["status"] = op.Status };
+                var result = new JObject { ["id"] = op.Id, ["cmd"] = op.Cmd, ["session"] = Session, ["status"] = op.Status };
                 if (op.Status == "done") result["result"] = op.Result?.DeepClone();
                 if (op.Status == "failed") result["error"] = op.Error;
                 return new JObject { ["ok"] = true, ["result"] = result };
@@ -256,10 +261,20 @@ namespace FoodTrucks
     // the /health snapshot, run_until and the bridge's own coroutines (load, quit).
     internal sealed class TestBridgePump : MonoBehaviour
     {
-        private static readonly ConcurrentQueue<(Func<object?> Work, TaskCompletionSource<JToken?> Done)> queue =
-            new ConcurrentQueue<(Func<object?>, TaskCompletionSource<JToken?>)>();
+        // Each queued call carries the generation it was admitted under; a stop moves to the next one, and the pump fails
+        // anything from an earlier generation. Admission and the stop share one lock, so nothing slips in between.
+        private static readonly ConcurrentQueue<(Func<object?> Work, TaskCompletionSource<JToken?> Done, int Generation)> queue =
+            new ConcurrentQueue<(Func<object?>, TaskCompletionSource<JToken?>, int)>();
+        private static readonly object admission = new object();
+        private static int generation;
         // Set when the bridge stops: no new work is taken.
         internal static volatile bool Stopped;
+
+        // The bridge starts (again): calls are taken under the current generation.
+        internal static void Admit()
+        {
+            lock (admission) Stopped = false;
+        }
         internal static TestBridgePump? Instance { get; private set; }
 
         internal static TestBridgePump Install()
@@ -276,8 +291,11 @@ namespace FoodTrucks
         internal static Task<JToken?> Run(Func<object?> work)
         {
             var done = new TaskCompletionSource<JToken?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            if (Stopped) done.SetException(new BridgeError(TestBridge.StoppedText));
-            else queue.Enqueue((work, done));
+            lock (admission)
+            {
+                if (Stopped) done.SetException(new BridgeError(TestBridge.StoppedText));
+                else queue.Enqueue((work, done, generation));
+            }
             return done.Task;
         }
 
@@ -295,8 +313,12 @@ namespace FoodTrucks
         // The bridge stops: every queued and pending call fails, and what pending ones hold is released.
         internal static void FailAll(string why)
         {
-            Stopped = true;
-            while (queue.TryDequeue(out var item)) item.Done.TrySetException(new BridgeError(why));
+            lock (admission)
+            {
+                Stopped = true;
+                generation++;
+                while (queue.TryDequeue(out var item)) item.Done.TrySetException(new BridgeError(why));
+            }
             foreach (var (work, done) in pending)
             {
                 try { work.OnStop?.Invoke(); }
@@ -342,7 +364,11 @@ namespace FoodTrucks
             PollPending();
             // Calls queued by the HTTP thread; each one answers its own waiter, errors included.
             var n = 0;
-            while (n++ < 50 && !Stopped && queue.TryDequeue(out var item)) RunQueued(item.Work, item.Done);
+            while (n++ < 50 && queue.TryDequeue(out var item))
+            {
+                if (item.Generation != Volatile.Read(ref generation)) item.Done.TrySetException(new BridgeError(TestBridge.StoppedText));
+                else RunQueued(item.Work, item.Done);
+            }
         }
 
         private static readonly HashSet<string> failed = new HashSet<string>();

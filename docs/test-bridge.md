@@ -25,14 +25,14 @@ The pieces:
 
 ## Transport
 
-All bodies are UTF-8 JSON. Every reply has `ok`. A failed call has `ok: false` and `error` (one sentence a person can act on).
+All bodies are UTF-8 JSON. Every reply has `ok` and, next to it, `session`: 8 hex characters the bridge picks at random each time it starts. A different `session` means the game or the mod restarted, and nothing a client knew from before (operation numbers, event numbers, state) holds. A failed call has `ok: false` and `error` (one sentence a person can act on).
 
 ### `GET /health`
 
 Answered on the HTTP thread from values the main thread refreshes every frame, so it works while the game loads.
 
 ```json
-{ "ok": true, "mod_version": "0.9.10", "bridge_version": 1, "scene": "menu|loading|city", "save": "FT bridge", "day": 3, "time": "14:05", "paused": false, "frame": 123456, "load": { "name": "FT bridge", "status": "pending|done|failed" } }
+{ "ok": true, "session": "3f9a1c07", "mod_version": "0.9.10", "bridge_version": 1, "scene": "menu|loading|city", "save": "FT bridge", "day": 3, "time": "14:05", "paused": false, "frame": 123456, "load": { "name": "FT bridge", "status": "pending|done|failed" } }
 ```
 
 ### `POST /call`
@@ -43,7 +43,7 @@ Answered on the HTTP thread from values the main thread refreshes every frame, s
 
 Runs on the Unity main thread, one call after another. The HTTP thread waits up to `timeout_s` (default 10, an `args` field) for the result; past that the reply is `ok: false, error: "timed out on the main thread; …"` and the command still finishes in the game. Reply: `{ "ok": true, "op": 17, "result": { … } }`, or `{ "ok": false, "op": 17, "error": "…" }`.
 
-Every call gets an operation number `op`. `{ "cmd": "op", "args": { "id": 17 } }` answers at once, whatever the main thread is doing, with `{ "ok": true, "result": { "id": 17, "cmd": "save", "status": "pending|done|failed", "result": { … }, "error": "…" } }` (`result` only when done, `error` only when failed). After a timeout, ask this instead of sending the call again. The bridge keeps the last 500 operations.
+Every call gets an operation number `op`. `{ "cmd": "op", "args": { "id": 17 } }` answers at once, whatever the main thread is doing, with `{ "ok": true, "result": { "id": 17, "cmd": "save", "session": "3f9a1c07", "status": "pending|done|failed", "result": { … }, "error": "…" } }` (`result` only when done, `error` only when failed). After a timeout, ask this instead of sending the call again. The bridge keeps the last 500 operations.
 
 Each request is served on its own thread, so `/health`, `/events` and `op` answer while a `/call` waits.
 
@@ -140,7 +140,7 @@ Fields the game side can't fill yet are `null`, never left out, so scenarios can
 
 Built 12 October 2026 in `unity/FoodTrucks/Scripts/` (`Notices.cs`, `TestBridge*.cs`). Not yet run in game; every game call below comes from the 1.0 decompile, and the ones to check first are listed in CHECKS.md, "Test bridge". Where the build differs from the contract above, this section wins.
 
-**Startup.** One line at the mod's initialisation load: `Test bridge: listening on http://127.0.0.1:8322/.` or `Test bridge: off (the game was started without -foodtrucks-test).` A taken port logs `Test bridge: could not listen on 127.0.0.1:8322 (…); … The bridge is off.` With the flag the bridge also sets `Application.runInBackground`, so the game keeps running when its window loses the focus. `Test bridge: stopped.` when the mod unloads.
+**Startup.** One line at the mod's initialisation load: `Test bridge: listening on http://127.0.0.1:8322/ (session 3f9a1c07).` or `Test bridge: off (the game was started without -foodtrucks-test).` A taken port logs `Test bridge: could not listen on 127.0.0.1:8322 (…); … The bridge is off.` With the flag the bridge also sets `Application.runInBackground`, so the game keeps running when its window loses the focus. `Test bridge: stopped.` when the mod unloads.
 
 **Notice log.** Every notice the mod shows is a `Notice: <text>` line and every text it sends a `Phone: <contact>: <text>` line, with the text resolved as the game shows it (`LocalizorManager.Localize(key, data)`). A key the game has no text for is logged as `<key> {name=value, …}`. The player's own line in a call (the commissary order read-back) is `Phone: <contact>: [player] <text>`. What the player sees is unchanged.
 
@@ -150,7 +150,7 @@ Built 12 October 2026 in `unity/FoodTrucks/Scripts/` (`Notices.cs`, `TestBridge*
 
 **`/events`.** `since` is the first number wanted: the reply has the events numbered `since` and later, and `next` is the number after the newest. Numbers start at 1. The mod's own error lines arrive once, as `error`, not again as `unity_error`.
 
-**Unload.** When the mod unloads, the bridge stops taking calls, fails every queued and pending call with `the bridge stopped` (a shot's camera and texture are released), and clears its operations, events, run_until and load status, so a start after the mod is enabled again begins clean.
+**Unload.** Taking a call and stopping share one lock, and each queued call carries the bridge generation it was taken under; a stop moves to the next generation, and the main thread fails any call from an earlier one with `the bridge stopped` instead of running it. When the mod unloads, the bridge stops taking calls, fails every queued and pending call with `the bridge stopped` (a shot's camera and texture are released), and clears its operations, events, run_until and load status, so a start after the mod is enabled again begins clean.
 
 **Error lines.** Every line the mod logs through `Log.Error` starts `ERROR: ` (once), after the game's `[Mod:Food Trucks]` prefix; the `error` events carry the same text.
 
@@ -158,7 +158,7 @@ Built 12 October 2026 in `unity/FoodTrucks/Scripts/` (`Notices.cs`, `TestBridge*
 
 **`/call` that finish later.** `save` (until the file is written), `teleport` of the player (until the move out of a building or vehicle ends) and `shoot` (8 frames) answer when they finish, within `timeout_s`. Past it the reply is `timed out on the main thread` and the work still finishes.
 
-**`time`.** `speed` multiplies the player's own game speed from Options (`GameManager.SetMinutesMultiplier`), from above 0 to 60; 1 is normal play. `speed` alone also unpauses. `run_until` takes `day` as a number or `"+N"` (days from today; default today) and `time` as `"HH:MM"`; it runs the clock at `speed` (default 1), checks every frame, and at the time pauses (the game's own pause, `SetPlayerPause`) and sets the speed back to 1. With the bridge on, a Harmony prefix on `GameManager.RunMainGameTick` (logged `Patch GameManager.RunMainGameTick(Single), test bridge: Active.`) keeps any step of the clock from going past the target minute, so it stops on that minute (its hour's events included, for a target on the hour). `state.clock.run_until` is the target while it runs; `state.clock.arrived_at` is where it stopped ("day D HH:MM") until the next `time` call. Anything that unpauses is refused while a screen holds the clock (the phone, the map, a call, an activity, a menu) or a time skip runs. `state.clock.speed` reads the game's multiplier back.
+**`time`.** `speed` multiplies the player's own game speed from Options (`GameManager.SetMinutesMultiplier`), from above 0 to 60; 1 is normal play. `speed` alone also unpauses. `run_until` takes `day` as a number or `"+N"` (days from today; default today) and `time` as `"HH:MM"`; it runs the clock at `speed` (default 1), checks every frame, and at the time pauses (the game's own pause, `SetPlayerPause`) and sets the speed back to 1. With the bridge on, a Harmony prefix on `GameManager.RunMainGameTick` (logged `Patch GameManager.RunMainGameTick(Single), test bridge run_until: Active.`) keeps any step of the clock from going past the target minute, so it stops on that minute (its hour's events included, for a target on the hour). `state.clock.run_until` is the target while it runs; `state.clock.arrived_at` is where it stopped ("day D HH:MM") until the next `time` call. Anything that unpauses is refused while a screen holds the clock (the phone, the map, a call, an activity, a menu) or a time skip runs. `state.clock.speed` reads the game's multiplier back.
 
 **`money`.** Writes the balance directly. The top bar follows on its next update.
 
@@ -170,7 +170,7 @@ Built 12 October 2026 in `unity/FoodTrucks/Scripts/` (`Notices.cs`, `TestBridge*
 
 **`shoot`.** The camera copies the game camera's settings and HDRP camera data, renders 8 frames into its own texture, then the PNG is written and the camera removed. `fov` defaults to 60. Vehicle poses use the truck's hatch (on its right, at the player's place behind it) or the cart's queue side; `bay-pavement` stands 6 m from the bay on its pavement side, `bay-road` 15 m along and 3 m towards the road; `door` stands 6 m out from the entrance nearest the bay.
 
-**`save`.** `GameManager.SaveGame(name)`, as the pause menu's Save. The reply comes when the game's save threads are done, and only if the save worked: no `Save game serialization failed` line, a `Compressed to` line, and the file in the character's folder written since the call and not empty. Reply `{ "name", "path", "bytes" }`.
+**`save`.** `GameManager.SaveGame(name)`, as the pause menu's Save. The reply comes when the game's save threads are done, and only if the save worked. With the bridge on, finalizers on `SaveGameSerializationHelper.SerializeJsonData`, `SerializeBinaryData` and `CompressBinaryData` (logged `Patch SaveGameSerializationHelper.…, test bridge save: Active.`) record what each returned for this save's paths (the game's temp file and the save file): both must return true. Any of the game's failure lines (`Save game serialization failed`, `SaveGame serialization failed`, `SaveGame compression failed`) also fails it, and so does a file in the character's folder that is missing, older than the call or empty. If a finalizer isn't active, the lines and the file decide. Reply `{ "name", "path", "bytes" }`.
 
 **`load`.** From the city it is refused unless the loaded save's name starts with FT too, since leaving skips the game's unsaved-changes question. A second load while one is pending is refused. Progress is in `state.load` and `/health`'s `load`: `pending` from the call, `done` once the city is up with that save and the mod has attached to it since the call (so reloading the same name doesn't count the old city), `failed` with `error` when the game reports a broken save or nothing arrives within 300 seconds. Log lines `Test bridge: load '<name>' done: day D, the mod's save data attached.` or `Test bridge: load '<name>' failed: ….` Finds the newest save of that name in the current version's folder. From the main menu it runs what the Load screen's button runs (`TransitionToSave` then `LoadScene.LoadTransitionToSave`) without its two questions (a save never played with mods, a different mod list). From the city it goes to the main menu first as the pause menu's Main menu does (`LoadScene.LoadMainMenuFromCity`, without asking about unsaved changes) and loads from there.
 

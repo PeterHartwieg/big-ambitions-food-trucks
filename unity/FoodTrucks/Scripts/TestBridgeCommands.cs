@@ -310,45 +310,82 @@ namespace FoodTrucks
 
         private const float SaveSeconds = 60f;
 
-        // What the game's save logged: serialisation runs in the call, compression on a thread of its own.
+        // The bridge's save in progress: the game's serialisation and compression results for its paths, from the
+        // finalizers on SaveGameSerializationHelper (bridge only), and the failure lines the game logs, as a fallback.
         private sealed class SaveWatch
         {
-            public volatile bool SerializeFailed;
-            public volatile bool Compressed;
+            public string TempPath = "";
+            public string OutputPath = "";
+            // Null until the method ran for this save's path.
+            public volatile object? Serialized;
+            public volatile object? Compressed;
+            public volatile bool FailureLogged;
 
             public void OnLog(string condition, string stackTrace, LogType type)
             {
-                if (condition.StartsWith("Save game serialization failed", StringComparison.Ordinal)) SerializeFailed = true;
-                else if (condition.StartsWith("Compressed to ", StringComparison.Ordinal)) Compressed = true;
+                // "Save game serialization failed" (SaveGameManager), "SaveGame serialization failed" and "SaveGame compression
+                // failed" (SaveGameSerializationHelper, which returns false and lets compression run anyway).
+                if (condition.StartsWith("Save game serialization failed", StringComparison.Ordinal) ||
+                    condition.StartsWith("SaveGame serialization failed", StringComparison.Ordinal) ||
+                    condition.StartsWith("SaveGame compression failed", StringComparison.Ordinal))
+                    FailureLogged = true;
             }
         }
 
-        // The save's real outcome: the game's serialisation and compression lines (SaveGameManager.SerializeSaveGame,
-        // CompressSaveGame), then the file itself, written since the call and not empty.
+        private static volatile SaveWatch? saving;
+        // How many of the three save patches are active; with all three the outcome comes from their results.
+        internal static int SaveHooks;
+
+        internal static Exception? SerializeFinalizer(string path, bool __result, Exception? __exception)
+        {
+            var watch = saving;
+            if (watch != null && SamePath(path, watch.TempPath)) watch.Serialized = __exception == null && __result;
+            return __exception;
+        }
+
+        internal static Exception? CompressFinalizer(string path, string outputPath, bool __result, Exception? __exception)
+        {
+            var watch = saving;
+            if (watch != null && SamePath(outputPath, watch.OutputPath)) watch.Compressed = __exception == null && __result;
+            return __exception;
+        }
+
+        private static bool SamePath(string? a, string b) =>
+            a != null && string.Equals(System.IO.Path.GetFullPath(a), System.IO.Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+
+        // The save's real outcome: with the bridge's patches, the game's serialise and compress both returned true for
+        // this save's paths; then the file itself, written since the call and not empty.
         private static object Save(JObject args)
         {
             var name = Need(args, "name", "the save's name");
             if (!IsFt(name)) throw new BridgeError($"The bridge saves only under names that start with FT, not '{name}'.");
-            if (SaveGameManager.SavingGameInProgress) throw new BridgeError("A save is already being written; try again in a moment.");
+            if (SaveGameManager.SavingGameInProgress || saving != null) throw new BridgeError("A save is already being written; try again in a moment.");
+            var game = SaveGameManager.Current;
             var started = DateTime.UtcNow.AddSeconds(-2);
-            var watch = new SaveWatch();
+            // The paths SaveGameManager.Save uses: the temp file it serialises to, the save it compresses into.
+            var path = System.IO.Path.Combine(SaveGamePathHelper.CurrentVersionFolderPath(), game.characterId,
+                Blueprints.FileSystemHelper.MakeValidFilename(name) + "." + (InstanceBehavior<GameManager>.Instance.useSaveGameTypeJson ? "json" : "hsg"));
+            var watch = new SaveWatch { TempPath = SaveGamePathHelper.GetTempSavePath(), OutputPath = path };
+            void Unwatch()
+            {
+                Application.logMessageReceivedThreaded -= watch.OnLog;
+                if (ReferenceEquals(saving, watch)) saving = null;
+            }
+            saving = watch;
             Application.logMessageReceivedThreaded += watch.OnLog;
             bool accepted;
             try { accepted = InstanceBehavior<GameManager>.Instance.SaveGame(name); }
             catch
             {
-                Application.logMessageReceivedThreaded -= watch.OnLog;
+                Unwatch();
                 throw;
             }
             if (!accepted)
             {
-                Application.logMessageReceivedThreaded -= watch.OnLog;
+                Unwatch();
                 throw new BridgeError("The game refused to save here (inside the interior designer, placing an item, at school or on the casino boat?).");
             }
-            var game = SaveGameManager.Current;
             var saved = game.SaveGameName;
-            var path = System.IO.Path.Combine(SaveGamePathHelper.CurrentVersionFolderPath(), game.characterId,
-                saved + "." + (InstanceBehavior<GameManager>.Instance.useSaveGameTypeJson ? "json" : "hsg"));
             Log.Info($"Test bridge: saving as '{saved}' ({path}).");
             var deadline = UnityEngine.Time.realtimeSinceStartup + SaveSeconds;
             return new Deferred(() =>
@@ -356,19 +393,25 @@ namespace FoodTrucks
                 if (SaveGameManager.SavingGameInProgress)
                 {
                     if (UnityEngine.Time.realtimeSinceStartup <= deadline) return null;
-                    Application.logMessageReceivedThreaded -= watch.OnLog;
+                    Unwatch();
                     throw new BridgeError($"The save didn't finish within {SaveSeconds:F0} seconds.");
                 }
-                Application.logMessageReceivedThreaded -= watch.OnLog;
-                if (watch.SerializeFailed) throw new BridgeError("The game's save failed while writing the city (see Player.log: Save game serialization failed).");
-                if (!watch.Compressed) throw new BridgeError("The game's save failed while compressing (no \"Compressed to\" line).");
+                Unwatch();
+                if (SaveHooks == 3)
+                {
+                    if (!(watch.Serialized is bool serialized)) throw new BridgeError("The game's save didn't serialise the city for this save.");
+                    if (!serialized) throw new BridgeError("The game's save failed while writing the city (SaveGame serialization failed; see Player.log).");
+                    if (!(watch.Compressed is bool compressed)) throw new BridgeError($"The game's save didn't compress into {path}.");
+                    if (!compressed) throw new BridgeError("The game's save failed while compressing (see Player.log).");
+                }
+                if (watch.FailureLogged) throw new BridgeError("The game logged a save failure (see Player.log).");
                 var file = new System.IO.FileInfo(path);
                 if (!file.Exists) throw new BridgeError($"The save file isn't there: {path}.");
                 if (file.LastWriteTimeUtc < started) throw new BridgeError($"The save file wasn't written by this save: {path}.");
                 if (file.Length == 0) throw new BridgeError($"The save file is empty: {path}.");
                 Log.Info($"Test bridge: saved '{saved}', {file.Length} bytes.");
                 return new JObject { ["name"] = saved, ["path"] = path, ["bytes"] = file.Length };
-            }, () => Application.logMessageReceivedThreaded -= watch.OnLog);
+            }, Unwatch);
         }
 
         private static JToken Load(JObject args)
@@ -441,6 +484,8 @@ namespace FoodTrucks
             LoadStatus = null;
             loadError = null;
             characterChecks.Clear();
+            saving = null;
+            SaveHooks = 0;
             TestBridgeUi.Forget();
         }
 

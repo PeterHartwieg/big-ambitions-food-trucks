@@ -108,6 +108,9 @@ namespace FoodTrucks
 
         private static void Write(HttpListenerContext context, int status, JObject reply)
         {
+            // The bridge's session, next to ok in every reply.
+            var ok = reply.Property("ok");
+            if (ok != null && reply.Property("session") == null) ok.AddAfterSelf(new JProperty("session", TestBridge.Session));
             var bytes = Encoding.UTF8.GetBytes(reply.ToString(Formatting.None));
             var response = context.Response;
             response.StatusCode = status;

@@ -157,11 +157,25 @@ namespace FoodTrucks
                 typeof(CargoLimit), prefix: nameof(CargoLimit.MoveEquipmentFirstPrefix), postfix: nameof(CargoLimit.MoveEquipmentFirstPostfix));
         }
 
-        // The test bridge's run_until: with -foodtrucks-test only, so the game's tick is untouched otherwise. First, so the
-        // mod's own tick prefix sees the clamped step.
+        // The test bridge's patches, with -foodtrucks-test only, so the game is untouched otherwise. run_until: a prefix on
+        // the game's tick, first, so the mod's own tick prefix sees the clamped step. save: the real outcome of the game's
+        // serialisation and compression for the bridge's save.
         public static void ApplyTestBridge()
         {
-            const string name = "GameManager.RunMainGameTick(Single), test bridge";
+            PatchBridge(typeof(GameManager), "RunMainGameTick", new[] { typeof(float) }, "run_until",
+                prefix: nameof(TestBridgeCommands.ClampTickPrefix), first: true);
+            var helper = typeof(SaveGameSerializationHelper);
+            PatchBridge(helper, "SerializeJsonData", new[] { typeof(string), typeof(GameInstance) }, "save",
+                finalizer: nameof(TestBridgeCommands.SerializeFinalizer));
+            PatchBridge(helper, "SerializeBinaryData", new[] { typeof(string), typeof(GameInstance), typeof(bool) }, "save",
+                finalizer: nameof(TestBridgeCommands.SerializeFinalizer));
+            PatchBridge(helper, "CompressBinaryData", new[] { typeof(string), typeof(string) }, "save",
+                finalizer: nameof(TestBridgeCommands.CompressFinalizer));
+        }
+
+        private static void PatchBridge(Type type, string method, Type[] args, string what, string? prefix = null, string? finalizer = null, bool first = false)
+        {
+            var name = $"{type.Name}.{method}({string.Join(", ", args.Select(a => a.Name))}), test bridge {what}";
             if (harmony == null)
             {
                 Log.Error($"Patch {name}: Not active, Harmony isn't set up.");
@@ -169,14 +183,17 @@ namespace FoodTrucks
             }
             try
             {
-                var original = AccessTools.Method(typeof(GameManager), "RunMainGameTick", new[] { typeof(float) });
+                var original = AccessTools.Method(type, method, args);
                 if (original == null)
                 {
                     Log.Error($"Patch {name}: Not active, method not found.");
                     return;
                 }
-                harmony.Patch(original, prefix: new HarmonyMethod(typeof(TestBridgeCommands), nameof(TestBridgeCommands.ClampTickPrefix)) { priority = HarmonyLib.Priority.First });
+                HarmonyMethod? Handler(string? handler) => handler == null ? null
+                    : new HarmonyMethod(typeof(TestBridgeCommands), handler) { priority = first ? HarmonyLib.Priority.First : HarmonyLib.Priority.Normal };
+                harmony.Patch(original, prefix: Handler(prefix), finalizer: Handler(finalizer));
                 Log.Info($"Patch {name}: Active.");
+                if (what == "save") TestBridgeCommands.SaveHooks++;
             }
             catch (Exception ex)
             {
