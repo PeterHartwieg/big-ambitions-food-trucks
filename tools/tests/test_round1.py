@@ -147,13 +147,13 @@ class ReviewParityTests(unittest.TestCase):
 class EventBoundaryTests(unittest.TestCase):
     class Scripted:
         def __init__(self): self.log=[]
-        def health(self): return {'ok':True,'scene':'city','save':'FT isolated'}
-        def events(self,since=0): return {'ok':True,'next':len(self.log)+1,'dropped':0,'events':[e for e in self.log if e['seq']>=since]}
+        def health(self): return {'ok':True,'session':'scripted','scene':'city','save':'FT isolated'}
+        def events(self,since=0): return {'ok':True,'session':'scripted','next':len(self.log)+1,'dropped':0,'events':[e for e in self.log if e['seq']>=since]}
         def call(self,cmd,args=None,timeout_s=10):
             if cmd=='initial_sales':
                 self.log += [{'seq':1,'text':'Sale: first visit'},{'seq':2,'text':'Sale: first visit again'}]
             elif cmd=='fresh_sale': self.log.append({'seq':len(self.log)+1,'text':'Sale: return visit'})
-            return {'ok':True,'op':1,'result':{'serving':'player'}}
+            return {'ok':True,'session':'scripted','op':1,'result':{'serving':'player'}}
 
     def run_steps(self,steps):
         with tempfile.TemporaryDirectory() as folder:
@@ -201,7 +201,7 @@ class MissingStateTests(unittest.TestCase):
             def __init__(self): super().__init__();self.reads=0
             def call(self,*args):
                 self.reads+=1
-                return {'ok':True,'op':self.reads,'result':{} if self.reads==1 else {'rows':[{'id':'truck','ready':True}]}}
+                return {'ok':True,'session':'scripted','op':self.reads,'result':{} if self.reads==1 else {'rows':[{'id':'truck','ready':True}]}}
         for kind in ('wait_state','expect'):
             bridge=Changing()
             step={kind:'rows[id=truck].ready','not_equals':None,'timeout_s':.02,'poll_s':.001} if kind=='wait_state' else {'expect':'state','path':'rows[id=truck].ready','not_equals':None}

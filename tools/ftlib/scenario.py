@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import time
 
-from .bridge import Bridge, BridgeError
+from .bridge import Bridge, BridgeError, check_session
 from .paths import CONDITIONS, lookup, meets, value, PathError
 from .shots import ROOT, contact_sheet, fetch_shot
 
@@ -104,18 +104,41 @@ class Runner:
         self.events = []
         self.current_note = ''
         self.coverage_lost = False
+        self.session = None
+        self.restarted = False
         self.cursor = 0
         self.boundaries = {}
         self.starts = {}
 
+    def invalidate(self):
+        self.restarted = self.coverage_lost = True
+        self.variables.clear()
+        self.last = None
+
+    def observe(self, reply):
+        try:
+            self.session = check_session(self.session, reply)
+        except BridgeError as exc:
+            if exc.restart: self.invalidate()
+            raise
+        return reply
+
+    def call(self, *args):
+        try:
+            return self.observe(self.bridge.call(*args))
+        except BridgeError as exc:
+            if exc.restart: self.invalidate()
+            elif exc.reply: self.observe(exc.reply)
+            raise
+
     def collect(self):
         try:
-            batch = self.bridge.events(self.cursor)
+            batch = self.observe(self.bridge.events(self.cursor))
         except BridgeError as exc:
-            if exc.restart: self.coverage_lost = True
+            if exc.restart: self.invalidate()
             raise
         if batch['next'] < self.cursor:
-            self.coverage_lost = True
+            self.invalidate()
             raise BridgeError(f"Bridge restarted: events.next {batch['next']} is below cursor {self.cursor}; rerun the scenario", restart=True)
         self.events.extend(batch['events'])
         self.cursor = batch['next']
@@ -137,7 +160,7 @@ class Runner:
         return obj
 
     def source(self, name):
-        return self.bridge.call('state')['result'] if name == 'state' else self.last
+        return self.call('state')['result'] if name == 'state' else self.last
 
     def pause_collect(self, seconds):
         deadline = time.monotonic() + seconds
@@ -151,11 +174,13 @@ class Runner:
         if kind == 'call':
             args = self.resolve(step.get('args', {}))
             try:
-                reply = self.bridge.call(step[kind], args, step.get('timeout_s', 10))
+                reply = self.call(step[kind], args, step.get('timeout_s', 10))
             except BridgeError as exc:
+                if exc.restart: raise
                 self.last = exc.reply or {'ok': False, 'error': str(exc)}
                 if str(exc)=='the bridge stopped':
                     self.coverage_lost=True
+                    self.collect()
                     raise
                 if step.get('expect_ok') is False and exc.remote:
                     return {'expected': 'ok: false', 'seen': self.last}
@@ -221,7 +246,7 @@ class Runner:
             return {'expected': f'no {step[kind]} between cursors {start} and {end}', 'seen': 'no match'}
         if kind == 'shoot':
             args = self.resolve(step[kind])
-            self.last = self.bridge.call('shoot', args)['result']
+            self.last = self.call('shoot', args)['result']
             shot = fetch_shot(self.last['path'], directory, args['name'] + '.png')
             return {'expected': args, 'seen': self.last, 'shot': str(shot), 'note': f"{args.get('pose', 'camera')} at {args.get('target', 'explicit coordinates')}. {self.current_note}"}
         if kind == 'sleep_s':
@@ -233,6 +258,7 @@ class Runner:
     def run(self, document, directory=None, keep_going=False):
         validate(document)
         self.__init__(self.bridge)
+        if hasattr(self.bridge, 'reset_session'): self.bridge.reset_session()
         name = re.sub(r'[^a-zA-Z0-9_.-]', '-', document['name'])
         directory = Path(directory or ROOT / 'build/scenarios' / f'{name}-{datetime.now():%Y%m%d-%H%M%S-%f}')
         directory.mkdir(parents=True, exist_ok=True)
@@ -240,13 +266,14 @@ class Runner:
                   'bridge_url': getattr(self.bridge, 'url', None),
                   'transport': getattr(self.bridge, 'transport', 'http')}
         try:
-            health = self.bridge.health()
+            health = self.observe(self.bridge.health())
             report['health'] = health
+            report['session'] = self.session
             for key, wanted in document.get('needs', {}).items():
                 actual = health.get('save' if key == 'save_prefix' else key)
                 if (key == 'save_prefix' and (not isinstance(actual, str) or not actual.startswith(wanted))) or (key != 'save_prefix' and actual != wanted):
                     raise ValueError(f'Needs {key} {wanted!r}, saw {actual!r}: load a matching FT test save in the city')
-            self.cursor = self.bridge.events(0)['next']
+            self.cursor = self.observe(self.bridge.events(0))['next']
             self.event_mark = self.cursor - 1
             self.boundaries[0] = self.cursor
             for index, step in enumerate(document['steps'], 1):
@@ -263,6 +290,9 @@ class Runner:
                         report['ok'] = False
                 report['steps'].append(record)
                 self.boundaries[index] = self.event_mark + 1 if record['kind'] == 'wait_event' and record['status'] == 'PASS' else self.cursor
+                if self.restarted:
+                    report['ok'] = False
+                    break
                 if record['status'] == 'FAIL' and not record['soft'] and not keep_going:
                     break
         except (BridgeError, ValueError, OSError) as exc:
@@ -270,7 +300,7 @@ class Runner:
             report['steps'].append({'step': 0, 'kind': 'needs', 'status': 'FAIL', 'soft': False,
                                     'expected': document.get('needs', {}), 'seen': str(exc)})
         try:
-            if self.boundaries:
+            if self.boundaries and not self.restarted:
                 self.collect()
         except BridgeError as exc:
             report['ok'] = False

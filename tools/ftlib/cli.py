@@ -79,7 +79,14 @@ def main():
         else:
             pattern = re.compile(args.grep) if args.grep else None
             while True:
-                reply = bridge.events(args.since)
+                try:
+                    reply = bridge.events(args.since)
+                except BridgeError as exc:
+                    if not args.follow or not exc.restart: raise
+                    print(f'{exc}; following the new session from event 1',file=sys.stderr,flush=True)
+                    bridge.reset_session()
+                    args.since = 1
+                    continue
                 if reply['dropped']:
                     print(f"Lost {reply['dropped']} events: restart with a fresh cursor", file=sys.stderr)
                 if pattern:

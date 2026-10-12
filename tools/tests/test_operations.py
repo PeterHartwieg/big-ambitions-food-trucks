@@ -36,12 +36,15 @@ class OperationTests(unittest.TestCase):
         reply=self.mock.operation('save',{'name':'FT pending','timeout_s':.1})
         self.assertFalse(reply['ok'])
         identifier=reply['op']
-        self.assertEqual(self.bridge.op(identifier)['result']['status'],'pending')
+        status=self.bridge.op(identifier)['result']
+        self.assertEqual(status['status'],'pending')
+        self.assertEqual(status['session'],reply['session'])
         self.assertTrue(self.bridge.health()['ok'])
         cursor=self.bridge.events()['next']
         self.mock.event('during pending call')
         self.assertEqual(self.bridge.events(cursor)['events'][0]['text'],'during pending call')
         recovered=self.bridge.recover(identifier,2)
+        self.assertEqual(recovered['session'],reply['session'])
         self.assertEqual(recovered['result']['name'],'FT pending')
         self.assertEqual(set(recovered['result']),{'name','path','bytes'})
 
@@ -81,8 +84,8 @@ class OperationTests(unittest.TestCase):
 
     def test_timeout_recovery_returns_eventual_failure(self):
         replies=[BridgeError('timed out on the main thread; the command goes on',remote=True,reply={'ok':False,'op':42}),
-                 {'ok':True,'result':{'id':42,'cmd':'save','status':'pending'}},
-                 {'ok':True,'result':{'id':42,'cmd':'save','status':'failed','error':'could not write the save'}}]
+                 {'ok':True,'result':{'session':self.mock.session,'id':42,'cmd':'save','status':'pending'}},
+                 {'ok':True,'result':{'session':self.mock.session,'id':42,'cmd':'save','status':'failed','error':'could not write the save'}}]
         with patch.object(self.bridge,'_request',side_effect=replies) as requests:
             with self.assertRaises(BridgeError) as raised: self.bridge.call('save',{'name':'FT broken'})
         self.assertTrue(raised.exception.remote)

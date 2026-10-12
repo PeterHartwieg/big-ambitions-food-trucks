@@ -294,8 +294,8 @@ class ScenarioTests(unittest.TestCase):
 
     def test_expected_error_does_not_hide_connection_failure(self):
         class BrokenBridge:
-            def health(self): return {'save':'FT unit','scene':'city'}
-            def events(self, since=0): return {'events':[],'next':0,'dropped':0}
+            def health(self): return {'session':'broken','save':'FT unit','scene':'city'}
+            def events(self, since=0): return {'session':'broken','events':[],'next':0,'dropped':0}
             def call(self, *args): raise BridgeError('No bridge: start the game')
         document={'name':'expected-failure','checks':'unit','steps':[{'call':'money','expect_ok':False}]}
         with tempfile.TemporaryDirectory() as folder:

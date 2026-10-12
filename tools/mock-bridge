@@ -14,6 +14,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 from urllib.parse import parse_qs, urlsplit
 import zlib
 
@@ -75,6 +76,7 @@ class Mock:
         self.operations = {}
         self.operation_waiters = {}
         self.stopped = False
+        self.session = uuid.uuid4().hex
         self.lifecycle = 0
         self.next_op = 1
         self.operation_delays = {}
@@ -152,9 +154,14 @@ class Mock:
             folder=self.shots/'saves'/re.sub(r'[^A-Za-z0-9._ -]','_',self.character)
             path=folder/(re.sub(r'[^A-Za-z0-9._ -]','_',name)+'.hsg')
             self.event(f"Test bridge: saving as '{name}' ({path}).")
+            serialization_failed=self.save_failure=='serialization_then_compression'
             try:
                 if self.save_failure=='serialization': raise ValueError('mock serialization failure')
-                data=json.dumps(self.state,allow_nan=False).encode()
+                if serialization_failed:
+                    self.event('SaveGame serialization failed: mock failure','unity_error')
+                    data=b'{"incomplete":'
+                else:
+                    data=json.dumps(self.state,allow_nan=False).encode()
             except (ValueError,TypeError):
                 self.event('Save game serialization failed: mock failure','unity_error')
                 raise ValueError("The game's save failed while writing the city (see Player.log: Save game serialization failed).")
@@ -165,6 +172,8 @@ class Mock:
                 path.write_bytes(packed)
             except (OSError,ValueError,zlib.error):
                 raise ValueError('The game\'s save failed while compressing (no "Compressed to" line).')
+            if serialization_failed:
+                raise ValueError("The game's save failed while writing the city (see Player.log: Save game serialization failed).")
             if not path.is_file(): raise ValueError(f"The save file isn't there: {path}.")
             if path.stat().st_mtime < started: raise ValueError(f"The save file wasn't written by this save: {path}.")
             size=path.stat().st_size
@@ -267,19 +276,21 @@ class Mock:
                                                 'amount':round(amount,2),'day':day,'time':self.state['clock']['time']})
 
     def operation(self, cmd, args):
-        if self.stopped: return {'ok':False,'error':'the bridge stopped'}
+        if self.stopped: return {'ok':False,'session':self.session,'error':'the bridge stopped'}
         if cmd=='op':
             identifier=num(args,'id')
-            if identifier is None: return {'ok':False,'error':'op needs "id": the number a /call reply gave as "op".'}
+            if identifier is None: return {'ok':False,'session':self.session,'error':'op needs "id": the number a /call reply gave as "op".'}
             with self.ops_lock:
+                if self.stopped: return {'ok':False,'session':self.session,'error':'the bridge stopped'}
                 op=self.operations.get(int(identifier))
-                if op is None: return {'ok':False,'error':f'No operation {identifier:g} (the bridge keeps the last 500).'}
-                return {'ok':True,'result':copy.deepcopy(op)}
+                if op is None: return {'ok':False,'session':self.session,'error':f'No operation {identifier:g} (the bridge keeps the last 500).'}
+                return {'ok':True,'session':self.session,'result':copy.deepcopy(op)}
         with self.ops_lock:
-            if self.stopped: return {'ok':False,'error':'the bridge stopped'}
+            if self.stopped: return {'ok':False,'session':self.session,'error':'the bridge stopped'}
             identifier=self.next_op
             self.next_op+=1
-            op={'id':identifier,'cmd':cmd,'status':'pending'}
+            session=self.session
+            op={'id':identifier,'cmd':cmd,'status':'pending','session':session}
             self.operations[identifier]=op
             finished=threading.Event()
             files=[]
@@ -306,9 +317,9 @@ class Mock:
                 finished.set()
         threading.Thread(target=work,daemon=True).start()
         if not finished.wait(min(600,max(1,num(args,'timeout_s') if num(args,'timeout_s') is not None else 10))):
-            return {'ok':False,'op':identifier,'error':f'timed out on the main thread; the command goes on: ask {{"cmd": "op", "args": {{"id": {identifier}}}}} for its outcome'}
+            return {'ok':False,'session':session,'op':identifier,'error':f'timed out on the main thread; the command goes on: ask {{"cmd": "op", "args": {{"id": {identifier}}}}} for its outcome'}
         with self.ops_lock:
-            return {'ok':op['status']=='done','op':identifier, **({'result':copy.deepcopy(op['result'])} if op['status']=='done' else {'error':op['error']})}
+            return {'ok':op['status']=='done','session':session,'op':identifier, **({'result':copy.deepcopy(op['result'])} if op['status']=='done' else {'error':op['error']})}
 
     def unload(self):
         with self.lock:
@@ -336,7 +347,10 @@ class Mock:
             self.confirmation_open=False
 
     def start_bridge(self):
-        with self.lock: self.stopped=False
+        with self.lock:
+            with self.ops_lock:
+                self.session=uuid.uuid4().hex
+                self.stopped=False
 
     def serving(self, v):
         player=self.state['player']
@@ -375,14 +389,14 @@ class Mock:
     def health(self):
         c = self.state['clock'] if self.state['scene'] == 'city' else {}
         if self.stopped:
-            return dict(ok=True,mod_version='0.9.10',bridge_version=1,scene='menu',save=None,day=None,time=None,paused=None,frame=0,load=None)
-        return dict(ok=True, mod_version='0.9.10', bridge_version=1, scene=self.state['scene'],
+            return dict(ok=True,session=self.session,mod_version='0.9.10',bridge_version=1,scene='menu',save=None,day=None,time=None,paused=None,frame=0,load=None)
+        return dict(ok=True, session=self.session, mod_version='0.9.10', bridge_version=1, scene=self.state['scene'],
                     save=self.state['save'], day=c.get('day'), time=c.get('time'), paused=c.get('paused'), frame=self.frame, load=None if self.load is None else {k:self.load[k] for k in ('name','status')})
 
     def events(self, since):
         since = max(since, 1)
         oldest = self.ring[0]['seq'] if self.ring else self.seq + 1
-        return {'ok': True, 'next': self.seq + 1, 'dropped': max(0, oldest - since),
+        return {'ok': True, 'session':self.session, 'next': self.seq + 1, 'dropped': max(0, oldest - since),
                 'events': [event for event in self.ring if event['seq'] >= since]}
 
     def vehicle(self, identifier=None):
@@ -1058,6 +1072,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def reply(self, data, status=200):
+        data.setdefault('session',self.server.mock.session)
         payload = json.dumps(data).encode()
         self.send_response(status)
         self.send_header('Content-Type','application/json; charset=utf-8')
