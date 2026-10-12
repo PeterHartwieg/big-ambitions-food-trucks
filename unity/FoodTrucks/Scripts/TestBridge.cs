@@ -121,7 +121,7 @@ namespace FoodTrucks
         private static long nextOp = 1;
 
         // Runs a /call on the main thread and waits up to timeoutSeconds for its reply. Runs on an HTTP thread.
-        internal static JObject Call(string cmd, JObject args, double timeoutSeconds)
+        internal static JObject Call(string cmd, JObject args, double timeoutSeconds, int generation)
         {
             if (cmd == "op") return OpStatus(args);
             if (TestBridgePump.Stopped) return Fail(StoppedText);
@@ -133,7 +133,7 @@ namespace FoodTrucks
                 opOrder.Enqueue(op.Id);
                 while (opOrder.Count > OpsKept) ops.Remove(opOrder.Dequeue());
             }
-            var task = TestBridgePump.Run(() => TestBridgeCommands.Run(cmd, args));
+            var task = TestBridgePump.Run(() => TestBridgeCommands.Run(cmd, args), generation);
             task.ContinueWith(t => Finish(op, t));
             bool finished;
             try { finished = task.Wait(TimeSpan.FromSeconds(timeoutSeconds)); }
@@ -270,6 +270,8 @@ namespace FoodTrucks
         // Set when the bridge stops: no new work is taken.
         internal static volatile bool Stopped;
 
+        internal static int Generation => Volatile.Read(ref generation);
+
         // The bridge starts (again): calls are taken under the current generation.
         internal static void Admit()
         {
@@ -288,12 +290,13 @@ namespace FoodTrucks
         // Calls in progress whose result comes later (Deferred), with their waiters.
         private static readonly List<(Deferred Work, TaskCompletionSource<JToken?> Done)> pending = new List<(Deferred, TaskCompletionSource<JToken?>)>();
 
-        internal static Task<JToken?> Run(Func<object?> work)
+        // `admitted`: the generation the request came in under; refused if that generation has ended since.
+        internal static Task<JToken?> Run(Func<object?> work, int admitted)
         {
             var done = new TaskCompletionSource<JToken?>(TaskCreationOptions.RunContinuationsAsynchronously);
             lock (admission)
             {
-                if (Stopped) done.SetException(new BridgeError(TestBridge.StoppedText));
+                if (Stopped || admitted != generation) done.SetException(new BridgeError(TestBridge.StoppedText));
                 else queue.Enqueue((work, done, generation));
             }
             return done.Task;

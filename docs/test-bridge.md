@@ -25,7 +25,7 @@ The pieces:
 
 ## Transport
 
-All bodies are UTF-8 JSON. Every reply has `ok` and, next to it, `session`: 8 hex characters the bridge picks at random each time it starts. A different `session` means the game or the mod restarted, and nothing a client knew from before (operation numbers, event numbers, state) holds. A failed call has `ok: false` and `error` (one sentence a person can act on).
+All bodies are UTF-8 JSON. Every reply has `ok` and, next to it, `session`: 8 hex characters the bridge picks at random each time it starts. A different `session` means the game or the mod restarted, and nothing a client knew from before (operation numbers, event numbers, state) holds. A `/call` body may carry `"expect_session": "<8 hex>"`; when it differs from the current session the call is refused before it is numbered or queued: `{ "ok": false, "session": "<current>", "error": "the bridge restarted (session <current>); reconnect first." }`. A failed call has `ok: false` and `error` (one sentence a person can act on).
 
 ### `GET /health`
 
@@ -150,7 +150,7 @@ Built 12 October 2026 in `unity/FoodTrucks/Scripts/` (`Notices.cs`, `TestBridge*
 
 **`/events`.** `since` is the first number wanted: the reply has the events numbered `since` and later, and `next` is the number after the newest. Numbers start at 1. The mod's own error lines arrive once, as `error`, not again as `unity_error`.
 
-**Unload.** Taking a call and stopping share one lock, and each queued call carries the bridge generation it was taken under; a stop moves to the next generation, and the main thread fails any call from an earlier one with `the bridge stopped` instead of running it. When the mod unloads, the bridge stops taking calls, fails every queued and pending call with `the bridge stopped` (a shot's camera and texture are released), and clears its operations, events, run_until and load status, so a start after the mod is enabled again begins clean.
+**Unload.** The HTTP server notes the bridge generation when it accepts a request. Taking a call into the main thread's queue and stopping share one lock: a call whose generation has ended by then (a stop, perhaps a start, came in between) is refused with `the bridge stopped`, and the main thread also fails any queued call from an earlier generation instead of running it. When the mod unloads, the bridge stops taking calls, fails every queued and pending call with `the bridge stopped` (a shot's camera and texture are released), and clears its operations, events, run_until and load status, so a start after the mod is enabled again begins clean.
 
 **Error lines.** Every line the mod logs through `Log.Error` starts `ERROR: ` (once), after the game's `[Mod:Food Trucks]` prefix; the `error` events carry the same text.
 

@@ -55,13 +55,16 @@ namespace FoodTrucks
                 HttpListenerContext context;
                 try { context = listener!.GetContext(); }
                 catch (Exception) { break; } // the listener was stopped
-                ThreadPool.QueueUserWorkItem(_ => Serve(context));
+                // The bridge generation this request came in under: a call that reaches the main thread's queue after a stop
+                // (and a start) is refused, never run under the new one.
+                var generation = TestBridgePump.Generation;
+                ThreadPool.QueueUserWorkItem(_ => Serve(context, generation));
             }
         }
 
-        private static void Serve(HttpListenerContext context)
+        private static void Serve(HttpListenerContext context, int generation)
         {
-            try { Handle(context); }
+            try { Handle(context, generation); }
             catch (Exception ex)
             {
                 try { Write(context, 500, TestBridge.Fail($"{ex.GetType().Name}: {ex.Message}")); }
@@ -69,7 +72,7 @@ namespace FoodTrucks
             }
         }
 
-        private static void Handle(HttpListenerContext context)
+        private static void Handle(HttpListenerContext context, int generation)
         {
             var request = context.Request;
             var path = request.Url.AbsolutePath.TrimEnd('/');
@@ -83,7 +86,7 @@ namespace FoodTrucks
                     Write(context, 200, TestBridgeEvents.Since(since));
                     return;
                 case "/call" when request.HttpMethod == "POST":
-                    Write(context, 200, Call(request));
+                    Write(context, 200, Call(request, generation));
                     return;
                 default:
                     Write(context, 404, TestBridge.Fail("Unknown endpoint: use GET /health, POST /call or GET /events?since=N."));
@@ -91,19 +94,24 @@ namespace FoodTrucks
             }
         }
 
-        private static JObject Call(HttpListenerRequest request)
+        private static JObject Call(HttpListenerRequest request, int generation)
         {
             string body;
             using (var reader = new StreamReader(request.InputStream, Encoding.UTF8)) body = reader.ReadToEnd();
             JObject call;
             try { call = JObject.Parse(body); }
             catch (JsonException ex) { return TestBridge.Fail("The body is not a JSON object: " + ex.Message); }
+            // A client that knew another session must reconnect first: nothing is queued or numbered for it.
+            var expect = call["expect_session"] is JValue e && e.Type == JTokenType.String ? e.Value<string>() : null;
+            var session = TestBridge.Session;
+            if (expect != null && expect != session)
+                return new JObject { ["ok"] = false, ["session"] = session, ["error"] = $"the bridge restarted (session {session}); reconnect first." };
             var cmd = call.Value<string>("cmd");
             if (string.IsNullOrEmpty(cmd)) return TestBridge.Fail("The body has no \"cmd\".");
             var args = call["args"] as JObject ?? new JObject();
             var timeout = 10.0;
             if (args["timeout_s"] is JValue t && (t.Type == JTokenType.Integer || t.Type == JTokenType.Float)) timeout = Math.Min(600.0, Math.Max(1.0, t.Value<double>()));
-            return TestBridge.Call(cmd!, args, timeout);
+            return TestBridge.Call(cmd!, args, timeout, generation);
         }
 
         private static void Write(HttpListenerContext context, int status, JObject reply)
