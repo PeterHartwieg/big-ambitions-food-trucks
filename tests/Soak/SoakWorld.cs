@@ -18,6 +18,7 @@ internal sealed partial class SoakWorld
 {
     private readonly int seed;
     private readonly Random random;
+    private readonly Random lagRandom;
     private readonly HireRunner runner = new(ShippedData.Rules.Fleet);
     private readonly HireSchedules schedules = new(ShippedData.Rules.Fleet);
     private readonly SalesSimulator simulator = new(ShippedData.Tables, ShippedData.Rules.Queue);
@@ -35,6 +36,9 @@ internal sealed partial class SoakWorld
     private readonly Dictionary<(string, int), (long Cents, int Sales)> crew = new();
     private readonly HashSet<(string, int)> paidCrew = new();
     private readonly HashSet<(string, long)> creditedHours = new();
+    private readonly Dictionary<string, (long From, long Until)> deferred = new();
+    private readonly Dictionary<(string, int), int> delayedPayDay = new();
+    private int heldAtMidnight, lateCrewSales, delayedPayouts;
 
     private sealed class Van
     {
@@ -42,6 +46,7 @@ internal sealed partial class SoakWorld
         public string? Bay;
         public bool Property;
         public double SoldThrough;
+        public long RoutedThrough;
         // Batches carry purchase prices just as game cargo entries do (not averaged).
         public List<Lot> Cargo = new();
     }
@@ -57,6 +62,7 @@ internal sealed partial class SoakWorld
     {
         this.seed = seed;
         random = new Random(seed);
+        lagRandom = new Random(seed ^ 0x51A7);
         foreach (var site in new[] { "a", "b" }) Core.Commissary.Commissaries.Unlock(state.Commissary, site);
         for (var i = 0; i < 1 + seed % 4; i++)
         {
@@ -79,7 +85,8 @@ internal sealed partial class SoakWorld
     }
 
     public string Coverage => $"saves={saves}, crew/player/route sales={crewSales}/{playerSales}/{routeSales}, " +
-        $"paid/refused deliveries={delivered.Count}/{refused.Count}, invalid plans={invalidPlans}, sleep days={slept}";
+        $"paid/refused deliveries={delivered.Count}/{refused.Count}, invalid plans={invalidPlans}, sleep days={slept}, " +
+        $"midnight holds/late crew sales/delayed payouts={heldAtMidnight}/{lateCrewSales}/{delayedPayouts}";
 
     public void Run(int days)
     {
@@ -88,12 +95,14 @@ internal sealed partial class SoakWorld
             for (var hour = 0; hour < days * 24; hour++)
             {
                 now = hour * 60L;
-                // The previous hour has sold completely before this hour's events (midnight included).
+                // Normally the preceding hour is complete; injected midnight lag catches up
+                // only after the closing day's payout attempt, before new player actions.
                 CloseHours(hour);
                 if (hour > 0 && hour % 24 == 0)
                 {
                     Payroll(Day - 1);
                     PayTakings(false);
+                    CatchUpDeferred();
                     CheckLedger(Day - 1);
                     SalesLedger.MarkInSummary(state, Day - 1);
                 }
@@ -101,12 +110,29 @@ internal sealed partial class SoakWorld
                 CommissaryTick();
                 if (Awake) PlayerAction();
                 var boundary = now + (hour == days * 24 - 1 ? random.Next(1, 60) : 60);
-                foreach (var id in vans.Keys) RunVehicle(state.Vehicles.Single(v => v.VehicleId == id), boundary);
+                foreach (var id in vans.Keys)
+                {
+                    var v = state.Vehicles.Single(v => v.VehicleId == id);
+                    if (hour % 24 == 23 && hour < (days - 2) * 24 && lagRandom.Next(3) == 0)
+                    {
+                        var start = now;
+                        RunVehicle(v, boundary - 15);
+                        v = state.Vehicles.Single(v => v.VehicleId == id); // a save may replace it
+                        if (v.IsOpen && v.Crew.Count > 0 && !(Awake && atWindow == id) &&
+                            state.CrewTakings.Any(t => t.VehicleId == id && t.Day == Day && t.Sales > 0))
+                            DeferLastMinutes(id, boundary - 15, boundary);
+                        else RunVehicle(v, boundary, boundary - 15);
+                        now = start;
+                    }
+                    else RunVehicle(v, boundary);
+                }
                 now = boundary;
                 CheckWorld();
             }
             // Stop at a random minute of the last day: uninstall must pay today's waiting sales too.
             Uninstall();
+            Require(heldAtMidnight == delayedPayDay.Count && delayedPayouts == delayedPayDay.Count,
+                "a deferred day was not held and then paid exactly once at a later midnight");
             Require(saves > 0 && crewSales > 0 && playerSales > 0 && routeSales > 0 && invalidPlans > 0 &&
                 slept > 0 && delivered.Count > 0 && refused.Count > 0,
                 "non-vacuous save, crew-sale and delivery coverage: " + Coverage);
@@ -214,11 +240,11 @@ internal sealed partial class SoakWorld
         invalidPlans++;
     }
 
-    private void RunVehicle(VehicleState v, long until)
+    private void RunVehicle(VehicleState v, long until, long? fromMinute = null)
     {
         var van = vans[v.VehicleId];
         var hourStart = now;
-        var t = now;
+        var t = fromMinute ?? now;
         var saveAt = random.Next(96) == 0 ? now + random.Next(1, 60) : -1;
         while (t < until)
         {
@@ -250,13 +276,14 @@ internal sealed partial class SoakWorld
                 { if (leg.Start > t) next = Math.Min(next, leg.Start); if (leg.End > t) next = Math.Min(next, leg.End); }
             if (v.Transit != null && v.Transit.ArrivesAt > t) next = Math.Min(next, v.Transit.ArrivesAt);
             if (saveAt > t) next = Math.Min(next, saveAt);
-            Advance(v, t, next);
+            Advance(v, t, next, GameDays.DayOf(hourStart));
             t = next;
             now = t;
             if (t == saveAt) { SaveLoad(); v = state.Vehicles.Single(x => x.VehicleId == v.VehicleId); }
         }
-        // Closed windows are sold-through too: they have no pending simulation.
-        van.SoldThrough = until;
+        // The route cursor and the open window's sales clock are separate, as in
+        // CartSelling.SoldThroughOf. Only Advance moves the open window's clock.
+        van.RoutedThrough = until;
         now = hourStart;
     }
 
@@ -282,7 +309,7 @@ internal sealed partial class SoakWorld
         if (atWindow == v.VehicleId) atWindow = null;
     }
 
-    private void Advance(VehicleState v, long from, long until)
+    private void Advance(VehicleState v, long from, long until, int liveDay)
     {
         var van = vans[v.VehicleId];
         if (!v.IsOpen || v.Service == null) return;
@@ -313,7 +340,7 @@ internal sealed partial class SoakWorld
                         $"hours={v.Schedule!.Stops[v.HireStop.Value].OpenAt}-{v.Schedule.Stops[v.HireStop.Value].CloseAt}");
                     routeSales++;
                 }
-                var day = GameDays.SaleDay(soldAt, GameDays.DayOf(until));
+                var day = GameDays.SaleDay(soldAt, liveDay);
                 Require(day == (int)(soldAt / 1440) + 1, "sale booked on wrong calendar day");
                 var price = 500L;
                 StreetSales.Record(state, v.VehicleId, day, price, 1);
@@ -325,6 +352,7 @@ internal sealed partial class SoakWorld
                 else
                 {
                     Require(!paidCrew.Contains((v.VehicleId, day)), "sale arrived after its day was paid");
+                    if (day < liveDay) lateCrewSales++;
                     CrewTakings.Accrue(state, v.VehicleId, day, price);
                     crew.TryGetValue((v.VehicleId, day), out var total);
                     crew[(v.VehicleId, day)] = (total.Cents + price, total.Sales + 1);
@@ -424,17 +452,75 @@ internal sealed partial class SoakWorld
 
     private void PayTakings(bool all)
     {
-        var due = all ? CrewTakings.All(state) : CrewTakings.Due(state, Day, id => vans[id].SoldThrough);
+        var due = all ? CrewTakings.All(state) : CrewTakings.Due(state, Day, SoldThroughOf);
+        if (!all)
+        {
+            // Payment deadlines are an independent oracle, set when lag is injected;
+            // do not derive the expected due set from Core's sold-through filter.
+            var expected = crew.Keys.Where(k => !paidCrew.Contains(k) && k.Item2 < Day &&
+                PaymentDay(k) <= Day).OrderBy(k => k.Item2).ThenBy(k => k.Item1, StringComparer.Ordinal);
+            Require(expected.SequenceEqual(due.Select(t => (t.VehicleId, t.Day))),
+                "sold-through gate paid a held day or withheld a completed day");
+            foreach (var key in delayedPayDay.Keys.Where(k => k.Item2 == Day - 1))
+            {
+                var taking = state.CrewTakings.Single(t => t.VehicleId == key.Item1 && t.Day == key.Item2);
+                Require(deferred.ContainsKey(key.Item1) && SoldThroughOf(key.Item1) < key.Item2 * 1440L &&
+                    !paidCrew.Contains(key) && crew[key] == (taking.Cents, taking.Sales),
+                    "the incomplete day must retain its entire taking at the first midnight");
+                heldAtMidnight++;
+                Note($"{key.Item1}: day {key.Item2} held at midnight; sold through {SoldThroughOf(key.Item1)}");
+            }
+        }
         foreach (var t in due)
         {
             var key = (t.VehicleId, t.Day);
             Require(crew.TryGetValue(key, out var expected) && expected == (t.Cents, t.Sales), "taking differs from crew sales");
-            Require(all || (now == t.Day * 1440L), "taking not paid at the midnight after its day");
+            Require(all || now == (PaymentDay(key) - 1) * 1440L,
+                "taking not paid at its expected midnight after catch-up");
             Require(paidCrew.Add(key), "crew taking paid twice");
+            if (delayedPayDay.ContainsKey(key))
+            {
+                Require(!all, "a deferred day reached uninstall before its later midnight payout");
+                delayedPayouts++;
+                Note($"{t.VehicleId}: held day {t.Day} paid once at midnight on day {Day}");
+            }
             Move(t.Cents, "crew payout", t.Day, $"{t.VehicleId}:{t.Day}");
             Require(CrewTakings.Settled(state, t), "settlement did not remove taking");
         }
-        Require(all ? state.CrewTakings.Count == 0 : state.CrewTakings.All(t => t.Day >= Day), "old crew taking left unpaid");
+        Require(all ? state.CrewTakings.Count == 0 : state.CrewTakings.All(t => t.Day >= Day ||
+            delayedPayDay.TryGetValue((t.VehicleId, t.Day), out var day) && day > Day), "old crew taking left unpaid");
+    }
+
+    private int PaymentDay((string, int) key) => delayedPayDay.TryGetValue(key, out var day) ? day : key.Item2 + 1;
+
+    private double SoldThroughOf(string id)
+    {
+        var v = state.Vehicles.Single(v => v.VehicleId == id);
+        var van = vans[id];
+        return Math.Min(v.IsOpen ? van.SoldThrough : double.PositiveInfinity, van.RoutedThrough);
+    }
+
+    private void DeferLastMinutes(string id, long from, long until)
+    {
+        var day = GameDays.DayOf(from);
+        Require(until == day * 1440L && SoldThroughOf(id) == from, "lag injection did not leave a genuine incomplete clock");
+        deferred.Add(id, (from, until));
+        delayedPayDay.Add((id, day), day + 2);
+        Note($"{id}: defer 23:45-midnight of day {day} until after its midnight payout attempt");
+    }
+
+    private void CatchUpDeferred()
+    {
+        foreach (var (id, lag) in deferred.ToList())
+        {
+            Require(now == lag.Until && !paidCrew.Contains((id, Day - 1)), "deferred day was paid before late sales");
+            Note($"{id}: catch up the last 15 minutes after midnight, retaining original sale day");
+            RunVehicle(state.Vehicles.Single(v => v.VehicleId == id), lag.Until, lag.From);
+            Require(SoldThroughOf(id) >= lag.Until, "late catch-up failed to pass the old day's boundary");
+            var taking = state.CrewTakings.Single(t => t.VehicleId == id && t.Day == Day - 1);
+            Require(crew[(id, taking.Day)] == (taking.Cents, taking.Sales), "late sales missing from the held day's taking");
+            deferred.Remove(id);
+        }
     }
 
     private void CheckLedger(int day)
