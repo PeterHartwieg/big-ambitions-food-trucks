@@ -85,7 +85,7 @@ crew.lastHour | must | Crew sales: .+?, day \d+ 23:00 hour: .+? | row 0.9.10/16
 order.iconFallback | count>=0 | Commissary order form: no icon Icon_.+? in the mod's bundle; .+? shows the game's icon\. | row 0.9.10/13
 bizman.build | must | (?m)^(?:\[Mod:FoodTrucks\] )?BizMan: vehicle page built from the warehouse driver row \([^\n]+\) and the logistics plan \([^\n]+; stop rows dragged by [^\n]+\); it sits in [^\n]+ \((?:laid out by its parent|sized by itself), (?:scrolling|no scroll view)\)\.$ | row bizman/1
 bizman.page | must | BizMan: vehicle page for truck .+?\. | row bizman/1
-bizman.noFallback | never | (?m)^(?:\[Mod:FoodTrucks\] )?(?:ERROR: )?BizMan vehicle page: [^\n]+ isn't where 1\.0 had it\.$ | row bizman/1
+bizman.noFallback | never | (?m)^(?:\[Mod:FoodTrucks\] )?(?:ERROR: )?BizMan vehicle page: [^\n]+ isn't where 1\.0 had it\. The vehicle panel's Hires button opens the old crew and route dialog instead\.$ | row bizman/1
 bizman.fallback | count>=0 | Hires: the BizMan vehicle page isn't available; the old crew and route dialog opens for .+?\. | row bizman/1
 bizman.crewAdded | must | Crew: .+? \(.+?\) on truck .+?\. | row bizman/2
 bizman.crewRemoved | must | Crew: .+? off truck .+? \(unassigned on the BizMan page\)\. | row bizman/2
