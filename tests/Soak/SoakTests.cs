@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using Xunit;
 using Xunit.Abstractions;
+using Xunit.Sdk;
 
 namespace FoodTrucks.Core.Tests.Soak;
 
@@ -33,8 +35,29 @@ public sealed class SoakTests
     public void TwoHundredSeedsFor365Days()
     {
         var watch = Stopwatch.StartNew();
-        for (var seed = 0; seed < 200; seed++) new SoakWorld(seed).Run(365);
-        output.WriteLine($"200 seeds × 365 days: {watch.Elapsed.TotalSeconds:F3}s");
+        var selection = Environment.GetEnvironmentVariable("FT_SOAK_SEED");
+        var seeds = Enumerable.Range(0, 200);
+        if (!string.IsNullOrEmpty(selection))
+        {
+            if (!int.TryParse(selection, out var selected) || selected < 0)
+                throw new XunitException("FT_SOAK_SEED must be a non-negative Int32 seed.");
+            seeds = new[] { selected };
+        }
+        var failures = new List<string>();
+        var count = 0;
+        foreach (var seed in seeds)
+        {
+            count++;
+            try { new SoakWorld(seed).Run(365); }
+            catch (Exception ex)
+            {
+                var failure = $"Long soak failed seed={seed}:\n{ex}";
+                output.WriteLine(failure);
+                failures.Add(failure);
+            }
+        }
+        output.WriteLine($"{count} seeds × 365 days: {watch.Elapsed.TotalSeconds:F3}s; failures={failures.Count}");
+        if (failures.Count > 0) throw new XunitException(string.Join("\n\n", failures));
     }
 }
 

@@ -179,6 +179,8 @@ internal sealed partial class SoakWorld
         var index = random.Next(v.Schedule.Stops.Count);
         var open = random.Next(48) * 30;
         var close = open + (random.Next(6) + 1) * 30;
+        var previous = v.Schedule.Stops[index];
+        Note($"{v.VehicleId}: edit stop {index} {previous.OpenAt}-{previous.CloseAt} to {open}-{close}; hire stop={v.HireStop}");
         var problem = RouteEditor.SetTimes(schedules, v, index, open, close);
         if (problem != ScheduleProblem.None) Require(before == codec.Serialize(state), "refused route edit mutated state");
         else HireRunner.Replan(v, now);
@@ -305,7 +307,10 @@ internal sealed partial class SoakWorld
                 if (v.HireStop != null)
                 {
                     var leg = HireRunner.Want(v, (long)soldAt);
-                    Require(leg != null && leg.Kind == LegKind.Open && leg.StopIndex == v.HireStop, "route sale outside stop hours");
+                    Require(RouteSaleAllowed(v, (long)soldAt),
+                        $"route sale outside stop hours; sold at {soldAt}, leg={leg?.Kind} stop={leg?.StopIndex} " +
+                        $"[{leg?.Start},{leg?.End}), hire stop={v.HireStop}, " +
+                        $"hours={v.Schedule!.Stops[v.HireStop.Value].OpenAt}-{v.Schedule.Stops[v.HireStop.Value].CloseAt}");
                     routeSales++;
                 }
                 var day = GameDays.SaleDay(soldAt, GameDays.DayOf(until));
@@ -330,6 +335,24 @@ internal sealed partial class SoakWorld
             if (result.SoldOut) { Close(v); break; }
             input.Stock = Stock(v);
         }
+    }
+
+    // HireRunner.Step keeps an already-open window at its stop during a replan's
+    // approach leg. That leg is a planning artefact, not an actual departure.
+    // Preserve the hours check: merely naming the same stop must not allow early sales.
+    internal static bool RouteSaleAllowed(VehicleState v, long minute)
+    {
+        if (!v.IsOpen || v.HireStop == null || v.Transit != null) return false;
+        var leg = HireRunner.Want(v, minute);
+        if (leg == null || leg.StopIndex != v.HireStop) return false;
+        if (leg.Kind == LegKind.Open) return true;
+        var plan = v.Shifts.Single(p => p.Legs.Contains(leg));
+        var opening = plan.Legs.FirstOrDefault(l => l.Kind == LegKind.Open &&
+            l.StopIndex == v.HireStop && l.End > minute);
+        if (opening == null) return false;
+        var starts = plan.Day < GameDays.DayOf(minute) ? opening.Start :
+            HireSchedules.Absolute(plan.Day, v.Schedule!.Stops[v.HireStop.Value].OpenAt);
+        return minute >= starts && minute < opening.End;
     }
 
     private long Draw(VehicleState v, string item)
