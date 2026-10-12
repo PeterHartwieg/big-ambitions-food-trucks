@@ -6,7 +6,7 @@ import time
 import urllib.error
 import urllib.request
 
-from .paths import lookup, meets
+from .paths import lookup, meets, PathError
 
 
 class BridgeError(RuntimeError):
@@ -75,10 +75,12 @@ class Bridge:
         arguments = dict(args or {})
         arguments.setdefault('timeout_s', timeout_s)
         limit = arguments['timeout_s']
-        if isinstance(limit, bool) or not isinstance(limit, (int, float)) or not math.isfinite(limit) or limit <= 0:
-            raise BridgeError('Invalid timeout_s: use a positive number of seconds')
+        if isinstance(limit, bool) or not isinstance(limit, (int, float)) or (isinstance(limit, float) and not math.isfinite(limit)):
+            raise BridgeError('Invalid timeout_s: use a finite number of seconds (clamped to 1..600)')
+        limit = min(600, max(1, limit))
+        arguments['timeout_s'] = limit
         try:
-            reply = self._request('/call', {'cmd': cmd, 'args': arguments}, max(.1, limit) + 2)
+            reply = self._request('/call', {'cmd': cmd, 'args': arguments}, limit + 2)
         except BridgeError as exc:
             if cmd != 'op' and exc.remote and exc.op is not None and str(exc).startswith('timed out on the main thread;'):
                 reply = self.recover(exc.op, recovery_s)
@@ -112,8 +114,14 @@ class Bridge:
     def wait_state(self, path, condition, timeout_s=30, poll_s=.1):
         deadline = time.monotonic() + timeout_s
         while True:
-            actual = lookup(self.call('state')['result'], path)
-            if meets(actual, condition):
+            state = self.call('state')['result']
+            try:
+                actual = lookup(state, path)
+                present = True
+            except PathError as exc:
+                actual = str(exc)
+                present = False
+            if present and meets(actual, condition):
                 return actual
             if time.monotonic() >= deadline:
                 raise BridgeError(f'State {path} stayed {actual!r}: expected {condition!r}; inspect tools/ft state')

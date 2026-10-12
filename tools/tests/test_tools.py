@@ -203,7 +203,7 @@ class BridgeTests(unittest.TestCase):
             mock.state['save']='Personal'
             self.assertIn('money',mock.call('state',{}))
             for cmd,args in [('money',{'set':0}),('debug',{'action':'spawn truck'}),('time',{'pause':True}),('ui',{'op':'click','id':1})]:
-                with self.subTest(cmd=cmd),self.assertRaisesRegex(ValueError,'FT save'):mock.call(cmd,args)
+                with self.subTest(cmd=cmd),self.assertRaisesRegex(ValueError,'FT city' if cmd=='ui' else 'FT save'):mock.call(cmd,args)
 
     def test_screenshot_png(self):
         shot=self.bridge.call('shoot',{'name':'png-test','pose':'door','target':'commissary:hells-kitchen','width':17,'height':16})['result']['path']
@@ -285,7 +285,7 @@ class ScenarioTests(unittest.TestCase):
         document={'name':'duplicate','checks':'unit','steps':[
             {'call':'console','args':{'line':'paid twice'}},
             {'call':'console','args':{'line':'paid twice'}},
-            {'wait_event':'paid twice'},
+            {'wait_event':'paid twice','after_step':0},
             {'no_event':'paid twice','from_step':3}]}
         with tempfile.TemporaryDirectory() as folder:
             report,_=Runner(self.session.bridge).run(document,folder)

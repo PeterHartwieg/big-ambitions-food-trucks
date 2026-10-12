@@ -78,6 +78,7 @@ class Mock:
         self.bay_status = {}
         self.load = None
         self.pending = []
+        self.walks = []
         self.last_ui = []
         self.activity_starting = False
         self.time_skip = False
@@ -91,6 +92,7 @@ class Mock:
         self.frame = 0
         self.stop = threading.Event()
         self.saves = {}
+        self.character = 'FT test character'
         self.reset('FT mock')
         self.store('FT mock')
         self.prepare_saves()
@@ -124,10 +126,11 @@ class Mock:
         self.activity_starting = False
         self.phone_texts = []
         self.pending = []
+        self.walks = []
 
     def store(self, name):
         self.saves[name] = copy.deepcopy({key: getattr(self, key) for key in
-            ('state', 'absolute', 'employees', 'selected', 'order_number', 'routes', 'takings', 'hours', 'phone_texts')})
+            ('state', 'character', 'absolute', 'employees', 'selected', 'order_number', 'routes', 'takings', 'hours', 'phone_texts')})
 
     def restore(self, name, emit=True):
         if name not in self.saves:
@@ -139,6 +142,7 @@ class Mock:
         self.state['clock'].update(run_until=None,arrived_at=arrived_at)
         self.dialog = 'closed'
         self.pending = []
+        self.walks = []
         self.state['player']['at_hatch']=None
         self.activity_starting=False
         self.state['notices_recent']=list(self.recent)
@@ -146,6 +150,7 @@ class Mock:
         if emit: self.event(f"Test bridge: loading '{name}' (Mock character, day {self.state['clock']['day']}).")
 
     def event(self, text, kind='log', day=None, clock=None):
+        if kind=='error' and not text.startswith('ERROR: '): text='ERROR: '+text
         self.seq += 1
         snapshot=self.state['clock'] if self.state['scene']=='city' else {}
         self.ring.append({'seq': self.seq, 'real': datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z'),
@@ -182,6 +187,11 @@ class Mock:
                     cart['pieces'] = [{'item':'hotdoggrill','units':40,'cap':40}, {'item':'coffeemachine','units':40,'cap':40}]
                     cart['stock'] = [{'item':'Hotdog','key':'ba:itemname_hotdog','amount':40}]
             self.store(name)
+        self.character='Shared mock character'
+        self.reset('FT shared character')
+        self.store('FT shared character')
+        self.reset('Non-FT mock')
+        self.store('Non-FT mock')
 
     def finish_load(self, name):
         self.restore(name, emit=False)
@@ -235,7 +245,7 @@ class Mock:
                 with self.ops_lock: op.update(status='failed',error=str(exc))
             finally: finished.set()
         threading.Thread(target=work,daemon=True).start()
-        if not finished.wait(max(.1,num(args,'timeout_s') or 10)):
+        if not finished.wait(min(600,max(1,num(args,'timeout_s') if num(args,'timeout_s') is not None else 10))):
             return {'ok':False,'op':identifier,'error':f'timed out on the main thread; the command goes on: ask {{"cmd": "op", "args": {{"id": {identifier}}}}} for its outcome'}
         with self.ops_lock:
             return {'ok':op['status']=='done','op':identifier, **({'result':copy.deepcopy(op['result'])} if op['status']=='done' else {'error':op['error']})}
@@ -255,7 +265,7 @@ class Mock:
             assigned={name for v in result['vehicles'] for name in v['crew']}
             result['employees']=[{k:e[k] for k in ('id','name','skill','satisfaction','wage')} for e in self.employees if e['name'] not in assigned]
             player=result['player']
-            player['activity']='driving' if player['in_vehicle'] and self.vehicle(player['in_vehicle'])['kind']=='truck' else 'pushing' if player['in_vehicle'] else 'starting' if self.activity_starting else 'at_hatch' if player['at_hatch'] else 'walking' if self.pending else 'on_foot'
+            player['activity']='driving' if player['in_vehicle'] and self.vehicle(player['in_vehicle'])['kind']=='truck' else 'pushing' if player['in_vehicle'] else 'starting' if self.activity_starting else 'at_hatch' if player['at_hatch'] else 'walking' if self.walks else 'on_foot'
             player['clock_held_by']=self.clock_held_by()
             result['commissary']['bays']=self.bays()
             result['clock']['speed']=round(result['clock']['speed'],2)
@@ -422,6 +432,13 @@ class Mock:
                         self.pending.remove((due,action))
                         action()
                 c = self.state['clock']
+                for due, action in list(self.walks):
+                    if c['paused']:
+                        self.walks.remove((due,action))
+                        self.walks.append((due+now-previous,action))
+                    elif now >= due:
+                        self.walks.remove((due,action))
+                        action()
                 if c['paused'] or self.state['scene']!='city':
                     credit = 0
                 else:
@@ -489,6 +506,8 @@ class Mock:
             current=next((b for b in self.buttons() if b['path']==entry['path'] and b['kind']==entry['kind']),None)
             if current is None:
                 raise ValueError(f"Entry {identifier} ({entry['text']}) is no longer on screen; list again.")
+            if current['text'] != entry['text']:
+                raise ValueError(f"the control with id {identifier} now reads '{current['text']}'; list again.")
         elif args.get('text') is not None:
             text = str(args['text'])
             self.last_ui = entries = self.buttons()
@@ -503,6 +522,8 @@ class Mock:
             current=entry
         else: raise ValueError('ui click needs "id" (from the last list) or "text".')
         text = current['text']
+        if re.search(r'(?:Save|Load|Delete|RemoveCharacter|Continue)(?:[ /]|$)',current['path'],re.I) or text.casefold() in ('save','save game','load','load game','delete','delete save','delete character','remove character','continue','overwrite'):
+            raise ValueError("ui click refuses the game's save and load controls; use the save and load commands.")
         if entry['kind']=='option':
             self.choice = text
             if self.dialog=='crew':
@@ -585,13 +606,13 @@ class Mock:
                 player['in_vehicle']=None
                 if v['kind']=='truck':
                     self.activity_starting=True
-                    self.pending.append((time.monotonic()+.05,lambda:self.at_hatch(v,'opened')))
+                    self.walks.append((time.monotonic()+.05,lambda:self.at_hatch(v,'opened')))
                 else: v.update(serving='player',hatch_side='right')
         elif op=='back_to_hatch':
-            if v['kind']!='truck' or not v['open'] or player['in_vehicle'] or player['carrying'] or player['at_hatch'] or self.pending:
+            if v['kind']!='truck' or not v['open'] or player['in_vehicle'] or player['carrying'] or player['at_hatch'] or self.walks:
                 raise ValueError("Back to the hatch isn't offered now: it needs an open truck and the player on foot, empty-handed and not at a hatch.")
             self.event(f"Truck window: back to the hatch of truck {v['id']}: walking to the rear door.")
-            self.pending.append((time.monotonic()+.05,lambda:self.at_hatch(v,'back to the hatch')))
+            self.walks.append((time.monotonic()+.05,lambda:self.at_hatch(v,'back to the hatch')))
         elif op=='step_out':
             if player['at_hatch']!=v['id']: raise ValueError(f"The player isn't at the hatch of {v['id']}.")
             player['at_hatch']=None
@@ -610,62 +631,69 @@ class Mock:
                 player.update(in_vehicle=v['id'],at_hatch=None,x=v['x'],y=v['y'],z=v['z'])
                 v.update(open=False,serving='nobody',queue=None)
             if ((player['x']-v['x'])**2+(player['z']-v['z'])**2)**.5>2.5:
-                self.pending.append((time.monotonic()+.05,arrive))
+                self.walks.append((time.monotonic()+.05,arrive))
             else: arrive()
         elif op=='exit':
             if self.state['clock']['paused']: raise ValueError("The game's Park button refused: paused, no parking here, or the panel isn't showing.")
             player['in_vehicle']=None
         elif op in ('rent_bay','restock'):
             c=v['commissary']
-            if not c or not c['in_bay']:
+            if not self.can_write:
+                self.event(LOCALE['foodtrucks:notification_data_readonly'],'notice')
+            elif not c or not c['in_bay']:
                 self.event(LOCALE['foodtrucks:notification_commissary_not_here'].format(vehicle=v['kind']),'notice')
-                raise ValueError('the Commissary button refused (see the notice)')
-            site=c['bay_site']
-            if op=='rent_bay':
-                if c['site']==site:
-                    offered='release, '+('restock' if any(s['site']==site and s['amount']>0 for s in self.state['commissary']['stock']) else 'nostock')+', order'
-                    raise ValueError(f'the Commissary button offers {offered} here, not rent or move')
-                self.state['commissary']['spaces']=[s for s in self.state['commissary']['spaces'] if s['vehicle']!=v['id']]+[{'site':site,'vehicle':v['id']}]
-                previous=c['site']
-                c['site']=site
-                monthly=TUNING['commissary']['rentPerMonthCents'][v['kind']]
-                charge=int(monthly*12/365+.5)/100
-                if previous is None:
-                    if self.state['money']>=charge:
-                        self.state['money']-=charge
-                        self.transaction('foodtrucks:transaction_commissary_rent',-charge,commissary=LOCALE['foodtrucks:commissary_'+site])
-                    else: self.state['commissary']['unpaid']['rent']+=charge
-                    text=LOCALE['foodtrucks:notification_commissary_rented'].format(vehicle=v['kind'],commissary=LOCALE['foodtrucks:commissary_'+site],rent=f'${monthly/100:,.2f}')
-                else:
-                    text=LOCALE['foodtrucks:notification_commissary_moved'].format(vehicle=v['kind'],commissary=LOCALE['foodtrucks:commissary_'+site],**{'from':LOCALE['foodtrucks:commissary_'+previous]})
-                self.event(text,'notice')
-            elif not any(s['site']==site and s['amount']>0 for s in self.state['commissary']['stock']):
-                self.event(LOCALE['foodtrucks:notification_commissary_nostock'].format(commissary=LOCALE['foodtrucks:commissary_'+site]),'notice')
+            elif op=='rent_bay' and c['site']==c['bay_site']:
+                pass
             else:
-                loaded=[]
-                for stock in self.state['commissary']['stock']:
-                    if stock['site']!=site: continue
-                    holds={'Hotdog':'hotdoggrill','Tacos':'griddle'}.get(stock['item'])
-                    pool=next((p for p in v['pieces'] if p['item']==holds),None)
-                    if not pool: continue
-                    amount=min(stock['amount'],max(0,int(pool['cap']-pool['units'])))
-                    pool['units']+=amount; stock['amount']-=amount
-                    cargo=next((s for s in v['stock'] if s['key']==stock['key']),None)
-                    if cargo: cargo['amount']+=amount
-                    else: v['stock'].append({'item':stock['item'],'key':stock['key'],'amount':amount})
-                    if amount: loaded.append(f'{amount} {stock["item"]}')
-                left=sum(s['amount'] for s in self.state['commissary']['stock'] if s['site']==site)
-                if loaded: self.event(LOCALE['foodtrucks:notification_commissary_restocked'].format(vehicle=v['kind'],loaded=', '.join(loaded),full='',left=left),'notice')
-                else: self.event(LOCALE['foodtrucks:notification_commissary_restock_full'].format(vehicle=v['kind'],left=left),'notice')
+                self.commissary_panel(v,op)
         else: raise ValueError(f"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay.")
         done = {'open':v['open'], 'close':not v['open'], 'step_out':player['at_hatch']!=v['id'],
-                'back_to_hatch':bool(self.pending) or player['at_hatch']==v['id'],
-                'enter':player['in_vehicle']==v['id'] or bool(self.pending), 'exit':player['in_vehicle']!=v['id'],
+                'back_to_hatch':bool(self.walks) or player['at_hatch']==v['id'],
+                'enter':player['in_vehicle']==v['id'] or bool(self.walks), 'exit':player['in_vehicle']!=v['id'],
                 'restock':v['stock']!=cargo_before,
                 'rent_bay':(v['commissary'] or {}).get('site') is not None and (v['commissary'] or {}).get('site')!=space_before}[op]
         self.event(f"Test bridge: vehicle {v['id']} {op}: {'done' if done else 'not done'}.")
         notices=[e['text'][8:] for e in self.ring if e['seq']>start and e['kind']=='notice']
         return {'done':done,'notices':notices,'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==v['id'])}
+
+    def commissary_panel(self, v, op):
+        c=v['commissary']
+        site=c['bay_site']
+        if op=='rent_bay':
+            if c['site']==site:
+                return
+            self.state['commissary']['spaces']=[s for s in self.state['commissary']['spaces'] if s['vehicle']!=v['id']]+[{'site':site,'vehicle':v['id']}]
+            previous=c['site']
+            c['site']=site
+            monthly=TUNING['commissary']['rentPerMonthCents'][v['kind']]
+            charge=int(monthly*12/365+.5)/100
+            if previous is None:
+                if self.state['money']>=charge:
+                    self.state['money']-=charge
+                    self.transaction('foodtrucks:transaction_commissary_rent',-charge,commissary=LOCALE['foodtrucks:commissary_'+site])
+                else: self.state['commissary']['unpaid']['rent']+=charge
+                text=LOCALE['foodtrucks:notification_commissary_rented'].format(vehicle=v['kind'],commissary=LOCALE['foodtrucks:commissary_'+site],rent=f'${monthly/100:,.2f}')
+            else:
+                text=LOCALE['foodtrucks:notification_commissary_moved'].format(vehicle=v['kind'],commissary=LOCALE['foodtrucks:commissary_'+site],**{'from':LOCALE['foodtrucks:commissary_'+previous]})
+            self.event(text,'notice')
+        elif not any(s['site']==site and s['amount']>0 for s in self.state['commissary']['stock']):
+            self.event(LOCALE['foodtrucks:notification_commissary_nostock'].format(commissary=LOCALE['foodtrucks:commissary_'+site]),'notice')
+        else:
+            loaded=[]
+            for stock in self.state['commissary']['stock']:
+                if stock['site']!=site: continue
+                holds={'Hotdog':'hotdoggrill','Tacos':'griddle'}.get(stock['item'])
+                pool=next((p for p in v['pieces'] if p['item']==holds),None)
+                if not pool: continue
+                amount=min(stock['amount'],max(0,int(pool['cap']-pool['units'])))
+                pool['units']+=amount; stock['amount']-=amount
+                cargo=next((s for s in v['stock'] if s['key']==stock['key']),None)
+                if cargo: cargo['amount']+=amount
+                else: v['stock'].append({'item':stock['item'],'key':stock['key'],'amount':amount})
+                if amount: loaded.append(f'{amount} {stock["item"]}')
+            left=sum(s['amount'] for s in self.state['commissary']['stock'] if s['site']==site)
+            if loaded: self.event(LOCALE['foodtrucks:notification_commissary_restocked'].format(vehicle=v['kind'],loaded=', '.join(loaded),full='',left=left),'notice')
+            else: self.event(LOCALE['foodtrucks:notification_commissary_restock_full'].format(vehicle=v['kind'],left=left),'notice')
 
     def require_city(self, cmd):
         scene=self.state['scene']
@@ -676,6 +704,18 @@ class Mock:
         name=self.state['save'] or ''
         if not name.startswith('FT'):
             raise ValueError(f"{cmd} changes the save, and the loaded save '{name}' doesn't start with FT: load an FT save first.")
+        self.require_character()
+
+    def require_character(self, character=None):
+        character = self.character if character is None else character
+        other = next((name for name,save in self.saves.items() if save['character']==character and not name.startswith('FT')),None)
+        if other is not None:
+            raise ValueError(f"This save's character also has saves not starting with FT ({other}); make FT saves with a character of their own.")
+
+    def require_ui(self):
+        if self.state['scene']!='city' or not self.mod_loaded or not (self.state['save'] or '').startswith('FT'):
+            raise ValueError('ui works only in a loaded FT city; use load from the main menu.')
+        self.require_character()
 
     def call(self, cmd, args):
         if cmd in ('console','debug','time','money','teleport','vehicle','commissary','crew','save'): self.require_ft(cmd)
@@ -692,7 +732,9 @@ class Mock:
             if self.load and self.load['status']=='pending': raise ValueError(f"A load of '{self.load['name']}' is under way; wait for it (state.load).")
             if self.state['scene']=='city' and not (self.state['save'] or '').startswith('FT'):
                 raise ValueError(f"The loaded save '{self.state['save']}' doesn't start with FT, and leaving it would skip the game's question about unsaved changes: go to the main menu by hand, or load from an FT save.")
-            if name not in self.saves: raise ValueError(f"No save named '{name}'. FT saves: {', '.join(self.saves) or 'none'}.")
+            if name not in self.saves: raise ValueError(f"No save named '{name}'. FT saves: {', '.join(n for n in self.saves if n.startswith('FT')) or 'none'}.")
+            if self.state['scene']=='city': self.require_character()
+            self.require_character(self.saves[name]['character'])
             self.load={'name':name,'status':'pending','error':None}
             self.state['scene']='loading'
             self.event(f"Test bridge: loading '{name}' (Mock character, day {self.saves[name]['state']['clock']['day']}).")
@@ -854,10 +896,10 @@ class Mock:
                     texts=[clean(LOCALE['foodtrucks:dialog_commissary_quote'].format(items='Hotdog',goods=f'${goods:.2f}',fee=f'${fee:.2f}',total=f'${goods+fee:.2f}',time='08:00'))]
                 return {'buttons':self.last_ui,'texts':texts}
             if op=='click':
-                if self.state['scene']=='city': self.require_ft('ui click')
+                self.require_ui()
                 return self.click(args)
             if op=='escape':
-                self.require_ft('ui escape')
+                self.require_ui()
                 if self.dialog=='closed':
                     hatch=self.state['player']['at_hatch']
                     if hatch:

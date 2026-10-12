@@ -4,7 +4,7 @@
   "needs": {},
   "steps": [
     {
-      "note": "Prepare 'FT commissary-refused-payment' by hand: exactly one licensed, closed truck with a space rented and the commissary unlocked at Hell's Kitchen, on foot nearby before delivery hour, no open screens, other orders, commissary stock or order transactions in the last two days. Do not confirm an order beforehand. The scenario creates one; new_game is unavailable."
+      "note": "Use FT saves from a new character of their own, never a series city saved under a new name. Prepare 'FT commissary-refused-payment' by hand: exactly one licensed, closed truck with a space rented and the commissary unlocked at Hell's Kitchen, on foot nearby before delivery hour, no open screens, other orders, commissary stock or order transactions in the last two days. Do not confirm an order beforehand. The scenario creates one; new_game is unavailable."
     },
     {
       "call": "load",
@@ -134,7 +134,8 @@
       "length": 1
     },
     {
-      "wait_event": "Commissary order [0-9]+: .+paid on delivery; due day"
+      "wait_event": "Commissary order [0-9]+: .+paid on delivery; due day",
+      "after_step": 13
     },
     {
       "call": "time",
@@ -231,7 +232,8 @@
       "equals": 1
     },
     {
-      "wait_event": "Commissary delivery: order .+ not delivered: .+ refused .+ cancelled\\."
+      "wait_event": "Commissary delivery: order .+ not delivered: .+ refused .+ cancelled\\.",
+      "after_step": 34
     },
     {
       "expect": "state",

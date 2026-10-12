@@ -4,7 +4,7 @@
   "needs": {},
   "steps": [
     {
-      "note": "Prepare 'FT commissary-pay-on-delivery' by hand: exactly one licensed, closed truck with a space rented and the commissary unlocked at Hell's Kitchen, on foot nearby before delivery hour, no open screens, other orders, commissary stock or order transactions in the last two days. Do not confirm an order beforehand. The scenario creates one; new_game is unavailable."
+      "note": "Use FT saves from a new character of their own, never a series city saved under a new name. Prepare 'FT commissary-pay-on-delivery' by hand: exactly one licensed, closed truck with a space rented and the commissary unlocked at Hell's Kitchen, on foot nearby before delivery hour, no open screens, other orders, commissary stock or order transactions in the last two days. Do not confirm an order beforehand. The scenario creates one; new_game is unavailable."
     },
     {
       "call": "load",
@@ -134,7 +134,8 @@
       "length": 1
     },
     {
-      "wait_event": "Commissary order [0-9]+: .+paid on delivery; due day"
+      "wait_event": "Commissary order [0-9]+: .+paid on delivery; due day",
+      "after_step": 13
     },
     {
       "note": "Phone counterpart for row 1: a person opens the vehicle's 'Commissary' picker, selects 'Order stock for delivery to Hell's Kitchen Commissary (opens its texts)' and confirms, then uses 'Order stock', adds Hotdog and sets two boxes, 'Order', and 'Confirm order'. The bridge exposes no quantity inputs; the game's picker/item controls and confirm label still need a live ui list. Run that phone path separately from this payment run so it does not create a second order. The automatic order above uses the same quote/confirm code."
@@ -223,7 +224,8 @@
       "equals": 1
     },
     {
-      "wait_event": "Commissary delivery: order .+ paid .+ on delivery"
+      "wait_event": "Commissary delivery: order .+ paid .+ on delivery",
+      "after_step": 33
     },
     {
       "expect": "state",

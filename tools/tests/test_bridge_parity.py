@@ -73,6 +73,7 @@ class ParityTests(unittest.TestCase):
         self.mock.state['player']['x']=100
         self.mock.call('vehicle',{'id':self.id,'op':'enter'})
         self.assertIsNone(self.mock.state['player']['in_vehicle'])
+        self.mock.call('time',{'pause':False})
         thread=threading.Thread(target=self.mock.run_clock,daemon=True)
         thread.start()
         try:
@@ -107,7 +108,8 @@ class ParityTests(unittest.TestCase):
         self.mock.state['save']='Personal'
         for cmd,args in [('time',{'pause':True}),('money',{'set':1}),('debug',{'action':'hire'}),('vehicle',{'id':self.id,'op':'enter'}),('ui',{'op':'escape'})]:
             guard='ui escape' if cmd=='ui' else cmd
-            self.refused(cmd,args,f"{guard} changes the save, and the loaded save 'Personal' doesn't start with FT: load an FT save first.")
+            text='ui works only in a loaded FT city; use load from the main menu.' if cmd=='ui' else f"{guard} changes the save, and the loaded save 'Personal' doesn't start with FT: load an FT save first."
+            self.refused(cmd,args,text)
         self.mock.call('ui',{'op':'list'})
         self.mock.call('shoot',{'name':'guard','x':0,'y':1,'z':0,'width':16,'height':16})
         self.mock.state.update(scene='menu',save=None)
