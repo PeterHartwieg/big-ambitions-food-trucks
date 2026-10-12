@@ -178,6 +178,8 @@ namespace FoodTrucks
             var point = hit.position;
             var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's runner is gone.");
             var game = SaveGameManager.Current;
+            // A walk the game is running (enter, Back to the hatch) would carry on from the new place: dropped first.
+            player.ResetNavigation();
             foreach (var v in game.VehicleInstances)
                 if (v != null && TruckWindow.PlayerAt(v.id)) TruckWindow.StepOutNow("moved by the test bridge");
             var exited = false;
@@ -250,6 +252,8 @@ namespace FoodTrucks
             int Cargo() => vehicle.cargoInstances.Where(c => c != null).Sum(c => c.amount);
             string? Space() => state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == id)?.CommissaryId;
             var cargoBefore = Cargo();
+            // Why the mod's own panel refused, when it says so without a notice (the Commissary button's choices).
+            string? why = null;
             var spaceBefore = Space();
             void InIt(string what)
             {
@@ -294,11 +298,11 @@ namespace FoodTrucks
                         break;
                     case "restock":
                         InIt("Commissary");
-                        Refused(global::FoodTrucks.Commissary.RunPanelOption(vehicle, "restock", "nostock"));
+                        why = global::FoodTrucks.Commissary.RunPanelOption(vehicle, "restock", "nostock");
                         break;
                     case "rent_bay":
                         InIt("Commissary");
-                        Refused(global::FoodTrucks.Commissary.RunPanelOption(vehicle, "rent", "move"));
+                        why = global::FoodTrucks.Commissary.RunPanelOption(vehicle, "rent", "move");
                         break;
                     default:
                         throw new BridgeError($"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay.");
@@ -321,7 +325,7 @@ namespace FoodTrucks
                 default: done = false; break;
             }
             Log.Info($"Test bridge: vehicle {id} {op}: {(done ? "done" : "not done")}.");
-            return new JObject { ["done"] = done, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
+            return new JObject { ["done"] = done, ["why"] = done ? null : why, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
         }
 
         // ---- commissary, crew ----
@@ -383,9 +387,5 @@ namespace FoodTrucks
             return new JObject { ["done"] = done, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
         }
 
-        private static void Refused(string? why)
-        {
-            if (why != null) throw new BridgeError(why);
-        }
     }
 }

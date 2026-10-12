@@ -54,6 +54,7 @@ namespace FoodTrucks
             if (http != null) return;
             try
             {
+                TestBridgePump.Stopped = false;
                 TestBridgeEvents.Hook();
                 pump = TestBridgePump.Install();
                 var server = new TestBridgeHttp(Port);
@@ -71,15 +72,29 @@ namespace FoodTrucks
             }
         }
 
+        internal const string StoppedText = "the bridge stopped";
+
+        // Stops taking calls, fails every queued and pending one, releases what they hold and clears the bridge's state,
+        // so a start after a mod re-enable begins clean.
         internal static void Stop()
         {
             var wasRunning = http != null;
+            TestBridgePump.FailAll(StoppedText);
             try { http?.Stop(); }
             catch (Exception ex) { Log.Error("Test bridge, stopping: " + ex.Message); }
             http = null;
             if (pump != null) Object.Destroy(pump.gameObject);
             pump = null;
+            try { TestBridgeCommands.Reset(); }
+            catch (Exception ex) { Log.Error("Test bridge, clearing: " + ex.Message); }
+            lock (opsGate)
+            {
+                ops.Clear();
+                opOrder.Clear();
+            }
+            Current = new Snapshot();
             TestBridgeEvents.Unhook();
+            TestBridgeEvents.Clear();
             if (wasRunning) Log.Info("Test bridge: stopped.");
         }
 
@@ -104,6 +119,7 @@ namespace FoodTrucks
         internal static JObject Call(string cmd, JObject args, double timeoutSeconds)
         {
             if (cmd == "op") return OpStatus(args);
+            if (TestBridgePump.Stopped) return Fail(StoppedText);
             Op op;
             lock (opsGate)
             {
@@ -225,15 +241,25 @@ namespace FoodTrucks
     // Poll every frame until it returns the result or throws.
     internal sealed class Deferred
     {
-        public Deferred(Func<JToken?> poll) => Poll = poll;
+        public Deferred(Func<JToken?> poll, Action? onStop = null)
+        {
+            Poll = poll;
+            OnStop = onStop;
+        }
+
         public Func<JToken?> Poll { get; }
+        // Run when the bridge stops before the result came (the shot's camera and texture go).
+        public Action? OnStop { get; }
     }
 
     // A hidden object that lives across scenes and runs the bridge's work on the main thread each frame: queued calls,
     // the /health snapshot, run_until and the bridge's own coroutines (load, quit).
     internal sealed class TestBridgePump : MonoBehaviour
     {
-        private static readonly ConcurrentQueue<Action> queue = new ConcurrentQueue<Action>();
+        private static readonly ConcurrentQueue<(Func<object?> Work, TaskCompletionSource<JToken?> Done)> queue =
+            new ConcurrentQueue<(Func<object?>, TaskCompletionSource<JToken?>)>();
+        // Set when the bridge stops: no new work is taken.
+        internal static volatile bool Stopped;
         internal static TestBridgePump? Instance { get; private set; }
 
         internal static TestBridgePump Install()
@@ -250,17 +276,34 @@ namespace FoodTrucks
         internal static Task<JToken?> Run(Func<object?> work)
         {
             var done = new TaskCompletionSource<JToken?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            queue.Enqueue(() =>
-            {
-                try
-                {
-                    var result = work();
-                    if (result is Deferred later) pending.Add((later, done));
-                    else done.SetResult(result as JToken);
-                }
-                catch (Exception ex) { done.SetException(ex); }
-            });
+            if (Stopped) done.SetException(new BridgeError(TestBridge.StoppedText));
+            else queue.Enqueue((work, done));
             return done.Task;
+        }
+
+        private static void RunQueued(Func<object?> work, TaskCompletionSource<JToken?> done)
+        {
+            try
+            {
+                var result = work();
+                if (result is Deferred later) pending.Add((later, done));
+                else done.SetResult(result as JToken);
+            }
+            catch (Exception ex) { done.SetException(ex); }
+        }
+
+        // The bridge stops: every queued and pending call fails, and what pending ones hold is released.
+        internal static void FailAll(string why)
+        {
+            Stopped = true;
+            while (queue.TryDequeue(out var item)) item.Done.TrySetException(new BridgeError(why));
+            foreach (var (work, done) in pending)
+            {
+                try { work.OnStop?.Invoke(); }
+                catch (Exception ex) { Log.Error("Test bridge, releasing a pending call: " + ex.Message); }
+                done.TrySetException(new BridgeError(why));
+            }
+            pending.Clear();
         }
 
         private static void PollPending()
@@ -273,12 +316,12 @@ namespace FoodTrucks
                     var result = work.Poll();
                     if (result == null) continue;
                     pending.RemoveAt(i);
-                    done.SetResult(result);
+                    done.TrySetResult(result);
                 }
                 catch (Exception ex)
                 {
                     pending.RemoveAt(i);
-                    done.SetException(ex);
+                    done.TrySetException(ex);
                 }
             }
         }
@@ -299,7 +342,7 @@ namespace FoodTrucks
             PollPending();
             // Calls queued by the HTTP thread; each one answers its own waiter, errors included.
             var n = 0;
-            while (n++ < 50 && queue.TryDequeue(out var action)) action();
+            while (n++ < 50 && !Stopped && queue.TryDequeue(out var item)) RunQueued(item.Work, item.Done);
         }
 
         private static readonly HashSet<string> failed = new HashSet<string>();
