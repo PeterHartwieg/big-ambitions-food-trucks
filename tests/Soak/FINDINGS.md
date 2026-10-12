@@ -48,3 +48,23 @@ refused. Core is unchanged; no skipped Core regression is needed for this case.
 Seed 78 now passes all 365 days. The full 200-seed matrix has not been rerun
 after the correction. See README.md for coverage and exclusions. No conclusion
 here implies an in-game check.
+
+## Resolved harness coverage gap: midnight sold-through gate (review L6)
+
+The harness previously set every vehicle's `SoldThrough` to the hour boundary
+after `RunVehicle`. Its payout gate therefore never saw an incomplete old day.
+This was a harness coverage gap, not evidence of a Core defect.
+
+Open-window clocks now move only in `Advance`; a separate route cursor is
+combined with the clock as in `CartSelling.SoldThroughOf`. Seeded runs sometimes
+leave 23:45–midnight unprocessed until after the midnight payout attempt. The
+expected payment day is recorded independently: the whole taking must stay
+held, real late sales must accrue to their original calendar day, and the complete
+taking must pay once at the following midnight. A focused regression guarantees
+those events across day 28 (a tax-period end), including save/load while held.
+
+The game normally catches up at midnight and retries incomplete takings on
+later sales ticks (`unity/FoodTrucks/Scripts/CartSelling.cs`, `CatchUpDay`,
+`PayCrewTakings`, `SoldThroughOf`). Deliberately missing that first catch-up and
+retrying at a later midnight is fault injection for the gate, not an assertion
+that the normal game waits an extra day. Core remains unchanged.

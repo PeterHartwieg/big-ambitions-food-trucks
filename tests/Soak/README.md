@@ -30,9 +30,14 @@ of game cargo batches, vehicle poses, employee identity and player money; Core
 owns the saved service, routes, wage markers, commissary and sales books.
 All loaded Core references are replaced before continuing.
 
-Each hour first settles the preceding open-window wage hour. At midnight, routes
-and windows have already sold through the boundary, then payroll and crew takings
-are settled before marking the day summary. Route hours are counted from
+Each hour first settles the preceding open-window wage hour. Normally, routes
+and windows have sold through midnight before payroll and crew takings settle.
+Seeded fault injection sometimes stops a crewed window at 23:45: the midnight
+payout attempt must hold its entire day, then its remaining 15 minutes catch up
+after that attempt, before new player actions and the day summary. The harness
+retries that taking at the following midnight, asserting one complete payment
+booked to the original day. The real game also retries on sales ticks; the
+harness deliberately uses a later midnight to test delayed settlement. Route hours are counted from
 `PlannedShiftMinutes`, including its unsaved midnight preview. The commissary
 retries pending charges, generates rent, attempts deliveries and checks the night,
 as its adapter does. The player then chooses an action. Each vehicle catches up
@@ -58,7 +63,14 @@ Checks include:
   with their original batches. Shared pieces and fractional stock weights use
   the shipped tables. Every fitted pool stays within capacity.
 - Crew sales accrue by vehicle/calendar day and pay exactly once at the next
-  midnight, or at uninstall for the last day. Sale-day and 28-day tax totals,
+  midnight, at a later midnight when injected lag held the day, or at uninstall
+  for the last day. Open sales clocks advance only with simulation; separate
+  route cursors feed the sold-through gate. Expected payout days are recorded
+  independently of Core's filter. Coverage prints midnight holds, actual late
+  crew sales and delayed payouts. A focused day-28 regression guarantees a
+  taking exists before midnight, survives save/load while held, receives a real
+  simulator completion afterwards and pays once at the next midnight on day 30.
+  Sale-day and 28-day tax totals,
   per-vehicle revenue/cost and lifetime revenue match the independent sales book.
   Wages, rent, fines and delivery-fee ledger totals match accepted payments.
 - A route-opened window sells within its stop's hours. An already-open window
@@ -124,3 +136,10 @@ matrix plus its focused replan regression passed in 10.33 s (21 tests).
 The corrected complete suite took 10.81 s wall time: 1,679 passed, zero failed,
 one skipped (the opt-in long soak).
 Core and the test project file are unchanged.
+
+After review L6's midnight-lag coverage correction: 22 short tests passed in
+8.03 s, including 14 injected held days and 79 actual late crew sales in the
+20-seed matrix. All 14 days paid once at the later midnight. The complete suite
+passed 1,680 tests with only the opt-in long test skipped, in 9.63 s wall time.
+The requested seed-78 × 365-day run passed in 10.53 s. Verification used the
+in-process xUnit runner because VSTest's socket remains blocked in this sandbox.
