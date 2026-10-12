@@ -30,6 +30,8 @@ namespace FoodTrucks
                 case "money": RequireFtCity(cmd); return Money(args);
                 case "teleport": RequireFtCity(cmd); return Teleport(args);
                 case "vehicle": RequireFtCity(cmd); return Vehicle(args);
+                case "commissary": RequireFtCity(cmd); return CommissaryCommand(args);
+                case "crew": RequireFtCity(cmd); return Crew(args);
                 case "ui": return TestBridgeUi.Run(args);
                 case "shoot": RequireCity(cmd); return TestBridgeShoot.Shoot(args);
                 case "save": RequireFtCity(cmd); return Save(args);
@@ -37,7 +39,7 @@ namespace FoodTrucks
                 case "new_game": return NewGame(args);
                 case "quit": return Quit();
                 default:
-                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, ui, shoot, save, load, new_game, quit.");
+                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, ui, shoot, save, load, new_game, quit, op.");
             }
         }
 
@@ -94,6 +96,10 @@ namespace FoodTrucks
         // Speeds above this skip too far in one frame for run_until to stop near its time.
         private const double MaxSpeed = 60;
         private static (double Target, string Text)? runUntil;
+        // Where the last run_until stopped ("day D HH:MM"), until the next time command.
+        private static string? arrivedAt;
+        // A run_until counts as arrived this close to its minute (the clock is a float).
+        private const double ArrivedMinutes = 0.001;
 
         internal static JObject Clock()
         {
@@ -105,7 +111,31 @@ namespace FoodTrucks
                 ["time"] = $"{game.Hour:D2}:{(int)game.Minute:D2}",
                 ["paused"] = Paused(),
                 ["speed"] = Speed(),
+                ["run_until"] = runUntil?.Text,
+                ["arrived_at"] = arrivedAt,
             };
+        }
+
+        // What holds the clock now, or null: a time skip, or the screens open while the game's time control is off.
+        internal static string? ClockHeldBy()
+        {
+            if (!InstanceBehavior<UIs>.IsInitialized) return null;
+            var uis = InstanceBehavior<UIs>.Instance;
+            if (uis.timeMachine != null && uis.timeMachine.isRunning) return "time skip";
+            if (uis.gameSpeed == null || !uis.gameSpeed.isTimeControlDisabled) return null;
+            var open = TestBridgeUi.Open();
+            return open.Count == 0 ? "a screen" : string.Join(", ", open);
+        }
+
+        // Harmony prefix on GameManager.RunMainGameTick, only with the bridge on: while run_until runs, no step of the
+        // clock goes past its minute (by more than a hair, so the minute itself and its hour's events are reached).
+        internal static void ClampTickPrefix(ref float deltaTimeWithMultiplier)
+        {
+            if (runUntil == null) return;
+            var game = SaveGameManager.Current;
+            if (game == null) return;
+            var most = (float)Math.Max(0.0, runUntil.Value.Target - NowMinutes(game) + ArrivedMinutes / 2);
+            if (deltaTimeWithMultiplier > most) deltaTimeWithMultiplier = most;
         }
 
         internal static bool? Paused()
@@ -149,6 +179,7 @@ namespace FoodTrucks
 
             var game = SaveGameManager.Current;
             runUntil = null;
+            arrivedAt = null;
             if (until != null)
             {
                 var target = Target(game, until);
@@ -183,9 +214,10 @@ namespace FoodTrucks
             return (day * 1440.0 + hour * 60 + minute, $"day {day} {hour:D2}:{minute:D2}");
         }
 
-        // Every frame, from the pump: stops run_until at its time.
+        // Every frame, from the pump: follows a load, stops run_until at its time.
         internal static void EveryFrame()
         {
+            FollowLoad();
             if (runUntil == null) return;
             var game = SaveGameManager.Current;
             if (game == null || Scene() != "city")
@@ -194,12 +226,13 @@ namespace FoodTrucks
                 Log.Info("Test bridge: run_until dropped: the city was left.");
                 return;
             }
-            if (NowMinutes(game) < runUntil.Value.Target) return;
+            if (NowMinutes(game) < runUntil.Value.Target - ArrivedMinutes) return;
             var text = runUntil.Value.Text;
             runUntil = null;
             InstanceBehavior<UIs>.Instance?.gameSpeed?.SetPlayerPause(true);
             SetSpeed(1);
-            Log.Info($"Test bridge: run_until {text} reached at day {game.Day} {game.Hour:D2}:{(int)game.Minute:D2}; paused, speed 1.");
+            arrivedAt = $"day {game.Day} {game.Hour:D2}:{(int)game.Minute:D2}";
+            Log.Info($"Test bridge: run_until {text} reached at {arrivedAt}; paused, speed 1.");
         }
 
         // ---- Console, debug actions, money ----
@@ -269,6 +302,12 @@ namespace FoodTrucks
             if (!IsFt(name)) throw new BridgeError($"The bridge loads only saves whose name starts with FT, not '{name}'.");
             var scene = Scene();
             if (scene == "loading") throw new BridgeError("The game is loading; wait until /health says menu or city.");
+            if (LoadStatus == "pending") throw new BridgeError($"A load of '{LoadTarget}' is under way; wait for it (state.load).");
+            // Leaving a city skips the game's unsaved-changes question, so only an FT city may be left this way.
+            var current = SaveGameManager.Current?.SaveGameName;
+            if (scene == "city" && !IsFt(current))
+                throw new BridgeError($"The loaded save '{current}' doesn't start with FT, and leaving it would skip the game's question about unsaved changes: " +
+                                      "go to the main menu by hand, or load from an FT save.");
             var saves = SaveGamePathHelper.GetAllSaveGamesFromVersion();
             var save = saves.Where(s => s != null && s.name == name).OrderByDescending(s => s.lastPlayedDate).FirstOrDefault();
             if (save == null)
@@ -277,12 +316,10 @@ namespace FoodTrucks
                 throw new BridgeError($"No save named '{name}'. FT saves: {(ft.Count == 0 ? "none" : string.Join(", ", ft))}.");
             }
             var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's runner is gone.");
-            if (scene == "menu")
-            {
-                if (!InstanceBehavior<MainMenuController>.IsInitialized)
-                    throw new BridgeError("load works from the main menu or the city, not the character creator.");
-                StartLoad(save);
-            }
+            if (scene == "menu" && !InstanceBehavior<MainMenuController>.IsInitialized)
+                throw new BridgeError("load works from the main menu or the city, not the character creator.");
+            BeginLoad(save.name);
+            if (scene == "menu") StartLoad(save);
             else pump.StartCoroutine(LoadFromCity(save));
             return new JObject { ["loading"] = true, ["name"] = save.name, ["character"] = save.characterData?.name };
         }
@@ -306,7 +343,7 @@ namespace FoodTrucks
             {
                 if (UnityEngine.Time.realtimeSinceStartup > deadline)
                 {
-                    Log.Error($"Test bridge: the main menu didn't come up within 120 seconds; '{save.name}' not loaded.");
+                    EndLoad("failed", "the main menu didn't come up within 120 seconds");
                     yield break;
                 }
                 yield return null;
@@ -315,6 +352,56 @@ namespace FoodTrucks
             yield return null;
             yield return null;
             StartLoad(save);
+        }
+
+        // ---- Load progress: state.load and health.load ----
+
+        internal static string? LoadTarget { get; private set; }
+        // "pending", "done" or "failed"; null before any load.
+        internal static string? LoadStatus { get; private set; }
+        private static string? loadError;
+        private static int loadAttachesAtStart;
+        private static float loadDeadline;
+        private const float LoadSeconds = 300f;
+
+        internal static JObject? LoadJson() => LoadTarget == null ? null
+            : new JObject { ["name"] = LoadTarget, ["status"] = LoadStatus, ["error"] = loadError };
+
+        private static void BeginLoad(string name)
+        {
+            LoadTarget = name;
+            LoadStatus = "pending";
+            loadError = null;
+            loadAttachesAtStart = FoodTrucksSession.Attaches;
+            loadDeadline = UnityEngine.Time.realtimeSinceStartup + LoadSeconds;
+            TransitionToSave.saveGameLoadErrored = false;
+        }
+
+        private static void EndLoad(string status, string? error)
+        {
+            LoadStatus = status;
+            loadError = error;
+            if (status == "done") Log.Info($"Test bridge: load '{LoadTarget}' done: day {SaveGameManager.Current?.Day}, the mod's save data attached.");
+            else Log.Error($"Test bridge: load '{LoadTarget}' failed: {error}.");
+        }
+
+        // Done when the city is up with that save and the mod has attached to it since the load began (so reloading
+        // the same name doesn't count the old city); failed when the game reports a broken save or time runs out.
+        private static void FollowLoad()
+        {
+            if (LoadStatus != "pending") return;
+            if (TransitionToSave.saveGameLoadErrored)
+            {
+                EndLoad("failed", "the game couldn't load the save (it went back to the main menu)");
+                return;
+            }
+            if (Scene() == "city" && SaveGameManager.Current?.SaveGameName == LoadTarget &&
+                FoodTrucksSession.Attaches > loadAttachesAtStart)
+            {
+                EndLoad("done", null);
+                return;
+            }
+            if (UnityEngine.Time.realtimeSinceStartup > loadDeadline) EndLoad("failed", $"not in the city with it after {LoadSeconds:F0} seconds");
         }
 
         private static JToken NewGame(JObject args)

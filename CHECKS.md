@@ -22,6 +22,12 @@ The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:832
 | 16 | `save` `{"name":"FT bridge 2"}`, then `load` `{"name":"FT bridge"}` from the city | The save appears in the Load screen. The load goes to the main menu and on into the city without a question |
 | 17 | Load a non-FT save by hand, then try `money`, `time` and `save` | Each is refused: the save's name doesn't start with FT. `state` still answers |
 | 18 | `GET /events?since=1` after a few of the rows above | Log lines, `notice` and `phone` events, and any Unity error; `next` grows. `new_game` returns `ok: false` saying why |
+| 20 | Start a `save` and at once `curl …/health` and `GET /events` | Both answer straight away while the save runs. The save's reply has an `op` number; `{"cmd":"op","args":{"id":N}}` says `done` |
+| 21 | `time` `{"run_until":{"day":"+0","time":"<the next hour>:59"},"speed":20}` | It stops paused on that :59 exactly, and `state.clock.arrived_at` says so. Then run to the next HH:00: the hour's events have run when it stops |
+| 22 | Park a truck legally in a bay, `state` | The truck's `legal` matches the panel's LEGAL, `legal_reason` starts "wheel parking test". A cart on the pavement says "pavement rule" |
+| 23 | `commissary` `{"op":"order","site":"hells-kitchen","items":[{"item":"<a food's name>","boxes":2}]}` with a space rented there | The same `Commissary order …` log lines as an order by phone, no money taken; the order is in `state.commissary.orders`. At 08:00 its payment shows in `state.transactions_today` |
+| 24 | Hire a worker (Ctrl+Alt+U), `state.employees`, then `crew` `assign` and `unassign` on the truck | The worker is listed, joins the truck (notice as from BizMan, `done: true`) and leaves again |
+| 25 | From a non-FT city, `load` `{"name":"FT bridge"}` | Refused, the reply says to go to the main menu or load from an FT save |
 | 19 | `quit` | The reply comes, then the game closes within a second or two |
 
 Log lines:
@@ -30,6 +36,7 @@ Log lines:
 - Every notice: `Notice: <text>`; every text: `Phone: <contact>: <text>`, the player's own read-back `Phone: <contact>: [player] <text>`. A raw key (`Notice: foodtrucks:… {…}`) means the locale file lacks the key: tell me.
 - Commands: `Test bridge: running the clock at speed N until day D HH:MM.`, `Test bridge: run_until day D HH:MM reached at day D HH:MM; paused, speed 1.`, `Test bridge: money set from … to ….`, `Test bridge: moving the player to x …`, `Test bridge: moved <type> <id> to x …`, `Test bridge: vehicle <id> <op>.`, `Test bridge: clicked "…" (…).`, `Test bridge: escape: ….`, `Test bridge: shot <name> (…): <path>.`, `Test bridge: saving as '…'.`, `Test bridge: loading '…' (…).`, `Test bridge: quitting the game.`
 - Any `Test bridge, refresh:` or `Test bridge, every frame:` error line: tell me.
+- With the flag only: `Patch GameManager.RunMainGameTick(Single), test bridge: Active.` Loads end with `Test bridge: load '…' done: day D, the mod's save data attached.` (or `… failed: …`); vehicle ops log `Test bridge: vehicle <id> <op>: done.` or `not done.`
 
 Game calls to watch first (read in the decompile, never run): the HttpListener under the game's Mono; `GameManager.SetMinutesMultiplier` and `GameSpeedController.SetPlayerPause` for `time`; `GameManager.SetPlayerPosition` and `VehicleHelper.TeleportVehicleToGround` for `teleport`; `TransitionToSave` with `LoadScene.LoadTransitionToSave`, and `LoadScene.LoadMainMenuFromCity` run from the bridge's own object, for `load`; `CancelButtonHandler.HandleEscapeClick` for `escape`; the second camera with HDRP's camera data copied by reflection for `shoot`; TextMeshPro read by reflection for `ui` labels and texts.
 

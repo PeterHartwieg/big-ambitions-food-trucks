@@ -10,8 +10,10 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks
 {
-    // The bridge's HTTP side: a loopback-only HttpListener on a background thread, one request at a time. It never
-    // touches the game: /health and /events read what the main thread left for them, /call waits for the main thread.
+    // The bridge's HTTP side: a loopback-only HttpListener on a background thread, each request served on a pool thread,
+    // so /health, /events and op queries answer while a /call waits for the main thread. It never touches the game:
+    // /health and /events read what the main thread left for them, /call waits for the main thread, where calls run one
+    // after another.
     internal sealed class TestBridgeHttp
     {
         private readonly int port;
@@ -53,12 +55,17 @@ namespace FoodTrucks
                 HttpListenerContext context;
                 try { context = listener!.GetContext(); }
                 catch (Exception) { break; } // the listener was stopped
-                try { Handle(context); }
-                catch (Exception ex)
-                {
-                    try { Write(context, 500, TestBridge.Fail($"{ex.GetType().Name}: {ex.Message}")); }
-                    catch (Exception) { try { context.Response.Abort(); } catch (Exception) { } }
-                }
+                ThreadPool.QueueUserWorkItem(_ => Serve(context));
+            }
+        }
+
+        private static void Serve(HttpListenerContext context)
+        {
+            try { Handle(context); }
+            catch (Exception ex)
+            {
+                try { Write(context, 500, TestBridge.Fail($"{ex.GetType().Name}: {ex.Message}")); }
+                catch (Exception) { try { context.Response.Abort(); } catch (Exception) { } }
             }
         }
 

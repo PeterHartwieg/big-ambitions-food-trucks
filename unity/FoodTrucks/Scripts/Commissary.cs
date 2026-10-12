@@ -1166,6 +1166,38 @@ namespace FoodTrucks
             return orders;
         }
 
+        // The test bridge's order: the phone form's confirm without the call. The same Core quote and order code and log
+        // lines; nothing is paid now (orders are paid on delivery). `items` are item keys or names with their boxes.
+        // Returns the orders placed, or why none were.
+        internal static (IReadOnlyList<CommissaryOrder> Orders, string? Refusal) OrderForTesting(string siteId, IEnumerable<(string Item, int Boxes)> items)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            var rules = Rules;
+            var site = Sites?.Site(siteId);
+            if (state == null || rules == null || site == null || uninstalled || !FoodTrucksSession.CanWrite)
+                return (Array.Empty<CommissaryOrder>(), site == null ? $"no commissary {siteId}" : "the commissary can't take orders now (data not loaded, read-only or uninstalled)");
+            if (!CommissaryOrdering.CanOrder(state.Commissary, siteId))
+                return (Array.Empty<CommissaryOrder>(), $"no space rented at {siteId} (or it isn't unlocked): rent a space first");
+            var catalogue = Catalogue(false).Concat(Catalogue(true)).ToList();
+            var requests = new List<CommissaryOrderRequest>();
+            foreach (var (item, boxes) in items)
+            {
+                var line = catalogue.FirstOrDefault(c => c.Item1 == item);
+                if (line.Item1 == null)
+                    line = catalogue.FirstOrDefault(c => string.Equals(LocalizorManager.GetLocalization(c.Item1, null), item, StringComparison.OrdinalIgnoreCase));
+                if (line.Item1 == null) return (Array.Empty<CommissaryOrder>(), $"{item} isn't on the commissary's list");
+                requests.Add(new CommissaryOrderRequest(line.Item1, line.Item2, line.Item3, Math.Max(0, boxes)));
+            }
+            var quote = CommissaryOrdering.Quote(rules, requests);
+            if (quote.Problem == CommissaryQuoteProblem.Empty) return (Array.Empty<CommissaryOrder>(), "the order has no boxes");
+            if (quote.Problem == CommissaryQuoteProblem.TooManyBoxes)
+                return (Array.Empty<CommissaryOrder>(), $"more than {CommissaryOrdering.MaxBoxesPerOrder} boxes in one order");
+            Log.Info($"Commissary order at {siteId}: read back {quote.Boxes} boxes ({string.Join(", ", quote.Lines.Select(l => $"{l.Boxes} {l.ItemName}"))}), " +
+                     $"{CartSelling.Money(quote.GoodsCents)} plus {CartSelling.Money(quote.FeeCents)} delivery (test bridge).");
+            var placed = PlaceQuote(siteId, quote);
+            return (placed, placed.Count == 0 ? "Core placed no order" : null);
+        }
+
         // ---- The uninstall step ----
 
         // Delivered stock is paid back at its goods price; open orders are cancelled with nothing to pay back, since they

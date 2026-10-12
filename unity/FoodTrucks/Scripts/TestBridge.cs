@@ -38,6 +38,8 @@ namespace FoodTrucks
             public string? Time;
             public bool? Paused;
             public int Frame;
+            public string? LoadName;
+            public string? LoadStatus;
         }
 
         internal static volatile Snapshot Current = new Snapshot();
@@ -57,6 +59,7 @@ namespace FoodTrucks
                 var server = new TestBridgeHttp(Port);
                 server.Start();
                 http = server;
+                Patches.ApplyTestBridge();
                 // An agent drives the game while its window may not have the focus.
                 Application.runInBackground = true;
                 Log.Info($"Test bridge: listening on http://127.0.0.1:{Port}/.");
@@ -80,21 +83,93 @@ namespace FoodTrucks
             if (wasRunning) Log.Info("Test bridge: stopped.");
         }
 
-        // Runs a /call on the main thread and waits up to timeoutSeconds for its reply.
+        // Every /call is an operation with a number, kept with its outcome (the last OpsKept), so a client whose call
+        // timed out can ask what became of it (cmd "op") instead of running it again.
+        private sealed class Op
+        {
+            public long Id;
+            public string Cmd = "";
+            public string Status = "pending";
+            public JToken? Result;
+            public string? Error;
+        }
+
+        private const int OpsKept = 500;
+        private static readonly object opsGate = new object();
+        private static readonly Dictionary<long, Op> ops = new Dictionary<long, Op>();
+        private static readonly Queue<long> opOrder = new Queue<long>();
+        private static long nextOp = 1;
+
+        // Runs a /call on the main thread and waits up to timeoutSeconds for its reply. Runs on an HTTP thread.
         internal static JObject Call(string cmd, JObject args, double timeoutSeconds)
         {
+            if (cmd == "op") return OpStatus(args);
+            Op op;
+            lock (opsGate)
+            {
+                op = new Op { Id = nextOp++, Cmd = cmd };
+                ops[op.Id] = op;
+                opOrder.Enqueue(op.Id);
+                while (opOrder.Count > OpsKept) ops.Remove(opOrder.Dequeue());
+            }
             var task = TestBridgePump.Run(() => TestBridgeCommands.Run(cmd, args));
-            try
+            task.ContinueWith(t => Finish(op, t));
+            bool finished;
+            try { finished = task.Wait(TimeSpan.FromSeconds(timeoutSeconds)); }
+            catch (AggregateException) { finished = true; }
+            if (!finished)
+                return new JObject
+                {
+                    ["ok"] = false, ["op"] = op.Id,
+                    ["error"] = $"timed out on the main thread; the command goes on: ask {{\"cmd\": \"op\", \"args\": {{\"id\": {op.Id}}}}} for its outcome",
+                };
+            Finish(op, task);
+            lock (opsGate)
             {
-                if (!task.Wait(TimeSpan.FromSeconds(timeoutSeconds)))
-                    return Fail("timed out on the main thread");
+                return op.Status == "done"
+                    ? new JObject { ["ok"] = true, ["op"] = op.Id, ["result"] = op.Result?.DeepClone() }
+                    : new JObject { ["ok"] = false, ["op"] = op.Id, ["error"] = op.Error };
             }
-            catch (AggregateException ex)
+        }
+
+        private static void Finish(Op op, Task<JToken?> task)
+        {
+            lock (opsGate)
             {
-                var inner = ex.InnerException ?? ex;
-                return Fail(inner is BridgeError ? inner.Message : $"{inner.GetType().Name}: {inner.Message}");
+                if (op.Status != "pending" || !task.IsCompleted) return;
+                if (task.IsFaulted)
+                {
+                    var inner = task.Exception?.InnerException ?? (Exception?)task.Exception;
+                    op.Status = "failed";
+                    op.Error = inner is BridgeError ? inner.Message : $"{inner?.GetType().Name}: {inner?.Message}";
+                }
+                else if (task.IsCanceled)
+                {
+                    op.Status = "failed";
+                    op.Error = "cancelled";
+                }
+                else
+                {
+                    op.Status = "done";
+                    op.Result = task.Result;
+                }
             }
-            return new JObject { ["ok"] = true, ["result"] = task.Result };
+        }
+
+        // { "cmd": "op", "args": { "id": N } }: answered on the HTTP thread, whatever the main thread is doing.
+        private static JObject OpStatus(JObject args)
+        {
+            var id = TestBridgeCommands.Num(args, "id");
+            if (id == null) return Fail("op needs \"id\": the number a /call reply gave as \"op\".");
+            lock (opsGate)
+            {
+                if (!ops.TryGetValue((long)id.Value, out var op))
+                    return Fail($"No operation {id} (the bridge keeps the last {OpsKept}).");
+                var result = new JObject { ["id"] = op.Id, ["cmd"] = op.Cmd, ["status"] = op.Status };
+                if (op.Status == "done") result["result"] = op.Result?.DeepClone();
+                if (op.Status == "failed") result["error"] = op.Error;
+                return new JObject { ["ok"] = true, ["result"] = result };
+            }
         }
 
         internal static JObject Fail(string error) => new JObject { ["ok"] = false, ["error"] = error };
@@ -109,6 +184,8 @@ namespace FoodTrucks
                 Scene = scene,
                 Frame = UnityEngine.Time.frameCount,
                 Save = game?.SaveGameName,
+                LoadName = TestBridgeCommands.LoadTarget,
+                LoadStatus = TestBridgeCommands.LoadStatus,
             };
             if (game != null && scene == "city")
             {
@@ -133,6 +210,7 @@ namespace FoodTrucks
                 ["time"] = s.Time,
                 ["paused"] = s.Paused,
                 ["frame"] = s.Frame,
+                ["load"] = s.LoadName == null ? null : new JObject { ["name"] = s.LoadName, ["status"] = s.LoadStatus },
             };
         }
     }

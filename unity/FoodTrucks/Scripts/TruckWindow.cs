@@ -484,6 +484,18 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Truck window, save position: " + ex); }
         }
 
+        // For the test bridge's state: "starting" from Open until the hatch's activity runs, "at_hatch" once it runs,
+        // "walking" on a Back to the hatch walk, else null.
+        internal static string? Phase()
+        {
+            var self = instance;
+            if (self == null) return null;
+            if (self.entering != null) return "starting";
+            if (self.vehicleId != null && self.place != null)
+                return self.activity != null && self.activity.GetState() == PlayerActivityState.Running ? "at_hatch" : "starting";
+            return self.Returning() ? "walking" : null;
+        }
+
         // The panel's Step out and Close window for the test bridge, as if clicked: false unless the player is at this
         // truck's hatch.
         internal static bool PanelStepOut(string id)

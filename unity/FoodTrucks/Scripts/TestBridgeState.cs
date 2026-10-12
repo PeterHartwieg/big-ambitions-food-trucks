@@ -30,11 +30,15 @@ namespace FoodTrucks
                 ["commissary"] = null,
                 ["ledger_today"] = null,
                 ["notices_recent"] = new JArray(Notices.Recent()),
+                ["load"] = TestBridgeCommands.LoadJson(),
+                ["transactions_today"] = new JArray(),
+                ["employees"] = new JArray(),
             };
             if (game == null || scene != "city") return result;
             result["clock"] = TestBridgeCommands.Clock();
             result["money"] = Math.Round(game.Money, 2);
             result["player"] = Player(game);
+            result["transactions_today"] = Transactions(game);
             var state = FoodTrucksSession.CurrentState;
             if (state == null) return result;
             result["licence"] = new JObject
@@ -51,6 +55,11 @@ namespace FoodTrucks
             }
             result["vehicles"] = vehicles;
             result["commissary"] = Commissary(state);
+            result["employees"] = new JArray(HireCrew.Available(state).Select(e => new JObject
+            {
+                ["id"] = e.id, ["name"] = HireCrew.Name(e), ["skill"] = Math.Round(HireCrew.Skill(e), 1),
+                ["satisfaction"] = Math.Round(e.satisfaction, 1), ["wage"] = Math.Round(e.hourlyWage, 2),
+            }));
             var today = state.DailySales.FirstOrDefault(d => d.Day == game.Day);
             result["ledger_today"] = new JObject
             {
@@ -69,8 +78,13 @@ namespace FoodTrucks
             foreach (var v in game.VehicleInstances)
                 if (v != null && TruckWindow.PlayerAt(v.id)) atHatch = v.id;
             var hands = PlayerHelper.ItemInstanceInHands;
+            string activity;
+            if (!string.IsNullOrEmpty(game.ActiveVehicleId)) activity = VehicleHelper.GetCurrentVehicleBase() is HandTruck ? "pushing" : "driving";
+            else activity = TruckWindow.Phase() ?? (controller != null && controller.hasOnGoalReachedAction ? "walking" : "on_foot");
             return new JObject
             {
+                ["activity"] = activity,
+                ["clock_held_by"] = TestBridgeCommands.ClockHeldBy(),
                 ["x"] = Round(position.x), ["y"] = Round(position.y), ["z"] = Round(position.z), ["heading"] = Round(heading),
                 ["in_vehicle"] = string.IsNullOrEmpty(game.ActiveVehicleId) ? null : game.ActiveVehicleId,
                 ["at_hatch"] = atHatch,
@@ -85,7 +99,21 @@ namespace FoodTrucks
             var controller = VehicleHelper.GetVehicleController(instance);
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
             var heading = controller != null ? controller.transform.eulerAngles.y : (float?)null;
-            var legality = Legality.Check(position);
+            // A truck parks: the game's own wheel test, as its panel's LEGAL/ILLEGAL. A cart stands on the pavement: the
+            // mod's pavement rule.
+            bool legal;
+            string legalReason;
+            if (kind == "truck")
+            {
+                legal = Legality.VehicleLegallyParked(instance, out var how);
+                legalReason = $"wheel parking test: {(legal ? "legal" : "illegal")}, {how}";
+            }
+            else
+            {
+                var rule = Legality.Check(position);
+                legal = rule.Legal;
+                legalReason = "pavement rule: " + rule.Detail;
+            }
             bool? toPavement = null;
             string? hatchSide = null;
             if (kind == "truck")
@@ -161,8 +189,8 @@ namespace FoodTrucks
                 ["name"] = LocalizorManager.GetLocalization(instance.vehicleTypeName, null),
                 ["x"] = Round(position.x), ["y"] = Round(position.y), ["z"] = Round(position.z),
                 ["heading"] = heading == null ? (double?)null : Round(heading.Value),
-                ["legal"] = legality.Legal,
-                ["legal_reason"] = legality.Detail,
+                ["legal"] = legal,
+                ["legal_reason"] = legalReason,
                 ["hatch_side"] = hatchSide,
                 ["hatch_to_pavement"] = toPavement,
                 ["open"] = open,
@@ -176,11 +204,59 @@ namespace FoodTrucks
             };
         }
 
+        // The game's transactions of today and yesterday, oldest first: label as the bank app shows it, amount, day, time.
+        private static JArray Transactions(GameInstance game)
+        {
+            var list = new JArray();
+            foreach (var t in game.Transactions)
+            {
+                if (t == null || t.timestamp.Day < game.Day - 1) continue;
+                list.Add(new JObject
+                {
+                    ["label"] = Notices.Text(t.transactionType ?? "", t.transactionData),
+                    ["type"] = t.transactionType,
+                    ["amount"] = Math.Round(t.amount, 2),
+                    ["day"] = t.timestamp.Day,
+                    ["time"] = $"{t.timestamp.Hour:D2}:{(int)t.timestamp.Minute:D2}",
+                });
+            }
+            return list;
+        }
+
+        // Each commissary's bay: "resolved" with its point, "failed" when the search found no legal parking, "pending"
+        // until the city's parking lanes let it search. `entrance` is the building's entrance nearest the bay.
+        private static JArray Bays()
+        {
+            var list = new JArray();
+            var sites = DemandData.Commissaries;
+            if (sites == null) return list;
+            foreach (var site in sites.Sites)
+            {
+                var points = global::FoodTrucks.Commissary.ResolvedBays(site);
+                var entry = new JObject
+                {
+                    ["site"] = site.Id,
+                    ["status"] = points == null ? "pending" : points.Count == 0 ? "failed" : "resolved",
+                    ["point"] = null,
+                    ["entrance"] = null,
+                };
+                if (points != null && points.Count > 0)
+                {
+                    entry["point"] = new JObject { ["x"] = Math.Round(points[0].X, 2), ["z"] = Math.Round(points[0].Z, 2), ["along_x"] = Math.Round(points[0].AlongX, 3), ["along_z"] = Math.Round(points[0].AlongZ, 3) };
+                    var door = TestBridgeCommands.EntranceNear(site, (float)points[0].X, (float)points[0].Z);
+                    if (door != null) entry["entrance"] = new JObject { ["x"] = Round(door.Value.x), ["z"] = Round(door.Value.z) };
+                }
+                list.Add(entry);
+            }
+            return list;
+        }
+
         private static JObject Commissary(SaveState state)
         {
             var c = state.Commissary;
             return new JObject
             {
+                ["bays"] = Bays(),
                 ["spaces"] = new JArray(c.Spaces.Select(s => new JObject { ["site"] = s.CommissaryId, ["vehicle"] = s.VehicleId })),
                 ["orders"] = new JArray(c.Orders.Select(o => new JObject
                 {

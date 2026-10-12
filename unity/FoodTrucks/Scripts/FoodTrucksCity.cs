@@ -84,9 +84,13 @@ namespace FoodTrucks
         public static SaveState? CurrentState =>
             game != null && ReferenceEquals(game, SaveGameManager.Current) ? state : null;
 
+        // How many times a save was attached this session (the test bridge's load completion).
+        internal static int Attaches { get; private set; }
+
         public static void Attach(GameInstance current)
         {
             Detach();
+            Attaches++;
             if (current.modData == null) current.modData = new Dictionary<string, string>();
             current.modData.TryGetValue(SaveKey, out var json);
 

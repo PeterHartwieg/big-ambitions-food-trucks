@@ -547,7 +547,8 @@ namespace FoodTrucks
 
         // ---- Changes ----
 
-        private static void ChooseCrew(string id, int slot, string? employeeId)
+        // The crew dropdown's choice for one slot (null: Unassigned). Also the test bridge's crew command.
+        internal static void ChooseCrew(string id, int slot, string? employeeId)
         {
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite) return;

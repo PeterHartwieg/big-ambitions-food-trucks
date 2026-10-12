@@ -157,6 +157,33 @@ namespace FoodTrucks
                 typeof(CargoLimit), prefix: nameof(CargoLimit.MoveEquipmentFirstPrefix), postfix: nameof(CargoLimit.MoveEquipmentFirstPostfix));
         }
 
+        // The test bridge's run_until: with -foodtrucks-test only, so the game's tick is untouched otherwise. First, so the
+        // mod's own tick prefix sees the clamped step.
+        public static void ApplyTestBridge()
+        {
+            const string name = "GameManager.RunMainGameTick(Single), test bridge";
+            if (harmony == null)
+            {
+                Log.Error($"Patch {name}: Not active, Harmony isn't set up.");
+                return;
+            }
+            try
+            {
+                var original = AccessTools.Method(typeof(GameManager), "RunMainGameTick", new[] { typeof(float) });
+                if (original == null)
+                {
+                    Log.Error($"Patch {name}: Not active, method not found.");
+                    return;
+                }
+                harmony.Patch(original, prefix: new HarmonyMethod(typeof(TestBridgeCommands), nameof(TestBridgeCommands.ClampTickPrefix)) { priority = HarmonyLib.Priority.First });
+                Log.Info($"Patch {name}: Active.");
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Patch {name}: Not active, {ex.Message}");
+            }
+        }
+
         public static void Remove()
         {
             harmony?.UnpatchAll(HarmonyId);

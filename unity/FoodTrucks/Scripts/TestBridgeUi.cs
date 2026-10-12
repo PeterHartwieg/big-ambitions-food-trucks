@@ -139,7 +139,7 @@ namespace FoodTrucks
         }
 
         // What is open, in the order the game's Esc handling closes things (CancelButtonHandler).
-        private static List<string> Open()
+        internal static List<string> Open()
         {
             var open = new List<string>();
             if (HudConfirm.isOpen) open.Add("confirmation");

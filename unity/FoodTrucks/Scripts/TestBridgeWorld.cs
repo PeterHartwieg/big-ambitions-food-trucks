@@ -68,13 +68,23 @@ namespace FoodTrucks
             return (point, along, 1);
         }
 
-        // A commissary's door (its building's first entrance) and the way out of the building from it.
+        // The building's entrance nearest a point (the bay), or null when the building isn't in this city.
+        internal static Vector3? EntranceNear(CommissarySite site, float x, float z)
+        {
+            var doors = World.EntrancesOf(site.Address);
+            if (doors == null || doors.Length == 0) return null;
+            return doors.OrderBy(d => (d.x - x) * (d.x - x) + (d.z - z) * (d.z - z)).First();
+        }
+
+        // A commissary's door and the way out of the building from it: the entrance nearest its resolved bay (the one
+        // state.commissary.bays names), else the building's first entrance.
         internal static (Vector3 Door, Vector3 Out) Door(string siteId)
         {
             var site = Site(siteId);
             var doors = World.EntrancesOf(site.Address);
             if (doors == null || doors.Length == 0) throw new BridgeError($"The building of {siteId} ({site.Address}) isn't in this city.");
-            var door = doors[0];
+            var bay = global::FoodTrucks.Commissary.ResolvedBays(site);
+            var door = bay != null && bay.Count > 0 ? EntranceNear(site, (float)bay[0].X, (float)bay[0].Z)!.Value : doors[0];
             var building = World.AllBuildings().FirstOrDefault(b => b.Doors.Contains(door)).Controller;
             var outward = building != null ? door - building.transform.position : Vector3.forward;
             outward.y = 0f;
@@ -236,6 +246,11 @@ namespace FoodTrucks
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
             var game = SaveGameManager.Current;
             var panel = InstanceBehavior<UIs>.Instance?.playerHUD?.itemPanelUI;
+            bool IsOpen() => FoodTrucks.Core.Saves.StreetSales.Find(state, id)?.IsOpen == true;
+            int Cargo() => vehicle.cargoInstances.Where(c => c != null).Sum(c => c.amount);
+            string? Space() => state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == id)?.CommissaryId;
+            var cargoBefore = Cargo();
+            var spaceBefore = Space();
             void InIt(string what)
             {
                 if (game.ActiveVehicleId != id) throw new BridgeError($"{what} is on the vehicle's panel, shown while the player drives the truck or pushes the cart: vehicle enter first.");
@@ -289,8 +304,83 @@ namespace FoodTrucks
                         throw new BridgeError($"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay.");
                 }
             });
-            Log.Info($"Test bridge: vehicle {id} {op}.");
-            return new JObject { ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
+            // Whether the operation happened, read from the state it should have changed (a refusal leaves only its notice).
+            bool done;
+            switch (op)
+            {
+                case "open": done = IsOpen(); break;
+                case "close": done = !IsOpen(); break;
+                case "step_out": done = !TruckWindow.PlayerAt(id); break;
+                // The walk to the rear door has started, or the player is placed again.
+                case "back_to_hatch": done = !TruckWindow.CanGoBack(vehicle); break;
+                // In it, or walking to it.
+                case "enter": done = game.ActiveVehicleId == id || (PlayerHelper.PlayerController?.hasOnGoalReachedAction ?? false); break;
+                case "exit": done = game.ActiveVehicleId != id; break;
+                case "restock": done = Cargo() != cargoBefore; break;
+                case "rent_bay": done = Space() != null && Space() != spaceBefore; break;
+                default: done = false; break;
+            }
+            Log.Info($"Test bridge: vehicle {id} {op}: {(done ? "done" : "not done")}.");
+            return new JObject { ["done"] = done, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
+        }
+
+        // ---- commissary, crew ----
+
+        // { "op": "order", "site", "items": [ { "item", "boxes" } ] }: the phone form's confirm without the call.
+        private static JToken CommissaryCommand(JObject args)
+        {
+            var op = Need(args, "op", "order");
+            if (op != "order") throw new BridgeError($"Unknown commissary op '{op}': order.");
+            var site = Need(args, "site", "the commissary's id");
+            if (!(args["items"] is JArray rows) || rows.Count == 0) throw new BridgeError("order needs \"items\": [ { \"item\", \"boxes\" } ].");
+            var items = rows.OfType<JObject>().Select(r => (Item: Need(r, "item", "an item key or name"), Boxes: (int)(Num(r, "boxes") ?? throw new BridgeError("Each item needs \"boxes\".")))).ToList();
+            var (orders, refusal) = global::FoodTrucks.Commissary.OrderForTesting(site, items);
+            if (refusal != null) throw new BridgeError(refusal);
+            return new JObject
+            {
+                ["orders"] = new JArray(orders.Select(o => new JObject
+                {
+                    ["n"] = o.Id, ["site"] = o.CommissaryId, ["item"] = o.ItemName, ["units"] = o.Units,
+                    ["goods"] = o.GoodsCents / 100.0, ["fee"] = o.FeeCents / 100.0, ["total"] = o.TotalCents / 100.0, ["due_day"] = o.DeliverDay,
+                })),
+            };
+        }
+
+        // { "op": "assign" | "unassign", "vehicle", "employee_id" }: the BizMan vehicle page's crew dropdown.
+        private static JToken Crew(JObject args)
+        {
+            var op = Need(args, "op", "assign or unassign");
+            var id = Need(args, "vehicle", "the food vehicle's id");
+            var employeeId = Need(args, "employee_id", "the employee's id (state.employees)");
+            var vehicle = FoodVehicle(id);
+            var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
+            if (!FoodTrucksSession.CanWrite) throw new BridgeError("The mod's save data is read-only.");
+            var record = FoodTrucks.Core.Saves.StreetSales.Find(state, id);
+            var crew = record?.Crew ?? new System.Collections.Generic.List<string>();
+            var notices = Notices.Capture(() =>
+            {
+                switch (op)
+                {
+                    case "assign":
+                        if (crew.Contains(employeeId)) throw new BridgeError($"{employeeId} is on {id} already.");
+                        if (!HireCrew.Available(state).Any(e => e.id == employeeId))
+                            throw new BridgeError($"{employeeId} isn't an unassigned hire (see state.employees).");
+                        var kind = FoodTrucksMod.KindOf(vehicle.vehicleTypeName);
+                        if (crew.Count >= HireCrew.Limit(kind)) throw new BridgeError($"{id} has its full crew ({crew.Count}).");
+                        BizManVehiclePage.ChooseCrew(id, crew.Count, employeeId);
+                        break;
+                    case "unassign":
+                        var slot = crew.IndexOf(employeeId);
+                        if (slot < 0) throw new BridgeError($"{employeeId} isn't on {id}.");
+                        BizManVehiclePage.ChooseCrew(id, slot, null);
+                        break;
+                    default:
+                        throw new BridgeError($"Unknown crew op '{op}': assign or unassign.");
+                }
+            });
+            var now = FoodTrucks.Core.Saves.StreetSales.Find(state, id)?.Crew ?? new System.Collections.Generic.List<string>();
+            var done = op == "assign" ? now.Contains(employeeId) : !now.Contains(employeeId);
+            return new JObject { ["done"] = done, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
         }
 
         private static void Refused(string? why)
