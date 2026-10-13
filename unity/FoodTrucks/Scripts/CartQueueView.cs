@@ -354,6 +354,12 @@ namespace FoodTrucks
         }
 
         public string VehicleId { get; }
+        // "truck" or "cart", for the log (live session 5: a truck's line was logged as a cart's).
+        public string Kind => kind ??= KindOf(VehicleId);
+        private string? kind;
+
+        private static string KindOf(string vehicleId) =>
+            FoodTrucksMod.KindOf(SaveGameManager.Current?.VehicleInstances?.FirstOrDefault(v => v != null && v.id == vehicleId)?.vehicleTypeName) ?? "vehicle";
         public ServiceState Service { get; }
         public ServiceMood Mood { get; set; } = ServiceMood.Neutral;
         public Dictionary<long, CustomerExit> Exits { get; } = new Dictionary<long, CustomerExit>();
@@ -376,7 +382,7 @@ namespace FoodTrucks
             var (places, look, ends, detail, side, lanes) = Layout(cart, queueLimit + 1 + ExtraPlaces, shape);
             var root = new GameObject("FoodTrucks.Queue." + vehicleId);
             root.AddComponent<QueueLineRoot>();
-            Log.Info($"Queue view: line at cart {vehicleId}: {detail}.");
+            Log.Info($"Queue view: line at {KindOf(vehicleId)} {vehicleId}: {detail}.");
             return new QueueLine(vehicleId, root, places, look, ends, service, shape.PavementOnly ? lanes : null) { Side = side };
         }
 
@@ -411,7 +417,7 @@ namespace FoodTrucks
             people.Clear();
             leaving.Clear();
             if (root != null) Object.Destroy(root);
-            if (count > 0 || WalkSummary().Length > 0) Log.Info($"Queue view: cart {VehicleId} line removed with {count} people ({reason}){WalkSummary()}.");
+            if (count > 0 || WalkSummary().Length > 0) Log.Info($"Queue view: {Kind} {VehicleId} line removed with {count} people ({reason}){WalkSummary()}.");
         }
 
         // One frame. Spawns at most `room` people; returns how many it spawned.
@@ -461,14 +467,14 @@ namespace FoodTrucks
                 if (pair.Value != null && pair.Value.UnsafeWalk)
                 {
                     unseen.Add(pair.Key);
-                    Log.Info($"Queue view: cart {VehicleId}: a customer's walk would cross a driving lane; taken out of view.");
+                    Log.Info($"Queue view: {Kind} {VehicleId}: a customer's walk would cross a driving lane; taken out of view.");
                 }
                 else if (pair.Value != null && pair.Value.Blocked)
                 {
                     // Two people each standing on the other's place never get free: the one who waited too long goes
                     // from view, so the other can take their place. Their sale (if served) is paid below.
                     unseen.Add(pair.Key);
-                    Log.Info($"Queue view: cart {VehicleId}: customer {pair.Key} waited {QueuePerson.BlockedSeconds:F0} s for someone to clear their place; taken out of view.");
+                    Log.Info($"Queue view: {Kind} {VehicleId}: customer {pair.Key} waited {QueuePerson.BlockedSeconds:F0} s for someone to clear their place; taken out of view.");
                 }
                 if (pair.Value != null) Object.Destroy(pair.Value.gameObject);
                 people.Remove(pair.Key);
@@ -500,14 +506,14 @@ namespace FoodTrucks
         {
             if (person.Walks > mostWalks) mostWalks = person.Walks;
             if (person.Walks == ManyWalks + 1 && manyWalksLogged++ < 3)
-                Log.Info($"Queue view: cart {VehicleId}: customer {id} has walked to {person.Walks} targets; the line keeps moving them (re-pathing).");
+                Log.Info($"Queue view: {Kind} {VehicleId}: customer {id} has walked to {person.Walks} targets; the line keeps moving them (re-pathing).");
             if (!(person.Circled is { } circle)) return;
             person.Circled = null;
             circled++;
             if (circle.Warped) circledWarped++;
             if (circle.Miss > worstMiss) worstMiss = circle.Miss;
             if (circled == 1)
-                Log.Info($"Queue view: cart {VehicleId}: a customer circled their place {circle.Miss:F2} m off without getting closer; " +
+                Log.Info($"Queue view: {Kind} {VehicleId}: a customer circled their place {circle.Miss:F2} m off without getting closer; " +
                          $"{(circle.Warped ? "put there" : "stopped where they were (their place is off the NavMesh)")}.");
         }
 
@@ -602,7 +608,7 @@ namespace FoodTrucks
                 {
                     blockedUntil = Time.time + SpawnRetrySeconds;
                     spawnFailures = 0;
-                    Log.Error($"Queue view: cart {VehicleId}: customers could not be created; trying again in {SpawnRetrySeconds:F0} s.");
+                    Log.Error($"Queue view: {Kind} {VehicleId}: customers could not be created; trying again in {SpawnRetrySeconds:F0} s.");
                 }
                 return null;
             }

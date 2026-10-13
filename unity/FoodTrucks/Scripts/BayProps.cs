@@ -89,7 +89,7 @@ namespace FoodTrucks
         }
 
         // The sign: on the pavement just behind the kerb, by the middle of the longest stretch, its plate facing the
-        // road (and readable from the pavement). Local -z is the pavement side (the paint's root faces the road). The
+        // road for drivers. Local -z is the pavement side (the paint's root faces the road). The
         // kerb is the first step up of 8 cm or more from the paint's own edge (0.9.10 measured from the driving lane's
         // waypoint height, which needn't be the road's); without one (a flush plaza, as across from the Hell's Kitchen
         // door), the pavement's edge: the first point off the parking lane and the road that is on the NavMesh. The pole
@@ -146,7 +146,10 @@ namespace FoodTrucks
                 var sign = Object.Instantiate(model, root, false);
                 sign.name = "LoadingZoneSign";
                 sign.transform.position = at;
-                sign.transform.localRotation = Quaternion.identity;
+                // Turned half round: the model's plate face comes in on the root's -z, the pavement (live session 5:
+                // both signs showed drivers their edge or back). Turned, the face and its double arrow along the kerb
+                // look at the road, with the plate on the road side of the pole.
+                sign.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
                 var plate = Material("M_BaySign_" + siteId);
                 if (plate != null)
                     foreach (var renderer in sign.GetComponentsInChildren<MeshRenderer>(true))
@@ -199,12 +202,26 @@ namespace FoodTrucks
             // pavement and its facing count; the props' heights come from the ground under each (Fits).
             // The player, people and vehicles are never the wall (live session 4: a player teleported to the door was
             // read as the facade, and every place came out 1.5 m too far out, by the driving lane).
-            var from = door + outward * 3f + Vector3.up * 1.0f;
+            // The ray starts at the driving lane, not 3 m out from the door (live session 5: Lower Manhattan's door
+            // point stands more than that inside its building, so a ray from 3 m out started inside the walls, which
+            // rays don't hit from within, and every place had "no wall behind it"). It runs back past the door, and
+            // the facade is the first surface of the Buildings layer met from the street; failing that, the first
+            // solid surface between 1.5 m behind the door and 3 m in front of it, as before.
+            var laneMetres = Mathf.Max(3f, Flat(nearest.Value.Point - door));
+            var from = door + outward * laneMetres + Vector3.up * 1.0f;
+            var rayMetres = laneMetres + FacadeBehindDoorMetres;
             var facade = door;
-            var hit = Physics.RaycastAll(from, -outward, 4.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
-                .Where(h => h.collider != null && !NotWall(h.collider)).OrderBy(h => h.distance).FirstOrDefault();
+            var hits = Physics.RaycastAll(from, -outward, rayMetres, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                .Where(h => h.collider != null && !NotWall(h.collider)).OrderBy(h => h.distance).ToList();
+            // A building surface more than 6 m in front of the door point is something else on the pavement (a kiosk).
+            var hit = hits.FirstOrDefault(h => BuildingsLayer >= 0 && h.collider.gameObject.layer == BuildingsLayer && h.distance >= laneMetres - 6f);
+            if (hit.collider == null)
+                hit = hits.FirstOrDefault(h => h.distance >= laneMetres - 3f && h.distance <= laneMetres + 1.5f);
             if (hit.collider != null)
                 facade = new Vector3(hit.point.x, door.y, hit.point.z);
+            else
+                return new Outcome($"no props by the door at x {door.x:F1}, z {door.z:F1}: no building wall on a ray at waist height from the driving lane at " +
+                                   $"x {from.x:F1}, z {from.z:F1} back {rayMetres:F0} m, {FacadeBehindDoorMetres:F0} m past the door ({(hits.Count == 0 ? "nothing solid hit" : "hit only " + string.Join(", ", hits.Take(3).Select(h => Describe(h.collider))))})", false);
             if (hit.collider != null)
             {
                 var normal = hit.normal;
@@ -300,7 +317,7 @@ namespace FoodTrucks
             // None on the NavMesh at all: the street's navigation may still be loading.
             if (placed.Count == 0 && skipped.Count > 0 && offNavMesh == skipped.Count) tryAgain = true;
             return new Outcome($"props by the door at x {door.x:F1}, z {door.z:F1} (facade facing {Mathf.Atan2(outward.x, outward.z) * Mathf.Rad2Deg:F0} degrees" +
-                               $"{(hit.collider != null ? ", " + Describe(hit.collider) : ", no facade hit")}): {(placed.Count == 0 ? "none" : string.Join(", ", placed))}" +
+                               $", {Describe(hit.collider)}, {Vector3.Dot(facade - door, outward):+0.0;-0.0} m from the door point): {(placed.Count == 0 ? "none" : string.Join(", ", placed))}" +
                                (skipped.Count > 0 ? "; left out: " + string.Join(", ", skipped) : ""), tryAgain);
         }
 
@@ -339,6 +356,9 @@ namespace FoodTrucks
             Moving(c) || c.gameObject.layer == PlayerLayer || c.transform.root.gameObject.layer == PlayerLayer;
 
         private static readonly int PlayerLayer = LayerMask.NameToLayer("Player");
+        private static readonly int BuildingsLayer = LayerMask.NameToLayer("Buildings");
+        // How far behind the door point the facade ray looks for the wall.
+        private const float FacadeBehindDoorMetres = 8f;
 
         // What a collider is, for the log: its name, its root object's name and its layer.
         internal static string Describe(Collider c)
@@ -367,7 +387,9 @@ namespace FoodTrucks
             {
                 var local = Quaternion.Inverse(Quaternion.LookRotation(outward, Vector3.up)) * (entrance - at);
                 var dx = Mathf.Max(0f, Mathf.Abs(local.x) - footprint.x);
-                var dz = Mathf.Max(0f, Mathf.Abs(local.z) - footprint.y);
+                // An entrance behind the prop (a door point inside its building, as at Lower Manhattan) counts by its
+                // distance along the facade alone, so a prop never stands in front of a recessed door.
+                var dz = local.z < 0f ? 0f : Mathf.Max(0f, Mathf.Abs(local.z) - footprint.y);
                 if (Mathf.Abs(local.y) < 3f && new Vector2(dx, dz).magnitude < DoorClearMetres - 0.05f)
                     return new Refusal($"next to the entrance at x {entrance.x:F1}, z {entrance.z:F1}", false, "entrance");
             }
