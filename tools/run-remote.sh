@@ -31,7 +31,8 @@ open_tunnel() {
   if lsof -nP -iTCP:$PORT -sTCP:LISTEN >/dev/null 2>&1; then
     echo "Port $PORT is already taken on this Mac (a mock bridge?). Stop that first." >&2; exit 1
   fi
-  ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L "$PORT:127.0.0.1:$PORT" "$HOST" < /dev/null &
+  # Its own output goes to a file: an ssh holding this script's stdout would keep a pipe on run-remote.sh open until the tunnel closes.
+  ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L "$PORT:127.0.0.1:$PORT" "$HOST" < /dev/null > "$REPO/build/bridge-tunnel.log" 2>&1 &
   echo $! > "$PIDFILE"
   sleep 2
   tunnel_up || { echo "The tunnel to $HOST did not open." >&2; rm -f "$PIDFILE"; exit 1; }
