@@ -152,7 +152,7 @@ Replaces the example car's meshes inside the copied `TurboHonza` prefab (`ModAss
 | `Truck_Wheel_RL` | `Wheels/RearLeft` | (−0.87, 0.38, −1.80) | |
 | `Truck_Wheel_RR` | `Wheels/RearRight` | (0.87, 0.38, −1.80) | |
 | `Truck_Hatch` | new | (1.10, 2.82, −1.10) | Serving hatch with its struts, hinge along local Z; open at localEulerAngles.z = +80 (checked in Unity). 164 tris |
-| `Truck_Collision` | `Colliders/BodyCollider` mesh | (0, 0, 0) | Convex hull, 126 tris, x −1.231…1.26, y 0…3.10 (roof units left outside), z −3.15…2.65. Convex MeshCollider, layer 12 as before |
+| `Truck_Collision` | `Colliders/BodyCollider` mesh | (0, 0, 0) | Convex hull of the body and hatch, 124 tris, x −1.231…1.26, y 0.30…3.10 (roof units left outside), z −3.15…2.65. Convex MeshCollider, layer 12 as before. No wheels and nothing below 0.30 since 13 October 2026, as the game's trucks (delivery truck 0.33, freight truck 0.30): with the wheels in it the hull reached the road, sat about 2 cm into it at the rear at rest and 5 to 14 cm in a hard turn, and scraped kerbs and street objects, which played NWH's crash sound |
 
 Wheelbase 3.60 m (the example car: 2.70 m), track 1.74 m (1.50 m).
 

@@ -604,18 +604,23 @@ def texture_and_uv():
  with open(OUT+'/light_islands.json','w') as f:json.dump(lights,f,indent=2)
  return {'face_islands':len(entries),'used_atlas_cells':int(occupied.sum()),'light_faces':len(lights)}
 
+HULL_FLOOR=.30  # metres above the tyres' contact patch
+
 def collision_export_save():
  old=bpy.data.objects.get('Truck_Collision')
  if old: bpy.data.objects.remove(old,do_unlink=True)
  points=[]
- # Actual body/wheel/hatch vertices, with mirror assemblies excluded.
- for name in ('Truck_Body','Truck_Hatch','Truck_Wheel_FL','Truck_Wheel_FR','Truck_Wheel_RL','Truck_Wheel_RR'):
+ # Actual body/hatch vertices, with mirror assemblies excluded. No wheels and nothing below HULL_FLOOR: NWH's
+ # raycast wheels carry the truck, and the game's vehicles keep their hulls off the road (delivery truck 0.33 m,
+ # freight truck 0.30 m). With the wheels in it, the hull reached the road and scraped kerbs and street objects
+ # when the truck leaned in a hard turn, which played the crash sound (Peter, 13 October 2026).
+ for name in ('Truck_Body','Truck_Hatch'):
   source=bpy.data.objects[name]
   for v in source.data.vertices:
    p=source.matrix_world @ v.co
    if p.z>3.101: continue  # Roof equipment is allowed outside the collision hull.
    if name=='Truck_Body' and abs(p.x)>1.145 and p.y<-1.70 and p.z>1.70: continue
-   points.append(tuple(p))
+   points.append((p.x,p.y,max(p.z,HULL_FLOOR)))
  # Enclose the added front plate recess with one bumper plane instead of
  # giving the collision hull each millimetre-deep bezel and protector face.
  points.extend((x,-2.65,z) for x in (-1.09,1.09) for z in (.47,.66))
