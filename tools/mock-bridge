@@ -264,6 +264,22 @@ class Mock:
         return [{'site':site,'status':self.bay_status.get(site,'resolved'),'point':{'x':393.2+i*100,'z':217.6,'along_x':0.,'along_z':1.} if self.bay_status.get(site,'resolved')=='resolved' else None,
                  'entrance':{'x':393.2+i*100+5,'z':217.6} if self.bay_status.get(site,'resolved')=='resolved' else None} for i,site in enumerate(SITES)]
 
+    def bay_candidates(self, args):
+        # The bridge's shape with made-up spots: one the automatic search takes, one past a long walk, one beyond 30 m.
+        site=need(args,'site',"the commissary's id")
+        radius=num(args,'radius')
+        radius=60 if radius is None else radius
+        if radius<5 or radius>80: raise ValueError('radius is 5 to 80 metres.')
+        if site not in SITES: raise ValueError(f'no commissary {site}')
+        i=SITES.index(site); x=393.2+i*100+5; z=217.6
+        spots=[(x-11.4,z-5.6,180.,12.7,'short',14.2,12.5,True,None),
+               (x+9.0,z+14.0,90.,16.6,'too_long',61.0,16.0,False,'too long a walk from the door'),
+               (x-36.0,z+20.0,180.,41.2,'short',44.0,41.0,False,"beyond the automatic search's 30 m")]
+        return {'site':site,'status':self.bay_status.get(site,'resolved'),'radius':radius,'max_metres':30,
+                'origins':[{'kind':'entrance','x':x,'z':z,'door':{'x':x,'y':0.1,'z':z},'walk_start':'door','parking_colliders':42,'truncated':False,
+                            'candidates':[{'x':round(a,2),'z':round(b,2),'heading':h,'distance':d,'walk':w,'walk_m':wm,'straight_m':sm,'automatic':auto,'rejected':why}
+                                          for a,b,h,d,w,wm,sm,auto,why in spots if d<=radius]}]}
+
     def require_bay(self, site):
         if self.bay_status.get(site)=='pending':
             raise ValueError(f"The bay of {site} isn't resolved yet (the city's parking lanes load after the city); try again in a few seconds.")
@@ -976,8 +992,9 @@ class Mock:
         if cmd=='vehicle':
             return self.operate(self.vehicle(need(args,'id',"the food vehicle's id")),need(args,'op','open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay'))
         if cmd=='commissary':
-            op=need(args,'op','order')
-            if op!='order': raise ValueError(f"Unknown commissary op '{op}': order.")
+            op=need(args,'op','order or bay_candidates')
+            if op=='bay_candidates': return self.bay_candidates(args)
+            if op!='order': raise ValueError(f"Unknown commissary op '{op}': order, bay_candidates.")
             site=need(args,'site',"the commissary's id")
             rows=args.get('items')
             if not isinstance(rows,list) or not rows: raise ValueError('order needs "items": [ { "item", "boxes" } ].')

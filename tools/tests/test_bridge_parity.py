@@ -28,6 +28,17 @@ class ParityTests(unittest.TestCase):
             self.mock.call(cmd,args)
         self.assertEqual(str(exc.exception),text)
 
+    def test_bay_candidates_shape_and_guards(self):
+        reply=self.mock.call('commissary',{'op':'bay_candidates','site':'murray-hill','radius':80})
+        self.assertEqual(reply['max_metres'],30)
+        origin=reply['origins'][0]
+        self.assertEqual(set(origin),{'kind','x','z','door','walk_start','parking_colliders','truncated','candidates'})
+        self.assertEqual(set(origin['candidates'][0]),{'x','z','heading','distance','walk','walk_m','straight_m','automatic','rejected'})
+        self.assertEqual(sum(c['automatic'] for c in origin['candidates']),1)
+        self.assertEqual(len(self.mock.call('commissary',{'op':'bay_candidates','site':'murray-hill','radius':30})['origins'][0]['candidates']),2)
+        self.refused('commissary',{'op':'bay_candidates','site':'murray-hill','radius':81},'radius is 5 to 80 metres.')
+        self.refused('commissary',{'op':'nope','site':'murray-hill'},"Unknown commissary op 'nope': order, bay_candidates.")
+
     def test_driving_and_paused_op_errors(self):
         for op,label in [('open','Open here'),('exit','Park'),('rent_bay','Commissary'),('restock','Commissary')]:
             self.refused('vehicle',{'id':self.id,'op':op},f"{label} is on the vehicle's panel, shown while the player drives the truck or pushes the cart: vehicle enter first.")
