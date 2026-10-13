@@ -27,7 +27,10 @@ if [ ! -d "$SDK/.git" ]; then
 fi
 # Refuse a clone at another commit or with edited SDK sources, rather than resetting it.
 [ "$(git -C "$SDK" rev-parse HEAD)" = "$SDK_COMMIT" ] || { echo "$SDK is not at the pinned SDK commit $SDK_COMMIT" >&2; exit 1; }
-SDK_INPUTS=(Assets/Editor Assets/Mods/Example-Vehicle "Assets/_BaDependencies/Vehicle Dependencies" Packages ProjectSettings)
+# The settings files Unity rewrites during a build (see run_unity); checked here like every input, so the restore
+# after the build can never discard a real change.
+SDK_RESAVED=("Assets/Settings/HDRP Balanced.asset" "Assets/Settings/HDRP High Fidelity.asset" "Assets/Settings/HDRP Performant.asset" ProjectSettings/GraphicsSettings.asset ProjectSettings/QualitySettings.asset)
+SDK_INPUTS=(Assets/Editor Assets/Mods/Example-Vehicle "Assets/_BaDependencies/Vehicle Dependencies" Packages ProjectSettings "${SDK_RESAVED[@]}")
 if [ -n "$(git -C "$SDK" status --porcelain --untracked-files=no -- "${SDK_INPUTS[@]}")" ]; then
   echo "$SDK has local changes in ${SDK_INPUTS[*]}; refusing to build" >&2; exit 1
 fi
@@ -117,9 +120,8 @@ link "$MOD_DIR" "$SDK/Assets/Mods/FoodTrucks"
 link "$REPO/unity/BuildEditor" "$SDK/Assets/Editor/FoodTrucksBuild"
 
 # BatchBuild switches the SDK's HDRP assets to both lit shader modes for the build (the vehicle shader's Forward
-# pass, which the game's hover outline needs) and back; Unity still rewrites these files with its own upgrades, so
+# pass, which the game's hover outline needs) and back; Unity still rewrites SDK_RESAVED with its own upgrades, so
 # they are put back after every Unity run, or the SDK_INPUTS check above would refuse the next build.
-SDK_RESAVED=(Assets/Settings ProjectSettings/GraphicsSettings.asset ProjectSettings/QualitySettings.asset)
 
 run_unity() { # run_unity <method> <log name>
   local log="$LOG_DIR/$2.log" ok=1
