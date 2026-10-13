@@ -65,11 +65,11 @@ class ParityTests(unittest.TestCase):
     def test_bay_candidates_for_a_nose_in_lot_bay(self):
         reply=self.mock.call('commissary',{'op':'bay_candidates','site':'industry-city','radius':30})
         origin=reply['origins'][0]
-        self.assertEqual((origin['kind'],origin['x'],origin['z'],origin['same_side']),('data',-1439.0,-1072.9,True))
+        self.assertEqual((origin['kind'],origin['x'],origin['z'],origin['same_side']),('data',-1439.0,-1073.4,True))
         self.assertTrue(origin['candidates'])
         self.assertEqual({c['heading'] for c in origin['candidates']},{180})
         picks=[c for c in origin['candidates'] if c['automatic']]
-        self.assertEqual([(p['x'],p['z'],p['distance']) for p in picks],[(-1439.0,-1072.9,0.0)])
+        self.assertEqual([(p['x'],p['z'],p['distance']) for p in picks],[(-1439.0,-1073.4,0.0)])
         self.assertTrue(all(c['walk'] is None and c['walk_m'] is None for c in origin['candidates']))
         self.assertNotIn('too long a walk from the door',{c['rejected'] for c in origin['candidates']})
 
