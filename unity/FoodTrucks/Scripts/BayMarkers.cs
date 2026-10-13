@@ -397,7 +397,7 @@ namespace FoodTrucks
             {
                 var doorLanes = TrafficLanes.Near(door, 40f);
                 outcome = doorLanes.Known
-                    ? BayProps.ByTheDoor(holder.transform, door, doorLanes)
+                    ? BayProps.ByTheDoor(holder.transform, door, doorLanes, World.BuildingAt(site.Address))
                     : new BayProps.Outcome("no props yet (no traffic lanes near the door)", true);
             }
             catch (Exception ex) { outcome = new BayProps.Outcome($"no props ({ex.GetType().Name}: {ex.Message})", true); }

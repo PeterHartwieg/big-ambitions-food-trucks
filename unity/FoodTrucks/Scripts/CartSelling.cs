@@ -283,6 +283,9 @@ namespace FoodTrucks
             // "About 1 customer an hour", "About 3 customers an hour", and none its own words (live session 5: "About 1
             // customers an hour"; live session 6: "About 0 customers an hour").
             var rate = (int)Math.Round(ExpectedSales(plan, service));
+            // Nobody coming and nobody serving but the player: its own words, not "Hardly any customers …, as long as
+            // someone is at the window" (review round 11, Opus).
+            if (rate <= 0 && serving.Count == 0) key = "foodtrucks:notification_open_quiet";
             var customers = rate <= 0 ? LocalizorManager.GetLocalization("foodtrucks:customers_none", null)
                 : rate == 1 ? LocalizorManager.GetLocalization("foodtrucks:customers_one", null)
                 : string.Format(LocalizorManager.GetLocalization("foodtrucks:customers_many", null), rate);
@@ -1045,7 +1048,9 @@ namespace FoodTrucks
             spot = World.ReadSpot(tables, controller != null ? controller.transform.position : new Vector3(spot!.X, spot.Y, spot.Z), at, Partners.VenueOf(cart.id));
             var again = spots.TryGetValue(cart.id, out var before) && before.Day == spot.Day && before.Hour == spot.Hour;
             spots[cart.id] = spot;
-            if (!again || !spot.Provisional) Log.Info($"Cart {cart.id} spot on day {spot.Day}, {spot.Hour:D2}:00{(spot.Provisional ? " (venues still being simulated)" : "")}: {World.Describe(spot)}.");
+            // "Truck" or "Cart" by the vehicle (live session 9: a truck's spot line said "Cart").
+            var noun = FoodTrucksMod.KindOf(cart.vehicleTypeName) == "truck" ? "Truck" : "Cart";
+            if (!again || !spot.Provisional) Log.Info($"{noun} {cart.id} spot on day {spot.Day}, {spot.Hour:D2}:00{(spot.Provisional ? " (venues still being simulated)" : "")}: {World.Describe(spot)}.");
             return spot;
         }
 

@@ -310,7 +310,10 @@ namespace FoodTrucks
                 if (employee == null) return false;
                 if (employee.IsAssignedToAnyBusiness() || employee.isBeingReplaced) return SettleLeaving(employee, "found at the hour's end");
                 CountOn(state, vehicleId, employee, payrollDay);
-                Log.Info($"Crew: {Name(employee)} paid for {hour % 24:D2}:00 on day {CrewPay.DayOfHour(hour)} (open window, {vehicleId}).");
+                // The hour goes onto the game's counters; the game's midnight payroll pays it, once, as the unassigned
+                // wage (EmployeeInstance.PayWage: workedHoursToday x hourly wage). The line says so, as "paid" read as a
+                // second payment beside the game's "Unassigned Daily Wage" (live session 9).
+                Log.Info($"Crew: {Name(employee)} worked {hour % 24:D2}:00 on day {CrewPay.DayOfHour(hour)} (open window, {vehicleId}); counted for the game's midnight wage.");
                 return true;
             });
             FoodTrucksSession.MarkChanged();

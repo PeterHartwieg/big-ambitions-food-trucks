@@ -191,7 +191,7 @@ namespace FoodTrucks
         // door where it fits: on the NavMesh, touching nothing, clear of every entrance (the commissary's and its
         // neighbours'), not on the road, and with WalkwayMetres of walkable pavement left in front of it. Those that
         // don't fit anywhere within MaxAlongMetres are left out; the log says why, naming what stood there.
-        public static Outcome ByTheDoor(Transform parent, Vector3 door, TrafficLanes lanes)
+        public static Outcome ByTheDoor(Transform parent, Vector3 door, TrafficLanes lanes, CityBuildingController? own = null)
         {
             var nearest = lanes.Nearest(door);
             if (nearest == null) return new Outcome("no props (no driving lane near the door to tell the street from the building)", false);
@@ -215,7 +215,7 @@ namespace FoodTrucks
             // sphere, capsule, convex mesh), so a building's concave mesh falls through to the ray from the street.
             Collider? doorWall = null;
             var facade = door;
-            var near = NearestWall(door);
+            var near = NearestWall(door, own);
             if (near != null)
             {
                 doorWall = near.Value.Collider;
@@ -394,15 +394,27 @@ namespace FoodTrucks
 
         // A collider's extent along a flat direction, from its world bounds.
         // The nearest building surface within WallNearDoorMetres of a door point that stands outside it, and the flat
-        // direction from that surface to the door (the wall's outside). Null when none can be told.
-        private static (Collider Collider, Vector3 Point, Vector3 Outward)? NearestWall(Vector3 door)
+        // direction from that surface to the door (the wall's outside). The commissary's own building first, when its
+        // colliders can be told apart (under its CityBuildingController), else any building (review round 11, Opus: a
+        // neighbour's wall nearer the door point could be taken). Null when none can be told.
+        private static (Collider Collider, Vector3 Point, Vector3 Outward)? NearestWall(Vector3 door, CityBuildingController? own)
+        {
+            if (own != null)
+            {
+                var ownWall = NearestWall(door, c => c.GetComponentInParent<CityBuildingController>() == own);
+                if (ownWall != null) return ownWall;
+            }
+            return NearestWall(door, _ => true);
+        }
+
+        private static (Collider Collider, Vector3 Point, Vector3 Outward)? NearestWall(Vector3 door, Func<Collider, bool> accept)
         {
             (Collider, Vector3, Vector3)? best = null;
             var bestDistance = float.MaxValue;
             var probe = door + Vector3.up * 1.0f;
             foreach (var c in Physics.OverlapSphere(probe, WallNearDoorMetres, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
             {
-                if (c == null || !IsBuilding(c) || NotWall(c) || c.bounds.size.y < 1.5f) continue;
+                if (c == null || !IsBuilding(c) || NotWall(c) || c.bounds.size.y < 1.5f || !accept(c)) continue;
                 // A kiosk or shelter next to the door isn't the wall the door is in.
                 if (Mathf.Max(c.bounds.size.x, c.bounds.size.z) < KioskMetres) continue;
                 if (c is MeshCollider mesh && !mesh.convex) continue;
