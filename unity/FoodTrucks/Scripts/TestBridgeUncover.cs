@@ -35,7 +35,8 @@ namespace FoodTrucks
         private static readonly FieldInfo? ActiveEntities = AccessTools.Field(typeof(ViewBlockingObjectManager), "ActiveEntities");
         private static readonly FieldInfo? RevealValue = AccessTools.Field(typeof(ViewBlockingEntity), "_currentRevealValue");
 
-        private readonly List<(ViewBlockingEntity Entity, bool Unblocked, float Reveal)> faded = new List<(ViewBlockingEntity, bool, float)>();
+        private readonly List<(ViewBlockingEntity Entity, bool Unblocked, float Reveal, List<(GameObject Thing, int Layer)> Layers)> faded =
+            new List<(ViewBlockingEntity, bool, float, List<(GameObject, int)>)>();
         private readonly List<(GameObject Thing, int Layer)> outlined = new List<(GameObject, int)>();
 
         // Names for the shot's reply: what this frame undid.
@@ -80,17 +81,24 @@ namespace FoodTrucks
                 Uncovered.Add($"{entity.name} ({entity.GetType().Name}, reveal {reveal:F2}{(blocked ? ", blocking the game's camera" : "")})");
                 if (!apply) continue;
                 var unblocked = false;
+                // The layers the block-mode toggle writes (the entity and its parts), as they are now: re-blocking
+                // writes layer 0, which would drop an outline a map filter or hover had put on a blocked building
+                // (review round 10).
+                var layers = new List<(GameObject, int)> { (entity.gameObject, entity.gameObject.layer) };
+                if (entity.cityBuildingParts != null)
+                    foreach (var part in entity.cityBuildingParts)
+                        if (part != null) layers.Add((part.gameObject, part.gameObject.layer));
                 try
                 {
                     // False while temporarilyDisableCameraBlock is set; then the entity is left as it is, and only its
                     // fade is lifted.
                     if (blocked) unblocked = entity.SetCameraBlockMode(false);
-                    faded.Add((entity, unblocked, reveal));
+                    faded.Add((entity, unblocked, reveal, layers));
                     entity.SetFadeSate(1f);
                 }
                 catch (Exception ex)
                 {
-                    if (!faded.Any(f => f.Entity == entity)) faded.Add((entity, unblocked, reveal));
+                    if (!faded.Any(f => f.Entity == entity)) faded.Add((entity, unblocked, reveal, layers));
                     Log.Error($"Test bridge, uncovering {entity.name}: {ex.Message}");
                 }
             }
@@ -109,8 +117,14 @@ namespace FoodTrucks
                 if (outlined.Count > before || (!apply && Has(controller.transform, buildingLayer))) Outlined.Add(controller.name);
             }
             var roots = new HashSet<Transform>();
+            // From each collider up to its item (or its body), not the scene root: an item's root can be the game's
+            // container of every owned item and vehicle (review round 10).
             foreach (var c in Physics.OverlapSphere(from, Reach, 1 << itemLayer, QueryTriggerInteraction.Collide))
-                if (c != null) roots.Add(c.attachedRigidbody != null ? c.attachedRigidbody.transform : c.transform.root);
+            {
+                if (c == null) continue;
+                var item = c.GetComponentInParent<ItemController>();
+                roots.Add(item != null ? item.transform : c.attachedRigidbody != null ? c.attachedRigidbody.transform : c.transform);
+            }
             foreach (var root in roots)
             {
                 var before = outlined.Count;
@@ -141,7 +155,7 @@ namespace FoodTrucks
             outlined.Clear();
             for (var i = faded.Count - 1; i >= 0; i--)
             {
-                var (entity, unblocked, reveal) = faded[i];
+                var (entity, unblocked, reveal, layers) = faded[i];
                 if (entity == null) continue;
                 try
                 {
@@ -149,6 +163,12 @@ namespace FoodTrucks
                     entity.SetFadeSate(reveal);
                 }
                 catch (Exception ex) { Log.Error($"Test bridge, putting {entity.name}'s fade back: {ex.Message}"); }
+                try
+                {
+                    foreach (var (thing, layer) in layers)
+                        if (thing != null) thing.layer = layer;
+                }
+                catch (Exception ex) { Log.Error($"Test bridge, putting {entity.name}'s layers back: {ex.Message}"); }
             }
             faded.Clear();
         }

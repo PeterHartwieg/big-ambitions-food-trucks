@@ -140,30 +140,32 @@ namespace FoodTrucks
             {
                 if (frames < total)
                 {
-                    // The camera renders once a frame; the picture is read after a few, so HDRP's exposure and history
-                    // settle. With compare, the as-is frames follow the uncovered ones.
-                    var uncover = frames < Frames;
-                    var scope = RenderFrame(camera, uncover);
-                    frames++;
-                    if (uncover)
+                    try
                     {
-                        uncovered = scope.Uncovered;
-                        outlined = scope.Outlined;
-                        if (frames == Frames)
+                        // The camera renders once a frame; the picture is read after a few, so HDRP's exposure and
+                        // history settle. With compare, the as-is frames follow the uncovered ones.
+                        var uncover = frames < Frames;
+                        var scope = RenderFrame(camera, uncover);
+                        frames++;
+                        if (uncover)
                         {
-                            try { Write(path); }
-                            catch { Release(); throw; }
+                            uncovered = scope.Uncovered;
+                            outlined = scope.Outlined;
+                            if (frames == Frames) Write(path);
+                        }
+                        else
+                        {
+                            asIsUncovered = scope.Uncovered;
+                            asIsOutlined = scope.Outlined;
+                            if (frames == total) Write(asIsPath);
                         }
                     }
-                    else
+                    catch
                     {
-                        asIsUncovered = scope.Uncovered;
-                        asIsOutlined = scope.Outlined;
-                        if (frames == total)
-                        {
-                            try { Write(asIsPath); }
-                            catch { Release(); throw; }
-                        }
+                        // A failed frame (the uncover step, the render, the write) leaves no camera or texture behind
+                        // (review round 10).
+                        Release();
+                        throw;
                     }
                     if (frames < total) return null;
                     Release();
