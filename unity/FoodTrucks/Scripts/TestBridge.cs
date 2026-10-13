@@ -41,12 +41,16 @@ namespace FoodTrucks
             public int? Day;
             public string? Time;
             public bool? Paused;
+            public bool? TimeSkip;
             public int Frame;
             public string? LoadName;
             public string? LoadStatus;
         }
 
         internal static volatile Snapshot Current = new Snapshot();
+
+        // The Unity main thread, where the game's clock may be read directly.
+        internal static int MainThread = -1;
 
         internal static void Start()
         {
@@ -58,6 +62,7 @@ namespace FoodTrucks
             if (http != null) return;
             try
             {
+                MainThread = Thread.CurrentThread.ManagedThreadId;
                 Session = Guid.NewGuid().ToString("N").Substring(0, 8);
                 TestBridgePump.Admit();
                 TestBridgeEvents.Hook();
@@ -66,6 +71,7 @@ namespace FoodTrucks
                 server.Start();
                 http = server;
                 Patches.ApplyTestBridge();
+                GlobalEvents.onHospitalRespawnStarts += TestBridgeCommands.OnCollapse;
                 // An agent drives the game while its window may not have the focus.
                 Application.runInBackground = true;
                 Log.Info($"Test bridge: listening on http://127.0.0.1:{Port}/ (session {Session}).");
@@ -98,6 +104,9 @@ namespace FoodTrucks
                 opOrder.Clear();
             }
             Current = new Snapshot();
+            lastMinutes = null;
+            jump = null;
+            GlobalEvents.onHospitalRespawnStarts -= TestBridgeCommands.OnCollapse;
             TestBridgeEvents.Unhook();
             TestBridgeEvents.Clear();
             if (wasRunning) Log.Info("Test bridge: stopped.");
@@ -213,8 +222,72 @@ namespace FoodTrucks
                 snapshot.Day = game.Day;
                 snapshot.Time = $"{game.Hour:D2}:{(int)game.Minute:D2}";
                 snapshot.Paused = TestBridgeCommands.Paused();
+                snapshot.TimeSkip = TestBridgeCommands.TimeSkipRunning();
             }
             Current = snapshot;
+            WatchClock(game, scene);
+        }
+
+        // The game's clock now, for an event's stamp: read directly on the main thread in the city (so a line logged
+        // after the clock moved this frame carries the moved clock), else the frame's snapshot.
+        internal static (int? Day, string? Time) ClockNow()
+        {
+            if (Thread.CurrentThread.ManagedThreadId == MainThread)
+            {
+                try
+                {
+                    var game = SaveGameManager.Current;
+                    if (game != null && TestBridgeCommands.Scene() == "city") return (game.Day, $"{game.Hour:D2}:{(int)game.Minute:D2}");
+                }
+                catch (Exception) { }
+            }
+            var s = Current;
+            return (s.Day, s.Time);
+        }
+
+        // Clock jumps: the clock moving more than JumpMinutes in one frame (or backwards), as a time skip, a hospital
+        // stay or something setting the time does. Live session 4 (13 October 2026) saw an event stamped day 1 08:44
+        // and /health say 11:47 a few seconds later; both read the same clock (this snapshot), so the clock itself had
+        // jumped between them. Each run of jumps is logged once it has settled for a second, with what was running.
+        private const double JumpMinutes = 30;
+        private static double? lastMinutes;
+        private static (double From, double To, string Why, float Settled)? jump;
+
+        private static void WatchClock(GameInstance? game, string scene)
+        {
+            if (game == null || scene != "city")
+            {
+                lastMinutes = null;
+                FlushJump(force: true);
+                return;
+            }
+            var now = game.Day * 1440.0 + game.Hour * 60.0 + game.Minute;
+            var real = UnityEngine.Time.realtimeSinceStartup;
+            if (lastMinutes != null && (now - lastMinutes.Value > JumpMinutes || now < lastMinutes.Value - 0.01))
+            {
+                var why = TestBridgeCommands.TimeSkipRunning() == true ? "a time skip (sleep or a paid activity)"
+                    : Helpers.EnergyHelper.goingToHospital ? "the player collapsed (hospital)"
+                    : "something set the time (the game, a load or another mod)";
+                jump = jump == null ? (lastMinutes.Value, now, why, real + 1f) : (jump.Value.From, now, jump.Value.Why, real + 1f);
+            }
+            else if (jump != null) jump = (jump.Value.From, now, jump.Value.Why, jump.Value.Settled);
+            lastMinutes = now;
+            FlushJump(force: false);
+        }
+
+        private static void FlushJump(bool force)
+        {
+            if (jump == null || (!force && UnityEngine.Time.realtimeSinceStartup < jump.Value.Settled)) return;
+            var (from, to, why, _) = jump.Value;
+            jump = null;
+            Log.Info($"Test bridge: the clock jumped from {Stamp(from)} to {Stamp(to)} in one go: {why}.");
+        }
+
+        private static string Stamp(double minutes)
+        {
+            var day = (int)Math.Floor(minutes / 1440.0);
+            var rest = minutes - day * 1440.0;
+            return $"day {day} {(int)(rest / 60):D2}:{(int)(rest % 60):D2}";
         }
 
         internal static JObject HealthJson()
@@ -230,6 +303,7 @@ namespace FoodTrucks
                 ["day"] = s.Day,
                 ["time"] = s.Time,
                 ["paused"] = s.Paused,
+                ["time_skip"] = s.TimeSkip,
                 ["frame"] = s.Frame,
                 ["load"] = s.LoadName == null ? null : new JObject { ["name"] = s.LoadName, ["status"] = s.LoadStatus },
             };

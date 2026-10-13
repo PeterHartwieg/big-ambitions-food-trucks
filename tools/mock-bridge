@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import copy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -118,9 +119,10 @@ class Mock:
     def reset(self, name):
         self.state = {
             'save': name, 'scene': 'city',
-            'clock': {'day': 1, 'weekday': 'Monday', 'time': '07:00', 'paused': True, 'speed': 1, 'run_until':None, 'arrived_at':None},
+            'clock': {'day': 1, 'weekday': 'Monday', 'time': '07:00', 'paused': True, 'speed': 1, 'run_until':None, 'arrived_at':None, 'keep_needs':False},
             'money': 20000., 'transactions_today':[],
-            'player': {'x': 0., 'y': 0., 'z': 0., 'heading': 0., 'in_vehicle': None, 'at_hatch': None, 'carrying': None},
+            'player': {'x': 0., 'y': 0., 'z': 0., 'heading': 0., 'in_vehicle': None, 'at_hatch': None, 'carrying': None,
+                       'needs': {'energy': 100., 'hunger': 100., 'happiness': 80., 'max': 100., 'collapse_at': -20., 'energy_off': False, 'going_to_hospital': False, 'kept_up': False}},
             'licence': {'until_day': None, 'permits': 0, 'course_done': False},
             'vehicles': [], 'commissary': {'spaces': [], 'orders': [], 'stock': [], 'unpaid': {'rent': 0, 'fines': 0}},
             'ledger_today': {'street_food': 0., 'crew_waiting': 0.}, 'notices_recent': list(self.recent)}
@@ -190,7 +192,9 @@ class Mock:
         for key, val in copy.deepcopy(self.saves[name]).items():
             setattr(self, key, val)
         self.until = None
-        self.state['clock'].update(run_until=None,arrived_at=arrived_at)
+        self.state['clock'].update(run_until=None,arrived_at=arrived_at,keep_needs=False)
+        self.state['player'].setdefault('needs',{'energy': 100., 'hunger': 100., 'happiness': 80., 'max': 100., 'collapse_at': -20., 'energy_off': False, 'going_to_hospital': False, 'kept_up': False})
+        self.state['player']['needs']['kept_up']=False
         self.dialog = 'closed'
         self.pending = []
         self.walks = []
@@ -414,9 +418,10 @@ class Mock:
     def health(self):
         c = self.state['clock'] if self.state['scene'] == 'city' else {}
         if self.stopped:
-            return dict(ok=True,session=self.session,mod_version='0.9.10',bridge_version=1,scene='menu',save=None,day=None,time=None,paused=None,frame=0,load=None)
+            return dict(ok=True,session=self.session,mod_version='0.9.10',bridge_version=1,scene='menu',save=None,day=None,time=None,paused=None,time_skip=None,frame=0,load=None)
         return dict(ok=True, session=self.session, mod_version='0.9.10', bridge_version=1, scene=self.state['scene'],
-                    save=self.state['save'], day=c.get('day'), time=c.get('time'), paused=c.get('paused'), frame=self.frame, load=None if self.load is None else {k:self.load[k] for k in ('name','status')})
+                    save=self.state['save'], day=c.get('day'), time=c.get('time'), paused=c.get('paused'), time_skip=self.time_skip if self.state['scene']=='city' else None,
+                    frame=self.frame, load=None if self.load is None else {k:self.load[k] for k in ('name','status')})
 
     def events(self, since):
         since = max(since, 1)
@@ -494,6 +499,19 @@ class Mock:
             if count:
                 self.event(f"Crew sales: {v['id']}, day {day} {hour:02d}:00 hour: {count} customers, {count} items, ${count*13:.2f}, paid in after midnight; {sum(s['amount'] for s in v['stock'])} units left.", day=day)
 
+    def spend_needs(self):
+        # The game's average burn (0.056 energy a minute, 1.5 hunger per energy); the bridge tops both up below 40 while
+        # keep_needs is on, as the game side does through the game's needs API.
+        needs=self.state['player']['needs']
+        needs['energy']=max(needs['collapse_at'],round(needs['energy']-.056,3))
+        needs['hunger']=max(0.,round(needs['hunger']-.084,3))
+        needs['kept_up']=self.state['clock']['keep_needs']
+        if self.state['clock']['keep_needs'] and (needs['energy']<40 or needs['hunger']<40):
+            energy,hunger=needs['energy'],needs['hunger']
+            needs.update(energy=100.,hunger=100.)
+            c=self.state['clock']
+            self.event(f"Test bridge: needs topped up while the clock runs (energy {energy:.1f} to 100.0, hunger {hunger:.1f} to 100.0), day {c['day']} {c['time']}.")
+
     def tick(self):
         before = self.absolute
         self.absolute += 1
@@ -501,6 +519,7 @@ class Mock:
         day = self.absolute // 1440 + 1
         m = self.absolute % 1440
         c.update(day=day, time=f'{m//60:02d}:{m%60:02d}', weekday=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'][(day-1)%7])
+        self.spend_needs()
         if m % 60 == 0:
             self.flush_hour(before // 1440 + 1, (before % 1440) // 60)
         if m == 0:
@@ -550,7 +569,7 @@ class Mock:
                         self.event(f"Sale: foodtrucks:itemname_tacos for $13.00 on day {day}, {stock['amount']} of it left.")
         if self.until is not None and self.absolute >= self.until:
             self.until = None
-            c.update(paused=True, speed=1, run_until=None, arrived_at=f"day {c['day']} {c['time']}")
+            c.update(paused=True, speed=1, run_until=None, arrived_at=f"day {c['day']} {c['time']}", keep_needs=False)
             self.event(f"Test bridge: run_until {self.until_text} reached at day {c['day']} {c['time']}; paused, speed 1.")
 
     def run_clock(self):
@@ -907,6 +926,8 @@ class Mock:
             pause=args.get('pause') if isinstance(args.get('pause'),bool) else None
             speed=num(args,'speed')
             until=args.get('run_until') if isinstance(args.get('run_until'),dict) else None
+            keep=args.get('keep_needs')
+            if keep is not None and not isinstance(keep,bool): raise ValueError('keep_needs must be true or false.')
             if pause is None and speed is None and until is None: raise ValueError('time needs "pause", "speed" or "run_until".')
             if speed is not None and not 0<speed<=60: raise ValueError('speed must be above 0 and at most 60.')
             unpausing=until is not None or pause is False or (speed is not None and pause is not True)
@@ -914,6 +935,7 @@ class Mock:
                 raise ValueError('A screen holds the clock (the phone, the map, a call, an activity or a menu): close it first (ui escape).')
             self.until=None
             c.update(run_until=None,arrived_at=None)
+            c['keep_needs']=bool(unpausing and pause is not True and (keep if keep is not None else until is not None))
             if until is not None:
                 day=until.get('day',c['day'])
                 try:
@@ -973,9 +995,13 @@ class Mock:
                     if who!='player': raise ValueError('vehicle: places the player beside a vehicle.')
                     v=self.vehicle(identifier); x,z=v['x']+(2.6 if v['kind']=='truck' else 2.1),v['z']
                 else: raise ValueError(f"Unknown place '{place}': use bay:<site>, commissary:<site> or vehicle:<id>.")
-            else:
+            surface=None
+            if place is None:
                 x,z=num(args,'x'),num(args,'z')
                 if x is None or z is None: raise ValueError('teleport needs "x" and "z", or "place".')
+                # The mock's city is flat: one walkable surface at y 0 (the bridge stacks every ground surface and picks).
+                y=num(args,'y')
+                surface=(f"the surface nearest the y asked for ({y:.2f}) of 1: 0.00" if y is not None else 'the only ground surface, walkable')
             if who!='player' and obj['open']: raise ValueError(f"Vehicle {who} is open for business: close it first (vehicle close).")
             if who=='player':
                 self.walks=[]
@@ -988,7 +1014,10 @@ class Mock:
                 if who!='player': obj['commissary']=None
             obj['heading']=obj['heading']%360
             if heading is not None: obj['heading']=heading%360
-            return {key:round(obj[key],2) for key in ('x','y','z','heading')}
+            reply={key:round(obj[key],2) for key in ('x','y','z','heading')}
+            if who!='player': reply['in_the_way_after']=[]
+            if surface is not None: reply['surface']=surface
+            return reply
         if cmd=='vehicle':
             return self.operate(self.vehicle(need(args,'id',"the food vehicle's id")),need(args,'op','open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay'))
         if cmd=='commissary':
@@ -1088,10 +1117,27 @@ class Mock:
                 else:
                     self.vehicle(target)
                     if pose not in POSES: raise ValueError(f"A vehicle takes the poses hatch-pavement, hatch-close, vehicle-side, vehicle-overhead, queue and cart-counter, not {pose}.")
-            elif any(num(args,k) is None for k in ('x','y','z')): raise ValueError('shoot needs "pose" and "target", or "x", "y", "z" (with "yaw", "pitch", "fov").')
+            fov=num(args,'fov')
+            fov=60 if fov is None else fov
+            if not 5<=fov<=120: raise ValueError('fov must be 5 to 120 degrees.')
+            camera={'x':0.,'y':1.65,'z':-6.,'yaw':0.,'pitch':0.,'fov':fov}
+            if pose is None:
+                if any(num(args,k) is None for k in ('x','y','z')): raise ValueError('shoot needs "pose" and "target", or "x", "y", "z" (with "yaw" and "pitch", or "look_at", and "fov").')
+                camera.update(x=round(num(args,'x'),2),y=round(num(args,'y'),2),z=round(num(args,'z'),2))
+                look=args.get('look_at')
+                if look is not None:
+                    if not isinstance(look,dict): raise ValueError('look_at must be an object { "x", "y", "z" }.')
+                    if 'yaw' in args or 'pitch' in args: raise ValueError('shoot takes "look_at" or "yaw" and "pitch", not both.')
+                    if any(num(look,k) is None for k in ('x','y','z')): raise ValueError('look_at needs "x", "y" and "z".')
+                    dx,dy,dz=(num(look,k)-camera[k] for k in ('x','y','z'))
+                    if dx*dx+dy*dy+dz*dz<1e-4: raise ValueError('look_at is where the camera stands; give a point away from it.')
+                    camera.update(yaw=round(math.degrees(math.atan2(dx,dz))%360,2),pitch=round(-math.degrees(math.atan2(dy,math.hypot(dx,dz))),2))
+                else:
+                    camera.update(yaw=round((num(args,'yaw') or 0)%360,2),pitch=round(num(args,'pitch') or 0,2))
             path=self.shots/(name+'.png')
             png(path,width,height,(180,190,200) if self.state['clock']['time']<'20:00' else (35,45,65))
-            return {'path':str(path)}
+            # The mock has no walls: a named pose always stands clear, so pose_note is null.
+            return {'path':str(path),'camera':camera,'pose_note':None}
         if cmd=='console':
             line=need(args,'line','the console line to run')
             self.event(f'Mock console: {line}')

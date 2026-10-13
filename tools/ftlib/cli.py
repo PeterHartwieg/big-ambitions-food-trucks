@@ -48,6 +48,46 @@ def call_flags(argv):
     return head + words + options
 
 
+def point(text, option):
+    try:
+        values = [float(v) for v in text.split(',')]
+    except ValueError:
+        values = []
+    if len(values) != 3:
+        raise ValueError(f'{option} takes X,Y,Z in metres, for example 393.2,1.7,217.6')
+    return dict(zip('xyz', values))
+
+
+def shoot_args(args):
+    """The shoot call's arguments: a named pose (--pose and --target) or a free camera (--at, then --look-at or
+    --yaw/--pitch), with --fov, --width and --height for either."""
+    named = args.pose is not None or args.target is not None
+    if named and args.at is not None:
+        raise ValueError('shoot takes --pose and --target, or --at for a free camera, not both')
+    call = {'name': args.name}
+    if named:
+        if args.pose is None or args.target is None:
+            raise ValueError('a named shot needs both --pose and --target')
+        if args.look_at is not None or args.yaw is not None or args.pitch is not None:
+            raise ValueError('--look-at, --yaw and --pitch go with --at (a free camera), not with --pose')
+        call.update(pose=args.pose, target=args.target)
+    elif args.at is not None:
+        call.update(point(args.at, '--at'))
+        if args.look_at is not None:
+            if args.yaw is not None or args.pitch is not None:
+                raise ValueError('a free camera takes --look-at or --yaw/--pitch, not both')
+            call['look_at'] = point(args.look_at, '--look-at')
+        else:
+            if args.yaw is not None: call['yaw'] = args.yaw
+            if args.pitch is not None: call['pitch'] = args.pitch
+    else:
+        raise ValueError('shoot needs --pose and --target, or --at X,Y,Z (with --look-at or --yaw/--pitch)')
+    for key in ('fov', 'width', 'height'):
+        if getattr(args, key) is not None:
+            call[key] = getattr(args, key)
+    return call
+
+
 def main():
     parser = argparse.ArgumentParser(description='Read and drive the Food Trucks test bridge')
     parser.add_argument('--json', action='store_true', dest='raw')
@@ -78,11 +118,19 @@ def main():
     p.add_argument('regex')
     p.add_argument('--timeout', type=float, default=30)
     p.add_argument('--json', action='store_true', dest='raw', default=argparse.SUPPRESS)
-    p = sub.add_parser('shoot')
+    p = sub.add_parser('shoot', help='A named pose round a target, or a free camera (--at with --look-at or --yaw/--pitch)')
     p.add_argument('name')
-    p.add_argument('--pose', required=True)
-    p.add_argument('--target', required=True)
-    p.add_argument('--fetch')
+    p.add_argument('--pose')
+    p.add_argument('--target')
+    p.add_argument('--at', metavar='X,Y,Z', help='Free camera: where it stands (world metres)')
+    p.add_argument('--look-at', dest='look_at', metavar='X,Y,Z', help='Free camera: the point it looks at')
+    p.add_argument('--yaw', type=float, help='Free camera: degrees clockwise from +z (instead of --look-at)')
+    p.add_argument('--pitch', type=float, help='Free camera: degrees down (instead of --look-at)')
+    p.add_argument('--fov', type=float, help='Field of view in degrees, 5 to 120 (default 60)')
+    p.add_argument('--width', type=int)
+    p.add_argument('--height', type=int)
+    p.add_argument('--timeout', type=float, default=20, help='Seconds to wait for the picture (timeout_s, 1 to 600)')
+    p.add_argument('--fetch', help='Copy the PNG here (needs BA_GAME_HOST when the game runs on another PC)')
     p.add_argument('--json', action='store_true', dest='raw', default=argparse.SUPPRESS)
     p = sub.add_parser('click')
     p.add_argument('text')
@@ -111,7 +159,7 @@ def main():
         elif args.command in ('ui', 'click'):
             reply = bridge.call('ui', {'op': 'list'} if args.command == 'ui' else {'op': 'click', 'text': args.text})
         elif args.command == 'shoot':
-            reply = bridge.call('shoot', {'name': args.name, 'pose': args.pose, 'target': args.target})
+            reply = bridge.call('shoot', shoot_args(args), args.timeout)
             if args.fetch:
                 reply['local_path'] = str(fetch_shot(reply['result']['path'], args.fetch))
         else:

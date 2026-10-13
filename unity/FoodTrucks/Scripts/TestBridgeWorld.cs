@@ -167,14 +167,60 @@ namespace FoodTrucks
             Vector3 target;
             if (place != null && who != "player" && place.StartsWith("bay:", StringComparison.Ordinal))
                 return TeleportToBay(who, place.Substring(4), heading, clear);
+            string? surface = null;
             if (place != null) (target, heading) = Place(place, who, heading);
             else
             {
                 var x = Num(args, "x") ?? throw new BridgeError("teleport needs \"x\" and \"z\", or \"place\".");
                 var z = Num(args, "z") ?? throw new BridgeError("teleport needs \"x\" and \"z\", or \"place\".");
-                target = Ground((float)x, (float)z);
+                var y = (float?)Num(args, "y");
+                var from = who == "player"
+                    ? (PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.")).transform.position.y
+                    : Spawned(FoodVehicle(who)).transform.position.y;
+                (target, surface) = GroundPicked((float)x, (float)z, from, y);
+                Log.Info($"Test bridge: teleport to x {x:F1}, z {z:F1}: y {target.y:F2}, {surface}.");
             }
-            return who == "player" ? TeleportPlayer(target, heading, clear) : TeleportVehicle(who, target, heading, clear);
+            var reply = who == "player" ? TeleportPlayer(target, heading, clear) : TeleportVehicle(who, target, heading, clear);
+            if (surface == null) return reply;
+            // The surface the point was put on, in the reply (a Deferred's reply once the move is done).
+            if (reply is JObject pose)
+            {
+                pose["surface"] = surface;
+                return pose;
+            }
+            if (reply is Deferred later)
+                return new Deferred(() =>
+                {
+                    var result = later.Poll();
+                    if (result is JObject done) done["surface"] = surface;
+                    return result;
+                }, later.OnStop);
+            return reply;
+        }
+
+        // The ground surfaces stacked above a point (a street under an elevated road), top down, and the one a teleport
+        // lands on (Core GroundPick): with an explicit y the one nearest it, else a walkable one (NavMesh within 1 m)
+        // nearest the mover's own height. Live session 4 (13 October 2026): the highest surface put the player on the
+        // elevated highway at y 5.06. Each ray starts just under the last surface; a ray never hits a box it starts in or
+        // a mesh's underside, so it goes on to the next surface down.
+        internal static (Vector3 Point, string Why) GroundPicked(float x, float z, float referenceY, float? explicitY)
+        {
+            var points = new List<Vector3>();
+            var top = 500f;
+            for (var i = 0; i < 8; i++)
+            {
+                if (!Physics.Raycast(new Vector3(x, top, z), Vector3.down, out var hit, top + 500f, LayerHelper.groundLayerMask, QueryTriggerInteraction.Ignore)) break;
+                if (points.Count == 0 || points[points.Count - 1].y - hit.point.y > 0.5f) points.Add(hit.point);
+                top = hit.point.y - 0.5f;
+            }
+            if (points.Count == 0)
+            {
+                if (explicitY != null) return (new Vector3(x, explicitY.Value, z), $"no ground under the point; the y asked for ({explicitY.Value:F2})");
+                throw new BridgeError($"No ground found at x {x:F1}, z {z:F1}.");
+            }
+            var surfaces = points.Select(p => ((double)p.y, NavMesh.SamplePosition(p, out var near, 1f, NavMesh.AllAreas) && Mathf.Abs(near.position.y - p.y) < 1f)).ToList();
+            var (index, why) = FoodTrucks.Core.Common.GroundPick.Choose(surfaces, referenceY, explicitY);
+            return (points[index], why);
         }
 
         // ---- What stands where something is moved to ----
@@ -238,9 +284,14 @@ namespace FoodTrucks
         }
 
         // The ground and road surfaces, parking areas and triggers aren't in the way; a kerb isn't either (the test starts
-        // 0.3 m up).
-        private static bool Ignored(Collider c) =>
-            c.isTrigger || ((1 << c.gameObject.layer) & (LayerHelper.groundLayerMask.value | LayerHelper.parkingAreaLayerMask.value)) != 0;
+        // 0.3 m up). A trigger on the parked-car or traffic layers still is: the game's own check for cars under a placed
+        // vehicle (VehicleHelper.DestroyBlockingVehicles) queries those layers with triggers included.
+        private static bool Ignored(Collider c)
+        {
+            var layer = c.gameObject.layer;
+            if (layer == LayerHelper.ParkedVehiclesLayerIndex || layer == LayerHelper.AiVehiclesLayerIndex) return false;
+            return c.isTrigger || ((1 << layer) & (LayerHelper.groundLayerMask.value | LayerHelper.parkingAreaLayerMask.value)) != 0;
+        }
 
         private static List<Blocker> Describe(IEnumerable<Collider> hits, Transform? self)
         {
@@ -266,6 +317,12 @@ namespace FoodTrucks
                     if (!found.ContainsKey(player)) found[player] = new Blocker { What = "the player" };
                     continue;
                 }
+                var van = c.GetComponentInParent<Vehicles.DeliveryDriverJob.DeliveryJobStartController>();
+                if (van != null)
+                {
+                    if (!found.ContainsKey(van)) found[van] = new Blocker { What = $"the building's delivery-job van ({van.name})" };
+                    continue;
+                }
                 var person = c.GetComponentInParent<ThirdPersonCharacter>();
                 if (person != null)
                 {
@@ -287,8 +344,70 @@ namespace FoodTrucks
             var top = Mathf.Max(local.max.y, bottom + 0.5f);
             var centre = new Vector3(local.center.x, (bottom + top) / 2f, local.center.z);
             var half = new Vector3(Mathf.Max(0.05f, local.extents.x - 0.1f), (top - bottom) / 2f, Mathf.Max(0.05f, local.extents.z - 0.1f));
-            var hits = Physics.OverlapBox(ground + rotation * centre, half, rotation, ~0, QueryTriggerInteraction.Ignore);
-            return Describe(hits, controller.transform);
+            var hits = Physics.OverlapBox(ground + rotation * centre, half, rotation, ~0, QueryTriggerInteraction.Collide);
+            var found = Describe(hits, controller.transform);
+            // The colliders alone missed a van in a perpendicular stall (live session 4, 13 October 2026, industry-city).
+            // So the parked cars round the place are also tested by their footprints (each lane car's mesh bounds, as
+            // the game sizes its stalls by), and so is the building's delivery-job van, which the game hides and shows
+            // again in its stall whatever stands there; a hidden one has no collider to hit.
+            var middle = ground + rotation * new Vector3(local.center.x, 0f, local.center.z);
+            var forward = rotation * Vector3.forward;
+            var mine = new FoodTrucks.Core.Fleet.FlatBox(middle.x, middle.z, forward.x, forward.z, local.extents.x, local.extents.z);
+            foreach (var (car, what, laneCar) in CarsNear(middle, 15f))
+            {
+                if (found.Any(b => b.LaneCar == car || b.What == what) || !CarFootprint(car, out var theirs)) continue;
+                if (FoodTrucks.Core.Fleet.Footprint.Overlap(mine, theirs, -0.05)) found.Add(new Blocker { What = what, LaneCar = laneCar ? car : null });
+            }
+            return found;
+        }
+
+        // The lanes' parked cars within `radius` of a point (active children of the parking lanes there) and the
+        // delivery-job vans, shown or hidden, with how each is named in a refusal and whether `clear` may send it away.
+        private static IEnumerable<(GameObject Car, string What, bool LaneCar)> CarsNear(Vector3 point, float radius)
+        {
+            var lanes = new HashSet<ParkingLaneGenerator>();
+            foreach (var c in Physics.OverlapSphere(point, radius, LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide))
+            {
+                var lane = c == null ? null : c.GetComponentInParent<ParkingLaneGenerator>();
+                if (lane != null) lanes.Add(lane);
+            }
+            foreach (var lane in lanes)
+                foreach (Transform child in lane.transform)
+                    if (BayParking.IsLaneCar(child.gameObject) && Flat(child.position - point) <= radius + 5f)
+                        yield return (child.gameObject, $"a parked car ({child.name})", true);
+            foreach (var van in UnityEngine.Object.FindObjectsByType<Vehicles.DeliveryDriverJob.DeliveryJobStartController>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (van != null && Flat(van.transform.position - point) <= radius + 5f)
+                    yield return (van.gameObject, van.gameObject.activeInHierarchy
+                        ? $"the building's delivery-job van ({van.name})"
+                        : $"the building's delivery-job van ({van.name}, hidden now; the game shows it again in its stall)", false);
+        }
+
+        private static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
+
+        // A parked car's footprint: its mesh collider's bounds (each lane car has one on its root), else its renderers'.
+        private static bool CarFootprint(GameObject car, out FoodTrucks.Core.Fleet.FlatBox box)
+        {
+            box = default;
+            var t = car.transform;
+            var forward = t.forward;
+            if (new Vector2(forward.x, forward.z).sqrMagnitude < 1e-6f) return false;
+            var mesh = car.GetComponent<MeshCollider>()?.sharedMesh;
+            if (mesh != null)
+            {
+                var b = mesh.bounds;
+                var scale = t.lossyScale;
+                var middle = t.TransformPoint(b.center);
+                box = new FoodTrucks.Core.Fleet.FlatBox(middle.x, middle.z, forward.x, forward.z, b.extents.x * Mathf.Abs(scale.x), b.extents.z * Mathf.Abs(scale.z));
+                return true;
+            }
+            var renderers = car.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0) return false;
+            // Renderers' world bounds: as wide one way as the other, whatever the car's turn.
+            var all = renderers[0].bounds;
+            foreach (var r in renderers) all.Encapsulate(r.bounds);
+            var reach = Mathf.Max(all.extents.x, all.extents.z);
+            box = new FoodTrucks.Core.Fleet.FlatBox(all.center.x, all.center.z, 0, 1, reach, reach);
+            return true;
         }
 
         // What stands where the player would: a standing person's capsule.
@@ -466,7 +585,13 @@ namespace FoodTrucks
             controller.SavePosition();
             var t = controller.transform;
             Log.Info($"Test bridge: moved {vehicle.vehicleTypeName} {id} to x {t.position.x:F1}, z {t.position.z:F1}, heading {t.eulerAngles.y:F0}.");
-            return Pose(t.position, t.eulerAngles.y);
+            var reply = Pose(t.position, t.eulerAngles.y);
+            // Tested again where the game put it (on the road under the point, which may differ from the ground probed).
+            var after = InTheWay(controller, t.position, t.rotation).Select(b => b.What).ToList();
+            reply["in_the_way_after"] = new JArray(after);
+            if (after.Count > 0)
+                Log.Error($"Test bridge: {vehicle.vehicleTypeName} {id} stands in something after the move: {string.Join(", ", after)}.");
+            return reply;
         }
 
         private static JObject Pose(Vector3 p, float heading) => new JObject
