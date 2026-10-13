@@ -26,8 +26,8 @@ What it does (art/README.md, "Surface look"):
 Materials per texel come from the flat source colour (see classify) or, for the truck, from its
 source mask. A model folder can hold a look.json (or the spec a "look" entry) to override per colour, e.g.
   {"classes": [{"rgb": [0.55, 0.78, 0.86], "class": "glass"}], "kind": "food"}
-"variants": ["a", "b"] also grades T_<Name>_a_BaseColor.png into T_<Name>_a_BC.png with the same bakes
-and mask (the commissary sign's plates, one per commissary, on the same UVs).
+"variants": ["a", "b"] also grades T_<Name>_a_BaseColor.png into T_<Name>_a_BC.png and its own mask
+T_<Name>_a_M.png with the same bakes (the commissary sign's plates, one per commissary, on the same UVs).
 """
 import bpy, json, math, os, sys
 import numpy as np
@@ -399,9 +399,12 @@ def main():
     save_px(nrm, paths["N"], False)
     for v in LOOK.get("variants", []):
         vsrc = load_px(os.path.join(FOLDER, f"T_{NAME}_{v}_BaseColor.png"))[0]
-        vbc, _ = compose(vsrc, ao, edge, fine, coarse, classify(vsrc), src_mask)
+        vbc, vmask = compose(vsrc, ao, edge, fine, coarse, classify(vsrc), src_mask)
         save_px(vbc, os.path.join(FOLDER, f"T_{NAME}_{v}_BC.png"), True)
-        log(f"{NAME}: variant {v}: wrote T_{NAME}_{v}_BC.png")
+        # Its own mask too: the mask's smoothness follows the base colour's classes, so the default plate's lettering
+        # (Hell's Kitchen) showed through another commissary's name in its gloss (live session 6, Lower Manhattan).
+        save_px(vmask, os.path.join(FOLDER, f"T_{NAME}_{v}_M.png"), False)
+        log(f"{NAME}: variant {v}: wrote T_{NAME}_{v}_BC.png and T_{NAME}_{v}_M.png")
     counts = {n: round(float((cls == i).mean()), 3) for i, n in enumerate(CLASSES) if (cls == i).any()}
     log(f"{NAME}: classes {counts}, AO p10/p50 {np.percentile(ao, 10):.2f}/{np.percentile(ao, 50):.2f}")
 

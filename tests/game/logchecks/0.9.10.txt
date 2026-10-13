@@ -126,6 +126,8 @@ mod.noBayMeasured | never | ERROR: Commissary (?:garment-district|murray-hill): 
 mod.spawnNoRoom | count>=0 | Not spawned .+?: no room in front of or beside the player at x .+?, z .+?\. | row mod/M14
 mod.unreleasable | count>=0 | Commissary parking: .+? couldn.t go back to its pool \(.+?\); left where it is, and passed over from now on\. | row mod/M1,mod/M3
 mod.customersPlural | never | About 1 customers an hour | row mod/M23
-mod.propsNoBuildingWall | count>=0 | no props by the door at x .+?, z .+?: no building wall on a ray at waist height from the driving lane | row mod/M21
-mod.propsLowerManhattan | must | Commissary props lower-manhattan(?:, try \d+)?: props by the door at x .+?, z .+? \(facade facing .+?, .+?layer Buildings\w*, [+-]\d+\.\d m from the door point\): (?!none) | row mod/M21
+mod.propsNoBuildingWall | count>=0 | no props by the door at x .+?, z .+?: no building wall within \d+ m of the door point, and none on a ray at waist height from the driving lane | row mod/M21
+mod.propsLowerManhattan | must | Commissary props lower-manhattan(?:, try \d+)?: props by the door at x .+?, z .+? \(facade facing .+?, .+?layer Buildings\w*, (?:the wall at the door|met from the street), [+-]\d+\.\d m from the door point\): (?!none) | row mod/M21
 mod.spawnBlocked | count>=0 | Not spawned .+?: no room in front of or beside the player at x .+?, z .+? \(in front: .+?\)\. | row mod/M20
+mod.customersNone | count>=0 | Hardly any customers here right now | row mod/M23
+mod.customersZero | never | About 0 customers | row mod/M23
