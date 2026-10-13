@@ -1158,6 +1158,8 @@ class Mock:
                     camera.update(yaw=round(math.degrees(math.atan2(dx,dz))%360,2),pitch=round(-math.degrees(math.atan2(dy,math.hypot(dx,dz))),2))
                 else:
                     camera.update(yaw=round((num(args,'yaw') or 0)%360,2),pitch=round(num(args,'pitch') or 0,2))
+            frames=num(args,'frames')
+            if frames is not None and not 8<=frames<=240: raise ValueError('frames must be 8 to 240.')
             for flag in ('compare','game_view'):
                 if args.get(flag) is not None and not isinstance(args.get(flag),bool): raise ValueError(f'{flag} must be true or false.')
             path=self.shots/(name+'.png')
@@ -1165,10 +1167,10 @@ class Mock:
             png(path,width,height,colour)
             # The mock has no walls, fades or outlines: a named pose always stands clear (pose_note null), and nothing is
             # uncovered or outlined.
-            reply={'path':str(path),'camera':camera,'pose_note':None,'uncovered':[],'outlined':[],'asis_path':None,'game_path':None,'game_error':None}
+            reply={'path':str(path),'camera':camera,'pose_note':None,'uncovered':[],'outlined':[],'hovered':[],'asis_path':None,'game_path':None,'game_error':None}
             if args.get('compare'):
                 asis=self.shots/(name+'-asis.png'); png(asis,width,height,colour)
-                reply.update(asis_path=str(asis),asis_uncovered=[],asis_outlined=[])
+                reply.update(asis_path=str(asis),asis_uncovered=[],asis_outlined=[],asis_hovered=[])
             if args.get('game_view'):
                 game=self.shots/(name+'-game.png'); png(game,width,height,colour)
                 reply['game_path']=str(game)

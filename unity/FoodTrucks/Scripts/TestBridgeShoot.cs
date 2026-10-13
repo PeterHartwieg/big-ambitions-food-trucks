@@ -76,6 +76,10 @@ namespace FoodTrucks
                 if (args[flag] != null && TestBridgeCommands.Bool(args, flag) == null) throw new BridgeError($"{flag} must be true or false.");
             // compare: also the as-is picture (<name>-asis.png), rendered after the uncovered one with nothing undone.
             // game_view: also the game's own frame (<name>-game.png), as the player sees it.
+            // frames: how many frames the camera renders before the picture is read (8 to 240, default 8), for HDRP's
+            // per-camera history (exposure, reflections, the sky's ambient light) to settle.
+            var shotFrames = (int)(TestBridgeCommands.Num(args, "frames") ?? Frames);
+            if (shotFrames < 8 || shotFrames > 240) throw new BridgeError("frames must be 8 to 240.");
             var compare = TestBridgeCommands.Bool(args, "compare") == true;
             var gameView = TestBridgeCommands.Bool(args, "game_view") == true;
 
@@ -104,8 +108,8 @@ namespace FoodTrucks
             var asIsPath = Path.Combine(folder, name + "-asis.png");
             var gamePath = Path.Combine(folder, name + "-game.png");
             var frames = 0;
-            List<string> uncovered = new List<string>(), outlined = new List<string>();
-            List<string> asIsUncovered = new List<string>(), asIsOutlined = new List<string>();
+            List<string> uncovered = new List<string>(), outlined = new List<string>(), hovered = new List<string>();
+            List<string> asIsUncovered = new List<string>(), asIsOutlined = new List<string>(), asIsHovered = new List<string>();
             string? gameError = null;
             var gameDone = !gameView;
             if (gameView)
@@ -144,7 +148,7 @@ namespace FoodTrucks
                     if (image != null) Object.Destroy(image);
                 }
             }
-            var total = Frames + (compare ? CompareFrames : 0);
+            var total = shotFrames + (compare ? CompareFrames : 0);
             return new Deferred(() =>
             {
                 if (frames < total)
@@ -153,19 +157,21 @@ namespace FoodTrucks
                     {
                         // The camera renders once a frame; the picture is read after a few, so HDRP's exposure and
                         // history settle. With compare, the as-is frames follow the uncovered ones.
-                        var uncover = frames < Frames;
+                        var uncover = frames < shotFrames;
                         var scope = RenderFrame(camera, uncover);
                         frames++;
                         if (uncover)
                         {
                             uncovered = scope.Uncovered;
                             outlined = scope.Outlined;
-                            if (frames == Frames) Write(path);
+                            hovered = scope.Hovered;
+                            if (frames == shotFrames) Write(path);
                         }
                         else
                         {
                             asIsUncovered = scope.Uncovered;
                             asIsOutlined = scope.Outlined;
+                            asIsHovered = scope.Hovered;
                             if (frames == total) Write(asIsPath);
                         }
                     }
@@ -182,7 +188,8 @@ namespace FoodTrucks
                 if (!gameDone) return null;
                 var why = note == null ? "" : " (" + note + ")";
                 var lists = (uncovered.Count == 0 ? "" : $"; uncovered {string.Join(", ", uncovered)}") +
-                            (outlined.Count == 0 ? "" : $"; outline lifted from {string.Join(", ", outlined)}");
+                            (outlined.Count == 0 ? "" : $"; outline lifted from {string.Join(", ", outlined)}") +
+                            (hovered.Count == 0 ? "" : $"; hover lifted from {string.Join(", ", hovered)}");
                 Log.Info($"Test bridge: shot {name} ({width}x{height}) from x {position.x:F1}, y {position.y:F1}, z {position.z:F1}{why}{lists}: {path}.");
                 var angles = rotation.eulerAngles;
                 var reply = new JObject
@@ -196,6 +203,7 @@ namespace FoodTrucks
                     ["pose_note"] = note,
                     ["uncovered"] = new JArray(uncovered),
                     ["outlined"] = new JArray(outlined),
+                    ["hovered"] = new JArray(hovered),
                     ["asis_path"] = compare ? asIsPath : null,
                     ["game_path"] = gameView && gameError == null ? gamePath : null,
                     ["game_error"] = gameError,
@@ -204,6 +212,7 @@ namespace FoodTrucks
                 {
                     reply["asis_uncovered"] = new JArray(asIsUncovered);
                     reply["asis_outlined"] = new JArray(asIsOutlined);
+                    reply["asis_hovered"] = new JArray(asIsHovered);
                 }
                 return reply;
             }, Release);

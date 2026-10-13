@@ -40,6 +40,7 @@ TOOLS = [
           'look_at': {'type': 'object', 'description': 'The point a free camera looks at: {"x", "y", "z"} in world metres.'},
           'timeout_s': {'type': 'number', 'description': 'Clamped to 1..600 seconds; default 20.'},
           'compare': {'type': 'boolean', 'description': "Also the as-is picture with the game's fades and outlines left on (asis_path, fetched as local_asis_path)."},
+          'frames': {'type': 'integer', 'minimum': 8, 'maximum': 240, 'description': 'Frames rendered before the picture is read; default 8.'},
           'game_view': {'type': 'boolean', 'description': "Also the game's own frame as the player sees it (game_path, fetched as local_game_path)."}}, ('name',)),
     tool('ft_check_log', 'Check a local Player.log. Row rules count only when rows are selected.',
          {'path': STRING, 'version': STRING, 'rows': STRING}, ('path',)),

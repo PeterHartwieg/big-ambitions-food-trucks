@@ -82,7 +82,7 @@ def shoot_args(args):
             if args.pitch is not None: call['pitch'] = args.pitch
     else:
         raise ValueError('shoot needs --pose and --target, or --at X,Y,Z (with --look-at or --yaw/--pitch)')
-    for key in ('fov', 'width', 'height'):
+    for key in ('fov', 'width', 'height', 'frames'):
         if getattr(args, key) is not None:
             call[key] = getattr(args, key)
     for key in ('compare', 'game_view'):
@@ -135,6 +135,7 @@ def main():
     p.add_argument('--timeout', type=float, default=20, help='Seconds to wait for the picture (timeout_s, 1 to 600)')
     p.add_argument('--compare', action='store_true', help='Also the as-is picture, with the game\'s fades and outlines left on (<name>-asis.png)')
     p.add_argument('--game-view', dest='game_view', action='store_true', help='Also the game\'s own frame (<name>-game.png)')
+    p.add_argument('--frames', type=int, help='Frames rendered before the picture is read, 8 to 240 (default 8)')
     p.add_argument('--fetch', help='Copy the PNG here (needs BA_GAME_HOST when the game runs on another PC)')
     p.add_argument('--json', action='store_true', dest='raw', default=argparse.SUPPRESS)
     p = sub.add_parser('click')

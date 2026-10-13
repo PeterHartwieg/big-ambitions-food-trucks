@@ -279,12 +279,14 @@ class ParityTests(unittest.TestCase):
         # Live session 6 research: the bridge lists what it uncovered (the game's view-blocking fade) and the outlines it
         # lifted, and can write the as-is picture and the game's own frame beside the shot.
         reply=self.mock.call('shoot',{'name':'diag','x':0,'y':1.7,'z':0,'yaw':0,'width':16,'height':16})
-        self.assertEqual((reply['uncovered'],reply['outlined'],reply['asis_path'],reply['game_path'],reply['game_error']),([],[],None,None,None))
+        self.assertEqual((reply['uncovered'],reply['outlined'],reply['hovered'],reply['asis_path'],reply['game_path'],reply['game_error']),([],[],[],None,None,None))
         self.assertNotIn('asis_uncovered',reply)
         reply=self.mock.call('shoot',{'name':'diag','x':0,'y':1.7,'z':0,'yaw':0,'width':16,'height':16,'compare':True,'game_view':True})
         self.assertTrue(reply['asis_path'].endswith('diag-asis.png'))
         self.assertTrue(reply['game_path'].endswith('diag-game.png'))
-        self.assertEqual((reply['asis_uncovered'],reply['asis_outlined']),([],[]))
+        self.assertEqual((reply['asis_uncovered'],reply['asis_outlined'],reply['asis_hovered']),([],[],[]))
+        self.refused('shoot',{'name':'diag','x':0,'y':1,'z':0,'frames':4},'frames must be 8 to 240.')
+        self.assertTrue(self.mock.call('shoot',{'name':'diag','x':0,'y':1,'z':0,'frames':60,'width':16,'height':16})['path'])
         self.refused('shoot',{'name':'diag','x':0,'y':1,'z':0,'compare':'yes'},'compare must be true or false.')
         state=self.mock.call('state',{})
         self.assertEqual(set(state['game_camera']),{'x','y','z','yaw','pitch'})

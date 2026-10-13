@@ -60,6 +60,13 @@ namespace FoodTrucks
         // Names for the shot's reply: what this frame undid.
         internal readonly List<string> Uncovered = new List<string>();
         internal readonly List<string> Outlined = new List<string>();
+        internal readonly List<string> Hovered = new List<string>();
+
+        private static readonly FieldInfo? CurrentHighlighted = AccessTools.Field(typeof(CityBuildingController), "CurrentBuildingHighlighted");
+        private static readonly FieldInfo? HasOutlineColor = AccessTools.Field(typeof(CityBuildingController), "_hasOutlineColor");
+        private static readonly FieldInfo? GroundPlane = AccessTools.Field(typeof(CityBuildingController), "groundPlane");
+        private static readonly FieldInfo? Billboards = AccessTools.Field(typeof(CityBuildingController), "billboards");
+        private static readonly int SelectionColorId = Shader.PropertyToID("_SelectionColor");
 
         private TestBridgeUncover() { }
 
@@ -71,6 +78,7 @@ namespace FoodTrucks
             try
             {
                 scope.Unfade(apply);
+                scope.Unhover(apply);
                 scope.Unoutline(from, apply);
             }
             catch
@@ -172,6 +180,60 @@ namespace FoodTrucks
                     }
                 }
                 catch (Exception ex) { Log.Error($"Test bridge, uncovering {entity.name}: {ex.Message}"); throw; }
+            }
+        }
+
+        // 3. The hovered or highlighted building (live session 9: the game's idle cursor over 22 1st Street opened its card
+        //    and drew the building pale with a white edge, and `outlined` stayed empty). The mouse over a building
+        //    (CityBuildingController.OnIoEnter, kept in CurrentBuildingHighlighted and MouseController.currentTargetEntity),
+        //    its card (BuildingResume.TargetController) and a map filter (SetHighlight) put its objects on BuildingsOutlined
+        //    (SetOutlineLayer: the root, its parts, its LOD, ground plane and billboards, which needn't be children of the
+        //    root) and, with a colour, set _SelectionColor in the property blocks of renderersToHide and the LOD
+        //    (SetOutlineColor) [code, 1.0]. Lifted for the frame: those objects back to the Buildings layer, the colour
+        //    cleared in a copy of each block; all saved first and written back exactly.
+        private void Unhover(bool apply)
+        {
+            var targets = new Dictionary<CityBuildingController, List<string>>();
+            void Add(CityBuildingController? building, string why)
+            {
+                if (building == null) return;
+                if (!targets.TryGetValue(building, out var whys)) targets[building] = whys = new List<string>();
+                if (!whys.Contains(why)) whys.Add(why);
+            }
+            Add(CurrentHighlighted?.GetValue(null) as CityBuildingController, "under the mouse");
+            var target = MouseController.currentTargetEntity;
+            Add(target as CityBuildingController ?? (target as ViewBlockingEntityPart)?.cityBuildingController as CityBuildingController, "under the mouse");
+            if (InstanceBehavior<UI.UIs>.IsInitialized)
+                Add(InstanceBehavior<UI.UIs>.Instance.buildingResume?.CityBuildingController, "its building card open");
+            foreach (var (controller, _) in World.AllBuildings())
+                if (controller != null && HasOutlineColor?.GetValue(controller) is bool coloured && coloured) Add(controller, "highlight colour");
+            var outlinedLayer = LayerHelper.BuildingOutlinedLayerIndex;
+            foreach (var pair in targets)
+            {
+                var building = pair.Key;
+                var things = new List<GameObject> { building.gameObject };
+                if (building.cityBuildingParts != null) things.AddRange(building.cityBuildingParts.Where(p => p != null).Select(p => p.gameObject));
+                if (building.lodVersion != null) things.Add(building.lodVersion.gameObject);
+                if (GroundPlane?.GetValue(building) is GameObject plane && plane != null) things.Add(plane);
+                if (Billboards?.GetValue(building) is Transform boards && boards != null)
+                    for (var i = 0; i < boards.childCount; i++) things.Add(boards.GetChild(i).gameObject);
+                var onLayer = things.Where(t => t.layer == outlinedLayer).ToList();
+                var coloured = HasOutlineColor?.GetValue(building) is bool c && c;
+                if (onLayer.Count == 0 && !coloured) continue;
+                Hovered.Add($"{building.name} ({string.Join(", ", pair.Value)}{(onLayer.Count > 0 ? $", {onLayer.Count} objects outlined" : "")}{(coloured ? ", selection colour" : "")})");
+                if (!apply) continue;
+                foreach (var thing in onLayer) Swap(thing, LayerHelper.BuildingLayerIndex, true);
+                if (!coloured) continue;
+                var renderers = (building.renderersToHide ?? new List<Renderer>()).ToList();
+                if (building.lodVersion != null) renderers.Add(building.lodVersion);
+                foreach (var r in renderers)
+                {
+                    if (!Save(r)) continue;
+                    var block = new MaterialPropertyBlock();
+                    r.GetPropertyBlock(block);
+                    block.SetColor(SelectionColorId, Color.clear);
+                    r.SetPropertyBlock(block);
+                }
             }
         }
 
