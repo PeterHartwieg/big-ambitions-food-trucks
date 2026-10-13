@@ -19,9 +19,11 @@ namespace FoodTrucks
     //   (review round 5);
     // - once the bay is resolved, and each time the player comes within NearMetres, the zone is swept for cars already
     //   standing there; a car in the main camera's view is left until it isn't, so none vanishes in view;
-    // - a bay resolved after the load (none in the save, the save's no longer current, or a stored failure searched
-    //   again) is swept with no view rule when it is resolved, before its paint is made (review round 1, Sol and
-    //   Astra: with the view rule, a car seen from the first frame stayed in the new paint while watched);
+    // - a bay resolved while the loading screen is still opaque (Commissary.Attach resolves the pending bays then, when
+    //   the street is ready) is swept with no view rule; one resolved later keeps the view rule, and its paint, sign and
+    //   props wait until no lane car is left in its zone: a car in view stays until it is out of view, is swept, and
+    //   only then the paint appears, so no car vanishes in view and none stands in fresh paint (review rounds 1 and 2
+    //   of the mod round; the coordinator's decision, 13 October 2026);
     // - on every load, under the loading screen, every bay is swept with no view rule: the lanes fill on the game's
     //   load event, before the mod's late load event, so the postfix never sees a bay's first cars (live session 2,
     //   13 October 2026: the player was teleported to the Hell's Kitchen door, the car in the paint was in view from
@@ -50,6 +52,29 @@ namespace FoodTrucks
         // Sites swept at least once since the load or since their bay was resolved; one not yet swept is swept whatever
         // the player's distance (0.9.9 swept a newly resolved bay only once the player came within NearMetres).
         private static readonly HashSet<string> swept = new HashSet<string>(StringComparer.Ordinal);
+        // Sites whose zone has been found empty of lane cars since the load or the bay's resolution: their paint may be
+        // drawn (PaintReady). Unlike `swept`, never undone by a car parked later.
+        private static readonly HashSet<string> firstCleared = new HashSet<string>(StringComparer.Ordinal);
+        // Sites whose paint was logged as waiting.
+        private static readonly HashSet<string> waitLogged = new HashSet<string>(StringComparer.Ordinal);
+        // Set by Commissary.Attach while it runs under the game's opaque loading screen.
+        internal static bool UnderLoadingScreen;
+
+        // Whether a bay's paint, sign and props may be drawn: its zone was found empty once (BayMarkers asks). After an
+        // error here nothing is kept out, so nothing waits either.
+        public static bool PaintReady(string siteId) => failed || firstCleared.Contains(siteId);
+
+        // A sweep of a site whose paint may wait: cleared opens it (logged if it waited); cars left in view hold it.
+        private static void Cleared(string siteId, int left)
+        {
+            if (left == 0)
+            {
+                if (firstCleared.Add(siteId) && waitLogged.Remove(siteId))
+                    Log.Info($"Commissary {siteId}: the bay is clear; its paint is drawn.");
+            }
+            else if (!firstCleared.Contains(siteId) && waitLogged.Add(siteId))
+                Log.Info($"Commissary {siteId}: paint waits for {left} parked {(left == 1 ? "car" : "cars")} in view to leave the bay.");
+        }
         // Cars kept out per site since the last summary line: (at generation, on a sweep).
         private static readonly Dictionary<string, (int Generated, int Swept)> counts = new Dictionary<string, (int, int)>(StringComparer.Ordinal);
         private static float nextSummary;
@@ -80,6 +105,8 @@ namespace FoodTrucks
             bayPointsUntil = float.MinValue;
             clean.Clear();
             swept.Clear();
+            firstCleared.Clear();
+            waitLogged.Clear();
             counts.Clear();
             lastPlayer = null;
             failed = false;
@@ -90,6 +117,8 @@ namespace FoodTrucks
         {
             clean.Remove(siteId);
             swept.Remove(siteId);
+            firstCleared.Remove(siteId);
+            waitLogged.Remove(siteId);
             bayPointsUntil = float.MinValue;
         }
 
@@ -102,7 +131,7 @@ namespace FoodTrucks
             {
                 if (!Legality.ParkingSceneReady())
                 {
-                    Log.Info("Commissary bays: the parking lanes aren't ready on load; the bays from the save are swept on the first look instead (with the view rule).");
+                    Log.Info("Commissary bays: the parking lanes aren't ready on load; the bays from the save are swept on the first look instead (with the view rule, their paint waiting until they are clear).");
                     return;
                 }
                 foreach (var site in sites.Sites)
@@ -111,6 +140,7 @@ namespace FoodTrucks
                     if (bays == null || bays.Count == 0) continue;
                     var (gone, left) = Sweep(BayMarkers.ZonesOf(site, (float)radius), inView: false);
                     swept.Add(site.Id);
+                    Cleared(site.Id, left);
                     Log.Info($"Commissary {site.Id}: bay swept on load, {gone} parked {(gone == 1 ? "car" : "cars")} kept out" + (left > 0 ? $", {left} left" : "") + ".");
                 }
             }
@@ -121,8 +151,8 @@ namespace FoodTrucks
             }
         }
 
-        // A bay just resolved (Commissary.Search, before BayMarkers can draw it): its first clearance, with no view rule.
-        // The paint isn't drawn yet, so a car that goes leaves no hole in anything seen; the bay appears empty.
+        // A bay just resolved (Commissary.Search, before BayMarkers can draw it): its first clearance. Under the loading
+        // screen with no view rule; later with it, and a car left in view holds the paint back (Cleared, PaintReady).
         public static void SweepNewBay(CommissarySite site, double radius)
         {
             Forget(site.Id);
@@ -131,9 +161,12 @@ namespace FoodTrucks
             {
                 var bays = Commissary.ResolvedBays(site);
                 if (bays == null || bays.Count == 0) return;
-                var (gone, left) = Sweep(BayMarkers.ZonesOf(site, (float)radius), inView: false);
-                swept.Add(site.Id);
-                Log.Info($"Commissary {site.Id}: new bay swept before its paint, {gone} parked {(gone == 1 ? "car" : "cars")} kept out" + (left > 0 ? $", {left} left" : "") + ".");
+                var cover = UnderLoadingScreen;
+                var (gone, left) = Sweep(BayMarkers.ZonesOf(site, (float)radius), inView: !cover);
+                if (left == 0) swept.Add(site.Id);
+                Log.Info($"Commissary {site.Id}: new bay swept {(cover ? "under the loading screen" : "with the view rule")}, {gone} parked {(gone == 1 ? "car" : "cars")} kept out" +
+                         (left > 0 ? $", {left} in view left for now" : "") + ".");
+                Cleared(site.Id, left);
             }
             catch (Exception ex)
             {
@@ -165,6 +198,7 @@ namespace FoodTrucks
                     if (bays == null || bays.Count == 0 || bays.Min(b => Flat(player, b.X, b.Z)) > NearMetres) continue;
                     var (gone, left) = Sweep(BayMarkers.ZonesOf(site, (float)radius), inView: false);
                     swept.Add(site.Id);
+                    Cleared(site.Id, left);
                     if (left == 0) clean.Add(site.Id);
                     else clean.Remove(site.Id);
                     if (gone > 0) Count(site.Id, 0, gone);
@@ -255,6 +289,7 @@ namespace FoodTrucks
                         swept.Add(site.Id);
                         clean.Add(site.Id);
                     }
+                    Cleared(site.Id, left);
                 }
                 if (Time.unscaledTime >= nextSummary && counts.Count > 0)
                 {

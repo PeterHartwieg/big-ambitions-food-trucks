@@ -331,6 +331,21 @@ public class BaySnapTests
     }
 
     [Fact]
+    public void TheExactAutomaticPickIsKeptOverACandidateCentimetresAway()
+    {
+        // Review round 2 (Astra): a lane from x 29 to 31.05. Nearest takes (30, 0); the centred candidate stands at
+        // (30.025, 0), beyond 30 m. The listed pick is Nearest's own place.
+        var legal = Lane(29, 31.05, -40, 40);
+        var auto = BaySnap.Nearest(0, 0, legal, BothAxes, WheelFootprint.Truck);
+        Assert.NotNull(auto);
+        var result = BaySnap.CandidatesWithPick(0, 0, legal, BothAxes, WheelFootprint.Truck, 80, reach: null);
+        Assert.Same(result.Automatic, result.Places.Single(p => Math.Abs(p.Z) < 2 && Math.Abs(p.X - 30) < 1));
+        Assert.Equal(auto!.X, result.Automatic!.X, 9);
+        Assert.Equal(auto.Z, result.Automatic.Z, 9);
+        Assert.True(result.Automatic.Distance <= BaySnap.MaxMetres + 1e-9);
+    }
+
+    [Fact]
     public void TheAutomaticPickSkipsAPlaceTheWalkRejects()
     {
         // Two lanes: one 11 m off behind the building (the walk rejects it), one 20 m off on the street.

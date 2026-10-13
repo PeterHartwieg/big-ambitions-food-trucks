@@ -152,7 +152,7 @@ namespace FoodTrucks.Core.Commissary
         }
 
         // The candidates within radius plus the automatic search's own pick: Nearest within MaxMetres with the same
-        // reach (walk) rule, run as the bay search runs it, added to the list if no candidate stands within
+        // reach (walk) rule, run as the bay search runs it, always listed in place of any candidate within
         // SamePickMetres of it (it can differ: Nearest skips cells near a rejected one and falls back to an uncentred
         // cell at its limit; review round 1, Sol, Astra and Opus). `automatic` false: the search takes nothing from
         // this origin (a door cut off from the street). Nearest first.
@@ -164,9 +164,10 @@ namespace FoodTrucks.Core.Commissary
             BaySnapResult? pick = automatic ? Nearest(x, z, legal, axes, footprint, MaxMetres, reach) : null;
             if (pick != null)
             {
-                var same = list.Where(c => Distance(c.X, c.Z, pick.X, pick.Z) < SamePickMetres).OrderBy(c => Distance(c.X, c.Z, pick.X, pick.Z)).FirstOrDefault();
-                if (same != null) pick = same;
-                else list.Add(pick);
+                // The pick itself is listed, exactly as Nearest found it: a candidate within SamePickMetres is the same
+                // place and gives way to it (review round 2, Astra: a centred candidate 2.5 cm off stood beyond 30 m).
+                list.RemoveAll(c => Distance(c.X, c.Z, pick.X, pick.Z) < SamePickMetres);
+                list.Add(pick);
             }
             return new BayCandidates(list.OrderBy(c => c.Distance).ToList(), pick);
         }

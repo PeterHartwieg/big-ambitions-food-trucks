@@ -104,8 +104,11 @@ bizman.layout | must | (?m)^(?:\[Mod:FoodTrucks\] )?BizMan: vehicle page built f
 map.lateConfirm | must | Map pick: the confirm for .+? came after the pick ended \(map closed\); nothing added\. | row bizman/17
 mod.loadSweep | must | Commissary [\w-]+: bay swept on load, \d+ parked cars? kept out\. | row mod/M1
 mod.loadSweepLeft | never | Commissary [\w-]+: bay swept on load, \d+ parked cars? kept out, \d+ left\. | row mod/M1
-mod.loadNotReady | count>=0 | Commissary bays: the parking lanes aren't ready on load; the bays from the save are swept on the first look instead \(with the view rule\)\. | row mod/M1
-mod.newBaySweep | count>=0 | Commissary [\w-]+: new bay swept before its paint, \d+ parked cars? kept out(?:, \d+ left)?\. | row mod/M1,mod/M5
+mod.loadNotReady | count>=0 | Commissary bays: the parking lanes aren't ready on load; the bays from the save are swept on the first look instead \(with the view rule, their paint waiting until they are clear\)\. | row mod/M1
+mod.newBaySweep | count>=0 | Commissary [\w-]+: new bay swept (?:under the loading screen|with the view rule), \d+ parked cars? kept out(?:, \d+ in view left for now)?\. | row mod/M1,mod/M5
+mod.newBayLeftUnderCover | never | Commissary [\w-]+: new bay swept under the loading screen, \d+ parked cars? kept out, \d+ in view left for now\. | row mod/M1,mod/M5
+mod.paintWaits | count>=0 | Commissary [\w-]+: paint waits for \d+ parked cars? in view to leave the bay\. | row mod/M1,mod/M5
+mod.paintClear | count>=0 | Commissary [\w-]+: the bay is clear; its paint is drawn\. | row mod/M1,mod/M5
 mod.jump | must | Commissary hells-kitchen: the player jumped \d+ m to within 150 m of the bay; swept before the frame was drawn, \d+ parked cars? kept out\. | row mod/M2
 mod.noBaySaved | must | Commissary (?:industry-city|garment-district|murray-hill) \(.+?\): bay searched from x .+?, z .+? \(nearest entrance\); no bay in the save; searched again after load\. | row mod/M5
 mod.noBayLine | must | ERROR: Commissary (?:industry-city|garment-district|murray-hill): no bay this load \(searched .+? in \d+ ms\): .+?\. No vehicle is ever in its bay | row mod/M5

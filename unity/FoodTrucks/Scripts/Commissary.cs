@@ -82,8 +82,18 @@ namespace FoodTrucks
                 LogBusinessAt(site);
             }
             // The lanes filled the bays with parked cars on the game's load event, before this one: they go now, under
-            // the loading screen.
-            BayParking.SweepOnLoad(sites, Rules!.BayRadiusMetres);
+            // the loading screen. Bays still to be searched are searched first, while the screen hides any car their
+            // sweep removes (a bay resolved later keeps the view rule and its paint waits; BayParking).
+            BayParking.UnderLoadingScreen = true;
+            try
+            {
+                if (state != null && Legality.ParkingSceneReady())
+                    foreach (var site in sites.Sites)
+                        if (SearchDue(site)) Resolve(site, "on load", force: true);
+                BayParking.SweepOnLoad(sites, Rules!.BayRadiusMetres);
+            }
+            catch (Exception ex) { Log.Error("Commissary, bays on load: " + ex); }
+            finally { BayParking.UnderLoadingScreen = false; }
             if (state == null) return;
             var commissary = state.Commissary;
             // The game doesn't save a contact's call button, so it is set again after every load.
@@ -1385,7 +1395,9 @@ namespace FoodTrucks
                 var door = doors == null || doors.Length == 0 ? (Vector3?)null : doors.OrderBy(d => Flat(d, origin)).First();
                 var entry = new BayCandidateOrigin { Kind = site.Bay != null ? "data" : "entrance", X = origin.X, Z = origin.Z, Door = door };
                 var centre = new Vector3((float)origin.X, door?.y ?? PlayerHelper.GetPosition().y, (float)origin.Z);
-                var probe = new Legality.ParkingProbe(centre, (float)radius + 8f);
+                // Wide enough for the automatic search's 30 m too, so its pick never changes with the listing radius
+                // (review round 2, Astra and Sol).
+                var probe = new Legality.ParkingProbe(centre, (float)Math.Max(radius, BaySnap.MaxMetres) + 8f);
                 entry.Colliders = probe.Count;
                 entry.Truncated = probe.Truncated;
                 Vector3? walkStart = null;
