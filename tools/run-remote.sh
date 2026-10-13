@@ -64,7 +64,7 @@ case "$ACTION" in
     remote status
     text="$(lock_text)"; if [ -n "$text" ]; then echo "Lock:"; sed 's/^/  /' <<<"$text"; else echo "Lock: free."; fi
     ;;
-  lock) take_lock "${LOCK_ARGS[@]}" ;;
+  lock) take_lock ${LOCK_ARGS[@]+"${LOCK_ARGS[@]}"} ;;
   unlock) drop_lock ;;
   start)
     require_lock_free_or_ours

@@ -29,6 +29,8 @@ take_lock() {
   local minutes="${1:-60}" what="${2:-Food Trucks test session}"
   require_lock_free_or_ours
   local since until
+  local q="'"
+  what="${what//$q/$q$q}"   # a quote doubled stays inside PowerShell's single-quoted string
   since="$(date '+%Y-%m-%d %H:%M')"
   until="$(date -v+"${minutes}"M '+%H:%M')"
   ssh "$HOST" "Set-Content -Path \$env:USERPROFILE\\game-lock.txt -Value @('owner: $LOCK_OWNER', 'since: $since', 'until: about $until', 'game: $what', 'rules: no install, restart, load or quit while held; message the owner to ask for it')" < /dev/null
