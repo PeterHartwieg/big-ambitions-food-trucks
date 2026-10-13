@@ -597,7 +597,7 @@ def texture_and_uv():
  output=nodes.new('ShaderNodeOutputMaterial');output.location=(400,0);bs=nodes.new('ShaderNodeBsdfPrincipled');bs.location=(120,0);bs.inputs['Roughness'].default_value=.65
  tex=nodes.new('ShaderNodeTexImage');tex.image=images['D'];tex.interpolation='Linear';tex.location=(-240,60)
  mat.node_tree.links.new(tex.outputs['Color'],bs.inputs['Base Color']);mat.node_tree.links.new(bs.outputs['BSDF'],output.inputs['Surface'])
- # Texture alpha is the game paint mask, never Blender transparency.
+ # Texture alpha is the game's paint mask (switched off in the truck's material, art/README.md), never Blender transparency.
  for ob in obs:
   ob.data.materials.clear();ob.data.materials.append(mat)
   for p in ob.data.polygons:p.material_index=0

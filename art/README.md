@@ -229,12 +229,14 @@ The 0.9.3 to 0.9.7 layout (two spots at the hatch's ends, scaled 0.72 on a steel
 
 | Slot | Texture | Contents |
 |---|---|---|
-| `_BaseColorMap`, `_MainTex` | `T_FoodTruck_BC` | Base colour from `game_look.py` (source `T_FoodTruck_D`); alpha 1 on painted panels [inference: the example's alpha looks like a paint mask] |
+| `_BaseColorMap`, `_MainTex` | `T_FoodTruck_BC` | Base colour from `game_look.py` (source `T_FoodTruck_D`); alpha 1 on painted panels, but the material ignores it (below) |
 | `_MaskMap` | `T_FoodTruck_M` | R metallic, G AO, B 0, A smoothness, from `game_look.py` (source `T_FoodTruck_MaskMap`) |
 | `_NormalMap` | `T_FoodTruck_N` | Rounded edges baked by `game_look.py` |
 | `_EmissionTexture`, `_FrontLights`, `_BackLights`, `_BlinkerLeft`, `_BlinkerRight` | `T_FoodTruck_E` | Light colours |
 | `_EmissionMask` | `T_FoodTruck_EM_1` | R headlights plus the amber marker and work lights, G tail/brake, B reverse |
 | `_IndicatorsMask` | `T_FoodTruck_EM_2` | R right blinkers and side repeaters, G left ones |
+
+**Paint mask off.** The vehicle shader (`SH_Vehicle`, read from the SDK's shader graph) sets the base colour to `lerp(texture, Tint, smoothstep(_Min, _Max, alpha))` and adds a Fresnel rim in `FresnelColor` on the same mask; the game's `CarFeatures.SetColor` sets Tint per car from its colour name. The example car's material has Tint dark red (0.44, 0, 0), `_Min` 0 and `_Max` 0.5, and our truck has no colour name, so until now every cream and teal panel rendered dark red with a red rim, close to black in shade. A single tint can't carry a two-colour livery, so `TruckAssets` sets `_Min` 1.5 and `_Max` 2: the smoothstep is 0 for every alpha, and the base colour and smoothness come from our maps alone.
 
 The channel meanings come from mapping the example car's masks back onto its mesh: `EM_1` R lies on the headlights, G and B on the rear lights, `EM_2` R on the right side and G on the left [inference; not yet seen lit in game]. The dirt textures stay the example's (`SM_HonzaCar_Dirt*`); the second UV map is a non-overlapping copy of the first, for them.
 

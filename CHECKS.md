@@ -1,3 +1,17 @@
+# Truck paint and the 1,600 kg drive (next build)
+
+Two things on `main` after the bay-side merge; no version bump, so the log says 0.9.10. The truck's material no longer lets the game's vehicle shader paint its panels in one tint (art/README.md, "Paint mask off"): until now the cream and teal body rendered dark red, close to black in shade. The drive rows are Peter's, at the wheel; the setup runs with the bridge in **FT bridge 2** (four trucks, so nothing needs spawning).
+
+| # | Do | Look for |
+|---|---|---|
+| P1 | Before Peter drives: a truck in the Hell's Kitchen bay (`teleport <truck> place=bay:hells-kitchen`), `shoot` `vehicle-side` with `game_view` at noon, then at 18:00 and in the shade of a building | Cream box and cab, teal skirt, white trims, the burger sign on the side, as in `art/truck/renders/14-final.png`, a little darker in shade but never black or dark red; no red rim along the roof edge |
+| P2 | `shoot` `vehicle-overhead` and one from inside the open truck at the hatch | The roof cream with its two vents; the inside walls light grey, not black |
+| D1 | From the Hell's Kitchen bay, pull away up Second Avenue and hold full throttle on the straight | A little slower off the line than before, still about 50 km/h at the top. If the game's delivery truck is at hand (the delivery job's vehicle, or one bought at General US Trucks), it should pull away a little quicker than ours |
+| D2 | Brake hard from top speed | Stops straight in about a truck's length or two more than before; the nose dips but the rear wheels stay down, no slide |
+| D3 | Take a few junction turns at 20 to 30 km/h, one tight; bump a kerb | Leans a little more than before, never tips or lifts a wheel; climbs or stops at the kerb like the game's trucks |
+| D4 | Back into the bay and park; open the window and stand at the hatch | Sits level, no bouncing after it stops; the hatch, register and crew at the same height as before |
+| D5 | Overall | "Slightly heavier", not a different vehicle. Say heavier, lighter or right; if wrong, say which part (pull-away, braking, turns) |
+
 # Bays on the door's side and a heavier truck (next build)
 
 Peter's decisions of 13 October 2026, on branch `bay-side`; no version bump, so the log says 0.9.10. A commissary's bay must be on the door's side of the street (Core `BaySide`: the straight walk from the entrance crosses no driving lane), measured bays included, and a vehicle is in the bay only on that side; Hell's Kitchen moved to Second Avenue 8 and Industry City to Twenty-first Street 2, with a nose-in bay in the lot beside it; the truck weighs 1,600 kg with springs and dampers scaled to match; the bridge's `bay_candidates` takes any building's address. Run with the bridge in **FT bridge**. The rule version changed, so every stored bay is searched again on the first load. Log rows in `tests/game/logchecks/0.9.10.txt` (`bayside.*`).

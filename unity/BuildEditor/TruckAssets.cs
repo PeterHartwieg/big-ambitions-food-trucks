@@ -271,6 +271,16 @@ namespace FoodTrucks.BuildEditor
                 text = text.Replace(from, to);
             }
             text = text.Replace("m_Name: M_HonzaCar", "m_Name: M_FoodTruck");
+            // The vehicle shader replaces the base colour with its single Tint (the example's dark red) wherever
+            // smoothstep(_Min, _Max, base colour alpha) is above 0, and adds a Fresnel rim there. The truck's livery
+            // has two paint colours in its texture, so the mask is switched off: with _Min 1.5 and _Max 2 the
+            // smoothstep is 0 for every alpha. Left at 0 and 0.5, the cream and teal panels rendered dark red,
+            // almost black in shade.
+            foreach (var (from, to) in new[] { ("    - _Min: 0\n", "    - _Min: 1.5\n"), ("    - _Max: 0.5\n", "    - _Max: 2\n") })
+            {
+                if (!text.Contains(from)) throw new InvalidOperationException($"{ExampleMaterial} lacks '{from.Trim()}'.");
+                text = text.Replace(from, to);
+            }
             File.WriteAllText(Path.Combine(ProjectRoot, path), text);
             AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
             return AssetDatabase.LoadAssetAtPath<Material>(path)

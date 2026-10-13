@@ -270,11 +270,11 @@ Material:
     - _LeftIndicatorStrength: 0
     - _LinkDetailsWithBase: 1
     - _MaterialID: 1
-    - _Max: 0.5
+    - _Max: 2
     - _Metallic: 0
     - _MetallicRemapMax: 1
     - _MetallicRemapMin: 0
-    - _Min: 0
+    - _Min: 1.5
     - _NormalMapSpace: 0
     - _NormalScale: 1
     - _OpaqueCullMode: 2
