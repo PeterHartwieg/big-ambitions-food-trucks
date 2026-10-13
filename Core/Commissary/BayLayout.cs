@@ -58,6 +58,56 @@ namespace FoodTrucks.Core.Commissary
         }
     }
 
+    // Whether a parked car stands in a bay's zone (BayParking). 0.9.9 asked only whether the car's middle was within 2 m
+    // of the zone, so a long car parked at a stretch's end with its middle 2.5 m out still stood a metre into the paint
+    // (live session 2, 13 October 2026). This takes the car's whole footprint: a rectangle turned with the car, its
+    // reach along and across the lane worked out from its turn, against each painted stretch.
+    public static class BayKeepOut
+    {
+        // spans: the zone's stretches as metres along from its foot; width: the paint's width, centred on the foot.
+        // along, across: the car's middle in the zone's frame. forwardAlong, forwardAcross: the car's forward in that
+        // frame (any length). halfLength, halfWidth: half the car's footprint. margin: added all round the zone.
+        public static bool Overlaps(IEnumerable<(double From, double To)> spans, double width, double along, double across,
+            double forwardAlong, double forwardAcross, double halfLength, double halfWidth, double margin)
+        {
+            if (spans == null) throw new ArgumentNullException(nameof(spans));
+            var length = Math.Sqrt(forwardAlong * forwardAlong + forwardAcross * forwardAcross);
+            var fa = length < 1e-9 ? 1 : Math.Abs(forwardAlong / length);
+            var fc = length < 1e-9 ? 0 : Math.Abs(forwardAcross / length);
+            var reachAlong = fa * halfLength + fc * halfWidth;
+            var reachAcross = fc * halfLength + fa * halfWidth;
+            if (Math.Abs(across) - reachAcross >= width / 2 + margin) return false;
+            foreach (var (from, to) in spans)
+                if (along + reachAlong > from - margin && along - reachAlong < to + margin) return true;
+            return false;
+        }
+    }
+
+    // Where the props by a commissary's door may stand (BayProps). Facades have pilasters, sills and recessed doors
+    // (Hell's Kitchen, live session 3), so the wall a prop stands against is read where the prop goes, not at the door.
+    public static class PropPlacement
+    {
+        // The facade line where a prop goes: the outermost wall hit (metres out from the door's own facade line, + to
+        // the street) within maxShift either way. A hit farther out is something standing on the pavement (a hydrant,
+        // a post), not the wall: the prop's overlap check refuses that place instead. Null without a usable hit.
+        public static double? FacadeOffset(IEnumerable<double> hits, double maxShift)
+        {
+            if (hits == null) throw new ArgumentNullException(nameof(hits));
+            double? best = null;
+            foreach (var h in hits)
+                if (Math.Abs(h) <= maxShift && (best == null || h > best.Value)) best = h;
+            return best;
+        }
+
+        // The middles to try for a prop of halfLength along one side of the door: from `start` (where the free facade
+        // begins, metres from the door's middle) outwards in steps, while the prop ends within maxAlong of the door.
+        public static IEnumerable<double> Offsets(double start, double halfLength, double maxAlong, double step)
+        {
+            if (step <= 0) throw new ArgumentOutOfRangeException(nameof(step));
+            for (var s = start + halfLength; s + halfLength <= maxAlong + 1e-9; s += step) yield return s;
+        }
+    }
+
     public enum BayStretchSource
     {
         // From the game's parking colliders.

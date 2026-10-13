@@ -18,7 +18,14 @@ namespace FoodTrucks
     //   rented or not; a car already there (the game may skip a lane within 80 m of the player) is left to the sweep
     //   (review round 5);
     // - once the bay is resolved, and each time the player comes within NearMetres, the zone is swept for cars already
-    //   standing there; a car in the main camera's view is left until it isn't, so none vanishes in view.
+    //   standing there; a car in the main camera's view is left until it isn't, so none vanishes in view;
+    // - on every load, under the loading screen, every bay is swept with no view rule: the lanes fill on the game's
+    //   load event, before the mod's late load event, so the postfix never sees a bay's first cars (live session 2,
+    //   13 October 2026: the player was teleported to the Hell's Kitchen door, the car in the paint was in view from
+    //   the first look, and stayed until the truck was put on it);
+    // - when the player jumps (a teleport, a taxi, the game's fast travel: more than CutMetres in one frame), the bays
+    //   near where they landed are swept before that frame is drawn, with no view rule: the picture is new anyway.
+    // A car is in a bay when any part of its footprint is (Core BayKeepOut), not only its middle.
     // A car goes back as the game's own cleanup sends it: the lane's onReleaseVehicle first, then the pool.
     // Only the lanes' own parked cars: never a player vehicle (another layer), moving traffic (another layer) or the
     // delivery job's van (DeliveryJobStartController).
@@ -26,12 +33,20 @@ namespace FoodTrucks
     {
         private const float NearMetres = 150f;
         private const float AwayMetres = 200f;
-        // A car counts as in the zone when its middle is within the zone plus this (a car half in the bay is out too).
+        // The sweep's box reaches this far beyond the zone; a car it finds counts when its footprint, plus
+        // FootprintMarginMetres, reaches into the zone.
         private const float CarMarginMetres = 2.0f;
+        private const float FootprintMarginMetres = 0.1f;
+        // A player move longer than this in one frame is a cut (no vehicle covers it in a frame).
+        private const float CutMetres = 50f;
+        private static Vector3? lastPlayer;
         private const float SummarySeconds = 60f;
         private static readonly Collider[] hits = new Collider[64];
         // Sites swept clean since the player last came near; cleared again when they go AwayMetres off.
         private static readonly HashSet<string> clean = new HashSet<string>(StringComparer.Ordinal);
+        // Sites swept at least once since the load or since their bay was resolved; one not yet swept is swept whatever
+        // the player's distance (0.9.9 swept a newly resolved bay only once the player came within NearMetres).
+        private static readonly HashSet<string> swept = new HashSet<string>(StringComparer.Ordinal);
         // Cars kept out per site since the last summary line: (at generation, on a sweep).
         private static readonly Dictionary<string, (int Generated, int Swept)> counts = new Dictionary<string, (int, int)>(StringComparer.Ordinal);
         private static float nextSummary;
@@ -61,7 +76,9 @@ namespace FoodTrucks
         {
             bayPointsUntil = float.MinValue;
             clean.Clear();
+            swept.Clear();
             counts.Clear();
+            lastPlayer = null;
             failed = false;
         }
 
@@ -69,7 +86,62 @@ namespace FoodTrucks
         public static void Forget(string siteId)
         {
             clean.Remove(siteId);
+            swept.Remove(siteId);
             bayPointsUntil = float.MinValue;
+        }
+
+        // On load, from Commissary.Attach (the game's late load event, the loading screen still up): every bay resolved
+        // from the save is swept with no view rule. A bay resolved later is swept on its first look.
+        public static void SweepOnLoad(CommissaryTables sites, double radius)
+        {
+            if (failed || Commissary.Uninstalled) return;
+            try
+            {
+                if (!Legality.ParkingSceneReady()) return;
+                foreach (var site in sites.Sites)
+                {
+                    var bays = Commissary.ResolvedBays(site);
+                    if (bays == null || bays.Count == 0) continue;
+                    var (gone, left) = Sweep(BayMarkers.ZonesOf(site, (float)radius), inView: false);
+                    swept.Add(site.Id);
+                    Log.Info($"Commissary {site.Id}: bay swept on load, {gone} parked {(gone == 1 ? "car" : "cars")} kept out" + (left > 0 ? $", {left} left" : "") + ".");
+                }
+            }
+            catch (Exception ex)
+            {
+                failed = true;
+                Log.Error("Commissary parking: " + ex + " Parked cars are no longer kept out of the bays this session.");
+            }
+        }
+
+        // Every frame (Commissary.LateUpdate, after the frame's moves and before it is drawn): a jump of the player is a
+        // cut, and the bays within NearMetres of where they landed are swept with no view rule.
+        public static void WatchCut(CommissaryTables sites, double radius, Vector3 player, bool inside)
+        {
+            if (failed || Commissary.Uninstalled) return;
+            var last = lastPlayer;
+            lastPlayer = player;
+            if (last == null || inside || Flat(player, last.Value.x, last.Value.z) <= CutMetres) return;
+            try
+            {
+                foreach (var site in sites.Sites)
+                {
+                    var bays = Commissary.ResolvedBays(site);
+                    if (bays == null || bays.Count == 0 || bays.Min(b => Flat(player, b.X, b.Z)) > NearMetres) continue;
+                    var (gone, left) = Sweep(BayMarkers.ZonesOf(site, (float)radius), inView: false);
+                    swept.Add(site.Id);
+                    if (left == 0) clean.Add(site.Id);
+                    else clean.Remove(site.Id);
+                    if (gone > 0) Count(site.Id, 0, gone);
+                    Log.Info($"Commissary {site.Id}: the player jumped {Flat(player, last.Value.x, last.Value.z):F0} m to within {NearMetres:F0} m of the bay; " +
+                             $"swept before the frame was drawn, {gone} parked {(gone == 1 ? "car" : "cars")} kept out.");
+                }
+            }
+            catch (Exception ex)
+            {
+                failed = true;
+                Log.Error("Commissary parking: " + ex + " Parked cars are no longer kept out of the bays this session.");
+            }
         }
 
         // Prefix on ParkingLaneGenerator.GenerateParkedVehicles: the lane's cars before it runs.
@@ -105,10 +177,12 @@ namespace FoodTrucks
                     foreach (Transform child in __instance.transform.Cast<Transform>().ToList())
                     {
                         if (__state.Contains(child.gameObject) || !IsLaneCar(child.gameObject)) continue;
-                        if (!zones.Any(z => z.Contains(child.position, CarMarginMetres))) continue;
+                        if (!zones.Any(z => InZone(z, child.gameObject))) continue;
                         if (OnScreen(child.gameObject))
                         {
+                            // Swept again on every look, whatever the distance, until it is out of view.
                             clean.Remove(site.Id);
+                            swept.Remove(site.Id);
                             continue;
                         }
                         if (Release(child.gameObject)) released++;
@@ -135,12 +209,17 @@ namespace FoodTrucks
                     if (bays == null || bays.Count == 0) continue;
                     var distance = bays.Min(b => Flat(player, b.X, b.Z));
                     if (distance > AwayMetres) clean.Remove(site.Id);
-                    if (inside || distance > NearMetres || clean.Contains(site.Id)) continue;
+                    // Near, or never swept since the load or the bay's resolution (then whatever the distance).
+                    if (inside || clean.Contains(site.Id) || (distance > NearMetres && swept.Contains(site.Id))) continue;
                     var zones = BayMarkers.ZonesOf(site, (float)radius);
-                    var (swept, left) = Sweep(zones);
-                    if (swept > 0) Count(site.Id, 0, swept);
-                    // Cars on screen are tried again on the next look.
-                    if (left == 0) clean.Add(site.Id);
+                    var (gone, left) = Sweep(zones, inView: true);
+                    if (gone > 0) Count(site.Id, 0, gone);
+                    // Cars on screen are tried again on the next look, and go as soon as they are out of view.
+                    if (left == 0)
+                    {
+                        swept.Add(site.Id);
+                        clean.Add(site.Id);
+                    }
                 }
                 if (Time.unscaledTime >= nextSummary && counts.Count > 0)
                 {
@@ -158,8 +237,9 @@ namespace FoodTrucks
             }
         }
 
-        // Releases the lane cars standing in the zones and not on screen; returns how many went and how many are left.
-        private static (int Swept, int Left) Sweep(List<BayMarkers.BayZone> zones)
+        // Releases the lane cars standing in the zones (and, with inView, not on screen); returns how many went and how
+        // many are left.
+        private static (int Swept, int Left) Sweep(List<BayMarkers.BayZone> zones, bool inView)
         {
             var swept = 0;
             var left = 0;
@@ -176,8 +256,8 @@ namespace FoodTrucks
                     {
                         var car = CarOf(hits[i]);
                         if (car == null || !seen.Add(car) || !IsLaneCar(car)) continue;
-                        if (!zone.Contains(car.transform.position, CarMarginMetres)) continue;
-                        if (OnScreen(car))
+                        if (!InZone(zone, car)) continue;
+                        if (inView && OnScreen(car))
                         {
                             left++;
                             continue;
@@ -187,6 +267,48 @@ namespace FoodTrucks
                 }
             }
             return (swept, left);
+        }
+
+        // Whether any part of a car's footprint reaches into the zone (Core BayKeepOut). The footprint is its mesh
+        // collider's bounds (each parked car has one on its root, ParkingLaneGenerator.GenerateParkedVehicles), else its
+        // renderers' bounds, else its middle.
+        internal static bool InZone(BayMarkers.BayZone zone, GameObject car)
+        {
+            var t = car.transform;
+            Vector3 middle;
+            float halfLength, halfWidth;
+            var mesh = car.GetComponent<MeshCollider>()?.sharedMesh;
+            if (mesh != null)
+            {
+                var b = mesh.bounds;
+                var scale = t.lossyScale;
+                middle = t.TransformPoint(b.center);
+                halfLength = b.extents.z * Mathf.Abs(scale.z);
+                halfWidth = b.extents.x * Mathf.Abs(scale.x);
+            }
+            else
+            {
+                var renderers = car.GetComponentsInChildren<Renderer>();
+                if (renderers.Length > 0)
+                {
+                    var b = renderers[0].bounds;
+                    foreach (var r in renderers) b.Encapsulate(r.bounds);
+                    middle = b.center;
+                    // World bounds: as wide one way as the other, whatever the car's turn.
+                    halfLength = halfWidth = Mathf.Max(b.extents.x, b.extents.z);
+                }
+                else
+                {
+                    middle = t.position;
+                    halfLength = halfWidth = 0f;
+                }
+            }
+            var d = middle - zone.Foot;
+            var across = zone.Across;
+            var forward = t.forward;
+            return BayKeepOut.Overlaps(zone.Spans.Select(sp => ((double)sp.From, (double)sp.To)), zone.Width,
+                Vector3.Dot(d, zone.Along), Vector3.Dot(d, across), Vector3.Dot(forward, zone.Along), Vector3.Dot(forward, across),
+                halfLength, halfWidth, FootprintMarginMetres);
         }
 
         // The parked car a collider belongs to: the lane's direct child above it.

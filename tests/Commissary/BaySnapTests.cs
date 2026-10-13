@@ -312,6 +312,31 @@ public class BaySnapTests
         Assert.Contains((2.0, 0.97), wide.Wheels.Select(w => (Math.Round(w.Along, 6), Math.Round(w.Across, 6))));
         Assert.Contains((-2.0, -0.97), wide.Wheels.Select(w => (Math.Round(w.Along, 6), Math.Round(w.Across, 6))));
     }
+
+    [Fact]
+    public void CandidatesListEveryStretchNearestFirstBeyondTheAutomaticLimit()
+    {
+        // Two lanes: the Hell's Kitchen one 11 m from the door, and another 50 m off, beyond the automatic 30 m.
+        var near = Lane(391.9, 394.3, 200, 225);
+        var far = Lane(452.8, 455.2, 210, 240);
+        bool Legal(double x, double z, double ax, double az) => near(x, z, ax, az) || far(x, z, ax, az);
+        var list = BaySnap.Candidates(404.5, 228.4, Legal, BothAxes, WheelFootprint.Truck, 80);
+        Assert.NotEmpty(list);
+        Assert.True(list.Zip(list.Skip(1), (a, b) => a.Distance <= b.Distance + 1e-9).All(x => x));
+        Assert.Contains(list, c => Math.Abs(c.X - 393.1) < 0.1);
+        Assert.Contains(list, c => Math.Abs(c.X - 454.0) < 0.1 && c.Distance > BaySnap.MaxMetres);
+        // The nearest candidate is the automatic search's own pick.
+        var auto = BaySnap.Nearest(404.5, 228.4, Legal, BothAxes, WheelFootprint.Truck);
+        Assert.Equal(auto!.X, list[0].X, 6);
+        Assert.Equal(auto.Z, list[0].Z, 6);
+        foreach (var c in list)
+        {
+            Assert.True(RealTruckLegal(Legal, c));
+            Assert.All(list.Where(o => !ReferenceEquals(o, c)), o => Assert.True(BaySnap.Distance(o.X, o.Z, c.X, c.Z) >= BaySnap.CandidateSpacingMetres - 1e-9));
+        }
+        Assert.Empty(BaySnap.Candidates(404.5, 228.4, Legal, BothAxes, WheelFootprint.Truck, 5));
+        Assert.Equal(2, BaySnap.Candidates(404.5, 228.4, Legal, BothAxes, WheelFootprint.Truck, 80, limit: 2).Count);
+    }
 }
 
 public class CommissaryBaysTests
@@ -339,6 +364,20 @@ public class CommissaryBaysTests
         Assert.NotNull(set);
         Assert.Empty(set!.Points);
         Assert.False(CommissaryBays.InBay(set.Points, 404.5, 228.4, 15, legallyParked: true));
+    }
+
+    [Fact]
+    public void AFailedSearchIsRepeatedOncePerLoad()
+    {
+        var state = new CommissaryState();
+        Assert.True(CommissaryBays.SearchDue(CommissaryBays.Current(state, "murray-hill", Origins), searchedThisLoad: false));
+        CommissaryBays.Store(state, "murray-hill", Origins, Array.Empty<BaySnapResult>());
+        var none = CommissaryBays.Current(state, "murray-hill", Origins);
+        Assert.True(CommissaryBays.SearchDue(none, searchedThisLoad: false));
+        Assert.False(CommissaryBays.SearchDue(none, searchedThisLoad: true));
+        // A bay found is kept and never searched again on a load.
+        CommissaryBays.Store(state, "murray-hill", Origins, new[] { new BaySnapResult(393.1, 222.9, 0, 1, 12) });
+        Assert.False(CommissaryBays.SearchDue(CommissaryBays.Current(state, "murray-hill", Origins), searchedThisLoad: false));
     }
 
     [Fact]

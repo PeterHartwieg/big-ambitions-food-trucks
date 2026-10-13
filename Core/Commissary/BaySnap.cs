@@ -85,26 +85,73 @@ namespace FoodTrucks.Core.Commissary
                     var length = Math.Sqrt(ax * ax + az * az);
                     if (length < 1e-9) continue;
                     var along = (X: ax / length, Z: az / length);
-                    if (!legal(px, pz, along.X, along.Z)) continue;
-                    var place = Centred(px, pz, along, legal) ?? (px, pz);
-                    // Centring can move a place past the search's limit (review round 5): the place itself must be
-                    // within maxMetres, else the grid cell is tried as it is.
-                    if (Distance(x, z, place.X, place.Z) > maxMetres + 1e-9 || !Fits(place.X, place.Z, along, probes, legal))
-                    {
-                        if (place.X == px && place.Z == pz) continue;
-                        place = (px, pz);
-                        if (!Fits(px, pz, along, probes, legal)) continue;
-                    }
-                    if (reach != null && !reach(place.X, place.Z))
+                    var place = PlaceAt(x, z, px, pz, along, probes, legal, maxMetres);
+                    if (place == null) continue;
+                    if (reach != null && !reach(place.Value.X, place.Value.Z))
                     {
                         rejected.Add((px, pz));
                         break;
                     }
-                    return new BaySnapResult(place.X, place.Z, along.X, along.Z, Distance(x, z, place.X, place.Z));
+                    return new BaySnapResult(place.Value.X, place.Value.Z, along.X, along.Z, Distance(x, z, place.Value.X, place.Value.Z));
                 }
             }
             return null;
         }
+
+        // The place a grid cell gives for a vehicle lined up with `along`, or null: the cell must be legal, and the
+        // place is the legal run's middle across the lane when that fits within maxMetres, else the cell itself.
+        private static (double X, double Z)? PlaceAt(double x, double z, double px, double pz, (double X, double Z) along, WheelFootprint probes,
+            Func<double, double, double, double, bool> legal, double maxMetres)
+        {
+            if (!legal(px, pz, along.X, along.Z)) return null;
+            var place = Centred(px, pz, along, legal) ?? (px, pz);
+            // Centring can move a place past the search's limit (review round 5): the place itself must be within
+            // maxMetres, else the grid cell is tried as it is.
+            if (Distance(x, z, place.X, place.Z) > maxMetres + 1e-9 || !Fits(place.X, place.Z, along, probes, legal))
+            {
+                if (place.X == px && place.Z == pz) return null;
+                place = (px, pz);
+                if (!Fits(px, pz, along, probes, legal)) return null;
+            }
+            return place;
+        }
+
+        // Every place within maxMetres of (x, z) where a truck stands legally parked, nearest first, at most `limit`, each
+        // at least spacingMetres from the ones before it (one per stretch of lane, not one per grid cell). The same
+        // places Nearest would weigh, with no walk check: the test bridge lists them so a commissary whose automatic
+        // search found nothing can be given a measured bay point (bay_candidates, docs/test-bridge.md).
+        public static IReadOnlyList<BaySnapResult> Candidates(double x, double z, Func<double, double, double, double, bool> legal,
+            Func<double, double, IEnumerable<(double X, double Z)>> axes, WheelFootprint footprint, double maxMetres,
+            double spacingMetres = CandidateSpacingMetres, int limit = CandidateLimit)
+        {
+            if (legal == null) throw new ArgumentNullException(nameof(legal));
+            if (axes == null) throw new ArgumentNullException(nameof(axes));
+            if (footprint == null) throw new ArgumentNullException(nameof(footprint));
+            var probes = footprint.WithClearance(ClearanceAlongMetres, ClearanceAcrossMetres);
+            var found = new List<BaySnapResult>();
+            foreach (var (dx, dz) in Grid(maxMetres))
+            {
+                if (found.Count >= limit) break;
+                var px = x + dx;
+                var pz = z + dz;
+                if (found.Any(f => Distance(f.X, f.Z, px, pz) < spacingMetres)) continue;
+                foreach (var (ax, az) in axes(px, pz))
+                {
+                    var length = Math.Sqrt(ax * ax + az * az);
+                    if (length < 1e-9) continue;
+                    var along = (X: ax / length, Z: az / length);
+                    var place = PlaceAt(x, z, px, pz, along, probes, legal, maxMetres);
+                    if (place == null) continue;
+                    if (!found.Any(f => Distance(f.X, f.Z, place.Value.X, place.Value.Z) < spacingMetres))
+                        found.Add(new BaySnapResult(place.Value.X, place.Value.Z, along.X, along.Z, Distance(x, z, place.Value.X, place.Value.Z)));
+                    break;
+                }
+            }
+            return found;
+        }
+
+        public const double CandidateSpacingMetres = 4;
+        public const int CandidateLimit = 60;
 
         // The middle of the legal run across the lane through (x, z), or null when (x, z) isn't legal itself.
         public static (double X, double Z)? Centred(double x, double z, (double X, double Z) along, Func<double, double, double, double, bool> legal)
@@ -267,6 +314,13 @@ namespace FoodTrucks.Core.Commissary
     {
         // Origins closer than this to the stored ones are the same search.
         public const double SameOriginMetres = 0.05;
+
+        // Whether a commissary's bay is searched now: never searched for these origins and rule, or searched and found
+        // nothing and not yet searched again since this load. A failed search is stored (so the 04:00 check and the
+        // paint decide from it) but repeated once on every load, as the street round a door can have loaded late or
+        // the rule have changed since (live session 2, 13 October 2026: three commissaries kept "no bay" for good).
+        public static bool SearchDue(CommissaryBaySet? current, bool searchedThisLoad) =>
+            current == null || ((current.Points == null || current.Points.Count == 0) && !searchedThisLoad);
 
         // The stored bays for a commissary, if they were searched from these origins under the current rule.
         public static CommissaryBaySet? Current(CommissaryState state, string siteId, IReadOnlyList<(double X, double Z)> origins)

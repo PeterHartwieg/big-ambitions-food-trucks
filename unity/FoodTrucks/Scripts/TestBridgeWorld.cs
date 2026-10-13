@@ -576,8 +576,9 @@ namespace FoodTrucks
         // { "op": "order", "site", "items": [ { "item", "boxes" } ] }: the phone form's confirm without the call.
         private static JToken CommissaryCommand(JObject args)
         {
-            var op = Need(args, "op", "order");
-            if (op != "order") throw new BridgeError($"Unknown commissary op '{op}': order.");
+            var op = Need(args, "op", "order or bay_candidates");
+            if (op == "bay_candidates") return BayCandidates(args);
+            if (op != "order") throw new BridgeError($"Unknown commissary op '{op}': order, bay_candidates.");
             var site = Need(args, "site", "the commissary's id");
             if (!(args["items"] is JArray rows) || rows.Count == 0) throw new BridgeError("order needs \"items\": [ { \"item\", \"boxes\" } ].");
             var items = rows.OfType<JObject>().Select(r => (Item: Need(r, "item", "an item key or name"), Boxes: (int)(Num(r, "boxes") ?? throw new BridgeError("Each item needs \"boxes\".")))).ToList();
@@ -589,6 +590,44 @@ namespace FoodTrucks
                 {
                     ["n"] = o.Id, ["site"] = o.CommissaryId, ["item"] = o.ItemName, ["units"] = o.Units,
                     ["goods"] = o.GoodsCents / 100.0, ["fee"] = o.FeeCents / 100.0, ["total"] = o.TotalCents / 100.0, ["due_day"] = o.DeliverDay,
+                })),
+            };
+        }
+
+        // { "op": "bay_candidates", "site", "radius"? }: legal truck spots round the commissary's search origins, for
+        // measuring a bay point by hand. Reads only.
+        private const double CandidateRadiusDefault = 60;
+        private const double CandidateRadiusMax = 80;
+
+        private static JToken BayCandidates(JObject args)
+        {
+            var site = Need(args, "site", "the commissary's id");
+            var radius = Num(args, "radius") ?? CandidateRadiusDefault;
+            if (radius < 5 || radius > CandidateRadiusMax) throw new BridgeError($"radius is 5 to {CandidateRadiusMax:F0} metres.");
+            (string Status, List<global::FoodTrucks.Commissary.BayCandidateOrigin> Origins) found;
+            try { found = global::FoodTrucks.Commissary.BayCandidatesForTesting(site, radius); }
+            catch (InvalidOperationException ex) { throw new BridgeError(ex.Message); }
+            JToken? Round(double? v) => v == null ? null : (JToken)Math.Round(v.Value, 2);
+            return new JObject
+            {
+                ["site"] = site,
+                ["status"] = found.Status,
+                ["radius"] = radius,
+                ["max_metres"] = BaySnap.MaxMetres,
+                ["origins"] = new JArray(found.Origins.Select(o => new JObject
+                {
+                    ["kind"] = o.Kind,
+                    ["x"] = Round(o.X), ["z"] = Round(o.Z),
+                    ["door"] = o.Door == null ? null : new JObject { ["x"] = Round(o.Door.Value.x), ["y"] = Round(o.Door.Value.y), ["z"] = Round(o.Door.Value.z) },
+                    ["walk_start"] = o.WalkStart,
+                    ["parking_colliders"] = o.Colliders,
+                    ["truncated"] = o.Truncated,
+                    ["candidates"] = new JArray(o.Candidates.Select(c => new JObject
+                    {
+                        ["x"] = Round(c.X), ["z"] = Round(c.Z), ["heading"] = Round(c.Heading), ["distance"] = Round(c.Distance),
+                        ["walk"] = c.Walk, ["walk_m"] = Round(c.WalkMetres), ["straight_m"] = Round(c.StraightMetres),
+                        ["automatic"] = c.Automatic, ["rejected"] = c.Rejected,
+                    })),
                 })),
             };
         }
