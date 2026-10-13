@@ -193,6 +193,11 @@
       }
     },
     {
+      "wait_event": "Notice: Nobody's at the truck's window",
+      "timeout_s": 300,
+      "after_step": 27
+    },
+    {
       "wait_state": "clock.paused",
       "timeout_s": 300,
       "equals": true
@@ -252,7 +257,7 @@
     {
       "wait_event": "Sale:",
       "timeout_s": 300,
-      "after_step": 41
+      "after_step": 42
     },
     {
       "expect": "state",

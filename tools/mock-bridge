@@ -513,6 +513,11 @@ class Mock:
                     v.update(open=False, serving='nobody', queue=None)
                     self.event(f"Truck {v['id']}: closing notice not shown (the crew's window, the player away or asleep).")
             v['serving']=self.serving(v)
+            waiting = self.__dict__.get('paused_notice', set())
+            if v['id'] in waiting:
+                waiting.discard(v['id'])
+                if v['open'] and v['serving'] == 'nobody':
+                    self.event(LOCALE['foodtrucks:notification_paused_truck'], 'notice')
             if v['open'] and v['serving'] != 'nobody' and m % 10 == 0:
                 stock = next((s for s in v['stock'] if s['amount'] > 0), None)
                 if stock:
@@ -744,6 +749,8 @@ class Mock:
             self.event(f"Truck window: player stepped out of truck {v['id']} at (0, 0, 0) (stepped out).")
             if not v['crew']:
                 self.event(f"Window {v['id']}: nobody serving the truck; the player left the hatch: stepped out.")
+                # As in game: the notice comes from the next per-minute sales check, not with the step-out.
+                self.__dict__.setdefault('paused_notice', set()).add(v['id'])
         elif op=='close':
             if not v['open']: raise ValueError(f"Vehicle {v['id']} isn't open.")
             v.update(open=False,serving='nobody',queue=None)

@@ -14,9 +14,26 @@ namespace FoodTrucks
     // game camera's settings (and HDRP's per-camera data), renders into a texture of its own for a few frames so HDRP's
     // exposure and history settle, and is destroyed after the read-back. Screen-space UI isn't drawn by a camera that
     // renders into a texture, so the picture has none.
+    //
+    // The game cuts away the parts of buildings between a camera and the player (its building shader reads the player's
+    // place from the shader global GlobalPlayerPos, which ThirdPersonCharacter sets every frame), so a building in front
+    // of the bridge's camera with the player behind it came out as a pale ghost. The bridge's camera therefore renders
+    // by hand (Camera.Render, which renders and submits at once) with GlobalPlayerPos moved behind it, and puts the
+    // player's place back straight after, before the game's own camera renders the frame.
     internal static class TestBridgeShoot
     {
         private const int Frames = 8;
+        private static readonly int PlayerPosition = Shader.PropertyToID("GlobalPlayerPos");
+
+        // One frame of the bridge's camera, with nothing cut away for the player.
+        private static void RenderUncut(Camera camera)
+        {
+            var saved = Shader.GetGlobalVector(PlayerPosition);
+            var t = camera.transform;
+            Shader.SetGlobalVector(PlayerPosition, t.position - t.forward * 500f);
+            try { camera.Render(); }
+            finally { Shader.SetGlobalVector(PlayerPosition, saved); }
+        }
         private const float EyeHeight = 1.65f;
         // HDRP isn't among the mod's compile references; its per-camera data is added and copied by reflection.
         private static readonly Type? HdCameraData =
@@ -49,7 +66,8 @@ namespace FoodTrucks
             var texture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             texture.Create();
             camera.targetTexture = texture;
-            camera.enabled = true;
+            // Rendered by hand, once a frame (RenderUncut), never by itself.
+            camera.enabled = false;
 
             var folder = Path.Combine(Application.persistentDataPath, "FoodTrucksTest", "shots");
             var path = Path.Combine(folder, name + ".png");
@@ -64,6 +82,7 @@ namespace FoodTrucks
             return new Deferred(() =>
             {
                 // The camera renders once a frame while enabled; the picture is read after a few.
+                RenderUncut(camera);
                 if (++frames < Frames) return null;
                 try
                 {
