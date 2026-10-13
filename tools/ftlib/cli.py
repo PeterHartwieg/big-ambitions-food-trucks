@@ -17,22 +17,35 @@ def readable(value, indent=0):
     return json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
 
 
+# Options of `ft` itself (before the subcommand) that take a value.
+TOP_VALUE_OPTIONS = set()
+# Options of `ft call` that take a value, so their value is never read as a key=value argument.
+CALL_VALUE_OPTIONS = {'--args', '--timeout', '--json'}
+
+
 def call_flags(argv):
-    """After `call`, a --json not followed by a JSON object means "print the raw reply" (as --raw), wherever it stands."""
-    if 'call' not in argv:
+    """For the `call` subcommand only: a --json not followed by a JSON object means "print the raw reply" (as --raw),
+    wherever it stands, and the output flags move after the key=value arguments so argparse never splits them."""
+    # The subcommand is the first word that isn't one of ft's own options.
+    at = next((i for i, token in enumerate(argv) if not token.startswith('-')), None)
+    if at is None or argv[at] != 'call':
         return argv
-    at = argv.index('call')
-    out = argv[:at + 1]
-    rest = argv[at + 1:]
+    head, rest = argv[:at + 1], argv[at + 1:]
+    words, options = [], []
     i = 0
     while i < len(rest):
         token = rest[i]
         if token == '--json' and not (i + 1 < len(rest) and rest[i + 1].lstrip().startswith('{')):
-            out.append('--raw')
+            options.append('--raw')
+        elif token in CALL_VALUE_OPTIONS and i + 1 < len(rest):
+            options += [token, rest[i + 1]]
+            i += 1
+        elif token.startswith('-') and token != '-':
+            options.append(token)
         else:
-            out.append(token)
+            words.append(token)
         i += 1
-    return out
+    return head + words + options
 
 
 def main():

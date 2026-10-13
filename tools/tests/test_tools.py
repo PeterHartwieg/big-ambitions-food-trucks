@@ -384,10 +384,21 @@ class CLIAndShotsTests(unittest.TestCase):
             reply=run('call','time','--json','{"pause":true}')
             self.assertEqual(reply.returncode,0,reply.stderr)
             self.assertIn('paused: true',reply.stdout)
-            for line in (('call','money','set=77','--json'),('call','--json','money','set=77'),('call','money','--json','set=77'),('call','money','--args','{"set":77}','--json')):
+            for line in (('call','money','set=77','--json'),('call','--json','money','set=77'),('call','money','--json','set=77'),('call','money','--args','{"set":77}','--json'),
+                         ('call','money','set=1','--json','set=77'),('--json','call','money','set=77')):
                 reply=run(*line)
                 self.assertEqual(reply.returncode,0,(line,reply.stderr))
                 self.assertEqual(json.loads(reply.stdout)['result']['money'],77,line)
+            reply=run('call','teleport','who=player','--json','x=1','z=2')
+            self.assertEqual(reply.returncode,0,reply.stderr)
+            self.assertTrue(json.loads(reply.stdout)['ok'])
+            # Both key=value arguments reach the bridge (the mock has no truck, so the reply is its refusal, as JSON).
+            reply=run('call','vehicle','id=truck-1','--json','op=enter','--timeout','5')
+            self.assertNotIn('unrecognized arguments',reply.stderr)
+            self.assertIn("No food cart or truck with id 'truck-1'",json.loads(reply.stdout)['error'])
+            # `call` as an argument of another subcommand is left alone.
+            reply=run('wait-event','call','--timeout','0.2','--json')
+            self.assertNotIn('unrecognized arguments',reply.stderr)
             reply=run('state','money','--json')
             self.assertIn('ok',json.loads(reply.stdout))
             reply=run('state','missing')

@@ -29,7 +29,9 @@ The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:833
 | 30 | After live2: drive the truck, `teleport` it into the bay with you in it, then `state` and look at the panel | The panel says LEGAL at once (no leaving and re-entering); `legal` true with "panel's live reading: Legal"; `vehicle open` works there |
 | 31 | After live2: at the hatch, `vehicle step_out` | The reply's `notices` has the "Nobody's at the truck's window…" notice |
 | 32 | After live2: `shoot` `door` and `bay-road` at Hell's Kitchen | `door`: the entrance in view, seen from the street side. `bay-road`: from the driving lane, the paint (LOADING ZONE) in frame |
-| 33 | After live2: `tools/ft call console line=help --json` (and `--json` before `console`) | JSON on stdout either way |
+| 33 | After live2: `tools/ft call console line=help --json` (and `--json` before `console`, and between key=value arguments) | JSON on stdout each way |
+| 34 | After round 6: teleport a truck facing 45° to another heading, and read the log | One `Test bridge: footprint of foodtrucks:vehicletype_foodtruck: …` line, about 2.2 m across and 6 m long, whatever the heading |
+| 35 | After round 6: teleport the empty truck from one district into the Hell's Kitchen bay, sleep past midnight | The "Public parking" charge is priced by Hell's Kitchen (the bay's district), not the district it came from |
 | 23 | `commissary` `{"op":"order","site":"hells-kitchen","items":[{"item":"<a food's name>","boxes":2}]}` with a space rented there | The same `Commissary order …` log lines as an order by phone, no money taken; the order is in `state.commissary.orders`. At 08:00 its payment shows in `state.transactions_today` |
 | 24 | Hire a worker (Ctrl+Alt+U), `state.employees`, then `crew` `assign` and `unassign` on the truck | The worker is listed, joins the truck (notice as from BizMan, `done: true`) and leaves again |
 | 25 | From a non-FT city, `load` `{"name":"FT bridge"}` | Refused, the reply says to go to the main menu or load from an FT save |
@@ -46,6 +48,7 @@ Log lines:
 - Any `Test bridge, refresh:` or `Test bridge, every frame:` error line: tell me.
 - Every mod error line now starts `ERROR: ` after the mod's prefix.
 - After live2: `Test bridge: cleared a parked car (…) at x …, z ….` when `clear` sent one away.
+- After round 6: `Test bridge: footprint of <type>: … m across, … m long, … m high, centre …` once per vehicle type.
 - With the flag only: `Patch GameManager.RunMainGameTick(Single), test bridge run_until: Active.` and three `Patch SaveGameSerializationHelper.…, test bridge save: Active.` lines. Loads end with `Test bridge: load '…' done: day D, the mod's save data attached.` (or `… failed: …`); vehicle ops log `Test bridge: vehicle <id> <op>: done.` or `not done.`
 
 Game calls to watch first (read in the decompile, never run): the HttpListener under the game's Mono; `GameManager.SetMinutesMultiplier` and `GameSpeedController.SetPlayerPause` for `time`; `GameManager.SetPlayerPosition` and `VehicleHelper.TeleportVehicleToGround` for `teleport`; `TransitionToSave` with `LoadScene.LoadTransitionToSave`, and `LoadScene.LoadMainMenuFromCity` run from the bridge's own object, for `load`; `CancelButtonHandler.HandleEscapeClick` for `escape`; the second camera with HDRP's camera data copied by reflection for `shoot`; TextMeshPro read by reflection for `ui` labels and texts.

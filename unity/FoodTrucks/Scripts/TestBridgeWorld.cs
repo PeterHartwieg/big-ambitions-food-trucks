@@ -186,30 +186,55 @@ namespace FoodTrucks
             public GameObject? LaneCar;
         }
 
-        // The vehicle's own size, from its solid colliders, in its own frame.
+        // The vehicle's own size in its own frame: each solid collider's own box (a box's centre and size, a sphere's or
+        // capsule's enclosing box, a mesh's local bounds), carried into the vehicle's frame with its scale (Core Footprint),
+        // so the size doesn't grow with the way the vehicle faces. Logged once per vehicle type, to check in game.
+        private static readonly HashSet<string> footprintLogged = new HashSet<string>(StringComparer.Ordinal);
+
         private static Bounds LocalBounds(VehicleController controller)
         {
-            var t = controller.transform;
-            Bounds? bounds = null;
-            var corners = new Vector3[8];
+            var toVehicle = controller.transform.worldToLocalMatrix;
+            var parts = new List<(double[] Matrix, FoodTrucks.Core.Fleet.LocalBox Box)>();
             foreach (var c in controller.GetComponentsInChildren<Collider>())
             {
                 if (c == null || c.isTrigger || !c.enabled) continue;
-                var b = c.bounds;
-                for (var i = 0; i < 8; i++)
-                    corners[i] = t.InverseTransformPoint(new Vector3((i & 1) == 0 ? b.min.x : b.max.x, (i & 2) == 0 ? b.min.y : b.max.y, (i & 4) == 0 ? b.min.z : b.max.z));
-                foreach (var p in corners)
+                Vector3 centre, size;
+                switch (c)
                 {
-                    if (bounds == null) bounds = new Bounds(p, Vector3.zero);
-                    else
-                    {
-                        var grown = bounds.Value;
-                        grown.Encapsulate(p);
-                        bounds = grown;
-                    }
+                    case BoxCollider box:
+                        centre = box.center;
+                        size = box.size;
+                        break;
+                    case SphereCollider sphere:
+                        centre = sphere.center;
+                        size = Vector3.one * sphere.radius * 2f;
+                        break;
+                    case CapsuleCollider capsule:
+                        centre = capsule.center;
+                        size = Vector3.one * capsule.radius * 2f;
+                        size[capsule.direction] = Mathf.Max(capsule.height, capsule.radius * 2f);
+                        break;
+                    case MeshCollider mesh when mesh.sharedMesh != null:
+                        centre = mesh.sharedMesh.bounds.center;
+                        size = mesh.sharedMesh.bounds.size;
+                        break;
+                    default:
+                        continue;
                 }
+                var m = toVehicle * c.transform.localToWorldMatrix;
+                parts.Add((new double[] { m.m00, m.m01, m.m02, m.m03, m.m10, m.m11, m.m12, m.m13, m.m20, m.m21, m.m22, m.m23 },
+                    new FoodTrucks.Core.Fleet.LocalBox((centre.x, centre.y, centre.z), (size.x, size.y, size.z))));
             }
-            return bounds ?? new Bounds(new Vector3(0f, 1.2f, 0f), new Vector3(2.2f, 2.4f, 6f));
+            var found = FoodTrucks.Core.Fleet.Footprint.Box(parts);
+            var bounds = found == null
+                ? new Bounds(new Vector3(0f, 1.2f, 0f), new Vector3(2.2f, 2.4f, 6f))
+                : new Bounds(new Vector3((float)(found.Value.Min.X + found.Value.Max.X) / 2f, (float)(found.Value.Min.Y + found.Value.Max.Y) / 2f, (float)(found.Value.Min.Z + found.Value.Max.Z) / 2f),
+                    new Vector3((float)(found.Value.Max.X - found.Value.Min.X), (float)(found.Value.Max.Y - found.Value.Min.Y), (float)(found.Value.Max.Z - found.Value.Min.Z)));
+            var type = controller.vehicleInstance?.vehicleTypeName ?? controller.name;
+            if (footprintLogged.Add(type))
+                Log.Info($"Test bridge: footprint of {type}: {bounds.size.x:F2} m across, {bounds.size.z:F2} m long, {bounds.size.y:F2} m high, " +
+                         $"centre {bounds.center.x:F2}, {bounds.center.y:F2}, {bounds.center.z:F2} ({(found == null ? "no colliders; the default" : parts.Count + " colliders")}).");
+            return bounds;
         }
 
         // The ground and road surfaces, parking areas and triggers aren't in the way; a kerb isn't either (the test starts
@@ -429,7 +454,14 @@ namespace FoodTrucks
             {
                 car.isCheckedForParkingZone = false;
                 if (game.ActiveVehicleId == id) car.UpdateParkingZone();
-                else vehicle.parkingState = Legality.VehicleLegallyParked(vehicle, out _) ? ParkingState.Legal : ParkingState.Illegal;
+                else
+                {
+                    // As the game stores both on leaving a vehicle (VehicleController.SetParkingData): the state and the
+                    // neighbourhood the hourly parking charge is priced by.
+                    var legal = Legality.GameParkingReading(controller.transform, out var neighbourhood);
+                    vehicle.parkingState = legal ? ParkingState.Legal : ParkingState.Illegal;
+                    vehicle.parkingNeighbourhood = neighbourhood;
+                }
             }
             controller.SavePosition();
             var t = controller.transform;

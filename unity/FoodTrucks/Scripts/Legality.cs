@@ -96,6 +96,27 @@ namespace FoodTrucks
             return lane != null && !lane.isHandicapParking;
         }
 
+        // The game's own reading for a vehicle standing here (CarController.UpdateParkingZone), with the neighbourhood of
+        // the parking lane under its wheels as the game records it (the last wheel's; empty when none was read). For a
+        // vehicle the player isn't driving, whose panel the game doesn't update (the test bridge's teleport).
+        public static bool GameParkingReading(Transform vehicle, out string neighbourhood)
+        {
+            neighbourhood = string.Empty;
+            if (BuildingManager.IsInsideBuilding) return true;
+            var wheels = WheelsOf(vehicle);
+            if (wheels.Length == 0) return LegalParkingAt(vehicle.position, vehicle.forward);
+            foreach (var wheel in wheels)
+            {
+                var count = Physics.OverlapBoxNonAlloc(wheel.position - wheel.up * 0.1f, new Vector3(WheelBoxHalfWidth, TruckWheelRadius * 2f, WheelBoxHalfWidth),
+                    probeHits, wheel.rotation, LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide);
+                if (count == 0 || probeHits[0] == null) return false;
+                var lane = probeHits[0].GetComponentInParent<ParkingLaneGenerator>();
+                if (lane == null || lane.isHandicapParking) return false;
+                neighbourhood = lane.neighbourhood;
+            }
+            return true;
+        }
+
         // Legal parking for a wheel standing at this point, the box turned with a vehicle facing `along` (flat).
         public static bool LegalParkingAt(Vector3 point, Vector3 along)
         {
