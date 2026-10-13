@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
@@ -20,10 +21,13 @@ namespace FoodTrucks.BuildEditor
 
         // An HDRP/Lit material at path with the model's three maps from folder (T_<name>_BC/_M/_N.png). baseColour
         // names another base colour map on the same UVs (T_<baseColour>_BC.png), e.g. the commissary sign's plates.
+        // baseColour: a variant's base colour (T_<baseColour>_BC.png); its own mask T_<baseColour>_M.png is used when
+        // there is one (the sign plates' lettering is in the mask's gloss too), else the model's.
         public static Material LitMaterial(string path, string folder, string name, string? baseColour = null)
         {
             var bc = Texture($"{folder}/T_{baseColour ?? name}_BC.png", TextureImporterType.Default, srgb: true);
-            var mask = MaskTexture($"{folder}/T_{name}_M.png");
+            var ownMask = baseColour != null && File.Exists(Path.Combine(Path.GetDirectoryName(Application.dataPath)!, $"{folder}/T_{baseColour}_M.png"));
+            var mask = MaskTexture($"{folder}/T_{(ownMask ? baseColour : name)}_M.png");
             var normal = Texture($"{folder}/T_{name}_N.png", TextureImporterType.NormalMap, srgb: false);
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (material == null)

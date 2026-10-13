@@ -146,10 +146,11 @@ namespace FoodTrucks
                 var sign = Object.Instantiate(model, root, false);
                 sign.name = "LoadingZoneSign";
                 sign.transform.position = at;
-                // Turned half round: the model's plate face comes in on the root's -z, the pavement (live session 5:
-                // both signs showed drivers their edge or back). Turned, the face and its double arrow along the kerb
-                // look at the road, with the plate on the road side of the pole.
-                sign.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                // As the model is built: the plate on the road side of the pole (the root's +z), its face and double
+                // arrow towards the road. Seen in game (live session 7): the plate stood 4 cm road-side of the pole this
+                // way. 0b461b7 turned it half round from a picture taken from the pavement, where the back's mirrored
+                // copy of the face reads as well, and so put the plate on the pavement side.
+                sign.transform.localRotation = Quaternion.identity;
                 var plate = Material("M_BaySign_" + siteId);
                 if (plate != null)
                     foreach (var renderer in sign.GetComponentsInChildren<MeshRenderer>(true))
@@ -207,29 +208,42 @@ namespace FoodTrucks
             // rays don't hit from within, and every place had "no wall behind it"). It runs back past the door, and
             // the facade is the first surface of the Buildings layer met from the street; failing that, the first
             // solid surface between 1.5 m behind the door and 3 m in front of it, as before.
-            var laneMetres = Mathf.Max(3f, Flat(nearest.Value.Point - door));
-            var from = door + outward * laneMetres + Vector3.up * 1.0f;
-            var rayMetres = laneMetres + FacadeBehindDoorMetres;
+            // First the wall the door is in: the nearest building surface within WallNearDoorMetres of the door point,
+            // facing away from it. Lower Manhattan's door is in a side face, on an alley off the street (live session 6:
+            // seen in game, the door point stands 0.5 m off Factory9's north face, and a ray from the street lane
+            // passed along that face without touching it). Only colliders whose nearest point Unity can tell count (box,
+            // sphere, capsule, convex mesh), so a building's concave mesh falls through to the ray from the street.
+            Collider? doorWall = null;
             var facade = door;
-            var hits = Physics.RaycastAll(from, -outward, rayMetres, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
-                .Where(h => h.collider != null && !NotWall(h.collider)).OrderBy(h => h.distance).ToList();
-            // A building surface more than 6 m in front of the door point is something else on the pavement (a kiosk).
-            // A building surface narrower than KioskMetres along the street is a newsstand or shelter on the pavement,
-            // not the facade (review round 7, Opus). The Buildings layer and its hover twin both count (review round 7,
-            // Sol: a building the cursor is over has its facade colliders moved to BuildingsOutlined).
-            var rayAlong = new Vector3(outward.z, 0f, -outward.x);
-            var hit = hits.FirstOrDefault(h => IsBuilding(h.collider) && h.distance >= laneMetres - 6f && WidthAlong(h.collider, rayAlong) >= KioskMetres);
-            if (hit.collider == null)
-                hit = hits.FirstOrDefault(h => h.distance >= laneMetres - 3f && h.distance <= laneMetres + 1.5f);
-            if (hit.collider != null)
-                facade = new Vector3(hit.point.x, door.y, hit.point.z);
-            else
-                // Nothing solid at all: the buildings may still be streaming in, so it is tried again (MaxPropTries bounds
-                // it; review round 7, Opus). Only other things hit: settled.
-                return new Outcome($"no props by the door at x {door.x:F1}, z {door.z:F1}: no building wall on a ray at waist height from the driving lane at " +
-                                   $"x {from.x:F1}, z {from.z:F1} back {rayMetres:F0} m, {FacadeBehindDoorMetres:F0} m past the door ({(hits.Count == 0 ? "nothing solid hit" : "hit only " + string.Join(", ", hits.Take(3).Select(h => Describe(h.collider))))})", hits.Count == 0);
-            if (hit.collider != null)
+            var near = NearestWall(door);
+            if (near != null)
             {
+                doorWall = near.Value.Collider;
+                facade = new Vector3(near.Value.Point.x, door.y, near.Value.Point.z);
+                outward = near.Value.Outward;
+            }
+            else
+            {
+                var laneMetres = Mathf.Max(3f, Flat(nearest.Value.Point - door));
+                var from = door + outward * laneMetres + Vector3.up * 1.0f;
+                var rayMetres = laneMetres + FacadeBehindDoorMetres;
+                var hits = Physics.RaycastAll(from, -outward, rayMetres, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                    .Where(h => h.collider != null && !NotWall(h.collider)).OrderBy(h => h.distance).ToList();
+                // A building surface more than 6 m in front of the door point is something else on the pavement (a kiosk).
+                // A building surface narrower than KioskMetres along the street is a newsstand or shelter on the pavement,
+                // not the facade (review round 7, Opus). The Buildings layer and its hover twin both count (review round 7,
+                // Sol: a building the cursor is over has its facade colliders moved to BuildingsOutlined).
+                var rayAlong = new Vector3(outward.z, 0f, -outward.x);
+                var hit = hits.FirstOrDefault(h => IsBuilding(h.collider) && h.distance >= laneMetres - 6f && WidthAlong(h.collider, rayAlong) >= KioskMetres);
+                if (hit.collider == null)
+                    hit = hits.FirstOrDefault(h => h.distance >= laneMetres - 3f && h.distance <= laneMetres + 1.5f);
+                if (hit.collider == null)
+                    // Nothing solid at all: the buildings may still be streaming in, so it is tried again (MaxPropTries
+                    // bounds it; review round 7, Opus). Only other things hit: settled.
+                    return new Outcome($"no props by the door at x {door.x:F1}, z {door.z:F1}: no building wall within {WallNearDoorMetres:F0} m of the door point, and none on a ray at waist height from the driving lane at " +
+                                       $"x {from.x:F1}, z {from.z:F1} back {rayMetres:F0} m, {FacadeBehindDoorMetres:F0} m past the door ({(hits.Count == 0 ? "nothing solid hit" : "hit only " + string.Join(", ", hits.Take(3).Select(h => Describe(h.collider))))})", hits.Count == 0);
+                doorWall = hit.collider;
+                facade = new Vector3(hit.point.x, door.y, hit.point.z);
                 var normal = hit.normal;
                 normal.y = 0f;
                 if (normal.sqrMagnitude > 0.5f && Vector3.Angle(normal, outward) < 35f) outward = normal.normalized;
@@ -323,7 +337,7 @@ namespace FoodTrucks
             // None on the NavMesh at all: the street's navigation may still be loading.
             if (placed.Count == 0 && skipped.Count > 0 && offNavMesh == skipped.Count) tryAgain = true;
             return new Outcome($"props by the door at x {door.x:F1}, z {door.z:F1} (facade facing {Mathf.Atan2(outward.x, outward.z) * Mathf.Rad2Deg:F0} degrees" +
-                               $", {Describe(hit.collider)}, {Vector3.Dot(facade - door, outward):+0.0;-0.0} m from the door point): {(placed.Count == 0 ? "none" : string.Join(", ", placed))}" +
+                               $", {Describe(doorWall!)}, {(near != null ? "the wall at the door" : "met from the street")}, {Vector3.Dot(facade - door, outward):+0.0;-0.0} m from the door point): {(placed.Count == 0 ? "none" : string.Join(", ", placed))}" +
                                (skipped.Count > 0 ? "; left out: " + string.Join(", ", skipped) : ""), tryAgain);
         }
 
@@ -372,6 +386,34 @@ namespace FoodTrucks
         private static bool IsBuilding(Collider c) => ((1 << c.gameObject.layer) & (int)LayerHelper.buildingAndOutlinesLayerMask) != 0;
 
         // A collider's extent along a flat direction, from its world bounds.
+        // The nearest building surface within WallNearDoorMetres of a door point that stands outside it, and the flat
+        // direction from that surface to the door (the wall's outside). Null when none can be told.
+        private static (Collider Collider, Vector3 Point, Vector3 Outward)? NearestWall(Vector3 door)
+        {
+            (Collider, Vector3, Vector3)? best = null;
+            var bestDistance = float.MaxValue;
+            var probe = door + Vector3.up * 1.0f;
+            foreach (var c in Physics.OverlapSphere(probe, WallNearDoorMetres, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            {
+                if (c == null || !IsBuilding(c) || NotWall(c) || c.bounds.size.y < 1.5f) continue;
+                if (c is MeshCollider mesh && !mesh.convex) continue;
+                var point = c.ClosestPoint(probe);
+                var away = probe - point;
+                away.y = 0f;
+                // Inside the collider (ClosestPoint gives the point itself) tells nothing.
+                if (away.sqrMagnitude < 0.05f * 0.05f) continue;
+                var distance = away.magnitude;
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = (c, point, away / distance);
+                }
+            }
+            return best;
+        }
+
+        private const float WallNearDoorMetres = 2f;
+
         private static float WidthAlong(Collider c, Vector3 along)
         {
             var e = c.bounds.extents;

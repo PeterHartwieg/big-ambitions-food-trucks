@@ -304,6 +304,7 @@ namespace FoodTrucks
             // The sight line: walls only. People, vehicles and thin things (posts, trees, hydrants under 0.8 m across)
             // don't hide the place (review round 7, Opus).
             bool Wall(Collider c) => InBox(c) && ((1 << c.gameObject.layer) & (int)LayerHelper.humanLayerMask) == 0 &&
+                                     c.gameObject.layer != LayerHelper.ParkedVehiclesLayerIndex && c.gameObject.layer != LayerHelper.AiVehiclesLayerIndex &&
                                      c.GetComponentInParent<ThirdPersonCharacter>() == null && c.GetComponentInParent<VehicleController>() == null &&
                                      Mathf.Max(c.bounds.size.x, c.bounds.size.z) >= 0.8f;
             why = "";
