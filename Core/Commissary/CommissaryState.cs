@@ -60,6 +60,10 @@ namespace FoodTrucks.Core.Commissary
         // The way the parking lane runs there.
         public double AlongX { get; set; }
         public double AlongZ { get; set; }
+        // The entrance its street side was checked from (Core BaySide): a vehicle is in this bay only on that side.
+        // Null on a point stored without one, whose side is then unknown.
+        public double? DoorX { get; set; }
+        public double? DoorZ { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

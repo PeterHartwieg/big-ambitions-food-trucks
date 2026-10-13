@@ -30,19 +30,35 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(str(exc.exception),text)
 
     def test_bay_candidates_shape_and_guards(self):
-        reply=self.mock.call('commissary',{'op':'bay_candidates','site':'murray-hill','radius':80})
+        reply=self.mock.call('commissary',{'op':'bay_candidates','site':'lower-manhattan','radius':80})
         self.assertEqual(reply['max_metres'],30)
         origin=reply['origins'][0]
         self.assertEqual(set(reply),{'site','address','status','radius','max_metres','origins'})
-        self.assertEqual((reply['site'],reply['address']),('murray-hill',None))
+        self.assertEqual((reply['site'],reply['address']),('lower-manhattan',None))
+        self.assertEqual((origin['kind'],origin['walk_start'],origin['same_side']),('entrance','door',None))
         self.assertEqual(set(origin),{'kind','x','z','door','walk_start','same_side','parking_colliders','truncated','candidates'})
         self.assertEqual(set(origin['candidates'][0]),{'x','z','heading','distance','walk','walk_m','straight_m','same_side','automatic','rejected'})
         self.assertEqual(sum(c['automatic'] for c in origin['candidates']),1)
         across=[c for c in origin['candidates'] if c['same_side'] is False]
         self.assertEqual([c['rejected'] for c in across],['across the road from the door'])
         self.assertTrue(all(c['same_side'] for c in origin['candidates'] if c['automatic']))
-        self.assertEqual(len(self.mock.call('commissary',{'op':'bay_candidates','site':'murray-hill','radius':30})['origins'][0]['candidates']),3)
+        self.assertEqual(len(self.mock.call('commissary',{'op':'bay_candidates','site':'lower-manhattan','radius':30})['origins'][0]['candidates']),3)
         self.refused('commissary',{'op':'bay_candidates','site':'murray-hill','radius':81},'radius is 5 to 80 metres.')
+
+    def test_bay_candidates_from_a_measured_bay(self):
+        for site in ('garment-district','murray-hill'):
+            origin=self.mock.call('commissary',{'op':'bay_candidates','site':site})['origins'][0]
+            self.assertEqual(origin['kind'],'data')
+            self.assertTrue(origin['walk_start'].startswith('none (a point set in data is trusted for its walk'))
+            self.assertIs(origin['same_side'],True)
+            self.assertTrue(all(c['walk'] is None for c in origin['candidates']))
+            self.assertEqual(sum(c['automatic'] for c in origin['candidates']),1)
+        self.mock.measured_across.add('murray-hill')
+        origin=self.mock.call('commissary',{'op':'bay_candidates','site':'murray-hill','radius':30})['origins'][0]
+        self.assertIs(origin['same_side'],False)
+        self.assertFalse(any(c['automatic'] for c in origin['candidates']))
+        self.assertEqual({c['rejected'] for c in origin['candidates']},
+                         {'the point set in data is across the road from the door, so the automatic search takes nothing from it'})
 
     def test_bay_candidates_for_any_building(self):
         reply=self.mock.call('commissary',{'op':'bay_candidates','address':'ba:street_twentyfirststreet#4','radius':40})
@@ -52,6 +68,8 @@ class ParityTests(unittest.TestCase):
         both='bay_candidates needs "site" (a commissary\'s id) or "address" (any building, as ba:street_…#N), not both.'
         self.refused('commissary',{'op':'bay_candidates','site':'murray-hill','address':'ba:street_twentyfirststreet#4'},both)
         self.refused('commissary',{'op':'bay_candidates'},both)
+        self.refused('commissary',{'op':'bay_candidates','address':'ba:street_twentyfirststreet#999'},
+                     'no building at ba:street_twentyfirststreet#999 in this city')
         self.refused('commissary',{'op':'bay_candidates','address':'21st Street 4'},
                      '"address" is a building\'s address as the game writes it, ba:street_<name>#<number>; got \'21st Street 4\'.')
         self.refused('commissary',{'op':'nope','site':'murray-hill'},"Unknown commissary op 'nope': order, bay_candidates.")

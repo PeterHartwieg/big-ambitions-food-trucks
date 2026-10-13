@@ -47,7 +47,7 @@ namespace FoodTrucks.Core.Commissary
     public static class BaySnap
     {
         // Bumped when the rule changes, so bays stored in saves are searched again.
-        public const int RuleVersion = 3;
+        public const int RuleVersion = 4;
         public const double MaxMetres = 30;
         public const double StepMetres = 0.5;
         // Margins beyond the real wheel hubs (Sol and Astra, review round 4: 0.9.9's ±0.85 m was inside the truck's
@@ -371,7 +371,12 @@ namespace FoodTrucks.Core.Commissary
             return set;
         }
 
-        public static CommissaryBaySet Store(CommissaryState state, string siteId, IReadOnlyList<(double X, double Z)> origins, IEnumerable<BaySnapResult> found)
+        public static CommissaryBaySet Store(CommissaryState state, string siteId, IReadOnlyList<(double X, double Z)> origins, IEnumerable<BaySnapResult> found) =>
+            Store(state, siteId, origins, found.Select(b => (b, ((double X, double Z)?)null)));
+
+        // Each bay with the entrance its side was checked from, kept for "in the bay" (OnDoorSide).
+        public static CommissaryBaySet Store(CommissaryState state, string siteId, IReadOnlyList<(double X, double Z)> origins,
+            IEnumerable<(BaySnapResult Bay, (double X, double Z)? Door)> found)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (string.IsNullOrWhiteSpace(siteId)) throw new ArgumentException("A bay needs its commissary.", nameof(siteId));
@@ -379,7 +384,10 @@ namespace FoodTrucks.Core.Commissary
             {
                 Rule = BaySnap.RuleVersion,
                 Origins = origins.Select(o => new CommissaryPoint { X = o.X, Z = o.Z }).ToList(),
-                Points = found.Select(b => new CommissaryBayPoint { X = b.X, Z = b.Z, AlongX = b.AlongX, AlongZ = b.AlongZ }).ToList()
+                Points = found.Select(f => new CommissaryBayPoint
+                {
+                    X = f.Bay.X, Z = f.Bay.Z, AlongX = f.Bay.AlongX, AlongZ = f.Bay.AlongZ, DoorX = f.Door?.X, DoorZ = f.Door?.Z
+                }).ToList()
             };
             state.Bays ??= new Dictionary<string, CommissaryBaySet>(StringComparer.Ordinal);
             state.Bays[siteId] = set;
@@ -391,6 +399,7 @@ namespace FoodTrucks.Core.Commissary
             if (set == null || set.Origins == null || set.Points == null || set.Origins.Count == 0) return false;
             if (set.Origins.Any(o => o == null || !Finite(o.X) || !Finite(o.Z))) return false;
             return set.Points.All(p => p != null && Finite(p.X) && Finite(p.Z) && Finite(p.AlongX) && Finite(p.AlongZ) &&
+                                       (p.DoorX == null) == (p.DoorZ == null) && (p.DoorX == null || (Finite(p.DoorX.Value) && Finite(p.DoorZ!.Value))) &&
                                        Math.Abs(Math.Sqrt(p.AlongX * p.AlongX + p.AlongZ * p.AlongZ) - 1) < 0.01);
         }
 
@@ -402,6 +411,39 @@ namespace FoodTrucks.Core.Commissary
         // In the bay: legally parked by the game's wheel test, and the middle within the radius of a bay point.
         public static bool InBay(IEnumerable<CommissaryBayPoint>? points, double x, double z, double radius, bool legallyParked) =>
             legallyParked && WithinRadius(points, x, z, radius);
+
+        // Whether a vehicle at (x, z) stands on the door's side of the street of a bay point it is within the radius of
+        // (Peter, 13 October 2026; review round 1, Astra and Sol: the opposite kerb is within 15 m too): the straight
+        // walk from the entrance that point was checked from to the vehicle's middle crosses no driving lane (BaySide).
+        // lanes gives the driving lanes round a point's entrance, null when they can't be read. True when some point
+        // within the radius says so; null (unknown) when none does and a point's side couldn't be checked (no entrance
+        // stored, the lanes unread, or no lane found at all: every street has lanes, so finding none means the read
+        // missed them, review round 1, Opus); false otherwise, including no point within the radius. Never true by
+        // default.
+        public static bool? OnDoorSide(IEnumerable<CommissaryBayPoint>? points, double x, double z, double radius,
+            Func<CommissaryBayPoint, IReadOnlyList<((double X, double Z) A, (double X, double Z) B)>?> lanes)
+        {
+            if (lanes == null) throw new ArgumentNullException(nameof(lanes));
+            if (points == null) return false;
+            var unknown = false;
+            foreach (var p in points)
+            {
+                if (p == null || BaySnap.Distance(p.X, p.Z, x, z) > radius) continue;
+                if (p.DoorX is not { } doorX || p.DoorZ is not { } doorZ)
+                {
+                    unknown = true;
+                    continue;
+                }
+                var read = lanes(p);
+                if (read == null || read.Count == 0)
+                {
+                    unknown = true;
+                    continue;
+                }
+                if (BaySide.SameSide(doorX, doorZ, x, z, read)) return true;
+            }
+            return unknown ? (bool?)null : false;
+        }
 
         public static bool WithinRadius(IEnumerable<CommissaryBayPoint>? points, double x, double z, double radius) =>
             points != null && points.Any(p => BaySnap.Distance(p.X, p.Z, x, z) <= radius);

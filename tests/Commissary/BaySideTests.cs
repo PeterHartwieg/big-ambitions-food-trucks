@@ -151,9 +151,58 @@ public class BaySideTests
         Assert.True(BaySide.SameSide(408.0, 228.4, with.X, with.Z, lane));
     }
 
+    // Review round 1 (Astra and Sol): the door at (8, 0), the bay found at (4, 0) on its kerb, driving lanes at x ±1.75
+    // between the kerbs. A truck on the opposite kerb at (-4, 0) is 8 m from the bay point, inside the 15 m radius.
+    private static CommissaryBayPoint OppositeKerbsBay() =>
+        new CommissaryBayPoint { X = 4, Z = 0, AlongX = 0, AlongZ = 1, DoorX = 8, DoorZ = 0 };
+
+    [Fact]
+    public void AVehicleOnTheOppositeKerbIsNotInTheBay()
+    {
+        var points = new[] { OppositeKerbsBay() };
+        IReadOnlyList<((double X, double Z) A, (double X, double Z) B)> Lanes(CommissaryBayPoint _) => Street();
+        Assert.True(CommissaryBays.WithinRadius(points, -4, 0, 15));
+        Assert.Equal(false, CommissaryBays.OnDoorSide(points, -4, 0, 15, Lanes));
+        Assert.Equal(true, CommissaryBays.OnDoorSide(points, 4, 9, 15, Lanes));
+        // Outside the radius on the door's side: not in the bay either.
+        Assert.Equal(false, CommissaryBays.OnDoorSide(points, 4, 20, 15, Lanes));
+        Assert.Equal(false, CommissaryBays.OnDoorSide(null, 4, 0, 15, Lanes));
+    }
+
+    [Fact]
+    public void AnUncheckableSideIsUnknownNeverIn()
+    {
+        var points = new[] { OppositeKerbsBay() };
+        // Lanes unread, or a read that found none (an entrance far above the street): unknown, even on the door's kerb.
+        Assert.Null(CommissaryBays.OnDoorSide(points, 4, 9, 15, _ => null));
+        Assert.Null(CommissaryBays.OnDoorSide(points, 4, 9, 15, _ => new List<((double X, double Z) A, (double X, double Z) B)>()));
+        // A point stored without its entrance can't be checked either.
+        var old = new[] { new CommissaryBayPoint { X = 4, Z = 0, AlongX = 0, AlongZ = 1 } };
+        Assert.Null(CommissaryBays.OnDoorSide(old, 4, 9, 15, _ => Street()));
+        // One point that says yes is enough; an unknown one beside it doesn't change that.
+        Assert.Equal(true, CommissaryBays.OnDoorSide(old.Concat(points), 4, 9, 15, _ => Street()));
+    }
+
+    [Fact]
+    public void StoredBaysKeepTheEntranceTheirSideWasCheckedFrom()
+    {
+        var state = new CommissaryState();
+        var set = CommissaryBays.Store(state, "a", new[] { (8.0, 0.0) }, new[] { (new BaySnapResult(4, 0, 0, 1, 4), ((double X, double Z)?)(8.0, 0.0)) });
+        Assert.Equal(8, set.Points[0].DoorX);
+        Assert.Equal(0, set.Points[0].DoorZ);
+        Assert.True(CommissaryBays.WellFormed(set));
+        set.Points[0].DoorZ = null;
+        Assert.False(CommissaryBays.WellFormed(set));
+        set.Points[0].DoorX = null;
+        Assert.True(CommissaryBays.WellFormed(set));
+        set.Points[0].DoorX = double.NaN;
+        set.Points[0].DoorZ = 0;
+        Assert.False(CommissaryBays.WellFormed(set));
+    }
+
     [Fact]
     public void BaysStoredUnderTheOldRuleAreSearchedAgain()
     {
-        Assert.Equal(3, BaySnap.RuleVersion);
+        Assert.Equal(4, BaySnap.RuleVersion);
     }
 }
