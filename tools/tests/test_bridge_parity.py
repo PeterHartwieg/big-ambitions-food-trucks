@@ -167,7 +167,7 @@ class ParityTests(unittest.TestCase):
         self.assertIsNone(self.v['queue']);self.assertIsNone(self.v['route']);self.assertIsNone(self.v['commissary'])
         self.assertIsNone(self.mock.state['licence']['until_day'])
         pose=self.mock.call('teleport',{'who':'player','x':1.234,'z':2.345,'heading':-90})
-        self.assertEqual(pose,{'x':1.23,'y':0,'z':2.35,'heading':270,'surface':'the only ground surface, walkable'})
+        self.assertEqual(pose,{'x':1.23,'y':0,'z':2.35,'heading':270,'surface':"the only ground surface, walkable; walking routes checked from the player's place"})
         self.mock.state['clock']['speed']=1.234
         self.assertEqual(self.mock.call('state',{})['clock']['speed'],1.23)
         cart=self.mock.spawn('cart')
@@ -255,10 +255,10 @@ class ParityTests(unittest.TestCase):
 
     def test_teleport_reports_the_surface_and_a_vehicle_the_recheck(self):
         reply=self.mock.call('teleport',{'who':'player','x':5,'z':6,'y':0.5})
-        self.assertEqual(reply['surface'],'the walkable surface nearest the y asked for (0.50) of 1: 0.00 walkable')
+        self.assertEqual(reply['surface'],"the walkable surface nearest the y asked for (0.50) of 1: 0.00 walkable; walking routes checked from the player's place")
         # Live session 5, row 40: a y with no walkable ground near it is refused, not snapped to the street.
         self.refused('teleport',{'who':'player','x':5,'z':6,'y':5.06},
-                     'No walkable ground at x 5.0, z 6.0 near y 5.06: no walkable surface within 1.5 m of the y asked for (5.06); surfaces there: 0.00 walkable.')
+                     "No walkable ground at x 5.0, z 6.0 near y 5.06: no walkable surface within 1.5 m of the y asked for (5.06); surfaces there: 0.00 walkable; walking routes checked from the player's place.")
         reply=self.mock.call('teleport',{'who':self.id,'x':5,'z':6})
         self.assertEqual(reply['in_the_way_after'],[])
         self.assertNotIn('surface',self.mock.call('teleport',{'who':'player','place':'vehicle:'+self.id}))
@@ -272,6 +272,18 @@ class ParityTests(unittest.TestCase):
         self.refused('shoot',{'name':'bad','x':0,'y':1,'z':0,'look_at':{'x':0}},'look_at needs "x", "y" and "z".')
         self.refused('shoot',{'name':'wide','x':0,'y':1,'z':0,'fov':150},'fov must be 5 to 120 degrees.')
         self.assertEqual(self.mock.call('shoot',{'name':'pose','pose':'vehicle-side','target':self.id,'width':16,'height':16})['pose_note'],None)
+
+    def test_shot_diagnostics_compare_and_game_view(self):
+        # Live session 6 research: the bridge lists what it uncovered (the game's view-blocking fade) and the outlines it
+        # lifted, and can write the as-is picture and the game's own frame beside the shot.
+        reply=self.mock.call('shoot',{'name':'diag','x':0,'y':1.7,'z':0,'yaw':0,'width':16,'height':16})
+        self.assertEqual((reply['uncovered'],reply['outlined'],reply['asis_path'],reply['game_path'],reply['game_error']),([],[],None,None,None))
+        self.assertNotIn('asis_uncovered',reply)
+        reply=self.mock.call('shoot',{'name':'diag','x':0,'y':1.7,'z':0,'yaw':0,'width':16,'height':16,'compare':True,'game_view':True})
+        self.assertTrue(reply['asis_path'].endswith('diag-asis.png'))
+        self.assertTrue(reply['game_path'].endswith('diag-game.png'))
+        self.assertEqual((reply['asis_uncovered'],reply['asis_outlined']),([],[]))
+        self.refused('shoot',{'name':'diag','x':0,'y':1,'z':0,'compare':'yes'},'compare must be true or false.')
 
     def test_health_has_time_skip(self):
         self.assertFalse(self.mock.health()['time_skip'])

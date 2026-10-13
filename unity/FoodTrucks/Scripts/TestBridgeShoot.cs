@@ -18,37 +18,41 @@ namespace FoodTrucks
     // exposure and history settle, and is destroyed after the read-back. Screen-space UI isn't drawn by a camera that
     // renders into a texture, so the picture has none.
     //
-    // The game cuts away buildings and vehicles round the player for its own camera: its shaders read the player's place
-    // from the shader global GlobalPlayerPos (ThirdPersonCharacter sets it every frame) and the cut's height from
-    // _PO_Height and _PO_Height_Offset (GameManager's "BuildingHider" values, set once at start) [code, 1.0]. The shader
-    // itself isn't in the decompile, so the exact rule is unknown. Live session 3 saw a facade in front of the bridge's
-    // camera as a pale ghost; moving GlobalPlayerPos 500 m behind the camera cleared it with the player at the door.
-    // Live session 5 (day 4, rain, the player at a truck's hatch or on the plaza) saw the ghost again: everything above
-    // a flat cut about half a metre over the player's own height, facades and the truck alike, with the same camera pose
-    // that came out clean on day 1. So the bridge's camera now renders (by hand, Camera.Render, which renders and submits
-    // at once) with the player's place 1 km straight above the camera and the cut's height at 10 km, so no rule built on
-    // those values reaches anything in view, and puts all three back straight after, before the game's own camera renders
-    // the frame. Unverified in game: CHECKS row 36.
+    // What the game changes on buildings for its own camera is undone round each frame of the bridge's camera and put
+    // back before the game's camera renders (TestBridgeUncover: the view-blocking fade and the hover outline). That fade
+    // was the ghost facade of live sessions 3 to 6. The shader globals of the game's BuildingHider (GlobalPlayerPos,
+    // _PO_Height, _PO_Height_Offset) are also moved out of reach for the frame and put back, as since 407e9a4: they
+    // weren't the ghost's cause, but nothing shows they never cut anything, and the override is undone in the same frame.
     internal static class TestBridgeShoot
     {
         private const int Frames = 8;
+        // The as-is frames of `compare`, rendered after the uncovered ones.
+        private const int CompareFrames = 4;
         private static readonly int PlayerPosition = Shader.PropertyToID("GlobalPlayerPos");
         private static readonly int CutHeight = Shader.PropertyToID("_PO_Height");
         private static readonly int CutHeightOffset = Shader.PropertyToID("_PO_Height_Offset");
 
-        // One frame of the bridge's camera, with nothing cut away for the player.
-        private static void RenderUncut(Camera camera)
+        // One frame of the bridge's camera: with `uncover`, without the game's fades and outlines for its own camera.
+        // The scope's lists say what was (or, as-is, would have been) undone.
+        private static TestBridgeUncover RenderFrame(Camera camera, bool uncover)
         {
             var savedPlayer = Shader.GetGlobalVector(PlayerPosition);
             var savedHeight = Shader.GetGlobalFloat(CutHeight);
             var savedOffset = Shader.GetGlobalFloat(CutHeightOffset);
             var t = camera.transform;
-            Shader.SetGlobalVector(PlayerPosition, t.position + Vector3.up * 1000f);
-            Shader.SetGlobalFloat(CutHeight, 10000f);
-            Shader.SetGlobalFloat(CutHeightOffset, 0f);
-            try { camera.Render(); }
+            TestBridgeUncover? scope = null;
+            try
+            {
+                Shader.SetGlobalVector(PlayerPosition, t.position + Vector3.up * 1000f);
+                Shader.SetGlobalFloat(CutHeight, 10000f);
+                Shader.SetGlobalFloat(CutHeightOffset, 0f);
+                scope = TestBridgeUncover.Begin(t.position, uncover);
+                camera.Render();
+                return scope;
+            }
             finally
             {
+                scope?.Dispose();
                 Shader.SetGlobalVector(PlayerPosition, savedPlayer);
                 Shader.SetGlobalFloat(CutHeight, savedHeight);
                 Shader.SetGlobalFloat(CutHeightOffset, savedOffset);
@@ -68,6 +72,12 @@ namespace FoodTrucks
             var height = (int)(TestBridgeCommands.Num(args, "height") ?? 900);
             if (width < 16 || height < 16 || width > 3840 || height > 2160) throw new BridgeError("width and height must be between 16 and 3840 by 2160.");
             var (position, rotation, fov, note) = Pose(args);
+            foreach (var flag in new[] { "compare", "game_view" })
+                if (args[flag] != null && TestBridgeCommands.Bool(args, flag) == null) throw new BridgeError($"{flag} must be true or false.");
+            // compare: also the as-is picture (<name>-asis.png), rendered after the uncovered one with nothing undone.
+            // game_view: also the game's own frame (<name>-game.png), as the player sees it.
+            var compare = TestBridgeCommands.Bool(args, "compare") == true;
+            var gameView = TestBridgeCommands.Bool(args, "game_view") == true;
 
             var source = Camera.main;
             if (source == null) throw new BridgeError("The game has no main camera now.");
@@ -86,41 +96,85 @@ namespace FoodTrucks
             var texture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             texture.Create();
             camera.targetTexture = texture;
-            // Rendered by hand, once a frame (RenderUncut), never by itself.
+            // Rendered by hand, once a frame (RenderFrame), never by itself.
             camera.enabled = false;
 
             var folder = Path.Combine(Application.persistentDataPath, "FoodTrucksTest", "shots");
             var path = Path.Combine(folder, name + ".png");
+            var asIsPath = Path.Combine(folder, name + "-asis.png");
+            var gamePath = Path.Combine(folder, name + "-game.png");
             var frames = 0;
+            List<string> uncovered = new List<string>(), outlined = new List<string>();
+            List<string> asIsUncovered = new List<string>(), asIsOutlined = new List<string>();
+            string? gameError = null;
+            var gameDone = !gameView;
+            if (gameView)
+            {
+                var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's runner is gone.");
+                pump.StartCoroutine(CaptureGameView(gamePath, error => { gameError = error; gameDone = true; }));
+            }
+            var released = false;
             void Release()
             {
+                if (released) return;
+                released = true;
                 if (camera != null) camera.targetTexture = null;
                 if (holder != null) Object.Destroy(holder);
                 texture.Release();
                 Object.Destroy(texture);
             }
+            void Write(string to)
+            {
+                var previous = RenderTexture.active;
+                RenderTexture.active = texture;
+                var image = new Texture2D(width, height, TextureFormat.RGB24, false);
+                image.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                image.Apply();
+                RenderTexture.active = previous;
+                Directory.CreateDirectory(folder);
+                File.WriteAllBytes(to, image.EncodeToPNG());
+                Object.Destroy(image);
+            }
+            var total = Frames + (compare ? CompareFrames : 0);
             return new Deferred(() =>
             {
-                // The camera renders once a frame while enabled; the picture is read after a few.
-                RenderUncut(camera);
-                if (++frames < Frames) return null;
-                try
+                if (frames < total)
                 {
-                    var previous = RenderTexture.active;
-                    RenderTexture.active = texture;
-                    var image = new Texture2D(width, height, TextureFormat.RGB24, false);
-                    image.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-                    image.Apply();
-                    RenderTexture.active = previous;
-                    Directory.CreateDirectory(folder);
-                    File.WriteAllBytes(path, image.EncodeToPNG());
-                    Object.Destroy(image);
+                    // The camera renders once a frame; the picture is read after a few, so HDRP's exposure and history
+                    // settle. With compare, the as-is frames follow the uncovered ones.
+                    var uncover = frames < Frames;
+                    var scope = RenderFrame(camera, uncover);
+                    frames++;
+                    if (uncover)
+                    {
+                        uncovered = scope.Uncovered;
+                        outlined = scope.Outlined;
+                        if (frames == Frames)
+                        {
+                            try { Write(path); }
+                            catch { Release(); throw; }
+                        }
+                    }
+                    else
+                    {
+                        asIsUncovered = scope.Uncovered;
+                        asIsOutlined = scope.Outlined;
+                        if (frames == total)
+                        {
+                            try { Write(asIsPath); }
+                            catch { Release(); throw; }
+                        }
+                    }
+                    if (frames < total) return null;
+                    Release();
                 }
-                finally { Release(); }
+                if (!gameDone) return null;
                 var why = note == null ? "" : " (" + note + ")";
-                Log.Info($"Test bridge: shot {name} ({width}x{height}) from x {position.x:F1}, y {position.y:F1}, z {position.z:F1}{why}: {path}.");
+                var lists = (uncovered.Count == 0 ? "" : $"; uncovered {string.Join(", ", uncovered)}") +
+                            (outlined.Count == 0 ? "" : $"; outline lifted from {string.Join(", ", outlined)}");
+                Log.Info($"Test bridge: shot {name} ({width}x{height}) from x {position.x:F1}, y {position.y:F1}, z {position.z:F1}{why}{lists}: {path}.");
                 var angles = rotation.eulerAngles;
-                return new JObject
+                var reply = new JObject
                 {
                     ["path"] = path,
                     ["camera"] = new JObject
@@ -129,8 +183,35 @@ namespace FoodTrucks
                         ["yaw"] = TestBridgeState.Round(angles.y), ["pitch"] = TestBridgeState.Round(angles.x > 180f ? angles.x - 360f : angles.x), ["fov"] = fov,
                     },
                     ["pose_note"] = note,
+                    ["uncovered"] = new JArray(uncovered),
+                    ["outlined"] = new JArray(outlined),
+                    ["asis_path"] = compare ? asIsPath : null,
+                    ["game_path"] = gameView && gameError == null ? gamePath : null,
+                    ["game_error"] = gameError,
                 };
+                if (compare)
+                {
+                    reply["asis_uncovered"] = new JArray(asIsUncovered);
+                    reply["asis_outlined"] = new JArray(asIsOutlined);
+                }
+                return reply;
             }, Release);
+        }
+
+        // The game's own frame, as the player sees it (its camera, its UI), captured at the end of this frame.
+        private static System.Collections.IEnumerator CaptureGameView(string to, Action<string?> done)
+        {
+            yield return new WaitForEndOfFrame();
+            Texture2D? image = null;
+            try
+            {
+                image = ScreenCapture.CaptureScreenshotAsTexture();
+                Directory.CreateDirectory(Path.GetDirectoryName(to)!);
+                File.WriteAllBytes(to, image.EncodeToPNG());
+                done(null);
+            }
+            catch (Exception ex) { done($"{ex.GetType().Name}: {ex.Message}"); }
+            finally { if (image != null) Object.Destroy(image); }
         }
 
         // The camera's place: an explicit pose (x, y, z with yaw and pitch, or look_at) or a named pose round a target,

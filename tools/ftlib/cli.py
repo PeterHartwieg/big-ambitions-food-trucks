@@ -85,6 +85,9 @@ def shoot_args(args):
     for key in ('fov', 'width', 'height'):
         if getattr(args, key) is not None:
             call[key] = getattr(args, key)
+    for key in ('compare', 'game_view'):
+        if getattr(args, key):
+            call[key] = True
     return call
 
 
@@ -130,6 +133,8 @@ def main():
     p.add_argument('--width', type=int)
     p.add_argument('--height', type=int)
     p.add_argument('--timeout', type=float, default=20, help='Seconds to wait for the picture (timeout_s, 1 to 600)')
+    p.add_argument('--compare', action='store_true', help='Also the as-is picture, with the game\'s fades and outlines left on (<name>-asis.png)')
+    p.add_argument('--game-view', dest='game_view', action='store_true', help='Also the game\'s own frame (<name>-game.png)')
     p.add_argument('--fetch', help='Copy the PNG here (needs BA_GAME_HOST when the game runs on another PC)')
     p.add_argument('--json', action='store_true', dest='raw', default=argparse.SUPPRESS)
     p = sub.add_parser('click')
@@ -165,6 +170,9 @@ def main():
                 # In the result too, where --json readers look for the shot (live session 5), and at the top as before.
                 reply['result']['local_path'] = local
                 reply['local_path'] = local
+                for key in ('asis_path', 'game_path'):
+                    if reply['result'].get(key):
+                        reply['result']['local_' + key] = str(fetch_shot(reply['result'][key], args.fetch))
         else:
             pattern = re.compile(args.grep) if args.grep else None
             while True:

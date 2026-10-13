@@ -424,6 +424,11 @@ class CLIAndShotsTests(unittest.TestCase):
                 self.assertEqual(reply.returncode,0,reply.stderr)
                 result=json.loads(reply.stdout)['result']
                 self.assertTrue(Path(result['local_path']).exists())
+                reply=run('shoot','both','--at','1,1.7,2','--yaw','90','--width','16','--height','16','--compare','--game-view','--fetch',folder,'--json')
+                self.assertEqual(reply.returncode,0,reply.stderr)
+                result=json.loads(reply.stdout)['result']
+                self.assertTrue(Path(result['local_asis_path']).name=='both-asis.png' and Path(result['local_asis_path']).exists())
+                self.assertTrue(Path(result['local_game_path']).exists())
             for bad in (('shoot','x'),('shoot','x','--pose','door'),('shoot','x','--at','1,2'),('shoot','x','--at','1,2,3','--pose','door','--target','commissary:hells-kitchen'),
                         ('shoot','x','--at','1,2,3','--look-at','1,2,4','--yaw','3')):
                 reply=run(*bad)

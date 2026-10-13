@@ -200,10 +200,14 @@ namespace FoodTrucks
 
         // The ground surfaces stacked above a point (a street under an elevated road), top down, and the one a teleport
         // lands on (Core GroundPick): with an explicit y the one nearest it (walkable, for the player), else a walkable
-        // one nearest the mover's own height. Walkable is NavMesh within the 3 m the player's landing allows and within
-        // 1 m of the surface's height (live session 5: a 1 m search read the street as not walkable). Live session 4
-        // (13 October 2026): the highest surface put the player on the elevated highway at y 5.06. Each ray starts just under the last surface; a ray never hits a box it starts in or
-        // a mesh's underside, so it goes on to the next surface down.
+        // one nearest the mover's own height. Each ray starts just under the last surface; a ray never hits a box it
+        // starts in or a mesh's underside, so it goes on to the next surface down. Live session 4 (13 October 2026): the
+        // highest surface put the player on the elevated highway at y 5.06.
+        //
+        // Walkable, for the player: NavMesh of the player's own agent type and areas within the 3 m the landing allows
+        // and within 1 m of the surface's height, and, while the player stands on the NavMesh, a complete walking route
+        // from there. Live session 6: the highway deck has NavMesh near it, so a y of 5.06 put the player up there; no
+        // footpath leads to it. A vehicle's surfaces are read with any NavMesh, as before.
         internal static (Vector3 Point, string Why) GroundPicked(float x, float z, float referenceY, float? explicitY, bool walkableOnly = false)
         {
             var points = new List<Vector3>();
@@ -219,11 +223,50 @@ namespace FoodTrucks
                 if (explicitY != null && !walkableOnly) return (new Vector3(x, explicitY.Value, z), $"no ground under the point; the y asked for ({explicitY.Value:F2})");
                 throw new BridgeError($"No ground found at x {x:F1}, z {z:F1}.");
             }
-            var surfaces = points.Select(p => ((double)p.y, NavMesh.SamplePosition(p, out var near, 3f, NavMesh.AllAreas) && Mathf.Abs(near.position.y - p.y) < 1f)).ToList();
+            List<(double, bool)> surfaces;
+            var route = "";
+            if (walkableOnly)
+            {
+                var filter = PlayerFilter(out var start);
+                route = start == null
+                    ? "; walking routes not checked (the player isn't on the NavMesh)"
+                    : "; walking routes checked from the player's place";
+                surfaces = points.Select(p => ((double)p.y, Walkable(p, filter, start))).ToList();
+            }
+            else surfaces = points.Select(p => ((double)p.y, NavMesh.SamplePosition(p, out var near, 3f, NavMesh.AllAreas) && Mathf.Abs(near.position.y - p.y) < 1f)).ToList();
             var (index, why) = FoodTrucks.Core.Common.GroundPick.Choose(surfaces, referenceY, explicitY, walkableOnly);
+            why += route;
             var kind = walkableOnly ? "walkable ground" : "ground";
             if (index < 0) throw new BridgeError($"No {kind} at x {x:F1}, z {z:F1} near y {explicitY:F2}: {why}.");
             return (points[index], why);
+        }
+
+        // The player agent's own NavMesh filter (agent type and areas), and the player's place on the NavMesh, or null
+        // when they aren't on it (in a vehicle, inside a building, off the mesh).
+        internal static NavMeshQueryFilter PlayerFilter(out Vector3? start)
+        {
+            start = null;
+            var filter = new NavMeshQueryFilter { agentTypeID = 0, areaMask = NavMesh.AllAreas };
+            var controller = PlayerHelper.PlayerController;
+            var agent = controller != null && controller.Character != null ? controller.Character.navmeshAgent : null;
+            if (agent != null)
+            {
+                filter.agentTypeID = agent.agentTypeID;
+                filter.areaMask = agent.areaMask;
+            }
+            var game = SaveGameManager.Current;
+            if (controller != null && game != null && string.IsNullOrEmpty(game.ActiveVehicleId) && !BuildingManager.IsInsideBuilding &&
+                NavMesh.SamplePosition(controller.transform.position, out var here, 1f, filter))
+                start = here.position;
+            return filter;
+        }
+
+        private static bool Walkable(Vector3 surface, NavMeshQueryFilter filter, Vector3? start)
+        {
+            if (!NavMesh.SamplePosition(surface, out var near, 3f, filter) || Mathf.Abs(near.position.y - surface.y) >= 1f) return false;
+            if (start == null) return true;
+            var path = new NavMeshPath();
+            return NavMesh.CalculatePath(start.Value, near.position, filter, path) && path.status == NavMeshPathStatus.PathComplete;
         }
 
         // ---- What stands where something is moved to ----
@@ -300,7 +343,12 @@ namespace FoodTrucks
             return c.isTrigger || ((1 << layer) & (LayerHelper.groundLayerMask.value | LayerHelper.parkingAreaLayerMask.value)) != 0;
         }
 
-        private static List<Blocker> Describe(IEnumerable<Collider> hits, Transform? self)
+        // `sceneryCounts` false (the player): a static collider (no Rigidbody, no NavMeshObstacle) doesn't count, since
+        // the landing point is on the NavMesh, which is already built round anything a person can't walk through. Live
+        // session 6: BridgeMiddleRoadColliders (layer StreetProps), which keep traffic out of the middle of the road
+        // under the bridge, refused a player at x -1515, z -1150 where the NavMesh runs. Vehicles, people, bodies and
+        // carving obstacles (the mod's bay props) still count.
+        private static List<Blocker> Describe(IEnumerable<Collider> hits, Transform? self, bool sceneryCounts = true)
         {
             var found = new Dictionary<UnityEngine.Object, Blocker>();
             foreach (var c in hits)
@@ -336,6 +384,7 @@ namespace FoodTrucks
                     if (!found.ContainsKey(person)) found[person] = new Blocker { What = $"a person ({person.name})", Thing = person.gameObject };
                     continue;
                 }
+                if (!sceneryCounts && c.attachedRigidbody == null && c.GetComponentInParent<NavMeshObstacle>() == null) continue;
                 var key = (UnityEngine.Object?)c.attachedRigidbody ?? c.transform.root;
                 if (!found.ContainsKey(key))
                     found[key] = new Blocker { What = $"{c.transform.root.name}/{c.name} (layer {LayerMask.LayerToName(c.gameObject.layer)})", Thing = key is Component k ? (UnityEngine.Object)k.gameObject : key };
@@ -436,7 +485,7 @@ namespace FoodTrucks
         private static List<Blocker> InTheWay(PlayerController player, Vector3 ground)
         {
             var hits = Physics.OverlapCapsule(ground + Vector3.up * 0.6f, ground + Vector3.up * 1.6f, 0.2f, ~0, QueryTriggerInteraction.Ignore);
-            return Describe(hits, player.transform);
+            return Describe(hits, player.transform, sceneryCounts: false);
         }
 
         // Nothing in the way, or (with clear) only the lanes' parked cars, which go back to their pool as BayParking sends
@@ -528,7 +577,7 @@ namespace FoodTrucks
         private static object TeleportPlayer(Vector3 target, float? heading, bool clear)
         {
             var player = PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.");
-            if (!NavMesh.SamplePosition(target, out var hit, 3f, NavMesh.AllAreas))
+            if (!NavMesh.SamplePosition(target, out var hit, 3f, PlayerFilter(out _)))
                 throw new BridgeError($"No walkable ground within 3 m of x {target.x:F1}, z {target.z:F1}.");
             // The NavMesh found must be on the chosen surface, not a level above or below it.
             if (Mathf.Abs(hit.position.y - target.y) > 1f)

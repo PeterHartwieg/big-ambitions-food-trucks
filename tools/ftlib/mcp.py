@@ -33,12 +33,14 @@ TOOLS = [
     tool('ft_ui_list', 'List visible buttons, texts and all visible dropdown options, even when the dropdown is closed. Entries include kind and ids from this list; changed labels refuse stale id clicks. Visibility does not check clipping or overlapping windows; refresh after changes.'),
     tool('ft_ui_click', 'Requires a loaded FT city with its own character. Native save/load/delete/character controls and pause-menu confirmations refuse; use ft_call save/load. Click a unique, case-insensitive button or option text, or an id from the last ui list. Selecting a list-picker option also needs its confirm button. Duplicate employee options need the correct row id.',
          {'text': STRING, 'id': {'type': 'integer'}}),
-    tool('ft_shoot', 'In the city, render 8 frames into a separate camera and fetch the PNG. Either pose and target (a named pose; the bridge pulls the camera in front of walls or picks another side, and says so in pose_note), or a free camera: x/y/z (world metres) with look_at {x,y,z} or yaw (degrees clockwise from +z) and pitch (degrees down), and fov (5 to 120, default 60). The reply has camera (where it stood) and pose_note. Name: 1 to 80 letters/digits/._-. Width 16 to 3840, height 16 to 2160. timeout_s defaults to 20. Move near distant targets so their street is loaded.',
+    tool('ft_shoot', 'In the city, render 8 frames into a separate camera and fetch the PNG. Either pose and target (a named pose; the bridge pulls the camera in front of walls or picks another side, and says so in pose_note), or a free camera: x/y/z (world metres) with look_at {x,y,z} or yaw (degrees clockwise from +z) and pitch (degrees down), and fov (5 to 120, default 60). The reply has camera (where it stood), pose_note, and uncovered/outlined: the buildings whose view-blocking fade (for the game camera) or hover outline the bridge lifted for its picture. Name: 1 to 80 letters/digits/._-. Width 16 to 3840, height 16 to 2160. timeout_s defaults to 20. Move near distant targets so their street is loaded.',
          {'name': STRING, 'pose': STRING, 'target': STRING, 'width': {'type': 'integer', 'minimum': 16, 'maximum':3840},
           'height': {'type': 'integer', 'minimum': 16, 'maximum':2160}, **{key: {'type': 'number'} for key in ('x', 'y', 'z', 'yaw', 'pitch')},
           'fov': {'type': 'number', 'minimum': 5, 'maximum': 120},
           'look_at': {'type': 'object', 'description': 'The point a free camera looks at: {"x", "y", "z"} in world metres.'},
-          'timeout_s': {'type': 'number', 'description': 'Clamped to 1..600 seconds; default 20.'}}, ('name',)),
+          'timeout_s': {'type': 'number', 'description': 'Clamped to 1..600 seconds; default 20.'},
+          'compare': {'type': 'boolean', 'description': "Also the as-is picture with the game's fades and outlines left on (asis_path, fetched as local_asis_path)."},
+          'game_view': {'type': 'boolean', 'description': "Also the game's own frame as the player sees it (game_path, fetched as local_game_path)."}}, ('name',)),
     tool('ft_check_log', 'Check a local Player.log. Row rules count only when rows are selected.',
          {'path': STRING, 'version': STRING, 'rows': STRING}, ('path',)),
 ]
@@ -57,7 +59,8 @@ def validate_args(schema, args):
         expected = field['type']
         valid = {'string': isinstance(val, str), 'object': isinstance(val, dict),
                  'integer': isinstance(val, int) and not isinstance(val, bool),
-                 'number': isinstance(val, (int, float)) and not isinstance(val, bool)}[expected]
+                 'number': isinstance(val, (int, float)) and not isinstance(val, bool),
+                 'boolean': isinstance(val, bool)}[expected]
         if not valid or (expected == 'number' and isinstance(val,float) and not math.isfinite(val)) or ('minimum' in field and val < field['minimum']) or ('maximum' in field and val > field['maximum']):
             raise ValueError(f'Invalid {key}: use a {expected} within the limits in tools/list')
 
@@ -104,6 +107,9 @@ def call_tool(name, args, bridge):
         result = bridge.call('shoot', shot, args.get('timeout_s', 20))
         local = fetch_shot(result['result']['path'], ROOT / 'build/shots')
         result['local_path'] = str(local)
+        for key in ('asis_path', 'game_path'):
+            if result['result'].get(key):
+                result['local_' + key] = str(fetch_shot(result['result'][key], ROOT / 'build/shots'))
         image = {'type': 'image', 'mimeType': 'image/png', 'data': base64.b64encode(local.read_bytes()).decode()}
     elif name == 'ft_check_log':
         report = check_log(args['path'], args.get('version'), args.get('rows'))

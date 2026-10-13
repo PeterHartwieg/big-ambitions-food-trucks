@@ -1015,10 +1015,12 @@ class Mock:
                 # The mock's city is flat: one walkable surface at y 0 (the bridge stacks every ground surface and picks).
                 y=num(args,'y')
                 what='walkable surface' if who=='player' else 'surface'
+                # For the player the bridge checks walking routes from where they stand, when they stand on the NavMesh.
+                route=('' if who!='player' else "; walking routes not checked (the player isn't on the NavMesh)" if obj['in_vehicle'] else "; walking routes checked from the player's place")
                 if y is not None and abs(y)>1.5:
                     walk='walkable ' if who=='player' else ''
-                    raise ValueError(f"No {walk}ground at x {x:.1f}, z {z:.1f} near y {y:.2f}: no {what} within 1.5 m of the y asked for ({y:.2f}); surfaces there: 0.00 walkable.")
-                surface=(f"the {what} nearest the y asked for ({y:.2f}) of 1: 0.00 walkable" if y is not None else 'the only ground surface, walkable')
+                    raise ValueError(f"No {walk}ground at x {x:.1f}, z {z:.1f} near y {y:.2f}: no {what} within 1.5 m of the y asked for ({y:.2f}); surfaces there: 0.00 walkable{route}.")
+                surface=(f"the {what} nearest the y asked for ({y:.2f}) of 1: 0.00 walkable" if y is not None else 'the only ground surface, walkable')+route
             if who!='player' and obj['open']: raise ValueError(f"Vehicle {who} is open for business: close it first (vehicle close).")
             if who=='player':
                 self.walks=[]
@@ -1151,10 +1153,21 @@ class Mock:
                     camera.update(yaw=round(math.degrees(math.atan2(dx,dz))%360,2),pitch=round(-math.degrees(math.atan2(dy,math.hypot(dx,dz))),2))
                 else:
                     camera.update(yaw=round((num(args,'yaw') or 0)%360,2),pitch=round(num(args,'pitch') or 0,2))
+            for flag in ('compare','game_view'):
+                if args.get(flag) is not None and not isinstance(args.get(flag),bool): raise ValueError(f'{flag} must be true or false.')
             path=self.shots/(name+'.png')
-            png(path,width,height,(180,190,200) if self.state['clock']['time']<'20:00' else (35,45,65))
-            # The mock has no walls: a named pose always stands clear, so pose_note is null.
-            return {'path':str(path),'camera':camera,'pose_note':None}
+            colour=(180,190,200) if self.state['clock']['time']<'20:00' else (35,45,65)
+            png(path,width,height,colour)
+            # The mock has no walls, fades or outlines: a named pose always stands clear (pose_note null), and nothing is
+            # uncovered or outlined.
+            reply={'path':str(path),'camera':camera,'pose_note':None,'uncovered':[],'outlined':[],'asis_path':None,'game_path':None,'game_error':None}
+            if args.get('compare'):
+                asis=self.shots/(name+'-asis.png'); png(asis,width,height,colour)
+                reply.update(asis_path=str(asis),asis_uncovered=[],asis_outlined=[])
+            if args.get('game_view'):
+                game=self.shots/(name+'-game.png'); png(game,width,height,colour)
+                reply['game_path']=str(game)
+            return reply
         if cmd=='console':
             line=need(args,'line','the console line to run')
             self.event(f'Mock console: {line}')
