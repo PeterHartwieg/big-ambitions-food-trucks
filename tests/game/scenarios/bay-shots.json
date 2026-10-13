@@ -1,6 +1,6 @@
 {
   "name": "bay-shots",
-  "checks": "CHECKS.md, Commissary look and payment (0.9.10), rows 6 to 8 and 12",
+  "checks": "CHECKS.md, Commissary look and payment (0.9.10), rows 6 to 8 and 12; Bays on the door's side and a heavier truck, rows B2 to B5",
   "needs": {},
   "steps": [
     {
@@ -86,7 +86,10 @@
     {
       "wait_state": "commissary.bays[site=industry-city].status",
       "timeout_s": 300,
-      "equals": "resolved"
+      "matches": "^(resolved|failed)$"
+    },
+    {
+      "note": "industry-city: a bay stays 'failed' when its search found no legal parking on the door's side of the street within a short walk. That is a reported outcome, not a scenario failure: the log's `ERROR: Commissary industry-city: no bay this load (...)` says why, and the bay shots below fail softly (no bay to aim at); the door shot still runs."
     },
     {
       "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
@@ -96,14 +99,16 @@
         "name": "industry-city-day-bay-pavement",
         "pose": "bay-pavement",
         "target": "bay:industry-city"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
         "name": "industry-city-day-bay-road",
         "pose": "bay-road",
         "target": "bay:industry-city"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
@@ -127,7 +132,10 @@
     {
       "wait_state": "commissary.bays[site=garment-district].status",
       "timeout_s": 300,
-      "equals": "resolved"
+      "matches": "^(resolved|failed)$"
+    },
+    {
+      "note": "garment-district: a bay stays 'failed' when its search found no legal parking on the door's side of the street within a short walk. That is a reported outcome, not a scenario failure: the log's `ERROR: Commissary garment-district: no bay this load (...)` says why, and the bay shots below fail softly (no bay to aim at); the door shot still runs."
     },
     {
       "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
@@ -137,14 +145,16 @@
         "name": "garment-district-day-bay-pavement",
         "pose": "bay-pavement",
         "target": "bay:garment-district"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
         "name": "garment-district-day-bay-road",
         "pose": "bay-road",
         "target": "bay:garment-district"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
@@ -168,7 +178,10 @@
     {
       "wait_state": "commissary.bays[site=hells-kitchen].status",
       "timeout_s": 300,
-      "equals": "resolved"
+      "matches": "^(resolved|failed)$"
+    },
+    {
+      "note": "hells-kitchen: a bay stays 'failed' when its search found no legal parking on the door's side of the street within a short walk. That is a reported outcome, not a scenario failure: the log's `ERROR: Commissary hells-kitchen: no bay this load (...)` says why, and the bay shots below fail softly (no bay to aim at); the door shot still runs."
     },
     {
       "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
@@ -178,14 +191,16 @@
         "name": "hells-kitchen-day-bay-pavement",
         "pose": "bay-pavement",
         "target": "bay:hells-kitchen"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
         "name": "hells-kitchen-day-bay-road",
         "pose": "bay-road",
         "target": "bay:hells-kitchen"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
@@ -209,7 +224,10 @@
     {
       "wait_state": "commissary.bays[site=lower-manhattan].status",
       "timeout_s": 300,
-      "equals": "resolved"
+      "matches": "^(resolved|failed)$"
+    },
+    {
+      "note": "lower-manhattan: a bay stays 'failed' when its search found no legal parking on the door's side of the street within a short walk. That is a reported outcome, not a scenario failure: the log's `ERROR: Commissary lower-manhattan: no bay this load (...)` says why, and the bay shots below fail softly (no bay to aim at); the door shot still runs."
     },
     {
       "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
@@ -219,14 +237,16 @@
         "name": "lower-manhattan-day-bay-pavement",
         "pose": "bay-pavement",
         "target": "bay:lower-manhattan"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
         "name": "lower-manhattan-day-bay-road",
         "pose": "bay-road",
         "target": "bay:lower-manhattan"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
@@ -250,7 +270,10 @@
     {
       "wait_state": "commissary.bays[site=murray-hill].status",
       "timeout_s": 300,
-      "equals": "resolved"
+      "matches": "^(resolved|failed)$"
+    },
+    {
+      "note": "murray-hill: a bay stays 'failed' when its search found no legal parking on the door's side of the street within a short walk. That is a reported outcome, not a scenario failure: the log's `ERROR: Commissary murray-hill: no bay this load (...)` says why, and the bay shots below fail softly (no bay to aim at); the door shot still runs."
     },
     {
       "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
@@ -260,14 +283,16 @@
         "name": "murray-hill-day-bay-pavement",
         "pose": "bay-pavement",
         "target": "bay:murray-hill"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
         "name": "murray-hill-day-bay-road",
         "pose": "bay-road",
         "target": "bay:murray-hill"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
@@ -311,7 +336,10 @@
     {
       "wait_state": "commissary.bays[site=industry-city].status",
       "timeout_s": 300,
-      "equals": "resolved"
+      "matches": "^(resolved|failed)$"
+    },
+    {
+      "note": "industry-city: a bay stays 'failed' when its search found no legal parking on the door's side of the street within a short walk. That is a reported outcome, not a scenario failure: the log's `ERROR: Commissary industry-city: no bay this load (...)` says why, and the bay shots below fail softly (no bay to aim at); the door shot still runs."
     },
     {
       "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
@@ -321,14 +349,16 @@
         "name": "industry-city-night-bay-pavement",
         "pose": "bay-pavement",
         "target": "bay:industry-city"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
         "name": "industry-city-night-bay-road",
         "pose": "bay-road",
         "target": "bay:industry-city"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
@@ -352,7 +382,10 @@
     {
       "wait_state": "commissary.bays[site=garment-district].status",
       "timeout_s": 300,
-      "equals": "resolved"
+      "matches": "^(resolved|failed)$"
+    },
+    {
+      "note": "garment-district: a bay stays 'failed' when its search found no legal parking on the door's side of the street within a short walk. That is a reported outcome, not a scenario failure: the log's `ERROR: Commissary garment-district: no bay this load (...)` says why, and the bay shots below fail softly (no bay to aim at); the door shot still runs."
     },
     {
       "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
@@ -362,14 +395,16 @@
         "name": "garment-district-night-bay-pavement",
         "pose": "bay-pavement",
         "target": "bay:garment-district"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
         "name": "garment-district-night-bay-road",
         "pose": "bay-road",
         "target": "bay:garment-district"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
@@ -393,7 +428,10 @@
     {
       "wait_state": "commissary.bays[site=hells-kitchen].status",
       "timeout_s": 300,
-      "equals": "resolved"
+      "matches": "^(resolved|failed)$"
+    },
+    {
+      "note": "hells-kitchen: a bay stays 'failed' when its search found no legal parking on the door's side of the street within a short walk. That is a reported outcome, not a scenario failure: the log's `ERROR: Commissary hells-kitchen: no bay this load (...)` says why, and the bay shots below fail softly (no bay to aim at); the door shot still runs."
     },
     {
       "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
@@ -403,14 +441,16 @@
         "name": "hells-kitchen-night-bay-pavement",
         "pose": "bay-pavement",
         "target": "bay:hells-kitchen"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
         "name": "hells-kitchen-night-bay-road",
         "pose": "bay-road",
         "target": "bay:hells-kitchen"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
@@ -434,7 +474,10 @@
     {
       "wait_state": "commissary.bays[site=lower-manhattan].status",
       "timeout_s": 300,
-      "equals": "resolved"
+      "matches": "^(resolved|failed)$"
+    },
+    {
+      "note": "lower-manhattan: a bay stays 'failed' when its search found no legal parking on the door's side of the street within a short walk. That is a reported outcome, not a scenario failure: the log's `ERROR: Commissary lower-manhattan: no bay this load (...)` says why, and the bay shots below fail softly (no bay to aim at); the door shot still runs."
     },
     {
       "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
@@ -444,14 +487,16 @@
         "name": "lower-manhattan-night-bay-pavement",
         "pose": "bay-pavement",
         "target": "bay:lower-manhattan"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
         "name": "lower-manhattan-night-bay-road",
         "pose": "bay-road",
         "target": "bay:lower-manhattan"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
@@ -475,7 +520,10 @@
     {
       "wait_state": "commissary.bays[site=murray-hill].status",
       "timeout_s": 300,
-      "equals": "resolved"
+      "matches": "^(resolved|failed)$"
+    },
+    {
+      "note": "murray-hill: a bay stays 'failed' when its search found no legal parking on the door's side of the street within a short walk. That is a reported outcome, not a scenario failure: the log's `ERROR: Commissary murray-hill: no bay this load (...)` says why, and the bay shots below fail softly (no bay to aim at); the door shot still runs."
     },
     {
       "note": "The camera cannot load a distant street. Move the player near the site and wait for its resolved bay before taking pictures."
@@ -485,14 +533,16 @@
         "name": "murray-hill-night-bay-pavement",
         "pose": "bay-pavement",
         "target": "bay:murray-hill"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {
         "name": "murray-hill-night-bay-road",
         "pose": "bay-road",
         "target": "bay:murray-hill"
-      }
+      },
+      "soft": true
     },
     {
       "shoot": {

@@ -278,6 +278,47 @@ public class CommissariesTests
         Assert.Equal(8, state.NightCheckedThroughDay);
     }
 
+    // Review round 2 (Astra and Sol): a truck in its bay whose street side can't be read yet (no lanes just after a load)
+    // must not be fined; the check waits and runs once the side is known.
+    [Fact]
+    public void AnUnknownStreetSideHoldsTheNightCheckInsteadOfFining()
+    {
+        var state = Rented();
+        state.NightCheckedThroughDay = 7;
+        var unknown = new CommissaryVehicle { VehicleId = "cart", BaySideUnknown = true };
+        Assert.Equal(new[] { "cart" }, Commissaries.Undecided(state, new[] { unknown }));
+        Assert.Empty(Commissaries.NightCheck(state, Rules, 8, 240, new[] { unknown }));
+        Assert.Equal(7, state.NightCheckedThroughDay);
+        // Read later in the morning: in its bay, no fine, the night checked.
+        Assert.Empty(Commissaries.NightCheck(state, Rules, 8, 250, new[] { new CommissaryVehicle { VehicleId = "cart", AtOwnCommissaryBay = true } }));
+        Assert.Equal(8, state.NightCheckedThroughDay);
+    }
+
+    [Fact]
+    public void AWaitedNightIsStillFinedWhenTheSideTurnsOutWrong()
+    {
+        var state = Rented();
+        state.NightCheckedThroughDay = 7;
+        Assert.Empty(Commissaries.NightCheck(state, Rules, 8, 240, new[] { new CommissaryVehicle { VehicleId = "cart", BaySideUnknown = true } }));
+        var fines = Commissaries.NightCheck(state, Rules, 9, 300, new[] { new CommissaryVehicle { VehicleId = "cart" } });
+        Assert.Equal(new[] { 8, 9 }, fines.Select(f => f.Day));
+        Assert.Equal(9, state.NightCheckedThroughDay);
+    }
+
+    [Fact]
+    public void AnUnknownSideDoesntHoldTheCheckWhenAnotherExemptionDecides()
+    {
+        var state = Rented();
+        state.NightCheckedThroughDay = 7;
+        var inside = new CommissaryVehicle { VehicleId = "cart", BaySideUnknown = true, PlayerInside = true };
+        Assert.Empty(Commissaries.Undecided(state, new[] { inside }));
+        Assert.Empty(Commissaries.NightCheck(state, Rules, 8, 240, new[] { inside }));
+        Assert.Equal(8, state.NightCheckedThroughDay);
+        // Without a space the bay never exempts it, so the side doesn't matter either.
+        var none = new CommissaryState { NightCheckedThroughDay = 7 };
+        Assert.Empty(Commissaries.Undecided(none, new[] { new CommissaryVehicle { VehicleId = "cart", BaySideUnknown = true } }));
+    }
+
     [Fact]
     public void ThePlayersOwnPropertyExemptsAVehicleWithoutASpace()
     {

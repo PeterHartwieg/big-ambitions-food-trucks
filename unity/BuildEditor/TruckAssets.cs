@@ -26,18 +26,29 @@ namespace FoodTrucks.BuildEditor
 
         // Driving, from the game's 1.0 vehicle prefabs (read with UnityPy, art/README.md "Driving"). The game gives
         // every car and truck the same 1,400 kg rigidbody, its delivery truck included, and sets speed by gearing
-        // and power instead, so the truck keeps the example car's mass, springs and dampers (the delivery truck's
-        // too: 5,000 N, 5,000, load rating 7,000). The delivery truck has 46 kW with forced induction (x1.2), final
-        // drive 15.25 on 0.43 m wheels (50 km/h at the 10,000 rpm limiter) and 2,500 N m brakes; the freight truck
-        // 35 kW with forced induction. Ours: 40 kW without it, so it pulls a little less than either (it carries a
-        // kitchen), the delivery truck's power curve (less low-end than the example car's), and a final drive for
-        // the same 50 km/h on our 0.38 m wheels. The 1.0 game reads VehicleType.maxSpeed only for the showroom and
-        // the bridge skip's fuel, and enginePower and brakeForce not at all; they mirror the prefab, as most of the game's do.
-        private const float Mass = 1400f;
+        // and power instead; the vans and trucks share the example car's springs and dampers (5,000 N, 5,000, load
+        // rating 7,000). The delivery truck has 46 kW with forced induction (x1.2), final drive 15.25 on 0.43 m
+        // wheels (50 km/h at the 10,000 rpm limiter) and 2,500 N m brakes; the freight truck 35 kW with forced
+        // induction. Ours: 40 kW without it, so it pulls a little less than either (it carries a kitchen), the
+        // delivery truck's power curve (less low-end than the example car's), and a final drive for the same
+        // 50 km/h on our 0.38 m wheels. The 1.0 game reads VehicleType.maxSpeed only for the showroom and the bridge
+        // skip's fuel, and enginePower and brakeForce not at all; they mirror the prefab, as most of the game's do.
+        //
+        // Mass (Peter, 13 October 2026): 1,600 kg, "slightly heavier" than the game's vehicles but not a different
+        // feel. The same 40 kW then pulls away about 12% slower and still reaches the 50 km/h limiter. The springs
+        // and dampers scale with the mass, so the truck sits at the same height (each wheel carries 3,920 N, which on
+        // the unscaled 5,000 N linear spring would sink 6 cm lower and bottom out under hard braking) and is damped
+        // as before (the ratio goes with the square root of spring rate times mass). The brakes stay: 2,500 N m on
+        // each wheel already asks more than the tyres grip at either mass, so the stop is the tyres' and doesn't
+        // lengthen. The tyres' load rating (7,000 N) stays well above the load.
+        private const float Mass = 1600f;
+        private const float GameMass = 1400f;
+        private const float SpringMaxForce = 5000f * Mass / GameMass; // N, 5,714; NWH spring maxForce, linear curve
+        private const float DamperRate = 5000f * Mass / GameMass; // NWH damper bumpRate and reboundRate
         private const float EnginePower = 40f; // kW, NWH engine maxPower
         private const float FinalGearRatio = 13.5f; // top gear 2.108: 10,000 rpm at 50 km/h on 0.38 m wheels
         private const int TopSpeed = 50; // km/h
-        private const float BrakeTorque = 2500f; // N m, the delivery truck's (same mass, same stopping)
+        private const float BrakeTorque = 2500f; // N m on each wheel, the delivery truck's (grip-limited, see Mass)
         // The delivery truck's power curve: power fraction over rpm / rev limiter, with its tangents.
         private static readonly Keyframe[] PowerCurve =
         {
@@ -155,6 +166,9 @@ namespace FoodTrucks.BuildEditor
                     wheelController.transform.localPosition = hub + new Vector3(0f, 0.164f, 0f);
                     Set(wheelController, "wheel.radius", 0.38f);
                     Set(wheelController, "wheel.width", 0.23f);
+                    Set(wheelController, "spring.maxForce", SpringMaxForce);
+                    Set(wheelController, "damper.bumpRate", DamperRate);
+                    Set(wheelController, "damper.reboundRate", DamperRate);
                 }
 
                 root.GetComponent<Rigidbody>().mass = Mass;

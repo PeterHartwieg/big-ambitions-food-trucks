@@ -58,6 +58,8 @@ namespace FoodTrucks
             notReadyLogged.Clear();
             errorLogged.Clear();
             searchedThisLoad.Clear();
+            doorLanes.Clear();
+            lastSide.Clear();
             Legality.ResetLanes();
             var state = FoodTrucksSession.CurrentState;
             var sites = Sites;
@@ -210,7 +212,7 @@ namespace FoodTrucks
                 return false;
             }
             var doors = World.EntrancesOf(site.Address);
-            var found = new List<(BaySnapResult Bay, (double X, double Z) From)>();
+            var found = new List<(BaySnapResult Bay, (double X, double Z) From, (double X, double Z) Door)>();
             var start = Time.realtimeSinceStartup;
             var colliders = 0;
             // What each origin came to, for the one line a commissary without a bay gets.
@@ -228,15 +230,62 @@ namespace FoodTrucks
                     tried.Add($"{label}: no parking lanes within {ProbeMetres:F0} m");
                     continue;
                 }
+                // The side rule (Peter, 13 October 2026; Core BaySide): a place counts only when the straight walk from
+                // the door to it crosses no driving lane, so the bay is on the door's side of the street. From a point set
+                // in data the door is the entrance nearest it, and the point itself must pass, else it isn't used.
+                if (door == null)
+                {
+                    tried.Add($"{label}: the building has no entrance to check the street's side from");
+                    continue;
+                }
+                var side = SideLanes(door.Value, origin, BaySnap.MaxMetres);
+                if (side.Lanes == null)
+                {
+                    if (side.Why.Length > 0)
+                    {
+                        if (Once(errorLogged, site.Id, "traffic read"))
+                            Log.Error($"Commissary {site.Id}: bay not resolved yet ({why}): the traffic lanes couldn't be read ({side.Why}); tried again every {ResolveRetrySeconds:F0} s.");
+                    }
+                    else if (Once(notReadyLogged, site.Id, "traffic"))
+                        Log.Info($"Commissary {site.Id}: bay not resolved yet ({why}): the traffic system isn't ready to check the door's street; tried again every {ResolveRetrySeconds:F0} s.");
+                    return false;
+                }
+                var sideLanes = side.Lanes;
+                var doorX = (double)door.Value.x;
+                var doorZ = (double)door.Value.z;
+                // No driving lane at all round the door: every street has lanes, so the read missed them (an entrance well
+                // above or below the street, review round 1, Opus). The side can't be checked, so nothing is resolved now
+                // and the search is tried again, as while the parking lanes load.
+                if (sideLanes.Count == 0)
+                {
+                    if (Once(errorLogged, site.Id, "no driving lanes"))
+                        Log.Error($"Commissary {site.Id}: bay not resolved yet ({why}): no driving lanes found round the door at x {doorX:F1}, " +
+                                  $"y {door.Value.y:F1}, z {doorZ:F1} ({side.Why}), so the street's side can't be checked; tried again every {ResolveRetrySeconds:F0} s.");
+                    return false;
+                }
+                if (site.Bay != null && BaySide.FirstCrossing(doorX, doorZ, origin.X, origin.Z, sideLanes) is { } measuredCrossing)
+                {
+                    var text = $"the measured bay in data/commissaries.json at x {origin.X:F1}, z {origin.Z:F1} is across the road from the door " +
+                               $"at x {doorX:F1}, z {doorZ:F1} (the walk crosses a driving lane at x {measuredCrossing.X:F1}, z {measuredCrossing.Z:F1}), so it isn't used";
+                    if (Once(errorLogged, site.Id, "measured across")) Log.Error($"Commissary {site.Id} ({site.Address}): {text}.");
+                    tried.Add($"{label}: {text}");
+                    continue;
+                }
+                var across = 0;
+                Func<double, double, bool> reach = (x, z) =>
+                {
+                    if (BaySide.SameSide(doorX, doorZ, x, z, sideLanes)) return true;
+                    across++;
+                    return false;
+                };
                 // From an entrance, a place the door's pedestrians can't reach within a short walk (the street behind the
-                // building, Core WalkRule) is passed over for good; a point set in data is trusted. The walk starts at the
-                // door's NavMesh point, which must itself have a short walk to the street; if it hasn't, nothing is guessed
-                // (review round 8: a replacement start near the door could be behind the building): that origin gives no
-                // bay and asks for a measured point.
-                Func<double, double, bool>? reach = null;
+                // building, Core WalkRule) is passed over for good; a point set in data is trusted for its walk. The walk
+                // starts at the door's NavMesh point, which must itself have a short walk to the street; if it hasn't,
+                // nothing is guessed (review round 8: a replacement start near the door could be behind the building):
+                // that origin gives no bay and asks for a measured point.
                 var tooLong = 0;
                 var noRoute = 0;
-                if (site.Bay == null && door != null)
+                if (site.Bay == null)
                 {
                     var from = WalkFrom(site.Id, door.Value);
                     if (from.Kind == WalkStart.NotReady)
@@ -259,8 +308,11 @@ namespace FoodTrucks
                     if (from.Kind != WalkStart.Unknown)
                     {
                         var walkStart = from.Point;
+                        var sideOnly = reach;
+                        // The side first: it is cheaper than a NavMesh path.
                         reach = (x, z) =>
                         {
+                            if (!sideOnly(x, z)) return false;
                             var verdict = Walk(walkStart, x, z);
                             if (verdict == WalkVerdict.TooLong) tooLong++;
                             if (verdict == WalkVerdict.NoRoute) noRoute++;
@@ -268,13 +320,23 @@ namespace FoodTrucks
                         };
                     }
                 }
-                var bay = BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres, reach);
-                if (bay == null)
-                    tried.Add(tooLong + noRoute > 0
-                        ? $"{label}: the only legal parking within {BaySnap.MaxMetres:F0} m is out of a short walk from the door ({tooLong} too long a walk, {noRoute} with no route)"
+                // A measured bay with a heading is nose-in in a lot: the point as measured when legal facing that way, else
+                // the nearest legal place facing that way (Core BaySnap.Measured).
+                var bay = site.Bay != null
+                    ? BaySnap.Measured(origin.X, origin.Z, site.BayHeading, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres, reach)
+                    : BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres, reach);
+                if (site.InLot && bay != null && bay.Distance > 0)
+                    Log.Error($"Commissary {site.Id}: the measured nose-in bay at x {origin.X:F1}, z {origin.Z:F1}, heading {site.BayHeading:F0}, isn't legal by the wheel test; " +
+                              $"the nearest legal place facing that way is x {bay.X:F1}, z {bay.Z:F1}, {bay.Distance:F1} m off. Correct the bay in data/commissaries.json.");
+                if (site.InLot && bay == null)
+                    tried.Add($"{label}: no legal place facing heading {site.BayHeading:F0} (nose-in) within {BaySnap.MaxMetres:F0} m: the stalls may be too shallow for the truck's wheels");
+                else if (bay == null)
+                    tried.Add(across + tooLong + noRoute > 0
+                        ? $"{label}: no legal parking within {BaySnap.MaxMetres:F0} m on the door's side of the street with a short walk from the door " +
+                          $"({across} across the road, {tooLong} too long a walk, {noRoute} with no route)"
                         : $"{label}: no legal parking for a truck within {BaySnap.MaxMetres:F0} m ({probe.Count} parking colliders read)");
                 if (bay != null && !found.Any(f => BaySnap.Distance(f.Bay.X, f.Bay.Z, bay.X, bay.Z) < SameBayMetres))
-                    found.Add((bay, origin));
+                    found.Add((bay, origin, (doorX, doorZ)));
             }
             // No parking collider at all round any origin: more likely the street isn't there yet than a commissary
             // without parking, so nothing is stored and it is tried again (review round 5). "No bay" is stored only
@@ -285,7 +347,7 @@ namespace FoodTrucks
                     Log.Info($"Commissary {site.Id}: bay not resolved yet ({why}): no parking lanes round it yet; tried again every {ResolveRetrySeconds:F0} s.");
                 return false;
             }
-            CommissaryBays.Store(state.Commissary, site.Id, origins, found.Select(f => f.Bay));
+            CommissaryBays.Store(state.Commissary, site.Id, origins, found.Select(f => (f.Bay, ((double X, double Z)?)f.Door)));
             searchedThisLoad.Add(site.Id);
             FoodTrucksSession.MarkChanged();
             BayMarkers.Forget(site.Id);
@@ -294,9 +356,9 @@ namespace FoodTrucks
             // a bay that appears round it (review round 1, Sol and Astra).
             BayParking.SweepNewBay(site, Rules!.BayRadiusMetres);
             var ms = (Time.realtimeSinceStartup - start) * 1000f;
-            foreach (var (bay, from) in found)
+            foreach (var (bay, from, _) in found)
                 Log.Info($"Commissary {site.Id}: bay on legal parking at x {bay.X:F1}, z {bay.Z:F1}, {bay.Distance:F1} m from x {from.X:F1}, z {from.Z:F1} " +
-                         $"({(site.Bay != null ? "set in data" : "entrance")}), the lane along {Math.Atan2(bay.AlongX, bay.AlongZ) * 180 / Math.PI:F0} degrees; " +
+                         $"({(site.Bay != null ? "set in data" : "entrance")}), {(site.InLot ? "nose-in in a lot, facing" : "the lane along")} {Math.Atan2(bay.AlongX, bay.AlongZ) * 180 / Math.PI:F0} degrees; " +
                          $"resolved {why} in {ms:F0} ms and kept in the save.");
             // One line per load for a commissary still without a bay, with what each origin came to.
             if (found.Count == 0)
@@ -305,6 +367,53 @@ namespace FoodTrucks
                           "Set a measured bay point in data/commissaries.json (the test bridge's commissary bay_candidates lists legal truck spots up to 80 m out).");
             return true;
         }
+
+        // Extra reach for the lanes read round a door (Core BaySide): a lane segment that crosses a walk is read when
+        // either of its waypoints is within the read, and the traffic system's waypoints can stand some way apart.
+        private const float SideSlackMetres = 40f;
+
+        // The driving lanes' centre lines round a door, far enough out to cover the walk to any place within reach of
+        // origin. Null while the traffic system isn't running (Why empty) or its lanes can't be read (Why says why); a
+        // read that finds no lane at all is an empty list, and every place is then on the door's side.
+        private static (List<((double X, double Z) A, (double X, double Z) B)>? Lanes, string Why) SideLanes(Vector3 door, (double X, double Z) origin, double reach)
+        {
+            if (!GleyTrafficSystem.TrafficManager.HasInstance || !GleyTrafficSystem.TrafficManager.IsInitialized) return (null, "");
+            var lanes = TrafficLanes.Near(door, Flat(door, origin) + (float)reach + SideSlackMetres);
+            if (lanes.Unavailable) return (null, lanes.Describe());
+            return (lanes.FlatSegments(), lanes.Describe());
+        }
+
+        // The driving lanes round each bay point's entrance, read once per load for "in the bay" (Core
+        // CommissaryBays.OnDoorSide); a read that failed or found none is tried again after ResolveRetrySeconds.
+        private static readonly Dictionary<(double, double), (float Radius, List<((double X, double Z) A, (double X, double Z) B)>? Lanes, float RetryAt)> doorLanes =
+            new Dictionary<(double, double), (float, List<((double X, double Z) A, (double X, double Z) B)>?, float)>();
+
+        private static IReadOnlyList<((double X, double Z) A, (double X, double Z) B)>? LanesFor(CommissaryBayPoint point, float radius)
+        {
+            if (point.DoorX is not { } x || point.DoorZ is not { } z) return null;
+            var key = (x, z);
+            var door = new Vector3((float)x, 0f, (float)z);
+            var need = Flat(door, (point.X, point.Z)) + radius + SideSlackMetres;
+            if (doorLanes.TryGetValue(key, out var known))
+            {
+                if (known.Lanes != null && known.Lanes.Count > 0 && known.Radius >= need) return known.Lanes;
+                if (known.Lanes == null || known.Lanes.Count == 0)
+                    if (Time.unscaledTime < known.RetryAt) return null;
+            }
+            // The read's height filter needs the door's height: the ground under the stored entrance.
+            var doors = Sites?.Sites.Select(s => World.EntrancesOf(s.Address)).Where(d => d != null).SelectMany(d => d!)
+                .Where(d => Math.Abs(d.x - x) < 0.01 && Math.Abs(d.z - z) < 0.01).ToList();
+            if (doors == null || doors.Count == 0) return null;
+            door.y = doors[0].y;
+            var side = SideLanes(door, (point.X, point.Z), radius);
+            doorLanes[key] = (need, side.Lanes, Time.unscaledTime + ResolveRetrySeconds);
+            return side.Lanes is { Count: > 0 } ? side.Lanes : null;
+        }
+
+        // The last side each vehicle was seen on at a commissary, kept while the side can't be checked: the answer stands
+        // for that vehicle at that spot only (review round 1, Opus: keep the last known answer or refuse).
+        private static readonly Dictionary<(string Site, string Vehicle), (Vector3 At, bool OnSide)> lastSide =
+            new Dictionary<(string, string), (Vector3, bool)>();
 
         private enum WalkStart
         {
@@ -435,7 +544,12 @@ namespace FoodTrucks
 
         // Parked in the open (not in a building or garage), its middle within the radius of the commissary's resolved
         // bay, and (a truck) legally parked by the game's test. A cart counts by its middle alone (Peter, review round 5).
-        internal static bool InBay(VehicleInstance vehicle, CommissarySite site, out string why)
+        internal static bool InBay(VehicleInstance vehicle, CommissarySite site, out string why) => InBayAnswer(vehicle, site, out why) == true;
+
+        // InBay with a third answer: null when the vehicle is within the radius but its street side can't be read yet
+        // (no driving lanes read round the door and no answer kept for it there). The 04:00 check waits on that rather
+        // than fine (review round 2, Astra and Sol); everything else takes it as "not in the bay".
+        internal static bool? InBayAnswer(VehicleInstance vehicle, CommissarySite site, out string why)
         {
             var rules = Rules;
             var points = ResolvedBays(site);
@@ -443,6 +557,13 @@ namespace FoodTrucks
             if (!string.IsNullOrEmpty(vehicle.streetName)) { why = "inside a building"; return false; }
             var position = PositionOf(vehicle);
             if (!CommissaryBays.WithinRadius(points, position.x, position.z, rules.BayRadiusMetres)) { why = "outside the radius"; return false; }
+            // On the door's side of the street (Core CommissaryBays.OnDoorSide): the opposite kerb is within the radius too.
+            var onSide = CommissaryBays.OnDoorSide(points, position.x, position.z, rules.BayRadiusMetres, p => LanesFor(p, (float)rules.BayRadiusMetres));
+            var sideKey = (site.Id, vehicle.id ?? "");
+            if (onSide != null) lastSide[sideKey] = (position, onSide.Value);
+            else if (lastSide.TryGetValue(sideKey, out var last) && Flat(last.At, (position.x, position.z)) < 0.5f) onSide = last.OnSide;
+            if (onSide == null) { why = "the street's side can't be checked yet (no driving lanes read round the door)"; return null; }
+            if (onSide == false) { why = "across the road from the door"; return false; }
             if (!CommissaryBays.RequiresLegalParking(FoodTrucksMod.KindOf(vehicle.vehicleTypeName)))
             {
                 why = "a cart within the radius";
@@ -732,6 +853,19 @@ namespace FoodTrucks
             }
             var unresolvedOther = sites.Sites.Where(site => ResolvedBays(site) == null).Select(site => site.Id).ToList();
             var flags = Flags(state, sites, fleet, now);
+            // A vehicle in its bay's radius whose street side can't be read yet (no lanes read round the door, as just
+            // after a load) holds the check too, never fined on an unknown (Core Commissaries.Undecided).
+            var undecided = Commissaries.Undecided(commissary, flags);
+            if (undecided.Count > 0)
+            {
+                if (nightSideWaitLogged != latest)
+                {
+                    nightSideWaitLogged = latest;
+                    Log.Info($"Overnight check through day {latest} waits: the street side of the bay can't be read yet for {string.Join(", ", undecided.Select(id => World.Short(id)))} " +
+                             "(no driving lanes read round the door); tried again each minute.");
+                }
+                return;
+            }
             var fines = Commissaries.NightCheck(commissary, rules, day, minute, flags);
             FoodTrucksSession.MarkChanged();
             Log.Info($"Overnight check through day {commissary.NightCheckedThroughDay}: " +
@@ -761,6 +895,7 @@ namespace FoodTrucks
         }
 
         private int nightWaitLogged = -1;
+        private int nightSideWaitLogged = -1;
 
         private static string Describe(CommissaryVehicle v) =>
             $"{World.Short(v.VehicleId)} {(v.AtOwnCommissaryBay ? "in its bay" : "out")}{(v.PlayerInside ? ", player inside" : "")}{(v.OnLateStop ? ", late stop" : "")}{(v.InTransit ? ", in transit" : "")}{(v.AtPlayerProperty ? ", at your own building" : "")}";
@@ -810,10 +945,12 @@ namespace FoodTrucks
                 var site = space == null ? null : sites.Site(space.CommissaryId);
                 if (space != null && site == null && unknownSiteShown.Add(vehicle.id))
                     Log.Error($"Commissary: {World.Short(vehicle.id)} has its space at '{space.CommissaryId}', which commissaries.json doesn't have; it counts as out overnight.");
+                bool? inBay = site == null || withDriver.Contains(vehicle.id) ? false : NoBay(site) ? true : InBayAnswer(vehicle, site, out _);
                 list.Add(new CommissaryVehicle
                 {
                     VehicleId = vehicle.id,
-                    AtOwnCommissaryBay = site != null && !withDriver.Contains(vehicle.id) && (NoBay(site) || InBay(vehicle, site, out _)),
+                    AtOwnCommissaryBay = inBay == true,
+                    BaySideUnknown = inBay == null,
                     PlayerInside = game.ActiveVehicleId == vehicle.id || TruckWindow.PlayerAt(vehicle.id),
                     // Only a window the crew has open at a stop right now: a route that sold out and closed early is out like any other.
                     OnLateStop = saved != null && saved.IsOpen && saved.HireStop != null,
@@ -891,8 +1028,8 @@ namespace FoodTrucks
             var site = SiteOf(cart);
             if (site == null)
             {
-                // Within a bay's radius but not legally parked: say so, rather than "not here".
-                var near = Sites?.Sites.FirstOrDefault(s => CommissaryBays.WithinRadius(ResolvedBays(s), PositionOf(cart).x, PositionOf(cart).z, rules.BayRadiusMetres));
+                // Within a bay's radius and on its door's side but not legally parked: say so, rather than "not here".
+                var near = Sites?.Sites.FirstOrDefault(s => !InBay(cart, s, out var whyNot) && whyNot.StartsWith("not legally parked", StringComparison.Ordinal));
                 CartSelling.Say(near != null ? "foodtrucks:notification_commissary_park_legally" : "foodtrucks:notification_commissary_not_here", kind);
                 return null;
             }
@@ -1366,6 +1503,8 @@ namespace FoodTrucks
             // The walk from the door's NavMesh point (null from a point set in data, or with no walk start).
             public string? Walk;
             public float? WalkMetres, StraightMetres;
+            // Whether the straight walk from the door crosses no driving lane (Core BaySide); null with no door.
+            public bool? SameSide;
             // The place the automatic search picks from this origin.
             public bool Automatic;
             // Why the automatic search passes this place over ("farther than the automatic pick" when it takes a nearer
@@ -1379,41 +1518,88 @@ namespace FoodTrucks
             public double X, Z;
             public Vector3? Door;
             public string WalkStart = "";
+            // A point set in data: whether it is itself on the door's side (null for an entrance, which is the door).
+            public bool? SameSide;
             public int Colliders;
             public bool Truncated;
             public List<BayCandidate> Candidates = new List<BayCandidate>();
         }
 
-        // Legal truck spots (the game's wheel test, as BaySnap's) within radius of each of a commissary's search origins,
-        // nearest first, each with its walk from the door and why the automatic search (BaySnap.MaxMetres, the walk
-        // rule) would pass it over. Reads only; nothing is stored. For measuring a bay point by hand.
-        internal static (string Status, List<BayCandidateOrigin> Origins) BayCandidatesForTesting(string siteId, double radius)
+        // Legal truck spots (the game's wheel test, as BaySnap's) within radius of each search origin, nearest first, each
+        // with its walk from the door, whether it is on the door's side of the street (Core BaySide) and why the automatic
+        // search (BaySnap.MaxMetres, the side and walk rules) would pass it over. The origins are a commissary's (its
+        // entrances, or the point set in data), or with an address any building's entrances, searched as a commissary's
+        // would be: for scouting a new garage. Reads only; nothing is stored. Status is null for an address.
+        internal static (string? Status, List<BayCandidateOrigin> Origins) BayCandidatesForTesting(string? siteId, string? address, double radius)
         {
-            var site = Sites?.Site(siteId) ?? throw new InvalidOperationException($"no commissary {siteId}");
-            var origins = Origins(site) ?? throw new InvalidOperationException($"{siteId}'s building isn't in the city yet");
+            CommissarySite? site = null;
+            List<(double X, double Z)> origins;
+            if (siteId != null)
+            {
+                site = Sites?.Site(siteId) ?? throw new InvalidOperationException($"no commissary {siteId}");
+                address = site.Address;
+                origins = Origins(site) ?? throw new InvalidOperationException($"{siteId}'s building isn't in the city yet");
+            }
+            else
+            {
+                if (address == null) throw new InvalidOperationException("bay_candidates needs a site or an address");
+                var entrances = World.EntrancesOf(address) ?? throw new InvalidOperationException($"no building at {address} in this city");
+                if (entrances.Length == 0) throw new InvalidOperationException($"the building at {address} has no entrance");
+                origins = entrances.Select(d => ((double)d.x, (double)d.z)).ToList();
+            }
+            var name = siteId ?? address!;
+            var measured = site?.Bay != null;
             if (!Legality.ParkingSceneReady()) throw new InvalidOperationException("the city's parking lanes aren't loaded yet; try again in a few seconds");
             var started = Time.realtimeSinceStartup;
-            var resolved = ResolvedBays(site);
-            var status = resolved == null ? "pending" : resolved.Count == 0 ? "failed" : "resolved";
-            var doors = World.EntrancesOf(site.Address);
+            string? status = null;
+            if (site != null)
+            {
+                var resolved = ResolvedBays(site);
+                status = resolved == null ? "pending" : resolved.Count == 0 ? "failed" : "resolved";
+            }
+            var doors = World.EntrancesOf(address!);
             var result = new List<BayCandidateOrigin>();
             foreach (var origin in origins)
             {
                 var door = doors == null || doors.Length == 0 ? (Vector3?)null : doors.OrderBy(d => Flat(d, origin)).First();
-                var entry = new BayCandidateOrigin { Kind = site.Bay != null ? "data" : "entrance", X = origin.X, Z = origin.Z, Door = door };
+                var entry = new BayCandidateOrigin { Kind = measured ? "data" : "entrance", X = origin.X, Z = origin.Z, Door = door };
                 var centre = new Vector3((float)origin.X, door?.y ?? PlayerHelper.GetPosition().y, (float)origin.Z);
                 // Wide enough for the automatic search's 30 m too, so its pick never changes with the listing radius
                 // (review round 2, Astra and Sol).
                 var probe = new Legality.ParkingProbe(centre, (float)Math.Max(radius, BaySnap.MaxMetres) + 8f);
                 entry.Colliders = probe.Count;
                 entry.Truncated = probe.Truncated;
+                // The side rule's lanes, read for the whole listing radius.
+                List<((double X, double Z) A, (double X, double Z) B)>? sideLanes = null;
+                var laneless = false;
+                if (door != null)
+                {
+                    var side = SideLanes(door.Value, origin, Math.Max(radius, BaySnap.MaxMetres));
+                    sideLanes = side.Lanes ?? throw new InvalidOperationException(side.Why.Length > 0
+                        ? "the traffic lanes couldn't be read (" + side.Why + "); try again in a few seconds"
+                        : "the traffic system isn't ready to check the door's street; try again in a few seconds");
+                    // No lane at all: the side is unknown, as the search treats it (it waits and tries again).
+                    if (sideLanes.Count == 0)
+                    {
+                        laneless = true;
+                        sideLanes = null;
+                    }
+                }
+                bool? SameSideOf(double x, double z) =>
+                    door == null || sideLanes == null ? (bool?)null : BaySide.SameSide(door.Value.x, door.Value.z, x, z, sideLanes);
                 Vector3? walkStart = null;
                 var cutOff = false;
-                if (site.Bay != null) entry.WalkStart = "none (a point set in data is trusted)";
+                var measuredAcross = false;
+                if (measured)
+                {
+                    entry.SameSide = SameSideOf(origin.X, origin.Z);
+                    measuredAcross = entry.SameSide == false;
+                    entry.WalkStart = "none (a point set in data is trusted for its walk; its side is checked from the nearest door)";
+                }
                 else if (door == null) entry.WalkStart = "none (no entrance)";
                 else
                 {
-                    var from = WalkFrom(site.Id, door.Value);
+                    var from = WalkFrom(name, door.Value);
                     switch (from.Kind)
                     {
                         case WalkStart.Door: walkStart = from.Point; entry.WalkStart = "door"; break;
@@ -1422,20 +1608,27 @@ namespace FoodTrucks
                         default: throw new InvalidOperationException("the traffic system isn't ready to check the door's street; try again in a few seconds");
                     }
                 }
-                // The automatic pick is the bay search's own: Nearest within BaySnap.MaxMetres with the same walk rule
-                // (from the door's NavMesh point when it has a short walk to the street; none from a point set in data
-                // or a door off the NavMesh; nothing at all from a door cut off from the street).
+                // The automatic pick is the bay search's own: Nearest within BaySnap.MaxMetres with the same rules (the side
+                // from the door; the walk from the door's NavMesh point when it has a short walk to the street, none from a
+                // point set in data or a door off the NavMesh), and nothing at all from a door cut off from the street, a
+                // point set in data that is itself across the road, or an origin with no door.
                 Func<double, double, bool>? reach = null;
-                if (!cutOff && walkStart != null)
+                if (!cutOff && sideLanes != null)
                 {
-                    var reachFrom = walkStart.Value;
-                    reach = (x, z) => WalkRule.Accepts(Walk(reachFrom, x, z));
+                    var doorX = (double)door!.Value.x;
+                    var doorZ = (double)door.Value.z;
+                    var lanes = sideLanes;
+                    var reachFrom = walkStart;
+                    reach = (x, z) => BaySide.SameSide(doorX, doorZ, x, z, lanes) && (reachFrom == null || WalkRule.Accepts(Walk(reachFrom.Value, x, z)));
                 }
-                var listed = BaySnap.CandidatesWithPick(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), radius, reach, automatic: !cutOff);
+                var automatic = !cutOff && !measuredAcross && door != null && !laneless;
+                var listed = BaySnap.CandidatesWithPick(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), radius, reach, automatic,
+                    measured ? site!.BayHeading : null);
                 var pick = listed.Automatic;
                 foreach (var c in listed.Places)
                 {
                     var candidate = new BayCandidate { X = c.X, Z = c.Z, Heading = Math.Atan2(c.AlongX, c.AlongZ) * 180 / Math.PI, Distance = c.Distance };
+                    candidate.SameSide = SameSideOf(c.X, c.Z);
                     WalkVerdict? verdict = null;
                     if (walkStart != null)
                     {
@@ -1450,17 +1643,22 @@ namespace FoodTrucks
                     }
                     if (ReferenceEquals(c, pick)) candidate.Automatic = true;
                     else if (c.Distance > BaySnap.MaxMetres + 1e-9) candidate.Rejected = $"beyond the automatic search's {BaySnap.MaxMetres:F0} m";
+                    else if (door == null) candidate.Rejected = "no entrance to check the street's side from, so the automatic search takes nothing here";
+                    else if (laneless) candidate.Rejected = "no driving lanes found round the door, so the street's side can't be checked and the automatic search waits";
                     else if (cutOff) candidate.Rejected = "the door has no short walk to the street, so the automatic search takes nothing from it";
+                    else if (measuredAcross) candidate.Rejected = "the point set in data is across the road from the door, so the automatic search takes nothing from it";
+                    else if (candidate.SameSide == false) candidate.Rejected = "across the road from the door";
                     else if (verdict == WalkVerdict.TooLong) candidate.Rejected = "too long a walk from the door";
                     else if (verdict == WalkVerdict.NoRoute) candidate.Rejected = "no walking route from the door";
                     else if (pick != null && c.Distance > pick.Distance) candidate.Rejected = "farther than the automatic pick";
-                    else candidate.Rejected = "not taken by the automatic search (it passes over cells within 3 m of one it rejected for its walk)";
+                    else candidate.Rejected = "not taken by the automatic search (it passes over cells within 3 m of one it rejected for its side or walk)";
                     entry.Candidates.Add(candidate);
                 }
                 result.Add(entry);
             }
-            Log.Info($"Commissary {siteId}: bay candidates within {radius:F0} m (test bridge): " +
+            Log.Info($"{(siteId != null ? "Commissary " + siteId : "Building " + address)}: bay candidates within {radius:F0} m (test bridge): " +
                      string.Join("; ", result.Select(o => $"from {o.Kind} x {o.X:F1}, z {o.Z:F1}: {o.Candidates.Count} legal, " +
+                                                          $"{o.Candidates.Count(c => c.SameSide == true)} on the door's side, " +
                                                           $"{o.Candidates.Count(c => c.Automatic)} the automatic pick")) + $"; {(Time.realtimeSinceStartup - started) * 1000f:F0} ms.");
             return (status, result);
         }

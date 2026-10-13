@@ -47,7 +47,7 @@ namespace FoodTrucks.Core.Commissary
     public static class BaySnap
     {
         // Bumped when the rule changes, so bays stored in saves are searched again.
-        public const int RuleVersion = 2;
+        public const int RuleVersion = 4;
         public const double MaxMetres = 30;
         public const double StepMetres = 0.5;
         // Margins beyond the real wheel hubs (Sol and Astra, review round 4: 0.9.9's ±0.85 m was inside the truck's
@@ -158,10 +158,12 @@ namespace FoodTrucks.Core.Commissary
         // this origin (a door cut off from the street). Nearest first.
         public static BayCandidates CandidatesWithPick(double x, double z, Func<double, double, double, double, bool> legal,
             Func<double, double, IEnumerable<(double X, double Z)>> axes, WheelFootprint footprint, double radius,
-            Func<double, double, bool>? reach, bool automatic = true)
+            Func<double, double, bool>? reach, bool automatic = true, double? heading = null)
         {
-            var list = Candidates(x, z, legal, axes, footprint, radius).ToList();
-            BaySnapResult? pick = automatic ? Nearest(x, z, legal, axes, footprint, MaxMetres, reach) : null;
+            // A measured nose-in bay lists and picks only places facing its own way (Measured).
+            var listAxes = heading == null ? axes : FixedAxis(axes, HeadingAxis(heading.Value));
+            var list = Candidates(x, z, legal, listAxes, footprint, radius).ToList();
+            BaySnapResult? pick = automatic ? Measured(x, z, heading, legal, axes, footprint, MaxMetres, reach) : null;
             if (pick != null)
             {
                 // The pick itself is listed, exactly as Nearest found it: a candidate within SamePickMetres is the same
@@ -173,6 +175,40 @@ namespace FoodTrucks.Core.Commissary
         }
 
         public const double SamePickMetres = 0.05;
+
+        // A heading in degrees clockwise from +z (as the log writes them) as a unit direction on the ground.
+        public static (double X, double Z) HeadingAxis(double degrees)
+        {
+            var radians = degrees * Math.PI / 180;
+            return (Math.Sin(radians), Math.Cos(radians));
+        }
+
+        // The parking lane's axes replaced by one fixed direction wherever there is parking: a measured nose-in bay in a
+        // lot is searched only facing its own way (the stalls' row reads as one lane running across them).
+        public static Func<double, double, IEnumerable<(double X, double Z)>> FixedAxis(Func<double, double, IEnumerable<(double X, double Z)>> axes, (double X, double Z) along)
+        {
+            if (axes == null) throw new ArgumentNullException(nameof(axes));
+            var only = new[] { along };
+            return (x, z) => axes(x, z).Any() ? only : Array.Empty<(double X, double Z)>();
+        }
+
+        // The place a measured bay gives. With a heading (nose-in in a lot): the point itself, facing that way, when the
+        // truck's wheels with their clearance pass the game's test there and reach accepts it, uncentred, so the truck
+        // stands in the stall chosen by hand; else the nearest legal place facing that way (Nearest with FixedAxis).
+        // Without a heading: Nearest as for an entrance. Null when nothing is legal within maxMetres.
+        public static BaySnapResult? Measured(double x, double z, double? heading, Func<double, double, double, double, bool> legal,
+            Func<double, double, IEnumerable<(double X, double Z)>> axes, WheelFootprint footprint, double maxMetres = MaxMetres,
+            Func<double, double, bool>? reach = null)
+        {
+            if (legal == null) throw new ArgumentNullException(nameof(legal));
+            if (axes == null) throw new ArgumentNullException(nameof(axes));
+            if (footprint == null) throw new ArgumentNullException(nameof(footprint));
+            if (heading == null) return Nearest(x, z, legal, axes, footprint, maxMetres, reach);
+            var along = HeadingAxis(heading.Value);
+            if (Fits(x, z, along, footprint.WithClearance(ClearanceAlongMetres, ClearanceAcrossMetres), legal) && (reach == null || reach(x, z)))
+                return new BaySnapResult(x, z, along.X, along.Z, 0);
+            return Nearest(x, z, legal, FixedAxis(axes, along), footprint, maxMetres, reach);
+        }
 
         public const double CandidateSpacingMetres = 4;
         public const int CandidateLimit = 60;
@@ -371,7 +407,12 @@ namespace FoodTrucks.Core.Commissary
             return set;
         }
 
-        public static CommissaryBaySet Store(CommissaryState state, string siteId, IReadOnlyList<(double X, double Z)> origins, IEnumerable<BaySnapResult> found)
+        public static CommissaryBaySet Store(CommissaryState state, string siteId, IReadOnlyList<(double X, double Z)> origins, IEnumerable<BaySnapResult> found) =>
+            Store(state, siteId, origins, found.Select(b => (b, ((double X, double Z)?)null)));
+
+        // Each bay with the entrance its side was checked from, kept for "in the bay" (OnDoorSide).
+        public static CommissaryBaySet Store(CommissaryState state, string siteId, IReadOnlyList<(double X, double Z)> origins,
+            IEnumerable<(BaySnapResult Bay, (double X, double Z)? Door)> found)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (string.IsNullOrWhiteSpace(siteId)) throw new ArgumentException("A bay needs its commissary.", nameof(siteId));
@@ -379,7 +420,10 @@ namespace FoodTrucks.Core.Commissary
             {
                 Rule = BaySnap.RuleVersion,
                 Origins = origins.Select(o => new CommissaryPoint { X = o.X, Z = o.Z }).ToList(),
-                Points = found.Select(b => new CommissaryBayPoint { X = b.X, Z = b.Z, AlongX = b.AlongX, AlongZ = b.AlongZ }).ToList()
+                Points = found.Select(f => new CommissaryBayPoint
+                {
+                    X = f.Bay.X, Z = f.Bay.Z, AlongX = f.Bay.AlongX, AlongZ = f.Bay.AlongZ, DoorX = f.Door?.X, DoorZ = f.Door?.Z
+                }).ToList()
             };
             state.Bays ??= new Dictionary<string, CommissaryBaySet>(StringComparer.Ordinal);
             state.Bays[siteId] = set;
@@ -391,6 +435,7 @@ namespace FoodTrucks.Core.Commissary
             if (set == null || set.Origins == null || set.Points == null || set.Origins.Count == 0) return false;
             if (set.Origins.Any(o => o == null || !Finite(o.X) || !Finite(o.Z))) return false;
             return set.Points.All(p => p != null && Finite(p.X) && Finite(p.Z) && Finite(p.AlongX) && Finite(p.AlongZ) &&
+                                       (p.DoorX == null) == (p.DoorZ == null) && (p.DoorX == null || (Finite(p.DoorX.Value) && Finite(p.DoorZ!.Value))) &&
                                        Math.Abs(Math.Sqrt(p.AlongX * p.AlongX + p.AlongZ * p.AlongZ) - 1) < 0.01);
         }
 
@@ -402,6 +447,39 @@ namespace FoodTrucks.Core.Commissary
         // In the bay: legally parked by the game's wheel test, and the middle within the radius of a bay point.
         public static bool InBay(IEnumerable<CommissaryBayPoint>? points, double x, double z, double radius, bool legallyParked) =>
             legallyParked && WithinRadius(points, x, z, radius);
+
+        // Whether a vehicle at (x, z) stands on the door's side of the street of a bay point it is within the radius of
+        // (Peter, 13 October 2026; review round 1, Astra and Sol: the opposite kerb is within 15 m too): the straight
+        // walk from the entrance that point was checked from to the vehicle's middle crosses no driving lane (BaySide).
+        // lanes gives the driving lanes round a point's entrance, null when they can't be read. True when some point
+        // within the radius says so; null (unknown) when none does and a point's side couldn't be checked (no entrance
+        // stored, the lanes unread, or no lane found at all: every street has lanes, so finding none means the read
+        // missed them, review round 1, Opus); false otherwise, including no point within the radius. Never true by
+        // default.
+        public static bool? OnDoorSide(IEnumerable<CommissaryBayPoint>? points, double x, double z, double radius,
+            Func<CommissaryBayPoint, IReadOnlyList<((double X, double Z) A, (double X, double Z) B)>?> lanes)
+        {
+            if (lanes == null) throw new ArgumentNullException(nameof(lanes));
+            if (points == null) return false;
+            var unknown = false;
+            foreach (var p in points)
+            {
+                if (p == null || BaySnap.Distance(p.X, p.Z, x, z) > radius) continue;
+                if (p.DoorX is not { } doorX || p.DoorZ is not { } doorZ)
+                {
+                    unknown = true;
+                    continue;
+                }
+                var read = lanes(p);
+                if (read == null || read.Count == 0)
+                {
+                    unknown = true;
+                    continue;
+                }
+                if (BaySide.SameSide(doorX, doorZ, x, z, read)) return true;
+            }
+            return unknown ? (bool?)null : false;
+        }
 
         public static bool WithinRadius(IEnumerable<CommissaryBayPoint>? points, double x, double z, double radius) =>
             points != null && points.Any(p => BaySnap.Distance(p.X, p.Z, x, z) <= radius);

@@ -160,6 +160,68 @@ namespace FoodTrucks
             return "no sign (" + (tried.Count == 0 ? "the longest stretch is too short for a spot" : string.Join("; ", tried)) + ")";
         }
 
+        // The sign of a nose-in bay in a lot (CommissarySite.InLot): past the stall's head, the end the truck's nose
+        // points to (head +1 is the paint's local +x), on the first step up of 8 cm or more (a kerb) or the first point
+        // off the parking and the road that is on the NavMesh (the pavement's edge), within 3 m of the paint's end,
+        // PoleBehindKerb further on, its plate facing back along the stall to the aisle. Without either there is no sign:
+        // a lot has no kerb beside the paint to put one on.
+        public static string SignAtHead(Transform root, string siteId, (float From, float To) longest, int head, Func<Vector3, float> groundAt)
+        {
+            var model = Model("BaySign");
+            if (model == null) return "no sign (model missing)";
+            var end = head > 0 ? longest.To : longest.From;
+            var tried = new List<string>();
+            foreach (var across in new[] { 0f, 0.6f, -0.6f })
+            {
+                var endY = groundAt(root.TransformPoint(new Vector3(end, 0f, across)));
+                float? kerb = null;
+                var found = "";
+                for (var d = 0f; d <= 3f; d += 0.1f)
+                {
+                    var ground = groundAt(root.TransformPoint(new Vector3(end + head * d, 0f, across)));
+                    if (ground - endY >= 0.08f) { kerb = d; found = "a kerb"; break; }
+                }
+                if (kerb == null)
+                    for (var d = 0.2f; d <= 3f; d += 0.1f)
+                    {
+                        var p = root.TransformPoint(new Vector3(end + head * d, 0f, across));
+                        p.y = groundAt(p);
+                        if (!Legality.InParkingLane(p) && !Legality.RoadBelow(p) && NavMesh.SamplePosition(p, out _, 0.3f, NavMesh.AllAreas))
+                        {
+                            kerb = d;
+                            found = "the pavement's edge (no raised kerb)";
+                            break;
+                        }
+                    }
+                if (kerb == null)
+                {
+                    tried.Add($"{across:+0.0;-0.0} m across: no kerb and no pavement within 3 m of the stall's head");
+                    continue;
+                }
+                var at = root.TransformPoint(new Vector3(end + head * (kerb.Value + PoleBehindKerb), 0f, across));
+                at.y = groundAt(at);
+                var blocker = Physics.OverlapCapsule(at + Vector3.up * 0.3f, at + Vector3.up * 2.0f, 0.25f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                    .FirstOrDefault(c => c != null && !c.transform.IsChildOf(root) && !NotWall(c) && c.GetComponentInParent<ThirdPersonCharacter>() == null &&
+                                         ((1 << c.gameObject.layer) & (int)LayerHelper.humanLayerMask) == 0);
+                if (blocker != null)
+                {
+                    tried.Add($"{across:+0.0;-0.0} m across: the pole at x {at.x:F1}, z {at.z:F1} (behind {found}) would stand in {Describe(blocker)}");
+                    continue;
+                }
+                var sign = Object.Instantiate(model, root, false);
+                sign.name = "LoadingZoneSign";
+                sign.transform.position = at;
+                // The model's plate faces the root's +z; turned a quarter so it faces back along the stall (-head on x).
+                sign.transform.localRotation = Quaternion.Euler(0f, head > 0 ? -90f : 90f, 0f);
+                var plate = Material("M_BaySign_" + siteId);
+                if (plate != null)
+                    foreach (var renderer in sign.GetComponentsInChildren<MeshRenderer>(true))
+                        if (renderer.name.EndsWith("Plate", StringComparison.Ordinal)) renderer.sharedMaterial = plate;
+                return $"sign at x {at.x:F1}, z {at.z:F1}, at the stall's head, {PoleBehindKerb:F2} m behind {found} {kerb.Value:F1} m past the paint{(plate == null ? " (no named plate for " + siteId + ")" : "")}";
+            }
+            return "no sign (" + string.Join("; ", tried) + ")";
+        }
+
         private sealed class Prop
         {
             public Prop(string name, Func<Transform, GameObject?> make) { Name = name; Make = make; }

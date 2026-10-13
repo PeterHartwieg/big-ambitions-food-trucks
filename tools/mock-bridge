@@ -24,6 +24,9 @@ from ftlib.logcheck import read_rules
 from ftlib.shots import ROOT
 
 SITES = [s['id'] for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']]
+# Commissaries with a measured bay in data, and the city's buildings (the balance tool's list), for bay_candidates.
+MEASURED = {s['id']: s['bay'] for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries'] if s.get('bay')}
+BUILDINGS = {b['key'] for b in json.loads((ROOT / 'tools/balance/city.json').read_text())['buildings']}
 TUNING = json.loads((ROOT / 'data/rules.json').read_text())
 ECONOMY = json.loads((ROOT / 'data/economy.json').read_text())
 # Prices and base-game box sizes are fake; the quote and per-item protocol are real.
@@ -77,6 +80,8 @@ class Mock:
         self.operations = {}
         self.operation_waiters = {}
         self.stopped = False
+        # Sites whose measured bay is across the road from their door (tests set this).
+        self.measured_across = set()
         self.session = uuid.uuid4().hex
         self.lifecycle = 0
         self.next_op = 1
@@ -269,20 +274,54 @@ class Mock:
                  'entrance':{'x':393.2+i*100+5,'z':217.6} if self.bay_status.get(site,'resolved')=='resolved' else None} for i,site in enumerate(SITES)]
 
     def bay_candidates(self, args):
-        # The bridge's shape with made-up spots: one the automatic search takes, one past a long walk, one beyond 30 m.
-        site=need(args,'site',"the commissary's id")
+        # The bridge's shape with made-up spots: one the automatic search takes, one past a long walk, one across the road
+        # from the door, one beyond 30 m. With "address" any building's entrances are the origins (no status). A site
+        # with a measured bay has one "data" origin at that point, checked for its side from the nearest door.
+        site=args.get('site'); address=args.get('address')
+        if (site is None)==(address is None):
+            raise ValueError('bay_candidates needs "site" (a commissary\'s id) or "address" (any building, as ba:street_…#N), not both.')
+        if address is not None and not (isinstance(address,str) and re.fullmatch(r'ba:street_[a-z0-9]+#[0-9]+',address)):
+            raise ValueError(f'"address" is a building\'s address as the game writes it, ba:street_<name>#<number>; got \'{address}\'.')
+        if address is not None and address not in BUILDINGS:
+            raise ValueError(f'no building at {address} in this city')
         radius=num(args,'radius')
         radius=60 if radius is None else float(round(radius))
         if radius<5 or radius>80: raise ValueError('radius is 5 to 80 metres.')
-        if site not in SITES: raise ValueError(f'no commissary {site}')
-        i=SITES.index(site); x=393.2+i*100+5; z=217.6
-        spots=[(x-11.4,z-5.6,180.,12.7,'short',14.2,12.5,True,None),
-               (x+9.0,z+14.0,90.,16.6,'too_long',61.0,16.0,False,'too long a walk from the door'),
-               (x-36.0,z+20.0,180.,41.2,'short',44.0,41.0,False,"beyond the automatic search's 30 m")]
-        return {'site':site,'status':self.bay_status.get(site,'resolved'),'radius':radius,'max_metres':30,
-                'origins':[{'kind':'entrance','x':x,'z':z,'door':{'x':x,'y':0.1,'z':z},'walk_start':'door','parking_colliders':42,'truncated':False,
-                            'candidates':[{'x':round(a,2),'z':round(b,2),'heading':h,'distance':d,'walk':w,'walk_m':wm,'straight_m':sm,'automatic':auto,'rejected':why}
-                                          for a,b,h,d,w,wm,sm,auto,why in spots if d<=radius]}]}
+        if site is not None:
+            site=str(site)
+            if site not in SITES: raise ValueError(f'no commissary {site}')
+            i=SITES.index(site)
+        else:
+            i=len(SITES)
+        dx=393.2+i*100+5; dz=217.6
+        measured=MEASURED.get(site) if site is not None else None
+        across=site in self.measured_across
+        x,z=(measured['x'],measured['z']) if measured else (dx,dz)
+        spots=[(x-11.4,z-5.6,180.,12.7,'short',14.2,12.5,True,True,None),
+               (x+9.0,z+14.0,90.,16.6,'too_long',61.0,16.0,True,False,'too long a walk from the door'),
+               (x-14.0,z+12.0,180.,18.4,'short',19.0,18.4,False,False,'across the road from the door'),
+               (x-36.0,z+20.0,180.,41.2,'short',44.0,41.0,True,False,"beyond the automatic search's 30 m")]
+        if measured:
+            # From a point set in data: no walks, the side checked from the nearest door; nothing automatic when the
+            # point itself is across the road. With a heading (nose-in in a lot) every spot faces that way and the
+            # automatic pick is the point itself.
+            measured_text='the point set in data is across the road from the door, so the automatic search takes nothing from it'
+            heading=measured.get('heading')
+            if heading is not None:
+                spots=[(x,z,heading,0.0,'short',None,None,True,True,None)]+[(a,b,heading,d,w,wm,sm,side,False,why) for a,b,h,d,w,wm,sm,side,auto,why in spots]
+            def reason(d,side,auto,why):
+                if d>30: return why
+                if across: return measured_text
+                if side is False: return 'across the road from the door'
+                return None if auto else 'farther than the automatic pick'
+            spots=[(a,b,h,d,None,None,None,side,auto and not across,reason(d,side,auto,why)) for a,b,h,d,w,wm,sm,side,auto,why in spots]
+        origin={'kind':'data' if measured else 'entrance','x':x,'z':z,'door':{'x':dx,'y':0.1,'z':dz},
+                'walk_start':'none (a point set in data is trusted for its walk; its side is checked from the nearest door)' if measured else 'door',
+                'same_side':(not across) if measured else None,'parking_colliders':42,'truncated':False,
+                'candidates':[{'x':round(a,2),'z':round(b,2),'heading':h,'distance':d,'walk':w,'walk_m':wm,'straight_m':sm,'same_side':side,'automatic':auto,'rejected':why}
+                              for a,b,h,d,w,wm,sm,side,auto,why in spots if d<=radius]}
+        return {'site':site,'address':address,'status':None if site is None else self.bay_status.get(site,'resolved'),'radius':radius,'max_metres':30,
+                'origins':[origin]}
 
     def require_bay(self, site):
         if self.bay_status.get(site)=='pending':
