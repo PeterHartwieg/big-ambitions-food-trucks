@@ -6,6 +6,8 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HOST="${1:-${BA_GAME_HOST:?Pass the ssh host of the Windows game PC, or set BA_GAME_HOST}}"
 PKG="$REPO/build/FoodTrucks"
 [ -f "$PKG/FoodTrucks.dll" ] || { echo "Build first: tools/build-mod.sh" >&2; exit 1; }
+. "$REPO/tools/game-lock.sh"
+require_lock_free_or_ours
 STAGE="FoodTrucks-staged-$(date +%Y%m%d%H%M%S)"
 scp -q -r "$PKG" "$HOST:$STAGE" < /dev/null
 scp -q "$REPO/build/FoodTrucks.sha256" "$HOST:$STAGE.sha256" < /dev/null

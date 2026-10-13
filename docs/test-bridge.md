@@ -23,6 +23,11 @@ The pieces:
 - It binds `127.0.0.1` only. The Mac reaches it through `ssh -L 8330:127.0.0.1:8330 homepc` (`tools/run-remote.sh tunnel`).
 - Commands that change a save (money, spawns, time jumps, debug actions) are for throwaway **FT** saves only. `load` and `new_game` refuse any save whose name doesn't start with `FT`, and the bridge refuses every changing command while the loaded save's name doesn't start with `FT`.
 
+
+### Sharing the game PC
+
+Several sessions test on homepc. `C:\Users\Peter\game-lock.txt` says who has the game: no file means free; the holder writes `owner:`, `since:`, `until:`, `game:` (what runs) and `rules:` lines and deletes the file when done. While another session holds it: no install, start, stop, quit or save load, and no bridge calls that change the game (`health`, `state` and `/events` are fine). `tools/run-remote.sh lock [minutes] [what]` and `unlock` take and release it under `BA_LOCK_OWNER` (default `Food Trucks session`); `start`, `stop` and `tools/install-remote.sh` refuse while someone else holds it, and `status` shows it.
+
 ## Transport
 
 All bodies are UTF-8 JSON. Every reply has `ok` and, next to it, `session`: 8 hex characters the bridge picks at random each time it starts. A different `session` means the game or the mod restarted, and nothing a client knew from before (operation numbers, event numbers, state) holds. A `/call` body may carry `"expect_session": "<8 hex>"`; when it differs from the current session the call is refused before it is numbered or queued: `{ "ok": false, "session": "<current>", "error": "the bridge restarted (session <current>); reconnect first." }`. A failed call has `ok: false` and `error` (one sentence a person can act on).

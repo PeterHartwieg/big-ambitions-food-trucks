@@ -8,16 +8,24 @@
 #   wait         wait until the bridge answers /health (up to BA_BRIDGE_WAIT seconds, default 180)
 #   stop         ask the bridge to quit the game and wait up to 120 s for it to close; never kills
 #   stop --force the same, then kill the game if it is still running, but only a game started with -foodtrucks-test
+#   lock [minutes] [what]   take the game PC's lock (tools/game-lock.sh); unlock   release it
+# start and stop refuse while another session holds the lock.
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-ACTION="${1:?status, start, tunnel, tunnel-stop, wait or stop}"
+ACTION="${1:?status, start, tunnel, tunnel-stop, wait, stop, lock or unlock}"
 FORCE=false
 if [ "${2:-}" = "--force" ]; then FORCE=true; shift; fi
+LOCK_ARGS=()
+if [ "$ACTION" = lock ]; then
+  # lock [minutes] [what] [ssh host]: the host comes last here, so it can still be left to BA_GAME_HOST.
+  [ -n "${2:-}" ] && LOCK_ARGS+=("$2"); [ -n "${3:-}" ] && LOCK_ARGS+=("$3"); set -- "$1" "${4:-}"
+fi
 HOST="${2:-${BA_GAME_HOST:?Pass the ssh host of the Windows game PC, or set BA_GAME_HOST}}"
 PORT=8330
 URL="http://127.0.0.1:$PORT"
 PIDFILE="$REPO/build/bridge-tunnel.pid"
 mkdir -p "$REPO/build"
+. "$REPO/tools/game-lock.sh"
 
 remote() {
   scp -q "$REPO/tools/Game-Windows.ps1" "$HOST:Game-FoodTrucks.ps1" < /dev/null
@@ -52,8 +60,14 @@ wait_bridge() {
 }
 
 case "$ACTION" in
-  status) remote status ;;
+  status)
+    remote status
+    text="$(lock_text)"; if [ -n "$text" ]; then echo "Lock:"; sed 's/^/  /' <<<"$text"; else echo "Lock: free."; fi
+    ;;
+  lock) take_lock "${LOCK_ARGS[@]}" ;;
+  unlock) drop_lock ;;
   start)
+    require_lock_free_or_ours
     remote start
     open_tunnel
     wait_bridge
@@ -65,6 +79,7 @@ case "$ACTION" in
     ;;
   wait) wait_bridge ;;
   stop)
+    require_lock_free_or_ours
     status="$(remote status)"
     if grep -q 'Game: not running' <<<"$status"; then
       echo "Game: not running."
