@@ -214,14 +214,20 @@ namespace FoodTrucks
             var hits = Physics.RaycastAll(from, -outward, rayMetres, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
                 .Where(h => h.collider != null && !NotWall(h.collider)).OrderBy(h => h.distance).ToList();
             // A building surface more than 6 m in front of the door point is something else on the pavement (a kiosk).
-            var hit = hits.FirstOrDefault(h => BuildingsLayer >= 0 && h.collider.gameObject.layer == BuildingsLayer && h.distance >= laneMetres - 6f);
+            // A building surface narrower than KioskMetres along the street is a newsstand or shelter on the pavement,
+            // not the facade (review round 7, Opus). The Buildings layer and its hover twin both count (review round 7,
+            // Sol: a building the cursor is over has its facade colliders moved to BuildingsOutlined).
+            var rayAlong = new Vector3(outward.z, 0f, -outward.x);
+            var hit = hits.FirstOrDefault(h => IsBuilding(h.collider) && h.distance >= laneMetres - 6f && WidthAlong(h.collider, rayAlong) >= KioskMetres);
             if (hit.collider == null)
                 hit = hits.FirstOrDefault(h => h.distance >= laneMetres - 3f && h.distance <= laneMetres + 1.5f);
             if (hit.collider != null)
                 facade = new Vector3(hit.point.x, door.y, hit.point.z);
             else
+                // Nothing solid at all: the buildings may still be streaming in, so it is tried again (MaxPropTries bounds
+                // it; review round 7, Opus). Only other things hit: settled.
                 return new Outcome($"no props by the door at x {door.x:F1}, z {door.z:F1}: no building wall on a ray at waist height from the driving lane at " +
-                                   $"x {from.x:F1}, z {from.z:F1} back {rayMetres:F0} m, {FacadeBehindDoorMetres:F0} m past the door ({(hits.Count == 0 ? "nothing solid hit" : "hit only " + string.Join(", ", hits.Take(3).Select(h => Describe(h.collider))))})", false);
+                                   $"x {from.x:F1}, z {from.z:F1} back {rayMetres:F0} m, {FacadeBehindDoorMetres:F0} m past the door ({(hits.Count == 0 ? "nothing solid hit" : "hit only " + string.Join(", ", hits.Take(3).Select(h => Describe(h.collider))))})", hits.Count == 0);
             if (hit.collider != null)
             {
                 var normal = hit.normal;
@@ -352,11 +358,27 @@ namespace FoodTrucks
 
         // Never a wall: anything that moves, and the player's own colliders (layer Player; the player's root collider
         // has no ThirdPersonCharacter above it).
-        private static bool NotWall(Collider c) =>
-            Moving(c) || c.gameObject.layer == PlayerLayer || c.transform.root.gameObject.layer == PlayerLayer;
+        // Parked and traffic cars too, by their layers (review round 7, Opus: on a narrow pavement a parked car could be
+        // the first solid surface and read as the facade).
+        private static bool NotWall(Collider c)
+        {
+            var layer = c.gameObject.layer;
+            return Moving(c) || layer == PlayerLayer || c.transform.root.gameObject.layer == PlayerLayer ||
+                   layer == LayerHelper.ParkedVehiclesLayerIndex || layer == LayerHelper.AiVehiclesLayerIndex || layer == LayerHelper.PlayerVehiclesLayerIndex;
+        }
 
-        private static readonly int PlayerLayer = LayerMask.NameToLayer("Player");
-        private static readonly int BuildingsLayer = LayerMask.NameToLayer("Buildings");
+        private static readonly int PlayerLayer = LayerHelper.PlayerLayerIndex;
+
+        private static bool IsBuilding(Collider c) => ((1 << c.gameObject.layer) & (int)LayerHelper.buildingAndOutlinesLayerMask) != 0;
+
+        // A collider's extent along a flat direction, from its world bounds.
+        private static float WidthAlong(Collider c, Vector3 along)
+        {
+            var e = c.bounds.extents;
+            return 2f * (Mathf.Abs(along.x) * e.x + Mathf.Abs(along.z) * e.z);
+        }
+
+        private const float KioskMetres = 4f;
         // How far behind the door point the facade ray looks for the wall.
         private const float FacadeBehindDoorMetres = 8f;
 

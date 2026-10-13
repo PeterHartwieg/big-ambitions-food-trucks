@@ -295,20 +295,27 @@ namespace FoodTrucks
             var half = handVehicle ? new Vector3(0.6f, 0.8f, 1.0f) : new Vector3(1.3f, 1.4f, 3.2f);
             var step = handVehicle ? 1.6f : 3.2f;
             var start = player.position + player.forward * distance;
-            var open = LayerHelper.groundLayerMask | (1 << LayerHelper.RoadsLayerIndex) | LayerHelper.parkingAreaLayerMask | LayerHelper.humanLayerMask;
-            var playerLayer = LayerMask.NameToLayer("Player");
-            bool Ignored(Collider c) => c == null || ((1 << c.gameObject.layer) & (int)open) != 0 || c.gameObject.layer == playerLayer ||
-                                        c.transform.root == player.root || c.GetComponentInParent<ThirdPersonCharacter>() != null;
+            // The box: everything solid but the ground, road and parking lanes, people included (review round 7, Sol);
+            // only the player is exempt, by its own colliders (review round 7, Astra: the root is GameManager's items
+            // container after a scooter dismount, so a root test exempted every owned vehicle).
+            var open = LayerHelper.groundLayerMask | (1 << LayerHelper.RoadsLayerIndex) | LayerHelper.parkingAreaLayerMask;
+            bool IsPlayer(Collider c) => c.gameObject.layer == LayerHelper.PlayerLayerIndex || c.transform.IsChildOf(player);
+            bool InBox(Collider c) => c != null && ((1 << c.gameObject.layer) & (int)open) == 0 && !IsPlayer(c);
+            // The sight line: walls only. People, vehicles and thin things (posts, trees, hydrants under 0.8 m across)
+            // don't hide the place (review round 7, Opus).
+            bool Wall(Collider c) => InBox(c) && ((1 << c.gameObject.layer) & (int)LayerHelper.humanLayerMask) == 0 &&
+                                     c.GetComponentInParent<ThirdPersonCharacter>() == null && c.GetComponentInParent<VehicleController>() == null &&
+                                     Mathf.Max(c.bounds.size.x, c.bounds.size.z) >= 0.8f;
             why = "";
             foreach (var (side, ahead) in new[] { (0, 0), (1, 0), (-1, 0), (2, 0), (-2, 0), (0, 1), (1, 1), (-1, 1), (0, 2) })
             {
                 var at = start + player.right * (side * step) + player.forward * (ahead * half.z * 2.4f);
                 var inBox = Physics.OverlapBox(at + Vector3.up * (half.y + 0.3f), half, player.rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
-                    .FirstOrDefault(c => !Ignored(c));
+                    .FirstOrDefault(InBox);
                 var eye = player.position + Vector3.up * 1.0f;
                 var target = at + Vector3.up * 1.0f;
                 var wall = Physics.RaycastAll(eye, target - eye, Vector3.Distance(eye, target), Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
-                    .Where(h => !Ignored(h.collider)).OrderBy(h => h.distance).Select(h => h.collider).FirstOrDefault();
+                    .Where(h => Wall(h.collider)).OrderBy(h => h.distance).Select(h => h.collider).FirstOrDefault();
                 if (inBox == null && wall == null) return at;
                 if (why.Length == 0)
                     why = inBox != null ? $"{BayProps.Describe(inBox)} stands there" : $"{BayProps.Describe(wall!)} is in the way from where you stand";
