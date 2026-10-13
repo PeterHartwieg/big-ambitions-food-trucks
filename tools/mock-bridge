@@ -269,20 +269,31 @@ class Mock:
                  'entrance':{'x':393.2+i*100+5,'z':217.6} if self.bay_status.get(site,'resolved')=='resolved' else None} for i,site in enumerate(SITES)]
 
     def bay_candidates(self, args):
-        # The bridge's shape with made-up spots: one the automatic search takes, one past a long walk, one beyond 30 m.
-        site=need(args,'site',"the commissary's id")
+        # The bridge's shape with made-up spots: one the automatic search takes, one past a long walk, one across the road
+        # from the door, one beyond 30 m. With "address" any building's entrances are the origins (no status).
+        site=args.get('site'); address=args.get('address')
+        if (site is None)==(address is None):
+            raise ValueError('bay_candidates needs "site" (a commissary\'s id) or "address" (any building, as ba:street_…#N), not both.')
+        if address is not None and not (isinstance(address,str) and re.fullmatch(r'ba:street_[a-z0-9]+#[0-9]+',address)):
+            raise ValueError(f'"address" is a building\'s address as the game writes it, ba:street_<name>#<number>; got \'{address}\'.')
         radius=num(args,'radius')
         radius=60 if radius is None else float(round(radius))
         if radius<5 or radius>80: raise ValueError('radius is 5 to 80 metres.')
-        if site not in SITES: raise ValueError(f'no commissary {site}')
-        i=SITES.index(site); x=393.2+i*100+5; z=217.6
-        spots=[(x-11.4,z-5.6,180.,12.7,'short',14.2,12.5,True,None),
-               (x+9.0,z+14.0,90.,16.6,'too_long',61.0,16.0,False,'too long a walk from the door'),
-               (x-36.0,z+20.0,180.,41.2,'short',44.0,41.0,False,"beyond the automatic search's 30 m")]
-        return {'site':site,'status':self.bay_status.get(site,'resolved'),'radius':radius,'max_metres':30,
-                'origins':[{'kind':'entrance','x':x,'z':z,'door':{'x':x,'y':0.1,'z':z},'walk_start':'door','parking_colliders':42,'truncated':False,
-                            'candidates':[{'x':round(a,2),'z':round(b,2),'heading':h,'distance':d,'walk':w,'walk_m':wm,'straight_m':sm,'automatic':auto,'rejected':why}
-                                          for a,b,h,d,w,wm,sm,auto,why in spots if d<=radius]}]}
+        if site is not None:
+            site=str(site)
+            if site not in SITES: raise ValueError(f'no commissary {site}')
+            i=SITES.index(site)
+        else:
+            i=len(SITES)
+        x=393.2+i*100+5; z=217.6
+        spots=[(x-11.4,z-5.6,180.,12.7,'short',14.2,12.5,True,True,None),
+               (x+9.0,z+14.0,90.,16.6,'too_long',61.0,16.0,True,False,'too long a walk from the door'),
+               (x-14.0,z+12.0,180.,18.4,'short',19.0,18.4,False,False,'across the road from the door'),
+               (x-36.0,z+20.0,180.,41.2,'short',44.0,41.0,True,False,"beyond the automatic search's 30 m")]
+        return {'site':site,'address':address,'status':None if site is None else self.bay_status.get(site,'resolved'),'radius':radius,'max_metres':30,
+                'origins':[{'kind':'entrance','x':x,'z':z,'door':{'x':x,'y':0.1,'z':z},'walk_start':'door','same_side':None,'parking_colliders':42,'truncated':False,
+                            'candidates':[{'x':round(a,2),'z':round(b,2),'heading':h,'distance':d,'walk':w,'walk_m':wm,'straight_m':sm,'same_side':side,'automatic':auto,'rejected':why}
+                                          for a,b,h,d,w,wm,sm,side,auto,why in spots if d<=radius]}]}
 
     def require_bay(self, site):
         if self.bay_status.get(site)=='pending':

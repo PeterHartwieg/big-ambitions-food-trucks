@@ -870,24 +870,31 @@ namespace FoodTrucks
             };
         }
 
-        // { "op": "bay_candidates", "site", "radius"? }: legal truck spots round the commissary's search origins, for
-        // measuring a bay point by hand. Reads only.
+        // { "op": "bay_candidates", "site" | "address", "radius"? }: legal truck spots round a commissary's search origins,
+        // or round any building's entrances (scouting a new garage), each with its walk and side of the street. Reads only.
         private const double CandidateRadiusDefault = 60;
         private const double CandidateRadiusMax = 80;
+        private static readonly System.Text.RegularExpressions.Regex AddressForm = new System.Text.RegularExpressions.Regex(@"^ba:street_[a-z0-9]+#[0-9]+$");
 
         private static JToken BayCandidates(JObject args)
         {
-            var site = Need(args, "site", "the commissary's id");
+            var site = Str(args, "site");
+            var address = Str(args, "address");
+            if ((site == null) == (address == null))
+                throw new BridgeError("bay_candidates needs \"site\" (a commissary's id) or \"address\" (any building, as ba:street_…#N), not both.");
+            if (address != null && !AddressForm.IsMatch(address))
+                throw new BridgeError($"\"address\" is a building's address as the game writes it, ba:street_<name>#<number>; got '{address}'.");
             // Whole metres: BaySnap caches one grid per radius for the session (review round 1, Opus).
             var radius = Math.Round(Num(args, "radius") ?? CandidateRadiusDefault);
             if (radius < 5 || radius > CandidateRadiusMax) throw new BridgeError($"radius is 5 to {CandidateRadiusMax:F0} metres.");
-            (string Status, List<global::FoodTrucks.Commissary.BayCandidateOrigin> Origins) found;
-            try { found = global::FoodTrucks.Commissary.BayCandidatesForTesting(site, radius); }
+            (string? Status, List<global::FoodTrucks.Commissary.BayCandidateOrigin> Origins) found;
+            try { found = global::FoodTrucks.Commissary.BayCandidatesForTesting(site, address, radius); }
             catch (InvalidOperationException ex) { throw new BridgeError(ex.Message); }
             JToken? Round(double? v) => v == null ? null : (JToken)Math.Round(v.Value, 2);
             return new JObject
             {
                 ["site"] = site,
+                ["address"] = address,
                 ["status"] = found.Status,
                 ["radius"] = radius,
                 ["max_metres"] = BaySnap.MaxMetres,
@@ -897,13 +904,14 @@ namespace FoodTrucks
                     ["x"] = Round(o.X), ["z"] = Round(o.Z),
                     ["door"] = o.Door == null ? null : new JObject { ["x"] = Round(o.Door.Value.x), ["y"] = Round(o.Door.Value.y), ["z"] = Round(o.Door.Value.z) },
                     ["walk_start"] = o.WalkStart,
+                    ["same_side"] = o.SameSide,
                     ["parking_colliders"] = o.Colliders,
                     ["truncated"] = o.Truncated,
                     ["candidates"] = new JArray(o.Candidates.Select(c => new JObject
                     {
                         ["x"] = Round(c.X), ["z"] = Round(c.Z), ["heading"] = Round(c.Heading), ["distance"] = Round(c.Distance),
                         ["walk"] = c.Walk, ["walk_m"] = Round(c.WalkMetres), ["straight_m"] = Round(c.StraightMetres),
-                        ["automatic"] = c.Automatic, ["rejected"] = c.Rejected,
+                        ["same_side"] = c.SameSide, ["automatic"] = c.Automatic, ["rejected"] = c.Rejected,
                     })),
                 })),
             };

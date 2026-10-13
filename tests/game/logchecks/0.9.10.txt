@@ -131,3 +131,6 @@ mod.propsLowerManhattan | must | Commissary props lower-manhattan(?:, try \d+)?:
 mod.spawnBlocked | count>=0 | Not spawned .+?: no room in front of or beside the player at x .+?, z .+? \(in front: .+?\)\. | row mod/M20
 mod.customersNone | count>=0 | Hardly any customers here right now|Hardly anyone comes by here right now | row mod/M23
 mod.customersZero | never | About 0 customers | row mod/M23
+bayside.noOldMeasured | never | Commissary hells-kitchen \(.+?\): bay searched from x 393\.2, z 217\.6 \(set in data\) | row bayside/B2
+bayside.measuredAcross | count>=0 | ERROR: Commissary [\w-]+ \(.+?\): the measured bay in data/commissaries\.json at x .+?, z .+? is across the road from the door | row bayside/B4
+bayside.buildingCandidates | must | Building ba:street_\w+#\d+: bay candidates within \d+ m \(test bridge\): .+? on the door's side, .+?; \d+ ms\. | row bayside/B7

@@ -223,6 +223,10 @@ namespace FoodTrucks
             return found;
         }
 
+        // The lanes' centre lines flat on the ground, for Core's BaySide (a bay on its door's side of the street).
+        public List<((double X, double Z) A, (double X, double Z) B)> FlatSegments() =>
+            segments.Select(s => (((double)s.A.x, (double)s.A.z), ((double)s.B.x, (double)s.B.z))).ToList();
+
         public bool Known => segments.Count > 0;
 
         public string Describe() => problem ?? $"{segments.Count} lane segments near";

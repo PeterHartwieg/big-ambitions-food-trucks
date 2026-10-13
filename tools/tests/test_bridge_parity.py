@@ -33,11 +33,27 @@ class ParityTests(unittest.TestCase):
         reply=self.mock.call('commissary',{'op':'bay_candidates','site':'murray-hill','radius':80})
         self.assertEqual(reply['max_metres'],30)
         origin=reply['origins'][0]
-        self.assertEqual(set(origin),{'kind','x','z','door','walk_start','parking_colliders','truncated','candidates'})
-        self.assertEqual(set(origin['candidates'][0]),{'x','z','heading','distance','walk','walk_m','straight_m','automatic','rejected'})
+        self.assertEqual(set(reply),{'site','address','status','radius','max_metres','origins'})
+        self.assertEqual((reply['site'],reply['address']),('murray-hill',None))
+        self.assertEqual(set(origin),{'kind','x','z','door','walk_start','same_side','parking_colliders','truncated','candidates'})
+        self.assertEqual(set(origin['candidates'][0]),{'x','z','heading','distance','walk','walk_m','straight_m','same_side','automatic','rejected'})
         self.assertEqual(sum(c['automatic'] for c in origin['candidates']),1)
-        self.assertEqual(len(self.mock.call('commissary',{'op':'bay_candidates','site':'murray-hill','radius':30})['origins'][0]['candidates']),2)
+        across=[c for c in origin['candidates'] if c['same_side'] is False]
+        self.assertEqual([c['rejected'] for c in across],['across the road from the door'])
+        self.assertTrue(all(c['same_side'] for c in origin['candidates'] if c['automatic']))
+        self.assertEqual(len(self.mock.call('commissary',{'op':'bay_candidates','site':'murray-hill','radius':30})['origins'][0]['candidates']),3)
         self.refused('commissary',{'op':'bay_candidates','site':'murray-hill','radius':81},'radius is 5 to 80 metres.')
+
+    def test_bay_candidates_for_any_building(self):
+        reply=self.mock.call('commissary',{'op':'bay_candidates','address':'ba:street_twentyfirststreet#4','radius':40})
+        self.assertEqual((reply['site'],reply['address'],reply['status']),(None,'ba:street_twentyfirststreet#4',None))
+        self.assertEqual({o['kind'] for o in reply['origins']},{'entrance'})
+        self.assertIn('same_side',reply['origins'][0]['candidates'][0])
+        both='bay_candidates needs "site" (a commissary\'s id) or "address" (any building, as ba:street_…#N), not both.'
+        self.refused('commissary',{'op':'bay_candidates','site':'murray-hill','address':'ba:street_twentyfirststreet#4'},both)
+        self.refused('commissary',{'op':'bay_candidates'},both)
+        self.refused('commissary',{'op':'bay_candidates','address':'21st Street 4'},
+                     '"address" is a building\'s address as the game writes it, ba:street_<name>#<number>; got \'21st Street 4\'.')
         self.refused('commissary',{'op':'nope','site':'murray-hill'},"Unknown commissary op 'nope': order, bay_candidates.")
 
     def test_driving_and_paused_op_errors(self):

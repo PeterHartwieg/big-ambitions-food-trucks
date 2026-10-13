@@ -21,12 +21,12 @@ public class CommissaryTablesTests
         Assert.InRange(tables.Sites.Count, 4, 6);
         Assert.Equal(tables.Sites.Count, tables.Sites.Select(s => s.Address).Distinct().Count());
         Assert.All(tables.Sites, s => Assert.StartsWith("foodtrucks:commissary_", s.Name));
-        // Measured bays: Hell's Kitchen's garage faces a no-parking kerb (the 0.9.8 agent run, 11 October 2026); the
-        // Garment District's and Murray Hill's doors have no NavMesh route to the street (live session 4, 13 October 2026).
-        Assert.Equal(new[] { "garment-district", "hells-kitchen", "murray-hill" }, tables.Sites.Where(s => s.Bay != null).Select(s => s.Id).ToArray());
-        var bay = tables.Site("hells-kitchen")!.Bay!.Value;
-        Assert.Equal(393.2, bay.X, 6);
-        Assert.Equal(217.6, bay.Z, 6);
+        // Measured bays: the Garment District's and Murray Hill's doors have no NavMesh route to the street (live session
+        // 4, 13 October 2026). Hell's Kitchen's went (Peter, 13 October 2026): it was across the road from the door.
+        Assert.Equal(new[] { "garment-district", "murray-hill" }, tables.Sites.Where(s => s.Bay != null).Select(s => s.Id).ToArray());
+        var bay = tables.Site("murray-hill")!.Bay!.Value;
+        Assert.Equal(43.8, bay.X, 6);
+        Assert.Equal(-281.8, bay.Z, 6);
     }
 
     // Saves keep a space, an order and stock by commissary ID only, so an address can move but an ID must stay.

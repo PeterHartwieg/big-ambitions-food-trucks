@@ -47,7 +47,7 @@ namespace FoodTrucks.Core.Commissary
     public static class BaySnap
     {
         // Bumped when the rule changes, so bays stored in saves are searched again.
-        public const int RuleVersion = 2;
+        public const int RuleVersion = 3;
         public const double MaxMetres = 30;
         public const double StepMetres = 0.5;
         // Margins beyond the real wheel hubs (Sol and Astra, review round 4: 0.9.9's ±0.85 m was inside the truck's
