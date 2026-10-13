@@ -1,3 +1,21 @@
+# Mod round after the bridge sessions (next build)
+
+Fixes for the mod findings of the three bridge sessions, on branch `mod-round`; no version bump, so the log says 0.9.10. Run with the bridge (`tools/run-remote.sh start homepc`) in **FT bridge**. The test bridge rows below still hold; row 36 there is still open.
+
+| # | Do | Look for |
+|---|---|---|
+| M1 | Load `FT bridge` with the player far from Hell's Kitchen | Once per resolved bay: `Commissary <site>: bay swept on load, N parked car(s) kept out.` Never `, K left` |
+| M2 | `teleport player place=commissary:hells-kitchen` from far away, then `shoot` the bay (`bay-road`, `bay-pavement`) | `Commissary hells-kitchen: the player jumped N m to within 150 m of the bay; swept before the frame was drawn, K parked cars kept out.` No car anywhere in the paint, ends included |
+| M3 | Run the clock past an hour with the player 100 to 150 m from the bay | No car in the paint afterwards; the minute line `kept N parked cars out of the bay (…)` if any were |
+| M4 | Load near Hell's Kitchen and walk to the door; `shoot` `door` | `Commissary props hells-kitchen: props by the door at x …, z … (facade facing …): pallet …, …`. Props against the facade, clear of the door, hydrant and walkway. Any `left out:` line in full, with what stands there |
+| M5 | Load the save again | For industry-city, garment-district and murray-hill: `… no bay in the save; searched again after load.`, then one `ERROR: Commissary <site>: no bay this load (…)` each, once per load |
+| M6 | `tools/ft call commissary op=bay_candidates site=<site> radius=80` for those three | A candidate list with walk lengths; log line `Commissary <site>: bay candidates within 80 m (test bridge): …`. Pick a spot with a short walk, teleport a truck there, check `legal` and shoot it |
+| M7 | Startup log | One `Patch ParkingSimulator.RunDaily: Active.` line |
+| M8 | Rent a truck space at Hell's Kitchen, park the truck legally in its bay, run the clock past midnight; keep a second truck on legal street parking | `Commissary hells-kitchen: no public parking for … tonight (in the rented bay).`; no "Public parking" debit for the bay truck; the street truck still pays. Commissary rent still paid |
+| M9 | Leave a truck in a commissary bay where it has no rented space, past midnight | The normal public parking charge; no skip line |
+| M10 | Open the truck, stand at the hatch, `shoot` `vehicle-side` and a shot from inside if a pose allows | The cash register is about a third of a metre wide, on the counter just cab-side of the player, screen towards the player, not floating, sunk or through the frame; the middle of the window is clear |
+| M11 | Same with crew serving (one, then three) | No body clips the register |
+
 # Test bridge (next build)
 
 The game side of the test bridge (`docs/test-bridge.md`): HTTP on `127.0.0.1:8330` inside the game, only when it starts with `-foodtrucks-test`, plus a `Notice:` or `Phone:` log line for every notice and text the mod shows. On `main`; no version bump, so the log says 0.9.10. Two live sessions so far (`build/logs/game/live1-end-214811`, `live2-end-082641`); the rows below marked "after live2" are fixes from them. Start the game once without the flag (rows 1 and 2), then with it: `tools/run-remote.sh start` runs `steam.exe -applaunch 1331550 -console -foodtrucks-test` on homepc. From the Mac, `ssh -L 8330:127.0.0.1:8330 homepc` and `curl http://127.0.0.1:8330/health`. Use a throwaway save named **FT bridge**, made from a **new character** of its own (start a new game, save it as FT bridge). Never make an FT save by saving a series city under a new name: the bridge refuses any save whose character also has saves not starting with FT.
