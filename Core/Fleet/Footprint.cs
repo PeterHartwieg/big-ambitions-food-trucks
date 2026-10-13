@@ -51,5 +51,44 @@ namespace FoodTrucks.Core.Fleet
             if (min == null || max == null) return null;
             return (min.Value, max.Value);
         }
+
+        // Whether two footprints on the ground overlap (separating axes), each grown by `margin` metres on every side.
+        // Height isn't looked at: the caller has already picked what stands at the vehicle's level.
+        public static bool Overlap(FlatBox a, FlatBox b, double margin = 0)
+        {
+            foreach (var axis in new[] { a.Forward, a.Right, b.Forward, b.Right })
+            {
+                var gap = Math.Abs((b.X - a.X) * axis.X + (b.Z - a.Z) * axis.Z);
+                if (gap > a.Reach(axis) + b.Reach(axis) + 2 * margin) return false;
+            }
+            return true;
+        }
+    }
+
+    // A footprint on the ground: its middle (x, z), the way it faces (a unit vector in x, z) and its half sizes.
+    public readonly struct FlatBox
+    {
+        public FlatBox(double x, double z, double forwardX, double forwardZ, double halfWidth, double halfLength)
+        {
+            var n = Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
+            if (n < 1e-9) throw new ArgumentException("A footprint needs a direction.", nameof(forwardX));
+            X = x;
+            Z = z;
+            Forward = (forwardX / n, forwardZ / n);
+            HalfWidth = Math.Abs(halfWidth);
+            HalfLength = Math.Abs(halfLength);
+        }
+
+        public double X { get; }
+        public double Z { get; }
+        public (double X, double Z) Forward { get; }
+        // Forward turned a quarter clockwise seen from above (Unity's right for a yaw).
+        public (double X, double Z) Right => (Forward.Z, -Forward.X);
+        public double HalfWidth { get; }
+        public double HalfLength { get; }
+
+        // Half the footprint's extent along a unit axis.
+        public double Reach((double X, double Z) axis) =>
+            HalfLength * Math.Abs(Forward.X * axis.X + Forward.Z * axis.Z) + HalfWidth * Math.Abs(Right.X * axis.X + Right.Z * axis.Z);
     }
 }

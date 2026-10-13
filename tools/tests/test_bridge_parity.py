@@ -166,7 +166,7 @@ class ParityTests(unittest.TestCase):
         self.assertIsNone(self.v['queue']);self.assertIsNone(self.v['route']);self.assertIsNone(self.v['commissary'])
         self.assertIsNone(self.mock.state['licence']['until_day'])
         pose=self.mock.call('teleport',{'who':'player','x':1.234,'z':2.345,'heading':-90})
-        self.assertEqual(pose,{'x':1.23,'y':0,'z':2.35,'heading':270})
+        self.assertEqual(pose,{'x':1.23,'y':0,'z':2.35,'heading':270,'surface':'the only ground surface, walkable'})
         self.mock.state['clock']['speed']=1.234
         self.assertEqual(self.mock.call('state',{})['clock']['speed'],1.23)
         cart=self.mock.spawn('cart')
@@ -212,6 +212,44 @@ class ParityTests(unittest.TestCase):
         runner.variables['truck']='truck-1'
         self.assertEqual(runner.resolve('vehicle:$truck'),'vehicle:truck-1')
         self.assertEqual(runner.resolve({'run_until':{'day':'+1','time':'08:05'}})['run_until']['day'],'+1')
+
+    # Live session 4 follow-ups (13 October 2026): needs in state, keep_needs on run_until, the teleport surface, the
+    # free camera and the shot's camera in the reply, health's time_skip.
+    def test_needs_in_state_and_kept_up_on_run_until(self):
+        needs=self.mock.call('state',{})['player']['needs']
+        self.assertEqual(set(needs),{'energy','hunger','happiness','max','collapse_at','energy_off','going_to_hospital','kept_up'})
+        self.refused('time',{'speed':2,'keep_needs':'yes'},'keep_needs must be true or false.')
+        self.assertTrue(self.mock.call('time',{'run_until':{'day':'+2','time':'07:00'},'speed':20})['keep_needs'])
+        self.mock.state['player']['needs']['energy']=39.5
+        self.mock.tick()
+        self.assertEqual(self.mock.state['player']['needs']['energy'],100.)
+        self.assertTrue(any(e['text'].startswith('Test bridge: needs topped up while the clock runs (energy 39.4 to 100.0') for e in self.mock.ring))
+        self.assertFalse(self.mock.call('time',{'run_until':{'day':'+2','time':'07:00'},'keep_needs':False})['keep_needs'])
+        self.assertFalse(self.mock.call('time',{'speed':4})['keep_needs'])
+        self.assertTrue(self.mock.call('time',{'speed':4,'keep_needs':True})['keep_needs'])
+        self.assertFalse(self.mock.call('time',{'pause':True,'keep_needs':True})['keep_needs'])
+
+    def test_teleport_reports_the_surface_and_a_vehicle_the_recheck(self):
+        reply=self.mock.call('teleport',{'who':'player','x':5,'z':6,'y':5})
+        self.assertIn('y asked for (5.00)',reply['surface'])
+        reply=self.mock.call('teleport',{'who':self.id,'x':5,'z':6})
+        self.assertEqual(reply['in_the_way_after'],[])
+        self.assertNotIn('surface',self.mock.call('teleport',{'who':'player','place':'vehicle:'+self.id}))
+
+    def test_free_camera_and_shot_reply(self):
+        reply=self.mock.call('shoot',{'name':'free','x':0,'y':1.65,'z':0,'look_at':{'x':10,'y':1.65,'z':0},'width':16,'height':16})
+        self.assertEqual(reply['camera'],{'x':0,'y':1.65,'z':0,'yaw':90.,'pitch':0.,'fov':60})
+        self.assertIsNone(reply['pose_note'])
+        self.refused('shoot',{'name':'both','x':0,'y':1,'z':0,'yaw':3,'look_at':{'x':1,'y':1,'z':1}},'shoot takes "look_at" or "yaw" and "pitch", not both.')
+        self.refused('shoot',{'name':'same','x':0,'y':1,'z':0,'look_at':{'x':0,'y':1,'z':0}},'look_at is where the camera stands; give a point away from it.')
+        self.refused('shoot',{'name':'bad','x':0,'y':1,'z':0,'look_at':{'x':0}},'look_at needs "x", "y" and "z".')
+        self.refused('shoot',{'name':'wide','x':0,'y':1,'z':0,'fov':150},'fov must be 5 to 120 degrees.')
+        self.assertEqual(self.mock.call('shoot',{'name':'pose','pose':'vehicle-side','target':self.id,'width':16,'height':16})['pose_note'],None)
+
+    def test_health_has_time_skip(self):
+        self.assertFalse(self.mock.health()['time_skip'])
+        self.mock.time_skip=True
+        self.assertTrue(self.mock.health()['time_skip'])
 
 
 if __name__=='__main__':unittest.main()

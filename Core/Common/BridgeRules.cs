@@ -1,0 +1,61 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace FoodTrucks.Core.Common
+{
+    // Choices the test bridge makes (docs/test-bridge.md), kept here so they are tested without the game.
+
+    // Which ground surface a teleport lands on, of the ones stacked above a point (a street under an elevated road).
+    // Live session 4 (13 October 2026): the highest surface put the player on the elevated highway.
+    public static class GroundPick
+    {
+        // `surfaces`: each surface's height and whether people can walk there (NavMesh within reach). An explicit y
+        // takes the surface nearest it; otherwise a walkable surface nearest the mover's own height, then any surface
+        // nearest it. Returns the index and a few words on why, for the reply.
+        public static (int Index, string Why) Choose(IReadOnlyList<(double Y, bool Walkable)> surfaces, double referenceY, double? explicitY)
+        {
+            if (surfaces == null || surfaces.Count == 0) throw new ArgumentException("No ground surfaces to choose from.", nameof(surfaces));
+            var all = Enumerable.Range(0, surfaces.Count).ToList();
+            string Heights() => string.Join(", ", surfaces.Select(s => s.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)));
+            int Nearest(IEnumerable<int> indexes, double y) => indexes.OrderBy(i => Math.Abs(surfaces[i].Y - y)).ThenBy(i => surfaces[i].Y).First();
+            if (explicitY != null)
+            {
+                var pick = Nearest(all, explicitY.Value);
+                return (pick, $"the surface nearest the y asked for ({explicitY.Value:F2}) of {surfaces.Count}: {Heights()}");
+            }
+            if (surfaces.Count == 1) return (0, surfaces[0].Walkable ? "the only ground surface, walkable" : "the only ground surface, not walkable");
+            var walkable = all.Where(i => surfaces[i].Walkable).ToList();
+            if (walkable.Count > 0)
+                return (Nearest(walkable, referenceY), $"the walkable surface nearest the mover's height ({referenceY:F2}) of {surfaces.Count}: {Heights()}");
+            return (Nearest(all, referenceY), $"the surface nearest the mover's height ({referenceY:F2}) of {surfaces.Count}, none walkable: {Heights()}");
+        }
+    }
+
+    // Keeping the player's needs up while the bridge runs the clock fast (live session 4: after two game days of
+    // run_until the character collapsed, the clock jumped to 08:00 the next day and the hospital charged $2,000).
+    public static class NeedsTopUp
+    {
+        // Topped up when energy or hunger falls below this (the game's scale is 0 to 100; it hospitalises at -20).
+        public const double Below = 40;
+
+        public static bool Due(double energy, double hunger) => energy < Below || hunger < Below;
+    }
+
+    // How far out a shot's camera may stand along its line from the subject, given the first solid thing on that line.
+    public static class ShotClearance
+    {
+        // Metres kept between the camera and the first hit.
+        public const double Margin = 0.4;
+
+        // `wanted`: the pose's distance; `firstHit`: the distance to the first solid thing from the subject, null when
+        // the line is clear; `minimum`: the nearest the pose still shows its subject. The distance to use, or null when
+        // the line is blocked nearer than that (then the next way round is tried).
+        public static double? Fit(double wanted, double? firstHit, double minimum)
+        {
+            if (firstHit == null || firstHit.Value >= wanted + Margin) return wanted;
+            var room = firstHit.Value - Margin;
+            return room >= minimum ? room : (double?)null;
+        }
+    }
+}

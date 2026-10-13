@@ -360,6 +360,11 @@ class MCPTests(unittest.TestCase):
             self.assertEqual(content[1]['type'],'image')
             self.assertTrue(base64.b64decode(content[1]['data']).startswith(b'\x89PNG'))
             self.assertTrue(Path(image['result']['structuredContent']['local_path']).exists())
+            free=request('tools/call',{'name':'ft_shoot','arguments':{'name':'mcp-free','x':0,'y':1.65,'z':0,'look_at':{'x':0,'y':1.65,'z':10},'fov':50,'timeout_s':30}})
+            self.assertFalse(free['result']['isError'],free)
+            self.assertEqual(free['result']['structuredContent']['result']['camera']['fov'],50)
+            mixed=request('tools/call',{'name':'ft_shoot','arguments':{'name':'mcp-mixed','x':0,'y':1,'z':0,'yaw':4,'look_at':{'x':1,'y':1,'z':1}}})
+            self.assertTrue(mixed['result']['isError'])
             invalid=request('tools/call',{'name':'ft_ui_click','arguments':{}})
             self.assertTrue(invalid['result']['isError'])
             self.assertEqual(request('unknown')['error']['code'],-32601)
@@ -407,6 +412,18 @@ class CLIAndShotsTests(unittest.TestCase):
             reply=run('call','time','run_until.day=2','run_until.time=08:05','speed=20','--raw')
             self.assertEqual(reply.returncode,0,reply.stderr)
             self.assertTrue(json.loads(reply.stdout)['ok'])
+            # A free camera from the command line (live session 4 had to send it as a raw call).
+            reply=run('--json','shoot','free-cli','--at','1,1.7,2','--look-at','1,1.7,12','--fov','45','--width','16','--height','16','--timeout','15')
+            self.assertEqual(reply.returncode,0,reply.stderr)
+            camera=json.loads(reply.stdout)['result']['camera']
+            self.assertEqual((camera['x'],camera['z'],camera['yaw'],camera['fov']),(1,2,0,45))
+            reply=run('--json','shoot','free-yaw','--at','1,1.7,2','--yaw','90','--pitch','10','--width','16','--height','16')
+            self.assertEqual(json.loads(reply.stdout)['result']['camera']['yaw'],90)
+            for bad in (('shoot','x'),('shoot','x','--pose','door'),('shoot','x','--at','1,2'),('shoot','x','--at','1,2,3','--pose','door','--target','commissary:hells-kitchen'),
+                        ('shoot','x','--at','1,2,3','--look-at','1,2,4','--yaw','3')):
+                reply=run(*bad)
+                self.assertEqual(reply.returncode,1,bad)
+                self.assertNotIn('Traceback',reply.stderr)
 
     def test_local_shot_and_offline_sheet(self):
         with MockSession() as session,tempfile.TemporaryDirectory() as folder:

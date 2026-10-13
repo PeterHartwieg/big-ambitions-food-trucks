@@ -147,7 +147,71 @@ namespace FoodTrucks
                 ["speed"] = Speed(),
                 ["run_until"] = runUntil?.Text,
                 ["arrived_at"] = arrivedAt,
+                ["keep_needs"] = keepNeeds,
             };
+        }
+
+        internal static bool? TimeSkipRunning()
+        {
+            if (!InstanceBehavior<UIs>.IsInitialized) return null;
+            var machine = InstanceBehavior<UIs>.Instance.timeMachine;
+            return machine == null ? (bool?)null : machine.isRunning;
+        }
+
+        // ---- The player's needs ----
+
+        // Set by a time call (on by default for run_until): while the clock runs, energy and hunger are topped up
+        // through the game's own needs API when either falls below NeedsTopUp.Below, so a long run never ends in a
+        // collapse (the hospital sets the clock to 08:00 the next day and bills $2,000; live session 4).
+        private static bool keepNeeds;
+        private static readonly System.Reflection.PropertyInfo? EnergySettingsProperty = AccessTools.Property(typeof(Helpers.EnergyHelper), "Settings");
+
+        private static Helpers.EnergySettings? NeedSettings()
+        {
+            try { return EnergySettingsProperty?.GetValue(null) as Helpers.EnergySettings; }
+            catch (Exception) { return null; }
+        }
+
+        // The needs the game tracks for the player: energy (a collapse when it reaches the hospital threshold while on
+        // foot), hunger (below the threshold energy burns faster; with both at 0 the player shuffles) and happiness
+        // (low happiness burns energy faster and slows its regain) [code, 1.0: EnergyHelper, EnergySettings].
+        internal static JObject Needs(GameInstance game)
+        {
+            var settings = NeedSettings();
+            return new JObject
+            {
+                ["energy"] = Math.Round(game.Energy, 1),
+                ["hunger"] = Math.Round(game.Hunger, 1),
+                ["happiness"] = Math.Round(game.Happiness, 1),
+                ["max"] = settings == null ? (JToken?)null : settings.MaxEnergyHungerHappinessValue,
+                ["collapse_at"] = settings == null ? (JToken?)null : settings.HospitalizationEnergyThreshold,
+                ["energy_off"] = game.gameVariables?.disableEnergy,
+                ["going_to_hospital"] = Helpers.EnergyHelper.goingToHospital,
+                ["kept_up"] = keepNeeds,
+            };
+        }
+
+        // Every frame while keepNeeds is on and the clock runs.
+        private static void KeepNeedsUp(GameInstance game)
+        {
+            if (!keepNeeds || Paused() == true || Helpers.EnergyHelper.goingToHospital || game.gameVariables?.disableEnergy == true) return;
+            if (!FoodTrucks.Core.Common.NeedsTopUp.Due(game.Energy, game.Hunger)) return;
+            var max = NeedSettings()?.MaxEnergyHungerHappinessValue ?? 100f;
+            var (energy, hunger) = (game.Energy, game.Hunger);
+            // GenerateEnergy is what a bed or a drink adds (it takes a share off for low happiness and stops at the
+            // top); twice the scale always reaches the top. SetCurrentHunger is what eating sets.
+            Helpers.EnergyHelper.GenerateEnergy(max * 2f);
+            Helpers.EnergyHelper.SetCurrentHunger(max);
+            Log.Info($"Test bridge: needs topped up while the clock runs (energy {energy:F1} to {game.Energy:F1}, hunger {hunger:F1} to {game.Hunger:F1}), day {game.Day} {game.Hour:D2}:{(int)game.Minute:D2}.");
+        }
+
+        // GlobalEvents.onHospitalRespawnStarts, while the bridge is on.
+        internal static void OnCollapse()
+        {
+            var game = SaveGameManager.Current;
+            if (game == null) return;
+            Log.Info($"Test bridge: the player collapsed at day {game.Day} {game.Hour:D2}:{(int)game.Minute:D2} (energy {game.Energy:F1}, hunger {game.Hunger:F1}, happiness {game.Happiness:F1}); " +
+                     "the game takes them to hospital, sets the clock to 08:00 and bills the stay.");
         }
 
         // What holds the clock now, or null: a time skip, or the screens open while the game's time control is off.
@@ -205,6 +269,8 @@ namespace FoodTrucks
             var pause = Bool(args, "pause");
             var speed = Num(args, "speed");
             var until = args["run_until"] as JObject;
+            var keep = Bool(args, "keep_needs");
+            if (args["keep_needs"] != null && keep == null) throw new BridgeError("keep_needs must be true or false.");
             if (pause == null && speed == null && until == null) throw new BridgeError("time needs \"pause\", \"speed\" or \"run_until\".");
             if (speed != null && (speed <= 0 || speed > MaxSpeed)) throw new BridgeError($"speed must be above 0 and at most {MaxSpeed}.");
             var unpausing = until != null || pause == false || (speed != null && pause != true);
@@ -214,6 +280,8 @@ namespace FoodTrucks
             var game = SaveGameManager.Current;
             runUntil = null;
             arrivedAt = null;
+            // On by default for run_until, off otherwise (docs/test-bridge.md, "time"); a pause turns it off.
+            keepNeeds = unpausing && pause != true && (keep ?? until != null);
             if (until != null)
             {
                 var target = Target(game, until);
@@ -251,7 +319,11 @@ namespace FoodTrucks
         // Every frame, from the pump: follows a load, stops run_until at its time.
         internal static void EveryFrame()
         {
+            ClearOrphanedLoad();
             FollowLoad();
+            var current = SaveGameManager.Current;
+            if (keepNeeds && (current == null || Scene() != "city")) keepNeeds = false;
+            else if (keepNeeds) KeepNeedsUp(current!);
             if (runUntil == null) return;
             var game = SaveGameManager.Current;
             if (game == null || Scene() != "city")
@@ -263,6 +335,7 @@ namespace FoodTrucks
             if (NowMinutes(game) < runUntil.Value.Target - ArrivedMinutes) return;
             var text = runUntil.Value.Text;
             runUntil = null;
+            keepNeeds = false;
             InstanceBehavior<UIs>.Instance?.gameSpeed?.SetPlayerPause(true);
             SetSpeed(1);
             arrivedAt = $"day {game.Day} {game.Hour:D2}:{(int)game.Minute:D2}";
@@ -444,7 +517,10 @@ namespace FoodTrucks
             var name = Need(args, "name", "the save's name");
             if (!IsFt(name)) throw new BridgeError($"The bridge loads only saves whose name starts with FT, not '{name}'.");
             var scene = Scene();
-            if (scene == "loading") throw new BridgeError("The game is loading; wait until /health says menu or city.");
+            if (scene == "loading")
+                throw new BridgeError(LoadScene.isLoading && !LoadingScreenUp()
+                    ? $"The game's loading flag is on with no loading screen (a load that never ran); the bridge clears it after {OrphanSeconds:F0} s: try again then."
+                    : "The game is loading; wait until /health says menu or city.");
             if (LoadStatus == "pending") throw new BridgeError($"A load of '{LoadTarget}' is under way; wait for it (state.load).");
             // Leaving a city skips the game's unsaved-changes question, so only an FT city may be left this way.
             var current = SaveGameManager.Current?.SaveGameName;
@@ -464,8 +540,7 @@ namespace FoodTrucks
             if (scene == "menu" && !InstanceBehavior<MainMenuController>.IsInitialized)
                 throw new BridgeError("load works from the main menu or the city, not the character creator.");
             BeginLoad(save.name);
-            if (scene == "menu") StartLoad(save);
-            else pump.StartCoroutine(LoadFromCity(save));
+            pump.StartCoroutine(scene == "menu" ? LoadFromMenu(save) : LoadFromCity(save));
             return new JObject { ["loading"] = true, ["name"] = save.name, ["character"] = save.characterData?.name };
         }
 
@@ -478,17 +553,26 @@ namespace FoodTrucks
             LoadScene.LoadTransitionToSave();
         }
 
-        // From the city: the pause menu's Main menu (without its question), then the main menu's load.
-        private static IEnumerator LoadFromCity(SaveGameManager.SaveGameStruct save)
+        // Whether one of the game's loading screens is still up (fading in, loading, or fading out after its load).
+        private static bool LoadingScreenUp() => UnityEngine.Object.FindAnyObjectByType<LoadingScreen>() != null;
+
+        // From the main menu: once no loading screen is left, the menu's load.
+        //
+        // Live session 4 (13 October 2026): a load from the city hung at the main menu twice. The game's LoadingScreen is
+        // a singleton (InstanceBehavior): LoadScene.LoadScenes clears isLoading before the screen fades out, and the
+        // screen destroys itself only after its fade (up to 1.6 s). The bridge used to start the menu's load two frames
+        // after the menu came up, inside that fade, so the new loading screen met the old one in Awake and destroyed
+        // itself; its coroutine died after its first yield, and LoadScene.isLoading stayed true for good, with nothing
+        // loading [code, 1.0: LoadScene, LoadingScreen, InstanceBehavior.Awake]. A player never clicks Load that fast.
+        private static IEnumerator LoadFromMenu(SaveGameManager.SaveGameStruct save)
         {
-            Log.Info($"Test bridge: to the main menu, to load '{save.name}'.");
-            yield return LoadScene.LoadMainMenuFromCity();
-            var deadline = UnityEngine.Time.realtimeSinceStartup + 120f;
-            while (Scene() != "menu" || !InstanceBehavior<MainMenuController>.IsInitialized)
+            var deadline = UnityEngine.Time.realtimeSinceStartup + MenuSeconds;
+            while (LoadScene.isLoading || LoadingScreenUp() || !InstanceBehavior<MainMenuController>.IsInitialized)
             {
+                if (LoadStatus != "pending") yield break;
                 if (UnityEngine.Time.realtimeSinceStartup > deadline)
                 {
-                    EndLoad("failed", "the main menu didn't come up within 120 seconds");
+                    EndLoad("failed", $"the main menu's last loading screen didn't go within {MenuSeconds:F0} seconds; {Where()}");
                     yield break;
                 }
                 yield return null;
@@ -496,7 +580,67 @@ namespace FoodTrucks
             // The menu's own Start runs in the frame after it loads.
             yield return null;
             yield return null;
+            if (LoadStatus != "pending") yield break;
+            if (LoadScene.isLoading)
+            {
+                // LoadScenes would return without loading anything.
+                EndLoad("failed", $"the game started another load first; {Where()}");
+                yield break;
+            }
             StartLoad(save);
+        }
+
+        private const float MenuSeconds = 120f;
+
+        // From the city: the pause menu's Main menu (without its question), then the main menu's load.
+        private static IEnumerator LoadFromCity(SaveGameManager.SaveGameStruct save)
+        {
+            Log.Info($"Test bridge: to the main menu, to load '{save.name}'.");
+            yield return LoadScene.LoadMainMenuFromCity();
+            var deadline = UnityEngine.Time.realtimeSinceStartup + MenuSeconds;
+            while (Scene() != "menu")
+            {
+                if (LoadStatus != "pending") yield break;
+                if (UnityEngine.Time.realtimeSinceStartup > deadline)
+                {
+                    EndLoad("failed", $"the main menu didn't come up within {MenuSeconds:F0} seconds; {Where()}");
+                    yield break;
+                }
+                yield return null;
+            }
+            Log.Info($"Test bridge: at the main menu; loading '{save.name}' once its loading screen has gone.");
+            yield return LoadFromMenu(save);
+        }
+
+        // Where the game is, for a failed load's reply: the scene, the loading flag and whether a loading screen is up.
+        private static string Where()
+        {
+            var scene = Scene();
+            var flag = LoadScene.isLoading ? "on" : "off";
+            var screen = LoadingScreenUp() ? "a loading screen is up" : "no loading screen";
+            return $"the game is at the {scene} (its loading flag {flag}, {screen})";
+        }
+
+        // The game's loading flag on with no loading screen for this long: a load that died (see LoadFromMenu). The
+        // bridge clears the flag so the game and the bridge can load again. LoadScenes sets the flag a few frames before
+        // its screen exists (the screen's prefab loads asynchronously), hence the wait.
+        private const float OrphanSeconds = 10f;
+        private static float? orphanSince;
+
+        private static void ClearOrphanedLoad()
+        {
+            if (!LoadScene.isLoading || LoadingScreenUp())
+            {
+                orphanSince = null;
+                return;
+            }
+            var now = UnityEngine.Time.realtimeSinceStartup;
+            orphanSince ??= now;
+            if (now - orphanSince.Value < OrphanSeconds) return;
+            orphanSince = null;
+            LoadScene.isLoading = false;
+            Log.Error($"Test bridge: the game's loading flag was on for {OrphanSeconds:F0} s with no loading screen (a load that never ran); cleared it, so loads work again. {Where()}.");
+            if (LoadStatus == "pending") EndLoad("failed", $"the game's load never ran (its loading flag stayed on with no loading screen; the bridge cleared it); {Where()}: load again");
         }
 
         // The bridge stops: nothing of this session's carries over to a start after a mod re-enable.
@@ -505,9 +649,11 @@ namespace FoodTrucks
             if (runUntil != null && SaveGameManager.Current != null) SetSpeed(1);
             runUntil = null;
             arrivedAt = null;
+            keepNeeds = false;
             LoadTarget = null;
             LoadStatus = null;
             loadError = null;
+            orphanSince = null;
             characterChecks.Clear();
             saving = null;
             SaveHooks = 0;
@@ -561,7 +707,7 @@ namespace FoodTrucks
                 EndLoad("done", null);
                 return;
             }
-            if (UnityEngine.Time.realtimeSinceStartup > loadDeadline) EndLoad("failed", $"not in the city with it after {LoadSeconds:F0} seconds");
+            if (UnityEngine.Time.realtimeSinceStartup > loadDeadline) EndLoad("failed", $"not in the city with it after {LoadSeconds:F0} seconds; {Where()}");
         }
 
         private static JToken NewGame(JObject args)

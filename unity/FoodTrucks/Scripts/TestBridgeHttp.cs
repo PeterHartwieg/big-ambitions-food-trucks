@@ -179,15 +179,15 @@ namespace FoodTrucks
 
         internal static void Add(string kind, string text)
         {
-            var s = TestBridge.Current;
+            var (day, time) = TestBridge.ClockNow();
             lock (gate)
             {
                 events.Enqueue(new JObject
                 {
                     ["seq"] = next++,
                     ["real"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                    ["day"] = s.Day,
-                    ["time"] = s.Time,
+                    ["day"] = day,
+                    ["time"] = time,
                     ["kind"] = kind,
                     ["text"] = text,
                 });
