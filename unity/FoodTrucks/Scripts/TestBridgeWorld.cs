@@ -413,7 +413,8 @@ namespace FoodTrucks
             IReadOnlyList<Vehicles.DeliveryDriverJob.DeliveryJobStartController>? vans = null)
         {
             var local = LocalBounds(controller);
-            var bottom = local.min.y + 0.3f;
+            // 0.3 m above the ground the vehicle stands on, not above its hull: the truck's hull itself starts 0.30 m up.
+            var bottom = Mathf.Min(local.min.y, 0f) + 0.3f;
             var top = Mathf.Max(local.max.y, bottom + 0.5f);
             var centre = new Vector3(local.center.x, (bottom + top) / 2f, local.center.z);
             var half = new Vector3(Mathf.Max(0.05f, local.extents.x - 0.1f), (top - bottom) / 2f, Mathf.Max(0.05f, local.extents.z - 0.1f));
