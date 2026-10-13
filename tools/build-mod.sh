@@ -116,10 +116,17 @@ link() { # link <target> <link path>
 link "$MOD_DIR" "$SDK/Assets/Mods/FoodTrucks"
 link "$REPO/unity/BuildEditor" "$SDK/Assets/Editor/FoodTrucksBuild"
 
+# BatchBuild switches the SDK's HDRP assets to both lit shader modes for the build (the vehicle shader's Forward
+# pass, which the game's hover outline needs) and back; Unity still rewrites these files with its own upgrades, so
+# they are put back after every Unity run, or the SDK_INPUTS check above would refuse the next build.
+SDK_RESAVED=(Assets/Settings ProjectSettings/GraphicsSettings.asset ProjectSettings/QualitySettings.asset)
+
 run_unity() { # run_unity <method> <log name>
-  local log="$LOG_DIR/$2.log"
-  if ! "$UNITY" -batchmode -nographics -projectPath "$SDK" -buildTarget Win64 \
-      -executeMethod "$1" -modId FoodTrucks -logFile "$log"; then
+  local log="$LOG_DIR/$2.log" ok=1
+  "$UNITY" -batchmode -nographics -projectPath "$SDK" -buildTarget Win64 \
+      -executeMethod "$1" -modId FoodTrucks -logFile "$log" || ok=0
+  git -C "$SDK" checkout -q -- "${SDK_RESAVED[@]}"
+  if [ "$ok" = 0 ]; then
     grep -E "FoodTrucksBuild|error CS|Exception" "$log" | tail -40 >&2
     echo "Unity step $1 failed; full log: $log" >&2
     exit 1
