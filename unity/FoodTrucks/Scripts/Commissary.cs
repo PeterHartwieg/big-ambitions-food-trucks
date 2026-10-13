@@ -746,7 +746,9 @@ namespace FoodTrucks
                 // The text says what was wrong (live session 4: a truck legally in another commissary's bay, with no space
                 // anywhere, read "wasn't in a commissary bay"): no space at all, or not in its own commissary's bay.
                 var space = commissary.Spaces.FirstOrDefault(sp => sp.VehicleId == fine.VehicleId);
-                var key = space == null ? "foodtrucks:message_city_overnight_fine_nospace" : "foodtrucks:message_city_overnight_fine";
+                // New keys for the new texts: the game keeps a sent message's key and parameters and words it again from
+                // them, so the old keys keep their old text for fines already in the phone (review round 4, Astra and Sol).
+                var key = space == null ? "foodtrucks:message_city_overnight_fine_nospace" : "foodtrucks:message_city_overnight_fine_ownbay";
                 Notices.SendText(CityLicensing.City(), paid ? key : key + "_unpaid", new Dictionary<string, string>
                 {
                     { "commissary", space == null ? "" : NameOf(space.CommissaryId) },

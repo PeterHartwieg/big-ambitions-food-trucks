@@ -136,16 +136,19 @@ namespace FoodTrucks
                     // hundred metres, where the street is loaded; farther than that the paint is too small to see anyway.
                     var near = bays.Any(b => Flat(player, (b.X, b.Z)) <= (inFoodVehicle ? MakeMetresDriving : MakeMetres));
                     var missing = Enumerable.Range(0, bays.Count).Where(i => !bySite.TryGetValue(i, out var m) || (m.Drawn && m.Root == null)).ToList();
-                    // A bay with nothing drawn yet is checked for parked cars right before its first markers: none is
+                    // A bay point with nothing drawn yet is checked for parked cars right before its markers: none is
                     // made while a lane car stands in its zone (BayParking.ClearBeforePaint; a car in view keeps it
                     // waiting until it is out of view and swept), so no car stands in fresh paint.
-                    var drawn = bySite.Values.Any(m => m.Root != null);
-                    if (missing.Count > 0 && near && !(retryAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at) &&
-                        (drawn || BayParking.ClearBeforePaint(site, radius)))
+                    // Per bay point: a point without markers is checked even when another point is drawn; drawn markers
+                    // are left alone.
+                    var ready = missing.Count > 0 && near && !(retryAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at)
+                        ? missing.Where(i => BayParking.ClearBeforePaint(site, ZoneAt(site, i, (float)radius))).ToList()
+                        : new List<int>();
+                    if (ready.Count > 0)
                     {
                         retryAt[site.Id] = Time.unscaledTime + RetrySeconds;
                         var doors = World.EntrancesOf(site.Address);
-                        foreach (var i in missing)
+                        foreach (var i in ready)
                         {
                             if (bySite.TryGetValue(i, out var gone))
                             {
@@ -228,6 +231,13 @@ namespace FoodTrucks
                 if (zone != null) list.Add(zone);
             }
             return list;
+        }
+
+        // One bay point's zone (worked out now if not yet), or null when it has none.
+        internal static BayZone? ZoneAt(CommissarySite site, int index, float radius)
+        {
+            ZonesOf(site, radius);
+            return zones.TryGetValue(site.Id, out var bySite) && bySite.TryGetValue(index, out var zone) ? zone : null;
         }
 
         // The bay's zone: the lane's middle and width across the bay point, then every half metre along the lane the

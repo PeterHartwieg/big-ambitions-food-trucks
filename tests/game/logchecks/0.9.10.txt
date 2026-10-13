@@ -111,8 +111,8 @@ mod.newBayLeftUnderCover | never | Commissary [\w-]+: new bay swept under the lo
 mod.paintWaits | count>=0 | Commissary [\w-]+: paint waits for \d+ parked cars? in view to leave the bay\. | row mod/M1,mod/M5
 mod.paintClear | count>=0 | Commissary [\w-]+: the bay is clear; its paint is drawn\. | row mod/M1,mod/M5
 mod.jump | must | Commissary hells-kitchen: the player jumped \d+ m to within 150 m of the bay; swept before the frame was drawn, \d+ parked cars? kept out\. | row mod/M2
-mod.noBaySaved | must | Commissary (?:industry-city|garment-district|murray-hill) \(.+?\): bay searched from x .+?, z .+? \(nearest entrance\); no bay in the save; searched again after load\. | row mod/M5
-mod.noBayLine | must | ERROR: Commissary (?:industry-city|garment-district|murray-hill): no bay this load \(searched .+? in \d+ ms\): .+?\. No vehicle is ever in its bay | row mod/M5
+mod.noBaySaved | must | Commissary industry-city \(.+?\): bay searched from x .+?, z .+? \(nearest entrance\); no bay in the save; searched again after load\. | row mod/M5
+mod.noBayLine | must | ERROR: Commissary industry-city: no bay this load \(searched .+? in \d+ ms\): .+?\. No vehicle is ever in its bay | row mod/M5
 mod.propsNoWall | count>=0 | no wall behind it at x .+?, z .+? | row mod/M4
 mod.propsBlocked | count>=0 | something stands there: .+?, layer .+? | row mod/M4
 mod.candidates | count>=0 | Commissary [\w-]+: bay candidates within \d+ m \(test bridge\): .+?; \d+ ms\. | row mod/M6
@@ -122,3 +122,6 @@ mod.fineOwnBay | count>=0 | Phone: The City of New York: Your .+? wasn't in the 
 mod.fineOldText | never | wasn't in a commissary bay at | row mod/M13
 mod.spawnPlace | count>=0 | Spawned foodtrucks:vehicletype_foodtruck: id .+?, controller .+?, at x .+?, z .+?\. | row mod/M14
 mod.measuredBays | must | Commissary (?:garment-district|murray-hill) \(.+?\): bay searched from x .+?, z .+? \(set in data\) | row mod/M15
+mod.noBayMeasured | never | ERROR: Commissary (?:garment-district|murray-hill): no bay this load | row mod/M5,mod/M15
+mod.spawnNoRoom | count>=0 | Not spawned .+?: no room in front of or beside the player at x .+?, z .+?\. | row mod/M14
+mod.unreleasable | count>=0 | Commissary parking: .+? couldn.t go back to its pool \(.+?\); left where it is, and passed over from now on\. | row mod/M1,mod/M3

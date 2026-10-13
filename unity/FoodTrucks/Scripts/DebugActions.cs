@@ -271,7 +271,14 @@ namespace FoodTrucks
             var instance = new VehicleInstance(typeName) { fuel = type.maxFuel * 0.97f };
             // Both origins are vehicle centres; the car is longer.
             var distance = type.spawnInPlayerObject ? 2f : 6f;
-            var at = FreeSpawnPlace(player, distance, type.spawnInPlayerObject);
+            var free = FreeSpawnPlace(player, distance, type.spawnInPlayerObject);
+            if (free == null)
+            {
+                Log.Info($"Not spawned {typeName}: no room in front of or beside the player at x {player.position.x:F1}, z {player.position.z:F1}.");
+                Notify("No room to spawn here: move to an open spot.");
+                return;
+            }
+            var at = free.Value;
             var controller = VehicleHelper.CreateAndSpawnVehicle(instance, at, player.rotation);
             Log.Info($"Spawned {typeName}: id {instance.id}, controller {(controller == null ? "none" : controller.GetType().Name)}, at x {at.x:F1}, z {at.z:F1}.");
             Notify($"Spawned {typeName}.");
@@ -279,7 +286,8 @@ namespace FoodTrucks
 
         // In front of the player, else beside that place, else further on, wherever no vehicle (the player's or a parked
         // or moving car) stands in the new one's box (live session 4: two spawns in a row stood one inside the other).
-        private static Vector3 FreeSpawnPlace(Transform player, float distance, bool handVehicle)
+        // Null when all nine places are taken (review round 4, Astra).
+        private static Vector3? FreeSpawnPlace(Transform player, float distance, bool handVehicle)
         {
             var half = handVehicle ? new Vector3(0.6f, 0.8f, 1.0f) : new Vector3(1.3f, 1.4f, 3.2f);
             var step = handVehicle ? 1.6f : 3.2f;
@@ -291,7 +299,7 @@ namespace FoodTrucks
                     .Any(c => c != null && (c.GetComponentInParent<VehicleController>() != null || c.gameObject.layer == LayerHelper.ParkedVehiclesLayerIndex));
                 if (!taken) return at;
             }
-            return start;
+            return null;
         }
 
         // A large ledger-only entry for today, so the next tax statement has street food income

@@ -52,6 +52,9 @@ namespace FoodTrucks
         // Sites swept at least once since the load or since their bay was resolved; one not yet swept is swept whatever
         // the player's distance (0.9.9 swept a newly resolved bay only once the player came within NearMetres).
         private static readonly HashSet<string> swept = new HashSet<string>(StringComparer.Ordinal);
+        // Cars whose release threw (review round 4, Opus): logged once, then left alone by every sweep, counted neither
+        // as kept out nor as left, so the bay doesn't stay unclean for good and its paint goes on round such a car.
+        private static readonly HashSet<GameObject> unreleasable = new HashSet<GameObject>();
         // Sites whose paint was logged as waiting.
         private static readonly HashSet<string> waitLogged = new HashSet<string>(StringComparer.Ordinal);
         // Set by Commissary.Attach while it runs under the game's opaque loading screen.
@@ -62,15 +65,19 @@ namespace FoodTrucks
         // unless under the loading screen, and the markers are made only if no lane car is left in it. A car in view
         // holds the paint back until it is out of view and swept. Drawn paint never asks again, so it doesn't flicker.
         // After an error here nothing is kept out, so nothing waits either.
-        public static bool ClearBeforePaint(CommissarySite site, double radius)
+        // Per bay point (review round 4, Sol and Opus): a point without markers is checked before its own are made,
+        // even when another point of the same commissary is drawn. A zone found empty also counts as a swept, clean bay.
+        public static bool ClearBeforePaint(CommissarySite site, BayMarkers.BayZone? zone)
         {
-            if (failed || Commissary.Uninstalled) return true;
+            if (failed || Commissary.Uninstalled || zone == null) return true;
             try
             {
-                var (gone, left) = Sweep(BayMarkers.ZonesOf(site, (float)radius), inView: !UnderLoadingScreen);
+                var (gone, left) = Sweep(new List<BayMarkers.BayZone> { zone }, inView: !UnderLoadingScreen);
                 if (gone > 0) Count(site.Id, 0, gone);
                 if (left == 0)
                 {
+                    swept.Add(site.Id);
+                    clean.Add(site.Id);
                     if (waitLogged.Remove(site.Id)) Log.Info($"Commissary {site.Id}: the bay is clear; its paint is drawn.");
                     return true;
                 }
@@ -116,6 +123,7 @@ namespace FoodTrucks
             clean.Clear();
             swept.Clear();
             waitLogged.Clear();
+            unreleasable.Clear();
             counts.Clear();
             lastPlayer = null;
             failed = false;
@@ -316,7 +324,7 @@ namespace FoodTrucks
         }
 
         // Releases the lane cars standing in the zones (and, with inView, not on screen); returns how many went and how
-        // many are left: on screen, or still there because their release failed (review round 3, Sol). A car is taken
+        // many are left on screen. A car whose release fails is passed over from then on (`unreleasable`). A car is taken
         // once it really stands in a zone, not when a zone's search box first finds it (review round 3, Astra and Sol:
         // a car in a box but only in the next zone was skipped there; Core BayKeepOut.CarsInZones).
         private static (int Swept, int Left) Sweep(List<BayMarkers.BayZone> zones, bool inView)
@@ -342,8 +350,9 @@ namespace FoodTrucks
             }
             foreach (var car in BayKeepOut.CarsInZones(zones, Near, (zone, car) => InZone(zone, car)))
             {
-                if ((inView && OnScreen(car)) || !Release(car)) left++;
-                else swept++;
+                if (unreleasable.Contains(car)) continue;
+                if (inView && OnScreen(car)) left++;
+                else if (Release(car)) swept++;
             }
             return (swept, left);
         }
@@ -428,7 +437,8 @@ namespace FoodTrucks
             }
             catch (Exception ex)
             {
-                Log.Error($"Commissary parking: {car.name} couldn't go back to its pool ({ex.Message}); left where it is.");
+                if (unreleasable.Add(car))
+                    Log.Error($"Commissary parking: {car.name} couldn't go back to its pool ({ex.Message}); left where it is, and passed over from now on.");
                 return false;
             }
         }
