@@ -393,6 +393,24 @@ namespace FoodTrucks
         // The commissary whose bay the vehicle is in (legally parked, its middle within the radius), or null.
         internal static CommissarySite? SiteOf(VehicleInstance vehicle) => Sites?.Sites.FirstOrDefault(s => InBay(vehicle, s, out _));
 
+        // Midnight uses the same rented space and bay test as 04:00. A missing or unresolved bay grants no parking
+        // exemption; the overnight rule's NoBay grace doesn't mean the vehicle is standing in a rented bay.
+        internal static CommissarySite? PublicParkingBay(VehicleInstance vehicle)
+        {
+            try
+            {
+                var state = FoodTrucksSession.CurrentState;
+                if (state == null || !FoodTrucksSession.CanWrite || StreetSales.Find(state, vehicle.id)?.Transit != null) return null;
+                var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.id);
+                var site = space == null ? null : Sites?.Site(space.CommissaryId);
+                if (site == null || !Resolve(site, "for midnight parking", force: true)) return null;
+                var bayId = InBay(vehicle, site, out _) ? site.Id : null;
+                return Commissaries.PublicParkingCovered(state.Commissary, vehicle.id, FoodTrucksMod.KindOf(vehicle.vehicleTypeName), bayId)
+                    ? site : null;
+            }
+            catch (Exception ex) { Log.Error(ex); return null; }
+        }
+
         // A commissary searched with no legal parking found: it has no bay, and its vehicles aren't fined.
         private static bool NoBay(CommissarySite site) => ResolvedBays(site) is { Count: 0 };
 

@@ -20,6 +20,9 @@ CHECK_ONLY=ARGS[:1]==['check']
 PIECES=ARGS[1:] if CHECK_ONLY else ['Griddle','StorageCabinet','PopcornMachine','DrinksCooler']
 # Player in the middle of the hatch (y 1.10), crew 0.45 m either side (WindowCrew, Core WindowPlaces).
 PEOPLE=[(-.59,1.10,'player'),(-.59,.65,'crew'),(-.59,1.55,'crew')]
+# TruckAssets.RegisterPosition/Scale: in front of the server, cab-side of the clear middle; front faces inside.
+REGISTER_POSITION=(-.90,.82,1.80)
+REGISTER_SCALE=2.2
 body=bpy.data.objects['Truck_Body']; hatch=bpy.data.objects['Truck_Hatch']
 dg=bpy.context.evaluated_depsgraph_get()
 def tree(ob):
@@ -62,6 +65,41 @@ for (a,oa,_),(b,ob,_) in zip(placed,placed[1:]):
 for name,o,_ in placed:
  pts=[o.matrix_world@v.co for v in o.data.vertices]
  print(f'EXTENT {name}: x {min(p.x for p in pts):.3f}..{max(p.x for p in pts):.3f} y {min(p.y for p in pts):.3f}..{max(p.y for p in pts):.3f} z top {max(p.z for p in pts):.3f}')
+# Register, with the same FBX and uniform scale as the prefab. Its drawer slightly overhangs the shallow counter.
+before=set(bpy.data.objects)
+bpy.ops.import_scene.fbx(filepath='art/props/CashRegister/CashRegister.fbx')
+register=None
+for o in [o for o in bpy.data.objects if o not in before]:
+ if o.name.endswith('_Collision'): bpy.data.objects.remove(o,do_unlink=True); continue
+ o.matrix_world=Matrix.Translation(REGISTER_POSITION)@Matrix.Rotation(math.radians(90),4,'Z')@Matrix.Scale(REGISTER_SCALE,4)@o.matrix_world
+ register=o
+ img=bpy.data.images.load(os.path.abspath('art/props/CashRegister/T_CashRegister_BaseColor.png'),check_existing=True)
+ m=bpy.data.materials.new('CashRegister_Review'); m.use_nodes=True; nt=m.node_tree
+ tex=nt.nodes.new('ShaderNodeTexImage'); tex.image=img
+ nt.links.new(tex.outputs['Color'],nt.nodes['Principled BSDF'].inputs['Base Color'])
+ o.data.materials.clear(); o.data.materials.append(m)
+assert register is not None
+bpy.context.view_layer.update(); dg=bpy.context.evaluated_depsgraph_get()
+pts=[register.matrix_world@v.co for v in register.data.vertices]
+lo=Vector([min(p[i] for p in pts) for i in range(3)]); hi=Vector([max(p[i] for p in pts) for i in range(3)])
+print(f'EXTENT CashRegister: x {lo.x:.3f}..{hi.x:.3f} y {lo.y:.3f}..{hi.y:.3f} z {lo.z:.3f}..{hi.z:.3f}')
+# The source drawer is 0.13 m deep; its centre and 84% of its depth rest on the counter, bottom exactly at 1.80.
+supported=min(-.78,REGISTER_POSITION[0]+.065*REGISTER_SCALE)-max(-1.02,REGISTER_POSITION[0]-.065*REGISTER_SCALE)
+rests=abs(lo.z-1.80)<1e-5 and supported/(.13*REGISTER_SCALE)>.80
+inside=lo.y>.20 and hi.y<2.00 and hi.z<2.82 and lo.x> -1.10 and hi.x<-.74 and hi.y<1.00
+print(('CLEAR ' if rests and inside else 'HIT ')+'register support, crew clearance and open middle'); ok&=rests and inside
+# Lift only during intersection checks so the intended contact with the counter is not a hit.
+register.location.z+=.002
+bpy.context.view_layer.update(); ok&=check('CashRegister on serving counter',register)
+rt=tree(register)
+for name,o,_ in placed:
+ hits=rt.overlap(tree(o)); print(('HIT ' if hits else 'CLEAR ')+f'CashRegister / {name}'); ok&=not hits
+saved_rotation=hatch.rotation_euler.copy()
+for angle in range(0,81,10):
+ hatch.rotation_euler=(0,math.radians(angle),0)
+ hits=rt.overlap(tree(hatch)); print(('HIT ' if hits else 'CLEAR ')+f'CashRegister / hatch {angle} degrees'); ok&=not hits
+hatch.rotation_euler=saved_rotation
+register.location.z-=.002
 print('INTERIOR '+('CLEAR' if ok else 'BLOCKED'))
 def render():
  # Stand-in people: body, head, face patch towards the hatch.

@@ -54,14 +54,15 @@ namespace FoodTrucks.BuildEditor
             ("RearRight", "Truck_Wheel_RR", new Vector3(0.87f, 0.38f, -1.80f)),
         };
 
+        private static readonly Vector3 RegisterPosition = new Vector3(0.90f, 1.80f, -0.82f);
+        private const float RegisterScale = 2.2f;
+
         // The cooking line (Peter, 10 October 2026): four spots on the back counter, opposite the hatch, numbered
         // from the cab end and filled from the middle out, so one or two pieces stand right behind the player.
         // Full size, 0.45 m apart along the truck and centred on the window (z -1.10); a 0.40 x 0.36 m piece
         // covers x -0.44 to -0.80, between the counter's front edge (-0.40) and the backsplash (-0.985), and
         // the tallest (0.65 m) stays under the hood (2.64). Checked for all sixteen models with
         // art/truck/review_interior.py (art/README.md, "Equipment spots").
-        private static readonly Vector3 RegisterPosition = new Vector3(0.905f, 1.80f, -0.305f);
-
         private const float LineX = -0.62f;
         private const float CounterTop = 1.75f;
         private static readonly (string Name, Vector3 Position)[] EquipmentSpots =
@@ -183,11 +184,14 @@ namespace FoodTrucks.BuildEditor
                 var spoiler = root.transform.Find("Spoiler");
                 if (spoiler != null) Object.DestroyImmediate(spoiler.gameObject);
 
-                // The cash register on the serving counter at the window's cab end, facing the street (+X): its
-                // 0.13 x 0.15 m footprint covers x 0.84 to 0.97, z -0.38 to -0.23, up to y 1.98, beside the
-                // crew's places (x 0.44 to 0.74) and inside the opening's end (z -0.20). Body work for the game's
-                // lists, like the hatch.
-                var register = PropAssets.AddRegister(body.transform.parent, RegisterPosition, Quaternion.Euler(0f, 90f, 0f), body.layer);
+                // The register in front of the server at (0.59, 0.94, -1.10), offset 0.28 m towards the cab to
+                // leave the middle open (Peter, 13 October 2026). Uniform scale 2.2 keeps its proportions:
+                // 0.293 x 0.330 m footprint, x 0.750 to 1.043, z -0.985 to -0.655, top y 2.190. The drawer
+                // rests at y 1.80 with 84% of its depth on the 0.24 m counter and about 2 cm overhang each side;
+                // clear of the crew (x <= 0.74), frame and hatch. Front (+Z), screen and drawer face inside (-X).
+                // Body work for the game's lists, like the hatch.
+                var register = PropAssets.AddRegister(body.transform.parent, RegisterPosition, Quaternion.Euler(0f, -90f, 0f), body.layer);
+                register.transform.localScale = Vector3.one * RegisterScale;
                 Append(root, "renderers", register);
                 // No street dirt on the truck: its renderers leave the decal layer, as the game's vehicles do.
                 SurfaceLook.NoStreetDecals(root);

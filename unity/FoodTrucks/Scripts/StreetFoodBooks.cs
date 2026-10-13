@@ -280,6 +280,7 @@ namespace FoodTrucks
         }
 
         // Parking: at midnight the game charges each vehicle what it ran up the day before, into yesterday.
+        // Rent covers a food vehicle in its commissary bay; clear its balance before noting the charges for Econoview.
         public static void ParkingDailyPrefix(out Dictionary<string, float>? __state)
         {
             __state = null;
@@ -287,7 +288,17 @@ namespace FoodTrucks
             {
                 if (!FoodTrucksSession.CanWrite) return;
                 foreach (var vehicle in FoodVehicles().Where(v => v.unpaidParkingAmount > 0f))
+                {
+                    var bay = Commissary.PublicParkingBay(vehicle);
+                    if (bay != null)
+                    {
+                        vehicle.unpaidParkingAmount = 0f;
+                        Log.Info($"Commissary {bay.Id}: no public parking for {LocalizorManager.GetLocalization(vehicle.vehicleTypeName, null)} " +
+                                 $"{World.Short(vehicle.id)} tonight (in the rented bay).");
+                        continue;
+                    }
                     (__state ??= new Dictionary<string, float>(StringComparer.Ordinal))[vehicle.id] = vehicle.unpaidParkingAmount;
+                }
             }
             catch (Exception ex) { Log.Error(ex); }
         }
