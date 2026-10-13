@@ -222,6 +222,7 @@ namespace FoodTrucks
                 ["queue"] = queue,
                 ["commissary"] = commissary,
                 ["route"] = route,
+                ["parking"] = Parking(instance),
             };
         }
 
@@ -307,6 +308,28 @@ namespace FoodTrucks
         private static string Clock(int minuteOfDay) => $"{minuteOfDay / 60 % 24:D2}:{minuteOfDay % 60:D2}";
 
         internal static double Round(float value) => Math.Round(value, 2);
+
+        // What the game's hourly parking charge reads for a vehicle nobody drives: its stored parking state, the
+        // neighbourhood it was left in and that neighbourhood's hourly price (ParkingSimulator.RunHourly: legal parking
+        // adds the price to unpaidParkingAmount every hour, $25 in a parking garage; illegal parking draws tickets).
+        private static JObject Parking(VehicleInstance instance)
+        {
+            double? price = null;
+            try
+            {
+                price = instance.streetName == "ba:street_parking" ? 25.0
+                    : string.IsNullOrEmpty(instance.parkingNeighbourhood) ? (double?)null
+                    : Math.Round(NeighborhoodHelper.GetData(instance.parkingNeighbourhood).parkingPrice, 2);
+            }
+            catch (Exception) { price = null; }
+            return new JObject
+            {
+                ["state"] = instance.parkingState.ToString(),
+                ["neighbourhood"] = instance.parkingNeighbourhood,
+                ["hourly_price"] = price,
+                ["unpaid"] = Math.Round(instance.unpaidParkingAmount, 2),
+            };
+        }
 
         private static T? Try<T>(Func<T?> read) where T : struct
         {

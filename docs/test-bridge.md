@@ -121,7 +121,8 @@ Poses for `shoot` (the camera is placed relative to the target and looks at it):
       "stock": [ { "item": "Hotdog", "amount": 62 } ],
       "queue": { "length": 4, "places": [ { "x": 0, "z": 0, "occupied": true } ] },
       "commissary": { "site": "hells-kitchen", "in_bay": true },
-      "route": { "stops": 2, "next": "…" }
+      "route": { "stops": 2, "next": "…" },
+      "parking": { "state": "Legal", "neighbourhood": "ba:neighborhood_…", "hourly_price": 5.0, "unpaid": 0.0 }
     }
   ],
   "commissary": {
@@ -218,6 +219,7 @@ A load that dies anyway is cleared only when the bridge can show it died. With t
 - `pieces[].item` is the equipment id from the demand tables. `stock[]` lists the cargo that isn't equipment: `item` the game's name, `key` the item key.
 - `queue` is null while closed. `length` is Core's customers at the window and in line; `places` are the spots the visible line uses (empty while it isn't shown), `occupied` for the first `length` of them.
 - `commissary` is null unless the vehicle has a space or stands in a bay; `site` is its space, `in_bay` whether it stands legally in any bay, `bay_site` which one.
+- `parking` is what the game's hourly parking charge reads for the vehicle when nobody drives it (`ParkingSimulator.RunHourly`): its stored `state` (`Legal`, `Illegal`, `NotAvailable`), the `neighbourhood` it was left in, that neighbourhood's `hourly_price` (null when the neighbourhood is unknown) and the `unpaid` amount the game bills at midnight.
 - `route.next` is a line of text, "stop N, HH:MM to HH:MM at x …, z …", for the first stop still to close today.
 - `commissary.orders[]` adds `item` and `units`; `total` is goods plus fee. `commissary.stock[]` adds `key`. `unpaid` sums the rent and fines the game refused.
 - `commissary.bays` has every commissary: `resolved` with the bay's first point and the building's entrance nearest it, `failed` when the search found no legal parking (a stored failure is searched again once on every load, and stays `failed` until a search finds a bay), `pending` until the city's parking lanes let it search. `shoot`'s `door` pose and `teleport`'s `commissary:` use that entrance.
