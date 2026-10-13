@@ -419,6 +419,11 @@ class CLIAndShotsTests(unittest.TestCase):
             self.assertEqual((camera['x'],camera['z'],camera['yaw'],camera['fov']),(1,2,0,45))
             reply=run('--json','shoot','free-yaw','--at','1,1.7,2','--yaw','90','--pitch','10','--width','16','--height','16')
             self.assertEqual(json.loads(reply.stdout)['result']['camera']['yaw'],90)
+            with tempfile.TemporaryDirectory() as folder:
+                reply=run('shoot','fetched','--at','1,1.7,2','--yaw','90','--width','16','--height','16','--fetch',folder,'--json')
+                self.assertEqual(reply.returncode,0,reply.stderr)
+                result=json.loads(reply.stdout)['result']
+                self.assertTrue(Path(result['local_path']).exists())
             for bad in (('shoot','x'),('shoot','x','--pose','door'),('shoot','x','--at','1,2'),('shoot','x','--at','1,2,3','--pose','door','--target','commissary:hells-kitchen'),
                         ('shoot','x','--at','1,2,3','--look-at','1,2,4','--yaw','3')):
                 reply=run(*bad)

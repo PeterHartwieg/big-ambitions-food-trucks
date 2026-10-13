@@ -122,7 +122,7 @@ class Mock:
             'clock': {'day': 1, 'weekday': 'Monday', 'time': '07:00', 'paused': True, 'speed': 1, 'run_until':None, 'arrived_at':None, 'keep_needs':False},
             'money': 20000., 'transactions_today':[],
             'player': {'x': 0., 'y': 0., 'z': 0., 'heading': 0., 'in_vehicle': None, 'at_hatch': None, 'carrying': None,
-                       'needs': {'energy': 100., 'hunger': 100., 'happiness': 80., 'max': 100., 'collapse_at': -20., 'energy_off': False, 'going_to_hospital': False, 'kept_up': False}},
+                       'needs': {'energy': 100., 'hunger': 100., 'happiness': 80., 'happiness_modifiers': [], 'max': 100., 'collapse_at': -20., 'energy_off': False, 'going_to_hospital': False, 'kept_up': False}},
             'licence': {'until_day': None, 'permits': 0, 'course_done': False},
             'vehicles': [], 'commissary': {'spaces': [], 'orders': [], 'stock': [], 'unpaid': {'rent': 0, 'fines': 0}},
             'ledger_today': {'street_food': 0., 'crew_waiting': 0.}, 'notices_recent': list(self.recent)}
@@ -193,7 +193,7 @@ class Mock:
             setattr(self, key, val)
         self.until = None
         self.state['clock'].update(run_until=None,arrived_at=arrived_at,keep_needs=False)
-        self.state['player'].setdefault('needs',{'energy': 100., 'hunger': 100., 'happiness': 80., 'max': 100., 'collapse_at': -20., 'energy_off': False, 'going_to_hospital': False, 'kept_up': False})
+        self.state['player'].setdefault('needs',{'energy': 100., 'hunger': 100., 'happiness': 80., 'happiness_modifiers': [], 'max': 100., 'collapse_at': -20., 'energy_off': False, 'going_to_hospital': False, 'kept_up': False})
         self.state['player']['needs']['kept_up']=False
         self.dialog = 'closed'
         self.pending = []
@@ -1014,7 +1014,11 @@ class Mock:
                 if x is None or z is None: raise ValueError('teleport needs "x" and "z", or "place".')
                 # The mock's city is flat: one walkable surface at y 0 (the bridge stacks every ground surface and picks).
                 y=num(args,'y')
-                surface=(f"the surface nearest the y asked for ({y:.2f}) of 1: 0.00" if y is not None else 'the only ground surface, walkable')
+                what='walkable surface' if who=='player' else 'surface'
+                if y is not None and abs(y)>1.5:
+                    walk='walkable ' if who=='player' else ''
+                    raise ValueError(f"No {walk}ground at x {x:.1f}, z {z:.1f} near y {y:.2f}: no {what} within 1.5 m of the y asked for ({y:.2f}); surfaces there: 0.00 walkable.")
+                surface=(f"the {what} nearest the y asked for ({y:.2f}) of 1: 0.00 walkable" if y is not None else 'the only ground surface, walkable')
             if who!='player' and obj['open']: raise ValueError(f"Vehicle {who} is open for business: close it first (vehicle close).")
             if who=='player':
                 self.walks=[]

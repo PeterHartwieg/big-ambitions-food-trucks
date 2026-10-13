@@ -44,6 +44,27 @@ public class BridgeRulesTests
     }
 
     [Fact]
+    public void Explicit_y_without_walkable_ground_near_it_is_refused_for_the_player()
+    {
+        // Live session 5, row 40: y 5.06 over a street at 0.20 put the player on the street.
+        var street = new List<(double Y, bool Walkable)> { (0.20, true) };
+        var (index, why) = GroundPick.Choose(street, referenceY: 0.1, explicitY: 5.06, walkableOnly: true);
+        Assert.Equal(-1, index);
+        Assert.Contains("no walkable surface within 1.5 m", why);
+        Assert.Equal(-1, GroundPick.Choose(UnderHighway, 0.1, 5.06, walkableOnly: true).Index);
+        Assert.Equal(0, GroundPick.Choose(UnderHighway, 0.1, 5.06, walkableOnly: false).Index);
+    }
+
+    [Fact]
+    public void The_reason_lists_which_surfaces_are_walkable()
+    {
+        var deck = new List<(double Y, bool Walkable)> { (3.22, true), (0.20, true) };
+        var (index, why) = GroundPick.Choose(deck, referenceY: 0.09, explicitY: null);
+        Assert.Equal(1, index);
+        Assert.Contains("3.22 walkable, 0.20 walkable", why);
+    }
+
+    [Fact]
     public void Needs_are_topped_up_below_forty()
     {
         Assert.False(NeedsTopUp.Due(40, 40));

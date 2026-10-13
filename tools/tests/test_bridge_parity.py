@@ -218,7 +218,7 @@ class ParityTests(unittest.TestCase):
     # free camera and the shot's camera in the reply, health's time_skip.
     def test_needs_in_state_and_kept_up_on_run_until(self):
         needs=self.mock.call('state',{})['player']['needs']
-        self.assertEqual(set(needs),{'energy','hunger','happiness','max','collapse_at','energy_off','going_to_hospital','kept_up'})
+        self.assertEqual(set(needs),{'energy','hunger','happiness','happiness_modifiers','max','collapse_at','energy_off','going_to_hospital','kept_up'})
         self.refused('time',{'speed':2,'keep_needs':'yes'},'keep_needs must be true or false.')
         self.assertTrue(self.mock.call('time',{'run_until':{'day':'+2','time':'07:00'},'speed':20})['keep_needs'])
         self.mock.state['player']['needs']['energy']=39.5
@@ -254,8 +254,11 @@ class ParityTests(unittest.TestCase):
         self.assertTrue(any(e['text']=="Test bridge: needs top-ups stopped: the save is now 'Renamed', which doesn't start with FT." for e in self.mock.ring))
 
     def test_teleport_reports_the_surface_and_a_vehicle_the_recheck(self):
-        reply=self.mock.call('teleport',{'who':'player','x':5,'z':6,'y':5})
-        self.assertIn('y asked for (5.00)',reply['surface'])
+        reply=self.mock.call('teleport',{'who':'player','x':5,'z':6,'y':0.5})
+        self.assertEqual(reply['surface'],'the walkable surface nearest the y asked for (0.50) of 1: 0.00 walkable')
+        # Live session 5, row 40: a y with no walkable ground near it is refused, not snapped to the street.
+        self.refused('teleport',{'who':'player','x':5,'z':6,'y':5.06},
+                     'No walkable ground at x 5.0, z 6.0 near y 5.06: no walkable surface within 1.5 m of the y asked for (5.06); surfaces there: 0.00 walkable.')
         reply=self.mock.call('teleport',{'who':self.id,'x':5,'z':6})
         self.assertEqual(reply['in_the_way_after'],[])
         self.assertNotIn('surface',self.mock.call('teleport',{'who':'player','place':'vehicle:'+self.id}))

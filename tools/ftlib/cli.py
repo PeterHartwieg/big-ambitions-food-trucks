@@ -161,7 +161,10 @@ def main():
         elif args.command == 'shoot':
             reply = bridge.call('shoot', shoot_args(args), args.timeout)
             if args.fetch:
-                reply['local_path'] = str(fetch_shot(reply['result']['path'], args.fetch))
+                local = str(fetch_shot(reply['result']['path'], args.fetch))
+                # In the result too, where --json readers look for the shot (live session 5), and at the top as before.
+                reply['result']['local_path'] = local
+                reply['local_path'] = local
         else:
             pattern = re.compile(args.grep) if args.grep else None
             while True:

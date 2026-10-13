@@ -177,7 +177,7 @@ namespace FoodTrucks
                 var from = who == "player"
                     ? (PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.")).transform.position.y
                     : Spawned(FoodVehicle(who)).transform.position.y;
-                (target, surface) = GroundPicked((float)x, (float)z, from, y);
+                (target, surface) = GroundPicked((float)x, (float)z, from, y, walkableOnly: who == "player");
                 Log.Info($"Test bridge: teleport to x {x:F1}, z {z:F1}: y {target.y:F2}, {surface}.");
             }
             var reply = who == "player" ? TeleportPlayer(target, heading, clear) : TeleportVehicle(who, target, heading, clear);
@@ -199,11 +199,12 @@ namespace FoodTrucks
         }
 
         // The ground surfaces stacked above a point (a street under an elevated road), top down, and the one a teleport
-        // lands on (Core GroundPick): with an explicit y the one nearest it, else a walkable one (NavMesh within 1 m)
-        // nearest the mover's own height. Live session 4 (13 October 2026): the highest surface put the player on the
+        // lands on (Core GroundPick): with an explicit y the one nearest it (walkable, for the player), else a walkable
+        // one nearest the mover's own height. Walkable is NavMesh within the 3 m the player's landing allows and within
+        // 1 m of the surface's height (live session 5: a 1 m search read the street as not walkable). Live session 4 (13 October 2026): the highest surface put the player on the
         // elevated highway at y 5.06. Each ray starts just under the last surface; a ray never hits a box it starts in or
         // a mesh's underside, so it goes on to the next surface down.
-        internal static (Vector3 Point, string Why) GroundPicked(float x, float z, float referenceY, float? explicitY)
+        internal static (Vector3 Point, string Why) GroundPicked(float x, float z, float referenceY, float? explicitY, bool walkableOnly = false)
         {
             var points = new List<Vector3>();
             var top = 500f;
@@ -215,11 +216,13 @@ namespace FoodTrucks
             }
             if (points.Count == 0)
             {
-                if (explicitY != null) return (new Vector3(x, explicitY.Value, z), $"no ground under the point; the y asked for ({explicitY.Value:F2})");
+                if (explicitY != null && !walkableOnly) return (new Vector3(x, explicitY.Value, z), $"no ground under the point; the y asked for ({explicitY.Value:F2})");
                 throw new BridgeError($"No ground found at x {x:F1}, z {z:F1}.");
             }
-            var surfaces = points.Select(p => ((double)p.y, NavMesh.SamplePosition(p, out var near, 1f, NavMesh.AllAreas) && Mathf.Abs(near.position.y - p.y) < 1f)).ToList();
-            var (index, why) = FoodTrucks.Core.Common.GroundPick.Choose(surfaces, referenceY, explicitY);
+            var surfaces = points.Select(p => ((double)p.y, NavMesh.SamplePosition(p, out var near, 3f, NavMesh.AllAreas) && Mathf.Abs(near.position.y - p.y) < 1f)).ToList();
+            var (index, why) = FoodTrucks.Core.Common.GroundPick.Choose(surfaces, referenceY, explicitY, walkableOnly);
+            var kind = walkableOnly ? "walkable ground" : "ground";
+            if (index < 0) throw new BridgeError($"No {kind} at x {x:F1}, z {z:F1} near y {explicitY:F2}: {why}.");
             return (points[index], why);
         }
 
@@ -527,6 +530,9 @@ namespace FoodTrucks
             var player = PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.");
             if (!NavMesh.SamplePosition(target, out var hit, 3f, NavMesh.AllAreas))
                 throw new BridgeError($"No walkable ground within 3 m of x {target.x:F1}, z {target.z:F1}.");
+            // The NavMesh found must be on the chosen surface, not a level above or below it.
+            if (Mathf.Abs(hit.position.y - target.y) > 1f)
+                throw new BridgeError($"No walkable ground within 3 m of x {target.x:F1}, y {target.y:F2}, z {target.z:F1} (the nearest is at y {hit.position.y:F2}).");
             var point = hit.position;
             MakeRoom(InTheWay(player, point), clear, $"x {point.x:F1}, z {point.z:F1}");
             var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's runner is gone.");
@@ -581,12 +587,20 @@ namespace FoodTrucks
             if (record?.IsOpen == true) throw new BridgeError($"Vehicle {id} is open for business: close it first (vehicle close).");
             var rotation = Quaternion.Euler(0f, heading ?? controller.transform.eulerAngles.y, 0f);
             MakeRoom(blockers ?? InTheWay(controller, target, rotation, vans), clear, $"x {target.x:F1}, z {target.z:F1}");
+            // NWH's Vehicle.Awake sets the body to interpolate. With no physics step (a paused clock) interpolation keeps
+            // drawing the vehicle between its last two physics poses, so a truck that had been driven showed, and state
+            // read, a point 15 to 90% of the way from its old place to the new one until the clock ran (live session 5,
+            // found by the mod agent). Interpolation is off for the move and comes back after the next physics step.
+            var body = controller.GetComponent<Rigidbody>();
+            var interpolation = body != null ? body.interpolation : RigidbodyInterpolation.None;
+            if (body != null) body.interpolation = RigidbodyInterpolation.None;
             VehicleHelper.TeleportVehicleToGround(controller, target, rotation);
             // The game moves the rigidbody; the transform only follows at the next physics step, which a paused game
             // doesn't take. Move it too, so the reply and the saved position are the new place.
-            var body = controller.GetComponent<Rigidbody>();
             if (body != null) controller.transform.SetPositionAndRotation(body.position, body.rotation);
             Physics.SyncTransforms();
+            if (body != null && interpolation != RigidbodyInterpolation.None)
+                TestBridgePump.Instance?.StartCoroutine(InterpolateAfterStep(body, interpolation));
             // The parking reading for the new place: the game reads it again when a car it drives stands still
             // (CarController.isCheckedForParkingZone), and at once here if the player drives this one, as the panel's
             // live reading that Open checks. A vehicle nobody drives keeps the state the game would store on leaving it.
@@ -621,6 +635,15 @@ namespace FoodTrucks
             if (hidden.Count > 0)
                 Log.Info($"Test bridge: {vehicle.vehicleTypeName} {id} stands where a hidden delivery-job van has its stall (hidden): {string.Join(", ", hidden)}.");
             return reply;
+        }
+
+        // Puts a body's interpolation back once a physics step has run from its new pose (WaitForFixedUpdate waits
+        // through a pause).
+        private static IEnumerator InterpolateAfterStep(Rigidbody body, RigidbodyInterpolation interpolation)
+        {
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
+            if (body != null && body.interpolation == RigidbodyInterpolation.None) body.interpolation = interpolation;
         }
 
         private static JObject Pose(Vector3 p, float heading) => new JObject

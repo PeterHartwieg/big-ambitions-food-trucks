@@ -18,24 +18,41 @@ namespace FoodTrucks
     // exposure and history settle, and is destroyed after the read-back. Screen-space UI isn't drawn by a camera that
     // renders into a texture, so the picture has none.
     //
-    // The game cuts away the parts of buildings between a camera and the player (its building shader reads the player's
-    // place from the shader global GlobalPlayerPos, which ThirdPersonCharacter sets every frame), so a building in front
-    // of the bridge's camera with the player behind it came out as a pale ghost. The bridge's camera therefore renders
-    // by hand (Camera.Render, which renders and submits at once) with GlobalPlayerPos moved behind it, and puts the
-    // player's place back straight after, before the game's own camera renders the frame.
+    // The game cuts away buildings and vehicles round the player for its own camera: its shaders read the player's place
+    // from the shader global GlobalPlayerPos (ThirdPersonCharacter sets it every frame) and the cut's height from
+    // _PO_Height and _PO_Height_Offset (GameManager's "BuildingHider" values, set once at start) [code, 1.0]. The shader
+    // itself isn't in the decompile, so the exact rule is unknown. Live session 3 saw a facade in front of the bridge's
+    // camera as a pale ghost; moving GlobalPlayerPos 500 m behind the camera cleared it with the player at the door.
+    // Live session 5 (day 4, rain, the player at a truck's hatch or on the plaza) saw the ghost again: everything above
+    // a flat cut about half a metre over the player's own height, facades and the truck alike, with the same camera pose
+    // that came out clean on day 1. So the bridge's camera now renders (by hand, Camera.Render, which renders and submits
+    // at once) with the player's place 1 km straight above the camera and the cut's height at 10 km, so no rule built on
+    // those values reaches anything in view, and puts all three back straight after, before the game's own camera renders
+    // the frame. Unverified in game: CHECKS row 36.
     internal static class TestBridgeShoot
     {
         private const int Frames = 8;
         private static readonly int PlayerPosition = Shader.PropertyToID("GlobalPlayerPos");
+        private static readonly int CutHeight = Shader.PropertyToID("_PO_Height");
+        private static readonly int CutHeightOffset = Shader.PropertyToID("_PO_Height_Offset");
 
         // One frame of the bridge's camera, with nothing cut away for the player.
         private static void RenderUncut(Camera camera)
         {
-            var saved = Shader.GetGlobalVector(PlayerPosition);
+            var savedPlayer = Shader.GetGlobalVector(PlayerPosition);
+            var savedHeight = Shader.GetGlobalFloat(CutHeight);
+            var savedOffset = Shader.GetGlobalFloat(CutHeightOffset);
             var t = camera.transform;
-            Shader.SetGlobalVector(PlayerPosition, t.position - t.forward * 500f);
+            Shader.SetGlobalVector(PlayerPosition, t.position + Vector3.up * 1000f);
+            Shader.SetGlobalFloat(CutHeight, 10000f);
+            Shader.SetGlobalFloat(CutHeightOffset, 0f);
             try { camera.Render(); }
-            finally { Shader.SetGlobalVector(PlayerPosition, saved); }
+            finally
+            {
+                Shader.SetGlobalVector(PlayerPosition, savedPlayer);
+                Shader.SetGlobalFloat(CutHeight, savedHeight);
+                Shader.SetGlobalFloat(CutHeightOffset, savedOffset);
+            }
         }
         private const float EyeHeight = 1.65f;
         // HDRP isn't among the mod's compile references; its per-camera data is added and copied by reflection.

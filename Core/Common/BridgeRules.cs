@@ -10,25 +10,37 @@ namespace FoodTrucks.Core.Common
     // Live session 4 (13 October 2026): the highest surface put the player on the elevated highway.
     public static class GroundPick
     {
-        // `surfaces`: each surface's height and whether people can walk there (NavMesh within reach). An explicit y
-        // takes the surface nearest it; otherwise a walkable surface nearest the mover's own height, then any surface
-        // nearest it. Returns the index and a few words on why, for the reply.
-        public static (int Index, string Why) Choose(IReadOnlyList<(double Y, bool Walkable)> surfaces, double referenceY, double? explicitY)
+        // How far an explicit y may be from the surface it asks for.
+        public const double ExplicitReach = 1.5;
+
+        // `surfaces`: each surface's height and whether people can walk there (NavMesh near it). An explicit y takes
+        // the surface nearest it within ExplicitReach, walkable when `walkableOnly` (the player); otherwise a walkable
+        // surface nearest the mover's own height, then any surface nearest it. Returns the index, or -1 when an explicit
+        // y has no such surface, and a few words on why, for the reply. Live session 5: the reply said "nearest the
+        // mover's height (0.09) of 2: 3.22, 0.20" and took 3.22, because the street at 0.20 read as not walkable; the
+        // heights are now listed with which are walkable, and an explicit y with nothing walkable near it is refused.
+        public static (int Index, string Why) Choose(IReadOnlyList<(double Y, bool Walkable)> surfaces, double referenceY, double? explicitY,
+            bool walkableOnly = false)
         {
             if (surfaces == null || surfaces.Count == 0) throw new ArgumentException("No ground surfaces to choose from.", nameof(surfaces));
             var all = Enumerable.Range(0, surfaces.Count).ToList();
-            string Heights() => string.Join(", ", surfaces.Select(s => s.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)));
+            string Heights() => string.Join(", ", surfaces.Select(s =>
+                s.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + (s.Walkable ? " walkable" : " not walkable")));
             int Nearest(IEnumerable<int> indexes, double y) => indexes.OrderBy(i => Math.Abs(surfaces[i].Y - y)).ThenBy(i => surfaces[i].Y).First();
             if (explicitY != null)
             {
-                var pick = Nearest(all, explicitY.Value);
-                return (pick, $"the surface nearest the y asked for ({explicitY.Value:F2}) of {surfaces.Count}: {Heights()}");
+                var y = explicitY.Value;
+                var near = all.Where(i => Math.Abs(surfaces[i].Y - y) <= ExplicitReach && (!walkableOnly || surfaces[i].Walkable)).ToList();
+                var what = walkableOnly ? "walkable surface" : "surface";
+                if (near.Count == 0)
+                    return (-1, FormattableString.Invariant($"no {what} within {ExplicitReach:F1} m of the y asked for ({y:F2}); surfaces there: {Heights()}"));
+                return (Nearest(near, y), FormattableString.Invariant($"the {what} nearest the y asked for ({y:F2}) of {surfaces.Count}: {Heights()}"));
             }
             if (surfaces.Count == 1) return (0, surfaces[0].Walkable ? "the only ground surface, walkable" : "the only ground surface, not walkable");
             var walkable = all.Where(i => surfaces[i].Walkable).ToList();
             if (walkable.Count > 0)
-                return (Nearest(walkable, referenceY), $"the walkable surface nearest the mover's height ({referenceY:F2}) of {surfaces.Count}: {Heights()}");
-            return (Nearest(all, referenceY), $"the surface nearest the mover's height ({referenceY:F2}) of {surfaces.Count}, none walkable: {Heights()}");
+                return (Nearest(walkable, referenceY), FormattableString.Invariant($"the walkable surface nearest the mover's height ({referenceY:F2}) of {surfaces.Count}: {Heights()}"));
+            return (Nearest(all, referenceY), FormattableString.Invariant($"the surface nearest the mover's height ({referenceY:F2}) of {surfaces.Count}, none walkable: {Heights()}"));
         }
     }
 

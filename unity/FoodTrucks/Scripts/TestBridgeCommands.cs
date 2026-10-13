@@ -132,8 +132,10 @@ namespace FoodTrucks
         private static (double Target, string Text)? runUntil;
         // Where the last run_until stopped ("day D HH:MM"), until the next time command.
         private static string? arrivedAt;
-        // A run_until counts as arrived this close to its minute (the clock is a float).
-        private const double ArrivedMinutes = 0.001;
+        // The last clock step of a run_until goes this far past its minute (a float clock lands a hair either side of
+        // where it is sent), and it counts as arrived only once the minute the game shows is the target: live session 5
+        // stopped at 16:04 for a 16:05 target, from a tolerance that took 16:04.999 as arrived.
+        private const double OvershootMinutes = 0.01;
 
         internal static JObject Clock()
         {
@@ -183,6 +185,13 @@ namespace FoodTrucks
                 ["energy"] = Math.Round(game.Energy, 1),
                 ["hunger"] = Math.Round(game.Hunger, 1),
                 ["happiness"] = Math.Round(game.Happiness, 1),
+                // Happiness never causes a collapse. The game rebuilds it every hour as the sum of these modifiers
+                // (HappinessHelper.UpdateHappiness), so the bridge only shows it: a value set by hand wouldn't hold.
+                // Low happiness burns energy up to 25% faster and slows its regain, and a hire whose job demands include
+                // a minimum player happiness (50 by default) loses satisfaction below it (live session 5: 100 to 40 in a
+                // two-day run) [code, 1.0: EnergySettings, MinimumPlayerHappiness].
+                ["happiness_modifiers"] = new JArray((game.happinessModifiers ?? new List<Helpers.HappinessModifierData>())
+                    .Where(m => m != null).Select(m => new JObject { ["type"] = m.type, ["hours_left"] = m.hoursLeft })),
                 ["max"] = settings == null ? (JToken?)null : settings.MaxEnergyHungerHappinessValue,
                 ["collapse_at"] = settings == null ? (JToken?)null : settings.HospitalizationEnergyThreshold,
                 ["energy_off"] = game.gameVariables?.disableEnergy,
@@ -260,7 +269,7 @@ namespace FoodTrucks
             if (runUntil == null) return;
             var game = SaveGameManager.Current;
             if (game == null) return;
-            var most = (float)Math.Max(0.0, runUntil.Value.Target - NowMinutes(game) + ArrivedMinutes / 2);
+            var most = (float)Math.Max(0.0, runUntil.Value.Target - NowMinutes(game) + OvershootMinutes);
             if (deltaTimeWithMultiplier > most) deltaTimeWithMultiplier = most;
         }
 
@@ -286,6 +295,9 @@ namespace FoodTrucks
         }
 
         private static double NowMinutes(GameInstance game) => game.Day * 1440.0 + game.Hour * 60.0 + game.Minute;
+
+        // The minute the game shows (its clock drops the fraction).
+        private static double ShownMinutes(GameInstance game) => game.Day * 1440.0 + game.Hour * 60.0 + (int)game.Minute;
 
         private static JToken Time(JObject args)
         {
@@ -368,7 +380,7 @@ namespace FoodTrucks
                 Log.Info("Test bridge: run_until dropped: the city was left.");
                 return;
             }
-            if (NowMinutes(game) < runUntil.Value.Target - ArrivedMinutes) return;
+            if (ShownMinutes(game) < runUntil.Value.Target) return;
             var text = runUntil.Value.Text;
             runUntil = null;
             keepNeeds = false;
