@@ -158,10 +158,12 @@ namespace FoodTrucks.Core.Commissary
         // this origin (a door cut off from the street). Nearest first.
         public static BayCandidates CandidatesWithPick(double x, double z, Func<double, double, double, double, bool> legal,
             Func<double, double, IEnumerable<(double X, double Z)>> axes, WheelFootprint footprint, double radius,
-            Func<double, double, bool>? reach, bool automatic = true)
+            Func<double, double, bool>? reach, bool automatic = true, double? heading = null)
         {
-            var list = Candidates(x, z, legal, axes, footprint, radius).ToList();
-            BaySnapResult? pick = automatic ? Nearest(x, z, legal, axes, footprint, MaxMetres, reach) : null;
+            // A measured nose-in bay lists and picks only places facing its own way (Measured).
+            var listAxes = heading == null ? axes : FixedAxis(axes, HeadingAxis(heading.Value));
+            var list = Candidates(x, z, legal, listAxes, footprint, radius).ToList();
+            BaySnapResult? pick = automatic ? Measured(x, z, heading, legal, axes, footprint, MaxMetres, reach) : null;
             if (pick != null)
             {
                 // The pick itself is listed, exactly as Nearest found it: a candidate within SamePickMetres is the same
@@ -173,6 +175,40 @@ namespace FoodTrucks.Core.Commissary
         }
 
         public const double SamePickMetres = 0.05;
+
+        // A heading in degrees clockwise from +z (as the log writes them) as a unit direction on the ground.
+        public static (double X, double Z) HeadingAxis(double degrees)
+        {
+            var radians = degrees * Math.PI / 180;
+            return (Math.Sin(radians), Math.Cos(radians));
+        }
+
+        // The parking lane's axes replaced by one fixed direction wherever there is parking: a measured nose-in bay in a
+        // lot is searched only facing its own way (the stalls' row reads as one lane running across them).
+        public static Func<double, double, IEnumerable<(double X, double Z)>> FixedAxis(Func<double, double, IEnumerable<(double X, double Z)>> axes, (double X, double Z) along)
+        {
+            if (axes == null) throw new ArgumentNullException(nameof(axes));
+            var only = new[] { along };
+            return (x, z) => axes(x, z).Any() ? only : Array.Empty<(double X, double Z)>();
+        }
+
+        // The place a measured bay gives. With a heading (nose-in in a lot): the point itself, facing that way, when the
+        // truck's wheels with their clearance pass the game's test there and reach accepts it, uncentred, so the truck
+        // stands in the stall chosen by hand; else the nearest legal place facing that way (Nearest with FixedAxis).
+        // Without a heading: Nearest as for an entrance. Null when nothing is legal within maxMetres.
+        public static BaySnapResult? Measured(double x, double z, double? heading, Func<double, double, double, double, bool> legal,
+            Func<double, double, IEnumerable<(double X, double Z)>> axes, WheelFootprint footprint, double maxMetres = MaxMetres,
+            Func<double, double, bool>? reach = null)
+        {
+            if (legal == null) throw new ArgumentNullException(nameof(legal));
+            if (axes == null) throw new ArgumentNullException(nameof(axes));
+            if (footprint == null) throw new ArgumentNullException(nameof(footprint));
+            if (heading == null) return Nearest(x, z, legal, axes, footprint, maxMetres, reach);
+            var along = HeadingAxis(heading.Value);
+            if (Fits(x, z, along, footprint.WithClearance(ClearanceAlongMetres, ClearanceAcrossMetres), legal) && (reach == null || reach(x, z)))
+                return new BaySnapResult(x, z, along.X, along.Z, 0);
+            return Nearest(x, z, legal, FixedAxis(axes, along), footprint, maxMetres, reach);
+        }
 
         public const double CandidateSpacingMetres = 4;
         public const int CandidateLimit = 60;

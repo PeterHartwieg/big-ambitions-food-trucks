@@ -30,6 +30,10 @@ namespace FoodTrucks
         private const float TruckLengthMetres = 5.8f;
         // The paint's width: the lane's, at most this.
         private const float MaxWidthMetres = 3.0f;
+        // A nose-in bay in a lot (CommissarySite.InLot): one stall, which the scouting shot put at about 2.75 m between
+        // lines; the row's collider runs across all of them, so the paint is kept narrower than a stall and the parked
+        // cars beside it stay out of its keep-out (BayParking).
+        private const float LotWidthMetres = 2.5f;
         // The edge probes stand this far inside the paint's edges.
         private const float EdgeInsetMetres = 0.1f;
         // The game's decal road paint: a flat 188 sRGB (T_Line_*, T_Crosswalk_*), the fallback's colour.
@@ -262,6 +266,12 @@ namespace FoodTrucks
             for (var s = 0f; s <= (float)BaySnap.CentreProbeMetres && Legal(at + across * (s + 0.05f)); s += 0.05f) last = s + 0.05f;
             var offset = (first + last) / 2f;
             var width = Mathf.Min(last - first - 2f * Legality.WheelBoxHalfWidth, MaxWidthMetres);
+            // In a lot the "lane" across is the whole row of stalls: the paint stays on the stall chosen by hand.
+            if (site.InLot)
+            {
+                offset = 0f;
+                width = Mathf.Min(LotWidthMetres, 2f * Mathf.Min(-first, last) - 2f * Legality.WheelBoxHalfWidth);
+            }
             var foot = at + across * offset;
             var half = width / 2f;
             // The whole paint lies within the radius of the bay point, so a vehicle wholly inside it is within it.
@@ -356,7 +366,15 @@ namespace FoodTrucks
                     catch (Exception ex) { furniture.Add($"no {what} ({ex.GetType().Name}: {ex.Message})"); }
                 }
                 Furnish("lettering", () => BayProps.Lettering(parent, longest, width, GroundAt));
-                Furnish("sign", () => BayProps.Sign(parent, site.Id, longest, width, GroundAt, groundY));
+                // In a lot there is no kerb beside the paint, only the next stall: the sign stands at the stall's head, past
+                // the truck's nose, facing back along the stall (BayProps.SignAtHead).
+                if (site.InLot)
+                {
+                    var nose = BaySnap.HeadingAxis(site.BayHeading!.Value);
+                    var head = Vector3.Dot(along, new Vector3((float)nose.X, 0f, (float)nose.Z)) >= 0f ? 1 : -1;
+                    Furnish("sign", () => BayProps.SignAtHead(parent, site.Id, longest, head, GroundAt));
+                }
+                else Furnish("sign", () => BayProps.Sign(parent, site.Id, longest, width, GroundAt, groundY));
             }
             catch
             {

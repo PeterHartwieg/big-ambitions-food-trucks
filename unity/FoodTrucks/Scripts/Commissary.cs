@@ -320,8 +320,17 @@ namespace FoodTrucks
                         };
                     }
                 }
-                var bay = BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres, reach);
-                if (bay == null)
+                // A measured bay with a heading is nose-in in a lot: the point as measured when legal facing that way, else
+                // the nearest legal place facing that way (Core BaySnap.Measured).
+                var bay = site.Bay != null
+                    ? BaySnap.Measured(origin.X, origin.Z, site.BayHeading, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres, reach)
+                    : BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres, reach);
+                if (site.InLot && bay != null && bay.Distance > 0)
+                    Log.Error($"Commissary {site.Id}: the measured nose-in bay at x {origin.X:F1}, z {origin.Z:F1}, heading {site.BayHeading:F0}, isn't legal by the wheel test; " +
+                              $"the nearest legal place facing that way is x {bay.X:F1}, z {bay.Z:F1}, {bay.Distance:F1} m off. Correct the bay in data/commissaries.json.");
+                if (site.InLot && bay == null)
+                    tried.Add($"{label}: no legal place facing heading {site.BayHeading:F0} (nose-in) within {BaySnap.MaxMetres:F0} m: the stalls may be too shallow for the truck's wheels");
+                else if (bay == null)
                     tried.Add(across + tooLong + noRoute > 0
                         ? $"{label}: no legal parking within {BaySnap.MaxMetres:F0} m on the door's side of the street with a short walk from the door " +
                           $"({across} across the road, {tooLong} too long a walk, {noRoute} with no route)"
@@ -349,7 +358,7 @@ namespace FoodTrucks
             var ms = (Time.realtimeSinceStartup - start) * 1000f;
             foreach (var (bay, from, _) in found)
                 Log.Info($"Commissary {site.Id}: bay on legal parking at x {bay.X:F1}, z {bay.Z:F1}, {bay.Distance:F1} m from x {from.X:F1}, z {from.Z:F1} " +
-                         $"({(site.Bay != null ? "set in data" : "entrance")}), the lane along {Math.Atan2(bay.AlongX, bay.AlongZ) * 180 / Math.PI:F0} degrees; " +
+                         $"({(site.Bay != null ? "set in data" : "entrance")}), {(site.InLot ? "nose-in in a lot, facing" : "the lane along")} {Math.Atan2(bay.AlongX, bay.AlongZ) * 180 / Math.PI:F0} degrees; " +
                          $"resolved {why} in {ms:F0} ms and kept in the save.");
             // One line per load for a commissary still without a bay, with what each origin came to.
             if (found.Count == 0)
@@ -1592,7 +1601,8 @@ namespace FoodTrucks
                     reach = (x, z) => BaySide.SameSide(doorX, doorZ, x, z, lanes) && (reachFrom == null || WalkRule.Accepts(Walk(reachFrom.Value, x, z)));
                 }
                 var automatic = !cutOff && !measuredAcross && door != null && !laneless;
-                var listed = BaySnap.CandidatesWithPick(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), radius, reach, automatic);
+                var listed = BaySnap.CandidatesWithPick(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), radius, reach, automatic,
+                    measured ? site!.BayHeading : null);
                 var pick = listed.Automatic;
                 foreach (var c in listed.Places)
                 {

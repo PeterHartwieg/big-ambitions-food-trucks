@@ -11,12 +11,14 @@ namespace FoodTrucks.Core.Commissary
     // its loading bay is the given point, or the building's nearest entrance when the data gives none.
     public sealed class CommissarySite
     {
-        public CommissarySite(string id, string name, string address, (double X, double Z)? bay)
+        public CommissarySite(string id, string name, string address, (double X, double Z)? bay, double? bayHeading = null)
         {
+            if (bayHeading != null && bay == null) throw new ArgumentException("A bay heading needs a bay point.", nameof(bayHeading));
             Id = id;
             Name = name;
             Address = address;
             Bay = bay;
+            BayHeading = bayHeading;
         }
 
         // Lower-case letters, digits and dashes: it is part of the commissary's phone contact ID.
@@ -27,6 +29,14 @@ namespace FoodTrucks.Core.Commissary
         public string Address { get; }
         // World position of the loading bay (x, z), when set by hand.
         public (double X, double Z)? Bay { get; }
+        // With a measured bay in a lot of stalls (Industry City, Peter, 13 October 2026): the way the truck faces, nose-in,
+        // in degrees clockwise from +z as the log writes headings. The bay is taken as measured when the truck stands
+        // legally there facing this way (BaySnap.Measured); the search then only tries this axis. The sign stands at the
+        // stall's head rather than on a kerb beside the paint.
+        public double? BayHeading { get; }
+
+        // Nose-in in a lot of stalls rather than along a kerb.
+        public bool InLot => BayHeading != null;
     }
 
     // The validated contents of data/commissaries.json.
@@ -95,13 +105,15 @@ namespace FoodTrucks.Core.Commissary
                     throw r.Fail(DataReader.PathOf(site, "address"), "must be street#number, as in ba:street_fifthstreet#2");
                 if (!addresses.Add(address)) throw r.Fail(DataReader.PathOf(site, "address"), "must be unique");
                 (double, double)? bay = null;
+                double? heading = null;
                 var point = r.OptionalObject(site, "bay");
                 if (point != null)
                 {
-                    r.OnlyKeys(point, "x", "z");
+                    r.OnlyKeys(point, "x", "z", "heading");
                     bay = (r.Number(point, "x", -100_000, 100_000), r.Number(point, "z", -100_000, 100_000));
+                    if (point["heading"] != null) heading = r.Number(point, "heading", -360, 360);
                 }
-                sites.Add(new CommissarySite(id, r.Text(site, "name"), address, bay));
+                sites.Add(new CommissarySite(id, r.Text(site, "name"), address, bay, heading));
             }
             if (sites.Count == 0) throw r.Fail("commissaries", "must not be empty");
             return new CommissaryTables(sites);
