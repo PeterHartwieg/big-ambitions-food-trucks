@@ -52,7 +52,8 @@ namespace FoodTrucks
 
         // A commissary's bay: its first resolved point on the ground, the paint's direction, and the side its pavement is on
         // (1 right of that direction, -1 left). The direction is the one a truck faces with its hatch (right) to the pavement,
-        // by the mod's own hatch check; the paint's own direction when neither reads as pavement.
+        // by the mod's own hatch check; the paint's own direction when neither reads as pavement. A nose-in bay in a lot
+        // (CommissarySite.InLot) faces its measured heading as stored, never turned for the hatch (review round 2, Astra).
         internal static (Vector3 Point, Vector3 Along, int PavementSide) Bay(string siteId)
         {
             var site = Site(siteId);
@@ -64,6 +65,7 @@ namespace FoodTrucks
             var along = new Vector3((float)p.AlongX, 0f, (float)p.AlongZ);
             if (along.sqrMagnitude < 1e-6f) along = Vector3.forward;
             along.Normalize();
+            if (site.InLot) return (point, along, 1);
             if (HatchCheck.Probe(point, Quaternion.LookRotation(along)).Opens) return (point, along, 1);
             if (HatchCheck.Probe(point, Quaternion.LookRotation(-along)).Opens) return (point, -along, 1);
             return (point, along, 1);

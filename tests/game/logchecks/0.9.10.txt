@@ -136,3 +136,4 @@ bayside.lotBay | must | Commissary industry-city: bay on legal parking at x .+?,
 bayside.lotNotLegal | never | Commissary industry-city: the measured nose-in bay at x .+? isn't legal by the wheel test | row bayside/B5
 bayside.measuredAcross | count>=0 | ERROR: Commissary [\w-]+ \(.+?\): the measured bay in data/commissaries\.json at x .+?, z .+? is across the road from the door | row bayside/B4
 bayside.buildingCandidates | must | Building ba:street_\w+#\d+: bay candidates within \d+ m \(test bridge\): .+? on the door's side, .+?; \d+ ms\. | row bayside/B7
+bayside.nightSideWait | count>=0 | Overnight check through day \d+ waits: the street side of the bay can't be read yet for .+? \(no driving lanes read round the door\); tried again each minute\. | row bayside/B5d

@@ -298,8 +298,30 @@ namespace FoodTrucks
             var ways = new List<Way>();
             if (target.StartsWith("bay:", StringComparison.Ordinal))
             {
-                var (point, along, side) = TestBridgeCommands.Bay(target.Substring(4));
+                var siteId = target.Substring(4);
+                var (point, along, side) = TestBridgeCommands.Bay(siteId);
                 var pavement = Quaternion.Euler(0f, 90f * side, 0f) * along;
+                // A nose-in bay in a lot: no pavement or lane beside it, so both poses look along the stall from the aisle
+                // behind the truck's rear (review round 2, Opus L1); bay-road stands further back and higher.
+                if (TestBridgeCommands.Site(siteId).InLot)
+                {
+                    switch (pose)
+                    {
+                        case "bay-pavement":
+                            ways.Add(new Way(Up(point - along * 6f, EyeHeight), Up(point, 1f), 2.5f, "from the aisle behind the stall"));
+                            ways.Add(new Way(Up(point - along * 4f, 5f), Up(point, 0.5f), 2.5f, "from above the aisle"));
+                            ways.Add(new Way(Up(point + along * 5f, EyeHeight), Up(point, 1f), 2.5f, "from the stall's head"));
+                            break;
+                        case "bay-road":
+                            ways.Add(new Way(Up(point - along * 12f, 1.5f), Up(point, 0.5f), 4f, "from the aisle, 12 m back"));
+                            ways.Add(new Way(Up(point - along * 12f, 6f), Up(point, 0.5f), 4f, "from above the aisle"));
+                            ways.Add(new Way(Up(point + pavement * 12f, 1.5f), Up(point, 0.5f), 4f, "along the row of stalls"));
+                            break;
+                        default:
+                            throw new BridgeError($"A bay takes the poses bay-pavement and bay-road, not {pose}.");
+                    }
+                    return (ways, null, false);
+                }
                 switch (pose)
                 {
                     case "bay-pavement":

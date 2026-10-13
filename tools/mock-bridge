@@ -303,10 +303,18 @@ class Mock:
                (x-36.0,z+20.0,180.,41.2,'short',44.0,41.0,True,False,"beyond the automatic search's 30 m")]
         if measured:
             # From a point set in data: no walks, the side checked from the nearest door; nothing automatic when the
-            # point itself is across the road.
+            # point itself is across the road. With a heading (nose-in in a lot) every spot faces that way and the
+            # automatic pick is the point itself.
             measured_text='the point set in data is across the road from the door, so the automatic search takes nothing from it'
-            spots=[(a,b,h,d,None,None,None,side,auto and not across,
-                    why if d>30 else measured_text if across else why) for a,b,h,d,w,wm,sm,side,auto,why in spots]
+            heading=measured.get('heading')
+            if heading is not None:
+                spots=[(x,z,heading,0.0,'short',None,None,True,True,None)]+[(a,b,heading,d,w,wm,sm,side,False,why) for a,b,h,d,w,wm,sm,side,auto,why in spots]
+            def reason(d,side,auto,why):
+                if d>30: return why
+                if across: return measured_text
+                if side is False: return 'across the road from the door'
+                return None if auto else 'farther than the automatic pick'
+            spots=[(a,b,h,d,None,None,None,side,auto and not across,reason(d,side,auto,why)) for a,b,h,d,w,wm,sm,side,auto,why in spots]
         origin={'kind':'data' if measured else 'entrance','x':x,'z':z,'door':{'x':dx,'y':0.1,'z':dz},
                 'walk_start':'none (a point set in data is trusted for its walk; its side is checked from the nearest door)' if measured else 'door',
                 'same_side':(not across) if measured else None,'parking_colliders':42,'truncated':False,

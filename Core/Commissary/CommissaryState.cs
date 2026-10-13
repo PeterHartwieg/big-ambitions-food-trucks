@@ -144,6 +144,11 @@ namespace FoodTrucks.Core.Commissary
     {
         public string VehicleId { get; set; } = string.Empty;
         public bool AtOwnCommissaryBay { get; set; }
+        // Within its own bay's radius, but which side of the street it stands on couldn't be read yet (no driving lanes
+        // read round the door, as just after a load): the night check waits rather than fine it (review round 2, Astra
+        // and Sol). Not saved.
+        [JsonIgnore]
+        public bool BaySideUnknown { get; set; }
         public bool PlayerInside { get; set; }
         public bool OnLateStop { get; set; }
         public bool InTransit { get; set; }

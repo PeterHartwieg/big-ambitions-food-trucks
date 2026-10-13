@@ -53,12 +53,25 @@ class ParityTests(unittest.TestCase):
             self.assertIs(origin['same_side'],True)
             self.assertTrue(all(c['walk'] is None for c in origin['candidates']))
             self.assertEqual(sum(c['automatic'] for c in origin['candidates']),1)
+        for origin in [self.mock.call('commissary',{'op':'bay_candidates','site':site})['origins'][0] for site in ('garment-district','murray-hill')]:
+            self.assertNotIn('too long a walk from the door',{c['rejected'] for c in origin['candidates']})
         self.mock.measured_across.add('murray-hill')
         origin=self.mock.call('commissary',{'op':'bay_candidates','site':'murray-hill','radius':30})['origins'][0]
         self.assertIs(origin['same_side'],False)
         self.assertFalse(any(c['automatic'] for c in origin['candidates']))
         self.assertEqual({c['rejected'] for c in origin['candidates']},
                          {'the point set in data is across the road from the door, so the automatic search takes nothing from it'})
+
+    def test_bay_candidates_for_a_nose_in_lot_bay(self):
+        reply=self.mock.call('commissary',{'op':'bay_candidates','site':'industry-city','radius':30})
+        origin=reply['origins'][0]
+        self.assertEqual((origin['kind'],origin['x'],origin['z'],origin['same_side']),('data',-1439.0,-1072.9,True))
+        self.assertTrue(origin['candidates'])
+        self.assertEqual({c['heading'] for c in origin['candidates']},{180})
+        picks=[c for c in origin['candidates'] if c['automatic']]
+        self.assertEqual([(p['x'],p['z'],p['distance']) for p in picks],[(-1439.0,-1072.9,0.0)])
+        self.assertTrue(all(c['walk'] is None and c['walk_m'] is None for c in origin['candidates']))
+        self.assertNotIn('too long a walk from the door',{c['rejected'] for c in origin['candidates']})
 
     def test_bay_candidates_for_any_building(self):
         reply=self.mock.call('commissary',{'op':'bay_candidates','address':'ba:street_twentyfirststreet#4','radius':40})

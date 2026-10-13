@@ -224,6 +224,9 @@ namespace FoodTrucks.Core.Commissary
             if (fleet.Any(v => v == null || string.IsNullOrWhiteSpace(v.VehicleId)) || fleet.Select(v => v.VehicleId).Distinct(StringComparer.Ordinal).Count() != fleet.Count)
                 throw new ArgumentException("Vehicles must have distinct, non-empty IDs.", nameof(vehicles));
             var latest = nowMinute >= rules.NightCheckMinute ? nowDay : nowDay - 1;
+            // A vehicle whose standing can't be decided yet holds the whole check: nothing is fined and the night isn't
+            // marked checked, so it runs again once the street's side can be read (Undecided).
+            if (Undecided(state, fleet).Count > 0) return Array.Empty<CommissaryFine>();
             var first = state.NightCheckedThroughDay.HasValue ? (long)state.NightCheckedThroughDay.Value + 1 : nowDay;
             var fines = new List<CommissaryFine>();
             foreach (var vehicle in fleet)
@@ -235,6 +238,18 @@ namespace FoodTrucks.Core.Commissary
             }
             state.NightCheckedThroughDay = Math.Max(state.NightCheckedThroughDay ?? 0, latest);
             return fines;
+        }
+
+        // The vehicles the night check can't decide yet: one that would be fined unless it is in its own bay, has a space,
+        // and whose street side at that bay couldn't be read. Any other exemption decides it without the bay.
+        public static IReadOnlyList<string> Undecided(CommissaryState state, IEnumerable<CommissaryVehicle> vehicles)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            if (vehicles == null) throw new ArgumentNullException(nameof(vehicles));
+            return vehicles.Where(v => v != null && v.BaySideUnknown && !v.AtOwnCommissaryBay &&
+                                       !(v.PlayerInside || v.OnLateStop || v.InTransit || v.AtPlayerProperty) &&
+                                       state.Spaces.Any(s => s.VehicleId == v.VehicleId))
+                .Select(v => v.VehicleId).ToList();
         }
 
         // The uninstall step: delivered stock (paid on delivery) is refunded at its goods price; open orders haven't been

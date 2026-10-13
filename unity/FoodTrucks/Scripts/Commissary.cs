@@ -544,7 +544,12 @@ namespace FoodTrucks
 
         // Parked in the open (not in a building or garage), its middle within the radius of the commissary's resolved
         // bay, and (a truck) legally parked by the game's test. A cart counts by its middle alone (Peter, review round 5).
-        internal static bool InBay(VehicleInstance vehicle, CommissarySite site, out string why)
+        internal static bool InBay(VehicleInstance vehicle, CommissarySite site, out string why) => InBayAnswer(vehicle, site, out why) == true;
+
+        // InBay with a third answer: null when the vehicle is within the radius but its street side can't be read yet
+        // (no driving lanes read round the door and no answer kept for it there). The 04:00 check waits on that rather
+        // than fine (review round 2, Astra and Sol); everything else takes it as "not in the bay".
+        internal static bool? InBayAnswer(VehicleInstance vehicle, CommissarySite site, out string why)
         {
             var rules = Rules;
             var points = ResolvedBays(site);
@@ -557,7 +562,7 @@ namespace FoodTrucks
             var sideKey = (site.Id, vehicle.id ?? "");
             if (onSide != null) lastSide[sideKey] = (position, onSide.Value);
             else if (lastSide.TryGetValue(sideKey, out var last) && Flat(last.At, (position.x, position.z)) < 0.5f) onSide = last.OnSide;
-            if (onSide == null) { why = "the street's side can't be checked yet (no driving lanes read round the door)"; return false; }
+            if (onSide == null) { why = "the street's side can't be checked yet (no driving lanes read round the door)"; return null; }
             if (onSide == false) { why = "across the road from the door"; return false; }
             if (!CommissaryBays.RequiresLegalParking(FoodTrucksMod.KindOf(vehicle.vehicleTypeName)))
             {
@@ -848,6 +853,19 @@ namespace FoodTrucks
             }
             var unresolvedOther = sites.Sites.Where(site => ResolvedBays(site) == null).Select(site => site.Id).ToList();
             var flags = Flags(state, sites, fleet, now);
+            // A vehicle in its bay's radius whose street side can't be read yet (no lanes read round the door, as just
+            // after a load) holds the check too, never fined on an unknown (Core Commissaries.Undecided).
+            var undecided = Commissaries.Undecided(commissary, flags);
+            if (undecided.Count > 0)
+            {
+                if (nightSideWaitLogged != latest)
+                {
+                    nightSideWaitLogged = latest;
+                    Log.Info($"Overnight check through day {latest} waits: the street side of the bay can't be read yet for {string.Join(", ", undecided.Select(id => World.Short(id)))} " +
+                             "(no driving lanes read round the door); tried again each minute.");
+                }
+                return;
+            }
             var fines = Commissaries.NightCheck(commissary, rules, day, minute, flags);
             FoodTrucksSession.MarkChanged();
             Log.Info($"Overnight check through day {commissary.NightCheckedThroughDay}: " +
@@ -877,6 +895,7 @@ namespace FoodTrucks
         }
 
         private int nightWaitLogged = -1;
+        private int nightSideWaitLogged = -1;
 
         private static string Describe(CommissaryVehicle v) =>
             $"{World.Short(v.VehicleId)} {(v.AtOwnCommissaryBay ? "in its bay" : "out")}{(v.PlayerInside ? ", player inside" : "")}{(v.OnLateStop ? ", late stop" : "")}{(v.InTransit ? ", in transit" : "")}{(v.AtPlayerProperty ? ", at your own building" : "")}";
@@ -926,10 +945,12 @@ namespace FoodTrucks
                 var site = space == null ? null : sites.Site(space.CommissaryId);
                 if (space != null && site == null && unknownSiteShown.Add(vehicle.id))
                     Log.Error($"Commissary: {World.Short(vehicle.id)} has its space at '{space.CommissaryId}', which commissaries.json doesn't have; it counts as out overnight.");
+                bool? inBay = site == null || withDriver.Contains(vehicle.id) ? false : NoBay(site) ? true : InBayAnswer(vehicle, site, out _);
                 list.Add(new CommissaryVehicle
                 {
                     VehicleId = vehicle.id,
-                    AtOwnCommissaryBay = site != null && !withDriver.Contains(vehicle.id) && (NoBay(site) || InBay(vehicle, site, out _)),
+                    AtOwnCommissaryBay = inBay == true,
+                    BaySideUnknown = inBay == null,
                     PlayerInside = game.ActiveVehicleId == vehicle.id || TruckWindow.PlayerAt(vehicle.id),
                     // Only a window the crew has open at a stop right now: a route that sold out and closed early is out like any other.
                     OnLateStop = saved != null && saved.IsOpen && saved.HireStop != null,
