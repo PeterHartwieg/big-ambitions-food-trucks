@@ -694,6 +694,13 @@ namespace FoodTrucks
         private static readonly System.Reflection.PropertyInfo? MainInstance =
             AccessTools.Property(typeof(InstanceBehavior<LoadingScreen>), "IsMainInstance");
 
+        // At patch time: without the reflection lookup the dead-load proof can't be made (review round 8).
+        internal static void ReportLoadCheck()
+        {
+            if (MainInstance == null)
+                Log.Error("Test bridge: InstanceBehavior<LoadingScreen>.IsMainInstance isn't there; a load that dies with its loading screen can't be detected, so the game's loading flag is only reported, never cleared.");
+        }
+
         internal static void StartLoadingPostfix(LoadingScreen __instance)
         {
             try
@@ -734,6 +741,7 @@ namespace FoodTrucks
         internal static void Reset()
         {
             if (runUntil != null && SaveGameManager.Current != null) SetSpeed(1);
+            RestoreAllInterpolation();
             runUntil = null;
             arrivedAt = null;
             keepNeeds = false;

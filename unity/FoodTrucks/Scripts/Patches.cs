@@ -174,6 +174,7 @@ namespace FoodTrucks
                 finalizer: nameof(TestBridgeCommands.CompressFinalizer));
             PatchBridge(typeof(UI.Load.LoadingScreen), "StartLoading", null, "load",
                 postfix: nameof(TestBridgeCommands.StartLoadingPostfix));
+            TestBridgeCommands.ReportLoadCheck();
         }
 
         // args null: the method's only overload, named without its parameters.

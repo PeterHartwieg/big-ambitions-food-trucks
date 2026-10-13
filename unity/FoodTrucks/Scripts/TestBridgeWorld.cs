@@ -201,8 +201,8 @@ namespace FoodTrucks
         // The ground surfaces stacked above a point (a street under an elevated road), top down, and the one a teleport
         // lands on (Core GroundPick): with an explicit y the one nearest it (walkable, for the player), else a walkable
         // one nearest the mover's own height. Walkable is NavMesh within the 3 m the player's landing allows and within
-        // 1 m of the surface's height (live session 5: a 1 m search read the street as not walkable). Live session 4 (13 October 2026): the highest surface put the player on the
-        // elevated highway at y 5.06. Each ray starts just under the last surface; a ray never hits a box it starts in or
+        // 1 m of the surface's height (live session 5: a 1 m search read the street as not walkable). Live session 4
+        // (13 October 2026): the highest surface put the player on the elevated highway at y 5.06. Each ray starts just under the last surface; a ray never hits a box it starts in or
         // a mesh's underside, so it goes on to the next surface down.
         internal static (Vector3 Point, string Why) GroundPicked(float x, float z, float referenceY, float? explicitY, bool walkableOnly = false)
         {
@@ -592,15 +592,27 @@ namespace FoodTrucks
             // read, a point 15 to 90% of the way from its old place to the new one until the clock ran (live session 5,
             // found by the mod agent). Interpolation is off for the move and comes back after the next physics step.
             var body = controller.GetComponent<Rigidbody>();
-            var interpolation = body != null ? body.interpolation : RigidbodyInterpolation.None;
-            if (body != null) body.interpolation = RigidbodyInterpolation.None;
-            VehicleHelper.TeleportVehicleToGround(controller, target, rotation);
-            // The game moves the rigidbody; the transform only follows at the next physics step, which a paused game
-            // doesn't take. Move it too, so the reply and the saved position are the new place.
-            if (body != null) controller.transform.SetPositionAndRotation(body.position, body.rotation);
-            Physics.SyncTransforms();
-            if (body != null && interpolation != RigidbodyInterpolation.None)
-                TestBridgePump.Instance?.StartCoroutine(InterpolateAfterStep(body, interpolation));
+            if (body != null) InterpolationOff(body);
+            try
+            {
+                VehicleHelper.TeleportVehicleToGround(controller, target, rotation);
+                // The game moves the rigidbody; the transform only follows at the next physics step, which a paused game
+                // doesn't take. Move it too, so the reply and the saved position are the new place.
+                if (body != null) controller.transform.SetPositionAndRotation(body.position, body.rotation);
+                Physics.SyncTransforms();
+            }
+            catch
+            {
+                // The move failed: the body's own mode back at once (review round 8).
+                if (body != null) RestoreInterpolation(body);
+                throw;
+            }
+            if (body != null)
+            {
+                var pump = TestBridgePump.Instance;
+                if (pump != null) pump.StartCoroutine(InterpolateAfterStep(body));
+                else RestoreInterpolation(body);
+            }
             // The parking reading for the new place: the game reads it again when a car it drives stands still
             // (CarController.isCheckedForParkingZone), and at once here if the player drives this one, as the panel's
             // live reading that Open checks. A vehicle nobody drives keeps the state the game would store on leaving it.
@@ -637,13 +649,38 @@ namespace FoodTrucks
             return reply;
         }
 
+        // Bodies whose interpolation the bridge turned off, with the mode each had first: a second teleport before the
+        // first is restored keeps the first original, not the None the bridge set (review round 8).
+        private static readonly Dictionary<Rigidbody, RigidbodyInterpolation> interpolationOff = new Dictionary<Rigidbody, RigidbodyInterpolation>();
+
+        private static void InterpolationOff(Rigidbody body)
+        {
+            if (!interpolationOff.ContainsKey(body)) interpolationOff[body] = body.interpolation;
+            body.interpolation = RigidbodyInterpolation.None;
+        }
+
+        private static void RestoreInterpolation(Rigidbody body)
+        {
+            if (!interpolationOff.TryGetValue(body, out var mode)) return;
+            interpolationOff.Remove(body);
+            if (body != null) body.interpolation = mode;
+        }
+
+        // Every body still waiting gets its mode back: the bridge stops (Reset), before its pump and coroutines go.
+        internal static void RestoreAllInterpolation()
+        {
+            foreach (var pair in interpolationOff.ToList())
+                if (pair.Key != null) pair.Key.interpolation = pair.Value;
+            interpolationOff.Clear();
+        }
+
         // Puts a body's interpolation back once a physics step has run from its new pose (WaitForFixedUpdate waits
         // through a pause).
-        private static IEnumerator InterpolateAfterStep(Rigidbody body, RigidbodyInterpolation interpolation)
+        private static IEnumerator InterpolateAfterStep(Rigidbody body)
         {
             yield return new WaitForFixedUpdate();
             yield return new WaitForFixedUpdate();
-            if (body != null && body.interpolation == RigidbodyInterpolation.None) body.interpolation = interpolation;
+            RestoreInterpolation(body);
         }
 
         private static JObject Pose(Vector3 p, float heading) => new JObject

@@ -93,6 +93,9 @@ namespace FoodTrucks
             try { http?.Stop(); }
             catch (Exception ex) { Log.Error("Test bridge, stopping: " + ex.Message); }
             http = null;
+            // Before the pump (and the coroutines that would restore them) goes.
+            try { TestBridgeCommands.RestoreAllInterpolation(); }
+            catch (Exception ex) { Log.Error("Test bridge, restoring interpolation: " + ex.Message); }
             if (pump != null) Object.Destroy(pump.gameObject);
             pump = null;
             try { TestBridgeCommands.Reset(); }
