@@ -1065,7 +1065,7 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
-    maximumSteerAngle: 35
+    maximumSteerAngle: 28
     returnToCenter: 1
     speedSensitiveSteeringCurve:
       serializedVersion: 2

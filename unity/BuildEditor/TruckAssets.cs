@@ -49,6 +49,11 @@ namespace FoodTrucks.BuildEditor
         private const float FinalGearRatio = 13.5f; // top gear 2.108: 10,000 rpm at 50 km/h on 0.38 m wheels
         private const int TopSpeed = 50; // km/h
         private const float BrakeTorque = 2500f; // N m on each wheel, the delivery truck's (grip-limited, see Mass)
+        // Steering (Peter, 13 October 2026, after driving 1,600 kg: "the curves you can take are too narrow"). The
+        // example car's 35 degrees on our 3.60 m wheelbase turned the truck in about 6.3 m (wheelbase / sin of the
+        // angle, to the outer front wheel), car-like. 28 degrees gives about 7.7 m, a step van's 15 to 16 m kerb-to-kerb
+        // circle.
+        private const float MaxSteerAngle = 28f;
         // The delivery truck's power curve: power fraction over rpm / rev limiter, with its tangents.
         private static readonly Keyframe[] PowerCurve =
         {
@@ -183,6 +188,7 @@ namespace FoodTrucks.BuildEditor
                 Apply(root, "powertrain.engine.powerCurve", p => p.animationCurveValue = new AnimationCurve(PowerCurve));
                 Set(root, "powertrain.transmission.finalGearRatio", FinalGearRatio);
                 Set(root, "brakes.maxTorque", BrakeTorque);
+                Set(root, "steering.maximumSteerAngle", MaxSteerAngle);
                 // Off on every game vehicle too; the game's SetMaxSpeed console command writes this value.
                 Set(root, "module.speedLimit", TopSpeed);
                 Set(root, "module.capacity", type.maxFuel);
