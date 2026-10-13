@@ -271,10 +271,10 @@ namespace FoodTrucks
             var instance = new VehicleInstance(typeName) { fuel = type.maxFuel * 0.97f };
             // Both origins are vehicle centres; the car is longer.
             var distance = type.spawnInPlayerObject ? 2f : 6f;
-            var free = FreeSpawnPlace(player, distance, type.spawnInPlayerObject);
+            var free = FreeSpawnPlace(player, distance, type.spawnInPlayerObject, out var blocked);
             if (free == null)
             {
-                Log.Info($"Not spawned {typeName}: no room in front of or beside the player at x {player.position.x:F1}, z {player.position.z:F1}.");
+                Log.Info($"Not spawned {typeName}: no room in front of or beside the player at x {player.position.x:F1}, z {player.position.z:F1} (in front: {blocked}).");
                 Notify("No room to spawn here: move to an open spot.");
                 return;
             }
@@ -284,20 +284,34 @@ namespace FoodTrucks
             Notify($"Spawned {typeName}.");
         }
 
-        // In front of the player, else beside that place, else further on, wherever no vehicle (the player's or a parked
-        // or moving car) stands in the new one's box (live session 4: two spawns in a row stood one inside the other).
-        // Null when all nine places are taken (review round 4, Astra).
-        private static Vector3? FreeSpawnPlace(Transform player, float distance, bool handVehicle)
+        // In front of the player, else beside that place, else further on, where the new vehicle's box is free and the
+        // player can see it from where they stand. Free: nothing solid in the box but the ground, the road and the
+        // parking lanes (vehicles, buildings, props, people; live session 4: two spawns stood one inside the other).
+        // Seen: no wall between the player's chest and the place's middle, at waist height (live session 5: facing a
+        // facade, a truck spawned 4.5 m inside the building, whose mesh collider a box wholly inside doesn't touch).
+        // Null when all nine places are taken (review round 4, Astra); `why` then says what held the first.
+        private static Vector3? FreeSpawnPlace(Transform player, float distance, bool handVehicle, out string why)
         {
             var half = handVehicle ? new Vector3(0.6f, 0.8f, 1.0f) : new Vector3(1.3f, 1.4f, 3.2f);
             var step = handVehicle ? 1.6f : 3.2f;
             var start = player.position + player.forward * distance;
+            var open = LayerHelper.groundLayerMask | (1 << LayerHelper.RoadsLayerIndex) | LayerHelper.parkingAreaLayerMask | LayerHelper.humanLayerMask;
+            var playerLayer = LayerMask.NameToLayer("Player");
+            bool Ignored(Collider c) => c == null || ((1 << c.gameObject.layer) & (int)open) != 0 || c.gameObject.layer == playerLayer ||
+                                        c.transform.root == player.root || c.GetComponentInParent<ThirdPersonCharacter>() != null;
+            why = "";
             foreach (var (side, ahead) in new[] { (0, 0), (1, 0), (-1, 0), (2, 0), (-2, 0), (0, 1), (1, 1), (-1, 1), (0, 2) })
             {
                 var at = start + player.right * (side * step) + player.forward * (ahead * half.z * 2.4f);
-                var taken = Physics.OverlapBox(at + Vector3.up * (half.y + 0.3f), half, player.rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
-                    .Any(c => c != null && (c.GetComponentInParent<VehicleController>() != null || c.gameObject.layer == LayerHelper.ParkedVehiclesLayerIndex));
-                if (!taken) return at;
+                var inBox = Physics.OverlapBox(at + Vector3.up * (half.y + 0.3f), half, player.rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                    .FirstOrDefault(c => !Ignored(c));
+                var eye = player.position + Vector3.up * 1.0f;
+                var target = at + Vector3.up * 1.0f;
+                var wall = Physics.RaycastAll(eye, target - eye, Vector3.Distance(eye, target), Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                    .Where(h => !Ignored(h.collider)).OrderBy(h => h.distance).Select(h => h.collider).FirstOrDefault();
+                if (inBox == null && wall == null) return at;
+                if (why.Length == 0)
+                    why = inBox != null ? $"{BayProps.Describe(inBox)} stands there" : $"{BayProps.Describe(wall!)} is in the way from where you stand";
             }
             return null;
         }

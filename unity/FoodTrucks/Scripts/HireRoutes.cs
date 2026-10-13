@@ -463,7 +463,7 @@ namespace FoodTrucks
                     if (Taken(to, toRotation, kind))
                     {
                         if (recoveryWaitShown.Add(vehicle.VehicleId))
-                            Log.Info($"Route: cart {vehicle.VehicleId} waits off the map: both where it left from and its stop are taken.");
+                            Log.Info($"Route: {kind} {vehicle.VehicleId} waits off the map: both where it left from and its stop are taken.");
                         return;
                     }
                     position = to;
@@ -566,13 +566,13 @@ namespace FoodTrucks
                     var fromRotation = Quaternion.Euler(0f, (float)transit.FromHeading, 0f);
                     if (t - transit.ArrivesAt < 2 * RetryMinutes || Taken(from, fromRotation, kind))
                     {
-                        if (t == transit.ArrivesAt) Log.Info($"Route: cart {vehicle.VehicleId}'s spot {transit.ToSpotKey} is taken; it waits.");
+                        if (t == transit.ArrivesAt) Log.Info($"Route: {kind} {vehicle.VehicleId}'s spot {transit.ToSpotKey} is taken; it waits.");
                         return false;
                     }
                     position = from;
                     rotation = fromRotation;
                     atStop = false;
-                    Log.Info($"Route: cart {vehicle.VehicleId}'s spot {transit.ToSpotKey} stayed taken; it goes back where it left from.");
+                    Log.Info($"Route: {kind} {vehicle.VehicleId}'s spot {transit.ToSpotKey} stayed taken; it goes back where it left from.");
                 }
             }
 

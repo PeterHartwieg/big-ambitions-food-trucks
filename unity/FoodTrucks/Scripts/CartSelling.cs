@@ -280,7 +280,11 @@ namespace FoodTrucks
             var serving = HireCrew.Serving(vehicle, HireCrew.Now());
             var key = serving.Count == 0 ? "foodtrucks:notification_open"
                 : serving.Count == 1 ? "foodtrucks:notification_open_crew_one" : "foodtrucks:notification_open_crew_many";
-            Say(key, kind, ("units", plan.StockUnits.ToString()), ("rate", ExpectedSales(plan, service).ToString("F0")),
+            // "1 customer", "3 customers" (live session 5: "About 1 customers an hour").
+            var rate = (int)Math.Round(ExpectedSales(plan, service));
+            var customers = rate == 1 ? LocalizorManager.GetLocalization("foodtrucks:customers_one", null)
+                : string.Format(LocalizorManager.GetLocalization("foodtrucks:customers_many", null), rate);
+            Say(key, kind, ("units", plan.StockUnits.ToString()), ("rate", rate.ToString()), ("customers", customers),
                 ("grade", GradeText(vehicle)), ("crew", HireCrew.Names(serving)));
             if (pitch != null) Say(pitch.Value.Key, kind, pitch.Value.Data);
             // From the driver's seat to the hatch: the player serves from inside the truck.
