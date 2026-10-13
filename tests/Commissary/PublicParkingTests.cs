@@ -35,7 +35,7 @@ public class PublicParkingTests
     [InlineData("car")]
     [InlineData("van")]
     [InlineData("cart")]
-    public void ATruckSpaceDoesNotCoverOtherVehicleKinds(string? kind)
+    public void CoverageRequiresTheKindParameterToMatchTheRentedSpace(string? kind)
     {
         Assert.False(Commissaries.PublicParkingCovered(Rented(), "v", kind, "a"));
     }
@@ -82,5 +82,43 @@ public class PublicParkingTests
             var bayId = CommissaryBays.InBay(points, 100, 200, 15, true) ? "a" : null;
             Assert.False(Commissaries.PublicParkingCovered(Rented(), "v", "truck", bayId));
         }
+    }
+
+    [Theory]
+    [InlineData(60f, 65f, true, 60f)]
+    [InlineData(60f, 65f, false, 65f)]
+    [InlineData(60f, 60f, true, 60f)]
+    [InlineData(60f, 0f, true, 0f)]
+    public void OnlyAnIncrementInACoveredHourIsRemoved(float before, float after, bool covered, float expected)
+    {
+        Assert.Equal(expected, Commissaries.PublicParkingAfterHour(before, after, covered));
+    }
+
+    [Fact]
+    public void BayHoursBeforeAndAfterStreetParkingLeaveAllStreetHoursDue()
+    {
+        var state = Rented();
+        var balance = 0f;
+        foreach (var bay in new[] { "a", "a", null, null, null, "a", "a" })
+            balance = Commissaries.PublicParkingAfterHour(balance, balance + 5f,
+                Commissaries.PublicParkingCovered(state, "v", "truck", bay));
+        Assert.Equal(15f, balance);
+    }
+
+    [Fact]
+    public void MidnightChargesYesterdayBeforeTheNewDaysBayHour()
+    {
+        var state = Rented();
+        var balance = Commissaries.PublicParkingAfterHour(0f, 5f, false);
+        // Arriving at 23:50 adds no covered hourly tick before RunDaily collects yesterday's balance.
+        var chargedYesterday = balance;
+        balance = 0f;
+        balance = Commissaries.PublicParkingAfterHour(balance, balance + 5f,
+            Commissaries.PublicParkingCovered(state, "v", "truck", "a"));
+        Assert.Equal(5f, chargedYesterday);
+        Assert.Equal(0f, balance);
+        // Today's later street hour belongs to the next midnight's bill.
+        balance = Commissaries.PublicParkingAfterHour(balance, balance + 5f, false);
+        Assert.Equal(5f, balance);
     }
 }

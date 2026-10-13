@@ -165,6 +165,7 @@ namespace FoodTrucks
             CityLicensing.Detach();
             Catering.Detach();
             Commissary.Detach();
+            StreetFoodBooks.ResetParkingHours();
             MapFilters.Clear();
             TruckHatch.Forget();
             WindowCrew.Reset();

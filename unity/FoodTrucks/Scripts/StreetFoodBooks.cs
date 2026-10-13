@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Entities;
+using FoodTrucks.Core.Commissary;
 using FoodTrucks.Core.Saves;
 using HarmonyLib;
 using Localizor;
@@ -39,6 +40,22 @@ namespace FoodTrucks
         // Both of the game's rows have to lose the moved costs, or they would count twice: moving is on only when
         // both of those patches are in place (CheckMoves, after patching).
         private static bool movesActive;
+
+        // Diagnostic hours since load, not money: the game's balance already persists the hourly exemptions.
+        private sealed class BayHours
+        {
+            public string Name = "";
+            public int Hours;
+            public readonly HashSet<string> Bays = new HashSet<string>(StringComparer.Ordinal);
+        }
+        private static readonly Dictionary<string, BayHours> parkingHours = new Dictionary<string, BayHours>(StringComparer.Ordinal);
+        private static int parkingHoursDay = -1;
+
+        internal static void ResetParkingHours()
+        {
+            parkingHours.Clear();
+            parkingHoursDay = -1;
+        }
 
         // Called once after patching.
         internal static void CheckMoves()
@@ -280,23 +297,21 @@ namespace FoodTrucks
         }
 
         // Parking: at midnight the game charges each vehicle what it ran up the day before, into yesterday.
-        // Rent covers a food vehicle in its commissary bay; clear its balance before noting the charges for Econoview.
+        // Hourly exemptions have already left only the street hours due; this prefix only notes them for Econoview.
         public static void ParkingDailyPrefix(out Dictionary<string, float>? __state)
         {
             __state = null;
             try
             {
                 if (!FoodTrucksSession.CanWrite) return;
+                // NewDay runs RunDaily before the new day's first RunHourly: finish yesterday's log first.
+                if (parkingHoursDay == SaveGameManager.Current.Day - 1)
+                    foreach (var hours in parkingHours.Values)
+                        Log.Info($"Commissary {string.Join(", ", hours.Bays.OrderBy(b => b))}: no public parking for {hours.Name} " +
+                                 $"for {hours.Hours} h in the rented bay today (observed since load).");
+                ResetParkingHours();
                 foreach (var vehicle in FoodVehicles().Where(v => v.unpaidParkingAmount > 0f))
                 {
-                    var bay = Commissary.PublicParkingBay(vehicle);
-                    if (bay != null)
-                    {
-                        vehicle.unpaidParkingAmount = 0f;
-                        Log.Info($"Commissary {bay.Id}: no public parking for {LocalizorManager.GetLocalization(vehicle.vehicleTypeName, null)} " +
-                                 $"{World.Short(vehicle.id)} tonight (in the rented bay).");
-                        continue;
-                    }
                     (__state ??= new Dictionary<string, float>(StringComparer.Ordinal))[vehicle.id] = vehicle.unpaidParkingAmount;
                 }
             }
@@ -320,19 +335,31 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error(ex); }
         }
 
-        // Parking tickets: the game writes one hourly at most per illegally parked vehicle, into today.
-        public static void ParkingHourlyPrefix(out Dictionary<string, int>? __state)
+        internal sealed class ParkingHour
+        {
+            public int Tickets;
+            public float UnpaidAmount;
+        }
+
+        // Public parking accrues hourly; tickets are charged immediately, into today.
+        public static void ParkingHourlyPrefix(out Dictionary<string, ParkingHour>? __state)
         {
             __state = null;
             try
             {
                 if (!FoodTrucksSession.CanWrite) return;
-                __state = FoodVehicles().ToDictionary(v => v.id, v => v.parkingTickets?.Count ?? 0, StringComparer.Ordinal);
+                if (parkingHoursDay != SaveGameManager.Current.Day)
+                {
+                    ResetParkingHours();
+                    parkingHoursDay = SaveGameManager.Current.Day;
+                }
+                __state = FoodVehicles().ToDictionary(v => v.id,
+                    v => new ParkingHour { Tickets = v.parkingTickets?.Count ?? 0, UnpaidAmount = v.unpaidParkingAmount }, StringComparer.Ordinal);
             }
             catch (Exception ex) { Log.Error(ex); }
         }
 
-        public static void ParkingHourlyPostfix(Dictionary<string, int>? __state)
+        public static void ParkingHourlyPostfix(Dictionary<string, ParkingHour>? __state)
         {
             try
             {
@@ -342,7 +369,22 @@ namespace FoodTrucks
                 foreach (var vehicle in FoodVehicles())
                 {
                     if (!__state.TryGetValue(vehicle.id, out var before)) continue;
-                    var tickets = (vehicle.parkingTickets?.Count ?? 0) - before;
+                    if (vehicle.unpaidParkingAmount > before.UnpaidAmount)
+                    {
+                        var bay = Commissary.PublicParkingBay(vehicle);
+                        vehicle.unpaidParkingAmount = Commissaries.PublicParkingAfterHour(before.UnpaidAmount, vehicle.unpaidParkingAmount, bay != null);
+                        if (bay != null)
+                        {
+                            if (!parkingHours.TryGetValue(vehicle.id, out var hours))
+                                parkingHours[vehicle.id] = hours = new BayHours
+                                {
+                                    Name = LocalizorManager.GetLocalization(vehicle.vehicleTypeName, null) + " " + World.Short(vehicle.id)
+                                };
+                            hours.Hours++;
+                            hours.Bays.Add(bay.Id);
+                        }
+                    }
+                    var tickets = (vehicle.parkingTickets?.Count ?? 0) - before.Tickets;
                     if (tickets > 0) SalesLedger.RecordGameCost(state, day, vehicle.id, LedgerLine.Parking, tickets * TicketCents);
                 }
             }

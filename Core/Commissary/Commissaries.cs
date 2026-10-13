@@ -200,7 +200,7 @@ namespace FoodTrucks.Core.Commissary
             state.NextBatchId = nextId;
         }
 
-        // Rent covers midnight public parking only for this food vehicle in the bay of its active space.
+        // Rent covers hourly public parking only for this food vehicle in the bay of its active space.
         // The adapter supplies a bay ID only after the usual InBay test passes.
         public static bool PublicParkingCovered(CommissaryState state, string vehicleId, string? kind, string? bayCommissaryId)
         {
@@ -208,6 +208,10 @@ namespace FoodTrucks.Core.Commissary
             return (kind == "cart" || kind == "truck") && !string.IsNullOrEmpty(bayCommissaryId) &&
                    state.Spaces.Any(s => s.VehicleId == vehicleId && s.Kind == kind && s.CommissaryId == bayCommissaryId);
         }
+
+        // Remove only this hour's increment in a rented bay; earlier street charges stay due at midnight.
+        public static float PublicParkingAfterHour(float before, float after, bool covered) =>
+            covered ? Math.Min(before, after) : after;
 
         // Across skipped nights, today's flags stand in for each skipped check. The first call starts tracking
         // now: before 04:00 it sets the baseline to yesterday, after 04:00 it checks only today's night.
