@@ -743,8 +743,13 @@ namespace FoodTrucks
                 if (paid) SalesLedger.RecordOvernightFine(state, SaveGameManager.Current.Day, fine.VehicleId, fine.Cents);
                 else commissary.Fines.Add(fine);
                 Log.Info($"Overnight fine: {World.Short(fine.VehicleId)} out on the night of day {fine.Day}, {CartSelling.Money(fine.Cents)} {(paid ? "paid" : "unpaid (not enough money); tried again")}.");
-                Notices.SendText(CityLicensing.City(), paid ? "foodtrucks:message_city_overnight_fine" : "foodtrucks:message_city_overnight_fine_unpaid", new Dictionary<string, string>
+                // The text says what was wrong (live session 4: a truck legally in another commissary's bay, with no space
+                // anywhere, read "wasn't in a commissary bay"): no space at all, or not in its own commissary's bay.
+                var space = commissary.Spaces.FirstOrDefault(sp => sp.VehicleId == fine.VehicleId);
+                var key = space == null ? "foodtrucks:message_city_overnight_fine_nospace" : "foodtrucks:message_city_overnight_fine";
+                Notices.SendText(CityLicensing.City(), paid ? key : key + "_unpaid", new Dictionary<string, string>
                 {
+                    { "commissary", space == null ? "" : NameOf(space.CommissaryId) },
                     { "vehicle", VehicleName(state, fine.VehicleId) },
                     { "day", fine.Day.ToString() },
                     { "fine", CartSelling.Money(fine.Cents) },

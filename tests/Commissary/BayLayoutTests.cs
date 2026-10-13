@@ -131,6 +131,31 @@ public class BayLayoutTests
         Assert.True(BayKeepOut.Overlaps(new[] { (0.0, 2.0) }, 2, 2.8, 1.6, 1, -1, 2.9, 0.9, 0.1));
     }
 
+    private sealed class Car
+    {
+        public Car(double along, double halfLength) { Along = along; HalfLength = halfLength; }
+        public double Along { get; }
+        public double HalfLength { get; }
+    }
+
+    [Fact]
+    public void ACarFoundByOneZonesBoxButStandingInTheNextIsTaken()
+    {
+        // Review round 3 (Sol): paint stretches -14.5…14.5 and -9.5…19.5, a 4.8 m car centred at 18.5. The first zone's
+        // box (2 m beyond its paint) finds it, but it stands only in the second.
+        var zones = new[] { (From: -14.5, To: 14.5), (From: -9.5, To: 19.5) };
+        var car = new Car(18.5, 2.4);
+        bool In((double From, double To) z, Car c) => BayKeepOut.Overlaps(new[] { z }, 2.35, c.Along, 0, 1, 0, c.HalfLength, 0.9, 0.1);
+        Assert.False(In(zones[0], car));
+        Assert.True(In(zones[1], car));
+        Assert.Same(car, Assert.Single(BayKeepOut.CarsInZones(zones, _ => new[] { car }, In)));
+        Assert.Same(car, Assert.Single(BayKeepOut.CarsInZones(zones.Reverse(), _ => new[] { car }, In)));
+        // A car in both zones is taken once; one in neither not at all.
+        var both = new Car(0, 2.4);
+        var neither = new Car(30, 2.4);
+        Assert.Equal(new[] { both, car }, BayKeepOut.CarsInZones(zones, _ => new[] { both, neither, car }, In));
+    }
+
     [Fact]
     public void TheFacadeIsTheOutermostWallHitNearTheDoorsLine()
     {

@@ -21,8 +21,9 @@ public class CommissaryTablesTests
         Assert.InRange(tables.Sites.Count, 4, 6);
         Assert.Equal(tables.Sites.Count, tables.Sites.Select(s => s.Address).Distinct().Count());
         Assert.All(tables.Sites, s => Assert.StartsWith("foodtrucks:commissary_", s.Name));
-        // Only Hell's Kitchen has a measured bay: its garage faces a no-parking kerb (the 0.9.8 agent run, 11 October 2026).
-        Assert.Equal(new[] { "hells-kitchen" }, tables.Sites.Where(s => s.Bay != null).Select(s => s.Id).ToArray());
+        // Measured bays: Hell's Kitchen's garage faces a no-parking kerb (the 0.9.8 agent run, 11 October 2026); the
+        // Garment District's and Murray Hill's doors have no NavMesh route to the street (live session 4, 13 October 2026).
+        Assert.Equal(new[] { "garment-district", "hells-kitchen", "murray-hill" }, tables.Sites.Where(s => s.Bay != null).Select(s => s.Id).ToArray());
         var bay = tables.Site("hells-kitchen")!.Bay!.Value;
         Assert.Equal(393.2, bay.X, 6);
         Assert.Equal(217.6, bay.Z, 6);
@@ -43,7 +44,7 @@ public class CommissaryTablesTests
     [InlineData("\"address\": \"ba:street_secondstreet#51\"", "\"address\": \"ba:street_secondstreet\"", "street#number")]
     [InlineData("\"address\": \"ba:street_secondstreet#51\"", "\"address\": \"ba:street_twentysecondstreet#6\"", "must be unique")]
     [InlineData("\"schemaVersion\": 1", "\"schemaVersion\": 2", "reads schema 1")]
-    [InlineData("\"address\": \"ba:street_fifthstreet#12\"", "\"address\": \"ba:street_fifthstreet#12\", \"bay\": { \"x\": 1, \"y\": 2 }", "not a known field")]
+    [InlineData("\"address\": \"ba:street_twentysecondstreet#6\"", "\"address\": \"ba:street_twentysecondstreet#6\", \"bay\": { \"x\": 1, \"y\": 2 }", "not a known field")]
     public void BadEntriesFailWithTheirPath(string from, string to, string message)
     {
         Assert.Contains(from, Json);
@@ -55,9 +56,9 @@ public class CommissaryTablesTests
     [Fact]
     public void ABayPointIsRead()
     {
-        var tables = CommissaryTables.Parse(Json.Replace("\"address\": \"ba:street_fifthstreet#12\"",
-            "\"address\": \"ba:street_fifthstreet#12\", \"bay\": { \"x\": 1225.5, \"z\": -922 }"));
-        Assert.Equal((1225.5, -922.0), tables.Site("murray-hill")!.Bay);
+        var tables = CommissaryTables.Parse(Json.Replace("\"address\": \"ba:street_twentysecondstreet#6\"",
+            "\"address\": \"ba:street_twentysecondstreet#6\", \"bay\": { \"x\": 1225.5, \"z\": -922 }"));
+        Assert.Equal((1225.5, -922.0), tables.Site("industry-city")!.Bay);
     }
 
     [Fact]

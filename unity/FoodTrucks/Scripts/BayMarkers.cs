@@ -131,15 +131,17 @@ namespace FoodTrucks
                     // Only resolved bays on legal parking are painted; Commissary logs a commissary that has none.
                     var bays = Commissary.ResolvedBays(site);
                     if (bays == null || bays.Count == 0) continue;
-                    // Not before its zone has been found free of parked cars (BayParking: a car in view keeps it
-                    // waiting), so no car stands in fresh paint.
-                    if (!BayParking.PaintReady(site.Id)) continue;
                     if (!markers.TryGetValue(site.Id, out var bySite)) markers[site.Id] = bySite = new Dictionary<int, Marker>();
                     // Drawn from the parking colliders and the road around it, so only with the player within a few
                     // hundred metres, where the street is loaded; farther than that the paint is too small to see anyway.
                     var near = bays.Any(b => Flat(player, (b.X, b.Z)) <= (inFoodVehicle ? MakeMetresDriving : MakeMetres));
                     var missing = Enumerable.Range(0, bays.Count).Where(i => !bySite.TryGetValue(i, out var m) || (m.Drawn && m.Root == null)).ToList();
-                    if (missing.Count > 0 && near && !(retryAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at))
+                    // A bay with nothing drawn yet is checked for parked cars right before its first markers: none is
+                    // made while a lane car stands in its zone (BayParking.ClearBeforePaint; a car in view keeps it
+                    // waiting until it is out of view and swept), so no car stands in fresh paint.
+                    var drawn = bySite.Values.Any(m => m.Root != null);
+                    if (missing.Count > 0 && near && !(retryAt.TryGetValue(site.Id, out var at) && Time.unscaledTime < at) &&
+                        (drawn || BayParking.ClearBeforePaint(site, radius)))
                     {
                         retryAt[site.Id] = Time.unscaledTime + RetrySeconds;
                         var doors = World.EntrancesOf(site.Address);

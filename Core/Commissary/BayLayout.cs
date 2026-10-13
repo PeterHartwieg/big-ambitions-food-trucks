@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace FoodTrucks.Core.Commissary
 {
@@ -91,6 +92,28 @@ namespace FoodTrucks.Core.Commissary
                 return true;
             }
             return false;
+        }
+
+        // The cars standing in any of the zones, each once, in the order found. near(zone) gives the cars a zone's
+        // search finds (its box reaches beyond the paint); inZone says whether one really stands in it. A car counts as
+        // seen only once it stands in a zone, so a car one zone's box finds but that stands only in a later zone is
+        // still taken there (review round 3 of the mod round, Astra and Sol).
+        public static List<TCar> CarsInZones<TZone, TCar>(IEnumerable<TZone> zones, Func<TZone, IEnumerable<TCar>> near, Func<TZone, TCar, bool> inZone)
+            where TCar : class
+        {
+            if (zones == null) throw new ArgumentNullException(nameof(zones));
+            if (near == null) throw new ArgumentNullException(nameof(near));
+            if (inZone == null) throw new ArgumentNullException(nameof(inZone));
+            var taken = new HashSet<TCar>();
+            var result = new List<TCar>();
+            foreach (var zone in zones)
+                foreach (var car in near(zone).ToList())
+                    if (car != null && !taken.Contains(car) && inZone(zone, car))
+                    {
+                        taken.Add(car);
+                        result.Add(car);
+                    }
+            return result;
         }
     }
 

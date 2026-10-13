@@ -271,10 +271,27 @@ namespace FoodTrucks
             var instance = new VehicleInstance(typeName) { fuel = type.maxFuel * 0.97f };
             // Both origins are vehicle centres; the car is longer.
             var distance = type.spawnInPlayerObject ? 2f : 6f;
-            var controller = VehicleHelper.CreateAndSpawnVehicle(
-                instance, player.position + player.forward * distance, player.rotation);
-            Log.Info($"Spawned {typeName}: id {instance.id}, controller {(controller == null ? "none" : controller.GetType().Name)}.");
+            var at = FreeSpawnPlace(player, distance, type.spawnInPlayerObject);
+            var controller = VehicleHelper.CreateAndSpawnVehicle(instance, at, player.rotation);
+            Log.Info($"Spawned {typeName}: id {instance.id}, controller {(controller == null ? "none" : controller.GetType().Name)}, at x {at.x:F1}, z {at.z:F1}.");
             Notify($"Spawned {typeName}.");
+        }
+
+        // In front of the player, else beside that place, else further on, wherever no vehicle (the player's or a parked
+        // or moving car) stands in the new one's box (live session 4: two spawns in a row stood one inside the other).
+        private static Vector3 FreeSpawnPlace(Transform player, float distance, bool handVehicle)
+        {
+            var half = handVehicle ? new Vector3(0.6f, 0.8f, 1.0f) : new Vector3(1.3f, 1.4f, 3.2f);
+            var step = handVehicle ? 1.6f : 3.2f;
+            var start = player.position + player.forward * distance;
+            foreach (var (side, ahead) in new[] { (0, 0), (1, 0), (-1, 0), (2, 0), (-2, 0), (0, 1), (1, 1), (-1, 1), (0, 2) })
+            {
+                var at = start + player.right * (side * step) + player.forward * (ahead * half.z * 2.4f);
+                var taken = Physics.OverlapBox(at + Vector3.up * (half.y + 0.3f), half, player.rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                    .Any(c => c != null && (c.GetComponentInParent<VehicleController>() != null || c.gameObject.layer == LayerHelper.ParkedVehiclesLayerIndex));
+                if (!taken) return at;
+            }
+            return start;
         }
 
         // A large ledger-only entry for today, so the next tax statement has street food income

@@ -62,8 +62,9 @@ order.delivered | must | Commissary delivery: order \d+, .+? at .+? \(ordered da
 order.refused | must | Commissary delivery: order \d+, .+? not delivered: the payment of \$.+? was refused \(not enough money\); the order is cancelled\. | row 0.9.10/3
 order.debug | count>=0 | Debug: \d+ commissary orders brought forward and delivered \(paid on delivery\)\. | row 0.9.10/2,0.9.10/3
 uninstall.refund | must | Uninstall: commissary refund \$.+? for the stock delivered; \d+ open orders cancelled, unpaid; .+? spaces given up\. | row 0.9.10/5
-bay.paint | must | Commissary marker .+?; a 5\.8 m truck fits wholly inside; LOADING ZONE 0\.70 m high, 5\.6 m long; sign at x .+?, z .+?, 0\.40 m behind a kerb .+? m past the paint | row 0.9.10/6,0.9.10/7,0.9.10/12
-bay.noSign | never | no sign \(.+?\) | row 0.9.10/6,0.9.10/7,0.9.10/12
+bay.paint | must | Commissary marker .+?; a 5\.8 m truck fits wholly inside; LOADING ZONE 0\.70 m high, 5\.6 m long; (?:sign at x .+?, z .+?, 0\.40 m behind (?:a kerb|the pavement's edge \(no raised kerb\)) .+? m past the paint|no sign \([+-]\d\.\d m: .+?\)) | row 0.9.10/6,0.9.10/7,0.9.10/12,mod/M12
+bay.noSign | never | no sign \(no kerb within 3 m of the paint's pavement edge, or no room for the pole\) | row 0.9.10/6,0.9.10/7,0.9.10/12,mod/M12
+bay.signRefused | count>=0 | no sign \([+-]\d\.\d m: .+?\) | row 0.9.10/6,0.9.10/7,0.9.10/12,mod/M12
 bay.noLettering | never | no lettering \(.+?\) | row 0.9.10/6,0.9.10/7,0.9.10/12
 bay.props | must | Commissary props .+?: props by the door at x .+?, z .+?: pallet [+-]\d+\.\d m along the facade(?:, [+-]\d+\.\d\d m off the door's line)?, roll cage [+-]\d+\.\d m .+?, hand truck [+-]\d+\.\d m .+?, dumpster [+-]\d+\.\d m | row 0.9.10/8,0.9.10/12,mod/M4
 bay.leftOut | count>=0 | left out: .+? \(.+?\) | row 0.9.10/8,0.9.10/12
@@ -105,8 +106,8 @@ map.lateConfirm | must | Map pick: the confirm for .+? came after the pick ended
 mod.loadSweep | must | Commissary [\w-]+: bay swept on load, \d+ parked cars? kept out\. | row mod/M1
 mod.loadSweepLeft | never | Commissary [\w-]+: bay swept on load, \d+ parked cars? kept out, \d+ left\. | row mod/M1
 mod.loadNotReady | count>=0 | Commissary bays: the parking lanes aren't ready on load; the bays from the save are swept on the first look instead \(with the view rule, their paint waiting until they are clear\)\. | row mod/M1
-mod.newBaySweep | count>=0 | Commissary [\w-]+: new bay swept (?:under the loading screen|with the view rule), \d+ parked cars? kept out(?:, \d+ in view left for now)?\. | row mod/M1,mod/M5
-mod.newBayLeftUnderCover | never | Commissary [\w-]+: new bay swept under the loading screen, \d+ parked cars? kept out, \d+ in view left for now\. | row mod/M1,mod/M5
+mod.newBaySweep | count>=0 | Commissary [\w-]+: new bay swept (?:under the loading screen|with the view rule), \d+ parked cars? kept out(?:, \d+ left for now)?\. | row mod/M1,mod/M5
+mod.newBayLeftUnderCover | never | Commissary [\w-]+: new bay swept under the loading screen, \d+ parked cars? kept out, \d+ left for now\. | row mod/M1,mod/M5
 mod.paintWaits | count>=0 | Commissary [\w-]+: paint waits for \d+ parked cars? in view to leave the bay\. | row mod/M1,mod/M5
 mod.paintClear | count>=0 | Commissary [\w-]+: the bay is clear; its paint is drawn\. | row mod/M1,mod/M5
 mod.jump | must | Commissary hells-kitchen: the player jumped \d+ m to within 150 m of the bay; swept before the frame was drawn, \d+ parked cars? kept out\. | row mod/M2
@@ -115,3 +116,9 @@ mod.noBayLine | must | ERROR: Commissary (?:industry-city|garment-district|murra
 mod.propsNoWall | count>=0 | no wall behind it at x .+?, z .+? | row mod/M4
 mod.propsBlocked | count>=0 | something stands there: .+?, layer .+? | row mod/M4
 mod.candidates | count>=0 | Commissary [\w-]+: bay candidates within \d+ m \(test bridge\): .+?; \d+ ms\. | row mod/M6
+mod.propsPlayerWall | never | props by the door at x .+?, z .+? \(facade facing .+?, [^)]*layer Player\) | row mod/M4
+mod.fineNoSpace | count>=0 | Phone: The City of New York: Your .+? had no commissary space at \d\d:\d\d on day \d+\. | row mod/M13
+mod.fineOwnBay | count>=0 | Phone: The City of New York: Your .+? wasn't in the bay of .+?, where it has its space, at \d\d:\d\d on day \d+\. | row mod/M13
+mod.fineOldText | never | wasn't in a commissary bay at | row mod/M13
+mod.spawnPlace | count>=0 | Spawned foodtrucks:vehicletype_foodtruck: id .+?, controller .+?, at x .+?, z .+?\. | row mod/M14
+mod.measuredBays | must | Commissary (?:garment-district|murray-hill) \(.+?\): bay searched from x .+?, z .+? \(set in data\) | row mod/M15

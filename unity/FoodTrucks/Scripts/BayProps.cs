@@ -89,29 +89,60 @@ namespace FoodTrucks
         }
 
         // The sign: on the pavement just behind the kerb, by the middle of the longest stretch, its plate facing the
-        // road (and readable from the pavement). The kerb is found by walking out from the paint's pavement edge until
-        // the ground steps up; with no kerb within 3 m there is no sign (a pole in the road would be worse).
+        // road (and readable from the pavement). Local -z is the pavement side (the paint's root faces the road). The
+        // kerb is the first step up of 8 cm or more from the paint's own edge (0.9.10 measured from the driving lane's
+        // waypoint height, which needn't be the road's); without one (a flush plaza, as across from the Hell's Kitchen
+        // door), the pavement's edge: the first point off the parking lane and the road that is on the NavMesh. The pole
+        // stands PoleBehindKerb past either, where nothing solid stands; a person or vehicle there doesn't count.
+        // Without a place the log says, for each spot tried, what was missing (live session 4: 0.9.10's line didn't
+        // say which of its two reasons held).
         public static string Sign(Transform root, string siteId, (float From, float To) longest, float width, Func<Vector3, float> groundAt, float laneY)
         {
             var model = Model("BaySign");
             if (model == null) return "no sign (model missing)";
             var middle = (longest.From + longest.To) / 2f;
+            var tried = new List<string>();
             foreach (var shift in new[] { 0f, 1.5f, -1.5f, 3f, -3f })
             {
                 var x = middle + shift;
                 if (x < longest.From || x > longest.To) continue;
+                var edgeY = groundAt(root.TransformPoint(new Vector3(x, 0f, -width / 2f)));
                 float? kerb = null;
+                var found = "";
                 for (var z = -width / 2f; z >= -width / 2f - 3f; z -= 0.1f)
                 {
                     var ground = groundAt(root.TransformPoint(new Vector3(x, 0f, z)));
-                    if (ground - laneY >= 0.08f) { kerb = z; break; }
+                    if (ground - edgeY >= 0.08f) { kerb = z; found = "a kerb"; break; }
                 }
-                if (kerb == null) continue;
+                if (kerb == null)
+                    for (var z = -width / 2f - 0.2f; z >= -width / 2f - 3f; z -= 0.1f)
+                    {
+                        var p = root.TransformPoint(new Vector3(x, 0f, z));
+                        p.y = groundAt(p);
+                        if (!Legality.InParkingLane(p) && !Legality.RoadBelow(p) && NavMesh.SamplePosition(p, out _, 0.3f, NavMesh.AllAreas))
+                        {
+                            kerb = z;
+                            found = "the pavement's edge (no raised kerb)";
+                            break;
+                        }
+                    }
+                if (kerb == null)
+                {
+                    tried.Add($"{shift:+0.0;-0.0} m: no kerb and no pavement within 3 m of the paint's edge");
+                    continue;
+                }
                 var local = new Vector3(x, 0f, kerb.Value - PoleBehindKerb);
                 var at = root.TransformPoint(local);
                 at.y = groundAt(at);
                 // Room for the pole: nothing solid within 0.25 m of it up to head height.
-                if (Physics.CheckCapsule(at + Vector3.up * 0.3f, at + Vector3.up * 2.0f, 0.25f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) continue;
+                var blocker = Physics.OverlapCapsule(at + Vector3.up * 0.3f, at + Vector3.up * 2.0f, 0.25f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                    .FirstOrDefault(c => c != null && !c.transform.IsChildOf(root) && !NotWall(c) && c.GetComponentInParent<ThirdPersonCharacter>() == null &&
+                                         ((1 << c.gameObject.layer) & (int)LayerHelper.humanLayerMask) == 0);
+                if (blocker != null)
+                {
+                    tried.Add($"{shift:+0.0;-0.0} m: the pole at x {at.x:F1}, z {at.z:F1} (behind {found}) would stand in {Describe(blocker)}");
+                    continue;
+                }
                 var sign = Object.Instantiate(model, root, false);
                 sign.name = "LoadingZoneSign";
                 sign.transform.position = at;
@@ -120,9 +151,9 @@ namespace FoodTrucks
                 if (plate != null)
                     foreach (var renderer in sign.GetComponentsInChildren<MeshRenderer>(true))
                         if (renderer.name.EndsWith("Plate", StringComparison.Ordinal)) renderer.sharedMaterial = plate;
-                return $"sign at x {at.x:F1}, z {at.z:F1}, {PoleBehindKerb:F2} m behind a kerb {-kerb.Value - width / 2f:F1} m past the paint{(plate == null ? " (no named plate for " + siteId + ")" : "")}";
+                return $"sign at x {at.x:F1}, z {at.z:F1}, {PoleBehindKerb:F2} m behind {found} {-kerb.Value - width / 2f:F1} m past the paint{(plate == null ? " (no named plate for " + siteId + ")" : "")}";
             }
-            return "no sign (no kerb within 3 m of the paint's pavement edge, or no room for the pole)";
+            return "no sign (" + (tried.Count == 0 ? "the longest stretch is too short for a spot" : string.Join("; ", tried)) + ")";
         }
 
         private sealed class Prop
@@ -166,9 +197,13 @@ namespace FoodTrucks
             outward.Normalize();
             // The facade: back along the outward line from the pavement, at waist height. Only its position across the
             // pavement and its facing count; the props' heights come from the ground under each (Fits).
+            // The player, people and vehicles are never the wall (live session 4: a player teleported to the door was
+            // read as the facade, and every place came out 1.5 m too far out, by the driving lane).
             var from = door + outward * 3f + Vector3.up * 1.0f;
             var facade = door;
-            if (Physics.Raycast(from, -outward, out var hit, 4.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            var hit = Physics.RaycastAll(from, -outward, 4.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                .Where(h => h.collider != null && !NotWall(h.collider)).OrderBy(h => h.distance).FirstOrDefault();
+            if (hit.collider != null)
                 facade = new Vector3(hit.point.x, door.y, hit.point.z);
             if (hit.collider != null)
             {
@@ -285,7 +320,7 @@ namespace FoodTrucks
                     foreach (var hit in Physics.RaycastAll(from, -outward, 3f + FacadeShiftMetres + 0.5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
                     {
                         var c = hit.collider;
-                        if (c == null || c.transform.IsChildOf(ownProps) || Moving(c)) continue;
+                        if (c == null || c.transform.IsChildOf(ownProps) || NotWall(c)) continue;
                         hits.Add(Vector3.Dot(hit.point - facade, outward));
                     }
                 }
@@ -297,6 +332,13 @@ namespace FoodTrucks
         private static bool Moving(Collider c) =>
             c.GetComponentInParent<ThirdPersonCharacter>() != null || c.GetComponentInParent<VehicleController>() != null ||
             ((1 << c.gameObject.layer) & (int)LayerHelper.humanLayerMask) != 0 || (c.attachedRigidbody != null && !c.attachedRigidbody.isKinematic);
+
+        // Never a wall: anything that moves, and the player's own colliders (layer Player; the player's root collider
+        // has no ThirdPersonCharacter above it).
+        private static bool NotWall(Collider c) =>
+            Moving(c) || c.gameObject.layer == PlayerLayer || c.transform.root.gameObject.layer == PlayerLayer;
+
+        private static readonly int PlayerLayer = LayerMask.NameToLayer("Player");
 
         // What a collider is, for the log: its name, its root object's name and its layer.
         internal static string Describe(Collider c)
@@ -342,7 +384,8 @@ namespace FoodTrucks
             foreach (var other in Physics.OverlapBox(middle, halves, rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
             {
                 if (other == null) continue;
-                var person = other.GetComponentInParent<ThirdPersonCharacter>() != null || ((1 << other.gameObject.layer) & (int)LayerHelper.humanLayerMask) != 0;
+                var person = other.GetComponentInParent<ThirdPersonCharacter>() != null || ((1 << other.gameObject.layer) & (int)LayerHelper.humanLayerMask) != 0 ||
+                             other.gameObject.layer == PlayerLayer;
                 if (person && !IsPlayer(other)) continue;
                 if (person || other.GetComponentInParent<VehicleController>() != null || (other.attachedRigidbody != null && !other.attachedRigidbody.isKinematic))
                 {
@@ -366,8 +409,7 @@ namespace FoodTrucks
             {
                 var c = hit.collider;
                 if (c == null || c.transform.IsChildOf(ownProps)) continue;
-                if (c.GetComponentInParent<VehicleController>() != null || c.GetComponentInParent<ThirdPersonCharacter>() != null) continue;
-                if (c.attachedRigidbody != null && !c.attachedRigidbody.isKinematic) continue;
+                if (NotWall(c)) continue;
                 if (hit.point.y > best) best = hit.point.y;
             }
             return best > float.MinValue ? best : point.y;
