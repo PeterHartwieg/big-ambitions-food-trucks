@@ -147,8 +147,31 @@ namespace FoodTrucks.Core.Commissary
                     break;
                 }
             }
-            return found;
+            // Centring moves a place across its lane, so grid order isn't distance order (review round 1, Opus).
+            return found.OrderBy(f => f.Distance).ToList();
         }
+
+        // The candidates within radius plus the automatic search's own pick: Nearest within MaxMetres with the same
+        // reach (walk) rule, run as the bay search runs it, added to the list if no candidate stands within
+        // SamePickMetres of it (it can differ: Nearest skips cells near a rejected one and falls back to an uncentred
+        // cell at its limit; review round 1, Sol, Astra and Opus). `automatic` false: the search takes nothing from
+        // this origin (a door cut off from the street). Nearest first.
+        public static BayCandidates CandidatesWithPick(double x, double z, Func<double, double, double, double, bool> legal,
+            Func<double, double, IEnumerable<(double X, double Z)>> axes, WheelFootprint footprint, double radius,
+            Func<double, double, bool>? reach, bool automatic = true)
+        {
+            var list = Candidates(x, z, legal, axes, footprint, radius).ToList();
+            BaySnapResult? pick = automatic ? Nearest(x, z, legal, axes, footprint, MaxMetres, reach) : null;
+            if (pick != null)
+            {
+                var same = list.Where(c => Distance(c.X, c.Z, pick.X, pick.Z) < SamePickMetres).OrderBy(c => Distance(c.X, c.Z, pick.X, pick.Z)).FirstOrDefault();
+                if (same != null) pick = same;
+                else list.Add(pick);
+            }
+            return new BayCandidates(list.OrderBy(c => c.Distance).ToList(), pick);
+        }
+
+        public const double SamePickMetres = 0.05;
 
         public const double CandidateSpacingMetres = 4;
         public const int CandidateLimit = 60;
@@ -210,6 +233,19 @@ namespace FoodTrucks.Core.Commissary
         }
 
         public static double Distance(double ax, double az, double bx, double bz) => Math.Sqrt((ax - bx) * (ax - bx) + (az - bz) * (az - bz));
+    }
+
+    // A candidate list and the automatic search's pick, which is one of the list's own entries (or null).
+    public sealed class BayCandidates
+    {
+        public BayCandidates(IReadOnlyList<BaySnapResult> places, BaySnapResult? automatic)
+        {
+            Places = places;
+            Automatic = automatic;
+        }
+
+        public IReadOnlyList<BaySnapResult> Places { get; }
+        public BaySnapResult? Automatic { get; }
     }
 
     public sealed class BaySnapResult

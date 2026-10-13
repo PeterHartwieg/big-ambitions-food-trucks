@@ -220,9 +220,15 @@ namespace FoodTrucks
                         {
                             var s = side * (float)offset;
                             tried++;
-                            var wall = FacadeAt(facade, outward, along, s, alongSize, parent);
+                            var wallAt = FacadeAt(facade, outward, along, s, alongSize, parent);
+                            var wall = wallAt ?? 0f;
                             var at = facade + outward * (wall + depth / 2f + FacadeGapMetres) + along * s;
-                            var why = Fits(at, rotation, centre, size, outward, depth, lanes, entrances, parent, out var ground);
+                            var ground = 0f;
+                            // No wall behind it (past the building's corner, an alley mouth): never a free-standing prop
+                            // (review round 1, Opus).
+                            var why = wallAt == null
+                                ? new Refusal($"no wall behind it at x {at.x:F1}, z {at.z:F1}", false, "no wall")
+                                : Fits(at, rotation, centre, size, outward, depth, lanes, entrances, parent, out ground);
                             if (why != null)
                             {
                                 transient |= why.Value.Transient;
@@ -268,8 +274,8 @@ namespace FoodTrucks
         // The wall where a prop goes, in metres out from the door's facade line (+ to the street): rays back towards
         // the building at both ends and the middle of the prop's length, from just above the overlap box's floor
         // (0.15 m, Fits) to waist height; the outermost hit within FacadeShiftMetres (Core PropPlacement.FacadeOffset).
-        // 0 when nothing usable is hit.
-        private static float FacadeAt(Vector3 facade, Vector3 outward, Vector3 along, float s, float length, Transform ownProps)
+        // Null when nothing usable is hit: no wall there.
+        private static float? FacadeAt(Vector3 facade, Vector3 outward, Vector3 along, float s, float length, Transform ownProps)
         {
             var hits = new List<double>();
             foreach (var a in new[] { s - length / 2f + 0.05f, s, s + length / 2f - 0.05f })
@@ -283,7 +289,8 @@ namespace FoodTrucks
                         hits.Add(Vector3.Dot(hit.point - facade, outward));
                     }
                 }
-            return (float)(PropPlacement.FacadeOffset(hits, FacadeShiftMetres) ?? 0.0);
+            var offset = PropPlacement.FacadeOffset(hits, FacadeShiftMetres);
+            return offset == null ? (float?)null : (float)offset.Value;
         }
 
         // A person, a vehicle or anything pushed by physics: never the street's own furniture.

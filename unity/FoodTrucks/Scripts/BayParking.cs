@@ -19,6 +19,9 @@ namespace FoodTrucks
     //   (review round 5);
     // - once the bay is resolved, and each time the player comes within NearMetres, the zone is swept for cars already
     //   standing there; a car in the main camera's view is left until it isn't, so none vanishes in view;
+    // - a bay resolved after the load (none in the save, the save's no longer current, or a stored failure searched
+    //   again) is swept with no view rule when it is resolved, before its paint is made (review round 1, Sol and
+    //   Astra: with the view rule, a car seen from the first frame stayed in the new paint while watched);
     // - on every load, under the loading screen, every bay is swept with no view rule: the lanes fill on the game's
     //   load event, before the mod's late load event, so the postfix never sees a bay's first cars (live session 2,
     //   13 October 2026: the player was teleported to the Hell's Kitchen door, the car in the paint was in view from
@@ -97,7 +100,11 @@ namespace FoodTrucks
             if (failed || Commissary.Uninstalled) return;
             try
             {
-                if (!Legality.ParkingSceneReady()) return;
+                if (!Legality.ParkingSceneReady())
+                {
+                    Log.Info("Commissary bays: the parking lanes aren't ready on load; the bays from the save are swept on the first look instead (with the view rule).");
+                    return;
+                }
                 foreach (var site in sites.Sites)
                 {
                     var bays = Commissary.ResolvedBays(site);
@@ -114,14 +121,42 @@ namespace FoodTrucks
             }
         }
 
+        // A bay just resolved (Commissary.Search, before BayMarkers can draw it): its first clearance, with no view rule.
+        // The paint isn't drawn yet, so a car that goes leaves no hole in anything seen; the bay appears empty.
+        public static void SweepNewBay(CommissarySite site, double radius)
+        {
+            Forget(site.Id);
+            if (failed || Commissary.Uninstalled) return;
+            try
+            {
+                var bays = Commissary.ResolvedBays(site);
+                if (bays == null || bays.Count == 0) return;
+                var (gone, left) = Sweep(BayMarkers.ZonesOf(site, (float)radius), inView: false);
+                swept.Add(site.Id);
+                Log.Info($"Commissary {site.Id}: new bay swept before its paint, {gone} parked {(gone == 1 ? "car" : "cars")} kept out" + (left > 0 ? $", {left} left" : "") + ".");
+            }
+            catch (Exception ex)
+            {
+                failed = true;
+                Log.Error("Commissary parking: " + ex + " Parked cars are no longer kept out of the bays this session.");
+            }
+        }
+
         // Every frame (Commissary.LateUpdate, after the frame's moves and before it is drawn): a jump of the player is a
         // cut, and the bays within NearMetres of where they landed are swept with no view rule.
         public static void WatchCut(CommissaryTables sites, double radius, Vector3 player, bool inside)
         {
             if (failed || Commissary.Uninstalled) return;
+            // Indoors nothing is remembered, so stepping out of a building (whose interior may stand elsewhere) starts
+            // afresh rather than counting as a jump (review round 1, Opus).
+            if (inside)
+            {
+                lastPlayer = null;
+                return;
+            }
             var last = lastPlayer;
             lastPlayer = player;
-            if (last == null || inside || Flat(player, last.Value.x, last.Value.z) <= CutMetres) return;
+            if (last == null || Flat(player, last.Value.x, last.Value.z) <= CutMetres) return;
             try
             {
                 foreach (var site in sites.Sites)

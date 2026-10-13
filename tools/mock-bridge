@@ -268,7 +268,7 @@ class Mock:
         # The bridge's shape with made-up spots: one the automatic search takes, one past a long walk, one beyond 30 m.
         site=need(args,'site',"the commissary's id")
         radius=num(args,'radius')
-        radius=60 if radius is None else radius
+        radius=60 if radius is None else float(round(radius))
         if radius<5 or radius>80: raise ValueError('radius is 5 to 80 metres.')
         if site not in SITES: raise ValueError(f'no commissary {site}')
         i=SITES.index(site); x=393.2+i*100+5; z=217.6

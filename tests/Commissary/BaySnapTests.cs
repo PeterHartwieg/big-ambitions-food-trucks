@@ -314,6 +314,41 @@ public class BaySnapTests
     }
 
     [Fact]
+    public void TheAutomaticPickAtTheLimitIsInTheListAndFlagged()
+    {
+        // Review round 1 (Astra): a long lane from x 29 to 31.4. Nearest takes the uncentred cell at x 30 (centring
+        // would carry it past 30 m); the 80 m candidates centre it at x 30.2, beyond the limit.
+        var legal = Lane(29, 31.4, -40, 40);
+        var auto = BaySnap.Nearest(0, 0, legal, BothAxes, WheelFootprint.Truck);
+        Assert.NotNull(auto);
+        Assert.Equal(30, auto!.X, 6);
+        var result = BaySnap.CandidatesWithPick(0, 0, legal, BothAxes, WheelFootprint.Truck, 80, reach: null);
+        Assert.NotNull(result.Automatic);
+        Assert.Contains(result.Automatic!, result.Places);
+        Assert.Equal(30, result.Automatic!.X, 6);
+        Assert.Equal(0, result.Automatic.Z, 6);
+        Assert.True(result.Places.Zip(result.Places.Skip(1), (a, b) => a.Distance <= b.Distance).All(x => x));
+    }
+
+    [Fact]
+    public void TheAutomaticPickSkipsAPlaceTheWalkRejects()
+    {
+        // Two lanes: one 11 m off behind the building (the walk rejects it), one 20 m off on the street.
+        var behind = Lane(391.9, 394.3, 200, 240);
+        var street = Lane(415.8, 418.2, 200, 240);
+        bool Legal(double x, double z, double ax, double az) => behind(x, z, ax, az) || street(x, z, ax, az);
+        bool Reach(double x, double z) => x > 400;
+        var result = BaySnap.CandidatesWithPick(404.5, 228.4, Legal, BothAxes, WheelFootprint.Truck, 80, Reach);
+        Assert.NotNull(result.Automatic);
+        Assert.Contains(result.Automatic!, result.Places);
+        Assert.Equal(417.0, result.Automatic!.X, 1);
+        // The nearer place is still listed, ahead of the pick.
+        Assert.True(result.Places[0].X < 400);
+        Assert.Null(BaySnap.CandidatesWithPick(404.5, 228.4, Legal, BothAxes, WheelFootprint.Truck, 80, Reach, automatic: false).Automatic);
+        Assert.Null(BaySnap.CandidatesWithPick(404.5, 228.4, Legal, BothAxes, WheelFootprint.Truck, 80, (_, _) => false).Automatic);
+    }
+
+    [Fact]
     public void CandidatesListEveryStretchNearestFirstBeyondTheAutomaticLimit()
     {
         // Two lanes: the Hell's Kitchen one 11 m from the door, and another 50 m off, beyond the automatic 30 m.

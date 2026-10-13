@@ -65,7 +65,7 @@ uninstall.refund | must | Uninstall: commissary refund \$.+? for the stock deliv
 bay.paint | must | Commissary marker .+?; a 5\.8 m truck fits wholly inside; LOADING ZONE 0\.70 m high, 5\.6 m long; sign at x .+?, z .+?, 0\.40 m behind a kerb .+? m past the paint | row 0.9.10/6,0.9.10/7,0.9.10/12
 bay.noSign | never | no sign \(.+?\) | row 0.9.10/6,0.9.10/7,0.9.10/12
 bay.noLettering | never | no lettering \(.+?\) | row 0.9.10/6,0.9.10/7,0.9.10/12
-bay.props | must | Commissary props .+?: props by the door at x .+?, z .+?: pallet \+2\.5 m along the facade, roll cage .+?, hand truck -2\.5 m .+?, dumpster .+? | row 0.9.10/8,0.9.10/12
+bay.props | must | Commissary props .+?: props by the door at x .+?, z .+?: pallet [+-]\d+\.\d m along the facade(?:, [+-]\d+\.\d\d m off the door's line)?, roll cage [+-]\d+\.\d m .+?, hand truck [+-]\d+\.\d m .+?, dumpster [+-]\d+\.\d m | row 0.9.10/8,0.9.10/12,mod/M4
 bay.leftOut | count>=0 | left out: .+? \(.+?\) | row 0.9.10/8,0.9.10/12
 bay.neighbourDoor | count>=0 | \(next to the entrance at x .+?, z .+?\) | row 0.9.10/8,0.9.10/12
 bay.retry | count>=0 | Commissary props .+?, try \d+: .+?; trying again in 10 s\. | row 0.9.10/8,0.9.10/12
@@ -102,3 +102,13 @@ route.arrived | must | Route: truck .+? arrived at .+?: .+?, \d+(?:\.\d+)? m fro
 map.cartSpot | must | (?m)^(?:\[Mod:FoodTrucks\] )?Map pick: cart stop by [^\n]+ at x [^\n]+, y [^\n]+, z [^\n]+, heading [^\n]+, [^\n]+ m from the entrance; (?:by a parking lane, pavement on the right [^\n]+ m out, cart [^\n]+ m out|by the nearest driving lane \(no parking lane fits\)); [^\n]+ \([0-9]+ ms\)\.$ | row bizman/11
 bizman.layout | must | (?m)^(?:\[Mod:FoodTrucks\] )?BizMan: vehicle page built from the warehouse driver row \([^\n]+\) and the logistics plan \([^\n]+; stop rows dragged by [^\n]+; the copied list's verticalLayoutGroup (?:at ''|none), contentSizeFitter (?:at ''|none)\); it sits in [^\n]+ \((?:laid out by its parent|sized by itself), (?:scrolling|no scroll view)\)\.$ | row bizman/1
 map.lateConfirm | must | Map pick: the confirm for .+? came after the pick ended \(map closed\); nothing added\. | row bizman/17
+mod.loadSweep | must | Commissary [\w-]+: bay swept on load, \d+ parked cars? kept out\. | row mod/M1
+mod.loadSweepLeft | never | Commissary [\w-]+: bay swept on load, \d+ parked cars? kept out, \d+ left\. | row mod/M1
+mod.loadNotReady | count>=0 | Commissary bays: the parking lanes aren't ready on load; the bays from the save are swept on the first look instead \(with the view rule\)\. | row mod/M1
+mod.newBaySweep | count>=0 | Commissary [\w-]+: new bay swept before its paint, \d+ parked cars? kept out(?:, \d+ left)?\. | row mod/M1,mod/M5
+mod.jump | must | Commissary hells-kitchen: the player jumped \d+ m to within 150 m of the bay; swept before the frame was drawn, \d+ parked cars? kept out\. | row mod/M2
+mod.noBaySaved | must | Commissary (?:industry-city|garment-district|murray-hill) \(.+?\): bay searched from x .+?, z .+? \(nearest entrance\); no bay in the save; searched again after load\. | row mod/M5
+mod.noBayLine | must | ERROR: Commissary (?:industry-city|garment-district|murray-hill): no bay this load \(searched .+? in \d+ ms\): .+?\. No vehicle is ever in its bay | row mod/M5
+mod.propsNoWall | count>=0 | no wall behind it at x .+?, z .+? | row mod/M4
+mod.propsBlocked | count>=0 | something stands there: .+?, layer .+? | row mod/M4
+mod.candidates | count>=0 | Commissary [\w-]+: bay candidates within \d+ m \(test bridge\): .+?; \d+ ms\. | row mod/M6

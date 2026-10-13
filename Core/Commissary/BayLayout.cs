@@ -60,8 +60,10 @@ namespace FoodTrucks.Core.Commissary
 
     // Whether a parked car stands in a bay's zone (BayParking). 0.9.9 asked only whether the car's middle was within 2 m
     // of the zone, so a long car parked at a stretch's end with its middle 2.5 m out still stood a metre into the paint
-    // (live session 2, 13 October 2026). This takes the car's whole footprint: a rectangle turned with the car, its
-    // reach along and across the lane worked out from its turn, against each painted stretch.
+    // (live session 2, 13 October 2026). This takes the car's whole footprint, a rectangle turned with the car, against
+    // each painted stretch (a rectangle in the zone's frame, grown by the margin), with a separating-axis test on both
+    // rectangles' axes. A first version checked only the zone's axes, which is the car's bounding box: a car parked at
+    // an angle near a stretch's corner counted although it stood clear (review round 1 of the mod round, Sol and Astra).
     public static class BayKeepOut
     {
         // spans: the zone's stretches as metres along from its foot; width: the paint's width, centred on the foot.
@@ -72,13 +74,22 @@ namespace FoodTrucks.Core.Commissary
         {
             if (spans == null) throw new ArgumentNullException(nameof(spans));
             var length = Math.Sqrt(forwardAlong * forwardAlong + forwardAcross * forwardAcross);
-            var fa = length < 1e-9 ? 1 : Math.Abs(forwardAlong / length);
-            var fc = length < 1e-9 ? 0 : Math.Abs(forwardAcross / length);
-            var reachAlong = fa * halfLength + fc * halfWidth;
-            var reachAcross = fc * halfLength + fa * halfWidth;
-            if (Math.Abs(across) - reachAcross >= width / 2 + margin) return false;
+            var f = length < 1e-9 ? (A: 1.0, C: 0.0) : (A: forwardAlong / length, C: forwardAcross / length);
+            var side = (A: -f.C, C: f.A);
+            var halfAcross = width / 2 + margin;
             foreach (var (from, to) in spans)
-                if (along + reachAlong > from - margin && along - reachAlong < to + margin) return true;
+            {
+                var zone = (A: (from + to) / 2, C: 0.0);
+                var halfAlong = (to - from) / 2 + margin;
+                var d = (A: along - zone.A, C: across - zone.C);
+                // The zone's axes: its half sizes against the car's reach along each.
+                if (Math.Abs(d.A) >= halfAlong + Math.Abs(f.A) * halfLength + Math.Abs(side.A) * halfWidth) continue;
+                if (Math.Abs(d.C) >= halfAcross + Math.Abs(f.C) * halfLength + Math.Abs(side.C) * halfWidth) continue;
+                // The car's axes: its half sizes against the zone's reach along each.
+                if (Math.Abs(d.A * f.A + d.C * f.C) >= halfLength + Math.Abs(f.A) * halfAlong + Math.Abs(f.C) * halfAcross) continue;
+                if (Math.Abs(d.A * side.A + d.C * side.C) >= halfWidth + Math.Abs(side.A) * halfAlong + Math.Abs(side.C) * halfAcross) continue;
+                return true;
+            }
             return false;
         }
     }

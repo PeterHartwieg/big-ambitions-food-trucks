@@ -602,7 +602,8 @@ namespace FoodTrucks
         private static JToken BayCandidates(JObject args)
         {
             var site = Need(args, "site", "the commissary's id");
-            var radius = Num(args, "radius") ?? CandidateRadiusDefault;
+            // Whole metres: BaySnap caches one grid per radius for the session (review round 1, Opus).
+            var radius = Math.Round(Num(args, "radius") ?? CandidateRadiusDefault);
             if (radius < 5 || radius > CandidateRadiusMax) throw new BridgeError($"radius is 5 to {CandidateRadiusMax:F0} metres.");
             (string Status, List<global::FoodTrucks.Commissary.BayCandidateOrigin> Origins) found;
             try { found = global::FoodTrucks.Commissary.BayCandidatesForTesting(site, radius); }

@@ -113,6 +113,25 @@ public class BayLayoutTests
     }
 
     [Fact]
+    public void AnAngledCarClearOfTheCornerIsNotInTheBay()
+    {
+        // Review round 1 (Sol): 45 degrees, its middle at 16.5 along and 3.2 across, clear of the paint's corner. Its
+        // bounding box in the bay's frame reaches in; the car itself doesn't.
+        Assert.False(BayKeepOut.Overlaps(Stretch, 2.35, 16.5, 3.2, 1, 1, 2.4, 0.9, 0.1));
+        // Review round 1 (Astra): a 2 m stretch 2 m wide, the car at (4, 2.5) facing (1, -1).
+        Assert.False(BayKeepOut.Overlaps(new[] { (0.0, 2.0) }, 2, 4, 2.5, 1, -1, 2.9, 0.9, 0.1));
+    }
+
+    [Fact]
+    public void AnAngledCarWithACornerInThePaintIsInTheBay()
+    {
+        // The same car as Sol's moved 1 m nearer along and across: its nose reaches over the paint's corner.
+        Assert.True(BayKeepOut.Overlaps(Stretch, 2.35, 15.5, 2.2, 1, 1, 2.4, 0.9, 0.1));
+        // Astra's car moved in until its corner crosses into the stretch.
+        Assert.True(BayKeepOut.Overlaps(new[] { (0.0, 2.0) }, 2, 2.8, 1.6, 1, -1, 2.9, 0.9, 0.1));
+    }
+
+    [Fact]
     public void TheFacadeIsTheOutermostWallHitNearTheDoorsLine()
     {
         // A recessed door (0), pilasters 0.25 m out, a hydrant 1.4 m out: the pilasters are the wall.

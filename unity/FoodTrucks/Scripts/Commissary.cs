@@ -279,7 +279,10 @@ namespace FoodTrucks
             searchedThisLoad.Add(site.Id);
             FoodTrucksSession.MarkChanged();
             BayMarkers.Forget(site.Id);
-            BayParking.Forget(site.Id);
+            // The new bay's first clearance, with no view rule, before its paint can be drawn (the markers are made in a
+            // later part of this look or a later look, BayMarkers.Update), so a car seen from the first frame can't stay in
+            // a bay that appears round it (review round 1, Sol and Astra).
+            BayParking.SweepNewBay(site, Rules!.BayRadiusMetres);
             var ms = (Time.realtimeSinceStartup - start) * 1000f;
             foreach (var (bay, from) in found)
                 Log.Info($"Commissary {site.Id}: bay on legal parking at x {bay.X:F1}, z {bay.Z:F1}, {bay.Distance:F1} m from x {from.X:F1}, z {from.Z:F1} " +
@@ -1372,6 +1375,7 @@ namespace FoodTrucks
             var site = Sites?.Site(siteId) ?? throw new InvalidOperationException($"no commissary {siteId}");
             var origins = Origins(site) ?? throw new InvalidOperationException($"{siteId}'s building isn't in the city yet");
             if (!Legality.ParkingSceneReady()) throw new InvalidOperationException("the city's parking lanes aren't loaded yet; try again in a few seconds");
+            var started = Time.realtimeSinceStartup;
             var resolved = ResolvedBays(site);
             var status = resolved == null ? "pending" : resolved.Count == 0 ? "failed" : "resolved";
             var doors = World.EntrancesOf(site.Address);
@@ -1399,8 +1403,18 @@ namespace FoodTrucks
                         default: throw new InvalidOperationException("the traffic system isn't ready to check the door's street; try again in a few seconds");
                     }
                 }
-                var picked = false;
-                foreach (var c in BaySnap.Candidates(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), radius))
+                // The automatic pick is the bay search's own: Nearest within BaySnap.MaxMetres with the same walk rule
+                // (from the door's NavMesh point when it has a short walk to the street; none from a point set in data
+                // or a door off the NavMesh; nothing at all from a door cut off from the street).
+                Func<double, double, bool>? reach = null;
+                if (!cutOff && walkStart != null)
+                {
+                    var reachFrom = walkStart.Value;
+                    reach = (x, z) => WalkRule.Accepts(Walk(reachFrom, x, z));
+                }
+                var listed = BaySnap.CandidatesWithPick(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), radius, reach, automatic: !cutOff);
+                var pick = listed.Automatic;
+                foreach (var c in listed.Places)
                 {
                     var candidate = new BayCandidate { X = c.X, Z = c.Z, Heading = Math.Atan2(c.AlongX, c.AlongZ) * 180 / Math.PI, Distance = c.Distance };
                     WalkVerdict? verdict = null;
@@ -1415,19 +1429,20 @@ namespace FoodTrucks
                         if (walk.Verdict == WalkVerdict.Short || walk.Verdict == WalkVerdict.TooLong) candidate.WalkMetres = walk.Path;
                         if (walk.Verdict != WalkVerdict.Unknown) candidate.StraightMetres = walk.Straight;
                     }
-                    if (c.Distance > BaySnap.MaxMetres + 1e-9) candidate.Rejected = $"beyond the automatic search's {BaySnap.MaxMetres:F0} m";
+                    if (ReferenceEquals(c, pick)) candidate.Automatic = true;
+                    else if (c.Distance > BaySnap.MaxMetres + 1e-9) candidate.Rejected = $"beyond the automatic search's {BaySnap.MaxMetres:F0} m";
                     else if (cutOff) candidate.Rejected = "the door has no short walk to the street, so the automatic search takes nothing from it";
                     else if (verdict == WalkVerdict.TooLong) candidate.Rejected = "too long a walk from the door";
                     else if (verdict == WalkVerdict.NoRoute) candidate.Rejected = "no walking route from the door";
-                    else if (picked) candidate.Rejected = "farther than the automatic pick";
-                    else candidate.Automatic = picked = true;
+                    else if (pick != null && c.Distance > pick.Distance) candidate.Rejected = "farther than the automatic pick";
+                    else candidate.Rejected = "not taken by the automatic search (it passes over cells within 3 m of one it rejected for its walk)";
                     entry.Candidates.Add(candidate);
                 }
                 result.Add(entry);
             }
             Log.Info($"Commissary {siteId}: bay candidates within {radius:F0} m (test bridge): " +
                      string.Join("; ", result.Select(o => $"from {o.Kind} x {o.X:F1}, z {o.Z:F1}: {o.Candidates.Count} legal, " +
-                                                          $"{o.Candidates.Count(c => c.Automatic)} the automatic pick")) + ".");
+                                                          $"{o.Candidates.Count(c => c.Automatic)} the automatic pick")) + $"; {(Time.realtimeSinceStartup - started) * 1000f:F0} ms.");
             return (status, result);
         }
 
