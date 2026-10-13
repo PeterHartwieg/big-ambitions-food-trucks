@@ -63,7 +63,8 @@ namespace FoodTrucks.BuildEditor
         {
             if (finished) return;
             finished = true;
-            RestorePipelines();
+            try { RestorePipelines(); }
+            catch (Exception ex) { Debug.Log("[FoodTrucksBuild] Restoring the HDRP assets failed (tools/build-mod.sh restores the files): " + ex); }
             Debug.Log($"[FoodTrucksBuild] {(code == 0 ? "OK" : "FAILED")}: {message}");
             EditorApplication.delayCall += () => EditorApplication.Exit(code);
         }
