@@ -190,7 +190,7 @@ namespace FoodTrucks
         }
 
         // The parked car a collider belongs to: the lane's direct child above it.
-        private static GameObject? CarOf(Collider? hit)
+        internal static GameObject? CarOf(Collider? hit)
         {
             if (hit == null) return null;
             var t = hit.transform;
@@ -200,7 +200,7 @@ namespace FoodTrucks
 
         // One of the lane's own parked cars: an active direct child of a parking lane, on the ParkedVehicles layer, and
         // not the delivery job's van.
-        private static bool IsLaneCar(GameObject car) =>
+        internal static bool IsLaneCar(GameObject car) =>
             car.activeInHierarchy && car.layer == LayerHelper.ParkedVehiclesLayerIndex &&
             car.transform.parent != null && car.transform.parent.GetComponent<ParkingLaneGenerator>() != null &&
             car.GetComponent<Vehicles.DeliveryDriverJob.DeliveryJobStartController>() == null;
@@ -215,7 +215,7 @@ namespace FoodTrucks
             return car.GetComponentsInChildren<Renderer>().Any(r => r.enabled && GeometryUtility.TestPlanesAABB(planes, r.bounds));
         }
 
-        private static bool Release(GameObject car)
+        internal static bool Release(GameObject car)
         {
             try
             {

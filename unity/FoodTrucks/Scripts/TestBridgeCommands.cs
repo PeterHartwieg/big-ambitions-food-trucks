@@ -285,13 +285,38 @@ namespace FoodTrucks
             return new JObject { ["output"] = new JArray(output) };
         }
 
-        private static JToken DebugAction(JObject args)
+        // A notice can come a frame or two after its action (the hatch's step-out notice did): a command that reports
+        // notices keeps collecting them for this many frames and this long in real time before it replies.
+        private const int NoticeFrames = 5;
+        private const float NoticeSeconds = 0.25f;
+
+        // Runs the action with the notice window open; the reply is built when the window closes, from what it caught.
+        internal static Deferred WithNotices(Action action, Func<List<string>, JObject> reply)
+        {
+            var caught = Notices.BeginCapture();
+            try { action(); }
+            catch
+            {
+                Notices.EndCapture(caught);
+                throw;
+            }
+            var frame = UnityEngine.Time.frameCount;
+            var until = UnityEngine.Time.realtimeSinceStartup + NoticeSeconds;
+            return new Deferred(() =>
+            {
+                if (UnityEngine.Time.frameCount - frame < NoticeFrames || UnityEngine.Time.realtimeSinceStartup < until) return null;
+                Notices.EndCapture(caught);
+                return reply(caught);
+            }, () => Notices.EndCapture(caught));
+        }
+
+        private static object DebugAction(JObject args)
         {
             var action = Need(args, "action", "the debug action's name");
             if (!DebugActions.Names.Contains(action))
                 throw new BridgeError($"No debug action '{action}'. Actions: {string.Join(", ", DebugActions.Names)}.");
-            var notices = Notices.Capture(() => DebugActions.RunByName(action));
-            return new JObject { ["action"] = action, ["notices"] = new JArray(notices) };
+            return WithNotices(() => DebugActions.RunByName(action),
+                notices => new JObject { ["action"] = action, ["notices"] = new JArray(notices) });
         }
 
         // A plain balance change: no transaction, so nothing in the books or the tax year.

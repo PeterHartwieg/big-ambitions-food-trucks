@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using FoodTrucks.Core.Commissary;
 using Helpers;
@@ -78,18 +79,58 @@ namespace FoodTrucks
 
         // A commissary's door and the way out of the building from it: the entrance nearest its resolved bay (the one
         // state.commissary.bays names), else the building's first entrance.
+        // The way out from the door is the walk to the street (the NavMesh path to the nearest driving lane, else to the
+        // bay); `View` is the point `viewMetres` along that walk, where a person coming from the street sees the door.
+        // Without a path, straight towards the lane or bay; without either, away from the building's middle.
         internal static (Vector3 Door, Vector3 Out) Door(string siteId)
+        {
+            var (door, outward, _) = DoorView(siteId, 1.5f);
+            return (door, outward);
+        }
+
+        internal static (Vector3 Door, Vector3 Out, Vector3 View) DoorView(string siteId, float viewMetres)
         {
             var site = Site(siteId);
             var doors = World.EntrancesOf(site.Address);
             if (doors == null || doors.Length == 0) throw new BridgeError($"The building of {siteId} ({site.Address}) isn't in this city.");
             var bay = global::FoodTrucks.Commissary.ResolvedBays(site);
             var door = bay != null && bay.Count > 0 ? EntranceNear(site, (float)bay[0].X, (float)bay[0].Z)!.Value : doors[0];
-            var building = World.AllBuildings().FirstOrDefault(b => b.Doors.Contains(door)).Controller;
-            var outward = building != null ? door - building.transform.position : Vector3.forward;
+            Vector3? street = TrafficLanes.Near(door, 40f).Nearest(door)?.Point;
+            if (street == null && bay != null && bay.Count > 0) street = new Vector3((float)bay[0].X, door.y, (float)bay[0].Z);
+            if (street != null && NavMesh.SamplePosition(door, out var from, 3f, NavMesh.AllAreas) && NavMesh.SamplePosition(street.Value, out var to, 4f, NavMesh.AllAreas))
+            {
+                var path = new NavMeshPath();
+                if (NavMesh.CalculatePath(from.position, to.position, NavMesh.AllAreas, path) && path.corners.Length >= 2)
+                {
+                    var view = Along(path.corners, viewMetres);
+                    var first = Along(path.corners, Mathf.Min(1.5f, viewMetres)) - door;
+                    first.y = 0f;
+                    if (first.sqrMagnitude > 1e-4f) return (door, first.normalized, view);
+                }
+            }
+            Vector3 outward;
+            if (street != null) outward = street.Value - door;
+            else
+            {
+                var building = World.AllBuildings().FirstOrDefault(b => b.Doors.Contains(door)).Controller;
+                outward = building != null ? door - building.transform.position : Vector3.forward;
+            }
             outward.y = 0f;
             if (outward.sqrMagnitude < 1e-4f) outward = Vector3.forward;
-            return (door, outward.normalized);
+            outward.Normalize();
+            return (door, outward, door + outward * viewMetres);
+        }
+
+        // The point `metres` along a path's corners (its end if shorter).
+        private static Vector3 Along(Vector3[] corners, float metres)
+        {
+            for (var i = 1; i < corners.Length; i++)
+            {
+                var leg = Vector3.Distance(corners[i - 1], corners[i]);
+                if (metres <= leg) return Vector3.Lerp(corners[i - 1], corners[i], leg > 0f ? metres / leg : 0f);
+                metres -= leg;
+            }
+            return corners[corners.Length - 1];
         }
 
         // A vehicle's hatch (a truck's serving window, a cart's window side) and the outward direction there.
@@ -122,7 +163,10 @@ namespace FoodTrucks
             var who = Need(args, "who", "\"player\" or a food vehicle's id");
             var place = Str(args, "place");
             var heading = (float?)Num(args, "heading");
+            var clear = Bool(args, "clear") == true;
             Vector3 target;
+            if (place != null && who != "player" && place.StartsWith("bay:", StringComparison.Ordinal))
+                return TeleportToBay(who, place.Substring(4), heading, clear);
             if (place != null) (target, heading) = Place(place, who, heading);
             else
             {
@@ -130,7 +174,151 @@ namespace FoodTrucks
                 var z = Num(args, "z") ?? throw new BridgeError("teleport needs \"x\" and \"z\", or \"place\".");
                 target = Ground((float)x, (float)z);
             }
-            return who == "player" ? TeleportPlayer(target, heading) : TeleportVehicle(who, target, heading);
+            return who == "player" ? TeleportPlayer(target, heading, clear) : TeleportVehicle(who, target, heading, clear);
+        }
+
+        // ---- What stands where something is moved to ----
+
+        // Something in the way: its description, and the lane's parked car it belongs to (the only kind `clear` removes).
+        private sealed class Blocker
+        {
+            public string What = "";
+            public GameObject? LaneCar;
+        }
+
+        // The vehicle's own size, from its solid colliders, in its own frame.
+        private static Bounds LocalBounds(VehicleController controller)
+        {
+            var t = controller.transform;
+            Bounds? bounds = null;
+            var corners = new Vector3[8];
+            foreach (var c in controller.GetComponentsInChildren<Collider>())
+            {
+                if (c == null || c.isTrigger || !c.enabled) continue;
+                var b = c.bounds;
+                for (var i = 0; i < 8; i++)
+                    corners[i] = t.InverseTransformPoint(new Vector3((i & 1) == 0 ? b.min.x : b.max.x, (i & 2) == 0 ? b.min.y : b.max.y, (i & 4) == 0 ? b.min.z : b.max.z));
+                foreach (var p in corners)
+                {
+                    if (bounds == null) bounds = new Bounds(p, Vector3.zero);
+                    else
+                    {
+                        var grown = bounds.Value;
+                        grown.Encapsulate(p);
+                        bounds = grown;
+                    }
+                }
+            }
+            return bounds ?? new Bounds(new Vector3(0f, 1.2f, 0f), new Vector3(2.2f, 2.4f, 6f));
+        }
+
+        // The ground and road surfaces, parking areas and triggers aren't in the way; a kerb isn't either (the test starts
+        // 0.3 m up).
+        private static bool Ignored(Collider c) =>
+            c.isTrigger || ((1 << c.gameObject.layer) & (LayerHelper.groundLayerMask.value | LayerHelper.parkingAreaLayerMask.value)) != 0;
+
+        private static List<Blocker> Describe(IEnumerable<Collider> hits, Transform? self)
+        {
+            var found = new Dictionary<UnityEngine.Object, Blocker>();
+            foreach (var c in hits)
+            {
+                if (c == null || Ignored(c) || (self != null && c.transform.IsChildOf(self))) continue;
+                var car = BayParking.CarOf(c);
+                if (car != null && BayParking.IsLaneCar(car))
+                {
+                    if (!found.ContainsKey(car)) found[car] = new Blocker { What = $"a parked car ({car.name})", LaneCar = car };
+                    continue;
+                }
+                var vehicle = c.GetComponentInParent<VehicleController>();
+                if (vehicle != null)
+                {
+                    if (!found.ContainsKey(vehicle)) found[vehicle] = new Blocker { What = $"the player's {vehicle.vehicleInstance?.vehicleTypeName} {vehicle.vehicleInstance?.id}" };
+                    continue;
+                }
+                var player = c.GetComponentInParent<PlayerController>();
+                if (player != null)
+                {
+                    if (!found.ContainsKey(player)) found[player] = new Blocker { What = "the player" };
+                    continue;
+                }
+                var person = c.GetComponentInParent<ThirdPersonCharacter>();
+                if (person != null)
+                {
+                    if (!found.ContainsKey(person)) found[person] = new Blocker { What = $"a person ({person.name})" };
+                    continue;
+                }
+                var key = (UnityEngine.Object?)c.attachedRigidbody ?? c.transform.root;
+                if (!found.ContainsKey(key))
+                    found[key] = new Blocker { What = $"{c.transform.root.name}/{c.name} (layer {LayerMask.LayerToName(c.gameObject.layer)})" };
+            }
+            return found.Values.ToList();
+        }
+
+        // What stands in the vehicle's footprint, 0.3 m up to its roof, at a pose on the ground.
+        private static List<Blocker> InTheWay(VehicleController controller, Vector3 ground, Quaternion rotation)
+        {
+            var local = LocalBounds(controller);
+            var bottom = local.min.y + 0.3f;
+            var top = Mathf.Max(local.max.y, bottom + 0.5f);
+            var centre = new Vector3(local.center.x, (bottom + top) / 2f, local.center.z);
+            var half = new Vector3(Mathf.Max(0.05f, local.extents.x - 0.1f), (top - bottom) / 2f, Mathf.Max(0.05f, local.extents.z - 0.1f));
+            var hits = Physics.OverlapBox(ground + rotation * centre, half, rotation, ~0, QueryTriggerInteraction.Ignore);
+            return Describe(hits, controller.transform);
+        }
+
+        // What stands where the player would: a standing person's capsule.
+        private static List<Blocker> InTheWay(PlayerController player, Vector3 ground)
+        {
+            var hits = Physics.OverlapCapsule(ground + Vector3.up * 0.6f, ground + Vector3.up * 1.6f, 0.2f, ~0, QueryTriggerInteraction.Ignore);
+            return Describe(hits, player.transform);
+        }
+
+        // Nothing in the way, or (with clear) only the lanes' parked cars, which go back to their pool as BayParking sends
+        // them. Otherwise a refusal naming what stands there.
+        private static void MakeRoom(List<Blocker> blockers, bool clear, string where)
+        {
+            if (blockers.Count == 0) return;
+            if (clear && blockers.All(b => b.LaneCar != null))
+            {
+                foreach (var b in blockers)
+                    if (!BayParking.Release(b.LaneCar!)) throw new BridgeError($"{b.What} at {where} couldn't be removed.");
+                Physics.SyncTransforms();
+                Log.Info($"Test bridge: cleared {string.Join(", ", blockers.Select(b => b.What))} at {where}.");
+                return;
+            }
+            var names = string.Join(", ", blockers.Select(b => b.What));
+            var hint = blockers.All(b => b.LaneCar != null) ? " Add \"clear\": true to send the parked cars away." : "";
+            throw new BridgeError($"Something stands at {where}: {names}.{hint}");
+        }
+
+        // A truck to a commissary's bay: the bay's middle, else the free place on its paint nearest the middle, the vehicle
+        // lined up with the lane and its hatch to the pavement.
+        private static JToken TeleportToBay(string id, string siteId, float? heading, bool clear)
+        {
+            var vehicle = FoodVehicle(id);
+            var controller = Spawned(vehicle);
+            var bay = Bay(siteId);
+            var rotation = Quaternion.Euler(0f, heading ?? Heading(bay.Along), 0f);
+            var halfLength = LocalBounds(controller).extents.z;
+            var places = new List<Vector3> { bay.Point };
+            var zones = BayMarkers.ZonesOf(Site(siteId), (float)(DemandData.Rules?.Commissary?.BayRadiusMetres ?? 15));
+            foreach (var zone in zones)
+                foreach (var (from, to) in zone.Spans)
+                    for (var t = from + halfLength; t <= to - halfLength + 1e-3f; t += 0.5f)
+                    {
+                        var p = zone.Foot + zone.Along * t;
+                        places.Add(Ground(p.x, p.z));
+                    }
+            var ordered = places.Distinct().OrderBy(p => (p - bay.Point).sqrMagnitude).ToList();
+            List<Blocker>? atMiddle = null;
+            foreach (var place in ordered)
+            {
+                var blockers = InTheWay(controller, place, rotation);
+                atMiddle ??= blockers;
+                if (blockers.Count == 0) return TeleportVehicle(id, place, rotation.eulerAngles.y, clear);
+            }
+            // Nothing free on the paint: the middle, if clear may send its parked cars away.
+            return TeleportVehicle(id, bay.Point, rotation.eulerAngles.y, clear, atMiddle);
         }
 
         private static (Vector3, float?) Place(string place, string who, float? heading)
@@ -170,12 +358,13 @@ namespace FoodTrucks
             }
         }
 
-        private static object TeleportPlayer(Vector3 target, float? heading)
+        private static object TeleportPlayer(Vector3 target, float? heading, bool clear)
         {
             var player = PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.");
             if (!NavMesh.SamplePosition(target, out var hit, 3f, NavMesh.AllAreas))
                 throw new BridgeError($"No walkable ground within 3 m of x {target.x:F1}, z {target.z:F1}.");
             var point = hit.position;
+            MakeRoom(InTheWay(player, point), clear, $"x {point.x:F1}, z {point.z:F1}");
             var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's runner is gone.");
             var game = SaveGameManager.Current;
             // A walk the game is running (enter, Back to the hatch) would carry on from the new place: dropped first.
@@ -218,19 +407,30 @@ namespace FoodTrucks
             });
         }
 
-        private static JToken TeleportVehicle(string id, Vector3 target, float? heading)
+        private static JToken TeleportVehicle(string id, Vector3 target, float? heading, bool clear, List<Blocker>? blockers = null)
         {
             var vehicle = FoodVehicle(id);
             var controller = Spawned(vehicle);
             var record = FoodTrucks.Core.Saves.StreetSales.Find(FoodTrucksSession.CurrentState, id);
             if (record?.IsOpen == true) throw new BridgeError($"Vehicle {id} is open for business: close it first (vehicle close).");
             var rotation = Quaternion.Euler(0f, heading ?? controller.transform.eulerAngles.y, 0f);
+            MakeRoom(blockers ?? InTheWay(controller, target, rotation), clear, $"x {target.x:F1}, z {target.z:F1}");
             VehicleHelper.TeleportVehicleToGround(controller, target, rotation);
             // The game moves the rigidbody; the transform only follows at the next physics step, which a paused game
             // doesn't take. Move it too, so the reply and the saved position are the new place.
             var body = controller.GetComponent<Rigidbody>();
             if (body != null) controller.transform.SetPositionAndRotation(body.position, body.rotation);
             Physics.SyncTransforms();
+            // The parking reading for the new place: the game reads it again when a car it drives stands still
+            // (CarController.isCheckedForParkingZone), and at once here if the player drives this one, as the panel's
+            // live reading that Open checks. A vehicle nobody drives keeps the state the game would store on leaving it.
+            var game = SaveGameManager.Current;
+            if (controller is CarController car)
+            {
+                car.isCheckedForParkingZone = false;
+                if (game.ActiveVehicleId == id) car.UpdateParkingZone();
+                else vehicle.parkingState = Legality.VehicleLegallyParked(vehicle, out _) ? ParkingState.Legal : ParkingState.Illegal;
+            }
             controller.SavePosition();
             var t = controller.transform;
             Log.Info($"Test bridge: moved {vehicle.vehicleTypeName} {id} to x {t.position.x:F1}, z {t.position.z:F1}, heading {t.eulerAngles.y:F0}.");
@@ -245,7 +445,7 @@ namespace FoodTrucks
 
         // ---- vehicle ----
 
-        private static JToken Vehicle(JObject args)
+        private static object Vehicle(JObject args)
         {
             var id = Need(args, "id", "the food vehicle's id");
             var op = Need(args, "op", "open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay");
@@ -264,7 +464,7 @@ namespace FoodTrucks
             {
                 if (game.ActiveVehicleId != id) throw new BridgeError($"{what} is on the vehicle's panel, shown while the player drives the truck or pushes the cart: vehicle enter first.");
             }
-            var notices = Notices.Capture(() =>
+            return WithNotices(() =>
             {
                 switch (op)
                 {
@@ -312,8 +512,14 @@ namespace FoodTrucks
                     default:
                         throw new BridgeError($"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay.");
                 }
-            });
-            // Whether the operation happened, read from the state it should have changed (a refusal leaves only its notice).
+            }, notices => VehicleReply(op, id, vehicle, state, notices, why, IsOpen, Cargo, Space, cargoBefore, spaceBefore));
+        }
+
+        // Whether the operation happened, read from the state it should have changed (a refusal leaves only its notice).
+        private static JObject VehicleReply(string op, string id, VehicleInstance vehicle, FoodTrucks.Core.Saves.SaveState state, List<string> notices,
+            string? why, Func<bool> IsOpen, Func<int> Cargo, Func<string?> Space, int cargoBefore, string? spaceBefore)
+        {
+            var game = SaveGameManager.Current;
             bool done;
             switch (op)
             {
@@ -356,7 +562,7 @@ namespace FoodTrucks
         }
 
         // { "op": "assign" | "unassign", "vehicle", "employee_id" }: the BizMan vehicle page's crew dropdown.
-        private static JToken Crew(JObject args)
+        private static object Crew(JObject args)
         {
             var op = Need(args, "op", "assign or unassign");
             var id = Need(args, "vehicle", "the food vehicle's id");
@@ -366,7 +572,7 @@ namespace FoodTrucks
             if (!FoodTrucksSession.CanWrite) throw new BridgeError("The mod's save data is read-only.");
             var record = FoodTrucks.Core.Saves.StreetSales.Find(state, id);
             var crew = record?.Crew ?? new System.Collections.Generic.List<string>();
-            var notices = Notices.Capture(() =>
+            return WithNotices(() =>
             {
                 switch (op)
                 {
@@ -386,10 +592,12 @@ namespace FoodTrucks
                     default:
                         throw new BridgeError($"Unknown crew op '{op}': assign or unassign.");
                 }
+            }, notices =>
+            {
+                var now = FoodTrucks.Core.Saves.StreetSales.Find(state, id)?.Crew ?? new List<string>();
+                var done = op == "assign" ? now.Contains(employeeId) : !now.Contains(employeeId);
+                return new JObject { ["done"] = done, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
             });
-            var now = FoodTrucks.Core.Saves.StreetSales.Find(state, id)?.Crew ?? new System.Collections.Generic.List<string>();
-            var done = op == "assign" ? now.Contains(employeeId) : !now.Contains(employeeId);
-            return new JObject { ["done"] = done, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
         }
 
     }

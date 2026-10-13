@@ -26,23 +26,18 @@ namespace FoodTrucks
             lock (gate) return recent.ToList();
         }
 
-        // The notice texts shown while an action runs (the test bridge's debug and vehicle commands). Main thread only;
-        // a notice shown later (a coroutine, the next tick) is in the log and the bridge's events, not here.
-        private static List<string>? capture;
+        // The notice texts shown while a test bridge command's window is open (the action and a few frames after it).
+        // Main thread only.
+        private static readonly List<List<string>> collectors = new List<List<string>>();
 
-        internal static List<string> Capture(Action action)
+        internal static List<string> BeginCapture()
         {
-            var outer = capture;
-            var mine = new List<string>();
-            capture = mine;
-            try { action(); }
-            finally
-            {
-                capture = outer;
-                outer?.AddRange(mine);
-            }
-            return mine;
+            var list = new List<string>();
+            collectors.Add(list);
+            return list;
         }
+
+        internal static void EndCapture(List<string> list) => collectors.Remove(list);
 
         // Notifications.Show with the same arguments, logged first.
         internal static void Show(NotificationType type, string key, Dictionary<string, string>? data, float seconds,
@@ -54,7 +49,7 @@ namespace FoodTrucks
                 recent.Enqueue(text);
                 while (recent.Count > RecentCount) recent.Dequeue();
             }
-            capture?.Add(text);
+            foreach (var list in collectors) list.Add(text);
             Log.Event("notice", "Notice: " + text);
             Notifications.Show(type, key, data, seconds, duplicateIdentifier, null, notificationSound, trackOnSaveGame);
         }

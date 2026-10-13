@@ -103,7 +103,14 @@ namespace FoodTrucks
             // mod's pavement rule.
             bool legal;
             string legalReason;
-            if (kind == "truck")
+            var info = InstanceBehavior<UI.UIs>.Instance?.playerHUD?.itemPanelUI?.vehicleInfo;
+            if (kind == "truck" && SaveGameManager.Current.ActiveVehicleId == instance.id && info != null && info.isActiveAndEnabled)
+            {
+                // The player drives it: the panel's live reading, the one Open checks (CartSelling.PitchProblem).
+                legal = info.currentParkingState == ParkingState.Legal;
+                legalReason = $"panel's live reading: {info.currentParkingState}";
+            }
+            else if (kind == "truck")
             {
                 legal = Legality.VehicleLegallyParked(instance, out var how);
                 legalReason = $"wheel parking test: {(legal ? "legal" : "illegal")}, {how}";

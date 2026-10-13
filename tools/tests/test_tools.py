@@ -384,6 +384,10 @@ class CLIAndShotsTests(unittest.TestCase):
             reply=run('call','time','--json','{"pause":true}')
             self.assertEqual(reply.returncode,0,reply.stderr)
             self.assertIn('paused: true',reply.stdout)
+            for line in (('call','money','set=77','--json'),('call','--json','money','set=77'),('call','money','--json','set=77'),('call','money','--args','{"set":77}','--json')):
+                reply=run(*line)
+                self.assertEqual(reply.returncode,0,(line,reply.stderr))
+                self.assertEqual(json.loads(reply.stdout)['result']['money'],77,line)
             reply=run('state','money','--json')
             self.assertIn('ok',json.loads(reply.stdout))
             reply=run('state','missing')

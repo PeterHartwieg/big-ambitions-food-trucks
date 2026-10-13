@@ -116,7 +116,12 @@ namespace FoodTrucks
                     case "bay-pavement":
                         return (Up(point + pavement * 6f, EyeHeight), Up(point, 1f));
                     case "bay-road":
-                        return (Up(point + along * 15f - pavement * 3f, 1.5f), Up(point, 1f));
+                    {
+                        // From the driving lane next to the bay, 12 m back along it, looking at the bay's middle.
+                        var lane = TrafficLanes.Near(point, 25f).Nearest(point);
+                        var from = lane != null ? lane.Value.Point - lane.Value.Direction * 12f : point + along * 12f - pavement * 5f;
+                        return (Up(from, 1.5f), Up(point, 0.5f));
+                    }
                     default:
                         throw new BridgeError($"A bay takes the poses bay-pavement and bay-road, not {pose}.");
                 }
@@ -124,8 +129,9 @@ namespace FoodTrucks
             if (target.StartsWith("commissary:", StringComparison.Ordinal))
             {
                 if (pose != "door") throw new BridgeError($"A commissary takes the pose door, not {pose}.");
-                var (door, away) = TestBridgeCommands.Door(target.Substring(11));
-                return (Up(door + away * 6f, EyeHeight), Up(door, 1.6f));
+                // From the street side: 6 m along the walk from the door to the street, looking back at the entrance.
+                var (door, _, view) = TestBridgeCommands.DoorView(target.Substring(11), 6f);
+                return (Up(view, EyeHeight), Up(door, 1.4f));
             }
             var vehicle = TestBridgeCommands.FoodVehicle(target);
             var transform = TestBridgeCommands.Spawned(vehicle).transform;

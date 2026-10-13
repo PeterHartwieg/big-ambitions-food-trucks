@@ -17,6 +17,24 @@ def readable(value, indent=0):
     return json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
 
 
+def call_flags(argv):
+    """After `call`, a --json not followed by a JSON object means "print the raw reply" (as --raw), wherever it stands."""
+    if 'call' not in argv:
+        return argv
+    at = argv.index('call')
+    out = argv[:at + 1]
+    rest = argv[at + 1:]
+    i = 0
+    while i < len(rest):
+        token = rest[i]
+        if token == '--json' and not (i + 1 < len(rest) and rest[i + 1].lstrip().startswith('{')):
+            out.append('--raw')
+        else:
+            out.append(token)
+        i += 1
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description='Read and drive the Food Trucks test bridge')
     parser.add_argument('--json', action='store_true', dest='raw')
@@ -29,8 +47,11 @@ def main():
     p = sub.add_parser('call')
     p.add_argument('cmd')
     p.add_argument('pairs', nargs='*')
-    p.add_argument('--json', dest='arguments', metavar='OBJECT')
-    p.add_argument('--raw', action='store_true', dest='call_raw', help='Print the raw reply (or put --json before call)')
+    # --json anywhere on the line prints the raw JSON reply; --json '{...}' (a JSON object) is the call's arguments, as
+    # --args '{...}' is.
+    p.add_argument('--json', dest='json_option', metavar='OBJECT')
+    p.add_argument('--args', dest='arguments', metavar='OBJECT', help='The call arguments as a JSON object')
+    p.add_argument('--raw', action='store_true', dest='call_raw', help='Print the raw reply (as --json does)')
     p.add_argument('--timeout', type=float, default=10)
     p = sub.add_parser('op', help='Query an earlier operation without repeating it')
     p.add_argument('id', type=int)
@@ -53,7 +74,7 @@ def main():
     p = sub.add_parser('click')
     p.add_argument('text')
     p.add_argument('--json', action='store_true', dest='raw', default=argparse.SUPPRESS)
-    args = parser.parse_args()
+    args = parser.parse_args(call_flags(sys.argv[1:]))
     bridge = Bridge()
     try:
         if args.command == 'health':
@@ -63,6 +84,10 @@ def main():
             if not args.raw:
                 reply = lookup(reply['result'], args.path)
         elif args.command == 'call':
+            if args.json_option is not None:
+                if args.arguments is not None:
+                    raise ValueError('Give the call arguments once: --args or --json with an object')
+                args.arguments = args.json_option
             reply = bridge.call(args.cmd, parse_args(args.pairs, args.arguments), args.timeout)
             args.raw = args.raw or args.call_raw
         elif args.command == 'op':
