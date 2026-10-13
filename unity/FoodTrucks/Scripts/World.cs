@@ -99,12 +99,12 @@ namespace FoodTrucks
 
         public static string AddressKey(string? street, int number) => $"{street}#{number}";
 
-        // The entrances of the building at an address; null when the city has no such building.
         // The city building at an address ("street#number"), or null.
         public static CityBuildingController? BuildingAt(string address) =>
             Buildings().Select(b => b.Controller).FirstOrDefault(c => c != null && c.building?.Address != null &&
                 AddressKey(c.building.Address.streetName, c.building.Address.streetNumber) == address);
 
+        // The entrances of the building at an address; null when the city has no such building.
         public static Vector3[]? EntrancesOf(string address)
         {
             if (byAddress == null)
