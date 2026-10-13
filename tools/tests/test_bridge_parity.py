@@ -262,6 +262,8 @@ class ParityTests(unittest.TestCase):
         reply=self.mock.call('teleport',{'who':self.id,'x':5,'z':6})
         self.assertEqual(reply['in_the_way_after'],[])
         self.assertNotIn('surface',self.mock.call('teleport',{'who':'player','place':'vehicle:'+self.id}))
+        far=self.mock.call('teleport',{'who':'player','x':500,'z':500})
+        self.assertTrue(far['surface'].endswith('; walking routes not checked (more than 100 m from the player)'))
 
     def test_free_camera_and_shot_reply(self):
         reply=self.mock.call('shoot',{'name':'free','x':0,'y':1.65,'z':0,'look_at':{'x':10,'y':1.65,'z':0},'width':16,'height':16})
@@ -284,6 +286,9 @@ class ParityTests(unittest.TestCase):
         self.assertTrue(reply['game_path'].endswith('diag-game.png'))
         self.assertEqual((reply['asis_uncovered'],reply['asis_outlined']),([],[]))
         self.refused('shoot',{'name':'diag','x':0,'y':1,'z':0,'compare':'yes'},'compare must be true or false.')
+        state=self.mock.call('state',{})
+        self.assertEqual(set(state['game_camera']),{'x','y','z','yaw','pitch'})
+        self.assertEqual(state['view_blocked'],[])
 
     def test_health_has_time_skip(self):
         self.assertFalse(self.mock.health()['time_skip'])

@@ -328,7 +328,7 @@ namespace FoodTrucks
         }
 
         public Func<JToken?> Poll { get; }
-        // Run when the bridge stops before the result came (the shot's camera and texture go).
+        // Run when the bridge stops before the result came, or when Poll throws (the shot's camera and texture go).
         public Action? OnStop { get; }
     }
 
@@ -421,6 +421,10 @@ namespace FoodTrucks
                 catch (Exception ex)
                 {
                     pending.RemoveAt(i);
+                    // A failed call releases what it holds too (a shot's camera and texture), not only a stopped one
+                    // (review round 10, Sol). Every OnStop is safe to run twice.
+                    try { work.OnStop?.Invoke(); }
+                    catch (Exception cleanup) { Log.Error("Test bridge, releasing a failed call: " + cleanup.Message); }
                     done.TrySetException(ex);
                 }
             }

@@ -398,6 +398,9 @@ class Mock:
             player=result['player']
             player['activity']='driving' if player['in_vehicle'] and self.vehicle(player['in_vehicle'])['kind']=='truck' else 'pushing' if player['in_vehicle'] else 'starting' if self.activity_starting else 'at_hatch' if player['at_hatch'] else 'walking' if self.walks else 'on_foot'
             player['clock_held_by']=self.clock_held_by()
+            # The mock's game camera hangs over the player; nothing is faded for it.
+            result['game_camera']={'x':round(player['x'],2),'y':round(player['y']+18,2),'z':round(player['z']-12,2),'yaw':0.,'pitch':55.}
+            result['view_blocked']=[]
             result['commissary']['bays']=self.bays()
             result['clock']['speed']=round(result['clock']['speed'],2)
             result['money']=round(result['money'],2)
@@ -413,7 +416,7 @@ class Mock:
             return result
         return {'save': self.state['save'], 'scene':self.state['scene'], 'vehicles':[],
                 'notices_recent':self.state['notices_recent'], 'load':copy.deepcopy(self.load), 'transactions_today':[], 'employees':[],
-                **{key:None for key in ('clock','money','player','licence','commissary','ledger_today')}}
+                'view_blocked':[], **{key:None for key in ('clock','money','player','licence','commissary','ledger_today','game_camera')}}
 
     def health(self):
         c = self.state['clock'] if self.state['scene'] == 'city' else {}
@@ -1016,7 +1019,9 @@ class Mock:
                 y=num(args,'y')
                 what='walkable surface' if who=='player' else 'surface'
                 # For the player the bridge checks walking routes from where they stand, when they stand on the NavMesh.
-                route=('' if who!='player' else "; walking routes not checked (the player isn't on the NavMesh)" if obj['in_vehicle'] else "; walking routes checked from the player's place")
+                far=who=='player' and math.hypot(obj['x']-x,obj['z']-z)>100
+                route=('' if who!='player' else "; walking routes not checked (the player isn't on the NavMesh)" if obj['in_vehicle']
+                       else "; walking routes not checked (more than 100 m from the player)" if far else "; walking routes checked from the player's place")
                 if y is not None and abs(y)>1.5:
                     walk='walkable ' if who=='player' else ''
                     raise ValueError(f"No {walk}ground at x {x:.1f}, z {z:.1f} near y {y:.2f}: no {what} within 1.5 m of the y asked for ({y:.2f}); surfaces there: 0.00 walkable{route}.")

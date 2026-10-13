@@ -126,14 +126,23 @@ namespace FoodTrucks
             void Write(string to)
             {
                 var previous = RenderTexture.active;
-                RenderTexture.active = texture;
-                var image = new Texture2D(width, height, TextureFormat.RGB24, false);
-                image.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-                image.Apply();
-                RenderTexture.active = previous;
-                Directory.CreateDirectory(folder);
-                File.WriteAllBytes(to, image.EncodeToPNG());
-                Object.Destroy(image);
+                Texture2D? image = null;
+                try
+                {
+                    RenderTexture.active = texture;
+                    image = new Texture2D(width, height, TextureFormat.RGB24, false);
+                    image.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                    image.Apply();
+                    RenderTexture.active = previous;
+                    Directory.CreateDirectory(folder);
+                    File.WriteAllBytes(to, image.EncodeToPNG());
+                }
+                finally
+                {
+                    // Whatever failed: the active render texture back, the read-back image gone (review round 10, Sol).
+                    RenderTexture.active = previous;
+                    if (image != null) Object.Destroy(image);
+                }
             }
             var total = Frames + (compare ? CompareFrames : 0);
             return new Deferred(() =>

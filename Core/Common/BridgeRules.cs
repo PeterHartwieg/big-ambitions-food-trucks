@@ -15,8 +15,8 @@ namespace FoodTrucks.Core.Common
 
         // `surfaces`: each surface's height and whether people can walk there (NavMesh near it). An explicit y takes
         // the surface nearest it within ExplicitReach, walkable when `walkableOnly` (the player); otherwise a walkable
-        // surface nearest the mover's own height, then any surface nearest it. Returns the index, or -1 when an explicit
-        // y has no such surface, and a few words on why, for the reply. Live session 5: the reply said "nearest the
+        // surface nearest the mover's own height, then (not for `walkableOnly`) any surface nearest it. Returns the index,
+        // or -1 when there is no such surface, and a few words on why, for the reply. Live session 5: the reply said "nearest the
         // mover's height (0.09) of 2: 3.22, 0.20" and took 3.22, because the street at 0.20 read as not walkable; the
         // heights are now listed with which are walkable, and an explicit y with nothing walkable near it is refused.
         public static (int Index, string Why) Choose(IReadOnlyList<(double Y, bool Walkable)> surfaces, double referenceY, double? explicitY,
@@ -36,8 +36,12 @@ namespace FoodTrucks.Core.Common
                     return (-1, FormattableString.Invariant($"no {what} within {ExplicitReach:F1} m of the y asked for ({y:F2}); surfaces there: {Heights()}"));
                 return (Nearest(near, y), FormattableString.Invariant($"the {what} nearest the y asked for ({y:F2}) of {surfaces.Count}: {Heights()}"));
             }
-            if (surfaces.Count == 1) return (0, surfaces[0].Walkable ? "the only ground surface, walkable" : "the only ground surface, not walkable");
             var walkable = all.Where(i => surfaces[i].Walkable).ToList();
+            // The player goes only where people can walk: with no walkable surface the move is refused, even for the
+            // only surface there (review round 10, Astra and Sol: a disconnected deck slipped through as the fallback).
+            if (walkableOnly && walkable.Count == 0)
+                return (-1, FormattableString.Invariant($"no walkable surface of {surfaces.Count}: {Heights()}"));
+            if (surfaces.Count == 1) return (0, surfaces[0].Walkable ? "the only ground surface, walkable" : "the only ground surface, not walkable");
             if (walkable.Count > 0)
                 return (Nearest(walkable, referenceY), FormattableString.Invariant($"the walkable surface nearest the mover's height ({referenceY:F2}) of {surfaces.Count}: {Heights()}"));
             return (Nearest(all, referenceY), FormattableString.Invariant($"the surface nearest the mover's height ({referenceY:F2}) of {surfaces.Count}, none walkable: {Heights()}"));

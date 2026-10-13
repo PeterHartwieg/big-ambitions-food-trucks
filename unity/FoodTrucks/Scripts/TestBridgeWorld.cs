@@ -205,8 +205,8 @@ namespace FoodTrucks
         // highest surface put the player on the elevated highway at y 5.06.
         //
         // Walkable, for the player: NavMesh of the player's own agent type and areas within the 3 m the landing allows
-        // and within 1 m of the surface's height, and, while the player stands on the NavMesh, a complete walking route
-        // from there. Live session 6: the highway deck has NavMesh near it, so a y of 5.06 put the player up there; no
+        // and within 1 m of the surface's height, and, while the player stands on the NavMesh within 100 m, a complete
+        // walking route from there. Live session 6: the highway deck has NavMesh near it, so a y of 5.06 put the player up there; no
         // footpath leads to it. A vehicle's surfaces are read with any NavMesh, as before.
         internal static (Vector3 Point, string Why) GroundPicked(float x, float z, float referenceY, float? explicitY, bool walkableOnly = false)
         {
@@ -228,7 +228,15 @@ namespace FoodTrucks
             if (walkableOnly)
             {
                 var filter = PlayerFilter(out var start);
-                route = start == null
+                // Only near the player: the city's NavMesh routes over long distances come back partial (live session 8:
+                // every move from Lower Manhattan to Hell's Kitchen read as unwalkable), and the deck this guards
+                // against is a short jump from the street under it.
+                if (start != null && new Vector2(start.Value.x - x, start.Value.z - z).magnitude > RouteMetres)
+                {
+                    route = $"; walking routes not checked (more than {RouteMetres:F0} m from the player)";
+                    start = null;
+                }
+                else route = start == null
                     ? "; walking routes not checked (the player isn't on the NavMesh)"
                     : "; walking routes checked from the player's place";
                 surfaces = points.Select(p => ((double)p.y, Walkable(p, filter, start))).ToList();
@@ -237,9 +245,14 @@ namespace FoodTrucks
             var (index, why) = FoodTrucks.Core.Common.GroundPick.Choose(surfaces, referenceY, explicitY, walkableOnly);
             why += route;
             var kind = walkableOnly ? "walkable ground" : "ground";
-            if (index < 0) throw new BridgeError($"No {kind} at x {x:F1}, z {z:F1} near y {explicitY:F2}: {why}.");
+            if (index < 0)
+                throw new BridgeError(explicitY != null
+                    ? $"No {kind} at x {x:F1}, z {z:F1} near y {explicitY:F2}: {why}."
+                    : $"No {kind} at x {x:F1}, z {z:F1}: {why}.");
             return (points[index], why);
         }
+
+        private const float RouteMetres = 100f;
 
         // The player agent's own NavMesh filter (agent type and areas), and the player's place on the NavMesh, or null
         // when they aren't on it (in a vehicle, inside a building, off the mesh).

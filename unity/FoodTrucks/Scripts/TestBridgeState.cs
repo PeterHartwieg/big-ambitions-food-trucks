@@ -33,9 +33,22 @@ namespace FoodTrucks
                 ["load"] = TestBridgeCommands.LoadJson(),
                 ["transactions_today"] = new JArray(),
                 ["employees"] = new JArray(),
+                ["game_camera"] = null,
+                ["view_blocked"] = new JArray(),
             };
             if (game == null || scene != "city") return result;
             result["clock"] = TestBridgeCommands.Clock();
+            var main = Camera.main;
+            if (main != null)
+            {
+                var a = main.transform.eulerAngles;
+                result["game_camera"] = new JObject
+                {
+                    ["x"] = Round(main.transform.position.x), ["y"] = Round(main.transform.position.y), ["z"] = Round(main.transform.position.z),
+                    ["yaw"] = Round(a.y), ["pitch"] = Round(a.x > 180f ? a.x - 360f : a.x),
+                };
+            }
+            result["view_blocked"] = TestBridgeUncover.ViewBlocked();
             result["money"] = Math.Round(game.Money, 2);
             result["player"] = Player(game);
             result["transactions_today"] = Transactions(game);

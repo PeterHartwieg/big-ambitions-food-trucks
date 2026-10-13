@@ -130,4 +130,19 @@ public class BridgeRulesTests
         Assert.True(Footprint.Overlap(truck, (0.3, 3.0), van, (0.0, 2.2)));
         Assert.False(Footprint.Overlap(truck, (0.3, 3.0), new FlatBox(10, 0, 0, 1, 1, 2.5), (0.0, 2.2)));
     }
+
+    [Fact]
+    public void A_player_is_refused_when_no_surface_is_walkable()
+    {
+        // Review round 10: a sole disconnected deck, and every surface failing the walk check.
+        var deck = new List<(double Y, bool Walkable)> { (5.06, false) };
+        var (index, why) = GroundPick.Choose(deck, referenceY: 0.1, explicitY: null, walkableOnly: true);
+        Assert.Equal(-1, index);
+        Assert.Contains("no walkable surface of 1: 5.06 not walkable", why);
+        var road = new List<(double Y, bool Walkable)> { (5.06, false), (0.05, false) };
+        Assert.Equal(-1, GroundPick.Choose(road, 0.1, null, walkableOnly: true).Index);
+        // A vehicle keeps the fallback.
+        Assert.Equal(0, GroundPick.Choose(deck, 0.1, null, walkableOnly: false).Index);
+        Assert.Equal(1, GroundPick.Choose(road, 0.1, null, walkableOnly: false).Index);
+    }
 }
