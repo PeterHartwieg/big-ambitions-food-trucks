@@ -445,7 +445,7 @@ class Mock:
         v = dict(id=identifier,kind=kind,name='Food '+kind,x=0.,y=0.,z=0.,heading=0.,legal=True,
                  legal_reason='wheel parking test: legal, mock wheels' if kind=='truck' else 'pavement rule: legal; nearest entrance 10.0 m',hatch_side='right' if kind=='truck' else None,
                  hatch_to_pavement=True if kind=='truck' else None, open=False,serving='nobody',crew=[],pieces=[],stock=[],
-                 queue=None,commissary=None,route=None)
+                 queue=None,commissary=None,route=None,parking={'state':'Legal','neighbourhood':'ba:neighborhood_hellskitchen','hourly_price':5.0,'unpaid':0.})
         self.state['vehicles'].append(v)
         self.selected = identifier
         self.event(f'Spawned foodtrucks:vehicletype_food{kind}: id {identifier}, controller mock.')
