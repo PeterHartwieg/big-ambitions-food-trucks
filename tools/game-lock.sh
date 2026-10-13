@@ -7,7 +7,7 @@ LOCK_OWNER="${BA_LOCK_OWNER:-Food Trucks session}"
 
 lock_text() {
   ssh "$HOST" 'if (Test-Path $env:USERPROFILE\game-lock.txt) { Get-Content $env:USERPROFILE\game-lock.txt }' < /dev/null 2>/dev/null \
-    | grep -v '^\*\*' | tr -d '\r'
+    | { grep -v '^\*\*' || true; } | tr -d '\r'
 }
 
 # Refuses (exit 1) when someone else holds the lock.
