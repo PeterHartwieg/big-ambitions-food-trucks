@@ -12,7 +12,9 @@ Two things on `main` after the bay-side merge; no version bump, so the log says 
 | D2 | Brake hard from top speed | Stops straight in about the same distance as before (the brakes out-grip the tyres at either mass, so the stop is the tyres'); the nose dips a little more, the rear wheels stay down, no slide |
 | D3 | Take a few junction turns at 20 to 30 km/h, one tight; bump a kerb | Leans a little more than before, never tips or lifts a wheel; climbs or stops at the kerb like the game's trucks |
 | D4 | Back into the bay and park; open the window and stand at the hatch | Sits level, no bouncing after it stops; the hatch, register and crew at the same height as before |
-| D5 | Overall | "Slightly heavier", not a different vehicle. Say heavier, lighter or right; if wrong, say which part (pull-away, braking, turns) |
+| D5 | Overall (Peter, 13 October: heavy enough; turned too tightly at 35 degrees, right at 28) | "Slightly heavier", not a different vehicle. Say heavier, lighter or right; if wrong, say which part (pull-away, braking, turns) |
+| D6 | With the bridge on, drive the truck and steer hard (the crash sound Peter heard about 70% of the time on 13 October, on the 28 degree build), then copy the `Collision (test bridge):` lines | Each names what the truck hit, its layer, where on the truck (local x, y, z; y near 0 is the hull's underside) and which of our colliders. Startup has `Patch VehicleController.OnCollisionEnter(Collision), test bridge collisions: Active.` What the lines show decides the fix (hull too low, a kerb or street object, our own parts) |
+| D7 | Quit the game from the pause menu | No `ERROR: Commissary, parked cars after a jump` or `visit check` lines after `Quitting game...` (six on 13 October: the player was destroyed first) |
 
 # Bays on the door's side and a heavier truck (next build)
 

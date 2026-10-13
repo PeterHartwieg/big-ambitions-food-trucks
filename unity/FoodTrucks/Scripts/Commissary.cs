@@ -614,6 +614,10 @@ namespace FoodTrucks
         // The order form's call can end with the phone closed, which tells no one: its item list is closed then. Checked
         // in Update and again in LateUpdate, so a phone closed anywhere in a frame (input, UI events, other scripts'
         // Update) is seen before the next frame's clicks reach the list.
+        // While the game quits the player is destroyed before this component, and PlayerHelper.GetPosition throws
+        // (six errors after "Quitting game..." on 13 October 2026).
+        private static bool NoPlayer => InstanceBehavior<GameManager>.Instance?.playerController == null;
+
         private void LateUpdate()
         {
             CommissaryOrderForm.Watch();
@@ -621,7 +625,7 @@ namespace FoodTrucks
             // is drawn (BayParking).
             var sites = Sites;
             var rules = Rules;
-            if (!attached || uninstalled || sites == null || rules == null || FoodTrucksSession.CurrentState == null) return;
+            if (!attached || uninstalled || sites == null || rules == null || FoodTrucksSession.CurrentState == null || NoPlayer) return;
             try
             {
                 var inside = BuildingManager.IsInsideBuilding || Parking.UndergroundParking.UndergroundParkingManager.IsInsideParking;
@@ -637,7 +641,7 @@ namespace FoodTrucks
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
             var sites = Sites;
-            if (!attached || uninstalled || state == null || rules == null || sites == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
+            if (!attached || uninstalled || state == null || rules == null || sites == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null || NoPlayer) return;
             if (!CityReady(sites)) return;
             if (Time.unscaledTime >= nextCheck)
             {

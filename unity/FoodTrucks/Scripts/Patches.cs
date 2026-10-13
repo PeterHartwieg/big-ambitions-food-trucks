@@ -174,6 +174,11 @@ namespace FoodTrucks
                 finalizer: nameof(TestBridgeCommands.CompressFinalizer));
             PatchBridge(typeof(UI.Load.LoadingScreen), "StartLoading", null, "load",
                 postfix: nameof(TestBridgeCommands.StartLoadingPostfix));
+            // Every collision of a food vehicle that plays NWH's crash clip, logged (TestBridgeCollisions).
+            var nwhVehicle = AccessTools.TypeByName("NWH.VehiclePhysics2.VehicleController");
+            if (nwhVehicle == null) Log.Error("Patch VehicleController.OnCollisionEnter, test bridge collisions: Not active, type not found.");
+            else PatchBridge(nwhVehicle, "OnCollisionEnter", new[] { typeof(UnityEngine.Collision) }, "collisions",
+                postfix: nameof(TestBridgeCommands.VehicleCollisionPostfix));
             TestBridgeCommands.ReportLoadCheck();
         }
 
