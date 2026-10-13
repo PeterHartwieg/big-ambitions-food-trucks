@@ -98,11 +98,12 @@ namespace FoodTrucks
 
         // The game's own reading for a vehicle standing here (CarController.UpdateParkingZone), with the neighbourhood of
         // the parking lane under its wheels as the game records it (the last wheel's; empty when none was read). For a
-        // vehicle the player isn't driving, whose panel the game doesn't update (the test bridge's teleport).
+        // vehicle the player isn't driving, whose panel the game doesn't update (the test bridge's teleport). The game's
+        // own reading skips the wheels while the player is indoors, because then its vehicle is indoors too; this one is
+        // for a vehicle out in the street wherever the player is, so it always reads the wheels.
         public static bool GameParkingReading(Transform vehicle, out string neighbourhood)
         {
             neighbourhood = string.Empty;
-            if (BuildingManager.IsInsideBuilding) return true;
             var wheels = WheelsOf(vehicle);
             if (wheels.Length == 0) return LegalParkingAt(vehicle.position, vehicle.forward);
             foreach (var wheel in wheels)
