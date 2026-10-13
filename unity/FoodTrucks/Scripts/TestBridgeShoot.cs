@@ -78,8 +78,11 @@ namespace FoodTrucks
             // game_view: also the game's own frame (<name>-game.png), as the player sees it.
             // frames: how many frames the camera renders before the picture is read (8 to 240, default 8), for HDRP's
             // per-camera history (exposure, reflections, the sky's ambient light) to settle.
-            var shotFrames = (int)(TestBridgeCommands.Num(args, "frames") ?? Frames);
-            if (shotFrames < 8 || shotFrames > 240) throw new BridgeError("frames must be 8 to 240.");
+            // A whole number only (review round 13: 240.5 was cut to 240).
+            var askedFrames = TestBridgeCommands.Num(args, "frames") ?? Frames;
+            if (double.IsNaN(askedFrames) || askedFrames != Math.Floor(askedFrames) || askedFrames < 8 || askedFrames > 240)
+                throw new BridgeError("frames must be a whole number from 8 to 240.");
+            var shotFrames = (int)askedFrames;
             var compare = TestBridgeCommands.Bool(args, "compare") == true;
             var gameView = TestBridgeCommands.Bool(args, "game_view") == true;
 

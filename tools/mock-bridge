@@ -1159,7 +1159,7 @@ class Mock:
                 else:
                     camera.update(yaw=round((num(args,'yaw') or 0)%360,2),pitch=round(num(args,'pitch') or 0,2))
             frames=num(args,'frames')
-            if frames is not None and not 8<=frames<=240: raise ValueError('frames must be 8 to 240.')
+            if frames is not None and (frames!=int(frames) or not 8<=frames<=240): raise ValueError('frames must be a whole number from 8 to 240.')
             for flag in ('compare','game_view'):
                 if args.get(flag) is not None and not isinstance(args.get(flag),bool): raise ValueError(f'{flag} must be true or false.')
             path=self.shots/(name+'.png')
