@@ -53,6 +53,7 @@ namespace FoodTrucks
             Patch(scroller, "LoadFeeRows", Type.EmptyTypes, typeof(StreetFoodBooks), postfix: nameof(StreetFoodBooks.FeeRows));
             Patch(typeof(EmployeeInstance), "PayWage", new[] { typeof(BuildingRegistration) }, typeof(StreetFoodBooks),
                 prefix: nameof(StreetFoodBooks.WagePrefix), postfix: nameof(StreetFoodBooks.WagePostfix));
+            // Midnight parking: rent covers food vehicles in their rented commissary bay, before the ledger notes costs.
             Patch(typeof(ParkingSimulator), "RunDaily", Type.EmptyTypes, typeof(StreetFoodBooks),
                 prefix: nameof(StreetFoodBooks.ParkingDailyPrefix), postfix: nameof(StreetFoodBooks.ParkingDailyPostfix));
             Patch(typeof(ParkingSimulator), "RunHourly", Type.EmptyTypes, typeof(StreetFoodBooks),
