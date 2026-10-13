@@ -172,11 +172,15 @@ namespace FoodTrucks
                 finalizer: nameof(TestBridgeCommands.SerializeFinalizer));
             PatchBridge(helper, "CompressBinaryData", new[] { typeof(string), typeof(string) }, "save",
                 finalizer: nameof(TestBridgeCommands.CompressFinalizer));
+            PatchBridge(typeof(UI.Load.LoadingScreen), "StartLoading", null, "load",
+                postfix: nameof(TestBridgeCommands.StartLoadingPostfix));
         }
 
-        private static void PatchBridge(Type type, string method, Type[] args, string what, string? prefix = null, string? finalizer = null, bool first = false)
+        // args null: the method's only overload, named without its parameters.
+        private static void PatchBridge(Type type, string method, Type[]? args, string what, string? prefix = null, string? finalizer = null,
+            bool first = false, string? postfix = null)
         {
-            var name = $"{type.Name}.{method}({string.Join(", ", args.Select(a => a.Name))}), test bridge {what}";
+            var name = args == null ? $"{type.Name}.{method}, test bridge {what}" : $"{type.Name}.{method}({string.Join(", ", args.Select(a => a.Name))}), test bridge {what}";
             if (harmony == null)
             {
                 Log.Error($"Patch {name}: Not active, Harmony isn't set up.");
@@ -192,7 +196,7 @@ namespace FoodTrucks
                 }
                 HarmonyMethod? Handler(string? handler) => handler == null ? null
                     : new HarmonyMethod(typeof(TestBridgeCommands), handler) { priority = first ? HarmonyLib.Priority.First : HarmonyLib.Priority.Normal };
-                harmony.Patch(original, prefix: Handler(prefix), finalizer: Handler(finalizer));
+                harmony.Patch(original, prefix: Handler(prefix), postfix: Handler(postfix), finalizer: Handler(finalizer));
                 Log.Info($"Patch {name}: Active.");
                 if (what == "save") TestBridgeCommands.SaveHooks++;
             }

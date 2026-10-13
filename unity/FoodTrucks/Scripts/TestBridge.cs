@@ -71,7 +71,6 @@ namespace FoodTrucks
                 server.Start();
                 http = server;
                 Patches.ApplyTestBridge();
-                GlobalEvents.onHospitalRespawnStarts += TestBridgeCommands.OnCollapse;
                 // An agent drives the game while its window may not have the focus.
                 Application.runInBackground = true;
                 Log.Info($"Test bridge: listening on http://127.0.0.1:{Port}/ (session {Session}).");
@@ -106,7 +105,6 @@ namespace FoodTrucks
             Current = new Snapshot();
             lastMinutes = null;
             jump = null;
-            GlobalEvents.onHospitalRespawnStarts -= TestBridgeCommands.OnCollapse;
             TestBridgeEvents.Unhook();
             TestBridgeEvents.Clear();
             if (wasRunning) Log.Info("Test bridge: stopped.");

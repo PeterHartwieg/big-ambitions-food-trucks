@@ -230,6 +230,10 @@ namespace FoodTrucks
         {
             public string What = "";
             public GameObject? LaneCar;
+            // The thing itself, so two cars of one model (pooled cars share model names) stay two (review round 6).
+            public UnityEngine.Object? Thing;
+            // A delivery-job van the game has hidden for now.
+            public bool Hidden;
         }
 
         // The vehicle's own size in its own frame: each solid collider's own box (a box's centre and size, a sphere's or
@@ -302,42 +306,44 @@ namespace FoodTrucks
                 var car = BayParking.CarOf(c);
                 if (car != null && BayParking.IsLaneCar(car))
                 {
-                    if (!found.ContainsKey(car)) found[car] = new Blocker { What = $"a parked car ({car.name})", LaneCar = car };
+                    if (!found.ContainsKey(car)) found[car] = new Blocker { What = $"a parked car ({car.name})", LaneCar = car, Thing = car };
                     continue;
                 }
                 var vehicle = c.GetComponentInParent<VehicleController>();
                 if (vehicle != null)
                 {
-                    if (!found.ContainsKey(vehicle)) found[vehicle] = new Blocker { What = $"the player's {vehicle.vehicleInstance?.vehicleTypeName} {vehicle.vehicleInstance?.id}" };
+                    if (!found.ContainsKey(vehicle)) found[vehicle] = new Blocker { What = $"the player's {vehicle.vehicleInstance?.vehicleTypeName} {vehicle.vehicleInstance?.id}", Thing = vehicle.gameObject };
                     continue;
                 }
                 var player = c.GetComponentInParent<PlayerController>();
                 if (player != null)
                 {
-                    if (!found.ContainsKey(player)) found[player] = new Blocker { What = "the player" };
+                    if (!found.ContainsKey(player)) found[player] = new Blocker { What = "the player", Thing = player.gameObject };
                     continue;
                 }
                 var van = c.GetComponentInParent<Vehicles.DeliveryDriverJob.DeliveryJobStartController>();
                 if (van != null)
                 {
-                    if (!found.ContainsKey(van)) found[van] = new Blocker { What = $"the building's delivery-job van ({van.name})" };
+                    if (!found.ContainsKey(van)) found[van] = new Blocker { What = $"the building's delivery-job van ({van.name})", Thing = van.gameObject };
                     continue;
                 }
                 var person = c.GetComponentInParent<ThirdPersonCharacter>();
                 if (person != null)
                 {
-                    if (!found.ContainsKey(person)) found[person] = new Blocker { What = $"a person ({person.name})" };
+                    if (!found.ContainsKey(person)) found[person] = new Blocker { What = $"a person ({person.name})", Thing = person.gameObject };
                     continue;
                 }
                 var key = (UnityEngine.Object?)c.attachedRigidbody ?? c.transform.root;
                 if (!found.ContainsKey(key))
-                    found[key] = new Blocker { What = $"{c.transform.root.name}/{c.name} (layer {LayerMask.LayerToName(c.gameObject.layer)})" };
+                    found[key] = new Blocker { What = $"{c.transform.root.name}/{c.name} (layer {LayerMask.LayerToName(c.gameObject.layer)})", Thing = key is Component k ? (UnityEngine.Object)k.gameObject : key };
             }
             return found.Values.ToList();
         }
 
         // What stands in the vehicle's footprint, 0.3 m up to its roof, at a pose on the ground.
-        private static List<Blocker> InTheWay(VehicleController controller, Vector3 ground, Quaternion rotation)
+        // `vans`: the delivery-job vans, looked up once per command (Vans()); null looks them up here.
+        private static List<Blocker> InTheWay(VehicleController controller, Vector3 ground, Quaternion rotation,
+            IReadOnlyList<Vehicles.DeliveryDriverJob.DeliveryJobStartController>? vans = null)
         {
             var local = LocalBounds(controller);
             var bottom = local.min.y + 0.3f;
@@ -353,17 +359,25 @@ namespace FoodTrucks
             var middle = ground + rotation * new Vector3(local.center.x, 0f, local.center.z);
             var forward = rotation * Vector3.forward;
             var mine = new FoodTrucks.Core.Fleet.FlatBox(middle.x, middle.z, forward.x, forward.z, local.extents.x, local.extents.z);
-            foreach (var (car, what, laneCar) in CarsNear(middle, 15f))
+            var mySpan = ((double)(ground.y + bottom), (double)(ground.y + top));
+            foreach (var (car, what, laneCar, hidden) in CarsNear(middle, 15f, vans ?? Vans()))
             {
-                if (found.Any(b => b.LaneCar == car || b.What == what) || !CarFootprint(car, out var theirs)) continue;
-                if (FoodTrucks.Core.Fleet.Footprint.Overlap(mine, theirs, -0.05)) found.Add(new Blocker { What = what, LaneCar = laneCar ? car : null });
+                if (found.Any(b => b.Thing == car) || !CarFootprint(car, out var theirs, out var theirSpan)) continue;
+                if (FoodTrucks.Core.Fleet.Footprint.Overlap(mine, mySpan, theirs, theirSpan, -0.05))
+                    found.Add(new Blocker { What = what, LaneCar = laneCar ? car : null, Thing = car, Hidden = hidden });
             }
             return found;
         }
 
+        // Every delivery-job van in the scene, hidden ones too: a scene-wide search, so once per command.
+        private static List<Vehicles.DeliveryDriverJob.DeliveryJobStartController> Vans() =>
+            UnityEngine.Object.FindObjectsByType<Vehicles.DeliveryDriverJob.DeliveryJobStartController>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Where(v => v != null).ToList();
+
         // The lanes' parked cars within `radius` of a point (active children of the parking lanes there) and the
         // delivery-job vans, shown or hidden, with how each is named in a refusal and whether `clear` may send it away.
-        private static IEnumerable<(GameObject Car, string What, bool LaneCar)> CarsNear(Vector3 point, float radius)
+        private static IEnumerable<(GameObject Car, string What, bool LaneCar, bool Hidden)> CarsNear(Vector3 point, float radius,
+            IReadOnlyList<Vehicles.DeliveryDriverJob.DeliveryJobStartController> vans)
         {
             var lanes = new HashSet<ParkingLaneGenerator>();
             foreach (var c in Physics.OverlapSphere(point, radius, LayerHelper.parkingAreaLayerMask, QueryTriggerInteraction.Collide))
@@ -374,20 +388,22 @@ namespace FoodTrucks
             foreach (var lane in lanes)
                 foreach (Transform child in lane.transform)
                     if (BayParking.IsLaneCar(child.gameObject) && Flat(child.position - point) <= radius + 5f)
-                        yield return (child.gameObject, $"a parked car ({child.name})", true);
-            foreach (var van in UnityEngine.Object.FindObjectsByType<Vehicles.DeliveryDriverJob.DeliveryJobStartController>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                        yield return (child.gameObject, $"a parked car ({child.name})", true, false);
+            foreach (var van in vans)
                 if (van != null && Flat(van.transform.position - point) <= radius + 5f)
                     yield return (van.gameObject, van.gameObject.activeInHierarchy
                         ? $"the building's delivery-job van ({van.name})"
-                        : $"the building's delivery-job van ({van.name}, hidden now; the game shows it again in its stall)", false);
+                        : $"the building's delivery-job van ({van.name}, hidden now; the game shows it again in its stall)", false, !van.gameObject.activeInHierarchy);
         }
 
         private static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
 
-        // A parked car's footprint: its mesh collider's bounds (each lane car has one on its root), else its renderers'.
-        private static bool CarFootprint(GameObject car, out FoodTrucks.Core.Fleet.FlatBox box)
+        // A parked car's footprint and height span: its mesh collider's bounds (each lane car has one on its root), else
+        // its renderers'.
+        private static bool CarFootprint(GameObject car, out FoodTrucks.Core.Fleet.FlatBox box, out (double Bottom, double Top) span)
         {
             box = default;
+            span = default;
             var t = car.transform;
             var forward = t.forward;
             if (new Vector2(forward.x, forward.z).sqrMagnitude < 1e-6f) return false;
@@ -398,6 +414,8 @@ namespace FoodTrucks
                 var scale = t.lossyScale;
                 var middle = t.TransformPoint(b.center);
                 box = new FoodTrucks.Core.Fleet.FlatBox(middle.x, middle.z, forward.x, forward.z, b.extents.x * Mathf.Abs(scale.x), b.extents.z * Mathf.Abs(scale.z));
+                var high = b.extents.y * Mathf.Abs(scale.y);
+                span = (middle.y - high, middle.y + high);
                 return true;
             }
             var renderers = car.GetComponentsInChildren<Renderer>(true);
@@ -407,6 +425,7 @@ namespace FoodTrucks
             foreach (var r in renderers) all.Encapsulate(r.bounds);
             var reach = Mathf.Max(all.extents.x, all.extents.z);
             box = new FoodTrucks.Core.Fleet.FlatBox(all.center.x, all.center.z, 0, 1, reach, reach);
+            span = (all.min.y, all.max.y);
             return true;
         }
 
@@ -454,15 +473,16 @@ namespace FoodTrucks
                         places.Add(Ground(p.x, p.z));
                     }
             var ordered = places.Distinct().OrderBy(p => (p - bay.Point).sqrMagnitude).ToList();
+            var vans = Vans();
             List<Blocker>? atMiddle = null;
             foreach (var place in ordered)
             {
-                var blockers = InTheWay(controller, place, rotation);
+                var blockers = InTheWay(controller, place, rotation, vans);
                 atMiddle ??= blockers;
-                if (blockers.Count == 0) return TeleportVehicle(id, place, rotation.eulerAngles.y, clear);
+                if (blockers.Count == 0) return TeleportVehicle(id, place, rotation.eulerAngles.y, clear, vans: vans);
             }
             // Nothing free on the paint: the middle, if clear may send its parked cars away.
-            return TeleportVehicle(id, bay.Point, rotation.eulerAngles.y, clear, atMiddle);
+            return TeleportVehicle(id, bay.Point, rotation.eulerAngles.y, clear, atMiddle, vans);
         }
 
         private static (Vector3, float?) Place(string place, string who, float? heading)
@@ -551,14 +571,16 @@ namespace FoodTrucks
             });
         }
 
-        private static JToken TeleportVehicle(string id, Vector3 target, float? heading, bool clear, List<Blocker>? blockers = null)
+        private static JToken TeleportVehicle(string id, Vector3 target, float? heading, bool clear, List<Blocker>? blockers = null,
+            List<Vehicles.DeliveryDriverJob.DeliveryJobStartController>? vans = null)
         {
+            vans ??= Vans();
             var vehicle = FoodVehicle(id);
             var controller = Spawned(vehicle);
             var record = FoodTrucks.Core.Saves.StreetSales.Find(FoodTrucksSession.CurrentState, id);
             if (record?.IsOpen == true) throw new BridgeError($"Vehicle {id} is open for business: close it first (vehicle close).");
             var rotation = Quaternion.Euler(0f, heading ?? controller.transform.eulerAngles.y, 0f);
-            MakeRoom(blockers ?? InTheWay(controller, target, rotation), clear, $"x {target.x:F1}, z {target.z:F1}");
+            MakeRoom(blockers ?? InTheWay(controller, target, rotation, vans), clear, $"x {target.x:F1}, z {target.z:F1}");
             VehicleHelper.TeleportVehicleToGround(controller, target, rotation);
             // The game moves the rigidbody; the transform only follows at the next physics step, which a paused game
             // doesn't take. Move it too, so the reply and the saved position are the new place.
@@ -587,10 +609,17 @@ namespace FoodTrucks
             Log.Info($"Test bridge: moved {vehicle.vehicleTypeName} {id} to x {t.position.x:F1}, z {t.position.z:F1}, heading {t.eulerAngles.y:F0}.");
             var reply = Pose(t.position, t.eulerAngles.y);
             // Tested again where the game put it (on the road under the point, which may differ from the ground probed).
-            var after = InTheWay(controller, t.position, t.rotation).Select(b => b.What).ToList();
-            reply["in_the_way_after"] = new JArray(after);
-            if (after.Count > 0)
-                Log.Error($"Test bridge: {vehicle.vehicleTypeName} {id} stands in something after the move: {string.Join(", ", after)}.");
+            // A hidden delivery-job van there is a warning, not a fault: nothing stands there now, but the game shows the van
+            // in its stall again later (review round 6). It is listed as "…, hidden now; …" and logged as Info with
+            // "(hidden)"; anything else standing there is an ERROR.
+            var after = InTheWay(controller, t.position, t.rotation, vans);
+            reply["in_the_way_after"] = new JArray(after.Select(b => b.What));
+            var shown = after.Where(b => !b.Hidden).Select(b => b.What).ToList();
+            var hidden = after.Where(b => b.Hidden).Select(b => b.What).ToList();
+            if (shown.Count > 0)
+                Log.Error($"Test bridge: {vehicle.vehicleTypeName} {id} stands in something after the move: {string.Join(", ", shown)}.");
+            if (hidden.Count > 0)
+                Log.Info($"Test bridge: {vehicle.vehicleTypeName} {id} stands where a hidden delivery-job van has its stall (hidden): {string.Join(", ", hidden)}.");
             return reply;
         }
 

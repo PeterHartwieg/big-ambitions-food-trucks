@@ -98,4 +98,15 @@ public class BridgeRulesTests
         Assert.False(Footprint.Overlap(a, new FlatBox(2.3, 0, 0, 1, 1, 1)));
         Assert.True(Footprint.Overlap(a, new FlatBox(2.3, 0, 1, 1, 1, 1)));
     }
+
+    [Fact]
+    public void Footprints_on_separate_levels_do_not_overlap()
+    {
+        // Same x and z, but the truck stands on a deck 3 m above the van's level.
+        var truck = new FlatBox(0, 0, 0, 1, 1.1, 2.9);
+        var van = new FlatBox(0.5, 1.5, 1, 0, 1.0, 2.5);
+        Assert.False(Footprint.Overlap(truck, (3.3, 6.0), van, (0.0, 2.2)));
+        Assert.True(Footprint.Overlap(truck, (0.3, 3.0), van, (0.0, 2.2)));
+        Assert.False(Footprint.Overlap(truck, (0.3, 3.0), new FlatBox(10, 0, 0, 1, 1, 2.5), (0.0, 2.2)));
+    }
 }

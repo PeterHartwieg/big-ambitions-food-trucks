@@ -505,6 +505,16 @@ class Mock:
         needs=self.state['player']['needs']
         needs['energy']=max(needs['collapse_at'],round(needs['energy']-.056,3))
         needs['hunger']=max(0.,round(needs['hunger']-.084,3))
+        if self.state['clock']['keep_needs']:
+            # Only for an FT save of a character with FT saves only, as the bridge checks every frame (review round 6).
+            why=None
+            if not (self.state['save'] or '').startswith('FT'): why=f"the save is now '{self.state['save']}', which doesn't start with FT"
+            else:
+                try: self.require_character()
+                except ValueError: why='the save\'s character now also has a save not starting with FT'
+            if why:
+                self.state['clock']['keep_needs']=False
+                self.event(f'Test bridge: needs top-ups stopped: {why}.')
         needs['kept_up']=self.state['clock']['keep_needs']
         if self.state['clock']['keep_needs'] and (needs['energy']<40 or needs['hunger']<40):
             energy,hunger=needs['energy'],needs['hunger']
@@ -933,9 +943,8 @@ class Mock:
             unpausing=until is not None or pause is False or (speed is not None and pause is not True)
             if unpausing and self.clock_held_by():
                 raise ValueError('A screen holds the clock (the phone, the map, a call, an activity or a menu): close it first (ui escape).')
-            self.until=None
-            c.update(run_until=None,arrived_at=None)
-            c['keep_needs']=bool(unpausing and pause is not True and (keep if keep is not None else until is not None))
+            # The whole request is checked before anything changes, as the bridge does (review round 6).
+            target=None
             if until is not None:
                 day=until.get('day',c['day'])
                 try:
@@ -946,6 +955,10 @@ class Mock:
                 text=f'day {day} {mins//60:02d}:{mins%60:02d}'
                 target=(day-1)*1440+mins
                 if target<=self.absolute: raise ValueError(f"{text} has passed already: it is day {c['day']} {c['time']}.")
+            self.until=None
+            c.update(run_until=None,arrived_at=None)
+            c['keep_needs']=bool(unpausing and pause is not True and (keep if keep is not None else until is not None))
+            if target is not None:
                 self.until=target; self.until_text=text
                 c['run_until']=text
                 c.update(speed=speed if speed is not None else 1,paused=False)

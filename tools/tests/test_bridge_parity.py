@@ -1,3 +1,4 @@
+import copy
 import json
 from pathlib import Path
 import runpy
@@ -228,6 +229,29 @@ class ParityTests(unittest.TestCase):
         self.assertFalse(self.mock.call('time',{'speed':4})['keep_needs'])
         self.assertTrue(self.mock.call('time',{'speed':4,'keep_needs':True})['keep_needs'])
         self.assertFalse(self.mock.call('time',{'pause':True,'keep_needs':True})['keep_needs'])
+
+    def test_refused_time_request_changes_nothing(self):
+        self.mock.call('time',{'run_until':{'day':'+1','time':'09:00'},'speed':10})
+        before=copy.deepcopy(self.mock.state['clock']); until=self.mock.until
+        for args,text in [({'run_until':{'time':'25:00'}},'run_until.time must be "HH:MM".'),
+                          ({'run_until':{'day':'+0','time':'06:00'}},'day 1 06:00 has passed already: it is day 1 07:00.'),
+                          ({'run_until':{'day':'soon','time':'08:00'},'keep_needs':False},'run_until.day must be a day number or "+N".')]:
+            self.refused('time',args,text)
+            self.assertEqual(self.mock.state['clock'],before)
+            self.assertEqual(self.mock.until,until)
+        self.mock.call('time',{'pause':True})
+        self.refused('time',{'run_until':{'time':'25:00'}},'run_until.time must be "HH:MM".')
+        self.assertFalse(self.mock.state['clock']['keep_needs'])
+        self.assertIsNone(self.mock.state['clock']['run_until'])
+
+    def test_needs_top_ups_stop_outside_an_ft_save(self):
+        self.mock.call('time',{'run_until':{'day':'+2','time':'07:00'},'speed':20})
+        self.mock.state['save']='Renamed'
+        self.mock.state['player']['needs']['energy']=10.
+        self.mock.tick()
+        self.assertFalse(self.mock.state['clock']['keep_needs'])
+        self.assertLess(self.mock.state['player']['needs']['energy'],10.)
+        self.assertTrue(any(e['text']=="Test bridge: needs top-ups stopped: the save is now 'Renamed', which doesn't start with FT." for e in self.mock.ring))
 
     def test_teleport_reports_the_surface_and_a_vehicle_the_recheck(self):
         reply=self.mock.call('teleport',{'who':'player','x':5,'z':6,'y':5})

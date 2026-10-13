@@ -63,6 +63,14 @@ namespace FoodTrucks.Core.Fleet
             }
             return true;
         }
+
+        // The same for two things that also have a height span (bottom and top, metres): they overlap only where both
+        // their spans and their footprints do, so a car on another parking level doesn't count (review round 6).
+        public static bool Overlap(FlatBox a, (double Bottom, double Top) aSpan, FlatBox b, (double Bottom, double Top) bSpan, double margin = 0)
+        {
+            if (aSpan.Bottom >= bSpan.Top || bSpan.Bottom >= aSpan.Top) return false;
+            return Overlap(a, b, margin);
+        }
     }
 
     // A footprint on the ground: its middle (x, z), the way it faces (a unit vector in x, z) and its half sizes.
