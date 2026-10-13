@@ -66,7 +66,8 @@ namespace FoodTrucks
         // holds the paint back until it is out of view and swept. Drawn paint never asks again, so it doesn't flicker.
         // After an error here nothing is kept out, so nothing waits either.
         // Per bay point (review round 4, Sol and Opus): a point without markers is checked before its own are made,
-        // even when another point of the same commissary is drawn. A zone found empty also counts as a swept, clean bay.
+        // even when another point of the same commissary is drawn. Only this point's zone is known to be clear, so the
+        // site isn't marked swept or clean here (review round 5, Astra and Sol: another point's car would be skipped).
         public static bool ClearBeforePaint(CommissarySite site, BayMarkers.BayZone? zone)
         {
             if (failed || Commissary.Uninstalled || zone == null) return true;
@@ -76,8 +77,6 @@ namespace FoodTrucks
                 if (gone > 0) Count(site.Id, 0, gone);
                 if (left == 0)
                 {
-                    swept.Add(site.Id);
-                    clean.Add(site.Id);
                     if (waitLogged.Remove(site.Id)) Log.Info($"Commissary {site.Id}: the bay is clear; its paint is drawn.");
                     return true;
                 }
@@ -263,6 +262,8 @@ namespace FoodTrucks
                     foreach (Transform child in __instance.transform.Cast<Transform>().ToList())
                     {
                         if (__state.Contains(child.gameObject) || !IsLaneCar(child.gameObject)) continue;
+                        // A pooled car parked anew gets a fresh chance (review round 5, Sol).
+                        unreleasable.Remove(child.gameObject);
                         if (!zones.Any(z => InZone(z, child.gameObject))) continue;
                         if (OnScreen(child.gameObject))
                         {
@@ -433,6 +434,7 @@ namespace FoodTrucks
                 // from its hiding lists), then the car goes back to its pool.
                 car.transform.parent?.GetComponent<ParkingLaneGenerator>()?.onReleaseVehicle?.Invoke(car);
                 ParkingSimulator.ReleaseParkedVehicle(car);
+                unreleasable.Remove(car);
                 return true;
             }
             catch (Exception ex)
