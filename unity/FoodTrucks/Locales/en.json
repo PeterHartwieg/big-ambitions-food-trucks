@@ -9,6 +9,7 @@
     "foodtrucks:customers_none": "Hardly any customers here right now",
     "foodtrucks:customers_one": "About 1 customer an hour here right now",
     "foodtrucks:customers_many": "About {0} customers an hour here right now",
+    "foodtrucks:notification_open_quiet": "The {vehicle} is open with {units} items, {grade} on the window. Hardly anyone comes by here right now.",
     "foodtrucks:notification_open": "The {vehicle} is open with {units} items, {grade} on the window. {customers}, as long as someone is at the window.",
     "foodtrucks:notification_open_crew_one": "The {vehicle} is open with {units} items, {grade} on the window. {crew} serves at the window, even when you walk off. {customers}.",
     "foodtrucks:notification_open_crew_many": "The {vehicle} is open with {units} items, {grade} on the window. {crew} serve at the window, even when you walk off. {customers}.",
