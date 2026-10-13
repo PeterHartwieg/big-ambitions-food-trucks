@@ -235,8 +235,10 @@ namespace FoodTrucks
                 // Sol: a building the cursor is over has its facade colliders moved to BuildingsOutlined).
                 var rayAlong = new Vector3(outward.z, 0f, -outward.x);
                 var hit = hits.FirstOrDefault(h => IsBuilding(h.collider) && h.distance >= laneMetres - 6f && WidthAlong(h.collider, rayAlong) >= KioskMetres);
+                // The fallback near the door point never takes a kiosk either: nothing narrower than KioskMetres along
+                // the street is a facade (review round 9, Astra: a kiosk the first test refused came back here).
                 if (hit.collider == null)
-                    hit = hits.FirstOrDefault(h => h.distance >= laneMetres - 3f && h.distance <= laneMetres + 1.5f);
+                    hit = hits.FirstOrDefault(h => h.distance >= laneMetres - 3f && h.distance <= laneMetres + 1.5f && WidthAlong(h.collider, rayAlong) >= KioskMetres);
                 if (hit.collider == null)
                     // Nothing solid at all: the buildings may still be streaming in, so it is tried again (MaxPropTries
                     // bounds it; review round 7, Opus). Only other things hit: settled.
@@ -383,7 +385,12 @@ namespace FoodTrucks
 
         private static readonly int PlayerLayer = LayerHelper.PlayerLayerIndex;
 
-        private static bool IsBuilding(Collider c) => ((1 << c.gameObject.layer) & (int)LayerHelper.buildingAndOutlinesLayerMask) != 0;
+        // A building's collider: on the Buildings layer or its hover twin, or a part of a city building on the Default
+        // layer, where the game's camera-block mode moves the parts between the camera and the player (review round 9,
+        // Astra).
+        private static bool IsBuilding(Collider c) =>
+            ((1 << c.gameObject.layer) & (int)LayerHelper.buildingAndOutlinesLayerMask) != 0 ||
+            (c.gameObject.layer == LayerHelper.DefaultLayerIndex && c.GetComponentInParent<CityBuildingController>() != null);
 
         // A collider's extent along a flat direction, from its world bounds.
         // The nearest building surface within WallNearDoorMetres of a door point that stands outside it, and the flat
@@ -396,6 +403,8 @@ namespace FoodTrucks
             foreach (var c in Physics.OverlapSphere(probe, WallNearDoorMetres, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
             {
                 if (c == null || !IsBuilding(c) || NotWall(c) || c.bounds.size.y < 1.5f) continue;
+                // A kiosk or shelter next to the door isn't the wall the door is in.
+                if (Mathf.Max(c.bounds.size.x, c.bounds.size.z) < KioskMetres) continue;
                 if (c is MeshCollider mesh && !mesh.convex) continue;
                 var point = c.ClosestPoint(probe);
                 var away = probe - point;
