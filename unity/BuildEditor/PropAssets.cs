@@ -15,7 +15,7 @@ namespace FoodTrucks.BuildEditor
         private const string Register = "CashRegister";
 
         // A "Cash_Register" child of parent with the register's mesh and material, on layer; returns its renderer.
-        public static MeshRenderer AddRegister(Transform parent, Vector3 position, Quaternion rotation, int layer)
+        public static MeshRenderer AddRegister(Transform parent, Vector3 position, Quaternion rotation, int layer, float scale = 1f)
         {
             var (mesh, material) = Load(Register);
             var go = new GameObject("Cash_Register");
@@ -23,12 +23,20 @@ namespace FoodTrucks.BuildEditor
             go.transform.SetParent(parent, false);
             go.transform.localPosition = position;
             go.transform.localRotation = rotation;
+            go.transform.localScale = Vector3.one * scale;
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = material;
             renderer.renderingLayerMask = SurfaceLook.VehicleRenderingLayers;
             var b = mesh.bounds;
-            Debug.Log($"[FoodTrucksBuild] Prop {Register} under {parent.name} at {position:F3}, turned {rotation.eulerAngles.y:F0} degrees: {mesh.triangles.Length / 3} tris, bounds {b.min:F3} to {b.max:F3}.");
+            var placement = Matrix4x4.TRS(position, rotation, Vector3.one * scale);
+            var placedBounds = new Bounds(placement.MultiplyPoint3x4(b.center), Vector3.zero);
+            for (var i = 0; i < 8; i++)
+                placedBounds.Encapsulate(placement.MultiplyPoint3x4(new Vector3(
+                    (i & 1) == 0 ? b.min.x : b.max.x,
+                    (i & 2) == 0 ? b.min.y : b.max.y,
+                    (i & 4) == 0 ? b.min.z : b.max.z)));
+            Debug.Log($"[FoodTrucksBuild] Prop {Register} under {parent.name} at {position:F3}, turned {rotation.eulerAngles.y:F0} degrees, scale {scale:F1}: {mesh.triangles.Length / 3} tris, bounds in parent space {placedBounds.min:F3} to {placedBounds.max:F3}.");
             return renderer;
         }
 

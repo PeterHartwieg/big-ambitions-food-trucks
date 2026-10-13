@@ -190,8 +190,7 @@ namespace FoodTrucks.BuildEditor
                 // rests at y 1.80 with 84% of its depth on the 0.24 m counter and about 2 cm overhang each side;
                 // clear of the crew (x <= 0.74), frame and hatch. Front (+Z), screen and drawer face inside (-X).
                 // Body work for the game's lists, like the hatch.
-                var register = PropAssets.AddRegister(body.transform.parent, RegisterPosition, Quaternion.Euler(0f, -90f, 0f), body.layer);
-                register.transform.localScale = Vector3.one * RegisterScale;
+                var register = PropAssets.AddRegister(body.transform.parent, RegisterPosition, Quaternion.Euler(0f, -90f, 0f), body.layer, RegisterScale);
                 Append(root, "renderers", register);
                 // No street dirt on the truck: its renderers leave the decal layer, as the game's vehicles do.
                 SurfaceLook.NoStreetDecals(root);

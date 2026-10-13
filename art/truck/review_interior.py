@@ -97,9 +97,12 @@ for name,o,_ in placed:
 saved_rotation=hatch.rotation_euler.copy()
 for angle in range(0,81,10):
  hatch.rotation_euler=(0,math.radians(angle),0)
- hits=rt.overlap(tree(hatch)); print(('HIT ' if hits else 'CLEAR ')+f'CashRegister / hatch {angle} degrees'); ok&=not hits
+ bpy.context.view_layer.update()
+ hatch_tree=tree(hatch)
+ hits=rt.overlap(hatch_tree); print(('HIT ' if hits else 'CLEAR ')+f'CashRegister / hatch {angle} degrees'); ok&=not hits
 hatch.rotation_euler=saved_rotation
 register.location.z-=.002
+bpy.context.view_layer.update()
 print('INTERIOR '+('CLEAR' if ok else 'BLOCKED'))
 def render():
  # Stand-in people: body, head, face patch towards the hatch.
