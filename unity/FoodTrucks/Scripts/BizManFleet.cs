@@ -57,7 +57,8 @@ namespace FoodTrucks
         internal static void CheckReady()
         {
             ready = Has(typeof(BusinessScrollerController), "PopulateAllModels") && Has(typeof(BizManFilterToggle), "PassesFilter") &&
-                    Has(typeof(BusinessCellView), "SetData") && Has(typeof(BizManList), "OpenBusiness");
+                    Has(typeof(BusinessCellView), "SetData") && Has(typeof(BizManList), "OpenBusiness") &&
+                    Has(typeof(BizManList), "OnDisable");
             Log.Info(ready
                 ? "BizMan: the Street food line and fleet section are on."
                 : "BizMan: no Street food line (a patch it needs isn't active).");
