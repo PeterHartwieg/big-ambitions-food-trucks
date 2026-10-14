@@ -61,4 +61,3 @@ def validate_bundles(package):
         clashes = sorted(name for name, count in Counter(names).items() if count > 1)
         if clashes:
             raise ValueError(f'{platform} bundle assets share a prefab name: {", ".join(clashes)}')
-
