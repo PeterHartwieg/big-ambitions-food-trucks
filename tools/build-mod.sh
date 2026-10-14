@@ -151,9 +151,7 @@ mkdir -p "$OUT/data"
 cp "$REPO"/data/*.json "$OUT/data/"
 # The game loads a prefab by file name from any bundle and may take another GameObject asset with the same name
 # instead (a vehicle's model rather than its prefab), so no model or other prefab may share a prefab's name.
-CLASHES="$(grep -iE '^- Assets/.*\.(prefab|fbx|obj|dae|blend)$' "$OUT/AssetBundles/Windows/foodtrucks.unity3d.manifest" \
-  | sed 's#.*/##; s#\.[^.]*$##' | tr 'A-Z' 'a-z' | sort | uniq -d)"
-[ -z "$CLASHES" ] || { echo "Bundle assets share a prefab's name: $CLASHES" >&2; exit 1; }
+python3 "$REPO/tools/validate-bundles.py" "$OUT"
 ( cd "$OUT" && find . -type f | sort | xargs shasum -a 256 ) > "$REPO/build/FoodTrucks.sha256"
 echo "Built $OUT"
 cat "$REPO/build/FoodTrucks.sha256"

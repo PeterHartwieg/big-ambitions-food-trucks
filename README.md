@@ -65,6 +65,8 @@ Debug keys (holding Ctrl; "Alt" means Ctrl+Alt): **K** free food truck, **Alt+K*
 
 `tools/park-remote.sh park|restore` moves the installed mod out of `ModsLocal` and back, and `tools/fetch-log-remote.sh <label>` copies the game's log; both are for the in-game checks in [CHECKS.md](CHECKS.md).
 
+For local macOS playtests, close Big Ambitions and run `python3 tools/install-local-mac.py` after building. The package includes Windows and Mac bundles. The installer preserves other mods and backs up the previous Food Trucks package. See [local testing](docs/test-bridge.md#local-macos-testing) for launch and bridge instructions (in-game Mac verification pending).
+
 `build-mod.sh` links `unity/FoodTrucks` into the SDK's `Assets/Mods` and `unity/BuildEditor` into its `Assets/Editor`, generates the vehicle and item assets, and runs the SDK's own packager. Harmony 2.4.2 (MIT) is downloaded from NuGet with a pinned checksum and shipped in `Dependencies/`.
 
 ## Licence
