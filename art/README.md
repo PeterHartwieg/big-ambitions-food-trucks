@@ -250,7 +250,28 @@ Until 14 October 2026 every cream and teal panel had alpha 1, so the whole body 
 | `head`, `tail`, `reverse`, `left`, `right`, `marker`, `worklight` | 0 | Lights |
 | `warm`, `chalk` | 0 | The menu board on the side |
 
-Alpha 1 covers 18% of the atlas (was 33%). With no colour name (the debug spawn: `DebugActions` makes a `VehicleInstance` without one, and the prefab has no `RandomVehicleColor`) the material's defaults show: Tint is the body's cream as `game_look.py` grades it (median sRGB 186, 162, 119), the rim a lighter cream (× 1.3), the rim power the example's 2.04. The game's colour values themselves (`GlobalReferences.vehicleColors`, `VehicleColor` assets) haven't been read from its bundles. Preview renders of the mask and of a few tints, with the shader's logic rebuilt in Cycles, are in `build/truck-paint/` (not committed).
+Alpha 1 covers 17% of the atlas (was 33%). Each paint island's padding (2 px, 1 px on 16 px cells) has alpha 0: the UVs stop at the padding, so the paint is still fully tinted to its edge (a half-sampled border gives smoothstep(0, 0.5, 0.5) = 1), while at far mips a trim or livery island next to it blends with alpha 0 and takes no tint. The atlas cells are 16 px aligned, so box-filtered mips stay inside a cell up to mip 4.
+
+The cream is only the default for a truck without a colour name: the debug spawn (`DebugActions` makes a `VehicleInstance` without one, and the prefab has no `RandomVehicleColor`). There the material's defaults show: Tint is the body's cream as `game_look.py` grades it (median sRGB 186, 162, 119), the rim a lighter cream (× 1.3), the rim power the example's 2.04. A bought truck always has a colour: `ContractVehicleForSale` starts the picker on `GlobalReferences.vehicleColors[0]`, so buying without touching the picker gives that first swatch, not cream.
+
+The game's 1.0 vehicle colours (`VehicleColor` assets in `sharedassets1.assets`, read with UnityPy from a copy outside the repo on 14 October 2026; sRGB bytes, path IDs 6799 to 6810 in this order). The order of `GlobalReferences.vehicleColors`, and so the dealer's first swatch, wasn't in the copied files; if it follows the assets, the first is Black.
+
+| Name | Random weight | Tint | Fresnel colour | Fresnel power |
+|---|---|---|---|---|
+| Black | 1 | 13, 13, 13 | 19, 19, 19 | 7 |
+| Blue | 0.3 | 49, 89, 156 | 16, 39, 84 | 1 |
+| DarkBlue | 1 | 15, 34, 72 | 41, 44, 87 | 2 |
+| DarkRed | 1 | 60, 0, 0 | 106, 0, 0 | 2 |
+| Green | 0.1 | 47, 87, 45 | 12, 41, 8 | 1 |
+| Grey | 1 | 96, 96, 96 | 59, 65, 67 | 1 |
+| Pink | 0.1 | 184, 135, 167 | 182, 97, 192 | 1 |
+| Purple | 0.1 | 38, 9, 60 | 76, 41, 96 | 1 |
+| Red | 0.5 | 164, 28, 27 | 79, 26, 26 | 1 |
+| Silver | 1 | 108, 108, 108 | 152, 152, 152 | 1 |
+| White | 1 | 188, 188, 188 | 123, 123, 123 | 1 |
+| Yellow | 0.1 | 197, 163, 38 | 115, 79, 26 | 1 |
+
+None is close to the cream (186, 162, 119): White has its lightness but no warmth, Yellow its hue family but three times the saturation. So a cream truck exists only from the debug spawn. Most game colours have a rim darker than the tint and power 1, unlike our default's lighter rim at 2.04. Preview renders of the mask and of a few tints, with the shader's logic rebuilt in Cycles, are in `build/truck-paint/` (not committed).
 
 **Decals off.** The material has `_DISABLE_DECALS` and `_SupportDecals` 0, as the game's own vehicle materials (since 14 October 2026). The SDK's HDRP assets compile decal variants for four decal targets (`DECALS_4RT`), the game renders with three (`DECALS_3RT`); a four-target variant blends metallic and ambient occlusion from a fourth decal buffer the game never fills, which left the truck almost black in shade whenever the game drew its decal buffers (Peter: "much better" with decals off). Every material we ship refuses decals, so the build keeps the SDK's four-target setting. The game's vehicle materials also turn screen-space reflections off; ours keep `_ReceivesSSR` 1, since matching that needs the stencil setup changed with it.
 

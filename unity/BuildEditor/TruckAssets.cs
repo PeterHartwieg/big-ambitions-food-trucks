@@ -288,6 +288,8 @@ namespace FoodTrucks.BuildEditor
             // doesn't fill and rendered almost black in shade whenever the game drew its decal buffers (13 and 14 October).
             foreach (var (from, to) in new[]
                      {
+                         // Identity entries: the paint mask needs the example's _Min 0 and _Max 0.5 (fails if the SDK changes them).
+                         ("    - _Min: 0\n", "    - _Min: 0\n"), ("    - _Max: 0.5\n", "    - _Max: 0.5\n"),
                          ("    - Color_3d0f0cdbe6b74be28a1a5be5bab71dea: {r: 0.4431373, g: 0, b: 0, a: 0}\n",
                           "    - Color_3d0f0cdbe6b74be28a1a5be5bab71dea: {r: 0.7294118, g: 0.63529414, b: 0.46666667, a: 1}\n"),
                          ("    - Color_f78fac473bac467092fb27521e9f71ea: {r: 1, g: 0, b: 0, a: 1}\n",
