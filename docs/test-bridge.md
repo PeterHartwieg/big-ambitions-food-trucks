@@ -32,16 +32,16 @@ Several sessions test on homepc. `C:\Users\Peter\game-lock.txt` says who has the
 
 The manifest targets Windows and Mac. `tools/build-mod.sh` packages and checks both bundles; Unity needs both platform modules. With Big Ambitions closed, run `python3 tools/install-local-mac.py`. It verifies every staged file against `build/FoodTrucks.sha256`, replaces only `ModsLocal/FoodTrucks`, and preserves the previous package under `FoodTrucksPackageBackups` outside ModsLocal. Other installed mods and saves stay in place. The default game data folder is `~/Library/Application Support/com.Hovgaard-Games.Big-Ambitions`; `--game-root` overrides it for another local installation.
 
-Launch the installed Steam game with `-foodtrucks-test`, for example from the shell (Steam must be running):
+Launch through Steam with the test arguments. If Steam is already running, fully quit it normally first so the fresh instance accepts `-applaunch` arguments:
 
 ```sh
-open "$HOME/Library/Application Support/Steam/steamapps/common/Big Ambitions/Big Ambitions.app" --args -foodtrucks-test
+open -a /Applications/Steam.app --args -applaunch 1331550 -foodtrucks-test -console -screen-fullscreen 0 -screen-width 1440 -screen-height 900
 tools/ft health
 ```
 
 Use a separate FT character as required by the bridge's save guards. The existing clients connect directly to `http://127.0.0.1:8330`; no PC or SSH tunnel is needed. `BA_BRIDGE_URL` can override that address. Screenshots reported as local paths are copied directly by the tools. Quit through the game's menu before installing another build; `tools/ft call quit` is also available while the bridge is active, subject to its save guards. The installer never starts or stops the game.
 
-Status: installer and bundle validation tested with temporary packages; local gameplay and rendered Mac assets remain pending an in-game session.
+Status: both platform bundles compiled through the official SDK, the verified installer succeeded, and the local Mac candidate launched through Steam and loaded an FT logistics save with all patches active. Directly opening the game app instead exited into Steam's launch-argument confirmation. Further gameplay and rendered-asset checks remain pending: the session stopped with system swap around 19 GiB and less than 400 MiB free disk space; this has not been established as a mod defect.
 
 ## Transport
 
