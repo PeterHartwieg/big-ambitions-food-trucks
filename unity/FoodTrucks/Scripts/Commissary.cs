@@ -1620,6 +1620,8 @@ namespace FoodTrucks
                 // Rent up to today belongs to the vehicles' time there.
                 try { ChargeRent(state, rules); }
                 catch (Exception ex) { Log.Error("Uninstall: commissary rent: " + ex); }
+                // Stock a logistics plan brought was never paid under the commissary's label (LogisticsCommissary).
+                var fromPlans = FoodTrucks.Core.Commissary.CommissaryLogistics.GoodsCents(commissary);
                 var refund = Commissaries.Refund(commissary);
                 var paidBack = false;
                 if (refund.Total > 0)
@@ -1629,7 +1631,7 @@ namespace FoodTrucks
                     paidBack = Payments.PayIn(refund.Total, info);
                     if (paidBack)
                     {
-                        var reversed = ReverseDeduction(refund.Total);
+                        var reversed = ReverseDeduction(refund.Total - fromPlans);
                         Log.Info($"Uninstall: {CartSelling.Money(reversed)} of this tax year's commissary deduction taken back for the refund.");
                     }
                     else Log.Error($"Uninstall: the commissary refund of {CartSelling.Money(refund.Total)} was not paid.");
@@ -1647,6 +1649,8 @@ namespace FoodTrucks
                 if (paidBack) CartSelling.Notify(refund.CancelledStandingOrders > 0 ? "foodtrucks:notification_uninstall_commissary_standing" : "foodtrucks:notification_uninstall_commissary",
                     ("refund", CartSelling.Money(refund.Total)));
             }
+            try { LogisticsCommissary.RemoveFromPlans(); }
+            catch (Exception ex) { Log.Error("Uninstall: commissary destinations in logistics plans: " + ex); }
             CartButton.ShowCommissary(false);
             BayMarkers.RemoveAll();
             CommissaryOrderForm.Forget(Sites?.Sites.Select(s => ContactPrefix + s.Id) ?? Enumerable.Empty<string>());

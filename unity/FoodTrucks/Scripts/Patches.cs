@@ -136,6 +136,18 @@ namespace FoodTrucks
             Patch(store, "UpdateItemsListTitle", Type.EmptyTypes, typeof(CommissaryOrderForm), postfix: nameof(CommissaryOrderForm.TitlePostfix));
             CommissaryOrderForm.CheckReady();
 
+            // Logistics plans: a commissary with a rented space is a destination of the game's warehouse plans, filled from
+            // the plan's warehouse at its 02:00 run (LogisticsCommissary). Offered only when all four are active.
+            var planUi = typeof(UI.Smartphone.Apps.BizMan.LogisticsManagers.LogisticsManagerPlanUI);
+            Patch(typeof(Buildings.Office.Headquarters.LogisticsManagerPlan), "DeliverDestination", new[] { typeof(LogisticsManagerPlanDestination) },
+                typeof(LogisticsCommissary), prefix: nameof(LogisticsCommissary.DeliverPrefix));
+            Patch(planUi, "GetListOfAvailableProducts", new[] { typeof(LogisticsManagerPlanDestination) }, typeof(LogisticsCommissary),
+                prefix: nameof(LogisticsCommissary.ProductsPrefix));
+            Patch(planUi, "IsProductInUse", new[] { typeof(Address), typeof(string) }, typeof(LogisticsCommissary), prefix: nameof(LogisticsCommissary.InUsePrefix));
+            Patch(typeof(UI.Smartphone.Apps.BizMan.LogisticsManagers.LogisticsManagerDestinationUI), "SetUp", null, typeof(LogisticsCommissary),
+                postfix: nameof(LogisticsCommissary.SetUpPostfix));
+            LogisticsCommissary.CheckReady();
+
             // The mod's own contacts (Street Food Bookings, the commissaries) have no delete button and survive "Delete all".
             Patch(typeof(UI.Smartphone.Apps.Contacts.ContactScrollerController), "LoadContact", null, typeof(ModContacts),
                 postfix: nameof(ModContacts.LoadContactPostfix));

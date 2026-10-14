@@ -137,6 +137,8 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Catering: " + ex); }
             try { Commissary.Attach(); }
             catch (Exception ex) { Log.Error("Commissary: " + ex); }
+            try { LogisticsCommissary.Attach(); }
+            catch (Exception ex) { Log.Error("Commissary logistics: " + ex); }
             // The Bakery mod's goods sell from the display case and the coffee machine when it is installed.
             try
             {
