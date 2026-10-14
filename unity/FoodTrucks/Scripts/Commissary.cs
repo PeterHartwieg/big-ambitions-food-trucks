@@ -1279,6 +1279,28 @@ namespace FoodTrucks
             return InBay(vehicle, site, out _) ? site.Id : null;
         }
 
+        // The route's stops in the bay of the commissary where the vehicle rents its space (within the bay radius of a
+        // resolved bay point, on the door's side): a crew with nothing to sell may still drive to one of these to restock
+        // (Core VehicleWhere.BayStops, review round 2 of the balance pass). An unknown street side counts as not in it.
+        internal static IReadOnlyCollection<int> CrewBayStops(SaveState state, VehicleState vehicle)
+        {
+            var stops = vehicle.Schedule?.Stops;
+            var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.VehicleId);
+            var site = space == null ? null : Sites?.Site(space.CommissaryId);
+            var rules = Rules;
+            var points = site == null ? null : ResolvedBays(site);
+            if (!attached || uninstalled || stops == null || rules == null || points == null) return Array.Empty<int>();
+            var result = new List<int>();
+            for (var i = 0; i < stops.Count; i++)
+            {
+                var stop = stops[i];
+                if (!CommissaryBays.WithinRadius(points, stop.X, stop.Z, rules.BayRadiusMetres)) continue;
+                if (CommissaryBays.OnDoorSide(points, stop.X, stop.Z, rules.BayRadiusMetres, p => LanesFor(p, (float)rules.BayRadiusMetres)) == true)
+                    result.Add(i);
+            }
+            return result;
+        }
+
         // The commissary's stock of the vehicle's foods, as Core's key for "did it change since the crew last tried".
         internal static string? CrewStockKey(SaveState state, VehicleInstance vehicle, string kind, string siteId)
         {

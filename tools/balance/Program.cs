@@ -743,12 +743,18 @@ if (opts.Wants("pass"))
             first.FirstOutAt, unlimited.Units > 0 ? d.Total.Units / unlimited.Units : 1, $"{d.Restocks} restocks");
     };
 
-    // A crew's route (HireSchedules.PlanDay): from the commissary's bay to the pitch, open, back to the bay as the last
-    // stop (a 30-minute stop, so the vehicle spends the night there and the crew restocks before it leaves the next
-    // morning: Core CrewRestock loads only in the bay of the commissary where it rents). With `breaks`, the route also
-    // has a midday stop in the bay, closing the pitch at one of those times and opening it again on the next half
-    // hour the trip allows; the crew restocks there before it leaves (each break is tried; the best is kept). Sales at
-    // the bay stops are left out. Travel is the game's: driving at the taxi timing, a cart pushed at walking pace.
+    // A crew's route, built and checked by Core (HireSchedules.Validate, PlanDay), as the game runs it. The vehicle
+    // restocks only in the bay of the commissary where it rents (Core CrewRestock), so every route has a bay stop: either
+    // in the evening after the pitch (it spends the night in the bay; the pitch closes early enough for the bay stop to
+    // open before midnight, as Validate requires) or in the morning before it (it spends the night at the pitch and is
+    // fined at 04:00). With `breaks` the evening form also gets a midday bay stop. A crew that sells out stays sold out
+    // until a bay stop comes; it may drive there with nothing on board (HireRunner.Step, VehicleWhere.BayStops). Each
+    // form that validates is simulated on a steady-state day (planned from where the day before ended, no earlier than
+    // its last leg) and the best net is kept; the note says which, and which forms Core refused. Sales at bay stops
+    // are left out. Wages: each hour the shift (first leg to last) covers at least half of; consecutive days don't
+    // overlap, so each hour is paid once.
+    var hireSchedules = new FoodTrucks.Core.Fleet.HireSchedules(rules.Fleet);
+    int FloorHalf(int minute) => minute / 30 * 30;
     Func<Spot, Conditions, DayEval?> Route(Cart cart, (int From, int To) day, int hires, FoodTrucks.Core.Fleet.TravelMode mode, int[]? breaks = null) => (spot, c) =>
     {
         var bay = commissaries.Where(b => b.Region == spot.Region)
@@ -756,30 +762,64 @@ if (opts.Wants("pass"))
         if (bay == null) return null;
         var metres = Math.Sqrt((bay.X - spot.X) * (bay.X - spot.X) + (bay.Z - spot.Z) * (bay.Z - spot.Z));
         var t = FoodTrucks.Core.Fleet.Travel.Minutes(rules.Fleet, metres, mode);
-        var unlimited = Selling.Run(cart, spot, day.From, day.To, c, Selling.Unlimited(cart));
-        var options = new List<(StopResult Result, int Close, int? FirstOut, string Note)>();
-        {
-            var stock = Selling.Load(cart, spot, day.From, day.To, c);
-            var r = Selling.Run(cart, spot, day.From, day.To, c, stock);
-            options.Add((r, CeilHalf(day.To + t) + 30, r.FirstOutAt, $"bay {t} min away"));
-        }
+        FoodTrucks.Core.Saves.ScheduleStop P(string key, int open, int close) => new() { SpotKey = key, X = spot.X, Z = spot.Z, OpenAt = open, CloseAt = close };
+        FoodTrucks.Core.Saves.ScheduleStop B(string key, int open) => new() { SpotKey = key, X = bay.X, Z = bay.Z, OpenAt = open, CloseAt = open + 30 };
+        var forms = new List<(string Name, List<FoodTrucks.Core.Saves.ScheduleStop> Stops, bool NightAtPitch)>();
+        var close = Math.Min(day.To, FloorHalf(1410 - t));
+        var shortened = close < day.To ? $", pitch shortened to {Clock(close)}" : "";
+        forms.Add(($"pitch, bay{shortened}", new() { P("pitch", day.From, close), B("bay", CeilHalf(close + t)) }, false));
+        var morningBay = FloorHalf(day.From - t) - 30;
+        forms.Add(("bay, pitch (night at the pitch)", new() { B("bay", morningBay), P("pitch", day.From, day.To) }, true));
         foreach (var b in breaks ?? Array.Empty<int>())
         {
             var bayOpen = CeilHalf(b + t);
             var back = CeilHalf(bayOpen + 30 + t);
-            if (back >= day.To - 30) continue;
-            var stock = Selling.Load(cart, spot, day.From, day.To, c);
-            var r = Selling.Run(cart, spot, day.From, b, c, stock);
-            stock = Selling.TopUp(cart, spot, back, day.To, c, stock);
-            var r2 = Selling.Run(cart, spot, back, day.To, c, stock);
-            r.Add(r2);
-            options.Add((r, CeilHalf(day.To + t) + 30, r.FirstOutAt, $"bay {t} min away, bay stop {Clock(bayOpen)}, back {Clock(back)}"));
+            forms.Add(($"pitch, bay {Clock(bayOpen)}, pitch from {Clock(back)}, bay{shortened}",
+                new() { P("pitch", day.From, b), B("bay-midday", bayOpen), P("pitch-again", back, close), B("bay", CeilHalf(close + t)) }, false));
         }
-        var start = day.From - t;
-        var hours = RouteHours(start, options[0].Close);
-        var best = options.OrderByDescending(o => o.Result.Profit - hires * wage * RouteHours(start, o.Close) - cr.DeliveryFeeShare * o.Result.Cost).First();
-        return new DayEval(best.Result.Profit, best.Result.Cost, hires * RouteHours(start, best.Close), new Dictionary<string, double>(best.Result.Sold),
-            best.FirstOut, unlimited.Units > 0 ? best.Result.Units / unlimited.Units : 1, best.Note);
+        var unlimited = Selling.Run(cart, spot, day.From, day.To, c, Selling.Unlimited(cart));
+        var refused = new List<string>();
+        (double Net, DayEval Eval)? best = null;
+        foreach (var (name, stops, nightAtPitch) in forms)
+        {
+            var schedule = new FoodTrucks.Core.Saves.HireSchedule { Stops = stops };
+            var problem = hireSchedules.Validate(schedule);
+            if (problem != FoodTrucks.Core.Fleet.ScheduleProblem.None) { refused.Add($"{name}: {problem}"); continue; }
+            var (endX, endZ) = nightAtPitch ? (spot.X, spot.Z) : (bay.X, bay.Z);
+            var first = hireSchedules.PlanDay(schedule, 2, DayOfWeek.Tuesday, endX, endZ, FoodTrucks.Core.Fleet.HireSchedules.Absolute(2, 0) - 1440, mode);
+            if (first.Legs.Count == 0) { refused.Add($"{name}: no plan"); continue; }
+            var plan = hireSchedules.PlanDay(schedule, 3, DayOfWeek.Wednesday, endX, endZ, first.Legs[^1].End, mode);
+            if (plan.Legs.Count == 0 || plan.Skipped.Count > 0) { refused.Add($"{name}: stops skipped"); continue; }
+            var origin = FoodTrucks.Core.Fleet.HireSchedules.Absolute(3, 0);
+            var stock = Selling.Load(cart, spot, day.From, day.To, c);
+            var result = new StopResult();
+            int? firstOut = null;
+            foreach (var leg in plan.Legs.Where(l => l.Kind == FoodTrucks.Core.Fleet.LegKind.Open))
+            {
+                var from = (int)(leg.Start - origin);
+                var to = (int)(leg.End - origin);
+                if (stops[leg.StopIndex].SpotKey.StartsWith("bay"))
+                {
+                    // The crew restocks in the bay before it leaves: each piece filled up again.
+                    stock = Selling.TopUp(cart, spot, to, day.To, c, stock);
+                    continue;
+                }
+                var r = Selling.Run(cart, spot, from, to, c, stock);
+                firstOut ??= r.FirstOutAt;
+                result.Add(r);
+            }
+            var start = (int)(plan.Legs[0].Start - origin);
+            var end = (int)(plan.Legs[^1].End - origin);
+            var hours = hires * RouteHours(start, end);
+            var fine = nightAtPitch ? cr.OvernightFineCents / 100.0 : 0;
+            var eval = new DayEval(result.Profit, result.Cost, hours, new Dictionary<string, double>(result.Sold), firstOut,
+                unlimited.Units > 0 ? result.Units / unlimited.Units : 1, $"{name}; bay {t} min away", fine);
+            var net = eval.Gross - hours * wage - cr.DeliveryFeeShare * eval.Goods - fine;
+            if (best == null || net > best.Value.Net) best = (net, eval);
+        }
+        if (best == null) return null;
+        var e = best.Value.Eval;
+        return e with { Note = e.Note + (refused.Count > 0 ? $"; Core refused {string.Join(", ", refused)}" : "") };
     };
 
     var byDrive = FoodTrucks.Core.Fleet.TravelMode.Drive;
@@ -797,6 +837,8 @@ if (opts.Wants("pass"))
     setups.Add(("Truck (4 pieces), crew of 2", crew2, 2, true, Route(crew2, truckDay, 2, byDrive)));
     setups.Add(("Truck (4 pieces), crew of 2, 07:00 to 15:00", crew2, 2, true, Route(crew2, (420, 900), 2, byDrive)));
     setups.Add(("Truck (4 pieces), crew of 2, midday bay stop", crew2, 2, true, Route(crew2, truckDay, 2, byDrive, new[] { 660, 810, 960 })));
+    var aloneStorage = MakeCart(new[] { HotDog, Coffee, Croissant }, "truck+storage", true, null, "truck", 1);
+    setups.Add(("Truck (3 pieces + Extra Storage), player alone", aloneStorage, 0, false, Played(aloneStorage, drive, truckDay, 0)));
     var crewStorage = MakeCart(new[] { HotDog, Coffee, Croissant }, "truck+storage", true, null, "truck", 2, crewSpeed);
     setups.Add(("Truck (3 pieces + Extra Storage), crew of 2", crewStorage, 2, true, Route(crewStorage, truckDay, 2, byDrive)));
     var crewStorage1 = MakeCart(new[] { HotDog, Coffee, Croissant }, "truck+storage", true, null, "truck", 1, crewSpeed);
@@ -814,7 +856,19 @@ if (opts.Wants("pass"))
     var week = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
     Conditions On(DayOfWeek day, FoodTrucks.Core.Pitches.PitchBonus? bonus = null, int month = 5, bool rain = false) => new()
         { Day = day, Month = month, Rain = rain, Pricing = opts.Pricing, PriceFactor = opts.PriceFactor, MarketDemand = opts.Market, Pitch = bonus ?? FoodTrucks.Core.Pitches.PitchBonus.None };
-    double DayNet(DayEval e, bool commissary, string kind) => e.Gross - e.HireHours * wage - (commissary ? cr.DeliveryFeeShare * e.Goods : 0) - RentDay(kind);
+    double DayNet(DayEval e, bool commissary, string kind) => e.Gross - e.HireHours * wage - (commissary ? cr.DeliveryFeeShare * e.Goods : 0) - e.Fine - RentDay(kind);
+    // A setup's week at a pitch: the seven days, and the week's gross, paid hire-hours, wages, fee and fines, and net.
+    (List<DayEval> Days, double Gross, int Hours, double Wages, double Fee, double Fines, double Net) WeekOf(
+        (string Label, Cart Cart, int Hires, bool Commissary, Func<Spot, Conditions, DayEval?> Day) setup, Spot spot, FoodTrucks.Core.Pitches.PitchBonus? bonus)
+    {
+        var days = week.AsParallel().AsOrdered().Select(d => setup.Day(spot, On(d, bonus))!).ToList();
+        var gross = days.Sum(d => d.Gross);
+        var hours = days.Sum(d => d.HireHours);
+        var fee = setup.Commissary ? cr.DeliveryFeeShare * days.Sum(d => d.Goods) : 0;
+        var fines = days.Sum(d => d.Fine);
+        return (days, gross, hours, hours * wage, fee, fines, gross - 7 * RentDay(setup.Cart.VehicleKind) - hours * wage - fee - fines);
+    }
+    var tiersOf = new Dictionary<string, List<(string Tier, Spot Spot, FoodTrucks.Core.Pitches.PitchBonus? Bonus, string Name)>>();
 
     o.AppendLine("## Balance pass: a day and a week per vehicle and pitch (May, dry, ceiling price)");
     o.AppendLine();
@@ -824,15 +878,16 @@ if (opts.Wants("pass"))
                  $"Hires: customer service {opts.CrewSkill:0} at satisfaction {opts.CrewSatisfaction:0}, ${wage:0.00} an hour, team speed {crewSpeed:0.00}, paid as the game pays them: a route's every hour its shift (leaving the bay to the bay stop's close) covers at least half of, sold out or not; a window the player opened, every hour the hire serves in its first half. " +
                  $"Fee: {cr.DeliveryFeeShare:P0} of the goods sold when a crew's stock comes by phone (a logistics plan has none); players haul from the wholesaler. " +
                  $"The player restocks when a piece runs out: a cart is pushed at {opts.MetresPerSecond} m/s, a truck driven at {opts.DriveSpeed} m/s, to the nearest wholesaler. " +
-                 "A crew's route: bay, pitch, bay (30 minutes, overnight there); it loads in the bay and sells until everything is out or the stop closes. The midday bay stop row adds a scheduled bay stop at 11:00, 13:30 or 16:00, whichever nets most at that pitch. " +
+                 "A crew's route is built and checked by Core's HireSchedules: pitch then a 30-minute bay stop before midnight (the pitch closes early enough; the night in the bay), or a morning bay stop then the pitch (the night at the pitch, fined $250 at 04:00), whichever Core accepts and nets more; the crew loads in the bay and sells until everything is out or the stop closes, and a sold-out crew waits for the next bay stop. The midday bay stop row adds a bay stop at 11:00, 13:30 or 16:00, whichever nets most. The note names the route and the forms Core refused. " +
                  "First out: hours from opening, full, until the first piece is empty, weekday. Of demand: units sold against the same weekday with unlimited stock and no trips.");
     o.AppendLine();
-    o.AppendLine("| Setup | Pitch | Spot | Weekday | Saturday | Sunday | Week gross | Rent | Wages (hours) | Fee | Week net | Wages ÷ gross | First out | Of demand | Note |");
+    o.AppendLine("| Setup | Pitch | Spot | Weekday | Saturday | Sunday | Week gross | Rent | Wages (hours) | Fee and fines | Week net | Wages ÷ gross | First out | Of demand | Note |");
     o.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
     var weekUnits = new List<(string Setup, string Tier, Dictionary<string, double> Units)>();
     var goodSpots = new Dictionary<string, Spot>();
-    foreach (var (label, cart, hires, commissary, dayOf) in setups)
+    foreach (var setup in setups)
     {
+        var (label, cart, hires, commissary, dayOf) = setup;
         var from = cart.VehicleKind == "truck" ? truckDay.From : label.Contains("coffee") ? coffeeDay.From : cartDay.From;
         var ranked = real.AsParallel().Select(s => (s, e: dayOf(s, On(DayOfWeek.Wednesday)))).Where(x => x.e != null)
             .Select(x => (x.s, p: DayNet(x.e!, commissary, cart.VehicleKind))).OrderBy(x => x.p).ThenBy(x => x.s.Name, StringComparer.Ordinal).ToList();
@@ -852,15 +907,12 @@ if (opts.Wants("pass"))
             tiers.Add(("premium, best", premium[^1].p.Spot!, FoodTrucks.Core.Pitches.PitchBonus.Of(premium[^1].p.Premium), premium[^1].p.Premium.Id));
         }
         goodSpots[label] = tiers[2].Spot;
+        tiersOf[label] = tiers;
         foreach (var (tier, spot, bonus, name) in tiers)
         {
-            var days7 = week.AsParallel().AsOrdered().Select(d => dayOf(spot, On(d, bonus))!).ToList();
-            var gross = days7.Sum(d => d.Gross);
-            var hireHours = days7.Sum(d => d.HireHours);
+            var (days7, gross, hireHours, wages, fee, fines, net) = WeekOf(setup, spot, bonus);
             var rent = 7 * RentDay(cart.VehicleKind);
-            var wages = hireHours * wage;
-            var fee = commissary ? cr.DeliveryFeeShare * days7.Sum(d => d.Goods) : 0;
-            var net = gross - rent - wages - fee;
+            fee += fines;
             var weekday = days7[2];
             o.AppendLine($"| {label} | {tier} | {name} ({H(spot.Hood)}) | {Money(weekday.Gross)} | {Money(days7[5].Gross)} | {Money(days7[6].Gross)} | " +
                          $"{Money(gross)} | {Money(rent)} | {Money(wages)} ({hireHours}) | {Money(fee)} | **{Money(net)}** | {(gross > 0 ? wages / gross : 0):P0} | " +
@@ -868,6 +920,35 @@ if (opts.Wants("pass"))
             var units = new Dictionary<string, double>(StringComparer.Ordinal);
             foreach (var d in days7) foreach (var p in d.Sold) units[p.Key] = units.GetValueOrDefault(p.Key) + p.Value;
             weekUnits.Add((label, tier, units));
+        }
+    }
+    o.AppendLine();
+
+    // Extra Storage (and the midday bay stop) at the same pitch: the second setup at the first one's pitches.
+    o.AppendLine("## The same pitch with and without Extra Storage (and the midday bay stop)");
+    o.AppendLine();
+    o.AppendLine("Each pair at the first setup's pitches (Extra Storage takes a slot, so the truck drops its cooler). Payback: days for the week's extra net to pay the cabinet's price.");
+    o.AppendLine();
+    o.AppendLine("| Without | With | Pitch | Spot | Week net without | with | Difference | Payback at $900 | at $1,500 |");
+    o.AppendLine("|---|---|---|---|---|---|---|---|---|");
+    foreach (var (without, with) in new[]
+             {
+                 ("Cart: hot dog grill + cooler, player", "Cart: hot dog grill + Extra Storage, player"),
+                 ("Truck (4 pieces), player alone", "Truck (3 pieces + Extra Storage), player alone"),
+                 ("Truck (4 pieces), crew of 1", "Truck (3 pieces + Extra Storage), crew of 1"),
+                 ("Truck (4 pieces), crew of 2", "Truck (3 pieces + Extra Storage), crew of 2"),
+                 ("Truck (4 pieces), crew of 2", "Truck (4 pieces), crew of 2, midday bay stop"),
+             })
+    {
+        var a = setups.First(x => x.Label == without);
+        var b = setups.First(x => x.Label == with);
+        foreach (var (tier, spot, bonus, name) in tiersOf[without])
+        {
+            var na = WeekOf(a, spot, bonus).Net;
+            var nb = WeekOf(b, spot, bonus).Net;
+            var gain = nb - na;
+            string Pay(double price) => !with.Contains("Extra Storage") ? "-" : gain > 0 ? $"{price / (gain / 7):0.0} days" : "never";
+            o.AppendLine($"| {without} | {with} | {tier} | {name} ({H(spot.Hood)}) | {Money(na)} | {Money(nb)} | {(gain >= 0 ? "+" : "")}{Money(gain)} | {Pay(900)} | {Pay(1500)} |");
         }
     }
     o.AppendLine();

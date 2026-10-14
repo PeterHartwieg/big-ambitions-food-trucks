@@ -38,6 +38,66 @@ public class CrewRestockTests
     private static VehicleWhere Bay(bool hasStock = true, bool canRestock = true, bool stayPut = false, string? stockKey = null) =>
         new(0, 0, leaveAlone: false, hasStock: hasStock, stayPut: stayPut, canRestock: canRestock, stockKey: stockKey);
 
+    // A route through the bay: the pitch at x 2000 until 13:00, the commissary's bay at x 0 from 14:30, the pitch again
+    // from 16:00. 2 km is 80 minutes each way.
+    private static VehicleState ThroughTheBay()
+    {
+        var truck = new VehicleState
+        {
+            VehicleId = "t1",
+            VehicleType = "truck",
+            HasPermit = true,
+            Crew = new List<string> { "e1" },
+            Schedule = new HireSchedule
+            {
+                Stops = new List<ScheduleStop>
+                {
+                    new() { SpotKey = "pitch", X = 2000, OpenAt = 11 * 60, CloseAt = 13 * 60 },
+                    new() { SpotKey = "bay", X = 0, OpenAt = 14 * 60 + 30, CloseAt = 15 * 60 },
+                    new() { SpotKey = "pitch-again", X = 2000, OpenAt = 16 * 60, CloseAt = 18 * 60 }
+                }
+            }
+        };
+        runner.EnsurePlan(truck, At(3, 6), 2000, 0);
+        return truck;
+    }
+
+    [Fact]
+    public void ASoldOutTruckDrivesBackToItsBayRestocksAndSetsOffAgain()
+    {
+        var truck = ThroughTheBay();
+        var bayStops = new[] { 1 };
+        // Sold out at the pitch after it closed: it leaves for the bay stop all the same.
+        var leave = runner.Step(truck, At(3, 13, 10), new VehicleWhere(2000, 0, leaveAlone: false, hasStock: false, bayStops: bayStops));
+        Assert.Equal((HireActionKind.Depart, 1, At(3, 14, 30)), (leave.Kind, leave.Stop, leave.ArrivesAt));
+        HireRunner.Depart(truck, leave, At(3, 13, 10), 2000, 0, 0, 0);
+        var arrive = runner.Step(truck, At(3, 14, 30), Bay(hasStock: false));
+        Assert.Equal(HireActionKind.Arrive, arrive.Kind);
+        HireRunner.Arrived(truck, 0, 0, atStop: true, At(3, 14, 30));
+        // In the bay with nothing on board: it restocks, then opens the bay stop with its food.
+        Assert.Equal((HireActionKind.Restock, 1), (runner.Step(truck, At(3, 14, 30), Bay(hasStock: false)).Kind, runner.Step(truck, At(3, 14, 30), Bay(hasStock: false)).Stop));
+        HireRunner.Restocked(truck, At(3, 14, 30));
+        Assert.Equal(HireActionKind.Open, runner.Step(truck, At(3, 14, 30), Bay()).Kind);
+        // After the bay stop it tops up for the new leg (once, as any leg leaving the bay) and sets off for the pitch again.
+        Assert.Equal(HireActionKind.Restock, runner.Step(truck, At(3, 15), Bay()).Kind);
+        HireRunner.Restocked(truck, At(3, 15));
+        var back = runner.Step(truck, At(3, 15), Bay());
+        Assert.Equal((HireActionKind.Depart, 2, At(3, 16, 20)), (back.Kind, back.Stop, back.ArrivesAt));
+    }
+
+    [Fact]
+    public void ASoldOutTruckNeverDrivesToAStopOutsideItsBay()
+    {
+        var truck = ThroughTheBay();
+        // Without the bay among its stops (no space there, say), sold out it stays where it is.
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 13, 10), new VehicleWhere(2000, 0, leaveAlone: false, hasStock: false)).Kind);
+        // Sold out at the bay without a restock (the commissary was out): not on to the pitch.
+        var empty = runner.Step(truck, At(3, 15), new VehicleWhere(0, 0, leaveAlone: false, hasStock: false, bayStops: new[] { 1 }));
+        Assert.Equal(HireActionKind.None, empty.Kind);
+        // And the player by the vehicle keeps it there even for the bay.
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 13, 10), new VehicleWhere(2000, 0, leaveAlone: false, hasStock: false, stayPut: true, bayStops: new[] { 1 })).Kind);
+    }
+
     [Fact]
     public void InTheBayTheCrewRestocksOnceBeforeItSetsOff()
     {

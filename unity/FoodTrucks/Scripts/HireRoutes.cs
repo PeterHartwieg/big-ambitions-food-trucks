@@ -347,6 +347,7 @@ namespace FoodTrucks
             var stayPut = false;
             string? restockAt = null;
             string? stockKey = null;
+            IReadOnlyCollection<int>? bayStops = null;
             if (!held && !indoors && !vehicle.IsOpen && vehicle.Transit == null && HireRunner.Want(vehicle, t) != null)
             {
                 canSell = KindOf(vehicle) == "truck" ? instance.parkingState == ParkingState.Legal : Legality.Check(position).Legal;
@@ -376,12 +377,14 @@ namespace FoodTrucks
                 // and again when the commissary's stock of its foods changes (Core CrewRestock.Due).
                 restockAt = Commissary.CrewRestockSite(FoodTrucksSession.CurrentState!, instance);
                 if (restockAt != null) stockKey = Commissary.CrewStockKey(FoodTrucksSession.CurrentState!, instance, KindOf(vehicle), restockAt);
+                // Sold out: the stops in its own bay are the only ones it may still drive to, to restock there.
+                if (!hasStock) bayStops = Commissary.CrewBayStops(FoodTrucksSession.CurrentState!, vehicle);
             }
             restockSites[vehicle.VehicleId] = restockAt;
             // A truck at a catering gig at this minute stays there, as one the player holds does (without counting as
             // the player's use, which would keep it an hour longer).
             return new VehicleWhere(position.x, position.z, held || indoors || Catering.BusyAt(vehicle.VehicleId, t), canSell, hasStock, stayPut,
-                canRestock: restockAt != null, stockKey: stockKey);
+                canRestock: restockAt != null, stockKey: stockKey, bayStops: bayStops);
         }
 
         // The commissary each vehicle could restock at, as the last Where read it.

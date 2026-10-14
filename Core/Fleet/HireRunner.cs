@@ -43,9 +43,10 @@ namespace FoodTrucks.Core.Fleet
     public readonly struct VehicleWhere
     {
         public VehicleWhere(double x, double z, bool leaveAlone, bool canSellHere = true, bool hasStock = true, bool stayPut = false,
-            bool canRestock = false, string? stockKey = null)
+            bool canRestock = false, string? stockKey = null, IReadOnlyCollection<int>? bayStops = null)
         {
             CanRestock = canRestock;
+            BayStops = bayStops;
             StockKey = stockKey;
             X = x;
             Z = z;
@@ -70,6 +71,10 @@ namespace FoodTrucks.Core.Fleet
         public bool CanRestock { get; }
         // The commissary's stock of the vehicle's foods there (CrewRestock.StockKey); null when not known.
         public string? StockKey { get; }
+        // The route's stops that lie in the bay of the commissary where the vehicle rents its space, where the crew
+        // would restock. A vehicle with nothing to sell may still leave for one of these, never for another stop.
+        // The game side fills it only when HasStock is false; null or empty means none.
+        public IReadOnlyCollection<int>? BayStops { get; }
     }
 
     // Runs a hire's route minute by minute. The saved day plan says what the hire should be doing now;
@@ -177,7 +182,8 @@ namespace FoodTrucks.Core.Fleet
         // player has, or opened themselves, is left alone; a window the hire opened closes when its stop's
         // hours end; otherwise, during a leg to stop i, a vehicle away from i leaves for it (travel timed
         // from where it really is), and one at i opens once the stop's hours have begun. A vehicle in its commissary's
-        // bay restocks first, once per leg (CrewRestock): before it leaves, or at its stop with nothing to sell.
+        // bay restocks first, once per leg (CrewRestock): before it leaves, or at its stop with nothing to sell. A vehicle
+        // with nothing to sell leaves only for a stop in its own commissary's bay (VehicleWhere.BayStops).
         public HireAction Step(VehicleState vehicle, long now, VehicleWhere where, double gameSpeed = 1.0)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -207,7 +213,8 @@ namespace FoodTrucks.Core.Fleet
             {
                 if (where.StayPut) return HireAction.None;
                 if (CrewRestock.Due(vehicle, want, where)) return new HireAction(HireActionKind.Restock, want.StopIndex);
-                if (!where.HasStock) return HireAction.None;
+                // Sold out: no point driving to a pitch, but a stop in its own bay is where it restocks (review round 2).
+                if (!where.HasStock && where.BayStops?.Contains(want.StopIndex) != true) return HireAction.None;
                 var minutes = Travel.Minutes(rules, distance, Travel.ModeFor(vehicle.VehicleType), gameSpeed);
                 var arrives = now + Math.Max(1, minutes);
                 // Moved away by the player too far to make it back before the stop closes: wait for the next one.

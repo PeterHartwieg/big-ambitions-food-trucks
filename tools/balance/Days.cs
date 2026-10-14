@@ -189,4 +189,4 @@ public sealed class Planner
 
 // One day of a setup at a pitch in the pass report: gross (sales less goods at wholesale), the goods, hire-hours the
 // game pays, units sold, when the first piece ran out, the share of unlimited-stock sales, and a note.
-public sealed record DayEval(double Gross, double Goods, int HireHours, Dictionary<string, double> Sold, int? FirstOut, double OfDemand, string Note);
+public sealed record DayEval(double Gross, double Goods, int HireHours, Dictionary<string, double> Sold, int? FirstOut, double OfDemand, string Note, double Fine = 0);
