@@ -92,6 +92,8 @@ Debug keys (holding Ctrl; "Alt" means Ctrl+Alt): **K** free food truck, **Alt+K*
 
 For local macOS playtests, close Big Ambitions and run `python3 tools/install-local-mac.py` after building. The package includes Windows and Mac bundles. The installer preserves other mods and backs up the previous Food Trucks package. See [local testing](docs/test-bridge.md#local-macos-testing) for launch and bridge instructions (in-game Mac verification pending).
 
+To prepare a local release-candidate archive after building, run `python3 tools/package-release.py`. It verifies `build/FoodTrucks.sha256`, the exact runtime file set, both platform bundles and required license notices, then writes `build/FoodTrucks-0.9.10-rc.zip` with one `FoodTrucks/` folder. It refuses an existing output; use `--output` for another candidate. This prepares a local artifact without uploading or publishing it. The version remains unreleased. See [release packaging](docs/test-bridge.md#local-release-candidate-packaging).
+
 `build-mod.sh` links `unity/FoodTrucks` into the SDK's `Assets/Mods` and `unity/BuildEditor` into its `Assets/Editor`, generates the vehicle and item assets, and runs the SDK's own packager. Harmony 2.4.2 (MIT) is downloaded from NuGet with a pinned checksum and shipped in `Dependencies/`.
 
 ## Licence

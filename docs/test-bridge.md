@@ -44,6 +44,14 @@ Use a separate FT character as required by the bridge's save guards. The existin
 
 Status: both platform bundles compiled through the official SDK, the verified installer succeeded, and the local Mac candidate launched through Steam and loaded an FT logistics save with all patches active. Directly opening the game app instead exited into Steam's launch-argument confirmation. Further gameplay and rendered-asset checks remain pending: the session stopped with system swap around 19 GiB and less than 400 MiB free disk space; this has not been established as a mod defect.
 
+## Local release-candidate packaging
+
+After the normal build, `python3 tools/package-release.py` validates the existing package and SHA-256 manifest and creates `build/FoodTrucks-0.9.10-rc.zip`. `--source`, `--manifest` and `--output` override those paths. The command performs no build, download, upload or publication and leaves the mod's unreleased version unchanged.
+
+The archive contains one `FoodTrucks/` folder with the runtime mod/Core/Harmony assemblies, Windows and Mac bundles, tuning data, locales, README and both project and Harmony license notices. An explicit runtime allowlist refuses game assemblies, save files, source code and any other unexpected input even if listed in the checksum manifest. Integrity checks require the exact manifested file set and reject duplicate/unsafe paths and symlinks. File bytes are checked while streaming into the ZIP; the source is checked again before retaining the archive.
+
+Entries have sorted paths, fixed timestamps and permissions. Identical package bytes produce identical archives with the same Python/zlib runtime regardless of source timestamps or permissions. The output is created atomically without replacing an existing candidate and without duplicating the temporary ZIP's disk allocation. No real release archive was generated during the low-disk session; temporary-fixture packaging tests passed. Packaging does not establish gameplay QA or publication approval.
+
 ## Transport
 
 All bodies are UTF-8 JSON. Every reply has `ok` and, next to it, `session`: 8 hex characters the bridge picks at random each time it starts. A different `session` means the game or the mod restarted, and nothing a client knew from before (operation numbers, event numbers, state) holds. A `/call` body may carry `"expect_session": "<8 hex>"`; when it differs from the current session the call is refused before it is numbered or queued: `{ "ok": false, "session": "<current>", "error": "the bridge restarted (session <current>); reconnect first." }`. A failed call has `ok: false` and `error` (one sentence a person can act on).
