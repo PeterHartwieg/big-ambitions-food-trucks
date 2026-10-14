@@ -254,7 +254,7 @@ namespace FoodTrucks
             CloseSection();
             if (section != null) UnityEngine.Object.Destroy(section.gameObject);
             font = list.GetComponentsInChildren<Text>(true).Select(t => t.font).FirstOrDefault(f => f != null)
-                   ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
+                   ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             var root = Rect("FoodTrucks.StreetFoodPage", list.transform);
             root.gameObject.SetActive(false);
             Stretch(root);
