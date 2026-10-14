@@ -377,8 +377,8 @@ namespace FoodTrucks
                 // and again when the commissary's stock of its foods changes (Core CrewRestock.Due).
                 restockAt = Commissary.CrewRestockSite(FoodTrucksSession.CurrentState!, instance);
                 if (restockAt != null) stockKey = Commissary.CrewStockKey(FoodTrucksSession.CurrentState!, instance, KindOf(vehicle), restockAt);
-                // Sold out: the stops in its own bay are the only ones it may still drive to, to restock there.
-                if (!hasStock) bayStops = Commissary.CrewBayStops(FoodTrucksSession.CurrentState!, vehicle);
+                // The stops in its own bay: reached only in the bay, and the only ones it may drive to when sold out.
+                bayStops = Commissary.CrewBayStops(FoodTrucksSession.CurrentState!, vehicle);
             }
             restockSites[vehicle.VehicleId] = restockAt;
             // A truck at a catering gig at this minute stays there, as one the player holds does (without counting as
@@ -551,6 +551,9 @@ namespace FoodTrucks
             Quaternion rotation;
             string? neighbourhood = null;
             var atStop = true;
+            // A stop in its own commissary's bay: parked in the bay or not at all (review round 3).
+            var bayArrival = BayArrival(vehicle, instance, transit, t, kind, out var bayFallback);
+            if (bayArrival != null) return bayArrival.Value;
             if (kind == "truck")
             {
                 var late = t - transit.ArrivesAt;
@@ -613,11 +616,68 @@ namespace FoodTrucks
             instance.parkingState = !atStop && neighbourhood == null ? (ParkingState)transit.FromParkingState : ParkingState.Legal;
             if (neighbourhood != null) instance.parkingNeighbourhood = neighbourhood;
             var placed = controller.transform.position;
+            // Parked near a bay stop but not in the bay: not arrived, so Core skips the stop until its opening ends and
+            // the next bay stop tries again, rather than driving there over and over.
+            if (bayFallback) atStop = false;
             HireRunner.Arrived(vehicle, placed.x, placed.z, atStop, t);
             FoodTrucksSession.MarkChanged();
             Log.Info($"Route: {kind} {vehicle.VehicleId} arrived {(atStop ? "at" : "back from")} {transit.ToSpotKey}: {placed}, {Vector3.Distance(placed, target):F0} m from the stop.");
             return true;
         }
+
+        // Arriving at a stop in the bay of the commissary where the vehicle rents its space: it is placed on the bay (its
+        // resolved points, then places along the paint) and counts as arrived only if it then stands in the bay by the
+        // restock test (Commissary.InBay). Null when the stop isn't such a stop (the ordinary arrival runs). One placement
+        // attempt per game minute; while none works it stays on its way, logged once. After 2 × RetryMinutes it parks as
+        // at any stop but as not arrived (Core skips the stop until its opening ends), so it is never off the map for good.
+        private static bool? BayArrival(VehicleState vehicle, VehicleInstance instance, TransitState transit, long t, string kind, out bool fallback)
+        {
+            fallback = false;
+            var state = FoodTrucksSession.CurrentState;
+            var index = transit.ToStopIndex;
+            if (state == null || index == null || !Commissary.CrewBayStops(state, vehicle).Contains(index.Value)) return null;
+            var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.VehicleId);
+            var site = space == null ? null : DemandData.Commissaries?.Site(space.CommissaryId);
+            if (site == null) return null;
+            var late = t - transit.ArrivesAt;
+            if (late >= 2 * RetryMinutes)
+            {
+                fallback = true;
+                if (bayGaveUp.Add((vehicle.VehicleId, transit.ArrivesAt)))
+                    Log.Info($"Route: {kind} {vehicle.VehicleId} found no place in the bay of {site.Id} for {RetryMinutes * 2} minutes; it parks nearby, not at the stop, and waits for its next bay stop.");
+                return null;
+            }
+            if (bayTried.TryGetValue(vehicle.VehicleId, out var tried) && tried == t) return false;
+            bayTried[vehicle.VehicleId] = t;
+            var halfLength = kind == "truck" ? TruckHalfSize.z : CartHalfSize.z;
+            var placedAny = false;
+            foreach (var (position, rotation) in Commissary.BayPlaces(site, halfLength))
+            {
+                if (Taken(position, rotation, kind)) continue;
+                var placed = Place(instance, position, rotation);
+                if (placed == null) continue;
+                placedAny = true;
+                instance.parkingState = ParkingState.Legal;
+                Physics.SyncTransforms();
+                if (!Commissary.InBay(instance, site, out var why))
+                {
+                    if (late == 0) Log.Info($"Route: {kind} {vehicle.VehicleId} at {position} isn't in the bay of {site.Id} ({why}); trying the next place.");
+                    continue;
+                }
+                HireRunner.Arrived(vehicle, placed.transform.position.x, placed.transform.position.z, atStop: true, t);
+                bayTried.Remove(vehicle.VehicleId);
+                FoodTrucksSession.MarkChanged();
+                Log.Info($"Route: {kind} {vehicle.VehicleId} arrived in the bay of {site.Id}: {placed.transform.position}.");
+                return true;
+            }
+            // Off the map again until a place in the bay frees up, as a vehicle on its way is.
+            if (placedAny && VehicleHelper.GetVehicleController(instance) is { } shown) TakeOffMap(shown);
+            if (late == 0) Log.Info($"Route: no free place in the bay of {site.Id} for {kind} {vehicle.VehicleId}; it waits on its way and tries each minute.");
+            return false;
+        }
+
+        private static readonly Dictionary<string, long> bayTried = new Dictionary<string, long>();
+        private static readonly HashSet<(string, long)> bayGaveUp = new HashSet<(string, long)>();
 
         // Puts the vehicle at a position: moves its controller if it has one, or spawns it as the game does
         // when the private driver brings a car back. The position is written to the save either way.

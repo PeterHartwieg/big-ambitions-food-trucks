@@ -72,8 +72,9 @@ namespace FoodTrucks.Core.Fleet
         // The commissary's stock of the vehicle's foods there (CrewRestock.StockKey); null when not known.
         public string? StockKey { get; }
         // The route's stops that lie in the bay of the commissary where the vehicle rents its space, where the crew
-        // would restock. A vehicle with nothing to sell may still leave for one of these, never for another stop.
-        // The game side fills it only when HasStock is false; null or empty means none.
+        // would restock. A vehicle with nothing to sell may still leave for one of these, never for another stop. Such a
+        // stop counts as reached only when the vehicle is in the bay by the restock test (CanRestock), not within the
+        // usual stop radius, so a truck parked 20 m off never takes it for its bay. Null or empty means none.
         public IReadOnlyCollection<int>? BayStops { get; }
     }
 
@@ -208,7 +209,10 @@ namespace FoodTrucks.Core.Fleet
             var distance = Travel.Distance(where.X, where.Z, stop.X, stop.Z);
             // Where the crew parked it for this stop counts as the stop even if it reads as no place to sell:
             // moving it would only bring it back there. Opening then says why not, once a day.
-            var atStop = ParkedFor(vehicle, want.StopIndex, stop, where) || (where.CanSellHere && distance <= rules.StopRadiusMetres);
+            // A stop in its own bay is reached only in the bay (review round 3): elsewhere it couldn't restock there.
+            var atStop = where.BayStops?.Contains(want.StopIndex) == true
+                ? where.CanRestock
+                : ParkedFor(vehicle, want.StopIndex, stop, where) || (where.CanSellHere && distance <= rules.StopRadiusMetres);
             if (!atStop)
             {
                 if (where.StayPut) return HireAction.None;

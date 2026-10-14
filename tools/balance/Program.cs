@@ -811,9 +811,24 @@ if (opts.Wants("pass"))
             var start = (int)(plan.Legs[0].Start - origin);
             var end = (int)(plan.Legs[^1].End - origin);
             var hours = hires * RouteHours(start, end);
-            var fine = nightAtPitch ? cr.OvernightFineCents / 100.0 : 0;
+            // The 04:00 check (Commissary's night check) on the planned day: no fine on the way somewhere, open at a stop
+            // (a late stop still serving) or in the bay; standing anywhere else, the fine.
+            var check = FoodTrucks.Core.Fleet.HireSchedules.Absolute(3, cr.NightCheckMinute);
+            var legs = first.Legs.Concat(plan.Legs).ToList();
+            var during = legs.FirstOrDefault(l => l.Start <= check && check < l.End);
+            bool InBayStop(int stopIndex) => stops[stopIndex].SpotKey.StartsWith("bay");
+            bool fined;
+            if (during.End > during.Start) fined = false; // on its way, or open at a stop
+            else
+            {
+                var before = legs.Where(l => l.End <= check).OrderBy(l => l.End).LastOrDefault();
+                // Before its first leg ever the vehicle is where the day before left it: where the route ends.
+                var stopIndex = before.End > before.Start ? before.StopIndex : stops.Count - 1;
+                fined = !InBayStop(stopIndex);
+            }
+            var fine = fined ? cr.OvernightFineCents / 100.0 : 0;
             var eval = new DayEval(result.Profit, result.Cost, hours, new Dictionary<string, double>(result.Sold), firstOut,
-                unlimited.Units > 0 ? result.Units / unlimited.Units : 1, $"{name}; bay {t} min away", fine);
+                unlimited.Units > 0 ? result.Units / unlimited.Units : 1, $"{name}; bay {t} min away{(fined ? "; fined at 04:00" : "")}", fine);
             var net = eval.Gross - hours * wage - cr.DeliveryFeeShare * eval.Goods - fine;
             if (best == null || net > best.Value.Net) best = (net, eval);
         }

@@ -1280,8 +1280,10 @@ namespace FoodTrucks
         }
 
         // The route's stops in the bay of the commissary where the vehicle rents its space (within the bay radius of a
-        // resolved bay point, on the door's side): a crew with nothing to sell may still drive to one of these to restock
-        // (Core VehicleWhere.BayStops, review round 2 of the balance pass). An unknown street side counts as not in it.
+        // resolved bay point, on the door's side): such a stop is reached only in the bay, and a crew with nothing to sell
+        // may still drive to it to restock (Core VehicleWhere.BayStops, review rounds 2 and 3 of the balance pass). An
+        // unknown street side counts as not in it and isn't cached, so it is read again next time. Cached per vehicle
+        // while its commissary, bay and stops stay the same.
         internal static IReadOnlyCollection<int> CrewBayStops(SaveState state, VehicleState vehicle)
         {
             var stops = vehicle.Schedule?.Stops;
@@ -1289,16 +1291,64 @@ namespace FoodTrucks
             var site = space == null ? null : Sites?.Site(space.CommissaryId);
             var rules = Rules;
             var points = site == null ? null : ResolvedBays(site);
-            if (!attached || uninstalled || stops == null || rules == null || points == null) return Array.Empty<int>();
+            if (!attached || uninstalled || stops == null || rules == null || points == null || site == null) return Array.Empty<int>();
+            var key = site.Id + "|" + string.Join(";", points.Select(p => $"{p.X:F1},{p.Z:F1}")) + "|" + string.Join(";", stops.Select(st => $"{st.X:F1},{st.Z:F1}"));
+            if (bayStopCache.TryGetValue(vehicle.VehicleId, out var cached) && cached.Key == key) return cached.Stops;
             var result = new List<int>();
+            var known = true;
             for (var i = 0; i < stops.Count; i++)
             {
                 var stop = stops[i];
                 if (!CommissaryBays.WithinRadius(points, stop.X, stop.Z, rules.BayRadiusMetres)) continue;
-                if (CommissaryBays.OnDoorSide(points, stop.X, stop.Z, rules.BayRadiusMetres, p => LanesFor(p, (float)rules.BayRadiusMetres)) == true)
-                    result.Add(i);
+                var side = CommissaryBays.OnDoorSide(points, stop.X, stop.Z, rules.BayRadiusMetres, p => LanesFor(p, (float)rules.BayRadiusMetres));
+                if (side == null) known = false;
+                if (side == true) result.Add(i);
             }
+            if (known) bayStopCache[vehicle.VehicleId] = (key, result);
             return result;
+        }
+
+        private static readonly Dictionary<string, (string Key, IReadOnlyCollection<int> Stops)> bayStopCache = new Dictionary<string, (string, IReadOnlyCollection<int>)>();
+
+        // Where a crew parks a vehicle arriving at a stop in its own bay: the site's resolved bay points, each lined up
+        // with its lane and the hatch to the pavement (a nose-in bay in a lot as measured), then places along the bay's
+        // paint nearest the first point, as the test bridge's bay teleport does. The caller tries them in order, takes
+        // the first free one and keeps it only if the vehicle then stands in the bay by InBay.
+        internal static List<(Vector3 Position, Quaternion Rotation)> BayPlaces(CommissarySite site, float halfLength, int max = 12)
+        {
+            var result = new List<(Vector3, Quaternion)>();
+            var points = ResolvedBays(site);
+            var rules = Rules;
+            if (points == null || points.Count == 0 || rules == null) return result;
+            Quaternion Facing(Vector3 at, Vector3 along)
+            {
+                if (along.sqrMagnitude < 1e-6f) along = Vector3.forward;
+                along.Normalize();
+                if (site.InLot) return Quaternion.LookRotation(along);
+                if (HatchCheck.Probe(at, Quaternion.LookRotation(along)).Opens) return Quaternion.LookRotation(along);
+                if (HatchCheck.Probe(at, Quaternion.LookRotation(-along)).Opens) return Quaternion.LookRotation(-along);
+                return Quaternion.LookRotation(along);
+            }
+            Vector3? GroundAt(float x, float z) =>
+                Physics.Raycast(new Vector3(x, 500f, z), Vector3.down, out var hit, 1000f, LayerHelper.groundLayerMask, QueryTriggerInteraction.Ignore)
+                    ? hit.point : (Vector3?)null;
+            foreach (var p in points)
+            {
+                var at = GroundAt((float)p.X, (float)p.Z);
+                if (at != null) result.Add((at.Value, Facing(at.Value, new Vector3((float)p.AlongX, 0f, (float)p.AlongZ))));
+            }
+            var first = result.Count > 0 ? result[0].Item1 : new Vector3((float)points[0].X, 0f, (float)points[0].Z);
+            var along = new List<(Vector3, Quaternion)>();
+            foreach (var zone in BayMarkers.ZonesOf(site, (float)rules.BayRadiusMetres))
+                foreach (var (from, to) in zone.Spans)
+                    for (var t = from + halfLength; t <= to - halfLength + 1e-3f; t += 1f)
+                    {
+                        var foot = zone.Foot + zone.Along * t;
+                        var at = GroundAt(foot.x, foot.z);
+                        if (at != null) along.Add((at.Value, Facing(at.Value, zone.Along)));
+                    }
+            result.AddRange(along.OrderBy(a => (a.Item1 - first).sqrMagnitude));
+            return result.Take(max).ToList();
         }
 
         // The commissary's stock of the vehicle's foods, as Core's key for "did it change since the crew last tried".

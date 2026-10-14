@@ -86,6 +86,26 @@ public class CrewRestockTests
     }
 
     [Fact]
+    public void ABayStopCountsAsReachedOnlyInTheBay()
+    {
+        var truck = ThroughTheBay();
+        var bayStops = new[] { 1 };
+        // Parked 20 m off the bay stop, inside the usual 25 m stop radius but not in the bay: not there yet, it moves.
+        var off = runner.Step(truck, At(3, 14, 30), new VehicleWhere(20, 0, leaveAlone: false, hasStock: false, bayStops: bayStops));
+        Assert.Equal((HireActionKind.Depart, 1), (off.Kind, off.Stop));
+        // Even parked there by the crew for that stop.
+        truck.Arrival = new ArrivalState { SpotKey = "bay", StopIndex = 1, X = 20, Z = 0 };
+        Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 14, 30), new VehicleWhere(20, 0, leaveAlone: false, bayStops: bayStops)).Kind);
+        // Placed in the bay: it restocks there and then opens.
+        var inBay = new VehicleWhere(20, 0, leaveAlone: false, hasStock: false, canRestock: true, bayStops: bayStops);
+        Assert.Equal(HireActionKind.Restock, runner.Step(truck, At(3, 14, 30), inBay).Kind);
+        HireRunner.Restocked(truck, At(3, 14, 30));
+        Assert.Equal(HireActionKind.Open, runner.Step(truck, At(3, 14, 30), new VehicleWhere(20, 0, leaveAlone: false, canRestock: true, bayStops: bayStops)).Kind);
+        // An ordinary stop keeps the 25 m radius.
+        Assert.Equal(HireActionKind.Open, runner.Step(ThroughTheBay(), At(3, 11), new VehicleWhere(1980, 0, leaveAlone: false, bayStops: bayStops)).Kind);
+    }
+
+    [Fact]
     public void ASoldOutTruckNeverDrivesToAStopOutsideItsBay()
     {
         var truck = ThroughTheBay();
