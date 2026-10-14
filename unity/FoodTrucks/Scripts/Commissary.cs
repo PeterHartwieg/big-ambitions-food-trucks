@@ -1279,6 +1279,13 @@ namespace FoodTrucks
             return InBay(vehicle, site, out _) ? site.Id : null;
         }
 
+        // The commissary's stock of the vehicle's foods, as Core's key for "did it change since the crew last tried".
+        internal static string? CrewStockKey(SaveState state, VehicleInstance vehicle, string kind, string siteId)
+        {
+            var tables = DemandData.Tables;
+            return tables == null ? null : FoodTrucks.Core.Fleet.CrewRestock.StockKey(tables, kind, CargoLimit.Lines(vehicle), InStock(state, siteId));
+        }
+
         // The crew loads food with the Restock button's code before it sets off (HireRoutes, on Core's Restock step),
         // never spare equipment. The log says what went in; when a fitted piece still has room and the commissary has
         // none of its foods (an empty commissary included), the commissary texts what was missing, once per vehicle and
@@ -2310,11 +2317,13 @@ namespace FoodTrucks
             if (refusal != null) return refusal;
             var rules = DemandData.Rules!.Commissary!;
             // Checked again at placing: midnight may have passed since the read-back, into a new week (review round 1, Opus).
+            // Over the limit, the commissary says why and the order form opens again to change it (review round 2, Opus).
             var over = Commissary.OverLimit(FoodTrucksSession.CurrentState!, rules, siteId, quote, CommissaryRepeat.Once);
             if (over != null)
             {
+                Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_text", new Dictionary<string, string> { { "text", over } }, read: true));
                 CartSelling.Notify("foodtrucks:notification", ("message", over));
-                return null;
+                return Form(siteId);
             }
             var placed = Commissary.PlaceQuote(siteId, quote);
             if (placed.Count == 0) return Closing("foodtrucks:dialog_commissary_unavailable", null);

@@ -43,9 +43,10 @@ namespace FoodTrucks.Core.Fleet
     public readonly struct VehicleWhere
     {
         public VehicleWhere(double x, double z, bool leaveAlone, bool canSellHere = true, bool hasStock = true, bool stayPut = false,
-            bool canRestock = false)
+            bool canRestock = false, string? stockKey = null)
         {
             CanRestock = canRestock;
+            StockKey = stockKey;
             X = x;
             Z = z;
             LeaveAlone = leaveAlone;
@@ -67,6 +68,8 @@ namespace FoodTrucks.Core.Fleet
         public bool StayPut { get; }
         // In the bay of the commissary where it rents its space: the crew restocks there, or learns what it is short of.
         public bool CanRestock { get; }
+        // The commissary's stock of the vehicle's foods there (CrewRestock.StockKey); null when not known.
+        public string? StockKey { get; }
     }
 
     // Runs a hire's route minute by minute. The saved day plan says what the hire should be doing now;
@@ -216,12 +219,14 @@ namespace FoodTrucks.Core.Fleet
             return want.Kind == LegKind.Open ? new HireAction(HireActionKind.Open, want.StopIndex) : HireAction.None;
         }
 
-        // The crew restocked (or tried to) for the leg running now: not again until the next leg.
-        public static void Restocked(VehicleState vehicle, long now)
+        // The crew restocked (or tried to) for the leg running now, leaving the commissary's stock of its foods at
+        // `stockKeyAfter`: not again in this leg unless that stock changes (CrewRestock.Due).
+        public static void Restocked(VehicleState vehicle, long now, string? stockKeyAfter = null)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var want = Want(vehicle, now);
             if (want != null) vehicle.RestockedFor = want.Start;
+            vehicle.RestockStockKey = stockKeyAfter;
         }
 
         // The crew parked it here for this stop and nobody has moved it since.

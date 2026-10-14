@@ -35,8 +35,8 @@ public class CrewRestockTests
         return truck;
     }
 
-    private static VehicleWhere Bay(bool hasStock = true, bool canRestock = true, bool stayPut = false) =>
-        new(0, 0, leaveAlone: false, hasStock: hasStock, stayPut: stayPut, canRestock: canRestock);
+    private static VehicleWhere Bay(bool hasStock = true, bool canRestock = true, bool stayPut = false, string? stockKey = null) =>
+        new(0, 0, leaveAlone: false, hasStock: hasStock, stayPut: stayPut, canRestock: canRestock, stockKey: stockKey);
 
     [Fact]
     public void InTheBayTheCrewRestocksOnceBeforeItSetsOff()
@@ -124,5 +124,30 @@ public class CrewRestockTests
         // An empty hot dog truck, nothing at the commissary: hot dogs are short.
         var cargo = new[] { new CargoLine(HotDogGrill, 1, false) };
         Assert.Equal(new[] { HotDog }, CrewRestock.Short(ShippedData.Tables, "truck", cargo, new Dictionary<string, int>()));
+    }
+
+    [Fact]
+    public void ADeliveryInTheSameLegBringsOneMoreRestockBeforeLeaving()
+    {
+        var truck = Truck();
+        // 09:40: nothing on board, nothing at the commissary. It tries, finds nothing, and waits.
+        Assert.Equal(HireActionKind.Restock, runner.Step(truck, At(3, 9, 40), Bay(hasStock: false, stockKey: "hotdog=0")).Kind);
+        HireRunner.Restocked(truck, At(3, 9, 40), "hotdog=0");
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 9, 41), Bay(hasStock: false, stockKey: "hotdog=0")).Kind);
+        // 09:45: a delivery came in. One more attempt; after loading, the stock left is the new key.
+        Assert.Equal(HireActionKind.Restock, runner.Step(truck, At(3, 9, 45), Bay(hasStock: false, stockKey: "hotdog=500")).Kind);
+        HireRunner.Restocked(truck, At(3, 9, 45), "hotdog=420");
+        Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 9, 45), Bay(stockKey: "hotdog=420")).Kind);
+    }
+
+    [Fact]
+    public void TheStockKeyListsTheVehiclesFoodsOnly()
+    {
+        var cargo = new[] { new CargoLine(HotDogGrill, 1, false), new CargoLine(Grill, 1, false) };
+        var stock = new Dictionary<string, int> { [HotDog] = 500, [Burger] = 20, ["ba:itemname_cupofcoffee"] = 9 };
+        var key = CrewRestock.StockKey(ShippedData.Tables, "truck", cargo, stock);
+        Assert.Equal($"{Burger}=20;{HotDog}=500;{Kabob}=0", key);
+        stock["ba:itemname_cupofcoffee"] = 0;
+        Assert.Equal(key, CrewRestock.StockKey(ShippedData.Tables, "truck", cargo, stock));
     }
 }

@@ -259,4 +259,17 @@ public class CommissaryStandingTests
         Assert.Equal(4, standing.NextDay);
         Assert.Single(CommissaryStandingOrders.Book(state, Rules, 4, 480, Price).Single().Orders);
     }
+
+    [Fact]
+    public void ADeliveryBroughtForwardCountsInTheWeekOfItsOwnDay()
+    {
+        var state = CommissariesTests.Rented();
+        // Week 1's tacos are all taken by day 7's order; a weekly order delivers on day 8, a new week.
+        CommissaryOrdering.Place(state, Rules, "a", Quote(("taco", 4, true)), (6, 600));
+        var standing = CommissaryStandingOrders.Create(state, Rules, "a", Quote(("taco", 2, true)), CommissaryRepeat.Weekly, (7, 100));
+        Assert.Equal(8, standing.NextDay);
+        var run = CommissaryStandingOrders.BookEarly(state, Rules, standing, 7, 300, Price);
+        Assert.Empty(run.Cut);
+        Assert.Equal(1000, Assert.Single(run.Orders).Units);
+    }
 }

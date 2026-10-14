@@ -118,6 +118,8 @@ namespace FoodTrucks.Core.Saves
         public List<SoldDay> Sold { get; set; } = new List<SoldDay>();
         // The start minute of the route leg the crew last restocked at the commissary for (CrewRestock): once per leg.
         public long? RestockedFor { get; set; }
+        // The commissary's stock of its foods after that attempt (CrewRestock.StockKey): a change allows one more.
+        public string? RestockStockKey { get; set; }
         // The game day the commissary last texted what a crew restock was short of: once a day.
         public int? RestockShortDay { get; set; }
 

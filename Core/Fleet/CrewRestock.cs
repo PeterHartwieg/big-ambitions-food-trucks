@@ -14,14 +14,28 @@ namespace FoodTrucks.Core.Fleet
     // HireRunner.Restocked.
     public static class CrewRestock
     {
-        // Once per leg of the plan: the leg it is setting off (or waiting) for, keyed by the leg's start minute. A
-        // restock that loaded nothing (an empty commissary) isn't tried again until the next leg, however long the crew
-        // waits; it still reports the shortage.
+        // Once per leg of the plan (the leg it is setting off or waiting for, keyed by its start minute), and again in
+        // the same leg only when the commissary's stock of the vehicle's foods has changed since the last attempt (a
+        // delivery at 08:00 after a check at 07:40 that found it empty; review round 2, Astra). The key is read after the
+        // last attempt's loading, so one change brings at most one more attempt: never a loop.
         public static bool Due(VehicleState vehicle, ShiftLeg want, VehicleWhere where)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             if (want == null) throw new ArgumentNullException(nameof(want));
-            return where.CanRestock && vehicle.RestockedFor != want.Start;
+            if (!where.CanRestock) return false;
+            return vehicle.RestockedFor != want.Start || (where.StockKey != null && where.StockKey != vehicle.RestockStockKey);
+        }
+
+        // What the commissary holds of the foods the vehicle's fitted pieces serve, as one string ("item=units;…", by
+        // item): equal keys mean nothing there changed for this vehicle.
+        public static string StockKey(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo, IReadOnlyDictionary<string, int> stock)
+        {
+            if (tables == null) throw new ArgumentNullException(nameof(tables));
+            if (cargo == null) throw new ArgumentNullException(nameof(cargo));
+            if (stock == null) throw new ArgumentNullException(nameof(stock));
+            var view = Storage.Of(tables, vehicleType, cargo);
+            var foods = view == null ? new List<string>() : view.Pools.SelectMany(p => p.Piece.Products).Distinct().OrderBy(p => p, StringComparer.Ordinal).ToList();
+            return string.Join(";", foods.Select(f => f + "=" + (stock.TryGetValue(f, out var n) ? n : 0)));
         }
 
         // The foods the commissary was short of after a restock: each fitted piece with room left for at least one more

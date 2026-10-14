@@ -257,7 +257,7 @@ internal sealed partial class SoakWorld
                 var ownBay = van.Bay != null && state.Commissary.Spaces.Any(s => s.VehicleId == v.VehicleId && s.CommissaryId == van.Bay);
                 var action = runner.Step(v, t, new VehicleWhere(van.X, van.Z, van.Property,
                     hasStock: Stock(v).Values.Any(n => n > 0), stayPut: Awake && atWindow == v.VehicleId,
-                    canRestock: ownBay));
+                    canRestock: ownBay, stockKey: ownBay ? CrewRestock.StockKey(ShippedData.Tables, v.VehicleType, Lines(v), Available(van.Bay!)) : null));
                 if (action.Kind == HireActionKind.None) break;
                 Note($"{v.VehicleId}: route {action.Kind} stop {action.Stop}");
                 switch (action.Kind)
@@ -271,7 +271,11 @@ internal sealed partial class SoakWorld
                         van.Z = fits ? transit.ToZ : transit.FromZ;
                         HireRunner.Arrived(v, van.X, van.Z, fits, t); break;
                     case HireActionKind.Open: Open(v, action.Stop, t); break;
-                    case HireActionKind.Restock: Restock(v, van.Bay!); HireRunner.Restocked(v, t); crewRestocks++; break;
+                    case HireActionKind.Restock:
+                        Restock(v, van.Bay!);
+                        HireRunner.Restocked(v, t, CrewRestock.StockKey(ShippedData.Tables, v.VehicleType, Lines(v), Available(van.Bay!)));
+                        crewRestocks++;
+                        break;
                 }
             }
             var next = until;

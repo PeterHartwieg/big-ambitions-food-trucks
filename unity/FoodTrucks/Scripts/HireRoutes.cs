@@ -346,6 +346,7 @@ namespace FoodTrucks
             var hasStock = true;
             var stayPut = false;
             string? restockAt = null;
+            string? stockKey = null;
             if (!held && !indoors && !vehicle.IsOpen && vehicle.Transit == null && HireRunner.Want(vehicle, t) != null)
             {
                 canSell = KindOf(vehicle) == "truck" ? instance.parkingState == ParkingState.Legal : Legality.Check(position).Legal;
@@ -371,16 +372,16 @@ namespace FoodTrucks
                 stayPut = (lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes) ||
                           (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres) ||
                           HireCrew.OnShift(vehicle, t).Count == 0;
-                // In its own commissary's bay: the crew restocks (or finds what is short) before it sets off. Read only while
-                // this leg's restock is still to come (Core CrewRestock: once per leg).
-                if (vehicle.RestockedFor != HireRunner.Want(vehicle, t)?.Start)
-                    restockAt = Commissary.CrewRestockSite(FoodTrucksSession.CurrentState!, instance);
+                // In its own commissary's bay: the crew restocks (or finds what is short) before it sets off, once per leg
+                // and again when the commissary's stock of its foods changes (Core CrewRestock.Due).
+                restockAt = Commissary.CrewRestockSite(FoodTrucksSession.CurrentState!, instance);
+                if (restockAt != null) stockKey = Commissary.CrewStockKey(FoodTrucksSession.CurrentState!, instance, KindOf(vehicle), restockAt);
             }
             restockSites[vehicle.VehicleId] = restockAt;
             // A truck at a catering gig at this minute stays there, as one the player holds does (without counting as
             // the player's use, which would keep it an hour longer).
             return new VehicleWhere(position.x, position.z, held || indoors || Catering.BusyAt(vehicle.VehicleId, t), canSell, hasStock, stayPut,
-                canRestock: restockAt != null);
+                canRestock: restockAt != null, stockKey: stockKey);
         }
 
         // The commissary each vehicle could restock at, as the last Where read it.
@@ -401,12 +402,18 @@ namespace FoodTrucks
                 case HireActionKind.Arrive:
                     return Arrive(vehicle, instance, action.Transit!, t, kind);
                 case HireActionKind.Restock:
-                    // Marked done for this leg whatever loads, so a failing load isn't tried again every minute.
-                    HireRunner.Restocked(vehicle, t);
+                {
+                    // Marked done for this leg and this stock first, so a load that throws isn't tried again every minute;
+                    // then with the stock left after loading, so only a later change (a delivery) brings another attempt.
+                    var state = FoodTrucksSession.CurrentState!;
+                    restockSites.TryGetValue(vehicle.VehicleId, out var site);
+                    HireRunner.Restocked(vehicle, t, site == null ? null : Commissary.CrewStockKey(state, instance, kind, site));
                     FoodTrucksSession.MarkChanged();
-                    if (restockSites.TryGetValue(vehicle.VehicleId, out var site) && site != null)
-                        Commissary.CrewRestock(FoodTrucksSession.CurrentState!, vehicle, instance, kind, site, t);
+                    if (site == null) return true;
+                    Commissary.CrewRestock(state, vehicle, instance, kind, site, t);
+                    HireRunner.Restocked(vehicle, t, Commissary.CrewStockKey(state, instance, kind, site));
                     return true;
+                }
                 case HireActionKind.Open:
                     var refusal = CartSelling.OpenByCrew(vehicle, action.Stop, t);
                     if (refusal == null)

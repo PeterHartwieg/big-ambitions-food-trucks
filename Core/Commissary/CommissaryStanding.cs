@@ -285,7 +285,8 @@ namespace FoodTrucks.Core.Commissary
             if (nowDay < 1 || nowMinute < 0 || nowMinute > 1439) throw new ArgumentOutOfRangeException(nameof(nowDay));
             if (standing.NextDay < nowDay || standing.NextDay > nowDay + 1) throw new InvalidOperationException("Only a delivery due today or tomorrow is brought forward.");
             var run = new CommissaryStandingBooking(standing, nowDay);
-            BookOne(state, rules, standing, run, nowDay, nowMinute, price, unlimited);
+            // Its boxes count in the week of its own day, the one the limit was planned for (review round 2, Opus).
+            BookOne(state, rules, standing, run, nowDay, nowMinute, price, unlimited, countDay: standing.NextDay);
             return run;
         }
 
@@ -293,7 +294,7 @@ namespace FoodTrucks.Core.Commissary
         // booked; the run says to text it only the first time in a row (TellNoSpace), and items not sold only once each
         // while they stay unsold (TellNotSold).
         private static void BookOne(CommissaryState state, CommissaryRules rules, CommissaryStandingOrder standing, CommissaryStandingBooking run,
-            int nowDay, int nowMinute, Func<string, CommissaryPrice?> price, bool unlimited)
+            int nowDay, int nowMinute, Func<string, CommissaryPrice?> price, bool unlimited, int? countDay = null)
         {
             standing.NextDay = checked(standing.NextDay + Interval(standing.Repeat));
             if (!CommissaryOrdering.CanOrder(state, standing.CommissaryId))
@@ -324,7 +325,7 @@ namespace FoodTrucks.Core.Commissary
                 {
                     // Only boxes delivered or booked count: deliveries not booked yet (this order's later days, other
                     // standing orders) don't hold back today's, so the earliest booking gets the boxes.
-                    var booked = Booked(state, standing.CommissaryId, line.ItemName, nowDay)
+                    var booked = Booked(state, standing.CommissaryId, line.ItemName, countDay ?? nowDay)
                                  + requests.Where(r => r.ItemName == line.ItemName && r.Capped).Sum(r => r.Boxes);
                     boxes = Math.Max(0, Math.Min(boxes, rules.FoodBoxLimit(line.ItemName) - booked));
                     if (boxes < line.Boxes) run.Cut.Add((line.ItemName, line.Boxes, boxes));
