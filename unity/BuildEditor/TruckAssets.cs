@@ -282,7 +282,16 @@ namespace FoodTrucks.BuildEditor
             // has two paint colours in its texture, so the mask is switched off: with _Min 1.5 and _Max 2 the
             // smoothstep is 0 for every alpha. Left at 0 and 0.5, the cream and teal panels rendered dark red,
             // almost black in shade.
-            foreach (var (from, to) in new[] { ("    - _Min: 0\n", "    - _Min: 1.5\n"), ("    - _Max: 0.5\n", "    - _Max: 2\n") })
+            // Decals off, as on the game's own vehicle materials (_DISABLE_DECALS) and our other models (SurfaceLook): the
+            // SDK's HDRP assets compile the decal variants for four decal targets (DECALS_4RT) while the game renders with
+            // three (DECALS_3RT), so a truck that read the decal buffers took its ambient occlusion from a target the game
+            // doesn't fill and rendered almost black in shade wherever street decals were on screen (13 and 14 October).
+            foreach (var (from, to) in new[]
+                     {
+                         ("    - _Min: 0\n", "    - _Min: 1.5\n"), ("    - _Max: 0.5\n", "    - _Max: 2\n"),
+                         ("    - _SupportDecals: 1\n", "    - _SupportDecals: 0\n"),
+                         ("  m_ValidKeywords:\n  - _DISABLE_SSR_TRANSPARENT\n", "  m_ValidKeywords:\n  - _DISABLE_DECALS\n  - _DISABLE_SSR_TRANSPARENT\n"),
+                     })
             {
                 if (!text.Contains(from)) throw new InvalidOperationException($"{ExampleMaterial} lacks '{from.Trim()}'.");
                 text = text.Replace(from, to);
