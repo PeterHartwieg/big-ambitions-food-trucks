@@ -532,8 +532,31 @@ namespace FoodTrucks
             }
         }
 
+        // BaTable instantiates virtualized option rows from a prefab outside the dropdown hierarchy. Give each
+        // copied dropdown its own row prefab before SetOptions loads rows; modifying the game's shared prefab
+        // would also change vanilla dropdowns, and styling only existing children misses later recycled rows.
+        private static void PrepareOptions(GameDropdown dropdown)
+        {
+            const string ownerName = "FoodTrucks.OptionTemplate";
+            if (dropdown.transform.Find(ownerName) != null) return;
+            var options = Field<UI.Elements.DropdownOptionScrollerController>(dropdown, "optionScrollerController");
+            if (options.prefab == null) throw Missing("the dropdown's option row prefab");
+            var owner = new GameObject(ownerName, typeof(RectTransform));
+            owner.SetActive(false);
+            owner.transform.SetParent(dropdown.transform, false);
+            var prefab = Object.Instantiate(options.prefab, owner.transform);
+            prefab.name = "FoodTrucks.DropdownOption";
+            ReadableText(prefab.transform);
+            prefab.gameObject.SetActive(true);
+            options.prefab = prefab;
+            // The native row height (80 canvas units, about 27px at 720p) fits the 16px font. Keep its scrolling
+            // behavior, but allow enough width for an employee's name and job information at the larger size.
+            Traverse.Create(dropdown).Field("maxOptionsWidth").SetValue(BizManFleet.Size(640));
+        }
+
         private static void SetUp(GameDropdown dropdown, List<string> options, int selected, bool interactable, Action<int> chosen)
         {
+            PrepareOptions(dropdown);
             dropdown.SetOptions(options, localize: false, selectedOption: selected);
             dropdown.onOptionSelected.RemoveAllListeners();
             dropdown.onOptionSelected.AddListener(index => Guard(() =>
