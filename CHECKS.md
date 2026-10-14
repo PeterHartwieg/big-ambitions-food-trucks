@@ -12,6 +12,12 @@ The Street food line now opens a dedicated page made from basic UI pieces, with 
 | B6 | Open Hires from a vehicle panel, also with no rented warehouse | BizMan opens that vehicle's details; its Back button opens the dedicated fleet page |
 | B7 | Log after opening | `BizMan: dedicated Street food page built with its own cards and scroll view.`; no warehouse-section cloning or new errors |
 
+# Developer actions release gate (pending live check)
+
+Start without `-foodtrucks-test`: startup logs `Debug actions off`; Ctrl+K/J/U and their Alt variants must not spawn vehicles, grant licences/stock or hire workers. Ctrl+V/X and their Alt variants must not create events, gigs or ledger/tax changes even if pressed twice. With `-console`, developer `foodtrucks_*` commands must be absent except `foodtrucks_uninstall`. Ctrl+Shift+F11 and that uninstall command must still ask for the existing second confirmation.
+
+Restart with `-foodtrucks-test` in a throwaway FT save: the developer keys and console commands must work as documented, including the existing second-press safeguards. Test bridge debug commands must still work. Compile and code review are not an in-game check.
+
 # Tuning (next build)
 
 Branch `tuning-1`; no version bump. Peter's balance decisions of 14 October 2026: the weekly phone limit is one for the whole fleet (all commissaries together), the 10% delivery fee is now a flat $250 per delivery (one fee per commissary and morning, whatever arrives), weekend markets bring a park crowd on top of the street's, catering's weekend events can be at a park gate, and the test bridge has a read-only `parks` command for collecting park positions. About 15 minutes in a throwaway save with spaces rented at two commissaries (FT bridge 2 has trucks and hires) and some money.
