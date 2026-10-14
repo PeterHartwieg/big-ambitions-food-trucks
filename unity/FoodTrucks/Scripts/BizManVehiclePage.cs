@@ -349,17 +349,19 @@ namespace FoodTrucks
             AddLabel(BizManFleet.Where(instance, vehicle, IsWithDriver(id)));
             if (!canWrite) AddLabel(Text("foodtrucks:bizman_page_readonly"));
 
-            // Crew: one row per staff slot.
+            // Crew: one row per staff slot, and one for each member past it (the truck's staff went from 3 to 2 on 14 October
+            // 2026), so they can be taken off. While the crew is over the limit no row offers anyone new: replacing someone
+            // would take them off and then refuse the newcomer.
             var limit = HireCrew.Limit(kind);
             var crew = vehicle?.Crew ?? new List<string>();
             AddLabel(Format("foodtrucks:bizman_page_crew_header", ("count", crew.Count.ToString()), ("limit", limit.ToString())));
             var available = HireCrew.Available(state);
-            for (var slot = 0; slot < limit; slot++)
+            for (var slot = 0; slot < Math.Max(limit, crew.Count); slot++)
             {
                 var current = slot < crew.Count ? HireCrew.Find(crew[slot]) : null;
                 var choices = new List<EmployeeInstance?> { null };
                 if (current != null) choices.Add(current);
-                choices.AddRange(available);
+                if (crew.Count <= limit) choices.AddRange(available);
                 var labels = choices.Select(e => e == null ? Text("foodtrucks:bizman_page_unassigned") : CrewOption(e)).ToList();
                 var index = slot;
                 AddRow(Format("foodtrucks:bizman_page_crew_slot", ("number", (slot + 1).ToString())), labels, current != null ? 1 : 0, canWrite,
