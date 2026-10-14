@@ -211,6 +211,7 @@ namespace FoodTrucks
         internal static void Reset()
         {
             CloseSection();
+            if (section != null) UnityEngine.Object.Destroy(section.gameObject);
             section = content = null;
             builtFor = openList = null;
             hiddenListParts.Clear();
