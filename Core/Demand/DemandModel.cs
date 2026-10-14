@@ -107,7 +107,7 @@ namespace FoodTrucks.Core.Demand
             var neighbourhood = tables.Neighbourhood(query.Neighbourhood);
 
             var baseline = tables.StreetBaseline(daypart);
-            var areaCrowds = AreaCrowds(query.Areas, daypart, day, query.AreaLive, query.PitchAreas);
+            var areaCrowds = AreaCrowds(query.Areas, daypart, day, season, query.Raining, query.AreaLive, query.PitchAreas);
             var crowdTotal = baseline + areaCrowds.Values.Sum();
             var footfallFactor = tables.PassersPerHour
                 * neighbourhood.Footfall * neighbourhood.DaypartFactor(daypart) * neighbourhood.DayFactor(day) * neighbourhood.SeasonFactor(season)
@@ -163,8 +163,9 @@ namespace FoodTrucks.Core.Demand
 
         // Independent crowds before the factors common to every passer, in a stable area order.
         // A pitch's own areas (PitchAreas) raise an area's presence to at least theirs, after the venues' live factor.
-        private Dictionary<string, double> AreaCrowds(AreaMix areas, Daypart daypart, DayOfWeek day, IReadOnlyDictionary<string, double>? live,
-            AreaMix? pitch = null)
+        // An area's own season and rain factors act on its crowd only, on top of the factors every passer has.
+        private Dictionary<string, double> AreaCrowds(AreaMix areas, Daypart daypart, DayOfWeek day, Season season, bool raining,
+            IReadOnlyDictionary<string, double>? live, AreaMix? pitch = null)
         {
             var crowds = new Dictionary<string, double>(StringComparer.Ordinal);
             var names = areas.Presences.Keys.Concat(pitch?.Presences.Keys ?? Enumerable.Empty<string>()).Distinct().OrderBy(k => k, StringComparer.Ordinal);
@@ -173,7 +174,8 @@ namespace FoodTrucks.Core.Demand
                 var area = tables.Area(name);
                 var factor = live != null && live.TryGetValue(name, out var f) && !double.IsNaN(f) && !double.IsInfinity(f) && f >= 0 ? f : 1.0;
                 var presence = Math.Max(areas.PresenceOf(name) * factor, pitch?.PresenceOf(name) ?? 0);
-                crowds.Add(name, presence * area.Footfall(daypart) * area.DayFactor(day));
+                crowds.Add(name, presence * area.Footfall(daypart, day) * area.DayFactor(day) * area.SeasonFactor(season)
+                    * (raining ? area.Rain : 1.0));
             }
             return crowds;
         }

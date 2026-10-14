@@ -1,3 +1,14 @@
+# Parks as their own demand area (next build)
+
+Branch `balance-park`; no version bump. Parks get the `park` area (`data/demand.json`): busy on weekend daytime, a weekday lunch bump, quiet at night, in rain and in winter, ice cream, slushies, snacks and drinks strong. The mod finds the game's own parks from the trigger volumes that give the walking-in-the-park happiness boost (`ParkAreas`), and zones in `data/zones.json` can add parks it misses. Unverified in game whether the volumes load with the city and cover each park. About 10 minutes in a throwaway save with a cart or truck.
+
+| # | Do | Look for |
+|---|---|---|
+| K1 | Push or drive a vehicle to the edge of a park (the green one with paths; the happiness boost shows when you walk in), open, Ctrl+Alt+L | The reading lists `park presence` (about 0.7 at the edge, less 20 to 50 m away); a pitch a block away has none |
+| K2 | Same pitch on a weekday at 12:00 and on a Saturday at 15:00 (sleep or Ctrl+F-keys) | Saturday afternoon clearly busier than the weekday lunch, the weekday lunch busier than 09:00 or 15:00 |
+| K3 | Walk round the parks you know (and the skate park) | Tell me any park the mod misses: walk its outline with Ctrl+Alt+G at each corner, so it can become a zone |
+| L1 | First reading after load | `Parks: N park areas and M skate park areas found (the game's walking-in-the-park triggers).` with N at least 1; with 0 the line ends `; parks come only from zones.json.` |
+
 # Commissary supply and crew restock (next build)
 
 Branch `crew-supply`; no version bump, so the log says 0.9.10. A phone order can repeat (every day, or every week on the weekday of its first delivery), the call lists standing orders and cancels them, and each food's boxes from phone orders are limited per game week at each commissary (`rules.json` `commissary.foodBoxesPerWeek`, 10 by default; machines have no limit). A crewed vehicle in its own commissary's bay restocks before it sets off. Peter's rows take about 15 minutes in a throwaway save with a rented truck space and one hire on a route (FT bridge 2 has both); the L rows are for whoever reads the log afterwards.

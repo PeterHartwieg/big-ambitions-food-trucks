@@ -6,7 +6,10 @@ public enum RestockMode
     Wholesaler,
     // Stand at the cart with the rest of a box in hand and reload it on the spot: no travel. The current
     // loading rule allows this if the player may hold a box while the cart sells.
-    BoxInHand
+    BoxInHand,
+    // No restock during the day: a crew loads in the commissary's bay before it leaves and sells until everything is
+    // out (Core CrewRestock: only in the bay of the commissary where the vehicle rents its space).
+    None
 }
 
 public sealed class Stay
@@ -38,6 +41,8 @@ public sealed class Planner
     private readonly City city;
     private readonly Travel travel;
     public RestockMode Mode { get; init; } = RestockMode.Wholesaler;
+    // Where a Wholesaler-mode trip goes: the city's wholesalers when null, or the commissaries.
+    public IReadOnlyList<Building>? Depots { get; init; }
 
     public Planner(Cart cart, City city, Travel travel)
     {
@@ -60,12 +65,18 @@ public sealed class Planner
         var stay = new Stay { Spot = spot, From = from, To = to };
         stock ??= Selling.Load(cart, spot, from, to, c);
         var t = from;
+        if (Mode == RestockMode.None)
+        {
+            stay.Result.Add(Selling.Run(cart, spot, from, to, c, stock));
+            stay.Left = new Dictionary<string, double>(stock);
+            return stay;
+        }
         while (t < to)
         {
             var r = Selling.Run(cart, spot, t, to, c, stock, untilOneOut: true);
             stay.Result.Add(r);
             if (r.SoldOutAt == null) break;
-            var trip = Mode == RestockMode.BoxInHand ? 2 : travel.Restock(city, spot, spot).Minutes;
+            var trip = Mode == RestockMode.BoxInHand ? 2 : travel.Restock(city, spot, spot, Depots).Minutes;
             if (trip == int.MaxValue || r.SoldOutAt.Value + trip + 30 > to)
             {
                 // No time for a trip: the other pieces keep selling what they hold until closing.
@@ -115,7 +126,7 @@ public sealed class Planner
                 {
                     move = Mode == RestockMode.BoxInHand
                         ? travel.Minutes(spots[i - 1].Distance(spots[i]))
-                        : travel.Restock(city, spots[i - 1], spots[i]).Minutes;
+                        : travel.Restock(city, spots[i - 1], spots[i], Depots).Minutes;
                     if (move == int.MaxValue) return null;
                     day.Refills++;
                 }

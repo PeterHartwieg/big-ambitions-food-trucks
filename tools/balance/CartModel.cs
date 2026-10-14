@@ -148,8 +148,10 @@ public sealed class Cart
 
     // Storage per piece (Core's Storage): each menu item is held by the one piece that serves it, each piece holds
     // the vehicle's unitsPerPiece, and with the Extra Storage piece (storage) every piece holds its factor more.
+    // `servers`: who stands at the window (the player alone at a truck is 1, though the truck's staff is 2), default the
+    // vehicle's staff. `speed`: their team speed (Core ServiceRules.Team; 1.0 at customer service 50, the player's start).
     public Cart(DemandTables tables, GamePrices prices, IReadOnlyList<string> menu, string name, bool storage = false,
-        int? staff = null, string kind = Kind)
+        int? staff = null, string kind = Kind, int? servers = null, double speed = 1.0)
     {
         VehicleKind = kind;
         this.tables = tables;
@@ -160,6 +162,8 @@ public sealed class Cart
         Storage = storage;
         var vehicle = tables.Vehicle(kind) ?? throw new InvalidOperationException($"economy.json has no {kind}.");
         Staff = staff ?? vehicle.Staff;
+        Servers = Math.Max(1, Math.Min(Staff, servers ?? Staff));
+        Speed = speed;
         var factor = storage ? tables.EquipmentIds.Select(tables.Equipment).Where(e => e!.IsStorage).Max(e => e!.StorageFactor) : 1.0;
         PerPiece = FoodTrucks.Core.Selling.Storage.Capacity(vehicle.UnitsPerPiece, 1, factor);
         PieceOf = menu.ToDictionary(i => i, i => tables.EquipmentForProduct(i)?.Id ?? throw new InvalidOperationException($"No equipment serves {i}."),
@@ -186,7 +190,13 @@ public sealed class Cart
     // A piece holding more than one menu item.
     public bool HasSharedPiece => PieceOf.GroupBy(p => p.Value).Any(g => g.Count() > 1);
     public IReadOnlyList<string> Menu { get; }
+    // The vehicle's staff from economy.json: CartDemand.Plan's capacity counts them all (CartPlan.Capacity).
     public int Staff { get; }
+    // Who serves and how fast: CartSelling sells at CapacityPerServer × speed × servers (ExpectedSales, SalesInput).
+    public int Servers { get; }
+    public double Speed { get; }
+    // What the window serves in an hour with this crew, from the plan's capacity.
+    public double WindowCapacity(HourPlan plan) => Staff > 0 ? plan.Capacity / Staff * Servers * Speed : 0;
     // All the pieces' storage together.
     public int StockUnits { get; }
     public DemandTables Tables => tables;
@@ -368,10 +378,12 @@ public static class Selling
             d.Minutes += step;
             d.Passers += plan.Passers * step / 60;
             d.Demand += plan.Demand * step / 60;
-            d.Capacity += plan.Capacity * step / 60;
-            var served = plan.Served * step / 60;
-            if (Queue != null && plan.Capacity > 0)
-                served *= Queue.Factor(plan.Demand * plan.Conversion, plan.Capacity, cart.Staff, c.Rain, cart.VehicleKind);
+            // The plan's capacity counts the vehicle's whole staff; the window sells with who is there (CartSelling.Service).
+            var capacity = cart.WindowCapacity(plan);
+            d.Capacity += capacity * step / 60;
+            var served = SalesRate.PerHour(plan.Demand, plan.Conversion, capacity) * step / 60;
+            if (Queue != null && capacity > 0)
+                served *= Queue.Factor(plan.Demand * plan.Conversion, capacity, cart.Servers, c.Rain, cart.VehicleKind);
             var foodBuyers = 0.0;
             var servedNow = 0.0;
             foreach (var share in plan.BuyerShares.OrderBy(p => p.Key, StringComparer.Ordinal))

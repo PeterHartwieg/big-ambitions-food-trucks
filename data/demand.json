@@ -19,7 +19,7 @@
     "night": "02:00"
   },
 
-  "_areas": "Footfall per daypart and a factor per day of the week. 1.0 is the reference footfall, not the average after tuning. Before 05:00 the previous day's factors apply. Independent area crowds add to the street baseline. Optional appetite factors are weighted by each area's contribution to footfall at this hour; the baseline and unlisted categories use factor 1.0. Waterfront covers parks, waterfront and tourist stretches placed by zones. Transit has all seven dayparts and weekdays from the study; areas have no season table, so transit uses the existing month and neighbourhood season factors.",
+  "_areas": "Footfall per daypart and a factor per day of the week. 1.0 is the reference footfall, not the average after tuning. Before 05:00 the previous day's factors apply. Independent area crowds add to the street baseline. Optional appetite factors are weighted by each area's contribution to footfall at this hour; the baseline and unlisted categories use factor 1.0. Optional per area: weekendFootfall replaces footfall on Saturday and Sunday (days still applies), seasons (missing seasons 1.0) and rain (1.0 when left out) scale that area's own crowd on top of the month, season and rain factors every passer has. Waterfront covers piers, the waterfront and tourist stretches placed by zones; parks have their own area. Transit has all seven dayparts and weekdays from the study.",
   "areas": {
     "office": {
       "footfall": { "early": 1.5, "morning": 2.0, "lunch": 3.0, "afternoon": 0.2, "evening": 0.2, "late": 0.05, "night": 0.02 },
@@ -52,6 +52,15 @@
       "footfall": { "early": 0.1, "morning": 0.4, "lunch": 0.8, "afternoon": 2.0, "evening": 0.8, "late": 0.1, "night": 0.0 },
       "days": { "mon": 0.9, "tue": 0.9, "wed": 0.9, "thu": 0.9, "fri": 1.0, "sat": 1.6, "sun": 1.6 },
       "appetite": { "coffee": 2.0, "icecream": 2.0, "snacks": 2.0, "slushies": 2.0 }
+    },
+    "_park": "Parks (Peter, 14 October 2026), from the game's park areas (classifier parkarea, skatepark) and hand-drawn zones. Weekdays are quiet except a lunch bump of office workers on the benches (1.4, about half an office block's lunch); mornings are joggers and dog walkers (0.5). Weekends are the park's days: late morning to early evening, peaking in the afternoon at 2.8, a little under the waterfront's weekend 3.2 because a park is a destination for locals rather than tourists. Night is empty (parks close). Summer 1.3 and winter 0.35 on top of the month (a January Saturday park is 0.21 of July's); rain 0.4 on top of rain.footfall 0.5, since nobody sits in a wet park. Appetite: what people buy on a walk or a lawn, so ice cream, slushies and snacks (popcorn, cotton candy, corn) x2 or more, cold drinks x1.8, hot dogs and other fast food x1.2 (the classic park cart), coffee x1.2 (a takeaway on the morning walk, moderate, below the waterfront's 2.0), sit-down meals lower (pizza 0.6, street meal 0.8). Bakery stays 1.0.",
+    "park": {
+      "footfall": { "early": 0.15, "morning": 0.5, "lunch": 1.4, "afternoon": 0.9, "evening": 0.6, "late": 0.05, "night": 0.0 },
+      "weekendFootfall": { "early": 0.1, "morning": 0.9, "lunch": 2.4, "afternoon": 2.8, "evening": 1.2, "late": 0.1, "night": 0.0 },
+      "days": { "mon": 1.0, "tue": 1.0, "wed": 1.0, "thu": 1.0, "fri": 1.1, "sat": 1.0, "sun": 1.0 },
+      "seasons": { "winter": 0.35, "spring": 1.0, "summer": 1.3, "autumn": 0.8 },
+      "rain": 0.4,
+      "appetite": { "icecream": 2.2, "slushies": 2.2, "snacks": 2.0, "colddrinks": 1.8, "fastfood": 1.2, "coffee": 1.2, "pizza": 0.6, "streetmeal": 0.8 }
     }
   },
 
@@ -196,7 +205,7 @@
   "_market": "The game's demand per product and neighbourhood (0 to 100) divided by 100, kept between floor and ceiling.",
   "market": { "floor": 0.3, "ceiling": 1.0 },
 
-  "_classifier": "Buildings and businesses within radiusMetres vote for area types; a vote counts in full at the spot and edgeWeight at the radius. A business type rule replaces its building's rule. Each area independently gets presence = 1 - exp(-votes / saturation), with no normalization or trimming. maxAreas remains accepted for compatibility but is ignored. With no votes the spot has no area crowd, only the street baseline; fallbackArea remains accepted but is no longer used. Venues reach high presence without reducing any other crowd. Zones set direct presences in [0,1]; override replaces the automatic result, add raises each presence to at least the zone value. Legacy additive zone share is accepted but ignored. Subway entrances are nearby places reported by the game side with building type subwayentrance and vote transit. Parks, waterfront and tourist stretches come from zones.",
+  "_classifier": "Buildings and businesses within radiusMetres vote for area types; a vote counts in full at the spot and edgeWeight at the radius. A business type rule replaces its building's rule. Each area independently gets presence = 1 - exp(-votes / saturation), with no normalization or trimming. maxAreas remains accepted for compatibility but is ignored. With no votes the spot has no area crowd, only the street baseline; fallbackArea remains accepted but is no longer used. Venues reach high presence without reducing any other crowd. Zones set direct presences in [0,1]; override replaces the automatic result, add raises each presence to at least the zone value. Legacy additive zone share is accepted but ignored. Subway entrances are nearby places reported by the game side with building type subwayentrance and vote transit. Parks are reported the same way from the game's own park areas (the trigger volumes that give the player the walking-in-the-park happiness boost): building type parkarea, or skatepark for the skate park, at the distance to the area's edge (0 inside). Parks the game has no area for, the waterfront and tourist stretches come from zones.",
   "classifier": {
     "_coverage": "Venue weights follow the accepted study tuning; the other shop, service and public-service weights remain draft values for playtesting. Empty businesses stay unclassified so the building type decides. buildingtype_special stays unclassified: it covers different uses with no single sensible area; a known business type decides, otherwise the classifier falls back.",
     "radiusMetres": 50,
@@ -212,7 +221,9 @@
       "ba:buildingtype_warehouse": { "industrial": 1.0 },
       "ba:buildingtype_cinema": { "retail": 1.0, "nightlife": 2.0 },
       "ba:buildingtype_theater": { "nightlife": 4.0 },
-      "subwayentrance": { "transit": 1.0 }
+      "subwayentrance": { "transit": 1.0 },
+      "parkarea": { "park": 1.5 },
+      "skatepark": { "park": 0.75 }
     },
     "businessTypes": {
       "ba:businesstype_nightclub": { "nightlife": 4.0 },

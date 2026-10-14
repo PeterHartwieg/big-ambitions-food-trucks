@@ -1,5 +1,5 @@
 {
-  "_notes": "Hand-drawn zones on top of the automatic areas. Each zone is a polygon of [x, z] points in world metres. mode override replaces the spot's area presences with the zone's areas; mode add raises each of the zone's areas to at least its value, leaving other areas as they are. Presences run from 0 to 1. The first matching override wins and ends the list; add zones before it are dropped. The old share field is accepted and ignored. Empty until the zones are drawn in the game.",
+  "_notes": "Hand-drawn zones on top of the automatic areas. Each zone is a polygon of [x, z] points in world metres. mode override replaces the spot's area presences with the zone's areas; mode add raises each of the zone's areas to at least its value, leaving other areas as they are. Presences run from 0 to 1. The first matching override wins and ends the list; add zones before it are dropped. The old share field is accepted and ignored. Area names are those in demand.json's areas: a park the game's own park areas miss is {\"park\": 1.0} in mode add, the waterfront {\"waterfront\": 1.0}. Points come from the zone point key (Ctrl+Alt+G, or the foodtrucks_zone_point command), which logs 'Zone point N: <neighbourhood>, x .., z ..'; walk the outline and mark each corner in order. Empty until the zones are drawn in the game.",
   "schemaVersion": 1,
   "zones": []
 }

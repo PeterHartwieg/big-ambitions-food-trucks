@@ -56,6 +56,13 @@ public sealed class City
 
     public IEnumerable<Building> Wholesalers => Buildings.Where(b => b.BusinessType == "ba:businesstype_wholesalestore");
 
+    // The commissary garages of data/commissaries.json, by address.
+    public List<Building> Commissaries(string path)
+    {
+        var keys = ((JArray)JObject.Parse(File.ReadAllText(path))["commissaries"]!).Select(c => (string)c["address"]!).ToList();
+        return Buildings.Where(b => keys.Contains(b.Key)).ToList();
+    }
+
     // A pitch in front of every building: the spot is the building's map anchor, and every building whose
     // outline lies within the classifier's radius votes, as World.Read feeds AreaClassifier in the game.
     public List<Spot> Spots(DemandTables tables)
@@ -89,10 +96,11 @@ public sealed class Travel
 
     public int Minutes(double metres) => (int)Math.Ceiling(metres * Detour / MetresPerMinute);
 
-    public (int Minutes, Building? Wholesaler) Restock(City city, Spot from, Spot to)
+    // Through the nearest depot (a wholesaler by default, or a commissary) from one spot to the next.
+    public (int Minutes, Building? Wholesaler) Restock(City city, Spot from, Spot to, IEnumerable<Building>? depots = null)
     {
         var best = (Minutes: int.MaxValue, Wholesaler: (Building?)null);
-        foreach (var w in city.Wholesalers.Where(w => w.Region == from.Region && w.Region == to.Region))
+        foreach (var w in (depots ?? city.Wholesalers).Where(w => w.Region == from.Region && w.Region == to.Region))
         {
             var d = Math.Sqrt((w.X - from.X) * (w.X - from.X) + (w.Z - from.Z) * (w.Z - from.Z)) +
                     Math.Sqrt((w.X - to.X) * (w.X - to.X) + (w.Z - to.Z) * (w.Z - to.Z));

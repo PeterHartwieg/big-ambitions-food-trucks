@@ -31,7 +31,7 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 | Restocking day | Carts carry about half a day's stock; a refill at a wholesaler during the day is expected. The player buys only what fits, so no full box is needed. |
 | Coffee | The step after hot dogs: the industrial coffee machine (the shop machine; the cheap one is an office item), fast service, its own crowds (morning commuters, parks at weekends and on warm afternoons). It should earn more than a hot dog cart at its own spots and cost more to start. |
 | Crowds add up | A spot's area types are not exclusive: offices nearby bring an office crowd, a nightclub a nightlife crowd, and the two add up rather than share a total. Every pavement also has ordinary street traffic at every hour. Who buys at a given hour follows who is there then. (Peter, 8 October 2026, after a spot next to offices and a club read as near-empty at lunch.) |
-| Nightlife and parks | Nightlife pitches come from buildings: nightclubs, theatres and cinemas nearby. Hand-drawn zones are for what has no building to find: parks, the waterfront, tourist stretches. |
+| Nightlife and parks | Nightlife pitches come from buildings: nightclubs, theatres and cinemas nearby. Parks are their own area (Peter, 14 October 2026), found from the game's own park areas. Hand-drawn zones are for what the mod can't find: parks the game has no area for, the waterfront, tourist stretches. |
 | Staff skill and queues | Service speed follows the worker's customer service skill times their satisfaction (the game's own measure; the player serves with theirs, 50 at the start): 50 serves at the base speeds the balance uses, low skill about 1.5× slower, top skill about 30% faster. Each vehicle's queue has a limit (cart about 6, truck about 10); arrivals at a full queue walk on. So skilled staff pay off at peaks and cheaper staff off-peak. As in the game, low skill makes customers complain and high skill pleases them, feeding reputation. All three in the data files. (Peter, 8 October 2026; in the game itself skill affects only satisfaction, not speed [code].) |
 | Messages | In-world wording: say what happens in the game ("The cart can't open without any equipment installed"), never how to use the interface. Maintenance tools such as the uninstall step may stay plain. |
 | Not chosen | Grey-market permits, fines, time-restricted streets, per-area demand curves. |
@@ -125,7 +125,9 @@ All tables live in a data file (`demand.json`) shipped with the mod, so balance 
 Every street spot gets an **area type** in two layers:
 
 1. **Automatic.** The mod reads the building types and business types within about 50 m. This covers every legal spot in the city, and it changes when the city changes: a nightclub opening next door makes the spot more of a nightlife spot.
-2. **Hand-drawn zones.** Polygons in the data file add or override the automatic result where the buildings don't tell the story: the theatre blocks in Hell's Kitchen, the Industry City market courtyard, the waterfront, tourist stretches in Midtown. Curated premium and event pitches set their area type directly.
+2. **Hand-drawn zones.** Polygons in the data file add or override the automatic result where the buildings don't tell the story: the theatre blocks in Hell's Kitchen, the Industry City market courtyard, the waterfront, tourist stretches in Midtown, a park the game has no park area for. Curated premium and event pitches set their area type directly.
+
+Parks are found automatically too. The game marks each park with a trigger volume that gives the player its walking-in-the-park happiness boost (`LocationHappinessTrigger`), and the skate park with its own [code, 1.0]. A spot within the classifier's radius of one counts it like a building, at the distance to the park's edge (0 inside): a park votes 1.5 for `park`, the skate park 0.75, so a pitch at a park's gate reads a park presence of about 0.7.
 
 | Area type | Comes from | Who walks past |
 |---|---|---|
@@ -134,7 +136,8 @@ Every street spot gets an **area type** in two layers:
 | Residential | residential buildings | locals, mornings, evenings, weekends |
 | Nightlife | nightclubs, bars, theatres | evening and late-night crowds |
 | Industrial | warehouses, factories | shift workers, early and late |
-| Waterfront and park | parks, piers, open space | walkers and tourists, warm weekends |
+| Park | the game's park areas, park zones | joggers and dog walkers in the morning, office workers at weekday lunch, families and walkers on weekend days; empty at night, in rain and in winter |
+| Waterfront | waterfront zones, piers | walkers and tourists, warm weekends |
 
 A spot can be several types at once, and their crowds add up: each type has a presence from 0 to 1 that grows with the number and closeness of its buildings (two office buildings nearby read about 0.67), and each brings its own crowd on top of the ordinary street traffic every pavement has. Who buys at a given hour follows who is there then.
 
@@ -174,9 +177,10 @@ Example footfall multipliers, weekday (1.0 is an average open hour city-wide):
 | Residential | 0.6 | 0.7 | 0.5 | 0.5 | 1.0 | 0.4 |
 | Nightlife | 0 | 0.1 | 0.4 | 0.3 | 1.5 | 2.0 |
 | Industrial | 1.5 | 0.4 | 1.5 | 0.3 | 0.5 | 1.0 |
-| Waterfront and park | 0.1 | 0.4 | 0.8 | 1.2 | 0.8 | 0.1 |
+| Waterfront | 0.1 | 0.4 | 0.8 | 1.2 | 0.8 | 0.1 |
+| Park | 0.15 | 0.5 | 1.4 | 0.9 | 0.6 | 0.05 |
 
-Day of week is per area: offices and industrial drop to 0.2 at weekends; nightlife peaks Thu to Sat; residential, retail and parks rise at weekends.
+Day of week is per area: offices and industrial drop to 0.2 at weekends; nightlife peaks Thu to Sat; residential, retail and the waterfront rise at weekends. An area can have its own weekend curve, season and rain factors (14 October 2026). Parks use all three: a weekend day runs 0.9 in the morning, 2.4 at lunch, 2.8 in the afternoon and 1.2 in the evening; summer 1.3 and winter 0.35 on top of the month's footfall; rain 0.4 on top of the 0.5 every passer has. Park crowds want ice cream, slushies and snacks about twice as often, cold drinks 1.8 times, hot dogs and coffee 1.2 times, sit-down food less. The game has no public holidays, so weekends stand for them.
 
 ### Appetite
 

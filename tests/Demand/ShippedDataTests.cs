@@ -13,7 +13,7 @@ public class ShippedDataTests
     {
         var tables = ShippedData.Tables;
 
-        Assert.Equal(7, tables.AreaNames.Count);
+        Assert.Equal(8, tables.AreaNames.Count);
         Assert.Equal(9, tables.CategoryNames.Count);
         Assert.Equal(0.3, tables.MarketFloor);
         Assert.Empty(tables.Zones);

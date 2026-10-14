@@ -95,6 +95,7 @@ namespace FoodTrucks
         {
             buildings = null;
             byAddress = null;
+            ParkAreas.Reset();
         }
 
         public static string AddressKey(string? street, int number) => $"{street}#{number}";
@@ -223,6 +224,9 @@ namespace FoodTrucks
                     if (distance <= radius) places.Add(new NearbyPlace(SubwayEntrance, null, distance));
                 }
             }
+            // The game's parks bring their own crowd (the `park` area), measured to the park's edge.
+            foreach (var (type, distance) in ParkAreas.Near(position, radius))
+                places.Add(new NearbyPlace(type, null, distance));
             var areas = new AreaClassifier(tables).Classify(places, position.x, position.z);
             return new Spot(areas, neighbourhood, places.Count, readDay, position, readHour, read)
             {

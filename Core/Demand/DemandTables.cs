@@ -80,10 +80,14 @@ namespace FoodTrucks.Core.Demand
             foreach (var entry in r.Entries(areasObj))
             {
                 var obj = AsObject(r, entry);
-                r.OnlyKeys(obj, "footfall", "days", "appetite");
+                r.OnlyKeys(obj, "footfall", "weekendFootfall", "days", "seasons", "rain", "appetite");
+                var weekend = r.OptionalObject(obj, "weekendFootfall");
                 areas.Add(entry.Name, new AreaTable(entry.Name,
                     FullTable(r, r.Object(obj, "footfall"), DaypartKeys, 0, 100),
+                    weekend == null ? null : FullTable(r, weekend, DaypartKeys, 0, 100),
                     FullTable(r, r.Object(obj, "days"), DayKeys, 0, 100),
+                    PartialTable(r, r.OptionalObject(obj, "seasons"), SeasonKeys),
+                    obj["rain"] == null ? 1.0 : r.Number(obj, "rain", 0, 100),
                     obj["appetite"] == null ? new Dictionary<string, double>(StringComparer.Ordinal)
                         : CategoryFactors(r, r.Object(obj, "appetite"))));
             }
@@ -556,20 +560,37 @@ namespace FoodTrucks.Core.Demand
     public sealed class AreaTable
     {
         private readonly double[] footfall;
+        private readonly double[]? weekendFootfall;
         private readonly double[] days;
+        private readonly double[] seasons;
         private readonly Dictionary<string, double> appetite;
 
-        internal AreaTable(string name, double[] footfall, double[] days, Dictionary<string, double> appetite)
+        internal AreaTable(string name, double[] footfall, double[]? weekendFootfall, double[] days, double[] seasons, double rain,
+            Dictionary<string, double> appetite)
         {
             Name = name;
             this.footfall = footfall;
+            this.weekendFootfall = weekendFootfall;
             this.days = days;
+            this.seasons = seasons;
+            Rain = rain;
             this.appetite = appetite;
         }
 
         public string Name { get; }
+        // The weekday curve.
         public double Footfall(Daypart daypart) => footfall[(int)daypart];
+        // The curve for a day: weekendFootfall on Saturday and Sunday when the area has one, else the weekday curve.
+        // The caller passes the day the hour belongs to (before Early it is still the previous day).
+        public double Footfall(Daypart daypart, DayOfWeek day) =>
+            weekendFootfall != null && (day == DayOfWeek.Saturday || day == DayOfWeek.Sunday)
+                ? weekendFootfall[(int)daypart] : footfall[(int)daypart];
+        public bool HasWeekendCurve => weekendFootfall != null;
         public double DayFactor(DayOfWeek day) => days[(int)day];
+        // This area's own crowd in a season, on top of the month's footfall that every passer has (missing seasons 1.0).
+        public double SeasonFactor(Season season) => seasons[(int)season];
+        // This area's own crowd while it rains, on top of rain.footfall that every passer has (1.0 when not given).
+        public double Rain { get; }
         // Unlisted categories keep their base appetite.
         public double AppetiteFactor(string category) => appetite.TryGetValue(category, out var factor) ? factor : 1.0;
     }
