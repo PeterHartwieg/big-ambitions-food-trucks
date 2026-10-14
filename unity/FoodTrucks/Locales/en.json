@@ -367,6 +367,7 @@
     "foodtrucks:commissary_lower-manhattan": "Lower Manhattan Commissary",
     "foodtrucks:commissary_murray-hill": "Murray Hill Commissary",
     "foodtrucks:commissary_description": "Parking, storage and deliveries for food vendors",
+    "foodtrucks:logistics_commissary_nospace": "{0} (no space rented: nothing delivered)",
     "foodtrucks:itempanel_commissary": "Commissary",
     "foodtrucks:commissary_header": "Commissary",
     "foodtrucks:commissary_body": "A space here keeps the vehicle legal overnight and lets you order stock by phone for delivery here.",
