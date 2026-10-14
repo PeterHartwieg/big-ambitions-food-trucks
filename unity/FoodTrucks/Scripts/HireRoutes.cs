@@ -345,6 +345,7 @@ namespace FoodTrucks
             var canSell = true;
             var hasStock = true;
             var stayPut = false;
+            string? restockAt = null;
             if (!held && !indoors && !vehicle.IsOpen && vehicle.Transit == null && HireRunner.Want(vehicle, t) != null)
             {
                 canSell = KindOf(vehicle) == "truck" ? instance.parkingState == ParkingState.Legal : Legality.Check(position).Legal;
@@ -370,11 +371,20 @@ namespace FoodTrucks
                 stayPut = (lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes) ||
                           (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres) ||
                           HireCrew.OnShift(vehicle, t).Count == 0;
+                // In its own commissary's bay with something there to load: the crew restocks before it sets off. Read only
+                // while this leg's restock is still to come (Core CrewRestock: once per leg).
+                if (vehicle.RestockedFor != HireRunner.Want(vehicle, t)?.Start)
+                    restockAt = Commissary.CrewRestockSite(FoodTrucksSession.CurrentState!, instance, KindOf(vehicle));
             }
+            restockSites[vehicle.VehicleId] = restockAt;
             // A truck at a catering gig at this minute stays there, as one the player holds does (without counting as
             // the player's use, which would keep it an hour longer).
-            return new VehicleWhere(position.x, position.z, held || indoors || Catering.BusyAt(vehicle.VehicleId, t), canSell, hasStock, stayPut);
+            return new VehicleWhere(position.x, position.z, held || indoors || Catering.BusyAt(vehicle.VehicleId, t), canSell, hasStock, stayPut,
+                canRestock: restockAt != null);
         }
+
+        // The commissary each vehicle could restock at, as the last Where read it.
+        private readonly Dictionary<string, string?> restockSites = new Dictionary<string, string?>();
 
         // Does one step; false when nothing changed, so the loop stops.
         private bool Do(VehicleState vehicle, VehicleInstance instance, HireAction action, long t)
@@ -390,6 +400,13 @@ namespace FoodTrucks
                     return true;
                 case HireActionKind.Arrive:
                     return Arrive(vehicle, instance, action.Transit!, t, kind);
+                case HireActionKind.Restock:
+                    // Marked done for this leg whatever loads, so a failing load isn't tried again every minute.
+                    HireRunner.Restocked(vehicle, t);
+                    FoodTrucksSession.MarkChanged();
+                    if (restockSites.TryGetValue(vehicle.VehicleId, out var site) && site != null)
+                        Commissary.CrewRestock(FoodTrucksSession.CurrentState!, vehicle, instance, kind, site, t);
+                    return true;
                 case HireActionKind.Open:
                     var refusal = CartSelling.OpenByCrew(vehicle, action.Stop, t);
                     if (refusal == null)

@@ -261,7 +261,9 @@ namespace FoodTrucks
             {
                 var line = Find(row.itemName);
                 if (line == null) throw new InvalidOperationException($"{row.itemName} isn't on the commissary's list.");
-                list.Add(new CommissaryOrderRequest(line.Item, line.Box, line.UnitCents, Math.Max(0, row.amount)));
+                // Food counts towards its weekly limit at the commissary; equipment doesn't.
+                list.Add(new CommissaryOrderRequest(line.Item, line.Box, line.UnitCents, Math.Max(0, row.amount),
+                    DemandData.Tables?.EquipmentForGameItem(line.Item) == null));
             }
             return list;
         }
@@ -282,14 +284,23 @@ namespace FoodTrucks
         }
 
         // The rows' item, box size and stock, as the item list shows them; the price beside it is the box price.
-        // Equipment reads plainly, by the piece ("Hot dog grill (1 here)"); food keeps "Hot dog, box of 500 (… here)".
-        private static LanguageChangeEventDataHolder Label(Line line) =>
-            LocalizorManager.Localize(DemandData.Tables?.EquipmentForGameItem(line.Item) != null ? "foodtrucks:commissary_form_piece" : "foodtrucks:commissary_form_item", new
+        // Equipment reads plainly, by the piece ("Hot dog grill (1 here)"); food keeps "Hot dog, box of 500 (… here)" and
+        // says how many boxes of it are left under its weekly limit in the delivery's week (Core CommissarySupply).
+        private static LanguageChangeEventDataHolder Label(Line line, string siteId)
+        {
+            var piece = DemandData.Tables?.EquipmentForGameItem(line.Item) != null;
+            var state = FoodTrucksSession.CurrentState;
+            var rules = DemandData.Rules?.Commissary;
+            var limited = !piece && state != null && rules != null && !Commissary.LimitsLifted;
+            var left = limited ? CommissarySupply.Left(state!.Commissary, rules!, siteId, line.Item, TimeHelper.CurrentDay + 1) : 0;
+            return LocalizorManager.Localize(piece ? "foodtrucks:commissary_form_piece" : limited ? "foodtrucks:commissary_form_item_left" : "foodtrucks:commissary_form_item", new
             {
                 item = LocalizorManager.GetLocalization(line.Item, null),
                 box = line.Box.ToString(),
-                stock = line.InStock.ToString()
+                stock = line.InStock.ToString(),
+                left = left.ToString()
             });
+        }
 
         // ---- Patches (each logs Active or Not active at startup through Patches.Patch) ----
 
@@ -332,7 +343,7 @@ namespace FoodTrucks
                 for (var i = 0; i < shown.Count; i++)
                 {
                     var (line, entry) = shown[i];
-                    entry.Init(Label(line), Icon(line.Item), line.BoxCents / 100f);
+                    entry.Init(Label(line, current.SiteId), Icon(line.Item), line.BoxCents / 100f);
                     entry.ItemsListEntry.transform.SetSiblingIndex(first + i);
                 }
             }

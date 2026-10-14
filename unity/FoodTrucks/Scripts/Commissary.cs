@@ -103,6 +103,7 @@ namespace FoodTrucks
                 if (sites.Site(id) != null) ContactFor(id);
             Log.Info($"Commissary state: unlocked {Join(commissary.Unlocked)}; spaces {Join(commissary.Spaces.Select(s => $"{s.Kind} {World.Short(s.VehicleId)} at {s.CommissaryId}"))}; " +
                      $"{commissary.Orders.Count} orders on the way (paid on delivery), {commissary.Stock.Values.Sum(l => l.Sum(x => (long)x.Units))} units in stock, " +
+                     $"{commissary.StandingOrders.Count} standing orders ({string.Join("; ", commissary.StandingOrders.Select(o => $"{o.Id} {o.Repeat} at {o.CommissaryId}, next day {o.NextDay}"))}), " +
                      $"{commissary.Charges.Count} rent charges and {commissary.Fines.Count} fines unpaid; night checked through day {commissary.NightCheckedThroughDay?.ToString() ?? "(not started)"}.");
         }
 
@@ -688,9 +689,77 @@ namespace FoodTrucks
             PayPending(state, rules, showNotification: false);
             PruneSpaces(state, rules);
             ChargeRent(state, rules);
+            BookStanding(state, rules, day, minute);
             Deliver(state, rules, day, minute);
             NightCheck(state, rules, sites, now, day, minute);
         }
+
+        // The game's own setting that lifts its wholesale and import limits lifts the commissary's weekly food limits too
+        // [code, 1.0: DeliveryHelper.AreWholesaleAndImportLimitsDisabled reads gameVariables.disableWholesaleAndImportLimits].
+        internal static bool LimitsLifted => SaveGameManager.Current?.gameVariables?.disableWholesaleAndImportLimits == true;
+
+        // Today's catalogue prices, as the phone order form has them: what a standing order books at.
+        private static Func<string, CommissaryPrice?> TodaysPrices()
+        {
+            Dictionary<string, (int Box, long Cents)>? prices = null;
+            return item =>
+            {
+                prices ??= Catalogue(false).Concat(Catalogue(true)).GroupBy(c => c.Item, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => (g.First().Box, g.First().UnitCents), StringComparer.Ordinal);
+                return prices.TryGetValue(item, out var p) ? new CommissaryPrice(p.Box, p.Cents) : (CommissaryPrice?)null;
+            };
+        }
+
+        // Standing orders due by now book today's delivery at today's prices (Core CommissaryStandingOrders.Book), before
+        // Deliver pays for them in the same step. What a food's weekly limit left out, items the commissary no longer
+        // sells and a day without a space there are texted by the commissary; the standing order stays.
+        internal static void BookStanding(SaveState state, CommissaryRules rules, int day, int minute)
+        {
+            if (state.Commissary.StandingOrders.Count == 0) return;
+            var runs = CommissaryStandingOrders.Book(state.Commissary, rules, day, minute, TodaysPrices(), LimitsLifted);
+            if (runs.Count == 0) return;
+            FoodTrucksSession.MarkChanged();
+            foreach (var run in runs)
+            {
+                var standing = run.Standing;
+                var site = standing.CommissaryId;
+                if (run.Missed > 0)
+                    Log.Info($"Commissary standing order {standing.Id} at {site}: {run.Missed} delivery days passed without a booking run; skipped, next day {standing.NextDay}.");
+                if (run.Orders.Count == 0 && run.Cut.Count == 0 && run.NotSold.Count == 0 && !run.NoSpace) continue;
+                Log.Info($"Commissary standing order {standing.Id} ({standing.Repeat}) at {site}: day {run.Day} " +
+                         (run.NoSpace ? "not booked: no vehicle has a space there" : $"booked {(run.Orders.Count == 0 ? "nothing" : string.Join(", ", run.Orders.Select(o => $"order {o.Id} {o.Units} {o.ItemName}")))}") +
+                         (run.Cut.Count == 0 ? "" : $"; weekly limit cut {string.Join(", ", run.Cut.Select(c => $"{c.ItemName} {c.Booked}/{c.Wanted} boxes"))}") +
+                         (run.NotSold.Count == 0 ? "" : $"; not sold any more: {string.Join(", ", run.NotSold)}") + $"; next day {standing.NextDay}.");
+                if (!state.Commissary.Unlocked.Contains(site)) continue;
+                var contact = ContactFor(site);
+                if (run.NoSpace)
+                    Notices.SendText(contact, "foodtrucks:message_commissary_standing_nospace", new Dictionary<string, string> { { "items", StandingItems(standing) } });
+                if (run.Cut.Count > 0)
+                    Notices.SendText(contact, "foodtrucks:message_commissary_standing_cut", new Dictionary<string, string>
+                    {
+                        { "cut", string.Join(", ", run.Cut.Select(c => string.Format(LocalizorManager.GetLocalization("foodtrucks:commissary_standing_cut_line", null),
+                            LocalizorManager.GetLocalization(c.ItemName, null), c.Booked, c.Wanted))) },
+                        { "weekday", CityPitches.Weekday(CommissarySupply.WeekStart(run.Day) + 7) }
+                    });
+                if (run.NotSold.Count > 0)
+                    Notices.SendText(contact, "foodtrucks:message_commissary_standing_notsold", new Dictionary<string, string>
+                    {
+                        { "items", string.Join(", ", run.NotSold.Select(i => LocalizorManager.GetLocalization(i, null))) }
+                    });
+            }
+        }
+
+        // "2 boxes of Hot dog, Griddle": a standing order's lines.
+        internal static string StandingItems(CommissaryStandingOrder standing) =>
+            string.Join(", ", standing.Lines.Select(l => string.Format(LocalizorManager.GetLocalization(
+                l.Capped ? (l.Boxes == 1 ? "foodtrucks:commissary_standing_line_one" : "foodtrucks:commissary_standing_line") : "foodtrucks:commissary_standing_piece", null),
+                l.Boxes, LocalizorManager.GetLocalization(l.ItemName, null))));
+
+        // "every day", "every Thursday".
+        internal static string StandingRepeat(CommissaryStandingOrder standing) =>
+            standing.Repeat == CommissaryRepeat.Weekly
+                ? LocalizorManager.GetLocalization("foodtrucks:commissary_repeat_weekly", null).Replace("{weekday}", CityPitches.Weekday(standing.NextDay))
+                : LocalizorManager.GetLocalization("foodtrucks:commissary_repeat_daily", null);
 
         // Debts the game refused earlier (not enough money), tried again: rent, then fines. Orders don't wait here: they
         // are paid on delivery, and one the game refuses then is cancelled (Deliver).
@@ -807,10 +876,13 @@ namespace FoodTrucks
             }
             foreach (var order in run.Refused)
             {
+                var standing = order.StandingOrderId != null;
                 Log.Info($"Commissary delivery: order {order.Id}, {order.Units} {order.ItemName} at {order.CommissaryId} not delivered: " +
-                         $"the payment of {CartSelling.Money(order.TotalCents)} was refused (not enough money); the order is cancelled.");
+                         $"the payment of {CartSelling.Money(order.TotalCents)} was refused (not enough money); the order is cancelled" +
+                         (standing ? $", standing order {order.StandingOrderId} stays." : "."));
+                // A standing order's delivery: only that one is cancelled; the standing order stays (its own text says so).
                 if (state.Commissary.Unlocked.Contains(order.CommissaryId))
-                    Notices.SendText(ContactFor(order.CommissaryId), "foodtrucks:message_commissary_delivery_unpaid", new Dictionary<string, string>
+                    Notices.SendText(ContactFor(order.CommissaryId), standing ? "foodtrucks:message_commissary_standing_unpaid" : "foodtrucks:message_commissary_delivery_unpaid", new Dictionary<string, string>
                     {
                         { "units", order.Units.ToString() },
                         { "item", LocalizorManager.GetLocalization(order.ItemName, null) },
@@ -1107,11 +1179,40 @@ namespace FoodTrucks
             CartSelling.Say("foodtrucks:notification_commissary_released", kind, ("commissary", NameOf(siteId)));
         }
 
+        // What one restock loaded: the units per item, the foods nothing on board holds, the units the cargo refused and
+        // kept here, and the units left in stock here.
+        private sealed class Loaded
+        {
+            public Dictionary<string, int> Items { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
+            public IReadOnlyList<string> NotHeld { get; set; } = Array.Empty<string>();
+            public long Back { get; set; }
+            public long Left { get; set; }
+        }
+
         // Loads the commissary's stock into the vehicle (storage per piece; plan, "Storage per piece"). Equipment first,
         // the spare pieces that fit (an Extra Storage only if the vehicle has none), so a piece fitted here already holds food. Then Core's
         // Storage.Restock plans the food: each fitted piece is filled from its foods, a shared piece split evenly by
-        // weight and topped up from the other food. Foods with no fitted piece stay here, and the message says so.
-        // Whatever doesn't go in goes back to the commissary's stock in its place.
+        // weight and topped up from the other food. Foods with no fitted piece stay here. Whatever doesn't go in goes
+        // back to the commissary's stock in its place. The Restock button and the crew (CrewRestock) both load this way.
+        private static Loaded LoadFromStock(SaveState state, FoodTrucks.Core.Demand.DemandTables tables, VehicleInstance vehicle, string kind, string siteId)
+        {
+            var result = new Loaded();
+            // Only spare pieces that fit (Core's Storage.FitPieces): never a second Extra Storage, never past the slots,
+            // so a Restock shows no refusal for a piece it chose to leave here.
+            var pieces = Storage.FitPieces(tables, kind, CargoLimit.Lines(vehicle), InStock(state, siteId));
+            if (pieces.Count > 0) result.Back += Load(state, vehicle, siteId, pieces, result.Items);
+            var foods = InStock(state, siteId).Where(p => tables.EquipmentForGameItem(p.Key) == null)
+                .ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+            var plan = Storage.Restock(tables, kind, CargoLimit.Lines(vehicle), foods);
+            if (plan.Load.Count > 0) result.Back += Load(state, vehicle, siteId, plan.Load, result.Items);
+            result.NotHeld = plan.NotHeld;
+            FoodTrucksSession.MarkChanged();
+            try { GameEvent.Invoke("ba:gameevent_itemcargochanged"); }
+            catch (Exception ex) { Log.Error("Commissary restock, cargo event: " + ex); }
+            result.Left = state.Commissary.Stock.TryGetValue(siteId, out var rest) ? rest.Sum(x => (long)x.Units) : 0;
+            return result;
+        }
+
         private static void Restock(string vehicleId, string kind, string siteId)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -1120,25 +1221,13 @@ namespace FoodTrucks
             var vehicle = SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v != null && v.id == vehicleId);
             if (vehicle == null || !state.Commissary.Stock.TryGetValue(siteId, out var stock) || stock.Count == 0) return;
 
-            var loaded = new Dictionary<string, int>(StringComparer.Ordinal);
-            var back = 0L;
-            // Only spare pieces that fit (Core's Storage.FitPieces): never a second Extra Storage, never past the slots,
-            // so a Restock shows no refusal for a piece it chose to leave here.
-            var pieces = Storage.FitPieces(tables, kind, CargoLimit.Lines(vehicle), InStock(state, siteId));
-            if (pieces.Count > 0) back += Load(state, vehicle, siteId, pieces, loaded);
-
-            var foods = InStock(state, siteId).Where(p => tables.EquipmentForGameItem(p.Key) == null)
-                .ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
-            var plan = Storage.Restock(tables, kind, CargoLimit.Lines(vehicle), foods);
-            if (plan.Load.Count > 0) back += Load(state, vehicle, siteId, plan.Load, loaded);
-            FoodTrucksSession.MarkChanged();
-
-            try { GameEvent.Invoke("ba:gameevent_itemcargochanged"); }
-            catch (Exception ex) { Log.Error("Commissary restock, cargo event: " + ex); }
-            var left = state.Commissary.Stock.TryGetValue(siteId, out var rest) ? rest.Sum(x => (long)x.Units) : 0;
+            var result = LoadFromStock(state, tables, vehicle, kind, siteId);
+            var loaded = result.Items;
+            var left = result.Left;
+            state.Commissary.Stock.TryGetValue(siteId, out var rest);
             var view = Storage.Of(tables, kind, CargoLimit.Lines(vehicle));
             Log.Info($"Commissary restock: {kind} {World.Short(vehicleId)} at {siteId} loaded {(loaded.Count == 0 ? "nothing" : string.Join(", ", loaded.Select(p => $"{p.Value} {p.Key}")))}; " +
-                     (plan.NotHeld.Count == 0 ? "" : $"no piece for {string.Join(", ", plan.NotHeld)}; ") + $"{back} units refused by the cargo and kept; " +
+                     (result.NotHeld.Count == 0 ? "" : $"no piece for {string.Join(", ", result.NotHeld)}; ") + $"{result.Back} units refused by the cargo and kept; " +
                      $"{left} units left in stock; storage {(view == null ? "?" : StoragePanel.Summary(vehicle, view))}.");
             // Fitted pieces are named first ("fitted Griddle"), then the foods with their counts.
             var fitted = loaded.Where(p => tables.EquipmentForGameItem(p.Key) != null)
@@ -1147,7 +1236,7 @@ namespace FoodTrucks
             var text = fitted.Count == 0 ? foodText
                 : LocalizorManager.GetLocalization("foodtrucks:commissary_restock_fitted", null).Replace("{pieces}", string.Join(", ", fitted))
                   + (foodText.Length > 0 ? "; " + foodText : "");
-            var notHeld = string.Join(", ", plan.NotHeld.Select(i => LocalizorManager.GetLocalization(i, null)));
+            var notHeld = string.Join(", ", result.NotHeld.Select(i => LocalizorManager.GetLocalization(i, null)));
             // Foods that stayed here because their piece is full, "Tacos: the Griddle is full (160/160)": each full piece
             // none of whose foods went in this time (a piece that took some says so in the loaded list). 0.9.8 named only
             // the foods nothing held and left a full Griddle unexplained (agent run, 11 October 2026).
@@ -1155,16 +1244,63 @@ namespace FoodTrucks
                 : view.Pools.Where(p => Capped(tables, p, rest) && !p.Piece.Products.Any(loaded.ContainsKey)).Select(p => PieceFull(vehicle, p, rest)).ToList();
             var full = fullParts.Count == 0 ? "" : " " + string.Join("; ", fullParts) + ".";
             if (fullParts.Count > 0) Log.Info($"Commissary restock: full pieces:{full}");
-            if (loaded.Count == 0 && plan.NotHeld.Count == 0 && fullParts.Count > 0)
+            if (loaded.Count == 0 && result.NotHeld.Count == 0 && fullParts.Count > 0)
                 CartSelling.Say("foodtrucks:notification_commissary_restock_full_why", kind, ("full", full), ("left", left.ToString()));
-            else if (loaded.Count == 0 && plan.NotHeld.Count == 0)
+            else if (loaded.Count == 0 && result.NotHeld.Count == 0)
                 CartSelling.Say("foodtrucks:notification_commissary_restock_full", kind, ("left", left.ToString()));
             else if (loaded.Count == 0)
                 CartSelling.Say("foodtrucks:notification_commissary_restock_notheld", kind, ("notheld", notHeld), ("full", full), ("left", left.ToString()));
-            else if (plan.NotHeld.Count == 0)
+            else if (result.NotHeld.Count == 0)
                 CartSelling.Say("foodtrucks:notification_commissary_restocked", kind, ("loaded", text), ("full", full), ("left", left.ToString()));
             else
                 CartSelling.Say("foodtrucks:notification_commissary_restocked_notheld", kind, ("loaded", text), ("notheld", notHeld), ("full", full), ("left", left.ToString()));
+        }
+
+        // ---- Crew restock (plan, "Commissary supply and crew restock") ----
+
+        // The commissary a crewed vehicle can restock at where it stands: the one where it rents its space, when it is in
+        // that bay (the Restock button's test) and the commissary holds a spare piece that fits or food it would load.
+        // Null otherwise.
+        internal static string? CrewRestockSite(SaveState state, VehicleInstance vehicle, string kind)
+        {
+            var tables = DemandData.Tables;
+            var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.id);
+            var site = space == null ? null : Sites?.Site(space.CommissaryId);
+            if (!attached || uninstalled || tables == null || site == null || !state.Commissary.Stock.TryGetValue(site.Id, out var stock) || stock.Count == 0) return null;
+            if (!InBay(vehicle, site, out _)) return null;
+            var lines = CargoLimit.Lines(vehicle);
+            var inStock = InStock(state, site.Id);
+            if (Storage.FitPieces(tables, kind, lines, inStock).Count > 0) return site.Id;
+            var foods = inStock.Where(p => tables.EquipmentForGameItem(p.Key) == null).ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+            return Storage.Restock(tables, kind, lines, foods).Load.Count > 0 ? site.Id : null;
+        }
+
+        // The crew loads with the Restock button's code before it sets off (HireRoutes, on Core's Restock step). The log
+        // says what went in; when a fitted piece still has room and the commissary had none of its foods, the commissary
+        // texts what was missing, once per vehicle and game day (Core CrewRestock).
+        internal static void CrewRestock(SaveState state, VehicleState saved, VehicleInstance vehicle, string kind, string siteId, long now)
+        {
+            var tables = DemandData.Tables;
+            if (tables == null) return;
+            var result = LoadFromStock(state, tables, vehicle, kind, siteId);
+            var shortOf = FoodTrucks.Core.Fleet.CrewRestock.Short(tables, kind, CargoLimit.Lines(vehicle), InStock(state, siteId));
+            var view = Storage.Of(tables, kind, CargoLimit.Lines(vehicle));
+            Log.Info($"Crew restock: {kind} {World.Short(vehicle.id)} at {siteId} loaded " +
+                     $"{(result.Items.Count == 0 ? "nothing" : string.Join(", ", result.Items.Select(p => $"{p.Value} {p.Key}")))}; " +
+                     (result.NotHeld.Count == 0 ? "" : $"no piece for {string.Join(", ", result.NotHeld)}; ") +
+                     (shortOf.Count == 0 ? "" : $"short of {string.Join(", ", shortOf)}; ") +
+                     $"{result.Back} units refused by the cargo and kept; {result.Left} units left in stock; storage {(view == null ? "?" : StoragePanel.Summary(vehicle, view))}.");
+            if (shortOf.Count == 0 || !FoodTrucks.Core.Fleet.CrewRestock.TellShort(saved, (int)(now / 1440) + 1)) return;
+            FoodTrucksSession.MarkChanged();
+            Log.Info($"Crew restock: {World.Short(vehicle.id)} short at {siteId}; the commissary texts it (once today).");
+            if (state.Commissary.Unlocked.Contains(siteId))
+                Notices.SendText(ContactFor(siteId), "foodtrucks:message_commissary_crew_short", new Dictionary<string, string>
+                {
+                    { "vehicle", VehicleName(state, vehicle.id) },
+                    { "items", string.Join(", ", shortOf.Select(i => LocalizorManager.GetLocalization(i, null))) },
+                    { "loaded", result.Items.Count == 0 ? LocalizorManager.GetLocalization("foodtrucks:commissary_crew_loaded_nothing", null)
+                        : string.Join(", ", result.Items.Select(p => $"{p.Value} {LocalizorManager.GetLocalization(p.Key, null)}")) }
+                });
         }
 
         // "Tacos, Chopped Cheese: the Griddle is full (160/160)": the piece's foods still in stock here.
@@ -1385,7 +1521,7 @@ namespace FoodTrucks
             var now = HireCrew.Now();
             var day = (int)(now / 1440) + 1;
             var minute = (int)(now % 1440);
-            var orders = CommissaryOrdering.Place(state.Commissary, rules, siteId, quote, (day, minute));
+            var orders = CommissaryOrdering.Place(state.Commissary, rules, siteId, quote, (day, minute), LimitsLifted);
             FoodTrucksSession.MarkChanged();
             foreach (var order in orders)
             {
@@ -1394,6 +1530,42 @@ namespace FoodTrucks
                          $"plus {CartSelling.Money(order.FeeCents)} delivery, paid on delivery; due day {order.DeliverDay} at {CityPitches.Clock(rules.DeliveryMinute)}.");
             }
             return orders;
+        }
+
+        // A confirmed order that repeats: Core keeps it as a standing order, its first delivery tomorrow.
+        internal static CommissaryStandingOrder? PlaceStanding(string siteId, CommissaryQuote quote, CommissaryRepeat repeat)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            var rules = Rules;
+            if (state == null || rules == null || uninstalled || !FoodTrucksSession.CanWrite) return null;
+            var now = HireCrew.Now();
+            var standing = CommissaryStandingOrders.Create(state.Commissary, rules, siteId, quote, repeat, ((int)(now / 1440) + 1, (int)(now % 1440)), LimitsLifted);
+            FoodTrucksSession.MarkChanged();
+            Log.Info($"Commissary standing order {standing.Id} at {siteId}: {repeat}, {string.Join(", ", standing.Lines.Select(l => $"{l.Boxes} {l.ItemName}"))}, " +
+                     $"first delivery day {standing.NextDay} at {CityPitches.Clock(rules.DeliveryMinute)}, paid on each delivery at that day's prices.");
+            return standing;
+        }
+
+        internal static bool CancelStanding(string siteId, long id)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || !FoodTrucksSession.CanWrite || !CommissaryStandingOrders.Cancel(state.Commissary, id)) return false;
+            FoodTrucksSession.MarkChanged();
+            Log.Info($"Commissary standing order {id} at {siteId}: cancelled by phone.");
+            return true;
+        }
+
+        // Why a quote doesn't fit a food's weekly limit, for the phone: "Hot dog: 2 boxes left in the week from Monday
+        // (day 8), the order needs 3". Null when it fits.
+        internal static string? OverLimit(SaveState state, CommissaryRules rules, string siteId, CommissaryQuote quote, CommissaryRepeat repeat)
+        {
+            var now = HireCrew.Now();
+            var check = CommissarySupply.Check(state.Commissary, rules, siteId, quote, repeat, (int)(now / 1440) + 1, LimitsLifted);
+            if (check.Fits) return null;
+            Log.Info($"Commissary order at {siteId}: {check.ItemName} over its weekly limit ({repeat}): {check.Left} boxes left in the week of day {check.WeekStart}, {check.Needed} needed.");
+            return LocalizorManager.GetLocalization("foodtrucks:commissary_over_limit", null)
+                .Replace("{item}", LocalizorManager.GetLocalization(check.ItemName, null)).Replace("{left}", check.Left.ToString())
+                .Replace("{needed}", check.Needed.ToString()).Replace("{day}", check.WeekStart.ToString());
         }
 
         // The test bridge's order: the phone form's confirm without the call. The same Core quote and order code and log
@@ -1416,12 +1588,14 @@ namespace FoodTrucks
                 if (line.Item1 == null)
                     line = catalogue.FirstOrDefault(c => string.Equals(LocalizorManager.GetLocalization(c.Item1, null), item, StringComparison.OrdinalIgnoreCase));
                 if (line.Item1 == null) return (Array.Empty<CommissaryOrder>(), $"{item} isn't on the commissary's list");
-                requests.Add(new CommissaryOrderRequest(line.Item1, line.Item2, line.Item3, Math.Max(0, boxes)));
+                requests.Add(new CommissaryOrderRequest(line.Item1, line.Item2, line.Item3, Math.Max(0, boxes), DemandData.Tables?.EquipmentForGameItem(line.Item1) == null));
             }
             var quote = CommissaryOrdering.Quote(rules, requests);
             if (quote.Problem == CommissaryQuoteProblem.Empty) return (Array.Empty<CommissaryOrder>(), "the order has no boxes");
             if (quote.Problem == CommissaryQuoteProblem.TooManyBoxes)
                 return (Array.Empty<CommissaryOrder>(), $"more than {CommissaryOrdering.MaxBoxesPerOrder} boxes in one order");
+            var over = OverLimit(state, rules, siteId, quote, CommissaryRepeat.Once);
+            if (over != null) return (Array.Empty<CommissaryOrder>(), over);
             Log.Info($"Commissary order at {siteId}: read back {quote.Boxes} boxes ({string.Join(", ", quote.Lines.Select(l => $"{l.Boxes} {l.ItemName}"))}), " +
                      $"{CartSelling.Money(quote.GoodsCents)} plus {CartSelling.Money(quote.FeeCents)} delivery (test bridge).");
             var placed = PlaceQuote(siteId, quote);
@@ -1468,8 +1642,10 @@ namespace FoodTrucks
                 commissary.Fines.Clear();
                 commissary.Unlocked.Clear();
                 FoodTrucksSession.MarkChanged();
-                Log.Info($"Uninstall: commissary refund {CartSelling.Money(paidBack ? refund.Total : 0)} for the stock delivered; {refund.CancelledOrders} open orders cancelled, unpaid; {spaces} spaces given up.");
-                if (paidBack) CartSelling.Notify("foodtrucks:notification_uninstall_commissary", ("refund", CartSelling.Money(refund.Total)));
+                Log.Info($"Uninstall: commissary refund {CartSelling.Money(paidBack ? refund.Total : 0)} for the stock delivered; {refund.CancelledOrders} open orders cancelled, unpaid; " +
+                         $"{refund.CancelledStandingOrders} standing orders ended; {spaces} spaces given up.");
+                if (paidBack) CartSelling.Notify(refund.CancelledStandingOrders > 0 ? "foodtrucks:notification_uninstall_commissary_standing" : "foodtrucks:notification_uninstall_commissary",
+                    ("refund", CartSelling.Money(refund.Total)));
             }
             CartButton.ShowCommissary(false);
             BayMarkers.RemoveAll();
@@ -1702,7 +1878,8 @@ namespace FoodTrucks
             CartSelling.Notify("foodtrucks:notification", ("message", $"Nearest commissary: {Name(nearest)}, {distance:F0} m ({standing})."));
         }
 
-        // Orders on the way arrive now and are paid, as if it were their 08:00 (throwaway saves).
+        // Orders on the way arrive now and are paid, as if it were their 08:00, and standing orders due by tomorrow
+        // deliver too (throwaway saves).
         public static void DeliverForTesting()
         {
             var state = FoodTrucksSession.CurrentState;
@@ -1718,9 +1895,17 @@ namespace FoodTrucks
                 order.DeliverDay = due;
                 count++;
             }
+            // Standing orders due by tomorrow book now, as on their day (their next day moves on from there).
+            var standing = 0;
+            foreach (var order in state.Commissary.StandingOrders.Where(o => due >= 1 && o.NextDay > due && o.NextDay <= day + 1))
+            {
+                order.NextDay = due;
+                standing++;
+            }
+            if (standing > 0) BookStanding(state, rules, due, rules.DeliveryMinute);
             // Delivered (and so removed) in the same step, before any save could see the moved days.
             Deliver(state, rules, day, minute);
-            Log.Info($"Debug: {count} commissary orders brought forward and delivered (paid on delivery).");
+            Log.Info($"Debug: {count} commissary orders and {standing} standing orders brought forward and delivered (paid on delivery).");
             CartSelling.Notify("foodtrucks:notification", ("message", $"Debug: {count} commissary orders brought forward; see the commissary's texts."));
         }
 
@@ -1829,18 +2014,79 @@ namespace FoodTrucks
                 commissary = Commissary.Name(site!),
                 spaces = commissary.Spaces.Count(s => s.CommissaryId == site!.Id).ToString(),
                 stock = (commissary.Stock.TryGetValue(site!.Id, out var lines) ? lines.Sum(l => (long)l.Units) : 0).ToString(),
-                orders = commissary.Orders.Count(o => o.CommissaryId == site.Id).ToString()
+                orders = commissary.Orders.Count(o => o.CommissaryId == site.Id).ToString(),
+                standing = CommissaryStandingOrders.At(commissary, site.Id).Count.ToString()
             };
-            Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_start", ToDictionary(data), read: true, isNewInteraction: true));
+            // A new key for the text with standing orders: the phone words old messages again from their key and data.
+            Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_start_standing", ToDictionary(data), read: true, isNewInteraction: true));
+            return Menu(site.Id, LocalizorManager.Localize("foodtrucks:dialog_commissary_start_standing", data));
+        }
+
+        // The call's menu: Order stock, and the standing orders when there are any.
+        private static DialogEntry Menu(string siteId, Localizor.LanguageChangeEvent.LanguageChangeEventDataHolder message)
+        {
+            var standing = CommissaryStandingOrders.At(FoodTrucksSession.CurrentState!.Commissary, siteId).Count;
             return new DialogEntry
             {
-                messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_start", data),
+                messageData = message,
                 Template = DialogEntry.TemplateType.Text,
-                OnConfirm = Guard(() => Form(site.Id)),
+                OnConfirm = Guard(() => Form(siteId)),
                 ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_order_stock", (object?)null),
+                OnSecondOption = standing > 0 ? Guard(() => Standing(siteId, 0)) : null!,
+                SecondOptionTextOverride = standing > 0 ? "foodtrucks:dialog_commissary_standing_list" : null!,
                 OnCancel = HangUp,
                 onCancelMessage = HangUpMessage()
             };
+        }
+
+        // The standing orders, one at a time: what it delivers, how often and when next. Next (or Done on the last, back to
+        // the menu), or cancel it.
+        private static DialogEntry? Standing(string siteId, int index)
+        {
+            var site = DemandData.Commissaries?.Site(siteId);
+            var refusal = Refusal(site);
+            if (refusal != null) return refusal;
+            var list = CommissaryStandingOrders.At(FoodTrucksSession.CurrentState!.Commissary, siteId);
+            if (list.Count == 0 || index >= list.Count)
+                return Menu(siteId, LocalizorManager.Localize("foodtrucks:dialog_commissary_standing_done", new { count = list.Count.ToString() }));
+            var standing = list[index];
+            var rules = DemandData.Rules!.Commissary!;
+            var data = new
+            {
+                index = (index + 1).ToString(),
+                count = list.Count.ToString(),
+                repeat = Commissary.StandingRepeat(standing),
+                items = Commissary.StandingItems(standing),
+                day = standing.NextDay.ToString(),
+                weekday = CityPitches.Weekday(standing.NextDay),
+                time = CityPitches.Clock(rules.DeliveryMinute)
+            };
+            Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_standing_one", ToDictionary(data), read: true));
+            var id = standing.Id;
+            return new DialogEntry
+            {
+                messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_standing_one", data),
+                Template = DialogEntry.TemplateType.Text,
+                OnConfirm = Guard(() => Standing(siteId, index + 1)),
+                ConfirmTextOverride = LocalizorManager.Localize(index + 1 < list.Count ? "foodtrucks:dialog_commissary_standing_next" : "foodtrucks:dialog_commissary_standing_back", (object?)null),
+                OnSecondOption = Guard(() => CancelStanding(siteId, id, index)),
+                SecondOptionTextOverride = "foodtrucks:dialog_commissary_standing_cancel",
+                OnCancel = HangUp,
+                onCancelMessage = HangUpMessage()
+            };
+        }
+
+        private static DialogEntry? CancelStanding(string siteId, long id, int index)
+        {
+            var standing = CommissaryStandingOrders.At(FoodTrucksSession.CurrentState!.Commissary, siteId).FirstOrDefault(s => s.Id == id);
+            if (standing != null && Commissary.CancelStanding(siteId, id))
+                Notices.Send(Current.contact, new TextMessage("foodtrucks:message_commissary_standing_cancelled", new Dictionary<string, string>
+                {
+                    { "repeat", Commissary.StandingRepeat(standing) },
+                    { "items", Commissary.StandingItems(standing) }
+                }, read: true));
+            // The next one moves up into this place.
+            return Standing(siteId, index);
         }
 
         // The game's phone order form, filled with what the commissary sells (CommissaryOrderForm).
@@ -1856,7 +2102,10 @@ namespace FoodTrucks
                 return Closing("foodtrucks:dialog_commissary_nothing", null);
             }
             CommissaryOrderForm.Begin(Current.contact.id, siteId, lines);
-            Log.Info($"Commissary order at {siteId}: the order form lists {lines.Count} items.");
+            var weekly = Commissary.LimitsLifted ? "off (the game's wholesale limits are switched off)"
+                : string.Join(", ", lines.Where(l => DemandData.Tables?.EquipmentForGameItem(l.Item) == null)
+                    .Select(l => $"{l.Item} {CommissarySupply.Left(FoodTrucksSession.CurrentState!.Commissary, DemandData.Rules!.Commissary!, siteId, l.Item, TimeHelper.CurrentDay + 1)}"));
+            Log.Info($"Commissary order at {siteId}: the order form lists {lines.Count} items; boxes left this week by food: {weekly}.");
             return new DialogEntry
             {
                 headerKey = "foodtrucks:dialog_commissary_order_header",
@@ -1887,6 +2136,13 @@ namespace FoodTrucks
                     CartSelling.Notify("foodtrucks:notification_commissary_order_too_many", ("max", CommissaryOrdering.MaxBoxesPerOrder.ToString()));
                     return null;
             }
+            // A food over its weekly limit for tomorrow's week: refused, the form stays to change it.
+            var over = Commissary.OverLimit(FoodTrucksSession.CurrentState!, rules, siteId, quote, CommissaryRepeat.Once);
+            if (over != null)
+            {
+                CartSelling.Notify("foodtrucks:notification", ("message", over));
+                return null;
+            }
             // The order is read back as it stands now: the form and its item list are done with ("Change" opens a fresh one).
             CommissaryOrderForm.End("read back");
             var items = string.Join("<br>", quote.Lines.Select(LineText));
@@ -1906,10 +2162,86 @@ namespace FoodTrucks
             {
                 messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_quote", data),
                 Template = DialogEntry.TemplateType.Text,
-                OnConfirm = Guard(() => Placed(siteId, quote)),
+                OnConfirm = Guard(() => HowOften(siteId, quote)),
                 ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_order_confirm", (object?)null),
                 OnSecondOption = Guard(() => Form(siteId)),
                 SecondOptionTextOverride = "foodtrucks:dialog_commissary_order_change",
+                OnCancel = HangUp,
+                onCancelMessage = HangUpMessage()
+            };
+        }
+
+        // Confirmed: once, or repeating (a standing order, Core CommissaryStandingOrders). Just once places it as before;
+        // Repeat asks every day or every week on tomorrow's weekday.
+        private static DialogEntry? HowOften(string siteId, CommissaryQuote quote)
+        {
+            var site = DemandData.Commissaries?.Site(siteId);
+            var refusal = Refusal(site);
+            if (refusal != null) return refusal;
+            return new DialogEntry
+            {
+                messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_how_often", (object?)null),
+                Template = DialogEntry.TemplateType.Text,
+                OnConfirm = Guard(() => Placed(siteId, quote)),
+                ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_once", (object?)null),
+                OnSecondOption = Guard(() => Repeat(siteId, quote)),
+                SecondOptionTextOverride = "foodtrucks:dialog_commissary_repeat",
+                OnCancel = HangUp,
+                onCancelMessage = HangUpMessage()
+            };
+        }
+
+        private static DialogEntry? Repeat(string siteId, CommissaryQuote quote)
+        {
+            var site = DemandData.Commissaries?.Site(siteId);
+            var refusal = Refusal(site);
+            if (refusal != null) return refusal;
+            var tomorrow = (int)(HireCrew.Now() / 1440) + 2;
+            return new DialogEntry
+            {
+                messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_repeat_which", new { weekday = CityPitches.Weekday(tomorrow) }),
+                Template = DialogEntry.TemplateType.Text,
+                OnConfirm = Guard(() => PlacedStanding(siteId, quote, CommissaryRepeat.Daily)),
+                ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_every_day", (object?)null),
+                OnSecondOption = Guard(() => PlacedStanding(siteId, quote, CommissaryRepeat.Weekly)),
+                // The game localizes this key with no arguments, so the weekday is in the message above, not on the button.
+                SecondOptionTextOverride = "foodtrucks:dialog_commissary_every_week",
+                OnCancel = HangUp,
+                onCancelMessage = HangUpMessage()
+            };
+        }
+
+        // A standing order booked: its food has to fit each food's weekly limit in its first two weeks, else the
+        // commissary says why and the choice stays (Just once may still fit).
+        private static DialogEntry? PlacedStanding(string siteId, CommissaryQuote quote, CommissaryRepeat repeat)
+        {
+            var site = DemandData.Commissaries?.Site(siteId);
+            var refusal = Refusal(site);
+            if (refusal != null) return refusal;
+            var rules = DemandData.Rules!.Commissary!;
+            var over = Commissary.OverLimit(FoodTrucksSession.CurrentState!, rules, siteId, quote, repeat);
+            if (over != null)
+            {
+                CartSelling.Notify("foodtrucks:notification", ("message", over));
+                return null;
+            }
+            var standing = Commissary.PlaceStanding(siteId, quote, repeat);
+            if (standing == null) return Closing("foodtrucks:dialog_commissary_unavailable", null);
+            const string key = "foodtrucks:message_commissary_standing_placed";
+            var data = new Dictionary<string, string>
+            {
+                { "repeat", Commissary.StandingRepeat(standing) },
+                { "items", Commissary.StandingItems(standing) },
+                { "time", CityPitches.Clock(rules.DeliveryMinute) }
+            };
+            Notices.Send(Current.contact, new TextMessage(key, data, read: true));
+            CommissaryOrderForm.End("standing order placed");
+            return new DialogEntry
+            {
+                messageData = LocalizorManager.Localize(key, data),
+                Template = DialogEntry.TemplateType.Text,
+                OnConfirm = Guard(() => Form(siteId)),
+                ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_order_more", (object?)null),
                 OnCancel = HangUp,
                 onCancelMessage = HangUpMessage()
             };
