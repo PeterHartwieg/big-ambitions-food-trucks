@@ -505,10 +505,6 @@ def face_pixels(ob,p,tag,size,pad=2):
  x,y,z=world[:,:,0],world[:,:,1],world[:,:,2]
  diffuse=np.zeros((size,size,4),np.float32);diffuse[:]=[*rgb,alpha]
  if tag=='paint' and ob.name=='Truck_Body' and faces_compartment(ob,p):diffuse[:,:,3]=0
- # The island's padding stays out of the mask: the UVs stop at the padding, so the paint is still fully tinted up to
- # its edge (smoothstep(0, 0.5) of a half-sampled border is 1), and at far mips a neighbouring trim or livery island
- # blends with alpha 0, not 1, and takes no tint.
- diffuse[:pad,:,3]=0;diffuse[-pad:,:,3]=0;diffuse[:,:pad,3]=0;diffuse[:,-pad:,3]=0
  ao=np.ones((size,size),np.float32)
  if tag in ('paint','stripe'):
   # Soft road-side darkening is encoded into both colour and mask G, with no noise.
