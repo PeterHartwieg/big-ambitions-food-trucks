@@ -267,6 +267,8 @@
     "foodtrucks:bizman_type": "Food carts and trucks",
     "foodtrucks:bizman_open_count": "{open} of {total} open",
     "foodtrucks:bizman_fleet_header": "Street food",
+    "foodtrucks:bizman_fleet_back": "Back to BizMan",
+    "foodtrucks:bizman_fleet_destination": "Set destination",
     "foodtrucks:bizman_fleet_where_open": "Open at {place}",
     "foodtrucks:bizman_fleet_where_closed": "Closed, at {place}",
     "foodtrucks:bizman_fleet_where_transit": "On the way to stop {stop}",
