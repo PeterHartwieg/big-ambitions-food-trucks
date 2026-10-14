@@ -1,6 +1,6 @@
 # Balance pass, 14 October 2026
 
-Every number here comes from the balance calculator [calc] and none was checked in game. Since the last run (storage per piece, 10 October) these changed: truck staff 2 (was 3), storage per piece (40 a cart piece, 80 a truck piece), Extra Storage at $900, truck mass 1,600 kg (driving feel only, nothing here), commissary phone orders with a weekly limit of 10 boxes of each food per commissary plus the 10% fee, standing orders, crews restocking at their commissary, logistics plans (no fee, no limit) and the new `park` area. No tuning value in `data/` changed in this pass. The proposals at the end are for Peter to decide.
+Every number here comes from the balance calculator [calc] and none was checked in game. Since the last run (storage per piece, 10 October) these changed: truck staff 2 (was 3), storage per piece (40 a cart piece, 80 a truck piece), Extra Storage at $900, truck mass 1,600 kg (driving feel only, nothing here), commissary phone orders with a weekly limit of 10 boxes of each food per commissary plus the 10% fee, standing orders, crews restocking at their commissary, logistics plans (no fee, no limit) and the new `park` area. No tuning value in `data/` changed in this pass. Peter decided the proposals the same day (tuning round 1, at the end): the weekly phone limit now counts the whole fleet, the fee is a flat $250 per delivery, and markets bring a park crowd. The crewed table, the fee section and the events table below are rerun with those; the other tables are from the first run, and the new fee moves a crewed week by less than $600 against them.
 
 Run it with `dotnet bin/Debug/net10.0/balance.dll --reports pass,premium,pitches,storage,compare` in `tools/balance` (about 16 minutes; `pass` alone takes about 3). Method as before: additive crowds, the game's queue, the ceiling price, May, dry, market demand 100, a 16-hour day (carts 09:00 to 01:00, coffee carts 06:00 to 22:00, trucks 07:00 to 23:00), seven open days a week. The truck is the stand-in with four pieces: hot dog grill, coffee machine, display case (croissants) and cooler.
 
@@ -28,17 +28,17 @@ Pitches are every real pitch ranked by its weekday net (gross less wages, fee an
 | Truck, player alone | $1,529 / $11,476 | $2,689 / $16,079 | $3,554 / $22,797 | $2,188 / $11,956 | $3,916 / $25,862 |
 | Truck, player + 1 hire (paid 107 to 112 hours a week) | $1,563 / $8,464 | $2,743 / $13,410 | $4,196 / $22,756 | $2,503 / $10,724 | $5,858 / $31,630 |
 
-**Crewed** (Core-checked route: pitch 07:00 to 23:00, then a bay stop; loads in the bay in the morning; all stock by phone, so the fee applies; a full truck day pays 17 hours a hire, 119 a week):
+**Crewed** (Core-checked route: pitch 07:00 to 23:00, then a bay stop; loads in the bay in the morning; all stock by phone, one delivery a week at $250 for the vehicle alone, $35.71 a day; a full truck day pays 17 hours a hire, 119 a week). Rerun after tuning round 1; the tiers are picked again per setup, so a typical pitch can differ from the first run's:
 
 | Vehicle | Poor: week net | Typical: day / week net | Good | Best | Premium, best |
 |---|---|---|---|---|---|
-| Truck, crew of 1 | $3,090 | $1,550 / $6,469 | $2,844 / $13,951 | $3,213 / $16,715 | $3,429 / $18,692 |
-| Truck, crew of 2 | -$210 | $1,560 / $3,302 | $2,920 / $10,554 | $3,567 / $14,417 | $4,507 / $20,622 |
-| Truck, crew of 2, pitch 07:00 to 15:00 only (9 hours a hire a day) | $1,081 | $1,155 / $4,398 | $2,538 / $10,644 | $3,173 / $14,473 | $4,133 / $20,508 |
-| Truck, crew of 2, with a scheduled midday bay stop | -$210 | $1,569 / $4,509 | $3,025 / $11,232 | $3,930 / $17,446 | $5,119 / $23,692 |
-| Truck with Extra Storage (3 food pieces), crew of 1 | $2,527 | $1,441 / $5,795 | $2,708 / $12,713 | $3,423 / $18,219 | $3,775 / $21,021 |
-| Truck with Extra Storage (3 food pieces), crew of 2 | -$771 | $1,465 / $5,566 | $3,027 / $11,533 | $4,189 / $18,118 | $5,567 / $25,387 |
-| Cart: hot dog grill + Extra Storage, 1 hire | $949 | $785 / $1,986 | $1,212 / $2,791 | $1,212 / $4,637 | $1,212 / $4,415 |
+| Truck, crew of 1 | $3,082 | $1,547 / $7,002 | $2,844 / $14,126 | $3,213 / $16,947 | $3,429 / $18,964 |
+| Truck, crew of 2 | -$218 | $1,557 / $3,226 | $2,920 / $10,721 | $3,567 / $14,663 | $4,507 / $21,023 |
+| Truck, crew of 2, pitch 07:00 to 15:00 only (9 hours a hire a day) | $985 | $1,158 / $3,697 | $2,538 / $10,747 | $3,173 / $14,652 | $4,133 / $20,820 |
+| Truck, crew of 2, with a scheduled midday bay stop | -$218 | $1,570 / $1,673 | $3,025 / $11,423 | $3,930 / $17,796 | $5,119 / $24,158 |
+| Truck with Extra Storage (3 food pieces), crew of 1 | $2,510 | $1,441 / $5,022 | $2,708 / $12,875 | $3,423 / $18,533 | $3,775 / $21,408 |
+| Truck with Extra Storage (3 food pieces), crew of 2 | -$788 | $1,468 / $3,102 | $3,027 / $11,773 | $4,189 / $18,520 | $5,567 / $25,940 |
+| Cart: hot dog grill + Extra Storage, 1 hire | -$554 | $841 / $1,770 | $1,212 / $2,781 | $1,212 / $4,633 | $1,212 / $4,406 |
 
 The midday bay stop row is a route Peter's crews can run today: the pitch closes at 11:00, 13:30 or 16:00 (whichever nets most there), the truck drives to its bay for a 30-minute stop, restocks before it leaves, and opens again on the next half hour. Sales at the bay stops are left out. At the same pitch it adds little ($20 to $560 a week) except at premium spots ($1,160 and $3,070). The truck routes all came out as "pitch, bay" with the bay 3 to 14 minutes away. The hired cart is pushed to and from its bay at walking pace, 70 to 418 minutes each way, all paid, and its pitch closes between 16:30 and 22:00 so the bay stop can open before midnight; the morning-bay form (a night at the pitch) never wins: its long shift is paid from the early-morning push, and where the trip is longest Core skips its stops. Its 04:00 fine is charged only when the plan has the vehicle standing at the pitch at 04:00, not on its way or open (round 3; the first version fined it every day).
 
@@ -76,30 +76,30 @@ So the cabinet is a real choice. On a played cart it beats the cooler almost eve
 
 ## The weekly phone limit: when does a player need a warehouse?
 
-10 boxes of a food are 5,000 units, per commissary and game week. One vehicle's week of each food:
+10 boxes of a food are 5,000 units a game week. The first run counted them per commissary; since tuning round 1 the limit is one for the whole fleet. One vehicle's week of each food:
 
-| Vehicle and pitch | Hot dogs a week | Coffee a week | Vehicles one commissary's limit supplies |
+| Vehicle and pitch | Hot dogs a week | Coffee a week | Vehicles the limit supplies |
 |---|---|---|---|
 | Hot dog cart (+ cooler or Extra Storage), typical to best | 435 to 883 | | 5.7 to 11.5 |
 | Coffee cart, typical to best | | 752 to 1,584 | 3.2 to 6.6 (coffee) |
 | Truck, player or crew, typical to best | 462 to 932 | 530 to 1,519 | 5.4 to 10.8 on hot dogs, 3.3 to 9.4 on coffee |
 | Truck, premium best | 549 to 954 | 1,455 to 2,367 | 5.2 to 9.1 on hot dogs, 2.1 to 3.4 on coffee |
 
-Croissants and sodas never come close (8 to 64 vehicles). So one commissary's limit runs out at about 3 busy coffee trucks or 6 to 10 hot dog vehicles. With five commissaries and a separate limit at each, a fleet spread over them gets 50 boxes a week of every food. A fleet of the design's size (four trucks) hits the limit only with coffee at the best pitches, all on one commissary. In short: today the limit almost never forces a warehouse.
+Croissants and sodas never come close (8 to 64 vehicles). So the limit runs out at about 3 busy coffee trucks or 6 to 10 hot dog vehicles. With a separate limit at each of the five commissaries, as in the first run, a fleet spread over them got 50 boxes a week of every food and almost never needed a warehouse. With one limit for the fleet (tuning round 1) a player builds a supply chain around the fourth or fifth truck, sooner with coffee.
 
-## Does the 10% fee matter?
+## Does the delivery fee matter?
 
-Hardly. The player's weekday at the good pitch, all stock hauled from the wholesaler against all stock ordered by phone and restocked at the nearest commissary:
+The first run had 10% of the goods on every order. Since tuning round 1 it is a flat $250 per delivery: one fee for everything a commissary delivers on a morning, however many orders and vehicles. 10 boxes hold 5,000 units and a busy truck sells under 3,000 units a week of all its foods, so one delivery a week covers a vehicle; the tool charges a vehicle $250 a week, $35.71 a day (`--deliveries-per-week`, `--fee-sharing` change that). The player's weekday at the good pitch, all stock hauled from the wholesaler against all stock ordered by phone and restocked at the nearest commissary:
 
-| Vehicle | Wholesaler | Commissary, after the fee | Fee | No trips at all |
+| Vehicle | Wholesaler | Commissary, after the fee | Fee a day (10% before) | No trips at all |
 |---|---|---|---|---|
-| Hot dog cart + cooler | $1,055 | $1,019 | $37 | $1,449 |
-| Hot dog cart + Extra Storage | $1,320 | $1,283 | $49 | $1,549 |
-| Coffee cart | $1,308 | $1,214 | $25 | $1,530 |
-| Truck, player alone | $2,689 | $2,626 | $63 | $2,689 |
-| Truck, player + 1 hire | $2,743 | $2,645 | $65 | $2,993 |
+| Hot dog cart + cooler | $1,055 | $1,020 | $36 ($37) | $1,449 |
+| Hot dog cart + Extra Storage | $1,320 | $1,296 | $36 ($49) | $1,549 |
+| Coffee cart | $1,308 | $1,203 | $36 ($25) | $1,530 |
+| Truck, player alone | $2,689 | $2,654 | $36 ($63) | $2,689 |
+| Truck, player + 1 hire | $2,743 | $2,674 | $36 ($65) | $2,993 |
 
-The fee is 2 to 4% of a day. What decides a played day is the trip: the restock trips cost $220 to $390 of sales (the "no trips" column), ten times the fee. The coffee cart loses $94 at the commissary mostly because its nearest commissary is further than the nearest wholesaler. For crews the fee is $150 to $800 a week, 2 to 3% of gross, against $3,300 to $6,600 of wages for a truck. A logistics plan saves that fee, but it needs a warehouse, a vehicle, a driver and a logistics manager, so it pays only for a large fleet.
+Ordered weekly, the flat fee costs a played vehicle about what 10% did. What decides a played day is still the trip: the restock trips cost $220 to $390 of sales (the "no trips" column). The coffee cart loses $105 at the commissary mostly because its nearest commissary is further than the nearest wholesaler. The flat fee changes how to order: a daily standing order pays $1,750 a week at that commissary, a weekly one $250, and every vehicle using the same commissary shares it, so a fleet on one commissary pays $250 a week in all. A crewed truck pays $250 a week alone (it was $150 to $800), against $3,300 to $6,600 of wages. Small vehicles pay the same fee as big ones: a hired cart's poor week goes from $949 to -$554 (its typical pitch is also a different one now). A logistics plan saves the fee, but it needs a warehouse, a vehicle, a driver and a logistics manager.
 
 ## Crew wages against takings
 
@@ -129,18 +129,41 @@ Summer weekends make a park one of the better pitches, rain halves it, winter em
 
 ## Premium spots and events
 
-Held all day, a premium spot adds $6 to $394 to a hot dog cart's day and $144 to $1,931 to the truck's (`--reports pitches`). The three Midtown spots are the best pitches in the city; Lower Manhattan's are weekday spots (a cart's Saturday there is $250 to $320). Events: festivals pay everywhere for a truck ($148 to $1,650 over the fee) and mostly for a cart; a weekend market's $80 place loses a hot dog cart money at three of the seven places (-$23 to -$56) while the truck gains $256 to $1,040.
+Held all day, a premium spot adds $6 to $394 to a hot dog cart's day and $144 to $1,931 to the truck's (`--reports pitches`). The three Midtown spots are the best pitches in the city; Lower Manhattan's are weekday spots (a cart's Saturday there is $250 to $320). Events: festivals pay everywhere for a truck ($148 to $1,650 over the fee) and mostly for a cart; a weekend market's $80 place lost a hot dog cart money at three of the seven places (-$23 to -$56) while the truck gained $256 to $1,040.
+
+**Markets after tuning round 1** (`--reports pitches`; Saturday 10:00 to 16:00 in May, a hot dog cart with grill and cooler at the ceiling price, played, restocking at the nearest wholesaler; gain over the same hours without the event, less the $80 place). Peter asked for more customers rather than a lower fee. Footfall alone (from 2.0) needed 6.5 before every place paid, with the truck gaining $1,300 to $2,300. Adding the `park` area at 1.0 to the market's `retail` 1.0 at the same footfall 2.0 is enough: a market gets a park's weekend crowd and its appetite for drinks and snacks.
+
+| Place | Cart before | Cart after | Truck before | Truck after |
+|---|---|---|---|---|
+| Midtown, Fourth Avenue | -$47 | $31 | $1,040 | $1,459 |
+| Lower Manhattan, Sixth Avenue | $136 | $221 | $256 | $878 |
+| Murray Hill, Fifth Avenue | $9 | $185 | $834 | $1,459 |
+| Hell's Kitchen, Third Avenue | -$23 | $86 | $871 | $1,289 |
+| Garment District, First Street | $193 | $376 | $600 | $1,495 |
+| Industry City, Tenth Avenue | -$56 | $5 | $556 | $1,174 |
+| Hamptons, Harbor Street | $119 | $204 | $667 | $1,895 |
+
+The cart's ceiling at a market is its stock: 40 hot dogs a piece run out, and the walk to the wholesaler and back eats the event's hours. With restocking in place (no walk) it would gain $136 to $447 at the old footfall. So the margins at Industry City and Midtown stay thin whatever the crowd, while the truck, which holds 80 a piece and drives, gains most. Festivals are unchanged: a cart gains $81 to $580 at four places and loses $65 at the Hamptons for the same reason; the truck gains $148 to $1,650. A market now pays a truck about what a festival does.
 
 ## Proposals
 
+Each with Peter's decision of 14 October 2026 (tuning round 1, branch `tuning-1`; plan, "Tuning round 1").
+
 1. **Count the weekly phone limit across the fleet, not per commissary** (code: `CommissarySupply` sums the player's deliveries over all commissaries). Reason: with five separate limits a fleet gets 50 boxes of each food a week and never needs a warehouse. Effect: 10 boxes a week supply 5 to 10 hot dog vehicles and about 3 busy coffee trucks in all, so a player builds a supply chain around the fourth or fifth truck. Data-only alternative: `foodBoxesPerWeek.default` 4 per commissary (about 2 to 4 hot dog vehicles each), which still lets a player spread over commissaries.
+   **Decided: done as proposed.** One limit of 10 boxes of each food a week for the fleet, all commissaries together; standing orders over it are cut as before.
 2. **Make phone delivery cost more than 10%, if the fee should matter**: either 20% or a flat $50 a delivery on top. Reason: at 10% the fee is 2 to 4% of a day, so it never weighs against hauling or a logistics plan. Effect: at 20% a crewed truck pays $460 to $1,620 a week; a flat $50 a day adds $350 a week whatever it sells, which hurts small orders most. If the limit (proposal 1) is the lever, keep 10%.
+   **Decided: a flat $250 per delivery instead of 10%**, one fee per commissary and morning, shared by everything delivered there then; phone deliveries only (not hauling, not logistics plans). The game charges its wholesale contracts a flat fee per delivery too: `DeliveryContract.deliveryFee`, copied from the wholesaler's settings asset (a value the decompile doesn't show; an early-access save fix set $400), and furniture deliveries a flat $250. A refused order passes the fee to the next order of that delivery. See "Does the delivery fee matter?" above.
 3. **Price the truck at $25,000** (`unity/BuildEditor/TruckAssets.cs`, still the $15,000 placeholder). Reason: played alone at a good pitch the truck earns $1,400 to $1,600 a day more than the best cart there, so $15,000 plus $8,670 of equipment pays back in about 2.5 weeks. Effect: about 3 weeks, still quick, and the truck costs about 2.5 small-shop setups, which the design's "multiples of the cheapest small-shop setup" allows.
+   **Decided: stays $15,000** for now; to be revisited with the modpack's economy settings.
 4. **Leave truck staff at 2, but expect players to hire one.** A second hire pays only at premium spots, and a crew of two loses money at a poor pitch. No change proposed; if Peter wants the second slot to matter more, the queue limit for trucks (10) or a faster truck window would be the levers, not wages.
+   **Decided: stays 2.**
 5. **Lower the weekend market's place to $40** (`data/pitches.json`). Reason: at $80 a hot dog cart loses money at three of seven markets. Effect: the cart's losses shrink to under $20 at two places and it gains at the rest; the truck still gains $296 to $1,080.
+   **Decided: keep the $80 fee and give markets more customers.** Markets get the `park` area at 1.0 beside `retail`; every market place now pays a cart $5 to $376 over the fee (table under "Premium spots and events").
 6. **Give parks their pitches and gigs once the in-game check confirms the game's park areas**: add `park` to catering's event gig areas (`rules.json` `catering.kinds[event].areas`, now waterfront and retail) and one premium spot at a park gate in each district with a park (the design's "a park gate"). Reason: parks now have their own crowd but nothing curated uses it. Effect: weekend park gigs for trucks, and an ice cream or slushie cart has a premium spot that suits it.
+   **Decided: both.** `park` is in catering's event areas, with buildings at a park's edge as park gate places. The park premium spots wait for the parks' positions: the game's park areas exist only in the scene, so the test bridge's new `parks` command collects them in game first (CHECKS B1).
 7. **No change to storage (40 a cart piece, 80 a truck piece) or to Extra Storage's $900.** Reason: played carts restock as the design wants (one or two trips) and the player's truck isn't storage-bound. Compared at the same pitch, the cabinet pays back $900 in 3 to 23 days on a played cart, never on a truck the player works alone, and only at the best and premium pitches on a crewed truck (1.3 to 5 days there). At $1,500 a played cart at a good pitch would need 27 days, so the earlier proposal to raise it is dropped.
 8. **Crewed carts: no change, but say it.** A hired cart pays wages for its pushes to and from the bay (an hour to seven each way), has to close its pitch early to reach the bay before midnight, and sells at most 80 hot dogs a day: $949 to $4,637 a week. If crewed carts should be a real option, the levers are the push speed for crews (`fleet.travel.pushMetresPerSecond`, 1.2) or letting a crew restock at a wholesaler, not storage.
+   **Decided: no change.** The flat fee makes the crewed cart a little worse still (its poor week is now -$554), which fits the ladder.
 9. **A sold-out crew may drive to its bay stop, and a bay stop counts only in the bay (Core and game side, done in review rounds 2 and 3).** Without it, a crew that sold out stood at its pitch until the player came, and a truck parked 20 m off its bay took that for the bay and never restocked. Now a route with a bay stop restocks as the tables assume; a route without one still stays sold out, as before.
 
 ## Not modelled

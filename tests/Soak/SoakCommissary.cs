@@ -17,7 +17,9 @@ internal sealed partial class SoakWorld
     private sealed record Entry(long Cents, string Kind, int Day, string Key);
     private readonly List<Entry> book = new();
     private readonly HashSet<(string, string)> paid = new();
-    private readonly Dictionary<long, (string Site, string Item, int Units, long Price, long Total)> orders = new();
+    private readonly Dictionary<long, (string Site, string Item, int Units, long Price, long Goods)> orders = new();
+    // Deliveries (commissary, delivery day) whose flat fee was paid: exactly one fee each.
+    private readonly HashSet<(string, int)> feesPaid = new();
     private readonly HashSet<long> decided = new(), delivered = new(), refused = new();
     private readonly HashSet<(string, int)> nights = new(), rents = new();
     private readonly Dictionary<string, long> initial = new(), received = new(), sold = new(), refunded = new();
@@ -68,7 +70,7 @@ internal sealed partial class SoakWorld
         var price = machine ? random.Next(20000, 100000) : random.Next(80, 201);
         var quote = CommissaryOrdering.Quote(commissaryRules, new[] { new CommissaryOrderRequest(item, machine ? 1 : 40, price, random.Next(1, 4), !machine) });
         // The order form refuses a food over its weekly limit; Place must refuse it too.
-        if (!CommissarySupply.Check(state.Commissary, commissaryRules, site, quote, CommissaryRepeat.Once, Day).Fits)
+        if (!CommissarySupply.Check(state.Commissary, commissaryRules, quote, CommissaryRepeat.Once, Day).Fits)
         {
             Require(Throws(() => CommissaryOrdering.Place(state.Commissary, commissaryRules, site, quote, (Day, Minute))), "order over the weekly limit placed");
             Note($"order of {item} at {site} refused: weekly limit");
@@ -79,7 +81,7 @@ internal sealed partial class SoakWorld
         if (random.Next(6) == 0)
         {
             var repeat = random.Next(2) == 0 ? CommissaryRepeat.Daily : CommissaryRepeat.Weekly;
-            if (!CommissarySupply.Check(state.Commissary, commissaryRules, site, quote, repeat, Day).Fits) return;
+            if (!CommissarySupply.Check(state.Commissary, commissaryRules, quote, repeat, Day).Fits) return;
             var standing = CommissaryStandingOrders.Create(state.Commissary, commissaryRules, site, quote, repeat, (Day, Minute));
             Note($"standing order {standing.Id}: {repeat} {item} at {site} from day {standing.NextDay}");
             // Cancelled again after a while, so standing orders don't pile up.
@@ -89,7 +91,7 @@ internal sealed partial class SoakWorld
         }
         foreach (var o in CommissaryOrdering.Place(state.Commissary, commissaryRules, site, quote, (Day, Minute)))
         {
-            orders.Add(o.Id, (site, item, o.Units, price, o.TotalCents));
+            orders.Add(o.Id, (site, item, o.Units, price, o.GoodsCents));
             Note($"order {o.Id}: {o.Units} {item} at {site}, due day {o.DeliverDay}");
         }
         Require(money == before, "order paid before delivery");
@@ -116,7 +118,7 @@ internal sealed partial class SoakWorld
                      item => ShippedData.Tables.EquipmentForGameItem(item) != null ? new CommissaryPrice(1, 60_000) : new CommissaryPrice(40, 150)))
             foreach (var o in run.Orders)
             {
-                orders.Add(o.Id, (o.CommissaryId, o.ItemName, o.Units, o.UnitPriceCents, o.TotalCents));
+                orders.Add(o.Id, (o.CommissaryId, o.ItemName, o.Units, o.UnitPriceCents, o.GoodsCents));
                 Note($"standing order {run.Standing.Id} booked order {o.Id}: {o.Units} {o.ItemName}");
                 standingBooked++;
             }
@@ -130,9 +132,15 @@ internal sealed partial class SoakWorld
             Require(o.DeliverDay < Day || (o.DeliverDay == Day && Minute >= 480), "payment requested before 08:00 delivery");
             Require(!decided.Contains(o.Id), "cancelled/delivered order attempted again");
             attempted.Add(o.Id);
-            Require(orders[o.Id] == (o.CommissaryId, o.ItemName, o.Units, o.UnitPriceCents, o.TotalCents), "order changed before delivery");
+            Require(orders[o.Id] == (o.CommissaryId, o.ItemName, o.Units, o.UnitPriceCents, o.GoodsCents), "order changed before delivery");
+            // One flat fee per commissary and delivery day, carried by the first order paid there.
+            Require(o.FeeCents == (feesPaid.Contains((o.CommissaryId, o.DeliverDay)) ? 0 : commissaryRules.DeliveryFeeCents), "delivery fee wrong for this delivery");
             var accepted = Move(-o.TotalCents, "order payment", Day, o.Id.ToString(), tryOnly: true, refuse: random.Next(5) == 0);
-            if (accepted) SalesLedger.RecordDeliveryFees(state, Day, o.FeeCents);
+            if (accepted)
+            {
+                SalesLedger.RecordDeliveryFees(state, Day, o.FeeCents);
+                if (o.FeeCents > 0) feesPaid.Add((o.CommissaryId, o.DeliverDay));
+            }
             return accepted;
         });
         var delta = new Dictionary<string, long>();
@@ -149,6 +157,7 @@ internal sealed partial class SoakWorld
             Require(decided.Add(o.Id) && refused.Add(o.Id) && !paid.Contains(("order payment", o.Id.ToString())), "refused order paid");
             Note($"refused/cancelled order {o.Id}");
         }
+        Require(result.Delivered.All(o => feesPaid.Contains((o.CommissaryId, o.DeliverDay))), "a delivery arrived without its fee");
         Require(attempted.SequenceEqual(result.Delivered.Concat(result.Refused).OrderBy(o => o.DeliverDay).ThenBy(o => o.Id).Select(o => o.Id)), "delivery payment order differs");
         AddUnits(before, delta);
         EqualUnits(before, Inventory(), "delivered stock differs from ordered and paid units");
@@ -244,7 +253,7 @@ internal sealed partial class SoakWorld
         // as stock costs only on sale. Compare ledger expenses against accepted payments.
         var entries = book.Where(e => e.Cents < 0).ToList();
         Require(state.DailySales.Sum(d => d.DeliveryFeesCents) == entries.Where(e => e.Kind == "order payment")
-            .Sum(e => orders[long.Parse(e.Key)].Total - orders[long.Parse(e.Key)].Units * orders[long.Parse(e.Key)].Price), "delivery fee ledger differs from payments");
+            .Sum(e => -e.Cents - orders[long.Parse(e.Key)].Goods), "delivery fee ledger differs from payments");
         Require(state.DailySales.SelectMany(d => d.ByVehicle).Sum(v => v.CommissaryRentCents) == -entries.Where(e => e.Kind == "rent").Sum(e => e.Cents), "rent ledger differs from payments");
         Require(state.DailySales.SelectMany(d => d.ByVehicle).Sum(v => v.OvernightFineCents) == -entries.Where(e => e.Kind == "fine").Sum(e => e.Cents), "fine ledger differs from payments");
         Require(state.DailySales.SelectMany(d => d.ByVehicle).Sum(v => v.WagesCents) == -entries.Where(e => e.Kind == "wage").Sum(e => e.Cents), "wage ledger differs from payments");

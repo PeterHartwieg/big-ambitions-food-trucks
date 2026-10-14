@@ -113,10 +113,12 @@ public class CommissariesTests
     {
         var state = Rented(5);
         var order = Commissaries.Order(state, Rules, "a", "dumpling", 3, 5, (5, minute));
-        Assert.Equal((1L, 5, 6, 15L, 2L, 17L), (order.Id, order.OrderedDay, order.DeliverDay, order.GoodsCents, order.FeeCents, order.TotalCents));
+        // The fee isn't on the order while it waits: it is set on delivery (one per commissary and morning).
+        Assert.Equal((1L, 5, 6, 15L, 0L, 15L), (order.Id, order.OrderedDay, order.DeliverDay, order.GoodsCents, order.FeeCents, order.TotalCents));
         Assert.Empty(Commissaries.Deliver(state, Rules, 5, 1439, Paid).Delivered);
         Assert.Empty(Commissaries.Deliver(state, Rules, 6, 479, Paid).Delivered);
-        Assert.Single(Commissaries.Deliver(state, Rules, 6, 480, Paid).Delivered);
+        var delivered = Assert.Single(Commissaries.Deliver(state, Rules, 6, 480, Paid).Delivered);
+        Assert.Equal((25_000L, 25_015L), (delivered.FeeCents, delivered.TotalCents));
         Assert.Equal(3, state.Stock["a"].Single().Units);
         Assert.Equal(5, state.Stock["a"].Single().UnitPriceCents);
         Assert.Empty(state.Orders);
@@ -176,6 +178,36 @@ public class CommissariesTests
     }
 
     [Fact]
+    public void OneFlatFeePerCommissaryAndMorningCarriedByTheFirstOrderPaid()
+    {
+        var state = Rented();
+        Commissaries.Unlock(state, "b");
+        Commissaries.Rent(state, Rules, "truck", "truck", "b", 1);
+        var refused = Commissaries.Order(state, Rules, "a", "machine", 1, 100000, (1, 100));
+        var a1 = Commissaries.Order(state, Rules, "a", "taco", 2, 100, (1, 200));
+        var a2 = Commissaries.Order(state, Rules, "a", "dumpling", 1, 100, (1, 300));
+        var b1 = Commissaries.Order(state, Rules, "b", "taco", 1, 100, (1, 300));
+        var offered = new List<(long Id, long Fee)>();
+        var run = Commissaries.Deliver(state, Rules, 2, 480, o => { offered.Add((o.Id, o.FeeCents)); return o.Id != refused.Id; });
+        // The refused first order passes the fee on: a's next order carries it, a's last none; b has its own delivery.
+        Assert.Equal(new[] { (refused.Id, 25_000L), (a1.Id, 25_000L), (a2.Id, 0L), (b1.Id, 25_000L) }, offered);
+        Assert.Equal(refused.Id, Assert.Single(run.Refused).Id);
+        Assert.Equal(50_000, run.Delivered.Sum(o => o.FeeCents));
+        // An order for the same morning delivered later (Ctrl+Alt+F3, a retry) pays no second fee; the next day's does.
+        var late = Commissaries.Order(state, Rules, "a", "taco", 1, 100, (1, 900));
+        late.DeliverDay = 2;
+        Assert.Equal(0, Assert.Single(Commissaries.Deliver(state, Rules, 2, 900, Paid).Delivered).FeeCents);
+        Commissaries.Order(state, Rules, "a", "taco", 1, 100, (2, 900));
+        Assert.Equal(25_000, Assert.Single(Commissaries.Deliver(state, Rules, 3, 480, Paid).Delivered).FeeCents);
+        // A morning where every payment is refused pays no fee.
+        Commissaries.Order(state, Rules, "a", "taco", 1, 100, (3, 900));
+        Assert.Single(Commissaries.Deliver(state, Rules, 4, 480, _ => false).Refused);
+        Assert.DoesNotContain(state.FeesPaid, f => f.Day == 4);
+        // Old days are dropped.
+        Assert.DoesNotContain(state.FeesPaid, f => f.Day < 3);
+    }
+
+    [Fact]
     public void APaymentThatThrowsKeepsTheOrdersDecidedBeforeIt()
     {
         var state = Rented();
@@ -185,7 +217,8 @@ public class CommissariesTests
             Commissaries.Deliver(state, Rules, 2, 480, o => o.Id == first.Id ? true : throw new InvalidOperationException()));
         Assert.Single(state.Stock["a"]);
         Assert.Equal(second.Id, Assert.Single(state.Orders).Id);
-        Assert.Equal(second.Id, Assert.Single(Commissaries.Deliver(state, Rules, 2, 481, Paid).Delivered).Id);
+        var retried = Assert.Single(Commissaries.Deliver(state, Rules, 2, 481, Paid).Delivered);
+        Assert.Equal((second.Id, 0L), (retried.Id, retried.FeeCents)); // the first order paid this morning's fee
     }
 
     [Fact]

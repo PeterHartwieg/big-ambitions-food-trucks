@@ -38,13 +38,13 @@ public class CommissaryStandingTests
         var run = Assert.Single(CommissaryStandingOrders.Book(state, Rules, 2, 480, Price));
         var order = Assert.Single(run.Orders);
         Assert.Equal((2, 2, 500, 12L, standing.Id), (order.OrderedDay, order.DeliverDay, order.Units, order.UnitPriceCents, order.StandingOrderId!.Value));
-        Assert.Equal(Rules.FeeCents(6000), order.FeeCents);
+        Assert.Equal(0, order.FeeCents); // the delivery's flat fee is set when it arrives
         Assert.Equal(3, standing.NextDay);
         // Booked once a day, however often the step runs.
         Assert.Empty(CommissaryStandingOrders.Book(state, Rules, 2, 900, Price));
         // Paid on delivery like any order; a refusal cancels the delivery and the standing order stays.
         var refused = Commissaries.Deliver(state, Rules, 2, 480, _ => false);
-        Assert.Single(refused.Refused);
+        Assert.Equal(Rules.DeliveryFeeCents, Assert.Single(refused.Refused).FeeCents);
         Assert.Single(state.StandingOrders);
         Assert.Single(CommissaryStandingOrders.Book(state, Rules, 3, 480, Price).Single().Orders);
     }
@@ -69,9 +69,9 @@ public class CommissaryStandingTests
     {
         var state = CommissariesTests.Rented();
         CommissaryOrdering.Place(state, Rules, "a", Quote(("taco", 3, true)), (1, 600));
-        Assert.Equal(1, CommissarySupply.Left(state, Rules, "a", "taco", 2));
-        Assert.Equal(6, CommissarySupply.Left(state, Rules, "a", "hotdog", 2));
-        var over = CommissarySupply.Check(state, Rules, "a", Quote(("taco", 2, true)), CommissaryRepeat.Once, 1);
+        Assert.Equal(1, CommissarySupply.Left(state, Rules, "taco", 2));
+        Assert.Equal(6, CommissarySupply.Left(state, Rules, "hotdog", 2));
+        var over = CommissarySupply.Check(state, Rules, Quote(("taco", 2, true)), CommissaryRepeat.Once, 1);
         Assert.False(over.Fits);
         Assert.Equal(("taco", 1, 1, 2), (over.ItemName, over.WeekStart, over.Left, over.Needed));
         Assert.Throws<InvalidOperationException>(() => CommissaryOrdering.Place(state, Rules, "a", Quote(("taco", 2, true)), (1, 700)));
@@ -87,16 +87,40 @@ public class CommissaryStandingTests
         CommissaryOrdering.Place(state, Rules, "a", Quote(("taco", 4, true)), (5, 600));
         Commissaries.Deliver(state, Rules, 6, 480, CommissariesTests.Paid);
         Assert.Empty(state.Orders);
-        Assert.Equal(0, CommissarySupply.Left(state, Rules, "a", "taco", 7));
+        Assert.Equal(0, CommissarySupply.Left(state, Rules, "taco", 7));
         // Day 8 is a Monday: a new week.
-        Assert.Equal(4, CommissarySupply.Left(state, Rules, "a", "taco", 8));
+        Assert.Equal(4, CommissarySupply.Left(state, Rules, "taco", 8));
         CommissaryOrdering.Place(state, Rules, "a", Quote(("taco", 1, true)), (7, 600));
         Commissaries.Deliver(state, Rules, 8, 480, CommissariesTests.Paid);
         Assert.Equal(8, state.WeekBoxes.Single().WeekStart);
         // A refused delivery doesn't count.
         CommissaryOrdering.Place(state, Rules, "a", Quote(("taco", 3, true)), (8, 600));
         Commissaries.Deliver(state, Rules, 9, 480, _ => false);
-        Assert.Equal(3, CommissarySupply.Left(state, Rules, "a", "taco", 9));
+        Assert.Equal(3, CommissarySupply.Left(state, Rules, "taco", 9));
+    }
+
+    [Fact]
+    public void TheWeeklyLimitIsOneForTheWholeFleetAcrossCommissaries()
+    {
+        var state = CommissariesTests.Rented();
+        Commissaries.Unlock(state, "b");
+        Commissaries.Rent(state, Rules, "truck", "truck", "b", 1);
+        CommissaryOrdering.Place(state, Rules, "a", Quote(("taco", 3, true)), (1, 600));
+        // b's orders count against the same 4 boxes of tacos: one left, for either commissary.
+        Assert.Equal(1, CommissarySupply.Left(state, Rules, "taco", 2));
+        Assert.Throws<InvalidOperationException>(() => CommissaryOrdering.Place(state, Rules, "b", Quote(("taco", 2, true)), (1, 600)));
+        CommissaryOrdering.Place(state, Rules, "b", Quote(("taco", 1, true), ("griddle", 3, false)), (1, 600));
+        Assert.Equal(0, CommissarySupply.Left(state, Rules, "taco", 2));
+        Commissaries.Deliver(state, Rules, 2, 480, CommissariesTests.Paid);
+        Assert.Equal(0, CommissarySupply.Left(state, Rules, "taco", 3));
+        // A standing order at b booking that week is cut by what a already took, earliest first.
+        var standing = CommissaryStandingOrders.Create(state, Rules, "b", Quote(("taco", 1, true)), CommissaryRepeat.Weekly, (8, 600));
+        CommissaryOrdering.Place(state, Rules, "a", Quote(("taco", 3, true)), (8, 700));
+        var run = Assert.Single(CommissaryStandingOrders.Book(state, Rules, 9, 480, Price));
+        Assert.Same(standing, run.Standing);
+        Assert.Single(run.Orders);
+        Assert.Equal(0, CommissarySupply.Left(state, Rules, "taco", 9));
+        Assert.False(CommissarySupply.Check(state, Rules, Quote(("taco", 1, true)), CommissaryRepeat.Once, 9).Fits);
     }
 
     [Fact]
@@ -104,16 +128,16 @@ public class CommissaryStandingTests
     {
         var state = CommissariesTests.Rented();
         // Day 1 for day 2: a daily box of tacos takes 6 this week (days 2 to 7), 7 a whole week: over 4.
-        var daily = CommissarySupply.Check(state, Rules, "a", Quote(("taco", 1, true)), CommissaryRepeat.Daily, 1);
+        var daily = CommissarySupply.Check(state, Rules, Quote(("taco", 1, true)), CommissaryRepeat.Daily, 1);
         Assert.False(daily.Fits);
         Assert.Throws<InvalidOperationException>(() => CommissaryStandingOrders.Create(state, Rules, "a", Quote(("taco", 1, true)), CommissaryRepeat.Daily, (1, 600)));
         // A weekly order of 3 hot dogs leaves 3 for one-off orders in each week it delivers.
         CommissaryStandingOrders.Create(state, Rules, "a", Quote(("hotdog", 3, true)), CommissaryRepeat.Weekly, (1, 600));
-        Assert.Equal(3, CommissarySupply.Left(state, Rules, "a", "hotdog", 2));
-        Assert.Equal(3, CommissarySupply.Left(state, Rules, "a", "hotdog", 9));
+        Assert.Equal(3, CommissarySupply.Left(state, Rules, "hotdog", 2));
+        Assert.Equal(3, CommissarySupply.Left(state, Rules, "hotdog", 9));
         Assert.Throws<InvalidOperationException>(() => CommissaryOrdering.Place(state, Rules, "a", Quote(("hotdog", 4, true)), (1, 700)));
         // A second weekly order of 4 doesn't fit next to it.
-        Assert.False(CommissarySupply.Check(state, Rules, "a", Quote(("hotdog", 4, true)), CommissaryRepeat.Weekly, 1).Fits);
+        Assert.False(CommissarySupply.Check(state, Rules, Quote(("hotdog", 4, true)), CommissaryRepeat.Weekly, 1).Fits);
     }
 
     [Fact]
@@ -176,7 +200,7 @@ public class CommissaryStandingTests
         Assert.Equal(new[] { ("taco", 2, true), ("griddle", 1, false) }, loaded.Lines.Select(l => (l.ItemName, l.Boxes, l.Capped)));
         Assert.Equal(2, c.NextStandingId);
         Assert.Equal(2, c.WeekBoxes.Single().Boxes);
-        Assert.Equal(2, CommissarySupply.Left(c, Rules, "a", "taco", 3));
+        Assert.Equal(2, CommissarySupply.Left(c, Rules, "taco", 3));
     }
 
     [Fact]
@@ -184,14 +208,14 @@ public class CommissaryStandingTests
     {
         var state = CommissariesTests.Rented();
         var standing = CommissaryStandingOrders.Create(state, Rules, "a", Quote(("taco", 2, true)), CommissaryRepeat.Weekly, (1, 600));
-        Assert.Equal(2, CommissarySupply.Left(state, Rules, "a", "taco", 2));
+        Assert.Equal(2, CommissarySupply.Left(state, Rules, "taco", 2));
         CommissaryStandingOrders.Book(state, Rules, 2, 480, Price);
         var run = Commissaries.Deliver(state, Rules, 2, 480, _ => false);
         Assert.Single(run.Refused);
         Assert.Empty(state.WeekBoxes);
         // Its day is over, nothing came: the week's 4 boxes are free again; next week holds its 2.
-        Assert.Equal(4, CommissarySupply.Left(state, Rules, "a", "taco", 3));
-        Assert.Equal(2, CommissarySupply.Left(state, Rules, "a", "taco", 9));
+        Assert.Equal(4, CommissarySupply.Left(state, Rules, "taco", 3));
+        Assert.Equal(2, CommissarySupply.Left(state, Rules, "taco", 9));
         Assert.Same(standing, Assert.Single(state.StandingOrders));
         Assert.Equal(9, standing.NextDay);
     }
@@ -275,8 +299,8 @@ public class CommissaryStandingTests
         // Paid and delivered today with the day-7 order: week 1 holds its own 4, week 8 the 2 brought forward.
         Assert.Equal(2, Commissaries.Deliver(state, Rules, 7, 480, CommissariesTests.Paid).Delivered.Count);
         Assert.Empty(state.Orders);
-        Assert.Equal(0, CommissarySupply.Left(state, Rules, "a", "taco", 7));
-        Assert.Equal(2, CommissarySupply.Left(state, Rules, "a", "taco", 8));
+        Assert.Equal(0, CommissarySupply.Left(state, Rules, "taco", 7));
+        Assert.Equal(2, CommissarySupply.Left(state, Rules, "taco", 8));
         Assert.Equal(new[] { (1, 4), (8, 2) }, state.WeekBoxes.OrderBy(w => w.WeekStart).Select(w => (w.WeekStart, w.Boxes)));
         // The order's count day survives a save while it waits.
         var again = CommissariesTests.Rented();
@@ -285,6 +309,6 @@ public class CommissaryStandingTests
         var codec = new SaveCodec();
         var loaded = codec.Load(codec.Serialize(new SaveState { Commissary = again })).State!.Commissary;
         Assert.Equal(8, loaded.Orders.Single().LimitDay);
-        Assert.Equal(3, CommissarySupply.Left(loaded, Rules, "a", "taco", 8));
+        Assert.Equal(3, CommissarySupply.Left(loaded, Rules, "taco", 8));
     }
 }

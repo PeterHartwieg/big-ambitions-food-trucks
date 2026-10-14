@@ -44,10 +44,10 @@ public class CommissaryLedgerTests
         var rules = new CommissaryRules();
         var order = Commissaries.Order(state.Commissary, rules, "a", "taco", 10, 100, (1, 100));
         Assert.Empty(state.DailySales);
-        SalesLedger.RecordDeliveryFees(state, 1, order.FeeCents); // as the adapter does when it is paid
+        SalesLedger.RecordDeliveryFees(state, 1, rules.DeliveryFeeCents); // as the adapter does when it is paid
         Assert.Empty(state.DailySales.Single().ByVehicle);
         Assert.Equal(0, state.DailySales.Single().CostCents);
-        Assert.Equal(-100, SalesLedger.DayProfitCents(state, 1));
+        Assert.Equal(-25_000, SalesLedger.DayProfitCents(state, 1));
         Commissaries.Deliver(state.Commissary, rules, 2, 480, CommissariesTests.Paid);
         var taken = Commissaries.Restock(state.Commissary, "a", new System.Collections.Generic.Dictionary<string, int> { ["taco"] = 4 });
         Assert.Equal(100, taken.Single().UnitPriceCents);
@@ -55,7 +55,7 @@ public class CommissaryLedgerTests
         StreetSales.Record(state, "cart", 2, 200, 4);
         SalesLedger.RecordCost(state, 2, "cart", 4 * taken.Single().UnitPriceCents);
         Assert.Equal(400, SalesLedger.DayProfitCents(state, 2));
-        Assert.Equal(300, FleetReport.WeekProfitCents(state, 2));
+        Assert.Equal(400 - 25_000, FleetReport.WeekProfitCents(state, 2));
     }
 
     [Fact]
@@ -78,10 +78,11 @@ public class CommissaryLedgerTests
     {
         var state = new SaveState { Commissary = CommissariesTests.Rented() };
         var rules = new CommissaryRules();
-        var delivered = Commissaries.Order(state.Commissary, rules, "a", "taco", 10, 100, (1, 100));
+        Commissaries.Order(state.Commissary, rules, "a", "taco", 10, 100, (1, 100));
         Assert.Empty(state.DailySales); // booking takes no money
-        foreach (var order in Commissaries.Deliver(state.Commissary, rules, 2, 480, CommissariesTests.Paid).Delivered)
-            SalesLedger.RecordDeliveryFees(state, 2, order.FeeCents);
+        var delivered = Commissaries.Deliver(state.Commissary, rules, 2, 480, CommissariesTests.Paid).Delivered.Single();
+        SalesLedger.RecordDeliveryFees(state, 2, delivered.FeeCents);
+        Assert.Equal(25_000, delivered.FeeCents);
         Commissaries.Order(state.Commissary, rules, "a", "machine", 1, 2000, (2, 500));
 
         var refund = Commissaries.Refund(state.Commissary);

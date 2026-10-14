@@ -34,6 +34,7 @@ namespace FoodTrucks
                 case "crew": RequireFtCity(cmd); return Crew(args);
                 case "fixture": RequireFtCity(cmd); return Fixture(args);
                 case "logistics": RequireCity(cmd); return Logistics(args);
+                case "parks": RequireCity(cmd); return Parks();
                 case "ui": return TestBridgeUi.Run(args);
                 case "shoot": RequireCity(cmd); return TestBridgeShoot.Shoot(args);
                 case "save": RequireFtCity(cmd); return Save(args);
@@ -41,9 +42,94 @@ namespace FoodTrucks
                 case "new_game": return NewGame(args);
                 case "quit": return Quit();
                 default:
-                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, fixture, logistics, ui, shoot, save, load, new_game, quit, op.");
+                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, fixture, logistics, parks, ui, shoot, save, load, new_game, quit, op.");
             }
         }
+
+        // ---- parks ----
+
+        // How far from a park's edge, and how many, the nearest building entrances listed.
+        private const double ParkEntranceRadius = 150;
+        private const int ParkEntrances = 5;
+
+        // {}: the game's park triggers as ParkAreas found them (kept and skipped), each with its bounds, neighbourhood and the
+        // nearest building entrances. Reads only; one park that fails gives an "error" entry, not a refusal.
+        private static JToken Parks()
+        {
+            var (kept, skipped) = ParkAreas.ForTesting();
+            var buildings = World.AllBuildings();
+            var parks = new JArray();
+            foreach (var (type, name, colliders) in kept)
+            {
+                try { parks.Add(Park(type, name, colliders, buildings)); }
+                catch (Exception ex) { parks.Add(new JObject { ["name"] = name, ["kind"] = type, ["error"] = ex.Message }); }
+            }
+            Log.Info($"Test bridge: parks: {kept.Count} kept, {skipped.Count} skipped, {buildings.Count} buildings searched.");
+            return new JObject
+            {
+                ["entrance_radius"] = ParkEntranceRadius,
+                ["parks"] = parks,
+                ["skipped"] = new JArray(skipped.Select(s => new JObject { ["name"] = s.Name, ["kind"] = s.Type, ["reason"] = s.Reason })),
+            };
+        }
+
+        private static JObject Park(string type, string name, Collider[] colliders, List<(CityBuildingController Controller, Vector3[] Doors)> buildings)
+        {
+            var usable = colliders.Where(ParkAreas.Usable).ToArray();
+            if (usable.Length == 0) throw new InvalidOperationException("no usable trigger collider now (switched off since the city loaded)");
+            var bounds = usable[0].bounds;
+            foreach (var c in usable.Skip(1)) bounds.Encapsulate(c.bounds);
+            var min = bounds.min;
+            var max = bounds.max;
+            // The neighbourhood of the building with the entrance nearest the centre, as World.ReadSpot reads it.
+            string? neighbourhood = null;
+            var nearest = double.MaxValue;
+            var near = new List<(string Address, Vector3 Door, double Distance)>();
+            foreach (var (controller, doors) in buildings)
+            {
+                var building = controller == null ? null : controller.building;
+                if (building == null) continue;
+                foreach (var door in doors)
+                {
+                    var toCentre = Flat(door, bounds.center);
+                    if (toCentre < nearest) { nearest = toCentre; neighbourhood = building.Neighbourhood; }
+                }
+                var address = building.Address;
+                if (address == null) continue;
+                (Vector3 Door, double Distance)? best = null;
+                foreach (var door in doors)
+                {
+                    // The bounds first, so only doors near the park are measured to its colliders.
+                    var dx = Math.Max(Math.Max(min.x - door.x, 0), door.x - max.x);
+                    var dz = Math.Max(Math.Max(min.z - door.z, 0), door.z - max.z);
+                    if (Math.Sqrt(dx * dx + dz * dz) > ParkEntranceRadius) continue;
+                    var distance = ParkAreas.DistanceTo(usable, door);
+                    if (distance <= ParkEntranceRadius && (best == null || distance < best.Value.Distance)) best = (door, distance);
+                }
+                if (best != null) near.Add((World.AddressKey(address.streetName, address.streetNumber), best.Value.Door, best.Value.Distance));
+            }
+            static JToken R(double v) => Math.Round(v, 2);
+            return new JObject
+            {
+                ["name"] = name,
+                ["kind"] = type,
+                ["neighbourhood"] = neighbourhood,
+                ["colliders"] = usable.Length,
+                ["concave_colliders"] = usable.Count(c => c is MeshCollider mesh && !mesh.convex),
+                ["bounds"] = new JObject
+                {
+                    ["min"] = new JObject { ["x"] = R(min.x), ["y"] = R(min.y), ["z"] = R(min.z) },
+                    ["max"] = new JObject { ["x"] = R(max.x), ["y"] = R(max.y), ["z"] = R(max.z) },
+                },
+                ["centre"] = new JObject { ["x"] = R(bounds.center.x), ["z"] = R(bounds.center.z) },
+                ["entrances"] = new JArray(near.OrderBy(n => n.Distance).Take(ParkEntrances).Select(n => new JObject
+                {
+                    ["address"] = n.Address, ["x"] = R(n.Door.x), ["z"] = R(n.Door.z), ["distance"] = R(n.Distance),
+                })),
+            };
+        }
+
+        private static double Flat(Vector3 a, Vector3 b) => Math.Sqrt((a.x - b.x) * (a.x - b.x) + (a.z - b.z) * (a.z - b.z));
 
         // ---- Scene, guard and arguments ----
 

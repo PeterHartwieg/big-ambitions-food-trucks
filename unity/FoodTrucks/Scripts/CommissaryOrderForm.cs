@@ -285,14 +285,15 @@ namespace FoodTrucks
 
         // The rows' item, box size and stock, as the item list shows them; the price beside it is the box price.
         // Equipment reads plainly, by the piece ("Hot dog grill (1 here)"); food keeps "Hot dog, box of 500 (… here)" and
-        // says how many boxes of it are left under its weekly limit in the delivery's week (Core CommissarySupply).
+        // says how many boxes of it are left under its weekly limit in the delivery's week, one limit for all commissaries
+        // together (Core CommissarySupply).
         private static LanguageChangeEventDataHolder Label(Line line, string siteId)
         {
             var piece = DemandData.Tables?.EquipmentForGameItem(line.Item) != null;
             var state = FoodTrucksSession.CurrentState;
             var rules = DemandData.Rules?.Commissary;
             var limited = !piece && state != null && rules != null && !Commissary.LimitsLifted;
-            var left = limited ? CommissarySupply.Left(state!.Commissary, rules!, siteId, line.Item, TimeHelper.CurrentDay + 1) : 0;
+            var left = limited ? CommissarySupply.Left(state!.Commissary, rules!, line.Item, TimeHelper.CurrentDay + 1) : 0;
             return LocalizorManager.Localize(piece ? "foodtrucks:commissary_form_piece" : limited ? "foodtrucks:commissary_form_item_left" : "foodtrucks:commissary_form_item", new
             {
                 item = LocalizorManager.GetLocalization(line.Item, null),
@@ -420,12 +421,13 @@ namespace FoodTrucks
             catch (Exception ex) { Fail("list title", ex); }
         }
 
-        // The delivery fee and total as Core prices the rows (one order, and one fee, per item).
+        // The delivery fee and total as Core prices the rows: one order per item, one flat fee for the delivery, none
+        // when another order already arrives at this commissary tomorrow morning (Commissary.QuoteFor).
         private static void ShowTotals(DeliveryContractSettingsBase form)
         {
-            var rules = DemandData.Rules?.Commissary;
-            if (rules == null) return;
-            var quote = CommissaryOrdering.Quote(rules, Requests(form));
+            var current = open;
+            var quote = current == null ? null : Commissary.QuoteFor(current.SiteId, Requests(form));
+            if (quote == null) return;
             SetText(feeTextField!.GetValue(form) as Component, CartSelling.Money(quote.FeeCents));
             SetText(totalTextField!.GetValue(form) as Component, CartSelling.Money(quote.TotalCents));
         }

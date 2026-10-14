@@ -81,18 +81,18 @@
         "durationMinutes": [60, 90], "guests": [40, 120], "categories": { "fastfood": 1.0, "pizza": 1.0, "streetmeal": 1.0, "coffee": 0.3 }, "weight": 1.0 },
       { "id": "party", "areas": ["residential", "nightlife"], "start": ["18:00", "20:00"],
         "durationMinutes": [90, 150], "guests": [40, 100], "categories": { "pizza": 1.0, "fastfood": 1.0, "streetmeal": 0.5, "icecream": 0.5, "snacks": 0.5 }, "weight": 0.8 },
-      { "id": "event", "areas": ["waterfront", "retail"], "days": ["fri", "sat", "sun"], "start": ["12:00", "16:00"],
+      { "id": "event", "areas": ["waterfront", "retail", "park"], "days": ["fri", "sat", "sun"], "start": ["12:00", "16:00"],
         "durationMinutes": [120, 180], "guests": [100, 200], "categories": { "fastfood": 1.0, "icecream": 1.0, "snacks": 1.0, "colddrinks": 0.5, "pizza": 0.5, "slushies": 0.5, "streetmeal": 0.5 }, "weight": 0.5 }
     ]
   },
 
-  "_commissary": "Rent is whole cents per vehicle kind per month, charged per game day as monthly x 12 / 365 rounded to cents, including the rental day. Orders cost goods plus deliveryFeeShare, rounded once per order, and always arrive the next day at deliveryMinute (08:00). Separate FIFO stock batches keep their goods price. At nightCheckMinute (04:00), vehicles away from their own rented bay pay overnightFineCents unless the player is inside, a hired late stop is still running, they are in transit, or they are parked at or inside a building the player rents or owns. Across skipped nights the current flags apply. bayRadiusMetres is for the game adapter's bay check. foodBoxesPerWeek limits the boxes of each food one commissary delivers from phone orders in a game week (Monday, day 1, 8, 15 ..., to Sunday, as the game resets its wholesale contract limits), one-off and standing orders together, counted by delivery day: `default` for every food, `items` overrides by game item key. It mirrors the game's per-item weekly maxWholesaleOrderAmount on wholesale contracts, in boxes, the unit the phone order sells (every food box holds 500). Equipment has no limit, nor do logistics plan deliveries; the game setting that disables wholesale and import limits lifts it too.",
+  "_commissary": "Rent is whole cents per vehicle kind per month, charged per game day as monthly x 12 / 365 rounded to cents, including the rental day. Orders cost their goods and always arrive the next day at deliveryMinute (08:00). Each delivery costs deliveryFeeCents once: everything a commissary delivers from phone orders on one morning together, charged with the first order paid that morning there (a refused order passes it to the next). Logistics plan deliveries and stock the player hauls pay none. Separate FIFO stock batches keep their goods price. At nightCheckMinute (04:00), vehicles away from their own rented bay pay overnightFineCents unless the player is inside, a hired late stop is still running, they are in transit, or they are parked at or inside a building the player rents or owns. Across skipped nights the current flags apply. bayRadiusMetres is for the game adapter's bay check. foodBoxesPerWeek limits the boxes of each food all commissaries together deliver from phone orders in a game week (one limit for the player's whole fleet) (Monday, day 1, 8, 15 ..., to Sunday, as the game resets its wholesale contract limits), one-off and standing orders together, counted by delivery day: `default` for every food, `items` overrides by game item key. It mirrors the game's per-item weekly maxWholesaleOrderAmount on wholesale contracts, in boxes, the unit the phone order sells (every food box holds 500). Equipment has no limit, nor do logistics plan deliveries; the game setting that disables wholesale and import limits lifts it too.",
   "commissary": {
     "rentPerMonthCents": { "cart": 30000, "truck": 125000 },
     "overnightFineCents": 25000,
     "nightCheckMinute": 240,
     "deliveryMinute": 480,
-    "deliveryFeeShare": 0.10,
+    "deliveryFeeCents": 25000,
     "bayRadiusMetres": 15,
     "foodBoxesPerWeek": { "default": 10, "items": {} }
   },

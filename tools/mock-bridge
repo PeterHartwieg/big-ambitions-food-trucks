@@ -26,7 +26,11 @@ from ftlib.shots import ROOT
 SITES = [s['id'] for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']]
 # Commissaries with a measured bay in data, and the city's buildings (the balance tool's list), for bay_candidates.
 MEASURED = {s['id']: s['bay'] for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries'] if s.get('bay')}
-BUILDINGS = {b['key'] for b in json.loads((ROOT / 'tools/balance/city.json').read_text())['buildings']}
+CITY = json.loads((ROOT / 'tools/balance/city.json').read_text())['buildings']
+BUILDINGS = {b['key'] for b in CITY}
+# Made-up park triggers for parks (name, kind, min x/y/z, max x/y/z); the game's come from the scene.
+PARKS = [('Park_Trigger', 'parkarea', (1180.0, 9.5, 600.0, 1290.0, 19.5, 700.0)),
+         ('SkatePark_Trigger', 'skatepark', (1490.0, 9.8, 440.0, 1520.0, 14.8, 470.0))]
 TUNING = json.loads((ROOT / 'data/rules.json').read_text())
 ECONOMY = json.loads((ROOT / 'data/economy.json').read_text())
 # Prices and base-game box sizes are fake; the quote and per-item protocol are real.
@@ -140,6 +144,8 @@ class Mock:
         self.selected = None
         self.boxes = 0
         self.order_number = 0
+        # Deliveries (site, day) whose flat fee is paid: one fee per commissary and morning, as Core's Commissaries.Deliver.
+        self.fees_paid = set()
         self.routes = {}
         self.takings = {}
         self.hours = {}
@@ -279,6 +285,23 @@ class Mock:
     def bays(self):
         return [{'site':site,'status':self.bay_status.get(site,'resolved'),'point':{'x':393.2+i*100,'z':217.6,'along_x':0.,'along_z':1.} if self.bay_status.get(site,'resolved')=='resolved' else None,
                  'entrance':{'x':393.2+i*100+5,'z':217.6} if self.bay_status.get(site,'resolved')=='resolved' else None} for i,site in enumerate(SITES)]
+
+    def parks(self):
+        # The bridge's shape from made-up boxes, with the balance tool's buildings as entrances: the 5 nearest within
+        # 150 m of each box on the ground, the neighbourhood of the building nearest the centre.
+        def flat(x,z,box):
+            dx=max(box[0]-x,0,x-box[3]); dz=max(box[2]-z,0,z-box[5])
+            return math.hypot(dx,dz)
+        parks=[]
+        for name,kind,box in PARKS:
+            cx,cz=(box[0]+box[3])/2,(box[2]+box[5])/2
+            hood=min(CITY,key=lambda b:math.hypot(b['x']-cx,b['z']-cz))['hood']
+            near=sorted(((flat(b['x'],b['z'],box),b) for b in CITY if flat(b['x'],b['z'],box)<=150),key=lambda t:t[0])[:5]
+            parks.append({'name':name,'kind':kind,'neighbourhood':hood,'colliders':1,'concave_colliders':0,
+                          'bounds':{'min':dict(zip('xyz',box[:3])),'max':dict(zip('xyz',box[3:]))},
+                          'centre':{'x':round(cx,2),'z':round(cz,2)},
+                          'entrances':[{'address':b['key'],'x':b['x'],'z':b['z'],'distance':round(d,2)} for d,b in near]})
+        return {'entrance_radius':150,'parks':parks,'skipped':[{'name':'Park_Trigger_Closed','kind':'parkarea','reason':'inactive'}]}
 
     def bay_candidates(self, args):
         # The bridge's shape with made-up spots: one the automatic search takes, one past a long walk, one across the road
@@ -509,14 +532,14 @@ class Mock:
         name,box,price=CATALOG[item]
         units=boxes*box
         goods=round(units*price,2)
-        fee=round(goods*TUNING['commissary']['deliveryFeeShare'],2)
+        # The fee is set on delivery (one per commissary and morning); a waiting order carries none.
         order = {'n':self.order_number, 'site':site, 'items':f'{units} {name}',
-                 'item':item,'units':units,'goods':goods,'fee':fee,'total':round(goods+fee,2),
+                 'item':item,'units':units,'goods':goods,'fee':0.0,'total':goods,
                  'due_day':self.state['clock']['day']+1}
         self.state['commissary']['orders'].append(order)
         if emit:
-            self.event(f"Commissary order {order['n']}: {boxes} boxes, {units} {name} at {site} for ${goods:.2f} plus ${fee:.2f} delivery, paid on delivery; due day {order['due_day']} at 08:00.")
-            self.event(LOCALE['foodtrucks:message_commissary_ordered'].format(units=units,item=name,total=f"${order['total']:.2f}",time='08:00'), 'phone')
+            self.event(f"Commissary order {order['n']}: {boxes} boxes, {units} {name} at {site} for ${goods:.2f}, paid on delivery; due day {order['due_day']} at 08:00.")
+            self.event(LOCALE['foodtrucks:message_commissary_ordered'].format(units=units,item=name,total=f"${goods:.2f}",time='08:00'), 'phone')
         return order
 
     def deliver(self, force=False):
@@ -527,12 +550,15 @@ class Mock:
             self.state['commissary']['orders'].remove(order)
             units=order['units']
             name=CATALOG[order['item']][0]
-            fee=order['fee']; goods=order['goods']
+            delivery=(order['site'],order['due_day'])
+            goods=order['goods']; fee=0.0 if delivery in self.fees_paid else TUNING['commissary']['deliveryFeeCents']/100
+            order['fee']=fee; order['total']=round(goods+fee,2)
             if self.state['money'] < order['total']:
                 self.event(f"Commissary delivery: order {order['n']}, {units} {name} not delivered: the payment of ${order['total']:.2f} was refused (not enough money); the order is cancelled.")
                 self.event(f"We couldn't deliver {units} {name}: the payment of ${order['total']:.2f} didn't go through. The order is cancelled; order again when you have the money.", 'phone')
             else:
                 self.state['money'] -= order['total']
+                self.fees_paid.add(delivery)
                 self.transaction('foodtrucks:transaction_commissary_order', -order['total'], commissary=LOCALE['foodtrucks:commissary_'+order['site']])
                 stock = next((s for s in self.state['commissary']['stock'] if s['site'] == order['site'] and s['key'] == order['item']), None)
                 if stock:
@@ -540,7 +566,7 @@ class Mock:
                 else:
                     self.state['commissary']['stock'].append({'site': order['site'], 'item': name, 'key':order['item'], 'amount': units})
                 self.event(f"Commissary delivery: order {order['n']}, {units} {name} at {order['site']} (ordered day {order['due_day']-1}, due day {order['due_day']}), paid ${order['total']:.2f} on delivery (goods ${goods:.2f}, fee ${fee:.2f}).")
-                self.event(LOCALE['foodtrucks:message_commissary_delivered'].format(units=units,item=name,commissary=LOCALE['foodtrucks:commissary_'+order['site']],total=f"${order['total']:.2f}"),'phone')
+                self.event(LOCALE['foodtrucks:message_commissary_delivered_fee' if fee else 'foodtrucks:message_commissary_delivered'].format(units=units,item=name,commissary=LOCALE['foodtrucks:commissary_'+order['site']],total=f"${order['total']:.2f}",fee=f"${fee:.2f}"),'phone')
 
     def flush_hour(self, day, hour):
         for v in self.state['vehicles']:
@@ -1052,6 +1078,9 @@ class Mock:
         if cmd=='logistics':
             self.require_city(cmd)
             return self.logistics_command(args)
+        if cmd=='parks':
+            self.require_city(cmd)
+            return self.parks()
         if cmd in ('load','save'):
             name=need(args,'name',"the save's name")
             if not name.startswith('FT'):
@@ -1218,8 +1247,15 @@ class Mock:
                 if boxes: merged[key]=merged.get(key,0)+boxes
             if not sum(merged.values()): raise ValueError('the order has no boxes')
             if sum(merged.values())>10: raise ValueError('more than 10 boxes in one order')
+            tomorrow=self.state['clock']['day']+1
+            shared=any(o['site']==site and o['due_day']==tomorrow for o in self.state['commissary']['orders'])
+            fee=0.0 if shared else TUNING['commissary']['deliveryFeeCents']/100
             orders=[self.add_order(site,boxes,item=item) for item,boxes in merged.items()]
-            return {'orders':[{k:order[k] for k in ('n','site','item','units','goods','fee','total','due_day')} for order in orders]}
+            # As the game side: the first order shows the fee this quote adds, paid with it on delivery.
+            rows=[{k:order[k] for k in ('n','site','item','units','goods','due_day')} for order in orders]
+            for i,row in enumerate(rows):
+                row['fee']=fee if i==0 else 0.0; row['total']=round(row['goods']+row['fee'],2)
+            return {'orders':rows,'delivery_fee':fee}
         if cmd=='crew':
             op=need(args,'op','assign or unassign')
             identifier=need(args,'vehicle',"the food vehicle's id")
@@ -1248,8 +1284,10 @@ class Mock:
                 self.last_ui=self.buttons()
                 texts=self.state['notices_recent'][-2:] + ([clean(t) for t in self.phone_texts[-20:]] if self.dialog in ('phone','order','confirm','items') else [])
                 if self.dialog=='confirm':
-                    goods=self.boxes*750;fee=round(goods*TUNING['commissary']['deliveryFeeShare'],2)
-                    texts=[clean(LOCALE['foodtrucks:dialog_commissary_quote'].format(items='Hotdog',goods=f'${goods:.2f}',fee=f'${fee:.2f}',total=f'${goods+fee:.2f}',time='08:00'))]
+                    goods=self.boxes*750;per=TUNING['commissary']['deliveryFeeCents']/100
+                    # The mock reads back the unshared quote: one flat fee for tomorrow's delivery.
+                    fee=per
+                    texts=[clean(LOCALE['foodtrucks:dialog_commissary_quote'].format(items='Hotdog',goods=f'${goods:.2f}',fee=f'${fee:.2f}',perDelivery=f'${per:.2f}',total=f'${goods+fee:.2f}',time='08:00'))]
                 return {'buttons':self.last_ui,'texts':texts}
             if op=='click':
                 self.require_ui()
@@ -1329,7 +1367,7 @@ class Mock:
             self.event(f'Mock console: {line}')
             return {'output':[f'Mock console accepted: {line}']}
         if cmd=='quit': return {}
-        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, fixture, logistics, ui, shoot, save, load, new_game, quit, op.")
+        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, fixture, logistics, parks, ui, shoot, save, load, new_game, quit, op.")
 
 
 class Handler(BaseHTTPRequestHandler):

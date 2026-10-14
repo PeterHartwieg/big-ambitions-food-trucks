@@ -99,8 +99,8 @@ namespace FoodTrucks.Core.Commissary
             var order = new CommissaryOrder { Id = state.NextOrderId, CommissaryId = commissaryId, ItemName = itemName,
                 Units = units, UnitPriceCents = wholesaleUnitPriceCents, OrderedDay = now.Day, DeliverDay = deliverDay,
                 CappedBoxes = cappedBoxes, StandingOrderId = standingOrderId, CountDay = countDay == deliverDay ? null : countDay };
-            order.FeeCents = rules.FeeCents(order.GoodsCents);
-            _ = order.TotalCents; // Refuse an overflowing price before changing state.
+            // The delivery fee is set on delivery, once per commissary and morning (Deliver).
+            _ = checked(order.GoodsCents + rules.DeliveryFeeCents); // Refuse an overflowing price before changing state.
             var nextId = checked(state.NextOrderId + 1);
             state.Orders.Add(order);
             state.NextOrderId = nextId;
@@ -112,6 +112,12 @@ namespace FoodTrucks.Core.Commissary
         // now (its delivery day at the delivery minute, or an earlier day) is offered to pay, oldest first. Paid, its
         // goods go into the commissary's stock; refused, the order is cancelled and nothing arrives, as the game drops a
         // one-off delivery the player can't pay for. Orders not yet due are left alone.
+        // The delivery fee (Peter, 14 October 2026): one flat fee per delivery, that is per commissary and delivery day,
+        // whatever arrives there that morning. The first order offered in a delivery carries it (FeeCents, paid with its
+        // goods); the others carry none. A refused order is cancelled with its fee, and the next order of that delivery
+        // carries the fee instead, so a delivery where something arrives pays it exactly once, and one where nothing
+        // arrives pays nothing. Paid fees are kept (FeesPaid), so a second run for the same day (Ctrl+Alt+F3, a payment
+        // that threw) doesn't charge it again.
         public static CommissaryDeliveries Deliver(CommissaryState state, CommissaryRules rules, int nowDay, int nowMinute,
             Func<CommissaryOrder, bool> pay)
         {
@@ -123,8 +129,11 @@ namespace FoodTrucks.Core.Commissary
             _ = checked(state.NextBatchId + due.Count);
             var delivered = new List<CommissaryOrder>();
             var refused = new List<CommissaryOrder>();
+            state.FeesPaid.RemoveAll(f => f.Day < nowDay - 1 && !due.Any(o => o.DeliverDay == f.Day));
             foreach (var order in due)
             {
+                var paidAlready = state.FeesPaid.Any(f => f.CommissaryId == order.CommissaryId && f.Day == order.DeliverDay);
+                order.FeeCents = paidAlready ? 0 : rules.DeliveryFeeCents;
                 // Each order leaves the list as soon as it is decided, so a payment that throws keeps the ones before it.
                 var paid = pay(order);
                 state.Orders.Remove(order);
@@ -133,6 +142,7 @@ namespace FoodTrucks.Core.Commissary
                     refused.Add(order);
                     continue;
                 }
+                if (!paidAlready) state.FeesPaid.Add(new CommissaryFeePaid { CommissaryId = order.CommissaryId, Day = order.DeliverDay });
                 CommissarySupply.Delivered(state, order, nowDay);
                 Stock(state, order.CommissaryId).Add(new CommissaryStockLine { ItemName = order.ItemName, Units = order.Units,
                     UnitPriceCents = order.UnitPriceCents, BatchId = CommissaryValidation.NextBatch(state),
@@ -278,6 +288,7 @@ namespace FoodTrucks.Core.Commissary
             state.Orders.Clear();
             state.StandingOrders.Clear();
             state.WeekBoxes.Clear();
+            state.FeesPaid.Clear();
             state.Spaces.Clear();
             state.ReleasedRentPaidThroughDay.Clear();
             return refund;

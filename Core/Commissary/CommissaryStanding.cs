@@ -5,13 +5,14 @@ using FoodTrucks.Core.Common;
 
 namespace FoodTrucks.Core.Commissary
 {
-    // The weekly limit on boxes of each food a commissary delivers from phone orders (Peter, 14 October 2026: phone
-    // orders are limited, so a growing fleet builds its own supply chain with a warehouse and a logistics plan). It
+    // The weekly limit on boxes of each food the commissaries deliver from phone orders (Peter, 14 October 2026: phone
+    // orders are limited, so a growing fleet builds its own supply chain with a warehouse and a logistics plan). One
+    // limit for the player's whole fleet: every commissary's phone orders count against it together. It
     // mirrors the game's wholesale contracts, which cap each item's units a week (Item.maxWholesaleOrderAmount against
     // DeliveryContractItem.amountOrderedThisWeek, reset when the weekday is 1, that is on days 1, 8, 15 ...; lifted by
     // the gameVariables.disableWholesaleAndImportLimits setting) [code, 1.0: BusinessHelper.DeliverWholesaleContract,
-    // BusinessHelper.HandleWholesaleDeliveries, TimeHelper.GetDayOfWeek]. Here the limit is in boxes per commissary and
-    // food, from rules.json. One-off and standing orders count together by their delivery day's week: boxes delivered,
+    // BusinessHelper.HandleWholesaleDeliveries, TimeHelper.GetDayOfWeek]. Here the limit is in boxes per food over all
+    // commissaries, from rules.json. One-off and standing orders count together by their delivery day's week: boxes delivered,
     // boxes booked and not yet delivered, and the deliveries standing orders still have to book that week, at full
     // size. Equipment and logistics plan deliveries don't count.
     public static class CommissarySupply
@@ -23,14 +24,14 @@ namespace FoodTrucks.Core.Commissary
             return day - (day - 1) % 7;
         }
 
-        // Boxes of the item counted in the week of `day` at the commissary.
-        public static int Used(CommissaryState state, string commissaryId, string itemName, int day)
+        // Boxes of the item counted in the week of `day`, at every commissary.
+        public static int Used(CommissaryState state, string itemName, int day)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             var week = WeekStart(day);
-            long used = state.WeekBoxes.Where(w => w.CommissaryId == commissaryId && w.ItemName == itemName && w.WeekStart == week).Sum(w => (long)w.Boxes);
-            used += state.Orders.Where(o => o.CommissaryId == commissaryId && o.ItemName == itemName && WeekStart(o.LimitDay) == week).Sum(o => (long)o.CappedBoxes);
-            foreach (var standing in state.StandingOrders.Where(s => s.CommissaryId == commissaryId))
+            long used = state.WeekBoxes.Where(w => w.ItemName == itemName && w.WeekStart == week).Sum(w => (long)w.Boxes);
+            used += state.Orders.Where(o => o.ItemName == itemName && WeekStart(o.LimitDay) == week).Sum(o => (long)o.CappedBoxes);
+            foreach (var standing in state.StandingOrders)
             {
                 var boxes = standing.Lines.Where(l => l.Capped && l.ItemName == itemName).Sum(l => (long)l.Boxes);
                 if (boxes > 0) used += boxes * CommissaryStandingOrders.DeliveriesIn(standing, week, week + 6);
@@ -39,18 +40,18 @@ namespace FoodTrucks.Core.Commissary
         }
 
         // Boxes of the item still free in the week of `day`, never below 0; int.MaxValue with the limits lifted.
-        public static int Left(CommissaryState state, CommissaryRules rules, string commissaryId, string itemName, int day, bool unlimited = false)
+        public static int Left(CommissaryState state, CommissaryRules rules, string itemName, int day, bool unlimited = false)
         {
             if (rules == null) throw new ArgumentNullException(nameof(rules));
             if (unlimited) return int.MaxValue;
-            return Math.Max(0, rules.FoodBoxLimit(itemName) - Used(state, commissaryId, itemName, day));
+            return Math.Max(0, rules.FoodBoxLimit(itemName) - Used(state, itemName, day));
         }
 
         // Whether a quote's food fits under each item's weekly limit in every week it delivers in: tomorrow's week for a
         // one-off order; for a standing order its deliveries in the next 14 days, so both the rest of the first week and
         // a whole week are checked. The first item and week that don't fit, with the boxes left there and the boxes the
         // order needs there.
-        public static CommissaryCapCheck Check(CommissaryState state, CommissaryRules rules, string commissaryId,
+        public static CommissaryCapCheck Check(CommissaryState state, CommissaryRules rules,
             CommissaryQuote quote, CommissaryRepeat repeat, int today, bool unlimited = false)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -67,13 +68,14 @@ namespace FoodTrucks.Core.Commissary
                 foreach (var week in days.Select(WeekStart).Distinct())
                 {
                     var needed = (long)line.CappedBoxes * days.Count(d => WeekStart(d) == week);
-                    var left = Left(state, rules, commissaryId, line.ItemName, week);
+                    var left = Left(state, rules, line.ItemName, week);
                     if (needed > left) return new CommissaryCapCheck(false, line.ItemName, week, left, (int)Math.Min(int.MaxValue, needed));
                 }
             return CommissaryCapCheck.Fine(first);
         }
 
-        // A paid delivery's food boxes go into its week's count; weeks before the current one are dropped.
+        // A paid delivery's food boxes go into its week's count (kept by commissary, counted over all of them); weeks before
+        // the current one are dropped.
         internal static void Delivered(CommissaryState state, CommissaryOrder order, int today)
         {
             var current = WeekStart(today);
@@ -196,8 +198,8 @@ namespace FoodTrucks.Core.Commissary
             if (!CommissaryOrdering.CanOrder(state, commissaryId)) throw new InvalidOperationException("Ordering requires an unlocked commissary with a rented space.");
             if (quote.Problem != CommissaryQuoteProblem.None) throw new InvalidOperationException($"The order can't be placed: {quote.Problem}.");
             var first = FirstDay(repeat, now.Day, firstDay);
-            if (!CommissarySupply.Check(state, rules, commissaryId, quote, repeat, first - 1, unlimited).Fits)
-                throw new InvalidOperationException("The order goes over a food's weekly limit at the commissary.");
+            if (!CommissarySupply.Check(state, rules, quote, repeat, first - 1, unlimited).Fits)
+                throw new InvalidOperationException("The order goes over a food's weekly limit on phone orders.");
             var standing = new CommissaryStandingOrder
             {
                 Id = state.NextStandingId,
@@ -325,26 +327,27 @@ namespace FoodTrucks.Core.Commissary
                 {
                     // Only boxes delivered or booked count: deliveries not booked yet (this order's later days, other
                     // standing orders) don't hold back today's, so the earliest booking gets the boxes.
-                    var booked = Booked(state, standing.CommissaryId, line.ItemName, countDay ?? nowDay)
+                    var booked = Booked(state, line.ItemName, countDay ?? nowDay)
                                  + requests.Where(r => r.ItemName == line.ItemName && r.Capped).Sum(r => r.Boxes);
                     boxes = Math.Max(0, Math.Min(boxes, rules.FoodBoxLimit(line.ItemName) - booked));
                     if (boxes < line.Boxes) run.Cut.Add((line.ItemName, line.Boxes, boxes));
                 }
                 if (boxes > 0) requests.Add(new CommissaryOrderRequest(line.ItemName, today.Value.BoxSize, today.Value.UnitPriceCents, boxes, line.Capped));
             }
-            // Each line becomes one order, priced as the phone form prices it (one fee per line).
+            // Each line becomes one order, priced as the phone form prices it. The delivery fee is charged on delivery, once
+            // per commissary and morning (Commissaries.Deliver).
             var quote = CommissaryOrdering.Quote(rules, requests);
             foreach (var line in quote.Lines)
                 run.Orders.Add(Commissaries.Book(state, rules, standing.CommissaryId, line.ItemName, line.Units, line.UnitPriceCents,
                     (nowDay, nowMinute), nowDay, line.CappedBoxes, standing.Id, countDay));
         }
 
-        // Boxes of the item delivered or booked (not yet delivered) in the week of `day`.
-        private static int Booked(CommissaryState state, string commissaryId, string itemName, int day)
+        // Boxes of the item delivered or booked (not yet delivered) in the week of `day`, at every commissary.
+        private static int Booked(CommissaryState state, string itemName, int day)
         {
             var week = CommissarySupply.WeekStart(day);
-            return state.WeekBoxes.Where(w => w.CommissaryId == commissaryId && w.ItemName == itemName && w.WeekStart == week).Sum(w => w.Boxes)
-                   + state.Orders.Where(o => o.CommissaryId == commissaryId && o.ItemName == itemName && CommissarySupply.WeekStart(o.LimitDay) == week).Sum(o => o.CappedBoxes);
+            return state.WeekBoxes.Where(w => w.ItemName == itemName && w.WeekStart == week).Sum(w => w.Boxes)
+                   + state.Orders.Where(o => o.ItemName == itemName && CommissarySupply.WeekStart(o.LimitDay) == week).Sum(o => o.CappedBoxes);
         }
     }
 }

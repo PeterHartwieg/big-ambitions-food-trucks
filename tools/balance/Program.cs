@@ -696,6 +696,11 @@ if (opts.Wants("pass"))
     double Wage(double skill) => 16 * (Math.Pow(skill, 1.05) / 100 + 1);
     var crewSpeed = rules.Service.Speed(FoodTrucks.Core.Rules.ServiceRules.EffectiveSkill(opts.CrewSkill, opts.CrewSatisfaction));
     var wage = Wage(opts.CrewSkill);
+    // The delivery fee: one flat fee per delivery at a commissary (rules.json deliveryFeeCents), whatever it brings and
+    // for however many vehicles. A vehicle's share a day: the fee × deliveries a week ÷ 7 ÷ the vehicles sharing them.
+    // One delivery a week covers a vehicle's week (10 boxes hold 5,000 units; a busy truck sells under 3,000 of all
+    // its foods), so the default is one a week for one vehicle.
+    var feeDay = cr.DeliveryFeeCents / 100.0 * opts.DeliveriesPerWeek / 7 / opts.FeeSharing;
     var commissaries = city.Commissaries(Path.Combine(opts.Data, "commissaries.json"));
     var truckMenu = new[] { HotDog, Coffee, Croissant, Soda };
     int CeilHalf(int minute) => (minute + 29) / 30 * 30;
@@ -829,7 +834,7 @@ if (opts.Wants("pass"))
             var fine = fined ? cr.OvernightFineCents / 100.0 : 0;
             var eval = new DayEval(result.Profit, result.Cost, hours, new Dictionary<string, double>(result.Sold), firstOut,
                 unlimited.Units > 0 ? result.Units / unlimited.Units : 1, $"{name}; bay {t} min away{(fined ? "; fined at 04:00" : "")}", fine);
-            var net = eval.Gross - hours * wage - cr.DeliveryFeeShare * eval.Goods - fine;
+            var net = eval.Gross - hours * wage - feeDay - fine;
             if (best == null || net > best.Value.Net) best = (net, eval);
         }
         if (best == null) return null;
@@ -871,7 +876,7 @@ if (opts.Wants("pass"))
     var week = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
     Conditions On(DayOfWeek day, FoodTrucks.Core.Pitches.PitchBonus? bonus = null, int month = 5, bool rain = false) => new()
         { Day = day, Month = month, Rain = rain, Pricing = opts.Pricing, PriceFactor = opts.PriceFactor, MarketDemand = opts.Market, Pitch = bonus ?? FoodTrucks.Core.Pitches.PitchBonus.None };
-    double DayNet(DayEval e, bool commissary, string kind) => e.Gross - e.HireHours * wage - (commissary ? cr.DeliveryFeeShare * e.Goods : 0) - e.Fine - RentDay(kind);
+    double DayNet(DayEval e, bool commissary, string kind) => e.Gross - e.HireHours * wage - (commissary ? feeDay : 0) - e.Fine - RentDay(kind);
     // A setup's week at a pitch: the seven days, and the week's gross, paid hire-hours, wages, fee and fines, and net.
     (List<DayEval> Days, double Gross, int Hours, double Wages, double Fee, double Fines, double Net) WeekOf(
         (string Label, Cart Cart, int Hires, bool Commissary, Func<Spot, Conditions, DayEval?> Day) setup, Spot spot, FoodTrucks.Core.Pitches.PitchBonus? bonus)
@@ -879,7 +884,7 @@ if (opts.Wants("pass"))
         var days = week.AsParallel().AsOrdered().Select(d => setup.Day(spot, On(d, bonus))!).ToList();
         var gross = days.Sum(d => d.Gross);
         var hours = days.Sum(d => d.HireHours);
-        var fee = setup.Commissary ? cr.DeliveryFeeShare * days.Sum(d => d.Goods) : 0;
+        var fee = setup.Commissary ? 7 * feeDay : 0;
         var fines = days.Sum(d => d.Fine);
         return (days, gross, hours, hours * wage, fee, fines, gross - 7 * RentDay(setup.Cart.VehicleKind) - hours * wage - fee - fines);
     }
@@ -891,7 +896,7 @@ if (opts.Wants("pass"))
                  "Crewed setups rank only pitches in a region with a commissary, since a crew loads only in its commissary's bay. " +
                  $"Gross: sales less goods at wholesale. Rent: the commissary space, ${RentDay("cart"):0.00} a day for a cart, ${RentDay("truck"):0.00} for a truck. " +
                  $"Hires: customer service {opts.CrewSkill:0} at satisfaction {opts.CrewSatisfaction:0}, ${wage:0.00} an hour, team speed {crewSpeed:0.00}, paid as the game pays them: a route's every hour its shift (leaving the bay to the bay stop's close) covers at least half of, sold out or not; a window the player opened, every hour the hire serves in its first half. " +
-                 $"Fee: {cr.DeliveryFeeShare:P0} of the goods sold when a crew's stock comes by phone (a logistics plan has none); players haul from the wholesaler. " +
+                 $"Fee: ${cr.DeliveryFeeCents / 100.0:0} per delivery at a commissary, {opts.DeliveriesPerWeek:0.#} a week shared by {opts.FeeSharing:0.#} vehicles (${feeDay:0.00} a vehicle a day), when a crew's stock comes by phone (a logistics plan has none); players haul from the wholesaler. " +
                  $"The player restocks when a piece runs out: a cart is pushed at {opts.MetresPerSecond} m/s, a truck driven at {opts.DriveSpeed} m/s, to the nearest wholesaler. " +
                  "A crew's route is built and checked by Core's HireSchedules: pitch then a 30-minute bay stop before midnight (the pitch closes early enough; the night in the bay), or a morning bay stop then the pitch (the night at the pitch, fined $250 at 04:00), whichever Core accepts and nets more; the crew loads in the bay and sells until everything is out or the stop closes, and a sold-out crew waits for the next bay stop. The midday bay stop row adds a bay stop at 11:00, 13:30 or 16:00, whichever nets most. The note names the route and the forms Core refused. " +
                  "First out: hours from opening, full, until the first piece is empty, weekday. Of demand: units sold against the same weekday with unlimited stock and no trips.");
@@ -968,12 +973,12 @@ if (opts.Wants("pass"))
     }
     o.AppendLine();
 
-    // The commissary's phone limit: boxes of each food a week (rules.json commissary.foodBoxesPerWeek), per commissary.
-    o.AppendLine($"## The weekly phone limit: {cr.FoodBoxesPerWeek} boxes of each food a week per commissary");
+    // The phone limit: boxes of each food a week (rules.json commissary.foodBoxesPerWeek), one limit for the whole fleet.
+    o.AppendLine($"## The weekly phone limit: {cr.FoodBoxesPerWeek} boxes of each food a week for the whole fleet");
     o.AppendLine();
-    o.AppendLine("Each food's units sold in the week above, and how many such vehicles one commissary's limit supplies (limit ÷ one vehicle's week). A box holds the item's box size (500 for every food here).");
+    o.AppendLine("Each food's units sold in the week above, and how many such vehicles the fleet's limit supplies (limit ÷ one vehicle's week). A box holds the item's box size (500 for every food here).");
     o.AppendLine();
-    o.AppendLine("| Setup | Pitch | Units a week (vehicles one commissary's limit supplies) |");
+    o.AppendLine("| Setup | Pitch | Units a week (vehicles the fleet's limit supplies) |");
     o.AppendLine("|---|---|---|");
     foreach (var (setup, tier, units) in weekUnits.Where(w => w.Tier is "typical" or "good" or "best" or "premium, best"))
         o.AppendLine($"| {setup} | {tier} | {string.Join(", ", units.OrderByDescending(p => p.Value).Select(p => $"{p.Key.Split('_').Last()} {p.Value:0} ({cr.FoodBoxLimit(p.Key) * prices.Items[p.Key].Box / Math.Max(1, p.Value):0.0})"))} |");
@@ -989,7 +994,7 @@ if (opts.Wants("pass"))
     };
     o.AppendLine("## The delivery fee against hauling: the player's weekday at the good pitch");
     o.AppendLine();
-    o.AppendLine("Wholesaler: all stock hauled from the nearest wholesaler, goods at wholesale. Commissary: all stock ordered by phone (the fee on every unit sold) and restocks at the nearest commissary's bay with its Restock button. In place: no trip (the upper bound).");
+    o.AppendLine("Wholesaler: all stock hauled from the nearest wholesaler, goods at wholesale. Commissary: all stock ordered by phone (the vehicle's day share of the flat delivery fee, as in the pass table) and restocks at the nearest commissary's bay with its Restock button. In place: no trip (the upper bound).");
     o.AppendLine();
     o.AppendLine("| Setup | Spot | Wholesaler: profit, restocks, minutes away | Commissary: profit less fee, restocks, minutes away | Fee | In place |");
     o.AppendLine("|---|---|---|---|---|---|");
@@ -1000,7 +1005,7 @@ if (opts.Wants("pass"))
         var w = new Planner(cart, city, tr).SingleSpot(spot, from, to, c);
         var com = new Planner(cart, city, new Travel { MetresPerMinute = tr.MetresPerMinute, Detour = tr.Detour, ShopMinutes = 5 }) { Depots = commissaries }.SingleSpot(spot, from, to, c);
         var hand = new Planner(cart, city, tr) { Mode = RestockMode.BoxInHand }.SingleSpot(spot, from, to, c);
-        var fee = cr.DeliveryFeeShare * com.Total.Cost;
+        var fee = feeDay;
         o.AppendLine($"| {label} | {spot.Name} ({H(spot.Hood)}) | {Money(w.Total.Profit)}, {w.Restocks}, {w.Stays.Sum(x => x.RestockMinutes)} | " +
                      $"{Money(com.Total.Profit - fee)}, {com.Restocks}, {com.Stays.Sum(x => x.RestockMinutes)} | {Money(fee)} | {Money(hand.Total.Profit)} |");
     }
@@ -1125,6 +1130,9 @@ sealed class Options
     // A typical hire for the pass report: customer service skill and satisfaction.
     public double CrewSkill = 60;
     public double CrewSatisfaction = 85;
+    // Phone deliveries a week at the vehicle's commissary, and how many vehicles share each (one flat fee per delivery).
+    public double DeliveriesPerWeek = 1;
+    public double FeeSharing = 1;
     public double CartPrice = 1200;
     public bool Parks = true;
     // --service queue (default): the game's queue since 0.4.0. --service fluid: the old min(buyers, capacity).
@@ -1170,6 +1178,8 @@ sealed class Options
                 case "--drive-speed": o.DriveSpeed = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "--crew-skill": o.CrewSkill = double.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "--crew-satisfaction": o.CrewSatisfaction = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                case "--deliveries-per-week": o.DeliveriesPerWeek = double.Parse(Next(), CultureInfo.InvariantCulture); break;
+                case "--fee-sharing": o.FeeSharing = Math.Max(1, double.Parse(Next(), CultureInfo.InvariantCulture)); break;
                 case "--no-parks": case "--no-archetypes": o.Parks = false; break;
                 case "--carts": o.Carts = Next().Split(','); o.FoodCarts = o.Carts; break;
                 case "--service": o.Queue = Next() != "fluid"; break;

@@ -83,6 +83,7 @@ namespace FoodTrucks
                                  "resolved at " + string.Join("; ", resolved.Select(p => $"x {p.X:F1}, z {p.Z:F1}")) + " (from the save)."));
                 LogBusinessAt(site);
             }
+            LogGameDeliveryFees(Rules!);
             // The lanes filled the bays with parked cars on the game's load event, before this one: they go now, under
             // the loading screen. Bays still to be searched are searched first, while the screen hides any car their
             // sweep removes (a bay resolved later keeps the view rule and its paint waits; BayParking).
@@ -105,6 +106,25 @@ namespace FoodTrucks
                      $"{commissary.Orders.Count} orders on the way (paid on delivery), {commissary.Stock.Values.Sum(l => l.Sum(x => (long)x.Units))} units in stock, " +
                      $"{commissary.StandingOrders.Count} standing orders ({string.Join("; ", commissary.StandingOrders.Select(o => $"{o.Id} {o.Repeat} at {o.CommissaryId}, next day {o.NextDay}"))}), " +
                      $"{commissary.Charges.Count} rent charges and {commissary.Fines.Count} fines unpaid; night checked through day {commissary.NightCheckedThroughDay?.ToString() ?? "(not started)"}.");
+        }
+
+        // The game's own wholesale delivery fee, a value on each wholesaler's settings asset that the code doesn't show
+        // (WholesaleStoreSettings.deliveryFee, copied into each contract and charged once per delivery), logged once
+        // against the commissary's flat fee so a session can compare them.
+        private static bool deliveryFeesLogged;
+
+        private static void LogGameDeliveryFees(CommissaryRules rules)
+        {
+            if (deliveryFeesLogged) return;
+            deliveryFeesLogged = true;
+            try
+            {
+                var fees = Resources.FindObjectsOfTypeAll<global::Buildings.WholesaleStoreSettings>()
+                    .Where(w => w != null).Select(w => $"{w.name} {CartSelling.Money((long)Math.Round(w.deliveryFee * 100))}").Distinct().ToList();
+                Log.Info($"Commissary delivery fee: {CartSelling.Money(rules.DeliveryFeeCents)} per delivery; the game's wholesale delivery fees: " +
+                         (fees.Count == 0 ? "none loaded" : string.Join(", ", fees)) + "; furniture deliveries $250.");
+            }
+            catch (Exception ex) { Log.Error("Commissary, reading the game's delivery fees: " + ex.Message); }
         }
 
         public static void Detach() => attached = false;
@@ -869,14 +889,16 @@ namespace FoodTrucks
             foreach (var order in run.Delivered)
             {
                 Log.Info($"Commissary delivery: order {order.Id}, {order.Units} {order.ItemName} at {order.CommissaryId} (ordered day {order.OrderedDay}, due day {order.DeliverDay}), " +
-                         $"paid {CartSelling.Money(order.TotalCents)} on delivery (goods {CartSelling.Money(order.GoodsCents)}, fee {CartSelling.Money(order.FeeCents)}).");
+                         $"paid {CartSelling.Money(order.TotalCents)} on delivery (goods {CartSelling.Money(order.GoodsCents)}, fee {CartSelling.Money(order.FeeCents)}" +
+                         (order.FeeCents > 0 ? ", this morning's delivery fee here)." : ", the delivery's fee paid with another order)."));
                 if (state.Commissary.Unlocked.Contains(order.CommissaryId))
-                    Notices.SendText(ContactFor(order.CommissaryId), "foodtrucks:message_commissary_delivered", new Dictionary<string, string>
+                    Notices.SendText(ContactFor(order.CommissaryId), order.FeeCents > 0 ? "foodtrucks:message_commissary_delivered_fee" : "foodtrucks:message_commissary_delivered", new Dictionary<string, string>
                     {
                         { "units", order.Units.ToString() },
                         { "item", LocalizorManager.GetLocalization(order.ItemName, null) },
                         { "commissary", NameOf(order.CommissaryId) },
-                        { "total", CartSelling.Money(order.TotalCents) }
+                        { "total", CartSelling.Money(order.TotalCents) },
+                        { "fee", CartSelling.Money(order.FeeCents) }
                     });
             }
             foreach (var order in run.Refused)
@@ -1647,10 +1669,24 @@ namespace FoodTrucks
             foreach (var order in orders)
             {
                 var boxes = quote.Lines.FirstOrDefault(l => l.ItemName == order.ItemName)?.Boxes ?? 0;
-                Log.Info($"Commissary order {order.Id}: {boxes} boxes, {order.Units} {order.ItemName} at {siteId} for {CartSelling.Money(order.GoodsCents)} " +
-                         $"plus {CartSelling.Money(order.FeeCents)} delivery, paid on delivery; due day {order.DeliverDay} at {CityPitches.Clock(rules.DeliveryMinute)}.");
+                Log.Info($"Commissary order {order.Id}: {boxes} boxes, {order.Units} {order.ItemName} at {siteId} for {CartSelling.Money(order.GoodsCents)}, paid on delivery; " +
+                         $"due day {order.DeliverDay} at {CityPitches.Clock(rules.DeliveryMinute)}.");
             }
+            if (orders.Count > 0)
+                Log.Info($"Commissary delivery fee at {siteId} for day {orders[0].DeliverDay}: {CartSelling.Money(rules.DeliveryFeeCents)} once for that morning's delivery" +
+                         (quote.SharedDelivery ? ", shared with an order already arriving then." : "."));
             return orders;
+        }
+
+        // A quote for an order to this commissary, delivered tomorrow: one flat fee for the delivery, none when something
+        // else already arrives there tomorrow morning (Core CommissaryOrdering.SharesDelivery). Null without data.
+        internal static CommissaryQuote? QuoteFor(string siteId, IEnumerable<CommissaryOrderRequest> requests)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            var rules = Rules;
+            if (state == null || rules == null) return null;
+            var tomorrow = (int)(HireCrew.Now() / 1440) + 2;
+            return CommissaryOrdering.Quote(rules, requests, CommissaryOrdering.SharesDelivery(state.Commissary, siteId, tomorrow));
         }
 
         // A confirmed order that repeats: Core keeps it as a standing order, its first delivery tomorrow.
@@ -1682,12 +1718,13 @@ namespace FoodTrucks
         {
             var today = (int)(HireCrew.Now() / 1440) + 1;
             var first = repeat == CommissaryRepeat.Once ? today + 1 : CommissaryStandingOrders.FirstDay(repeat, today, firstDay);
-            var check = CommissarySupply.Check(state.Commissary, rules, siteId, quote, repeat, first - 1, LimitsLifted);
+            var check = CommissarySupply.Check(state.Commissary, rules, quote, repeat, first - 1, LimitsLifted);
             if (check.Fits) return null;
-            Log.Info($"Commissary order at {siteId}: {check.ItemName} over its weekly limit ({repeat}): {check.Left} boxes left in the week of day {check.WeekStart}, {check.Needed} needed.");
+            Log.Info($"Commissary order at {siteId}: {check.ItemName} over its weekly limit for the whole fleet ({repeat}): {check.Left} boxes left in the week of day {check.WeekStart}, {check.Needed} needed.");
             return LocalizorManager.GetLocalization("foodtrucks:commissary_over_limit", null)
                 .Replace("{item}", LocalizorManager.GetLocalization(check.ItemName, null)).Replace("{left}", check.Left.ToString())
-                .Replace("{needed}", check.Needed.ToString()).Replace("{day}", check.WeekStart.ToString());
+                .Replace("{needed}", check.Needed.ToString()).Replace("{day}", check.WeekStart.ToString())
+                .Replace("{limit}", rules.FoodBoxLimit(check.ItemName!).ToString());
         }
 
         // The test bridge's fixture: the Commissary button's Rent for this vehicle at this commissary, without standing in
@@ -1709,16 +1746,17 @@ namespace FoodTrucks
 
         // The test bridge's order: the phone form's confirm without the call. The same Core quote and order code and log
         // lines; nothing is paid now (orders are paid on delivery). `items` are item keys or names with their boxes.
-        // Returns the orders placed, or why none were.
-        internal static (IReadOnlyList<CommissaryOrder> Orders, string? Refusal) OrderForTesting(string siteId, IEnumerable<(string Item, int Boxes)> items)
+        // Returns the orders placed and the delivery fee the quote adds (0 when another order already arrives there that
+        // morning), or why none were placed.
+        internal static (IReadOnlyList<CommissaryOrder> Orders, string? Refusal, long FeeCents) OrderForTesting(string siteId, IEnumerable<(string Item, int Boxes)> items)
         {
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
             var site = Sites?.Site(siteId);
             if (state == null || rules == null || site == null || uninstalled || !FoodTrucksSession.CanWrite)
-                return (Array.Empty<CommissaryOrder>(), site == null ? $"no commissary {siteId}" : "the commissary can't take orders now (data not loaded, read-only or uninstalled)");
+                return (Array.Empty<CommissaryOrder>(), site == null ? $"no commissary {siteId}" : "the commissary can't take orders now (data not loaded, read-only or uninstalled)", 0);
             if (!CommissaryOrdering.CanOrder(state.Commissary, siteId))
-                return (Array.Empty<CommissaryOrder>(), $"no space rented at {siteId} (or it isn't unlocked): rent a space first");
+                return (Array.Empty<CommissaryOrder>(), $"no space rented at {siteId} (or it isn't unlocked): rent a space first", 0);
             var catalogue = Catalogue(false).Concat(Catalogue(true)).ToList();
             var requests = new List<CommissaryOrderRequest>();
             foreach (var (item, boxes) in items)
@@ -1726,19 +1764,19 @@ namespace FoodTrucks
                 var line = catalogue.FirstOrDefault(c => c.Item1 == item);
                 if (line.Item1 == null)
                     line = catalogue.FirstOrDefault(c => string.Equals(LocalizorManager.GetLocalization(c.Item1, null), item, StringComparison.OrdinalIgnoreCase));
-                if (line.Item1 == null) return (Array.Empty<CommissaryOrder>(), $"{item} isn't on the commissary's list");
+                if (line.Item1 == null) return (Array.Empty<CommissaryOrder>(), $"{item} isn't on the commissary's list", 0);
                 requests.Add(new CommissaryOrderRequest(line.Item1, line.Item2, line.Item3, Math.Max(0, boxes), DemandData.Tables?.EquipmentForGameItem(line.Item1) == null));
             }
-            var quote = CommissaryOrdering.Quote(rules, requests);
-            if (quote.Problem == CommissaryQuoteProblem.Empty) return (Array.Empty<CommissaryOrder>(), "the order has no boxes");
+            var quote = QuoteFor(siteId, requests)!;
+            if (quote.Problem == CommissaryQuoteProblem.Empty) return (Array.Empty<CommissaryOrder>(), "the order has no boxes", 0);
             if (quote.Problem == CommissaryQuoteProblem.TooManyBoxes)
-                return (Array.Empty<CommissaryOrder>(), $"more than {CommissaryOrdering.MaxBoxesPerOrder} boxes in one order");
+                return (Array.Empty<CommissaryOrder>(), $"more than {CommissaryOrdering.MaxBoxesPerOrder} boxes in one order", 0);
             var over = OverLimit(state, rules, siteId, quote, CommissaryRepeat.Once);
-            if (over != null) return (Array.Empty<CommissaryOrder>(), over);
+            if (over != null) return (Array.Empty<CommissaryOrder>(), over, 0);
             Log.Info($"Commissary order at {siteId}: read back {quote.Boxes} boxes ({string.Join(", ", quote.Lines.Select(l => $"{l.Boxes} {l.ItemName}"))}), " +
-                     $"{CartSelling.Money(quote.GoodsCents)} plus {CartSelling.Money(quote.FeeCents)} delivery (test bridge).");
+                     $"{CartSelling.Money(quote.GoodsCents)} plus {CartSelling.Money(quote.FeeCents)} delivery{(quote.SharedDelivery ? " (shared)" : "")} (test bridge).");
             var placed = PlaceQuote(siteId, quote);
-            return (placed, placed.Count == 0 ? "Core placed no order" : null);
+            return (placed, placed.Count == 0 ? "Core placed no order" : null, quote.FeeCents);
         }
 
         // ---- The uninstall step ----
@@ -2275,8 +2313,8 @@ namespace FoodTrucks
             CommissaryOrderForm.Begin(Current.contact.id, siteId, lines);
             var weekly = Commissary.LimitsLifted ? "off (the game's wholesale limits are switched off)"
                 : string.Join(", ", lines.Where(l => DemandData.Tables?.EquipmentForGameItem(l.Item) == null)
-                    .Select(l => $"{l.Item} {CommissarySupply.Left(FoodTrucksSession.CurrentState!.Commissary, DemandData.Rules!.Commissary!, siteId, l.Item, TimeHelper.CurrentDay + 1)}"));
-            Log.Info($"Commissary order at {siteId}: the order form lists {lines.Count} items; boxes left this week by food: {weekly}.");
+                    .Select(l => $"{l.Item} {CommissarySupply.Left(FoodTrucksSession.CurrentState!.Commissary, DemandData.Rules!.Commissary!, l.Item, TimeHelper.CurrentDay + 1)}"));
+            Log.Info($"Commissary order at {siteId}: the order form lists {lines.Count} items; boxes left this week by food, whole fleet: {weekly}.");
             return new DialogEntry
             {
                 headerKey = "foodtrucks:dialog_commissary_order_header",
@@ -2297,7 +2335,7 @@ namespace FoodTrucks
             if (refusal != null) return refusal;
             var rules = DemandData.Rules!.Commissary!;
             var form = Current.GetInputComponent<UI.Dialog.FurnitureDeliveryContractSettings>();
-            var quote = CommissaryOrdering.Quote(rules, CommissaryOrderForm.Requests(form));
+            var quote = Commissary.QuoteFor(siteId, CommissaryOrderForm.Requests(form))!;
             switch (quote.Problem)
             {
                 case CommissaryQuoteProblem.Empty:
@@ -2323,15 +2361,18 @@ namespace FoodTrucks
                 items,
                 goods = CartSelling.Money(quote.GoodsCents),
                 fee = CartSelling.Money(quote.FeeCents),
+                perDelivery = CartSelling.Money(quote.FeePerDeliveryCents),
                 total = CartSelling.Money(quote.TotalCents),
                 time = CityPitches.Clock(rules.DeliveryMinute)
             };
-            Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_quote", ToDictionary(data), read: true));
+            // The fee is per delivery here: shared when another order already arrives tomorrow morning.
+            var quoteKey = quote.SharedDelivery ? "foodtrucks:dialog_commissary_quote_shared" : "foodtrucks:dialog_commissary_quote";
+            Notices.Send(Current.contact, new TextMessage(quoteKey, ToDictionary(data), read: true));
             Log.Info($"Commissary order at {siteId}: read back {quote.Boxes} boxes ({string.Join(", ", quote.Lines.Select(l => $"{l.Boxes} {l.ItemName}"))}), " +
-                     $"{CartSelling.Money(quote.GoodsCents)} plus {CartSelling.Money(quote.FeeCents)} delivery.");
+                     $"{CartSelling.Money(quote.GoodsCents)} plus {CartSelling.Money(quote.FeeCents)} delivery{(quote.SharedDelivery ? " (shared with an order already arriving then)" : "")}.");
             return new DialogEntry
             {
-                messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_quote", data),
+                messageData = LocalizorManager.Localize(quoteKey, data),
                 Template = DialogEntry.TemplateType.Text,
                 OnConfirm = Guard(() => HowOften(siteId, quote)),
                 ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_order_confirm", (object?)null),
@@ -2409,7 +2450,8 @@ namespace FoodTrucks
                 { "repeat", Commissary.StandingRepeat(standing) },
                 { "items", Commissary.StandingItems(standing) },
                 { "time", CityPitches.Clock(rules.DeliveryMinute) },
-                { "day", standing.NextDay.ToString() }
+                { "day", standing.NextDay.ToString() },
+                { "fee", CartSelling.Money(rules.DeliveryFeeCents) }
             };
             Notices.Send(Current.contact, new TextMessage(key, data, read: true));
             CommissaryOrderForm.End("standing order placed");
@@ -2451,6 +2493,9 @@ namespace FoodTrucks
                 CartSelling.Notify("foodtrucks:notification", ("message", over));
                 return Form(siteId);
             }
+            // Whether the fee is shared is decided again now: another order may have been placed since the read-back.
+            var tomorrow = (int)(HireCrew.Now() / 1440) + 2;
+            var shared = CommissaryOrdering.SharesDelivery(FoodTrucksSession.CurrentState!.Commissary, siteId, tomorrow);
             var placed = Commissary.PlaceQuote(siteId, quote);
             if (placed.Count == 0) return Closing("foodtrucks:dialog_commissary_unavailable", null);
             var texts = new List<string>();
@@ -2461,9 +2506,16 @@ namespace FoodTrucks
                 {
                     { "units", order.Units.ToString() },
                     { "item", LocalizorManager.GetLocalization(order.ItemName, null) },
-                    { "total", CartSelling.Money(order.TotalCents) },
+                    { "total", CartSelling.Money(order.GoodsCents) },
                     { "time", CityPitches.Clock(rules.DeliveryMinute) }
                 };
+                Notices.Send(Current.contact, new TextMessage(key, data, read: true));
+                texts.Add(LocalizorManager.Localize(key, data).ToString());
+            }
+            {
+                // One text for the delivery fee: once for tomorrow morning's delivery here, whatever arrives with it.
+                var key = shared ? "foodtrucks:message_commissary_ordered_fee_shared" : "foodtrucks:message_commissary_ordered_fee";
+                var data = new Dictionary<string, string> { { "fee", CartSelling.Money(rules.DeliveryFeeCents) }, { "time", CityPitches.Clock(rules.DeliveryMinute) } };
                 Notices.Send(Current.contact, new TextMessage(key, data, read: true));
                 texts.Add(LocalizorManager.Localize(key, data).ToString());
             }

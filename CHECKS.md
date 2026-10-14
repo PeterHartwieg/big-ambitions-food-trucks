@@ -1,3 +1,21 @@
+# Tuning (next build)
+
+Branch `tuning-1`; no version bump. Peter's balance decisions of 14 October 2026: the weekly phone limit is one for the whole fleet (all commissaries together), the 10% delivery fee is now a flat $250 per delivery (one fee per commissary and morning, whatever arrives), weekend markets bring a park crowd on top of the street's, catering's weekend events can be at a park gate, and the test bridge has a read-only `parks` command for collecting park positions. About 15 minutes in a throwaway save with spaces rented at two commissaries (FT bridge 2 has trucks and hires) and some money.
+
+| # | Do | Look for |
+|---|---|---|
+| T1 | Call commissary A, Order stock, open the item list | Each food reads "Hot dog, box of 500 (… here, N more boxes this week, all commissaries)" |
+| T2 | Order 3 boxes of hot dogs at A and confirm Just tomorrow; then call commissary B and open its item list | B's hot dog line shows 3 fewer boxes left: the limit is one for the fleet. Ordering more than what's left at B is refused with "Phone orders are limited to 10 boxes of each food a week for your whole fleet, at all commissaries together …" |
+| T3 | At A, a new order on a day with nothing arriving there tomorrow: Order, then read the read-back | The form's fee box and the read-back say $250 delivery; the read-back says the fee is per delivery here, one fee for everything that morning. After Confirm order, Just tomorrow: one "Ordered: …" text per food and one "Delivery fee: $250 for tomorrow's 08:00 delivery here …" text |
+| T4 | Order again at A the same day (another food) | The form's fee box shows $0 and the read-back says "No extra delivery fee: another order already comes here that morning …"; the closing text says no extra fee |
+| T5 | Let 08:00 come (or Ctrl+Alt+F3) | The first delivered order's text says "… paid, with this morning's $250 delivery fee …", the others don't; money drops by the goods plus one $250 at A (and one at B if B delivers too). Econoview's delivery fees for the day: $250 per commissary that delivered |
+| T6 | Confirm an order with Repeat it, Every day | "Standing order: … plus the $250 delivery fee, once per morning we deliver here …". The next mornings each charge one $250 at that commissary, shared with any one-off order arriving there then |
+| T7 | Book a weekend market place (City of New York, when one is announced) with a hot dog cart and open there on the day | Clearly busier than an ordinary Saturday there, more drinks than usual; Ctrl+Alt+L shows `park` among the areas |
+| L1 | Load | `Commissary delivery fee: $250 per delivery; the game's wholesale delivery fees: <name> $…, …; furniture deliveries $250.` Note the wholesalers' values: they live on the game's assets, not in its code |
+| L2 | T3 to T6 | `Commissary delivery fee at <site> for day N: $250.00 once for that morning's delivery` on the first order of a morning, `…, shared with an order already arriving then.` on a second; deliveries log `fee $250.00, this morning's delivery fee here` on one order per commissary and morning, `fee $0.00, the delivery's fee paid with another order` on the rest |
+| L3 | A day or two of play with a crewed truck | `Catering: day N: … places (M at park gates) …` with M above 0 once the parks are found; weekend `event` gigs may be at a park gate |
+| B1 | Test bridge: `tools/ft call parks` in any save in the city | Each park the mod found: kind, neighbourhood, bounds, centre and the 5 nearest entrances. Save the JSON in `build/logs/game/parks/`: the park premium spots (one per neighbourhood with a park, at a gate) are picked from it |
+
 # Parks as their own demand area (next build)
 
 Branch `balance-park`; no version bump. Parks get the `park` area (`data/demand.json`): busy on weekend daytime, a weekday lunch bump, quiet at night, in rain and in winter, ice cream, slushies, snacks and drinks strong. The mod finds the game's own parks from the trigger volumes that give the walking-in-the-park happiness boost (`ParkAreas`), and zones in `data/zones.json` can add parks it misses. Unverified in game whether the volumes load with the city and cover each park. About 10 minutes in a throwaway save with a cart or truck.

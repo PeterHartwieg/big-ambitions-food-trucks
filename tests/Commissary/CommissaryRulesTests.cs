@@ -23,7 +23,7 @@ public class CommissaryRulesTests
             Assert.Equal(25000, rules.OvernightFineCents);
             Assert.Equal(240, rules.NightCheckMinute);
             Assert.Equal(480, rules.DeliveryMinute);
-            Assert.Equal(0.10, rules.DeliveryFeeShare);
+            Assert.Equal(25000, rules.DeliveryFeeCents);
             Assert.Equal(15, rules.BayRadiusMetres);
             Assert.Equal(10, rules.FoodBoxesPerWeek);
         }
@@ -33,13 +33,13 @@ public class CommissaryRulesTests
     public void CustomRulesAreReadExactlyAndCollectionsAreCopied()
     {
         var root = JObject.Parse(ShippedData.RulesJson);
-        root["commissary"] = JObject.Parse("{\"rentPerMonthCents\":{\"van\":9223372036854775807},\"overnightFineCents\":9223372036854775807,\"nightCheckMinute\":200,\"deliveryMinute\":500,\"deliveryFeeShare\":0.2,\"bayRadiusMetres\":20,\"foodBoxesPerWeek\":{\"default\":3,\"items\":{\"hotdog\":5}}}");
+        root["commissary"] = JObject.Parse("{\"rentPerMonthCents\":{\"van\":9223372036854775807},\"overnightFineCents\":9223372036854775807,\"nightCheckMinute\":200,\"deliveryMinute\":500,\"deliveryFeeCents\":9223372036854775807,\"bayRadiusMetres\":20,\"foodBoxesPerWeek\":{\"default\":3,\"items\":{\"hotdog\":5}}}");
         var rules = RuleTables.Parse(root.ToString()).Commissary;
         Assert.Equal(long.MaxValue, rules.RentPerMonthCents["van"]);
         Assert.Equal(long.MaxValue, rules.OvernightFineCents);
         Assert.Equal(200, rules.NightCheckMinute);
         Assert.Equal(500, rules.DeliveryMinute);
-        Assert.Equal(2, rules.FeeCents(10));
+        Assert.Equal(long.MaxValue, rules.DeliveryFeeCents);
         Assert.Equal(20, rules.BayRadiusMetres);
         Assert.Equal(3, rules.FoodBoxesPerWeek);
         Assert.Equal(5, rules.FoodBoxLimit("hotdog"));
@@ -52,17 +52,6 @@ public class CommissaryRulesTests
         Assert.Throws<NotSupportedException>(() => ((IDictionary<string, long>)rules.RentPerMonthCents).Clear());
     }
 
-    [Fact]
-    public void FeesRoundOncePerOrderWithHalfCentsAwayFromZero()
-    {
-        var rules = new CommissaryRules();
-        Assert.Equal(1, rules.FeeCents(5));
-        Assert.Equal(2, rules.FeeCents(15));
-        Assert.Equal(0, rules.FeeCents(4));
-        Assert.Equal(0, rules.FeeCents(0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => rules.FeeCents(-1));
-    }
-
     [Theory]
     [InlineData("rentPerMonthCents.cart", "-1")]
     [InlineData("rentPerMonthCents.cart", "1.5")]
@@ -73,8 +62,9 @@ public class CommissaryRulesTests
     [InlineData("nightCheckMinute", "-1")]
     [InlineData("deliveryMinute", "480.5")]
     [InlineData("deliveryMinute", "null")]
-    [InlineData("deliveryFeeShare", "-0.1")]
-    [InlineData("deliveryFeeShare", "1.1")]
+    [InlineData("deliveryFeeCents", "-1")]
+    [InlineData("deliveryFeeCents", "250.5")]
+    [InlineData("deliveryFeeCents", "null")]
     [InlineData("bayRadiusMetres", "0")]
     [InlineData("bayRadiusMetres", "-1")]
     public void BadRulesNameTheJsonPath(string path, string value)
@@ -97,14 +87,9 @@ public class CommissaryRulesTests
         Assert.Contains("commissary", Assert.Throws<DemandDataException>(() => RuleTables.Parse(root.ToString())).Message);
     }
 
-    [Theory]
-    [InlineData(double.NaN)]
-    [InlineData(double.PositiveInfinity)]
-    [InlineData(double.NegativeInfinity)]
-    [InlineData(-0.1)]
-    [InlineData(1.1)]
-    public void InvalidFeeSharesAreRejectedInDirectConstruction(double value) =>
-        Assert.Throws<ArgumentOutOfRangeException>(() => new CommissaryRules(deliveryFeeShare: value));
+    [Fact]
+    public void ANegativeDeliveryFeeIsRejectedInDirectConstruction() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CommissaryRules(deliveryFeeCents: -1));
 
     [Fact]
     public void OtherInvalidConstructorInputsAreRejected()

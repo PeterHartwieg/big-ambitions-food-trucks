@@ -861,15 +861,19 @@ namespace FoodTrucks
             var site = Need(args, "site", "the commissary's id");
             if (!(args["items"] is JArray rows) || rows.Count == 0) throw new BridgeError("order needs \"items\": [ { \"item\", \"boxes\" } ].");
             var items = rows.OfType<JObject>().Select(r => (Item: Need(r, "item", "an item key or name"), Boxes: (int)(Num(r, "boxes") ?? throw new BridgeError("Each item needs \"boxes\".")))).ToList();
-            var (orders, refusal) = global::FoodTrucks.Commissary.OrderForTesting(site, items);
+            var (orders, refusal, feeCents) = global::FoodTrucks.Commissary.OrderForTesting(site, items);
             if (refusal != null) throw new BridgeError(refusal);
+            // The delivery fee is set when the orders arrive, once per commissary and morning, on the first order paid.
+            // Here the first order shows the fee this quote adds (0 when another order already arrives there that
+            // morning), so fee and total are what each order is expected to pay on delivery.
             return new JObject
             {
-                ["orders"] = new JArray(orders.Select(o => new JObject
+                ["orders"] = new JArray(orders.Select((o, i) => new JObject
                 {
                     ["n"] = o.Id, ["site"] = o.CommissaryId, ["item"] = o.ItemName, ["units"] = o.Units,
-                    ["goods"] = o.GoodsCents / 100.0, ["fee"] = o.FeeCents / 100.0, ["total"] = o.TotalCents / 100.0, ["due_day"] = o.DeliverDay,
+                    ["goods"] = o.GoodsCents / 100.0, ["fee"] = (i == 0 ? feeCents : 0) / 100.0, ["total"] = (o.GoodsCents + (i == 0 ? feeCents : 0)) / 100.0, ["due_day"] = o.DeliverDay,
                 })),
+                ["delivery_fee"] = feeCents / 100.0,
             };
         }
 

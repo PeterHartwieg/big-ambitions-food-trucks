@@ -15,9 +15,12 @@ namespace FoodTrucks.Core.Commissary
         // Phone orders that repeat every day or every week (CommissaryStandingOrders); each due day books its delivery.
         public List<CommissaryStandingOrder> StandingOrders { get; set; } = new List<CommissaryStandingOrder>();
         public long NextStandingId { get; set; } = 1;
-        // Food boxes delivered from phone orders per commissary, item and game week, for the weekly limit
-        // (CommissarySupply). Weeks before the current one are dropped.
+        // Food boxes delivered from phone orders per commissary, item and game week, for the weekly limit, which counts
+        // them over all commissaries (CommissarySupply). Weeks before the current one are dropped.
         public List<CommissaryWeekBoxes> WeekBoxes { get; set; } = new List<CommissaryWeekBoxes>();
+        // Deliveries whose fee is paid: one per commissary and delivery day (Commissaries.Deliver), so a later run the same
+        // day, or one after a payment that threw, doesn't charge it again. Days before yesterday are dropped.
+        public List<CommissaryFeePaid> FeesPaid { get; set; } = new List<CommissaryFeePaid>();
         // Separate batches, including when prices differ, in arrival order. No averaging of goods costs.
         public Dictionary<string, List<CommissaryStockLine>> Stock { get; set; } = new Dictionary<string, List<CommissaryStockLine>>(StringComparer.Ordinal);
         public long NextOrderId { get; set; } = 1;
@@ -97,11 +100,13 @@ namespace FoodTrucks.Core.Commissary
         public string ItemName { get; set; } = string.Empty;
         public int Units { get; set; }
         public long UnitPriceCents { get; set; }
+        // The delivery fee paid with this order: set on delivery, the flat fee on the first order of that morning's delivery
+        // at its commissary and 0 on the others (Commissaries.Deliver); 0 while it waits.
         public long FeeCents { get; set; }
         public int OrderedDay { get; set; }
         // Paid when it arrives (Commissaries.Deliver), at the delivery minute of this day.
         public int DeliverDay { get; set; }
-        // Its food boxes, counted towards the commissary's weekly limit for its item in DeliverDay's week; 0 for equipment.
+        // Its food boxes, counted towards its item's weekly limit on phone orders in DeliverDay's week; 0 for equipment.
         public int CappedBoxes { get; set; }
         // The standing order that booked it on its delivery day (then OrderedDay is DeliverDay); null for a phone order.
         public long? StandingOrderId { get; set; }
@@ -142,6 +147,15 @@ namespace FoodTrucks.Core.Commissary
         public bool NoSpaceTold { get; set; }
         // Items texted as no longer sold; each cleared once it sells again.
         public List<string> NotSoldTold { get; set; } = new List<string>();
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    public class CommissaryFeePaid
+    {
+        public string CommissaryId { get; set; } = string.Empty;
+        public int Day { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -313,6 +327,8 @@ namespace FoodTrucks.Core.Commissary
                     state.StandingOrders.RemoveAt(i);
                 }
             }
+            state.FeesPaid ??= new List<CommissaryFeePaid>();
+            state.FeesPaid.RemoveAll(f => f == null || string.IsNullOrWhiteSpace(f.CommissaryId) || f.Day < 1);
             state.WeekBoxes ??= new List<CommissaryWeekBoxes>();
             state.WeekBoxes.RemoveAll(w => w == null || string.IsNullOrWhiteSpace(w.CommissaryId) || string.IsNullOrWhiteSpace(w.ItemName) ||
                                            w.WeekStart < 1 || w.Boxes < 0);

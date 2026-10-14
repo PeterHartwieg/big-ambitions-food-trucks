@@ -58,6 +58,23 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(len(self.mock.call('commissary',{'op':'bay_candidates','site':'lower-manhattan','radius':30})['origins'][0]['candidates']),3)
         self.refused('commissary',{'op':'bay_candidates','site':'murray-hill','radius':81},'radius is 5 to 80 metres.')
 
+    def test_parks_shape_and_city_only(self):
+        reply=self.mock.call('parks',{})
+        self.assertEqual(reply['entrance_radius'],150)
+        self.assertEqual({p['kind'] for p in reply['parks']},{'parkarea','skatepark'})
+        for park in reply['parks']:
+            self.assertEqual(set(park),{'name','kind','neighbourhood','colliders','concave_colliders','bounds','centre','entrances'})
+            self.assertTrue(park['neighbourhood'].startswith('ba:neighborhood_'))
+            for axis in 'xyz': self.assertLessEqual(park['bounds']['min'][axis],park['bounds']['max'][axis])
+            distances=[e['distance'] for e in park['entrances']]
+            self.assertTrue(0<len(distances)<=5)
+            self.assertEqual(distances,sorted(distances))
+            self.assertTrue(all(d<=150 for d in distances))
+            for e in park['entrances']: self.assertRegex(e['address'],r'^ba:street_[a-z0-9]+#[0-9]+$')
+        self.assertEqual(set(reply['skipped'][0]),{'name','kind','reason'})
+        self.mock.state['scene']='menu'
+        self.refused('parks',{},'parks works in the city only; the game is at the menu now.')
+
     def test_bay_candidates_from_a_measured_bay(self):
         for site in ('garment-district','murray-hill'):
             origin=self.mock.call('commissary',{'op':'bay_candidates','site':site})['origins'][0]

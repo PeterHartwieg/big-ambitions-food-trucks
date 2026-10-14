@@ -200,7 +200,7 @@ namespace FoodTrucks
             };
             var offers = CateringOffers.ForDay(rules, state.Catering, context);
             FoodTrucksSession.MarkChanged();
-            Log.Info($"Catering: day {day}: {offers.Count} offers from {caterers.Count} trucks, {places.Count} places, {context.LifetimeServed} items sold, booking reputation {state.Catering.BookingReputation:F2}.");
+            Log.Info($"Catering: day {day}: {offers.Count} offers from {caterers.Count} trucks, {places.Count} places ({places.Count(p => p.Area == "park")} at park gates), {context.LifetimeServed} items sold, booking reputation {state.Catering.BookingReputation:F2}.");
             foreach (var offer in offers)
             {
                 Log.Info($"Catering offer {offer.Id}: {offer.Kind} at {offer.PlaceId} on day {offer.GigDay} {Clock(offer.StartMinute)} for {offer.DurationMinutes} min, {offer.Guests} guests, {offer.RequiredCategory}, {CartSelling.Money(offer.FeeCents)}; reply by day {offer.ReplyByDay}.");
@@ -217,7 +217,11 @@ namespace FoodTrucks
             return units;
         }
 
-        // Every building whose own type or business points to one area: a place for that area's gigs.
+        // Every building whose own type or business points to one area: a place for that area's gigs. A building whose
+        // entrance is at the edge of one of the game's parks (ParkAreas, within ParkGateMetres) is also a `park` place,
+        // the park gate, when a kind wants parks (Peter, 14 October 2026).
+        private const double ParkGateMetres = 25;
+
         private static List<CateringPlace> Places(DemandTables tables, CateringRules rules)
         {
             var wanted = new HashSet<string>(rules.Kinds.SelectMany(k => k.Areas), StringComparer.Ordinal);
@@ -229,6 +233,8 @@ namespace FoodTrucks
                 var address = controller.building.Address;
                 if (address == null || doors.Length == 0) continue;
                 registrations.TryGetValue((address.streetName, address.streetNumber), out var registration);
+                if (wanted.Contains("park") && ParkAreas.Near(doors[0], ParkGateMetres).Any(p => p.Type == ParkAreas.Park))
+                    places.Add(new CateringPlace { PlaceId = World.AddressKey(address.streetName, address.streetNumber), Area = "park", X = doors[0].x, Z = doors[0].z });
                 var rule = classifier.RuleFor(controller.building.BuildingType, registration?.businessTypeName);
                 if (rule == null || rule.Count == 0) continue;
                 var area = rule.OrderByDescending(p => p.Value).ThenBy(p => p.Key, StringComparer.Ordinal).First().Key;
