@@ -4,7 +4,7 @@ The candidate builds and is ready for review. Workshop readiness and full live v
 
 ## Candidate and review scope
 
-The review base is `4535c83`, published as `codex/release-review-base-2026-10-14`. Local `main` was 383 commits ahead of its remote; it was left untouched. Focused branches and PRs preserve that separation. The combined code candidate is `ee54b96`; later documentation integration is `2ecffc5`.
+The review base is `4535c83`, published as `codex/release-review-base-2026-10-14`. Local `main` was 383 commits ahead of its remote; it was left untouched. Focused branches and PRs preserve that separation. The compiled runtime candidate is `ee54b96`; later documentation integration was `2ecffc5`. Source integration `e0226fa` includes the release packager; the compiled runtime is unchanged.
 
 | PR | Change | Evidence |
 |---|---|---|
@@ -17,13 +17,14 @@ The review base is `4535c83`, published as `codex/release-review-base-2026-10-14
 | [7](https://github.com/PeterHartwieg/big-ambitions-food-trucks/pull/7) | Gate developer cheats behind the test launch flag | Compiled/reviewed; normal-launch check pending |
 | [8](https://github.com/PeterHartwieg/big-ambitions-food-trucks/pull/8) | Reject browser-origin test bridge mutations | HTTP-handler tests passed; live check pending |
 | [9](https://github.com/PeterHartwieg/big-ambitions-food-trucks/pull/9) | Current README, player starting instructions and this handoff | Documentation review; historical evidence retained |
+| [10](https://github.com/PeterHartwieg/big-ambitions-food-trucks/pull/10) | Deterministic verified release-candidate packaging, stacked on PR 4 | Archive produced and independently verified; independent code review found no concrete defect |
 
-Release packaging is being prepared separately as PR 10; its final result is not claimed here.
+**Checked packaging:** `build/FoodTrucks-0.9.10-rc-ee54b96.zip` is 47,695,364 bytes. All 17 entries were independently streamed and checked against their SHA-256 values. The `.zip.sha256` sidecar records archive SHA-256 `88660a8037f8b20ab93d88f34803f0c2ec8b8f56904521f9d1da1141ded9996e`. This is a local release candidate, not a Workshop upload.
 
 ## Automated and build results
 
 - **Checked:** 1,812 Core tests passed. A separate long soak is still running; its final result is pending.
-- **Checked:** 106 Python tool tests passed.
+- **Checked:** 112 integrated Python tool tests passed in 33.422 seconds, including release packaging tests (the earlier pre-packaging run passed 106).
 - **Checked:** the integrated candidate built through Unity 2022.3.62f2 and the official SDK, producing Windows and Mac asset bundles.
 - **Limit:** these results do not establish rendering, player-facing navigation or clean Workshop installation.
 
@@ -43,6 +44,6 @@ Local, untracked evidence is under `build/logs/game/mac-release-2026-10-14/`: `P
 2. **Park pitches:** check all three entrances for legal selling places, park-facing approach, queue/hatch clearance, map markers, first-come behavior and park presence readings.
 3. **Normal launch:** developer shortcuts/commands must be absent without `-foodtrucks-test`; safe uninstall must remain available. Test-mode tools must still function.
 4. **Current-package smoke:** licence, equipment, stock and selling; a crew route/restock; money/stock conservation; save/reload; safe uninstall and subsequent mod-free loading. The implementation plan calls for uninstall/mod-free loading once before release. Artificial throwing-listener cases already have focused harness coverage.
-5. **Distribution:** finish packaging review, then the implementation plan's private Workshop upload and clean-install check before public release. Version selection and publication remain separate actions.
+5. **Distribution:** local packaging and its independent review are complete. The implementation plan's private Workshop upload and clean-install check remain pending before public release. Version selection and publication remain separate actions.
 
 Older checklist sections are historical snapshots. Later session evidence supersedes many bay, collision, shading and sale-sound rows; they do not all need replaying. Preserve checked/pending/unverified labels. Older behavior without newer evidence, including colour persistence, standing-order/restock presentation and catering/queue appearance, remains a validation gap to cover in representative play rather than a known defect. Peter explicitly waived another live check for the two-person staff/hatch change; unaccepted balance proposals are not new release requirements.
