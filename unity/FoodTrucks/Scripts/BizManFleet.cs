@@ -35,6 +35,9 @@ namespace FoodTrucks
         private static Transform? section, content;
         private static BizManList? builtFor;
         private static Font? font;
+        // Author this page in a 720-pixel-high reference view, then convert to the game canvas units.
+        private static float units = 1f;
+        private static float Size(float value) => value * units;
         private static readonly List<GameObject> hiddenListParts = new List<GameObject>();
         private static readonly Color PageColour = new Color(0.94f, 0.95f, 0.97f, 1f);
         private static readonly Color CardColour = Color.white;
@@ -254,6 +257,9 @@ namespace FoodTrucks
             if (section != null && content != null && builtFor == list) return true;
             CloseSection();
             if (section != null) UnityEngine.Object.Destroy(section.gameObject);
+            var canvas = list.GetComponentInParent<Canvas>()?.rootCanvas;
+            var scale = canvas != null ? canvas.scaleFactor : 1f;
+            units = Screen.height > 0 && scale > 0f ? Screen.height / (720f * scale) : 1f;
             font = list.GetComponentsInChildren<Text>(true).Select(t => t.font).FirstOrDefault(f => f != null)
                    ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             var root = Rect("FoodTrucks.StreetFoodPage", list.transform);
@@ -267,30 +273,30 @@ namespace FoodTrucks
             header.anchorMin = new Vector2(0f, 1f);
             header.anchorMax = Vector2.one;
             header.pivot = new Vector2(0.5f, 1f);
-            header.offsetMin = new Vector2(16f, -68f);
-            header.offsetMax = new Vector2(-16f, -12f);
+            header.offsetMin = new Vector2(Size(16f), Size(-68f));
+            header.offsetMax = new Vector2(Size(-16f), Size(-12f));
             var headerLayout = header.gameObject.AddComponent<HorizontalLayoutGroup>();
-            headerLayout.spacing = 16f;
+            headerLayout.spacing = Size(16f);
             headerLayout.childControlWidth = headerLayout.childControlHeight = true;
             headerLayout.childForceExpandWidth = false;
             headerLayout.childForceExpandHeight = true;
             var back = ActionButton(header, Text("foodtrucks:bizman_fleet_back"), () => { BizManVehiclePage.Close(); CloseSection(); });
-            back.GetComponent<LayoutElement>().preferredWidth = 110f;
-            var title = Label(header, Text("foodtrucks:bizman_fleet_header"), 26);
+            back.GetComponent<LayoutElement>().preferredWidth = Size(140f);
+            var title = Label(header, Text("foodtrucks:bizman_fleet_header"), 24);
             title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
             var scrollRoot = Rect("FleetScroll", root);
             Stretch(scrollRoot);
-            scrollRoot.offsetMin = new Vector2(12f, 12f);
-            scrollRoot.offsetMax = new Vector2(-12f, -80f);
+            scrollRoot.offsetMin = new Vector2(Size(12f), Size(12f));
+            scrollRoot.offsetMax = new Vector2(Size(-12f), Size(-80f));
             var scroll = scrollRoot.gameObject.AddComponent<ScrollRect>();
             scroll.horizontal = false;
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
-            scroll.scrollSensitivity = 35f;
+            scroll.scrollSensitivity = Size(35f);
             var viewport = Rect("Viewport", scrollRoot);
             Stretch(viewport);
-            viewport.offsetMax = new Vector2(-18f, 0f);
+            viewport.offsetMax = new Vector2(Size(-18f), 0f);
             viewport.gameObject.AddComponent<Image>().color = PageColour;
             viewport.gameObject.AddComponent<RectMask2D>();
             var body = Rect("Content", viewport);
@@ -299,8 +305,8 @@ namespace FoodTrucks
             body.pivot = new Vector2(0.5f, 1f);
             body.offsetMin = body.offsetMax = Vector2.zero;
             var layout = body.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 14f;
-            layout.padding = new RectOffset(4, 4, 4, 12);
+            layout.spacing = Size(14f);
+            layout.padding = new RectOffset((int)Size(4), (int)Size(4), (int)Size(4), (int)Size(12));
             layout.childControlWidth = layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
@@ -312,7 +318,7 @@ namespace FoodTrucks
             var bar = Rect("Scrollbar", scrollRoot);
             bar.anchorMin = new Vector2(1f, 0f);
             bar.anchorMax = Vector2.one;
-            bar.offsetMin = new Vector2(-12f, 0f);
+            bar.offsetMin = new Vector2(Size(-12f), 0f);
             bar.offsetMax = Vector2.zero;
             bar.gameObject.AddComponent<Image>().color = CardColour;
             var handle = Rect("Handle", bar);
@@ -324,7 +330,7 @@ namespace FoodTrucks
             scrollbar.handleRect = handle;
             scrollbar.targetGraphic = handleImage;
             scroll.verticalScrollbar = scrollbar;
-            Log.Info("BizMan: dedicated Street food page built with its own cards and scroll view.");
+            Log.Info($"BizMan: dedicated Street food page built with its own cards and scroll view. Canvas scale {scale:F3}, reference units {units:F2}, body font {Mathf.RoundToInt(Size(16))}.");
             return true;
         }
 
@@ -342,12 +348,12 @@ namespace FoodTrucks
             rect.offsetMin = rect.offsetMax = Vector2.zero;
         }
 
-        private static Text Label(Transform parent, string value, int size = 18)
+        private static Text Label(Transform parent, string value, int size = 16)
         {
             var rect = Rect("Label", parent);
             var text = rect.gameObject.AddComponent<Text>();
             text.font = font;
-            text.fontSize = size;
+            text.fontSize = Mathf.Max(1, Mathf.RoundToInt(Size(size)));
             text.color = new Color(0.13f, 0.17f, 0.21f, 1f);
             text.text = value;
             text.supportRichText = false;
@@ -366,7 +372,7 @@ namespace FoodTrucks
             button.targetGraphic = image;
             button.onClick.AddListener(() => Guard(action));
             var size = rect.gameObject.AddComponent<LayoutElement>();
-            size.minHeight = size.preferredHeight = 40f;
+            size.minHeight = size.preferredHeight = Size(40f);
             var text = Label(rect, caption);
             Stretch(text.rectTransform);
             text.color = Color.white;
@@ -401,8 +407,8 @@ namespace FoodTrucks
                 var card = Rect("FoodTrucks.VehicleCard", content);
                 card.gameObject.AddComponent<Image>().color = CardColour;
                 var layout = card.gameObject.AddComponent<VerticalLayoutGroup>();
-                layout.padding = new RectOffset(16, 16, 12, 16);
-                layout.spacing = 8f;
+                layout.padding = new RectOffset((int)Size(16), (int)Size(16), (int)Size(12), (int)Size(16));
+                layout.spacing = Size(8f);
                 layout.childControlWidth = layout.childControlHeight = true;
                 layout.childForceExpandWidth = true;
                 layout.childForceExpandHeight = false;
