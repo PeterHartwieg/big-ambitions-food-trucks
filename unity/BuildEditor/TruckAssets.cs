@@ -285,7 +285,7 @@ namespace FoodTrucks.BuildEditor
             // Decals off, as on the game's own vehicle materials (_DISABLE_DECALS) and our other models (SurfaceLook): the
             // SDK's HDRP assets compile the decal variants for four decal targets (DECALS_4RT) while the game renders with
             // three (DECALS_3RT), so a truck that read the decal buffers took its ambient occlusion from a target the game
-            // doesn't fill and rendered almost black in shade wherever street decals were on screen (13 and 14 October).
+            // doesn't fill and rendered almost black in shade whenever the game drew its decal buffers (13 and 14 October).
             foreach (var (from, to) in new[]
                      {
                          ("    - _Min: 0\n", "    - _Min: 1.5\n"), ("    - _Max: 0.5\n", "    - _Max: 2\n"),
