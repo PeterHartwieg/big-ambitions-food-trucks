@@ -1318,6 +1318,36 @@ namespace FoodTrucks
         // zone's facing is probed once.
         internal static List<(Vector3 Position, Quaternion Rotation)> BayPlaces(CommissarySite site, float halfLength)
         {
+            var points0 = ResolvedBays(site);
+            var cacheKey = site.Id + "|" + halfLength.ToString("F2") + "|" + (points0 == null ? "" : string.Join(";", points0.Select(p => $"{p.X:F1},{p.Z:F1}")));
+            if (bayPlaceCache.TryGetValue(site.Id, out var cachedPlaces) && cachedPlaces.Key == cacheKey) return cachedPlaces.Places;
+            var built = BuildBayPlaces(site, halfLength);
+            if (built.Count > 0) bayPlaceCache[site.Id] = (cacheKey, built);
+            return built;
+        }
+
+        private static readonly Dictionary<string, (string Key, List<(Vector3, Quaternion)> Places)> bayPlaceCache =
+            new Dictionary<string, (string, List<(Vector3, Quaternion)>)>();
+
+        // The part of the in-bay test that doesn't depend on where the vehicle stands: the bay resolved, and the street's
+        // side readable at its first point (InBayAnswer gives no answer while the driving lanes round the door aren't read).
+        internal static bool BayReady(CommissarySite site, out string why)
+        {
+            var rules = Rules;
+            var points = ResolvedBays(site);
+            if (rules == null || points == null || points.Count == 0) { why = "bay not resolved"; return false; }
+            var p = points[0];
+            if (CommissaryBays.OnDoorSide(points, p.X, p.Z, rules.BayRadiusMetres, q => LanesFor(q, (float)rules.BayRadiusMetres)) == null)
+            {
+                why = "the street's side can't be checked yet";
+                return false;
+            }
+            why = "";
+            return true;
+        }
+
+        private static List<(Vector3 Position, Quaternion Rotation)> BuildBayPlaces(CommissarySite site, float halfLength)
+        {
             var result = new List<(Vector3, Quaternion)>();
             var points = ResolvedBays(site);
             var rules = Rules;

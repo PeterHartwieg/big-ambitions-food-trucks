@@ -133,6 +133,8 @@ namespace FoodTrucks
         {
             try
             {
+                // A crew's placement (HireRoutes.Place) checked the place free itself: nothing of the game's is deleted.
+                if (HireRoutes.SpawnNoCleanup) return false;
                 if (vehicleType == null || vehicleType.vehicleTypeName != FoodTrucksMod.CartTypeName || prefab == null || placedTransform == null) return true;
                 var box = prefab.GetComponent<BoxCollider>();
                 if (box == null) return true;
