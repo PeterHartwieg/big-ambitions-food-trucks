@@ -21,6 +21,8 @@ There is no published Workshop release yet. Build from this repository using [Bu
 
 ## Validation history
 
+The current review candidate, automated results, local Mac session limitations and remaining release gates are recorded in the [14 October audit handoff](evidence/autonomous-audit-2026-10-14.md).
+
 The evidence below records specific historical builds and sessions, with their original checked, pending and unverified results. It is not a claim that every current feature or later fix has been checked. Current outstanding checks are in [CHECKS.md](CHECKS.md).
 
 ## Removing the mod
