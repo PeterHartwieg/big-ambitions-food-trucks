@@ -16,7 +16,9 @@ namespace FoodTrucks.Core.Fleet
         // The transit is over: place the vehicle at Transit's spot.
         Arrive,
         // Open the window at Stop, where the vehicle stands.
-        Open
+        Open,
+        // Load from the commissary's stock: the vehicle stands in the bay where it rents its space (CrewRestock).
+        Restock
     }
 
     public readonly struct HireAction
@@ -40,8 +42,10 @@ namespace FoodTrucks.Core.Fleet
     // Where the vehicle is and what the game side knows about the place, this minute.
     public readonly struct VehicleWhere
     {
-        public VehicleWhere(double x, double z, bool leaveAlone, bool canSellHere = true, bool hasStock = true, bool stayPut = false)
+        public VehicleWhere(double x, double z, bool leaveAlone, bool canSellHere = true, bool hasStock = true, bool stayPut = false,
+            bool canRestock = false)
         {
+            CanRestock = canRestock;
             X = x;
             Z = z;
             LeaveAlone = leaveAlone;
@@ -61,6 +65,8 @@ namespace FoodTrucks.Core.Fleet
         // The player is right by it or used it a moment ago (stepped out to buy stock, say): the crew opens and
         // closes as usual but doesn't drive it away.
         public bool StayPut { get; }
+        // In the bay of the commissary where it rents its space, which holds something the vehicle would load.
+        public bool CanRestock { get; }
     }
 
     // Runs a hire's route minute by minute. The saved day plan says what the hire should be doing now;
@@ -167,7 +173,8 @@ namespace FoodTrucks.Core.Fleet
         // a vehicle in transit arrives when its time is up and does nothing else meanwhile; a vehicle the
         // player has, or opened themselves, is left alone; a window the hire opened closes when its stop's
         // hours end; otherwise, during a leg to stop i, a vehicle away from i leaves for it (travel timed
-        // from where it really is), and one at i opens once the stop's hours have begun.
+        // from where it really is), and one at i opens once the stop's hours have begun. A vehicle in its commissary's
+        // bay restocks first, once per leg (CrewRestock): before it leaves, or at its stop with nothing to sell.
         public HireAction Step(VehicleState vehicle, long now, VehicleWhere where, double gameSpeed = 1.0)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -195,7 +202,9 @@ namespace FoodTrucks.Core.Fleet
             var atStop = ParkedFor(vehicle, want.StopIndex, stop, where) || (where.CanSellHere && distance <= rules.StopRadiusMetres);
             if (!atStop)
             {
-                if (where.StayPut || !where.HasStock) return HireAction.None;
+                if (where.StayPut) return HireAction.None;
+                if (CrewRestock.Due(vehicle, want, where)) return new HireAction(HireActionKind.Restock, want.StopIndex);
+                if (!where.HasStock) return HireAction.None;
                 var minutes = Travel.Minutes(rules, distance, Travel.ModeFor(vehicle.VehicleType), gameSpeed);
                 var arrives = now + Math.Max(1, minutes);
                 // Moved away by the player too far to make it back before the stop closes: wait for the next one.
@@ -203,7 +212,16 @@ namespace FoodTrucks.Core.Fleet
                 if (closes != null && arrives >= closes) return HireAction.None;
                 return new HireAction(HireActionKind.Depart, want.StopIndex, arrives);
             }
+            if (!where.HasStock && !where.StayPut && CrewRestock.Due(vehicle, want, where)) return new HireAction(HireActionKind.Restock, want.StopIndex);
             return want.Kind == LegKind.Open ? new HireAction(HireActionKind.Open, want.StopIndex) : HireAction.None;
+        }
+
+        // The crew restocked (or tried to) for the leg running now: not again until the next leg.
+        public static void Restocked(VehicleState vehicle, long now)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            var want = Want(vehicle, now);
+            if (want != null) vehicle.RestockedFor = want.Start;
         }
 
         // The crew parked it here for this stop and nobody has moved it since.

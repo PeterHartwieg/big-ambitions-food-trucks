@@ -89,6 +89,12 @@ Checks include:
 - Deliveries are paid no earlier than 08:00, in due-day/order order, exactly once.
   Cancelled orders never return. Delivered units and prices equal the original
   orders. Rent release/re-rent cannot regenerate the same vehicle/day charge.
+- Some phone orders repeat (standing orders, cancelled after ten days); their
+  deliveries are booked before each delivery run and go through the same checks.
+  An order over a food's weekly limit is refused by `Place`, and no week's
+  delivered boxes of a food exceed its limit.
+- A crewed vehicle in its own commissary's bay restocks when the route asks
+  (`HireActionKind.Restock`), with the same loading as the player's restock.
 - The exact 04:00 fine set matches the vehicle flags and exemptions, including
   vehicles without a space. A repeated night check produces no extra fine.
 - Random `SerializeForSave → Load → Serialize` snapshots compare the complete

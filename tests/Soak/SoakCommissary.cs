@@ -75,6 +75,18 @@ internal sealed partial class SoakWorld
             return;
         }
         var before = money;
+        // Now and then the order repeats instead (a standing order; its deliveries book themselves in CommissaryTick).
+        if (random.Next(6) == 0)
+        {
+            var repeat = random.Next(2) == 0 ? CommissaryRepeat.Daily : CommissaryRepeat.Weekly;
+            if (!CommissarySupply.Check(state.Commissary, commissaryRules, site, quote, repeat, Day).Fits) return;
+            var standing = CommissaryStandingOrders.Create(state.Commissary, commissaryRules, site, quote, repeat, (Day, Minute));
+            Note($"standing order {standing.Id}: {repeat} {item} at {site} from day {standing.NextDay}");
+            // Cancelled again after a while, so standing orders don't pile up.
+            foreach (var old in state.Commissary.StandingOrders.Where(s => s.CreatedDay < Day - 10).ToList())
+                CommissaryStandingOrders.Cancel(state.Commissary, old.Id);
+            return;
+        }
         foreach (var o in CommissaryOrdering.Place(state.Commissary, commissaryRules, site, quote, (Day, Minute)))
         {
             orders.Add(o.Id, (site, item, o.Units, price, o.TotalCents));
@@ -99,6 +111,18 @@ internal sealed partial class SoakWorld
             if (Move(-f.Cents, "fine", Day, $"{f.VehicleId}:{f.Day}", tryOnly: true))
             { SalesLedger.RecordOvernightFine(state, Day, f.VehicleId, f.Cents); state.Commissary.Fines.Remove(f); }
         ChargeRent();
+        // Standing orders book their day's delivery first, at a fixed soak price per unit.
+        foreach (var run in CommissaryStandingOrders.Book(state.Commissary, commissaryRules, Day, Minute,
+                     item => ShippedData.Tables.EquipmentForGameItem(item) != null ? new CommissaryPrice(1, 60_000) : new CommissaryPrice(40, 150)))
+            foreach (var o in run.Orders)
+            {
+                orders.Add(o.Id, (o.CommissaryId, o.ItemName, o.Units, o.UnitPriceCents, o.TotalCents));
+                Note($"standing order {run.Standing.Id} booked order {o.Id}: {o.Units} {o.ItemName}");
+                standingBooked++;
+            }
+        // Each food's weekly limit holds for what was delivered.
+        foreach (var w in state.Commissary.WeekBoxes)
+            Require(w.Boxes <= commissaryRules.FoodBoxLimit(w.ItemName), "weekly food limit exceeded");
         var before = Inventory();
         var attempted = new List<long>();
         var result = Commissaries.Deliver(state.Commissary, commissaryRules, Day, Minute, o =>

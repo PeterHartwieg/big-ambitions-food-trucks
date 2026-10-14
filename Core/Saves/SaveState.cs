@@ -116,6 +116,10 @@ namespace FoodTrucks.Core.Saves
         // Units of each item sold today and yesterday, for BizMan's fleet page (SoldCounts; additive field: older
         // saves read none). Older days are dropped as new sales come in.
         public List<SoldDay> Sold { get; set; } = new List<SoldDay>();
+        // The start minute of the route leg the crew last restocked at the commissary for (CrewRestock): once per leg.
+        public long? RestockedFor { get; set; }
+        // The game day the commissary last texted what a crew restock was short of: once a day.
+        public int? RestockShortDay { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

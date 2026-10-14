@@ -30,7 +30,7 @@ internal sealed partial class SoakWorld
     private long asleepUntil;
     private string? atWindow;
     private int nextEmployee;
-    private int saves, crewSales, playerSales, routeSales, slept, invalidPlans;
+    private int saves, crewSales, playerSales, routeSales, slept, invalidPlans, crewRestocks, standingBooked;
     private readonly Dictionary<(string, int), long> revenue = new();
     private readonly Dictionary<(string, int), long> costs = new();
     private readonly Dictionary<(string, int), (long Cents, int Sales)> crew = new();
@@ -85,7 +85,7 @@ internal sealed partial class SoakWorld
     }
 
     public string Coverage => $"saves={saves}, crew/player/route sales={crewSales}/{playerSales}/{routeSales}, " +
-        $"paid/refused deliveries={delivered.Count}/{refused.Count}, invalid plans={invalidPlans}, sleep days={slept}, " +
+        $"paid/refused deliveries={delivered.Count}/{refused.Count}, invalid plans={invalidPlans}, sleep days={slept}, crew restocks={crewRestocks}, standing bookings={standingBooked}, " +
         $"midnight holds/late crew sales/delayed payouts={heldAtMidnight}/{lateCrewSales}/{delayedPayouts}";
 
     public void Run(int days)
@@ -253,8 +253,11 @@ internal sealed partial class SoakWorld
             runner.EnsurePlan(v, t, from.X, from.Z);
             for (var guard = 0; guard < 4; guard++)
             {
+                // In the bay of its own commissary space with stock there: the crew may restock (CrewRestock).
+                var ownBay = van.Bay != null && state.Commissary.Spaces.Any(s => s.VehicleId == v.VehicleId && s.CommissaryId == van.Bay);
                 var action = runner.Step(v, t, new VehicleWhere(van.X, van.Z, van.Property,
-                    hasStock: Stock(v).Values.Any(n => n > 0), stayPut: Awake && atWindow == v.VehicleId));
+                    hasStock: Stock(v).Values.Any(n => n > 0), stayPut: Awake && atWindow == v.VehicleId,
+                    canRestock: ownBay && Available(van.Bay!).Count > 0));
                 if (action.Kind == HireActionKind.None) break;
                 Note($"{v.VehicleId}: route {action.Kind} stop {action.Stop}");
                 switch (action.Kind)
@@ -268,6 +271,7 @@ internal sealed partial class SoakWorld
                         van.Z = fits ? transit.ToZ : transit.FromZ;
                         HireRunner.Arrived(v, van.X, van.Z, fits, t); break;
                     case HireActionKind.Open: Open(v, action.Stop, t); break;
+                    case HireActionKind.Restock: Restock(v, van.Bay!); HireRunner.Restocked(v, t); crewRestocks++; break;
                 }
             }
             var next = until;
