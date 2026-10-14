@@ -37,8 +37,8 @@ namespace FoodTrucks.Core.Commissary
     }
 
     // A commissary as a destination of the game's logistics plans (Peter, 14 October 2026). At the game's 02:00 run the
-    // plan's warehouse fills the commissary up to each stock target; the goods become batches at the wholesale price, as
-    // orders do, so the uninstall refund treats them alike. No fee and no money: the game's logistics charge none.
+    // plan's warehouse fills the commissary up to each stock target; the goods become batches priced at what the warehouse
+    // paid for them (PaidCents), so stock costs and the uninstall refund follow the player's own purchase. No fee and no money: the game's logistics charge none.
     // The game moves the goods; this decides how many.
     public static class CommissaryLogistics
     {
@@ -83,6 +83,14 @@ namespace FoodTrucks.Core.Commissary
             }
             return new CommissaryLogisticsPlan(true, lines, unpriced);
         }
+
+        // The price per unit the goods taken out of the warehouse carry, to whole cents: the game's withdrawal keeps the
+        // mean price the player paid for them across the pallets it took from [code, 1.0: BuildingHelper.WithdrawFromCargo,
+        // CargoInstance.MergeAmount]. Not a number or below 0 reads as 0; the catalogue price is no stand-in.
+        public static long PaidCents(double pricePerUnit) =>
+            double.IsNaN(pricePerUnit) || pricePerUnit <= 0 ? 0
+            : pricePerUnit * 100 >= long.MaxValue ? long.MaxValue
+            : (long)Math.Round(pricePerUnit * 100, MidpointRounding.AwayFromZero);
 
         // Units arrived from the warehouse: one new batch, last in the commissary's FIFO order.
         public static CommissaryStockLine Receive(CommissaryState state, string commissaryId, string itemName, int units,

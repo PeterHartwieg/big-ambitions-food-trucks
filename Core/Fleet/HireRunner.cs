@@ -65,7 +65,7 @@ namespace FoodTrucks.Core.Fleet
         // The player is right by it or used it a moment ago (stepped out to buy stock, say): the crew opens and
         // closes as usual but doesn't drive it away.
         public bool StayPut { get; }
-        // In the bay of the commissary where it rents its space, which holds something the vehicle would load.
+        // In the bay of the commissary where it rents its space: the crew restocks there, or learns what it is short of.
         public bool CanRestock { get; }
     }
 

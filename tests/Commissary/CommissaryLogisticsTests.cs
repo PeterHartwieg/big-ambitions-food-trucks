@@ -142,4 +142,21 @@ public class CommissaryLogisticsTests
         Assert.Null(CommissaryLogistics.IdFor(ids, 7));
         Assert.Null(CommissaryLogistics.IdFor(ids, -1));
     }
+
+    [Fact]
+    public void ABatchFromTheWarehouseCarriesWhatTheWarehousePaidNotTheCatalogue()
+    {
+        // The withdrawal's mean price per unit, in dollars, to whole cents.
+        Assert.Equal(137, CommissaryLogistics.PaidCents(1.365));
+        Assert.Equal(140, CommissaryLogistics.PaidCents(1.4f));
+        Assert.Equal(0, CommissaryLogistics.PaidCents(0));
+        Assert.Equal(0, CommissaryLogistics.PaidCents(-2));
+        Assert.Equal(0, CommissaryLogistics.PaidCents(double.NaN));
+        var state = CommissariesTests.Rented();
+        // The plan's catalogue says 150; the warehouse paid 1.365 a unit.
+        var plan = CommissaryLogistics.Plan(state, "a", new[] { new KeyValuePair<string, int>("tacos", 20) }, new Dictionary<string, long> { ["tacos"] = 150 });
+        var line = CommissaryLogistics.Receive(state, "a", "tacos", plan.Lines.Single().Units, CommissaryLogistics.PaidCents(1.365), 2, "w");
+        Assert.Equal(137, line.UnitPriceCents);
+        Assert.Equal(20 * 137, CommissaryLogistics.GoodsCents(state));
+    }
 }

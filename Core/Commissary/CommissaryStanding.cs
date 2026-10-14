@@ -143,8 +143,12 @@ namespace FoodTrucks.Core.Commissary
         public List<(string ItemName, int Wanted, int Booked)> Cut { get; } = new List<(string, int, int)>();
         // Items the commissary doesn't sell that day (no game item or no price): left out.
         public List<string> NotSold { get; } = new List<string>();
-        // No vehicle has its space at the commissary any more: nothing booked that day.
+        // No vehicle has its space at the commissary any more: nothing booked that day. TellNoSpace: the first such day in
+        // a row, the one to text.
         public bool NoSpace { get; internal set; }
+        public bool TellNoSpace { get; internal set; }
+        // Of NotSold, those not texted yet while they stay unsold.
+        public List<string> TellNotSold { get; } = new List<string>();
         // Delivery days that passed without a booking run (the game wasn't running): skipped, not delivered late.
         public int Missed { get; internal set; }
     }
@@ -177,11 +181,12 @@ namespace FoodTrucks.Core.Commissary
         // The weekday a weekly order delivers on.
         public static DayOfWeek Weekday(CommissaryStandingOrder standing) => GameDays.Weekday(standing.NextDay);
 
-        // A confirmed order that repeats becomes a standing order; its first delivery is tomorrow, as a one-off order's.
-        // The same checks as a one-off order: the commissary takes orders, the quote has no problem, and its food fits
-        // under each item's weekly limit (CommissarySupply.Check).
+        // A confirmed order that repeats becomes a standing order; its first delivery is tomorrow, as a one-off order's,
+        // or `firstDay` when the phone named that day in its question and midnight passed since (then on that weekday, the
+        // first such day from today). The same checks as a one-off order: the commissary takes orders, the quote has no
+        // problem, and its food fits under each item's weekly limit (CommissarySupply.Check).
         public static CommissaryStandingOrder Create(CommissaryState state, CommissaryRules rules, string commissaryId,
-            CommissaryQuote quote, CommissaryRepeat repeat, (int Day, int Minute) now, bool unlimited = false)
+            CommissaryQuote quote, CommissaryRepeat repeat, (int Day, int Minute) now, bool unlimited = false, int? firstDay = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (rules == null) throw new ArgumentNullException(nameof(rules));
@@ -190,7 +195,8 @@ namespace FoodTrucks.Core.Commissary
             if (now.Day < 1 || now.Minute < 0 || now.Minute > 1439) throw new ArgumentOutOfRangeException(nameof(now));
             if (!CommissaryOrdering.CanOrder(state, commissaryId)) throw new InvalidOperationException("Ordering requires an unlocked commissary with a rented space.");
             if (quote.Problem != CommissaryQuoteProblem.None) throw new InvalidOperationException($"The order can't be placed: {quote.Problem}.");
-            if (!CommissarySupply.Check(state, rules, commissaryId, quote, repeat, now.Day, unlimited).Fits)
+            var first = FirstDay(repeat, now.Day, firstDay);
+            if (!CommissarySupply.Check(state, rules, commissaryId, quote, repeat, first - 1, unlimited).Fits)
                 throw new InvalidOperationException("The order goes over a food's weekly limit at the commissary.");
             var standing = new CommissaryStandingOrder
             {
@@ -198,12 +204,25 @@ namespace FoodTrucks.Core.Commissary
                 CommissaryId = commissaryId,
                 Repeat = repeat,
                 CreatedDay = now.Day,
-                NextDay = checked(now.Day + 1),
+                NextDay = first,
                 Lines = quote.Lines.Select(l => new CommissaryStandingLine { ItemName = l.ItemName, Boxes = l.Boxes, Capped = l.Capped }).ToList()
             };
             state.NextStandingId = checked(state.NextStandingId + 1);
             state.StandingOrders.Add(standing);
             return standing;
+        }
+
+        // The first delivery day: `named` (the day the phone's question named) moved on by whole intervals to today at the
+        // earliest, so a weekly order keeps the weekday the player chose; tomorrow without one.
+        public static int FirstDay(CommissaryRepeat repeat, int today, int? named)
+        {
+            if (today < 1) throw new ArgumentOutOfRangeException(nameof(today));
+            if (named == null) return checked(today + 1);
+            if (named.Value < 1) throw new ArgumentOutOfRangeException(nameof(named));
+            var day = named.Value;
+            var interval = Interval(repeat);
+            while (day < today) day = checked(day + interval);
+            return day;
         }
 
         public static bool Cancel(CommissaryState state, long id)
@@ -249,40 +268,74 @@ namespace FoodTrucks.Core.Commissary
                 }
                 var run = new CommissaryStandingBooking(standing, nowDay) { Missed = missed };
                 runs.Add(run);
-                standing.NextDay = checked(standing.NextDay + interval);
-                if (!CommissaryOrdering.CanOrder(state, standing.CommissaryId))
-                {
-                    run.NoSpace = true;
-                    continue;
-                }
-                var requests = new List<CommissaryOrderRequest>();
-                foreach (var line in standing.Lines)
-                {
-                    var today = price(line.ItemName);
-                    if (today == null)
-                    {
-                        run.NotSold.Add(line.ItemName);
-                        continue;
-                    }
-                    var boxes = line.Boxes;
-                    if (line.Capped && !unlimited)
-                    {
-                        // Only boxes delivered or booked count: deliveries not booked yet (this order's later days, other
-                        // standing orders) don't hold back today's, so the earliest booking gets the boxes.
-                        var booked = Booked(state, standing.CommissaryId, line.ItemName, nowDay)
-                                     + requests.Where(r => r.ItemName == line.ItemName && r.Capped).Sum(r => r.Boxes);
-                        boxes = Math.Max(0, Math.Min(boxes, rules.FoodBoxLimit(line.ItemName) - booked));
-                        if (boxes < line.Boxes) run.Cut.Add((line.ItemName, line.Boxes, boxes));
-                    }
-                    if (boxes > 0) requests.Add(new CommissaryOrderRequest(line.ItemName, today.Value.BoxSize, today.Value.UnitPriceCents, boxes, line.Capped));
-                }
-                // Each line becomes one order, priced as the phone form prices it (one fee per line).
-                var quote = CommissaryOrdering.Quote(rules, requests);
-                foreach (var line in quote.Lines)
-                    run.Orders.Add(Commissaries.Book(state, rules, standing.CommissaryId, line.ItemName, line.Units, line.UnitPriceCents,
-                        (nowDay, nowMinute), nowDay, line.CappedBoxes, standing.Id));
+                BookOne(state, rules, standing, run, nowDay, nowMinute, price, unlimited);
             }
             return runs;
+        }
+
+        // Ctrl+Alt+F3 (debug): the next delivery of a standing order due by tomorrow is booked now, for delivery today, and
+        // its schedule goes on from its own day as if it had come then: no extra delivery, no change to its days.
+        public static CommissaryStandingBooking BookEarly(CommissaryState state, CommissaryRules rules, CommissaryStandingOrder standing,
+            int nowDay, int nowMinute, Func<string, CommissaryPrice?> price, bool unlimited = false)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            if (rules == null) throw new ArgumentNullException(nameof(rules));
+            if (standing == null) throw new ArgumentNullException(nameof(standing));
+            if (price == null) throw new ArgumentNullException(nameof(price));
+            if (nowDay < 1 || nowMinute < 0 || nowMinute > 1439) throw new ArgumentOutOfRangeException(nameof(nowDay));
+            if (standing.NextDay < nowDay || standing.NextDay > nowDay + 1) throw new InvalidOperationException("Only a delivery due today or tomorrow is brought forward.");
+            var run = new CommissaryStandingBooking(standing, nowDay);
+            BookOne(state, rules, standing, run, nowDay, nowMinute, price, unlimited);
+            return run;
+        }
+
+        // One delivery of a standing order, for nowDay: its next day moves on by one interval. With no space, nothing is
+        // booked; the run says to text it only the first time in a row (TellNoSpace), and items not sold only once each
+        // while they stay unsold (TellNotSold).
+        private static void BookOne(CommissaryState state, CommissaryRules rules, CommissaryStandingOrder standing, CommissaryStandingBooking run,
+            int nowDay, int nowMinute, Func<string, CommissaryPrice?> price, bool unlimited)
+        {
+            standing.NextDay = checked(standing.NextDay + Interval(standing.Repeat));
+            if (!CommissaryOrdering.CanOrder(state, standing.CommissaryId))
+            {
+                run.NoSpace = true;
+                run.TellNoSpace = !standing.NoSpaceTold;
+                standing.NoSpaceTold = true;
+                return;
+            }
+            standing.NoSpaceTold = false;
+            var requests = new List<CommissaryOrderRequest>();
+            foreach (var line in standing.Lines)
+            {
+                var today = price(line.ItemName);
+                if (today == null)
+                {
+                    run.NotSold.Add(line.ItemName);
+                    if (!standing.NotSoldTold.Contains(line.ItemName))
+                    {
+                        run.TellNotSold.Add(line.ItemName);
+                        standing.NotSoldTold.Add(line.ItemName);
+                    }
+                    continue;
+                }
+                standing.NotSoldTold.Remove(line.ItemName);
+                var boxes = line.Boxes;
+                if (line.Capped && !unlimited)
+                {
+                    // Only boxes delivered or booked count: deliveries not booked yet (this order's later days, other
+                    // standing orders) don't hold back today's, so the earliest booking gets the boxes.
+                    var booked = Booked(state, standing.CommissaryId, line.ItemName, nowDay)
+                                 + requests.Where(r => r.ItemName == line.ItemName && r.Capped).Sum(r => r.Boxes);
+                    boxes = Math.Max(0, Math.Min(boxes, rules.FoodBoxLimit(line.ItemName) - booked));
+                    if (boxes < line.Boxes) run.Cut.Add((line.ItemName, line.Boxes, boxes));
+                }
+                if (boxes > 0) requests.Add(new CommissaryOrderRequest(line.ItemName, today.Value.BoxSize, today.Value.UnitPriceCents, boxes, line.Capped));
+            }
+            // Each line becomes one order, priced as the phone form prices it (one fee per line).
+            var quote = CommissaryOrdering.Quote(rules, requests);
+            foreach (var line in quote.Lines)
+                run.Orders.Add(Commissaries.Book(state, rules, standing.CommissaryId, line.ItemName, line.Units, line.UnitPriceCents,
+                    (nowDay, nowMinute), nowDay, line.CappedBoxes, standing.Id));
         }
 
         // Boxes of the item delivered or booked (not yet delivered) in the week of `day`.

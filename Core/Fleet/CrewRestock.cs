@@ -8,14 +8,15 @@ using FoodTrucks.Core.Selling;
 namespace FoodTrucks.Core.Fleet
 {
     // Crews restock at the commissary (plan, "Commissary supply and crew restock"): a crewed vehicle standing in the bay
-    // of the commissary where it rents its space loads from the commissary's stock with the Restock button's code before
+    // of the commissary where it rents its space loads food from the commissary's stock with the Restock button's code before
     // it sets off for a stop, the morning's first one after a night in the bay included. A crew with nothing to sell
     // restocks first if it can, then decides whether to set off. HireRunner.Step asks Due; the game side loads and calls
     // HireRunner.Restocked.
     public static class CrewRestock
     {
         // Once per leg of the plan: the leg it is setting off (or waiting) for, keyed by the leg's start minute. A
-        // restock that loaded nothing isn't tried again until the next leg, however long the crew waits.
+        // restock that loaded nothing (an empty commissary) isn't tried again until the next leg, however long the crew
+        // waits; it still reports the shortage.
         public static bool Due(VehicleState vehicle, ShiftLeg want, VehicleWhere where)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));

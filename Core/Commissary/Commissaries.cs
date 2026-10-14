@@ -116,6 +116,8 @@ namespace FoodTrucks.Core.Commissary
             Check(state, rules); Time(nowDay, nowMinute);
             if (pay == null) throw new ArgumentNullException(nameof(pay));
             var due = Due(state, rules, nowDay, nowMinute);
+            // Checked before any payment: nothing is paid for an order that can't then be delivered.
+            if (due.Any(o => o.DeliverDay < 1)) throw new InvalidOperationException("An order is due on a day before day 1.");
             _ = checked(state.NextBatchId + due.Count);
             var delivered = new List<CommissaryOrder>();
             var refused = new List<CommissaryOrder>();

@@ -371,10 +371,10 @@ namespace FoodTrucks
                 stayPut = (lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes) ||
                           (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres) ||
                           HireCrew.OnShift(vehicle, t).Count == 0;
-                // In its own commissary's bay with something there to load: the crew restocks before it sets off. Read only
-                // while this leg's restock is still to come (Core CrewRestock: once per leg).
+                // In its own commissary's bay: the crew restocks (or finds what is short) before it sets off. Read only while
+                // this leg's restock is still to come (Core CrewRestock: once per leg).
                 if (vehicle.RestockedFor != HireRunner.Want(vehicle, t)?.Start)
-                    restockAt = Commissary.CrewRestockSite(FoodTrucksSession.CurrentState!, instance, KindOf(vehicle));
+                    restockAt = Commissary.CrewRestockSite(FoodTrucksSession.CurrentState!, instance);
             }
             restockSites[vehicle.VehicleId] = restockAt;
             // A truck at a catering gig at this minute stays there, as one the player holds does (without counting as

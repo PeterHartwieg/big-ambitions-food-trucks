@@ -134,6 +134,14 @@ namespace FoodTrucks
             if (destination == null || !Ours(destination.deliveryTargetAddress)) return true;
             try { Deliver(__instance, destination); }
             catch (Exception ex) { Log.Error("Commissary logistics, delivery: " + ex); }
+            // As the game's own DeliverDestination after a delivery: the game refreshes what depends on stock once the
+            // run's work is done [code, 1.0: LogisticsManagerPlan.DeliverDestination, GameManager.shouldUpdateAfterDeliveries].
+            try
+            {
+                var game = InstanceBehavior<GameManager>.Instance;
+                if (game != null) game.shouldUpdateAfterDeliveries = true;
+            }
+            catch (Exception ex) { Log.Error("Commissary logistics, update after deliveries: " + ex.Message); }
             return false;
         }
 
@@ -206,7 +214,8 @@ namespace FoodTrucks
             var got = taken?.amount ?? 0;
             if (got > 0)
             {
-                try { CoreLogistics.Receive(state.Commissary, siteId, line.ItemName, got, line.UnitPriceCents, day, from); }
+                // Priced at what the warehouse paid (the withdrawal's mean price), not the catalogue's.
+                try { CoreLogistics.Receive(state.Commissary, siteId, line.ItemName, got, CoreLogistics.PaidCents(taken!.pricePerUnit), day, from); }
                 catch (Exception ex)
                 {
                     Log.Error($"Commissary logistics: {got} {line.ItemName} for {siteId} not taken into stock, back to the warehouse: {ex}");

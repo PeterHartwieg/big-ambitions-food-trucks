@@ -104,4 +104,25 @@ public class CrewRestockTests
         Assert.Equal(truck.RestockedFor, loaded.RestockedFor);
         Assert.True(CrewRestock.TellShort(loaded, 4));
     }
+
+    [Fact]
+    public void AwayFromItsBayNoRestockAndATooLateTripStillRestocksOnce()
+    {
+        // Not in its own bay: it just sets off.
+        Assert.Equal(HireActionKind.Depart, runner.Step(Truck(), At(3, 9, 40), Bay(canRestock: false)).Kind);
+        // At 13:30 a trip of 80 minutes would arrive after the stop closes at 14:00: it restocks once, then stays.
+        var truck = Truck();
+        Assert.Equal(HireActionKind.Restock, runner.Step(truck, At(3, 13, 30), Bay()).Kind);
+        HireRunner.Restocked(truck, At(3, 13, 30));
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 13, 30), Bay()).Kind);
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 13, 45), Bay()).Kind);
+    }
+
+    [Fact]
+    public void AnEmptyCommissaryStillNamesWhatWasMissing()
+    {
+        // An empty hot dog truck, nothing at the commissary: hot dogs are short.
+        var cargo = new[] { new CargoLine(HotDogGrill, 1, false) };
+        Assert.Equal(new[] { HotDog }, CrewRestock.Short(ShippedData.Tables, "truck", cargo, new Dictionary<string, int>()));
+    }
 }

@@ -257,7 +257,7 @@ internal sealed partial class SoakWorld
                 var ownBay = van.Bay != null && state.Commissary.Spaces.Any(s => s.VehicleId == v.VehicleId && s.CommissaryId == van.Bay);
                 var action = runner.Step(v, t, new VehicleWhere(van.X, van.Z, van.Property,
                     hasStock: Stock(v).Values.Any(n => n > 0), stayPut: Awake && atWindow == v.VehicleId,
-                    canRestock: ownBay && Available(van.Bay!).Count > 0));
+                    canRestock: ownBay));
                 if (action.Kind == HireActionKind.None) break;
                 Note($"{v.VehicleId}: route {action.Kind} stop {action.Stop}");
                 switch (action.Kind)

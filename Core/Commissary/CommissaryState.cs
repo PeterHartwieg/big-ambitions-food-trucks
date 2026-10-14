@@ -133,6 +133,10 @@ namespace FoodTrucks.Core.Commissary
         // The next delivery day not booked yet.
         public int NextDay { get; set; }
         public List<CommissaryStandingLine> Lines { get; set; } = new List<CommissaryStandingLine>();
+        // Texted that no vehicle has a space there; cleared once a delivery books again.
+        public bool NoSpaceTold { get; set; }
+        // Items texted as no longer sold; each cleared once it sells again.
+        public List<string> NotSoldTold { get; set; } = new List<string>();
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -294,6 +298,7 @@ namespace FoodTrucks.Core.Commissary
             for (var i = state.StandingOrders.Count - 1; i >= 0; i--)
             {
                 var standing = state.StandingOrders[i];
+                if (standing != null) standing.NotSoldTold ??= new List<string>();
                 if (standing?.Lines != null) standing.Lines.RemoveAll(l => l == null || string.IsNullOrWhiteSpace(l.ItemName) || l.Boxes <= 0);
                 if (standing == null || standing.Id < 1 || string.IsNullOrWhiteSpace(standing.CommissaryId) || standing.CreatedDay < 1 ||
                     standing.NextDay < 1 || !Enum.IsDefined(typeof(CommissaryRepeat), standing.Repeat) || standing.Repeat == CommissaryRepeat.Once ||
