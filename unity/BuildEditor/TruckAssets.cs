@@ -277,18 +277,23 @@ namespace FoodTrucks.BuildEditor
                 text = text.Replace(from, to);
             }
             text = text.Replace("m_Name: M_HonzaCar", "m_Name: M_FoodTruck");
-            // The vehicle shader replaces the base colour with its single Tint (the example's dark red) wherever
-            // smoothstep(_Min, _Max, base colour alpha) is above 0, and adds a Fresnel rim there. The truck's livery
-            // has two paint colours in its texture, so the mask is switched off: with _Min 1.5 and _Max 2 the
-            // smoothstep is 0 for every alpha. Left at 0 and 0.5, the cream and teal panels rendered dark red,
-            // almost black in shade.
+            // Paint (art/README.md, "Paint mask"): the vehicle shader replaces the base colour with Tint wherever
+            // smoothstep(_Min, _Max, base colour alpha) is above 0 and adds a Fresnel rim there; CarFeatures.SetColor sets
+            // Tint, the rim colour and its power per truck from the dealer's colour. Our alpha is 1 only on the body paint,
+            // so the example's _Min 0 and _Max 0.5 stay. The defaults, for a truck without a colour name (debug spawn), are
+            // the body's cream as game_look.py grades it (median sRGB 186, 162, 119) and a lighter cream rim (x 1.3).
             // Decals off, as on the game's own vehicle materials (_DISABLE_DECALS) and our other models (SurfaceLook): the
             // SDK's HDRP assets compile the decal variants for four decal targets (DECALS_4RT) while the game renders with
             // three (DECALS_3RT), so a truck that read the decal buffers took its ambient occlusion from a target the game
             // doesn't fill and rendered almost black in shade whenever the game drew its decal buffers (13 and 14 October).
             foreach (var (from, to) in new[]
                      {
-                         ("    - _Min: 0\n", "    - _Min: 1.5\n"), ("    - _Max: 0.5\n", "    - _Max: 2\n"),
+                         // Identity entries: the paint mask needs the example's _Min 0 and _Max 0.5 (fails if the SDK changes them).
+                         ("    - _Min: 0\n", "    - _Min: 0\n"), ("    - _Max: 0.5\n", "    - _Max: 0.5\n"),
+                         ("    - Color_3d0f0cdbe6b74be28a1a5be5bab71dea: {r: 0.4431373, g: 0, b: 0, a: 0}\n",
+                          "    - Color_3d0f0cdbe6b74be28a1a5be5bab71dea: {r: 0.7294118, g: 0.63529414, b: 0.46666667, a: 1}\n"),
+                         ("    - Color_f78fac473bac467092fb27521e9f71ea: {r: 1, g: 0, b: 0, a: 1}\n",
+                          "    - Color_f78fac473bac467092fb27521e9f71ea: {r: 0.9482353, g: 0.8258824, b: 0.6066667, a: 1}\n"),
                          ("    - _SupportDecals: 1\n", "    - _SupportDecals: 0\n"),
                          ("  m_ValidKeywords:\n  - _DISABLE_SSR_TRANSPARENT\n", "  m_ValidKeywords:\n  - _DISABLE_DECALS\n  - _DISABLE_SSR_TRANSPARENT\n"),
                      })

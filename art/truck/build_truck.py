@@ -12,8 +12,11 @@ import numpy as np
 from mathutils import Vector, Matrix
 OUT = 'art/truck'
 os.makedirs(OUT+'/renders', exist_ok=True)
+# Entries: (sRGB colour, metallic, smoothness, paint mask). The mask is the base colour's alpha, which the game's vehicle
+# shader replaces with the dealer's colour (art/README.md, "Paint mask"): 1 only on the body paint, 0 on the livery and
+# everything else that keeps its own colour.
 PALETTE = {
- 'paint': ((.94,.79,.52),0,.60,1), 'stripe': ((.12,.37,.36),0,.60,1),
+ 'paint': ((.94,.79,.52),0,.60,1), 'stripe': ((.12,.37,.36),0,.60,0),
  'rubber': ((.025,.032,.038),0,.20,0), 'plastic': ((.10,.13,.15),0,.28,0),
  'glass': ((.065,.15,.19),0,.90,0), 'steel': ((.63,.70,.72),1,.90,0),
  'rim': ((.70,.74,.74),1,.75,0), 'interior': ((.14,.18,.18),0,.25,0),
@@ -481,6 +484,14 @@ def render_stage(filename, opened=False, rear=False):
  finally:
   bpy.data.objects.remove(go,do_unlink=True); h.rotation_euler=(0,0,0); cam.location=prev; cam.rotation_euler=prot
 
+# The food compartment's inside (Blender coordinates): inner wall faces x -1.02 and 1.02, cab bulkhead y -0.91, rear
+# wall 2.97, floor 0.94, ceiling 2.96. Painted faces that look into it keep their cream when the game paints the truck.
+COMPARTMENT=((-1.02,-.91,.94),(1.02,2.97,2.96))
+def faces_compartment(ob,p):
+ c=ob.matrix_world @ p.center+(ob.matrix_world.to_3x3() @ p.normal).normalized()*.10
+ lo,hi=COMPARTMENT
+ return all(lo[i]<c[i]<hi[i] for i in range(3))
+
 def face_pixels(ob,p,tag,size,pad=2):
  """Paint procedural flat-colour detail in each island using surface coordinates."""
  rgb,metal,smooth,alpha=PALETTE[tag]
@@ -493,6 +504,7 @@ def face_pixels(ob,p,tag,size,pad=2):
   world=vs[0]+u[...,None]*(vs[1]-vs[0])+v[...,None]*(vs[2]-vs[0])
  x,y,z=world[:,:,0],world[:,:,1],world[:,:,2]
  diffuse=np.zeros((size,size,4),np.float32);diffuse[:]=[*rgb,alpha]
+ if tag=='paint' and ob.name=='Truck_Body' and faces_compartment(ob,p):diffuse[:,:,3]=0
  ao=np.ones((size,size),np.float32)
  if tag in ('paint','stripe'):
   # Soft road-side darkening is encoded into both colour and mask G, with no noise.
@@ -597,7 +609,7 @@ def texture_and_uv():
  output=nodes.new('ShaderNodeOutputMaterial');output.location=(400,0);bs=nodes.new('ShaderNodeBsdfPrincipled');bs.location=(120,0);bs.inputs['Roughness'].default_value=.65
  tex=nodes.new('ShaderNodeTexImage');tex.image=images['D'];tex.interpolation='Linear';tex.location=(-240,60)
  mat.node_tree.links.new(tex.outputs['Color'],bs.inputs['Base Color']);mat.node_tree.links.new(bs.outputs['BSDF'],output.inputs['Surface'])
- # Texture alpha is the game's paint mask (switched off in the truck's material, art/README.md), never Blender transparency.
+ # Texture alpha is the game's paint mask (art/README.md, "Paint mask"), never Blender transparency.
  for ob in obs:
   ob.data.materials.clear();ob.data.materials.append(mat)
   for p in ob.data.polygons:p.material_index=0
