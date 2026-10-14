@@ -1,3 +1,29 @@
+# Commissary supply and crew restock (next build)
+
+Branch `crew-supply`; no version bump, so the log says 0.9.10. A phone order can repeat (every day, or every week on the weekday of its first delivery), the call lists standing orders and cancels them, and each food's boxes from phone orders are limited per game week at each commissary (`rules.json` `commissary.foodBoxesPerWeek`, 10 by default; machines have no limit). A crewed vehicle in its own commissary's bay restocks before it sets off. Peter's rows take about 15 minutes in a throwaway save with a rented truck space and one hire on a route (FT bridge 2 has both); the L rows are for whoever reads the log afterwards.
+
+| # | Do | Look for |
+|---|---|---|
+| S1 | Call the commissary, Order stock, open the item list | Each food reads "Hot dog, box of 500 (… here, N more boxes this week)"; machines read as before, with no limit |
+| S2 | Order 2 boxes of a food, Order, Confirm order | A new question, "Just this once, or should we repeat it?", with Just tomorrow, Repeat it and Hang up. Just tomorrow books it as before ("Ordered: … arrives here at 08:00 tomorrow") |
+| S3 | Order 1 box of another food, Confirm order, Repeat it, Every week | The commissary names tomorrow's weekday in the question, then texts "Standing order: 1 box of …, every <weekday> at 08:00 from tomorrow, …". The call's start now says 1 standing order |
+| S4 | Hang up, call again | A Standing orders button beside Order stock. It shows the standing order with its next day; Done goes back to the menu |
+| S5 | Sleep to 08:00 (or Ctrl+Alt+F3) | "Your delivery is in" for both orders, paid as usual; the standing order's next day is a week later |
+| S6 | Order more boxes of one food than the item list says are left | Order (or Every day) is refused with "We can only send N more boxes of … in the week from day …"; the form stays open to change it; Just tomorrow with fewer boxes works |
+| S7 | Call, Standing orders, Cancel this one | "Cancelled your standing order: …"; the call's start says 0 standing orders and nothing arrives on its weekday |
+| S8 | Leave the hired truck in its commissary's bay overnight, its route starting in the morning, with food and a machine of its kind in stock there | Before the truck sets off its load goes up (the panel's storage, or BizMan's fleet card); the commissary's stock goes down; no message pops up for it |
+| S9 | Same, but with none of one of the truck's foods in stock | The truck loads what there is and sets off; the commissary texts once that day "Your crew loaded the … here (…), but we had no … for it" |
+| S10 | A crewed truck with nothing on board in its bay, the commissary empty | It stays in the bay and doesn't drive to its stop (as before); no text, nothing loaded |
+| L1 | Load | `Commissary state: … N standing orders (…)` in the startup state line |
+| L2 | S1 | `Commissary order at <site>: the order form lists N items; boxes left this week by food: <item> N, …` (or `off (…)` when the game's wholesale limits are switched off) |
+| L3 | S3 | `Commissary standing order N at <site>: Weekly, 1 <item>, first delivery day D at 08:00, paid on each delivery at that day's prices.` |
+| L4 | S5 | `Commissary standing order N (Weekly) at <site>: day D booked order M 500 <item>; next day D+7.` before the usual `Commissary delivery: order M …` |
+| L5 | S6 | `Commissary order at <site>: <item> over its weekly limit (Once): N boxes left in the week of day W, M needed.` and no `Commissary order N:` line |
+| L6 | S7 | `Commissary standing order N at <site>: cancelled by phone.` |
+| L7 | S8, S9 | `Crew restock: truck <id> at <site> loaded …; [short of …;] … units left in stock; storage …`, once per route leg, then `Route: truck <id> leaves for stop 1 …`. S9 also `Crew restock: <id> short at <site>; the commissary texts it (once today).`, only once that day |
+| L8 | A standing order refused for lack of money, or cut by the limit | `… not delivered: the payment of $… was refused (not enough money); the order is cancelled, standing order N stays.` with the text "Only today's delivery is cancelled; the standing order stays."; or `…; weekly limit cut <item> 1/2 boxes; …` with the commissary's text naming what was left out |
+| L9 | Uninstall step (Ctrl+Shift+F11) in a throwaway save | `Uninstall: commissary refund …; N open orders cancelled, unpaid; M standing orders ended; …` |
+
 # Truck paint and the 1,600 kg drive (next build)
 
 Two things on `main` after the bay-side merge; no version bump, so the log says 0.9.10. The truck's material no longer lets the game's vehicle shader paint its panels in one tint (art/README.md, "Paint mask off"): until now the cream and teal body rendered dark red, close to black in shade. The drive rows are Peter's, at the wheel; the setup runs with the bridge in **FT bridge 2** (four trucks, so nothing needs spawning).
