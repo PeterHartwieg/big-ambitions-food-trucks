@@ -1,6 +1,6 @@
 {
   "name": "logistics-commissary",
-  "checks": "CHECKS.md, Commissary supply and crew restock, rows W1, W3 and W6 (the fixture sets up what W2 does by hand)",
+  "checks": "CHECKS.md, Commissary from a logistics plan, rows W0, W3 and W6 (the fixture sets up what W2 does by hand)",
   "needs": {},
   "steps": [
     {
@@ -74,15 +74,26 @@
       "equals": "hells-kitchen"
     },
     {
+      "remember": "warehouse",
+      "from": "result",
+      "path": "warehouse.address"
+    },
+    {
       "call": "logistics",
       "args": {
-        "op": "run"
+        "op": "run",
+        "warehouse": "$warehouse"
       },
       "timeout_s": 60
     },
     {
       "wait_event": "Commissary logistics: .+ to hells-kitchen: ",
       "timeout_s": 10
+    },
+    {
+      "expect": "result",
+      "path": "before",
+      "length": 1
     },
     {
       "remember": "warehouse_before",
@@ -110,12 +121,18 @@
       "greater": "$held_before"
     },
     {
+      "remember": "warehouse_after",
+      "from": "result",
+      "path": "after.0.warehouse.stock[item=ba:itemname_hotdog].amount"
+    },
+    {
       "note": "A second run with the stock at its target brings nothing (W3's second night)."
     },
     {
       "call": "logistics",
       "args": {
-        "op": "run"
+        "op": "run",
+        "warehouse": "$warehouse"
       },
       "timeout_s": 60
     },
@@ -131,7 +148,73 @@
       "timeout_s": 120
     },
     {
-      "note": "Peter: open BizMan, the headquarters' logistics screen. The plan names the warehouse, the manager and the commissary (W2's dropdown entry). 'FT logistics ready' is the save to start W3 to W9 from."
+      "note": "W6: load the saved fixture and check the plan, its target and both stocks came back."
+    },
+    {
+      "call": "load",
+      "args": {
+        "name": "FT logistics ready"
+      }
+    },
+    {
+      "wait_state": "load.status",
+      "timeout_s": 300,
+      "not_equals": "pending"
+    },
+    {
+      "expect": "state",
+      "path": "load.status",
+      "equals": "done"
+    },
+    {
+      "wait_state": "scene",
+      "timeout_s": 300,
+      "equals": "city"
+    },
+    {
+      "wait_event": "Commissary logistics: \\d+ plan destinations at commissaries: .*hells-kitchen from ",
+      "timeout_s": 30,
+      "after_step": 26
+    },
+    {
+      "call": "logistics",
+      "args": {
+        "op": "status",
+        "warehouse": "$warehouse"
+      }
+    },
+    {
+      "expect": "result",
+      "path": "plans",
+      "length": 1
+    },
+    {
+      "expect": "result",
+      "path": "plans.0.manager.id",
+      "not_equals": null
+    },
+    {
+      "expect": "result",
+      "path": "plans.0.max_destinations",
+      "greater": 0
+    },
+    {
+      "expect": "result",
+      "path": "plans.0.destinations[site=hells-kitchen].targets[item=ba:itemname_hotdog].target",
+      "equals": 40
+    },
+    {
+      "expect": "result",
+      "path": "plans.0.destinations[site=hells-kitchen].targets[item=ba:itemname_hotdog].held",
+      "equals": 40
+    },
+    {
+      "expect": "result",
+      "path": "plans.0.warehouse.stock[item=ba:itemname_hotdog].amount",
+      "equals": "$warehouse_after"
+    },
+    {
+      "note": "Peter: BizMan, the headquarters' logistics screen. The plan names the warehouse and the commissary (W2's dropdown entry), but its manager dropdown reads Unassigned: the fixture's manager has no work shift (the headquarters has no workstation), and the dropdown lists only managers with one. The 02:00 run still delivers. Don't pick a manager there and don't edit the headquarters' schedule: the game then unassigns the manager (ScheduleHelper.UpdateHQPlans) and nothing is delivered. 'FT logistics ready' is the save to start W3 to W9 from."
     }
   ]
 }

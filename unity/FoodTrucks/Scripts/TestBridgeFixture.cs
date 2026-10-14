@@ -65,6 +65,8 @@ namespace FoodTrucks
                 throw new BridgeError("The player is inside a building; the game places furniture and vehicles only in buildings the player isn't in. Teleport the player outside first.");
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
             if (!FoodTrucksSession.CanWrite) throw new BridgeError("The mod's save data is read-only.");
+            if (!LogisticsCommissary.Ready)
+                throw new BridgeError("Commissary logistics is off (its patches aren't active; see the startup log), so a plan can't name a commissary.");
             var site = Site(Str(args, "site") ?? "hells-kitchen");
             var stock = ItemRows(args, "stock", "units", new[] { (HotDog, 200) });
             var targets = ItemRows(args, "targets", "amount", new[] { (HotDog, 40) });
@@ -135,6 +137,7 @@ namespace FoodTrucks
             public Warehouse? Warehouse;
             public BuildingRegistration? Headquarters;
             public EmployeeInstance? Manager;
+            public VehicleSlot? Slot;
             public LogisticsManagerPlan? Plan;
         }
 
@@ -272,9 +275,26 @@ namespace FoodTrucks
             return ("done", string.Join(", ", done) + (already.Count > 0 ? "; already there: " + string.Join(", ", already) : ""));
         }
 
-        // A headquarters, rented and started as the warehouse is; the player's own if there is one.
+        // The warehouse's plan, if it has one (a warehouse is in at most one plan, as the plan screen's warehouse list
+        // leaves out warehouses another plan has).
+        private static LogisticsManagerPlan? PlanOf(Warehouse warehouse) =>
+            SaveGameManager.Current.logisticsManagerPlans.FirstOrDefault(p => p != null && !p.isFactory && p.targetAddress == warehouse.Address);
+
+        // A headquarters, rented and started as the warehouse is; the player's own if there is one. When the warehouse
+        // already has a plan, the plan's own headquarters, so a manager is never hired at one headquarters for another's plan.
         private static (string, string) FixtureHeadquarters(FixtureContext c)
         {
+            var planned = PlanOf(c.Warehouse!);
+            if (planned != null)
+            {
+                var own = planned.headquartersAddress == null || planned.headquartersAddress.IsUndefined() ? null
+                    : SaveGameManager.Current.BuildingRegistrations.FirstOrDefault(r => r != null && r.Address == planned.headquartersAddress);
+                if (own == null || !own.RentedByPlayer || own.businessTypeName != HeadquartersType)
+                    throw new StepFailed($"{c.Warehouse!.BusinessName} already has plan {planned.id}, whose headquarters ({planned.headquartersAddress?.ToString() ?? "none"}) " +
+                                         "isn't one the player runs; delete that plan in BizMan or give up the warehouse, then run the fixture again");
+                c.Headquarters = own;
+                return ("already", $"the headquarters of the warehouse's plan, {own.BusinessName} at {own.Address}");
+            }
             var existing = PlayerBusinesses(HeadquartersType).OrderBy(r => r.BusinessName == FixtureHeadquartersName ? 0 : 1).FirstOrDefault();
             if (existing != null)
             {
@@ -297,10 +317,11 @@ namespace FoodTrucks
         {
             var hq = c.Headquarters!.Address;
             var plans = SaveGameManager.Current.logisticsManagerPlans;
-            var mine = plans.FirstOrDefault(p => !p.isFactory && p.targetAddress == c.Warehouse!.Address);
-            // The plan's own manager first, then any free one of this headquarters.
+            var mine = PlanOf(c.Warehouse!);
+            // The plan's own manager first, then any free one of this headquarters; only one the 02:00 run counts as
+            // there (EmployeeInstance.IsEmployeeAvailable: not absent without a stand-in, not being replaced).
             var existing = EmployeeHelper.GetEmployeeInstances().Where(e => e != null && e.HasSkill(LogisticsSkill) && e.assignedAddress == hq &&
-                    !plans.Any(p => p != mine && p.assignedEmployeeId == e.id))
+                    e.IsEmployeeAvailable() && !plans.Any(p => p != mine && p.assignedEmployeeId == e.id))
                 .OrderBy(e => mine != null && mine.assignedEmployeeId == e.id ? 0 : 1).FirstOrDefault();
             if (existing != null)
             {
@@ -315,20 +336,24 @@ namespace FoodTrucks
                             "No work shift: the headquarters has no workstation (see the doc)");
         }
 
-        // A delivery vehicle in the warehouse's first slot, placed as the game's vehicle delivery does
-        // (VehicleDeliveryHelper.TryPlaceVehicleInWarehouse: the slot's parking place, VehicleSlot.AssignVehicle), free.
+        // A slot with a vehicle that delivers (destinationsThatCanDeliver above 0): one already there, else a new one in the
+        // first free slot, placed as the game's vehicle delivery does (VehicleDeliveryHelper.TryPlaceVehicleInWarehouse:
+        // the slot's parking place, VehicleSlot.AssignVehicle), free. The driver step uses this slot.
         private static (string, string) FixtureVehicle(FixtureContext c)
         {
             var warehouse = c.Warehouse!;
-            var slotted = warehouse.vehicleSlots.FirstOrDefault(s => VehicleOf(s) != null);
+            var slotted = warehouse.vehicleSlots.FirstOrDefault(s => (VehicleOf(s)?.VehicleType?.destinationsThatCanDeliver ?? 0) > 0);
             if (slotted != null)
             {
+                c.Slot = slotted;
                 var v = VehicleOf(slotted)!;
                 return ("already", $"slot {warehouse.vehicleSlots.IndexOf(slotted) + 1} has a {v.vehicleTypeName} ({v.id}), {v.VehicleType.destinationsThatCanDeliver} destinations");
             }
             if (warehouse.vehicleSlots.Count == 0) throw new StepFailed("the warehouse has no vehicle slots");
-            var type = DeliveryVehicleType() ?? throw new StepFailed("the game has no vehicle type that can deliver from a warehouse");
             var slotIndex = warehouse.vehicleSlots.FindIndex(s => string.IsNullOrEmpty(s.vehicleInstanceId));
+            if (slotIndex < 0)
+                throw new StepFailed($"all {warehouse.vehicleSlots.Count} slots hold vehicles that deliver nowhere; move one out of the warehouse by hand, then run the fixture again");
+            var type = DeliveryVehicleType() ?? throw new StepFailed("the game has no vehicle type that can deliver from a warehouse");
             var controllers = InstanceBehavior<BuildingManager>.Instance.GetBuildingTransform(new BuildingSizeInfo(warehouse)).GetComponentsInChildren<WarehouseSlotController>();
             var place = controllers.FirstOrDefault(x => x.slotIndex == slotIndex + 1)
                 ?? throw new StepFailed($"the warehouse's interior has no parking place for slot {slotIndex + 1}");
@@ -344,6 +369,7 @@ namespace FoodTrucks
             };
             warehouse.vehicleSlots[slotIndex].AssignVehicle(vehicle);
             SaveGameManager.Current.VehicleInstances.Add(vehicle);
+            c.Slot = warehouse.vehicleSlots[slotIndex];
             return ("done", $"a {type.vehicleTypeName} ({vehicle.id}) in slot {slotIndex + 1}: {type.destinationsThatCanDeliver} destinations, " +
                             $"driver skill {type.requiredDeliveryDriverSkillValue} needed; no money paid");
         }
@@ -353,7 +379,7 @@ namespace FoodTrucks
         private static (string, string) FixtureDriver(FixtureContext c)
         {
             var warehouse = c.Warehouse!;
-            var slot = warehouse.vehicleSlots.First(s => VehicleOf(s) != null);
+            var slot = c.Slot!;
             var vehicle = VehicleOf(slot)!;
             var current = string.IsNullOrEmpty(slot.employeeDriverId) ? null : EmployeeHelper.GetEmployeeById(slot.employeeDriverId, showError: false);
             if (current != null && Warehouse.CanDriverOperateVehicle(current, vehicle))
@@ -390,7 +416,9 @@ namespace FoodTrucks
             var warehouse = c.Warehouse!;
             var plans = SaveGameManager.Current.logisticsManagerPlans;
             var changes = new List<string>();
-            var plan = plans.FirstOrDefault(p => !p.isFactory && p.targetAddress == warehouse.Address);
+            var plan = PlanOf(warehouse);
+            if (plan != null && plan.headquartersAddress != c.Headquarters!.Address)
+                throw new StepFailed($"plan {plan.id} belongs to {plan.headquartersAddress}, not {c.Headquarters.BusinessName}");
             if (plan == null)
             {
                 plan = new LogisticsManagerPlan { headquartersAddress = c.Headquarters!.Address, isFactory = false };
@@ -581,37 +609,50 @@ namespace FoodTrucks
 
         // ---- logistics: status and run ----
 
-        // { "op": "status" | "run" }
+        // { "op": "status" | "run", "warehouse"? }: "warehouse" (an address as the replies give it) lists only that
+        // warehouse's plan; run still runs every plan.
         private static JToken Logistics(JObject args)
         {
             var op = Need(args, "op", "status or run");
-            if (op == "status") return new JObject { ["plans"] = PlansJson() };
+            var only = Str(args, "warehouse");
+            if (op == "status") return new JObject { ["plans"] = PlansJson(only) };
             if (op != "run") throw new BridgeError($"Unknown logistics op '{op}': status, run.");
             RequireFtCity("logistics run");
             if (LogisticsManagerHelper.WarehouseDeliveriesWork.HasPendingWork || LogisticsManagerHelper.FactoryDeliveriesWork.HasPendingWork)
                 throw new BridgeError("The game's own logistics run is still working through its deliveries; try again in a moment.");
-            var before = PlansJson();
+            // The game's run casts each plan's warehouse registration to a Warehouse and would throw on anything else.
+            var broken = SaveGameManager.Current.logisticsManagerPlans.Where(p => p != null && !p.isFactory && HasTarget(p) && WarehouseOf(p) == null).ToList();
+            if (broken.Count > 0)
+                throw new BridgeError($"Plans whose warehouse isn't a warehouse the game knows ({string.Join(", ", broken.Select(p => $"{p.id} at {p.targetAddress}"))}); " +
+                                      "the game's run would fail on them. Pick another warehouse for them in BizMan.");
+            var before = PlansJson(only);
             var planned = SaveGameManager.Current.logisticsManagerPlans.Where(p => p != null && !p.isFactory).Sum(p => p.GetPlannedDeliveries().Count());
             // As the 02:00 hour does (GameManager.RunMainGameTick), then drained at once as DeletePlan does
             // (DistributedWork.ForceCompleteAllWork), so the deliveries and the game's end-of-run texts happen in this call.
             LogisticsManagerHelper.DoAllWarehouseDeliveries();
             LogisticsManagerHelper.WarehouseDeliveriesWork.ForceCompleteAllWork();
-            var after = PlansJson();
+            var after = PlansJson(only);
             Log.Info($"Test bridge: logistics run now (the game's 02:00 warehouse deliveries), day {SaveGameManager.Current.Day} " +
                      $"{SaveGameManager.Current.Hour:D2}:{(int)SaveGameManager.Current.Minute:D2}: {planned} destinations planned.");
             return new JObject { ["deliveries"] = planned, ["before"] = before, ["after"] = after };
         }
 
-        private static JArray PlansJson() =>
-            new JArray((SaveGameManager.Current.logisticsManagerPlans ?? new List<LogisticsManagerPlan>()).Where(p => p != null && !p.isFactory).Select(PlanJson));
+        private static JArray PlansJson(string? warehouse = null) =>
+            new JArray((SaveGameManager.Current.logisticsManagerPlans ?? new List<LogisticsManagerPlan>())
+                .Where(p => p != null && !p.isFactory && (warehouse == null || p.targetAddress?.ToString() == warehouse)).Select(PlanJson));
+
+        private static bool HasTarget(LogisticsManagerPlan plan) => plan.targetAddress != null && !plan.targetAddress.IsUndefined();
+
+        // The plan's warehouse; null when it has none or its registration isn't a warehouse.
+        private static Warehouse? WarehouseOf(LogisticsManagerPlan plan) =>
+            HasTarget(plan) ? BuildingHelper.GetBuildingRegistration(plan.targetAddress) as Warehouse : null;
 
         // A plan: its warehouse with what its pallets hold of each item any destination targets, its manager, how many
         // destinations it delivers to, and each destination with its targets and, for a commissary, what it holds of them
         // (the mod's stock; null for a business).
         private static JObject PlanJson(LogisticsManagerPlan plan)
         {
-            var hasWarehouse = plan.targetAddress != null && !plan.targetAddress.IsUndefined();
-            var warehouse = hasWarehouse ? BuildingHelper.GetBuildingRegistration(plan.targetAddress) : null;
+            var warehouse = WarehouseOf(plan);
             var items = plan.destinations.Where(d => d?.stockTargets != null).SelectMany(d => d.stockTargets).Where(t => t != null)
                 .Select(t => t.itemName).Distinct(StringComparer.Ordinal).ToList();
             var manager = string.IsNullOrEmpty(plan.assignedEmployeeId) ? null : EmployeeHelper.GetEmployeeById(plan.assignedEmployeeId, showError: false);
@@ -627,7 +668,7 @@ namespace FoodTrucks
                     ["stock"] = new JArray(items.Select(i => new JObject { ["item"] = i, ["amount"] = BuildingHelper.CountResourcesInPallets(warehouse.Address, i) })),
                 },
                 ["manager"] = manager == null ? null : new JObject { ["id"] = manager.id, ["name"] = HireCrew.Name(manager), ["skill"] = Math.Round(manager.GetSkillValue(LogisticsSkill), 1) },
-                ["max_destinations"] = hasWarehouse ? plan.MaxDestinations : 0,
+                ["max_destinations"] = warehouse == null ? 0 : plan.MaxDestinations,
                 ["destinations"] = new JArray(plan.destinations.Select((d, i) =>
                 {
                     var site = LogisticsCommissary.SiteIdOf(d?.deliveryTargetAddress);

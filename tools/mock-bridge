@@ -108,6 +108,8 @@ class Mock:
         self.frame = 0
         self.stop = threading.Event()
         self.saves = {}
+        # Tests set this to stand for the player inside a building, where the fixture refuses as the game's does.
+        self.inside_building = False
         self.character = 'FT test character'
         self.reset('FT mock')
         self.store('FT mock')
@@ -259,6 +261,9 @@ class Mock:
     def finish_load(self, name):
         self.restore(name, emit=False)
         self.load={'name':name,'status':'done','error':None}
+        if self.logistics and self.logistics['plan']['destinations']:
+            dests=self.logistics['plan']['destinations']
+            self.event(f"Commissary logistics: {len(dests)} plan destinations at commissaries: "+'; '.join(f"{d['site']} from {self.logistics['warehouse']['name']}, {len(d['targets'])} targets" for d in dests)+'.')
         self.event(f"Test bridge: load '{name}' done: day {self.state['clock']['day']}, the mod's save data attached.")
 
     def clock_held_by(self):
@@ -926,6 +931,8 @@ class Mock:
     def fixture(self, args):
         name=need(args,'name',"the fixture's name: logistics")
         if name!='logistics': raise ValueError(f"No fixture '{name}'. Fixtures: logistics.")
+        if self.inside_building:
+            raise ValueError("The player is inside a building; the game places furniture and vehicles only in buildings the player isn't in. Teleport the player outside first.")
         site=args.get('site') or 'hells-kitchen'
         if site not in SITES: raise ValueError(f"No commissary '{site}'. Commissaries: {', '.join(SITES)}.")
         def rows(key, amount, default):
@@ -950,7 +957,7 @@ class Mock:
                 return {'fixture':'logistics','complete':False,'site':site,'steps':steps,'warehouse':None,'headquarters':None,'plan':None}
             v=free[0]
             spaces.append({'site':site,'vehicle':v['id']})
-            v['commissary']['site']=site
+            v['commissary']={**(v['commissary'] or {'in_bay':False,'bay_site':None}),'site':site}
             step('commissary_space','done',f"{v['kind']} {v['id']} rented a space at {site}")
         made=self.logistics is None
         if made:
@@ -989,7 +996,8 @@ class Mock:
 
     def logistics_command(self, args):
         op=need(args,'op','status or run')
-        plans=lambda: [self.plan_json()] if self.logistics else []
+        only=args.get('warehouse')
+        plans=lambda: [self.plan_json()] if self.logistics and only in (None,self.logistics['warehouse']['address']) else []
         if op=='status': return {'plans':plans()}
         if op!='run': raise ValueError(f"Unknown logistics op '{op}': status, run.")
         self.require_ft('logistics run')

@@ -29,6 +29,19 @@ class ParityTests(unittest.TestCase):
             self.mock.call(cmd,args)
         self.assertEqual(str(exc.exception),text)
 
+    def test_fixture_logistics_refuses_inside_and_filters_by_warehouse(self):
+        self.mock.inside_building=True
+        self.refused('fixture',{'name':'logistics'},"The player is inside a building; the game places furniture and vehicles only in buildings the player isn't in. Teleport the player outside first.")
+        self.mock.inside_building=False
+        reply=self.mock.call('fixture',{'name':'logistics'})
+        self.assertTrue(reply['complete'])
+        self.assertEqual([s['step'] for s in reply['steps']],list(NS['Mock'].FIXTURE_STEPS))
+        address=reply['warehouse']['address']
+        self.assertEqual(len(self.mock.call('logistics',{'op':'status','warehouse':address})['plans']),1)
+        self.assertEqual(self.mock.call('logistics',{'op':'status','warehouse':'ba:street_none#1'})['plans'],[])
+        again=self.mock.call('fixture',{'name':'logistics'})
+        self.assertTrue(all(s['status']=='already' for s in again['steps']))
+
     def test_bay_candidates_shape_and_guards(self):
         reply=self.mock.call('commissary',{'op':'bay_candidates','site':'lower-manhattan','radius':80})
         self.assertEqual(reply['max_metres'],30)

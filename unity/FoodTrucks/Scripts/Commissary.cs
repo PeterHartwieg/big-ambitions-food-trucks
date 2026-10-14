@@ -1581,9 +1581,6 @@ namespace FoodTrucks
                 .Replace("{needed}", check.Needed.ToString()).Replace("{day}", check.WeekStart.ToString());
         }
 
-        // The test bridge's order: the phone form's confirm without the call. The same Core quote and order code and log
-        // lines; nothing is paid now (orders are paid on delivery). `items` are item keys or names with their boxes.
-        // Returns the orders placed, or why none were.
         // The test bridge's fixture: the Commissary button's Rent for this vehicle at this commissary, without standing in
         // its bay (the commissary is unlocked first, as the first visit does). Null when the vehicle has its space there.
         internal static string? RentForTesting(string vehicleId, string siteId)
@@ -1601,6 +1598,9 @@ namespace FoodTrucks
             return state.Commissary.Spaces.Any(s => s.VehicleId == vehicleId && s.CommissaryId == siteId) ? null : "the rent didn't happen (see the log)";
         }
 
+        // The test bridge's order: the phone form's confirm without the call. The same Core quote and order code and log
+        // lines; nothing is paid now (orders are paid on delivery). `items` are item keys or names with their boxes.
+        // Returns the orders placed, or why none were.
         internal static (IReadOnlyList<CommissaryOrder> Orders, string? Refusal) OrderForTesting(string siteId, IEnumerable<(string Item, int Boxes)> items)
         {
             var state = FoodTrucksSession.CurrentState;
