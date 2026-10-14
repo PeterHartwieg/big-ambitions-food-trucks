@@ -157,6 +157,33 @@
           "retail": 1.0
         },
         "footfall": 1.25
+      },
+      {
+        "id": "lower-park-eleventh-street",
+        "name": "foodtrucks:pitch_lower-park-eleventh-street",
+        "address": "ba:street_eleventhstreet#23",
+        "areas": {
+          "park": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "hells-park-second-avenue",
+        "name": "foodtrucks:pitch_hells-park-second-avenue",
+        "address": "ba:street_secondavenue#5",
+        "areas": {
+          "park": 1.0
+        },
+        "footfall": 1.25
+      },
+      {
+        "id": "industry-park-twenty-first-street",
+        "name": "foodtrucks:pitch_industry-park-twenty-first-street",
+        "address": "ba:street_twentyfirststreet#25",
+        "areas": {
+          "park": 1.0
+        },
+        "footfall": 1.25
       }
     ]
   },
@@ -279,5 +306,6 @@
     ],
     "satisfactionBonus": 5,
     "minWorkedMinutes": 60
-  }
+  },
+  "_parkPremium": "Park pitches added from the read-only parks bridge capture of 14 October 2026 (session e4cd4ee8): Lower Manhattan, Hell's Kitchen and Industry City. Address anchors are nearby building entrances, not confirmed park gates. Park volume/entrance positions were observed; pitch placement, legal loading/parking and visibility remain pending live validation. The closest Lower Manhattan and Hell's Kitchen candidates overlap existing event radii, so the nearest alternatives outside those event streets were selected. See docs/balance/park-premium-pitches.md."
 }

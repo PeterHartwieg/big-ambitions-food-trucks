@@ -30,6 +30,8 @@ Each question the mod depends on, and how sure we are. "Checked" means seen in t
 
 Also found in the session: clicking Sleep in a mod vehicle's item panel throws `SleepEnvironment config is not assigned` (the prefabs carry an empty sleep setup), and the test truck's storage can't be opened although it shows 0/20.
 
+Park premium pitches (14 October 2026): **pending**. Three address anchors use observed park/entrance positions; their selling positions and map presentation still need live validation. [Selection, calculator results and live checks](docs/balance/park-premium-pitches.md).
+
 Milestone 1 fixes for these, played on 8 October 2026 (session report in [docs/evidence/milestone-1-session-1.md](docs/evidence/milestone-1-session-1.md)):
 
 | Finding | Fix | Status |
