@@ -43,7 +43,8 @@ class MemoryHTTP:
         body = request.data or b''
         method = 'POST' if request.data is not None else 'GET'
         path = url.path + ('?' + url.query if url.query else '')
-        wire = f'{method} {path} HTTP/1.0\r\nHost: 127.0.0.1\r\nContent-Length: {len(body)}\r\n\r\n'.encode() + body
+        headers = ''.join(f'{key}: {value}\r\n' for key, value in request.header_items() if key.lower() not in ('host', 'content-length'))
+        wire = f'{method} {path} HTTP/1.0\r\nHost: 127.0.0.1\r\nContent-Length: {len(body)}\r\n{headers}\r\n'.encode() + body
         connection = Connection(wire)
         NAMESPACE['Handler'](connection, ('127.0.0.1', 1), self.server)
         reply = connection.output.getvalue()

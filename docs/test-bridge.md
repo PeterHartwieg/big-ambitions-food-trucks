@@ -20,6 +20,7 @@ The pieces:
 ## Safety
 
 - The bridge starts only with `-foodtrucks-test` on the game's command line. Without it nothing listens, and the Workshop build behaves as before.
+- `POST /call` requires `Content-Type: application/json` and refuses `Origin` or `Sec-Fetch-Site` headers before queuing any operation. Use the native CLI/MCP clients; browser-origin requests are refused even from a localhost page.
 - It binds `127.0.0.1` only. The Mac reaches it through `ssh -L 8330:127.0.0.1:8330 homepc` (`tools/run-remote.sh tunnel`).
 - Commands that change a save (money, spawns, time jumps, debug actions) are for throwaway **FT** saves only. `load` and `new_game` refuse any save whose name doesn't start with `FT`, and the bridge refuses every changing command while the loaded save's name doesn't start with `FT`.
 
