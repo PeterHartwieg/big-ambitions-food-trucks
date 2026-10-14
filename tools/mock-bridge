@@ -143,12 +143,13 @@ class Mock:
         self.hours = {}
         self.activity_starting = False
         self.phone_texts = []
+        self.logistics = None
         self.pending = []
         self.walks = []
 
     def store(self, name):
         self.saves[name] = copy.deepcopy({key: getattr(self, key) for key in
-            ('state', 'character', 'absolute', 'employees', 'selected', 'order_number', 'routes', 'takings', 'hours', 'phone_texts')})
+            ('state', 'character', 'absolute', 'employees', 'selected', 'order_number', 'routes', 'takings', 'hours', 'phone_texts', 'logistics')})
 
     def save_city(self, name):
         if self.save_in_progress: raise ValueError('A save is already being written; try again in a moment.')
@@ -225,7 +226,7 @@ class Mock:
     def prepare_saves(self):
         # These stand in for saves a person prepares in the game, not bridge commands.
         for name in ('FT bridge', 'FT commissary-pay-on-delivery', 'FT commissary-refused-payment',
-                     'FT crew-midnight-payout', 'FT hatch-only-selling', 'FT bay-shots', 'FT truck-look-shots'):
+                     'FT crew-midnight-payout', 'FT hatch-only-selling', 'FT bay-shots', 'FT truck-look-shots', 'FT logistics'):
             self.reset(name)
             if name not in ('FT bridge', 'FT bay-shots'):
                 self.spawn('truck')
@@ -233,8 +234,9 @@ class Mock:
                 self.place_vehicle(v, 'hells-kitchen')
                 self.state['player'].update(x=v['x'] + 2.6, z=v['z'])
                 self.state['licence'] = {'until_day':60, 'permits':1, 'course_done':True}
-                self.state['commissary']['spaces'] = [{'site':'hells-kitchen','vehicle':v['id']}]
-                v['commissary']['site'] = 'hells-kitchen'
+                if name != 'FT logistics':
+                    self.state['commissary']['spaces'] = [{'site':'hells-kitchen','vehicle':v['id']}]
+                    v['commissary']['site'] = 'hells-kitchen'
                 v['pieces'] = [{'item':'griddle', 'units':160, 'cap':160}]
                 v['stock'] = [{'item':'Tacos', 'key':'foodtrucks:itemname_tacos', 'amount':160}]
                 if 'crew-' in name:
@@ -916,6 +918,102 @@ class Mock:
             if loaded: self.event(LOCALE['foodtrucks:notification_commissary_restocked'].format(vehicle=v['kind'],loaded=', '.join(loaded),full='',left=left),'notice')
             else: self.event(LOCALE['foodtrucks:notification_commissary_restock_full'].format(vehicle=v['kind'],left=left),'notice')
 
+    # The fixture and logistics commands (docs/test-bridge.md): a warehouse, a headquarters and a plan to a commissary,
+    # kept as one record per save; the run moves what is missing up to each target from the warehouse to the commissary.
+    FIXTURE_STEPS = ('commissary_space','warehouse','pallets','stock','headquarters','logistics_manager','vehicle','driver','plan')
+    ITEM_NAMES = {'ba:itemname_hotdog':'Hotdog'}
+
+    def fixture(self, args):
+        name=need(args,'name',"the fixture's name: logistics")
+        if name!='logistics': raise ValueError(f"No fixture '{name}'. Fixtures: logistics.")
+        site=args.get('site') or 'hells-kitchen'
+        if site not in SITES: raise ValueError(f"No commissary '{site}'. Commissaries: {', '.join(SITES)}.")
+        def rows(key, amount, default):
+            value=args.get(key)
+            if value is None: return default
+            if not isinstance(value,list) or not value: raise ValueError(f'"{key}" is a list: [ {{ "item", "{amount}" }} ].')
+            return [(r['item'],int(r[amount])) for r in value]
+        stock=rows('stock','units',[('ba:itemname_hotdog',200)])
+        targets=rows('targets','amount',[('ba:itemname_hotdog',40)])
+        steps=[]
+        def step(name,status,detail):
+            steps.append({'step':name,'status':status,'detail':detail})
+            self.event(f'Test bridge: fixture logistics, {name}: {status}: {detail}')
+        spaces=self.state['commissary']['spaces']
+        if any(s['site']==site for s in spaces):
+            step('commissary_space','already',f'{site} has a space')
+        else:
+            free=[v for v in self.state['vehicles'] if not any(s['vehicle']==v['id'] for s in spaces)]
+            if not free:
+                step('commissary_space','failed','no food cart or truck in this save; a space is rented for a vehicle (debug spawn truck, or buy one), then run the fixture again')
+                for rest in self.FIXTURE_STEPS[1:]: step(rest,'not_run','an earlier step failed')
+                return {'fixture':'logistics','complete':False,'site':site,'steps':steps,'warehouse':None,'headquarters':None,'plan':None}
+            v=free[0]
+            spaces.append({'site':site,'vehicle':v['id']})
+            v['commissary']['site']=site
+            step('commissary_space','done',f"{v['kind']} {v['id']} rented a space at {site}")
+        made=self.logistics is None
+        if made:
+            self.logistics={'warehouse':{'name':'FT Fixture Warehouse','address':'ba:street_mockstreet#2','type':'ba:businesstype_warehouse'},
+                            'headquarters':{'name':'FT Fixture HQ','address':'ba:street_mockstreet#4','type':'ba:businesstype_headquarters'},
+                            'stock':{}, 'plan':{'id':'mockplan','destinations':[]}}
+        lg=self.logistics
+        for name in ('warehouse','pallets'): step(name,'done' if made else 'already','mock')
+        added=[f'{amount-lg["stock"].get(item,0)} {item}' for item,amount in stock if lg['stock'].get(item,0)<amount]
+        for item,amount in stock: lg['stock'][item]=max(amount,lg['stock'].get(item,0))
+        step('stock','done' if added else 'already',', '.join(added) or 'mock')
+        for name in ('headquarters','logistics_manager','vehicle','driver'): step(name,'done' if made else 'already','mock')
+        dest=next((d for d in lg['plan']['destinations'] if d['site']==site),None)
+        changed=dest is None
+        if dest is None:
+            dest={'site':site,'targets':{}}
+            lg['plan']['destinations'].append(dest)
+        for item,amount in targets:
+            if dest['targets'].get(item)!=amount: dest['targets'][item]=amount; changed=True
+        step('plan','done' if changed else 'already',f'destination {lg["plan"]["destinations"].index(dest)+1} of 1')
+        return {'fixture':'logistics','complete':True,'site':site,'steps':steps,'warehouse':lg['warehouse'],'headquarters':lg['headquarters'],
+                'plan':self.plan_json()}
+
+    def held(self, site, item):
+        return sum(s['amount'] for s in self.state['commissary']['stock'] if s['site']==site and s.get('key')==item)
+
+    def plan_json(self):
+        lg=self.logistics
+        items=sorted({item for d in lg['plan']['destinations'] for item in d['targets']})
+        return {'id':lg['plan']['id'],'headquarters':lg['headquarters']['address'],
+                'warehouse':{**{k:lg['warehouse'][k] for k in ('name','address')},'stock':[{'item':i,'amount':lg['stock'].get(i,0)} for i in items]},
+                'manager':{'id':'mockmanager','name':'Mock Manager','skill':60.0},'max_destinations':1,
+                'destinations':[{'index':n+1,'site':d['site'],'address':None,
+                                 'targets':[{'item':i,'target':t,'held':self.held(d['site'],i)} for i,t in d['targets'].items()]}
+                                for n,d in enumerate(lg['plan']['destinations'])]}
+
+    def logistics_command(self, args):
+        op=need(args,'op','status or run')
+        plans=lambda: [self.plan_json()] if self.logistics else []
+        if op=='status': return {'plans':plans()}
+        if op!='run': raise ValueError(f"Unknown logistics op '{op}': status, run.")
+        self.require_ft('logistics run')
+        before=plans()
+        planned=0
+        if self.logistics:
+            lg=self.logistics
+            for d in lg['plan']['destinations'][:1]:
+                planned+=1
+                moved=[]
+                for item,target in d['targets'].items():
+                    take=min(max(0,target-self.held(d['site'],item)),lg['stock'].get(item,0))
+                    if take<=0: continue
+                    lg['stock'][item]-=take
+                    line=next((s for s in self.state['commissary']['stock'] if s['site']==d['site'] and s.get('key')==item),None)
+                    if line: line['amount']+=take
+                    else: self.state['commissary']['stock'].append({'site':d['site'],'item':self.ITEM_NAMES.get(item,item),'key':item,'amount':take})
+                    moved.append((item,take))
+                text=', '.join(f'{n} {i}' for i,n in moved) if moved else 'nothing brought'
+                self.event(f"Commissary logistics: {lg['warehouse']['name']} to {d['site']}: {text} ({sum(n for _,n in moved)} units).")
+        c=self.state['clock']
+        self.event(f"Test bridge: logistics run now (the game's 02:00 warehouse deliveries), day {c['day']} {c['time']}: {planned} destinations planned.")
+        return {'deliveries':planned,'before':before,'after':plans()}
+
     def require_city(self, cmd):
         scene=self.state['scene']
         if scene!='city': raise ValueError(f'{cmd} works in the city only; the game is at the {scene} now.')
@@ -940,8 +1038,12 @@ class Mock:
 
     def call(self, cmd, args):
         if self.stopped: raise ValueError('the bridge stopped')
-        if cmd in ('console','debug','time','money','teleport','vehicle','commissary','crew','save'): self.require_ft(cmd)
+        if cmd in ('console','debug','time','money','teleport','vehicle','commissary','crew','fixture','save'): self.require_ft(cmd)
         if cmd=='state': return self.read_state()
+        if cmd=='fixture': return self.fixture(args)
+        if cmd=='logistics':
+            self.require_city(cmd)
+            return self.logistics_command(args)
         if cmd in ('load','save'):
             name=need(args,'name',"the save's name")
             if not name.startswith('FT'):
@@ -1219,7 +1321,7 @@ class Mock:
             self.event(f'Mock console: {line}')
             return {'output':[f'Mock console accepted: {line}']}
         if cmd=='quit': return {}
-        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, ui, shoot, save, load, new_game, quit, op.")
+        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, fixture, logistics, ui, shoot, save, load, new_game, quit, op.")
 
 
 class Handler(BaseHTTPRequestHandler):

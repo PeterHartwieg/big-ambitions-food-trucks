@@ -113,6 +113,12 @@ namespace FoodTrucks
 
         private static Address AddressOf(CommissarySite site) => new Address(Street, CoreLogistics.AddressNumber(site.Id));
 
+        // For the test bridge: whether commissaries are offered as destinations, the address a commissary stands for in a
+        // plan (what its dropdown entry sets), and the commissary an address stands for.
+        internal static bool Ready => ready;
+        internal static Address DestinationFor(CommissarySite site) => AddressOf(site);
+        internal static string? SiteIdOf(Address? address) => IdOf(address);
+
         private static string SourceName(LogisticsManagerPlan plan)
         {
             if (plan.targetAddress.IsUndefined()) return "no warehouse";

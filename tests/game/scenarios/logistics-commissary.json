@@ -1,0 +1,137 @@
+{
+  "name": "logistics-commissary",
+  "checks": "CHECKS.md, Commissary supply and crew restock, rows W1, W3 and W6 (the fixture sets up what W2 does by hand)",
+  "needs": {},
+  "steps": [
+    {
+      "note": "Use FT saves from a new character of their own, never a series city saved under a new name. Prepare 'FT logistics' by hand: at least one food truck or cart (a licence isn't needed), the player on foot outside any building, enough money for a day's commissary rent. The fixture rents the rest; it reuses what an earlier run made, so the same save can run this twice."
+    },
+    {
+      "call": "load",
+      "args": {
+        "name": "FT logistics"
+      }
+    },
+    {
+      "wait_state": "load.status",
+      "timeout_s": 300,
+      "not_equals": "pending"
+    },
+    {
+      "expect": "state",
+      "path": "load.status",
+      "equals": "done"
+    },
+    {
+      "wait_state": "scene",
+      "timeout_s": 300,
+      "equals": "city"
+    },
+    {
+      "wait_state": "licence",
+      "timeout_s": 300,
+      "not_equals": null
+    },
+    {
+      "call": "time",
+      "args": {
+        "pause": true
+      }
+    },
+    {
+      "call": "fixture",
+      "args": {
+        "name": "logistics",
+        "site": "hells-kitchen",
+        "stock": [
+          {
+            "item": "ba:itemname_hotdog",
+            "units": 200
+          }
+        ],
+        "targets": [
+          {
+            "item": "ba:itemname_hotdog",
+            "amount": 40
+          }
+        ]
+      },
+      "timeout_s": 60
+    },
+    {
+      "expect": "result",
+      "path": "complete",
+      "equals": true
+    },
+    {
+      "expect": "result",
+      "path": "plan.destinations[site=hells-kitchen].targets[item=ba:itemname_hotdog].target",
+      "equals": 40
+    },
+    {
+      "expect": "state",
+      "path": "commissary.spaces[site=hells-kitchen].site",
+      "equals": "hells-kitchen"
+    },
+    {
+      "call": "logistics",
+      "args": {
+        "op": "run"
+      },
+      "timeout_s": 60
+    },
+    {
+      "wait_event": "Commissary logistics: .+ to hells-kitchen: ",
+      "timeout_s": 10
+    },
+    {
+      "remember": "warehouse_before",
+      "from": "result",
+      "path": "before.0.warehouse.stock[item=ba:itemname_hotdog].amount"
+    },
+    {
+      "remember": "held_before",
+      "from": "result",
+      "path": "before.0.destinations[site=hells-kitchen].targets[item=ba:itemname_hotdog].held"
+    },
+    {
+      "expect": "result",
+      "path": "after.0.destinations[site=hells-kitchen].targets[item=ba:itemname_hotdog].held",
+      "equals": 40
+    },
+    {
+      "expect": "result",
+      "path": "after.0.warehouse.stock[item=ba:itemname_hotdog].amount",
+      "less": "$warehouse_before"
+    },
+    {
+      "expect": "result",
+      "path": "after.0.destinations[site=hells-kitchen].targets[item=ba:itemname_hotdog].held",
+      "greater": "$held_before"
+    },
+    {
+      "note": "A second run with the stock at its target brings nothing (W3's second night)."
+    },
+    {
+      "call": "logistics",
+      "args": {
+        "op": "run"
+      },
+      "timeout_s": 60
+    },
+    {
+      "wait_event": "Commissary logistics: .+ to hells-kitchen: nothing brought \\(0 units\\)",
+      "timeout_s": 10
+    },
+    {
+      "call": "save",
+      "args": {
+        "name": "FT logistics ready"
+      },
+      "timeout_s": 120
+    },
+    {
+      "note": "Peter: open BizMan, the headquarters' logistics screen. The plan names the warehouse, the manager and the commissary (W2's dropdown entry). 'FT logistics ready' is the save to start W3 to W9 from."
+    }
+  ]
+}
