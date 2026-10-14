@@ -229,14 +229,28 @@ The 0.9.3 to 0.9.7 layout (two spots at the hatch's ends, scaled 0.72 on a steel
 
 | Slot | Texture | Contents |
 |---|---|---|
-| `_BaseColorMap`, `_MainTex` | `T_FoodTruck_BC` | Base colour from `game_look.py` (source `T_FoodTruck_D`); alpha 1 on painted panels, but the material ignores it (below) |
+| `_BaseColorMap`, `_MainTex` | `T_FoodTruck_BC` | Base colour from `game_look.py` (source `T_FoodTruck_D`); alpha is the paint mask (below) |
 | `_MaskMap` | `T_FoodTruck_M` | R metallic, G AO, B 0, A smoothness, from `game_look.py` (source `T_FoodTruck_MaskMap`) |
 | `_NormalMap` | `T_FoodTruck_N` | Rounded edges baked by `game_look.py` |
 | `_EmissionTexture`, `_FrontLights`, `_BackLights`, `_BlinkerLeft`, `_BlinkerRight` | `T_FoodTruck_E` | Light colours |
 | `_EmissionMask` | `T_FoodTruck_EM_1` | R headlights plus the amber marker and work lights, G tail/brake, B reverse |
 | `_IndicatorsMask` | `T_FoodTruck_EM_2` | R right blinkers and side repeaters, G left ones |
 
-**Paint mask off.** The vehicle shader (`SH_Vehicle`, read from the SDK's shader graph) sets the base colour to `lerp(texture, Tint, smoothstep(_Min, _Max, alpha))` and adds a Fresnel rim in `FresnelColor` on the same mask; the game's `CarFeatures.SetColor` sets Tint per car from its colour name. The example car's material has Tint dark red (0.44, 0, 0), `_Min` 0 and `_Max` 0.5. A debug-spawned truck has no colour name and kept that red; a bought one gets the dealer's colour. Either way, until now every cream and teal panel rendered in one tint with a coloured rim, close to black in shade. A single tint can't carry a two-colour livery, so `TruckAssets` sets `_Min` 1.5 and `_Max` 2: the smoothstep is 0 for every alpha, which switches off the tint, the Fresnel rim and the 1.1 smoothness boost on paint, whatever colour the game assigns. The base colour and smoothness come from our maps, with the game's dirt blended on top as on its own cars. The dealer still offers colours for the truck; they now have no effect (open: hide the picker for it).
+**Paint mask.** The vehicle shader (`SH_Vehicle`, read from the SDK's shader graph) sets the base colour to `lerp(texture, Tint, smoothstep(_Min, _Max, alpha))`, then blends towards `FresnelColor` by `smoothstep × Fresnel(power) × AO`, and multiplies smoothness by `SmoothnessBoost` (1.1) on the same mask. `CarFeatures.SetColor` sets Tint, the rim colour and the rim power on every renderer in `bodyMeshes` (the body, the four wheels and the hatch) from the vehicle's colour name. The tint replaces the texture outright, so a mask texel at 1 shows one flat colour: the baked road-side darkening, the seam lines and rivets drawn into the paint and `game_look.py`'s grime are lost there, as on the game's own cars; the occlusion in the mask's G, the normal map and the game's dirt still apply.
+
+Until 14 October 2026 every cream and teal panel had alpha 1, so the whole body took one tint, and the mask was switched off (`_Min` 1.5, `_Max` 2). Now `build_truck.py` writes alpha 1 only on the body paint, per palette tag, and the material keeps the example car's `_Min` 0 and `_Max` 0.5 (the alpha is exactly 0 or 1):
+
+| Tag | Alpha | Parts |
+|---|---|---|
+| `paint` | 1 | Box, cab, roof, hood, front fenders, grille surround, rear door, generator hatch panel, the serving hatch on both faces (its underside is the awning). 0 where a paint face looks into the food compartment (inner walls, ceiling, bulkhead; `faces_compartment`), so the kitchen stays cream |
+| `seam` | 1 | The panel joins on the sides: in the body colour they show by their shape, not as a cream line on a red truck |
+| `stripe` | 0 | Teal skirt and rocker band, the bands under the awning: the livery keeps its teal |
+| `diamond`, `steel`, `rim`, `tank`, `trim` | 0 | Diamond plate, rear fenders, frames, rails, ladder, wheel rims, tanks, trims |
+| `rubber`, `plastic`, `glass`, `interior` | 0 | Tyres, gaskets, bumpers, mirrors, glass, cab interior and floor |
+| `head`, `tail`, `reverse`, `left`, `right`, `marker`, `worklight` | 0 | Lights |
+| `warm`, `chalk` | 0 | The menu board on the side |
+
+Alpha 1 covers 18% of the atlas (was 33%). With no colour name (the debug spawn: `DebugActions` makes a `VehicleInstance` without one, and the prefab has no `RandomVehicleColor`) the material's defaults show: Tint is the body's cream as `game_look.py` grades it (median sRGB 186, 162, 119), the rim a lighter cream (× 1.3), the rim power the example's 2.04. The game's colour values themselves (`GlobalReferences.vehicleColors`, `VehicleColor` assets) haven't been read from its bundles. Preview renders of the mask and of a few tints, with the shader's logic rebuilt in Cycles, are in `build/truck-paint/` (not committed).
 
 **Decals off.** The material has `_DISABLE_DECALS` and `_SupportDecals` 0, as the game's own vehicle materials (since 14 October 2026). The SDK's HDRP assets compile decal variants for four decal targets (`DECALS_4RT`), the game renders with three (`DECALS_3RT`); a four-target variant blends metallic and ambient occlusion from a fourth decal buffer the game never fills, which left the truck almost black in shade whenever the game drew its decal buffers (Peter: "much better" with decals off). Every material we ship refuses decals, so the build keeps the SDK's four-target setting. The game's vehicle materials also turn screen-space reflections off; ours keep `_ReceivesSSR` 1, since matching that needs the stencil setup changed with it.
 

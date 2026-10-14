@@ -244,7 +244,7 @@
         }
       },
       "Truck_Collision": {
-        "triangles": 126,
+        "triangles": 124,
         "origin": [
           0.0,
           0.0,
@@ -253,7 +253,7 @@
         "bbox_min": [
           -1.26,
           -2.65,
-          0.0
+          0.3
         ],
         "bbox_max": [
           1.231,
@@ -277,7 +277,7 @@
         "inconsistent_normal_edges": 0,
         "degenerate_faces": 0,
         "closed_islands_inside_out": 0,
-        "max_vertex_outside_face_plane_m": 4e-05
+        "max_vertex_outside_face_plane_m": 0.00013
       }
     },
     "visible_triangles": 8092,
@@ -592,7 +592,7 @@
         }
       },
       "Truck_Collision": {
-        "triangles": 126,
+        "triangles": 124,
         "origin": [
           0.0,
           0.0,
@@ -601,7 +601,7 @@
         "bbox_min": [
           -1.26,
           -2.65,
-          -0.0
+          0.3
         ],
         "bbox_max": [
           1.231,
@@ -625,7 +625,7 @@
         "inconsistent_normal_edges": 0,
         "degenerate_faces": 0,
         "closed_islands_inside_out": 0,
-        "max_vertex_outside_face_plane_m": 4e-05
+        "max_vertex_outside_face_plane_m": 0.00013
       }
     },
     "visible_triangles": 8092,

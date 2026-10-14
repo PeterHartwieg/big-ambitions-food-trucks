@@ -1,3 +1,20 @@
+# Truck colour (next build)
+
+Branch `truck-paint`; no version bump. The colour picked at the dealer now paints the truck's body: the base colour's alpha is 1 only on the body paint, and the material uses the game's paint mask again (art/README.md, "Paint mask"). The livery's teal bands, the diamond plate, trims, glass, lights, wheels and the kitchen inside keep their own colours. A truck without a colour (the debug spawn) is cream, as before. Previews of the mask and a few tints: `build/truck-paint/sheet.png` in the worktree. Do it in a throwaway save with money for two trucks, at General US Trucks (1 Seventh Avenue).
+
+| # | Do | Look for |
+|---|---|---|
+| C1 | At the dealer, pick the food truck, choose a strong colour (red or blue), buy it | The picker shows the game's swatches. There is no 3D preview for a mod vehicle (no showcase model), so nothing changes on screen until the truck spawns outside |
+| C2 | Look at it outside in daylight, all four sides, hatch closed and open | Box, cab, roof, hood, front fenders, rear door and both faces of the hatch in the chosen colour; the teal skirt and the bands under the awning still teal; diamond plate, rear fenders, rails, ladder, trims and wheel rims steel; glass dark; lights and the menu board unchanged. No cream left on the outside body, no colour on the steel |
+| C3 | Open the truck and look in through the hatch, and from the hatch place | Kitchen walls and ceiling cream, counters, hood and fridge steel: nothing inside in the truck's colour |
+| C4 | Buy a second truck in another colour (white, black or a light one) | Same split as C2 in that colour. A light colour shows the panel shapes by shading only: the drawn seam lines and rivets go with the tint, as on the game's cars |
+| C5 | Ctrl+K (debug spawn) | Cream body, teal livery, as in the 0.9.10 build; no red anywhere and no red rim along the roof edge |
+| C6 | Park one coloured truck in the shade of a building and look at it at noon and at 18:00 | Darker in shade but its colour, never near black; the cream truck too |
+| C7 | Save, quit to the menu, load | Both trucks keep their colours (the game reapplies the save's colour name on load) |
+| C8 | Drive the coloured truck a day or two, or until the dirt shows | The game's dirt sits on top of the colour as on its own cars |
+| C9 | A hired crew drives the coloured truck on its route | Still its colour after the crew's respawn (`HireRoutes` respawns it from the same saved vehicle) |
+| L1 | Load, C1 to C9 | No mod `ERROR:` lines; no `RemapShaders` warning for `SH_Vehicle` |
+
 # Commissary supply and crew restock (next build)
 
 Branch `crew-supply`; no version bump, so the log says 0.9.10. A phone order can repeat (every day, or every week on the weekday of its first delivery), the call lists standing orders and cancels them, and each food's boxes from phone orders are limited per game week at each commissary (`rules.json` `commissary.foodBoxesPerWeek`, 10 by default; machines have no limit). A crewed vehicle in its own commissary's bay restocks before it sets off. Peter's rows take about 15 minutes in a throwaway save with a rented truck space and one hire on a route (FT bridge 2 has both); the L rows are for whoever reads the log afterwards.
@@ -49,7 +66,7 @@ The test bridge sets that save up: `tools/scenario run tests/game/scenarios/logi
 
 # Truck paint and the 1,600 kg drive (next build)
 
-Two things on `main` after the bay-side merge; no version bump, so the log says 0.9.10. The truck's material no longer lets the game's vehicle shader paint its panels in one tint (art/README.md, "Paint mask off"): until now the cream and teal body rendered dark red, close to black in shade. The drive rows are Peter's, at the wheel; the setup runs with the bridge in **FT bridge 2** (four trucks, so nothing needs spawning).
+Two things on `main` after the bay-side merge; no version bump, so the log says 0.9.10. The truck's material no longer lets the game's vehicle shader paint its panels in one tint (art/README.md, "Paint mask"; since replaced by a real mask): until now the cream and teal body rendered dark red, close to black in shade. The drive rows are Peter's, at the wheel; the setup runs with the bridge in **FT bridge 2** (four trucks, so nothing needs spawning).
 
 | # | Do | Look for |
 |---|---|---|
