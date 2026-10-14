@@ -175,15 +175,6 @@
           "park": 1.0
         },
         "footfall": 1.25
-      },
-      {
-        "id": "industry-park-twenty-first-street",
-        "name": "foodtrucks:pitch_industry-park-twenty-first-street",
-        "address": "ba:street_twentyfirststreet#25",
-        "areas": {
-          "park": 1.0
-        },
-        "footfall": 1.25
       }
     ]
   },
@@ -307,5 +298,5 @@
     "satisfactionBonus": 5,
     "minWorkedMinutes": 60
   },
-  "_parkPremium": "Park pitches added from the read-only parks bridge capture of 14 October 2026 (session e4cd4ee8): Lower Manhattan, Hell's Kitchen and Industry City. Address anchors are nearby building entrances, not confirmed park gates. Park volume/entrance positions were observed; pitch placement, legal loading/parking and visibility remain pending live validation. The closest Lower Manhattan and Hell's Kitchen candidates overlap existing event radii, so the nearest alternatives outside those event streets were selected. See docs/balance/park-premium-pitches.md."
+  "_parkPremium": "Park pitches added from the read-only parks bridge capture of 14 October 2026: Lower Manhattan and Hell's Kitchen. Their legal parking/hatch rules were checked by the live bridge; gate access, premium claims, visible queues and map presentation remain pending. Industry City's new premium anchor is deferred after all tested legal truck placements failed the hatch rule or other candidates were blocked; its automatic park demand is unchanged. See docs/balance/park-premium-pitches.md."
 }
