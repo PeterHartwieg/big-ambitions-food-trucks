@@ -1,3 +1,19 @@
+# BizMan with a warehouse (next build)
+
+Branch `fix-bizman-warehouse`; no version bump. In 1.0 the fleet section lay exactly on top of BizMan's warehouse section, so with a rented warehouse both sets of cards showed at once; and the vehicle page was never built (the stop row's collapse button is its whole header, which the page hid). Now the fleet section stands in for the warehouse section while it is open, and the vehicle page sits inside the fleet section. About 10 minutes: save `FT logistics ready` (warehouse, HQ and food trucks), then any save with food vehicles and no warehouse.
+
+| # | Do | Look for |
+|---|---|---|
+| W1 | `FT logistics ready`: open BizMan | The middle column says Warehouses and shows only the game's warehouse card, as without the mod; the Street food line is in the business list |
+| W2 | Click the Street food line | The middle column's header says Street food and shows one card per food vehicle, no warehouse card under or between them, nothing overlapping; scrolls if there are many |
+| W3 | Click the Street food line again | The warehouse card and the Warehouses header come back, unchanged (its buttons, destination and Manage drivers work) |
+| W4 | Open the section, click a truck's card | The vehicle page opens in the middle column, laid out like a card and scrolling: crew rows, days, stops (name, remove, dropdown, time dropdowns, drag handle), partner. No "couldn't be opened" notice. Drag a stop by its handle when there are two |
+| W5 | Back on the page, then leave BizMan and open it again | Back shows the fleet cards; after leaving, the column is the game's Warehouses again |
+| W6 | The truck's panel, Hires | BizMan opens on the truck's page (no old dialog, no notice) |
+| W7 | A save with food vehicles and no warehouse (FT bridge 2) | W2, W4 and W6 as above; W1's column is the empty Warehouses section |
+| L1 | Log after W2 | `BizMan: fleet section copied from the warehouse section's template (card at Viewport/Content/WhiteBox (Template); N filled warehouse card(s) left out of the copy, M shown in the game's section); it stands in for Row 2/ScrollRect (Warehouses) while open, headings Header ('bizman_warehouses').` With the warehouse N is 1 when BizMan had shown it before the first click, M is 1; no `fleet section label`/`button` lines naming `(Clone)` |
+| L2 | Log after W4 | `BizMan: vehicle page built from … stop rows dragged by DestinationHeader/DragArea; collapse button kept, switched off at 'DestinationHeader'; …; it sits in …/FoodTrucks.StreetFoodSection/Viewport/Content (laid out by its parent, scrolling).` then `BizMan: vehicle page for truck <id>.`; no `ERROR: BizMan vehicle page` |
+
 # Tuning (next build)
 
 Branch `tuning-1`; no version bump. Peter's balance decisions of 14 October 2026: the weekly phone limit is one for the whole fleet (all commissaries together), the 10% delivery fee is now a flat $250 per delivery (one fee per commissary and morning, whatever arrives), weekend markets bring a park crowd on top of the street's, catering's weekend events can be at a park gate, and the test bridge has a read-only `parks` command for collecting park positions. About 15 minutes in a throwaway save with spaces rented at two commissaries (FT bridge 2 has trucks and hires) and some money.

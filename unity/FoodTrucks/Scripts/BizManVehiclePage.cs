@@ -26,9 +26,9 @@ namespace FoodTrucks
 {
     // A vehicle's own page in BizMan (Peter, 11 October 2026): crew, route and partner venue, in place of the old
     // Hires dialog on the vehicle panel. Clicking a vehicle's card in the Street food section opens it; the panel's
-    // Hires button opens it too. It sits in the BizMan list beside the fleet section, outside BizManBusiness, so the
-    // game's business page, its settings and its unsaved-changes check never see it; while it shows, the list's other
-    // parts are hidden, and Back brings them back.
+    // Hires button opens it too. It sits in the fleet section's card list, outside BizManBusiness, so the game's
+    // business page, its settings and its unsaved-changes check never see it; while it shows, the vehicle cards are
+    // hidden, and Back brings the section back. The section scrolls and lays the page out like a card.
     //
     // Built from copies of the game's own BizMan parts:
     // - a crew row, the days row and the partner row: the warehouse Drivers tab's DriverStation (a label and a
@@ -51,6 +51,8 @@ namespace FoodTrucks
         private static string buttonLabelPath = "", rowLabelPath = "", rowNamePath = "", rowEmptyPath = "", rowDropdownPath = "";
         private static string entryPath = "", entryNamePath = "", entryRemovePath = "", entryDropdownPath = "";
         private static readonly List<string> entryHiddenPaths = new List<string>();
+        // Buttons in the stop row that stay but no longer do anything (1.0: the collapse button is the whole header).
+        private static readonly List<string> entryInertPaths = new List<string>();
 
         public static bool IsOpen => page != null && page.gameObject.activeSelf;
 
@@ -98,17 +100,14 @@ namespace FoodTrucks
                 return;
             }
             vehicleId = id;
-            if (!page.gameObject.activeSelf)
+            // Every time: the section may have just been filled with fresh cards (opening from the vehicle panel).
+            foreach (Transform sibling in page.parent)
             {
-                hiddenSiblings.Clear();
-                foreach (Transform sibling in page.parent)
-                {
-                    if (sibling == page || !sibling.gameObject.activeSelf) continue;
-                    hiddenSiblings.Add(sibling.gameObject);
-                    sibling.gameObject.SetActive(false);
-                }
-                page.gameObject.SetActive(true);
+                if (sibling == page || !sibling.gameObject.activeSelf) continue;
+                hiddenSiblings.Add(sibling.gameObject);
+                sibling.gameObject.SetActive(false);
             }
+            page.gameObject.SetActive(true);
             Refresh();
             Log.Info($"BizMan: vehicle page for {KindOf(id)} {id}.");
             HireRoutes.Later(() => Guard(() =>
@@ -175,7 +174,7 @@ namespace FoodTrucks
 
         private static void Build(BizManList list)
         {
-            var section = BizManFleet.EnsureSection(list) ?? throw new InvalidOperationException("The Street food section couldn't be built.");
+            var cards = BizManFleet.EnsureCardList(list) ?? throw new InvalidOperationException("The Street food section couldn't be built.");
             var bizMan = InstanceBehavior<UIs>.Instance?.fullMenu?.bizMan ?? throw Missing("the BizMan app");
             var business = bizMan.business ?? throw Missing("BizMan's business page");
 
@@ -215,32 +214,35 @@ namespace FoodTrucks
             entryNamePath = Path(entryName.transform, destination.transform, "the destination row's name");
             entryRemovePath = Path(entryRemove.transform, destination.transform, "the destination row's remove button");
             entryDropdownPath = Path(entryDropdown.transform, destination.transform, "the destination row's dropdown");
+            // Dragging starts on the row's handle (all of the row when it has none); the page mustn't hide it.
+            var handle = destination.GetComponent<ReorderableListItem>().handle;
+            var handlePath = handle == null ? "" : Path(handle, destination.transform, "the stop row's drag handle");
+            // The parts the page uses in each stop row; nothing that holds one of them may be hidden.
+            var kept = new List<(string Path, string What)>
+            {
+                (entryNamePath, "name"), (entryRemovePath, "remove button"), (entryDropdownPath, "dropdown"),
+            };
+            if (handle != null) kept.Add((handlePath, "drag handle"));
+            bool Holds(string part, string path) => part.Length == 0 || path == part || path.StartsWith(part + "/", StringComparison.Ordinal);
             entryHiddenPaths.Clear();
-            entryHiddenPaths.Add(Path(entryCollapse.transform, destination.transform, "the destination row's collapse button"));
+            entryInertPaths.Clear();
+            // In 1.0 the collapse button is the row's whole header (name, remove button, dropdown and drag handle in it):
+            // it stays, its button switched off; a collapse button on its own is hidden.
+            var collapsePath = Path(entryCollapse.transform, destination.transform, "the destination row's collapse button");
+            (kept.Any(k => Holds(collapsePath, k.Path)) ? entryInertPaths : entryHiddenPaths).Add(collapsePath);
             entryHiddenPaths.Add(Path(entryArrow, destination.transform, "the destination row's arrow"));
             entryHiddenPaths.Add(Path(productsHeader, destination.transform, "the destination row's products header"));
             entryHiddenPaths.Add(Path(noProducts, destination.transform, "the destination row's no-products note"));
             entryHiddenPaths.Add(Path(productsList.transform, destination.transform, "the destination row's products list"));
-            // Dragging starts on the row's handle (all of the row when it has none); the page mustn't hide it.
-            var handle = destination.GetComponent<ReorderableListItem>().handle;
-            var handlePath = handle == null ? "" : Path(handle, destination.transform, "the stop row's drag handle");
-            if (handle != null && entryHiddenPaths.Any(p => p.Length > 0 && (handlePath == p || handlePath.StartsWith(p + "/", StringComparison.Ordinal))))
-                throw new InvalidOperationException("The stop row's drag handle is inside a part the page hides.");
+            foreach (var (keptPath, what) in kept)
+                if (entryHiddenPaths.Any(p => p.Length > 0 && Holds(p, keptPath)))
+                    throw new InvalidOperationException($"The stop row's {what} is inside a part the page hides.");
 
-            // The page, beside the fleet section in the same list, sized like it.
-            var parent = section.parent;
+            // The page, in the fleet section's card list (1.0: a vertical layout in a scroll view), laid out like a card.
+            var parent = cards;
             var go = new GameObject("FoodTrucks.VehiclePage", typeof(RectTransform));
             go.SetActive(false);
             go.transform.SetParent(parent, false);
-            go.transform.SetSiblingIndex(section.GetSiblingIndex() + 1);
-            if (section is RectTransform from && go.transform is RectTransform to)
-            {
-                to.anchorMin = from.anchorMin;
-                to.anchorMax = from.anchorMax;
-                to.pivot = from.pivot;
-                to.sizeDelta = new Vector2(from.sizeDelta.x, to.sizeDelta.y);
-                to.anchoredPosition = new Vector2(from.anchoredPosition.x, to.anchoredPosition.y);
-            }
             var layout = go.AddComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(12, 12, 8, 24);
             layout.spacing = 10f;
@@ -290,15 +292,23 @@ namespace FoodTrucks
             var item = entry.GetComponent<ReorderableListItem>();
             item.list = listTemplate.GetComponent<ReorderableList>();
             foreach (var hidden in entryHiddenPaths) Hide(entry, hidden);
+            foreach (var inert in entryInertPaths)
+            {
+                var part = Find(entry, inert).GetComponent<Button>();
+                if (part == null) continue;
+                part.onClick = new Button.ButtonClickedEvent();
+                part.enabled = false;
+            }
 
             // Each part is laid out by its own preferred size; a part with none keeps the height it had.
             foreach (var template in new[] { buttonTemplate, labelTemplate, rowTemplate })
                 KeepHeight(template, template == buttonTemplate ? button.transform : template == labelTemplate ? label.transform : station.transform);
             KeepHeight(entry.gameObject, destination.transform);
 
-            var scroll = section.GetComponentInParent<ScrollRect>();
+            var scroll = parent.GetComponentInParent<ScrollRect>();
             Log.Info($"BizMan: vehicle page built from the warehouse driver row ({PathTo(station.transform)}) and the logistics plan " +
-                     $"({PathTo(plan.transform)}; stop rows dragged by {(handle == null ? "the whole row" : handlePath)}; the copied list's {string.Join(", ", listLayout)}); it sits in {PathTo(parent)} " +
+                     $"({PathTo(plan.transform)}; stop rows dragged by {(handle == null ? "the whole row" : handlePath)}; " +
+                     $"collapse button {(entryInertPaths.Count > 0 ? "kept, switched off" : "hidden")} at '{collapsePath}'; the copied list's {string.Join(", ", listLayout)}); it sits in {PathTo(parent)} " +
                      $"({(parentLaysOut ? "laid out by its parent" : "sized by itself")}, {(scroll != null ? "scrolling" : "no scroll view")}).");
         }
 

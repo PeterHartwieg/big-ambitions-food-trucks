@@ -29,12 +29,15 @@ namespace FoodTrucks
     // destination button uses the address), the click (it opens the business page by address), and the list
     // itself. The line only shows when all four are in place.
     //
-    // The fleet section is a copy of BizMan's own warehouse section, placed right after it in the same list, with
-    // a copy of the warehouse card per vehicle: its name, address and two small tables (drivers, inventory) hold
-    // the vehicle's whereabouts, money, grade, crew and route, and what it sold today and has left. Clicking the
-    // Street food line opens the section and scrolls to it; clicking a card opens that vehicle's page
-    // (BizManVehiclePage); leaving the list closes both. If anything here fails,
-    // the line is taken out and BizMan carries on without it.
+    // The fleet section is a copy of BizMan's own warehouse section (in 1.0 the scroll view "ScrollRect (Warehouses)"
+    // under the column's "Warehouses" header), with a copy of the warehouse card per vehicle: its name, address and
+    // two small tables (drivers, inventory) hold the vehicle's whereabouts, money, grade, crew and route, and what it
+    // sold today and has left. The column has no layout group, so the copy sits exactly where the game's section is:
+    // while the fleet section shows, the game's section is hidden and the column's heading says Street food, and
+    // both come back when it closes. The copy is made from the card template alone: the warehouse cards the game had
+    // filled in for the player's warehouses are left out of it. Clicking the Street food line opens the section (and
+    // a second click closes it); clicking a card opens that vehicle's page (BizManVehiclePage), inside the section;
+    // leaving the list closes both. If anything here fails, the line is taken out and BizMan carries on without it.
     internal static class BizManFleet
     {
         private const string EntryId = "foodtrucks:streetfood";
@@ -45,6 +48,10 @@ namespace FoodTrucks
         // Cells whose destination button the Street food line hid; a recycled cell gets it back.
         private static readonly HashSet<int> hiddenButtons = new HashSet<int>();
         private static Transform? section, cardTemplate;
+        // The game's warehouse section, and its column's headings, while the fleet section stands in for them.
+        private static Transform? gameSection;
+        private static readonly List<(TextLocalizationComponent Label, string Key)> headings = new List<(TextLocalizationComponent, string)>();
+        private static bool gameSectionHidden;
 
         // Called once after patching: the line shows only when every patch that keeps it safe is in place.
         internal static void CheckReady()
@@ -72,7 +79,7 @@ namespace FoodTrucks
             if (logged.Add(where)) Log.Error($"BizMan Street food ({where}), line taken out: {ex}");
             try
             {
-                if (section != null) section.gameObject.SetActive(false);
+                CloseSection();
                 list?.RemoveModels(IsOurs);
             }
             catch (Exception again) { Log.Error(again); }
@@ -162,12 +169,21 @@ namespace FoodTrucks
             }
         }
 
-        // A click on the line opens the fleet section instead of a business page. Returning false skips the
-        // game's handler, which would open BizMan's business page for an address the line doesn't have.
+        // A click on the line opens the fleet section instead of a business page, and a second click closes it (the
+        // game's warehouse section comes back). Returning false skips the game's handler, which would open BizMan's
+        // business page for an address the line doesn't have.
         public static bool OpenPrefix(BizManList __instance, BusinessCellView.BusinessModel businessModel)
         {
             if (!IsOurs(businessModel)) return true;
-            try { Open(__instance); }
+            try
+            {
+                if (section != null && section.gameObject.activeSelf)
+                {
+                    BizManVehiclePage.Close();
+                    CloseSection();
+                }
+                else Open(__instance);
+            }
             catch (Exception ex) { Fail("fleet section", ex, Traverse.Create(__instance).Field("businessScrollerController").GetValue<BusinessScrollerController>()); }
             return false;
         }
@@ -176,16 +192,42 @@ namespace FoodTrucks
         public static void ListClosedPostfix()
         {
             BizManVehiclePage.Close();
-            try { if (section != null) section.gameObject.SetActive(false); }
+            try { CloseSection(); }
             catch (Exception ex) { Log.Error(ex); }
+        }
+
+        // The fleet section stands in for the game's warehouse section: the game's is hidden and the column's
+        // heading says Street food.
+        private static void ShowSectionView()
+        {
+            if (section == null) return;
+            if (gameSection != null && gameSection.gameObject.activeSelf)
+            {
+                gameSection.gameObject.SetActive(false);
+                gameSectionHidden = true;
+            }
+            foreach (var (label, _) in headings)
+                if (label != null) label.Key = "foodtrucks:bizman_fleet_header";
+            section.gameObject.SetActive(true);
+        }
+
+        // The game's warehouse section and heading come back exactly as they were.
+        private static void CloseSection()
+        {
+            if (section != null) section.gameObject.SetActive(false);
+            if (gameSectionHidden && gameSection != null) gameSection.gameObject.SetActive(true);
+            gameSectionHidden = false;
+            foreach (var (label, key) in headings)
+                if (label != null) label.Key = key;
         }
 
         // ---- The fleet section ----
 
         private static BizManList? openList;
 
-        // The section, built if it isn't yet (the vehicle page sits beside it); null if it can't be.
-        internal static Transform? EnsureSection(BizManList list) => ready && !broken && Ensure(list) ? section : null;
+        // The section's card list, built if it isn't yet (the vehicle page sits in it, in place of the cards); null if
+        // it can't be.
+        internal static Transform? EnsureCardList(BizManList list) => ready && !broken && Ensure(list) && cardTemplate != null ? cardTemplate.parent : null;
 
         // Opens the section, filled afresh and scrolled to (the vehicle page's Back, and opening a page from elsewhere).
         internal static void ShowSection(BizManList list)
@@ -199,7 +241,7 @@ namespace FoodTrucks
             if (!Ensure(list) || section == null || cardTemplate == null) return;
             openList = list;
             Fill();
-            section.gameObject.SetActive(true);
+            ShowSectionView();
             HireRoutes.Later(() =>
             {
                 try { ScrollTo(section); }
@@ -222,14 +264,21 @@ namespace FoodTrucks
             var path = PathBelow(template, warehouses.transform)
                        ?? throw new InvalidOperationException("The warehouse card isn't inside the warehouse section.");
 
-            // Copied under an inactive holder, so none of the copy's components wake before the warehouse loader is gone.
+            // Copied under an inactive holder, so none of the copy's components wake before the warehouse loaders are gone.
             var holder = new GameObject("FoodTrucks.Holder");
             holder.SetActive(false);
             holder.transform.SetParent(warehouses.transform.parent, false);
             var copy = UnityEngine.Object.Instantiate(warehouses.gameObject, holder.transform);
             copy.name = "FoodTrucks.StreetFoodSection";
-            UnityEngine.Object.DestroyImmediate(copy.GetComponent<WarehouseList>());
+            // 1.0 has a second WarehouseList on the section's viewport; none of them may stay in the copy.
+            foreach (var loader in copy.GetComponentsInChildren<WarehouseList>(true)) UnityEngine.Object.DestroyImmediate(loader);
             var card = copy.transform.Find(path) ?? throw new InvalidOperationException("The copied section has no warehouse card.");
+            // The copy came with the cards the game filled in for the player's warehouses (copies of the template beside
+            // it). They go now, before anything below looks at the copy: the section is built from the template alone.
+            var filled = new List<Transform>();
+            foreach (Transform sibling in card.parent)
+                if (sibling != card) filled.Add(sibling);
+            foreach (var other in filled) UnityEngine.Object.DestroyImmediate(other.gameObject);
             copy.SetActive(false);
             copy.transform.SetParent(warehouses.transform.parent, false);
             copy.transform.SetSiblingIndex(warehouses.transform.GetSiblingIndex() + 1);
@@ -251,12 +300,31 @@ namespace FoodTrucks
             }
             foreach (var label in card.GetComponentsInChildren<TextLocalizationComponent>(true))
                 Note($"fleet card label {PathBelow(label.transform, card)} = '{label.Key}'.");
+            card.gameObject.SetActive(false);
 
-            // The copy came with the player's warehouse cards; the game's own reset clears them off the template.
-            card.ResetTemplate();
+            // The column's headings that name warehouses (1.0: "Header", bizman_warehouses) say Street food while the
+            // section shows.
+            headings.Clear();
+            var column = warehouses.transform.parent;
+            foreach (Transform part in column)
+            {
+                if (part == warehouses.transform || part == copy.transform) continue;
+                foreach (var label in part.GetComponentsInChildren<TextLocalizationComponent>(true))
+                    if (!string.IsNullOrEmpty(label.Key) && label.Key.IndexOf("warehouse", StringComparison.OrdinalIgnoreCase) >= 0)
+                        headings.Add((label, label.Key));
+            }
+
             section = copy.transform;
             cardTemplate = card;
-            Log.Info($"BizMan: fleet section copied from the warehouse section (card at {path}).");
+            gameSection = warehouses.transform;
+            gameSectionHidden = false;
+            var game = 0;
+            foreach (Transform sibling in template.parent)
+                if (sibling != template && sibling.gameObject.activeSelf) game++;
+            Log.Info($"BizMan: fleet section copied from the warehouse section's template (card at {path}; " +
+                     $"{filled.Count} filled warehouse card{(filled.Count == 1 ? "" : "s")} left out of the copy, " +
+                     $"{game} shown in the game's section); it stands in for {PathBelow(warehouses.transform, column.parent) ?? warehouses.name} " +
+                     $"while open, headings {(headings.Count == 0 ? "none" : string.Join(", ", headings.Select(h => $"{PathBelow(h.Label.transform, column) ?? h.Label.name} ('{h.Key}')")))}.");
             return true;
         }
 
