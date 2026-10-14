@@ -32,7 +32,7 @@ namespace FoodTrucks
                 .ToList();
         }
 
-        // How many work the window at once: the vehicle's staff in economy.json (cart 1, truck 3).
+        // How many work the window at once: the vehicle's staff in economy.json (cart 1, truck 2).
         public static int Limit(string? kind) =>
             DemandData.Tables?.Vehicle(string.IsNullOrEmpty(kind) ? "cart" : kind!)?.Staff ?? 1;
 

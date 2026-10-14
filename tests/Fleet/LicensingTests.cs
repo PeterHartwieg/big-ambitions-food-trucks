@@ -138,7 +138,7 @@ public class LicensingTests
     [Theory]
     [InlineData("cart", true, 3, 1)]
     [InlineData("truck", true, 1, 2)]
-    [InlineData("truck", true, 5, 3)]
+    [InlineData("truck", true, 5, 2)]
     [InlineData("truck", false, 0, 0)]
     public void CrewIsCappedByTheVehicle(string type, bool player, int hires, int crew)
     {

@@ -66,7 +66,7 @@ Decided while building the Core (8 October 2026; numbers in `data/rules.json`): 
 | How it moves | Pushed on foot, anywhere in the city (slow); bridges use the game's bridge skip with walking time | Driven |
 | Equipment slots | 2 | 4 |
 | Stock | 40 units per fitted piece, 80 with Extra Storage (a one-piece cart sells out in about 4 hours at a good pitch) | 80 units per fitted piece, 160 with Extra Storage |
-| Window staff | 1 | Up to 3 |
+| Window staff | 1 | Up to 2 |
 | Catering | No | Yes |
 | Pitch rules | Sidewalk spots | Curb spots |
 
