@@ -1313,8 +1313,10 @@ namespace FoodTrucks
         // Where a crew parks a vehicle arriving at a stop in its own bay: the site's resolved bay points, each lined up
         // with its lane and the hatch to the pavement (a nose-in bay in a lot as measured), then places along the bay's
         // paint nearest the first point, as the test bridge's bay teleport does. The caller tries them in order, takes
-        // the first free one and keeps it only if the vehicle then stands in the bay by InBay.
-        internal static List<(Vector3 Position, Quaternion Rotation)> BayPlaces(CommissarySite site, float halfLength, int max = 12)
+        // the first free one and keeps it only if the vehicle then stands in the bay by InBay. Every place along the paint
+        // is listed (every metre), not a first few, so a bay with a truck in its middle still offers its free ends; each
+        // zone's facing is probed once.
+        internal static List<(Vector3 Position, Quaternion Rotation)> BayPlaces(CommissarySite site, float halfLength)
         {
             var result = new List<(Vector3, Quaternion)>();
             var points = ResolvedBays(site);
@@ -1340,15 +1342,20 @@ namespace FoodTrucks
             var first = result.Count > 0 ? result[0].Item1 : new Vector3((float)points[0].X, 0f, (float)points[0].Z);
             var along = new List<(Vector3, Quaternion)>();
             foreach (var zone in BayMarkers.ZonesOf(site, (float)rules.BayRadiusMetres))
+            {
+                Quaternion? facing = null;
                 foreach (var (from, to) in zone.Spans)
                     for (var t = from + halfLength; t <= to - halfLength + 1e-3f; t += 1f)
                     {
                         var foot = zone.Foot + zone.Along * t;
                         var at = GroundAt(foot.x, foot.z);
-                        if (at != null) along.Add((at.Value, Facing(at.Value, zone.Along)));
+                        if (at == null) continue;
+                        facing ??= Facing(at.Value, zone.Along);
+                        along.Add((at.Value, facing.Value));
                     }
+            }
             result.AddRange(along.OrderBy(a => (a.Item1 - first).sqrMagnitude));
-            return result.Take(max).ToList();
+            return result;
         }
 
         // The commissary's stock of the vehicle's foods, as Core's key for "did it change since the crew last tried".

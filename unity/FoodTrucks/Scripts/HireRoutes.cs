@@ -507,6 +507,24 @@ namespace FoodTrucks
             Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} brought back to {position} after its route stopped.");
         }
 
+        // Whether anything a vehicle mustn't be put on stands where this one's hull would be, for a bay arrival (review
+        // round 4): the player's and the mod's vehicles, the lanes' parked cars and AI traffic (the game's spawn would
+        // delete those in view, VehicleHelper.DestroyBlockingVehicles), and the player; never the arriving vehicle itself,
+        // so a place it was just tried at and refused doesn't block the next one.
+        private static bool BayTaken(Vector3 position, Quaternion rotation, string kind, VehicleInstance self)
+        {
+            var centre = position + rotation * (kind == "truck" ? TruckCentre : CartCentre);
+            var half = kind == "truck" ? TruckHalfSize : CartHalfSize;
+            var mask = (1 << LayerHelper.VehiclesLayerIndex) | (1 << LayerHelper.ParkedVehiclesLayerIndex) |
+                       (1 << LayerHelper.AiVehiclesLayerIndex) | (1 << LayerHelper.PlayerVehiclesLayerIndex) | (1 << LayerHelper.PlayerLayerIndex);
+            var own = VehicleHelper.GetVehicleController(self)?.transform;
+            foreach (var hit in Physics.OverlapBox(centre, half, rotation, mask, QueryTriggerInteraction.Ignore))
+                if (hit != null && (own == null || !hit.transform.IsChildOf(own))) return true;
+            // The player, wherever their collider sits: standing inside the hull's footprint.
+            var local = Quaternion.Inverse(rotation) * (PlayerHelper.GetPosition() - centre);
+            return Mathf.Abs(local.x) <= half.x + 0.3f && Mathf.Abs(local.z) <= half.z + 0.3f && Mathf.Abs(local.y) <= half.y + 1f;
+        }
+
         // Whether another vehicle stands where this one's hull would be.
         private static bool Taken(Vector3 position, Quaternion rotation, string kind) =>
             Physics.CheckBox(position + rotation * (kind == "truck" ? TruckCentre : CartCentre), kind == "truck" ? TruckHalfSize : CartHalfSize,
@@ -653,7 +671,7 @@ namespace FoodTrucks
             var placedAny = false;
             foreach (var (position, rotation) in Commissary.BayPlaces(site, halfLength))
             {
-                if (Taken(position, rotation, kind)) continue;
+                if (BayTaken(position, rotation, kind, instance)) continue;
                 var placed = Place(instance, position, rotation);
                 if (placed == null) continue;
                 placedAny = true;
