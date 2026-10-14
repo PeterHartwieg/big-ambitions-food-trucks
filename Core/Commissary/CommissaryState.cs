@@ -105,6 +105,11 @@ namespace FoodTrucks.Core.Commissary
         public int CappedBoxes { get; set; }
         // The standing order that booked it on its delivery day (then OrderedDay is DeliverDay); null for a phone order.
         public long? StandingOrderId { get; set; }
+        // The day its boxes count on for the weekly limit when that isn't DeliverDay: a standing delivery brought
+        // forward by Ctrl+Alt+F3 counts in the week of its scheduled day. Null: DeliverDay.
+        public int? CountDay { get; set; }
+        [JsonIgnore]
+        public int LimitDay => CountDay ?? DeliverDay;
         [JsonIgnore]
         public long GoodsCents => checked(Units * UnitPriceCents);
         [JsonIgnore]
@@ -283,7 +288,7 @@ namespace FoodTrucks.Core.Commissary
             {
                 var order = state.Orders[i];
                 if (order == null || string.IsNullOrWhiteSpace(order.CommissaryId) || string.IsNullOrWhiteSpace(order.ItemName) ||
-                    order.Units <= 0 || order.UnitPriceCents < 0 || order.FeeCents < 0 || order.OrderedDay < 1 || order.CappedBoxes < 0 ||
+                    order.Units <= 0 || order.UnitPriceCents < 0 || order.FeeCents < 0 || order.OrderedDay < 1 || order.CappedBoxes < 0 || order.CountDay < 1 ||
                     order.DeliverDay < order.OrderedDay || (order.DeliverDay == order.OrderedDay && order.StandingOrderId == null))
                 {
                     Preserve(state, "_discardedOrders", order, order?.ExtensionData);

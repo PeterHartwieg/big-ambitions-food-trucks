@@ -85,8 +85,10 @@ namespace FoodTrucks.Core.Commissary
         // One order for delivery on deliverDay: tomorrow for a phone order, today for a standing order's delivery.
         // cappedBoxes are its food boxes, counted towards the item's weekly limit (CommissarySupply).
         internal static CommissaryOrder Book(CommissaryState state, CommissaryRules rules, string commissaryId, string itemName,
-            int units, long wholesaleUnitPriceCents, (int Day, int Minute) now, int deliverDay, int cappedBoxes, long? standingOrderId)
+            int units, long wholesaleUnitPriceCents, (int Day, int Minute) now, int deliverDay, int cappedBoxes, long? standingOrderId,
+            int? countDay = null)
         {
+            if (countDay < 1) throw new ArgumentOutOfRangeException(nameof(countDay));
             Check(state, rules); Name(commissaryId, nameof(commissaryId)); Name(itemName, nameof(itemName)); Time(now.Day, now.Minute);
             if (units <= 0) throw new ArgumentOutOfRangeException(nameof(units));
             if (wholesaleUnitPriceCents < 0) throw new ArgumentOutOfRangeException(nameof(wholesaleUnitPriceCents));
@@ -96,7 +98,7 @@ namespace FoodTrucks.Core.Commissary
                 throw new InvalidOperationException("Ordering requires an unlocked commissary with a rented space.");
             var order = new CommissaryOrder { Id = state.NextOrderId, CommissaryId = commissaryId, ItemName = itemName,
                 Units = units, UnitPriceCents = wholesaleUnitPriceCents, OrderedDay = now.Day, DeliverDay = deliverDay,
-                CappedBoxes = cappedBoxes, StandingOrderId = standingOrderId };
+                CappedBoxes = cappedBoxes, StandingOrderId = standingOrderId, CountDay = countDay == deliverDay ? null : countDay };
             order.FeeCents = rules.FeeCents(order.GoodsCents);
             _ = order.TotalCents; // Refuse an overflowing price before changing state.
             var nextId = checked(state.NextOrderId + 1);

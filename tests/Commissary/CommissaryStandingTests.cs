@@ -270,6 +270,21 @@ public class CommissaryStandingTests
         Assert.Equal(8, standing.NextDay);
         var run = CommissaryStandingOrders.BookEarly(state, Rules, standing, 7, 300, Price);
         Assert.Empty(run.Cut);
-        Assert.Equal(1000, Assert.Single(run.Orders).Units);
+        var order = Assert.Single(run.Orders);
+        Assert.Equal((1000, 7, 8), (order.Units, order.DeliverDay, order.LimitDay));
+        // Paid and delivered today with the day-7 order: week 1 holds its own 4, week 8 the 2 brought forward.
+        Assert.Equal(2, Commissaries.Deliver(state, Rules, 7, 480, CommissariesTests.Paid).Delivered.Count);
+        Assert.Empty(state.Orders);
+        Assert.Equal(0, CommissarySupply.Left(state, Rules, "a", "taco", 7));
+        Assert.Equal(2, CommissarySupply.Left(state, Rules, "a", "taco", 8));
+        Assert.Equal(new[] { (1, 4), (8, 2) }, state.WeekBoxes.OrderBy(w => w.WeekStart).Select(w => (w.WeekStart, w.Boxes)));
+        // The order's count day survives a save while it waits.
+        var again = CommissariesTests.Rented();
+        var waiting = CommissaryStandingOrders.Create(again, Rules, "a", Quote(("taco", 1, true)), CommissaryRepeat.Weekly, (7, 100));
+        CommissaryStandingOrders.BookEarly(again, Rules, waiting, 7, 300, Price);
+        var codec = new SaveCodec();
+        var loaded = codec.Load(codec.Serialize(new SaveState { Commissary = again })).State!.Commissary;
+        Assert.Equal(8, loaded.Orders.Single().LimitDay);
+        Assert.Equal(3, CommissarySupply.Left(loaded, Rules, "a", "taco", 8));
     }
 }

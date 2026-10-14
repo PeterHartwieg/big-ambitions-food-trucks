@@ -29,7 +29,7 @@ namespace FoodTrucks.Core.Commissary
             if (state == null) throw new ArgumentNullException(nameof(state));
             var week = WeekStart(day);
             long used = state.WeekBoxes.Where(w => w.CommissaryId == commissaryId && w.ItemName == itemName && w.WeekStart == week).Sum(w => (long)w.Boxes);
-            used += state.Orders.Where(o => o.CommissaryId == commissaryId && o.ItemName == itemName && WeekStart(o.DeliverDay) == week).Sum(o => (long)o.CappedBoxes);
+            used += state.Orders.Where(o => o.CommissaryId == commissaryId && o.ItemName == itemName && WeekStart(o.LimitDay) == week).Sum(o => (long)o.CappedBoxes);
             foreach (var standing in state.StandingOrders.Where(s => s.CommissaryId == commissaryId))
             {
                 var boxes = standing.Lines.Where(l => l.Capped && l.ItemName == itemName).Sum(l => (long)l.Boxes);
@@ -79,7 +79,7 @@ namespace FoodTrucks.Core.Commissary
             var current = WeekStart(today);
             state.WeekBoxes.RemoveAll(w => w.WeekStart < current);
             if (order.CappedBoxes <= 0) return;
-            var week = WeekStart(order.DeliverDay);
+            var week = WeekStart(order.LimitDay);
             if (week < current) return;
             var entry = state.WeekBoxes.FirstOrDefault(w => w.CommissaryId == order.CommissaryId && w.ItemName == order.ItemName && w.WeekStart == week);
             if (entry == null)
@@ -336,7 +336,7 @@ namespace FoodTrucks.Core.Commissary
             var quote = CommissaryOrdering.Quote(rules, requests);
             foreach (var line in quote.Lines)
                 run.Orders.Add(Commissaries.Book(state, rules, standing.CommissaryId, line.ItemName, line.Units, line.UnitPriceCents,
-                    (nowDay, nowMinute), nowDay, line.CappedBoxes, standing.Id));
+                    (nowDay, nowMinute), nowDay, line.CappedBoxes, standing.Id, countDay));
         }
 
         // Boxes of the item delivered or booked (not yet delivered) in the week of `day`.
@@ -344,7 +344,7 @@ namespace FoodTrucks.Core.Commissary
         {
             var week = CommissarySupply.WeekStart(day);
             return state.WeekBoxes.Where(w => w.CommissaryId == commissaryId && w.ItemName == itemName && w.WeekStart == week).Sum(w => w.Boxes)
-                   + state.Orders.Where(o => o.CommissaryId == commissaryId && o.ItemName == itemName && CommissarySupply.WeekStart(o.DeliverDay) == week).Sum(o => o.CappedBoxes);
+                   + state.Orders.Where(o => o.CommissaryId == commissaryId && o.ItemName == itemName && CommissarySupply.WeekStart(o.LimitDay) == week).Sum(o => o.CappedBoxes);
         }
     }
 }
