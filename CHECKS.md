@@ -10,6 +10,7 @@ The Street food line now opens a dedicated page made from basic UI pieces, with 
 | B4 | Back to Street food, then Back to BizMan | Fleet cards return first, then the original business, warehouse and HQ lists return with their buttons working |
 | B5 | Leave BizMan from the fleet and vehicle pages; reopen; reload a save | Normal BizMan lists return; Street food opens afresh without stale hidden cards |
 | B6 | Open Hires from a vehicle panel, also with no rented warehouse | BizMan opens that vehicle's details; its Back button opens the dedicated fleet page |
+| B8 | Open vehicle details at 1280×720, choose a crew member, days and partner; inspect a route with stops | Left-aligned readable labels and compact selection rows; no unused vehicle field or VEHICLE/DRIVER captions; dropdown choices and stop dragging still work |
 | B7 | Log after opening | `BizMan: dedicated Street food page built with its own cards and scroll view.`; no warehouse-section cloning or new errors |
 
 # Tuning (next build)

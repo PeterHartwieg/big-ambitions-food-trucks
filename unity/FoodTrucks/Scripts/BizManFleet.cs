@@ -37,7 +37,7 @@ namespace FoodTrucks
         private static Font? font;
         // Author this page in a 720-pixel-high reference view, then convert to the game canvas units.
         private static float units = 1f;
-        private static float Size(float value) => value * units;
+        internal static float Size(float value) => value * units;
         private static readonly List<GameObject> hiddenListParts = new List<GameObject>();
         private static readonly Color PageColour = new Color(0.94f, 0.95f, 0.97f, 1f);
         private static readonly Color CardColour = Color.white;
@@ -334,7 +334,7 @@ namespace FoodTrucks
             return true;
         }
 
-        private static RectTransform Rect(string name, Transform parent)
+        internal static RectTransform Rect(string name, Transform parent)
         {
             var go = new GameObject(name, typeof(RectTransform));
             go.transform.SetParent(parent, false);
@@ -348,7 +348,7 @@ namespace FoodTrucks
             rect.offsetMin = rect.offsetMax = Vector2.zero;
         }
 
-        private static Text Label(Transform parent, string value, int size = 16)
+        internal static Text Label(Transform parent, string value, int size = 16)
         {
             var rect = Rect("Label", parent);
             var text = rect.gameObject.AddComponent<Text>();
@@ -363,7 +363,7 @@ namespace FoodTrucks
             return text;
         }
 
-        private static Button ActionButton(Transform parent, string caption, Action action)
+        internal static Button ActionButton(Transform parent, string caption, Action action)
         {
             var rect = Rect("Button", parent);
             var image = rect.gameObject.AddComponent<Image>();
