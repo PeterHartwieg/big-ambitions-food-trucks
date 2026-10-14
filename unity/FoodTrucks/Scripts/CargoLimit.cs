@@ -4,8 +4,10 @@ using System.Collections.Generic;
 using System.Linq;
 using BigAmbitions.Items;
 using FoodTrucks.Core.Selling;
+using Helpers;
 using Localizor;
 using UI.Notification;
+using UnityEngine;
 
 namespace FoodTrucks
 {
@@ -149,6 +151,36 @@ namespace FoodTrucks
         public static void MoveEquipmentFirstPostfix(ref bool __result, bool __state)
         {
             if (__state) __result = true;
+        }
+
+        // How close the player must be to hear a food vehicle's cargo change: the game's range for NPC voices
+        // (NpcVocalizerManager.vocalisationRange).
+        private const float BoxSoundMetres = 15f;
+
+        // Prefix on VehicleController.OnItemAddedToCargo, which runs on every cargo change of a spawned vehicle and plays
+        // the game's HandTruckAddBox sound at the player's position, however far away the vehicle is: the game only changes
+        // a vehicle's cargo with the player beside it. A food vehicle's cargo also changes with nobody near (crew sales,
+        // catering, deliveries), so its sound plays only with the player within BoxSoundMetres and not in another building
+        // (the game's own test in VehicleController.OnCurrentHeightChanged). The cargo count is updated either way.
+        public static bool BoxSoundPrefix(VehicleController __instance)
+        {
+            bool quiet;
+            try
+            {
+                var vehicle = __instance.vehicleInstance;
+                if (VehicleKind(vehicle) == null || PlayerHelper.PlayerController == null) return true;
+                var away = BuildingManager.IsInsideBuilding &&
+                           vehicle.Address != InstanceBehavior<BuildingManager>.Instance.buildingRegistration?.Address;
+                quiet = away || Vector3.Distance(PlayerHelper.GetPosition(), __instance.transform.position) > BoxSoundMetres;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex);
+                return true;
+            }
+            if (!quiet) return true;
+            __instance.UpdateCargoCount();
+            return false;
         }
 
         private static void Refused(VehicleInstance vehicle, string itemName, LoadCheck check)

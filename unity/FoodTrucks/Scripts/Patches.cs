@@ -156,6 +156,8 @@ namespace FoodTrucks
             // A hand truck or box unloaded into a food vehicle: its equipment goes in before its food.
             Patch(typeof(ICargoHolder), "TryToMergeAndMoveCargoBetweenHolders", new[] { typeof(ICargoHolder), typeof(ICargoHolder) },
                 typeof(CargoLimit), prefix: nameof(CargoLimit.MoveEquipmentFirstPrefix), postfix: nameof(CargoLimit.MoveEquipmentFirstPostfix));
+            // A food vehicle's cargo change (a crew sale, say) plays the game's box sound only with the player near it.
+            Patch(typeof(VehicleController), "OnItemAddedToCargo", Type.EmptyTypes, typeof(CargoLimit), prefix: nameof(CargoLimit.BoxSoundPrefix));
         }
 
         // The test bridge's patches, with -foodtrucks-test only, so the game is untouched otherwise. run_until: a prefix on
