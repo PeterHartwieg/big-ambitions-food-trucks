@@ -1406,6 +1406,12 @@ class Handler(BaseHTTPRequestHandler):
             if urlsplit(self.path).path.rstrip('/') != '/call':
                 self.reply({'ok':False,'error':'Unknown endpoint: use GET /health, POST /call or GET /events?since=N.'},404)
                 return
+            if self.headers.get('Origin') is not None or self.headers.get('Sec-Fetch-Site') is not None:
+                self.reply({'ok':False,'error':'Browser-origin calls are refused; use the CLI or MCP bridge client.'},403)
+                return
+            if self.headers.get('Content-Type','').split(';',1)[0].strip().lower() != 'application/json':
+                self.reply({'ok':False,'error':'POST /call requires Content-Type: application/json.'},415)
+                return
             size = int(self.headers.get('Content-Length',0))
             if not 0 < size <= 1048576:
                 raise ValueError('Invalid request size: send a JSON object smaller than 1 MB')

@@ -90,6 +90,19 @@ namespace FoodTrucks
                     Write(context, 200, TestBridgeEvents.Since(since));
                     return;
                 case "/call" when request.HttpMethod == "POST":
+                    // Loopback is reachable from web pages too. Reject browser-origin calls before reading
+                    // or queuing work, and require a non-simple media type so HTML forms cannot mutate state.
+                    if (request.Headers["Origin"] != null || request.Headers["Sec-Fetch-Site"] != null)
+                    {
+                        Write(context, 403, TestBridge.Fail("Browser-origin calls are refused; use the CLI or MCP bridge client."));
+                        return;
+                    }
+                    var mediaType = (request.ContentType ?? "").Split(';')[0].Trim();
+                    if (!string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Write(context, 415, TestBridge.Fail("POST /call requires Content-Type: application/json."));
+                        return;
+                    }
                     Write(context, 200, Call(request, generation));
                     return;
                 default:
