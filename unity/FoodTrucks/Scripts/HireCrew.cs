@@ -55,7 +55,8 @@ namespace FoodTrucks
         // Who serves at the window: the best of the crew on shift and the player (their skill, when at the window), up
         // to the vehicle's staff. Only the crew chosen here serve, and only they are paid for serving.
         public static (List<EmployeeInstance> Crew, List<double> Skills) Team(VehicleState vehicle, long now, double? playerSkill, string? kind = null) =>
-            CrewPay.Team(OnShift(vehicle, now).Select(e => (e, Effective(e))), playerSkill, Limit(kind ?? vehicle.VehicleType));
+            CrewPay.Team(OnShift(vehicle, now).Select(e => (e, Effective(e))), playerSkill, Limit(kind ?? vehicle.VehicleType),
+                playerHeld: (kind ?? vehicle.VehicleType) == "truck");
 
         // Who serves at the window with the player away.
         public static List<EmployeeInstance> Serving(VehicleState vehicle, long now) => Team(vehicle, now, null).Crew;

@@ -141,6 +141,23 @@ public class CrewPayTests
     }
 
     [Fact]
+    public void APlayerHeldAtTheHatchAlwaysServes()
+    {
+        var crew = new[] { ("a", 40.0), ("b", 70.0), ("c", 55.0) };
+
+        // Two crew better than the player: the player still serves, with the best of them; two at the hatch.
+        var held = CrewPay.Team(crew, 30.0, 2, playerHeld: true);
+        Assert.Equal(new[] { "b" }, held.Crew);
+        Assert.Equal(new[] { 70.0, 30.0 }, held.Skills);
+        // Without the player the best two serve, as for any vehicle.
+        Assert.Equal(new[] { "b", "c" }, CrewPay.Team(crew, null, 2, playerHeld: true).Crew);
+        // A staff of one leaves the player alone at the window.
+        Assert.Empty(CrewPay.Team(crew, 30.0, 1, playerHeld: true).Crew);
+        // Ties among the crew go in their order.
+        Assert.Equal(new[] { "a" }, CrewPay.Team(new[] { ("a", 50.0), ("b", 50.0) }, 10.0, 2, playerHeld: true).Crew);
+    }
+
+    [Fact]
     public void EachHireIsPaidOncePerHour()
     {
         var state = new SaveState();

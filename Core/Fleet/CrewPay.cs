@@ -46,14 +46,25 @@ namespace FoodTrucks.Core.Fleet
 
         // Who serves at the window: the best of the crew on shift and the player when at the window, up to the
         // vehicle's staff. Returns the crew among them (they alone are paid for serving) and every skill that serves.
-        public static (List<T> Crew, List<double> Skills) Team<T>(IEnumerable<(T Who, double Skill)> crew, double? playerSkill, int limit)
+        // `playerHeld`: the player stands held at the window (the truck's hatch) and can't step aside, so they always
+        // serve and the best crew fill the other places; with the truck's staff of 2 (Peter, 14 October 2026: "one line
+        // makes sense for 2") two people show at the hatch, never three. Otherwise (the cart) the best skills serve and
+        // ties go to the crew, in their order: the player can step aside.
+        public static (List<T> Crew, List<double> Skills) Team<T>(IEnumerable<(T Who, double Skill)> crew, double? playerSkill, int limit,
+            bool playerHeld = false)
         {
             if (crew == null) throw new ArgumentNullException(nameof(crew));
+            var places = Math.Max(0, limit);
+            if (playerHeld && playerSkill.HasValue && places > 0)
+            {
+                var hands = crew.Select((c, i) => (c, i)).OrderByDescending(x => x.c.Skill).ThenBy(x => x.i)
+                    .Take(places - 1).Select(x => x.c).ToList();
+                return (hands.Select(h => h.Who).ToList(), hands.Select(h => h.Skill).Append(playerSkill.Value).ToList());
+            }
             var everyone = crew.Select(c => (IsCrew: true, c.Who, c.Skill)).ToList();
             if (playerSkill.HasValue) everyone.Add((false, default!, playerSkill.Value));
-            // Ties go to the crew, in their order: the player can step aside.
             var chosen = everyone.Select((p, i) => (p, i)).OrderByDescending(x => x.p.Skill).ThenBy(x => x.p.IsCrew ? 0 : 1).ThenBy(x => x.i)
-                .Take(Math.Max(0, limit)).Select(x => x.p).ToList();
+                .Take(places).Select(x => x.p).ToList();
             return (chosen.Where(p => p.IsCrew).Select(p => p.Who).ToList(), chosen.Select(p => p.Skill).ToList());
         }
 

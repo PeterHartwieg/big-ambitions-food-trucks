@@ -314,7 +314,8 @@ internal sealed partial class SoakWorld
         var van = vans[v.VehicleId];
         if (!v.IsOpen || v.Service == null) return;
         var player = Awake && atWindow == v.VehicleId && PlayerServing.Serves(v.VehicleType, true, 0, 8);
-        var team = CrewPay.Team(v.Crew.Select(e => (e, 60.0)), player ? 80.0 : (double?)null, ShippedData.Tables.Vehicle(v.VehicleType)!.Staff);
+        var team = CrewPay.Team(v.Crew.Select(e => (e, 60.0)), player ? 80.0 : (double?)null, ShippedData.Tables.Vehicle(v.VehicleType)!.Staff,
+            playerHeld: v.VehicleType == "truck");
         var serviceTeam = ShippedData.Rules.Service.Team(team.Skills);
         var input = new SalesInput { Menu = Menu.FromCargo(ShippedData.Tables, v.VehicleType, Lines(v)).Menu.Items,
             Stock = Stock(v), CustomersPerHour = 15 + (from / 60 % 5) * 8, Servers = team.Skills.Count,
