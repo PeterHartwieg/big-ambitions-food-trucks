@@ -28,6 +28,21 @@ The pieces:
 
 Several sessions test on homepc. `C:\Users\Peter\game-lock.txt` says who has the game: no file means free; the holder writes `owner:`, `since:`, `until:`, `game:` (what runs) and `rules:` lines and deletes the file when done. While another session holds it: no install, start, stop, quit or save load, and no bridge calls that change the game (`health`, `state` and `/events` are fine). `tools/run-remote.sh lock [minutes] [what]` and `unlock` take and release it under `BA_LOCK_OWNER` (default `Food Trucks session`); `start`, `stop` and `tools/install-remote.sh` refuse while someone else holds it, and `status` shows it.
 
+## Local macOS testing
+
+The manifest targets Windows and Mac. `tools/build-mod.sh` packages and checks both bundles; Unity needs both platform modules. With Big Ambitions closed, run `python3 tools/install-local-mac.py`. It verifies every staged file against `build/FoodTrucks.sha256`, replaces only `ModsLocal/FoodTrucks`, and preserves the previous package under `FoodTrucksPackageBackups` outside ModsLocal. Other installed mods and saves stay in place. The default game data folder is `~/Library/Application Support/com.Hovgaard-Games.Big-Ambitions`; `--game-root` overrides it for another local installation.
+
+Launch the installed Steam game with `-foodtrucks-test`, for example from the shell (Steam must be running):
+
+```sh
+open "$HOME/Library/Application Support/Steam/steamapps/common/Big Ambitions/Big Ambitions.app" --args -foodtrucks-test
+tools/ft health
+```
+
+Use a separate FT character as required by the bridge's save guards. The existing clients connect directly to `http://127.0.0.1:8330`; no PC or SSH tunnel is needed. `BA_BRIDGE_URL` can override that address. Screenshots reported as local paths are copied directly by the tools. Quit through the game's menu before installing another build; `tools/ft call quit` is also available while the bridge is active, subject to its save guards. The installer never starts or stops the game.
+
+Status: installer and bundle validation tested with temporary packages; local gameplay and rendered Mac assets remain pending an in-game session.
+
 ## Transport
 
 All bodies are UTF-8 JSON. Every reply has `ok` and, next to it, `session`: 8 hex characters the bridge picks at random each time it starts. A different `session` means the game or the mod restarted, and nothing a client knew from before (operation numbers, event numbers, state) holds. A `/call` body may carry `"expect_session": "<8 hex>"`; when it differs from the current session the call is refused before it is numbered or queued: `{ "ok": false, "session": "<current>", "error": "the bridge restarted (session <current>); reconnect first." }`. A failed call has `ok: false` and `error` (one sentence a person can act on).
