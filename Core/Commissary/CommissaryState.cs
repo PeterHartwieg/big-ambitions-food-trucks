@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Commissary
@@ -11,6 +12,12 @@ namespace FoodTrucks.Core.Commissary
         public List<string> Unlocked { get; set; } = new List<string>();
         public List<CommissarySpace> Spaces { get; set; } = new List<CommissarySpace>();
         public List<CommissaryOrder> Orders { get; set; } = new List<CommissaryOrder>();
+        // Phone orders that repeat every day or every week (CommissaryStandingOrders); each due day books its delivery.
+        public List<CommissaryStandingOrder> StandingOrders { get; set; } = new List<CommissaryStandingOrder>();
+        public long NextStandingId { get; set; } = 1;
+        // Food boxes delivered from phone orders per commissary, item and game week, for the weekly limit
+        // (CommissarySupply). Weeks before the current one are dropped.
+        public List<CommissaryWeekBoxes> WeekBoxes { get; set; } = new List<CommissaryWeekBoxes>();
         // Separate batches, including when prices differ, in arrival order. No averaging of goods costs.
         public Dictionary<string, List<CommissaryStockLine>> Stock { get; set; } = new Dictionary<string, List<CommissaryStockLine>>(StringComparer.Ordinal);
         public long NextOrderId { get; set; } = 1;
@@ -94,10 +101,61 @@ namespace FoodTrucks.Core.Commissary
         public int OrderedDay { get; set; }
         // Paid when it arrives (Commissaries.Deliver), at the delivery minute of this day.
         public int DeliverDay { get; set; }
+        // Its food boxes, counted towards the commissary's weekly limit for its item in DeliverDay's week; 0 for equipment.
+        public int CappedBoxes { get; set; }
+        // The standing order that booked it on its delivery day (then OrderedDay is DeliverDay); null for a phone order.
+        public long? StandingOrderId { get; set; }
         [JsonIgnore]
         public long GoodsCents => checked(Units * UnitPriceCents);
         [JsonIgnore]
         public long TotalCents => checked(GoodsCents + FeeCents);
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    public enum CommissaryRepeat
+    {
+        Once,
+        Daily,
+        // Every week on the weekday of its first delivery.
+        Weekly
+    }
+
+    // A phone order that repeats: each due day it books one delivery for that day's delivery minute at that day's prices.
+    public class CommissaryStandingOrder
+    {
+        public long Id { get; set; }
+        public string CommissaryId { get; set; } = string.Empty;
+        [JsonConverter(typeof(StringEnumConverter))]
+        public CommissaryRepeat Repeat { get; set; } = CommissaryRepeat.Daily;
+        public int CreatedDay { get; set; }
+        // The next delivery day not booked yet.
+        public int NextDay { get; set; }
+        public List<CommissaryStandingLine> Lines { get; set; } = new List<CommissaryStandingLine>();
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    public class CommissaryWeekBoxes
+    {
+        public string CommissaryId { get; set; } = string.Empty;
+        public string ItemName { get; set; } = string.Empty;
+        // The week's first day (a Monday: 1, 8, 15 ...).
+        public int WeekStart { get; set; }
+        public int Boxes { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    public class CommissaryStandingLine
+    {
+        public string ItemName { get; set; } = string.Empty;
+        public int Boxes { get; set; }
+        // Food, counted towards its weekly limit.
+        public bool Capped { get; set; } = true;
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -166,11 +224,13 @@ namespace FoodTrucks.Core.Commissary
         public long Total => GoodsCents;
         // Open orders cancelled: not paid yet, so nothing to refund.
         public int CancelledOrders { get; }
+        public int CancelledStandingOrders { get; }
 
-        internal CommissaryRefund(long goodsCents, int cancelledOrders)
+        internal CommissaryRefund(long goodsCents, int cancelledOrders, int cancelledStandingOrders)
         {
             GoodsCents = goodsCents;
             CancelledOrders = cancelledOrders;
+            CancelledStandingOrders = cancelledStandingOrders;
         }
     }
 
@@ -219,7 +279,8 @@ namespace FoodTrucks.Core.Commissary
             {
                 var order = state.Orders[i];
                 if (order == null || string.IsNullOrWhiteSpace(order.CommissaryId) || string.IsNullOrWhiteSpace(order.ItemName) ||
-                    order.Units <= 0 || order.UnitPriceCents < 0 || order.FeeCents < 0 || order.OrderedDay < 1 || order.DeliverDay <= order.OrderedDay)
+                    order.Units <= 0 || order.UnitPriceCents < 0 || order.FeeCents < 0 || order.OrderedDay < 1 || order.CappedBoxes < 0 ||
+                    order.DeliverDay < order.OrderedDay || (order.DeliverDay == order.OrderedDay && order.StandingOrderId == null))
                 {
                     Preserve(state, "_discardedOrders", order, order?.ExtensionData);
                     state.Orders.RemoveAt(i);
@@ -229,6 +290,23 @@ namespace FoodTrucks.Core.Commissary
             if (state.Orders.Any(o => o.Id < 1) || state.Orders.Select(o => o.Id).Distinct().Count() != state.Orders.Count)
                 throw new JsonSerializationException("Commissary order IDs must be unique and positive.");
             state.NextOrderId = Math.Max(Math.Max(1, state.NextOrderId), checked(state.Orders.Select(o => o.Id).DefaultIfEmpty(0).Max() + 1));
+            state.StandingOrders ??= new List<CommissaryStandingOrder>();
+            for (var i = state.StandingOrders.Count - 1; i >= 0; i--)
+            {
+                var standing = state.StandingOrders[i];
+                if (standing?.Lines != null) standing.Lines.RemoveAll(l => l == null || string.IsNullOrWhiteSpace(l.ItemName) || l.Boxes <= 0);
+                if (standing == null || standing.Id < 1 || string.IsNullOrWhiteSpace(standing.CommissaryId) || standing.CreatedDay < 1 ||
+                    standing.NextDay < 1 || !Enum.IsDefined(typeof(CommissaryRepeat), standing.Repeat) || standing.Repeat == CommissaryRepeat.Once ||
+                    standing.Lines == null || standing.Lines.Count == 0 || state.StandingOrders.Take(i).Any(s => s?.Id == standing.Id))
+                {
+                    Preserve(state, "_discardedStandingOrders", standing, standing?.ExtensionData);
+                    state.StandingOrders.RemoveAt(i);
+                }
+            }
+            state.WeekBoxes ??= new List<CommissaryWeekBoxes>();
+            state.WeekBoxes.RemoveAll(w => w == null || string.IsNullOrWhiteSpace(w.CommissaryId) || string.IsNullOrWhiteSpace(w.ItemName) ||
+                                           w.WeekStart < 1 || w.Boxes < 0);
+            state.NextStandingId = Math.Max(Math.Max(1, state.NextStandingId), checked(state.StandingOrders.Select(o => o.Id).DefaultIfEmpty(0).Max() + 1));
             state.Stock ??= new Dictionary<string, List<CommissaryStockLine>>(StringComparer.Ordinal);
             foreach (var id in state.Stock.Keys.ToList())
             {

@@ -86,14 +86,15 @@
     ]
   },
 
-  "_commissary": "Rent is whole cents per vehicle kind per month, charged per game day as monthly x 12 / 365 rounded to cents, including the rental day. Orders cost goods plus deliveryFeeShare, rounded once per order, and always arrive the next day at deliveryMinute (08:00). Separate FIFO stock batches keep their goods price. At nightCheckMinute (04:00), vehicles away from their own rented bay pay overnightFineCents unless the player is inside, a hired late stop is still running, they are in transit, or they are parked at or inside a building the player rents or owns. Across skipped nights the current flags apply. bayRadiusMetres is for the game adapter's bay check.",
+  "_commissary": "Rent is whole cents per vehicle kind per month, charged per game day as monthly x 12 / 365 rounded to cents, including the rental day. Orders cost goods plus deliveryFeeShare, rounded once per order, and always arrive the next day at deliveryMinute (08:00). Separate FIFO stock batches keep their goods price. At nightCheckMinute (04:00), vehicles away from their own rented bay pay overnightFineCents unless the player is inside, a hired late stop is still running, they are in transit, or they are parked at or inside a building the player rents or owns. Across skipped nights the current flags apply. bayRadiusMetres is for the game adapter's bay check. foodBoxesPerWeek limits the boxes of each food one commissary delivers from phone orders in a game week (Monday, day 1, 8, 15 ..., to Sunday, as the game resets its wholesale contract limits), one-off and standing orders together, counted by delivery day: `default` for every food, `items` overrides by game item key. It mirrors the game's per-item weekly maxWholesaleOrderAmount on wholesale contracts, in boxes, the unit the phone order sells (every food box holds 500). Equipment has no limit, nor do logistics plan deliveries; the game setting that disables wholesale and import limits lifts it too.",
   "commissary": {
     "rentPerMonthCents": { "cart": 30000, "truck": 125000 },
     "overnightFineCents": 25000,
     "nightCheckMinute": 240,
     "deliveryMinute": 480,
     "deliveryFeeShare": 0.10,
-    "bayRadiusMetres": 15
+    "bayRadiusMetres": 15,
+    "foodBoxesPerWeek": { "default": 10, "items": {} }
   },
 
   "_liveCrowds": "How much of its usual crowd a venue near a pitch brings this hour (design: Live crowds from game businesses). A closed nightclub, theatre or cinema brings closedWeight. Theatre audiences come out at letOuts (minutes after midnight; 1350 is 22:30), plus weekendLetOuts at weekends (the matinee at 17:00), cinema audiences every `every` minutes from `first` to `last` (1470 is 00:30 after midnight); each surge lasts surgeMinutes at `surge` times the crowd, times weekendSurge on Saturdays and Sundays. A nightclub's guests come out for clubClosing.minutes after it closes. Offices and factories bring their staff at work divided by workers.reference, between workers.min and workers.max. The player's own nightclubs, theatres and cinemas bring their guests in the last hour divided by guests.reference, between guests.min and guests.max, times any surge; AI venues have no counts and bring their usual crowd. kinds maps the game's business types to these venues; everything else is as the area tables say. Every number is a guess.",

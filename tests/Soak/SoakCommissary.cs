@@ -66,7 +66,14 @@ internal sealed partial class SoakWorld
         var item = random.Next(5) == 0 ? Pieces[random.Next(Pieces.Length)] : menu[random.Next(menu.Count)];
         var machine = ShippedData.Tables.EquipmentForGameItem(item) != null;
         var price = machine ? random.Next(20000, 100000) : random.Next(80, 201);
-        var quote = CommissaryOrdering.Quote(commissaryRules, new[] { new CommissaryOrderRequest(item, machine ? 1 : 40, price, random.Next(1, 4)) });
+        var quote = CommissaryOrdering.Quote(commissaryRules, new[] { new CommissaryOrderRequest(item, machine ? 1 : 40, price, random.Next(1, 4), !machine) });
+        // The order form refuses a food over its weekly limit; Place must refuse it too.
+        if (!CommissarySupply.Check(state.Commissary, commissaryRules, site, quote, CommissaryRepeat.Once, Day).Fits)
+        {
+            Require(Throws(() => CommissaryOrdering.Place(state.Commissary, commissaryRules, site, quote, (Day, Minute))), "order over the weekly limit placed");
+            Note($"order of {item} at {site} refused: weekly limit");
+            return;
+        }
         var before = money;
         foreach (var o in CommissaryOrdering.Place(state.Commissary, commissaryRules, site, quote, (Day, Minute)))
         {
@@ -74,6 +81,12 @@ internal sealed partial class SoakWorld
             Note($"order {o.Id}: {o.Units} {item} at {site}, due day {o.DeliverDay}");
         }
         Require(money == before, "order paid before delivery");
+    }
+
+    private static bool Throws(Action action)
+    {
+        try { action(); return false; }
+        catch (InvalidOperationException) { return true; }
     }
 
     private void CommissaryTick()

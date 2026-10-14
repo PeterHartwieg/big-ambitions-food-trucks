@@ -4,10 +4,11 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Commissary
 {
-    // One line of an order form: an item, its box size and wholesale price per unit, and the boxes wanted.
+    // One line of an order form: an item, its box size and wholesale price per unit, and the boxes wanted. Capped: food,
+    // whose boxes count towards its weekly limit at the commissary (CommissarySupply); equipment isn't.
     public sealed class CommissaryOrderRequest
     {
-        public CommissaryOrderRequest(string itemName, int boxSize, long unitPriceCents, int boxes)
+        public CommissaryOrderRequest(string itemName, int boxSize, long unitPriceCents, int boxes, bool capped = true)
         {
             if (string.IsNullOrWhiteSpace(itemName)) throw new ArgumentException("An item name is required.", nameof(itemName));
             if (boxSize <= 0) throw new ArgumentOutOfRangeException(nameof(boxSize));
@@ -17,12 +18,14 @@ namespace FoodTrucks.Core.Commissary
             BoxSize = boxSize;
             UnitPriceCents = unitPriceCents;
             Boxes = boxes;
+            Capped = capped;
         }
 
         public string ItemName { get; }
         public int BoxSize { get; }
         public long UnitPriceCents { get; }
         public int Boxes { get; }
+        public bool Capped { get; }
     }
 
     // A priced line: each line becomes one order, with its own delivery fee, exactly as Commissaries.Order prices it.
@@ -32,6 +35,7 @@ namespace FoodTrucks.Core.Commissary
         {
             ItemName = request.ItemName;
             Boxes = request.Boxes;
+            Capped = request.Capped;
             BoxSize = request.BoxSize;
             UnitPriceCents = request.UnitPriceCents;
             Units = checked(request.Boxes * request.BoxSize);
@@ -42,6 +46,8 @@ namespace FoodTrucks.Core.Commissary
 
         public string ItemName { get; }
         public int Boxes { get; }
+        public bool Capped { get; }
+        public int CappedBoxes => Capped ? Boxes : 0;
         public int BoxSize { get; }
         public long UnitPriceCents { get; }
         public int Units { get; }
@@ -66,6 +72,7 @@ namespace FoodTrucks.Core.Commissary
         {
             Lines = lines;
             Boxes = lines.Sum(l => l.Boxes);
+            CappedBoxes = lines.Sum(l => l.CappedBoxes);
             GoodsCents = lines.Aggregate(0L, (sum, l) => checked(sum + l.GoodsCents));
             FeeCents = lines.Aggregate(0L, (sum, l) => checked(sum + l.FeeCents));
             TotalCents = checked(GoodsCents + FeeCents);
@@ -76,6 +83,8 @@ namespace FoodTrucks.Core.Commissary
 
         public IReadOnlyList<CommissaryQuoteLine> Lines { get; }
         public int Boxes { get; }
+        // Food boxes, counted towards the weekly limits.
+        public int CappedBoxes { get; }
         public long GoodsCents { get; }
         public long FeeCents { get; }
         public long TotalCents { get; }
@@ -115,9 +124,9 @@ namespace FoodTrucks.Core.Commissary
                     continue;
                 }
                 var same = merged[index];
-                if (same.BoxSize != request.BoxSize || same.UnitPriceCents != request.UnitPriceCents)
+                if (same.BoxSize != request.BoxSize || same.UnitPriceCents != request.UnitPriceCents || same.Capped != request.Capped)
                     throw new ArgumentException($"{request.ItemName} is listed twice at different box sizes or prices.", nameof(requests));
-                merged[index] = new CommissaryOrderRequest(same.ItemName, same.BoxSize, same.UnitPriceCents, checked(same.Boxes + request.Boxes));
+                merged[index] = new CommissaryOrderRequest(same.ItemName, same.BoxSize, same.UnitPriceCents, checked(same.Boxes + request.Boxes), same.Capped);
             }
             var lines = new List<CommissaryQuoteLine>(merged.Count);
             foreach (var request in merged)
@@ -128,20 +137,25 @@ namespace FoodTrucks.Core.Commissary
             return new CommissaryQuote(lines);
         }
 
-        // One order per line, all or none: the commissary must take orders and the quote must have no problem. Nothing is
-        // paid here; the money moves on delivery.
+        // One order per line, all or none: the commissary must take orders, the quote must have no problem, and its food
+        // boxes must fit under each food's weekly limit for tomorrow's week (CommissarySupply). Nothing is paid here; the
+        // money moves on delivery.
         public static IReadOnlyList<CommissaryOrder> Place(CommissaryState state, CommissaryRules rules, string commissaryId,
-            CommissaryQuote quote, (int Day, int Minute) now)
+            CommissaryQuote quote, (int Day, int Minute) now, bool unlimited = false)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (rules == null) throw new ArgumentNullException(nameof(rules));
             if (quote == null) throw new ArgumentNullException(nameof(quote));
             if (!CanOrder(state, commissaryId)) throw new InvalidOperationException("Ordering requires an unlocked commissary with a rented space.");
             if (quote.Problem != CommissaryQuoteProblem.None) throw new InvalidOperationException($"The order can't be placed: {quote.Problem}.");
+            if (now.Day < 1) throw new ArgumentOutOfRangeException(nameof(now));
+            if (!CommissarySupply.Check(state, rules, commissaryId, quote, CommissaryRepeat.Once, now.Day, unlimited).Fits)
+                throw new InvalidOperationException("The order goes over a food's weekly limit at the commissary.");
             _ = checked(state.NextOrderId + quote.Lines.Count); // Refuse running out of order IDs before any order is booked.
             var orders = new List<CommissaryOrder>(quote.Lines.Count);
+            var deliverDay = checked(now.Day + 1);
             foreach (var line in quote.Lines)
-                orders.Add(Commissaries.Order(state, rules, commissaryId, line.ItemName, line.Units, line.UnitPriceCents, now));
+                orders.Add(Commissaries.Book(state, rules, commissaryId, line.ItemName, line.Units, line.UnitPriceCents, now, deliverDay, line.CappedBoxes, null));
             return orders;
         }
     }

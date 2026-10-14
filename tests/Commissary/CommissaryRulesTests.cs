@@ -25,6 +25,7 @@ public class CommissaryRulesTests
             Assert.Equal(480, rules.DeliveryMinute);
             Assert.Equal(0.10, rules.DeliveryFeeShare);
             Assert.Equal(15, rules.BayRadiusMetres);
+            Assert.Equal(10, rules.FoodBoxesPerWeek);
         }
     }
 
@@ -32,7 +33,7 @@ public class CommissaryRulesTests
     public void CustomRulesAreReadExactlyAndCollectionsAreCopied()
     {
         var root = JObject.Parse(ShippedData.RulesJson);
-        root["commissary"] = JObject.Parse("{\"rentPerMonthCents\":{\"van\":9223372036854775807},\"overnightFineCents\":9223372036854775807,\"nightCheckMinute\":200,\"deliveryMinute\":500,\"deliveryFeeShare\":0.2,\"bayRadiusMetres\":20}");
+        root["commissary"] = JObject.Parse("{\"rentPerMonthCents\":{\"van\":9223372036854775807},\"overnightFineCents\":9223372036854775807,\"nightCheckMinute\":200,\"deliveryMinute\":500,\"deliveryFeeShare\":0.2,\"bayRadiusMetres\":20,\"foodBoxesPerWeek\":{\"default\":3,\"items\":{\"hotdog\":5}}}");
         var rules = RuleTables.Parse(root.ToString()).Commissary;
         Assert.Equal(long.MaxValue, rules.RentPerMonthCents["van"]);
         Assert.Equal(long.MaxValue, rules.OvernightFineCents);
@@ -40,6 +41,9 @@ public class CommissaryRulesTests
         Assert.Equal(500, rules.DeliveryMinute);
         Assert.Equal(2, rules.FeeCents(10));
         Assert.Equal(20, rules.BayRadiusMetres);
+        Assert.Equal(3, rules.FoodBoxesPerWeek);
+        Assert.Equal(5, rules.FoodBoxLimit("hotdog"));
+        Assert.Equal(3, rules.FoodBoxLimit("coffee"));
         Assert.True(rules.DailyRentCents("van") > 0);
         var rents = new Dictionary<string, long> { ["cart"] = 30000 };
         rules = new CommissaryRules(rents);

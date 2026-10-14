@@ -10,7 +10,8 @@ namespace FoodTrucks.Core.Commissary
     {
         public CommissaryRules(IReadOnlyDictionary<string, long>? rentPerMonthCents = null,
             long overnightFineCents = 25000, int nightCheckMinute = 240, int deliveryMinute = 480,
-            double deliveryFeeShare = 0.10, double bayRadiusMetres = 15)
+            double deliveryFeeShare = 0.10, double bayRadiusMetres = 15, int foodBoxesPerWeek = 10,
+            IReadOnlyDictionary<string, int>? foodBoxesPerWeekByItem = null)
         {
             var rents = new Dictionary<string, long>(StringComparer.Ordinal);
             foreach (var pair in rentPerMonthCents ?? new Dictionary<string, long> { ["cart"] = 30000, ["truck"] = 125000 })
@@ -27,12 +28,22 @@ namespace FoodTrucks.Core.Commissary
                 throw new ArgumentOutOfRangeException(nameof(deliveryFeeShare));
             if (double.IsNaN(bayRadiusMetres) || double.IsInfinity(bayRadiusMetres) || bayRadiusMetres <= 0)
                 throw new ArgumentOutOfRangeException(nameof(bayRadiusMetres));
+            if (foodBoxesPerWeek < 0) throw new ArgumentOutOfRangeException(nameof(foodBoxesPerWeek));
+            var limits = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var pair in foodBoxesPerWeekByItem ?? new Dictionary<string, int>())
+            {
+                if (string.IsNullOrWhiteSpace(pair.Key) || pair.Value < 0)
+                    throw new ArgumentException("Weekly food box limits must name items with amounts not negative.", nameof(foodBoxesPerWeekByItem));
+                limits.Add(pair.Key, pair.Value);
+            }
             RentPerMonthCents = new ReadOnlyDictionary<string, long>(rents);
             OvernightFineCents = overnightFineCents;
             NightCheckMinute = nightCheckMinute;
             DeliveryMinute = deliveryMinute;
             DeliveryFeeShare = deliveryFeeShare;
             BayRadiusMetres = bayRadiusMetres;
+            FoodBoxesPerWeek = foodBoxesPerWeek;
+            FoodBoxesPerWeekByItem = new ReadOnlyDictionary<string, int>(limits);
         }
 
         public IReadOnlyDictionary<string, long> RentPerMonthCents { get; }
@@ -41,6 +52,12 @@ namespace FoodTrucks.Core.Commissary
         public int DeliveryMinute { get; }
         public double DeliveryFeeShare { get; }
         public double BayRadiusMetres { get; }
+        // Boxes of one food one commissary delivers from phone orders in a game week, one-off and standing orders together,
+        // by delivery day (Peter, 14 October 2026: a growing fleet builds its own supply chain). The default, and
+        // overrides by game item. Equipment has no limit (CommissarySupply).
+        public int FoodBoxesPerWeek { get; }
+        public IReadOnlyDictionary<string, int> FoodBoxesPerWeekByItem { get; }
+        public int FoodBoxLimit(string itemName) => itemName != null && FoodBoxesPerWeekByItem.TryGetValue(itemName, out var limit) ? limit : FoodBoxesPerWeek;
 
         // Round each day's rent and each order's fee once, to whole cents; halves round away from zero.
         public long DailyRentCents(string kind) => checked((long)Math.Round(RentPerMonthCents[kind] * 12m / 365m, 0, MidpointRounding.AwayFromZero));
@@ -52,7 +69,7 @@ namespace FoodTrucks.Core.Commissary
 
         internal static CommissaryRules Read(DataReader r, JObject obj)
         {
-            r.OnlyKeys(obj, "rentPerMonthCents", "overnightFineCents", "nightCheckMinute", "deliveryMinute", "deliveryFeeShare", "bayRadiusMetres");
+            r.OnlyKeys(obj, "rentPerMonthCents", "overnightFineCents", "nightCheckMinute", "deliveryMinute", "deliveryFeeShare", "bayRadiusMetres", "foodBoxesPerWeek");
             var rents = r.Object(obj, "rentPerMonthCents");
             var amounts = new Dictionary<string, long>(StringComparer.Ordinal);
             foreach (var entry in r.Entries(rents))
@@ -63,9 +80,19 @@ namespace FoodTrucks.Core.Commissary
             if (amounts.Count == 0) throw r.Fail(rents.Path, "must not be empty");
             var radius = r.Number(obj, "bayRadiusMetres", 0, double.MaxValue);
             if (radius == 0) throw r.Fail(DataReader.PathOf(obj, "bayRadiusMetres"), "must be above 0");
+            var boxes = r.Object(obj, "foodBoxesPerWeek");
+            r.OnlyKeys(boxes, "default", "items");
+            var byItem = new Dictionary<string, int>(StringComparer.Ordinal);
+            var items = r.OptionalObject(boxes, "items");
+            if (items != null)
+                foreach (var entry in r.Entries(items))
+                {
+                    if (string.IsNullOrWhiteSpace(entry.Name)) throw r.Fail(entry.Path, "must not be blank");
+                    byItem.Add(entry.Name, r.Integer(items, entry.Name, 0, 100000));
+                }
             return new CommissaryRules(amounts, Cents(r, obj, "overnightFineCents"),
                 r.Integer(obj, "nightCheckMinute", 0, 1439), r.Integer(obj, "deliveryMinute", 0, 1439),
-                r.Number(obj, "deliveryFeeShare", 0, 1), radius);
+                r.Number(obj, "deliveryFeeShare", 0, 1), radius, r.Integer(boxes, "default", 0, 100000), byItem);
         }
 
         private static long Cents(DataReader r, JObject obj, string name)

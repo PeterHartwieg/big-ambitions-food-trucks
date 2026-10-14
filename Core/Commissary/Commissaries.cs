@@ -79,15 +79,24 @@ namespace FoodTrucks.Core.Commissary
         }
 
         public static CommissaryOrder Order(CommissaryState state, CommissaryRules rules, string commissaryId,
-            string itemName, int units, long wholesaleUnitPriceCents, (int Day, int Minute) now)
+            string itemName, int units, long wholesaleUnitPriceCents, (int Day, int Minute) now) =>
+            Book(state, rules, commissaryId, itemName, units, wholesaleUnitPriceCents, now, checked(now.Day + 1), 0, null);
+
+        // One order for delivery on deliverDay: tomorrow for a phone order, today for a standing order's delivery.
+        // cappedBoxes are its food boxes, counted towards the item's weekly limit (CommissarySupply).
+        internal static CommissaryOrder Book(CommissaryState state, CommissaryRules rules, string commissaryId, string itemName,
+            int units, long wholesaleUnitPriceCents, (int Day, int Minute) now, int deliverDay, int cappedBoxes, long? standingOrderId)
         {
             Check(state, rules); Name(commissaryId, nameof(commissaryId)); Name(itemName, nameof(itemName)); Time(now.Day, now.Minute);
             if (units <= 0) throw new ArgumentOutOfRangeException(nameof(units));
             if (wholesaleUnitPriceCents < 0) throw new ArgumentOutOfRangeException(nameof(wholesaleUnitPriceCents));
+            if (cappedBoxes < 0) throw new ArgumentOutOfRangeException(nameof(cappedBoxes));
+            if (deliverDay < now.Day || (deliverDay == now.Day && standingOrderId == null)) throw new ArgumentOutOfRangeException(nameof(deliverDay));
             if (!state.Unlocked.Contains(commissaryId, StringComparer.Ordinal) || !state.Spaces.Any(s => s.CommissaryId == commissaryId))
                 throw new InvalidOperationException("Ordering requires an unlocked commissary with a rented space.");
             var order = new CommissaryOrder { Id = state.NextOrderId, CommissaryId = commissaryId, ItemName = itemName,
-                Units = units, UnitPriceCents = wholesaleUnitPriceCents, OrderedDay = now.Day, DeliverDay = checked(now.Day + 1) };
+                Units = units, UnitPriceCents = wholesaleUnitPriceCents, OrderedDay = now.Day, DeliverDay = deliverDay,
+                CappedBoxes = cappedBoxes, StandingOrderId = standingOrderId };
             order.FeeCents = rules.FeeCents(order.GoodsCents);
             _ = order.TotalCents; // Refuse an overflowing price before changing state.
             var nextId = checked(state.NextOrderId + 1);
@@ -120,6 +129,7 @@ namespace FoodTrucks.Core.Commissary
                     refused.Add(order);
                     continue;
                 }
+                CommissarySupply.Delivered(state, order, nowDay);
                 Stock(state, order.CommissaryId).Add(new CommissaryStockLine { ItemName = order.ItemName, Units = order.Units,
                     UnitPriceCents = order.UnitPriceCents, BatchId = CommissaryValidation.NextBatch(state),
                     OrderMetadata = CopyExtra(order.ExtensionData) });
@@ -253,15 +263,17 @@ namespace FoodTrucks.Core.Commissary
         }
 
         // The uninstall step: delivered stock (paid on delivery) is refunded at its goods price; open orders haven't been
-        // paid, so they are cancelled with nothing to refund. Spaces are given up; rent and fine debts remain to settle.
+        // paid, so they are cancelled with nothing to refund, and standing orders end. Spaces are given up; rent and fine debts remain to settle.
         public static CommissaryRefund Refund(CommissaryState state)
         {
             Check(state);
             long goods = 0;
             foreach (var line in state.Stock.Values.SelectMany(lines => lines)) goods = checked(goods + checked(line.Units * line.UnitPriceCents));
-            var refund = new CommissaryRefund(goods, state.Orders.Count);
+            var refund = new CommissaryRefund(goods, state.Orders.Count, state.StandingOrders.Count);
             state.Stock.Clear();
             state.Orders.Clear();
+            state.StandingOrders.Clear();
+            state.WeekBoxes.Clear();
             state.Spaces.Clear();
             state.ReleasedRentPaidThroughDay.Clear();
             return refund;
