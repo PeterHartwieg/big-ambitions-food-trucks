@@ -1,8 +1,27 @@
 # Food Trucks for Big Ambitions
 
-A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, open the window and sell to the lunch crowd, then move on before the evening rush starts somewhere else.
+A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, fit equipment, stock up and serve the crowd yourself or send a crew along a scheduled route.
 
-**Status, 9 October 2026:** Milestone 6 (depth), build `0.7.0`, half built and not yet checked in the game: health grades with inspections and a Clean button, regulars per pitch and weekday, competition between your own vehicles, and live crowds from nearby venues (open or closed, theatre and cinema let-outs, club closing time, office staff). Milestone 5 (hires), build `0.6.0`, also unchecked, lets the game's own employees run a cart or truck: put an unassigned employee on the vehicle from its "Hires" button, add stops with opening hours, and the crew drives to each stop, opens, closes and moves on, paid by the game's own payroll. Milestone 4 (`0.5.0`, also unchecked) brought the food truck with its final model, the vendor licence and permits by phone from the City of New York, and the "Street food" map filters. Milestone 3 (`0.4.0`) brought customers as people with a queue; Milestone 2 (`0.3.1`) crowds that add up, the game's own equipment, stock limits, legal pavement spots and prices like a shop's; see [docs/implementation-plan.md](docs/implementation-plan.md). Balance is set by calculation: [docs/balance/cart-economics.md](docs/balance/cart-economics.md). Milestone 1 was played once; results below.
+**Status, 14 October 2026:** development build `0.9.10`, targeting Big Ambitions 1.0. The cart and truck, equipment and menus, demand and visible queues, licences and permits, crew routes, health grades, regulars, competition, catering, venue partnerships, map filters, commissary supply and warehouse logistics are implemented. This is an unreleased development build: Workshop publication has not happened, release review is under way, and the latest changes still need in-game checks. The dedicated Street food page and local Mac validation are being reviewed separately; neither is claimed checked here. See [CHECKS.md](CHECKS.md) for pending checks and [docs/implementation-plan.md](docs/implementation-plan.md) for development history.
+
+Demand depends on the spot, time, nearby businesses, weather and season. Equipment determines both the menu and food capacity; crews use the game's employees and payroll. Street food has its own save data, income and expense breakdown, and income-tax integration. Balance is calculated and still subject to playtesting; the latest study is [docs/balance/balance-pass-2026-10-14.md](docs/balance/balance-pass-2026-10-14.md).
+
+## Installing a development build
+
+There is no published Workshop release yet. Build from this repository using [Building](#building), or use a complete development package supplied for testing. With the game closed, place the entire `FoodTrucks` package folder in the game's `ModsLocal` folder, preserving its asset bundles, data, locales and dependencies. A source checkout or the DLL alone is not an installable package. Restart the game after installing or replacing it. To remove it from saves, follow [Removing the mod](#removing-the-mod) first.
+
+## Getting started
+
+1. Complete the game's **Food Safety** course. Call the **City of New York** to buy a vendor licence.
+2. Buy a food cart or food truck in person at **General US Trucks**. Call the city again for that vehicle's permit.
+3. Fit equipment by carrying it to the vehicle and loading it into cargo, then load matching food. For example, a Hot Dog Grill unlocks hot dogs. Each fitted piece has its own food capacity; excess stock stays in the box.
+4. Find a legal spot and choose **Open here** on the vehicle. The button explains any rule preventing opening. Stay at the cart to serve; a truck places you at its hatch. **Prices** sets custom prices; otherwise district pricing suggestions or standard prices apply.
+5. Visit a commissary's marked loading bay and choose **Commissary** to rent a space and unlock its phone contact. Order foods and machines for the next morning, then use **Restock** at the bay. Deliveries are paid on arrival; phone orders share a weekly food limit across the fleet. Daily/weekly standing orders and warehouse logistics can supply a larger operation.
+6. Use **Hires** on a vehicle to manage unassigned employees and route stops. A crew with a schedule can restock at its rented commissary bay, travel and serve without you. Use **Clean** to maintain hygiene and plan overnight parking: vehicles left out at 04:00 can receive a commissary fine. Catering offers arrive through **Street food bookings** as the business grows.
+
+## Validation history
+
+The evidence below records specific historical builds and sessions, with their original checked, pending and unverified results. It is not a claim that every current feature or later fix has been checked. Current outstanding checks are in [CHECKS.md](CHECKS.md).
 
 ## Removing the mod
 
