@@ -33,15 +33,22 @@ namespace FoodTrucks
                 var distance = double.MaxValue;
                 foreach (var collider in colliders)
                 {
-                    if (collider == null) continue;
+                    // A disabled collider's ClosestPoint returns the position itself (distance 0 anywhere), so a collider
+                    // switched off or deactivated since discovery doesn't count.
+                    if (!Usable(collider)) continue;
                     distance = Math.Min(distance, GroundDistance(collider, position));
                 }
                 if (distance <= radius) yield return (type, distance);
             }
         }
 
-        // Metres on the ground from a position to a volume: the closest point of the collider (its bounds for a
-        // concave mesh, which ClosestPoint doesn't support), height left out.
+        private static bool Usable(Collider? collider) =>
+            collider != null && collider.enabled && collider.isTrigger && collider.gameObject.activeInHierarchy;
+
+        // Metres on the ground from a position to a volume: the collider's closest point, height left out. Unity's
+        // ClosestPoint works only for box, sphere, capsule and convex mesh colliders; for a concave mesh this falls back
+        // to its world bounding box, which reads a spot inside the box's corners as inside the park (a shape the game's
+        // park triggers aren't expected to have; the startup line counts them).
         private static double GroundDistance(Collider collider, Vector3 position)
         {
             var concave = collider is MeshCollider mesh && !mesh.convex;
@@ -55,31 +62,43 @@ namespace FoodTrucks
         {
             if (areas != null) return areas;
             var list = new List<(string, Collider[])>();
-            var parks = 0;
-            var skateParks = 0;
-            try
+            int parks = 0, skateParks = 0, inactive = 0, noCollider = 0, concave = 0, failed = 0;
+            LocationHappinessTrigger[] triggers;
+            try { triggers = UnityEngine.Object.FindObjectsOfType<LocationHappinessTrigger>(true); }
+            catch (Exception ex)
             {
-                foreach (var trigger in UnityEngine.Object.FindObjectsOfType<LocationHappinessTrigger>(true))
+                Log.Error($"Parks: finding the game's park areas failed, so parks come only from zones.json: {ex.Message}");
+                triggers = Array.Empty<LocationHappinessTrigger>();
+            }
+            foreach (var trigger in triggers)
+            {
+                // One broken trigger doesn't drop the others.
+                try
                 {
                     if (trigger == null) continue;
                     var config = Traverse.Create(trigger).Field("balanceConfig").GetValue<PlayerActivityBalanceConfig>();
                     var kind = config == null ? null : config.TemporalType;
                     string? type = kind == WalkingInThePark ? Park : kind == InTheSkatePark ? SkatePark : null;
                     if (type == null) continue;
-                    var colliders = trigger.GetComponents<Collider>().Where(c => c != null && c.isTrigger).ToArray();
-                    if (colliders.Length == 0) continue;
+                    if (!trigger.gameObject.activeInHierarchy) { inactive++; continue; }
+                    // The trigger's own collider or its children's, active and enabled only.
+                    var colliders = trigger.GetComponentsInChildren<Collider>(false).Where(Usable).ToArray();
+                    if (colliders.Length == 0) { noCollider++; continue; }
+                    concave += colliders.Count(c => c is MeshCollider mesh && !mesh.convex);
                     list.Add((type, colliders));
                     if (type == Park) parks++; else skateParks++;
                 }
-            }
-            catch (Exception ex)
-            {
-                Log.Error($"Parks: reading the game's park areas failed, so parks come only from zones.json: {ex.Message}");
+                catch (Exception ex)
+                {
+                    failed++;
+                    Log.Error($"Parks: reading a park area failed, so it is left out: {ex.Message}");
+                }
             }
             // Before the city has loaded there is nothing to find; try again on the next read.
             if (list.Count == 0 && InstanceBehavior<CityManager>.Instance == null) return list;
             areas = list;
-            Log.Info($"Parks: {parks} park areas and {skateParks} skate park areas found (the game's walking-in-the-park triggers)" +
+            Log.Info($"Parks: {parks} park areas and {skateParks} skate park areas found (the game's walking-in-the-park triggers); " +
+                     $"skipped {inactive} inactive, {noCollider} without an enabled trigger collider, {failed} that failed; {concave} concave mesh colliders measured by their bounds" +
                      (list.Count == 0 ? "; parks come only from zones.json." : "."));
             return areas;
         }

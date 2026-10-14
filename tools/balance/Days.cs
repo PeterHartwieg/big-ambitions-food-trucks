@@ -18,6 +18,8 @@ public sealed class Stay
     public int From, To;
     public int Restocks;
     public int RestockMinutes;
+    // Each restock trip, from leaving to selling again (minutes of the day): the window is shut meanwhile.
+    public List<(int From, int To)> Trips = new();
     public StopResult Result = new();
     // Stock left when the stay ends.
     public Dictionary<string, double> Left = new();
@@ -85,6 +87,7 @@ public sealed class Planner
             }
             stay.Restocks++;
             stay.RestockMinutes += trip;
+            stay.Trips.Add((r.SoldOutAt.Value, r.SoldOutAt.Value + trip));
             t = r.SoldOutAt.Value + trip;
             // As Core's Restock: what is on board stays, each piece takes only what fits in its room.
             stock = Selling.TopUp(cart, spot, t, to, c, stock);
@@ -183,3 +186,7 @@ public sealed class Planner
         return best;
     }
 }
+
+// One day of a setup at a pitch in the pass report: gross (sales less goods at wholesale), the goods, hire-hours the
+// game pays, units sold, when the first piece ran out, the share of unlimited-stock sales, and a note.
+public sealed record DayEval(double Gross, double Goods, int HireHours, Dictionary<string, double> Sold, int? FirstOut, double OfDemand, string Note);

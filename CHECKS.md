@@ -7,7 +7,8 @@ Branch `balance-park`; no version bump. Parks get the `park` area (`data/demand.
 | K1 | Push or drive a vehicle to the edge of a park (the green one with paths; the happiness boost shows when you walk in), open, Ctrl+Alt+L | The reading lists `park presence` (about 0.7 at the edge, less 20 to 50 m away); a pitch a block away has none |
 | K2 | Same pitch on a weekday at 12:00 and on a Saturday at 15:00 (sleep or Ctrl+F-keys) | Saturday afternoon clearly busier than the weekday lunch, the weekday lunch busier than 09:00 or 15:00 |
 | K3 | Walk round the parks you know (and the skate park) | Tell me any park the mod misses: walk its outline with Ctrl+Alt+G at each corner, so it can become a zone |
-| L1 | First reading after load | `Parks: N park areas and M skate park areas found (the game's walking-in-the-park triggers).` with N at least 1; with 0 the line ends `; parks come only from zones.json.` |
+| L1 | First reading after load | `Parks: N park areas and M skate park areas found (the game's walking-in-the-park triggers); skipped … inactive, … without an enabled trigger collider, … that failed; … concave mesh colliders measured by their bounds.` with N at least 1 and no `Parks: reading a park area failed` errors; with none found the line ends `; parks come only from zones.json.` |
+
 # Truck colour (next build)
 
 Branch `truck-paint`; no version bump. The colour picked at the dealer now paints the truck's body: the base colour's alpha is 1 only on the body paint, and the material uses the game's paint mask again (art/README.md, "Paint mask"). The livery's teal bands, the diamond plate, trims, glass, lights, wheels and the kitchen inside keep their own colours. A truck without a colour (the debug spawn) is cream, as before. Previews of the mask and a few tints: `build/truck-paint/sheet.png` in the worktree. Do it in a throwaway save with money for three trucks, at General US Trucks (1 Seventh Avenue).
