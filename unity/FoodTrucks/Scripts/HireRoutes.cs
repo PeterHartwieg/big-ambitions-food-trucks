@@ -507,19 +507,26 @@ namespace FoodTrucks
             Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} brought back to {position} after its route stopped.");
         }
 
-        // Whether anything a vehicle mustn't be put on stands where this one's hull would be, for every placement a crew
-        // makes (review rounds 4 and 5): the player's and the mod's vehicles, the lanes' parked cars and AI traffic, and
-        // the player; never `self`, so a place a vehicle was just tried at and refused doesn't block the next one. The
-        // game's spawn would delete parked and traffic cars in its way; Place suppresses that cleanup (SpawnNoCleanup),
-        // so a car this box misses stays where it is rather than vanishing.
-        private static bool Taken(Vector3 position, Quaternion rotation, string kind, VehicleInstance? self = null)
+        // Street placements (arrival, fallback, recovery, bring-back, FreeParking), as before: another vehicle on the
+        // vehicles layer where this one's hull would be (the game's own spawn cleanup releases parked lane cars, as for
+        // its own vehicles), plus the player standing in the footprint; never `self`'s own hull (review round 6).
+        private static bool Taken(Vector3 position, Quaternion rotation, string kind, VehicleInstance? self = null) =>
+            Occupied(position, rotation, kind, self, 1 << LayerHelper.VehiclesLayerIndex, QueryTriggerInteraction.UseGlobal);
+
+        // Bay arrivals only (review rounds 4 to 6): anything a vehicle mustn't be put on, the player's and the mod's
+        // vehicles, the lanes' parked cars and AI traffic with their trigger colliders, and the player; never `self`.
+        // Bay spawns skip the game's cleanup (SpawnNoCleanup), so nothing in the bay is deleted.
+        private static bool BayTaken(Vector3 position, Quaternion rotation, string kind, VehicleInstance self) =>
+            Occupied(position, rotation, kind, self,
+                (1 << LayerHelper.VehiclesLayerIndex) | (1 << LayerHelper.ParkedVehiclesLayerIndex) | (1 << LayerHelper.AiVehiclesLayerIndex) |
+                (1 << LayerHelper.PlayerVehiclesLayerIndex) | (1 << LayerHelper.PlayerLayerIndex), QueryTriggerInteraction.Collide);
+
+        private static bool Occupied(Vector3 position, Quaternion rotation, string kind, VehicleInstance? self, int mask, QueryTriggerInteraction triggers)
         {
             var centre = position + rotation * (kind == "truck" ? TruckCentre : CartCentre);
             var half = kind == "truck" ? TruckHalfSize : CartHalfSize;
-            var mask = (1 << LayerHelper.VehiclesLayerIndex) | (1 << LayerHelper.ParkedVehiclesLayerIndex) |
-                       (1 << LayerHelper.AiVehiclesLayerIndex) | (1 << LayerHelper.PlayerVehiclesLayerIndex) | (1 << LayerHelper.PlayerLayerIndex);
             var own = self == null ? null : VehicleHelper.GetVehicleController(self)?.transform;
-            foreach (var hit in Physics.OverlapBox(centre, half, rotation, mask, QueryTriggerInteraction.Ignore))
+            foreach (var hit in Physics.OverlapBox(centre, half, rotation, mask, triggers))
                 if (hit != null && (own == null || !hit.transform.IsChildOf(own))) return true;
             // The player, wherever their collider sits: standing inside the hull's footprint.
             var local = Quaternion.Inverse(rotation) * (PlayerHelper.GetPosition() - centre);
@@ -654,38 +661,45 @@ namespace FoodTrucks
             var site = space == null ? null : DemandData.Commissaries?.Site(space.CommissaryId);
             if (site == null) return null;
             var late = t - transit.ArrivesAt;
-            if (late >= 2 * RetryMinutes)
-            {
-                fallback = true;
-                if (bayGaveUp.Add((vehicle.VehicleId, transit.ArrivesAt)))
-                    Log.Info($"Route: {kind} {vehicle.VehicleId} found no place in the bay of {site.Id} for {RetryMinutes * 2} minutes; it parks nearby, not at the stop, and waits for its next bay stop.");
-                return null;
-            }
+            var key = (vehicle.VehicleId, transit.ArrivesAt);
             if (bayTried.TryGetValue(vehicle.VehicleId, out var tried) && tried == t) return false;
             bayTried[vehicle.VehicleId] = t;
             // What doesn't depend on the place: the bay resolved and its street side readable. Without it no place can pass
-            // InBay this minute, so none is tried.
-            if (!Commissary.BayReady(site, out var notReady))
+            // InBay this minute, so none is tried (and the 20 minutes still run out to the street fallback).
+            var ready = Commissary.BayReady(site, out var notReady);
+            var places = ready ? Commissary.BayPlaces(site, kind == "truck" ? TruckHalfSize.z : CartHalfSize.z) : new List<(Vector3, Quaternion)>();
+            bayCovered.TryGetValue(key, out var covered);
+            if (late >= 2 * RetryMinutes && covered >= places.Count)
+            {
+                fallback = true;
+                if (bayGaveUp.Add(key))
+                    Log.Info($"Route: {kind} {vehicle.VehicleId} found no place in the bay of {site.Id} for {RetryMinutes * 2} minutes; it parks nearby, not at the stop, and waits for its next bay stop.");
+                return null;
+            }
+            if (!ready)
             {
                 if (late == 0) Log.Info($"Route: the bay of {site.Id} can't take {kind} {vehicle.VehicleId} yet ({notReady}); it waits on its way.");
                 return false;
             }
-            var halfLength = kind == "truck" ? TruckHalfSize.z : CartHalfSize.z;
-            var places = Commissary.BayPlaces(site, halfLength);
-            var placedAny = false;
-            // At most PlacesPerAttempt places a minute, carrying on from where the last attempt stopped.
+            // At most PlacesPerAttempt places a minute, carrying on from where the last attempt stopped, but enough that the
+            // whole set is tried before the 20 minutes are up; a catch-up after a time skip tries all that are left at once.
+            var minutesLeft = 2 * RetryMinutes - late;
+            var left = places.Count - covered;
+            var take = minutesLeft <= 1 ? left : Math.Max(PlacesPerAttempt, (int)Math.Ceiling(left / (double)minutesLeft));
             bayCursor.TryGetValue(vehicle.VehicleId, out var cursor);
             if (cursor >= places.Count) cursor = 0;
-            var batch = places.Skip(cursor).Take(PlacesPerAttempt).ToList();
-            bayCursor[vehicle.VehicleId] = cursor + batch.Count >= places.Count ? 0 : cursor + batch.Count;
+            var batch = places.Skip(cursor).Take(take).ToList();
+            if (batch.Count < take) batch.AddRange(places.Take(Math.Min(cursor, take - batch.Count)));
+            bayCursor[vehicle.VehicleId] = (cursor + batch.Count) % Math.Max(1, places.Count);
+            bayCovered[key] = covered + batch.Count;
+            var placedAny = false;
             foreach (var (position, rotation) in batch)
             {
-                if (Taken(position, rotation, kind, instance)) continue;
-                var placed = Place(instance, position, rotation);
+                if (BayTaken(position, rotation, kind, instance)) continue;
+                var placed = Place(instance, position, rotation, noCleanup: true);
                 if (placed == null) continue;
                 placedAny = true;
                 instance.parkingState = ParkingState.Legal;
-                Physics.SyncTransforms();
                 if (!Commissary.InBay(instance, site, out var why))
                 {
                     if (late == 0) Log.Info($"Route: {kind} {vehicle.VehicleId} at {position} isn't in the bay of {site.Id} ({why}); trying the next place.");
@@ -694,6 +708,7 @@ namespace FoodTrucks
                 HireRunner.Arrived(vehicle, placed.transform.position.x, placed.transform.position.z, atStop: true, t);
                 bayTried.Remove(vehicle.VehicleId);
                 bayCursor.Remove(vehicle.VehicleId);
+                bayCovered.Remove(key);
                 FoodTrucksSession.MarkChanged();
                 Log.Info($"Route: {kind} {vehicle.VehicleId} arrived in the bay of {site.Id}: {placed.transform.position}.");
                 return true;
@@ -704,6 +719,7 @@ namespace FoodTrucks
             return false;
         }
 
+        private static readonly Dictionary<(string, long), int> bayCovered = new Dictionary<(string, long), int>();
         private static readonly Dictionary<string, long> bayTried = new Dictionary<string, long>();
         private static readonly Dictionary<string, int> bayCursor = new Dictionary<string, int>();
         private const int PlacesPerAttempt = 8;
@@ -711,10 +727,19 @@ namespace FoodTrucks
 
         // Puts the vehicle at a position: moves its controller if it has one, or spawns it as the game does
         // when the private driver brings a car back. The position is written to the save either way.
-        // True while Place spawns a vehicle: the game's cleanup of blocking cars is skipped.
+        // True while a bay arrival spawns a vehicle: the game's cleanup of blocking cars is skipped (CartParts.DestroyBlockingPrefix).
         internal static bool SpawnNoCleanup;
 
-        private static VehicleController? Place(VehicleInstance instance, Vector3 position, Quaternion rotation)
+        // `noCleanup` only for bay arrivals, which checked the place with BayTaken; street placements keep the game's cleanup.
+        // The physics scene is synced after every placement, so the next check sees the vehicle where it now stands.
+        private static VehicleController? Place(VehicleInstance instance, Vector3 position, Quaternion rotation, bool noCleanup = false)
+        {
+            var placed = PlaceUnsynced(instance, position, rotation, noCleanup);
+            Physics.SyncTransforms();
+            return placed;
+        }
+
+        private static VehicleController? PlaceUnsynced(VehicleInstance instance, Vector3 position, Quaternion rotation, bool noCleanup)
         {
             var controller = VehicleHelper.GetVehicleController(instance);
             if (controller != null)
@@ -732,9 +757,9 @@ namespace FoodTrucks
             list.Remove(instance);
             try
             {
-                // The game's spawn deletes parked and traffic cars in the way (VehicleHelper.DestroyBlockingVehicles); the
-                // crew only places on what Taken found free, so nothing is deleted here (CartParts.DestroyBlockingPrefix).
-                SpawnNoCleanup = true;
+                // The game's spawn deletes parked and traffic cars in the way (VehicleHelper.DestroyBlockingVehicles). A bay
+                // arrival placed only where BayTaken found nothing, so its spawn deletes nothing (CartParts.DestroyBlockingPrefix).
+                SpawnNoCleanup = noCleanup;
                 controller = VehicleHelper.CreateAndSpawnVehicle(instance, position, rotation);
             }
             finally
