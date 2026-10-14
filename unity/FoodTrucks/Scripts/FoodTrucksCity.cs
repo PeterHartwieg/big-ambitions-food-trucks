@@ -174,6 +174,7 @@ namespace FoodTrucks
             HireRoutes.Reset();
             StopPicker.Reset();
             BizManVehiclePage.Reset();
+            BizManFleet.Reset();
             if (runtimeObject != null) Object.Destroy(runtimeObject);
             runtimeObject = null;
             game = null;
