@@ -160,18 +160,28 @@ namespace FoodTrucks
         // Prefix on VehicleController.OnItemAddedToCargo, which runs on every cargo change of a spawned vehicle and plays
         // the game's HandTruckAddBox sound at the player's position, however far away the vehicle is: the game only changes
         // a vehicle's cargo with the player beside it. A food vehicle's cargo also changes with nobody near (crew sales,
-        // catering, deliveries), so its sound plays only with the player within BoxSoundMetres and not in another building
-        // (the game's own test in VehicleController.OnCurrentHeightChanged). The cargo count is updated either way.
+        // catering, Restock), so its sound plays only with the player within BoxSoundMetres and not in another building
+        // (the game's own test in VehicleController.OnCurrentHeightChanged) or an underground garage. The cargo count is
+        // updated either way.
         public static bool BoxSoundPrefix(VehicleController __instance)
         {
             bool quiet;
             try
             {
                 var vehicle = __instance.vehicleInstance;
-                if (VehicleKind(vehicle) == null || PlayerHelper.PlayerController == null) return true;
-                var away = BuildingManager.IsInsideBuilding &&
-                           vehicle.Address != InstanceBehavior<BuildingManager>.Instance.buildingRegistration?.Address;
-                quiet = away || Vector3.Distance(PlayerHelper.GetPosition(), __instance.transform.position) > BoxSoundMetres;
+                if (VehicleKind(vehicle) == null) return true;
+                // No player (a load or quit): nobody to hear it, and the game's own code would throw on the position.
+                if (PlayerHelper.PlayerController == null) quiet = true;
+                else
+                {
+                    var player = PlayerHelper.GetPosition();
+                    var here = __instance.transform.position;
+                    // An underground garage counts as away unless the vehicle stands down there too (a level apart).
+                    var away = (BuildingManager.IsInsideBuilding &&
+                                vehicle.Address != InstanceBehavior<BuildingManager>.Instance.buildingRegistration?.Address) ||
+                               (Parking.UndergroundParking.UndergroundParkingManager.IsInsideParking && Mathf.Abs(player.y - here.y) > 2.5f);
+                    quiet = away || Vector3.Distance(player, here) > BoxSoundMetres;
+                }
             }
             catch (Exception ex)
             {
