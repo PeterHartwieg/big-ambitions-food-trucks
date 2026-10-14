@@ -75,7 +75,7 @@ namespace FoodTrucks.BuildEditor
             manifest.LocalesFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(ModFolder + "/Locales");
             // Dependencies/ is found by convention; the folder is recreated by the build script.
             manifest.DependenciesFolder = null!;
-            manifest.TargetPlatforms = ModTargetPlatforms.Windows;
+            manifest.TargetPlatforms = ModTargetPlatforms.Windows | ModTargetPlatforms.Mac;
             if (manifest.ModAssembly == null) throw new InvalidOperationException("FoodTrucks.asmdef not found.");
             EditorUtility.SetDirty(manifest);
         }
