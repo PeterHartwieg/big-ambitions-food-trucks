@@ -8,6 +8,21 @@ During the PC playtest of `9e2bf50` Peter rejected the first Street food UI: its
 
 **The rework is built (branch `ui-page`), pending Peter's look.** The page is now made of copies of the game's own BizMan parts, so its fonts, sizes and colours are the game's. The rows below replace the old page's checks. The alert counts come from the warnings track (`VehicleTodos`); on `ui-page` alone they read 0. The UI isn't accepted for release until Peter has seen it.
 
+# Vehicle warnings as to-dos (next build)
+
+Each food vehicle's warnings are the game's own to-dos in the phone (spec: the plan's "Street food page and vehicle warnings"). The Street food overview counts them as alerts. Saves never hold them.
+
+| # | Do | Look for |
+|---|---|---|
+| T1 | Start the game | Seven `Patch ...: Active.` lines for the to-do patches and "To-dos: vehicle warnings show as the game's to-dos." |
+| T2 | Truck with a grill and 0 hot dogs, let a game minute pass, then load hot dogs to 15%, later 50% | "Out of Hotdog" (red), then "Low stock of Hotdog" (yellow), then done; `To-do added/completed` log lines; the overview's alerts follow |
+| T3 | A vehicle with no permit and no space; a truck with one of its two crew on a route | "No vending permit…", "No commissary space…", "Not enough crew…"; each completes when fixed |
+| T4 | Click a vehicle's to-do, then its destination button | The vehicle's BizMan page opens; the guider points at the vehicle |
+| T5 | Save, quit, load the save with the mod disabled | No food-truck to-dos, no TasksUI errors in the log, the game's own to-dos still complete |
+| T6 | Save and reload with the mod | "To-dos: N kept out of the save file."; the to-dos come back within a game minute |
+| T7 | Bring the licence into its renewal window | One "Vendor licence runs out after day N" to-do; a click opens the City's conversation |
+| T8 | Uninstall step (Ctrl+Shift+F11 twice) | All of ours go and don't come back |
+
 # UI flow (next build)
 
 Branch `ui-flow`. The vehicle's item panel now does loading and unloading only (spec: the plan's "UI flow: the vehicle panel holds only cargo"). Open, Close and Clean are in the on-foot menu when you click a parked vehicle; prices and "Add the spot where it stands" are on the BizMan vehicle page; commissary spaces are rented by phone; the bay's Commissary stock moves food and equipment both ways. About 20 minutes in a throwaway FT save with a cart, a truck, a commissary space and stock there (`FT bridge 2`). Start with U1: if the Spaces list doesn't show or take clicks, nothing else about commissary spaces can be checked.
