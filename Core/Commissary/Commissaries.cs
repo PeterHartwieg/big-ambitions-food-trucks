@@ -224,44 +224,92 @@ namespace FoodTrucks.Core.Commissary
             state.NextBatchId = nextId;
         }
 
-        // OrderMetadata "source" on a batch a vehicle gave back at the bay (StockTransfer; plan, "UI flow").
+        // OrderMetadata on a batch a vehicle gave back at the bay (StockTransfer; plan, "UI flow"): "source" is this value,
+        // "day" the day it came back, "vehicle" the vehicle. OrderedKey true when its units came from commissary orders
+        // (their cost was deducted under the commissary's label); LoadedDayKey the oldest day the food was loaded on, so
+        // taking it again keeps its age (review round 1 of the UI flow).
         public const string ReturnedSourceValue = "vehicle";
+        public const string OrderedKey = "ordered";
+        public const string LoadedDayKey = "loadedDay";
 
-        // Units a vehicle gave back at the bay: one new batch, last in the commissary's FIFO order, at what the vehicle
-        // paid for them (its cargo's price per unit), marked with the day and the vehicle.
-        public static CommissaryStockLine ReturnFromVehicle(CommissaryState state, string commissaryId, string itemName, int units,
-            long unitPriceCents, int day, string vehicleId)
+        // A batch whose cost the commissary's tax label carries: a phone order's delivery, or a returned batch whose units
+        // came from one. Logistics stock and returned stock of other origins don't.
+        public static bool Deducted(CommissaryStockLine line) =>
+            line != null && !CommissaryLogistics.FromLogistics(line) && (!FromVehicle(line) || Flag(line, OrderedKey));
+
+        // Units of a taken batch that went onto a vehicle: a deducted batch's units join the fleet's pool of ordered units
+        // out on vehicles (CommissaryState.OrderedOnVehicles), so giving them back keeps their origin. Cargo merges
+        // stacks, so the origin is pooled per item rather than followed unit by unit.
+        public static void TookOnVehicle(CommissaryState state, CommissaryStockLine line, int units)
+        {
+            Check(state);
+            if (line == null) throw new ArgumentNullException(nameof(line));
+            if (units <= 0 || !Deducted(line)) return;
+            state.OrderedOnVehicles.TryGetValue(line.ItemName, out var before);
+            state.OrderedOnVehicles[line.ItemName] = checked(before + units);
+        }
+
+        // Units a vehicle gave back at the bay, at what the vehicle paid for them (its cargo's price per unit), marked
+        // with the day and the vehicle, last in the commissary's FIFO order. As many as the fleet's pool of ordered units
+        // of the item allows go into a batch marked ordered; the pool is first cut to `fleetOnBoard`, the units of the
+        // item the food vehicles hold before this return, since sold units leave it without notice. The rest is a batch of
+        // other origin (a wholesaler, say). `loadedDay`: the oldest day the food was loaded, kept for its age.
+        public static IReadOnlyList<CommissaryStockLine> ReturnFromVehicle(CommissaryState state, string commissaryId, string itemName, int units,
+            long unitPriceCents, int day, string vehicleId, int fleetOnBoard, int? loadedDay = null)
         {
             Check(state); Name(commissaryId, nameof(commissaryId)); Name(itemName, nameof(itemName)); Name(vehicleId, nameof(vehicleId)); Time(day, 0);
             if (units <= 0) throw new ArgumentOutOfRangeException(nameof(units));
             if (unitPriceCents < 0) throw new ArgumentOutOfRangeException(nameof(unitPriceCents));
             _ = checked(units * unitPriceCents);
-            var line = new CommissaryStockLine
+            state.OrderedOnVehicles.TryGetValue(itemName, out var pool);
+            pool = Math.Min(pool, Math.Max(0, fleetOnBoard));
+            var ordered = Math.Min(units, pool);
+            if (pool - ordered > 0) state.OrderedOnVehicles[itemName] = pool - ordered;
+            else state.OrderedOnVehicles.Remove(itemName);
+            var lines = new List<CommissaryStockLine>();
+            foreach (var (count, isOrdered) in new[] { (ordered, true), (units - ordered, false) })
             {
-                ItemName = itemName, Units = units, UnitPriceCents = unitPriceCents, BatchId = CommissaryValidation.NextBatch(state),
-                OrderMetadata = new Dictionary<string, Newtonsoft.Json.Linq.JToken>(StringComparer.Ordinal)
+                if (count <= 0) continue;
+                var metadata = new Dictionary<string, Newtonsoft.Json.Linq.JToken>(StringComparer.Ordinal)
                 {
                     [CommissaryLogistics.SourceKey] = ReturnedSourceValue,
                     ["day"] = day,
                     ["vehicle"] = vehicleId
-                }
-            };
-            Stock(state, commissaryId).Add(line);
-            return line;
+                };
+                if (isOrdered) metadata[OrderedKey] = true;
+                if (loadedDay is { } loaded && loaded >= 1) metadata[LoadedDayKey] = loaded;
+                var line = new CommissaryStockLine
+                {
+                    ItemName = itemName, Units = count, UnitPriceCents = unitPriceCents, BatchId = CommissaryValidation.NextBatch(state),
+                    OrderMetadata = metadata
+                };
+                Stock(state, commissaryId).Add(line);
+                lines.Add(line);
+            }
+            return lines;
         }
 
         public static bool FromVehicle(CommissaryStockLine line) =>
             line?.OrderMetadata != null && line.OrderMetadata.TryGetValue(CommissaryLogistics.SourceKey, out var source) &&
             source.Type == Newtonsoft.Json.Linq.JTokenType.String && (string?)source == ReturnedSourceValue;
 
-        // The goods value of stock vehicles gave back, still in the commissaries. It may have come from a wholesaler and
-        // was never booked under the commissary's tax label, so the uninstall refund doesn't take it off that deduction.
+        // The oldest day a returned batch's food was loaded on a vehicle, or null (never on one, or not recorded).
+        public static int? LoadedDay(CommissaryStockLine line) =>
+            line?.OrderMetadata != null && line.OrderMetadata.TryGetValue(LoadedDayKey, out var day) &&
+            day.Type == Newtonsoft.Json.Linq.JTokenType.Integer && (int)day >= 1 ? (int)day : (int?)null;
+
+        private static bool Flag(CommissaryStockLine line, string key) =>
+            line.OrderMetadata != null && line.OrderMetadata.TryGetValue(key, out var value) &&
+            value.Type == Newtonsoft.Json.Linq.JTokenType.Boolean && (bool)value;
+
+        // The goods value of returned stock not from commissary orders, still in the commissaries. It never went under the
+        // commissary's tax label, so the uninstall refund doesn't take it off that deduction; returned ordered stock does.
         public static long ReturnedGoodsCents(CommissaryState state)
         {
             Check(state);
             long cents = 0;
             foreach (var line in state.Stock.Values.SelectMany(l => l))
-                if (FromVehicle(line)) cents = checked(cents + checked(line.Units * line.UnitPriceCents));
+                if (FromVehicle(line) && !Deducted(line)) cents = checked(cents + checked(line.Units * line.UnitPriceCents));
             return cents;
         }
 
@@ -309,6 +357,9 @@ namespace FoodTrucks.Core.Commissary
         // of the commissary where it rents its space, really in it (not only excused because that commissary has no
         // bay), not in transit. Each night the check covers gives the service day that just ended, the evening before
         // the check's day. Call before NightCheck, which moves the checked-through day on; nothing while the check waits.
+        // A vehicle with a space whose street side can't be read yet, and which isn't fined anyway (the player inside,
+        // say, so the check doesn't wait for it), keeps those days pending in the save (CommissaryState.PendingCleaning)
+        // until its side is known: ResolvePendingCleaning (review round 1 of the UI flow, Astra).
         public static IReadOnlyList<(string VehicleId, int ServiceDay)> CleanedOvernight(CommissaryState state, CommissaryRules rules,
             int nowDay, int nowMinute, IEnumerable<CommissaryVehicle> vehicles)
         {
@@ -321,11 +372,30 @@ namespace FoodTrucks.Core.Commissary
             var first = (long)state.NightCheckedThroughDay.Value + 1;
             foreach (var vehicle in fleet)
             {
-                if (!vehicle.AtOwnCommissaryBay || vehicle.BayGrace || vehicle.InTransit || !state.Spaces.Any(s => s.VehicleId == vehicle.VehicleId)) continue;
+                if (vehicle.BayGrace || vehicle.InTransit || !state.Spaces.Any(s => s.VehicleId == vehicle.VehicleId)) continue;
+                if (!vehicle.AtOwnCommissaryBay && !vehicle.BaySideUnknown) continue;
                 for (var day = first; day <= latest; day++)
-                    if (day - 1 >= 1) cleaned.Add((vehicle.VehicleId, (int)(day - 1)));
+                {
+                    if (day - 1 < 1) continue;
+                    if (vehicle.AtOwnCommissaryBay) cleaned.Add((vehicle.VehicleId, (int)(day - 1)));
+                    else
+                    {
+                        if (!state.PendingCleaning.TryGetValue(vehicle.VehicleId, out var days)) state.PendingCleaning[vehicle.VehicleId] = days = new List<int>();
+                        if (!days.Contains((int)(day - 1))) days.Add((int)(day - 1));
+                    }
+                }
             }
             return cleaned;
+        }
+
+        // A vehicle's overnight cleaning that waited for its street side, now decided: in its own bay, the waiting service
+        // days are cleaned; otherwise (out of the bay, gone, no space any more) they are dropped. Removed either way.
+        public static IReadOnlyList<int> ResolvePendingCleaning(CommissaryState state, string vehicleId, bool inOwnBay)
+        {
+            Check(state); Name(vehicleId, nameof(vehicleId));
+            if (!state.PendingCleaning.TryGetValue(vehicleId, out var days)) return Array.Empty<int>();
+            state.PendingCleaning.Remove(vehicleId);
+            return inOwnBay ? days.Where(d => d >= 1).Distinct().OrderBy(d => d).ToList() : (IReadOnlyList<int>)Array.Empty<int>();
         }
 
         // The vehicles the night check can't decide yet: one that would be fined unless it is in its own bay, has a space,
@@ -353,6 +423,8 @@ namespace FoodTrucks.Core.Commissary
             state.StandingOrders.Clear();
             state.WeekBoxes.Clear();
             state.FeesPaid.Clear();
+            state.OrderedOnVehicles.Clear();
+            state.PendingCleaning.Clear();
             state.Spaces.Clear();
             state.ReleasedRentPaidThroughDay.Clear();
             return refund;

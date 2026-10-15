@@ -34,7 +34,7 @@ public class StockTransferTests
 
         Assert.Equal(new[]
         {
-            (TransferKind.Take, Burger), (TransferKind.Take, HotDog), (TransferKind.Take, Grill),
+            (TransferKind.Take, Burger), (TransferKind.Take, "ba:itemname_chair"), (TransferKind.Take, HotDog), (TransferKind.Take, Grill),
             (TransferKind.Return, HotDog), (TransferKind.Return, HotDogGrill)
         }, choices.Select(c => (c.Kind, c.Item)));
         var hotDog = choices.Single(c => c.Kind == TransferKind.Take && c.Item == HotDog);
@@ -108,13 +108,14 @@ public class StockTransferTests
     }
 
     [Fact]
-    public void FoodAlreadyOverItsRoomIsNotSentBackOnThePiecesAccount()
+    public void TheLastPieceLeavingTakesAllItsFoodEvenOverItsRoom()
     {
-        // An old save: 100 hot dogs with one grill on a cart (room 40). Taking the grill out sends back the 40 it held
-        // within its room; the 60 over it stay, as they would have without the transfer. A food isn't a piece.
-        var cargo = new[] { L(HotDogGrill, 1), L(HotDog, 100) };
+        // An old save: 100 hot dogs with one grill on a cart (room 40). Taking the grill out leaves no room at all, so
+        // all 100 go back rather than 60 staying with nothing to hold them (review round 1 of the UI flow, Astra).
+        // Other pools keep what they hold, even over their room. A food isn't a piece.
+        var cargo = new[] { L(HotDogGrill, 1), L(HotDog, 100), L(Grill, 1), L(Burger, 90) };
 
-        Assert.Equal(D((HotDog, 40)), StockTransfer.FoodLeavingWith(Tables, "cart", cargo, HotDogGrill));
+        Assert.Equal(D((HotDog, 100)), StockTransfer.FoodLeavingWith(Tables, "cart", cargo, HotDogGrill));
         Assert.Empty(StockTransfer.FoodLeavingWith(Tables, "cart", cargo, HotDog));
     }
 }
