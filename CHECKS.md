@@ -1,3 +1,7 @@
+# Latest PC playtest feedback — 15 October 2026
+
+Peter's notes on commissary rental and ordering, delivery times, product labels, equipment artwork/scale, back-alley bays and their markings, selectable stock transfers, serving fast-forward, queues near obstacles and park pitch visibility are recorded in [the implementation plan](docs/implementation-plan.md#pc-playtest-feedback--15-october-2026). These are follow-up requirements and observations; no fix is claimed. Do not treat the historical checks below as acceptance of the reported behavior.
+
 # Street food UI feedback — 15 October 2026
 
 **Rework deferred to a separate session at Peter's request.** During the PC playtest of `9e2bf50`, Peter rejected the current UI: its use cases are unclear, it is much larger than other game UI, and its appearance does not match the game's existing controls. The primary use case is **see which vehicles need attention**. Define the overview and vehicle-detail workflows around that goal and match native BizMan typography, spacing, control sizes and styling in the rework session. The replacement layout is not yet decided.

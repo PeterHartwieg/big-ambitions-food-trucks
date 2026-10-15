@@ -10,6 +10,24 @@ Turns [design.md](design.md) into ordered work. Written 7 October 2026. The stru
 
 **Status, 9 October 2026:** Milestones 3 to 7 and both rounds of playtest fixes are built and merged into `main` (0.9.2). Milestone 8 is under way: 0.9.3 shows fitted equipment in the truck, and 0.9.4 adds the commissary and the new foods; both are merged into `main` and 0.9.4 is installed for the next session (10 October 2026). Only 0.9.0 has been played; the rest waits for that session (`CHECKS.md`). Workshop packaging and release wait until the mod is finished and polished (Peter). Milestone 0 is done and played (README evidence table; session report in `evidence/milestone-0-session-1.md`). Milestone 1 was played on 8 October (README; session report in `evidence/milestone-1-session-1.md`). Selling, saves, the truck fixes and the uninstall step work. Carried into Milestone 2: the cart's grip (move the handle to the vanilla grip height and reach), a unit limit for the cart's stock, whether street food belongs in the game's day summary, the drive-by question (a workstation at the window?), and the unchecked items: hover outline, delivery refusal on a save with a warehouse, and the forced tax payment without the mod. Remaining debug keys are listed in the README; gate or remove them before the Workshop release.
 
+## PC playtest feedback — 15 October 2026
+
+Recorded from Peter's playtest of installed build `9e2bf50`, using the separate FT PC playtest save. These are observed issues and requested follow-up changes, **not implemented or verified fixes**. They supersede conflicting earlier interaction decisions. Peter requested notes only; the UI rework is deferred to another session.
+
+1. **Street food overview:** the primary use case is **see which vehicles need attention**. The current UI's purpose is unclear, its elements are much larger than the game's other UI, and the styling does not match native BizMan. Define the workflows and use native scale/style in the rework; no replacement layout is agreed yet.
+2. **Commissary rental by phone:** rent a space by calling the commissary, rather than through a vehicle-menu option.
+3. **Selectable delivery time:** let the player choose the delivery time for an order.
+4. **Short product labels:** product text is unnecessarily long. Show box quantities and purchase limits separately through a visual presentation instead of embedding them in product names. The exact presentation is still to be designed.
+5. **Order button behavior:** clicking **Order** should place the order, as in the base game; remove the extra **Confirm order** step. Reconcile one-off/repeating-order choices with this flow during the rework.
+6. **Distinct grill/fryer artwork:** Industrial Grill and Industrial Fryer currently appear to use the same artwork. Peter believes the base game already has a suitable Industrial Grill asset; verify that candidate before choosing an asset.
+7. **Countertop equipment scale:** some small equipment models look like miniaturized base-game machines rather than plausible countertop appliances for a cart or truck. Review their physical proportions and suitability for counter placement.
+8. **Commissary location preference:** Peter particularly likes the Lower Manhattan commissary space. Seek similar back-alley parking spaces in the other districts.
+9. **Loading-zone alignment and size:** the Lower Manhattan loading-zone outline is not aligned with the existing ground parking lines. Align the marking to those lines and provide **two to three parking spaces per commissary**.
+10. **Selectable, bidirectional stock transfer:** the current **Restock** interaction is unclear and does not let Peter choose which items to take, including equipment such as a griddle, or return items to the commissary. Provide item selection and transfers in both directions.
+11. **Fast-forward while serving:** offer a fast-forward option while the player works at a truck's serving hatch or a cart, like working at a store cash register.
+12. **Queue placement near obstacles:** with a tree and bench close to the serving window, the queue formed roughly two metres away from the window and looked disconnected from it. Revisit the relationship between the serving point, first customer and obstacle avoidance; capture/reproduce the reported arrangement before calling it fixed.
+13. **Park pitch discoverability:** Peter could not see how the park pitches are marked. Verify what the current map/world presentation actually shows and make the pitches identifiable; whether markers are absent or merely unclear is not yet established.
+
 ## Ground rules
 
 - **Version 1 keeps the full scope** Peter chose, built in the milestone order below. If a feature fights back, it moves to 1.1 following the [cut list](#cut-list). No milestone waits on another track's polish.
