@@ -4,6 +4,7 @@ import runpy
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 TOOLS = Path(__file__).resolve().parents[1]
@@ -53,6 +54,24 @@ class ReleasePackageTests(unittest.TestCase):
         self.rehash()
         (self.source / 'extra.txt').write_text('extra')
         with self.assertRaisesRegex(ValueError, 'Unlisted'): self.package()
+        self.assertFalse((self.root / 'candidate.zip').exists())
+
+    def test_coherent_source_and_manifest_change_at_final_verification_refused(self):
+        real_verify = PACKAGE['verify']
+        calls = 0
+
+        def verify_with_rebuild(source, manifest):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                (self.source / 'FoodTrucks.dll').write_bytes(b'rebuilt runtime')
+                self.rehash()
+            return real_verify(source, manifest)
+
+        with patch.dict(PACKAGE['package'].__globals__, verify=verify_with_rebuild):
+            with self.assertRaisesRegex(ValueError, 'Package changed'):
+                self.package()
+        self.assertEqual(calls, 2)
         self.assertFalse((self.root / 'candidate.zip').exists())
 
     def test_manifest_cannot_authorize_game_dlls_sources_or_saves(self):
