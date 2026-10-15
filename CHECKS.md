@@ -14,7 +14,7 @@ Branch `ui-flow`. The vehicle's item panel now does loading and unloading only (
 
 | # | Do | Look for |
 |---|---|---|
-| U1 | Call a commissary, "Spaces and standing orders", "Spaces", pick "Truck 2: rent a space here" | The phone gets out of the way and the vehicle list shows and takes clicks; rent is charged; the commissary texts it; spaces right after a reload. Hang up or close the list before picking: nothing changes |
+| U1 | Call a commissary, "Spaces and standing orders", "Spaces", pick "Truck 2: rent a space here" | The commissary says "Which vehicle?…", the call ends and the phone closes, the vehicle list shows and takes clicks; rent is charged; the phone opens again on the conversation with the commissary's text; spaces right after a reload. Esc on the list: nothing changes |
 | U2 | Call a commissary where you have no space | It opens on Spaces (and Standing orders, only if any); the first line gives the cart's and truck's rent |
 | U3 | Move a space from another commissary, then give one up | "move its space here from X", "give up its space here"; texts in the conversation |
 | U4 | Drive or push a vehicle, open its item panel, on the street and in a bay | No Open here, Prices, Hires, Add stop here or Clean; in a bay only "Commissary stock", right after Park |
