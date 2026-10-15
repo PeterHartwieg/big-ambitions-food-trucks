@@ -1,4 +1,10 @@
-# Dedicated Street food page (pending in game)
+# Street food UI feedback — 15 October 2026
+
+**Rework deferred to a separate session at Peter's request.** During the PC playtest of `9e2bf50`, Peter rejected the current UI: its use cases are unclear, it is much larger than other game UI, and its appearance does not match the game's existing controls. The primary use case is **see which vehicles need attention**. Define the overview and vehicle-detail workflows around that goal and match native BizMan typography, spacing, control sizes and styling in the rework session. The replacement layout is not yet decided.
+
+The current UI is **not accepted for release**. The detailed interaction checks below remain reference material for the rework; passing callbacks or rendering checks does not resolve this feedback.
+
+# Dedicated Street food page (awaiting rework)
 
 The Street food line now opens a dedicated page made from basic UI pieces, with its own scrolling fleet cards. It no longer copies the warehouse section. The existing crew, route and partner detail page shares its content area.
 
