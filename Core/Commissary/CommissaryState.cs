@@ -39,6 +39,9 @@ namespace FoodTrucks.Core.Commissary
         // Units of commissary-ordered stock (deducted under the commissary's tax label) out on the fleet's vehicles, per
         // item, so a return keeps that origin (Commissaries.TookOnVehicle, ReturnFromVehicle). Additive.
         public Dictionary<string, int> OrderedOnVehicles { get; set; } = new Dictionary<string, int>(StringComparer.Ordinal);
+        // Their deducted cost in cents, per item, beside the units: taken out at the pool's average cost (the game merges
+        // stacks at an averaged price, so the cargo's price isn't it; review round 3 of the UI flow). Additive.
+        public Dictionary<string, long> OrderedOnVehiclesCents { get; set; } = new Dictionary<string, long>(StringComparer.Ordinal);
         // Overnight cleaning waiting for a vehicle's street side to be read, by vehicle: the service days
         // (Commissaries.CleanedOvernight, ResolvePendingCleaning). Additive.
         public Dictionary<string, List<int>> PendingCleaning { get; set; } = new Dictionary<string, List<int>>(StringComparer.Ordinal);
@@ -387,6 +390,9 @@ namespace FoodTrucks.Core.Commissary
             state.OrderedOnVehicles ??= new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var item in state.OrderedOnVehicles.Keys.ToList())
                 if (string.IsNullOrWhiteSpace(item) || state.OrderedOnVehicles[item] <= 0) state.OrderedOnVehicles.Remove(item);
+            state.OrderedOnVehiclesCents ??= new Dictionary<string, long>(StringComparer.Ordinal);
+            foreach (var item in state.OrderedOnVehiclesCents.Keys.ToList())
+                if (!state.OrderedOnVehicles.ContainsKey(item ?? "") || state.OrderedOnVehiclesCents[item!] < 0) state.OrderedOnVehiclesCents.Remove(item!);
             state.PendingCleaning ??= new Dictionary<string, List<int>>(StringComparer.Ordinal);
             foreach (var vehicle in state.PendingCleaning.Keys.ToList())
             {
