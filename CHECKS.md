@@ -4,9 +4,9 @@ Peter's notes on commissary rental and ordering, delivery times, product labels,
 
 # Street food UI feedback — 15 October 2026
 
-**Rework deferred to a separate session at Peter's request.** During the PC playtest of `9e2bf50`, Peter rejected the current UI: its use cases are unclear, it is much larger than other game UI, and its appearance does not match the game's existing controls. The primary use case is **see which vehicles need attention**. Define the overview and vehicle-detail workflows around that goal and match native BizMan typography, spacing, control sizes and styling in the rework session. The replacement layout is not yet decided.
+During the PC playtest of `9e2bf50` Peter rejected the first Street food UI: its use cases were unclear, it was much larger than the rest of the game's UI, and it didn't look like the game's controls. He then reviewed a mockup (`build/ui-mockup/` in the main checkout) and decided: no "needs attention" list; warnings are game to-dos, and the overview shows "N alerts" like the game's business table; keep the game's 7-day average daily income column; flag low stock the game's way.
 
-The current UI is **not accepted for release**. The detailed interaction checks below remain reference material for the rework; passing callbacks or rendering checks does not resolve this feedback.
+**The rework is built (branch `ui-page`), pending Peter's look.** The page is now made of copies of the game's own BizMan parts, so its fonts, sizes and colours are the game's. The rows below replace the old page's checks. The alert counts come from the warnings track (`VehicleTodos`); on `ui-page` alone they read 0. The UI isn't accepted for release until Peter has seen it.
 
 # UI flow (next build)
 
@@ -27,24 +27,24 @@ Branch `ui-flow`. The vehicle's item panel now does loading and unloading only (
 | U11 | Click a vehicle in its own commissary bay, then one elsewhere (and one in another commissary's bay) | Clean only in its own bay; 20-minute skip; "clean for today" |
 | U12 | Leave a vehicle in its own bay overnight and another out | One `Overnight cleaning: … cleaned for day N` line for the one in its bay; none for the other |
 | U13 | Let a crew close at the end of a stop; on another day, Close a crew's open vehicle on foot at a stop | No cleaning line on the crew's close; after your Close the route doesn't reopen it on the next tick |
-| U14 | BizMan, Street food, a vehicle's page, Prices: Change a food, type a price; then Change again and leave it empty | The phone closes for the prompt and comes back on the page; the row shows the price and set or automatic, and the most customers accept |
+| U14 | BizMan, Street food, a vehicle's page, Prices: click a food, type a price; then click it again and leave it empty | The phone closes for the prompt and comes back on the page; the row shows the price, "your price" or the automatic source, and "up to" the most customers accept |
 | U15 | Vehicle page, "Add the spot where it stands" (parked legally; then while driving it) | Time pickers, then the stop on the page; while driving, "Park the … first"; an empty route's hint names this button |
 | U16 | Bridge: `vehicle restock`, `vehicle transfer` and `vehicle rent_bay` in a bay; `vehicle open` on foot | Each returns done with `why` null |
 
-# Dedicated Street food page (awaiting rework)
+# Dedicated Street food page (rework, next build)
 
-The Street food line now opens a dedicated page made from basic UI pieces, with its own scrolling fleet cards. It no longer copies the warehouse section. The existing crew, route and partner detail page shares its content area.
+Branch `ui-page`. The Street food line opens a page built from copies of the game's BizMan parts (plan: "Street food page and vehicle warnings"). The overview is a copy of the business table, one row per vehicle. A vehicle's page fills the list's three columns with copies of the warehouse box. Judge size and look against the game's own business list and warehouse box at the same resolution. Use a throwaway FT save with a cart, a truck, a rented warehouse and a commissary space (`FT bridge 2`). Start with B7: if the log says the page wasn't built, nothing else here can be checked.
 
 | # | Do | Look for |
 |---|---|---|
-| B1 | Open BizMan with a rented warehouse and food vehicles; click Street food | Dedicated Street food page, one card per vehicle, no warehouse cards or controls; vehicle names, whereabouts, sales, profit, grade, crew, route and stock appear |
-| B2 | Resize the window; scroll a fleet longer than the viewport | Labels wrap within cards; wheel and scrollbar reach every card; no horizontal clipping |
-| B3 | Click a vehicle name; edit crew, days, stops and partner; drag a stop | Existing vehicle details open and scroll; changes persist after reopening and saving |
-| B4 | Back to Street food, then Back to BizMan | Fleet cards return first, then the original business, warehouse and HQ lists return with their buttons working |
-| B5 | Leave BizMan from the fleet and vehicle pages; reopen; reload a save | Normal BizMan lists return; Street food opens afresh without stale hidden cards |
-| B6 | Open Hires from a vehicle panel, also with no rented warehouse | BizMan opens that vehicle's details; its Back button opens the dedicated fleet page |
-| B8 | Open vehicle details at 1280×720, choose a crew member, days and partner; inspect a route with stops | Left-aligned readable labels and compact selection rows; no unused vehicle field or VEHICLE/DRIVER captions; dropdown choices and stop dragging still work |
-| B7 | Log after opening | `BizMan: dedicated Street food page built with its own cards and scroll view.`; no warehouse-section cloning or new errors |
+| B7 | Open BizMan, click Street food, then a vehicle; read the log | `BizMan: Street food page built from the game's parts: copied …; nothing missing.` and `BizMan: vehicle page parts copied: …`. Copy both lines whatever they say. Any `missing …` names a game part that wasn't where 1.0 had it; the page falls back without it (no Back button, or two columns instead of three) or isn't offered at all |
+| B1 | With a rented warehouse and food vehicles, click Street food in the business list | The business list's own table, same row height, font and hover outline, titled Street food, one row per vehicle: its Econoview name, Food cart or Food truck, average daily income (red below 0, "-$494" style), alerts ("N alerts" in red, else a white 0), health grade (A, B, C in red, "-" before the first inspection), status (Open at …, Closed, at …, On the way to stop N, With the private driver) and the Set destination button. No warehouse or HQ boxes beside it. The Street food line itself shows the fleet's alert total |
+| B2 | Resize the window; on a fleet longer than the table, scroll; on a vehicle page, scroll each column | Rows and boxes keep the game's proportions; the wheel and scrollbar reach every row and box; nothing clipped sideways. Long hints in a box wrap and push what follows down rather than overlap it |
+| B3 | Click a vehicle row; choose crew, days and partner; add a stop on the map and with "Add the spot where it stands"; drag a stop; change its times; remove one | First column: a summary box (type, status with Set destination, alerts, avg daily income, health grade), then Crew and route. Second: Prices (a click on a food asks for its price), Stock. Third: Commissary space, Partner deal. Changes stick after Back and reopening, and after a save and load |
+| B4 | Back to Street food (the button at the right of the title), then Back to BizMan | The overview comes back first, then the game's business, warehouse and HQ lists with their buttons working |
+| B5 | Leave BizMan from the overview and from a vehicle page; reopen; reload a save | The normal BizMan lists return; Street food opens afresh on the overview with no stale rows |
+| B6 | Stock box on a cart with a grill at 8 of 40 hot dogs and an empty soda; Commissary space box with and without a space | Each fitted piece as "Hot Dog Grill: 8/40", each food "8/40" with "Low stock" in light red, "0/…" with "Empty" in red. With a space: commissary, rent, since which day and "Call commissary", which opens that commissary's conversation in Contacts. Without one: the nightly fine in red and "Call <commissary>" for each commissary already visited |
+| B8 | A vehicle page at 1280×720 and at 1920×1080 | Boxes, rows, dropdowns and buttons the size of the warehouse box's own; dropdown choices open and pick; no oversized text left from the old page |
 
 # Developer actions release gate (pending live check)
 
