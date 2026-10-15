@@ -7,13 +7,12 @@ using FoodTrucks.Core.Saves;
 using Helpers;
 using Localizor;
 using Streets;
-using UI.InteriorDesigner;
 using UnityEngine;
 
 namespace FoodTrucks
 {
     // Adding and changing a route's stops, shared by the BizMan vehicle page ("Add the spot where it stands", its stop
-    // rows) and the map pick. Core's RouteEditor decides; this asks the times, writes the save and tells the crew.
+    // rows) and the map pick. Core's RouteEditor decides; this picks default times, writes the save and tells the crew.
     internal static class RouteStops
     {
         // Opening hours are picked in half hours.
@@ -21,66 +20,43 @@ namespace FoodTrucks
 
         internal static int LatestClose => DemandData.Rules?.Fleet.LatestCloseMinute ?? 27 * 60;
 
-        // Asks when the crew opens and closes at a new stop, with the game's list picker, offering only times that fit
-        // between the route's other stops; then adds it. `added` runs after a stop went in, `cancelled` when the player
-        // closes either picker without choosing.
-        public static void AskTimesAndAdd(string vehicleId, Vector3 position, float heading, Action? added = null, Action? cancelled = null)
-        {
-            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
-            var rules = DemandData.Rules;
-            if (rules != null && vehicle?.Schedule != null && vehicle.Schedule.Stops.Count >= rules.Fleet.MaxStops)
-            {
-                CartSelling.Notify("foodtrucks:notification_route_full", ("max", rules.Fleet.MaxStops.ToString()));
-                cancelled?.Invoke();
-                return;
-            }
-            var opens = RouteEditor.OpenTimes(vehicle?.Schedule, Step, LatestClose);
-            if (opens.Count == 0)
-            {
-                CartSelling.Notify("foodtrucks:notification_route_no_time");
-                cancelled?.Invoke();
-                return;
-            }
-            var times = opens.ToDictionary(StaffDialog.Clock, m => m);
-            var answered = false;
-            DropdownSelector.Show(times.Keys.ToList(), Guard(chosen =>
-            {
-                answered = true;
-                if (times.TryGetValue(chosen, out var open)) HireRoutes.Later(() => AskClose(vehicleId, position, heading, open, added, cancelled));
-                else cancelled?.Invoke();
-            }), "foodtrucks:hires_open_header", "foodtrucks:hires_open_body");
-            if (cancelled != null) WhenClosedUnanswered(() => answered, cancelled);
-        }
+        // A new stop's default hours: from 11:00 (or the first free time after it, else the first free time of the day)
+        // for up to three hours, within the gaps the route's other stops leave. The stop goes in at once and its times are
+        // changed with the dropdowns on its row of the vehicle page (Peter, 15 October 2026: the list pickers that asked
+        // for the times took the player out of the page).
+        internal const int DefaultOpen = 11 * 60;
+        internal const int DefaultLength = 3 * 60;
 
-        private static void AskClose(string vehicleId, Vector3 position, float heading, int open, Action? added, Action? cancelled)
+        // Adds a stop at the default hours. `done` runs after either outcome, so the caller goes back to the page.
+        public static void AddWithDefaultTimes(string vehicleId, Vector3 position, float heading, Action? done = null)
         {
-            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
-            var closes = RouteEditor.CloseTimes(vehicle?.Schedule, open, Step, LatestClose);
-            var times = closes.ToDictionary(StaffDialog.Clock, m => m);
-            var answered = false;
-            DropdownSelector.Show(times.Keys.ToList(), Guard(chosen =>
+            try
             {
-                answered = true;
-                if (times.TryGetValue(chosen, out var close) && Add(vehicleId, position, heading, open, close)) added?.Invoke();
-                else cancelled?.Invoke();
-            }), "foodtrucks:hires_close_header", "foodtrucks:hires_close_body");
-            if (cancelled != null) WhenClosedUnanswered(() => answered, cancelled);
-        }
-
-        // The game's list picker has no cancel callback (DropdownSelectorUI.OnCancel only drops the confirm): checked each
-        // frame, a picker that closed without an answer runs `cancelled`.
-        private static void WhenClosedUnanswered(Func<bool> answered, Action cancelled)
-        {
-            HireRoutes.Later(() =>
-            {
-                if (answered()) return;
-                if (DropdownSelector.isOpen)
+                var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
+                var rules = DemandData.Rules;
+                if (rules != null && vehicle?.Schedule != null && vehicle.Schedule.Stops.Count >= rules.Fleet.MaxStops)
                 {
-                    WhenClosedUnanswered(answered, cancelled);
+                    CartSelling.Notify("foodtrucks:notification_route_full", ("max", rules.Fleet.MaxStops.ToString()));
                     return;
                 }
-                cancelled();
-            });
+                var opens = RouteEditor.OpenTimes(vehicle?.Schedule, Step, LatestClose);
+                if (opens.Count == 0)
+                {
+                    CartSelling.Notify("foodtrucks:notification_route_no_time");
+                    return;
+                }
+                var open = opens.Where(m => m >= DefaultOpen).DefaultIfEmpty(opens[0]).First();
+                var closes = RouteEditor.CloseTimes(vehicle?.Schedule, open, Step, LatestClose);
+                if (closes.Count == 0)
+                {
+                    CartSelling.Notify("foodtrucks:notification_route_no_time");
+                    return;
+                }
+                var close = closes.Where(m => m <= open + DefaultLength).DefaultIfEmpty(closes[0]).Max();
+                Add(vehicleId, position, heading, open, close);
+            }
+            catch (Exception ex) { Log.Error("Route stop: " + ex); }
+            finally { done?.Invoke(); }
         }
 
         public static bool Add(string vehicleId, Vector3 position, float heading, int open, int close)
@@ -171,12 +147,5 @@ namespace FoodTrucks
             problem == ScheduleProblem.Overlap ? "foodtrucks:bizman_page_route_invalid_overlap"
             : problem == ScheduleProblem.BadTimes ? "foodtrucks:bizman_page_route_invalid_times"
             : "foodtrucks:bizman_page_route_invalid";
-
-        // The game's list picker calls back without a guard: nothing may throw out of a choice.
-        private static Action<string> Guard(Action<string> choice) => chosen =>
-        {
-            try { choice(chosen); }
-            catch (Exception ex) { Log.Error("Route: " + ex); }
-        };
     }
 }

@@ -5,7 +5,7 @@ using Localizor;
 
 namespace FoodTrucks
 {
-    // What the crew-and-route screens share (the BizMan vehicle page and fleet section, the route's time pickers): the
+    // What the crew-and-route screens share (the BizMan vehicle page and fleet section): the
     // day choices for a route, a stop's spot key and the clock text. The old list-picker dialog that held these went
     // with the vehicle panel's Hires button (15 October 2026).
     internal static class StaffDialog

@@ -734,10 +734,8 @@ namespace FoodTrucks
             var position = controller!.transform.position;
             var heading = controller.transform.eulerAngles.y;
             Log.Info($"Route: adding the spot where {kind} {id} stands, x {position.x:F1}, z {position.z:F1}, heading {heading:F0} (BizMan page).");
-            // The time pickers show outside the phone, as after a map pick; the page comes back either way.
-            InstanceBehavior<UIs>.Instance?.fullMenu?.Toggle(show: false);
-            void Reopen() => HireRoutes.Later(() => OpenFor(id));
-            HireRoutes.Later(() => RouteStops.AskTimesAndAdd(id, position, heading, Reopen, Reopen));
+            // Default hours; the stop's row has the time dropdowns, so the page stays open.
+            RouteStops.AddWithDefaultTimes(id, position, heading, RefreshLater);
         }
 
         private static void ChoosePartner(string id, string? venue)

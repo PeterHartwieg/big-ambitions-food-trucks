@@ -43,7 +43,7 @@ Branch `ui-flow`. The vehicle's item panel now does loading and unloading only (
 | U12 | Leave a vehicle in its own bay overnight and another out | One `Overnight cleaning: … cleaned for day N` line for the one in its bay; none for the other |
 | U13 | Let a crew close at the end of a stop; on another day, Close a crew's open vehicle on foot at a stop | No cleaning line on the crew's close; after your Close the route doesn't reopen it on the next tick |
 | U14 | BizMan, Street food, a vehicle's page, Prices: click a food, type a price; then click it again and leave it empty | The phone closes for the prompt and comes back on the page; the row shows the price, "your price" or the automatic source, and "up to" the most customers accept |
-| U15 | Vehicle page, "Add the spot where it stands" (parked legally; then while driving it) | Time pickers, then the stop on the page; while driving, "Park the … first"; an empty route's hint names this button |
+| U15 | Vehicle page, "Add the spot where it stands" (parked legally; then while driving it) | The stop appears on the page at once, 11:00 to 14:00 (or the first free hours), with its time dropdowns to change them; the same after "Add stop on the map" and picking a building; while driving, "Park the … first"; an empty route's hint names this button |
 | U16 | Bridge: `vehicle restock`, `vehicle transfer` and `vehicle rent_bay` in a bay; `vehicle open` on foot | Each returns done with `why` null |
 
 # Dedicated Street food page (rework, next build)

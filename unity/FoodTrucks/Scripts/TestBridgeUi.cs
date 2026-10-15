@@ -49,11 +49,13 @@ namespace FoodTrucks
 
         internal static JToken Run(JObject args)
         {
-            var op = TestBridgeCommands.Need(args, "op", "list, click or escape");
+            var op = TestBridgeCommands.Need(args, "op", "list, click, escape or tree");
             switch (op)
             {
                 case "list":
                     return List();
+                case "tree":
+                    return Tree(args);
                 case "click":
                     RequireFtCity(op);
                     return Click(args);
@@ -61,8 +63,56 @@ namespace FoodTrucks
                     RequireFtCity(op);
                     return Escape();
                 default:
-                    throw new BridgeError($"Unknown ui op '{op}': list, click or escape.");
+                    throw new BridgeError($"Unknown ui op '{op}': list, click, escape or tree.");
             }
+        }
+
+        // `tree`: reads only. The objects whose hierarchy path ends with `path` (inactive ones too), each with its children
+        // down to `depth`: name, active, size, components, and the colour of each Graphic and the alpha of a CanvasGroup.
+        // For comparing a copied game part with the game's own (15 October 2026: our WhiteBox copies showed no background).
+        private static JToken Tree(JObject args)
+        {
+            var path = TestBridgeCommands.Need(args, "path", "the end of an object's hierarchy path, e.g. \"Content/WhiteBox (Template)(Clone)\"");
+            var depth = Math.Max(0, Math.Min(8, args.Value<int?>("depth") ?? 3));
+            var limit = Math.Max(1, Math.Min(10, args.Value<int?>("max") ?? 3));
+            var found = new JArray();
+            foreach (var t in Resources.FindObjectsOfTypeAll<RectTransform>())
+            {
+                if (found.Count >= limit) break;
+                if (t == null || t.gameObject.scene.name == null) continue;
+                var full = FullPath(t);
+                if (!full.EndsWith(path, StringComparison.Ordinal)) continue;
+                found.Add(new JObject { ["path"] = full, ["node"] = Node(t, depth) });
+            }
+            return new JObject { ["found"] = found };
+        }
+
+        private static string FullPath(Transform t)
+        {
+            var parts = new List<string>();
+            for (var n = t; n != null; n = n.parent) parts.Add(n.name);
+            parts.Reverse();
+            return string.Join("/", parts);
+        }
+
+        private static JObject Node(Transform t, int depth)
+        {
+            var rect = t as RectTransform;
+            var node = new JObject
+            {
+                ["name"] = t.name,
+                ["active"] = t.gameObject.activeSelf,
+                ["size"] = rect == null ? null : $"{rect.rect.width:F0}x{rect.rect.height:F0}",
+                ["components"] = new JArray(t.GetComponents<Component>().Where(c => c != null && !(c is Transform)).Select(c => c.GetType().Name)),
+            };
+            foreach (var g in t.GetComponents<Graphic>())
+                node["graphic_" + g.GetType().Name] = $"enabled {g.enabled}, colour {ColorUtility.ToHtmlStringRGBA(g.color)}" +
+                                                       (g is Image image ? $", sprite {(image.sprite == null ? "none" : image.sprite.name)}, material {(image.material == null ? "none" : image.material.name)}" : "");
+            var group = t.GetComponent<CanvasGroup>();
+            if (group != null) node["canvas_group_alpha"] = group.alpha;
+            if (depth > 0 && t.childCount > 0)
+                node["children"] = new JArray(t.Cast<Transform>().Select(c => Node(c, depth - 1)));
+            return node;
         }
 
         internal const string NotFtCityText = "ui works only in a loaded FT city; use load from the main menu.";

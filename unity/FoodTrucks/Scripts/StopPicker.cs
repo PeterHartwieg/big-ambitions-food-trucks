@@ -203,9 +203,9 @@ namespace FoodTrucks
             }
             End("stop picked");
             InstanceBehavior<CityManager>.Instance?.cityMap?.Close();
-            // Back to the vehicle's BizMan page whether a stop went in or the times were cancelled.
+            // Back to the vehicle's BizMan page whether the stop went in or was refused.
             void Reopen() => HireRoutes.Later(() => BizManVehiclePage.OpenFor(id));
-            HireRoutes.Later(() => RouteStops.AskTimesAndAdd(id, position, heading, Reopen, Reopen));
+            HireRoutes.Later(() => RouteStops.AddWithDefaultTimes(id, position, heading, Reopen));
         }
 
         // ---- The spot ----

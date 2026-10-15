@@ -2288,7 +2288,7 @@ namespace FoodTrucks
         // ---- Spaces: the game's list picker, outside the phone ----
 
         // The list the call opened, while its choice may still act: its number and the commissary. The picker shows
-        // outside the phone, as the vehicle page's prompts do (BizManVehiclePage: the price prompt, the time pickers), so
+        // outside the phone, as the vehicle page's prompts do (BizManVehiclePage: the price prompt), so
         // the call ends and the phone closes for it (review round 1 of the UI flow, Opus); the choice is texted into the
         // conversation, which the phone opens on again. A later list, a new call to a commissary or the uninstall step
         // forget it (EndSpaces), and the picker's own close drops its callback, so a late click does nothing.

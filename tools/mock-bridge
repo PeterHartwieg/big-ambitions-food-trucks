@@ -1326,7 +1326,7 @@ class Mock:
             self.event(notice,'notice')
             return {'done':True,'notices':[notice],'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==identifier)}
         if cmd=='ui':
-            op=need(args,'op','list, click or escape')
+            op=need(args,'op','list, click, escape or tree')
             if op=='list':
                 self.last_ui=self.buttons()
                 texts=self.state['notices_recent'][-2:] + ([clean(t) for t in self.phone_texts[-20:]] if self.dialog in ('phone','order','confirm','items') else [])
@@ -1356,7 +1356,10 @@ class Mock:
                 closed='list picker' if self.dialog in ('commissary','items','opens','closes') else 'phone'
                 self.dialog='closed'; self.event(f'Test bridge: escape: {closed}.')
                 return {'closed':closed}
-            raise ValueError(f"Unknown ui op '{op}': list, click or escape.")
+            if op=='tree':
+                need(args,'path',"the end of an object's hierarchy path")
+                return {'found':[]}
+            raise ValueError(f"Unknown ui op '{op}': list, click, escape or tree.")
         if cmd=='shoot':
             self.require_city(cmd)
             name=need(args,'name',"the picture's file name, without .png")
