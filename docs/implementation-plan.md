@@ -46,6 +46,30 @@ The vehicle's item panel (pushing a cart, driving a truck) does loading and unlo
 
 The commissary call's first step keeps "Order stock" and gets a second choice "Spaces and standing orders", which leads to "Spaces" and "Standing orders". A commissary the player has no space at offers "Spaces" and "Standing orders" straight away. The game's list picker shows the vehicle list, as the order form does. The test bridge's `restock` and `rent_bay` keep working through the new entry points.
 
+## Street food page and vehicle warnings (Peter, 15 October 2026)
+
+Peter reviewed the mockup (`build/ui-mockup/`). No "needs attention" list: warnings work the way the game's own do. A business's alert count in BizMan is the number of its to-do tasks in the phone (`BuildingRegistration.Alerts` counts `TodoTasks` at its address), and a shelf at or under 25% of its capacity makes a "low stock" to-do, an empty one "empty stock" (`ItemHelper`, `TodoTaskType`). A food vehicle gets the same: real to-dos in the phone's to-do list, and the overview shows "N alerts" in the game's red alert style (`bizman_number_of_alerts`).
+
+**Warnings, one to-do each** (decided in Core, `VehicleWarnings`, from the save state and tables; the game side only shows them):
+
+| Warning | When | Done when |
+|---|---|---|
+| Low stock | A food on the vehicle's menu at or under 25% of what its fitted pieces hold for it (the game's rule) | Above 25%, or the food leaves the menu |
+| Empty stock | A menu food at 0 | Restocked, or off the menu |
+| Missing crew | A route with days and stops, and fewer crew than the vehicle takes (a truck with one of its two) | Crew complete, or the route cleared |
+| Route can't run | `HireRunner.RouteProblem` gives a problem | No problem |
+| No permit | The vehicle has no permit | Permit bought |
+| No commissary space | The vehicle has no space anywhere (the 04:00 fine) | A space rented |
+| Health grade C | The last inspection gave C | A better grade |
+
+The vendor licence running out (renewal window, or expired) is one fleet to-do pointing at the City. Lost money is not a warning: the overview's average daily income shows red below zero, as the game's does.
+
+**To-dos in the game.** Own `TodoTaskType` values (from 9201), with `itemInstanceId` holding the vehicle id and `itemName` the food. Patches give each its text, icon and destination (the vehicle's place on the map, as the fleet's Set destination does), keep the game's completion check from completing ours, and send a click to the vehicle's page. Core's list is reconciled with the to-dos once a game minute: missing ones created, cleared ones completed. The mod's to-dos never reach a save file: they are taken out just before the game writes a save and put back after, so a save opened without the mod has none; the uninstall step removes them too.
+
+**Overview** (the Street food line in BizMan): built from a copy of the game's business table (`BaTable (Businesses)`, `BusinessCellView`), one row per vehicle, at the game's own size and font: name, Cart or Truck, average daily income over 7 days (red below zero), alerts ("N alerts" in red, else 0), health grade, status (open where, closed where, on the way, with the driver), Set destination. A click opens the vehicle page. No fleet summary boxes beyond what the game's table has.
+
+**Vehicle page:** copies of the game's white boxes (`WhiteBox (Template)`), one per section: Crew and route (as now, plus "Add the spot where it stands"), Prices, Stock (read only, per piece, x of capacity), Commissary space (read only, "Call commissary" opens its conversation), Partner deal. The alert count at the top.
+
 ## Ground rules
 
 - **Version 1 keeps the full scope** Peter chose, built in the milestone order below. If a feature fights back, it moves to 1.1 following the [cut list](#cut-list). No milestone waits on another track's polish.
