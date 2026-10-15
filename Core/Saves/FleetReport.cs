@@ -78,6 +78,29 @@ namespace FoodTrucks.Core.Saves
             return money;
         }
 
+        // A vehicle's average daily income for the overview's "Avg Daily Income" column, the game's way
+        // (BuildingRegistration.GetAvgDailyIncome(7)): the profit of each of the last seven finished days the vehicle
+        // has a record for, averaged over those days only, so a new vehicle's first days aren't diluted by days it
+        // didn't exist. Today is left out because its wages are only booked at midnight. 0 with no finished day.
+        public static long AvgDailyProfitCents(SaveState? state, string vehicleId, int today)
+        {
+            if (state?.DailySales == null) return 0;
+            var days = new HashSet<int>();
+            long total = 0;
+            foreach (var entry in state.DailySales)
+            {
+                if (entry?.ByVehicle == null || entry.Day >= today || entry.Day < today - WeekDays) continue;
+                foreach (var day in entry.ByVehicle)
+                {
+                    if (day == null || !string.Equals(day.VehicleId, vehicleId, StringComparison.Ordinal)) continue;
+                    days.Add(entry.Day);
+                    total += Sum(day.SalesCents, day.CateringCents) - Sum(Sum(day.StockCents, day.WagesCents),
+                        Sum(Sum(day.ParkingCents, day.PermitCents), Sum(day.CommissaryRentCents, day.OvernightFineCents)));
+                }
+            }
+            return days.Count == 0 ? 0 : (long)Math.Round(total / (double)days.Count, MidpointRounding.AwayFromZero);
+        }
+
         // The whole business's profit over the last seven days, for its line in BizMan's list, on the same terms as
         // Econoview's Street food total: the day's sales and stock from its totals (which also hold whatever was
         // recorded before the per-vehicle breakdown began, even on a day that has both), less the itemised crew

@@ -1,6 +1,8 @@
 #nullable enable
 using System;
 using Entities;
+using Helpers;
+using UI;
 using UI.Smartphone.Apps.Contacts;
 
 namespace FoodTrucks
@@ -18,6 +20,15 @@ namespace FoodTrucks
 
         internal static bool IsOurs(string? id) =>
             id != null && (id == Catering.ContactId || id.StartsWith(Commissary.ContactPrefix, StringComparison.Ordinal));
+
+        // Opens the phone's Contacts app on one contact's conversation, as the commissary call does after Spaces: the app
+        // opens on the contact it last showed.
+        internal static void OpenConversation(Contact contact)
+        {
+            SaveGameManager.Current.PlayerDefaults.contactsLastName = contact.id;
+            SaveGameManager.Current.PlayerDefaults.contactsLastCategoryName = contact.category;
+            InstanceBehavior<UIs>.Instance.fullMenu.ShowApp(AppName.Contacts);
+        }
 
         // Postfix on ContactScrollerController.LoadContact: the card just added has no delete button.
         internal static void LoadContactPostfix(ContactScrollerController __instance, Contact contact)

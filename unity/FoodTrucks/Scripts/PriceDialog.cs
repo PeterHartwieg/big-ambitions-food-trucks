@@ -20,16 +20,23 @@ namespace FoodTrucks
     {
         internal readonly struct Line
         {
-            public Line(string item, string name, string text)
+            public Line(string item, string name, string text, string price, string source, string ceiling)
             {
                 Item = item;
                 Name = name;
                 Text = text;
+                Price = price;
+                Source = source;
+                Ceiling = ceiling;
             }
 
             public string Item { get; }
             public string Name { get; }
             public string Text { get; }
+            // The parts, for the vehicle page's price rows: "$6.50", "your price", "$8.00" (empty without a ceiling).
+            public string Price { get; }
+            public string Source { get; }
+            public string Ceiling { get; }
         }
 
         // The vehicle's menu as lines; empty when it has none (or isn't a food vehicle in this save).
@@ -51,7 +58,7 @@ namespace FoodTrucks
                 var text = ceiling > 0
                     ? string.Format(Text("foodtrucks:prices_option"), name, price, source, CartSelling.Money(ceiling))
                     : string.Format(Text("foodtrucks:prices_option_no_ceiling"), name, price, source);
-                lines.Add(new Line(item, name, text));
+                lines.Add(new Line(item, name, text, price, source, ceiling > 0 ? CartSelling.Money(ceiling) : ""));
             }
             return lines;
         }

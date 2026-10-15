@@ -136,3 +136,34 @@ public class FleetReportTests
         Assert.Equal(statement.Total[0], FleetReport.WeekProfitCents(state, 5));
     }
 }
+
+public class AvgDailyIncomeTests
+{
+    [Fact]
+    public void FinishedDaysWithARecordAreAveragedAndTodayIsLeftOut()
+    {
+        var state = new SaveState();
+        StreetSales.Record(state, "cart", 10, 500, 10);             // today: left out
+        StreetSales.Record(state, "cart", 9, 500, 4);               // 2,000
+        SalesLedger.RecordLine(state, 9, "cart", LedgerLine.Wages, 600);
+        StreetSales.Record(state, "cart", 5, 500, 2);               // 1,000
+        SalesLedger.RecordCost(state, 5, "cart", 400);
+        StreetSales.Record(state, "cart", 3, 500, 2);               // seven days before today: in the window
+        StreetSales.Record(state, "cart", 2, 500, 50);              // eight days before: outside
+        StreetSales.Record(state, "truck", 9, 900, 1);              // another vehicle
+
+        Assert.Equal((1_400 + 600 + 1_000) / 3, FleetReport.AvgDailyProfitCents(state, "cart", 10));
+    }
+
+    [Fact]
+    public void ALossAveragesNegativeAndNoFinishedDayIsZero()
+    {
+        var state = new SaveState();
+        SalesLedger.RecordLine(state, 4, "cart", LedgerLine.Wages, 1_000);
+        StreetSales.Record(state, "cart", 5, 500, 1);
+
+        Assert.Equal(-250, FleetReport.AvgDailyProfitCents(state, "cart", 6));
+        Assert.Equal(0, FleetReport.AvgDailyProfitCents(state, "cart", 4));
+        Assert.Equal(0, FleetReport.AvgDailyProfitCents(null, "cart", 4));
+    }
+}
