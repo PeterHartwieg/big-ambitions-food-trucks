@@ -249,6 +249,17 @@ namespace FoodTrucks.Core.Commissary
             state.OrderedOnVehicles[line.ItemName] = checked(before + units);
         }
 
+        // Units of an item that left a vehicle other than by a return (sold at the window or by a crew, served at a gig):
+        // ordered units count as leaving first, so the pool never keeps units the fleet no longer has (review round 2 of
+        // the UI flow, Astra and Sol). Paths the mod can't see are bounded by the cut in ReturnFromVehicle.
+        public static void LeftVehicle(CommissaryState state, string itemName, int units)
+        {
+            Check(state);
+            if (string.IsNullOrEmpty(itemName) || units <= 0 || !state.OrderedOnVehicles.TryGetValue(itemName, out var pool)) return;
+            if (pool > units) state.OrderedOnVehicles[itemName] = pool - units;
+            else state.OrderedOnVehicles.Remove(itemName);
+        }
+
         // Units a vehicle gave back at the bay, at what the vehicle paid for them (its cargo's price per unit), marked
         // with the day and the vehicle, last in the commissary's FIFO order. As many as the fleet's pool of ordered units
         // of the item allows go into a batch marked ordered; the pool is first cut to `fleetOnBoard`, the units of the

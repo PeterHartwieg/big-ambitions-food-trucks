@@ -571,6 +571,8 @@ namespace FoodTrucks
                     taken += n;
                     want -= n;
                     SoldCounts.Record(vehicle, day, item, n);
+                    // Served at the gig: the commissary-order pool goes first (tax origin of later returns).
+                    FoodTrucks.Core.Commissary.Commissaries.LeftVehicle(state.Commissary, item, n);
                     try
                     {
                         truck.ReduceFromCargo(entry, n);

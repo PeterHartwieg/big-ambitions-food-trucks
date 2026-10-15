@@ -1294,6 +1294,8 @@ namespace FoodTrucks
             StreetSales.Record(state, vehicle.VehicleId, day, cents, 1);
             if (!inPerson) CrewTakings.Accrue(state, vehicle.VehicleId, day, cents);
             SoldCounts.Record(vehicle, day, itemName, 1);
+            // The unit leaves the fleet: the commissary-order pool goes first (tax origin of later returns).
+            FoodTrucks.Core.Commissary.Commissaries.LeftVehicle(state.Commissary, itemName, 1);
             // Food on board for days counts against the health grade (design: Health grades).
             // Food ages by calendar day; a stale sale marks the working day of the minute it was sold.
             var soldAt = (long)Math.Floor(at ?? HireCrew.NowExact());
