@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Saves;
 
 namespace FoodTrucks.Core.Selling
 {
@@ -62,6 +64,22 @@ namespace FoodTrucks.Core.Selling
                     list.Add(new FoodStock(pool.EquipmentId, item, units, capacity, Level(units, capacity)));
                 }
             return list;
+        }
+
+        // The foods the vehicle actually stocks, for its warnings and its Stock box: a food that exists in the game now
+        // (`exists`, from the adapter; null: all do; a Bakery food without the Bakery mod doesn't) and that is on board
+        // now or in the vehicle's sales record (VehicleState.Sold, the last two days it sold on, kept until it sells
+        // again). So a food sold out stays flagged until it sells again elsewhere for two days, and a piece's other foods
+        // the player never carries (a coffee machine's tea) are left out.
+        public static IReadOnlyList<FoodStock> Stocked(DemandTables tables, StorageView view, VehicleState? vehicle, Func<string, bool>? exists = null)
+        {
+            var sold = new HashSet<string>(StringComparer.Ordinal);
+            if (vehicle?.Sold != null)
+                foreach (var day in vehicle.Sold)
+                    if (day?.Units != null)
+                        foreach (var pair in day.Units)
+                            if (pair.Value > 0) sold.Add(pair.Key);
+            return Of(tables, view).Where(f => (exists == null || exists(f.Item)) && (f.Units > 0 || sold.Contains(f.Item))).ToList();
         }
     }
 }

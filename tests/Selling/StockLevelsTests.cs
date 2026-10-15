@@ -49,4 +49,18 @@ public class StockLevelsTests
         var hotDog = StockLevels.Of(Tables, view).Single(s => s.Item == HotDog);
         Assert.Equal((0, 80, StockLevel.Empty), (hotDog.Units, hotDog.Capacity, hotDog.Level));
     }
+
+    [Fact]
+    public void StockedLeavesOutFoodsNeverCarriedAndFoodsMissingFromTheGame()
+    {
+        var view = Core.Selling.Storage.Of(Tables, "cart", new[] { L(Machine, 1), L(Coffee, 100) })!;
+        var vehicle = new FoodTrucks.Core.Saves.VehicleState();
+
+        Assert.Equal(new[] { Coffee }, StockLevels.Stocked(Tables, view, vehicle).Select(s => s.Item));
+
+        vehicle.Sold.Add(new FoodTrucks.Core.Saves.SoldDay { Day = 2, Units = { ["ba:itemname_cupoftea"] = 3, ["bakeryxx:itemname_latte"] = 2 } });
+        Assert.Equal(new[] { Coffee, "ba:itemname_cupoftea", "bakeryxx:itemname_latte" }, StockLevels.Stocked(Tables, view, vehicle).Select(s => s.Item));
+        Assert.Equal(new[] { Coffee, "ba:itemname_cupoftea" },
+            StockLevels.Stocked(Tables, view, vehicle, i => !i.StartsWith("bakeryxx:")).Select(s => s.Item));
+    }
 }

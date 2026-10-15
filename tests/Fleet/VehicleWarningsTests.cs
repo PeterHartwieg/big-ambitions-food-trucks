@@ -15,6 +15,10 @@ public class VehicleWarningsTests
 {
     private const string HotDog = "ba:itemname_hotdog";
     private const string HotDogGrill = "ba:itemname_hotdoggrill";
+    private const string Machine = "ba:itemname_industrialcoffeemachine";
+    private const string Coffee = "ba:itemname_cupofcoffee";
+    private const string Tea = "ba:itemname_cupoftea";
+    private const string Latte = "bakeryxx:itemname_latte";
 
     private static FleetRules Rules => ShippedData.Rules.Fleet;
     private static CargoLine L(string item, int amount) => new(item, amount, false);
@@ -54,6 +58,8 @@ public class VehicleWarningsTests
         var (state, vehicle) = Setup();
         var cargo = new List<CargoLine> { L(HotDogGrill, 1) };
         if (hotDogs > 0) cargo.Add(L(HotDog, hotDogs));
+        // Sold out: it sold hot dogs on its last day out.
+        else vehicle.Sold.Add(Sold(4, HotDog));
 
         var warnings = For(state, vehicle, cargo);
 
@@ -68,6 +74,32 @@ public class VehicleWarningsTests
         var (state, vehicle) = Setup("truck");
         Assert.Equal(VehicleWarningKind.LowStock, Assert.Single(For(state, vehicle, new[] { L(HotDogGrill, 2), L(HotDog, 40) })).Kind);
         Assert.Empty(For(state, vehicle, new[] { L(HotDogGrill, 1), L(HotDog, 40) }));
+    }
+
+    private static SoldDay Sold(int day, string item) => new() { Day = day, Units = new Dictionary<string, int> { [item] = 5 } };
+
+    [Fact]
+    public void OnlyFoodsTheVehicleStocksWarn()
+    {
+        // A coffee machine also makes tea, lattes and americanos; a cart carrying only coffee warns about none of them.
+        var (state, vehicle) = Setup();
+        Assert.Empty(For(state, vehicle, new[] { L(Machine, 1), L(Coffee, 160) }));
+
+        // Tea it sold yesterday and has run out of is empty; coffee down to a quarter is low.
+        vehicle.Sold.Add(Sold(3, Tea));
+        Assert.Equal(new[] { new VehicleWarning(VehicleWarningKind.LowStock, "v1", Coffee), new VehicleWarning(VehicleWarningKind.EmptyStock, "v1", Tea) },
+            For(state, vehicle, new[] { L(Machine, 1), L(Coffee, 40) }));
+    }
+
+    [Fact]
+    public void FoodsMissingFromTheGameNeverWarn()
+    {
+        // A Bakery latte in the sales record, but the Bakery mod is gone: no to-do the player could never clear.
+        var (state, vehicle) = Setup();
+        vehicle.Sold.Add(Sold(3, Latte));
+        var cargo = new[] { L(Machine, 1), L(Coffee, 160) };
+        Assert.Equal(VehicleWarningKind.EmptyStock, Assert.Single(For(state, vehicle, cargo)).Kind);
+        Assert.Empty(VehicleWarnings.For(ShippedData.Tables, Rules, state, vehicle, cargo, itemExists: i => !i.StartsWith("bakeryxx:")));
     }
 
     [Fact]

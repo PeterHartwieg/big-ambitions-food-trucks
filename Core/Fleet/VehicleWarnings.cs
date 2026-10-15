@@ -65,16 +65,14 @@ namespace FoodTrucks.Core.Fleet
     // list with the phone's to-dos; nothing here changes the state.
     public static class VehicleWarnings
     {
-        // The game's own low stock rule (ItemHelper): at or under a quarter of what the shelf holds.
-        public const double LowStockShare = 0.25;
-
         public static bool IsFleetKind(VehicleWarningKind kind) =>
             kind == VehicleWarningKind.LicenceRunningOut || kind == VehicleWarningKind.LicenceExpired;
 
         // The warnings for one vehicle, in a fixed order. `cargo` is the vehicle's cargo as the adapter reads it; `crew` is
-        // how many of its hires still exist (null: count vehicle.Crew).
+        // how many of its hires still exist (null: count vehicle.Crew); `itemExists` says whether a food exists in the game
+        // now (null: all do).
         public static IReadOnlyList<VehicleWarning> For(DemandTables tables, FleetRules rules, SaveState state, VehicleState vehicle,
-            IEnumerable<CargoLine> cargo, int? crew = null)
+            IEnumerable<CargoLine> cargo, int? crew = null, Func<string, bool>? itemExists = null)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
             if (rules == null) throw new ArgumentNullException(nameof(rules));
@@ -85,20 +83,13 @@ namespace FoodTrucks.Core.Fleet
             var warnings = new List<VehicleWarning>();
             var lines = cargo.ToList();
 
-            // Stock: each food on the menu against what its fitted pieces hold of it alone.
-            var menu = Menu.FromCargo(tables, vehicle.VehicleType, lines);
+            // Stock: the foods it stocks, by the Stock box's own rule (StockLevels), so the box and the to-dos agree.
             var view = Storage.Of(tables, vehicle.VehicleType, lines);
-            if (menu.Problem == MenuProblem.None && view != null)
-                foreach (var item in menu.Menu.Items)
+            if (view != null)
+                foreach (var food in StockLevels.Stocked(tables, view, vehicle, itemExists))
                 {
-                    var pool = view.PoolFor(tables, item);
-                    var product = tables.Product(item);
-                    if (pool == null || product == null) continue;
-                    var holds = StockLimit.CanLoad(0.0, int.MaxValue, pool.Capacity, product.StockWeight);
-                    if (holds <= 0) continue;
-                    var units = pool.Units.TryGetValue(item, out var n) ? n : 0;
-                    if (units <= 0) warnings.Add(new VehicleWarning(VehicleWarningKind.EmptyStock, id, item));
-                    else if (units <= holds * LowStockShare) warnings.Add(new VehicleWarning(VehicleWarningKind.LowStock, id, item));
+                    if (food.Level == StockLevel.Empty) warnings.Add(new VehicleWarning(VehicleWarningKind.EmptyStock, id, food.Item));
+                    else if (food.Level == StockLevel.Low) warnings.Add(new VehicleWarning(VehicleWarningKind.LowStock, id, food.Item));
                 }
 
             // Crew and route: only a vehicle with a route (stops; no days means every day) needs crew.

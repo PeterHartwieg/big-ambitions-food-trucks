@@ -117,6 +117,20 @@ public class FleetReportTests
     }
 
     [Fact]
+    public void TheBusinessAverageCountsFinishedDaysWithARecordOnly()
+    {
+        var state = new SaveState();
+        StreetSales.Record(state, "cart", 7, 1_000, 3);
+        SalesLedger.RecordLicence(state, 8, 1_000);
+        // Today and a day older than the week don't count.
+        StreetSales.Record(state, "cart", 9, 5_000, 1);
+        state.DailySales.Add(new DailySales { Day = 1, RevenueCents = 9_000 });
+
+        Assert.Equal((3_000 - 1_000) / 2, FleetReport.AvgDailyProfitCents(state, 9));
+        Assert.Equal(0, FleetReport.AvgDailyProfitCents(new SaveState(), 9));
+    }
+
+    [Fact]
     public void ADayBegunBeforeTheBreakdownKeepsItsEarlierProfitOnceVehiclesAreRecorded()
     {
         var state = new SaveState();

@@ -112,11 +112,34 @@ namespace FoodTrucks.Core.Saves
             foreach (var entry in state.DailySales)
             {
                 if (entry == null || entry.Day > today || entry.Day <= today - WeekDays) continue;
-                total += entry.RevenueCents - entry.CostCents - entry.LicenceCents - entry.EventPlacesCents - entry.DeliveryFeesCents;
-                foreach (var day in entry.ByVehicle ?? new List<VehicleDay>())
-                    if (day != null) total -= Sum(Sum(day.WagesCents, day.ParkingCents),
-                        Sum(day.PermitCents, Sum(day.CommissaryRentCents, day.OvernightFineCents)));
+                total += DayProfitCents(entry);
             }
+            return total;
+        }
+
+        // The whole business's average daily income for its line in BizMan's list, by the rows' rule
+        // (AvgDailyProfitCents): the last seven finished days with a record, each on WeekProfitCents's terms, averaged
+        // over those days only. 0 with no finished day.
+        public static long AvgDailyProfitCents(SaveState? state, int today)
+        {
+            if (state?.DailySales == null) return 0;
+            var days = new HashSet<int>();
+            long total = 0;
+            foreach (var entry in state.DailySales)
+            {
+                if (entry == null || entry.Day >= today || entry.Day < today - WeekDays) continue;
+                days.Add(entry.Day);
+                total += DayProfitCents(entry);
+            }
+            return days.Count == 0 ? 0 : (long)Math.Round(total / (double)days.Count, MidpointRounding.AwayFromZero);
+        }
+
+        private static long DayProfitCents(DailySales entry)
+        {
+            var total = entry.RevenueCents - entry.CostCents - entry.LicenceCents - entry.EventPlacesCents - entry.DeliveryFeesCents;
+            foreach (var day in entry.ByVehicle ?? new List<VehicleDay>())
+                if (day != null) total -= Sum(Sum(day.WagesCents, day.ParkingCents),
+                    Sum(day.PermitCents, Sum(day.CommissaryRentCents, day.OvernightFineCents)));
             return total;
         }
 

@@ -35,6 +35,8 @@ namespace FoodTrucks
 
         private static VehicleTodos? instance;
         private static bool ready;
+        private static System.Reflection.MethodInfo? addToUi, completeRoutine;
+        private static long lastOverviewRefresh = long.MinValue / 2;
         private long lastMinute = long.MinValue;
 
         // Called once after patching. Without the text, completion check, click and save patches our to-dos would break
@@ -43,7 +45,10 @@ namespace FoodTrucks
         {
             var tasksUi = typeof(TasksUI);
             var helper = typeof(SaveGameSerializationHelper);
-            ready = Has(tasksUi, "GetTodoDescription", new[] { typeof(TodoTask), typeof(bool) }) &&
+            addToUi = AccessTools.Method(tasksUi, "AddTodoTaskToUI", new[] { typeof(TodoTask), typeof(bool) });
+            completeRoutine = AccessTools.Method(tasksUi, "CompleteTodoTaskRoutine", new[] { typeof(TodoTask) });
+            if (addToUi == null || completeRoutine == null) Log.Error("To-dos: TasksUI.AddTodoTaskToUI or CompleteTodoTaskRoutine not found.");
+            ready = addToUi != null && completeRoutine != null && Has(tasksUi, "GetTodoDescription", new[] { typeof(TodoTask), typeof(bool) }) &&
                     Has(tasksUi, "CheckForCompletedTodoTasks", Type.EmptyTypes) &&
                     Has(tasksUi, "ClickTask", new[] { typeof(TodoTask) }) &&
                     Has(helper, "SerializeJsonData", new[] { typeof(string), typeof(GameInstance) }) &&
@@ -142,9 +147,9 @@ namespace FoodTrucks
                     var kind = FoodTrucksMod.KindOf(vehicle.vehicleTypeName)!;
                     var saved = StreetSales.Find(state, vehicle.id) ?? new VehicleState { VehicleId = vehicle.id, VehicleType = kind };
                     if (string.IsNullOrEmpty(saved.VehicleType))
-                        saved = new VehicleState { VehicleId = vehicle.id, VehicleType = kind, HasPermit = saved.HasPermit, Schedule = saved.Schedule, Crew = saved.Crew, Health = saved.Health };
+                        saved = new VehicleState { VehicleId = vehicle.id, VehicleType = kind, HasPermit = saved.HasPermit, Schedule = saved.Schedule, Crew = saved.Crew, Health = saved.Health, Sold = saved.Sold };
                     var crew = saved.Crew.Count(id => HireCrew.Find(id) != null);
-                    wanted.AddRange(VehicleWarnings.For(tables, rules, state, saved, CargoLimit.Lines(vehicle), crew));
+                    wanted.AddRange(VehicleWarnings.For(tables, rules, state, saved, CargoLimit.Lines(vehicle), crew, ItemExists));
                 }
                 wanted.AddRange(VehicleWarnings.Fleet(rules, state.Licence, game.Day));
             }
@@ -157,16 +162,61 @@ namespace FoodTrucks
                 var task = existing.FirstOrDefault(t => WarningOf(t).Equals(warning));
                 if (task == null) continue;
                 existing.Remove(task);
-                tasks.CompleteTodoTask(task);
-                // The game's completion removes only a task with a row in the list; one without goes here.
-                game.TodoTasks.Remove(task);
+                Complete(tasks, task);
                 Log.Info($"To-do completed: {Describe(warning)}.");
             }
             foreach (var warning in add)
             {
-                var task = tasks.CreateTodoTask(TypeOf(warning.Kind), null, warning.ItemName, warning.VehicleId, null, PriorityOf(warning.Kind));
-                if (task != null) Log.Info($"To-do added: {Describe(warning)}.");
+                Add(tasks, warning);
+                Log.Info($"To-do added: {Describe(warning)}.");
             }
+            // The overview's rows follow: at once when a to-do changed, else every ten game minutes (open or closed, income).
+            var now = HireCrew.Now();
+            if (add.Count > 0 || complete.Count > 0 || now - lastOverviewRefresh >= 10 || now < lastOverviewRefresh)
+            {
+                lastOverviewRefresh = now;
+                BizManFleet.RefreshOverview();
+            }
+        }
+
+        // The game's CreateTodoTask and CompleteTodoTask also call TasksUI.UpdateBusinessAlerts with the task's address. Ours
+        // have none, and with BizMan open before any building's page has been shown its business's address is null too, so
+        // the game would schedule BizManBusiness.LoadAlerts, which then throws on the missing building and never clears its
+        // schedule flag (no building's alerts would refresh again). So ours are added and completed here, by the same steps
+        // without that call: into the list and its row (AddTodoTaskToUI), out of it with the game's struck-through fade
+        // (CompleteTodoTaskRoutine).
+        private static void Add(TasksUI tasks, VehicleWarning warning)
+        {
+            var task = new TodoTask
+            {
+                // Not the game's base64 id: a row is found by its name with Transform.Find, where '/' would be a path.
+                id = "foodtrucks-" + Guid.NewGuid().ToString("N"),
+                type = TypeOf(warning.Kind),
+                itemName = warning.ItemName,
+                itemInstanceId = warning.VehicleId,
+                priority = PriorityOf(warning.Kind),
+            };
+            SaveGameManager.Current.TodoTasks.Add(task);
+            addToUi!.Invoke(tasks, new object[] { task, true });
+        }
+
+        private static void Complete(TasksUI tasks, TodoTask task)
+        {
+            if (tasks.isActiveAndEnabled && completeRoutine!.Invoke(tasks, new object[] { task }) is System.Collections.IEnumerator routine)
+                tasks.StartCoroutine(routine);
+            else tasks.InstantlyCompleteTodoTask(task);
+            // The routine removes the task only when it has a row; one without goes here.
+            SaveGameManager.Current.TodoTasks.Remove(task);
+        }
+
+        private static readonly Dictionary<string, bool> exists = new Dictionary<string, bool>(StringComparer.Ordinal);
+
+        // Whether the game has this item now: a Bakery food doesn't without the Bakery mod.
+        internal static bool ItemExists(string item)
+        {
+            if (!exists.TryGetValue(item, out var found))
+                exists[item] = found = BigAmbitions.Items.ItemsGetter.GetByName(item, suppressError: true) != null;
+            return found;
         }
 
         // The player's food vehicles, those left with the game's private driver included.
@@ -245,7 +295,8 @@ namespace FoodTrucks
                 var kind = KindOf(task);
                 var data = new Dictionary<string, string>
                 {
-                    ["itemname"] = string.IsNullOrEmpty(task.itemName) ? "" : LocalizorManager.GetLocalization(task.itemName, null),
+                    // The key itself, as the game's alert_low_stock passes it: the label translates it when it shows.
+                    ["itemname"] = task.itemName ?? "",
                     ["day"] = (FoodTrucksSession.CurrentState?.Licence.LicenceExpiresOnDay ?? 0).ToString(),
                 };
                 __result = LanguageChangeEventDataHolder.Create(Keys.TryGetValue(kind, out var key) ? key : "foodtrucks:todo_unknown", data);
@@ -341,6 +392,12 @@ namespace FoodTrucks
             {
                 // With the private driver: nowhere to go to.
                 CartSelling.Notify("foodtrucks:notification_todo_no_place");
+                return;
+            }
+            // On its way between stops (HireRoutes.Depart): off the map, its saved place is where it left from.
+            if (StreetSales.Find(FoodTrucksSession.CurrentState, vehicle.id)?.Transit != null)
+            {
+                CartSelling.Notify("foodtrucks:notification_todo_on_the_way");
                 return;
             }
             if (!string.IsNullOrEmpty(vehicle.streetName))
