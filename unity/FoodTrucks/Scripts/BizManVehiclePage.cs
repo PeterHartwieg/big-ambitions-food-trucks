@@ -367,7 +367,8 @@ namespace FoodTrucks
                 box.Paragraph(Text("foodtrucks:bizman_page_stock_none"));
                 return;
             }
-            var foods = StockLevels.Of(tables, view);
+            // Only the foods it stocks (on board, or sold on its last days out) that exist in the game: the to-dos' own rule.
+            var foods = StockLevels.Stocked(tables, view, StreetSales.Find(FoodTrucksSession.CurrentState, instance.id), VehicleTodos.ItemExists);
             foreach (var pool in view.Pools)
             {
                 box.Section(Format("foodtrucks:bizman_page_stock_piece", ("piece", StoragePanel.PieceName(instance, pool.Piece)),

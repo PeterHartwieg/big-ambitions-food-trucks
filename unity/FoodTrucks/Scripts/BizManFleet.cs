@@ -100,7 +100,7 @@ namespace FoodTrucks
                 var model = NewModel(EntryId);
                 model.BusinessName = Text("foodtrucks:econoview_row");
                 model.BusinessType = "foodtrucks:bizman_type";
-                model.AvgDailyIncome = FleetReport.WeekProfitCents(state, today) / 100f / FleetReport.WeekDays;
+                model.AvgDailyIncome = FleetReport.AvgDailyProfitCents(state, today) / 100f;
                 // The vehicles' to-dos and the licence's, as a business line counts its own.
                 model.Alerts = vehicles.Sum(v => VehicleTodos.CountFor(v.Instance.id)) + VehicleTodos.FleetCount();
                 model.Satisfaction = 0;
@@ -623,7 +623,16 @@ namespace FoodTrucks
 
         // ---- The overview ----
 
-        private static void Fill()
+        // The overview's rows again while it shows (alerts, status, income), kept where the player scrolled: VehicleTodos
+        // calls this after each minute's reconcile.
+        internal static void RefreshOverview()
+        {
+            if (broken || table == null || tableRows == null || !table.gameObject.activeInHierarchy) return;
+            try { Fill(keepScroll: true); }
+            catch (Exception ex) { Log.Error("BizMan Street food overview refresh: " + ex); }
+        }
+
+        private static void Fill(bool keepScroll = false)
         {
             var state = FoodTrucksSession.CurrentState;
             if (state == null || tableRows == null || cellPrefab == null) return;
@@ -643,7 +652,7 @@ namespace FoodTrucks
                 VehicleRow(state, instance, vehicle.WithDriver, name, today);
             }
             var scroll = tableRows.GetComponentInParent<ScrollRect>();
-            if (scroll != null) scroll.verticalNormalizedPosition = 1f;
+            if (scroll != null && !keepScroll) scroll.verticalNormalizedPosition = 1f;
         }
 
         private static BusinessCellView? NewRow(string id, Action click)
