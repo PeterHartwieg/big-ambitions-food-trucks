@@ -384,14 +384,54 @@ public class CommissariesTests
         Commissaries.ReturnToStock(state, "a", new[] { Line("hotdog", 100, 50) });
         foreach (var taken in Commissaries.Restock(state, "a", new Dictionary<string, int> { ["hotdog"] = 40 }))
             Commissaries.TookOnVehicle(state, taken, taken.Units);
-        // 35 sold; the fleet holds 5 ordered and 10 bought elsewhere: at most 5 of a return count as ordered.
-        var back = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 15, 50, 6, "truck1", fleetOnBoard: 5);
+        // 35 sold, then 10 bought at a wholesaler: the truck holds 5 ordered and 10 others, 15 in all.
+        Commissaries.LeftVehicle(state, "hotdog", 35);
+        Assert.Equal(5, state.OrderedOnVehicles["hotdog"]);
+        var back = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 15, 50, 6, "truck1", fleetOnBoard: 15);
 
         Assert.Equal(new[] { (5, true), (10, false) }, back.Select(l => (l.Units, Commissaries.Deducted(l))));
+        Assert.False(state.OrderedOnVehicles.ContainsKey("hotdog"));
         // Logistics stock taken and given back was never deducted.
         var logistics = CommissaryLogistics.Receive(state, "a", "cola", 10, 30, 6, "wh");
         Commissaries.TookOnVehicle(state, logistics, 10);
         Assert.False(state.OrderedOnVehicles.ContainsKey("cola"));
+    }
+
+    // Sold out entirely, restocked at a wholesaler, given back: nothing is ordered any more.
+    [Fact]
+    public void ASellOutThenAWholesalerRestockReturnsNothingAsOrdered()
+    {
+        var state = Rented();
+        Commissaries.ReturnToStock(state, "a", new[] { Line("hotdog", 40, 50) });
+        foreach (var taken in Commissaries.Restock(state, "a", new Dictionary<string, int> { ["hotdog"] = 40 }))
+            Commissaries.TookOnVehicle(state, taken, taken.Units);
+        Commissaries.LeftVehicle(state, "hotdog", 40);
+        Commissaries.LeftVehicle(state, "hotdog", 5); // more than the pool: clamped at none
+
+        var back = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 30, 42, 7, "truck1", fleetOnBoard: 30);
+
+        Assert.Equal(new[] { (30, false) }, back.Select(l => (l.Units, Commissaries.Deducted(l))));
+        Assert.Equal(30 * 42, Commissaries.ReturnedGoodsCents(state));
+    }
+
+    // Ordered stock at two prices, taken by one vehicle and given back by another: the pool is the fleet's, per item.
+    [Fact]
+    public void OrderedUnitsAtMixedPricesCanComeBackFromAnotherVehicle()
+    {
+        var state = Rented();
+        Commissaries.ReturnToStock(state, "a", new[] { Line("hotdog", 20, 50), Line("hotdog", 20, 60) });
+        foreach (var taken in Commissaries.Restock(state, "a", new Dictionary<string, int> { ["hotdog"] = 40 }))
+            Commissaries.TookOnVehicle(state, taken, taken.Units);
+        Assert.Equal(40, state.OrderedOnVehicles["hotdog"]);
+        Commissaries.LeftVehicle(state, "hotdog", 10);
+
+        // 30 ordered units remain. Truck 2 holds 20, truck 1 holds 15 (5 from a wholesaler): 35 in the fleet.
+        var second = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 20, 60, 6, "truck2", fleetOnBoard: 35);
+        var first = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 15, 50, 6, "truck1", fleetOnBoard: 15);
+
+        Assert.Equal(new[] { (20, true) }, second.Select(l => (l.Units, Commissaries.Deducted(l))));
+        Assert.Equal(new[] { (10, true), (5, false) }, first.Select(l => (l.Units, Commissaries.Deducted(l))));
+        Assert.Equal(5 * 50, Commissaries.ReturnedGoodsCents(state));
     }
 
     [Fact]
