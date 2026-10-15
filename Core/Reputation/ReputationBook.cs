@@ -170,6 +170,16 @@ namespace FoodTrucks.Core.Reputation
                 if (day >= 1 && day > closedThrough) Day(vehicle, day).Cleaned = true;
         }
 
+        // Cleaned overnight in its commissary's bay (Commissaries.CleanedOvernight): that one service day only, not the
+        // vehicle's last opening, since the 04:00 check can run late after a load. A day already counted takes nothing.
+        public static bool CleanedOn(VehicleState vehicle, int serviceDay, int closedThrough)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            if (serviceDay < 1 || serviceDay <= closedThrough) return false;
+            Day(vehicle, serviceDay).Cleaned = true;
+            return true;
+        }
+
         public int Points(VehicleState vehicle) => vehicle?.Health == null ? 0 : health.Points(vehicle.Health);
 
         // Every day before `today` that has a record goes into health and regulars, oldest first; then the

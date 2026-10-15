@@ -759,7 +759,7 @@ namespace FoodTrucks
         private static object Vehicle(JObject args)
         {
             var id = Need(args, "id", "the food vehicle's id");
-            var op = Need(args, "op", "open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay");
+            var op = Need(args, "op", "open, close, step_out, back_to_hatch, enter, exit, restock, transfer or rent_bay");
             var vehicle = FoodVehicle(id);
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
             var game = SaveGameManager.Current;
@@ -768,7 +768,7 @@ namespace FoodTrucks
             int Cargo() => vehicle.cargoInstances.Where(c => c != null).Sum(c => c.amount);
             string? Space() => state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == id)?.CommissaryId;
             var cargoBefore = Cargo();
-            // Why the mod's own panel refused, when it says so without a notice (the Commissary button's choices).
+            // Why Commissary stock or the commissary's Spaces refused, when it says so without a notice.
             string? why = null;
             var spaceBefore = Space();
             void InIt(string what)
@@ -813,15 +813,29 @@ namespace FoodTrucks
                             throw new BridgeError("The game's Park button refused: paused, no parking here, or the panel isn't showing.");
                         break;
                     case "restock":
-                        InIt("Commissary");
-                        why = global::FoodTrucks.Commissary.RunPanelOption(vehicle, "restock", "nostock");
+                        // Commissary stock's Fill up (food only), or its "nothing in stock" notice.
+                        InIt("Commissary stock");
+                        why = global::FoodTrucks.Commissary.FillUpForTesting(vehicle);
                         break;
+                    case "transfer":
+                    {
+                        // Commissary stock's take or return of one item: { "direction": "take" | "return", "item", "units"? }.
+                        InIt("Commissary stock");
+                        var direction = Need(args, "direction", "take or return");
+                        var item = Need(args, "item", "an item key or name");
+                        var units = Num(args, "units");
+                        if (units != null && units.Value < 1)
+                            throw new BridgeError("units is a whole number from 1, or left out for as many as fit (take) or all on board (return).");
+                        why = global::FoodTrucks.Commissary.TransferForTesting(vehicle, direction, item, units == null ? (int?)null : (int)Math.Min(int.MaxValue, units.Value));
+                        break;
+                    }
                     case "rent_bay":
-                        InIt("Commissary");
-                        why = global::FoodTrucks.Commissary.RunPanelOption(vehicle, "rent", "move");
+                        // The commissary's Spaces, by phone: rent or move for the commissary whose bay the vehicle stands
+                        // in. Paperwork, so the player needn't be in the vehicle.
+                        why = global::FoodTrucks.Commissary.RentBayForTesting(vehicle);
                         break;
                     default:
-                        throw new BridgeError($"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay.");
+                        throw new BridgeError($"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock, transfer or rent_bay.");
                 }
             }, notices => VehicleReply(op, id, vehicle, state, notices, why, IsOpen, Cargo, Space, cargoBefore, spaceBefore));
         }
@@ -842,7 +856,8 @@ namespace FoodTrucks
                 // In it, or walking to it.
                 case "enter": done = game.ActiveVehicleId == id || (PlayerHelper.PlayerController?.hasOnGoalReachedAction ?? false); break;
                 case "exit": done = game.ActiveVehicleId != id; break;
-                case "restock": done = Cargo() != cargoBefore; break;
+                case "restock":
+                case "transfer": done = Cargo() != cargoBefore; break;
                 case "rent_bay": done = Space() != null && Space() != spaceBefore; break;
                 default: done = false; break;
             }

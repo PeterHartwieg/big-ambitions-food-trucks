@@ -64,7 +64,8 @@ namespace FoodTrucks
                 return;
             }
             var after = panel.parkButton.transform.GetSiblingIndex();
-            commissaryButton = Add(template, "FoodTrucks.CommissaryButton", "foodtrucks:itempanel_commissary", () => Commissary.ShowPanel(panel), after + 6);
+            // Commissary stock: the bay's two-way transfer, take or give back food and equipment by name (Commissary.ShowStock).
+            commissaryButton = Add(template, "FoodTrucks.CommissaryButton", "foodtrucks:itempanel_commissary_stock", Commissary.ShowStock, after + 1);
             Log.Info("Cart buttons added to the item panel.");
         }
 

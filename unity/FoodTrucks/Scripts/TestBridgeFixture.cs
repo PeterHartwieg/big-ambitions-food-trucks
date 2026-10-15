@@ -167,7 +167,7 @@ namespace FoodTrucks
 
         // ---- Steps ----
 
-        // The player rents a space at the commissary with the Commissary button's Rent (Commissary.RentForTesting).
+        // The player rents a space at the commissary with the phone's Rent (Commissary.RentForTesting).
         private static (string, string) CommissarySpace(FixtureContext c, FoodTrucks.Core.Saves.SaveState state)
         {
             if (CommissaryOrdering.CanOrder(state.Commissary, c.Site.Id))
@@ -185,7 +185,7 @@ namespace FoodTrucks
                     : $"every food vehicle has a space elsewhere; pass \"vehicle\" to move one here ({string.Join(", ", food.Select(v => v.id))})");
             var refusal = global::FoodTrucks.Commissary.RentForTesting(vehicle.id, c.Site.Id);
             if (refusal != null) throw new StepFailed(refusal);
-            return ("done", $"{FoodTrucksMod.KindOf(vehicle.vehicleTypeName)} {vehicle.id} rented a space at {c.Site.Id} (the Commissary button's Rent, first day's rent charged)");
+            return ("done", $"{FoodTrucksMod.KindOf(vehicle.vehicleTypeName)} {vehicle.id} rented a space at {c.Site.Id} (the phone's Rent, first day's rent charged)");
         }
 
         // A warehouse building near the commissary, rented as the console's RentBuilding does (BuildingHelper.RentBuilding,

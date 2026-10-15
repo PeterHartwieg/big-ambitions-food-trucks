@@ -311,6 +311,45 @@ public class CommissariesTests
         Assert.Equal(8, state.NightCheckedThroughDay);
     }
 
+    // Peter (15 October 2026): a vehicle in the bay of its own commissary at 04:00 counts as cleaned for the service day
+    // that just ended, the evening before the check; a commissary without a bay spares the fine but cleans nothing.
+    [Fact]
+    public void TheNightCheckCleansAVehicleInItsOwnBayForTheEveningBefore()
+    {
+        var state = Rented();
+        state.NightCheckedThroughDay = 7;
+        var inBay = new CommissaryVehicle { VehicleId = "cart", AtOwnCommissaryBay = true };
+
+        Assert.Empty(Commissaries.CleanedOvernight(state, Rules, 8, 200, new[] { inBay }));
+        Assert.Equal(new[] { ("cart", 7) }, Commissaries.CleanedOvernight(state, Rules, 8, 240, new[] { inBay }));
+        // Two nights skipped (a load after two days away): each night's evening, as each night is fined.
+        Assert.Equal(new[] { ("cart", 7), ("cart", 8) }, Commissaries.CleanedOvernight(state, Rules, 9, 600, new[] { inBay }));
+        Assert.Empty(Commissaries.CleanedOvernight(state, Rules, 8, 240, new[] { new CommissaryVehicle { VehicleId = "cart", AtOwnCommissaryBay = true, BayGrace = true } }));
+        Assert.Empty(Commissaries.CleanedOvernight(state, Rules, 8, 240, new[] { new CommissaryVehicle { VehicleId = "cart", PlayerInside = true } }));
+        Assert.Empty(Commissaries.CleanedOvernight(state, Rules, 8, 240, new[] { new CommissaryVehicle { VehicleId = "other", AtOwnCommissaryBay = true } }));
+        // Not before the check has started, nor while it waits on an unknown street side.
+        Assert.Empty(Commissaries.CleanedOvernight(new CommissaryState(), Rules, 8, 240, new[] { inBay }));
+        Commissaries.Rent(state, Rules, "cart2", "cart", "a", 7);
+        Assert.Empty(Commissaries.CleanedOvernight(state, Rules, 8, 240, new[] { inBay, new CommissaryVehicle { VehicleId = "cart2", BaySideUnknown = true } }));
+    }
+
+    [Fact]
+    public void StockAVehicleGivesBackIsANewBatchAtItsPriceAndKeptOffTheDeduction()
+    {
+        var state = Rented();
+        Commissaries.ReturnToStock(state, "a", new[] { Line("hotdog", 10, 50) });
+        var line = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 20, 45, 6, "truck1");
+
+        Assert.Equal(new long[] { 1, 2 }, state.Stock["a"].Select(l => l.BatchId));
+        Assert.Equal(45, line.UnitPriceCents);
+        Assert.True(Commissaries.FromVehicle(line));
+        Assert.False(Commissaries.FromVehicle(state.Stock["a"][0]));
+        Assert.Equal(900, Commissaries.ReturnedGoodsCents(state));
+        // First in, first out: what was here before goes first.
+        Assert.Equal(10, Commissaries.Restock(state, "a", new Dictionary<string, int> { ["hotdog"] = 15 }).First().Units);
+        Assert.Throws<ArgumentOutOfRangeException>(() => Commissaries.ReturnFromVehicle(state, "a", "hotdog", 0, 45, 6, "truck1"));
+    }
+
     // Review round 2 (Astra and Sol): a truck in its bay whose street side can't be read yet (no lanes just after a load)
     // must not be fined; the check waits and runs once the side is known.
     [Fact]

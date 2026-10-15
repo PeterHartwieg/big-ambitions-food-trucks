@@ -701,22 +701,21 @@ class Mock:
             entries.append({'id':len(entries)+1, 'text':clean(text), 'kind':kind,
                             'path':f'Mock/{self.dialog}/{row or len(entries)}'})
         if self.state['player']['in_vehicle'] and self.dialog == 'closed':
-            add(LOCALE['foodtrucks:itempanel_commissary'])
+            add(LOCALE['foodtrucks:itempanel_commissary_stock'])
         if not self.state['player']['in_vehicle'] and not self.state['player']['at_hatch'] and self.dialog == 'closed':
             # The on-foot menu of the mock's vehicle, as if it had been clicked.
             v = next((v for v in self.state['vehicles'] if v['id'] == self.selected), None)
             if v and not v['open']: add(LOCALE['foodtrucks:overlay_open'])
         if self.dialog == 'commissary':
+            # Commissary stock: Fill up, a take per item in stock here, a return per item on board.
             site = self.vehicle()['commissary']['bay_site']
-            v=self.vehicle(); c=v['commissary']; name=LOCALE['foodtrucks:commissary_'+site]
-            rent=f"${TUNING['commissary']['rentPerMonthCents'][v['kind']]/100:,.2f}"
-            if not c['site']: add(LOCALE['foodtrucks:commissary_option_rent'].format(rent,name),'option')
-            elif c['site']!=site: add(LOCALE['foodtrucks:commissary_option_move'].format(LOCALE['foodtrucks:commissary_'+c['site']],name,rent),'option')
-            else: add(LOCALE['foodtrucks:commissary_option_release'].format(name),'option')
-            units=sum(s['amount'] for s in self.state['commissary']['stock'] if s['site']==site)
-            add(LOCALE['foodtrucks:commissary_option_restock'].format(units) if units else LOCALE['foodtrucks:commissary_option_nostock'].format(name),'option')
-            if any(space['site']==site for space in self.state['commissary']['spaces']):
-                add(LOCALE['foodtrucks:commissary_option_order'].format(name),'option')
+            v=self.vehicle(); name=LOCALE['foodtrucks:commissary_'+site]
+            here=[s for s in self.state['commissary']['stock'] if s['site']==site and s['amount']>0]
+            units=sum(s['amount'] for s in here)
+            add(LOCALE['foodtrucks:commissary_stock_fill'].format(f'{units:,}') if units else LOCALE['foodtrucks:commissary_stock_fill_none'].format(name),'option')
+            for s in here: add(LOCALE['foodtrucks:commissary_stock_take'].format(f"{s['amount']:,}",s['item']),'option')
+            for s in v['stock']:
+                if s['amount']>0: add(LOCALE['foodtrucks:commissary_stock_return'].format(f"{s['amount']:,}",s['item']),'option')
             add('Confirm')
             add('Cancel')
         elif self.dialog == 'phone':
@@ -786,20 +785,17 @@ class Mock:
             if self.dialog=='crew':
                 v=self.vehicle()
                 v['crew']=[] if text=='Unassigned' else [next(e['name'] for e in self.employees if e['label']==text)]
-        elif text==LOCALE['foodtrucks:itempanel_commissary']:
+        elif text==LOCALE['foodtrucks:itempanel_commissary_stock']:
             self.dialog='commissary'
         elif text==LOCALE['foodtrucks:bizman_page_add_here']:
             self.dialog='opens'
         elif text=='Confirm':
             if self.dialog=='commissary':
-                if self.choice.startswith('Order stock for delivery'): self.dialog='phone'
-                elif self.choice.startswith(('Rent a space','Move its space')):
-                    self.operate(self.vehicle(),'rent_bay'); self.dialog='closed'
-                elif self.choice.startswith('Give up its space'):
-                    v=self.vehicle();v['commissary']['site']=None
-                    self.state['commissary']['spaces']=[s for s in self.state['commissary']['spaces'] if s['vehicle']!=v['id']]
-                    self.dialog='closed'
-                else: self.operate(self.vehicle(),'restock');self.dialog='closed'
+                taken=re.match(r'(Take|Return) (.+): [\d,]+ (?:here|on board)$',self.choice)
+                if taken:
+                    self.operate(self.vehicle(),'transfer',{'direction':taken.group(1).lower(),'item':taken.group(2)})
+                else: self.operate(self.vehicle(),'restock')
+                self.dialog='closed'
             elif self.dialog=='items':
                 self.boxes=max(1,self.boxes)
                 self.dialog='order'
@@ -835,14 +831,14 @@ class Mock:
         v['serving']='player'
         self.event(f"Truck window: player placed at the hatch of truck {v['id']} ({how}) at (0, 0, 0).")
 
-    def operate(self, v, op):
+    def operate(self, v, op, args=None):
         player = self.state['player']
         start=self.seq
         why=None
         cargo_before=copy.deepcopy(v['stock'])
         space_before=(v['commissary'] or {}).get('site')
         if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
-        label={'exit':'Park','rent_bay':'Commissary','restock':'Commissary'}.get(op)
+        label={'exit':'Park','restock':'Commissary stock','transfer':'Commissary stock'}.get(op)
         if label and player['in_vehicle'] != v['id']:
             raise ValueError(f"{label} is on the vehicle's panel, shown while the player drives the truck or pushes the cart: vehicle enter first.")
         if op=='open':
@@ -895,28 +891,70 @@ class Mock:
         elif op=='exit':
             if self.state['clock']['paused']: raise ValueError("The game's Park button refused: paused, no parking here, or the panel isn't showing.")
             player['in_vehicle']=None
-        elif op in ('rent_bay','restock'):
+        elif op in ('rent_bay','restock','transfer'):
             c=v['commissary']
+            refused="the commissary's Spaces refused (see the notice)" if op=='rent_bay' else 'the Commissary stock button refused (see the notice)'
+            if op=='transfer':
+                args=args or {}
+                direction=need(args,'direction','take or return'); item=need(args,'item','an item key or name')
+                units=num(args,'units')
+                if units is not None and units<1: raise ValueError('units is a whole number from 1, or left out for as many as fit (take) or all on board (return).')
             if not self.can_write:
-                why='the Commissary button refused (see the notice)'
+                why=refused
                 self.event(LOCALE['foodtrucks:notification_data_readonly'],'notice')
             elif not c or not c['in_bay']:
-                why='the Commissary button refused (see the notice)'
+                why=refused
                 self.event(LOCALE['foodtrucks:notification_commissary_not_here'].format(vehicle=v['kind']),'notice')
             elif op=='rent_bay' and c['site']==c['bay_site']:
-                offered='release, '+('restock' if any(stock['site']==c['bay_site'] and stock['amount']>0 for stock in self.state['commissary']['stock']) else 'nostock')+', order'
-                why=f'the Commissary button offers {offered} here, not rent or move'
+                why="the commissary's Spaces offer release for this vehicle here, not rent or move"
+            elif op=='transfer':
+                why=self.transfer(v,direction,item,units)
             else:
                 self.commissary_panel(v,op)
-        else: raise ValueError(f"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay.")
+        else: raise ValueError(f"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock, transfer or rent_bay.")
         done = {'open':v['open'], 'close':not v['open'], 'step_out':player['at_hatch']!=v['id'],
                 'back_to_hatch':bool(self.walks) or player['at_hatch']==v['id'],
                 'enter':player['in_vehicle']==v['id'] or bool(self.walks), 'exit':player['in_vehicle']!=v['id'],
-                'restock':v['stock']!=cargo_before,
+                'restock':v['stock']!=cargo_before, 'transfer':v['stock']!=cargo_before,
                 'rent_bay':(v['commissary'] or {}).get('site') is not None and (v['commissary'] or {}).get('site')!=space_before}[op]
         self.event(f"Test bridge: vehicle {v['id']} {op}: {'done' if done else 'not done'}.")
         notices=[e['text'][8:] for e in self.ring if e['seq']>start and e['kind']=='notice']
         return {'done':done,'why':None if done else why,'notices':notices,'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==v['id'])}
+
+    # Commissary stock's take or return of one item (by key or name), as TransferForTesting: a take loads what the
+    # item's piece still holds, a return gives back all on board (or units). Returns why not, or None.
+    def transfer(self, v, direction, item, units):
+        if direction not in ('take','return'): return f"direction is take or return, not '{direction}'"
+        site=v['commissary']['bay_site']
+        here=[s for s in self.state['commissary']['stock'] if s['site']==site and s['amount']>0]
+        source=here if direction=='take' else [s for s in v['stock'] if s['amount']>0]
+        line=next((s for s in source if s['key']==item or s['item'].casefold()==str(item).casefold()),None)
+        if line is None:
+            return f"Commissary stock offers no {direction} of '{item}' here ({', '.join(s['key'] for s in source) or 'none'})"
+        if direction=='take':
+            holds={'Hotdog':'hotdoggrill','Tacos':'griddle'}.get(line['item'])
+            pool=next((p for p in v['pieces'] if p['item']==holds),None)
+            room=max(0,int(pool['cap']-pool['units'])) if pool else 0
+            amount=min(line['amount'],room,units if units is not None else room)
+            if amount<=0:
+                self.event(f"Nothing on this {v['kind']} holds {line['item']}.",'notice'); return f'refused by the cargo: {"PieceFull" if pool else "NoPiece"}'
+            pool['units']+=amount; line['amount']-=amount
+            cargo=next((s for s in v['stock'] if s['key']==line['key']),None)
+            if cargo: cargo['amount']+=amount
+            else: v['stock'].append({'item':line['item'],'key':line['key'],'amount':amount})
+            left=line['amount']
+            self.event(LOCALE['foodtrucks:notification_commissary_stock_took'].format(units=amount,item=line['item'],vehicle=v['kind'],capped='',left=left),'notice')
+        else:
+            amount=min(line['amount'],units if units is not None else line['amount'])
+            line['amount']-=amount
+            for pool in v['pieces']:
+                if pool['item']=={'Hotdog':'hotdoggrill','Tacos':'griddle'}.get(line['item']): pool['units']=max(0,pool['units']-amount)
+            stock=next((s for s in self.state['commissary']['stock'] if s['site']==site and s['key']==line['key']),None)
+            if stock: stock['amount']+=amount
+            else: self.state['commissary']['stock'].append({'site':site,'item':line['item'],'key':line['key'],'amount':amount})
+            here_now=sum(s['amount'] for s in self.state['commissary']['stock'] if s['site']==site and s['key']==line['key'])
+            self.event(LOCALE['foodtrucks:notification_commissary_stock_returned'].format(units=amount,item=line['item'],here=here_now),'notice')
+        return None
 
     def commissary_panel(self, v, op):
         c=v['commissary']
@@ -1229,7 +1267,7 @@ class Mock:
             if surface is not None: reply['surface']=surface
             return reply
         if cmd=='vehicle':
-            return self.operate(self.vehicle(need(args,'id',"the food vehicle's id")),need(args,'op','open, close, step_out, back_to_hatch, enter, exit, restock or rent_bay'))
+            return self.operate(self.vehicle(need(args,'id',"the food vehicle's id")),need(args,'op','open, close, step_out, back_to_hatch, enter, exit, restock, transfer or rent_bay'),args)
         if cmd=='commissary':
             op=need(args,'op','order or bay_candidates')
             if op=='bay_candidates': return self.bay_candidates(args)

@@ -118,7 +118,7 @@ class ParityTests(unittest.TestCase):
         self.refused('commissary',{'op':'nope','site':'murray-hill'},"Unknown commissary op 'nope': order, bay_candidates.")
 
     def test_driving_and_paused_op_errors(self):
-        for op,label in [('exit','Park'),('rent_bay','Commissary'),('restock','Commissary')]:
+        for op,label in [('exit','Park'),('restock','Commissary stock'),('transfer','Commissary stock')]:
             self.refused('vehicle',{'id':self.id,'op':op},f"{label} is on the vehicle's panel, shown while the player drives the truck or pushes the cart: vehicle enter first.")
         self.mock.call('vehicle',{'id':self.id,'op':'enter'})
         self.refused('vehicle',{'id':self.id,'op':'enter'},f'The player is in {self.id} already.')
@@ -274,15 +274,15 @@ class ParityTests(unittest.TestCase):
         self.mock.place_vehicle(self.v,'hells-kitchen')
         self.mock.call('vehicle',{'id':self.id,'op':'rent_bay'})
         locale=NS['LOCALE']
-        self.mock.call('ui',{'op':'click','text':locale['foodtrucks:itempanel_commissary']})
+        self.mock.call('ui',{'op':'click','text':locale['foodtrucks:itempanel_commissary_stock']})
         listing=self.mock.call('ui',{'op':'list'})
         self.assertEqual(listing['buttons'][0]['kind'],'option')
-        order=next(b for b in listing['buttons'] if b['text'].startswith('Order stock for delivery'))
-        self.mock.call('ui',{'op':'click','id':order['id']})
+        fill=next(b for b in listing['buttons'] if b['text'].startswith('Fill up'))
+        self.mock.call('ui',{'op':'click','id':fill['id']})
         self.assertEqual(self.mock.dialog,'commissary')
         self.mock.call('ui',{'op':'click','text':'Confirm'})
-        self.assertEqual(self.mock.dialog,'phone')
-        self.refused('ui',{'op':'click','id':order['id']},f'Entry {order["id"]} ({order["text"]}) is no longer on screen; list again.')
+        self.assertEqual(self.mock.dialog,'closed')
+        self.refused('ui',{'op':'click','id':fill['id']},f'Entry {fill["id"]} ({fill["text"]}) is no longer on screen; list again.')
         self.mock.dialog='crew'
         self.refused('ui',{'op':'click','text':'Unassigned'},'3 entries read "Unassigned": 1 (Mock/crew/Crew1/option[0]), 2 (Mock/crew/Crew2/option[0]), 3 (Mock/crew/Crew3/option[0]); click by id.')
 

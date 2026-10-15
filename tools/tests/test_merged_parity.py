@@ -64,19 +64,22 @@ class MergedParityTests(unittest.TestCase):
         args={'id':v['id']}
         reply=self.bridge.call('vehicle',{**args,'op':'enter'})['result']
         self.assertIsNone(reply['why'])
-        for op in ('restock','rent_bay'):
+        for op,why in (('restock','the Commissary stock button refused (see the notice)'),('rent_bay',"the commissary's Spaces refused (see the notice)")):
             reply=self.bridge.call('vehicle',{**args,'op':op})['result']
             self.assertFalse(reply['done'])
-            self.assertEqual(reply['why'],'the Commissary button refused (see the notice)')
+            self.assertEqual(reply['why'],why)
             self.assertEqual(len(reply['notices']),1)
         self.mock.place_vehicle(v,'hells-kitchen')
         reply=self.bridge.call('vehicle',{**args,'op':'rent_bay'})['result']
         self.assertTrue(reply['done']);self.assertIsNone(reply['why'])
         reply=self.bridge.call('vehicle',{**args,'op':'rent_bay'})['result']
         self.assertFalse(reply['done'])
-        self.assertEqual(reply['why'],'the Commissary button offers release, nostock, order here, not rent or move')
+        self.assertEqual(reply['why'],"the commissary's Spaces offer release for this vehicle here, not rent or move")
         reply=self.bridge.call('vehicle',{**args,'op':'restock'})['result']
         self.assertFalse(reply['done']);self.assertIsNone(reply['why'])
+        reply=self.bridge.call('vehicle',{**args,'op':'transfer','direction':'take','item':'Hotdog'})['result']
+        self.assertFalse(reply['done'])
+        self.assertEqual(reply['why'],"Commissary stock offers no take of 'Hotdog' here (none)")
         self.bridge.call('time',{'pause':False})
         self.bridge.call('vehicle',{**args,'op':'exit'})
         reply=self.bridge.call('vehicle',{**args,'op':'open'})['result']

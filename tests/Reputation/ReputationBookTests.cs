@@ -42,6 +42,21 @@ public class ReputationBookTests
     }
 
     [Fact]
+    public void CleanedOvernightMarksThatServiceDayOnly()
+    {
+        var cart = new VehicleState { VehicleId = "c1" };
+        book.Opened(cart, 3, 42);
+        book.Opened(cart, 4, 42);
+
+        Assert.True(ReputationBook.CleanedOn(cart, 3, 0));
+        Assert.False(ReputationBook.CleanedOn(cart, 2, 2));
+        Assert.False(ReputationBook.CleanedOn(cart, 0, 0));
+
+        Assert.True(ReputationBook.Day(cart, 3).Cleaned);
+        Assert.False(ReputationBook.Day(cart, 4).Cleaned);
+    }
+
+    [Fact]
     public void RegularsBuildAtASpotVisitedForAnHour()
     {
         var state = new SaveState();

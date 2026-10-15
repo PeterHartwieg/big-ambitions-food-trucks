@@ -7,6 +7,7 @@ using Dialogs;
 using Entities;
 using FoodTrucks.Core.Commissary;
 using FoodTrucks.Core.Fleet;
+using FoodTrucks.Core.Reputation;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
 using Helpers;
@@ -20,10 +21,11 @@ using UnityEngine;
 namespace FoodTrucks
 {
     // Commissaries (design: Commissary and new foods). Garages from data/commissaries.json where the player rents a
-    // space per vehicle in person (the Commissary button at the bay), orders stock by phone for delivery at 08:00,
-    // restocks at the bay, and pays rent daily; at 04:00 the City fines a food vehicle that isn't in its bay.
+    // space per vehicle by phone (the call's Spaces), orders stock by phone for delivery at 08:00, takes and gives back
+    // stock at the bay (Commissary stock on the vehicle's panel, CommissaryStock.cs), and pays rent daily; at 04:00 the
+    // City fines a food vehicle that isn't in its bay, and one standing in its own bay counts as cleaned.
     // Core's Commissaries decides; this finds the bays, moves the money and the cargo, and sends the texts.
-    internal sealed class Commissary : MonoBehaviour
+    internal sealed partial class Commissary : MonoBehaviour
     {
         // Each commissary's phone contact is this plus its ID; en.json names it.
         public const string ContactPrefix = "foodtrucks-commissary-";
@@ -167,7 +169,7 @@ namespace FoodTrucks
         // (CommissaryState.Bays), with the origins and the rule version it was searched with, so a load decides from the
         // same points without searching. A vehicle is in the bay when the game's wheel test calls it legally parked and
         // its middle is within the bay radius of a resolved point (Core CommissaryBays.InBay); the paint, Ctrl+F3, the
-        // Commissary button, the visit unlock and the 04:00 check all ask InBay or the resolved points. An unresolved
+        // Commissary stock button, the visit unlock and the 04:00 check all ask InBay or the resolved points. An unresolved
         // commissary decides nothing: no unlock, no button, no paint, and the 04:00 check waits for it.
 
         // The resolved bay points, or null while not resolved. Empty when the search found no legal parking.
@@ -622,7 +624,8 @@ namespace FoodTrucks
             try { Contact.ShowAddedContactNotifications(); }
             catch (Exception ex) { Log.Error("Commissary, new contact notice: " + ex); }
             var rules = Rules!;
-            Notices.SendText(contact, "foodtrucks:message_commissary_welcome", new Dictionary<string, string>
+            // A new key for the new text (renting by phone): the phone words sent messages again from their key.
+            Notices.SendText(contact, "foodtrucks:message_commissary_welcome_phone", new Dictionary<string, string>
             {
                 { "commissary", Name(site) },
                 { "cart", CartSelling.Money(rules.RentPerMonthCents.TryGetValue("cart", out var cart) ? cart : 0) },
@@ -642,6 +645,7 @@ namespace FoodTrucks
         private void LateUpdate()
         {
             CommissaryOrderForm.Watch();
+            CommissaryDialog.WatchSpaces();
             // A jump of the player (teleport, taxi, fast travel) sweeps the bays near where they land before the frame
             // is drawn (BayParking).
             var sites = Sites;
@@ -658,7 +662,7 @@ namespace FoodTrucks
         private void Update()
         {
             CommissaryOrderForm.Watch();
-            StartPendingCall();
+            CommissaryDialog.WatchSpaces();
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
             var sites = Sites;
@@ -677,7 +681,7 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Commissary: " + ex); }
         }
 
-        // Twice a second: the player at a bay unlocks it; the panel's Commissary button shows while the vehicle is in a bay.
+        // Twice a second: the player at a bay unlocks it; the panel's Commissary stock button shows while the vehicle is in a bay.
         private static void Look(SaveState state)
         {
             if (Sites != null) ResolveOne(Sites);
@@ -969,6 +973,8 @@ namespace FoodTrucks
                 }
                 return;
             }
+            // Before the check moves its day on: a vehicle in its own bay is cleaned for the evening before each check.
+            CleanOvernight(state, Commissaries.CleanedOvernight(commissary, rules, day, minute, flags));
             var fines = Commissaries.NightCheck(commissary, rules, day, minute, flags);
             FoodTrucksSession.MarkChanged();
             Log.Info($"Overnight check through day {commissary.NightCheckedThroughDay}: " +
@@ -999,6 +1005,26 @@ namespace FoodTrucks
 
         private int nightWaitLogged = -1;
         private int nightSideWaitLogged = -1;
+
+        // Cleaning happens only at the commissary where a vehicle rents its space (Peter, 15 October 2026): standing in
+        // that bay at the 04:00 check counts as cleaned for the service day that just ended (Core
+        // Commissaries.CleanedOvernight), so a crewed vehicle stays clean by ending its route in its bay. A day already
+        // counted for health takes nothing (Core ReputationBook.CleanedOn); one line per vehicle either way.
+        private static void CleanOvernight(SaveState state, IReadOnlyList<(string VehicleId, int ServiceDay)> cleaned)
+        {
+            var closedThrough = ReputationBook.ClosedThrough(state);
+            foreach (var (vehicleId, serviceDay) in cleaned)
+            {
+                var vehicle = StreetSales.GetOrAdd(state, vehicleId);
+                if (string.IsNullOrEmpty(vehicle.VehicleType))
+                    vehicle.VehicleType = state.Commissary.Spaces.FirstOrDefault(sp => sp.VehicleId == vehicleId)?.Kind ?? vehicle.VehicleType;
+                var marked = ReputationBook.CleanedOn(vehicle, serviceDay, closedThrough);
+                Log.Info(marked
+                    ? $"Overnight cleaning: {World.Short(vehicleId)} stood in its commissary's bay at the check; cleaned for day {serviceDay}."
+                    : $"Overnight cleaning: {World.Short(vehicleId)} stood in its commissary's bay at the check, but day {serviceDay} is already counted (through day {closedThrough}); nothing marked.");
+            }
+            if (cleaned.Count > 0) FoodTrucksSession.MarkChanged();
+        }
 
         private static string Describe(CommissaryVehicle v) =>
             $"{World.Short(v.VehicleId)} {(v.AtOwnCommissaryBay ? "in its bay" : "out")}{(v.PlayerInside ? ", player inside" : "")}{(v.OnLateStop ? ", late stop" : "")}{(v.InTransit ? ", in transit" : "")}{(v.AtPlayerProperty ? ", at your own building" : "")}";
@@ -1054,6 +1080,8 @@ namespace FoodTrucks
                     VehicleId = vehicle.id,
                     AtOwnCommissaryBay = inBay == true,
                     BaySideUnknown = inBay == null,
+                    // Spared the fine because its commissary has no bay, not standing in one: no overnight cleaning.
+                    BayGrace = site != null && !withDriver.Contains(vehicle.id) && NoBay(site),
                     PlayerInside = game.ActiveVehicleId == vehicle.id || TruckWindow.PlayerAt(vehicle.id),
                     // Only a window the crew has open at a stop right now: a route that sold out and closed early is out like any other.
                     OnLateStop = saved != null && saved.IsOpen && saved.HireStop != null,
@@ -1089,92 +1117,146 @@ namespace FoodTrucks
         // A fine is no business expense: no tax label.
         private static TransactionInfo FineInfo() => new TransactionInfo("foodtrucks:transaction_overnight_fine", new Dictionary<string, string>());
 
-        // ---- The Commissary button on the vehicle's panel ----
+        // ---- Spaces, by phone (plan, "UI flow: the vehicle panel holds only cargo"; Peter, 15 October 2026) ----
 
-        public static void ShowPanel(ItemPanelUI panel)
+        // One row of the call's Spaces list: a food vehicle and the one thing it can do at this commissary.
+        internal sealed class SpaceChoice
         {
-            var options = PanelOptions(VehicleHelper.GetCurrentVehicle(), forPicker: true);
-            if (options == null) return;
-            var labels = options.Select(o => o.Label).ToList();
-            DropdownSelector.Show(labels, chosen =>
+            public SpaceChoice(string vehicleId, string kind, string op, string label)
             {
-                try { options.FirstOrDefault(o => o.Label == chosen).Act?.Invoke(); }
-                catch (Exception ex) { Log.Error("Commissary button: " + ex); }
-            }, "foodtrucks:commissary_header", "foodtrucks:commissary_body");
+                VehicleId = vehicleId;
+                Kind = kind;
+                Op = op;
+                Label = label;
+            }
+
+            public string VehicleId { get; }
+            public string Kind { get; }
+            // "rent", "move" or "release".
+            public string Op { get; }
+            public string Label { get; }
         }
 
-        // The test bridge's restock and rent_bay: the panel's checks and messages, then the first of its choices named in
-        // `ops` ("rent", "move", "release", "restock", "nostock", "order"). Null when it ran one; otherwise why not.
-        internal static string? RunPanelOption(VehicleInstance cart, params string[] ops)
-        {
-            var options = PanelOptions(cart, forPicker: false);
-            if (options == null) return "the Commissary button refused (see the notice)";
-            var choice = options.FirstOrDefault(o => ops.Contains(o.Op));
-            if (choice.Act == null) return $"the Commissary button offers {string.Join(", ", options.Select(o => o.Op))} here, not {string.Join(" or ", ops)}";
-            choice.Act();
-            return null;
-        }
-
-        // The Commissary button's choices for the vehicle, after its checks (each refusal shows its notice); null when
-        // it refused. forPicker: the game's list picker must be there to show them.
-        private static List<(string Op, string Label, Action Act)>? PanelOptions(VehicleInstance? cart, bool forPicker)
+        // The player's food vehicles, each with its one action at this commissary: rent a space here (with the monthly
+        // rent), move its space here from another commissary, or give up its space here. Vehicles in transit or with a
+        // crew are listed too: renting is paperwork. Two vehicles with one name get a number, so each label is unique.
+        internal static List<SpaceChoice> SpaceChoices(string siteId)
         {
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
-            var kind = FoodTrucksMod.KindOf(cart?.vehicleTypeName);
-            if (state == null || rules == null || cart == null || kind == null || uninstalled) return null;
+            var list = new List<SpaceChoice>();
+            if (state == null || rules == null || Sites?.Site(siteId) == null) return list;
+            var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+            var fleet = Fleet().Values.Select(v => (Vehicle: v, Name: VehicleName(state, v.id)))
+                .OrderBy(v => v.Name, StringComparer.CurrentCulture).ThenBy(v => v.Vehicle.id, StringComparer.Ordinal);
+            foreach (var (vehicle, baseName) in fleet)
+            {
+                var kind = FoodTrucksMod.KindOf(vehicle.vehicleTypeName);
+                if (kind == null) continue;
+                seen[baseName] = (seen.TryGetValue(baseName, out var n) ? n : 0) + 1;
+                var name = seen[baseName] > 1 ? $"{baseName} ({seen[baseName]})" : baseName;
+                var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.id);
+                var rent = CartSelling.Money(rules.RentPerMonthCents.TryGetValue(kind, out var monthly) ? monthly : 0);
+                if (space == null)
+                    list.Add(new SpaceChoice(vehicle.id, kind, "rent", Format("foodtrucks:commissary_spaces_rent", name, rent)));
+                else if (space.CommissaryId != siteId)
+                    list.Add(new SpaceChoice(vehicle.id, kind, "move", Format("foodtrucks:commissary_spaces_move", name, NameOf(space.CommissaryId), rent)));
+                else
+                    list.Add(new SpaceChoice(vehicle.id, kind, "release", Format("foodtrucks:commissary_spaces_release", name)));
+            }
+            return list;
+        }
+
+        // Does a Spaces choice with Rent or Release (rent charged, the notice shown, as they always did), then the
+        // commissary texts what changed into its conversation, as it texts orders. `inCall`: the call is on, so the text
+        // belongs to it and is read already. Returns that text, or null when nothing changed (the log says why).
+        internal static string? ApplySpace(SpaceChoice choice, string siteId, bool inCall)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            var rules = Rules;
+            var who = $"{choice.Kind} {World.Short(choice.VehicleId)}";
+            if (state == null || rules == null || uninstalled || !FoodTrucksSession.CanWrite)
+            {
+                Log.Info($"Commissary {siteId}: Spaces {choice.Op} for {who} refused: the mod's data isn't writable now.");
+                return null;
+            }
+            if (!Fleet().ContainsKey(choice.VehicleId))
+            {
+                Log.Info($"Commissary {siteId}: Spaces {choice.Op} for {who} refused: the vehicle is gone.");
+                return null;
+            }
+            // The list was made when it opened; the vehicle's space must still be what the choice was made for.
+            var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == choice.VehicleId);
+            var fits = space == null ? "rent" : space.CommissaryId != siteId ? "move" : "release";
+            if (fits != choice.Op)
+            {
+                Log.Info($"Commissary {siteId}: Spaces {choice.Op} for {who} refused: its space changed since the list opened (now {fits}).");
+                return null;
+            }
+            var from = space?.CommissaryId;
+            var done = choice.Op == "release" ? Release(choice.VehicleId, choice.Kind, siteId) : Rent(choice.VehicleId, choice.Kind, siteId);
+            if (!done) return null;
+            var name = VehicleName(state, choice.VehicleId);
+            var rent = CartSelling.Money(rules.RentPerMonthCents.TryGetValue(choice.Kind, out var monthly) ? monthly : 0);
+            var (key, data) = choice.Op switch
+            {
+                "rent" => ("foodtrucks:message_commissary_space_rented", new Dictionary<string, string> { { "vehicle", name }, { "rent", rent }, { "time", CityPitches.Clock(rules.NightCheckMinute) } }),
+                "move" => ("foodtrucks:message_commissary_space_moved", new Dictionary<string, string> { { "vehicle", name }, { "from", NameOf(from) }, { "rent", rent } }),
+                _ => ("foodtrucks:message_commissary_space_released", new Dictionary<string, string> { { "vehicle", name } })
+            };
+            var contact = ContactFor(siteId);
+            if (inCall) Notices.Send(contact, new TextMessage(key, data, read: true));
+            else Notices.SendText(contact, key, data);
+            return Notices.Text(key, data);
+        }
+
+        // Says why a vehicle isn't in a bay: within one's radius on its door's side but not legally parked, or not at one.
+        private static void SayNotInBay(VehicleInstance vehicle, string kind)
+        {
+            var near = Sites?.Sites.FirstOrDefault(s => !InBay(vehicle, s, out var whyNot) && whyNot.StartsWith("not legally parked", StringComparison.Ordinal));
+            CartSelling.Say(near != null ? "foodtrucks:notification_commissary_park_legally" : "foodtrucks:notification_commissary_not_here", kind);
+        }
+
+        // The test bridge's rent_bay: the Spaces choice for this vehicle at the commissary whose bay it stands in (rent or
+        // move), as if picked in that commissary's call, with the same checks, notice and text. Null when it ran;
+        // otherwise why not (a refusal shows its notice first).
+        internal static string? RentBayForTesting(VehicleInstance vehicle)
+        {
+            const string refused = "the commissary's Spaces refused (see the notice)";
+            var state = FoodTrucksSession.CurrentState;
+            var kind = FoodTrucksMod.KindOf(vehicle.vehicleTypeName);
+            if (state == null || Rules == null || kind == null || uninstalled) return "the commissary can't rent a space now (data not loaded or uninstalled)";
             if (!FoodTrucksSession.CanWrite)
             {
                 CartSelling.Notify("foodtrucks:notification_data_readonly");
-                return null;
+                return refused;
             }
-            var site = SiteOf(cart);
+            var site = SiteOf(vehicle);
             if (site == null)
             {
-                // Within a bay's radius and on its door's side but not legally parked: say so, rather than "not here".
-                var near = Sites?.Sites.FirstOrDefault(s => !InBay(cart, s, out var whyNot) && whyNot.StartsWith("not legally parked", StringComparison.Ordinal));
-                CartSelling.Say(near != null ? "foodtrucks:notification_commissary_park_legally" : "foodtrucks:notification_commissary_not_here", kind);
-                return null;
-            }
-            if (forPicker && DropdownSelector.onShow == null)
-            {
-                Log.Error("Commissary: the game's list picker isn't available in this scene.");
-                CartSelling.Notify("foodtrucks:notification_prices_unavailable");
-                return null;
+                SayNotInBay(vehicle, kind);
+                return refused;
             }
             Unlock(state, site, "vehicle at the bay");
-            var id = cart.id;
-            var siteId = site.Id;
-            var options = new List<(string Op, string Label, Action Act)>();
-            var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == id);
-            var rent = CartSelling.Money(rules.RentPerMonthCents.TryGetValue(kind, out var monthly) ? monthly : 0);
-            if (space == null)
-                options.Add(("rent", Format("foodtrucks:commissary_option_rent", rent, Name(site)), () => Rent(id, kind, siteId)));
-            else if (space.CommissaryId != siteId)
-                options.Add(("move", Format("foodtrucks:commissary_option_move", NameOf(space.CommissaryId), Name(site), rent), () => Rent(id, kind, siteId)));
-            else
-                options.Add(("release", Format("foodtrucks:commissary_option_release", Name(site)), () => Release(id, kind, siteId)));
-            var units = state.Commissary.Stock.TryGetValue(siteId, out var lines) ? lines.Sum(l => (long)l.Units) : 0;
-            options.Add(units > 0
-                ? ("restock", Format("foodtrucks:commissary_option_restock", units.ToString()), () => Restock(id, kind, siteId))
-                : ("nostock", Format("foodtrucks:commissary_option_nostock", Name(site)), () => CartSelling.Say("foodtrucks:notification_commissary_nostock", kind, ("commissary", Name(site)))));
-            if (state.Commissary.Spaces.Any(s => s.CommissaryId == siteId))
-                options.Add(("order", Format("foodtrucks:commissary_option_order", Name(site)), () => CallToOrder(siteId)));
-            return options;
+            var choice = SpaceChoices(site.Id).FirstOrDefault(c => c.VehicleId == vehicle.id);
+            if (choice == null) return $"the commissary's Spaces don't list {vehicle.id}";
+            if (choice.Op == "release") return "the commissary's Spaces offer release for this vehicle here, not rent or move";
+            return ApplySpace(choice, site.Id, inCall: false) == null ? "the Spaces choice changed nothing (see the log)" : null;
         }
 
-        // Renting a space here, or moving the vehicle's space here; its first day's rent is charged at once.
-        private static void Rent(string vehicleId, string kind, string siteId)
+        // Renting a space here, or moving the vehicle's space here; its first day's rent is charged at once. True when
+        // the space is here now.
+        private static bool Rent(string vehicleId, string kind, string siteId)
         {
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
-            if (state == null || rules == null || !FoodTrucksSession.CanWrite) return;
+            if (state == null || rules == null || !FoodTrucksSession.CanWrite) return false;
             var day = SaveGameManager.Current.Day;
             var before = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicleId)?.CommissaryId;
             if (!rules.RentPerMonthCents.TryGetValue(kind, out var monthly))
             {
                 Log.Error($"Commissary: no rent for {kind} in rules.json.");
-                return;
+                return false;
             }
             // Days not charged yet go to the old place first.
             ChargeRent(state, rules);
@@ -1191,22 +1273,28 @@ namespace FoodTrucks
                 Log.Info($"Commissary {siteId}: {kind} {World.Short(vehicleId)} moved its space here from {before} on day {day}.");
                 CartSelling.Say("foodtrucks:notification_commissary_moved", kind, ("commissary", NameOf(siteId)), ("from", NameOf(before)));
             }
+            return true;
         }
 
-        private static void Release(string vehicleId, string kind, string siteId)
+        private static bool Release(string vehicleId, string kind, string siteId)
         {
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
-            if (state == null || rules == null || !FoodTrucksSession.CanWrite) return;
+            if (state == null || rules == null || !FoodTrucksSession.CanWrite) return false;
             // Core wants the rent settled before a space goes.
             ChargeRent(state, rules);
-            if (!Commissaries.Release(state.Commissary, vehicleId)) return;
+            if (!Commissaries.Release(state.Commissary, vehicleId))
+            {
+                Log.Info($"Commissary {siteId}: {kind} {World.Short(vehicleId)} has no space to give up.");
+                return false;
+            }
             FoodTrucksSession.MarkChanged();
             Log.Info($"Commissary {siteId}: {kind} {World.Short(vehicleId)} gave up its space on day {SaveGameManager.Current.Day}.");
             CartSelling.Say("foodtrucks:notification_commissary_released", kind, ("commissary", NameOf(siteId)));
+            return true;
         }
 
-        // What one restock loaded: the units per item, the foods nothing on board holds, the units the cargo refused and
+        // What one fill-up loaded: the units per item, the foods nothing on board holds, the units the cargo refused and
         // kept here, and the units left in stock here.
         private sealed class Loaded
         {
@@ -1216,82 +1304,42 @@ namespace FoodTrucks
             public long Left { get; set; }
         }
 
-        // Loads the commissary's stock into the vehicle (storage per piece; plan, "Storage per piece"). Equipment first,
-        // the spare pieces that fit (an Extra Storage only if the vehicle has none), so a piece fitted here already holds food. Then Core's
-        // Storage.Restock plans the food: each fitted piece is filled from its foods, a shared piece split evenly by
-        // weight and topped up from the other food. Foods with no fitted piece stay here. Whatever doesn't go in goes
-        // back to the commissary's stock in its place. The Restock button and the crew (CrewRestock) both load this way;
-        // the crew loads food only (fitPieces false): fitting equipment is the player's choice.
-        private static Loaded LoadFromStock(SaveState state, FoodTrucks.Core.Demand.DemandTables tables, VehicleInstance vehicle, string kind, string siteId,
-            bool fitPieces = true)
+        // Loads the commissary's food into the vehicle (storage per piece; plan, "Storage per piece"): Core's
+        // StockTransfer.FillUp plans it, each fitted piece filled from its foods, a shared piece split evenly by weight
+        // and topped up from the other food. Foods with no fitted piece stay here, and so does equipment: a piece is
+        // fitted only when the player takes it by name (Commissary stock). Whatever doesn't go in goes back to the
+        // commissary's stock in its place. Fill up and the crew (CrewRestock) both load this way.
+        private static Loaded LoadFromStock(SaveState state, FoodTrucks.Core.Demand.DemandTables tables, VehicleInstance vehicle, string kind, string siteId)
         {
             var result = new Loaded();
-            // Only spare pieces that fit (Core's Storage.FitPieces): never a second Extra Storage, never past the slots,
-            // so a Restock shows no refusal for a piece it chose to leave here.
-            var pieces = fitPieces ? Storage.FitPieces(tables, kind, CargoLimit.Lines(vehicle), InStock(state, siteId)) : new Dictionary<string, int>();
-            if (pieces.Count > 0) result.Back += Load(state, vehicle, siteId, pieces, result.Items);
-            var foods = InStock(state, siteId).Where(p => tables.EquipmentForGameItem(p.Key) == null)
-                .ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
-            var plan = Storage.Restock(tables, kind, CargoLimit.Lines(vehicle), foods);
+            var plan = StockTransfer.FillUp(tables, kind, CargoLimit.Lines(vehicle), InStock(state, siteId));
             if (plan.Load.Count > 0) result.Back += Load(state, vehicle, siteId, plan.Load, result.Items);
             result.NotHeld = plan.NotHeld;
             FoodTrucksSession.MarkChanged();
             if (result.Items.Count > 0 || result.Back > 0)
             {
                 try { GameEvent.Invoke("ba:gameevent_itemcargochanged"); }
-                catch (Exception ex) { Log.Error("Commissary restock, cargo event: " + ex); }
+                catch (Exception ex) { Log.Error("Commissary fill up, cargo event: " + ex); }
             }
             result.Left = state.Commissary.Stock.TryGetValue(siteId, out var rest) ? rest.Sum(x => (long)x.Units) : 0;
             return result;
         }
 
-        private static void Restock(string vehicleId, string kind, string siteId)
+        // The game's signals for a cargo that changed outside its own loading: the HUD's count and the cargo event.
+        private static void CargoChanged(VehicleInstance vehicle)
         {
-            var state = FoodTrucksSession.CurrentState;
-            var tables = DemandData.Tables;
-            if (state == null || tables == null || !FoodTrucksSession.CanWrite) return;
-            var vehicle = SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v != null && v.id == vehicleId);
-            if (vehicle == null || !state.Commissary.Stock.TryGetValue(siteId, out var stock) || stock.Count == 0) return;
-
-            var result = LoadFromStock(state, tables, vehicle, kind, siteId);
-            var loaded = result.Items;
-            var left = result.Left;
-            state.Commissary.Stock.TryGetValue(siteId, out var rest);
-            var view = Storage.Of(tables, kind, CargoLimit.Lines(vehicle));
-            Log.Info($"Commissary restock: {kind} {World.Short(vehicleId)} at {siteId} loaded {(loaded.Count == 0 ? "nothing" : string.Join(", ", loaded.Select(p => $"{p.Value} {p.Key}")))}; " +
-                     (result.NotHeld.Count == 0 ? "" : $"no piece for {string.Join(", ", result.NotHeld)}; ") + $"{result.Back} units refused by the cargo and kept; " +
-                     $"{left} units left in stock; storage {(view == null ? "?" : StoragePanel.Summary(vehicle, view))}.");
-            // Fitted pieces are named first ("fitted Griddle"), then the foods with their counts.
-            var fitted = loaded.Where(p => tables.EquipmentForGameItem(p.Key) != null)
-                .Select(p => (p.Value > 1 ? p.Value + " " : "") + LocalizorManager.GetLocalization(p.Key, null)).ToList();
-            var foodText = string.Join(", ", FoodParts(tables, vehicle, view, loaded, rest));
-            var text = fitted.Count == 0 ? foodText
-                : LocalizorManager.GetLocalization("foodtrucks:commissary_restock_fitted", null).Replace("{pieces}", string.Join(", ", fitted))
-                  + (foodText.Length > 0 ? "; " + foodText : "");
-            var notHeld = string.Join(", ", result.NotHeld.Select(i => LocalizorManager.GetLocalization(i, null)));
-            // Foods that stayed here because their piece is full, "Tacos: the Griddle is full (160/160)": each full piece
-            // none of whose foods went in this time (a piece that took some says so in the loaded list). 0.9.8 named only
-            // the foods nothing held and left a full Griddle unexplained (agent run, 11 October 2026).
-            var fullParts = view == null ? new List<string>()
-                : view.Pools.Where(p => Capped(tables, p, rest) && !p.Piece.Products.Any(loaded.ContainsKey)).Select(p => PieceFull(vehicle, p, rest)).ToList();
-            var full = fullParts.Count == 0 ? "" : " " + string.Join("; ", fullParts) + ".";
-            if (fullParts.Count > 0) Log.Info($"Commissary restock: full pieces:{full}");
-            if (loaded.Count == 0 && result.NotHeld.Count == 0 && fullParts.Count > 0)
-                CartSelling.Say("foodtrucks:notification_commissary_restock_full_why", kind, ("full", full), ("left", left.ToString()));
-            else if (loaded.Count == 0 && result.NotHeld.Count == 0)
-                CartSelling.Say("foodtrucks:notification_commissary_restock_full", kind, ("left", left.ToString()));
-            else if (loaded.Count == 0)
-                CartSelling.Say("foodtrucks:notification_commissary_restock_notheld", kind, ("notheld", notHeld), ("full", full), ("left", left.ToString()));
-            else if (result.NotHeld.Count == 0)
-                CartSelling.Say("foodtrucks:notification_commissary_restocked", kind, ("loaded", text), ("full", full), ("left", left.ToString()));
-            else
-                CartSelling.Say("foodtrucks:notification_commissary_restocked_notheld", kind, ("loaded", text), ("notheld", notHeld), ("full", full), ("left", left.ToString()));
+            try
+            {
+                vehicle.OnItemsInCargoUpdated()?.Invoke();
+                GameEvent.Invoke("ba:gameevent_itemcargochanged");
+            }
+            catch (Exception ex) { Log.Error("Commissary stock, cargo event: " + ex); }
         }
 
         // ---- Crew restock (plan, "Commissary supply and crew restock") ----
 
         // The commissary a crewed vehicle can restock at where it stands: the one where it rents its space, when it is in
-        // that bay (the Restock button's test). Whether anything there would load doesn't matter: the restock step also
+        // that bay (the in-bay test). Whether anything there would load doesn't matter: the restock step also
         // finds what the commissary was short of and texts it (review round 1, Astra and Sol). Null otherwise.
         internal static string? CrewRestockSite(SaveState state, VehicleInstance vehicle)
         {
@@ -1431,7 +1479,7 @@ namespace FoodTrucks
             return tables == null ? null : FoodTrucks.Core.Fleet.CrewRestock.StockKey(tables, kind, CargoLimit.Lines(vehicle), InStock(state, siteId));
         }
 
-        // The crew loads food with the Restock button's code before it sets off (HireRoutes, on Core's Restock step),
+        // The crew loads food with Fill up's code before it sets off (HireRoutes, on Core's Restock step),
         // never spare equipment. The log says what went in; when a fitted piece still has room and the commissary has
         // none of its foods (an empty commissary included), the commissary texts what was missing, once per vehicle and
         // game day (Core CrewRestock).
@@ -1439,7 +1487,7 @@ namespace FoodTrucks
         {
             var tables = DemandData.Tables;
             if (tables == null) return;
-            var result = LoadFromStock(state, tables, vehicle, kind, siteId, fitPieces: false);
+            var result = LoadFromStock(state, tables, vehicle, kind, siteId);
             var shortOf = FoodTrucks.Core.Fleet.CrewRestock.Short(tables, kind, CargoLimit.Lines(vehicle), InStock(state, siteId));
             var view = Storage.Of(tables, kind, CargoLimit.Lines(vehicle));
             Log.Info($"Crew restock: {kind} {World.Short(vehicle.id)} at {siteId} loaded " +
@@ -1581,94 +1629,6 @@ namespace FoodTrucks
                 .ToList();
         }
 
-        // The bay's "Order stock": the phone opens on the commissary's conversation and calls it, so ordering happens
-        // in one place, the conversation's order form.
-        //
-        // Not ContactsApp.OpenAndStartCall: it presses CALL one frame after opening the app, but the app shows the
-        // conversation in a coroutine (ShowContactConversationIEnumerator) that waits a frame and then lays out the
-        // history. When the call wins that race (the phone opened from the world, as here), the call's first entry, with
-        // its Hang up and Order stock buttons, is placed before the history is laid out and ends up out of sight, and
-        // the call can't be continued or hung up [code, 1.0; 0.9.6 playtest]. So the phone opens on the conversation
-        // (the game's own OpenAppWithContact path through the app's OnEnable), and the call starts through the CALL
-        // button's own path (ContactsApp.StartCall) once the conversation panel is up with this contact.
-        private static void CallToOrder(string siteId)
-        {
-            HireRoutes.Later(() =>
-            {
-                try
-                {
-                    var contact = ContactFor(siteId);
-                    Log.Info($"Commissary {siteId}: the bay's Order stock opens its conversation.");
-                    SaveGameManager.Current.PlayerDefaults.contactsLastName = contact.id;
-                    SaveGameManager.Current.PlayerDefaults.contactsLastCategoryName = contact.category;
-                    // FullMenu.SelectApp turns every app off and the chosen one back on, so the app's OnEnable runs and
-                    // opens contactsLastName even when Contacts was already showing; its OnDisable on the way cancels
-                    // a call already running there. With unsaved BizMan settings ShowApp only asks first: Contacts
-                    // isn't showing, so the pending call gives up quietly (below) and the player presses CALL after answering.
-                    InstanceBehavior<UIs>.Instance.fullMenu.ShowApp(AppName.Contacts);
-                    pendingCall = (siteId, contact, Time.frameCount, Time.unscaledTime + PendingCallSeconds);
-                }
-                catch (Exception ex)
-                {
-                    pendingCall = null;
-                    Log.Error("Commissary order, opening the phone: " + ex);
-                    CartSelling.Notify("foodtrucks:notification_commissary_call", ("commissary", NameOf(siteId)));
-                }
-            });
-        }
-
-        private const float PendingCallSeconds = 5f;
-        private static (string SiteId, Contact Contact, int Frame, float Until)? pendingCall;
-        // The frame in which the bay's "Order stock" last pressed CALL, for the hang-up log line.
-        internal static int BayCallFrame = -1;
-        private static readonly System.Reflection.FieldInfo? ConversationPanelField =
-            typeof(ContactsApp).GetField("conversationPanel", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-
-        // Starts the bay's call once the phone shows the commissary's conversation: the panel is up with this contact,
-        // which the app's coroutine sets in the same step that lays out the history, and a frame has passed since.
-        private static void StartPendingCall()
-        {
-            if (pendingCall == null) return;
-            var (siteId, contact, frame, until) = pendingCall.Value;
-            try
-            {
-                var app = InstanceBehavior<UIs>.Instance?.fullMenu?.contactsApp;
-                var panel = app == null ? null : ConversationPanelField?.GetValue(app) as GameObject;
-                if (app != null && app.isActiveAndEnabled && app.selectedContact?.id == contact.id && panel != null && panel.activeSelf &&
-                    Time.frameCount > frame + 1)
-                {
-                    pendingCall = null;
-                    // Rare: switching apps cancelled any call in Contacts, but one may have started since.
-                    if (DialogController.current != null)
-                    {
-                        Log.Info($"Commissary {siteId}: a call is already on; the bay's Order stock leaves the conversation open.");
-                        return;
-                    }
-                    BayCallFrame = Time.frameCount;
-                    app.StartCall();
-                    Log.Info($"Commissary {siteId}: the bay's call started once the conversation was up ({Time.frameCount - frame} frames).");
-                    return;
-                }
-                if (Time.unscaledTime < until && (app == null || app.isActiveAndEnabled || Time.frameCount <= frame + 2)) return;
-                pendingCall = null;
-                if (app != null && !app.isActiveAndEnabled)
-                {
-                    // The player's own doing: the phone closed, another app chosen, or BizMan's unsaved-settings question.
-                    Log.Info($"Commissary {siteId}: the bay's call was dropped: Contacts isn't showing (the phone was closed or left for another app).");
-                    return;
-                }
-                Log.Error($"Commissary {siteId}: the bay's call didn't start: the conversation never came up " +
-                          $"(app {(app == null ? "missing" : app.isActiveAndEnabled ? "open" : "closed")}, panel field {(ConversationPanelField == null ? "missing" : "found")}).");
-                CartSelling.Notify("foodtrucks:notification_commissary_call", ("commissary", NameOf(siteId)));
-            }
-            catch (Exception ex)
-            {
-                pendingCall = null;
-                Log.Error("Commissary order, starting the call: " + ex);
-                CartSelling.Notify("foodtrucks:notification_commissary_call", ("commissary", NameOf(siteId)));
-            }
-        }
-
         // A quote placed as Core's orders. No money moves now: each order is paid when it arrives (Deliver).
         internal static IReadOnlyList<CommissaryOrder> PlaceQuote(string siteId, CommissaryQuote quote)
         {
@@ -1741,7 +1701,7 @@ namespace FoodTrucks
                 .Replace("{limit}", rules.FoodBoxLimit(check.ItemName!).ToString());
         }
 
-        // The test bridge's fixture: the Commissary button's Rent for this vehicle at this commissary, without standing in
+        // The test bridge's fixture: the phone's Rent for this vehicle at this commissary, without standing in
         // its bay (the commissary is unlocked first, as the first visit does). Null when the vehicle has its space there.
         internal static string? RentForTesting(string vehicleId, string siteId)
         {
@@ -1813,6 +1773,8 @@ namespace FoodTrucks
                 catch (Exception ex) { Log.Error("Uninstall: commissary rent: " + ex); }
                 // Stock a logistics plan brought was never paid under the commissary's label (LogisticsCommissary).
                 var fromPlans = FoodTrucks.Core.Commissary.CommissaryLogistics.GoodsCents(commissary);
+                // Nor was stock a vehicle gave back at the bay (Commissary stock): it may have come from a wholesaler.
+                var fromVehicles = Commissaries.ReturnedGoodsCents(commissary);
                 var refund = Commissaries.Refund(commissary);
                 var paidBack = false;
                 if (refund.Total > 0)
@@ -1822,7 +1784,7 @@ namespace FoodTrucks
                     paidBack = Payments.PayIn(refund.Total, info);
                     if (paidBack)
                     {
-                        var reversed = ReverseDeduction(refund.Total - fromPlans);
+                        var reversed = ReverseDeduction(refund.Total - fromPlans - fromVehicles);
                         Log.Info($"Uninstall: {CartSelling.Money(reversed)} of this tax year's commissary deduction taken back for the refund.");
                     }
                     else Log.Error($"Uninstall: the commissary refund of {CartSelling.Money(refund.Total)} was not paid.");
@@ -1845,6 +1807,7 @@ namespace FoodTrucks
             CartButton.ShowCommissary(false);
             BayMarkers.RemoveAll();
             CommissaryOrderForm.Forget(Sites?.Sites.Select(s => ContactPrefix + s.Id) ?? Enumerable.Empty<string>());
+            CommissaryDialog.EndSpaces("uninstall step");
             var removed = SaveGameManager.Current?.Contacts.RemoveAll(c => c != null && c.id != null && c.id.StartsWith(ContactPrefix, StringComparison.Ordinal)) ?? 0;
             if (removed > 0) Log.Info($"Uninstall: {removed} commissary contacts removed.");
         }
@@ -2131,14 +2094,12 @@ namespace FoodTrucks
 
     // A commissary's call, all in its conversation: what it holds for you, then "Order stock" opens the order form
     // (CommissaryOrderForm), the commissary reads the order back with its total, and "Confirm order" places it.
+    // "Spaces and standing orders" leads to Spaces (rent, move or give up a vehicle's space here, picked from the game's
+    // list) and Standing orders. Without a space here the call starts at that second step (plan, "UI flow").
     internal sealed class CommissaryDialog : Dialog
     {
-        // Whether the call now on was started by the bay's "Order stock" (its StartCall runs this constructor in the same frame).
-        private static bool startedFromBay;
-
         public CommissaryDialog()
         {
-            startedFromBay = Commissary.BayCallFrame == Time.frameCount;
             try { DialogController.current.ShowEntry(Start()); }
             catch (Exception ex)
             {
@@ -2169,10 +2130,10 @@ namespace FoodTrucks
         private static void HangUp()
         {
             CommissaryOrderForm.End("hung up");
+            EndSpaces("hung up");
             var id = Current?.contact?.id;
             var over = PhoneCall.HangUp();
-            Log.Info($"Commissary call: {id ?? "?"} hung up ({(startedFromBay ? "started from the bay" : "started with CALL")}); " +
-                     $"{(over ? "the call is over, CALL is ready" : "a call is still on")}.");
+            Log.Info($"Commissary call: {id ?? "?"} hung up; {(over ? "the call is over, CALL is ready" : "a call is still on")}.");
         }
 
         private static TextMessage HangUpMessage() => new TextMessage("ba:messagetype_contacts_message_player_cancel_call");
@@ -2186,8 +2147,8 @@ namespace FoodTrucks
         }
 
         // Null when this commissary takes an order now, else the closing line saying why not.
-        // forOrders false: only viewing or cancelling standing orders, which needs no space (review round 1, Astra: a
-        // standing order outlives the last space, and must stay cancellable).
+        // forOrders false: Spaces and standing orders, which need no space here (review round 1, Astra: a standing
+        // order outlives the last space, and must stay cancellable; Spaces is where a first space is rented).
         private static DialogEntry? Refusal(CommissarySite? site, bool forOrders = true)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -2195,7 +2156,7 @@ namespace FoodTrucks
                 return Closing("foodtrucks:dialog_commissary_unavailable", null);
             if (!forOrders) return null;
             if (!CommissaryOrdering.CanOrder(state.Commissary, site.Id))
-                return Closing("foodtrucks:dialog_commissary_no_space", new { commissary = Commissary.Name(site) });
+                return Closing("foodtrucks:dialog_commissary_no_space_phone", new { commissary = Commissary.Name(site) });
             if (!CommissaryOrderForm.Ready)
             {
                 Log.Error("Commissary call: no order form (see the Commissary orders line at startup).");
@@ -2207,16 +2168,22 @@ namespace FoodTrucks
         private static DialogEntry Start()
         {
             var site = Site();
-            // Without a space here the call still shows the standing orders, to cancel them; with none, it says why not.
-            var refusal = Refusal(site, forOrders: site == null || FoodTrucksSession.CurrentState == null ||
-                                               CommissaryStandingOrders.At(FoodTrucksSession.CurrentState.Commissary, site.Id).Count == 0);
+            var refusal = Refusal(site, forOrders: false);
             if (refusal != null) return refusal;
             var commissary = FoodTrucksSession.CurrentState!.Commissary;
             if (!CommissaryOrdering.CanOrder(commissary, site!.Id))
             {
-                var nospace = new { commissary = Commissary.Name(site), standing = CommissaryStandingOrders.At(commissary, site.Id).Count.ToString() };
-                Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_start_nospace", ToDictionary(nospace), read: true, isNewInteraction: true));
-                return Menu(site.Id, LocalizorManager.Localize("foodtrucks:dialog_commissary_start_nospace", nospace));
+                // No space here: the call opens on Spaces and Standing orders, with the rent for a space.
+                var rules = DemandData.Rules!.Commissary!;
+                var nospace = new
+                {
+                    commissary = Commissary.Name(site),
+                    standing = CommissaryStandingOrders.At(commissary, site.Id).Count.ToString(),
+                    cart = CartSelling.Money(rules.RentPerMonthCents.TryGetValue("cart", out var cart) ? cart : 0),
+                    truck = CartSelling.Money(rules.RentPerMonthCents.TryGetValue("truck", out var truck) ? truck : 0)
+                };
+                Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_start_spaces", ToDictionary(nospace), read: true, isNewInteraction: true));
+                return Menu(site.Id, LocalizorManager.Localize("foodtrucks:dialog_commissary_start_spaces", nospace));
             }
             var data = new
             {
@@ -2231,32 +2198,149 @@ namespace FoodTrucks
             return Menu(site.Id, LocalizorManager.Localize("foodtrucks:dialog_commissary_start_standing", data));
         }
 
-        // The call's menu: Order stock (with a space here), and the standing orders when there are any.
+        // The call's menu: Order stock and "Spaces and standing orders" with a space here; without one, the second
+        // step's choices straight away.
         private static DialogEntry Menu(string siteId, Localizor.LanguageChangeEvent.LanguageChangeEventDataHolder message)
         {
             var commissary = FoodTrucksSession.CurrentState!.Commissary;
-            var standing = CommissaryStandingOrders.At(commissary, siteId).Count;
-            if (!CommissaryOrdering.CanOrder(commissary, siteId))
-                return new DialogEntry
-                {
-                    messageData = message,
-                    Template = DialogEntry.TemplateType.Text,
-                    OnConfirm = Guard(() => Standing(siteId, 0)),
-                    ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_standing_list", (object?)null),
-                    OnCancel = HangUp,
-                    onCancelMessage = HangUpMessage()
-                };
+            if (!CommissaryOrdering.CanOrder(commissary, siteId)) return SpacesMenu(siteId, message);
             return new DialogEntry
             {
                 messageData = message,
                 Template = DialogEntry.TemplateType.Text,
                 OnConfirm = Guard(() => Form(siteId)),
                 ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_order_stock", (object?)null),
+                OnSecondOption = Guard(() => SpacesMenu(siteId, LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_menu", (object?)null))),
+                SecondOptionTextOverride = "foodtrucks:dialog_commissary_spaces_and_standing",
+                OnCancel = HangUp,
+                onCancelMessage = HangUpMessage()
+            };
+        }
+
+        // The second step: Spaces, and Standing orders when there are any.
+        private static DialogEntry SpacesMenu(string siteId, Localizor.LanguageChangeEvent.LanguageChangeEventDataHolder message)
+        {
+            var refusal = Refusal(DemandData.Commissaries?.Site(siteId), forOrders: false);
+            if (refusal != null) return refusal;
+            var standing = CommissaryStandingOrders.At(FoodTrucksSession.CurrentState!.Commissary, siteId).Count;
+            return new DialogEntry
+            {
+                messageData = message,
+                Template = DialogEntry.TemplateType.Text,
+                OnConfirm = Guard(() => Spaces(siteId)),
+                ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces", (object?)null),
                 OnSecondOption = standing > 0 ? Guard(() => Standing(siteId, 0)) : null!,
                 SecondOptionTextOverride = standing > 0 ? "foodtrucks:dialog_commissary_standing_list" : null!,
                 OnCancel = HangUp,
                 onCancelMessage = HangUpMessage()
             };
+        }
+
+        // ---- Spaces: the game's list picker beside the phone ----
+
+        // The picker the call opened, while it may still act: its number, the contact and the commissary. A choice acts
+        // only while this is its picker and the call with that contact is still on; hanging up, closing the call's
+        // step or the phone, or another picker forgets it (EndSpaces), so a late click does nothing.
+        private static (int Id, string ContactId, string SiteId)? spacesOpen;
+        private static int spacesCount;
+
+        private static DialogEntry? Spaces(string siteId)
+        {
+            var site = DemandData.Commissaries?.Site(siteId);
+            var refusal = Refusal(site, forOrders: false);
+            if (refusal != null) return refusal;
+            var choices = Commissary.SpaceChoices(siteId);
+            if (choices.Count == 0)
+            {
+                Log.Info($"Commissary call {siteId}: Spaces lists nothing: the player has no food cart or truck.");
+                return SpacesMenu(siteId, LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_none", (object?)null));
+            }
+            // The game's list picker belongs to the interior designer and registers itself when that UI starts.
+            if (DropdownSelector.onShow == null)
+            {
+                Log.Error($"Commissary call {siteId}: Spaces can't open: the game's list picker isn't available in this scene.");
+                return SpacesMenu(siteId, LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_unavailable", (object?)null));
+            }
+            EndSpaces("a new Spaces list");
+            var id = ++spacesCount;
+            var contactId = Current.contact.id;
+            spacesOpen = (id, contactId, siteId);
+            var byLabel = choices.ToDictionary(c => c.Label, c => c, StringComparer.Ordinal);
+            Log.Info($"Commissary call {siteId}: Spaces lists {choices.Count} vehicles ({string.Join(", ", choices.Select(c => $"{World.Short(c.VehicleId)} {c.Op}"))}).");
+            DropdownSelector.Show(choices.Select(c => c.Label).ToList(), chosen =>
+            {
+                try { Chosen(id, contactId, siteId, byLabel.TryGetValue(chosen ?? "", out var choice) ? choice : null); }
+                catch (Exception ex) { Log.Error("Commissary call, Spaces: " + ex); }
+            }, "foodtrucks:commissary_spaces_header", "foodtrucks:commissary_spaces_body");
+            return new DialogEntry
+            {
+                messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_pick", (object?)null),
+                Template = DialogEntry.TemplateType.Text,
+                OnConfirm = Guard(() =>
+                {
+                    EndSpaces("back from Spaces");
+                    return Menu(siteId, LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_menu", (object?)null));
+                }),
+                ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_back", (object?)null),
+                OnCancel = HangUp,
+                onCancelMessage = HangUpMessage()
+            };
+        }
+
+        // A vehicle picked: acts only while the picker is still the call's (EndSpaces), then the call goes on at its menu
+        // with a line saying what changed.
+        private static void Chosen(int id, string contactId, string siteId, Commissary.SpaceChoice? choice)
+        {
+            var current = spacesOpen;
+            var dialog = DialogController.current;
+            if (current == null || current.Value.Id != id || dialog == null || dialog.contact?.id != contactId)
+            {
+                Log.Info($"Commissary call {siteId}: a Spaces choice came after its call or list had ended; nothing done.");
+                return;
+            }
+            spacesOpen = null;
+            if (choice == null)
+            {
+                Log.Info($"Commissary call {siteId}: the Spaces list closed with nothing chosen.");
+                return;
+            }
+            var text = Commissary.ApplySpace(choice, siteId, inCall: true);
+            var line = text == null
+                ? LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_unchanged", (object?)null)
+                : LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_changed", new { text });
+            var next = Guard(() => Menu(siteId, line))();
+            if (next != null) dialog.ShowEntry(next);
+        }
+
+        // Forgets the call's Spaces list and closes the game's picker if it is still showing it. Called on hanging up, a
+        // closing line, Back, a new list, the uninstall step, and each frame once the call has gone (WatchSpaces).
+        internal static void EndSpaces(string why)
+        {
+            var current = spacesOpen;
+            spacesOpen = null;
+            if (current == null) return;
+            try
+            {
+                if (!DropdownSelector.isOpen)
+                {
+                    Log.Info($"Commissary call {current.Value.SiteId}: Spaces list forgotten ({why}); the picker was already closed.");
+                    return;
+                }
+                var picker = UnityEngine.Object.FindObjectOfType<DropdownSelectorUI>();
+                picker?.OnCancel();
+                Log.Info($"Commissary call {current.Value.SiteId}: Spaces list closed ({why}){(picker == null ? "; no picker found to close, its choice does nothing" : "")}.");
+            }
+            catch (Exception ex) { Log.Error("Commissary call, closing the Spaces list: " + ex); }
+        }
+
+        // Every frame (Commissary.Update and LateUpdate): the game's ContactsApp hangs up on closing the phone without
+        // calling the entry's OnCancel, so a call that has gone is noticed here and its Spaces list closed.
+        internal static void WatchSpaces()
+        {
+            var current = spacesOpen;
+            if (current == null) return;
+            var dialog = DialogController.current;
+            if (dialog == null || dialog.contact?.id != current.Value.ContactId) EndSpaces("the call ended");
         }
 
         // The standing orders, one at a time: what it delivers, how often and when next. Next (or Done on the last, back to
@@ -2269,9 +2353,7 @@ namespace FoodTrucks
             var commissary = FoodTrucksSession.CurrentState!.Commissary;
             var list = CommissaryStandingOrders.At(commissary, siteId);
             if (list.Count == 0 || index >= list.Count)
-                return list.Count == 0 && !CommissaryOrdering.CanOrder(commissary, siteId)
-                    ? Closing("foodtrucks:dialog_commissary_standing_none_nospace", new { commissary = Commissary.Name(site!) })
-                    : Menu(siteId, LocalizorManager.Localize("foodtrucks:dialog_commissary_standing_done", new { count = list.Count.ToString() }));
+                return Menu(siteId, LocalizorManager.Localize("foodtrucks:dialog_commissary_standing_done", new { count = list.Count.ToString() }));
             var standing = list[index];
             var rules = DemandData.Rules!.Commissary!;
             var data = new
@@ -2548,6 +2630,7 @@ namespace FoodTrucks
         private static DialogEntry Closing(string key, object? data)
         {
             CommissaryOrderForm.End("call closing");
+            EndSpaces("call closing");
             Notices.Send(Current.contact, new TextMessage(key, data == null ? null : ToDictionary(data), read: true, isNewInteraction: true));
             return new DialogEntry
             {

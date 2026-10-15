@@ -193,7 +193,7 @@ namespace FoodTrucks
             return false;
         }
 
-        private static void Refused(VehicleInstance vehicle, string itemName, LoadCheck check)
+        internal static void Refused(VehicleInstance vehicle, string itemName, LoadCheck check)
         {
             var tables = DemandData.Tables;
             var kind = VehicleKind(vehicle);

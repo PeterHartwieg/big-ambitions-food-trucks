@@ -381,7 +381,7 @@ namespace FoodTrucks.Core.Commissary
 
     // The bays a save keeps, and what "in the bay" means (the coordinator's decision, review round 4): a vehicle is in a
     // commissary's bay when the game's own wheel test calls it legally parked and its middle is within the bay radius of
-    // one of the commissary's resolved bay points. The paint, Ctrl+F3, the panel's Commissary button, the visit unlock
+    // one of the commissary's resolved bay points. The paint, Ctrl+F3, the panel's Commissary stock button, the visit unlock
     // and the 04:00 check all use this.
     public static class CommissaryBays
     {
