@@ -134,7 +134,7 @@ class Mock:
             'money': 20000., 'transactions_today':[],
             'player': {'x': 0., 'y': 0., 'z': 0., 'heading': 0., 'in_vehicle': None, 'at_hatch': None, 'carrying': None,
                        'needs': {'energy': 100., 'hunger': 100., 'happiness': 80., 'happiness_modifiers': [], 'max': 100., 'collapse_at': -20., 'energy_off': False, 'going_to_hospital': False, 'kept_up': False}},
-            'licence': {'until_day': None, 'permits': 0, 'course_done': False},
+            'licence': {'until_day': None, 'permits': 0, 'course_done': False, 'todos': []},
             'vehicles': [], 'commissary': {'spaces': [], 'orders': [], 'stock': [], 'unpaid': {'rent': 0, 'fines': 0}},
             'ledger_today': {'street_food': 0., 'crew_waiting': 0.}, 'notices_recent': list(self.recent)}
         self.absolute = 420
@@ -241,7 +241,7 @@ class Mock:
                 v = self.state['vehicles'][0]
                 self.place_vehicle(v, 'hells-kitchen')
                 self.state['player'].update(x=v['x'] + 2.6, z=v['z'])
-                self.state['licence'] = {'until_day':60, 'permits':1, 'course_done':True}
+                self.state['licence'] = {'until_day':60, 'permits':1, 'course_done':True, 'todos':[]}
                 if name != 'FT logistics':
                     self.state['commissary']['spaces'] = [{'site':'hells-kitchen','vehicle':v['id']}]
                     v['commissary']['site'] = 'hells-kitchen'
@@ -519,7 +519,8 @@ class Mock:
         v = dict(id=identifier,kind=kind,name='Food '+kind,x=0.,y=0.,z=0.,heading=0.,legal=True,
                  legal_reason='wheel parking test: legal, mock wheels' if kind=='truck' else 'pavement rule: legal; nearest entrance 10.0 m',hatch_side='right' if kind=='truck' else None,
                  hatch_to_pavement=True if kind=='truck' else None, open=False,serving='nobody',crew=[],pieces=[],stock=[],
-                 queue=None,commissary=None,route=None,parking={'state':'Legal','neighbourhood':'ba:neighborhood_hellskitchen','hourly_price':5.0,'unpaid':0.})
+                 queue=None,commissary=None,route=None,parking={'state':'Legal','neighbourhood':'ba:neighborhood_hellskitchen','hourly_price':5.0,'unpaid':0.},
+                 todos=[])
         self.state['vehicles'].append(v)
         self.selected = identifier
         self.event(f'Spawned foodtrucks:vehicletype_food{kind}: id {identifier}, controller mock.')

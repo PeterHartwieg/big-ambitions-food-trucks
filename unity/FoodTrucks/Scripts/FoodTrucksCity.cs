@@ -124,6 +124,7 @@ namespace FoodTrucks
             runtimeObject.AddComponent<CartParts>();
             runtimeObject.AddComponent<VehicleDisplays>();
             runtimeObject.AddComponent<Commissary>();
+            runtimeObject.AddComponent<VehicleTodos>();
             try { PrefabFixes.Apply(); }
             catch (Exception ex) { Log.Error("Prefab fixes: " + ex); }
             try { CartParts.LogLanes(); }

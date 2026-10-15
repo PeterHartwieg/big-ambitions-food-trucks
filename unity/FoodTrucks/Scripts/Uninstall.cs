@@ -43,6 +43,8 @@ namespace FoodTrucks
                 RemoveMarketEntries(game);
                 try { Commissary.RemoveForUninstall(); }
                 catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
+                try { VehicleTodos.RemoveAll("uninstall"); }
+                catch (Exception ex) { Log.Error("Uninstall: to-dos: " + ex); }
                 CartSelling.Notify("foodtrucks:notification_uninstall_none");
                 return;
             }
@@ -81,6 +83,9 @@ namespace FoodTrucks
             Catering.RemoveContact();
             try { Commissary.RemoveForUninstall(); }
             catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
+            // The vehicles' and the licence's to-dos; none come back once the commissary is uninstalled.
+            try { VehicleTodos.RemoveAll("uninstall"); }
+            catch (Exception ex) { Log.Error("Uninstall: to-dos: " + ex); }
             long refundCents = 0;
             long unpaidCents = 0;
             var removed = 0;

@@ -59,6 +59,7 @@ namespace FoodTrucks
                 ["until_day"] = state.Licence.HasVendorLicence ? state.Licence.LicenceExpiresOnDay : (int?)null,
                 ["permits"] = state.Vehicles.Count(v => v.HasPermit),
                 ["course_done"] = Try(() => (bool?)EducationHelper.HasCompletedDiploma(DiplomaName.FoodSafetyCourse)),
+                ["todos"] = Todos(null),
             };
             var vehicles = new JArray();
             foreach (var instance in game.VehicleInstances.Where(v => v != null && FoodTrucksMod.KindOf(v.vehicleTypeName) != null))
@@ -224,8 +225,14 @@ namespace FoodTrucks
                 ["commissary"] = commissary,
                 ["route"] = route,
                 ["parking"] = Parking(instance),
+                ["todos"] = Todos(instance.id),
             };
         }
+
+        // The phone's to-dos the mod made for this vehicle (null: the fleet's, the vendor licence), as they stand after the
+        // last minute's reconcile: kind and food.
+        private static JArray Todos(string? vehicleId) =>
+            new JArray(VehicleTodos.ListFor(vehicleId).Select(t => new JObject { ["kind"] = t.Kind, ["item"] = t.Item }));
 
         // The game's transactions of today and yesterday, oldest first: label as the bank app shows it, amount, day, time.
         private static JArray Transactions(GameInstance game)

@@ -495,5 +495,16 @@
     "foodtrucks:message_commissary_standing_notsold": "We can't get {items} any more, so it's left out of your standing order.",
     "foodtrucks:message_commissary_standing_nospace": "No vehicle has a space here any more, so your standing order ({items}) wasn't delivered today. It stays on our list; call us to cancel it.",
     "foodtrucks:message_commissary_crew_short": "Your crew loaded the {vehicle} here ({loaded}), but we had no {items} for it. Order more, or bring it here yourself.",
-    "foodtrucks:commissary_crew_loaded_nothing": "nothing"
+    "foodtrucks:commissary_crew_loaded_nothing": "nothing",
+    "foodtrucks:todo_low_stock": "Low stock of {itemname}",
+    "foodtrucks:todo_empty_stock": "Out of {itemname}",
+    "foodtrucks:todo_missing_crew": "Not enough crew for its route",
+    "foodtrucks:todo_route_problem": "Its route can't run: check the stops' times",
+    "foodtrucks:todo_no_permit": "No vending permit: buy one from the City",
+    "foodtrucks:todo_no_commissary_space": "No commissary space: fined every night at 04:00",
+    "foodtrucks:todo_health_grade_c": "Health grade C: clean it at its commissary",
+    "foodtrucks:todo_licence_running_out": "Vendor licence runs out after day {day}: renew it with the City",
+    "foodtrucks:todo_licence_expired": "Vendor licence has run out: renew it with the City",
+    "foodtrucks:todo_unknown": "Needs attention",
+    "foodtrucks:notification_todo_no_place": "This vehicle is with your private driver, so it has no place on the map."
 }

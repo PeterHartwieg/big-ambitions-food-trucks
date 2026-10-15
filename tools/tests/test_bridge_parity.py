@@ -244,6 +244,9 @@ class ParityTests(unittest.TestCase):
     def test_state_differences_and_notice_capture(self):
         self.assertIsNone(self.v['queue']);self.assertIsNone(self.v['route']);self.assertIsNone(self.v['commissary'])
         self.assertIsNone(self.mock.state['licence']['until_day'])
+        # The mod's to-dos: a list per vehicle and the fleet's under licence (the mock makes none).
+        state=self.mock.call('state',{})
+        self.assertEqual(state['licence']['todos'],[]);self.assertEqual(state['vehicles'][0]['todos'],[])
         pose=self.mock.call('teleport',{'who':'player','x':1.234,'z':2.345,'heading':-90})
         self.assertEqual(pose,{'x':1.23,'y':0,'z':2.35,'heading':270,'surface':"the only ground surface, walkable; walking routes checked from the player's place"})
         self.mock.state['clock']['speed']=1.234
