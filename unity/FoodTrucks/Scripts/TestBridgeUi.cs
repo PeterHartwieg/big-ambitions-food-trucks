@@ -264,16 +264,14 @@ namespace FoodTrucks
                 foreach (var notices in Object.FindObjectsOfType<NotificationsUI>()) Add(notices.container);
             }
             var texts = new List<string>();
-            if (TmpText == null || TmpTextProperty == null) return texts;
+            var seen = new HashSet<Component>();
             foreach (var root in roots.Distinct())
             {
-                foreach (var component in root.GetComponentsInChildren(TmpText, false))
+                foreach (var (component, text) in TextBlocks(root))
                 {
-                    if (!(component is Behaviour behaviour) || !behaviour.isActiveAndEnabled) continue;
-                    if (TmpAlphaProperty?.GetValue(component) is float alpha && alpha < 0.05f) continue;
-                    if (!Visible(component.transform, out _)) continue;
-                    var text = Clean(TmpTextProperty.GetValue(component) as string);
-                    if (text.Length > 0 && (texts.Count == 0 || texts[texts.Count - 1] != text)) texts.Add(text);
+                    // Roots can overlap (for example a dialog under the open phone). Read each label once.
+                    if (!seen.Add(component) || !Visible(component.transform, out _)) continue;
+                    if (texts.Count == 0 || texts[texts.Count - 1] != text) texts.Add(text);
                 }
             }
             return texts;
@@ -305,17 +303,33 @@ namespace FoodTrucks
             return at.x >= 0 && at.y >= 0 && at.x <= Screen.width && at.y <= Screen.height;
         }
 
+        // Both native TMP labels and the mod's Unity UI Text labels, in hierarchy order.
+        // Traverse once so a mixed hierarchy neither duplicates labels nor groups them by text implementation.
+        private static IEnumerable<(Component Component, string Text)> TextBlocks(Transform root)
+        {
+            foreach (var component in root.GetComponentsInChildren<Behaviour>(false))
+            {
+                if (!component.isActiveAndEnabled) continue;
+                string? value;
+                if (component is Text legacy)
+                {
+                    if (legacy.color.a < 0.05f) continue;
+                    value = legacy.text;
+                }
+                else if (TmpText != null && TmpTextProperty != null && TmpText.IsInstanceOfType(component))
+                {
+                    if (TmpAlphaProperty?.GetValue(component) is float alpha && alpha < 0.05f) continue;
+                    value = TmpTextProperty.GetValue(component) as string;
+                }
+                else continue;
+                var text = Clean(value);
+                if (text.Length > 0) yield return (component, text);
+            }
+        }
+
         private static string Label(Transform t)
         {
-            if (TmpText != null && TmpTextProperty != null)
-            {
-                foreach (var component in t.GetComponentsInChildren(TmpText, false))
-                {
-                    if (component is Behaviour b && !b.isActiveAndEnabled) continue;
-                    var text = Clean(TmpTextProperty.GetValue(component) as string);
-                    if (text.Length > 0) return text;
-                }
-            }
+            foreach (var (_, text) in TextBlocks(t)) return text;
             return t.name;
         }
 

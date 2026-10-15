@@ -20,6 +20,7 @@ The pieces:
 ## Safety
 
 - The bridge starts only with `-foodtrucks-test` on the game's command line. Without it nothing listens, and the Workshop build behaves as before.
+- `POST /call` requires `Content-Type: application/json` and refuses `Origin` or `Sec-Fetch-Site` headers before queuing any operation. Use the native CLI/MCP clients; browser-origin requests are refused even from a localhost page.
 - It binds `127.0.0.1` only. The Mac reaches it through `ssh -L 8330:127.0.0.1:8330 homepc` (`tools/run-remote.sh tunnel`).
 - Commands that change a save (money, spawns, time jumps, debug actions) are for throwaway **FT** saves only. `load` and `new_game` refuse any save whose name doesn't start with `FT`, and the bridge refuses every changing command while the loaded save's name doesn't start with `FT`.
 
@@ -27,6 +28,29 @@ The pieces:
 ### Sharing the game PC
 
 Several sessions test on homepc. `C:\Users\Peter\game-lock.txt` says who has the game: no file means free; the holder writes `owner:`, `since:`, `until:`, `game:` (what runs) and `rules:` lines and deletes the file when done. While another session holds it: no install, start, stop, quit or save load, and no bridge calls that change the game (`health`, `state` and `/events` are fine). `tools/run-remote.sh lock [minutes] [what]` and `unlock` take and release it under `BA_LOCK_OWNER` (default `Food Trucks session`); `start`, `stop` and `tools/install-remote.sh` refuse while someone else holds it, and `status` shows it.
+
+## Local macOS testing
+
+The manifest targets Windows and Mac. `tools/build-mod.sh` packages and checks both bundles; Unity needs both platform modules. With Big Ambitions closed, run `python3 tools/install-local-mac.py`. It verifies every staged file against `build/FoodTrucks.sha256`, replaces only `ModsLocal/FoodTrucks`, and preserves the previous package under `FoodTrucksPackageBackups` outside ModsLocal. Other installed mods and saves stay in place. The default game data folder is `~/Library/Application Support/com.Hovgaard-Games.Big-Ambitions`; `--game-root` overrides it for another local installation.
+
+Launch through Steam with the test arguments. If Steam is already running, fully quit it normally first so the fresh instance accepts `-applaunch` arguments:
+
+```sh
+open -a /Applications/Steam.app --args -applaunch 1331550 -foodtrucks-test -console -screen-fullscreen 0 -screen-width 1440 -screen-height 900
+tools/ft health
+```
+
+Use a separate FT character as required by the bridge's save guards. The existing clients connect directly to `http://127.0.0.1:8330`; no PC or SSH tunnel is needed. `BA_BRIDGE_URL` can override that address. Screenshots reported as local paths are copied directly by the tools. Quit through the game's menu before installing another build; `tools/ft call quit` is also available while the bridge is active, subject to its save guards. The installer never starts or stops the game.
+
+Status: both platform bundles compiled through the official SDK, the verified installer succeeded, and the local Mac candidate launched through Steam and loaded an FT logistics save with all patches active. Directly opening the game app instead exited into Steam's launch-argument confirmation. Further gameplay and rendered-asset checks remain pending: the session stopped with system swap around 19 GiB and less than 400 MiB free disk space; this has not been established as a mod defect.
+
+## Local release-candidate packaging
+
+After the normal build, `python3 tools/package-release.py` validates the existing package and SHA-256 manifest and creates `build/FoodTrucks-0.9.10-rc.zip`. `--source`, `--manifest` and `--output` override those paths. The command performs no build, download, upload or publication and leaves the mod's unreleased version unchanged.
+
+The archive contains one `FoodTrucks/` folder with the runtime mod/Core/Harmony assemblies, Windows and Mac bundles, tuning data, locales, README and both project and Harmony license notices. An explicit runtime allowlist refuses game assemblies, save files, source code and any other unexpected input even if listed in the checksum manifest. Integrity checks require the exact manifested file set and reject duplicate/unsafe paths and symlinks. File bytes are checked while streaming into the ZIP; the source is checked again before retaining the archive.
+
+Entries have sorted paths, fixed timestamps and permissions. Identical package bytes produce identical archives with the same Python/zlib runtime regardless of source timestamps or permissions. The output is created atomically without replacing an existing candidate and without duplicating the temporary ZIP's disk allocation. No real release archive was generated during the low-disk session; temporary-fixture packaging tests passed. Packaging does not establish gameplay QA or publication approval.
 
 ## Transport
 
@@ -48,7 +72,7 @@ Answered on the HTTP thread from values the main thread refreshes every frame, s
 
 Runs on the Unity main thread, one call after another. The HTTP thread waits up to `timeout_s` (default 10, an `args` field) for the result; past that the reply is `ok: false, error: "timed out on the main thread; …"` and the command still finishes in the game. Reply: `{ "ok": true, "op": 17, "result": { … } }`, or `{ "ok": false, "op": 17, "error": "…" }`.
 
-Every call gets an operation number `op`. `{ "cmd": "op", "args": { "id": 17 } }` answers at once, whatever the main thread is doing, with `{ "ok": true, "result": { "id": 17, "cmd": "save", "session": "3f9a1c07", "status": "pending|done|failed", "result": { … }, "error": "…" } }` (`result` only when done, `error` only when failed). After a timeout, ask this instead of sending the call again. The bridge keeps the last 500 operations.
+Every call gets an operation number `op`. `{ "cmd": "op", "args": { "id": 17 } }` answers at once, whatever the main thread is doing, with `{ "ok": true, "result": { "id": 17, "cmd": "save", "session": "3f9a1c07", "status": "pending|done|failed", "result": { … }, "error": "…" } }` (`result` only when done, `error` only when failed). After a timeout, ask this instead of sending the call again. The bridge keeps every pending operation and the last 500 completed operations, ordered by completion.
 
 Each request is served on its own thread, so `/health`, `/events` and `op` answer while a `/call` waits.
 
@@ -152,6 +176,8 @@ Fields the game side can't fill yet are `null`, never left out, so scenarios can
 ## Game side, as built
 
 Built 12 October 2026 in `unity/FoodTrucks/Scripts/` (`Notices.cs`, `TestBridge*.cs`). Not yet run in game; every game call below comes from the 1.0 decompile, and the ones to check first are listed in CHECKS.md, "Test bridge". Where the build differs from the contract above, this section wins.
+
+**Developer actions.** `DebugActions` also requires `-foodtrucks-test` before registering developer console commands, accepting debug hotkeys or running a named bridge action. Without it, the only retained action is the player's safe uninstall step (`Ctrl+Shift+F11` / `foodtrucks_uninstall`), with its existing second confirmation. The bridge's FT-save guard continues to apply to bridge commands.
 
 **Startup.** One line at the mod's initialisation load: `Test bridge: listening on http://127.0.0.1:8330/ (session 3f9a1c07).` or `Test bridge: off (the game was started without -foodtrucks-test).` A taken port logs `Test bridge: could not listen on 127.0.0.1:8330 (…); … The bridge is off.` With the flag the bridge also sets `Application.runInBackground`, so the game keeps running when its window loses the focus. `Test bridge: stopped.` when the mod unloads.
 
@@ -372,6 +398,6 @@ The mock mirrors the built command guards, errors, result shapes, null fields, a
 
 `save` returns name, path and bytes only after serialization, compression and a fresh nonempty file succeed. Failed saves remain failed operations. On unload, queued and deferred work fails with `the bridge stopped`, operation and event history is cleared, and event numbers start at 1 on re-enable.
 
-Every normal command reply carries an `op` id, also shown by readable `ft call` output and in MCP results/errors. `ft op N` and MCP `ft_op` query it without creating another operation. `timeout_s` is clamped to 1..600 seconds by both client and bridge. After a main-thread timeout the client polls that id for up to 30 seconds and returns the original result or failure. It never repeats the command. If it stays pending, query the id later. A transport failure before an id arrives has an unknown outcome; inspect the game log before repeating a mutation. The bridge keeps 500 operations. Invalid request bodies and op queries have no new op id.
+Every normal command reply carries an `op` id, also shown by readable `ft call` output and in MCP results/errors. `ft op N` and MCP `ft_op` query it without creating another operation. `timeout_s` is clamped to 1..600 seconds by both client and bridge. After a main-thread timeout the client polls that id for up to 30 seconds and returns the original result or failure. It never repeats the command. If it stays pending, query the id later. A transport failure before an id arrives has an unknown outcome; inspect the game log before repeating a mutation. The bridge keeps every pending operation and the last 500 completed operations. Invalid request bodies and op queries have no new op id.
 
 `.mcp.json` registers the stdio server as `foodtrucks-game`. It uses the same environment variables and fetches screenshots into `build/shots/`. The MCP server is one Python process for the whole agent session: it loads the tools' code when it starts, so after `tools/` changes it keeps running the old code until the session (or its MCP server) restarts. `ft_reconnect` only pins the bridge's new session; it doesn't reload any code. Live session 5's server was older than the tools and had no `look_at`. The MCP client persists between tool calls. After a restart, `ft_health` keeps working and adds `restarted`, `reconnect_required`, the previous session and a message; it does not reconnect. Use `ft_reconnect` to pin the current session and discard old operation ids and event cursors. Resume with events `since: 1`, fresh operation ids and fresh scenario values. Known old ids and cursors are refused locally until issued again in the current session. A failed reconnect leaves calls blocked. The CLI starts fresh for each invocation, so it has no reconnect command.

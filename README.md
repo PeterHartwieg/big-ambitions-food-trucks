@@ -1,8 +1,29 @@
 # Food Trucks for Big Ambitions
 
-A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, open the window and sell to the lunch crowd, then move on before the evening rush starts somewhere else.
+A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, fit equipment, stock up and serve the crowd yourself or send a crew along a scheduled route.
 
-**Status, 9 October 2026:** Milestone 6 (depth), build `0.7.0`, half built and not yet checked in the game: health grades with inspections and a Clean button, regulars per pitch and weekday, competition between your own vehicles, and live crowds from nearby venues (open or closed, theatre and cinema let-outs, club closing time, office staff). Milestone 5 (hires), build `0.6.0`, also unchecked, lets the game's own employees run a cart or truck: put an unassigned employee on the vehicle from its "Hires" button, add stops with opening hours, and the crew drives to each stop, opens, closes and moves on, paid by the game's own payroll. Milestone 4 (`0.5.0`, also unchecked) brought the food truck with its final model, the vendor licence and permits by phone from the City of New York, and the "Street food" map filters. Milestone 3 (`0.4.0`) brought customers as people with a queue; Milestone 2 (`0.3.1`) crowds that add up, the game's own equipment, stock limits, legal pavement spots and prices like a shop's; see [docs/implementation-plan.md](docs/implementation-plan.md). Balance is set by calculation: [docs/balance/cart-economics.md](docs/balance/cart-economics.md). Milestone 1 was played once; results below.
+**Status, 14 October 2026:** development build `0.9.10`, targeting Big Ambitions 1.0. The cart and truck, equipment and menus, demand and visible queues, licences and permits, crew routes, health grades, regulars, competition, catering, venue partnerships, map filters, commissary supply and warehouse logistics are implemented. This is an unreleased development build: Workshop publication has not happened, release review is under way, and the latest changes still need in-game checks. The dedicated Street food page and local Mac validation are being reviewed separately; neither is claimed checked here. See [CHECKS.md](CHECKS.md) for pending checks and [docs/implementation-plan.md](docs/implementation-plan.md) for development history.
+
+Demand depends on the spot, time, nearby businesses, weather and season. Equipment determines both the menu and food capacity; crews use the game's employees and payroll. Street food has its own save data, income and expense breakdown, and income-tax integration. Balance is calculated and still subject to playtesting; the latest study is [docs/balance/balance-pass-2026-10-14.md](docs/balance/balance-pass-2026-10-14.md).
+
+## Installing a development build
+
+There is no published Workshop release yet. Build from this repository using [Building](#building), or use a complete development package supplied for testing. With the game closed, place the entire `FoodTrucks` package folder in the game's `ModsLocal` folder, preserving its asset bundles, data, locales and dependencies. A source checkout or the DLL alone is not an installable package. Restart the game after installing or replacing it. To remove it from saves, follow [Removing the mod](#removing-the-mod) first.
+
+## Getting started
+
+1. Complete the game's **Food Safety** course. Call the **City of New York** to buy a vendor licence.
+2. Buy a food cart or food truck in person at **General US Trucks**. Call the city again for that vehicle's permit.
+3. Fit equipment by carrying it to the vehicle and loading it into cargo, then load matching food. For example, a Hot Dog Grill unlocks hot dogs. Each fitted piece has its own food capacity; excess stock stays in the box.
+4. Find a legal spot and choose **Open here** on the vehicle. The button explains any rule preventing opening. Stay at the cart to serve; a truck places you at its hatch. **Prices** sets custom prices; otherwise district pricing suggestions or standard prices apply.
+5. Visit a commissary's marked loading bay and choose **Commissary** to rent a space and unlock its phone contact. Order foods and machines for the next morning, then use **Restock** at the bay. Deliveries are paid on arrival; phone orders share a weekly food limit across the fleet. Daily/weekly standing orders and warehouse logistics can supply a larger operation.
+6. Use **Hires** on a vehicle to manage unassigned employees and route stops. A crew with a schedule can restock at its rented commissary bay, travel and serve without you. Use **Clean** to maintain hygiene and plan overnight parking: vehicles left out at 04:00 can receive a commissary fine. Catering offers arrive through **Street food bookings** as the business grows.
+
+## Validation history
+
+The current review candidate, automated results, local Mac session limitations and remaining release gates are recorded in the [14 October audit handoff](evidence/autonomous-audit-2026-10-14.md).
+
+The evidence below records specific historical builds and sessions, with their original checked, pending and unverified results. It is not a claim that every current feature or later fix has been checked. Current outstanding checks are in [CHECKS.md](CHECKS.md).
 
 ## Removing the mod
 
@@ -29,6 +50,8 @@ Each question the mod depends on, and how sure we are. "Checked" means seen in t
 | 7 | What happens to a save with mod vehicles after the mod is removed? | Checked: unsafe | Parked mod vehicles disappear but the save plays; Persona shows broken wealth figures. A save made while holding the mod cart loads to a different place with no world interaction. Reinstalling the mod restores the vehicles, even after a save without it. The mod needs an uninstall step that sells or stores its vehicles first. |
 
 Also found in the session: clicking Sleep in a mod vehicle's item panel throws `SleepEnvironment config is not assigned` (the prefabs carry an empty sleep setup), and the test truck's storage can't be opened although it shows 0/20.
+
+Park premium pitches (14 October 2026): **partly checked**. Two premium address anchors use observed park/entrance positions. Live bridge checks passed parking and hatch rules at Lower Manhattan and Hell's Kitchen; Premium claims, visible queues and map presentation remain pending; Industry City's proposed premium anchor is deferred after failed truck placement checks. [Selection, calculator results and live checks](docs/balance/park-premium-pitches.md).
 
 Milestone 1 fixes for these, played on 8 October 2026 (session report in [docs/evidence/milestone-1-session-1.md](docs/evidence/milestone-1-session-1.md)):
 
@@ -61,9 +84,15 @@ tools/build-mod.sh --generate
 tools/install-remote.sh <ssh host of the Windows game PC>
 ```
 
+Developer debug keys require starting the game with `-foodtrucks-test`; without it, developer hotkeys and console commands are disabled. The safe uninstall step remains available on Ctrl+Shift+F11 and `foodtrucks_uninstall`, with its existing second confirmation.
+
 Debug keys (holding Ctrl; "Alt" means Ctrl+Alt): **K** free food truck, **Alt+K** a free vendor licence and permits for every food vehicle, **J** free food cart, **Alt+J** a vanilla hand truck, **U** one box of each of the mod's new foods and one of each new machine into the food vehicle next to you, counted as bought at their own prices so the uninstall refund includes them (throwaway saves only; console `foodtrucks_new_items`), **Alt+U** hire a customer service worker (skill 60) without a recruitment campaign, **L** status, **Alt+L** the demand model's reading for the cart next to you, **G** log the grip while pushing, **Alt+G** mark a point for drawing a park zone, **V** a city event at the nearest event place, **Alt+V** a catering gig at the nearest place, **X** issue the tax statement now, **Alt+X** record $200,000 of street food today without moving money (throwaway saves only; V, Alt+V, X and Alt+X run only on a second press within 10 seconds), **F3** commissary bays, **Alt+F3** commissary deliveries now, **Shift+F3** the overnight check as a dry run, **Shift+F11** the uninstall step. The letters are ones the game doesn't bind (its bindings ignore Ctrl), in the same place on QWERTY and QWERTZ; Ctrl+Shift with a letter is left to other mods, and F1, F2, F4 to F10 and F12 to the game and Camera Tools.
 
 `tools/park-remote.sh park|restore` moves the installed mod out of `ModsLocal` and back, and `tools/fetch-log-remote.sh <label>` copies the game's log; both are for the in-game checks in [CHECKS.md](CHECKS.md).
+
+For local macOS playtests, close Big Ambitions and run `python3 tools/install-local-mac.py` after building. The package includes Windows and Mac bundles. The installer preserves other mods and backs up the previous Food Trucks package. See [local testing](docs/test-bridge.md#local-macos-testing) for launch and bridge instructions (in-game Mac verification pending).
+
+To prepare a local release-candidate archive after building, run `python3 tools/package-release.py`. It verifies `build/FoodTrucks.sha256`, the exact runtime file set, both platform bundles and required license notices, then writes `build/FoodTrucks-0.9.10-rc.zip` with one `FoodTrucks/` folder. It refuses an existing output; use `--output` for another candidate. This prepares a local artifact without uploading or publishing it. The version remains unreleased. See [release packaging](docs/test-bridge.md#local-release-candidate-packaging).
 
 `build-mod.sh` links `unity/FoodTrucks` into the SDK's `Assets/Mods` and `unity/BuildEditor` into its `Assets/Editor`, generates the vehicle and item assets, and runs the SDK's own packager. Harmony 2.4.2 (MIT) is downloaded from NuGet with a pinned checksum and shipped in `Dependencies/`.
 

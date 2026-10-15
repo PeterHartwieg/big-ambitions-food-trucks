@@ -216,7 +216,18 @@ namespace FoodTrucks
         {
             var cargo = new List<CargoInstance>();
             BuildingHelper.GetItemsWithStock(warehouse, line.ItemName, cargo);
-            var taken = BuildingHelper.WithdrawFromCargo(cargo, line.Units);
+            // WithdrawFromCargo invokes each pallet's listeners after reducing its amount. A listener can throw
+            // before the helper returns the withdrawn cargo. Keep the original amounts until Core accepts it, so
+            // either failure restores the same stacks without running the throwing listeners again.
+            var before = cargo.Select(c => (Cargo: c, Amount: c.amount)).ToList();
+            CargoInstance? taken;
+            try { taken = BuildingHelper.WithdrawFromCargo(cargo, line.Units); }
+            catch (Exception ex)
+            {
+                foreach (var entry in before) entry.Cargo.amount = entry.Amount;
+                Log.Error($"Commissary logistics: withdrawal of {line.ItemName} for {siteId} threw; warehouse stock restored: {ex}");
+                return 0;
+            }
             var got = taken?.amount ?? 0;
             if (got > 0)
             {
@@ -225,12 +236,14 @@ namespace FoodTrucks
                 catch (Exception ex)
                 {
                     Log.Error($"Commissary logistics: {got} {line.ItemName} for {siteId} not taken into stock, back to the warehouse: {ex}");
-                    BuildingHelper.ReturnToCargo(cargo, taken);
-                    if (taken!.amount > 0) Log.Error($"Commissary logistics: {taken.amount} {line.ItemName} didn't fit back into the warehouse and are lost.");
-                    got = 0;
+                    foreach (var entry in before) entry.Cargo.amount = entry.Amount;
+                    return 0;
                 }
             }
-            BuildingHelper.RemoveEmptyCargo(cargo);
+            // Stock has already reached Core. Empty-stack cleanup only updates the warehouse's presentation;
+            // its listeners must not abort delivery bookkeeping or the remaining products in the plan.
+            try { BuildingHelper.RemoveEmptyCargo(cargo); }
+            catch (Exception ex) { Log.Error("Commissary logistics, empty cargo cleanup: " + ex); }
             return got;
         }
 

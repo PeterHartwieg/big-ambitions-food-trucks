@@ -30,14 +30,8 @@ namespace FoodTrucks
     // business page, its settings and its unsaved-changes check never see it; while it shows, the vehicle cards are
     // hidden, and Back brings the section back. The section scrolls and lays the page out like a card.
     //
-    // Built from copies of the game's own BizMan parts:
-    // - a crew row, the days row and the partner row: the warehouse Drivers tab's DriverStation (a label and a
-    //   UI.Elements.Dropdown), one per staff slot, its dropdown listing the employees who can join;
-    // - the stops: the logistics manager plan's ReorderableList with its LogisticsManagerDestinationUI row (name,
-    //   remove button, dropdown), one row per stop with two time dropdowns, dragged to reorder;
-    // - buttons and labels: the plan's "Show warehouse" button and its destinations label.
-    // Every part is looked up when the page is first built; if any is missing, one error is logged and the vehicle
-    // panel's Hires button opens the old dialog instead. Every change goes straight into the mod's save data.
+    // Labels, buttons and compact selection rows are basic UI components using the fleet page's reference scale.
+    // Only the game's dropdown and reorderable stop list are copied, preserving their selection/drag behavior.
     internal static class BizManVehiclePage
     {
         private static bool broken;
@@ -47,8 +41,7 @@ namespace FoodTrucks
         private static string? vehicleId;
 
         // The templates, copies kept inactive under `holder`, and the paths of their parts.
-        private static GameObject? buttonTemplate, labelTemplate, rowTemplate, listTemplate;
-        private static string buttonLabelPath = "", rowLabelPath = "", rowNamePath = "", rowEmptyPath = "", rowDropdownPath = "";
+        private static GameObject? dropdownTemplate, listTemplate;
         private static string entryPath = "", entryNamePath = "", entryRemovePath = "", entryDropdownPath = "";
         private static readonly List<string> entryHiddenPaths = new List<string>();
         // Buttons in the stop row that stay but no longer do anything (1.0: the collapse button is the whole header).
@@ -181,9 +174,6 @@ namespace FoodTrucks
             // The warehouse Drivers tab's row.
             var drivers = business.GetComponentsInChildren<Drivers>(true).FirstOrDefault() ?? throw Missing("the warehouse Drivers tab");
             var station = Need(drivers.driverStationTemplate, "Drivers.driverStationTemplate");
-            var slotLabel = Field<TextLocalizationComponent>(station, "slotNumberField");
-            var vehicleName = Field<Component>(station, "vehicleNameField");
-            var noVehicle = Field<GameObject>(station, "noVehicleAssignedObj");
             var dropdown = Field<GameDropdown>(station, "driverDropdown");
 
             // The logistics manager plan's parts.
@@ -191,9 +181,6 @@ namespace FoodTrucks
             var plan = Need(plans.logisticsManagerPlanUI, "LogisticsManagersPlanList.logisticsManagerPlanUI");
             var destination = Field<LogisticsManagerDestinationUI>(plan, "destinationTemplate");
             var reorderable = Field<ReorderableList>(plan, "destinationsReorderableList");
-            var button = Field<Button>(plan, "showWarehouseButton");
-            var buttonLabel = Field<TextLocalizationComponent>(plan, "showWarehouseLabel");
-            var label = Field<TextLocalizationComponent>(plan, "destinationsAmountLabel");
             var entryName = Field<TextLocalizationComponent>(destination, "nameText");
             var entryRemove = Field<Button>(destination, "removeButton");
             var entryDropdown = Field<GameDropdown>(destination, "businessTargetDropdown");
@@ -205,11 +192,6 @@ namespace FoodTrucks
             if (destination.GetComponent<ReorderableListItem>() == null) throw Missing("the stop row's ReorderableListItem");
             if (destination.transform.parent != reorderable.transform) throw new InvalidOperationException("The logistics plan's destination row isn't directly in its reorderable list.");
 
-            buttonLabelPath = Path(buttonLabel.transform, button.transform, "the Show warehouse label");
-            rowLabelPath = Path(slotLabel.transform, station.transform, "the driver row's slot label");
-            rowNamePath = Path(vehicleName.transform, station.transform, "the driver row's vehicle name");
-            rowEmptyPath = Path(noVehicle.transform, station.transform, "the driver row's no-vehicle mark");
-            rowDropdownPath = Path(dropdown.transform, station.transform, "the driver row's dropdown");
             entryPath = Path(destination.transform, reorderable.transform, "the destination row");
             entryNamePath = Path(entryName.transform, destination.transform, "the destination row's name");
             entryRemovePath = Path(entryRemove.transform, destination.transform, "the destination row's remove button");
@@ -244,8 +226,8 @@ namespace FoodTrucks
             go.SetActive(false);
             go.transform.SetParent(parent, false);
             var layout = go.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(12, 12, 8, 24);
-            layout.spacing = 10f;
+            layout.padding = new RectOffset((int)BizManFleet.Size(16), (int)BizManFleet.Size(16), (int)BizManFleet.Size(12), (int)BizManFleet.Size(24));
+            layout.spacing = BizManFleet.Size(12f);
             layout.childControlWidth = true;
             layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
@@ -259,13 +241,10 @@ namespace FoodTrucks
             holder = holderGo.transform;
             page = go.transform;
 
-            buttonTemplate = Object.Instantiate(button.gameObject, holder);
-            buttonTemplate.name = "FoodTrucks.PageButton";
-            labelTemplate = Object.Instantiate(label.gameObject, holder);
-            labelTemplate.name = "FoodTrucks.PageLabel";
-            rowTemplate = Object.Instantiate(station.gameObject, holder);
-            rowTemplate.name = "FoodTrucks.PageRow";
-            Object.DestroyImmediate(rowTemplate.GetComponent<DriverStation>());
+            // Copy the dropdown alone: vehicle fields, captions, backgrounds and warehouse spacing do not belong
+            // on a crew/day/partner row. Instantiate remaps the dropdown's internal button and option references.
+            dropdownTemplate = Object.Instantiate(dropdown.gameObject, holder);
+            dropdownTemplate.name = "FoodTrucks.PageDropdown";
             listTemplate = Object.Instantiate(reorderable.gameObject, holder);
             listTemplate.name = "FoodTrucks.PageStops";
             // A drag disables the list's layout group and adds, then removes, a LayoutElement on its object. Both references
@@ -300,13 +279,10 @@ namespace FoodTrucks
                 part.enabled = false;
             }
 
-            // Each part is laid out by its own preferred size; a part with none keeps the height it had.
-            foreach (var template in new[] { buttonTemplate, labelTemplate, rowTemplate })
-                KeepHeight(template, template == buttonTemplate ? button.transform : template == labelTemplate ? label.transform : station.transform);
             KeepHeight(entry.gameObject, destination.transform);
 
             var scroll = parent.GetComponentInParent<ScrollRect>();
-            Log.Info($"BizMan: vehicle page built from the warehouse driver row ({PathTo(station.transform)}) and the logistics plan " +
+            Log.Info($"BizMan: vehicle page built with basic labels/buttons and a standalone dropdown from ({PathTo(station.transform)}) and the logistics plan " +
                      $"({PathTo(plan.transform)}; stop rows dragged by {(handle == null ? "the whole row" : handlePath)}; " +
                      $"collapse button {(entryInertPaths.Count > 0 ? "kept, switched off" : "hidden")} at '{collapsePath}'; the copied list's {string.Join(", ", listLayout)}); it sits in {PathTo(parent)} " +
                      $"({(parentLaysOut ? "laid out by its parent" : "sized by itself")}, {(scroll != null ? "scrolling" : "no scroll view")}).");
@@ -351,11 +327,7 @@ namespace FoodTrucks
             var name = names.TryGetValue(id, out var n) ? n : id;
 
             AddButton(Text("foodtrucks:bizman_page_back"), Back);
-            var title = AddLabel(name);
-            // The title a size up (the label is TextMesh Pro, which the mod doesn't reference: by reflection).
-            var graphic = title.GetComponent<Graphic>();
-            var fontSize = graphic == null ? null : graphic.GetType().GetProperty("fontSize");
-            if (fontSize != null && fontSize.PropertyType == typeof(float)) fontSize.SetValue(graphic, (float)fontSize.GetValue(graphic) * 1.3f);
+            AddLabel(name, 24);
             AddLabel(BizManFleet.Where(instance, vehicle, IsWithDriver(id)));
             if (!canWrite) AddLabel(Text("foodtrucks:bizman_page_readonly"));
 
@@ -430,6 +402,7 @@ namespace FoodTrucks
 
         private static void FillStop(Transform entry, string id, HireSchedule schedule, int index, bool canWrite)
         {
+            ReadableText(entry);
             var stop = schedule.Stops[index];
             var latest = RouteStops.LatestClose;
             BizManFleet.SetText(entry.Find(entryNamePath), Format("foodtrucks:bizman_page_stop", ("number", (index + 1).ToString()), ("place", RouteStops.Label(stop))));
@@ -514,40 +487,76 @@ namespace FoodTrucks
 
         // ---- Parts ----
 
-        private static Button AddButton(string text, Action click)
-        {
-            var copy = Object.Instantiate(buttonTemplate!, page);
-            copy.SetActive(true);
-            var button = copy.GetComponent<Button>();
-            button.onClick = new Button.ButtonClickedEvent();
-            button.onClick.AddListener(() => Guard(click));
-            button.interactable = true;
-            BizManFleet.SetText(Find(copy.transform, buttonLabelPath), text);
-            return button;
-        }
+        private static Button AddButton(string text, Action click) =>
+            BizManFleet.ActionButton(page!, text, () => Guard(click));
 
-        private static TextLocalizationComponent AddLabel(string text)
-        {
-            var copy = Object.Instantiate(labelTemplate!, page);
-            copy.SetActive(true);
-            var label = copy.GetComponent<TextLocalizationComponent>();
-            label.SetValue(text, true);
-            return label;
-        }
+        private static UnityEngine.UI.Text AddLabel(string text, int size = 16) => BizManFleet.Label(page!, text, size);
 
         private static void AddRow(string title, List<string> options, int selected, bool interactable, Action<int> chosen)
         {
-            var row = Object.Instantiate(rowTemplate!, page).transform;
-            row.gameObject.SetActive(true);
-            BizManFleet.SetText(Find(row, rowLabelPath), title);
-            Hide(row, rowNamePath);
-            Hide(row, rowEmptyPath);
-            var dropdown = Find(row, rowDropdownPath).GetComponent<GameDropdown>();
+            var row = BizManFleet.Rect("FoodTrucks.SelectionRow", page!);
+            var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.spacing = BizManFleet.Size(16);
+            layout.childControlWidth = layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = true;
+            var rowSize = row.gameObject.AddComponent<LayoutElement>();
+            rowSize.minHeight = rowSize.preferredHeight = BizManFleet.Size(40);
+            var label = BizManFleet.Label(row, title);
+            label.alignment = TextAnchor.MiddleLeft;
+            var labelSize = label.gameObject.AddComponent<LayoutElement>();
+            labelSize.minWidth = labelSize.preferredWidth = BizManFleet.Size(160);
+            var copy = Object.Instantiate(dropdownTemplate!, row);
+            copy.SetActive(true);
+            var dropdown = copy.GetComponent<GameDropdown>();
+            var controlSize = copy.GetComponent<LayoutElement>() ?? copy.AddComponent<LayoutElement>();
+            controlSize.ignoreLayout = false;
+            controlSize.minWidth = BizManFleet.Size(160);
+            controlSize.flexibleWidth = 1f;
+            controlSize.minHeight = controlSize.preferredHeight = BizManFleet.Size(40);
+            // TMP isn't a compile reference. Set its text graphics to the same authored size as our own labels;
+            // the native dropdown retains its input, option list and selection behavior.
+            ReadableText(copy.transform);
             SetUp(dropdown, options, selected, interactable, chosen);
+        }
+
+        private static void ReadableText(Transform root)
+        {
+            foreach (var graphic in root.GetComponentsInChildren<Graphic>(true))
+            {
+                var autoSize = graphic.GetType().GetProperty("enableAutoSizing");
+                if (autoSize != null && autoSize.CanWrite && autoSize.PropertyType == typeof(bool)) autoSize.SetValue(graphic, false);
+                var property = graphic.GetType().GetProperty("fontSize");
+                if (property != null && property.CanWrite && property.PropertyType == typeof(float))
+                    property.SetValue(graphic, BizManFleet.Size(16));
+            }
+        }
+
+        // BaTable instantiates virtualized option rows from a prefab outside the dropdown hierarchy. Give each
+        // copied dropdown its own row prefab before SetOptions loads rows; modifying the game's shared prefab
+        // would also change vanilla dropdowns, and styling only existing children misses later recycled rows.
+        private static void PrepareOptions(GameDropdown dropdown)
+        {
+            const string ownerName = "FoodTrucks.OptionTemplate";
+            if (dropdown.transform.Find(ownerName) != null) return;
+            var options = Field<UI.Elements.DropdownOptionScrollerController>(dropdown, "optionScrollerController");
+            if (options.prefab == null) throw Missing("the dropdown's option row prefab");
+            var owner = new GameObject(ownerName, typeof(RectTransform));
+            owner.SetActive(false);
+            owner.transform.SetParent(dropdown.transform, false);
+            var prefab = Object.Instantiate(options.prefab, owner.transform);
+            prefab.name = "FoodTrucks.DropdownOption";
+            ReadableText(prefab.transform);
+            prefab.gameObject.SetActive(true);
+            options.prefab = prefab;
+            // The native row height (80 canvas units, about 27px at 720p) fits the 16px font. Keep its scrolling
+            // behavior, but allow enough width for an employee's name and job information at the larger size.
+            Traverse.Create(dropdown).Field("maxOptionsWidth").SetValue(BizManFleet.Size(640));
         }
 
         private static void SetUp(GameDropdown dropdown, List<string> options, int selected, bool interactable, Action<int> chosen)
         {
+            PrepareOptions(dropdown);
             dropdown.SetOptions(options, localize: false, selectedOption: selected);
             dropdown.onOptionSelected.RemoveAllListeners();
             dropdown.onOptionSelected.AddListener(index => Guard(() =>

@@ -93,6 +93,20 @@ class OperationTests(unittest.TestCase):
         self.assertEqual(str(raised.exception),'could not write the save')
         self.assertEqual([c.args[1]['cmd'] for c in requests.call_args_list],['save','op','op'])
 
+    def test_pending_mutation_survives_completed_operation_eviction(self):
+        self.mock.operation_delays['debug']=60
+        pending=self.mock.operation('debug',{'action':'spawn truck','timeout_s':1})
+        self.assertFalse(pending['ok'])
+        identifier=pending['op']
+        for _ in range(501): self.mock.operation('state',{})
+        self.assertEqual(self.bridge.op(identifier)['result']['status'],'pending')
+        self.assertEqual(len(self.mock.state['vehicles']),1)
+        self.assertEqual(len(self.mock.operations),501)  # 500 completed plus the pending mutation
+        self.mock.operation_waiters[identifier][1].set()
+        recovered=self.bridge.recover(identifier,2)
+        self.assertTrue(recovered['ok'])
+        self.assertEqual(len(self.mock.state['vehicles']),1)
+
     def test_missing_and_evicted_operations(self):
         with self.assertRaisesRegex(BridgeError,'op needs'): self.bridge.call('op')
         first=self.bridge.call('state')['op']

@@ -23,6 +23,10 @@ namespace FoodTrucks
     // camera) when it runs with -console. F1, F2, F5 and F12 are the game's help, bug report, quick save and menu.
     internal sealed class DebugActions : MonoBehaviour
     {
+        // Opt-in for every developer shortcut and console command. Uninstall remains a player action.
+        private static readonly bool Testing = Environment.GetCommandLineArgs().Any(a =>
+            string.Equals(a, TestBridge.Flag, StringComparison.OrdinalIgnoreCase));
+
         private static readonly Action SpawnTruckAction = () => SpawnVehicle(FoodTrucksMod.TruckTypeName);
         private static readonly Action LicenceAction = CityLicensing.GrantForTesting;
         private static readonly Action SpawnCartAction = () => SpawnVehicle(FoodTrucksMod.CartTypeName);
@@ -85,6 +89,12 @@ namespace FoodTrucks
         {
             try
             {
+                CommandHelper.AddCommand("foodtrucks_uninstall", "Food Trucks: remove and refund all Food Trucks vehicles (run twice to confirm)", UninstallAction);
+                if (!Testing)
+                {
+                    Log.Info($"Debug actions off (start with {TestBridge.Flag} to enable); uninstall remains on Ctrl+Shift+F11 and foodtrucks_uninstall.");
+                    return;
+                }
                 CommandHelper.AddCommand("foodtrucks_spawn_truck", "Food Trucks: spawn a free food truck next to you (testing)", SpawnTruckAction);
                 CommandHelper.AddCommand("foodtrucks_licence", "Food Trucks: a free vendor licence and permits for every food vehicle (throwaway saves only)", LicenceAction);
                 CommandHelper.AddCommand("foodtrucks_spawn_cart", "Food Trucks: spawn a free food cart next to you (testing)", SpawnCartAction);
@@ -99,7 +109,6 @@ namespace FoodTrucks
                 CommandHelper.AddCommand("foodtrucks_demand", "Food Trucks: the demand model's reading for the cart next to you", DemandAction);
                 CommandHelper.AddCommand("foodtrucks_status", "Food Trucks: show the mod's save data", StatusAction);
                 CommandHelper.AddCommand("foodtrucks_new_items", "Food Trucks: one box of each new food and one of each new machine into the food vehicle next to you, as if bought (throwaway saves only)", NewItemsAction);
-                CommandHelper.AddCommand("foodtrucks_uninstall", "Food Trucks: remove and refund all Food Trucks vehicles (run twice to confirm)", UninstallAction);
                 CommandHelper.AddCommand("foodtrucks_commissary_where", "Food Trucks: log where every commissary bay is from you and your vehicle", CommissaryWhereAction);
                 CommandHelper.AddCommand("foodtrucks_commissary_deliver", "Food Trucks: deliver every paid commissary order now (throwaway saves only)", CommissaryDeliverAction);
                 CommandHelper.AddCommand("foodtrucks_commissary_night", "Food Trucks: what the 04:00 overnight check would say now, without fines", CommissaryNightAction);
@@ -143,6 +152,7 @@ namespace FoodTrucks
             var alt = keyboard.altKey.isPressed;
             foreach (var k in Keys)
             {
+                if (!Testing && k.Name != "uninstall") continue;
                 if (k.Shift != shift || k.Alt != alt || !keyboard[k.Key].wasPressedThisFrame) continue;
                 if (k.Twice && (armedName != k.Name || Time.unscaledTime > armedUntil))
                 {
@@ -160,9 +170,10 @@ namespace FoodTrucks
         }
 
         // The test bridge's `debug`: one action by its Name, without the second press a Twice action asks for.
-        // False when no action has that name.
+        // False without the test flag, or when no action has that name.
         internal static bool RunByName(string name)
         {
+            if (!Testing) return false;
             foreach (var k in Keys)
             {
                 if (k.Name != name) continue;

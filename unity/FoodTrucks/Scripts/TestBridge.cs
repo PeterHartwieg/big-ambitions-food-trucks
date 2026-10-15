@@ -113,7 +113,7 @@ namespace FoodTrucks
             if (wasRunning) Log.Info("Test bridge: stopped.");
         }
 
-        // Every /call is an operation with a number, kept with its outcome (the last OpsKept), so a client whose call
+        // Every /call is an operation with a number, kept with its outcome (all pending and the last OpsKept completed), so a client whose call
         // timed out can ask what became of it (cmd "op") instead of running it again.
         private sealed class Op
         {
@@ -140,8 +140,6 @@ namespace FoodTrucks
             {
                 op = new Op { Id = nextOp++, Cmd = cmd };
                 ops[op.Id] = op;
-                opOrder.Enqueue(op.Id);
-                while (opOrder.Count > OpsKept) ops.Remove(opOrder.Dequeue());
             }
             var task = TestBridgePump.Run(() => TestBridgeCommands.Run(cmd, args), generation);
             task.ContinueWith(t => Finish(op, t));
@@ -183,6 +181,13 @@ namespace FoodTrucks
                 {
                     op.Status = "done";
                     op.Result = task.Result;
+                }
+                // A pending mutation must stay recoverable even when newer reads finish first.
+                // Stop clears the registry; a late continuation must not repopulate its retention queue.
+                if (ops.TryGetValue(op.Id, out var retained) && ReferenceEquals(retained, op))
+                {
+                    opOrder.Enqueue(op.Id);
+                    while (opOrder.Count > OpsKept) ops.Remove(opOrder.Dequeue());
                 }
             }
         }

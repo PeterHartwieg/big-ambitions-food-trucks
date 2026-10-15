@@ -1,18 +1,23 @@
-# BizMan with a warehouse (next build)
+# Dedicated Street food page (pending in game)
 
-Branch `fix-bizman-warehouse`; no version bump. In 1.0 the fleet section lay exactly on top of BizMan's warehouse section, so with a rented warehouse both sets of cards showed at once; and the vehicle page was never built (the stop row's collapse button is its whole header, which the page hid). Now the fleet section stands in for the warehouse section while it is open, and the vehicle page sits inside the fleet section. About 10 minutes: save `FT logistics ready` (warehouse, HQ and food trucks), then any save with food vehicles and no warehouse.
+The Street food line now opens a dedicated page made from basic UI pieces, with its own scrolling fleet cards. It no longer copies the warehouse section. The existing crew, route and partner detail page shares its content area.
 
 | # | Do | Look for |
 |---|---|---|
-| W1 | `FT logistics ready`: open BizMan | The middle column says Warehouses and shows only the game's warehouse card, as without the mod; the Street food line is in the business list |
-| W2 | Click the Street food line | The middle column's header says Street food and shows one card per food vehicle, no warehouse card under or between them, nothing overlapping; scrolls if there are many |
-| W3 | Click the Street food line again | The warehouse card and the Warehouses header come back, unchanged (its buttons, destination and Manage drivers work) |
-| W4 | Open the section, click a truck's card | The vehicle page opens in the middle column, laid out like a card and scrolling: crew rows, days, stops (name, remove, dropdown, time dropdowns, drag handle), partner. No "couldn't be opened" notice. Drag a stop by its handle when there are two |
-| W5 | Back on the page, then leave BizMan and open it again | Back shows the fleet cards; after leaving, the column is the game's Warehouses again |
-| W6 | The truck's panel, Hires | BizMan opens on the truck's page (no old dialog, no notice) |
-| W7 | A save with food vehicles and no warehouse (FT bridge 2) | W2, W4 and W6 as above; W1's column is the empty Warehouses section |
-| L1 | Log after W2 | `BizMan: fleet section copied from the warehouse section's template (card at Viewport/Content/WhiteBox (Template); N filled warehouse card(s) left out of the copy, M shown in the game's section); it stands in for Row 2/ScrollRect (Warehouses) while open, headings Header ('bizman_warehouses').` With the warehouse N is 1 when BizMan had shown it before the first click, M is 1; no `fleet section label`/`button` lines naming `(Clone)` |
-| L2 | Log after W4 | `BizMan: vehicle page built from … stop rows dragged by DestinationHeader/DragArea; collapse button kept, switched off at 'DestinationHeader'; …; it sits in …/FoodTrucks.StreetFoodSection/Viewport/Content (laid out by its parent, scrolling).` then `BizMan: vehicle page for truck <id>.`; no `ERROR: BizMan vehicle page` |
+| B1 | Open BizMan with a rented warehouse and food vehicles; click Street food | Dedicated Street food page, one card per vehicle, no warehouse cards or controls; vehicle names, whereabouts, sales, profit, grade, crew, route and stock appear |
+| B2 | Resize the window; scroll a fleet longer than the viewport | Labels wrap within cards; wheel and scrollbar reach every card; no horizontal clipping |
+| B3 | Click a vehicle name; edit crew, days, stops and partner; drag a stop | Existing vehicle details open and scroll; changes persist after reopening and saving |
+| B4 | Back to Street food, then Back to BizMan | Fleet cards return first, then the original business, warehouse and HQ lists return with their buttons working |
+| B5 | Leave BizMan from the fleet and vehicle pages; reopen; reload a save | Normal BizMan lists return; Street food opens afresh without stale hidden cards |
+| B6 | Open Hires from a vehicle panel, also with no rented warehouse | BizMan opens that vehicle's details; its Back button opens the dedicated fleet page |
+| B8 | Open vehicle details at 1280×720, choose a crew member, days and partner; inspect a route with stops | Left-aligned readable labels and compact selection rows; no unused vehicle field or VEHICLE/DRIVER captions; dropdown choices and stop dragging still work |
+| B7 | Log after opening | `BizMan: dedicated Street food page built with its own cards and scroll view.`; no warehouse-section cloning or new errors |
+
+# Developer actions release gate (pending live check)
+
+Start without `-foodtrucks-test`: startup logs `Debug actions off`; Ctrl+K/J/U and their Alt variants must not spawn vehicles, grant licences/stock or hire workers. Ctrl+V/X and their Alt variants must not create events, gigs or ledger/tax changes even if pressed twice. With `-console`, developer `foodtrucks_*` commands must be absent except `foodtrucks_uninstall`. Ctrl+Shift+F11 and that uninstall command must still ask for the existing second confirmation.
+
+Restart with `-foodtrucks-test` in a throwaway FT save: the developer keys and console commands must work as documented, including the existing second-press safeguards. Test bridge debug commands must still work. Compile and code review are not an in-game check.
 
 # Tuning (next build)
 
@@ -30,7 +35,8 @@ Branch `tuning-1`; no version bump. Peter's balance decisions of 14 October 2026
 | L1 | Load | `Commissary delivery fee: $250 per delivery; the game's wholesale delivery fees: <name> $…, …; furniture deliveries $250.` Note the wholesalers' values: they live on the game's assets, not in its code |
 | L2 | T3 to T6 | `Commissary delivery fee at <site> for day N: $250.00 once for that morning's delivery` on the first order of a morning, `…, shared with an order already arriving then.` on a second; deliveries log `fee $250.00, this morning's delivery fee here` on one order per commissary and morning, `fee $0.00, the delivery's fee paid with another order` on the rest |
 | L3 | A day or two of play with a crewed truck | `Catering: day N: … places (M at park gates) …` with M above 0 once the parks are found; weekend `event` gigs may be at a park gate |
-| B1 | Test bridge: `tools/ft call parks` in any save in the city | Each park the mod found: kind, neighbourhood, bounds, centre and the 5 nearest entrances. Save the JSON in `build/logs/game/parks/`: the park premium spots (one per neighbourhood with a park, at a gate) are picked from it |
+| B1 | Test bridge: `tools/ft call parks` in any save in the city | Capture collected 14 October 2026 (three parks). Lower Manhattan and Hell's Kitchen parking/hatch rules checked by bridge; Industry City premium addition deferred after failed truck placement checks; visual/claim checks remain pending for the two shipped pitches: see [park pitch checks](docs/balance/park-premium-pitches.md) for entrances and coordinates |
+| B2 | Visit Eleventh Street 23 and Second Avenue 5; open a permitted vehicle in a legal place within 40 m | The park pitch name appears and `premium spot <id>` logs. Check the park-facing approach, hatch/queue, Street food map marker and first-come rule; details in the park pitch checks |
 
 # Parks as their own demand area (next build)
 

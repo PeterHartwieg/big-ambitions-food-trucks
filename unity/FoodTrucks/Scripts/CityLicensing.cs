@@ -113,7 +113,9 @@ namespace FoodTrucks
         {
             var info = new TransactionInfo(transactionKey, new Dictionary<string, string>());
             info.SetTaxDeductibleName(FeesLabel);
-            return GameManager.ChangeMoneySafe(-cents / 100f, info, null, null, force: false, showNotification: true);
+            // A money-change listener can throw after the game books the fee. Continue granting
+            // the purchase when that happened, otherwise the player loses the money and gets nothing.
+            return cents == 0 || Payments.TryPayOut(cents, info, showNotification: true);
         }
 
         // Debug key for throwaway saves: a licence and a permit for every food vehicle, free and without the course.

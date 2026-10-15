@@ -394,7 +394,6 @@ class Mock:
             files=[]
             self.operation_waiters[identifier]=(op,finished,files)
             lifecycle=self.lifecycle
-            while len(self.operations)>500: del self.operations[next(iter(self.operations))]
         def work():
             try:
                 with self.call_gate:
@@ -411,7 +410,13 @@ class Mock:
                 with self.ops_lock:
                     if op['status']=='pending': op.update(status='failed',error=str(exc))
             finally:
-                with self.ops_lock: self.operation_waiters.pop(identifier,None)
+                with self.ops_lock:
+                    self.operation_waiters.pop(identifier,None)
+                    if self.operations.get(identifier) is op:
+                        self.operations.pop(identifier)
+                        self.operations[identifier]=op  # retention follows completion, not admission
+                    completed=[key for key, item in self.operations.items() if item['status']!='pending']
+                    for key in completed[:-500]: del self.operations[key]
                 finished.set()
         threading.Thread(target=work,daemon=True).start()
         if not finished.wait(min(600,max(1,num(args,'timeout_s') if num(args,'timeout_s') is not None else 10))):
@@ -1405,6 +1410,12 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if urlsplit(self.path).path.rstrip('/') != '/call':
                 self.reply({'ok':False,'error':'Unknown endpoint: use GET /health, POST /call or GET /events?since=N.'},404)
+                return
+            if self.headers.get('Origin') is not None or self.headers.get('Sec-Fetch-Site') is not None:
+                self.reply({'ok':False,'error':'Browser-origin calls are refused; use the CLI or MCP bridge client.'},403)
+                return
+            if self.headers.get('Content-Type','').split(';',1)[0].strip().lower() != 'application/json':
+                self.reply({'ok':False,'error':'POST /call requires Content-Type: application/json.'},415)
                 return
             size = int(self.headers.get('Content-Length',0))
             if not 0 < size <= 1048576:

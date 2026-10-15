@@ -5,7 +5,6 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization;
 using Entities;
-using Extensions;
 using FoodTrucks.Core.Saves;
 using HarmonyLib;
 using Helpers;
@@ -21,23 +20,9 @@ using UnityEngine.UI;
 
 namespace FoodTrucks
 {
-    // BizMan: one "Street food" line at the end of the business list, and a fleet section with a card per vehicle.
-    //
-    // The game's list holds only building registrations, and its business pages, Insight, schedule and pricing all
-    // read one. So the line is a list model with no registration (marked by its ID), and four patches keep it away
-    // from code that would need one: the filter (a neighbourhood filter looks up the building), the cell (its
-    // destination button uses the address), the click (it opens the business page by address), and the list
-    // itself. The line only shows when all four are in place.
-    //
-    // The fleet section is a copy of BizMan's own warehouse section (in 1.0 the scroll view "ScrollRect (Warehouses)"
-    // under the column's "Warehouses" header), with a copy of the warehouse card per vehicle: its name, address and
-    // two small tables (drivers, inventory) hold the vehicle's whereabouts, money, grade, crew and route, and what it
-    // sold today and has left. The column has no layout group, so the copy sits exactly where the game's section is:
-    // while the fleet section shows, the game's section is hidden and the column's heading says Street food, and
-    // both come back when it closes. The copy is made from the card template alone: the warehouse cards the game had
-    // filled in for the player's warehouses are left out of it. Clicking the Street food line opens the section (and
-    // a second click closes it); clicking a card opens that vehicle's page (BizManVehiclePage), inside the section;
-    // leaving the list closes both. If anything here fails, the line is taken out and BizMan carries on without it.
+    // A dedicated Street food page in BizMan, built from basic UI components. The business-list entry
+    // has no building registration; its patches keep the game's address-based business flow away from it.
+    // The fleet and vehicle pages share our scrolling content, independent of warehouse cards or loaders.
     internal static class BizManFleet
     {
         private const string EntryId = "foodtrucks:streetfood";
@@ -47,11 +32,15 @@ namespace FoodTrucks
         private static readonly HashSet<string> logged = new HashSet<string>(StringComparer.Ordinal);
         // Cells whose destination button the Street food line hid; a recycled cell gets it back.
         private static readonly HashSet<int> hiddenButtons = new HashSet<int>();
-        private static Transform? section, cardTemplate;
-        // The game's warehouse section, and its column's headings, while the fleet section stands in for them.
-        private static Transform? gameSection;
-        private static readonly List<(TextLocalizationComponent Label, string Key)> headings = new List<(TextLocalizationComponent, string)>();
-        private static bool gameSectionHidden;
+        private static Transform? section, content;
+        private static BizManList? builtFor;
+        private static Font? font;
+        // Author this page in a 720-pixel-high reference view, then convert to the game canvas units.
+        private static float units = 1f;
+        internal static float Size(float value) => value * units;
+        private static readonly List<GameObject> hiddenListParts = new List<GameObject>();
+        private static readonly Color PageColour = new Color(0.94f, 0.95f, 0.97f, 1f);
+        private static readonly Color CardColour = Color.white;
 
         // Called once after patching: the line shows only when every patch that keeps it safe is in place.
         internal static void CheckReady()
@@ -197,29 +186,41 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error(ex); }
         }
 
-        // The fleet section stands in for the game's warehouse section: the game's is hidden and the column's
-        // heading says Street food.
         private static void ShowSectionView()
         {
-            if (section == null) return;
-            if (gameSection != null && gameSection.gameObject.activeSelf)
+            if (section == null || builtFor == null) return;
+            if (!section.gameObject.activeSelf)
             {
-                gameSection.gameObject.SetActive(false);
-                gameSectionHidden = true;
+                hiddenListParts.Clear();
+                foreach (Transform part in builtFor.transform)
+                {
+                    if (part == section || !part.gameObject.activeSelf) continue;
+                    hiddenListParts.Add(part.gameObject);
+                    part.gameObject.SetActive(false);
+                }
             }
-            foreach (var (label, _) in headings)
-                if (label != null) label.Key = "foodtrucks:bizman_fleet_header";
             section.gameObject.SetActive(true);
+            section.SetAsLastSibling();
         }
 
-        // The game's warehouse section and heading come back exactly as they were.
         private static void CloseSection()
         {
             if (section != null) section.gameObject.SetActive(false);
-            if (gameSectionHidden && gameSection != null) gameSection.gameObject.SetActive(true);
-            gameSectionHidden = false;
-            foreach (var (label, key) in headings)
-                if (label != null) label.Key = key;
+            foreach (var part in hiddenListParts)
+                if (part != null) part.SetActive(true);
+            hiddenListParts.Clear();
+        }
+
+        internal static void Reset()
+        {
+            CloseSection();
+            if (section != null) UnityEngine.Object.Destroy(section.gameObject);
+            section = content = null;
+            builtFor = openList = null;
+            hiddenListParts.Clear();
+            hiddenButtons.Clear();
+            broken = false;
+            logged.Clear();
         }
 
         // ---- The fleet section ----
@@ -228,7 +229,7 @@ namespace FoodTrucks
 
         // The section's card list, built if it isn't yet (the vehicle page sits in it, in place of the cards); null if
         // it can't be.
-        internal static Transform? EnsureCardList(BizManList list) => ready && !broken && Ensure(list) && cardTemplate != null ? cardTemplate.parent : null;
+        internal static Transform? EnsureCardList(BizManList list) => ready && !broken && Ensure(list) ? content : null;
 
         // Opens the section, filled afresh and scrolled to (the vehicle page's Back, and opening a page from elsewhere).
         internal static void ShowSection(BizManList list)
@@ -239,7 +240,7 @@ namespace FoodTrucks
 
         private static void Open(BizManList list)
         {
-            if (!Ensure(list) || section == null || cardTemplate == null) return;
+            if (!Ensure(list) || section == null || content == null) return;
             openList = list;
             Fill();
             ShowSectionView();
@@ -250,83 +251,133 @@ namespace FoodTrucks
             });
         }
 
-        // Copies BizMan's warehouse section once per list (the list is rebuilt with each city scene).
+        // The page covers the BizMan list while open; the app's own navigation remains outside it.
         private static bool Ensure(BizManList list)
         {
-            if (section != null && cardTemplate != null) return true;
-            var warehouses = Traverse.Create(list).Field("warehouseList").GetValue<WarehouseList>();
-            var template = warehouses == null ? null : Traverse.Create(warehouses).Field("warehouseEntry").GetValue<Transform>();
-            var businesses = Traverse.Create(list).Field("businessScrollerController").GetValue<BusinessScrollerController>();
-            if (warehouses == null || template == null || warehouses.transform.parent == null)
-                throw new InvalidOperationException("BizMan's warehouse section or its card isn't where 1.0 had it.");
-            // The copy has to be the warehouse section alone, not a panel that also holds the business list.
-            if (businesses != null && businesses.transform.IsChildOf(warehouses.transform))
-                throw new InvalidOperationException("BizMan's warehouse section holds the business list; copying it would copy the list.");
-            var path = PathBelow(template, warehouses.transform)
-                       ?? throw new InvalidOperationException("The warehouse card isn't inside the warehouse section.");
+            if (section != null && content != null && builtFor == list) return true;
+            CloseSection();
+            if (section != null) UnityEngine.Object.Destroy(section.gameObject);
+            var canvas = list.GetComponentInParent<Canvas>()?.rootCanvas;
+            var scale = canvas != null ? canvas.scaleFactor : 1f;
+            units = Screen.height > 0 && scale > 0f ? Screen.height / (720f * scale) : 1f;
+            font = list.GetComponentsInChildren<Text>(true).Select(t => t.font).FirstOrDefault(f => f != null)
+                   ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var root = Rect("FoodTrucks.StreetFoodPage", list.transform);
+            root.gameObject.SetActive(false);
+            Stretch(root);
+            root.gameObject.AddComponent<Image>().color = PageColour;
+            section = root;
+            builtFor = list;
 
-            // Copied under an inactive holder, so none of the copy's components wake before the warehouse loaders are gone.
-            var holder = new GameObject("FoodTrucks.Holder");
-            holder.SetActive(false);
-            holder.transform.SetParent(warehouses.transform.parent, false);
-            var copy = UnityEngine.Object.Instantiate(warehouses.gameObject, holder.transform);
-            copy.name = "FoodTrucks.StreetFoodSection";
-            // 1.0 has a second WarehouseList on the section's viewport; none of them may stay in the copy.
-            foreach (var loader in copy.GetComponentsInChildren<WarehouseList>(true)) UnityEngine.Object.DestroyImmediate(loader);
-            var card = copy.transform.Find(path) ?? throw new InvalidOperationException("The copied section has no warehouse card.");
-            // The copy came with the cards the game filled in for the player's warehouses (copies of the template beside
-            // it). They go now, before anything below looks at the copy: the section is built from the template alone.
-            var filled = new List<Transform>();
-            foreach (Transform sibling in card.parent)
-                if (sibling != card) filled.Add(sibling);
-            foreach (var other in filled) UnityEngine.Object.DestroyImmediate(other.gameObject);
-            copy.SetActive(false);
-            copy.transform.SetParent(warehouses.transform.parent, false);
-            copy.transform.SetSiblingIndex(warehouses.transform.GetSiblingIndex() + 1);
-            UnityEngine.Object.Destroy(holder);
+            var header = Rect("Header", root);
+            header.anchorMin = new Vector2(0f, 1f);
+            header.anchorMax = Vector2.one;
+            header.pivot = new Vector2(0.5f, 1f);
+            header.offsetMin = new Vector2(Size(16f), Size(-68f));
+            header.offsetMax = new Vector2(Size(-16f), Size(-12f));
+            var headerLayout = header.gameObject.AddComponent<HorizontalLayoutGroup>();
+            headerLayout.spacing = Size(16f);
+            headerLayout.childControlWidth = headerLayout.childControlHeight = true;
+            headerLayout.childForceExpandWidth = false;
+            headerLayout.childForceExpandHeight = true;
+            var back = ActionButton(header, Text("foodtrucks:bizman_fleet_back"), () => { BizManVehiclePage.Close(); CloseSection(); });
+            back.GetComponent<LayoutElement>().preferredWidth = Size(140f);
+            var title = Label(header, Text("foodtrucks:bizman_fleet_header"), 24);
+            title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
-            // The section's own heading becomes Street food, and its buttons (renting a warehouse and the like) go.
-            foreach (var label in copy.GetComponentsInChildren<TextLocalizationComponent>(true))
-            {
-                if (label.transform.IsChildOf(card)) continue;
-                Note($"fleet section label {PathBelow(label.transform, copy.transform)} = '{label.Key}'.");
-                if (!string.IsNullOrEmpty(label.Key) && label.Key.IndexOf("warehouse", StringComparison.OrdinalIgnoreCase) >= 0)
-                    label.SetData(LanguageChangeEventDataHolder.Create("foodtrucks:bizman_fleet_header"));
-            }
-            foreach (var button in copy.GetComponentsInChildren<Button>(true))
-            {
-                if (button.transform.IsChildOf(card) || card.IsChildOf(button.transform)) continue;
-                Note($"fleet section button {PathBelow(button.transform, copy.transform)} hidden.");
-                button.gameObject.SetActive(false);
-            }
-            foreach (var label in card.GetComponentsInChildren<TextLocalizationComponent>(true))
-                Note($"fleet card label {PathBelow(label.transform, card)} = '{label.Key}'.");
-            card.gameObject.SetActive(false);
+            var scrollRoot = Rect("FleetScroll", root);
+            Stretch(scrollRoot);
+            scrollRoot.offsetMin = new Vector2(Size(12f), Size(12f));
+            scrollRoot.offsetMax = new Vector2(Size(-12f), Size(-80f));
+            var scroll = scrollRoot.gameObject.AddComponent<ScrollRect>();
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = Size(35f);
+            var viewport = Rect("Viewport", scrollRoot);
+            Stretch(viewport);
+            viewport.offsetMax = new Vector2(Size(-18f), 0f);
+            viewport.gameObject.AddComponent<Image>().color = PageColour;
+            viewport.gameObject.AddComponent<RectMask2D>();
+            var body = Rect("Content", viewport);
+            body.anchorMin = new Vector2(0f, 1f);
+            body.anchorMax = Vector2.one;
+            body.pivot = new Vector2(0.5f, 1f);
+            body.offsetMin = body.offsetMax = Vector2.zero;
+            var layout = body.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = Size(14f);
+            layout.padding = new RectOffset((int)Size(4), (int)Size(4), (int)Size(4), (int)Size(12));
+            layout.childControlWidth = layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            body.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            scroll.viewport = viewport;
+            scroll.content = body;
+            content = body;
 
-            // The column's headings that name warehouses (1.0: "Header", bizman_warehouses) say Street food while the
-            // section shows.
-            headings.Clear();
-            var column = warehouses.transform.parent;
-            foreach (Transform part in column)
-            {
-                if (part == warehouses.transform || part == copy.transform) continue;
-                foreach (var label in part.GetComponentsInChildren<TextLocalizationComponent>(true))
-                    if (!string.IsNullOrEmpty(label.Key) && label.Key.IndexOf("warehouse", StringComparison.OrdinalIgnoreCase) >= 0)
-                        headings.Add((label, label.Key));
-            }
-
-            section = copy.transform;
-            cardTemplate = card;
-            gameSection = warehouses.transform;
-            gameSectionHidden = false;
-            var game = 0;
-            foreach (Transform sibling in template.parent)
-                if (sibling != template && sibling.gameObject.activeSelf) game++;
-            Log.Info($"BizMan: fleet section copied from the warehouse section's template (card at {path}; " +
-                     $"{filled.Count} filled warehouse card{(filled.Count == 1 ? "" : "s")} left out of the copy, " +
-                     $"{game} shown in the game's section); it stands in for {PathBelow(warehouses.transform, column.parent) ?? warehouses.name} " +
-                     $"while open, headings {(headings.Count == 0 ? "none" : string.Join(", ", headings.Select(h => $"{PathBelow(h.Label.transform, column) ?? h.Label.name} ('{h.Key}')")))}.");
+            var bar = Rect("Scrollbar", scrollRoot);
+            bar.anchorMin = new Vector2(1f, 0f);
+            bar.anchorMax = Vector2.one;
+            bar.offsetMin = new Vector2(Size(-12f), 0f);
+            bar.offsetMax = Vector2.zero;
+            bar.gameObject.AddComponent<Image>().color = CardColour;
+            var handle = Rect("Handle", bar);
+            Stretch(handle);
+            var handleImage = handle.gameObject.AddComponent<Image>();
+            handleImage.color = new Color(0.55f, 0.60f, 0.65f, 1f);
+            var scrollbar = bar.gameObject.AddComponent<Scrollbar>();
+            scrollbar.direction = Scrollbar.Direction.BottomToTop;
+            scrollbar.handleRect = handle;
+            scrollbar.targetGraphic = handleImage;
+            scroll.verticalScrollbar = scrollbar;
+            Log.Info($"BizMan: dedicated Street food page built with its own cards and scroll view. Canvas scale {scale:F3}, reference units {units:F2}, body font {Mathf.RoundToInt(Size(16))}.");
             return true;
+        }
+
+        internal static RectTransform Rect(string name, Transform parent)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            return (RectTransform)go.transform;
+        }
+
+        private static void Stretch(RectTransform rect)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+        }
+
+        internal static Text Label(Transform parent, string value, int size = 16)
+        {
+            var rect = Rect("Label", parent);
+            var text = rect.gameObject.AddComponent<Text>();
+            text.font = font;
+            text.fontSize = Mathf.Max(1, Mathf.RoundToInt(Size(size)));
+            text.color = new Color(0.13f, 0.17f, 0.21f, 1f);
+            text.text = value;
+            text.supportRichText = false;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.raycastTarget = false;
+            return text;
+        }
+
+        internal static Button ActionButton(Transform parent, string caption, Action action)
+        {
+            var rect = Rect("Button", parent);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.color = new Color(0.25f, 0.32f, 0.40f, 1f);
+            var button = rect.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            button.onClick.AddListener(() => Guard(action));
+            var size = rect.gameObject.AddComponent<LayoutElement>();
+            size.minHeight = size.preferredHeight = Size(40f);
+            var text = Label(rect, caption);
+            Stretch(text.rectTransform);
+            text.color = Color.white;
+            text.alignment = TextAnchor.MiddleCenter;
+            return button;
         }
 
         internal static string? PathBelow(Transform target, Transform root)
@@ -343,17 +394,28 @@ namespace FoodTrucks
         private static void Fill()
         {
             var state = FoodTrucksSession.CurrentState;
-            if (state == null || cardTemplate == null) return;
-            // The last opening's cards go: they are copies of the template, which the reset clears.
-            cardTemplate.ResetTemplate();
+            if (state == null || content == null) return;
+            foreach (Transform child in content)
+            {
+                if (child.name != "FoodTrucks.VehicleCard") continue;
+                child.gameObject.SetActive(false);
+                UnityEngine.Object.Destroy(child.gameObject);
+            }
             var names = StreetFoodBooks.VehicleNames();
             foreach (var vehicle in Vehicles().OrderBy(v => names.TryGetValue(v.Instance.id, out var n) ? n : v.Instance.id, StringComparer.Ordinal))
             {
-                var card = UnityEngine.Object.Instantiate(cardTemplate, cardTemplate.parent);
-                card.name = "FoodTrucks.VehicleCard";
+                var card = Rect("FoodTrucks.VehicleCard", content);
+                card.gameObject.AddComponent<Image>().color = CardColour;
+                var layout = card.gameObject.AddComponent<VerticalLayoutGroup>();
+                layout.padding = new RectOffset((int)Size(16), (int)Size(16), (int)Size(12), (int)Size(16));
+                layout.spacing = Size(8f);
+                layout.childControlWidth = layout.childControlHeight = true;
+                layout.childForceExpandWidth = true;
+                layout.childForceExpandHeight = false;
                 FillCard(card, state, vehicle.Instance, vehicle.WithDriver, names.TryGetValue(vehicle.Instance.id, out var name) ? name : vehicle.Instance.id);
-                card.gameObject.SetActive(true);
             }
+            var scroll = content.GetComponentInParent<ScrollRect>();
+            if (scroll != null) scroll.verticalNormalizedPosition = 1f;
         }
 
         private static void FillCard(Transform card, SaveState state, VehicleInstance instance, bool withDriver, string name)
@@ -362,30 +424,13 @@ namespace FoodTrucks
             var today = SaveGameManager.Current.Day;
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
 
-            // A click on the card opens the vehicle's page (crew, route, partner); the warehouse card's would open a
-            // business page.
-            var root = card.GetComponent<Button>();
-            if (root != null)
+            ActionButton(card, name, () =>
             {
-                root.onClick = new Button.ButtonClickedEvent();
-                var id = instance.id;
-                root.onClick.AddListener(() => Guard(() =>
-                {
-                    if (openList != null) BizManVehiclePage.Show(openList, id);
-                }));
-            }
-            SetText(card.Find("WarehouseName"), name);
-            SetText(card.Find("Address"), Where(instance, vehicle, withDriver));
-            var destination = card.Find("Address/SetDestinationButton")?.GetComponent<Button>();
-            if (destination != null)
-            {
-                destination.onClick = new Button.ButtonClickedEvent();
-                var canGo = !withDriver && vehicle?.Transit == null;
-                destination.gameObject.SetActive(canGo);
-                if (canGo) destination.onClick.AddListener(() => Guard(() => GoTo(instance, name)));
-            }
-            Hide(card, "ManageDrivers");
-            Hide(card, "ShowFullInventory");
+                if (openList != null) BizManVehiclePage.Show(openList, instance.id);
+            });
+            Label(card, Where(instance, vehicle, withDriver));
+            if (!withDriver && vehicle?.Transit == null)
+                ActionButton(card, Text("foodtrucks:bizman_fleet_destination"), () => GoTo(instance, name));
 
             // The drivers table: money, health, crew and route, three columns a row.
             var money = FleetReport.Vehicle(state, instance.id, today);
@@ -411,14 +456,11 @@ namespace FoodTrucks
                 if (storage.StoragePieces > 0)
                     rows.Add((Text("foodtrucks:bizman_fleet_storage_extra"), Text("foodtrucks:bizman_fleet_storage_doubles"), "", false));
             }
-            Rows(card, "VehicleSlotsList/VehicleSlotEntry", rows.Count, (row, i) =>
+            foreach (var (label, first, second, loss) in rows)
             {
-                var (label, first, second, loss) = rows[i];
-                SetText(row.Find("SlotNumber"), label);
-                SetText(row.Find("VehicleName"), first);
-                SetText(row.Find("DriverStatus"), second);
-                Colour(row.Find("DriverStatus"), loss ? (Color)colors.lightRed : (Color?)null);
-            });
+                var line = Label(card, label + "   " + first + (string.IsNullOrEmpty(second) ? "" : "   " + second));
+                if (loss) line.color = (Color)colors.lightRed;
+            }
 
             // The inventory table: units sold today and units left of each item, most sold first, like the game's
             // sold-amount tooltip.
@@ -428,42 +470,14 @@ namespace FoodTrucks
             var items = sold.Select(s => s.Item).Concat(stock.Where(s => s.Value > 0).Select(s => s.Key).OrderBy(i => i, StringComparer.Ordinal))
                 .Distinct(StringComparer.Ordinal).ToList();
             var soldOf = sold.ToDictionary(s => s.Item, s => s.Units, StringComparer.Ordinal);
-            Rows(card, "InventoryList/InventoryEntry", Math.Max(1, items.Count), (row, i) =>
+            if (items.Count == 0) Label(card, Text("foodtrucks:bizman_fleet_nothing"));
+            foreach (var item in items)
             {
-                var splitter = row.Find("Splitter");
-                if (splitter != null) splitter.gameObject.SetActive(i < items.Count - 1);
-                if (items.Count == 0)
-                {
-                    SetText(row.Find("ItemName"), Text("foodtrucks:bizman_fleet_nothing"));
-                    SetText(row.Find("Amount"), "");
-                    SetText(row.Find("DaysLeft"), "");
-                    return;
-                }
-                var item = items[i];
                 soldOf.TryGetValue(item, out var units);
                 stock.TryGetValue(item, out var left);
-                SetText(row.Find("ItemName"), Text(item));
-                SetText(row.Find("Amount"), Format("foodtrucks:bizman_fleet_sold", ("count", units.ToString())));
-                SetText(row.Find("DaysLeft"), Format("foodtrucks:bizman_fleet_left", ("count", left.ToString())));
-                Colour(row.Find("DaysLeft"), left == 0 ? (Color)colors.lightRed : (Color?)null);
-            });
-        }
-
-        // Fills copies of a card's row template; the template itself stays hidden.
-        private static void Rows(Transform card, string path, int count, Action<Transform, int> fill)
-        {
-            var template = card.Find(path);
-            if (template == null)
-            {
-                Note($"the warehouse card has no {path}; that part of the fleet card stays empty.");
-                return;
-            }
-            template.gameObject.SetActive(false);
-            for (var i = 0; i < count; i++)
-            {
-                var row = UnityEngine.Object.Instantiate(template, template.parent);
-                fill(row, i);
-                row.gameObject.SetActive(true);
+                var line = Label(card, Text(item) + "   " + Format("foodtrucks:bizman_fleet_sold", ("count", units.ToString())) +
+                                       "   " + Format("foodtrucks:bizman_fleet_left", ("count", left.ToString())));
+                if (left == 0) line.color = (Color)colors.lightRed;
             }
         }
 
@@ -552,19 +566,6 @@ namespace FoodTrucks
             var graphic = target.GetComponent<Graphic>();
             var property = graphic == null ? null : graphic.GetType().GetProperty("text", BindingFlags.Instance | BindingFlags.Public);
             if (property != null && property.PropertyType == typeof(string)) property.SetValue(graphic, text);
-        }
-
-        // Null keeps the template's colour (each card is a fresh copy).
-        private static void Colour(Transform? target, Color? colour)
-        {
-            var graphic = target == null ? null : target.GetComponent<Graphic>();
-            if (graphic != null && colour != null) graphic.color = colour.Value;
-        }
-
-        private static void Hide(Transform card, string path)
-        {
-            var part = card.Find(path);
-            if (part != null) part.gameObject.SetActive(false);
         }
 
         private static void Guard(Action action)
