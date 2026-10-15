@@ -209,8 +209,8 @@ namespace FoodTrucks
 
         private static string Text(string key) => LocalizorManager.GetLocalization(key, null);
 
-        // What can go back from the vehicle, by item: paid, loose stacks, as selling takes them (no unpaid, sealed or
-        // nested cargo).
+        // What can go back from the vehicle, by item: paid stacks, not sealed, as selling takes them. Food goes back from
+        // loose stacks only; a fitted piece also when it holds stock, which goes back with it (Unload).
         private static Dictionary<string, int> Returnable(VehicleInstance vehicle)
         {
             var units = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -219,10 +219,13 @@ namespace FoodTrucks
             return units;
         }
 
-        private static IEnumerable<CargoInstance> ReturnableStacks(VehicleInstance vehicle, string? item) =>
-            vehicle.cargoInstances.Where(c => c != null && !string.IsNullOrEmpty(c.itemName) && (item == null || c.itemName == item) &&
-                                              c.paid && !c.IsSealed && c.amount > 0 &&
-                                              (c.nestedCargoInstances == null || c.nestedCargoInstances.Count == 0)).ToList();
+        private static IEnumerable<CargoInstance> ReturnableStacks(VehicleInstance vehicle, string? item)
+        {
+            var tables = DemandData.Tables;
+            return vehicle.cargoInstances.Where(c => c != null && !string.IsNullOrEmpty(c.itemName) && (item == null || c.itemName == item) &&
+                                                     c.paid && !c.IsSealed && c.amount > 0 &&
+                                                     (!Nested(c) || tables?.EquipmentForGameItem(c.itemName) != null)).ToList();
+        }
 
         // ---- Fill up ----
 
@@ -337,9 +340,11 @@ namespace FoodTrucks
                 CartSelling.Say("foodtrucks:notification_commissary_stock_none_on_board", at.Kind, ("item", Text(item)));
                 return "none on board";
             }
-            var count = piece ? 1 : Math.Min(Math.Max(1, units), onBoard);
+            // A piece goes one at a time, unless the only ones left hold stock in one stack, which goes back whole (Unload).
+            var first = piece ? ReturnableStacks(vehicle, item).OrderBy(c => Nested(c) ? 1 : 0).ThenBy(c => c.amount).First() : null;
+            var count = piece ? (Nested(first!) ? first!.amount : 1) : Math.Min(Math.Max(1, units), onBoard);
             // Decided before the piece leaves, from the cargo as it stands.
-            var food = piece ? StockTransfer.FoodLeavingWith(at.Tables, at.Kind, CargoLimit.Lines(vehicle), item, 1) : new Dictionary<string, int>();
+            var food = piece ? StockTransfer.FoodLeavingWith(at.Tables, at.Kind, CargoLimit.Lines(vehicle), item, count) : new Dictionary<string, int>();
             var day = Math.Max(1, SaveGameManager.Current.Day);
             var moved = Unload(at, item, count, day);
             var foodBack = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -373,28 +378,71 @@ namespace FoodTrucks
             return null;
         }
 
-        // Takes up to `units` of an item off the vehicle, smallest stacks first, and adds each stack's share to this
-        // commissary's stock as a new batch at the stack's price per unit (Core Commissaries.ReturnFromVehicle). The
+        // Takes up to `units` of an item off the vehicle, loose stacks first and smallest first, and adds each stack's share
+        // to this commissary's stock as a new batch at the stack's price per unit (Core Commissaries.ReturnFromVehicle,
+        // which keeps the share that came from commissary orders apart, for the tax label, and the day the food first came
+        // on board). A fitted piece holding stock (a stocked drinks fridge) goes back whole, its stack and what it holds:
+        // the contents become stock of their own, so no unit or value is lost (review round 1 of the UI flow, Astra). The
         // stock is booked before the cargo changes: emptying a stack runs the game's cargo listeners, and one that throws
         // must not lose the units. Food leaves the health grade's record oldest first, as a sale does. Returns the units moved.
         private static int Unload(AtBay at, string item, int units, int day)
         {
             var vehicle = at.Vehicle;
-            var saved = StreetSales.Find(at.State, vehicle.id);
-            var food = at.Tables.Product(item) != null;
             var moved = 0;
-            foreach (var entry in ReturnableStacks(vehicle, item).OrderBy(c => c.amount))
+            foreach (var entry in ReturnableStacks(vehicle, item).OrderBy(c => Nested(c) ? 1 : 0).ThenBy(c => c.amount))
             {
                 if (moved >= units) break;
-                var n = Math.Min(units - moved, entry.amount);
-                var cents = (long)Math.Round(Math.Max(0f, entry.pricePerUnit) * 100.0);
-                Commissaries.ReturnFromVehicle(at.State.Commissary, at.Site.Id, item, n, cents, day, vehicle.id);
-                if (food && saved != null) ReputationBook.Consume(saved, item, n);
+                var whole = Nested(entry);
+                var n = whole ? entry.amount : Math.Min(units - moved, entry.amount);
+                if (whole)
+                {
+                    Log.Info($"Commissary stock: {entry.amount} {item} on {World.Short(vehicle.id)} hold stock; they go back whole with it.");
+                    foreach (var inner in Contents(entry))
+                        Book(at, inner.itemName, inner.amount, inner.pricePerUnit, day);
+                }
+                Book(at, item, n, entry.pricePerUnit, day);
                 moved += n;
                 try { vehicle.ReduceFromCargo(entry, n); }
                 catch (Exception ex) { Log.Error($"Commissary stock, taking {n} {item} off {vehicle.id}: {ex}"); }
             }
             return moved;
+        }
+
+        private static bool Nested(CargoInstance entry) => entry.nestedCargoInstances != null && entry.nestedCargoInstances.Count > 0;
+
+        // What a stack holds, with units (the game nests one level: NestedCargoInstance).
+        private static IEnumerable<NestedCargoInstance> Contents(CargoInstance stack) =>
+            (stack.nestedCargoInstances ?? new List<NestedCargoInstance>()).Where(n => n != null && n.amount > 0 && !string.IsNullOrEmpty(n.itemName));
+
+        // One stack's share into this commissary's stock. The price goes through decimal, so the game's float price per
+        // unit comes back as the cents it was loaded at (review round 1 of the UI flow, Opus). The fleet's units of the
+        // item are counted before this vehicle's leave, as Core's ordered pool is cut to them.
+        private static void Book(AtBay at, string item, int units, float pricePerUnit, int day)
+        {
+            var food = at.Tables.Product(item) != null;
+            var saved = StreetSales.Find(at.State, at.Vehicle.id);
+            var fleetOnBoard = Fleet().Values.Sum(v => (long)UnitsOnBoard(v, item));
+            var loadedDay = food && saved != null ? ReputationBook.TakeOutOldest(saved, item, units) : null;
+            var cents = (long)Math.Round((decimal)Math.Max(0f, pricePerUnit) * 100m);
+            var lines = Commissaries.ReturnFromVehicle(at.State.Commissary, at.Site.Id, item, units, cents, day, at.Vehicle.id,
+                (int)Math.Min(int.MaxValue, fleetOnBoard), loadedDay);
+            Log.Info($"Commissary stock: {units} {item} from {World.Short(at.Vehicle.id)} into stock at {at.Site.Id}, {CartSelling.Money(cents)} each " +
+                     $"({string.Join(", ", lines.Select(l => $"{l.Units} {(Commissaries.Deducted(l) ? "from commissary orders" : "of other origin")}"))})" +
+                     (loadedDay == null ? "." : $", on board since day {loadedDay}."));
+        }
+
+        // An item's units in a vehicle's cargo, inside other stacks too, as the health grade counts food on board.
+        internal static int UnitsOnBoard(VehicleInstance vehicle, string item)
+        {
+            long units = 0;
+            foreach (var stack in vehicle.cargoInstances)
+            {
+                if (stack == null) continue;
+                if (stack.itemName == item && stack.amount > 0) units += stack.amount;
+                foreach (var inner in Contents(stack))
+                    if (inner.itemName == item) units += inner.amount;
+            }
+            return (int)Math.Min(int.MaxValue, units);
         }
 
         // ---- The test bridge (docs/test-bridge.md) ----

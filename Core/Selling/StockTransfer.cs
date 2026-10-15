@@ -46,8 +46,9 @@ namespace FoodTrucks.Core.Selling
     {
         // Every choice the list offers: a take for each item in stock here (foods, then pieces), a return for each food
         // on board and each fitted piece. `stock` is the commissary's units by item; `onBoard` the vehicle's units that
-        // can go back by item (the game leaves out unpaid, sealed and nested stacks). Items that are neither a food
-        // nor a piece of equipment aren't the commissary's business and are left out.
+        // can go back by item (the game leaves out unpaid and sealed stacks, and nested ones except a fitted piece, which
+        // goes back with what it holds). Every item in stock can be taken, the contents a stocked piece came back with
+        // included; on board, items that are neither a food nor a piece of equipment aren't the commissary's business.
         public static IReadOnlyList<TransferChoice> Choices(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo,
             IReadOnlyDictionary<string, int> stock, IReadOnlyDictionary<string, int> onBoard)
         {
@@ -58,7 +59,7 @@ namespace FoodTrucks.Core.Selling
             var lines = cargo.ToList();
             var choices = new List<TransferChoice>();
             foreach (var piece in new[] { false, true })
-                foreach (var pair in stock.Where(p => p.Value > 0 && Known(tables, p.Key) && IsPiece(tables, p.Key) == piece)
+                foreach (var pair in stock.Where(p => p.Value > 0 && !string.IsNullOrWhiteSpace(p.Key) && IsPiece(tables, p.Key) == piece)
                              .OrderBy(p => p.Key, StringComparer.Ordinal))
                 {
                     var check = Take(tables, vehicleType, lines, pair.Key, piece ? 1 : pair.Value);
@@ -92,10 +93,11 @@ namespace FoodTrucks.Core.Selling
             return Storage.Restock(tables, vehicleType, cargo, foods);
         }
 
-        // The food that has to go back with `pieces` of a piece of equipment: in each pool the piece made bigger (its own
-        // kind's, or every pool for an Extra Storage), what the removal pushes over the smaller room, taken from the
-        // food with the most load first so the pool stays balanced. Food that was over its room before the removal (an
-        // old save) isn't sent back on its account. A pool with no piece left loses its room, so all its food goes.
+        // The food that has to go back with `pieces` of a piece of equipment: in each pool the removal makes smaller (its
+        // own kind's, or every pool for an Extra Storage), whatever is over the smaller room, taken from the food with the
+        // most load first so the pool stays balanced. A pool with no piece left has no room, so all its food goes, even
+        // food that was already over its room in an old save (review round 1 of the UI flow, Astra). Pools the removal
+        // doesn't touch keep what they hold.
         public static IReadOnlyDictionary<string, int> FoodLeavingWith(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo,
             string pieceItem, int pieces = 1)
         {
@@ -109,9 +111,8 @@ namespace FoodTrucks.Core.Selling
             var after = Storage.Of(tables, vehicleType, Without(lines, pieceItem, pieces))!;
             foreach (var pool in before.Pools)
             {
-                var room = after.Pools.FirstOrDefault(p => p.EquipmentId == pool.EquipmentId)?.Capacity ?? 0;
-                // Keep what was over the old room over the new one too: only the removal's share goes back.
-                var keep = room + Math.Max(0, pool.Load - pool.Capacity);
+                var keep = after.Pools.FirstOrDefault(p => p.EquipmentId == pool.EquipmentId)?.Capacity ?? 0;
+                if (keep >= pool.Capacity) continue;
                 var units = pool.Units.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
                 var load = pool.Load;
                 while (load > keep + 1e-9)

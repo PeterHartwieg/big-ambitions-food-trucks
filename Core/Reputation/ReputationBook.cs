@@ -170,6 +170,51 @@ namespace FoodTrucks.Core.Reputation
                 if (day >= 1 && day > closedThrough) Day(vehicle, day).Cleaned = true;
         }
 
+        // Units given back to a commissary, oldest first as a sale takes them: the day the oldest of them came on board,
+        // kept with the returned stock so taking it again keeps its age (Restored). Null when none were recorded.
+        public static int? TakeOutOldest(VehicleState vehicle, string item, int units)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            int? oldest = vehicle.StockBatches != null && vehicle.StockBatches.TryGetValue(item, out var batches) && batches.Count > 0 && units > 0
+                ? batches[0].Day : (int?)null;
+            Consume(vehicle, item, units);
+            return oldest;
+        }
+
+        // Units loaded from a commissary batch that was on a vehicle before: they keep the day they first came on board,
+        // so giving stale food back and taking it again doesn't make it fresh (review round 1 of the UI flow). The item's
+        // record is first brought to `unitsOnBoard` as TrackStock would (new units as today's), then `units` of the
+        // newest are moved to `day`. A day not before today changes nothing.
+        public static void Restored(VehicleState vehicle, string item, int units, int day, int unitsOnBoard, int today)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            if (string.IsNullOrEmpty(item) || units <= 0 || day < 1 || day >= today) return;
+            TrackStock(vehicle, OnlyItem(vehicle, item, unitsOnBoard), today);
+            if (vehicle.StockBatches == null || !vehicle.StockBatches.TryGetValue(item, out var batches)) return;
+            var move = 0;
+            for (var i = batches.Count - 1; i >= 0 && move < units; i--)
+            {
+                if (batches[i].Day <= day) break;
+                var take = Math.Min(units - move, batches[i].Units);
+                batches[i].Units -= take;
+                move += take;
+                if (batches[i].Units == 0) batches.RemoveAt(i);
+            }
+            if (move == 0) return;
+            var at = batches.FindIndex(b => b.Day >= day);
+            if (at >= 0 && batches[at].Day == day) batches[at].Units = checked(batches[at].Units + move);
+            else batches.Insert(at < 0 ? batches.Count : at, new StockBatch { Day = day, Units = move });
+        }
+
+        // The on-board counts TrackStock needs to touch only this item: the others as recorded.
+        private static Dictionary<string, int> OnlyItem(VehicleState vehicle, string item, int unitsOnBoard)
+        {
+            var counts = (vehicle.StockBatches ?? new Dictionary<string, List<StockBatch>>())
+                .ToDictionary(p => p.Key, p => (int)Math.Min(int.MaxValue, p.Value.Sum(b => (long)b.Units)), StringComparer.Ordinal);
+            counts[item] = Math.Max(0, unitsOnBoard);
+            return counts;
+        }
+
         // Cleaned overnight in its commissary's bay (Commissaries.CleanedOvernight): that one service day only, not the
         // vehicle's last opening, since the 04:00 check can run late after a load. A day already counted takes nothing.
         public static bool CleanedOn(VehicleState vehicle, int serviceDay, int closedThrough)

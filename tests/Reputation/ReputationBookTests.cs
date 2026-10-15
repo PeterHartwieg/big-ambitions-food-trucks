@@ -41,6 +41,25 @@ public class ReputationBookTests
         Assert.Equal(0, book.Points(cart));
     }
 
+    // Review round 1 of the UI flow (Astra, Opus): food given back and taken again keeps its age.
+    [Fact]
+    public void FoodGivenBackAndTakenAgainKeepsTheDayItFirstCameOnBoard()
+    {
+        var cart = new VehicleState { VehicleId = "c1" };
+        ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 30 }, 2);
+        ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 50 }, 5);
+
+        Assert.Equal(2, ReputationBook.TakeOutOldest(cart, "hotdog", 25));
+        Assert.Equal(new[] { (2, 5), (5, 20) }, cart.StockBatches!["hotdog"].Select(b => (b.Day, b.Units)));
+
+        // Taken again on day 6: the cargo now holds 50; the 25 come back as day 2's, not as fresh food.
+        ReputationBook.Restored(cart, "hotdog", 25, 2, 50, 6);
+        Assert.Equal(new[] { (2, 30), (5, 20) }, cart.StockBatches!["hotdog"].Select(b => (b.Day, b.Units)));
+        // TrackStock finds the count matching and changes nothing.
+        Assert.False(ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 50 }, 6));
+        Assert.Null(ReputationBook.TakeOutOldest(new VehicleState { VehicleId = "c2" }, "hotdog", 5));
+    }
+
     [Fact]
     public void CleanedOvernightMarksThatServiceDayOnly()
     {

@@ -645,7 +645,6 @@ namespace FoodTrucks
         private void LateUpdate()
         {
             CommissaryOrderForm.Watch();
-            CommissaryDialog.WatchSpaces();
             // A jump of the player (teleport, taxi, fast travel) sweeps the bays near where they land before the frame
             // is drawn (BayParking).
             var sites = Sites;
@@ -662,7 +661,6 @@ namespace FoodTrucks
         private void Update()
         {
             CommissaryOrderForm.Watch();
-            CommissaryDialog.WatchSpaces();
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
             var sites = Sites;
@@ -716,6 +714,7 @@ namespace FoodTrucks
             BookStanding(state, rules, day, minute);
             Deliver(state, rules, day, minute);
             NightCheck(state, rules, sites, now, day, minute);
+            ResolvePendingCleaning(state, sites);
         }
 
         // The game's own setting that lifts its wholesale and import limits lifts the commissary's weekly food limits too
@@ -974,7 +973,11 @@ namespace FoodTrucks
                 return;
             }
             // Before the check moves its day on: a vehicle in its own bay is cleaned for the evening before each check.
+            var pendingBefore = commissary.PendingCleaning.Keys.ToList();
             CleanOvernight(state, Commissaries.CleanedOvernight(commissary, rules, day, minute, flags));
+            foreach (var held in commissary.PendingCleaning.Keys.Except(pendingBefore).ToList())
+                Log.Info($"Overnight cleaning: {World.Short(held)} is by its commissary's bay, but the street's side can't be read yet; " +
+                         $"day {string.Join(", ", commissary.PendingCleaning[held])} waits for it.");
             var fines = Commissaries.NightCheck(commissary, rules, day, minute, flags);
             FoodTrucksSession.MarkChanged();
             Log.Info($"Overnight check through day {commissary.NightCheckedThroughDay}: " +
@@ -1024,6 +1027,27 @@ namespace FoodTrucks
                     : $"Overnight cleaning: {World.Short(vehicleId)} stood in its commissary's bay at the check, but day {serviceDay} is already counted (through day {closedThrough}); nothing marked.");
             }
             if (cleaned.Count > 0) FoodTrucksSession.MarkChanged();
+        }
+
+        // Each minute while overnight cleaning waits for a vehicle's street side (Core Commissaries.ResolvePendingCleaning):
+        // decided as soon as the side can be read; a vehicle gone or without its space there any more isn't cleaned.
+        private static void ResolvePendingCleaning(SaveState state, CommissaryTables sites)
+        {
+            var pending = state.Commissary.PendingCleaning;
+            if (pending.Count == 0) return;
+            var fleet = Fleet();
+            foreach (var vehicleId in pending.Keys.ToList())
+            {
+                var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicleId);
+                var site = space == null ? null : sites.Site(space.CommissaryId);
+                var why = "it is gone or has no space there any more";
+                bool? inBay = fleet.TryGetValue(vehicleId, out var vehicle) && site != null ? InBayAnswer(vehicle, site, out why) : false;
+                if (inBay == null) continue;
+                var days = Commissaries.ResolvePendingCleaning(state.Commissary, vehicleId, inBay.Value);
+                FoodTrucksSession.MarkChanged();
+                if (inBay.Value) CleanOvernight(state, days.Select(d => (vehicleId, d)).ToList());
+                else Log.Info($"Overnight cleaning: {World.Short(vehicleId)} wasn't in its commissary's bay once its side could be read ({why}); nothing cleaned.");
+            }
         }
 
         private static string Describe(CommissaryVehicle v) =>
@@ -1561,6 +1585,25 @@ namespace FoodTrucks
             return wanted;
         }
 
+        // What loaded units carry from their batch (review round 1 of the UI flow): ordered stock joins the fleet's pool of
+        // ordered units on vehicles, so a return keeps its tax origin (Core Commissaries.TookOnVehicle), and food that was
+        // on a vehicle before keeps the day it first came on board (Core ReputationBook.Restored).
+        private static void Followed(SaveState state, VehicleInstance vehicle, CommissaryStockLine line, int moved)
+        {
+            try
+            {
+                Commissaries.TookOnVehicle(state.Commissary, line, moved);
+                if (Commissaries.LoadedDay(line) is { } day && DemandData.Tables?.Product(line.ItemName) != null)
+                {
+                    var saved = StreetSales.GetOrAdd(state, vehicle.id);
+                    if (string.IsNullOrEmpty(saved.VehicleType)) saved.VehicleType = FoodTrucksMod.KindOf(vehicle.vehicleTypeName) ?? saved.VehicleType;
+                    ReputationBook.Restored(saved, line.ItemName, moved, day, UnitsOnBoard(vehicle, line.ItemName), SaveGameManager.Current.Day);
+                    Log.Info($"Commissary stock: {moved} {line.ItemName} loaded into {World.Short(vehicle.id)} keep their age (on board since day {day}).");
+                }
+            }
+            catch (Exception ex) { Log.Error($"Commissary stock, following {line.ItemName} onto {vehicle.id}: {ex}"); }
+        }
+
         // Takes the wanted units out of stock, oldest first, loads them through TryToAddToCargo (so CargoLimit still has the
         // last word) and returns what didn't go in to its batch. Returns the units returned.
         private static long Load(SaveState state, VehicleInstance vehicle, string siteId, IReadOnlyDictionary<string, int> wanted,
@@ -1579,7 +1622,11 @@ namespace FoodTrucks
                     moved = Math.Max(0, Math.Min(line.Units, vehicle.GetAmountByItemName(line.ItemName) - before));
                 }
                 else Log.Error($"Commissary restock: {line.ItemName} isn't a game item (its mod removed?); it stays in stock.");
-                if (moved > 0) loaded[line.ItemName] = (loaded.TryGetValue(line.ItemName, out var l) ? l : 0) + moved;
+                if (moved > 0)
+                {
+                    loaded[line.ItemName] = (loaded.TryGetValue(line.ItemName, out var l) ? l : 0) + moved;
+                    Followed(state, vehicle, line, moved);
+                }
                 if (moved < line.Units)
                     back.Add(new CommissaryStockLine
                     {
@@ -2167,6 +2214,8 @@ namespace FoodTrucks
 
         private static DialogEntry Start()
         {
+            // A Spaces list still open from an earlier call goes: this call is where the player is now.
+            EndSpaces("a new call");
             var site = Site();
             var refusal = Refusal(site, forOrders: false);
             if (refusal != null) return refusal;
@@ -2236,12 +2285,14 @@ namespace FoodTrucks
             };
         }
 
-        // ---- Spaces: the game's list picker beside the phone ----
+        // ---- Spaces: the game's list picker, outside the phone ----
 
-        // The picker the call opened, while it may still act: its number, the contact and the commissary. A choice acts
-        // only while this is its picker and the call with that contact is still on; hanging up, closing the call's
-        // step or the phone, or another picker forgets it (EndSpaces), so a late click does nothing.
-        private static (int Id, string ContactId, string SiteId)? spacesOpen;
+        // The list the call opened, while its choice may still act: its number and the commissary. The picker shows
+        // outside the phone, as the vehicle page's prompts do (BizManVehiclePage: the price prompt, the time pickers), so
+        // the call ends and the phone closes for it (review round 1 of the UI flow, Opus); the choice is texted into the
+        // conversation, which the phone opens on again. A later list, a new call to a commissary or the uninstall step
+        // forget it (EndSpaces), and the picker's own close drops its callback, so a late click does nothing.
+        private static (int Id, string SiteId)? spacesOpen;
         private static int spacesCount;
 
         private static DialogEntry? Spaces(string siteId)
@@ -2263,39 +2314,45 @@ namespace FoodTrucks
             }
             EndSpaces("a new Spaces list");
             var id = ++spacesCount;
-            var contactId = Current.contact.id;
-            spacesOpen = (id, contactId, siteId);
+            var contact = Current.contact;
+            spacesOpen = (id, siteId);
+            var labels = choices.Select(c => c.Label).ToList();
             var byLabel = choices.ToDictionary(c => c.Label, c => c, StringComparer.Ordinal);
-            Log.Info($"Commissary call {siteId}: Spaces lists {choices.Count} vehicles ({string.Join(", ", choices.Select(c => $"{World.Short(c.VehicleId)} {c.Op}"))}).");
-            DropdownSelector.Show(choices.Select(c => c.Label).ToList(), chosen =>
+            Log.Info($"Commissary call {siteId}: Spaces lists {choices.Count} vehicles ({string.Join(", ", choices.Select(c => $"{World.Short(c.VehicleId)} {c.Op}"))}); " +
+                     "the call ends and the phone closes for the list.");
+            Notices.Send(contact, new TextMessage("foodtrucks:dialog_commissary_spaces_pick", null, read: true));
+            // The call ends as hanging up ends it, the phone closes, and the list opens the next frame.
+            CommissaryOrderForm.End("Spaces list");
+            PhoneCall.HangUp();
+            InstanceBehavior<UIs>.Instance?.fullMenu?.Toggle(show: false);
+            HireRoutes.Later(() =>
             {
-                try { Chosen(id, contactId, siteId, byLabel.TryGetValue(chosen ?? "", out var choice) ? choice : null); }
-                catch (Exception ex) { Log.Error("Commissary call, Spaces: " + ex); }
-            }, "foodtrucks:commissary_spaces_header", "foodtrucks:commissary_spaces_body");
-            return new DialogEntry
-            {
-                messageData = LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_pick", (object?)null),
-                Template = DialogEntry.TemplateType.Text,
-                OnConfirm = Guard(() =>
+                try
                 {
-                    EndSpaces("back from Spaces");
-                    return Menu(siteId, LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_menu", (object?)null));
-                }),
-                ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_back", (object?)null),
-                OnCancel = HangUp,
-                onCancelMessage = HangUpMessage()
-            };
+                    if (spacesOpen?.Id != id) return;
+                    DropdownSelector.Show(labels, chosen =>
+                    {
+                        try { Chosen(id, siteId, contact, byLabel.TryGetValue(chosen ?? "", out var choice) ? choice : null); }
+                        catch (Exception ex) { Log.Error("Commissary call, Spaces: " + ex); }
+                    }, "foodtrucks:commissary_spaces_header", "foodtrucks:commissary_spaces_body");
+                }
+                catch (Exception ex)
+                {
+                    spacesOpen = null;
+                    Log.Error("Commissary call, opening the Spaces list: " + ex);
+                }
+            });
+            return null;
         }
 
-        // A vehicle picked: acts only while the picker is still the call's (EndSpaces), then the call goes on at its menu
-        // with a line saying what changed.
-        private static void Chosen(int id, string contactId, string siteId, Commissary.SpaceChoice? choice)
+        // A vehicle picked: acts only while the list is still the one opened (EndSpaces). The commissary texts what
+        // changed into its conversation (Commissary.ApplySpace), and the phone opens on it again, as the vehicle page
+        // comes back after its prompts.
+        private static void Chosen(int id, string siteId, Contact contact, Commissary.SpaceChoice? choice)
         {
-            var current = spacesOpen;
-            var dialog = DialogController.current;
-            if (current == null || current.Value.Id != id || dialog == null || dialog.contact?.id != contactId)
+            if (spacesOpen?.Id != id)
             {
-                Log.Info($"Commissary call {siteId}: a Spaces choice came after its call or list had ended; nothing done.");
+                Log.Info($"Commissary call {siteId}: a Spaces choice came after its list had ended; nothing done.");
                 return;
             }
             spacesOpen = null;
@@ -2304,16 +2361,23 @@ namespace FoodTrucks
                 Log.Info($"Commissary call {siteId}: the Spaces list closed with nothing chosen.");
                 return;
             }
-            var text = Commissary.ApplySpace(choice, siteId, inCall: true);
-            var line = text == null
-                ? LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_unchanged", (object?)null)
-                : LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_changed", new { text });
-            var next = Guard(() => Menu(siteId, line))();
-            if (next != null) dialog.ShowEntry(next);
+            if (Commissary.ApplySpace(choice, siteId, inCall: false) == null)
+                CartSelling.Notify("foodtrucks:notification_commissary_spaces_unchanged");
+            HireRoutes.Later(() =>
+            {
+                try
+                {
+                    if (Commissary.Uninstalled) return;
+                    SaveGameManager.Current.PlayerDefaults.contactsLastName = contact.id;
+                    SaveGameManager.Current.PlayerDefaults.contactsLastCategoryName = contact.category;
+                    InstanceBehavior<UIs>.Instance.fullMenu.ShowApp(AppName.Contacts);
+                }
+                catch (Exception ex) { Log.Error($"Commissary call {siteId}: opening the conversation again after Spaces: {ex}"); }
+            });
         }
 
-        // Forgets the call's Spaces list and closes the game's picker if it is still showing it. Called on hanging up, a
-        // closing line, Back, a new list, the uninstall step, and each frame once the call has gone (WatchSpaces).
+        // Forgets the Spaces list and closes the game's picker if it is still showing it: a new list, a new call to a
+        // commissary, the uninstall step.
         internal static void EndSpaces(string why)
         {
             var current = spacesOpen;
@@ -2331,16 +2395,6 @@ namespace FoodTrucks
                 Log.Info($"Commissary call {current.Value.SiteId}: Spaces list closed ({why}){(picker == null ? "; no picker found to close, its choice does nothing" : "")}.");
             }
             catch (Exception ex) { Log.Error("Commissary call, closing the Spaces list: " + ex); }
-        }
-
-        // Every frame (Commissary.Update and LateUpdate): the game's ContactsApp hangs up on closing the phone without
-        // calling the entry's OnCancel, so a call that has gone is noticed here and its Spaces list closed.
-        internal static void WatchSpaces()
-        {
-            var current = spacesOpen;
-            if (current == null) return;
-            var dialog = DialogController.current;
-            if (dialog == null || dialog.contact?.id != current.Value.ContactId) EndSpaces("the call ended");
         }
 
         // The standing orders, one at a time: what it delivers, how often and when next. Next (or Done on the last, back to

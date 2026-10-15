@@ -36,6 +36,12 @@ namespace FoodTrucks.Core.Commissary
         // Each commissary's bay as resolved in this city (CommissaryBays): the points the search started from and where
         // it found legal parking, so a load decides "in the bay" from the same points without searching again.
         public Dictionary<string, CommissaryBaySet> Bays { get; set; } = new Dictionary<string, CommissaryBaySet>(StringComparer.Ordinal);
+        // Units of commissary-ordered stock (deducted under the commissary's tax label) out on the fleet's vehicles, per
+        // item, so a return keeps that origin (Commissaries.TookOnVehicle, ReturnFromVehicle). Additive.
+        public Dictionary<string, int> OrderedOnVehicles { get; set; } = new Dictionary<string, int>(StringComparer.Ordinal);
+        // Overnight cleaning waiting for a vehicle's street side to be read, by vehicle: the service days
+        // (Commissaries.CleanedOvernight, ResolvePendingCleaning). Additive.
+        public Dictionary<string, List<int>> PendingCleaning { get; set; } = new Dictionary<string, List<int>>(StringComparer.Ordinal);
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -377,6 +383,17 @@ namespace FoodTrucks.Core.Commissary
                 throw new JsonSerializationException("Commissary pending payments must name their vehicle and day, with amounts not negative.");
             if (state.RentPaidThroughDay < 0 || state.NightCheckedThroughDay < 0)
                 throw new JsonSerializationException("Commissary day cursors must not be negative.");
+            // Bookkeeping only: entries that make no sense are dropped, never refused.
+            state.OrderedOnVehicles ??= new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var item in state.OrderedOnVehicles.Keys.ToList())
+                if (string.IsNullOrWhiteSpace(item) || state.OrderedOnVehicles[item] <= 0) state.OrderedOnVehicles.Remove(item);
+            state.PendingCleaning ??= new Dictionary<string, List<int>>(StringComparer.Ordinal);
+            foreach (var vehicle in state.PendingCleaning.Keys.ToList())
+            {
+                var days = state.PendingCleaning[vehicle]?.Where(d => d >= 1).Distinct().ToList();
+                if (string.IsNullOrWhiteSpace(vehicle) || days == null || days.Count == 0) state.PendingCleaning.Remove(vehicle);
+                else state.PendingCleaning[vehicle] = days;
+            }
             // A resolved bay is only a cache of the city: a malformed one is dropped and searched again.
             state.Bays ??= new Dictionary<string, CommissaryBaySet>(StringComparer.Ordinal);
             foreach (var id in state.Bays.Keys.ToList())
