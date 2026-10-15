@@ -39,8 +39,8 @@ rsync -a --checksum "$GAME_DLLS/" "$SDK/Assets/_BaDependencies/GameDlls/" --incl
 python3 "$REPO/tools/write-dll-metas.py" "$SDK/Assets/_BaDependencies/GameDlls"
 
 
-# Harmony, checksum-pinned. Never committed.
-if [ ! -f "$DEPS/0Harmony.dll" ]; then
+# Harmony and its required notice, recovered together from the checksum-pinned package. Never committed.
+if [ ! -f "$DEPS/0Harmony.dll" ] || [ ! -f "$REPO/build/Harmony-LICENSE.txt" ]; then
   tmp="$(mktemp -d)"
   curl -fsSL "$HARMONY_URL" -o "$tmp/harmony.nupkg"
   echo "$HARMONY_SHA256  $tmp/harmony.nupkg" | shasum -a 256 -c - >/dev/null
@@ -144,7 +144,7 @@ run_unity FoodTrucks.BuildEditor.BatchBuild.Build build
 OUT="$REPO/build/FoodTrucks"
 rm -rf "$OUT"
 cp -R "$SDK/Output/FoodTrucks" "$OUT"
-cp "$REPO/build/Harmony-LICENSE.txt" "$OUT/Dependencies/Harmony-LICENSE.txt" 2>/dev/null || true
+cp "$REPO/build/Harmony-LICENSE.txt" "$OUT/Dependencies/Harmony-LICENSE.txt"
 cp "$REPO/README.md" "$REPO/LICENSE.txt" "$OUT/"
 # The demand and economy tables, read at startup from the mod folder so players can tune them.
 mkdir -p "$OUT/data"
