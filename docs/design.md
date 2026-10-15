@@ -310,6 +310,10 @@ Decided by Peter, 9 October 2026, for the eight new foods. These are new game it
 - **Hires.** A crewed vehicle restocks at a commissary bay where it rents a space, before it leaves for a stop; short stock is loaded as far as it goes and the commissary texts what was missing (14 October 2026).
 - **Supply.** Phone orders can repeat daily or weekly (the flat fee each delivery, shared with whatever else arrives that morning). Each food's boxes from phone orders are limited per game week, one limit for the whole fleet at all commissaries together (Peter, 14 October 2026), so a growing fleet stocks a warehouse. A logistics manager's plan can deliver from the player's warehouse to a commissary where they rent a space, with no fee. No wholesale contracts (Peter, 14 October 2026).
 
+## Warnings
+
+A food vehicle warns the player the way the game's shops do, with to-dos in the phone (Peter, 15 October 2026). Core's `VehicleWarnings` decides the list from the save and the tables. A menu food at or under a quarter of what its fitted pieces hold gives "low stock", and at none it gives "empty stock", as the game's shelves do. A vehicle with a route warns when it has fewer crew than it takes and when the route fails today's rules. Every vehicle warns without a permit, without a commissary space anywhere, and after a C from the health inspector. The vendor licence gives one fleet to-do from its renewal window on, and another once it has run out. Each warning is its own to-do type, numbered from 9201. Once a game minute the game side makes the to-dos that are missing and completes the ones that cleared. A click opens the vehicle's BizMan page, or the City's conversation for the licence, and the destination button points at where the vehicle stands. The to-dos never reach a save file. The mod takes them out while the game writes a save and puts them back straight after, so a save opened without the mod has none. Lost money is no warning: the overview shows a negative daily income in red, as the game does. *Core tested; pending in-game check.*
+
 ## Economy calibration
 
 The target is game money, not NYC money:

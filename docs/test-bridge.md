@@ -142,7 +142,7 @@ Poses for `shoot` (the camera is placed relative to the target and looks at it):
   "player": { "x": 0, "y": 0, "z": 0, "heading": 0, "in_vehicle": null, "at_hatch": null, "carrying": null,
               "activity": "on_foot", "clock_held_by": null,
               "needs": { "energy": 82.5, "hunger": 74.0, "happiness": 80.0, "happiness_modifiers": [ { "type": "…", "hours_left": 5 } ], "max": 100, "collapse_at": -20, "energy_off": false, "going_to_hospital": false, "kept_up": false } },
-  "licence": { "until_day": 60, "permits": 2, "course_done": true },
+  "licence": { "until_day": 60, "permits": 2, "course_done": true, "todos": [ { "kind": "licence_running_out", "item": null } ] },
   "vehicles": [
     {
       "id": "…", "kind": "truck|cart", "name": "Food truck",
@@ -154,7 +154,8 @@ Poses for `shoot` (the camera is placed relative to the target and looks at it):
       "queue": { "length": 4, "places": [ { "x": 0, "z": 0, "occupied": true } ] },
       "commissary": { "site": "hells-kitchen", "in_bay": true },
       "route": { "stops": 2, "next": "…" },
-      "parking": { "state": "Legal", "neighbourhood": "ba:neighborhood_…", "hourly_price": 5.0, "unpaid": 0.0 }
+      "parking": { "state": "Legal", "neighbourhood": "ba:neighborhood_…", "hourly_price": 5.0, "unpaid": 0.0 },
+      "todos": [ { "kind": "low_stock", "item": "ba:itemname_hotdog" }, { "kind": "no_permit", "item": null } ]
     }
   ],
   "commissary": {
@@ -282,6 +283,7 @@ A load that dies anyway is cleared only when the bridge can show it died. With t
 - `parking` is what the game's hourly parking charge reads for the vehicle when nobody drives it (`ParkingSimulator.RunHourly`): its stored `state` (`Legal`, `Illegal`, `NotAvailable`), the `neighbourhood` it was left in, that neighbourhood's `hourly_price` (null when the neighbourhood is unknown) and the `unpaid` amount the game bills at midnight.
 - `route.next` is a line of text, "stop N, HH:MM to HH:MM at x …, z …", for the first stop still to close today.
 - `commissary.orders[]` adds `item` and `units`; `total` is goods plus fee (0 while the order waits: the delivery's flat fee is set when it arrives). `commissary.stock[]` adds `key`. `unpaid` sums the rent and fines the game refused.
+- `todos` lists the to-dos the mod has in the phone for that vehicle (`VehicleTodos`), as the last game minute's reconcile left them: `kind` is `low_stock`, `empty_stock`, `missing_crew`, `route_problem`, `no_permit`, `no_commissary_space` or `health_grade_c`, `item` the food for the two stock kinds and null otherwise. `licence.todos` holds the fleet's one, `licence_running_out` or `licence_expired`. The reconcile runs once a game minute, so a change made while the game is paused shows after the clock moves. The mock makes none. Built, not yet run in game.
 - `commissary.bays` has every commissary: `resolved` with the bay's first point and the building's entrance nearest it, `failed` when the search found no legal parking (a stored failure is searched again once on every load, and stays `failed` until a search finds a bay), `pending` until the city's parking lanes let it search. `shoot`'s `door` pose and `teleport`'s `commissary:` use that entrance.
 - `transactions_today` is the game's transactions of today and yesterday, oldest first; `label` is the transaction type resolved with its data, as close to the bank app's text as the bridge can read it.
 - `employees` are the hires the crew dropdown offers (hired, without a building or vehicle), best customer service first.

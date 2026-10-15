@@ -100,6 +100,22 @@ namespace FoodTrucks
             Patch(AccessTools.TypeByName("AI.Employees.NoTaskAssignedComplaint"), "ComplaintHandled", new[] { typeof(EmployeeInstance) }, nameof(CrewTaskHandled));
             Patch(AccessTools.TypeByName("UI.Tasks.TasksUI"), "CreateTodoTask", null, nameof(SkipCrewUnassignedTask), prefix: true);
 
+            // Vehicle warnings as the game's to-dos (VehicleTodos): text, click and destination for our to-do types, the game's
+            // completion check kept off them (it throws on a type it doesn't know), and none of ours in a save file. Made only
+            // when the text, check, click and save patches are all active.
+            var tasksUi = typeof(UI.Tasks.TasksUI);
+            Patch(tasksUi, "GetTodoDescription", new[] { typeof(TodoTask), typeof(bool) }, typeof(VehicleTodos), prefix: nameof(VehicleTodos.DescriptionPrefix));
+            Patch(tasksUi, "CheckForCompletedTodoTasks", Type.EmptyTypes, typeof(VehicleTodos),
+                prefix: nameof(VehicleTodos.CompletionCheckPrefix), finalizer: nameof(VehicleTodos.CompletionCheckFinalizer));
+            Patch(tasksUi, "ClickTask", new[] { typeof(TodoTask) }, typeof(VehicleTodos), prefix: nameof(VehicleTodos.ClickPrefix));
+            Patch(tasksUi, "AddTodoTaskToUI", new[] { typeof(TodoTask), typeof(bool) }, typeof(VehicleTodos), postfix: nameof(VehicleTodos.AddToUiPostfix));
+            Patch(typeof(SaveGameSerializationHelper), "SerializeJsonData", new[] { typeof(string), typeof(GameInstance) }, typeof(VehicleTodos),
+                prefix: nameof(VehicleTodos.SerializePrefix), finalizer: nameof(VehicleTodos.SerializeFinalizer));
+            Patch(typeof(SaveGameSerializationHelper), "SerializeBinaryData", new[] { typeof(string), typeof(GameInstance), typeof(bool) }, typeof(VehicleTodos),
+                prefix: nameof(VehicleTodos.SerializePrefix), finalizer: nameof(VehicleTodos.SerializeFinalizer));
+            Patch(typeof(SaveGameManager), "InitializeLoadedSave", Type.EmptyTypes, typeof(VehicleTodos), postfix: nameof(VehicleTodos.LoadedPostfix));
+            VehicleTodos.CheckReady();
+
             // Partnerships: a partner venue's facility satisfaction gets the bonus in the game's daily update.
             Patch(typeof(BusinessHelper), "UpdateSatisfaction", new[] { typeof(BuildingRegistration) }, typeof(Partners),
                 prefix: nameof(Partners.SatisfactionPrefix), postfix: nameof(Partners.SatisfactionPostfix));
