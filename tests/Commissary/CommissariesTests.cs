@@ -397,6 +397,41 @@ public class CommissariesTests
         Assert.False(state.OrderedOnVehicles.ContainsKey("cola"));
     }
 
+    // Review round 3 of the UI flow (Astra): the game merges stacks at an averaged price, so the cargo's price isn't
+    // what was deducted. 40 ordered at $0.50 and 40 from a wholesaler at $1.00 come back as 80 at $0.75; the uninstall
+    // reverses the $20 deducted, not $30.
+    [Fact]
+    public void AMergedStackReversesOnlyTheDeductedCost()
+    {
+        var state = Rented();
+        Commissaries.ReturnToStock(state, "a", new[] { Line("hotdog", 40, 50) });
+        foreach (var taken in Commissaries.Restock(state, "a", new Dictionary<string, int> { ["hotdog"] = 40 }))
+            Commissaries.TookOnVehicle(state, taken, taken.Units);
+        Assert.Equal(2000, state.OrderedOnVehiclesCents["hotdog"]);
+
+        var back = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 80, 75, 6, "truck1", fleetOnBoard: 80);
+
+        Assert.Equal(new[] { (40, true), (40, false) }, back.Select(l => (l.Units, Commissaries.Deducted(l))));
+        Assert.Equal(50, Commissaries.DeductedPerUnit(back[0]));
+        Assert.Empty(state.OrderedOnVehiclesCents);
+        var refund = Commissaries.Refund(Clone(state));
+        Assert.Equal(6000, refund.Total);
+        Assert.Equal(2000, refund.Total - Commissaries.ReturnedGoodsCents(state));
+        // Taking the ordered batch again carries its deducted cost back into the pool, not its averaged price.
+        foreach (var taken in Commissaries.Restock(state, "a", new Dictionary<string, int> { ["hotdog"] = 40 }))
+            Commissaries.TookOnVehicle(state, taken, taken.Units);
+        Assert.Equal(40, state.OrderedOnVehicles["hotdog"]);
+        Assert.Equal(2000, state.OrderedOnVehiclesCents["hotdog"]);
+        // Sales take the average cost out with the units; the last unit takes the rest.
+        Commissaries.LeftVehicle(state, "hotdog", 10);
+        Assert.Equal(1500, state.OrderedOnVehiclesCents["hotdog"]);
+        Commissaries.LeftVehicle(state, "hotdog", 50);
+        Assert.Empty(state.OrderedOnVehiclesCents);
+    }
+
+    private static CommissaryState Clone(CommissaryState state) =>
+        Newtonsoft.Json.JsonConvert.DeserializeObject<CommissaryState>(Newtonsoft.Json.JsonConvert.SerializeObject(state))!;
+
     // Sold out entirely, restocked at a wholesaler, given back: nothing is ordered any more.
     [Fact]
     public void ASellOutThenAWholesalerRestockReturnsNothingAsOrdered()
@@ -431,7 +466,10 @@ public class CommissariesTests
 
         Assert.Equal(new[] { (20, true) }, second.Select(l => (l.Units, Commissaries.Deducted(l))));
         Assert.Equal(new[] { (10, true), (5, false) }, first.Select(l => (l.Units, Commissaries.Deducted(l))));
-        Assert.Equal(5 * 50, Commissaries.ReturnedGoodsCents(state));
+        // The pool's average cost is 55 cents (20 at 50, 20 at 60): the 30 ordered units back carry 1,650 deducted; the
+        // returns are worth 20 × 60 + 15 × 50, so 300 of their value stays off the reversal.
+        Assert.Equal(55, Commissaries.DeductedPerUnit(second[0]));
+        Assert.Equal(20 * 60 + 15 * 50 - 30 * 55, Commissaries.ReturnedGoodsCents(state));
     }
 
     [Fact]

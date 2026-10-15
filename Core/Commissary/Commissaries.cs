@@ -226,10 +226,13 @@ namespace FoodTrucks.Core.Commissary
 
         // OrderMetadata on a batch a vehicle gave back at the bay (StockTransfer; plan, "UI flow"): "source" is this value,
         // "day" the day it came back, "vehicle" the vehicle. OrderedKey true when its units came from commissary orders
-        // (their cost was deducted under the commissary's label); LoadedDayKey the oldest day the food was loaded on, so
-        // taking it again keeps its age (review round 1 of the UI flow).
+        // (their cost was deducted under the commissary's label), with DeductedPerUnitKey that deducted cost per unit in
+        // cents, which can differ from the batch's price (the cargo's averaged price after the game merged stacks);
+        // LoadedDayKey the oldest day the food was loaded on, so taking it again keeps its age (review rounds 1 to 3 of
+        // the UI flow).
         public const string ReturnedSourceValue = "vehicle";
         public const string OrderedKey = "ordered";
+        public const string DeductedPerUnitKey = "deductedPerUnit";
         public const string LoadedDayKey = "loadedDay";
 
         // A batch whose cost the commissary's tax label carries: a phone order's delivery, or a returned batch whose units
@@ -237,34 +240,76 @@ namespace FoodTrucks.Core.Commissary
         public static bool Deducted(CommissaryStockLine line) =>
             line != null && !CommissaryLogistics.FromLogistics(line) && (!FromVehicle(line) || Flag(line, OrderedKey));
 
-        // Units of a taken batch that went onto a vehicle: a deducted batch's units join the fleet's pool of ordered units
-        // out on vehicles (CommissaryState.OrderedOnVehicles), so giving them back keeps their origin. Cargo merges
-        // stacks, so the origin is pooled per item rather than followed unit by unit.
+        // The cost per unit, in cents, that a deducted batch put under the commissary's label: a returned ordered batch's
+        // recorded cost, else its own price. Zero for a batch that isn't deducted.
+        public static double DeductedPerUnit(CommissaryStockLine line)
+        {
+            if (!Deducted(line)) return 0;
+            if (FromVehicle(line) && line.OrderMetadata.TryGetValue(DeductedPerUnitKey, out var cost) &&
+                (cost.Type == Newtonsoft.Json.Linq.JTokenType.Float || cost.Type == Newtonsoft.Json.Linq.JTokenType.Integer))
+                return Math.Max(0, (double)cost);
+            return line.UnitPriceCents;
+        }
+
+        // Units of a taken batch that went onto a vehicle: a deducted batch's units and their deducted cost join the
+        // fleet's pool of ordered stock out on vehicles (CommissaryState.OrderedOnVehicles, OrderedOnVehiclesCents), so
+        // giving them back keeps their origin and cost. Cargo merges stacks at an averaged price, so origin and cost are
+        // pooled per item rather than followed unit by unit.
         public static void TookOnVehicle(CommissaryState state, CommissaryStockLine line, int units)
         {
             Check(state);
             if (line == null) throw new ArgumentNullException(nameof(line));
             if (units <= 0 || !Deducted(line)) return;
             state.OrderedOnVehicles.TryGetValue(line.ItemName, out var before);
+            state.OrderedOnVehiclesCents.TryGetValue(line.ItemName, out var cents);
             state.OrderedOnVehicles[line.ItemName] = checked(before + units);
+            state.OrderedOnVehiclesCents[line.ItemName] = checked(cents + (long)Math.Round(units * DeductedPerUnit(line)));
         }
 
         // Units of an item that left a vehicle other than by a return (sold at the window or by a crew, served at a gig):
-        // ordered units count as leaving first, so the pool never keeps units the fleet no longer has (review round 2 of
-        // the UI flow, Astra and Sol). Paths the mod can't see are bounded by the cut in ReturnFromVehicle.
+        // ordered units count as leaving first, at the pool's average cost, so the pool never keeps units the fleet no
+        // longer has (review round 2 of the UI flow, Astra and Sol). Paths the mod can't see are bounded by the cut in
+        // ReturnFromVehicle.
         public static void LeftVehicle(CommissaryState state, string itemName, int units)
         {
             Check(state);
-            if (string.IsNullOrEmpty(itemName) || units <= 0 || !state.OrderedOnVehicles.TryGetValue(itemName, out var pool)) return;
-            if (pool > units) state.OrderedOnVehicles[itemName] = pool - units;
-            else state.OrderedOnVehicles.Remove(itemName);
+            if (string.IsNullOrEmpty(itemName) || units <= 0) return;
+            TakeFromPool(state, itemName, units);
+        }
+
+        // Takes up to `units` out of an item's ordered pool at its average cost: the units and cents taken. Cents never
+        // go below zero and are dropped with the last unit.
+        private static (int Units, long Cents) TakeFromPool(CommissaryState state, string itemName, int units)
+        {
+            if (!state.OrderedOnVehicles.TryGetValue(itemName, out var pool) || pool <= 0)
+            {
+                state.OrderedOnVehicles.Remove(itemName);
+                state.OrderedOnVehiclesCents.Remove(itemName);
+                return (0, 0);
+            }
+            state.OrderedOnVehiclesCents.TryGetValue(itemName, out var cents);
+            cents = Math.Max(0, cents);
+            var taken = Math.Min(units, pool);
+            var takenCents = taken == pool ? cents : (long)Math.Round((double)cents * taken / pool);
+            if (pool - taken > 0)
+            {
+                state.OrderedOnVehicles[itemName] = pool - taken;
+                state.OrderedOnVehiclesCents[itemName] = Math.Max(0, cents - takenCents);
+            }
+            else
+            {
+                state.OrderedOnVehicles.Remove(itemName);
+                state.OrderedOnVehiclesCents.Remove(itemName);
+            }
+            return (taken, takenCents);
         }
 
         // Units a vehicle gave back at the bay, at what the vehicle paid for them (its cargo's price per unit), marked
         // with the day and the vehicle, last in the commissary's FIFO order. As many as the fleet's pool of ordered units
-        // of the item allows go into a batch marked ordered; the pool is first cut to `fleetOnBoard`, the units of the
-        // item the food vehicles hold before this return, since sold units leave it without notice. The rest is a batch of
-        // other origin (a wholesaler, say). `loadedDay`: the oldest day the food was loaded, kept for its age.
+        // of the item allows go into a batch marked ordered, carrying the pool's average deducted cost per unit for the
+        // uninstall's reversal; the pool is first cut to `fleetOnBoard`, the units of the item the food vehicles hold
+        // before this return, for paths the mod can't see. The rest is a batch of other origin (a wholesaler, say).
+        // `loadedDay`: the oldest day the food was loaded, kept for its age.
         public static IReadOnlyList<CommissaryStockLine> ReturnFromVehicle(CommissaryState state, string commissaryId, string itemName, int units,
             long unitPriceCents, int day, string vehicleId, int fleetOnBoard, int? loadedDay = null)
         {
@@ -273,10 +318,8 @@ namespace FoodTrucks.Core.Commissary
             if (unitPriceCents < 0) throw new ArgumentOutOfRangeException(nameof(unitPriceCents));
             _ = checked(units * unitPriceCents);
             state.OrderedOnVehicles.TryGetValue(itemName, out var pool);
-            pool = Math.Min(pool, Math.Max(0, fleetOnBoard));
-            var ordered = Math.Min(units, pool);
-            if (pool - ordered > 0) state.OrderedOnVehicles[itemName] = pool - ordered;
-            else state.OrderedOnVehicles.Remove(itemName);
+            if (pool > Math.Max(0, fleetOnBoard)) TakeFromPool(state, itemName, pool - Math.Max(0, fleetOnBoard));
+            var (ordered, orderedCents) = TakeFromPool(state, itemName, units);
             var lines = new List<CommissaryStockLine>();
             foreach (var (count, isOrdered) in new[] { (ordered, true), (units - ordered, false) })
             {
@@ -287,7 +330,11 @@ namespace FoodTrucks.Core.Commissary
                     ["day"] = day,
                     ["vehicle"] = vehicleId
                 };
-                if (isOrdered) metadata[OrderedKey] = true;
+                if (isOrdered)
+                {
+                    metadata[OrderedKey] = true;
+                    metadata[DeductedPerUnitKey] = (double)orderedCents / count;
+                }
                 if (loadedDay is { } loaded && loaded >= 1) metadata[LoadedDayKey] = loaded;
                 var line = new CommissaryStockLine
                 {
@@ -313,15 +360,17 @@ namespace FoodTrucks.Core.Commissary
             line.OrderMetadata != null && line.OrderMetadata.TryGetValue(key, out var value) &&
             value.Type == Newtonsoft.Json.Linq.JTokenType.Boolean && (bool)value;
 
-        // The goods value of returned stock not from commissary orders, still in the commissaries. It never went under the
-        // commissary's tax label, so the uninstall refund doesn't take it off that deduction; returned ordered stock does.
+        // Of returned stock still in the commissaries, the value the uninstall pays back but doesn't take off the
+        // commissary's deduction: its goods value less what its units put under that label (their deducted cost, for
+        // units from commissary orders). Stock of other origin never went under the label. May be negative when the
+        // cargo's averaged price is below the deducted cost; the caller's reversal is then larger than the refund share.
         public static long ReturnedGoodsCents(CommissaryState state)
         {
             Check(state);
-            long cents = 0;
+            double cents = 0;
             foreach (var line in state.Stock.Values.SelectMany(l => l))
-                if (FromVehicle(line) && !Deducted(line)) cents = checked(cents + checked(line.Units * line.UnitPriceCents));
-            return cents;
+                if (FromVehicle(line)) cents += (double)line.Units * line.UnitPriceCents - line.Units * DeductedPerUnit(line);
+            return (long)Math.Round(cents);
         }
 
         // Rent covers hourly public parking only for this food vehicle in the bay of its active space.
@@ -435,6 +484,7 @@ namespace FoodTrucks.Core.Commissary
             state.WeekBoxes.Clear();
             state.FeesPaid.Clear();
             state.OrderedOnVehicles.Clear();
+            state.OrderedOnVehiclesCents.Clear();
             state.PendingCleaning.Clear();
             state.Spaces.Clear();
             state.ReleasedRentPaidThroughDay.Clear();
