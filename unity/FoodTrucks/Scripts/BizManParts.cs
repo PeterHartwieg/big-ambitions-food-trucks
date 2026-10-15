@@ -22,6 +22,7 @@ namespace FoodTrucks
     internal static class BizManParts
     {
         private const string TitlePath = "WarehouseName";
+        private const string BackgroundPath = "Background";
         private const string AddressPath = "Address";
         private const string DestinationPath = "Address/SetDestinationButton";
         private const string SectionPath = "VehicleSlots";
@@ -45,7 +46,7 @@ namespace FoodTrucks
             copy.name = "FoodTrucks.BoxTemplate";
             copy.gameObject.SetActive(false);
             BizManFleet.StripLogic(copy);
-            foreach (var path in new[] { TitlePath, AddressPath, DestinationPath, SectionPath, SlotListPath + "/" + SlotEntryName,
+            foreach (var path in new[] { TitlePath, BackgroundPath, AddressPath, DestinationPath, SectionPath, SlotListPath + "/" + SlotEntryName,
                          ItemListPath + "/" + ItemEntryName, ButtonButtonPath })
                 if (copy.Find(path) == null) missing.Add("WhiteBox " + path);
             if (copy.Find(TitlePath) == null)
@@ -118,9 +119,11 @@ namespace FoodTrucks
                     click.onClick = new Button.ButtonClickedEvent();
                     click.enabled = false;
                 }
-                // Everything but the title starts hidden; the page adds copies of the parts it needs, in order.
+                // Everything but the title and the white card behind the box starts hidden; the page adds copies of the
+                // parts it needs, in order. (The card is the child `Background`: hiding it left the text on BizMan's blur,
+                // seen in game 15 October 2026.)
                 foreach (Transform child in root)
-                    child.gameObject.SetActive(child.name == TitlePath);
+                    child.gameObject.SetActive(child.name == TitlePath || child.name == BackgroundPath);
                 SetText(root.Find(TitlePath), title);
                 root.gameObject.SetActive(true);
             }
@@ -244,10 +247,23 @@ namespace FoodTrucks
                 var button = part?.GetComponentInChildren<Button>(true);
                 if (button == null) return null;
                 Caption(button, caption);
+                Widen(button, part!);
                 button.onClick = new Button.ButtonClickedEvent();
                 button.onClick.AddListener(() => Guard(click));
                 button.interactable = interactable;
                 return button;
+            }
+
+            // The game's button has a fixed width for "Manage drivers"; a longer caption ("Call Hell's Kitchen Commissary")
+            // was cut off in game (15 October 2026). It grows to its caption, up to the row's width.
+            private static void Widen(Button button, Transform row)
+            {
+                if (!(button.transform is RectTransform rect) || !(row is RectTransform rowRect)) return;
+                var label = button.GetComponentsInChildren<Graphic>(true).FirstOrDefault(g => HasText(g));
+                if (label == null) return;
+                var wanted = LayoutUtility.GetPreferredWidth((RectTransform)label.transform) + 48f;
+                var room = rowRect.rect.width > 1f ? rowRect.rect.width : wanted;
+                if (wanted > rect.rect.width) rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, Mathf.Min(wanted, room));
             }
 
             // A line of text in the address line's style, wrapping (hints, refusals, the read-only note).

@@ -305,8 +305,22 @@ namespace FoodTrucks
                     child.gameObject.SetActive(false);
                     Object.Destroy(child.gameObject);
                 }
+                // The content grows downwards from the top: with the copied pivot it grew both ways as boxes went in, and a
+                // column taller than the screen opened partway down, its first box's title out of sight (seen in game
+                // 15 October 2026). Back to the top once the boxes are laid out.
+                if (content is RectTransform rect)
+                {
+                    rect.anchorMin = new Vector2(rect.anchorMin.x, 1f);
+                    rect.anchorMax = new Vector2(rect.anchorMax.x, 1f);
+                    rect.pivot = new Vector2(rect.pivot.x, 1f);
+                    rect.anchoredPosition = new Vector2(rect.anchoredPosition.x, 0f);
+                }
                 var scroll = content.GetComponentInParent<ScrollRect>();
-                if (scroll != null) scroll.verticalNormalizedPosition = 1f;
+                if (scroll != null)
+                {
+                    scroll.verticalNormalizedPosition = 1f;
+                    HireRoutes.Later(() => { if (scroll != null) scroll.verticalNormalizedPosition = 1f; });
+                }
             }
             return (content1, content2, content3 ?? content2);
         }
