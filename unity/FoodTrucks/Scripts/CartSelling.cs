@@ -18,14 +18,13 @@ using Helpers;
 using Localizor;
 using Parking.UndergroundParking;
 using UI;
-using UI.ItemPanel;
 using UI.Notification;
 using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Selling: Open parks the cart where it stands (or the truck where it stopped, in a legal parking space),
-    // if the player has a vendor licence, the vehicle a permit, and the fitted equipment gives a menu. While it is open, Core's SalesSimulator runs every in-game minute: customers arrive at the rate
+    // Selling: "Open for business" in the parked vehicle's on-foot menu opens the cart where it stands (or the truck in
+    // a legal parking space), if the player has a vendor licence, the vehicle a permit, and the fitted equipment gives a menu. While it is open, Core's SalesSimulator runs every in-game minute: customers arrive at the rate
     // the demand model gives for the spot and the hour (CartDemand), queue at the window and give up after
     // a while. The player serves at the speed of their customer service skill while they stay close to a cart or
     // stand at a truck's hatch; otherwise only a crew serves, and without one the queue waits and thins out. Each customer buys one main
@@ -179,10 +178,11 @@ namespace FoodTrucks
         // stop's closing time even across a time skip.
         private static bool RunByRoute(VehicleState vehicle) => vehicle.HireStop != null;
 
-        // Called by the item panel's Open button while the player pushes a cart or sits in a stopped truck.
-        public static void OpenHere(ItemPanelUI panel)
+        // The on-foot menu's "Open for business" (OverlayButtons) and the test bridge's open: the vehicle stands parked,
+        // the player is on foot. The vehicle's own saved parking state and position decide, not the item panel.
+        public static void OpenHere(VehicleController controller)
         {
-            try { instance?.Open(panel); }
+            try { instance?.Open(controller); }
             catch (Exception ex)
             {
                 Log.Error("Open failed: " + ex);
@@ -190,19 +190,49 @@ namespace FoodTrucks
             }
         }
 
-        private void Open(ItemPanelUI panel)
+        // Whether the on-foot menu offers "Open for business" for this vehicle: a food vehicle, closed and not on the
+        // road with its crew, the player on foot. The checks themselves come with the click (Open).
+        internal static bool CanOfferOpen(VehicleInstance? cart)
+        {
+            if (cart == null || FoodTrucksMod.KindOf(cart.vehicleTypeName) == null) return false;
+            if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) return false;
+            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, cart.id);
+            return vehicle == null || (!vehicle.IsOpen && vehicle.Transit == null);
+        }
+
+        // Whether the on-foot menu offers "Close": an open food vehicle, the player on foot and not at its hatch (there
+        // the hatch panel closes it).
+        internal static bool CanOfferClose(VehicleInstance? cart)
+        {
+            if (cart == null || FoodTrucksMod.KindOf(cart.vehicleTypeName) == null) return false;
+            if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId) || TruckWindow.PlayerAt(cart.id)) return false;
+            return StreetSales.Find(FoodTrucksSession.CurrentState, cart.id)?.IsOpen == true;
+        }
+
+        private void Open(VehicleController controller)
         {
             var state = FoodTrucksSession.CurrentState;
-            var cart = VehicleHelper.GetCurrentVehicle();
+            var cart = controller.vehicleInstance;
             var kind = FoodTrucksMod.KindOf(cart?.vehicleTypeName);
             if (cart == null || kind == null) return;
+            if (!string.IsNullOrEmpty(SaveGameManager.Current.ActiveVehicleId))
+            {
+                Log.Info($"Open: {kind} {cart.id} refused: the player is in a vehicle ({SaveGameManager.Current.ActiveVehicleId}).");
+                return;
+            }
             if (state == null || !FoodTrucksSession.CanWrite)
             {
                 Notify("foodtrucks:notification_data_readonly");
                 return;
             }
-            if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking)
+            if (StreetSales.Find(state, cart.id) is { } already && (already.IsOpen || already.Transit != null))
             {
+                Log.Info($"Open: {kind} {cart.id} refused: {(already.IsOpen ? "open already" : "on the road with its crew")}.");
+                return;
+            }
+            if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking || !string.IsNullOrEmpty(cart.streetName))
+            {
+                Log.Info($"Open: {kind} {cart.id} refused: {(string.IsNullOrEmpty(cart.streetName) ? "the player is indoors" : "the vehicle is in a building or garage")}.");
                 Say("foodtrucks:notification_open_outside", kind);
                 return;
             }
@@ -248,14 +278,13 @@ namespace FoodTrucks
                 return;
             }
 
-            var problem = PitchProblem(panel, cart);
+            var problem = PitchProblem(cart, controller);
             if (problem != null)
             {
                 Notify(problem);
                 return;
             }
-            var controller = VehicleHelper.GetCurrentVehicleBase();
-            var position = controller != null ? controller.transform.position : PlayerHelper.GetPosition();
+            var position = controller.transform.position;
             // A running city event: only vehicles with a booked place sell there.
             var eventProblem = CityPitches.EventProblem(state, cart.id, position, HireCrew.Now());
             if (eventProblem != null)
@@ -264,16 +293,8 @@ namespace FoodTrucks
                 return;
             }
 
-            // The game's own Park button: it checks the panel state and refuses where parking is not allowed.
-            // For a truck it is the way out of the driver's seat.
-            panel.ClickPark();
-            if (SaveGameManager.Current.ActiveVehicleId == cart.id)
-            {
-                Log.Info($"Open: {kind} {cart.id} could not be parked here.");
-                Say("foodtrucks:notification_open_cannot_park", kind);
-                return;
-            }
-
+            // Where the crew parked it stops counting as at its stop, as when the player takes the vehicle.
+            HireRoutes.PlayerTook(vehicle);
             var (plan, pitch) = StartSelling(vehicle, cart, controller, position, kind, hireStop: null);
             var service = Service(rules, kind, vehicle, true);
             // The crew serves a window the player opened too, wherever and whenever: the message says who.
@@ -292,44 +313,47 @@ namespace FoodTrucks
             Say(key, kind, ("units", plan.StockUnits.ToString()), ("rate", rate.ToString()), ("customers", customers),
                 ("grade", GradeText(vehicle)), ("crew", HireCrew.Names(serving)));
             if (pitch != null) Say(pitch.Value.Key, kind, pitch.Value.Data);
-            // From the driver's seat to the hatch: the player serves from inside the truck.
-            if (kind == "truck") TruckWindow.Enter(cart.id);
+            // To the hatch: the player serves from inside the truck (placed there when beside it, else walked to its rear door).
+            if (kind == "truck") TruckWindow.EnterFromOutside(controller);
         }
 
-        // Where the player stands with the vehicle now, as a pitch: null when it could open here, else the
-        // message saying why not. A truck needs a legal parking space and pavement by its hatch, a cart a legal
-        // pavement spot. Shared by Open and the route's "add a stop here".
-        internal static string? PitchProblem(ItemPanelUI panel, VehicleInstance cart)
+        // Where a parked vehicle stands now, as a pitch: null when it could open here, else the message saying why not. A
+        // truck needs a legal parking space by its saved parking state (the game sets it on parking; the crew's opening
+        // reads it too) and pavement by its hatch, a cart a legal pavement spot. Shared by Open and the vehicle page's "Add
+        // the spot where it stands". The player's own whereabouts are the caller's to check.
+        internal static string? PitchProblem(VehicleInstance cart, VehicleController? controller)
         {
             var kind = FoodTrucksMod.KindOf(cart.vehicleTypeName) ?? "cart";
-            var controller = VehicleHelper.GetCurrentVehicleBase();
-            var position = controller != null ? controller.transform.position : PlayerHelper.GetPosition();
-            if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking) return "foodtrucks:notification_open_outside";
+            controller ??= VehicleHelper.GetVehicleController(cart);
+            var position = controller != null ? controller.transform.position : (Vector3)cart.position;
+            if (!string.IsNullOrEmpty(cart.streetName))
+            {
+                Log.Info($"Pitch: {kind} {cart.id}: in a building or garage ({cart.streetName}).");
+                return "foodtrucks:notification_open_outside";
+            }
+            if (SaveGameManager.Current?.ActiveVehicleId == cart.id)
+            {
+                Log.Info($"Pitch: {kind} {cart.id} at {position}: the player is driving or pushing it.");
+                return "foodtrucks:legality_truck_moving";
+            }
             if (kind == "truck")
             {
                 // A truck sells from a legal parking space: the game's own check, the one parking fees use.
-                var parking = panel.vehicleInfo != null ? panel.vehicleInfo.currentParkingState : ParkingState.NotAvailable;
+                var parking = cart.parkingState;
                 if (parking != ParkingState.Legal)
                 {
-                    Log.Info($"Pitch: truck {cart.id} at {position}: parking {parking}.");
+                    Log.Info($"Pitch: truck {cart.id} at {position}: saved parking state {parking}.");
                     return parking == ParkingState.NotAvailable ? "foodtrucks:legality_truck_moving" : "foodtrucks:legality_truck_parking";
                 }
-                // The hatch is on the right: with it towards the road, the line would form in the traffic. Without the
-                // player in it, the truck's own controller says where it stands.
-                var truck = controller != null ? controller.transform : null;
-                if (truck == null)
-                {
-                    var own = VehicleHelper.GetVehicleController(cart);
-                    if (own != null) truck = own.transform;
-                }
-                if (truck == null)
+                // The hatch is on the right: with it towards the road, the line would form in the traffic.
+                if (controller == null)
                 {
                     Log.Info($"Pitch: truck {cart.id} at {position}: parking {parking}; hatch not checked (no vehicle controller).");
                     return null;
                 }
-                position = truck.position;
+                var truck = controller.transform;
                 var hatch = HatchCheck.Probe(truck);
-                Log.Info($"Pitch: truck {cart.id} at {position}, heading {truck.eulerAngles.y:F0}: parking {parking}; " +
+                Log.Info($"Pitch: truck {cart.id} at {truck.position}, heading {truck.eulerAngles.y:F0}: parking {parking}; " +
                          $"hatch {hatch}; {(hatch.Opens ? "may open" : "refused")}.");
                 return hatch.RefusalKey;
             }
@@ -639,23 +663,26 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error(ex); }
         }
 
-        // The player closes the window from the truck's hatch.
+        // The player closes the window: from the truck's hatch, or with Close in the vehicle's on-foot menu.
         internal static void CloseByPlayer(string vehicleId)
         {
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
-            if (instance == null || vehicle == null || !vehicle.IsOpen || !FoodTrucksSession.CanWrite) return;
+            if (instance == null || vehicle == null || !vehicle.IsOpen || !FoodTrucksSession.CanWrite)
+            {
+                Log.Info($"Close: {vehicleId} not closed: {(instance == null ? "no runtime" : vehicle == null || !vehicle.IsOpen ? "not open" : "the mod's data is read-only")}.");
+                return;
+            }
             instance.Close(vehicle, "foodtrucks:notification_closed");
         }
 
         // at: the game minute the window closes, when the sales clock is catching up behind the live one.
         private void Close(VehicleState vehicle, string messageKey, double? at = null)
         {
-            // The crew cleans up whenever they close, sold out or not. The day is the last minute served.
+            // Closing doesn't clean, for the crew either: cleaning happens only in the vehicle's own commissary bay (the
+            // on-foot menu's Clean, or standing there at the 04:00 check).
             var state = FoodTrucksSession.CurrentState;
             var closedAt = (long)Math.Floor(at ?? HireCrew.NowExact());
             var crewWindow = vehicle.HireStop != null || HireCrew.OnShift(vehicle, closedAt).Count > 0;
-            if (state != null && crewWindow)
-                ReputationBook.Cleaned(vehicle, ServiceDay(closedAt - 1), ReputationBook.ClosedThrough(state));
             vehicle.OpenPitch = null;
             if (state != null)
             {
@@ -1327,21 +1354,36 @@ namespace FoodTrucks
             units[item] = (int)Math.Min(int.MaxValue, (long)have + amount);
         }
 
-        // Cleaning the vehicle by hand (the "Clean" button): a short wait while the game's clock runs, like a
-        // taxi ride, and today counts as cleaned for the health grade. The crew cleans as they close.
-        public static void CleanHere()
+        // Cleaning the vehicle (the on-foot menu's "Clean", OverlayButtons): only in the bay of the commissary where it
+        // rents its space. A short wait while the game's clock runs, like a taxi ride, and today counts as cleaned for the
+        // health grade. Closing doesn't clean; a vehicle standing in its bay at the 04:00 check counts as cleaned too.
+        public static void CleanHere(string vehicleId)
         {
             var state = FoodTrucksSession.CurrentState;
-            var cart = VehicleHelper.GetCurrentVehicle();
+            var cart = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicleId);
             var kind = FoodTrucksMod.KindOf(cart?.vehicleTypeName);
             var timeMachine = InstanceBehavior<UIs>.Instance?.timeMachine;
-            if (state == null || cart == null || kind == null || timeMachine == null) return;
+            if (state == null || cart == null || kind == null || timeMachine == null)
+            {
+                Log.Info($"Cleaning: {vehicleId} refused: {(cart == null || kind == null ? "no such food vehicle" : "no save data or time skip")}.");
+                return;
+            }
             if (!FoodTrucksSession.CanWrite)
             {
                 Notify("foodtrucks:notification_data_readonly");
                 return;
             }
-            if (timeMachine.isRunning) return;
+            if (timeMachine.isRunning)
+            {
+                Log.Info($"Cleaning: {kind} {cart.id} refused: a time skip is running.");
+                return;
+            }
+            if (Commissary.OwnBay(state, cart, out var why) == null)
+            {
+                Log.Info($"Cleaning: {kind} {cart.id} refused: {why}.");
+                Say(state.Commissary.Spaces.Any(s => s.VehicleId == cart.id) ? "foodtrucks:notification_clean_not_in_bay" : "foodtrucks:notification_clean_no_space", kind);
+                return;
+            }
             var vehicle = StreetSales.GetOrAdd(state, cart.id);
             if (string.IsNullOrEmpty(vehicle.VehicleType)) vehicle.VehicleType = kind;
             var day = ServiceDayNow();
@@ -1350,8 +1392,18 @@ namespace FoodTrucks
             var goal = TimeHelper.Now();
             goal.AddMinutes(CleaningMinutes);
             timeMachine.StartTimeMachine(goal, disableCancel: true, "foodtrucks:timemachine_cleaning");
-            Log.Info($"Cleaning: {kind} {cart.id} cleaned on day {day}, {CleaningMinutes} minutes.");
+            Log.Info($"Cleaning: {kind} {cart.id} cleaned on day {day} ({why}), {CleaningMinutes} minutes.");
             Say("foodtrucks:notification_cleaned", kind);
+        }
+
+        // Whether the on-foot menu offers "Clean": the player on foot, no time skip running, the vehicle in its own
+        // commissary's bay.
+        internal static bool CanOfferClean(VehicleInstance? cart)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || cart == null || FoodTrucksMod.KindOf(cart.vehicleTypeName) == null) return false;
+            if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId) || InstanceBehavior<UIs>.Instance?.timeMachine?.isRunning == true) return false;
+            return state.Commissary.Spaces.Any(s => s.VehicleId == cart.id) && Commissary.OwnBay(state, cart, out _) != null;
         }
 
         private const int CleaningMinutes = 20;

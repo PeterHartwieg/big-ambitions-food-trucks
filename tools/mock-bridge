@@ -701,8 +701,11 @@ class Mock:
             entries.append({'id':len(entries)+1, 'text':clean(text), 'kind':kind,
                             'path':f'Mock/{self.dialog}/{row or len(entries)}'})
         if self.state['player']['in_vehicle'] and self.dialog == 'closed':
-            for key in ('itempanel_open','itempanel_hires','itempanel_addstop','itempanel_commissary'):
-                add(LOCALE['foodtrucks:'+key])
+            add(LOCALE['foodtrucks:itempanel_commissary'])
+        if not self.state['player']['in_vehicle'] and not self.state['player']['at_hatch'] and self.dialog == 'closed':
+            # The on-foot menu of the mock's vehicle, as if it had been clicked.
+            v = next((v for v in self.state['vehicles'] if v['id'] == self.selected), None)
+            if v and not v['open']: add(LOCALE['foodtrucks:overlay_open'])
         if self.dialog == 'commissary':
             site = self.vehicle()['commissary']['bay_site']
             v=self.vehicle(); c=v['commissary']; name=LOCALE['foodtrucks:commissary_'+site]
@@ -737,6 +740,7 @@ class Mock:
                 for i,e in enumerate(self.employees):
                     if e['name'] not in self.vehicle()['crew'] or self.vehicle()['crew'][slot:slot+1]==[e['name']]:
                         add(e['label'],'option',f'Crew{slot+1}/option[{i+1}]')
+            add(LOCALE['foodtrucks:bizman_page_add_here'])
             add(LOCALE['foodtrucks:bizman_page_back'])
         elif self.dialog in ('opens','closes'):
             for text in ('08:30','11:00','22:00') if self.dialog=='opens' else ('00:00','14:00','02:00'):
@@ -784,9 +788,7 @@ class Mock:
                 v['crew']=[] if text=='Unassigned' else [next(e['name'] for e in self.employees if e['label']==text)]
         elif text==LOCALE['foodtrucks:itempanel_commissary']:
             self.dialog='commissary'
-        elif text==LOCALE['foodtrucks:itempanel_hires']:
-            self.dialog='crew'
-        elif text==LOCALE['foodtrucks:itempanel_addstop']:
+        elif text==LOCALE['foodtrucks:bizman_page_add_here']:
             self.dialog='opens'
         elif text=='Confirm':
             if self.dialog=='commissary':
@@ -823,7 +825,7 @@ class Mock:
         elif text==LOCALE['foodtrucks:dialog_commissary_order_change']: self.dialog='order'
         elif text==LOCALE['foodtrucks:bizman_page_back']: self.dialog='fleet'
         elif text in ('Hang up', 'Cancel'): self.dialog='closed'
-        elif text==LOCALE['foodtrucks:itempanel_open']: self.operate(self.vehicle(),'open')
+        elif text==LOCALE['foodtrucks:overlay_open']: self.operate(self.vehicle(),'open')
         self.event(f'Test bridge: clicked "{entry["text"]}" ({entry["path"]}).')
         return {'clicked':entry['text']}
 
@@ -840,12 +842,13 @@ class Mock:
         cargo_before=copy.deepcopy(v['stock'])
         space_before=(v['commissary'] or {}).get('site')
         if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
-        label={'open':'Open here','exit':'Park','rent_bay':'Commissary','restock':'Commissary'}.get(op)
+        label={'exit':'Park','rent_bay':'Commissary','restock':'Commissary'}.get(op)
         if label and player['in_vehicle'] != v['id']:
             raise ValueError(f"{label} is on the vehicle's panel, shown while the player drives the truck or pushes the cart: vehicle enter first.")
         if op=='open':
-            if self.state['clock']['paused']:
-                raise ValueError("Open parks with the game's Park button, which doesn't work while paused: unpause first (time).")
+            if player['in_vehicle']:
+                raise ValueError(f"Open for business is in the parked vehicle's on-foot menu: vehicle exit first (the player is in {player['in_vehicle']}).")
+            if v['open']: raise ValueError(f"Vehicle {v['id']} is open already.")
             expiry=self.state['licence']['until_day']
             reason=None
             if not v['pieces']: reason='notification_open_no_equipment'

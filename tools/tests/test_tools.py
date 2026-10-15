@@ -342,9 +342,8 @@ class MCPTests(unittest.TestCase):
             request('tools/call',{'name':'ft_call','arguments':{'cmd':'time','args':{'pause':True}}})
             for action in ('spawn truck','licence'):
                 request('tools/call',{'name':'ft_call','arguments':{'cmd':'debug','args':{'action':action}}})
-            request('tools/call',{'name':'ft_call','arguments':{'cmd':'vehicle','args':{'id':'truck-1','op':'enter'}}})
             request('tools/call',{'name':'ft_call','arguments':{'cmd':'time','args':{'pause':False}}})
-            clicked=request('tools/call',{'name':'ft_ui_click','arguments':{'text':'OPEN HERE'}})
+            clicked=request('tools/call',{'name':'ft_ui_click','arguments':{'text':'OPEN FOR BUSINESS'}})
             self.assertFalse(clicked['result']['isError'],clicked)
             with tempfile.TemporaryDirectory() as folder:
                 log=Path(folder)/'Player.log'

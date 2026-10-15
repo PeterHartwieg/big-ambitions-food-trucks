@@ -478,7 +478,7 @@ namespace FoodTrucks
             var plan = CartDemand.Plan(tables, controller.vehicleInstance, spot);
             var message = $"Day {game.Day} ({World.DayOfWeekOf(game.Day)}) {TimeHelper.CurrentHour:D2}:{(int)TimeHelper.CurrentMinute:D2}, " +
                           $"rain {(BigAmbitions.DayNightCycle.RainHelper.isRaining ? "yes" : "no")}. Spot: {World.Describe(spot)}. " +
-                          $"Open here: {legality.Detail}{(legality.RoadBelow ? " (road layer below)" : "")}. {CartDemand.Describe(plan)}";
+                          $"Open for business: {legality.Detail}{(legality.RoadBelow ? " (road layer below)" : "")}. {CartDemand.Describe(plan)}";
             Log.Info("Demand here: " + message);
             Notify(message);
         }

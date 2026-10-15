@@ -174,8 +174,6 @@ class OperationTests(unittest.TestCase):
 
     def test_panel_refusal_has_done_false(self):
         v=self.mock.spawn('truck')
-        self.bridge.call('vehicle',{'id':v['id'],'op':'enter'})
-        self.bridge.call('time',{'pause':False})
         reply=self.bridge.call('vehicle',{'id':v['id'],'op':'open'})
         self.assertTrue(reply['ok']);self.assertFalse(reply['result']['done'])
 

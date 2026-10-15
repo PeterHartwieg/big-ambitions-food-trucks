@@ -120,7 +120,8 @@ namespace FoodTrucks
             var info = InstanceBehavior<UI.UIs>.Instance?.playerHUD?.itemPanelUI?.vehicleInfo;
             if (kind == "truck" && SaveGameManager.Current.ActiveVehicleId == instance.id && info != null && info.isActiveAndEnabled)
             {
-                // The player drives it: the panel's live reading, the one Open checks (CartSelling.PitchProblem).
+                // The player drives it: the panel's live reading, which the game saves as the truck's parking state when it
+                // parks (the state Open for business checks, CartSelling.PitchProblem).
                 legal = info.currentParkingState == ParkingState.Legal;
                 legalReason = $"panel's live reading: {info.currentParkingState}";
             }

@@ -1,141 +1,15 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using FoodTrucks.Core.Common;
-using FoodTrucks.Core.Fleet;
-using FoodTrucks.Core.Pitches;
-using FoodTrucks.Core.Saves;
-using Helpers;
 using Localizor;
-using UI.InteriorDesigner;
-using UI.ItemPanel;
 
 namespace FoodTrucks
 {
-    // The old "Hires" dialog, now the fallback for the BizMan vehicle page (BizManVehiclePage): the crew and the
-    // route, with the game's list picker (the one the Prices button uses). Take on or let go of a worker, add the spot
-    // the vehicle stands on as a stop with its opening hours, remove a stop, pick the days the route runs.
+    // What the crew-and-route screens share (the BizMan vehicle page and fleet section, the route's time pickers): the
+    // day choices for a route, a stop's spot key and the clock text. The old list-picker dialog that held these went
+    // with the vehicle panel's Hires button (15 October 2026).
     internal static class StaffDialog
     {
-        public static void Show(ItemPanelUI panel)
-        {
-            var state = FoodTrucksSession.CurrentState;
-            var rules = DemandData.Rules;
-            var cart = VehicleHelper.GetCurrentVehicle();
-            var kind = FoodTrucksMod.KindOf(cart?.vehicleTypeName);
-            if (state == null || rules == null || cart == null || kind == null) return;
-            if (!FoodTrucksSession.CanWrite)
-            {
-                CartSelling.Notify("foodtrucks:notification_data_readonly");
-                return;
-            }
-            if (DropdownSelector.onShow == null)
-            {
-                Log.Error("Hires: the game's list picker isn't available in this scene.");
-                CartSelling.Notify("foodtrucks:notification_prices_unavailable");
-                return;
-            }
-            HireCrew.Check(state);
-            var vehicle = StreetSales.GetOrAdd(state, cart.id);
-            if (string.IsNullOrEmpty(vehicle.VehicleType)) vehicle.VehicleType = kind;
-            var id = cart.id;
-            var options = new List<(string Label, Action Act)>();
-
-            foreach (var employee in vehicle.Crew.Select(HireCrew.Find).Where(e => e != null).Select(e => e!))
-            {
-                var employeeId = employee.id;
-                var name = HireCrew.Name(employee);
-                options.Add((Format("foodtrucks:hires_option_letgo", name, Skill(employee), Wage(employee.hourlyWage)), () =>
-                {
-                    HireCrew.Remove(vehicle, employeeId, "let go by the player");
-                    CartSelling.Say("foodtrucks:notification_crew_letgo", kind, ("name", name));
-                }));
-            }
-            var limit = HireCrew.Limit(kind);
-            if (vehicle.Crew.Count < limit)
-            {
-                foreach (var employee in HireCrew.Available(state))
-                {
-                    var hire = employee;
-                    options.Add((Format("foodtrucks:hires_option_takeon", HireCrew.Name(employee), Skill(employee),
-                        employee.satisfaction.ToString("F0"), Wage(employee.hourlyWage)), () =>
-                    {
-                        if (HireCrew.Add(state, vehicle, hire))
-                            CartSelling.Say("foodtrucks:notification_crew_added", kind, ("name", HireCrew.Name(hire)));
-                    }));
-                }
-            }
-
-            var schedule = vehicle.Schedule;
-            if (schedule == null || schedule.Stops.Count < rules.Fleet.MaxStops)
-                options.Add((Text("foodtrucks:hires_option_addstop"), () => AddStopHere(panel, id)));
-            if (schedule != null)
-            {
-                for (var i = 0; i < schedule.Stops.Count; i++)
-                {
-                    var stop = schedule.Stops[i];
-                    var index = i;
-                    options.Add((Format("foodtrucks:hires_option_removestop", (i + 1).ToString(), Clock(stop.OpenAt), Clock(stop.CloseAt), Place(stop)), () =>
-                    {
-                        RouteStops.Remove(vehicle, index);
-                    }));
-                }
-                options.Add((Format("foodtrucks:hires_option_days", Text(DaysKey(schedule.Days))), () => HireRoutes.Later(() => AskDays(id))));
-            }
-
-            // A partner deal with one of the player's own venues within reach, or ending the one it has.
-            var partner = Partners.VenueOf(id);
-            if (partner != null)
-                options.Add((Format("foodtrucks:hires_option_partner_end", Partners.Name(partner)), () => Partners.End(state, vehicle, kind)));
-            else
-            {
-                var here = VehicleHelper.GetCurrentVehicleBase();
-                if (here != null)
-                {
-                    foreach (var venue in Partners.VenuesNear(here.transform.position).Where(v => Partnerships.ForVenue(state, v.Address) == null))
-                    {
-                        var address = venue.Address;
-                        options.Add((Format("foodtrucks:hires_option_partner", Partners.Name(address), Text("foodtrucks:venue_" + venue.Kind.ToString().ToLowerInvariant())),
-                            () => Partners.Sign(state, vehicle, address, kind)));
-                    }
-                }
-            }
-
-            // Two employees can read the same; a number keeps the choices apart.
-            for (var i = 0; i < options.Count; i++)
-                if (options.Take(i).Any(o => o.Label == options[i].Label)) options[i] = ($"{options[i].Label} ({i + 1})", options[i].Act);
-            var labels = options.Select(o => o.Label).ToList();
-            DropdownSelector.Show(labels, Guard(chosen =>
-            {
-                var match = options.FirstOrDefault(o => o.Label == chosen);
-                match.Act?.Invoke();
-            }), "foodtrucks:hires_header", vehicle.Crew.Count == 0 ? "foodtrucks:hires_body_nocrew" : "foodtrucks:hires_body");
-        }
-
-        // The stop is where the vehicle stands, if the vehicle could open here now: the panel's "Add stop here", an
-        // exact spot (the map pick on the BizMan page snaps to a kerbside place instead).
-        internal static void AddStopHere(ItemPanelUI panel, string vehicleId)
-        {
-            var cart = VehicleHelper.GetCurrentVehicle();
-            var controller = VehicleHelper.GetCurrentVehicleBase();
-            if (cart == null || cart.id != vehicleId || controller == null) return;
-            if (!FoodTrucksSession.CanWrite)
-            {
-                CartSelling.Notify("foodtrucks:notification_data_readonly");
-                return;
-            }
-            var problem = CartSelling.PitchProblem(panel, cart);
-            if (problem != null)
-            {
-                CartSelling.Notify(problem);
-                return;
-            }
-            var position = controller.transform.position;
-            var heading = controller.transform.eulerAngles.y;
-            HireRoutes.Later(() => RouteStops.AskTimesAndAdd(vehicleId, position, heading));
-        }
-
         internal static readonly (string Key, DayOfWeek[] Days)[] DayChoices =
         {
             ("foodtrucks:hires_days_every", Array.Empty<DayOfWeek>()),
@@ -144,27 +18,6 @@ namespace FoodTrucks
             ("foodtrucks:hires_days_weekends", new[] { DayOfWeek.Saturday, DayOfWeek.Sunday }),
         };
 
-        private static void AskDays(string vehicleId)
-        {
-            var options = DayChoices.ToDictionary(c => Text(c.Key), c => c.Days);
-            DropdownSelector.Show(options.Keys.ToList(), Guard(chosen =>
-            {
-                var state = FoodTrucksSession.CurrentState;
-                var vehicle = StreetSales.Find(state, vehicleId);
-                var rules = DemandData.Rules;
-                if (vehicle?.Schedule == null || rules == null || !options.TryGetValue(chosen, out var days) || !FoodTrucksSession.CanWrite) return;
-                var problem = RouteEditor.SetDays(new HireSchedules(rules.Fleet), vehicle, days);
-                if (problem != ScheduleProblem.None)
-                {
-                    Log.Info($"Route: days for {vehicleId} refused: {problem}.");
-                    CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
-                    return;
-                }
-                RouteStops.Changed(vehicle);
-                Log.Info($"Route: {vehicleId} runs {(days.Length == 0 ? "every day" : string.Join(", ", days))}.");
-            }), "foodtrucks:hires_days_header", null!);
-        }
-
         internal static string DaysKey(List<DayOfWeek>? days)
         {
             var set = new HashSet<DayOfWeek>(days ?? new List<DayOfWeek>());
@@ -172,13 +25,6 @@ namespace FoodTrucks
                 if (set.SetEquals(choice)) return key;
             return "foodtrucks:hires_days_custom";
         }
-
-        // The game's list picker calls back without a guard: nothing may throw out of a choice.
-        private static Action<string> Guard(Action<string> choice) => chosen =>
-        {
-            try { choice(chosen); }
-            catch (Exception ex) { Log.Error("Hires: " + ex); }
-        };
 
         // A stop is a pitch: the same key regulars use (World.PitchKey).
         internal static string SpotKey(float x, float z) => World.PitchKey(FoodTrucksSession.CurrentState, x, z);
@@ -189,19 +35,6 @@ namespace FoodTrucks
             var time = $"{minute / 60 % 24:D2}:{minute % 60:D2}";
             return minute >= 24 * 60 ? string.Format(Text("foodtrucks:hires_after_midnight"), time) : time;
         }
-
-        private static string Place(ScheduleStop stop)
-        {
-            var tables = DemandData.Tables;
-            var neighbourhood = tables == null ? null : World.ReadSpot(tables, new UnityEngine.Vector3((float)stop.X, 0f, (float)stop.Z)).Neighbourhood;
-            return string.IsNullOrEmpty(neighbourhood) ? stop.SpotKey : LocalizorManager.GetLocalization(neighbourhood, null);
-        }
-
-        private static string Skill(Entities.EmployeeInstance employee) => HireCrew.Skill(employee).ToString("F0");
-
-        private static string Wage(float hourly) => CartSelling.Money((long)Math.Round(hourly * 100));
-
-        private static string Format(string key, params object[] values) => string.Format(Text(key), values);
 
         private static string Text(string key) => LocalizorManager.GetLocalization(key, null);
     }

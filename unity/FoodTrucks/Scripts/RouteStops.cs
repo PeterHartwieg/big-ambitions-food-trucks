@@ -12,8 +12,8 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Adding and changing a route's stops, shared by the vehicle panel's "Add stop here", the map pick and the BizMan
-    // vehicle page. Core's RouteEditor decides; this asks the times, writes the save and tells the crew.
+    // Adding and changing a route's stops, shared by the BizMan vehicle page ("Add the spot where it stands", its stop
+    // rows) and the map pick. Core's RouteEditor decides; this asks the times, writes the save and tells the crew.
     internal static class RouteStops
     {
         // Opening hours are picked in half hours.

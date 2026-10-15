@@ -780,11 +780,11 @@ namespace FoodTrucks
                 switch (op)
                 {
                     case "open":
-                        InIt("Open here");
-                        if (panel == null) throw new BridgeError("The vehicle panel isn't there.");
-                        // Open parks through the game's Park button, which does nothing while the game is paused.
-                        if (Paused() == true) throw new BridgeError("Open parks with the game's Park button, which doesn't work while paused: unpause first (time).");
-                        CartSelling.OpenHere(panel);
+                        // The on-foot menu's Open for business: the vehicle stands parked, the player is out of every vehicle.
+                        if (!string.IsNullOrEmpty(game.ActiveVehicleId))
+                            throw new BridgeError($"Open for business is in the parked vehicle's on-foot menu: vehicle exit first (the player is in {game.ActiveVehicleId}).");
+                        if (FoodTrucks.Core.Saves.StreetSales.Find(state, id)?.IsOpen == true) throw new BridgeError($"Vehicle {id} is open already.");
+                        CartSelling.OpenHere(Spawned(vehicle));
                         break;
                     case "close":
                         if (TruckWindow.PanelClose(id)) break;

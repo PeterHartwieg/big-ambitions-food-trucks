@@ -78,6 +78,7 @@ class MergedParityTests(unittest.TestCase):
         reply=self.bridge.call('vehicle',{**args,'op':'restock'})['result']
         self.assertFalse(reply['done']);self.assertIsNone(reply['why'])
         self.bridge.call('time',{'pause':False})
+        self.bridge.call('vehicle',{**args,'op':'exit'})
         reply=self.bridge.call('vehicle',{**args,'op':'open'})['result']
         self.assertFalse(reply['done']);self.assertIsNone(reply['why'])
 
