@@ -28,6 +28,24 @@ Recorded from Peter's playtest of installed build `9e2bf50`, using the separate 
 12. **Queue placement near obstacles:** with a tree and bench close to the serving window, the queue formed roughly two metres away from the window and looked disconnected from it. Revisit the relationship between the serving point, first customer and obstacle avoidance; capture/reproduce the reported arrangement before calling it fixed.
 13. **Park pitch discoverability:** Peter could not see how the park pitches are marked. Verify what the current map/world presentation actually shows and make the pitches identifiable; whether markers are absent or merely unclear is not yet established.
 
+## UI flow: the vehicle panel holds only cargo (Peter, 15 October 2026)
+
+The vehicle's item panel (pushing a cart, driving a truck) does loading and unloading and nothing else. Everything else moves to the vehicle on foot, the Street food page in BizMan, or a phone call. Peter's decisions: open for business on foot at the vehicle, cleaning at the commissary only, prices per vehicle on the vehicle page. The Street food page itself is rebuilt after Peter approves a mockup (playtest note 1); the moves below come first and use the current vehicle page.
+
+| Action | Was | Now |
+|---|---|---|
+| Open for business | Item panel "Open here" (pressed Park, then opened) | On foot: click the parked vehicle, "Open for business" beside Enter vehicle and Manage storage. Same checks as before, from the vehicle's saved parking state and position instead of the panel. A truck then puts the player at its hatch. |
+| Close | Truck: hatch panel. Cart: grab it or drive off | Unchanged, plus "Close" in the on-foot menu of an open vehicle (so a cart can close without being moved). |
+| Clean | Item panel "Clean", anywhere; crews cleaned as they closed | Only at the commissary where the vehicle rents its space: "Clean" in the on-foot menu in that bay, same 20-minute time skip; and a vehicle standing in that bay at the 04:00 check counts as cleaned for the service day that just ended. Crews no longer clean as they close, so a crewed vehicle stays clean by ending its route in its bay (a bay stop). Without a space a vehicle can't be cleaned and its grade slips. |
+| Prices | Item panel "Prices" (list picker, text prompt) | Vehicle page in BizMan: a Prices section, one row per food on its menu (price, automatic or set, the most customers accept here), "Change" opens the same text prompt. |
+| Hires | Item panel "Hires", fallback crew-and-route picker | Gone from the panel. Crew and route stay on the vehicle page; the fallback picker (`StaffDialog.Show`) is removed. |
+| Add stop here | Item panel | Vehicle page: "Add the spot where it stands", beside "Add stop on the map". Same pitch check as Open, for the parked vehicle. |
+| Rent, move, give up a commissary space | Commissary button in the bay | Phone call to the commissary: "Spaces" lists the player's food vehicles ("Truck 2: rent a space here, $1,250 a month", "Cart 1: give up its space here", "Truck 3: move its space here from Midtown"). Contacts still unlock on the first visit. |
+| Order stock | Phone call, or the bay's Commissary button opening the call | Phone call only. |
+| Restock | Commissary button: load everything that fits, fitting spare equipment too | Stays in the item panel, as it is loading: "Commissary stock" in the bay. Two-way and chosen: a list of what can be taken ("Take hot dogs: 1,200 here") and returned ("Return hot dogs: 62 on board", "Return griddle"), then how many. "Fill up" loads food as Restock did (equipment only when picked by name). A returned piece of equipment sends back the food that no longer fits. Any commissary's bay, space or not, as before. |
+
+The commissary call's first step keeps "Order stock" and gets a second choice "Spaces and standing orders", which leads to "Spaces" and "Standing orders". A commissary the player has no space at offers "Spaces" and "Standing orders" straight away. The game's list picker shows the vehicle list, as the order form does. The test bridge's `restock` and `rent_bay` keep working through the new entry points.
+
 ## Ground rules
 
 - **Version 1 keeps the full scope** Peter chose, built in the milestone order below. If a feature fights back, it moves to 1.1 following the [cut list](#cut-list). No milestone waits on another track's polish.
