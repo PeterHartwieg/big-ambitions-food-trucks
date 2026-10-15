@@ -230,6 +230,10 @@ namespace FoodTrucks.Core.Commissary
         // and Sol). Not saved.
         [JsonIgnore]
         public bool BaySideUnknown { get; set; }
+        // In its bay only because its commissary's search found no legal parking (no bay to stand in): spared the fine,
+        // but not cleaned there overnight (Commissaries.CleanedOvernight). Not saved.
+        [JsonIgnore]
+        public bool BayGrace { get; set; }
         public bool PlayerInside { get; set; }
         public bool OnLateStop { get; set; }
         public bool InTransit { get; set; }

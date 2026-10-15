@@ -224,6 +224,47 @@ namespace FoodTrucks.Core.Commissary
             state.NextBatchId = nextId;
         }
 
+        // OrderMetadata "source" on a batch a vehicle gave back at the bay (StockTransfer; plan, "UI flow").
+        public const string ReturnedSourceValue = "vehicle";
+
+        // Units a vehicle gave back at the bay: one new batch, last in the commissary's FIFO order, at what the vehicle
+        // paid for them (its cargo's price per unit), marked with the day and the vehicle.
+        public static CommissaryStockLine ReturnFromVehicle(CommissaryState state, string commissaryId, string itemName, int units,
+            long unitPriceCents, int day, string vehicleId)
+        {
+            Check(state); Name(commissaryId, nameof(commissaryId)); Name(itemName, nameof(itemName)); Name(vehicleId, nameof(vehicleId)); Time(day, 0);
+            if (units <= 0) throw new ArgumentOutOfRangeException(nameof(units));
+            if (unitPriceCents < 0) throw new ArgumentOutOfRangeException(nameof(unitPriceCents));
+            _ = checked(units * unitPriceCents);
+            var line = new CommissaryStockLine
+            {
+                ItemName = itemName, Units = units, UnitPriceCents = unitPriceCents, BatchId = CommissaryValidation.NextBatch(state),
+                OrderMetadata = new Dictionary<string, Newtonsoft.Json.Linq.JToken>(StringComparer.Ordinal)
+                {
+                    [CommissaryLogistics.SourceKey] = ReturnedSourceValue,
+                    ["day"] = day,
+                    ["vehicle"] = vehicleId
+                }
+            };
+            Stock(state, commissaryId).Add(line);
+            return line;
+        }
+
+        public static bool FromVehicle(CommissaryStockLine line) =>
+            line?.OrderMetadata != null && line.OrderMetadata.TryGetValue(CommissaryLogistics.SourceKey, out var source) &&
+            source.Type == Newtonsoft.Json.Linq.JTokenType.String && (string?)source == ReturnedSourceValue;
+
+        // The goods value of stock vehicles gave back, still in the commissaries. It may have come from a wholesaler and
+        // was never booked under the commissary's tax label, so the uninstall refund doesn't take it off that deduction.
+        public static long ReturnedGoodsCents(CommissaryState state)
+        {
+            Check(state);
+            long cents = 0;
+            foreach (var line in state.Stock.Values.SelectMany(l => l))
+                if (FromVehicle(line)) cents = checked(cents + checked(line.Units * line.UnitPriceCents));
+            return cents;
+        }
+
         // Rent covers hourly public parking only for this food vehicle in the bay of its active space.
         // The adapter supplies a bay ID only after the usual InBay test passes.
         public static bool PublicParkingCovered(CommissaryState state, string vehicleId, string? kind, string? bayCommissaryId)
@@ -262,6 +303,29 @@ namespace FoodTrucks.Core.Commissary
             }
             state.NightCheckedThroughDay = Math.Max(state.NightCheckedThroughDay ?? 0, latest);
             return fines;
+        }
+
+        // The service days a vehicle counts as cleaned at the 04:00 check (Peter, 15 October 2026): standing in the bay
+        // of the commissary where it rents its space, really in it (not only excused because that commissary has no
+        // bay), not in transit. Each night the check covers gives the service day that just ended, the evening before
+        // the check's day. Call before NightCheck, which moves the checked-through day on; nothing while the check waits.
+        public static IReadOnlyList<(string VehicleId, int ServiceDay)> CleanedOvernight(CommissaryState state, CommissaryRules rules,
+            int nowDay, int nowMinute, IEnumerable<CommissaryVehicle> vehicles)
+        {
+            Check(state, rules); Time(nowDay, nowMinute);
+            if (vehicles == null) throw new ArgumentNullException(nameof(vehicles));
+            var fleet = vehicles.Where(v => v != null).ToList();
+            var cleaned = new List<(string, int)>();
+            if (state.NightCheckedThroughDay == null || Undecided(state, fleet).Count > 0) return cleaned;
+            var latest = nowMinute >= rules.NightCheckMinute ? nowDay : nowDay - 1;
+            var first = (long)state.NightCheckedThroughDay.Value + 1;
+            foreach (var vehicle in fleet)
+            {
+                if (!vehicle.AtOwnCommissaryBay || vehicle.BayGrace || vehicle.InTransit || !state.Spaces.Any(s => s.VehicleId == vehicle.VehicleId)) continue;
+                for (var day = first; day <= latest; day++)
+                    if (day - 1 >= 1) cleaned.Add((vehicle.VehicleId, (int)(day - 1)));
+            }
+            return cleaned;
         }
 
         // The vehicles the night check can't decide yet: one that would be fined unless it is in its own bay, has a space,

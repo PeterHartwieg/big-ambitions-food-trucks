@@ -80,7 +80,8 @@ namespace FoodTrucks
             // The exact spot the vehicle stands on as a stop; the BizMan page adds stops by picking a building on the map.
             buttons.Add(Add(template, "FoodTrucks.AddStopButton", "foodtrucks:itempanel_addstop", () => AddStopHere(panel), after + 4));
             buttons.Add(Add(template, "FoodTrucks.CleanButton", "foodtrucks:itempanel_clean", CartSelling.CleanHere, after + 5));
-            commissaryButton = Add(template, "FoodTrucks.CommissaryButton", "foodtrucks:itempanel_commissary", () => Commissary.ShowPanel(panel), after + 6);
+            // Commissary stock: the bay's two-way transfer, take or give back food and equipment by name (Commissary.ShowStock).
+            commissaryButton = Add(template, "FoodTrucks.CommissaryButton", "foodtrucks:itempanel_commissary_stock", Commissary.ShowStock, after + 6);
             Log.Info("Cart buttons added to the item panel.");
         }
 
