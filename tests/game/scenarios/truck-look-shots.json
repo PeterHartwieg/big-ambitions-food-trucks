@@ -105,28 +105,6 @@
       }
     },
     {
-      "call": "vehicle",
-      "args": {
-        "id": "$truck",
-        "op": "enter"
-      }
-    },
-    {
-      "expect": "result",
-      "path": "done",
-      "equals": true
-    },
-    {
-      "wait_state": "player.in_vehicle",
-      "timeout_s": 300,
-      "equals": "$truck"
-    },
-    {
-      "wait_state": "player.activity",
-      "timeout_s": 300,
-      "equals": "driving"
-    },
-    {
       "call": "time",
       "args": {
         "pause": false
@@ -236,28 +214,6 @@
       }
     },
     {
-      "call": "vehicle",
-      "args": {
-        "id": "$cart",
-        "op": "enter"
-      }
-    },
-    {
-      "expect": "result",
-      "path": "done",
-      "equals": true
-    },
-    {
-      "wait_state": "player.in_vehicle",
-      "timeout_s": 300,
-      "equals": "$cart"
-    },
-    {
-      "wait_state": "player.activity",
-      "timeout_s": 300,
-      "equals": "pushing"
-    },
-    {
       "call": "time",
       "args": {
         "pause": false
@@ -359,28 +315,6 @@
       "args": {
         "pause": false
       }
-    },
-    {
-      "call": "vehicle",
-      "args": {
-        "id": "$truck",
-        "op": "enter"
-      }
-    },
-    {
-      "expect": "result",
-      "path": "done",
-      "equals": true
-    },
-    {
-      "wait_state": "player.in_vehicle",
-      "timeout_s": 300,
-      "equals": "$truck"
-    },
-    {
-      "wait_state": "player.activity",
-      "timeout_s": 300,
-      "equals": "driving"
     },
     {
       "call": "time",
@@ -490,28 +424,6 @@
       "args": {
         "pause": false
       }
-    },
-    {
-      "call": "vehicle",
-      "args": {
-        "id": "$cart",
-        "op": "enter"
-      }
-    },
-    {
-      "expect": "result",
-      "path": "done",
-      "equals": true
-    },
-    {
-      "wait_state": "player.in_vehicle",
-      "timeout_s": 300,
-      "equals": "$cart"
-    },
-    {
-      "wait_state": "player.activity",
-      "timeout_s": 300,
-      "equals": "pushing"
     },
     {
       "call": "time",

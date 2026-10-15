@@ -42,7 +42,7 @@ namespace FoodTrucks
             var original = AccessTools.Method(typeof(BuildingResume), "SetButtons");
             var info = original == null ? null : Harmony.GetPatchInfo(original);
             ready = info != null && info.Postfixes.Any(p => p.PatchMethod.DeclaringType == typeof(StopPicker));
-            Log.Info(ready ? "Map pick: on (\"Add as a stop\" in the building card)." : "Map pick: off (a patch it needs isn't active); stops are added from the vehicle panel only.");
+            Log.Info(ready ? "Map pick: on (\"Add as a stop\" in the building card)." : "Map pick: off (a patch it needs isn't active); stops are added with the vehicle page's \"Add the spot where it stands\" only.");
         }
 
         public static bool Ready => ready;

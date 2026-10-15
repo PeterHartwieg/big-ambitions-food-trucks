@@ -15,9 +15,9 @@ There is no published Workshop release yet. Build from this repository using [Bu
 1. Complete the game's **Food Safety** course. Call the **City of New York** to buy a vendor licence.
 2. Buy a food cart or food truck in person at **General US Trucks**. Call the city again for that vehicle's permit.
 3. Fit equipment by carrying it to the vehicle and loading it into cargo, then load matching food. For example, a Hot Dog Grill unlocks hot dogs. Each fitted piece has its own food capacity; excess stock stays in the box.
-4. Find a legal spot and choose **Open here** on the vehicle. The button explains any rule preventing opening. Stay at the cart to serve; a truck places you at its hatch. **Prices** sets custom prices; otherwise district pricing suggestions or standard prices apply.
+4. Park on a legal spot, step out and click the vehicle. **Open for business** opens it, or says which rule stops it. Stay at the cart to serve; a truck places you at its hatch. **Close** in the same menu closes it. Set your own prices in the vehicle's BizMan page (Street food); otherwise district pricing suggestions or standard prices apply.
 5. Visit a commissary's marked loading bay and choose **Commissary** to rent a space and unlock its phone contact. Order foods and machines for the next morning, then use **Restock** at the bay. Deliveries are paid on arrival; phone orders share a weekly food limit across the fleet. Daily/weekly standing orders and warehouse logistics can supply a larger operation.
-6. Use **Hires** on a vehicle to manage unassigned employees and route stops. A crew with a schedule can restock at its rented commissary bay, travel and serve without you. Use **Clean** to maintain hygiene and plan overnight parking: vehicles left out at 04:00 can receive a commissary fine. Catering offers arrive through **Street food bookings** as the business grows.
+6. The vehicle's BizMan page puts unassigned employees on it and builds its route, by map pick or with **Add the spot where it stands**. A crew with a schedule can restock at its rented commissary bay, travel and serve without you. A vehicle is cleaned only in the bay where it rents its space (**Clean** in its on-foot menu), and vehicles left out at 04:00 can receive a commissary fine. Catering offers arrive through **Street food bookings** as the business grows.
 
 ## Validation history
 

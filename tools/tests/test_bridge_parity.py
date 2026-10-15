@@ -118,13 +118,14 @@ class ParityTests(unittest.TestCase):
         self.refused('commissary',{'op':'nope','site':'murray-hill'},"Unknown commissary op 'nope': order, bay_candidates.")
 
     def test_driving_and_paused_op_errors(self):
-        for op,label in [('open','Open here'),('exit','Park'),('rent_bay','Commissary'),('restock','Commissary')]:
+        for op,label in [('exit','Park'),('rent_bay','Commissary'),('restock','Commissary')]:
             self.refused('vehicle',{'id':self.id,'op':op},f"{label} is on the vehicle's panel, shown while the player drives the truck or pushes the cart: vehicle enter first.")
         self.mock.call('vehicle',{'id':self.id,'op':'enter'})
         self.refused('vehicle',{'id':self.id,'op':'enter'},f'The player is in {self.id} already.')
-        self.refused('vehicle',{'id':self.id,'op':'open'},"Open parks with the game's Park button, which doesn't work while paused: unpause first (time).")
+        self.refused('vehicle',{'id':self.id,'op':'open'},f"Open for business is in the parked vehicle's on-foot menu: vehicle exit first (the player is in {self.id}).")
         self.refused('vehicle',{'id':self.id,'op':'exit'},"The game's Park button refused: paused, no parking here, or the panel isn't showing.")
         self.mock.call('time',{'pause':False})
+        self.mock.call('vehicle',{'id':self.id,'op':'exit'})
         reply=self.mock.call('vehicle',{'id':self.id,'op':'open'})
         self.assertFalse(reply['state']['open'])
         self.assertEqual(reply['notices'],["The truck can't open without any equipment installed."])

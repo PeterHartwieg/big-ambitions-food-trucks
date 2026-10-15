@@ -17,7 +17,7 @@ using UnityEngine.Events;
 
 namespace FoodTrucks
 {
-    // The player serving from inside a truck: after "Open here" they stand at the open hatch, in the middle of
+    // The player serving from inside a truck: after "Open for business" they stand at the open hatch, in the middle of
     // the places the crew use (WindowCrew), facing the line, until they step out.
     //
     // How they are held there [code, 1.0; unverified in game]: the game's own scooter ride
@@ -34,7 +34,7 @@ namespace FoodTrucks
     // PlayerHelper.SaveCurrentPosition), so a load puts them outside by the truck, never inside its body.
     //
     // Back to the hatch: on foot by an open truck, its overlay (click the truck: the game's "Enter vehicle" and
-    // "Manage storage" buttons) has a "Back to the hatch" button (HatchButton). The player walks to the rear door
+    // "Manage storage" buttons) has a "Back to the hatch" button (OverlayButtons). The player walks to the rear door
     // and is placed at the hatch again as after Open, with the window and its line left as they are.
     internal sealed class TruckWindow : MonoBehaviour
     {
@@ -114,7 +114,18 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Truck window, session end: " + ex); }
         }
 
-        // Called by Open once the game's Park button has taken the player out of the driver's seat.
+        // Called by Open (the on-foot menu's "Open for business"): beside the truck the player is placed at its hatch,
+        // further off they walk to its rear door first, as for Back to the hatch.
+        public static void EnterFromOutside(VehicleController controller)
+        {
+            var id = controller.vehicleInstance?.id;
+            var player = PlayerHelper.PlayerController;
+            if (id == null || player == null) return;
+            if (Vector3.Distance(player.transform.position, controller.transform.position) <= PlaceMetres) Enter(id);
+            else BackToHatch(controller);
+        }
+
+        // Places the player at the truck's hatch once they are out of any seat and on the NavMesh.
         public static void Enter(string truckId)
         {
             var self = instance;

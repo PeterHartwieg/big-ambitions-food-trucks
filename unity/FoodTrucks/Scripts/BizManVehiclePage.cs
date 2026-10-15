@@ -12,7 +12,7 @@ using Localizor;
 using Localizor.LanguageChangeEvent;
 using UI;
 using UI.Components;
-using UI.ItemPanel;
+using Parking.UndergroundParking;
 using UI.Smartphone.Apps.BizMan;
 using UI.Smartphone.Apps.BizMan.LogisticsManagers;
 using UI.Smartphone.Apps.BizMan.Warehouse;
@@ -24,9 +24,9 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // A vehicle's own page in BizMan (Peter, 11 October 2026): crew, route and partner venue, in place of the old
-    // Hires dialog on the vehicle panel. Clicking a vehicle's card in the Street food section opens it; the panel's
-    // Hires button opens it too. It sits in the fleet section's card list, outside BizManBusiness, so the game's
+    // A vehicle's own page in BizMan (Peter, 11 October 2026): prices, crew, route and partner venue. Clicking a
+    // vehicle's card in the Street food section opens it (15 October 2026: the vehicle panel has no Hires button any
+    // more, and the old list-picker dialog is gone). It sits in the fleet section's card list, outside BizManBusiness, so the game's
     // business page, its settings and its unsaved-changes check never see it; while it shows, the vehicle cards are
     // hidden, and Back brings the section back. The section scrolls and lays the page out like a card.
     //
@@ -51,22 +51,7 @@ namespace FoodTrucks
 
         // ---- Opening ----
 
-        // The vehicle panel's Hires button: BizMan opens on the vehicle's page; if the page can't be built, the old dialog.
-        public static void OpenFromPanel(ItemPanelUI panel)
-        {
-            var cart = VehicleHelper.GetCurrentVehicle();
-            if (cart == null) return;
-            var bizMan = InstanceBehavior<UIs>.Instance?.fullMenu?.bizMan;
-            if (bizMan == null || bizMan.list == null || !Ensure(bizMan.list))
-            {
-                Log.Info($"Hires: the BizMan vehicle page isn't available; the old crew and route dialog opens for {cart.id}.");
-                StaffDialog.Show(panel);
-                return;
-            }
-            OpenFor(cart.id);
-        }
-
-        // Opens BizMan on the vehicle's page, from anywhere (the panel, the end of a map pick).
+        // Opens BizMan on the vehicle's page, from anywhere (the end of a map pick, a price or a stop asked outside the phone).
         public static void OpenFor(string id)
         {
             var bizMan = InstanceBehavior<UIs>.Instance?.fullMenu?.bizMan;
@@ -157,7 +142,7 @@ namespace FoodTrucks
             catch (Exception ex)
             {
                 broken = true;
-                Log.Error($"BizMan vehicle page: {ex.Message} The vehicle panel's Hires button opens the old crew and route dialog instead.");
+                Log.Error($"BizMan vehicle page: {ex.Message} Vehicle pages aren't offered; prices, crew and routes can't be changed this session.");
                 if (page != null) Object.Destroy(page.gameObject);
                 page = null;
                 holder = null;
@@ -331,6 +316,12 @@ namespace FoodTrucks
             AddLabel(BizManFleet.Where(instance, vehicle, IsWithDriver(id)));
             if (!canWrite) AddLabel(Text("foodtrucks:bizman_page_readonly"));
 
+            // Prices: one row per food on the vehicle's menu, priced where it stands now.
+            AddLabel(Text("foodtrucks:bizman_page_prices_header"));
+            var prices = PriceDialog.Lines(id);
+            if (prices.Count == 0) AddLabel(Text("foodtrucks:bizman_page_prices_none"));
+            foreach (var line in prices) AddPriceRow(id, line, canWrite);
+
             // Crew: one row per staff slot, and one for each member past it (the truck's staff went from 3 to 2 on 14 October
             // 2026), so they can be taken off. While the crew is over the limit no row offers anyone new: replacing someone
             // would take them off and then refuse the newcomer.
@@ -373,6 +364,8 @@ namespace FoodTrucks
                 var add = AddButton(Text("foodtrucks:bizman_page_add_stop"), () => AddOnMap(id));
                 add.interactable = canWrite && count < rules.Fleet.MaxStops;
             }
+            var here = AddButton(Text("foodtrucks:bizman_page_add_here"), () => AddWhereItStands(id));
+            here.interactable = canWrite && count < rules.Fleet.MaxStops;
 
             // Partner venue.
             AddLabel(Text("foodtrucks:bizman_page_partner_header"));
@@ -486,6 +479,27 @@ namespace FoodTrucks
         }
 
         // ---- Parts ----
+
+        // A price line and its Change button, side by side.
+        private static void AddPriceRow(string id, PriceDialog.Line line, bool canWrite)
+        {
+            var row = BizManFleet.Rect("FoodTrucks.PriceRow", page!);
+            var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.spacing = BizManFleet.Size(16);
+            layout.childControlWidth = layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = true;
+            var rowSize = row.gameObject.AddComponent<LayoutElement>();
+            rowSize.minHeight = BizManFleet.Size(40);
+            var label = BizManFleet.Label(row, line.Text);
+            label.alignment = TextAnchor.MiddleLeft;
+            var labelSize = label.gameObject.AddComponent<LayoutElement>();
+            labelSize.flexibleWidth = 1f;
+            var change = BizManFleet.ActionButton(row, Text("foodtrucks:bizman_page_price_change"), () => Guard(() => ChangePrice(id, line.Item, line.Name)));
+            var changeSize = change.GetComponent<LayoutElement>();
+            changeSize.minWidth = changeSize.preferredWidth = BizManFleet.Size(120);
+            change.interactable = canWrite;
+        }
 
         private static Button AddButton(string text, Action click) =>
             BizManFleet.ActionButton(page!, text, () => Guard(click));
@@ -677,6 +691,79 @@ namespace FoodTrucks
                 return;
             }
             StopPicker.Start(id);
+        }
+
+        // The game's text prompt, as the old Prices button had it. It shows outside the phone, like the map pick's time
+        // pickers: the phone closes for it and opens again on this page once it is answered or closed.
+        private static void ChangePrice(string id, string item, string name)
+        {
+            if (!FoodTrucksSession.CanWrite)
+            {
+                CartSelling.Notify("foodtrucks:notification_data_readonly");
+                return;
+            }
+            Log.Info($"Prices: changing {item} on {KindOf(id)} {id} (BizMan page).");
+            InstanceBehavior<UIs>.Instance?.fullMenu?.Toggle(show: false);
+            HireRoutes.Later(() => Guard(() => PriceDialog.AskPrice(id, item, name, () => HireRoutes.Later(() => OpenFor(id)))));
+        }
+
+        // "Add the spot where it stands": the parked vehicle's own place as a stop, if it could open there now (the same
+        // pitch check as Open for business), with the opening hours asked as after a map pick; then back to this page.
+        internal static void AddWhereItStands(string id)
+        {
+            var rules = DemandData.Rules;
+            var state = FoodTrucksSession.CurrentState;
+            var kind = KindOf(id);
+            if (state == null || !FoodTrucksSession.CanWrite)
+            {
+                CartSelling.Notify("foodtrucks:notification_data_readonly");
+                return;
+            }
+            var saved = StreetSales.Find(state, id);
+            if (rules != null && saved?.Schedule != null && saved.Schedule.Stops.Count >= rules.Fleet.MaxStops)
+            {
+                Log.Info($"Route: the spot where {kind} {id} stands not added: the route is full.");
+                CartSelling.Notify("foodtrucks:notification_route_full", ("max", rules.Fleet.MaxStops.ToString()));
+                return;
+            }
+            var cart = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == id);
+            var controller = cart == null ? null : VehicleHelper.GetVehicleController(cart);
+            string? refusal = null, why = null;
+            if (cart == null || controller == null || saved?.Transit != null)
+            {
+                why = cart == null ? "not in the city (with a driver, or gone)" : saved?.Transit != null ? "on the road with its crew" : "not in the world";
+                refusal = "foodtrucks:notification_addstop_away";
+            }
+            else if (SaveGameManager.Current!.ActiveVehicleId == id)
+            {
+                why = "the player is driving or pushing it";
+                refusal = "foodtrucks:notification_addstop_driven";
+            }
+            else if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking)
+            {
+                why = "the player is indoors, where the street isn't read";
+                refusal = "foodtrucks:notification_addstop_indoors";
+            }
+            if (refusal != null)
+            {
+                Log.Info($"Route: the spot where {kind} {id} stands not added: {why}.");
+                CartSelling.Say(refusal, kind);
+                return;
+            }
+            var problem = CartSelling.PitchProblem(cart!, controller);
+            if (problem != null)
+            {
+                Log.Info($"Route: the spot where {kind} {id} stands not added: not a pitch ({problem}).");
+                CartSelling.Notify(problem);
+                return;
+            }
+            var position = controller!.transform.position;
+            var heading = controller.transform.eulerAngles.y;
+            Log.Info($"Route: adding the spot where {kind} {id} stands, x {position.x:F1}, z {position.z:F1}, heading {heading:F0} (BizMan page).");
+            // The time pickers show outside the phone, as after a map pick; the page comes back either way.
+            InstanceBehavior<UIs>.Instance?.fullMenu?.Toggle(show: false);
+            void Reopen() => HireRoutes.Later(() => OpenFor(id));
+            HireRoutes.Later(() => RouteStops.AskTimesAndAdd(id, position, heading, Reopen, Reopen));
         }
 
         private static void ChoosePartner(string id, string? venue)

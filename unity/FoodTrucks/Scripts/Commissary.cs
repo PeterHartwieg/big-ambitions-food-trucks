@@ -1301,6 +1301,20 @@ namespace FoodTrucks
             return InBay(vehicle, site, out _) ? site.Id : null;
         }
 
+        // The commissary where the vehicle rents its space, when it stands in that bay (the on-foot menu's Clean); null
+        // otherwise, with why for the log.
+        internal static CommissarySite? OwnBay(SaveState state, VehicleInstance vehicle, out string why)
+        {
+            var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.id);
+            var site = space == null ? null : Sites?.Site(space.CommissaryId);
+            if (!attached || uninstalled) why = "the commissaries aren't running";
+            else if (space == null) why = "no commissary space";
+            else if (site == null) why = $"its commissary {space.CommissaryId} isn't known";
+            else if (InBay(vehicle, site, out var bay)) { why = "in its bay at " + site.Id; return site; }
+            else why = $"not in its bay at {site.Id} ({bay})";
+            return null;
+        }
+
         // The route's stops in the bay of the commissary where the vehicle rents its space (within the bay radius of a
         // resolved bay point, on the door's side): such a stop is reached only in the bay, and a crew with nothing to sell
         // may still drive to it to restock (Core VehicleWhere.BayStops, review rounds 2 and 3 of the balance pass). An
