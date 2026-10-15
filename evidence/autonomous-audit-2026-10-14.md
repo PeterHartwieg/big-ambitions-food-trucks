@@ -49,6 +49,19 @@ An initial rendered run stopped responding after a BizMan click before any dedic
 
 Local, untracked evidence is under `build/logs/game/mac-release-2026-10-14/`, including first-run log/sample/state, `headless-http-guards.json`, final uninstall/save JSON, selling before/after state and `final-cleanup.json`. Build/test logs and screenshots remain under `build/`. Raw logs, saves and game data are not included in this tracked handoff.
 
+## Follow-up review rounds — 15 October 2026
+
+**Checked:** the combined source candidate `809d75b` (base `4535c83`) completed three CLI review rounds with GPT 6.1 Sol and GPT 6 Astra, and two rounds in one persistent Claude Opus 5.5 session at medium effort. All three final verdicts report **no actionable findings**. This is source review, not completion of the live or distribution gates below. The packaged runtime remains `021fd34`; later changes affect evidence and build/package tools only.
+
+The first passes missed two actionable P2 comments already present on PR 10. The coordinator reproduced/adjudicated them and assigned a separate Sol CLI worker to each:
+
+- **Harmony notice recovery:** keeping the cached DLL while cleaning the notice could produce a build without its mandatory notice. The build now recovers both from the checksum-pinned package when either is missing, and the final notice copy must succeed.
+- **Archive/source consistency:** replacing source bytes and their manifest together after archive streaming could pass final verification against different hashes. Packaging now requires the final mapping to equal the initial one before retaining the archive.
+
+Both regression checks failed before their fixes. Six offline shell-harness cases cover notice recovery, complete-cache reuse, failed download, checksum rejection and required final copy; another regression replaces both source and manifest and checks that no archive is retained. **115 Python tool tests passed on PR 10; 119 passed on the combined candidate in 38.245 seconds.** The updated packager reproduced the retained 47,696,407-byte ZIP byte for byte, with the same SHA-256 recorded above. No Unity rebuild or new live-game result is claimed for this tooling-only follow-up.
+
+Opus's optional concerns about hypothetical shared dropdown ownership, failure-path stock visuals, custom installer roots, backup retention and minor wording/checklist nits were reviewed in the next round. No concrete serious defect was established; all three reviewers accepted leaving them outside this fix scope. Local review prompts, transcripts and regression logs are retained under `build/review-rounds-2026-10-15/`; no credentials, game source or saves are included in this handoff.
+
 ## Remaining release gates
 
 1. **Street food UI:** native wheel/scrollbar and stop dragging, resizing/wrapping, UI state after save/reload and operation without a warehouse. Rendered typography, popup readability, navigation and actual crew selection are checked; CHECKS B1–B8 is the detailed guide.
