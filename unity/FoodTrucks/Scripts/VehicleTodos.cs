@@ -202,11 +202,18 @@ namespace FoodTrucks
 
         private static void Complete(TasksUI tasks, TodoTask task)
         {
-            if (tasks.isActiveAndEnabled && completeRoutine!.Invoke(tasks, new object[] { task }) is System.Collections.IEnumerator routine)
-                tasks.StartCoroutine(routine);
-            else tasks.InstantlyCompleteTodoTask(task);
-            // The routine removes the task only when it has a row; one without goes here.
-            SaveGameManager.Current.TodoTasks.Remove(task);
+            try
+            {
+                if (tasks.isActiveAndEnabled && completeRoutine!.Invoke(tasks, new object[] { task }) is System.Collections.IEnumerator routine)
+                    tasks.StartCoroutine(routine);
+                else tasks.InstantlyCompleteTodoTask(task);
+            }
+            finally
+            {
+                // The routine removes the task only when it has a row; one without goes here, and so does one whose row
+                // the game couldn't remove (InstantlyCompleteTodoTask throws before TasksUI has started).
+                SaveGameManager.Current.TodoTasks.Remove(task);
+            }
         }
 
         private static readonly Dictionary<string, bool> exists = new Dictionary<string, bool>(StringComparer.Ordinal);
