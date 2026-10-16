@@ -20,7 +20,7 @@ namespace FoodTrucks
     {
         // The drawings' PNGs, in the mod's bundle (every asset under the mod folder is packed by the SDK's builder).
         private const string ImageFolder = "Assets/Mods/FoodTrucks/UI/";
-        private const float DiagramHeight = 250f;
+        private const float DiagramMaxHeight = 600f;
         private static readonly Dictionary<string, Texture2D?> textures = new Dictionary<string, Texture2D?>(StringComparer.Ordinal);
 
         internal static void Reset()
@@ -48,12 +48,15 @@ namespace FoodTrucks
 
             var root = Rect("FoodTrucks.Diagram", box.Root);
             box.Add(root);
-            var size = root.gameObject.AddComponent<LayoutElement>();
-            size.minHeight = size.preferredHeight = DiagramHeight;
-            var frame = Rect("Frame", root);
-            Fill(frame);
             // The places and crops are in the json's pixels; the image is drawn at its aspect, whatever its file's size.
             var aspect = diagram.Height > 0 ? diagram.Width / (float)diagram.Height : 2f;
+            // The box's full inner width, the height following at the drawing's aspect up to DiagramMaxHeight; capped, the
+            // drawing is centred (the frame fits inside at its aspect). Layers, bars and tooltips are anchored to the frame.
+            var size = root.gameObject.AddComponent<AspectHeight>();
+            size.Aspect = aspect;
+            size.MaxHeight = DiagramMaxHeight;
+            var frame = Rect("Frame", root);
+            Fill(frame);
             var fitter = frame.gameObject.AddComponent<AspectRatioFitter>();
             fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
             fitter.aspectRatio = aspect;
