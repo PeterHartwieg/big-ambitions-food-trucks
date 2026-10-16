@@ -76,6 +76,17 @@ The vendor licence running out (renewal window, or expired) is one fleet to-do p
 - *Vehicle page.* The first column is a copy of the warehouse column's scroll view, standing where the table was; the other two are the warehouse and HQ columns. `BizManParts` builds each box from a copy of the warehouse list's `WhiteBox (Template)`: its title, the address line with Set destination (the status), the section label, the three-column slot row, the inventory row with its splitter, and the Manage drivers button. The page's Back is also a copy of that button, at the right of the first column's title. Dropdowns and the stop list are the same copies as before (the Drivers tab's dropdown, the logistics plan's reorderable list), placed in box rows, at the game's sizes. Stock levels come from Core's `StockLevels` (a quarter or less is low, none is empty).
 - *Fallbacks.* One log line at build names every part copied and every part missing. Without the HQ column the third column's boxes go in the second; without the table's title the Back button sits at the column's top right; without the table, the warehouse box or its scroll view the page isn't offered, the Street food line is taken out of the list and the click says the page is unavailable.
 
+## Vehicle week plan and crew shifts (Peter, 16 October 2026)
+
+A vehicle is planned like a shop: per weekday. Decided in the playtest of the vehicle page:
+
+- **Per weekday.** Each weekday has its own route or none (closed that day): its own stops with their opening and closing times. The vehicle page gets a day picker on top, like the game's schedule screen, and "copy to other days".
+- **Commissary at both ends.** Every route day starts at the vehicle's own commissary (restock, leave in time for stop 1) and ends there (drive back, park in the bay: the 04:00 cleaning and no fine). Drive rows between all legs show the estimated drive (or walk for a cart), and opening times move later when the drive needs it. Without a commissary space the day starts and ends where the vehicle stands.
+- **Shifts.** Each crew member has shifts per weekday (start and end hour), at most 12 hours a day. Their weekly total shows against the hours they want (the game's `HoursWorkingPerWeek` demand), and scheduling outside it affects their satisfaction as in a shop. Wages are paid per scheduled hour, as now.
+- **Coverage.** The vehicle moves only with at least one crew member on shift, and serves only with at least one on shift (a second serves faster, as now). A part of the route day (from leaving the commissary to getting back) with nobody on shift is shown on the page and is a route to-do; in game the vehicle waits closed where it is until a shift starts.
+- **Editing.** A timeline grid like the game's schedule screen: one row per crew member, the day's hours across, shift bars to drag and resize, the route day's legs and stops as a band on top. An auto-fill button splits the route day into shifts for the assigned crew. A mockup comes first for Peter's review; built after he approves it.
+- **No migration.** The mod is unreleased: routes saved by earlier dev builds become the same route on each of their days, or are dropped (no compatibility code for dev saves).
+
 ## Ground rules
 
 - **Version 1 keeps the full scope** Peter chose, built in the milestone order below. If a feature fights back, it moves to 1.1 following the [cut list](#cut-list). No milestone waits on another track's polish.
