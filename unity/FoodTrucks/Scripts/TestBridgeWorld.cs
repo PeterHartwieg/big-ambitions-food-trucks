@@ -940,14 +940,21 @@ namespace FoodTrucks
         }
 
         // { "op": "assign" | "unassign", "vehicle", "employee_id" }: the BizMan vehicle page's crew dropdown.
+        // { "op": "auto_schedule", "vehicle" }: the Week plan tab's Auto schedule week (the crew's shifts for the week).
         private static object Crew(JObject args)
         {
-            var op = Need(args, "op", "assign or unassign");
+            var op = Need(args, "op", "assign, unassign or auto_schedule");
             var id = Need(args, "vehicle", "the food vehicle's id");
-            var employeeId = Need(args, "employee_id", "the employee's id (state.employees)");
             var vehicle = FoodVehicle(id);
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
             if (!FoodTrucksSession.CanWrite) throw new BridgeError("The mod's save data is read-only.");
+            if (op == "auto_schedule")
+                return WithNotices(() => BizManWeekPlan.AutoSchedule(id, FoodTrucksMod.KindOf(vehicle.vehicleTypeName) ?? "cart"), notices =>
+                {
+                    var shifts = FoodTrucks.Core.Saves.StreetSales.Find(state, id)?.Schedule?.CrewShifts?.Count ?? 0;
+                    return new JObject { ["done"] = shifts > 0, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
+                });
+            var employeeId = Need(args, "employee_id", "the employee's id (state.employees)");
             var record = FoodTrucks.Core.Saves.StreetSales.Find(state, id);
             var crew = record?.Crew ?? new System.Collections.Generic.List<string>();
             return WithNotices(() =>
@@ -968,7 +975,7 @@ namespace FoodTrucks
                         BizManVehiclePage.ChooseCrew(id, slot, null);
                         break;
                     default:
-                        throw new BridgeError($"Unknown crew op '{op}': assign or unassign.");
+                        throw new BridgeError($"Unknown crew op '{op}': assign, unassign or auto_schedule.");
                 }
             }, notices =>
             {

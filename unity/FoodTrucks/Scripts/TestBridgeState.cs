@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
 using Helpers;
 using Localizor;
@@ -193,15 +194,22 @@ namespace FoodTrucks
             };
 
             JObject? route = null;
-            var stops = record?.Schedule?.Stops;
-            if (stops != null && stops.Count > 0)
+            var schedule = record?.Schedule;
+            if (schedule != null && (schedule.Stops.Count > 0 || schedule.CrewShifts.Count > 0))
             {
                 var minuteOfDay = (int)(now % 1440);
-                var next = stops.Select((s, i) => (Stop: s, Index: i)).Where(p => p.Stop.CloseAt > minuteOfDay).OrderBy(p => p.Stop.OpenAt).FirstOrDefault();
+                var today = FoodTrucks.Core.Common.GameDays.Weekday(Math.Max(1, HireRunner.DayOf(now)));
+                var todays = WeekPlan.StopsOf(schedule, today);
+                var next = todays.Select((i, k) => (Stop: schedule.Stops[i], Number: k + 1)).Where(p => p.Stop.CloseAt > minuteOfDay)
+                    .OrderBy(p => p.Stop.OpenAt).FirstOrDefault();
                 route = new JObject
                 {
-                    ["stops"] = stops.Count,
-                    ["next"] = next.Stop == null ? null : $"stop {next.Index + 1}, {Clock(next.Stop.OpenAt)} to {Clock(next.Stop.CloseAt)} at x {next.Stop.X:F1}, z {next.Stop.Z:F1}",
+                    ["stops"] = todays.Count,
+                    ["next"] = next.Stop == null ? null : $"stop {next.Number}, {Clock(next.Stop.OpenAt)} to {Clock(next.Stop.CloseAt)} at x {next.Stop.X:F1}, z {next.Stop.Z:F1}",
+                    ["week"] = WeekOf(record!),
+                    ["shifts"] = ShiftsOf(record!),
+                    ["problem"] = DemandData.Rules == null ? null : Snake(new HireRunner(DemandData.Rules.Fleet).RouteProblem(record!, HireRoutes.GameSpeed(),
+                        HireRoutes.HomePoint(HireRoutes.HomeOf(record!)), HireRoutes.HomeOf(record!)?.BayStops).ToString()),
                 };
             }
 
@@ -228,6 +236,58 @@ namespace FoodTrucks
                 ["todos"] = Todos(instance.id),
             };
         }
+
+        // The week plan, Monday first: each weekday's closed mark and stops, its route day (restock to back in the bay, as
+        // minutes from that day's midnight, past 1440 for a late route) and the parts of it with nobody on shift.
+        private static JArray WeekOf(VehicleState vehicle)
+        {
+            var schedule = vehicle.Schedule!;
+            var rules = DemandData.Rules;
+            var home = HireRoutes.HomeOf(vehicle);
+            var days = rules == null ? null : WeekPlan.RouteDays(new HireSchedules(rules.Fleet), schedule, Travel.ModeFor(vehicle.VehicleType),
+                HireRoutes.GameSpeed(), HireRoutes.HomePoint(home), home?.BayStops);
+            var list = new JArray();
+            foreach (var day in WeekPlan.Days)
+            {
+                var routeDay = days?[WeekPlan.Position(day)];
+                list.Add(new JObject
+                {
+                    ["day"] = day.ToString().ToLowerInvariant(),
+                    ["closed"] = WeekPlan.IsClosed(schedule, day),
+                    ["stops"] = new JArray(WeekPlan.StopsOf(schedule, day).Select(i => schedule.Stops[i]).Select(s => new JObject
+                    {
+                        ["open"] = Clock(s.OpenAt), ["close"] = Clock(s.CloseAt), ["x"] = Math.Round(s.X, 2), ["z"] = Math.Round(s.Z, 2),
+                    })),
+                    ["route_day"] = routeDay == null || routeDay.Empty ? null : new JObject { ["start"] = routeDay.Start, ["end"] = routeDay.End },
+                    ["gaps"] = routeDay == null || routeDay.Empty ? new JArray()
+                        : new JArray(WeekPlan.Gaps(routeDay, schedule, vehicle.Crew).Select(g => new JObject { ["start"] = g.Start, ["end"] = g.End })),
+                });
+            }
+            return list;
+        }
+
+        // Each crew member's shifts and week: name, id, the week's hours and the range they want (null: no demand).
+        private static JArray ShiftsOf(VehicleState vehicle) =>
+            new JArray((vehicle.Crew ?? new List<string>()).Select(id =>
+            {
+                var employee = HireCrew.Find(id);
+                var wish = employee == null ? new CrewWish(id) : HireCrew.Wish(employee);
+                return new JObject
+                {
+                    ["employee"] = employee == null ? id : HireCrew.Name(employee),
+                    ["id"] = id,
+                    ["week_hours"] = WeekPlan.WeekHours(vehicle.Schedule, id),
+                    ["wants_min"] = wish.MinHours,
+                    ["wants_max"] = wish.MaxHours,
+                    ["shifts"] = new JArray(vehicle.Schedule!.CrewShifts.Where(s => s.EmployeeId == id).Select(s => new JObject
+                    {
+                        ["day"] = s.Day.ToString().ToLowerInvariant(), ["start"] = s.Start, ["end"] = s.End,
+                    })),
+                };
+            }));
+
+        private static string Snake(string name) =>
+            string.Concat(name.Select((c, i) => i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
 
         // The phone's to-dos the mod made for this vehicle (null: the fleet's, the vendor licence), as they stand after the
         // last minute's reconcile: kind and food.

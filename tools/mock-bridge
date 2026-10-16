@@ -53,6 +53,19 @@ def minute(text):
         raise ValueError('run_until.time must be "HH:MM".')
 
 
+WEEK = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+
+
+def week_route(open_minute, close_minute, x, z):
+    """A one-stop route on every weekday, in the shape the bridge's state gives (`route`): today's stop count and next
+    stop, the week plan Monday first (stops, route day in minutes from that day's midnight, gaps), the crew's shifts, and
+    the route problem. The mock has no commissary, so the route day is the stop's own hours and nobody has shifts."""
+    clock = lambda m: f'{(m % 1440) // 60:02d}:{m % 60:02d}'
+    days = [{'day': d, 'closed': False, 'stops': [{'open': clock(open_minute), 'close': clock(close_minute), 'x': x, 'z': z}],
+             'route_day': {'start': open_minute, 'end': close_minute}, 'gaps': []} for d in WEEK]
+    return {'stops': 1, 'next': f'stop 1, {clock(open_minute)} to {clock(close_minute)} at x {x}, z {z}', 'week': days, 'shifts': [], 'problem': None}
+
+
 def need(args, key, what):
     value = args.get(key)
     if value is None or isinstance(value, (dict, list)):
@@ -248,7 +261,7 @@ class Mock:
                 v['pieces'] = [{'item':'griddle', 'units':160, 'cap':160}]
                 v['stock'] = [{'item':'Tacos', 'key':'foodtrucks:itemname_tacos', 'amount':160}]
                 if 'crew-' in name:
-                    v['route'] = {'stops':1,'next':'stop 1, 08:30 to 24:00 at x 393.2, z 217.6'}
+                    v['route'] = week_route(510, 1440, 393.2, 217.6)
                     self.routes[v['id']] = (510,1440)
                 if 'truck-look' in name:
                     self.spawn('cart')
@@ -808,7 +821,7 @@ class Mock:
                 end=minute(self.choice)
                 if end<=self.open_minute: end+=1440
                 self.routes[v['id']]=(self.open_minute,end)
-                v['route']={'stops':1,'next':f'stop 1, {self.open_minute//60:02d}:00 to {self.choice} at x {v["x"]}, z {v["z"]}'}
+                v['route']=week_route(self.open_minute, end, v['x'], v['z'])
                 self.dialog='closed'
         elif text==LOCALE['foodtrucks:dialog_commissary_order_stock']:
             self.dialog='order'; self.boxes=0
@@ -1304,12 +1317,22 @@ class Mock:
                 row['fee']=fee if i==0 else 0.0; row['total']=round(row['goods']+row['fee'],2)
             return {'orders':rows,'delivery_fee':fee}
         if cmd=='crew':
-            op=need(args,'op','assign or unassign')
+            op=need(args,'op','assign, unassign or auto_schedule')
             identifier=need(args,'vehicle',"the food vehicle's id")
-            employee_id=need(args,'employee_id',"the employee's id (state.employees)")
             v=self.vehicle(identifier)
             if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
             if not self.can_write: raise ValueError("The mod's save data is read-only.")
+            if op=='auto_schedule':
+                # One crew member covers the stop's hours every day (the mock has no commissary, so no restock or drive back).
+                route=v['route']
+                if route and v['crew']:
+                    first=route['week'][0]['route_day']
+                    start,end=first['start']//60,min(24,-(-first['end']//60))
+                    route['shifts']=[{'employee':name,'id':next((e['id'] for e in self.employees if e['name']==name),name),'week_hours':7*(end-start) if i==0 else 0,
+                                      'wants_min':None,'wants_max':None,'shifts':[{'day':d,'start':start,'end':end} for d in WEEK] if i==0 else []}
+                                     for i,name in enumerate(v['crew'])]
+                return {'done':bool(route and v['crew']),'notices':[],'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==identifier)}
+            employee_id=need(args,'employee_id',"the employee's id (state.employees)")
             employee=next((e for e in self.employees if e['id']==employee_id),None)
             name=employee['name'] if employee else None
             if op=='assign':
@@ -1321,7 +1344,7 @@ class Mock:
             elif op=='unassign':
                 if name not in v['crew']: raise ValueError(f"{employee_id} isn't on {identifier}.")
                 v['crew'].remove(name)
-            else: raise ValueError(f"Unknown crew op '{op}': assign or unassign.")
+            else: raise ValueError(f"Unknown crew op '{op}': assign, unassign or auto_schedule.")
             notice=LOCALE['foodtrucks:notification_crew_added' if op=='assign' else 'foodtrucks:notification_crew_letgo'].format(name=name,vehicle=v['kind'])
             self.event(notice,'notice')
             return {'done':True,'notices':[notice],'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==identifier)}
