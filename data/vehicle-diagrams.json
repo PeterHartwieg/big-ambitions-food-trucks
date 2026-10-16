@@ -1,0 +1,62 @@
+{
+  "_notes": "Equipment diagrams on the BizMan vehicle page, rendered by art/tools/render_diagrams.sh. Per kind: the image (in unity/FoodTrucks/UI), its size in pixels, the suggested icon size as a fraction of the image height (a 0.40 m piece), and the places in the order VehicleDisplays fills them. x runs right and y down, 0 to 1 of the image; x/y is the icon centre (0.22 m above the place, about the middle of a piece), baseX/baseY the place itself on the counter. Keys starting with an underscore are notes.",
+  "schemaVersion": 1,
+  "truck": {
+    "image": "VehicleDiagram_Truck.png",
+    "width": 1200,
+    "height": 500,
+    "iconSize": 0.1044,
+    "places": [
+      {
+        "place": "EquipmentLine2",
+        "x": 0.432,
+        "y": 0.3522,
+        "baseX": 0.432,
+        "baseY": 0.4074
+      },
+      {
+        "place": "EquipmentLine3",
+        "x": 0.3831,
+        "y": 0.3522,
+        "baseX": 0.3831,
+        "baseY": 0.4074
+      },
+      {
+        "place": "EquipmentLine1",
+        "x": 0.481,
+        "y": 0.3522,
+        "baseX": 0.481,
+        "baseY": 0.4074
+      },
+      {
+        "place": "EquipmentLine4",
+        "x": 0.3342,
+        "y": 0.3522,
+        "baseX": 0.3342,
+        "baseY": 0.4074
+      }
+    ]
+  },
+  "cart": {
+    "image": "VehicleDiagram_Cart.png",
+    "width": 800,
+    "height": 500,
+    "iconSize": 0.1646,
+    "places": [
+      {
+        "place": "EquipmentFront",
+        "x": 0.5808,
+        "y": 0.4537,
+        "baseX": 0.5808,
+        "baseY": 0.5376
+      },
+      {
+        "place": "EquipmentRear",
+        "x": 0.434,
+        "y": 0.4251,
+        "baseX": 0.434,
+        "baseY": 0.509
+      }
+    ]
+  }
+}
