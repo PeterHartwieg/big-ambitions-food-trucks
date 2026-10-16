@@ -29,6 +29,8 @@ namespace FoodTrucks
         private static readonly Color MarkerColour = new Color(0.95f, 0.70f, 0.15f);
         private static bool ready;
         private static string? vehicleId;
+        // The weekday the stop goes on (the Week plan tab's chosen day).
+        private static DayOfWeek pickDay = DayOfWeek.Monday;
         private static Button? addButton;
         private static GameObject? markerTarget;
         private static PointOfInterest? marker;
@@ -47,8 +49,8 @@ namespace FoodTrucks
 
         public static bool Ready => ready;
 
-        // Opens the city map to pick a stop for the vehicle. False when the map can't be used now.
-        public static bool Start(string id)
+        // Opens the city map to pick a stop for the vehicle's route on `day`. False when the map can't be used now.
+        public static bool Start(string id, DayOfWeek day)
         {
             var map = InstanceBehavior<CityManager>.Instance?.cityMap;
             if (!ready || map == null || !CityMap.CanOpenMap())
@@ -60,8 +62,9 @@ namespace FoodTrucks
             GlobalEvents.onCityMapToggle = (Action<bool>)Delegate.Combine(GlobalEvents.onCityMapToggle, (Action<bool>)OnMapToggle);
             RemoveMarker();
             vehicleId = id;
+            pickDay = day;
             var kind = KindOf(id);
-            Log.Info($"Map pick: started for {kind} {id}.");
+            Log.Info($"Map pick: started for {kind} {id}, {day}.");
             InstanceBehavior<UIs>.Instance.fullMenu.Toggle(show: false);
             HireRoutes.Later(() =>
             {
@@ -205,7 +208,8 @@ namespace FoodTrucks
             InstanceBehavior<CityManager>.Instance?.cityMap?.Close();
             // Back to the vehicle's BizMan page whether the stop went in or was refused.
             void Reopen() => HireRoutes.Later(() => BizManVehiclePage.OpenFor(id));
-            HireRoutes.Later(() => RouteStops.AddWithDefaultTimes(id, position, heading, Reopen));
+            var day = pickDay;
+            HireRoutes.Later(() => RouteStops.AddWithDefaultTimes(id, day, position, heading, Reopen));
         }
 
         // ---- The spot ----

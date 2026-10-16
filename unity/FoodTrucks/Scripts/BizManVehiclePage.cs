@@ -29,8 +29,9 @@ using Object = UnityEngine.Object;
 namespace FoodTrucks
 {
     // A vehicle's own page in BizMan (Peter, 11 and 15 October 2026), in the three columns of the Street food page
-    // (BizManFleet): the vehicle's summary and its crew and route in the first, prices and stock in the second, the
-    // commissary space and the partner deal in the third. Each section is a copy of the game's warehouse box (BizManParts);
+    // (BizManFleet), with two tabs (Peter, 16 October 2026): Overview has the vehicle's summary and menu in the first
+    // column, alerts and the commissary space in the second, the partner deal in the third; Week plan (BizManWeekPlan)
+    // has the crew, the day's route and the shifts across the page. Each section is a copy of the game's warehouse box (BizManParts);
     // the crew, days and partner choices are copies of the warehouse Drivers tab's dropdown, and the stops a copy of the
     // logistics manager plan's reorderable list. Clicking a vehicle's row on the Street food page opens it; Back goes to the
     // overview. It sits outside BizManBusiness, so the game's business page, its settings and its unsaved-changes check
@@ -42,13 +43,13 @@ namespace FoodTrucks
         private static string? vehicleId;
 
         // The templates, copies kept inactive in the Street food page's holder, and the paths of their parts.
-        private static GameObject? dropdownTemplate, listTemplate;
+        internal static GameObject? dropdownTemplate, listTemplate;
         // A copy of the game's product price field (InventoryProductCellView.retailPrice); null when it isn't there.
         private static GameObject? priceFieldTemplate;
         private static bool priceFieldLogged;
         // The page dropdowns' light box colour (read from the copied dropdown), the price fields' background.
         private static Color? fieldGrey;
-        private static string entryPath = "", entryNamePath = "", entryRemovePath = "", entryDropdownPath = "";
+        internal static string entryPath = "", entryNamePath = "", entryRemovePath = "", entryDropdownPath = "";
         private static readonly List<string> entryHiddenPaths = new List<string>();
         // Buttons in the stop row that stay but no longer do anything (1.0: the collapse button is the whole header).
         private static readonly List<string> entryInertPaths = new List<string>();
@@ -274,7 +275,7 @@ namespace FoodTrucks
 
         // ---- Filling ----
 
-        private static void RefreshLater() => HireRoutes.Later(() => Guard(Refresh));
+        internal static void RefreshLater() => HireRoutes.Later(() => Guard(Refresh));
 
         private static void Refresh()
         {
@@ -285,7 +286,8 @@ namespace FoodTrucks
             var instance = Instance(id);
             var names = StreetFoodBooks.VehicleNames();
             var name = names.TryGetValue(id, out var n) ? n : id;
-            var columns = BizManFleet.ShowVehicleColumns(name);
+            var week = BizManWeekPlan.WeekTab;
+            var columns = BizManFleet.ShowVehicleColumns(name, wide: week);
             if (columns == null) return;
             var (first, second, third) = columns.Value;
             vehicleId = id;
@@ -302,9 +304,15 @@ namespace FoodTrucks
             var canWrite = FoodTrucksSession.CanWrite;
             var withDriver = IsWithDriver(id);
 
+            BizManWeekPlan.Tabs(first);
+            if (week)
+            {
+                BizManWeekPlan.Fill(first, state, rules, vehicle, instance, id, kind, canWrite);
+                LayoutRebuilder.MarkLayoutForRebuild((RectTransform)first);
+                return;
+            }
             Summary(first, state, vehicle, instance, name, withDriver, canWrite);
             Menu(first, id, vehicle, instance, canWrite);
-            CrewAndRoute(first, state, rules, vehicle, instance, id, kind, canWrite);
             Alerts(second, id);
             CommissarySpace(second, state, id, kind);
             Partner(third, state, id, instance, canWrite);
@@ -330,60 +338,6 @@ namespace FoodTrucks
             box.Row(Text("foodtrucks:bizman_page_income"), income.ToShortCurrencyFormat(), "", income < 0f ? (Color)colors.lightRed : (Color?)null);
             var grade = vehicle?.Health?.Grade ?? Grade.Ungraded;
             box.Row(Text("foodtrucks:bizman_column_grade"), grade == Grade.Ungraded ? "-" : grade.ToString(), "", grade == Grade.C ? (Color)colors.lightRed : (Color?)null);
-        }
-
-        // Crew: one row per staff slot, and one for each member past it (the truck's staff went from 3 to 2 on 14 October
-        // 2026), so they can be taken off. While the crew is over the limit no row offers anyone new: replacing someone
-        // would take them off and then refuse the newcomer. Route: days, stops, add.
-        private static void CrewAndRoute(Transform column, SaveState state, RuleTables rules, VehicleState? vehicle, VehicleInstance? instance, string id, string kind, bool canWrite)
-        {
-            var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
-            var box = new BizManParts.Box(column, Text("foodtrucks:bizman_page_crew_title"));
-            var limit = HireCrew.Limit(kind);
-            var crew = vehicle?.Crew ?? new List<string>();
-            box.Section(Format("foodtrucks:bizman_page_crew_header", ("count", crew.Count.ToString()), ("limit", limit.ToString())));
-            var available = HireCrew.Available(state);
-            for (var slot = 0; slot < Math.Max(limit, crew.Count); slot++)
-            {
-                var current = slot < crew.Count ? HireCrew.Find(crew[slot]) : null;
-                var choices = new List<EmployeeInstance?> { null };
-                if (current != null) choices.Add(current);
-                if (crew.Count <= limit) choices.AddRange(available);
-                var labels = choices.Select(e => e == null ? Text("foodtrucks:bizman_page_unassigned") : CrewOption(e)).ToList();
-                var index = slot;
-                AddRow(box, Format("foodtrucks:bizman_page_crew_slot", ("number", (slot + 1).ToString())), labels, current != null ? 1 : 0, canWrite,
-                    chosen => ChooseCrew(id, index, choices[chosen]?.id));
-            }
-
-            var schedule = vehicle?.Schedule;
-            var count = schedule?.Stops.Count ?? 0;
-            box.Section(Format("foodtrucks:bizman_page_route_header", ("count", count.ToString()), ("max", rules.Fleet.MaxStops.ToString())));
-            if (schedule != null)
-            {
-                var dayKeys = StaffDialog.DayChoices.Select(c => c.Key).ToList();
-                var currentDays = StaffDialog.DaysKey(schedule.Days);
-                if (!dayKeys.Contains(currentDays)) dayKeys.Add(currentDays);
-                AddRow(box, Text("foodtrucks:bizman_page_days"), dayKeys.Select(Text).ToList(), dayKeys.IndexOf(currentDays), canWrite,
-                    chosen => ChooseDays(id, dayKeys[chosen]));
-                // A route saved under older rules that fails today's: the crew doesn't run it, and the page says why.
-                var problem = vehicle == null ? ScheduleProblem.None : new HireRunner(rules.Fleet).RouteProblem(vehicle);
-                if (problem != ScheduleProblem.None) box.Paragraph(Text(RouteStops.ProblemKey(problem)), (Color)colors.red);
-                // What else keeps the route from running as planned: the crew (HireRunner runs a route only with crew; the
-                // to-dos count one short of the vehicle's staff as missing) and the permit (no stop opens without one).
-                if (count > 0)
-                {
-                    var hands = crew.Count(c => HireCrew.Find(c) != null);
-                    if (hands == 0) box.Paragraph(Text("foodtrucks:bizman_page_route_no_crew"), (Color)colors.red);
-                    else if (hands < limit)
-                        box.Paragraph(Format("foodtrucks:bizman_page_route_short_crew", ("count", hands.ToString()), ("limit", limit.ToString())), (Color)colors.red);
-                    if (vehicle != null && !vehicle.HasPermit) box.Paragraph(Text("foodtrucks:bizman_page_route_no_permit"), (Color)colors.red);
-                }
-                if (instance != null) VehiclePageDrawings.Route(box, schedule, instance, vehicle);
-                AddStops(box, id, schedule, canWrite);
-            }
-            else box.Paragraph(Text("foodtrucks:bizman_page_route_no_stops"));
-            if (StopPicker.Ready) box.Button(Text("foodtrucks:bizman_page_add_stop"), () => AddOnMap(id), canWrite && count < rules.Fleet.MaxStops);
-            box.Button(Text("foodtrucks:bizman_page_add_here"), () => AddWhereItStands(id), canWrite && count < rules.Fleet.MaxStops);
         }
 
         // The vehicle's to-dos, as a store's page lists its alerts: each one's text in the game's alert colour (red for
@@ -592,7 +546,7 @@ namespace FoodTrucks
         }
 
         // "Hell's Kitchen" for "Hell's Kitchen Commissary": the buttons sit under the Commissary space title.
-        private static string ShortName(FoodTrucks.Core.Commissary.CommissarySite site)
+        internal static string ShortName(FoodTrucks.Core.Commissary.CommissarySite site)
         {
             var name = Commissary.Name(site);
             var word = Text("foodtrucks:bizman_page_space_word");
@@ -629,284 +583,17 @@ namespace FoodTrucks
                 chosen => ChoosePartner(id, venues[chosen]));
         }
 
-        private static void AddStops(BizManParts.Box box, string id, HireSchedule schedule, bool canWrite)
-        {
-            var listGo = Object.Instantiate(listTemplate!, box.Root);
-            listGo.name = "FoodTrucks.Stops";
-            box.Add(listGo.transform);
-            listGo.SetActive(true);
-            var reorder = listGo.GetComponent<ReorderableList>();
-            var template = listGo.transform.Find(entryPath);
-            // The day from the bay where it rents its space, through the stops, and back (Peter, 16 October 2026): fixed
-            // rows that aren't stops (no ReorderableListItem, so the list's drag leaves them out; the page is rebuilt after
-            // a drag, putting them back in place), with the drive (or walk) between each two.
-            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
-            var fleet = DemandData.Rules!.Fleet;
-            var mode = Travel.ModeFor(vehicle?.VehicleType);
-            var speed = HireRoutes.GameSpeed();
-            var home = vehicle == null ? null : HireRoutes.HomeOf(vehicle);
-            var homeName = home == null ? null : HomeName(home.Value.SiteId);
-            int Minutes(double fromX, double fromZ, double toX, double toZ) => Travel.Between(fleet, fromX, fromZ, toX, toZ, mode, speed);
-            var stops = schedule.Stops;
-            var drives = new List<int>();
-            RectTransform first;
-            if (home != null)
-            {
-                var place = home.Value.Place;
-                var drive = Minutes(place.X, place.Z, stops[0].X, stops[0].Z);
-                first = FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_leaves", ("commissary", homeName!), ("time", Clock(stops[0].OpenAt - drive))), bold: true);
-                FixedRow(listGo.transform, TravelText(mode, drive), bold: false);
-                drives.Add(drive);
-            }
-            else first = FixedRow(listGo.transform, Text("foodtrucks:bizman_page_route_no_space"), bold: true);
-            // "Opens" and "Closes" on that first line, over the stops' two time dropdowns once the list is laid out.
-            Captions(first);
-            HireRoutes.Later(() => Guard(() => AlignHeader(first, listGo.transform)));
-            for (var i = 0; i < stops.Count; i++)
-            {
-                if (i > 0)
-                {
-                    var drive = Minutes(stops[i - 1].X, stops[i - 1].Z, stops[i].X, stops[i].Z);
-                    FixedRow(listGo.transform, TravelText(mode, drive), bold: false);
-                    drives.Add(drive);
-                }
-                var entry = Object.Instantiate(template, listGo.transform);
-                entry.name = "FoodTrucks.Stop";
-                var item = entry.GetComponent<ReorderableListItem>();
-                if (item != null) item.list = canWrite ? reorder : null;
-                FillStop(entry, id, schedule, i, canWrite);
-                entry.gameObject.SetActive(true);
-            }
-            if (home != null)
-            {
-                var last = stops[stops.Count - 1];
-                if (home.Value.EndsThere)
-                    FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_ends_in_bay", ("commissary", homeName!)), bold: true);
-                else
-                {
-                    var place = home.Value.Place;
-                    var back = Minutes(last.X, last.Z, place.X, place.Z);
-                    drives.Add(back);
-                    FixedRow(listGo.transform, Format(mode == TravelMode.Push ? "foodtrucks:bizman_page_route_walk_back" : "foodtrucks:bizman_page_route_drive_back",
-                        ("minutes", back.ToString())), bold: false);
-                    FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_back", ("commissary", homeName!), ("time", Clock(last.CloseAt + back))), bold: true);
-                    // Back after the 04:00 check: it isn't in the bay then (no refusal; the check sees it on its way).
-                    var check = DemandData.Rules?.Commissary.NightCheckMinute ?? 240;
-                    if (last.CloseAt + back > 1440 + check)
-                    {
-                        Log.Info($"Route: {vehicle!.VehicleType} {id} gets back to its bay at {Clock(last.CloseAt + back)}, after the {Clock(check)} check.");
-                        FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_back_late", ("time", Clock(check))), bold: true);
-                    }
-                }
-            }
-            if (canWrite) reorder.OnItemReordered += (from, to) => Guard(() => MoveStop(id, from, to));
-            reorder.Reinitialize();
-            Log.Info($"BizMan: route rows for {id}: {(mode == TravelMode.Push ? "walks" : "drives")} {string.Join(", ", drives)} min at game speed {speed:0.##}" +
-                     (home == null ? ", no commissary space." : $", from and back to {home.Value.SiteId}."));
-        }
-
-        private static string TravelText(TravelMode mode, int minutes) =>
-            Format(mode == TravelMode.Push ? "foodtrucks:bizman_page_route_walk" : "foodtrucks:bizman_page_route_drive", ("minutes", minutes.ToString()));
-
-        private static string Clock(int minute) => StaffDialog.Clock(((minute % 1440) + 1440) % 1440);
-
-        private static string HomeName(string siteId)
-        {
-            var site = DemandData.Commissaries?.Site(siteId);
-            return site == null ? siteId : ShortName(site);
-        }
-
-        // A slim line between the stop cards, in the box's section-label style: grey for a drive with the vehicle icon
-        // before it, dark for the commissary at either end. Not a stop: it can't be dragged or removed.
-        private static RectTransform FixedRow(Transform list, string text, bool bold)
-        {
-            var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
-            var unit = BizManParts.SmallLabelHeight();
-            var go = new GameObject(bold ? "FoodTrucks.CommissaryRow" : "FoodTrucks.TravelRow", typeof(RectTransform));
-            var row = (RectTransform)go.transform;
-            row.SetParent(list, false);
-            var element = go.AddComponent<LayoutElement>();
-            element.minHeight = element.preferredHeight = unit * 1.2f;
-            element.flexibleWidth = 1f;
-            var indent = 0f;
-            if (!bold)
-            {
-                var icon = new GameObject("Icon", typeof(RectTransform));
-                var iconRect = (RectTransform)icon.transform;
-                iconRect.SetParent(row, false);
-                iconRect.anchorMin = iconRect.anchorMax = new Vector2(0f, 0.5f);
-                iconRect.pivot = new Vector2(0f, 0.5f);
-                iconRect.sizeDelta = new Vector2(unit * 0.8f, unit * 0.8f);
-                iconRect.anchoredPosition = new Vector2(unit * 0.5f, 0f);
-                var image = icon.AddComponent<Image>();
-                image.sprite = InstanceBehavior<GlobalReferences>.Instance.vehiclePOIIcon;
-                image.preserveAspect = true;
-                image.color = colors.darkGrey;
-                image.raycastTarget = false;
-                indent = unit * 1.6f;
-            }
-            if (BizManParts.SmallLabel(row, text) is RectTransform label)
-            {
-                label.name = "FoodTrucks.RowText";
-                var labelElement = label.GetComponent<LayoutElement>();
-                if (labelElement != null) labelElement.ignoreLayout = true;
-                label.anchorMin = Vector2.zero;
-                label.anchorMax = Vector2.one;
-                label.offsetMin = new Vector2(indent, 0f);
-                label.offsetMax = Vector2.zero;
-                BizManParts.Colour(label, bold ? (Color)colors.midnight : (Color)colors.darkGrey);
-            }
-            return row;
-        }
-
-        // "Opens" and "Closes" on the first fixed row, in the box's section-label style: until the list is laid out on the
-        // right half of the row; AlignHeader then puts each over its dropdown column and ends the row's own text before them.
-        private static void Captions(RectTransform row)
-        {
-            var opens = BizManParts.SmallLabel(row, Text("foodtrucks:bizman_page_opens_label")) as RectTransform;
-            var closes = BizManParts.SmallLabel(row, Text("foodtrucks:bizman_page_closes_label")) as RectTransform;
-            if (opens == null || closes == null) return;
-            foreach (var (label, from, to) in new[] { (opens, 0.5f, 0.75f), (closes, 0.75f, 1f) })
-            {
-                label.name = label == opens ? "Opens" : "Closes";
-                var element = label.GetComponent<LayoutElement>();
-                if (element != null) element.ignoreLayout = true;
-                label.anchorMin = new Vector2(from, 0f);
-                label.anchorMax = new Vector2(to, 1f);
-                label.offsetMin = label.offsetMax = Vector2.zero;
-            }
-            if (row.Find("FoodTrucks.RowText") is RectTransform text) text.anchorMax = new Vector2(0.5f, 1f);
-        }
-
-        private static void AlignHeader(RectTransform header, Transform list)
-        {
-            if (header == null || list == null) return;
-            var times = list.GetComponentsInChildren<RectTransform>(true).FirstOrDefault(t => t.name == "FoodTrucks.Times");
-            if (times == null || times.childCount < 2) return;
-            Canvas.ForceUpdateCanvases();
-            var rect = header.rect;
-            for (var i = 0; i < 2; i++)
-            {
-                var label = header.Find(i == 0 ? "Opens" : "Closes") as RectTransform;
-                var column = times.GetChild(i) as RectTransform;
-                if (label == null || column == null) continue;
-                var corners = new Vector3[4];
-                column.GetWorldCorners(corners);
-                var left = header.InverseTransformPoint(corners[0]).x;
-                var right = header.InverseTransformPoint(corners[2]).x;
-                if (rect.width <= 1f || right <= left) continue;
-                label.anchorMin = new Vector2(Mathf.Clamp01((left - rect.xMin) / rect.width), 0f);
-                label.anchorMax = new Vector2(Mathf.Clamp01((right - rect.xMin) / rect.width), 1f);
-                label.offsetMin = label.offsetMax = Vector2.zero;
-                if (i == 0 && header.Find("FoodTrucks.RowText") is RectTransform text) text.anchorMax = new Vector2(label.anchorMin.x, 1f);
-            }
-        }
-
-        private static void FillStop(Transform entry, string id, HireSchedule schedule, int index, bool canWrite)
-        {
-            var stop = schedule.Stops[index];
-            var latest = RouteStops.LatestClose;
-            BizManParts.SetText(entry.Find(entryNamePath), Format("foodtrucks:bizman_page_stop", ("number", (index + 1).ToString()), ("place", RouteStops.Label(stop))));
-
-            // The opening and closing times, side by side: the row's dropdown and a copy, in a row of their own.
-            var open = entry.Find(entryDropdownPath).GetComponent<GameDropdown>();
-            var times = new GameObject("FoodTrucks.Times", typeof(RectTransform));
-            var row = (RectTransform)times.transform;
-            var openRect = (RectTransform)open.transform;
-            row.SetParent(openRect.parent, false);
-            row.SetSiblingIndex(openRect.GetSiblingIndex());
-            row.anchorMin = openRect.anchorMin;
-            row.anchorMax = openRect.anchorMax;
-            row.pivot = openRect.pivot;
-            row.anchoredPosition = openRect.anchoredPosition;
-            row.sizeDelta = openRect.sizeDelta;
-            var rowElement = times.AddComponent<LayoutElement>();
-            var openElement = open.GetComponent<LayoutElement>();
-            rowElement.preferredHeight = openRect.rect.height > 1f ? openRect.rect.height : openElement != null ? openElement.preferredHeight : -1f;
-            rowElement.flexibleWidth = 1f;
-            var horizontal = times.AddComponent<HorizontalLayoutGroup>();
-            horizontal.spacing = 8f;
-            horizontal.childControlWidth = true;
-            horizontal.childControlHeight = true;
-            horizontal.childForceExpandWidth = true;
-            horizontal.childForceExpandHeight = true;
-            var close = Object.Instantiate(open.gameObject, row).GetComponent<GameDropdown>();
-            open.transform.SetParent(row, false);
-            open.transform.SetSiblingIndex(0);
-            // Two equal halves showing only the time; "Opens" and "Closes" stand once over the list (StopsHeader). The
-            // dropdowns have no width of their own (the copied dropdown carries two LayoutElements, one with its own width,
-            // which made "Opens" narrow and "Closes" wide in game, 16 October 2026).
-            foreach (var dd in new[] { open, close })
-            {
-                if (dd.GetComponent<LayoutElement>() == null) dd.gameObject.AddComponent<LayoutElement>();
-                foreach (var element in dd.GetComponents<LayoutElement>())
-                {
-                    element.minWidth = element.preferredWidth = 0f;
-                    element.flexibleWidth = 1f;
-                }
-                Compact(dd.transform);
-            }
-
-            // Only times the drive from the stop before allows, as the crew's plan counts it.
-            var fleet = DemandData.Rules!.Fleet;
-            var mode = Travel.ModeFor(StreetSales.Find(FoodTrucksSession.CurrentState, id)?.VehicleType);
-            var speed = HireRoutes.GameSpeed();
-            var opens = RouteEditor.OpenTimes(schedule, RouteStops.Step, latest, index,
-                from => RouteEditor.TravelMinutes(fleet, from, stop, mode, speed));
-            if (!opens.Contains(stop.OpenAt)) opens.Add(stop.OpenAt);
-            opens.Sort();
-            SetUp(open, opens.Select(StaffDialog.Clock).ToList(), opens.IndexOf(stop.OpenAt), canWrite,
-                chosen => Retime(id, index, opens[chosen], null));
-            var closes = RouteEditor.CloseTimes(schedule, stop.OpenAt, RouteStops.Step, latest, index);
-            if (!closes.Contains(stop.CloseAt)) closes.Add(stop.CloseAt);
-            closes.Sort();
-            SetUp(close, closes.Select(StaffDialog.Clock).ToList(), closes.IndexOf(stop.CloseAt), canWrite,
-                chosen => Retime(id, index, stop.OpenAt, closes[chosen]));
-
-            var remove = entry.Find(entryRemovePath).GetComponent<Button>();
-            remove.onClick = new Button.ButtonClickedEvent();
-            remove.interactable = canWrite;
-            var place = RouteStops.Label(stop);
-            remove.onClick.AddListener(() => Guard(() =>
-            {
-                var body = LanguageChangeEventDataHolder.Create("foodtrucks:bizman_page_remove_body",
-                    new Dictionary<string, string> { ["number"] = (index + 1).ToString(), ["place"] = place });
-                HudConfirm.Show(LanguageChangeEventDataHolder.Create("foodtrucks:bizman_page_remove_header"), body,
-                    () => Guard(() => RemoveStop(id, index)), null, allowConfirmationSkip: false, isNegative: true);
-            }));
-        }
-
-        // A stop's time dropdown without the game's ‹ › step buttons: two of them side by side left the time itself no
-        // room (Peter, 16 October 2026: "What are the arrows for?"). The middle box takes the whole header.
-        private static void Compact(Transform dropdown)
-        {
-            var header = dropdown.Find("Header");
-            if (header == null) return;
-            foreach (var side in new[] { "LeftButton", "RightButton" })
-            {
-                var button = header.Find(side);
-                if (button != null) button.gameObject.SetActive(false);
-            }
-            if (header.Find("MiddleBox") is RectTransform middle)
-            {
-                middle.anchorMin = new Vector2(0f, middle.anchorMin.y);
-                middle.anchorMax = new Vector2(1f, middle.anchorMax.y);
-                middle.offsetMin = new Vector2(0f, middle.offsetMin.y);
-                middle.offsetMax = new Vector2(0f, middle.offsetMax.y);
-            }
-        }
-
         // ---- Parts ----
 
         // A box row with a copy of the game's dropdown as its value.
-        private static void AddRow(BizManParts.Box box, string title, List<string> options, int selected, bool interactable, Action<int> chosen)
+        internal static void AddRow(BizManParts.Box box, string title, List<string> options, int selected, bool interactable, Action<int> chosen)
         {
             var dropdown = box.DropdownRow<GameDropdown>(title, dropdownTemplate!);
             if (dropdown == null) return;
             SetUp(dropdown, options, selected, interactable, chosen);
         }
 
-        private static void SetUp(GameDropdown dropdown, List<string> options, int selected, bool interactable, Action<int> chosen)
+        internal static void SetUp(GameDropdown dropdown, List<string> options, int selected, bool interactable, Action<int> chosen)
         {
             dropdown.SetOptions(options, localize: false, selectedOption: selected);
             dropdown.onOptionSelected.RemoveAllListeners();
@@ -950,86 +637,6 @@ namespace FoodTrucks
             RefreshLater();
         }
 
-        private static void ChooseDays(string id, string key)
-        {
-            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
-            var choice = StaffDialog.DayChoices.FirstOrDefault(c => c.Key == key);
-            var rules = DemandData.Rules;
-            if (vehicle?.Schedule == null || choice.Days == null || rules == null || !FoodTrucksSession.CanWrite) return;
-            var problem = RouteEditor.SetDays(new HireSchedules(rules.Fleet), vehicle, choice.Days);
-            if (problem != ScheduleProblem.None)
-            {
-                Log.Info($"Route: days {key} for {id} refused: {problem}.");
-                CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
-                RefreshLater();
-                return;
-            }
-            RouteStops.Changed(vehicle);
-            Log.Info($"Route: {id} runs {(choice.Days.Length == 0 ? "every day" : string.Join(", ", choice.Days))} (BizMan page).");
-            RefreshLater();
-        }
-
-        // A new opening time keeps the stop's length where it fits; a new closing time keeps its opening.
-        private static void Retime(string id, int index, int open, int? close)
-        {
-            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
-            var rules = DemandData.Rules;
-            if (vehicle?.Schedule == null || rules == null || !FoodTrucksSession.CanWrite) return;
-            var newClose = close ?? RouteEditor.CloseFor(vehicle.Schedule, index, open, RouteStops.Step, RouteStops.LatestClose);
-            var problem = newClose == null ? ScheduleProblem.Overlap : RouteEditor.SetTimes(new HireSchedules(rules.Fleet), vehicle, index, open, newClose.Value);
-            if (problem != ScheduleProblem.None)
-            {
-                Log.Info($"Route: new hours {StaffDialog.Clock(open)}-{(newClose is int c ? StaffDialog.Clock(c) : "?")} for stop {index + 1} of {id} refused: {problem}.");
-                CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
-            }
-            else
-            {
-                RouteStops.Changed(vehicle);
-                Log.Info($"Route: stop {index + 1} of {id} now {StaffDialog.Clock(open)}-{StaffDialog.Clock(newClose!.Value)} (BizMan page).");
-            }
-            RefreshLater();
-        }
-
-        private static void MoveStop(string id, int from, int to)
-        {
-            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
-            var rules = DemandData.Rules;
-            if (vehicle?.Schedule == null || rules == null || !FoodTrucksSession.CanWrite) return;
-            var problem = RouteEditor.MovePlace(new HireSchedules(rules.Fleet), vehicle, from, to);
-            if (problem == ScheduleProblem.None && from != to)
-            {
-                RouteStops.Changed(vehicle);
-                Log.Info($"Route: stop {from + 1} of {id} moved to {to + 1}; the times stay in their slots (BizMan page).");
-            }
-            else if (problem != ScheduleProblem.None) Log.Info($"Route: moving stop {from + 1} to {to + 1} of {id} refused: {problem}.");
-            RefreshLater();
-        }
-
-        private static void RemoveStop(string id, int index)
-        {
-            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
-            if (vehicle == null) return;
-            RouteStops.Remove(vehicle, index);
-            RefreshLater();
-        }
-
-        private static void AddOnMap(string id)
-        {
-            var rules = DemandData.Rules;
-            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
-            if (!FoodTrucksSession.CanWrite)
-            {
-                CartSelling.Notify("foodtrucks:notification_data_readonly");
-                return;
-            }
-            if (rules != null && vehicle?.Schedule != null && vehicle.Schedule.Stops.Count >= rules.Fleet.MaxStops)
-            {
-                CartSelling.Notify("foodtrucks:notification_route_full", ("max", rules.Fleet.MaxStops.ToString()));
-                return;
-            }
-            StopPicker.Start(id);
-        }
-
         // The game's text prompt, as the old Prices button had it. It shows outside the phone, like the map pick's time
         // pickers: the phone closes for it and opens again on this page once it is answered or closed.
         private static void ChangePrice(string id, string item, string name)
@@ -1042,63 +649,6 @@ namespace FoodTrucks
             Log.Info($"Prices: changing {item} on {KindOf(id)} {id} (BizMan page).");
             InstanceBehavior<UIs>.Instance?.fullMenu?.Toggle(show: false);
             HireRoutes.Later(() => Guard(() => PriceDialog.AskPrice(id, item, name, () => HireRoutes.Later(() => OpenFor(id)))));
-        }
-
-        // "Add the spot where it stands": the parked vehicle's own place as a stop, if it could open there now (the same
-        // pitch check as Open for business), with the opening hours asked as after a map pick; then back to this page.
-        internal static void AddWhereItStands(string id)
-        {
-            var rules = DemandData.Rules;
-            var state = FoodTrucksSession.CurrentState;
-            var kind = KindOf(id);
-            if (state == null || !FoodTrucksSession.CanWrite)
-            {
-                CartSelling.Notify("foodtrucks:notification_data_readonly");
-                return;
-            }
-            var saved = StreetSales.Find(state, id);
-            if (rules != null && saved?.Schedule != null && saved.Schedule.Stops.Count >= rules.Fleet.MaxStops)
-            {
-                Log.Info($"Route: the spot where {kind} {id} stands not added: the route is full.");
-                CartSelling.Notify("foodtrucks:notification_route_full", ("max", rules.Fleet.MaxStops.ToString()));
-                return;
-            }
-            var cart = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == id);
-            var controller = cart == null ? null : VehicleHelper.GetVehicleController(cart);
-            string? refusal = null, why = null;
-            if (cart == null || controller == null || saved?.Transit != null)
-            {
-                why = cart == null ? "not in the city (with a driver, or gone)" : saved?.Transit != null ? "on the road with its crew" : "not in the world";
-                refusal = "foodtrucks:notification_addstop_away";
-            }
-            else if (SaveGameManager.Current!.ActiveVehicleId == id)
-            {
-                why = "the player is driving or pushing it";
-                refusal = "foodtrucks:notification_addstop_driven";
-            }
-            else if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking)
-            {
-                why = "the player is indoors, where the street isn't read";
-                refusal = "foodtrucks:notification_addstop_indoors";
-            }
-            if (refusal != null)
-            {
-                Log.Info($"Route: the spot where {kind} {id} stands not added: {why}.");
-                CartSelling.Say(refusal, kind);
-                return;
-            }
-            var problem = CartSelling.PitchProblem(cart!, controller);
-            if (problem != null)
-            {
-                Log.Info($"Route: the spot where {kind} {id} stands not added: not a pitch ({problem}).");
-                CartSelling.Notify(problem);
-                return;
-            }
-            var position = controller!.transform.position;
-            var heading = controller.transform.eulerAngles.y;
-            Log.Info($"Route: adding the spot where {kind} {id} stands, x {position.x:F1}, z {position.z:F1}, heading {heading:F0} (BizMan page).");
-            // Default hours; the stop's row has the time dropdowns, so the page stays open.
-            RouteStops.AddWithDefaultTimes(id, position, heading, RefreshLater);
         }
 
         private static void ChoosePartner(string id, string? venue)
@@ -1114,11 +664,11 @@ namespace FoodTrucks
 
         // ---- Helpers ----
 
-        private static string CrewOption(EmployeeInstance employee) =>
+        internal static string CrewOption(EmployeeInstance employee) =>
             Format("foodtrucks:bizman_page_crew_option", ("name", HireCrew.Name(employee)), ("skill", HireCrew.Skill(employee).ToString("F0")),
                 ("satisfaction", employee.satisfaction.ToString("F0")), ("wage", CartSelling.Money((long)Math.Round(employee.hourlyWage * 100))));
 
-        private static VehicleInstance? Instance(string id)
+        internal static VehicleInstance? Instance(string id)
         {
             var game = SaveGameManager.Current;
             return game?.VehicleInstances.FirstOrDefault(v => v.id == id) ?? game?.privateDriverVehicleInstances?.FirstOrDefault(v => v.id == id);
@@ -1128,7 +678,7 @@ namespace FoodTrucks
             SaveGameManager.Current?.VehicleInstances.All(v => v.id != id) == true &&
             SaveGameManager.Current.privateDriverVehicleInstances?.Any(v => v.id == id) == true;
 
-        private static string KindOf(string id) => FoodTrucksMod.KindOf(Instance(id)?.vehicleTypeName) ?? "cart";
+        internal static string KindOf(string id) => FoodTrucksMod.KindOf(Instance(id)?.vehicleTypeName) ?? "cart";
 
         private static T Field<T>(object owner, string name) where T : class =>
             Need(Traverse.Create(owner).Field(name).GetValue<T>(), $"{owner.GetType().Name}.{name}");
@@ -1162,15 +712,15 @@ namespace FoodTrucks
             return string.Join("/", parts);
         }
 
-        private static void Guard(Action action)
+        internal static void Guard(Action action)
         {
             try { action(); }
             catch (Exception ex) { Log.Error("BizMan vehicle page: " + ex); }
         }
 
-        private static string Text(string key) => LocalizorManager.GetLocalization(key, null);
+        internal static string Text(string key) => LocalizorManager.GetLocalization(key, null);
 
-        private static string Format(string key, params (string Key, string Value)[] values) =>
+        internal static string Format(string key, params (string Key, string Value)[] values) =>
             LocalizorManager.GetLocalization(key, values.ToDictionary(v => v.Key, v => v.Value));
     }
 }

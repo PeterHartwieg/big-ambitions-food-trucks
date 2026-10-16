@@ -166,7 +166,10 @@ namespace FoodTrucks
                     if (string.IsNullOrEmpty(saved.VehicleType))
                         saved = new VehicleState { VehicleId = vehicle.id, VehicleType = kind, HasPermit = saved.HasPermit, Schedule = saved.Schedule, Crew = saved.Crew, Health = saved.Health, Sold = saved.Sold };
                     var crew = saved.Crew.Count(id => HireCrew.Find(id) != null);
-                    wanted.AddRange(VehicleWarnings.For(tables, rules, state, saved, CargoLimit.Lines(vehicle), crew, ItemExists, HireRoutes.GameSpeed()));
+                    // The route day starts and ends in its own bay, so the shifts must cover the restock and the drive back too.
+                    var home = HireRoutes.HomeOf(saved);
+                    wanted.AddRange(VehicleWarnings.For(tables, rules, state, saved, CargoLimit.Lines(vehicle), crew, ItemExists, HireRoutes.GameSpeed(),
+                        HireRoutes.HomePoint(home), home?.BayStops));
                 }
                 wanted.AddRange(VehicleWarnings.Fleet(rules, state.Licence, game.Day));
             }

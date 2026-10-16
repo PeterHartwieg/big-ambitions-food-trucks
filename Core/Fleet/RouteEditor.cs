@@ -37,7 +37,7 @@ namespace FoodTrucks.Core.Fleet
             var problem = AddStop(schedules, schedule, stop);
             if (problem != ScheduleProblem.None) return problem;
             vehicle.Schedule = schedule;
-            Remap(vehicle, before, schedule.Stops);
+            Remap(vehicle, before, schedule.Stops ?? new List<ScheduleStop>());
             return problem;
         }
 
