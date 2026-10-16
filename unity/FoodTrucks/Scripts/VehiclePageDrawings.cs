@@ -32,15 +32,18 @@ namespace FoodTrucks
 
         // ---- The vehicle and its equipment ----
 
-        // The vehicle's drawing (data/vehicle-diagrams.json) with each fitted piece's icon on its place, in fitting order:
-        // a fill bar under it (what it holds of what it can, red when low or empty) and its name and load as a tooltip;
-        // a place with no piece is a faint outline. False when there is no drawing for this vehicle (the Menu box then
-        // lists the equipment as text).
+        // The vehicle's drawing (data/vehicle-diagrams.json, schema 2): the background (the vehicle with empty places), then
+        // in its draw order (back to front) each fitted piece's own layer at its crop rectangle, scaled with the image, so
+        // it looks like the vehicle with its equipment. Pieces take the places in fitting order. A piece with no layer (the
+        // cotton candy machine, say) shows its icon at the place's hotspot; a place with nothing fitted a faint outline.
+        // At each fitted place's hotspot, under the piece, a small fill bar (what it holds of what it can, red when low
+        // or empty); the piece's name and load as its tooltip. False when there is no drawing for this vehicle (the Menu
+        // box then lists the equipment as text).
         internal static bool Equipment(BizManParts.Box box, VehicleInstance instance, StorageView view, DemandTables tables)
         {
             var kind = FoodTrucksMod.KindOf(instance.vehicleTypeName);
             var diagram = DemandData.Diagrams?.For(kind);
-            var texture = diagram == null ? null : Texture(diagram.Image);
+            var texture = diagram == null ? null : Texture(diagram.Image, required: true);
             if (diagram == null || texture == null) return false;
 
             var root = Rect("FoodTrucks.Diagram", box.Root);
@@ -48,10 +51,9 @@ namespace FoodTrucks
             var size = root.gameObject.AddComponent<LayoutElement>();
             size.minHeight = size.preferredHeight = DiagramHeight;
             var frame = Rect("Frame", root);
-            frame.anchorMin = Vector2.zero;
-            frame.anchorMax = Vector2.one;
-            frame.offsetMin = frame.offsetMax = Vector2.zero;
-            var aspect = texture.height > 0 ? texture.width / (float)texture.height : 2f;
+            Fill(frame);
+            // The places and crops are in the json's pixels; the image is drawn at its aspect, whatever its file's size.
+            var aspect = diagram.Height > 0 ? diagram.Width / (float)diagram.Height : 2f;
             var fitter = frame.gameObject.AddComponent<AspectRatioFitter>();
             fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
             fitter.aspectRatio = aspect;
@@ -69,21 +71,21 @@ namespace FoodTrucks
                 if (item == null) continue;
                 pieces.Add((item, StoragePanel.PieceName(instance, piece), view.Pools.FirstOrDefault(p => p.EquipmentId == id)));
             }
-            var filled = VehicleDiagrams.Fill(diagram, pieces);
-            for (var i = 0; i < diagram.Places.Count; i++)
+            var filled = VehicleDiagrams.Fill(diagram, pieces).ToDictionary(f => f.Place.Name, f => f.Piece, StringComparer.Ordinal);
+            var bars = new List<(DiagramPlace Place, float Below, string Name, StoragePool? Pool)>();
+            var missing = new List<string>();
+            foreach (var name in diagram.DrawOrder)
             {
-                var place = diagram.Places[i];
-                var halfWidth = (float)(place.Size / aspect / 2);
-                var halfHeight = (float)(place.Size / 2);
+                var place = diagram.Places.First(p => p.Name == name);
                 var x = (float)place.X;
                 var y = 1f - (float)place.Y;
-                var slot = Rect("FoodTrucks.Place", frame);
-                slot.anchorMin = new Vector2(x - halfWidth, y - halfHeight);
-                slot.anchorMax = new Vector2(x + halfWidth, y + halfHeight);
-                slot.offsetMin = slot.offsetMax = Vector2.zero;
-                if (i >= filled.Count)
+                var halfHeight = (float)(place.Size / 2);
+                var halfWidth = halfHeight / aspect;
+                if (!filled.TryGetValue(name, out var piece))
                 {
-                    // An empty place: a faint outline.
+                    // Nothing fitted here: a faint outline at the hotspot.
+                    var slot = Rect("FoodTrucks.EmptyPlace", frame);
+                    Anchor(slot, x - halfWidth, y - halfHeight, x + halfWidth, y + halfHeight);
                     var empty = slot.gameObject.AddComponent<Image>();
                     empty.color = new Color(1f, 1f, 1f, 0f);
                     empty.raycastTarget = false;
@@ -93,45 +95,85 @@ namespace FoodTrucks
                     outline.useGraphicAlpha = false;
                     continue;
                 }
-                var (item, name, pool) = filled[i].Piece;
-                var icon = slot.gameObject.AddComponent<Image>();
-                icon.sprite = CommissaryOrderForm.Icon(item);
-                icon.preserveAspect = true;
-                var tip = slot.gameObject.AddComponent<BasicTooltip>();
+                var layer = place.LayerFor(piece.Item);
+                var layerTexture = layer == null ? null : Texture(layer.File, required: false);
+                Graphic shown;
+                float bottom;
+                if (layer != null && layerTexture != null)
+                {
+                    // The piece's own picture at its crop rectangle (pixels of the full image, y down).
+                    var cell = Rect("FoodTrucks.Layer", frame);
+                    var left = layer.X / (float)diagram.Width;
+                    var right = (layer.X + layer.Width) / (float)diagram.Width;
+                    var top = 1f - layer.Y / (float)diagram.Height;
+                    bottom = 1f - (layer.Y + layer.Height) / (float)diagram.Height;
+                    Anchor(cell, left, bottom, right, top);
+                    var raw = cell.gameObject.AddComponent<RawImage>();
+                    raw.texture = layerTexture;
+                    shown = raw;
+                }
+                else
+                {
+                    if (layer != null) missing.Add(layer.File);
+                    // No layer for this piece: its icon at the hotspot.
+                    var slot = Rect("FoodTrucks.Icon", frame);
+                    Anchor(slot, x - halfWidth, y - halfHeight, x + halfWidth, y + halfHeight);
+                    var icon = slot.gameObject.AddComponent<Image>();
+                    icon.sprite = CommissaryOrderForm.Icon(piece.Item);
+                    icon.preserveAspect = true;
+                    shown = icon;
+                    bottom = y - halfHeight;
+                }
+                var tip = shown.gameObject.AddComponent<BasicTooltip>();
                 tip.titleKey = "foodtrucks:bizman_value";
                 tip.localizationArguments = new
                 {
-                    value = pool == null ? name : $"{name}: {pool.LoadUnits} / {pool.Capacity}"
+                    value = piece.Pool == null ? piece.Name : $"{piece.Name}: {piece.Pool.LoadUnits} / {piece.Pool.Capacity}"
                 };
+                bars.Add((place, bottom, piece.Name, piece.Pool));
+            }
+            // The fill bars over everything, each just under its piece, as wide as the place's icon.
+            foreach (var (place, below, _, pool) in bars)
+            {
                 if (pool == null || pool.Capacity <= 0) continue;
-                // The fill bar under the icon.
+                var x = (float)place.X;
+                var halfWidth = (float)(place.Size / 2) / aspect;
                 var bar = Rect("FoodTrucks.Fill", frame);
-                bar.anchorMin = new Vector2(x - halfWidth, y - halfHeight - 0.07f);
-                bar.anchorMax = new Vector2(x + halfWidth, y - halfHeight - 0.03f);
-                bar.offsetMin = bar.offsetMax = Vector2.zero;
+                Anchor(bar, x - halfWidth, below - 0.05f, x + halfWidth, below - 0.02f);
                 var back = bar.gameObject.AddComponent<Image>();
                 back.color = new Color(0f, 0f, 0f, 0.15f);
                 back.raycastTarget = false;
                 var share = Mathf.Clamp01((float)(pool.Load / pool.Capacity));
                 var level = Rect("Level", bar);
-                level.anchorMin = Vector2.zero;
-                level.anchorMax = new Vector2(share, 1f);
-                level.offsetMin = level.offsetMax = Vector2.zero;
+                Anchor(level, 0f, 0f, share, 1f);
                 var fill = level.gameObject.AddComponent<Image>();
                 fill.color = StockLevels.Level(pool.LoadUnits, pool.Capacity) == StockLevel.Ok ? (Color)colors.green : (Color)colors.red;
                 fill.raycastTarget = false;
             }
+            if (missing.Count > 0 && missingLogged.Add(string.Join(",", missing)))
+                Log.Info($"BizMan: vehicle drawing layers not in the mod's bundle ({string.Join(", ", missing)}); those pieces show their icons.");
             return true;
         }
 
-        private static Texture2D? Texture(string file)
+        private static readonly HashSet<string> missingLogged = new HashSet<string>(StringComparer.Ordinal);
+
+        private static void Anchor(RectTransform rect, float left, float bottom, float right, float top)
+        {
+            rect.anchorMin = new Vector2(left, bottom);
+            rect.anchorMax = new Vector2(right, top);
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+        }
+
+        // A drawing's PNG from the mod's bundle, loaded the first time it is drawn and kept per file for the scene.
+        private static Texture2D? Texture(string file, bool required)
         {
             if (textures.TryGetValue(file, out var cached)) return cached;
             var texture = FoodTrucksMod.Bundle?.LoadAsset<Texture2D>(ImageFolder + file);
             textures[file] = texture;
-            Log.Info(texture != null
-                ? $"BizMan: vehicle drawing {file} loaded, {texture.width}x{texture.height}."
-                : $"BizMan: no vehicle drawing {ImageFolder}{file} in the mod's bundle; the Menu box lists the equipment as text.");
+            if (required)
+                Log.Info(texture != null
+                    ? $"BizMan: vehicle drawing {file} loaded, {texture.width}x{texture.height}."
+                    : $"BizMan: no vehicle drawing {ImageFolder}{file} in the mod's bundle; the Menu box lists the equipment as text.");
             return texture;
         }
 

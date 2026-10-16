@@ -8,42 +8,63 @@ namespace FoodTrucks.Core.Tests.Fleet;
 public class VehicleDiagramsTests
 {
     private const string Json = @"{
-        ""truck"": { ""image"": ""VehicleDiagram_Truck.png"", ""iconSize"": 0.18,
-                     ""places"": [ { ""x"": 0.2, ""y"": 0.5 }, { ""x"": 0.4, ""y"": 0.5, ""size"": 0.25 } ] },
-        ""cart"": { ""image"": ""VehicleDiagram_Cart.png"", ""places"": [ { ""x"": 0.5, ""y"": 0.3, ""iconSize"": 0.3 } ] }
+        ""_notes"": ""a note"",
+        ""schemaVersion"": 2,
+        ""truck"": { ""image"": ""VehicleDiagram_Truck.png"", ""width"": 1200, ""height"": 500, ""iconSize"": 0.18,
+                     ""drawOrder"": [ ""Back"", ""Front"" ],
+                     ""places"": [
+                        { ""place"": ""Front"", ""x"": 0.2, ""y"": 0.5,
+                          ""layers"": { ""ba:itemname_hotdoggrill"": { ""file"": ""Front_Grill.png"", ""x"": 200, ""y"": 210, ""width"": 68, ""height"": 45 } } },
+                        { ""place"": ""Back"", ""x"": 0.4, ""y"": 0.5, ""size"": 0.25 } ] },
+        ""cart"": { ""image"": ""VehicleDiagram_Cart.png"", ""width"": 800, ""height"": 500,
+                    ""places"": [ { ""place"": ""Front"", ""x"": 0.5, ""y"": 0.3, ""size"": 0.3 } ] }
     }";
 
     [Fact]
-    public void KindsImagesAndPlacesAreRead()
+    public void KindsImagesPlacesLayersAndDrawOrderAreRead()
     {
         var diagrams = VehicleDiagrams.Parse(Json);
 
         var truck = diagrams.For("truck")!;
-        Assert.Equal("VehicleDiagram_Truck.png", truck.Image);
+        Assert.Equal(("VehicleDiagram_Truck.png", 1200, 500), (truck.Image, truck.Width, truck.Height));
         Assert.Equal(new[] { 0.18, 0.25 }, truck.Places.Select(p => p.Size));
         Assert.Equal((0.4, 0.5), (truck.Places[1].X, truck.Places[1].Y));
+        Assert.Equal(new[] { "Back", "Front" }, truck.DrawOrder);
+        var layer = truck.Places[0].LayerFor("ba:itemname_hotdoggrill")!;
+        Assert.Equal(("Front_Grill.png", 200, 210, 68, 45), (layer.File, layer.X, layer.Y, layer.Width, layer.Height));
+        Assert.Null(truck.Places[0].LayerFor("ba:itemname_cottoncandymachine"));
         Assert.Equal(0.3, diagrams.For("cart")!.Places.Single().Size);
+        Assert.Equal(new[] { "Front" }, diagrams.For("cart")!.DrawOrder);
         Assert.Null(diagrams.For("van"));
     }
 
     [Fact]
-    public void TheShippedFileReadsWithTheTruckAndCartPlaces()
+    public void TheShippedFileReadsWithLayersInsideTheImage()
     {
         var json = System.IO.File.ReadAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "data", "vehicle-diagrams.json"));
         var diagrams = VehicleDiagrams.Parse(json);
 
-        Assert.Equal("VehicleDiagram_Truck.png", diagrams.For("truck")!.Image);
-        Assert.Equal(4, diagrams.For("truck")!.Places.Count);
-        Assert.Equal(2, diagrams.For("cart")!.Places.Count);
-        Assert.All(diagrams.For("truck")!.Places, p => Assert.InRange(p.Size, 0.01, 0.5));
+        foreach (var kind in new[] { "truck", "cart" })
+        {
+            var diagram = diagrams.For(kind)!;
+            Assert.NotEmpty(diagram.Places);
+            Assert.Equal(diagram.Places.Count, diagram.DrawOrder.Count);
+            Assert.All(diagram.Places, p => Assert.InRange(p.Size, 0.01, 0.5));
+            Assert.Contains(diagram.Places, p => p.Layers.Count > 0);
+        }
+        Assert.NotNull(diagrams.For("truck")!.Places.SelectMany(p => p.Layers.Keys).FirstOrDefault(k => k == "ba:itemname_hotdoggrill"));
     }
 
     [Theory]
-    [InlineData(@"{ ""schemaVersion"": 2, ""truck"": { ""image"": ""a.png"", ""places"": [] } }")]
-    [InlineData(@"{ ""truck"": { ""places"": [] } }")]
-    [InlineData(@"{ ""truck"": { ""image"": ""a.png"" } }")]
-    [InlineData(@"{ ""truck"": { ""image"": ""a.png"", ""places"": [ { ""x"": 1.5, ""y"": 0.2 } ] } }")]
-    [InlineData(@"{ ""truck"": { ""image"": ""a.png"", ""places"": [ { ""y"": 0.2 } ] } }")]
+    [InlineData(@"{ ""truck"": { ""image"": ""a.png"", ""width"": 10, ""height"": 10, ""places"": [] } }")]
+    [InlineData(@"{ ""schemaVersion"": 1, ""truck"": { ""image"": ""a.png"", ""width"": 10, ""height"": 10, ""places"": [] } }")]
+    [InlineData(@"{ ""schemaVersion"": 2, ""truck"": { ""width"": 10, ""height"": 10, ""places"": [] } }")]
+    [InlineData(@"{ ""schemaVersion"": 2, ""truck"": { ""image"": ""a.png"", ""height"": 10, ""places"": [] } }")]
+    [InlineData(@"{ ""schemaVersion"": 2, ""truck"": { ""image"": ""a.png"", ""width"": 10, ""height"": 10 } }")]
+    [InlineData(@"{ ""schemaVersion"": 2, ""truck"": { ""image"": ""a.png"", ""width"": 10, ""height"": 10, ""places"": [ { ""place"": ""A"", ""x"": 1.5, ""y"": 0.2 } ] } }")]
+    [InlineData(@"{ ""schemaVersion"": 2, ""truck"": { ""image"": ""a.png"", ""width"": 10, ""height"": 10, ""places"": [ { ""x"": 0.5, ""y"": 0.2 } ] } }")]
+    [InlineData(@"{ ""schemaVersion"": 2, ""truck"": { ""image"": ""a.png"", ""width"": 10, ""height"": 10, ""drawOrder"": [ ""B"" ], ""places"": [ { ""place"": ""A"", ""x"": 0.5, ""y"": 0.2 } ] } }")]
+    [InlineData(@"{ ""schemaVersion"": 2, ""truck"": { ""image"": ""a.png"", ""width"": 10, ""height"": 10, ""places"": [ { ""place"": ""A"", ""x"": 0.5, ""y"": 0.2, ""layers"": { ""i"": { ""file"": ""l.png"", ""x"": 5, ""y"": 5, ""width"": 8, ""height"": 2 } } } ] } }")]
     public void ABadFileFailsWithAClearMessage(string json) =>
         Assert.Contains("vehicle-diagrams.json", Assert.Throws<FormatException>(() => VehicleDiagrams.Parse(json)).Message);
 
