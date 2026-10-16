@@ -58,11 +58,14 @@ public class WeekPlanTests
     }
 
     [Fact]
-    public void ShiftsThatBreakTheRulesMakeTheSaveCorrupt()
+    public void ShiftsThatBreakTheRulesAreDroppedButTheSaveLoads()
     {
         var json = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
                    "{\"employeeId\":\"e1\",\"day\":1,\"start\":20,\"end\":26}]}}]}";
-        Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load(json).Status);
+        var bad = new SaveCodec().Load(json);
+        Assert.Equal(LoadStatus.Loaded, bad.Status);
+        Assert.Empty(bad.State!.Vehicles.Single().Schedule!.CrewShifts);
+        Assert.Single(bad.Notes);
         var twice = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
                     "{\"employeeId\":\"e1\",\"day\":1,\"start\":8,\"end\":12},{\"employeeId\":\"e1\",\"day\":1,\"start\":14,\"end\":16}]}}]}";
         // Two shifts a day for one crew member are fine (the game's schedule allows them), at the same hour they aren't.
@@ -72,13 +75,18 @@ public class WeekPlanTests
         Assert.Equal(LoadStatus.Loaded, overlap.Status);
         Assert.Single(overlap.State!.Vehicles.Single().Schedule!.CrewShifts);
         Assert.Single(overlap.Notes);
-        // With a row named, the same is a broken save.
-        Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load(twice.Replace("\"start\":14", "\"start\":11").Replace("\"end\":12}", "\"end\":12,\"station\":\"serving1\"}")
-            .Replace("\"end\":16}", "\"end\":16,\"station\":\"driving\"}")).Status);
-        // Nor two shifts on one row at once.
+        // With rows named, the later colliding shift is dropped the same way.
+        var named = new SaveCodec().Load(twice.Replace("\"start\":14", "\"start\":11").Replace("\"end\":12}", "\"end\":12,\"station\":\"serving1\"}")
+            .Replace("\"end\":16}", "\"end\":16,\"station\":\"driving\"}"));
+        Assert.Equal(LoadStatus.Loaded, named.Status);
+        Assert.Single(named.Notes);
+        // Nor two shifts on one row at once: the later one goes, with a note.
         var row = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
                   "{\"employeeId\":\"e1\",\"day\":1,\"start\":8,\"end\":12,\"station\":\"driving\"},{\"employeeId\":\"e2\",\"day\":1,\"start\":10,\"end\":16,\"station\":\"driving\"}]}}]}";
-        Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load(row).Status);
+        var clash = new SaveCodec().Load(row);
+        Assert.Equal(LoadStatus.Loaded, clash.Status);
+        Assert.Equal("e1", Assert.Single(clash.State!.Vehicles.Single().Schedule!.CrewShifts).EmployeeId);
+        Assert.Contains("collides", Assert.Single(clash.Notes));
         Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load(row.Replace("\"station\":\"driving\"}]", "\"station\":\"serving1\"}]")).Status);
     }
 

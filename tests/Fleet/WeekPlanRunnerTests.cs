@@ -167,7 +167,68 @@ public class WeekPlanRunnerTests
         Assert.Equal(HireActionKind.Close, runner.Step(truck, At(3, 4), AtStop()).Kind);
         truck.IsOpen = false;
         truck.HireStop = null;
-        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 4), AtStop()).Kind);
+        // It doesn't open again; the driver takes it back to the bay instead.
+        Assert.Equal((HireActionKind.Depart, HireSchedules.HomeIndex), (runner.Step(truck, At(3, 4), AtStop()).Kind, runner.Step(truck, At(3, 4), AtStop()).Stop));
+    }
+
+    [Fact]
+    public void AWindowLoadedOpenAwayFromTheBayOwesTheDriveBack()
+    {
+        // Saved open at the Wednesday 11:00-14:00 pitch by a build that didn't arm the drive back on opening; shifts
+        // Wednesday 09:00-14:00 and Friday 09:00-12:00.
+        var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 660, 840));
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 9, 14);
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Friday, 9, 12);
+        truck.IsOpen = true;
+        truck.HireStop = 0;
+        var codec = new SaveCodec();
+        var state = new SaveState();
+        state.Vehicles.Add(truck);
+        truck = codec.Load(codec.Serialize(state)).State!.Vehicles.Single();
+        Assert.False(truck.ReturnPending);
+        runner.EnsurePlan(truck, At(3, 12), 0, 0, home: Bay);
+
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), AtStop()).Kind);
+        Assert.True(truck.ReturnPending);
+        Assert.Equal(HireActionKind.Close, runner.Step(truck, At(3, 14), AtStop()).Kind);
+        truck.IsOpen = false;
+        truck.HireStop = null;
+        runner.EnsurePlan(truck, At(5, 9), 0, 0, home: Bay);
+        Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(5, 9), AtStop()).Kind);
+    }
+
+    [Fact]
+    public void AWindowWithNobodyAbleToServeCloses()
+    {
+        var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 660, 840));
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 9, 14);
+        runner.EnsurePlan(truck, At(3, 6), 0, 0, home: Bay);
+        truck.IsOpen = true;
+        truck.HireStop = 0;
+        var away = new VehicleWhere(0, 0, leaveAlone: false, home: Bay, canServe: false);
+
+        Assert.Equal(HireActionKind.Close, runner.Step(truck, At(3, 12), away).Kind);
+        truck.IsOpen = false;
+        truck.HireStop = null;
+        Assert.NotEqual(HireActionKind.Open, runner.Step(truck, At(3, 12), away).Kind);
+    }
+
+    [Fact]
+    public void ASecondShiftOnATakenRowIsRefusedAndTheSaveStillLoads()
+    {
+        var truck = Truck(Stop(DayOfWeek.Monday, "a", 660, 840));
+        truck.Crew.Add("e2");
+        Assert.Equal(ShiftProblem.None, WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 9, 17, "serving1"));
+        Assert.Equal(ShiftProblem.None, WeekPlan.SetShift(rules, truck, "e2", DayOfWeek.Monday, 8, 12));
+        var before = truck.Schedule!.CrewShifts.Select(s => $"{s.EmployeeId} {s.Start}-{s.End} {s.Station}").ToList();
+
+        Assert.Equal(ShiftProblem.Clash, WeekPlan.SetShift(rules, truck, "e2", DayOfWeek.Monday, 9, 17, "serving1"));
+
+        Assert.Equal(before, truck.Schedule.CrewShifts.Select(s => $"{s.EmployeeId} {s.Start}-{s.End} {s.Station}"));
+        var codec = new SaveCodec();
+        var state = new SaveState();
+        state.Vehicles.Add(truck);
+        Assert.Equal(LoadStatus.Loaded, codec.Load(codec.Serialize(state)).Status);
     }
 
     [Fact]

@@ -14,7 +14,9 @@ namespace FoodTrucks.Core.Fleet
         // Longer than FleetRules.MaxShiftHours.
         TooLong,
         // The employee isn't on the vehicle's crew.
-        NotCrew
+        NotCrew,
+        // The row, or the crew member, has another shift at those hours.
+        Clash
     }
 
     // A part of a route day with nobody on shift: minutes from the weekday's midnight (may pass 1440), and the leg
@@ -214,6 +216,25 @@ namespace FoodTrucks.Core.Fleet
             return notes;
         }
 
+        // Before a save's checks: rows for shifts from before rows (AssignStations), then any shift that still collides
+        // with an earlier one (bad hours, its crew member's or its row's) is dropped with a note: a save never fails to
+        // load over its shifts.
+        public static List<string> RepairShifts(VehicleState vehicle)
+        {
+            var notes = AssignStations(vehicle);
+            var schedule = vehicle?.Schedule;
+            if (schedule?.CrewShifts == null || CheckShifts(schedule.CrewShifts)) return notes;
+            var kept = new List<CrewShift>();
+            foreach (var shift in schedule.CrewShifts)
+            {
+                if (CheckShifts(kept.Append(shift))) kept.Add(shift);
+                else notes.Add(shift == null ? $"Schedule: {vehicle!.VehicleId} had an empty shift; dropped."
+                    : $"Schedule: {vehicle!.VehicleId}'s shift {shift.EmployeeId} {shift.Day} {shift.Start:D2}-{shift.End:D2} {shift.Station} collides with another; dropped.");
+            }
+            schedule.CrewShifts = kept;
+            return notes;
+        }
+
         // The shifts CheckShifts accepts, in order: one with bad hours, or at the same hour as an earlier one for its crew
         // member or on its row, is left out (shifts read back from the game's Schedule tab are written to the save only so).
         public static List<CrewShift> Sanitize(IEnumerable<CrewShift> shifts, out int dropped)
@@ -246,13 +267,17 @@ namespace FoodTrucks.Core.Fleet
             if (vehicle.Crew == null || !vehicle.Crew.Contains(employeeId)) return ShiftProblem.NotCrew;
             var schedule = vehicle.Schedule ??= new HireSchedule();
             schedule.CrewShifts ??= new List<CrewShift>();
-            schedule.CrewShifts.RemoveAll(s => s == null || (s.Day == day && s.EmployeeId == employeeId));
             var rows = Stations(staff);
-            schedule.CrewShifts.Add(new CrewShift
+            var others = schedule.CrewShifts.Where(s => s != null && !(s.Day == day && s.EmployeeId == employeeId)).ToList();
+            var shift = new CrewShift
             {
                 EmployeeId = employeeId, Day = day, Start = start, End = end,
-                Station = station ?? FreeStation(schedule.CrewShifts, day, start, end, rows)
-            });
+                Station = station ?? FreeStation(others, day, start, end, rows)
+            };
+            // Refused, and nothing changed, when the row is taken then (review round 4: such a save wouldn't load).
+            if (!CheckShifts(others.Append(shift))) return ShiftProblem.Clash;
+            schedule.CrewShifts = others;
+            schedule.CrewShifts.Add(shift);
             SortShifts(schedule);
             return ShiftProblem.None;
         }

@@ -406,7 +406,9 @@ namespace FoodTrucks
             // A truck at a catering gig at this minute stays there, as one the player holds does (without counting as
             // the player's use, which would keep it an hour longer).
             return new VehicleWhere(position.x, position.z, held || indoors || Catering.BusyAt(vehicle.VehicleId, t), canSell, hasStock, stayPut,
-                canRestock: restockAt != null, stockKey: stockKey, bayStops: bayStops, home: HomePoint(home));
+                canRestock: restockAt != null, stockKey: stockKey, bayStops: bayStops, home: HomePoint(home),
+                // Someone able to serve on a serving row now (HireCrew.OnShift leaves out the sick, training and replaced).
+                canServe: HireCrew.OnShift(vehicle, t).Count > 0);
         }
 
         // The bay of the commissary where the vehicle rents its space, which its crew starts each route day in (the

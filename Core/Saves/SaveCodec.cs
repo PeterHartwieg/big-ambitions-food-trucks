@@ -118,7 +118,7 @@ namespace FoodTrucks.Core.Saves
                 {
                     if (vehicle == null) continue;
                     FoodTrucks.Core.Fleet.WeekPlan.Upgrade(vehicle);
-                    notes.AddRange(FoodTrucks.Core.Fleet.WeekPlan.AssignStations(vehicle));
+                    notes.AddRange(FoodTrucks.Core.Fleet.WeekPlan.RepairShifts(vehicle));
                 }
                 ValidateState(state);
                 var result = new LoadResult(status, state);
