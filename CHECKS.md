@@ -8,6 +8,26 @@ During the PC playtest of `9e2bf50` Peter rejected the first Street food UI: its
 
 **The rework is built (branch `ui-page`), pending Peter's look.** The page is now made of copies of the game's own BizMan parts, so its fonts, sizes and colours are the game's. The rows below replace the old page's checks. The alert counts come from the warnings track (`VehicleTodos`); on `ui-page` alone they read 0. The UI isn't accepted for release until Peter has seen it.
 
+# Week plan (next build)
+
+Branch `ui-week` (spec: the plan's "Vehicle week plan and crew shifts"). A vehicle's route is planned per weekday, each crew member has shifts per weekday, and the vehicle page has two tabs: Overview and Week plan. Nothing here has run in game; the day tiles and shift bars are copies of the game's schedule screen parts with the mod's own handlers. Use a throwaway FT save with a truck that has a commissary space, two crew and a route from an earlier build (`FT bridge 2`), and a cart. Start with WK1: if the log says parts are missing, the page draws plain ones and the look rows can't be judged.
+
+| # | Do | Look for |
+|---|---|---|
+| WK1 | Load the save, open BizMan, Street food, the truck, then the Week plan tab; read the log | `BizMan: week plan parts copied: the business page's tab (…), the schedule day button (…), the work shift bar (…); nothing missing.` Copy the line whatever it says |
+| WK2 | Look at the route saved by the older build | The same stops on each of the days it ran on (every day for an "every day" route); no load error. The crew has no shifts yet: each running day's tile has a red dot and the shift grid's On shift row is red across the route day |
+| WK3 | Overview and Week plan tabs | Tabs at the top of the first column in the business page's tab style; Overview shows the summary, Menu, Alerts, Commissary space and Partner deal and no Crew and route box; Week plan spans the page's whole width (no second and third column) |
+| WK4 | Day tiles: click each day, untick and tick a day's box | Seven tiles, Monday first, the game's schedule tile look; the chosen one white; hours of the route day under the name ("09:10–15:20", "–" without a route), "Today" on today's; a closed day's tile looks closed and its route stops running from that day; opening a day whose night would run into the next morning is refused with the overlap notice |
+| WK5 | On the chosen tile: Copy, then Paste on another day; Paste to all days; Clear day | The chosen tile shows the game's copy, paste, paste to all, clear and auto schedule buttons; paste copies stops and shifts; Paste to all and Clear ask first with the game's own question; a paste that would run a night into a morning is refused |
+| WK6 | Route for the chosen day: add a stop on the map and with "Add the spot where it stands"; drag a stop; change its times; remove one | The stop goes on the chosen weekday only; the first row reads "Hell's Kitchen: restock from 09:10, leaves 09:40"; drive rows between stops; the drive back and "back about …"; Opens and Closes over the first card; the map beside the list with the commissary as a square C at both ends |
+| WK7 | Shift grid: Auto schedule week, then look at a day | One row per crew member over the route day's hours (an hour either side), the route day as a band on top (grey restock, blue drives, green numbered stops), shift bars in the employee's colour; the On shift row has no red; each member's week total against the hours they want, red when outside |
+| WK8 | Drag a bar, drag each end, click an empty hour, right-click a bar | Moves and resizes in whole hours, 1 to 12 hours, never past 24:00; a click adds a shift from that hour; right-click removes it; each change shows at once and survives Back, reopening, and a save and load |
+| WK9 | A truck route ending after midnight (a stop to 01:00) | The grid runs past 24:00 with the hours after midnight in blue; the part after midnight is red until the next day has a 00:00 shift; Auto schedule gives one |
+| WK10 | Remove the shift covering the stop, let the game run through it | The vehicle stays closed where it is until a shift starts (log `Route: … nobody on shift …` once), the route to-do appears ("Route can't run"); with the shift back it drives and opens |
+| WK11 | Let a day pass with two crew on different shifts | Each is paid only their own shift hours at midnight (bank: Unassigned wage), whether the truck sold or stood; a crew member off shift doesn't serve at a window you open |
+| WK12 | Give one crew member more hours than their HoursWorkingPerWeek demand allows (their employee page) | Red week total on the grid and a red line under it; the game's demand box for hours turns unfulfilled and satisfaction drifts down over the next hours, as in a shop |
+| WK13 | Bridge: `state` | `route.week` (seven days, `route_day`, `gaps`) and `route.shifts` match the page |
+
 # Vehicle warnings as to-dos (next build)
 
 Each food vehicle's warnings are the game's own to-dos in the phone (spec: the plan's "Street food page and vehicle warnings"). The Street food overview counts them as alerts. Saves never hold them.
