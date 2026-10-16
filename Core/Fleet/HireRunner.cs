@@ -105,28 +105,43 @@ namespace FoodTrucks.Core.Fleet
         // Uncovered (part of a route day with nobody of the crew on shift) comes last, and only for a vehicle with crew: one
         // without has the missing-crew warning. `home` and `bayStops` as for EnsurePlan.
         public ScheduleProblem RouteProblem(VehicleState vehicle, double gameSpeed = 1.0, (double X, double Z)? home = null,
+            IReadOnlyCollection<int>? bayStops = null) =>
+            RouteProblems(vehicle, gameSpeed, home, bayStops).DefaultIfEmpty(ScheduleProblem.None).First();
+
+        // Every problem of the route, the most severe first: one of Validate's (which stops the route), then Unreachable,
+        // then Uncovered, so the page can say each one (review round 1: Uncovered was hidden behind Unreachable).
+        public List<ScheduleProblem> RouteProblems(VehicleState vehicle, double gameSpeed = 1.0, (double X, double Z)? home = null,
             IReadOnlyCollection<int>? bayStops = null)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            var problems = new List<ScheduleProblem>();
             var schedule = vehicle.Schedule;
-            if (schedule?.Stops == null || schedule.Stops.Count == 0) return ScheduleProblem.None;
+            if (schedule?.Stops == null || schedule.Stops.Count == 0) return problems;
             var problem = schedules.Validate(schedule);
-            if (problem != ScheduleProblem.None) return problem;
+            if (problem != ScheduleProblem.None)
+            {
+                problems.Add(problem);
+                return problems;
+            }
             var mode = Travel.ModeFor(vehicle.VehicleType);
-            if (schedules.UnreachableStop(schedule, mode, gameSpeed) >= 0) return ScheduleProblem.Unreachable;
-            if (vehicle.Crew == null || vehicle.Crew.Count == 0) return ScheduleProblem.None;
-            return WeekPlan.AnyGap(WeekPlan.RouteDays(schedules, schedule, mode, gameSpeed, home, bayStops), schedule, vehicle.Crew)
-                ? ScheduleProblem.Uncovered
-                : ScheduleProblem.None;
+            if (schedules.UnreachableStop(schedule, mode, gameSpeed) >= 0) problems.Add(ScheduleProblem.Unreachable);
+            if (vehicle.Crew != null && vehicle.Crew.Count > 0 &&
+                WeekPlan.AnyGap(WeekPlan.RouteDays(schedules, schedule, mode, gameSpeed, home, bayStops), schedule, vehicle.Crew))
+                problems.Add(ScheduleProblem.Uncovered);
+            return problems;
         }
 
         // A crewed vehicle with a valid route gets a plan for the day that contains `now`, starting from where
-        // it will be: the last stop of a plan still running past midnight, or where it stands. A plan made in
-        // the middle of the day starts now, so stops already over are skipped. Old plans are dropped.
+        // it will be: the end of a plan still running (a late stop past midnight, the drive back), or where it stands. A
+        // plan made in the middle of the day starts now, so stops already over are skipped. Old plans are dropped.
         // `home`: the vehicle's own commissary bay, where each day starts with the restock when the vehicle is there and
         // ends (unless the day's last stop is one of `bayStops`, stops already in that bay); a day after one that ended
         // there starts from the bay. The plan follows the crew's shifts (WeekPlan.CoverageOf): it moves and opens only
         // while someone is on shift.
+        // Two more days are looked at (review round 1 of the week plan): yesterday's, during the night, when it has no plan
+        // (a shift edit dropped it, or its late stop was cut short by a shift that now goes on): what of it is left from
+        // now is planned again; and tomorrow's, from noon, when its restock or first drive starts before midnight (as the
+        // page's route day has it, WeekPlan.RouteDayOf).
         public void EnsurePlan(VehicleState vehicle, long now, double x, double z, double gameSpeed = 1.0,
             (double X, double Z)? home = null, IReadOnlyCollection<int>? bayStops = null)
         {
@@ -141,40 +156,54 @@ namespace FoodTrucks.Core.Fleet
                 vehicle.Shifts.Clear();
                 return;
             }
-            if (vehicle.Shifts.Any(p => p.Day == day)) return;
-            var from = now;
-            var running = vehicle.Shifts.Where(p => p.Legs.Count > 0 && End(p) > now).OrderBy(End).LastOrDefault();
-            if (running != null)
-            {
-                var lastIndex = running.Legs[running.Legs.Count - 1].StopIndex;
-                var last = lastIndex == HireSchedules.HomeIndex ? null : schedule.Stops.ElementAtOrDefault(lastIndex);
-                if (last != null)
-                {
-                    x = last.X;
-                    z = last.Z;
-                }
-                else if (lastIndex == HireSchedules.HomeIndex && home != null) (x, z) = home.Value;
-                from = End(running);
-            }
             var origin = HireSchedules.Absolute(day, 0);
-            var coverage = WeekPlan.CoverageOf(schedule, vehicle.Crew, origin - 1440, origin + 3 * 1440);
-            var plan = schedules.PlanDay(schedule, day, GameDays.Weekday(day), x, z, from, Travel.ModeFor(vehicle.VehicleType), gameSpeed, home,
-                bayStops, coverage);
-            vehicle.Shifts.Add(new ShiftPlan
+            var coverage = WeekPlan.CoverageOf(schedule, vehicle.Crew, origin - 2 * 1440, origin + 4 * 1440);
+            var mode = Travel.ModeFor(vehicle.VehicleType);
+            bool Add(int d, bool keepEmpty, long? startsBefore)
             {
-                Day = day,
-                Legs = plan.Legs.Select(l => new ShiftLeg { Kind = l.Kind, StopIndex = l.StopIndex, Start = l.Start, End = l.End }).ToList()
-            });
+                if (d < 1 || vehicle.Shifts.Any(p => p.Day == d)) return false;
+                var (px, pz, from) = (x, z, now);
+                var running = vehicle.Shifts.Where(p => p.Legs.Count > 0 && End(p) > now).OrderBy(End).LastOrDefault();
+                if (running != null)
+                {
+                    var lastIndex = running.Legs.OrderBy(l => l.End).Last().StopIndex;
+                    var last = lastIndex == HireSchedules.HomeIndex ? null : schedule.Stops.ElementAtOrDefault(lastIndex);
+                    if (last != null) (px, pz) = (last.X, last.Z);
+                    else if (lastIndex == HireSchedules.HomeIndex && home != null) (px, pz) = home.Value;
+                    from = End(running);
+                }
+                var plan = schedules.PlanDay(schedule, d, GameDays.Weekday(d), px, pz, from, mode, gameSpeed, home, bayStops, coverage);
+                if (!keepEmpty && plan.Legs.Count == 0) return false;
+                if (startsBefore != null && (plan.Legs.Count == 0 || plan.Legs[0].Start >= startsBefore)) return false;
+                vehicle.Shifts.Add(new ShiftPlan
+                {
+                    Day = d,
+                    Legs = plan.Legs.Select(l => new ShiftLeg { Kind = l.Kind, StopIndex = l.StopIndex, Start = l.Start, End = l.End }).ToList()
+                });
+                return true;
+            }
+            if (now < origin + Math.Max(0, rules.LatestCloseMinute - 1440)) Add(day - 1, keepEmpty: false, startsBefore: null);
+            Add(day, keepEmpty: true, startsBefore: null);
+            if (now >= origin + 720) Add(day + 1, keepEmpty: false, startsBefore: origin + 1440);
         }
 
-        // The route changed: plan today again from now. Yesterday's plan for a stop still running past
-        // midnight stays, so the crew finishes it.
+        // The route changed: plan today (and a tomorrow planned early) again from now. Yesterday's plan for a stop still
+        // running past midnight stays, so the crew finishes it.
         public static void Replan(VehicleState vehicle, long now)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var day = DayOf(now);
             vehicle.Shifts?.RemoveAll(p => p.Day >= day);
             // The stop's hours may have changed: a trip on its way finds its closing time from the new plan.
+            if (vehicle.Transit != null) vehicle.Transit.ToCloseAt = null;
+        }
+
+        // The shifts or the crew changed: every unfinished plan goes, yesterday's late one included, and EnsurePlan plans
+        // what is left of them again with the new shifts.
+        public static void ReplanShifts(VehicleState vehicle, long now)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            vehicle.Shifts?.Clear();
             if (vehicle.Transit != null) vehicle.Transit.ToCloseAt = null;
         }
 
@@ -204,30 +233,51 @@ namespace FoodTrucks.Core.Fleet
             return null;
         }
 
+        // Whether the vehicle's crew has someone on shift the whole of [from, to) (a drive), or at `from` when to <= from.
+        private static bool Covered(VehicleState vehicle, long from, long to)
+        {
+            var coverage = WeekPlan.CoverageOf(vehicle.Schedule, vehicle.Crew, from - 1440, Math.Max(from, to) + 1440);
+            return to <= from ? coverage.Covers(from) : coverage.Earliest(from, to - from, to) == from;
+        }
+
+        // A leg to a stop (not the drive back) that hasn't ended.
+        private static bool StopLegAhead(VehicleState vehicle, long now) =>
+            vehicle.Shifts != null && vehicle.Shifts.Any(p => p.Legs.Any(l => l.StopIndex != HireSchedules.HomeIndex && l.End > now));
+
         // The next thing to do for a hired vehicle. Rules, in order:
         // a vehicle in transit arrives when its time is up and does nothing else meanwhile; a vehicle the
         // player has, or opened themselves, is left alone; a window the hire opened closes when its stop's
-        // hours end; otherwise, during a leg to stop i, a vehicle away from i leaves for it (travel timed
-        // from where it really is), and one at i opens once the stop's hours have begun. A vehicle in its commissary's
-        // bay restocks first, once per leg (CrewRestock): before it leaves, or at its stop with nothing to sell. A vehicle
-        // with nothing to sell leaves only for a stop in its own commissary's bay (VehicleWhere.BayStops).
+        // hours end or nobody is on shift; otherwise, during a leg to stop i, a vehicle away from i leaves for it (travel
+        // timed from where it really is, and only when someone is on shift for the whole drive), and one at i opens once
+        // the stop's hours have begun. A vehicle in its commissary's bay restocks first, once per leg (CrewRestock): before
+        // it leaves, or at its stop with nothing to sell. A vehicle with nothing to sell leaves only for a stop in its own
+        // commissary's bay (VehicleWhere.BayStops). With no stop ahead, a crew that owes the drive back
+        // (VehicleState.ReturnPending) drives back as soon as someone is on shift for the whole drive.
         public HireAction Step(VehicleState vehicle, long now, VehicleWhere where, double gameSpeed = 1.0)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             if (vehicle.Transit != null)
                 return now >= vehicle.Transit.ArrivesAt ? new HireAction(HireActionKind.Arrive, transit: vehicle.Transit) : HireAction.None;
             if (where.LeaveAlone) return HireAction.None;
+            // In its own bay: nothing owed.
+            if (where.CanRestock) vehicle.ReturnPending = false;
             var want = Want(vehicle, now);
             if (vehicle.IsOpen)
             {
-                if (vehicle.HireStop == null) return HireAction.None;
-                // Still the stop it is open at, even if a fresh plan has a short leg "to" it first.
-                return want != null && want.StopIndex == vehicle.HireStop
+                if (vehicle.HireStop == null)
+                    return vehicle.CrewWindowLost ? new HireAction(HireActionKind.Close) : HireAction.None;
+                // Still the stop it is open at, even if a fresh plan has a short leg "to" it first, while someone is on shift.
+                return want != null && want.StopIndex == vehicle.HireStop && Covered(vehicle, now, now)
                     ? HireAction.None
                     : new HireAction(HireActionKind.Close);
             }
-            if (want == null || vehicle.Crew == null || vehicle.Crew.Count == 0) return HireAction.None;
-            if (want.StopIndex == HireSchedules.HomeIndex) return Home(vehicle, now, where, gameSpeed);
+            vehicle.CrewWindowLost = false;
+            if (vehicle.Crew == null || vehicle.Crew.Count == 0) return HireAction.None;
+            if (want == null || want.StopIndex == HireSchedules.HomeIndex)
+            {
+                if (want != null) vehicle.ReturnPending = true;
+                return vehicle.ReturnPending && !StopLegAhead(vehicle, now) ? Home(vehicle, now, where, gameSpeed) : HireAction.None;
+            }
             // The morning restock in the bay before it leaves: nothing elsewhere, the drive then leaves from where it is.
             if (want.Kind == LegKind.Restock)
                 return !where.StayPut && CrewRestock.Due(vehicle, want, where) ? new HireAction(HireActionKind.Restock, want.StopIndex) : HireAction.None;
@@ -254,21 +304,26 @@ namespace FoodTrucks.Core.Fleet
                 // Moved away by the player too far to make it back before the stop closes: wait for the next one.
                 var closes = OpenEnd(vehicle, want.StopIndex, now);
                 if (closes != null && arrives >= closes) return HireAction.None;
+                // The drive as it would really run, from now: only with someone on shift all the way.
+                if (!Covered(vehicle, now, arrives)) return HireAction.None;
                 return new HireAction(HireActionKind.Depart, want.StopIndex, arrives);
             }
             if (!where.HasStock && !where.StayPut && CrewRestock.Due(vehicle, want, where)) return new HireAction(HireActionKind.Restock, want.StopIndex);
-            return want.Kind == LegKind.Open ? new HireAction(HireActionKind.Open, want.StopIndex) : HireAction.None;
+            return want.Kind == LegKind.Open && Covered(vehicle, now, now) ? new HireAction(HireActionKind.Open, want.StopIndex) : HireAction.None;
         }
 
-        // The drive back to its own bay after the last stop: nothing once it is in the bay (or has no bay to go to), or
-        // while the player keeps it, or after a failed try until the hour is out; else it leaves for the bay.
+        // The drive back to its own bay: nothing once it is in the bay (or has no bay to go to), or while the player keeps
+        // it, or after a failed try until the hour is out, or while nobody is on shift for the whole drive from now (it
+        // goes at the first moment someone is); else it leaves for the bay.
         private HireAction Home(VehicleState vehicle, long now, VehicleWhere where, double gameSpeed)
         {
             if (where.Home == null || where.CanRestock || where.StayPut) return HireAction.None;
             if (vehicle.Skipped != null && now < vehicle.Skipped.Until && vehicle.Skipped.SpotKey == HireSchedules.HomeSpotKey) return HireAction.None;
             var (x, z) = where.Home.Value;
             var minutes = Travel.Between(rules, where.X, where.Z, x, z, Travel.ModeFor(vehicle.VehicleType), gameSpeed);
-            return new HireAction(HireActionKind.Depart, HireSchedules.HomeIndex, now + Math.Max(1, minutes));
+            var arrives = now + Math.Max(1, minutes);
+            if (!Covered(vehicle, now, arrives)) return HireAction.None;
+            return new HireAction(HireActionKind.Depart, HireSchedules.HomeIndex, arrives);
         }
 
         // The crew restocked (or tried to) for the leg running now, leaving the commissary's stock of its foods at
@@ -305,6 +360,7 @@ namespace FoodTrucks.Core.Fleet
             if (action.Kind != HireActionKind.Depart) throw new ArgumentException("Not a departure.", nameof(action));
             var toHome = action.Stop == HireSchedules.HomeIndex;
             if (toHome && home == null) throw new ArgumentException("A trip back to the bay needs the bay.", nameof(home));
+            vehicle.ReturnPending = true;
             var stop = toHome ? home! : vehicle.Schedule!.Stops[action.Stop];
             vehicle.Service = null;
             vehicle.IsOpen = false;
@@ -354,6 +410,7 @@ namespace FoodTrucks.Core.Fleet
             var transit = vehicle.Transit;
             vehicle.Transit = null;
             vehicle.Arrival = atStop && transit != null ? new ArrivalState { SpotKey = transit.ToSpotKey, StopIndex = transit.ToStopIndex, X = x, Z = z } : null;
+            if (atStop && transit?.ToSpotKey == HireSchedules.HomeSpotKey) vehicle.ReturnPending = false;
             if (atStop || transit == null) return;
             // The opening this trip was for, not a later one at the same stop.
             var index = transit.ToStopIndex ?? vehicle.Schedule?.Stops?.FindIndex(s => s.SpotKey == transit.ToSpotKey) ?? -1;

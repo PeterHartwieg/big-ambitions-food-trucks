@@ -468,8 +468,8 @@ namespace FoodTrucks
             {
                 // What keeps the route from running as planned: a route that fails the rules, the crew, the permit.
                 var home = HireRoutes.HomeOf(vehicle);
-                var problem = new HireRunner(rules.Fleet).RouteProblem(vehicle, HireRoutes.GameSpeed(), HireRoutes.HomePoint(home), home?.BayStops);
-                if (problem != ScheduleProblem.None) box.Paragraph(Text(RouteStops.ProblemKey(problem)), (Color)colors.red);
+                foreach (var problem in new HireRunner(rules.Fleet).RouteProblems(vehicle, HireRoutes.GameSpeed(), HireRoutes.HomePoint(home), home?.BayStops))
+                    box.Paragraph(Text(RouteStops.ProblemKey(problem)), (Color)colors.red);
                 var limit = HireCrew.Limit(kind);
                 var hands = vehicle.Crew.Count(c => HireCrew.Find(c) != null);
                 if (hands == 0) box.Paragraph(Text("foodtrucks:bizman_page_route_no_crew"), (Color)colors.red);
@@ -1062,7 +1062,8 @@ namespace FoodTrucks
         // Shifts changed: today is planned again, the crew's weekly hours follow, the save is marked, the page refreshed.
         private static void ShiftsChanged(VehicleState vehicle)
         {
-            HireRunner.Replan(vehicle, HireCrew.Now());
+            // Every unfinished plan, yesterday's late one too, is planned again with the new shifts.
+            HireRunner.ReplanShifts(vehicle, HireCrew.Now());
             HireCrew.SetWeeklyWork(vehicle);
             FoodTrucksSession.MarkChanged();
             BizManVehiclePage.RefreshLater();
@@ -1146,6 +1147,9 @@ namespace FoodTrucks
                 var rules = DemandData.Rules;
                 if (vehicle == null || rules == null) return;
                 var schedules = new HireSchedules(rules.Fleet);
+                // A crew window open at a stop the paste replaces closes first, as for a removed stop (review round 1).
+                var targets = all ? WeekPlan.Days.Where(d => d != copy.From).ToList() : new List<DayOfWeek> { day };
+                if (RouteEditor.TakesOpenStop(vehicle, targets)) CartSelling.CloseByCrew(vehicle, HireCrew.Now());
                 var problem = all ? RouteEditor.PasteToAllDays(schedules, vehicle, copy) : RouteEditor.PasteDay(schedules, vehicle, copy, day);
                 if (problem != ScheduleProblem.None)
                 {
@@ -1155,7 +1159,7 @@ namespace FoodTrucks
                     return;
                 }
                 Log.Info($"Week plan: {copy.From} pasted onto {(all ? "every day" : day.ToString())} of {id}.");
-                RouteStops.Changed(vehicle);
+                RouteStops.Changed(vehicle, shifts: true);
                 BizManVehiclePage.RefreshLater();
             }
             if (!all)
@@ -1177,7 +1181,7 @@ namespace FoodTrucks
                     if (vehicle.IsOpen && vehicle.HireStop == index) CartSelling.CloseByCrew(vehicle, HireCrew.Now());
                 RouteEditor.ClearDay(vehicle, day);
                 Log.Info($"Week plan: {day} of {id} cleared.");
-                RouteStops.Changed(vehicle);
+                RouteStops.Changed(vehicle, shifts: true);
                 BizManVehiclePage.RefreshLater();
             }), allowConfirmationSkip: true, isNegative: true);
         }

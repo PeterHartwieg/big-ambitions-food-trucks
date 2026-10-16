@@ -26,6 +26,8 @@ namespace FoodTrucks
         private const float WideParkingMetres = 200f;
         // Steps per vehicle per tick: enough to close, leave and so on after a load or a time skip.
         private const int MaxSteps = 4;
+        // Moments stepped per vehicle per tick (Run).
+        private const int MaxMoments = 512;
 
         private static HireRoutes? instance;
         private static readonly List<Action> later = new List<Action>();
@@ -127,7 +129,7 @@ namespace FoodTrucks
             var instance = Instance(vehicle.VehicleId);
             if (instance == null) return;
             var t = from;
-            for (var guard = 0; guard < 64; guard++)
+            for (var guard = 0; guard < MaxMoments; guard++)
             {
                 StepAt(vehicle, instance, t);
                 var next = NextMoment(vehicle, t, boundary);
@@ -161,7 +163,7 @@ namespace FoodTrucks
                 return;
             }
             var now = HireCrew.Now();
-            var running = state.Vehicles.Where(v => (v.Crew != null && v.Crew.Count > 0) || v.Transit != null || v.HireStop != null).ToList();
+            var running = state.Vehicles.Where(v => (v.Crew != null && v.Crew.Count > 0) || v.Transit != null || v.HireStop != null || v.CrewWindowLost).ToList();
             // A vehicle that sat out ticks (no crew for a while) starts again from now, not from where it stopped.
             foreach (var id in routedUntil.Keys.Where(id => running.All(v => v.VehicleId != id)).ToList()) routedUntil.Remove(id);
             foreach (var vehicle in running)
@@ -268,11 +270,18 @@ namespace FoodTrucks
             }
             if (!routedUntil.TryGetValue(vehicle.VehicleId, out var from) || from > now) from = now;
             var t = from;
-            for (var guard = 0; guard < 64; guard++)
+            // A long skip has many moments (legs, the hours, arrivals): up to MaxMoments a tick; the rest go on next tick
+            // from the last one handled, so no moment is skipped and the window sells only up to it.
+            for (var guard = 0; guard < MaxMoments; guard++)
             {
                 StepAt(vehicle, instance, t);
                 if (t >= now) break;
                 t = NextMoment(vehicle, t, now);
+            }
+            if (t < now)
+            {
+                routedUntil[vehicle.VehicleId] = t;
+                return;
             }
             routedUntil[vehicle.VehicleId] = now;
             CartSelling.AdvanceTo(vehicle, HireCrew.NowExact());
@@ -295,6 +304,9 @@ namespace FoodTrucks
             // A new day gets its plan at midnight.
             var midnight = (t / 1440 + 1) * 1440;
             if (midnight > t && midnight < next) next = midnight;
+            // Shifts start and end on the hour: an owed drive back waits for one, an open window closes at one's end.
+            var hour = (t / 60 + 1) * 60;
+            if (vehicle.Crew != null && vehicle.Crew.Count > 0 && hour > t && hour < next) next = hour;
             return next;
         }
 
@@ -357,7 +369,8 @@ namespace FoodTrucks
             string? restockAt = null;
             string? stockKey = null;
             IReadOnlyCollection<int>? bayStops = null;
-            if (!held && !indoors && !vehicle.IsOpen && vehicle.Transit == null && HireRunner.Want(vehicle, t) != null)
+            // A leg running, or the drive back owed (VehicleState.ReturnPending): the checks the crew's moves need.
+            if (!held && !indoors && !vehicle.IsOpen && vehicle.Transit == null && (HireRunner.Want(vehicle, t) != null || vehicle.ReturnPending))
             {
                 canSell = KindOf(vehicle) == "truck" ? instance.parkingState == ParkingState.Legal : Legality.Check(position).Legal;
                 // A truck left at a stop with its hatch to the road can't sell there: the crew parks it again,

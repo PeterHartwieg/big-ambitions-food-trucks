@@ -40,7 +40,7 @@ namespace FoodTrucks.Core.Fleet
 
         // A window the player opened: the route leaves it alone and doesn't pay for it.
         public static bool PlayerWindow(VehicleState vehicle) =>
-            vehicle != null && vehicle.IsOpen && vehicle.HireStop == null && vehicle.Transit == null &&
+            vehicle != null && vehicle.IsOpen && vehicle.HireStop == null && !vehicle.CrewWindowLost && vehicle.Transit == null &&
             vehicle.Crew != null && vehicle.Crew.Count > 0;
 
         // Whether serving a window the player opened at this minute (a minute the sales reached with the window still

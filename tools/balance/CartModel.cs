@@ -172,6 +172,8 @@ public sealed class Cart
     }
 
     public bool Storage { get; }
+    // The same vehicle with another number at the window (the crew on shift that hour).
+    public Cart WithServers(int servers) => new Cart(tables, prices, Menu, Name, Storage, Staff, VehicleKind, servers, Speed);
     // Weighted units each piece holds.
     public int PerPiece { get; }
     // The piece that holds each menu item.

@@ -99,10 +99,12 @@ namespace FoodTrucks
 
         // The route changed: each stop opens no earlier than the drive from the one before allows (Core
         // RouteEditor.FitTravel, said in one notice), today is planned again, the crew's weekly hours follow, the save is marked.
-        public static void Changed(VehicleState vehicle)
+        // `shifts`: the edit changed shifts too (a paste, a cleared day), so yesterday's late plan is planned again as well.
+        public static void Changed(VehicleState vehicle, bool shifts = false)
         {
             FitTravel(vehicle);
-            HireRunner.Replan(vehicle, HireCrew.Now());
+            if (shifts) HireRunner.ReplanShifts(vehicle, HireCrew.Now());
+            else HireRunner.Replan(vehicle, HireCrew.Now());
             HireCrew.SetWeeklyWork(vehicle);
             FoodTrucksSession.MarkChanged();
         }

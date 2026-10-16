@@ -98,8 +98,9 @@ namespace FoodTrucks
         public static void Remove(VehicleState vehicle, string employeeId, string reason)
         {
             if (vehicle.Crew == null || !vehicle.Crew.Remove(employeeId)) return;
-            // Their shifts go with them.
+            // Their shifts go with them, and the plans follow the shifts left (yesterday's late one too).
             WeekPlan.DropCrew(vehicle.Schedule, employeeId);
+            HireRunner.ReplanShifts(vehicle, Now());
             var employee = Find(employeeId);
             if (employee != null)
             {
@@ -128,6 +129,8 @@ namespace FoodTrucks
                     vehicle.Transit = null;
                     vehicle.Arrival = null;
                     vehicle.HireStop = null;
+                    vehicle.ReturnPending = false;
+                    vehicle.CrewWindowLost = false;
                     continue;
                 }
                 foreach (var id in vehicle.Crew.ToList())
@@ -165,6 +168,8 @@ namespace FoodTrucks
                 vehicle.Arrival = null;
                 vehicle.Skipped = null;
                 vehicle.HireStop = null;
+                vehicle.ReturnPending = false;
+                vehicle.CrewWindowLost = false;
             }
             FoodTrucksSession.MarkChanged();
         }

@@ -294,6 +294,14 @@ namespace FoodTrucks.Core.Fleet
         }
 
         // The day's stops and shifts go; the day is then simply without a route.
+        // Whether pasting or clearing these days takes away the stop the crew has its window open at: the game side closes
+        // that window first, as for a removed stop.
+        public static bool TakesOpenStop(VehicleState? vehicle, IEnumerable<DayOfWeek> days)
+        {
+            var stop = vehicle?.HireStop == null ? null : vehicle.Schedule?.Stops?.ElementAtOrDefault(vehicle.HireStop.Value);
+            return vehicle != null && vehicle.IsOpen && stop != null && days.Contains(stop.Day);
+        }
+
         public static void ClearDay(VehicleState vehicle, DayOfWeek day)
         {
             var schedule = vehicle?.Schedule;
@@ -360,6 +368,8 @@ namespace FoodTrucks.Core.Fleet
             if (vehicle.HireStop != null)
             {
                 var moved = Map(vehicle.HireStop.Value);
+                // A crew window whose stop went: never left open as if the player had opened it (the runner closes it).
+                if (moved < 0 && vehicle.IsOpen) vehicle.CrewWindowLost = true;
                 vehicle.HireStop = moved < 0 ? (int?)null : moved;
             }
             if (vehicle.Arrival?.StopIndex != null)

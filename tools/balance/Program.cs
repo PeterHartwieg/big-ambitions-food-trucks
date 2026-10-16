@@ -706,11 +706,9 @@ if (opts.Wants("pass"))
     int CeilHalf(int minute) => (minute + 29) / 30 * 30;
 
     // What the game pays a hire for (Core CrewPay). A shift hour: every whole hour of the hire's shifts on the week plan
-    // (HireCrew.CountHour, WeekPlan.OnShift), worked or idle. The model's crew all serve the whole route day, so each is
-    // scheduled for every whole hour it touches, from the morning restock to back in the bay (WeekPlan's route day).
-    // An open hour of a window the player opened: the hire serves at some minute of its first half (CrewPay.CloseHours);
-    // during a restock trip the window is shut.
-    int RouteHours(int start, int end) => end <= start ? 0 : (int)Math.Ceiling(end / 60.0) - (int)Math.Floor(start / 60.0);
+    // (HireCrew.CountHour, WeekPlan.OnShift), worked or idle; a crew's shifts are Core's auto schedule for its route
+    // (Route below). An open hour of a window the player opened: the hire serves at some minute of its first half
+    // (CrewPay.CloseHours); during a restock trip the window is shut.
     int OpenHours(Stay stay)
     {
         var hours = 0;
@@ -751,9 +749,11 @@ if (opts.Wants("pass"))
     // until a bay stop comes; it may drive there with nothing on board (HireRunner.Step, VehicleWhere.BayStops). Each
     // form that validates is simulated on a steady-state day (planned from where the day before ended, no earlier than
     // its last leg) and the best net is kept; the note says which, and which forms Core refused. Sales at bay stops
-    // are left out. Wages: every whole hour of the route day (restock to back in the bay), as shifts covering it are
-    // paid (consecutive days don't overlap, so each hour is paid once). The stops run on Tuesday and Wednesday (the
-    // week plan's stops are per weekday); Wednesday is the day measured.
+    // are left out. The crew's shifts are Core's WeekPlan.AutoSchedule for the route (at most 12 hours a shift, one a day,
+    // the vehicle's staff at most: a cart's crew is 1), the plan follows them (PlanDay with their coverage: no drive or
+    // opening without someone on shift), the window serves with the crew on shift each hour, and each hire is paid their
+    // shift hours on Wednesday (Tuesday's night past midnight included). The stops run on Tuesday and Wednesday (the week
+    // plan's stops are per weekday); Wednesday is the day measured.
     var hireSchedules = new FoodTrucks.Core.Fleet.HireSchedules(rules.Fleet);
     int FloorHalf(int minute) => minute / 30 * 30;
     Func<Spot, Conditions, DayEval?> Route(Cart cart, (int From, int To) day, int hires, FoodTrucks.Core.Fleet.TravelMode mode, int[]? breaks = null) => (spot, c) =>
@@ -787,15 +787,24 @@ if (opts.Wants("pass"))
                 day1.Concat(day1.Select(s => FoodTrucks.Core.Fleet.WeekPlan.CopyStop(s, DayOfWeek.Wednesday)))) };
             var stops = schedule.Stops;
             var bayStops = stops.Select((s, i) => (s, i)).Where(x => x.s.SpotKey.StartsWith("bay")).Select(x => x.i).ToList();
+            var crewIds = Enumerable.Range(1, Math.Max(1, hires)).Select(i => $"h{i}").ToList();
+            var staff = Math.Min(crewIds.Count, tables.Vehicle(cart.VehicleKind)!.Staff);
+            crewIds = crewIds.Take(staff).ToList();
+            var routeDays = FoodTrucks.Core.Fleet.WeekPlan.RouteDays(hireSchedules, schedule, mode, home: (bay.X, bay.Z), bayStops: bayStops);
+            schedule.CrewShifts = FoodTrucks.Core.Fleet.WeekPlan.AutoSchedule(rules.Fleet, routeDays,
+                crewIds.Select(id => new FoodTrucks.Core.Fleet.CrewWish(id)).ToList(), staff);
+            var coverage = FoodTrucks.Core.Fleet.WeekPlan.CoverageOf(schedule, crewIds, FoodTrucks.Core.Fleet.HireSchedules.Absolute(1, 0),
+                FoodTrucks.Core.Fleet.HireSchedules.Absolute(5, 0));
+            var onShift = FoodTrucks.Core.Fleet.WeekPlan.WeekCount(schedule, crewIds);
             var problem = hireSchedules.Validate(schedule);
             if (problem != FoodTrucks.Core.Fleet.ScheduleProblem.None) { refused.Add($"{name}: {problem}"); continue; }
             // Each day ends back in the bay (the home leg), or at the bay stop that ends it.
             var (endX, endZ) = (bay.X, bay.Z);
             var first = hireSchedules.PlanDay(schedule, 2, DayOfWeek.Tuesday, endX, endZ, FoodTrucks.Core.Fleet.HireSchedules.Absolute(2, 0) - 1440, mode,
-                home: (bay.X, bay.Z), bayStops: bayStops);
+                home: (bay.X, bay.Z), bayStops: bayStops, coverage: coverage);
             if (first.Legs.Count == 0) { refused.Add($"{name}: no plan"); continue; }
             var plan = hireSchedules.PlanDay(schedule, 3, DayOfWeek.Wednesday, endX, endZ, first.Legs[^1].End, mode,
-                home: (bay.X, bay.Z), bayStops: bayStops);
+                home: (bay.X, bay.Z), bayStops: bayStops, coverage: coverage);
             if (plan.Legs.Count == 0 || plan.Skipped.Count > 0) { refused.Add($"{name}: stops skipped"); continue; }
             var origin = FoodTrucks.Core.Fleet.HireSchedules.Absolute(3, 0);
             var stock = Selling.Load(cart, spot, day.From, day.To, c);
@@ -811,13 +820,18 @@ if (opts.Wants("pass"))
                     stock = Selling.TopUp(cart, spot, to, day.To, c, stock);
                     continue;
                 }
-                var r = Selling.Run(cart, spot, from, to, c, stock);
-                firstOut ??= r.FirstOutAt;
-                result.Add(r);
+                // Hour by hour, with the crew on shift then (Wednesday's hours of the week; day 3 is a Wednesday).
+                for (var a = from; a < to; a = Math.Min(to, (a / 60 + 1) * 60))
+                {
+                    var b = Math.Min(to, (a / 60 + 1) * 60);
+                    var servers = onShift[(2 * 24 + a / 60) % 168];
+                    if (servers <= 0) continue;
+                    var r = Selling.Run(cart.WithServers(servers), spot, a, b, c, stock);
+                    firstOut ??= r.FirstOutAt;
+                    result.Add(r);
+                }
             }
-            var start = (int)(plan.Legs[0].Start - origin);
-            var end = (int)(plan.Legs[^1].End - origin);
-            var hours = hires * RouteHours(start, end);
+            var hours = schedule.CrewShifts.Where(x => x.Day == DayOfWeek.Wednesday).Sum(x => x.End - x.Start);
             // The 04:00 check (Commissary's night check) on the planned day: no fine on the way somewhere, open at a stop
             // (a late stop still serving) or in the bay; standing anywhere else, the fine.
             var check = FoodTrucks.Core.Fleet.HireSchedules.Absolute(3, cr.NightCheckMinute);
@@ -897,7 +911,7 @@ if (opts.Wants("pass"))
     o.AppendLine($"Pitches: every real pitch ranked by its weekday net (gross less wages, fee and rent); poor is the 25th percentile, typical the median, good the 90th percentile, best the top; premium is the median and the best of the {premiumSpots.Count} premium spots, held all day. " +
                  "Crewed setups rank only pitches in a region with a commissary, since a crew loads only in its commissary's bay. " +
                  $"Gross: sales less goods at wholesale. Rent: the commissary space, ${RentDay("cart"):0.00} a day for a cart, ${RentDay("truck"):0.00} for a truck. " +
-                 $"Hires: customer service {opts.CrewSkill:0} at satisfaction {opts.CrewSatisfaction:0}, ${wage:0.00} an hour, team speed {crewSpeed:0.00}, paid as the game pays them: a route's every hour its shift (leaving the bay to the bay stop's close) covers at least half of, sold out or not; a window the player opened, every hour the hire serves in its first half. " +
+                 $"Hires: customer service {opts.CrewSkill:0} at satisfaction {opts.CrewSatisfaction:0}, ${wage:0.00} an hour, team speed {crewSpeed:0.00}, paid as the game pays them: a crew every hour of its shifts (Core's auto schedule for the route: at most 12 hours a shift, a cart's crew of 1), sold out or not, serving only while on shift; a window the player opened, every hour the hire serves in its first half. " +
                  $"Fee: ${cr.DeliveryFeeCents / 100.0:0} per delivery at a commissary, {opts.DeliveriesPerWeek:0.#} a week shared by {opts.FeeSharing:0.#} vehicles (${feeDay:0.00} a vehicle a day), when a crew's stock comes by phone (a logistics plan has none); players haul from the wholesaler. " +
                  $"The player restocks when a piece runs out: a cart is pushed at {opts.MetresPerSecond} m/s, a truck driven at {opts.DriveSpeed} m/s, to the nearest wholesaler. " +
                  "A crew's route is built and checked by Core's HireSchedules: pitch then a 30-minute bay stop before midnight (the pitch closes early enough; the night in the bay), or a morning bay stop then the pitch (the night at the pitch, fined $250 at 04:00), whichever Core accepts and nets more; the crew loads in the bay and sells until everything is out or the stop closes, and a sold-out crew waits for the next bay stop. The midday bay stop row adds a bay stop at 11:00, 13:30 or 16:00, whichever nets most. The note names the route and the forms Core refused. " +

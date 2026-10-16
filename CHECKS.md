@@ -27,6 +27,9 @@ Branch `ui-week` (spec: the plan's "Vehicle week plan and crew shifts"). A vehic
 | WK11 | Let a day pass with two crew on different shifts | Each is paid only their own shift hours at midnight (bank: Unassigned wage), whether the truck sold or stood; a crew member off shift doesn't serve at a window you open |
 | WK12 | Give one crew member more hours than their HoursWorkingPerWeek demand allows (their employee page) | Red week total on the grid and a red line under it; the game's demand box for hours turns unfulfilled and satisfaction drifts down over the next hours, as in a shop |
 | WK13 | Bridge: `state` | `route.week` (seven days, `route_day`, `gaps`) and `route.shifts` match the page |
+| WK14 | While the crew has a stop open, copy another day and paste it onto today | The window closes (closing notice) and the crew carries on with today's new stops; it never stays open by itself |
+| WK15 | Stand by a crewed truck when its last stop ends (it stays put), walk off an hour later; then save and load | It drives back to its bay once you're gone, with someone on shift for the whole drive; after the load it still goes |
+| WK16 | A Monday stop at 00:30 with Sunday and Monday night shifts | The crew restocks in the bay on Sunday evening and opens on time at 00:30 |
 
 # Vehicle warnings as to-dos (next build)
 

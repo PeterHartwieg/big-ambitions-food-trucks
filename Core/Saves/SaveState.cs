@@ -122,6 +122,13 @@ namespace FoodTrucks.Core.Saves
         public string? RestockStockKey { get; set; }
         // The game day the commissary last texted what a crew restock was short of: once a day.
         public int? RestockShortDay { get; set; }
+        // The crew owes the drive back to the commissary bay: set when it leaves for a stop, or the plan reaches its
+        // drive back; cleared once in the bay. Kept apart from the plans, so a delay, a replan or a load doesn't lose it
+        // (HireRunner.Step).
+        public bool ReturnPending { get; set; }
+        // A window the crew opened whose stop a route edit took away (RouteEditor.Remap): the runner closes it on its next
+        // step, rather than leaving it open as if the player had opened it.
+        public bool CrewWindowLost { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

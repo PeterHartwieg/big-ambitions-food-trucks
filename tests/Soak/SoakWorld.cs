@@ -31,6 +31,21 @@ internal sealed partial class SoakWorld
     private string? atWindow;
     private int nextEmployee;
     private int saves, crewSales, playerSales, routeSales, slept, invalidPlans, crewRestocks, standingBooked;
+    // The drive back to the commissary bay: trips home, those that left after their planned leg (delayed by the player
+    // holding the vehicle, a replan or a gap in the shifts), shift edits at midnight, and the nights each vehicle has
+    // owed the drive back with a fully staffed route.
+    private int homeTrips, delayedHome, midnightShiftEdits;
+    private readonly Dictionary<string, int> owedNights = new();
+
+    // Each commissary's bay in the soak's world.
+    private static (double X, double Z) BayAt(string site) => site == "a" ? (0, 0) : (600, 0);
+
+    // The bay of the commissary where the vehicle rents its space: the route day starts and ends there.
+    private (double X, double Z)? HomeOf(VehicleState v)
+    {
+        var site = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == v.VehicleId)?.CommissaryId;
+        return site == null ? null : BayAt(site);
+    }
     private readonly Dictionary<(string, int), long> revenue = new();
     private readonly Dictionary<(string, int), long> costs = new();
     private readonly Dictionary<(string, int), (long Cents, int Sales)> crew = new();
@@ -86,6 +101,7 @@ internal sealed partial class SoakWorld
     }
 
     public string Coverage => $"saves={saves}, crew/player/route sales={crewSales}/{playerSales}/{routeSales}, " +
+        $"home trips/delayed/midnight shift edits={homeTrips}/{delayedHome}/{midnightShiftEdits}, " +
         $"paid/refused deliveries={delivered.Count}/{refused.Count}, invalid plans={invalidPlans}, sleep days={slept}, crew restocks={crewRestocks}, standing bookings={standingBooked}, " +
         $"midnight holds/late crew sales/delayed payouts={heldAtMidnight}/{lateCrewSales}/{delayedPayouts}";
 
@@ -108,6 +124,7 @@ internal sealed partial class SoakWorld
                     SalesLedger.MarkInSummary(state, Day - 1);
                 }
                 CountRouteHours(hour);
+                if (hour % 24 == 0 && hour > 0) { MidnightShiftEdit(); CheckOwedReturns(); }
                 CommissaryTick();
                 if (Awake) PlayerAction();
                 var boundary = now + (hour == days * 24 - 1 ? random.Next(1, 60) : 60);
@@ -156,16 +173,17 @@ internal sealed partial class SoakWorld
             case 0: Order(v); break;
             case 1:
                 // Travel to a bay is game-owned. Never teleport an in-transit or open vehicle.
-                if (v.Transit == null && !v.IsOpen) { van.Bay = random.Next(2) == 0 ? "a" : "b"; van.X = van.Z = 0; van.Property = false; Restock(v, van.Bay); }
+                if (v.Transit == null && !v.IsOpen) { van.Bay = random.Next(2) == 0 ? "a" : "b"; (van.X, van.Z) = BayAt(van.Bay); van.Property = false; Restock(v, van.Bay); }
                 break;
             case 2: if (v.Transit == null && !v.IsOpen) { atWindow = v.VehicleId; Open(v, null, now + random.NextDouble()); } break;
             case 3: Close(v); break;
-            case 4: if (v.IsOpen) atWindow = v.VehicleId; break;
+            // At the window, or standing by a closed vehicle (the crew leaves it where it is: a delayed drive).
+            case 4: if (v.IsOpen || v.Transit == null) atWindow = v.VehicleId; break;
             case 5: atWindow = null; break;
             case 6: ChangeRoute(v); break;
             case 7:
                 if (v.Crew.Count < ShippedData.Tables.Vehicle(v.VehicleType)!.Staff)
-                { v.Crew.Add($"e{nextEmployee++}"); Staff(v); HireRunner.Replan(v, now); }
+                { v.Crew.Add($"e{nextEmployee++}"); Staff(v); HireRunner.ReplanShifts(v, now); }
                 break;
             case 8:
                 if (v.Crew.Count > 0)
@@ -173,8 +191,9 @@ internal sealed partial class SoakWorld
                     var id = v.Crew[0];
                     SettleFired(id);
                     v.Crew.RemoveAt(0);
+                    WeekPlan.DropCrew(v.Schedule, id);
                     if (v.Crew.Count == 0 && v.HireStop != null) Close(v);
-                    HireRunner.Replan(v, now);
+                    HireRunner.ReplanShifts(v, now);
                 }
                 break;
             case 9: Rent(v, random.Next(2) == 0 ? "a" : "b"); break;
@@ -205,7 +224,7 @@ internal sealed partial class SoakWorld
     private void Staff(VehicleState v)
     {
         if (v.Schedule == null) return;
-        var days = WeekPlan.RouteDays(schedules, v.Schedule, Travel.ModeFor(v.VehicleType));
+        var days = WeekPlan.RouteDays(schedules, v.Schedule, Travel.ModeFor(v.VehicleType), home: HomeOf(v));
         v.Schedule.CrewShifts = WeekPlan.AutoSchedule(ShippedData.Rules.Fleet, days, v.Crew.Select(e => new CrewWish(e)).ToList(),
             ShippedData.Tables.Vehicle(v.VehicleType)!.Staff, v.Schedule.CrewShifts);
         if (v.Schedule.CrewShifts.Count > 0 && random.Next(4) == 0) v.Schedule.CrewShifts.RemoveAt(random.Next(v.Schedule.CrewShifts.Count));
@@ -273,27 +292,47 @@ internal sealed partial class SoakWorld
         {
             now = t;
             var from = HireRunner.PlanFrom(v, van.X, van.Z);
-            runner.EnsurePlan(v, t, from.X, from.Z);
+            var home = HomeOf(v);
+            runner.EnsurePlan(v, t, from.X, from.Z, home: home);
             for (var guard = 0; guard < 4; guard++)
             {
                 // In the bay of its own commissary space with stock there: the crew may restock (CrewRestock).
                 var ownBay = van.Bay != null && state.Commissary.Spaces.Any(s => s.VehicleId == v.VehicleId && s.CommissaryId == van.Bay);
                 var action = runner.Step(v, t, new VehicleWhere(van.X, van.Z, van.Property,
                     hasStock: Stock(v).Values.Any(n => n > 0), stayPut: Awake && atWindow == v.VehicleId,
-                    canRestock: ownBay, stockKey: ownBay ? CrewRestock.StockKey(ShippedData.Tables, v.VehicleType, Lines(v), Available(van.Bay!)) : null));
+                    canRestock: ownBay, stockKey: ownBay ? CrewRestock.StockKey(ShippedData.Tables, v.VehicleType, Lines(v), Available(van.Bay!)) : null,
+                    home: home));
                 if (action.Kind == HireActionKind.None) break;
                 Note($"{v.VehicleId}: route {action.Kind} stop {action.Stop}");
                 switch (action.Kind)
                 {
                     case HireActionKind.Close: Close(v); break;
-                    case HireActionKind.Depart: Close(v); HireRunner.Depart(v, action, t, van.X, 0, van.Z, 0); van.Bay = null; break;
+                    case HireActionKind.Depart:
+                        // A drive only with someone on shift all the way (review round 1).
+                        Require(WeekPlan.CoverageOf(v.Schedule, v.Crew, t - 1440, action.ArrivesAt + 1440).Earliest(t, action.ArrivesAt - t, action.ArrivesAt) == t,
+                            "a drive left without crew on shift for all of it");
+                        var toHome = action.Stop == HireSchedules.HomeIndex;
+                        if (toHome)
+                        {
+                            homeTrips++;
+                            if (HireRunner.Want(v, t)?.StopIndex != HireSchedules.HomeIndex) delayedHome++;
+                        }
+                        Close(v);
+                        HireRunner.Depart(v, action, t, van.X, 0, van.Z, 0,
+                            toHome ? new ScheduleStop { SpotKey = HireSchedules.HomeSpotKey, X = home!.Value.X, Z = home.Value.Z } : null);
+                        van.Bay = null; break;
                     case HireActionKind.Arrive:
                         var transit = v.Transit!;
                         var fits = random.Next(10) != 0;
-                        van.X = fits ? transit.ToX + (v.VehicleType == "truck" ? 35 : 0) : transit.FromX;
+                        var homeTrip = transit.ToSpotKey == HireSchedules.HomeSpotKey;
+                        van.X = fits ? transit.ToX + (v.VehicleType == "truck" && !homeTrip ? 35 : 0) : transit.FromX;
                         van.Z = fits ? transit.ToZ : transit.FromZ;
+                        // Back in the bay of its space (if it still rents one there).
+                        if (fits && homeTrip) van.Bay = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == v.VehicleId)?.CommissaryId;
                         HireRunner.Arrived(v, van.X, van.Z, fits, t); break;
-                    case HireActionKind.Open: Open(v, action.Stop, t); break;
+                    case HireActionKind.Open:
+                        Require(WeekPlan.OnShiftCrew(v, t).Count > 0, "the crew opened with nobody on shift");
+                        Open(v, action.Stop, t); break;
                     case HireActionKind.Restock:
                         Restock(v, van.Bay!);
                         HireRunner.Restocked(v, t, CrewRestock.StockKey(ShippedData.Tables, v.VehicleType, Lines(v), Available(van.Bay!)));
@@ -301,6 +340,9 @@ internal sealed partial class SoakWorld
                         break;
                 }
             }
+            // A crew window never stays open with nobody on shift (the step just closed it otherwise).
+            Require(!(v.IsOpen && v.HireStop != null) || WeekPlan.OnShiftCrew(v, t).Count > 0 || (van.Property && !v.IsOpen),
+                "a crew window stayed open with nobody on shift");
             var next = until;
             foreach (var p in v.Shifts)
                 foreach (var leg in p.Legs)
@@ -568,6 +610,39 @@ internal sealed partial class SoakWorld
         }
         var first = (day - 1) / 28 * 28 + 1;
         Require(SalesLedger.SumCents(state, first, day) == revenue.Where(p => p.Key.Item2 >= first && p.Key.Item2 <= day).Sum(p => p.Value), "tax period total differs");
+    }
+
+    // At midnight now and then: a vehicle's shifts are scheduled again (the night's coverage changes while a late stop or
+    // a drive back may be running); every unfinished plan is planned again.
+    private void MidnightShiftEdit()
+    {
+        if (random.Next(3) != 0) return;
+        var v = state.Vehicles[random.Next(state.Vehicles.Count)];
+        if (v.Schedule == null) return;
+        Staff(v);
+        HireRunner.ReplanShifts(v, now);
+        midnightShiftEdits++;
+        Note($"{v.VehicleId}: shifts scheduled again at midnight");
+    }
+
+    // A vehicle whose route is fully staffed doesn't owe the drive back for more than two nights in a row (the player
+    // standing by it, its own building and a route with problems aside).
+    private void CheckOwedReturns()
+    {
+        foreach (var v in state.Vehicles)
+        {
+            var van = vans[v.VehicleId];
+            var home = HomeOf(v);
+            var owed = v.ReturnPending && v.Transit == null && !v.IsOpen && home != null && !van.Property && atWindow != v.VehicleId &&
+                       v.Crew.Count > 0 && runner.RouteProblems(v, 1.0, home).Count == 0;
+            // Out at a late stop or with stops still ahead at midnight isn't owing yet; that night isn't counted.
+            var busy = HireRunner.Want(v, now) != null || v.Shifts.Any(p => p.Legs.Any(l => l.StopIndex != HireSchedules.HomeIndex && l.End > now));
+            if (owed && busy) continue;
+            owedNights[v.VehicleId] = owed ? owedNights.GetValueOrDefault(v.VehicleId) + 1 : 0;
+            Require(owedNights[v.VehicleId] <= 2, $"a fully staffed vehicle owed the drive back for three nights: {v.VehicleId} at x {van.X}, z {van.Z}, bay {van.Bay}, home {home}, " +
+                $"arrival {v.Arrival?.SpotKey}, skipped {v.Skipped?.SpotKey} until {v.Skipped?.Until}, legs {string.Join("; ", v.Shifts.SelectMany(p => p.Legs).Select(l => $"{l.Kind} {l.StopIndex} {l.Start}-{l.End}"))}, " +
+                $"shifts {string.Join(", ", v.Schedule?.CrewShifts.Select(c => $"{c.EmployeeId} {c.Day} {c.Start}-{c.End}") ?? new string[0])}, crew {string.Join(",", v.Crew)}, stops {string.Join(", ", v.Schedule?.Stops.Select(x => $"{x.Day} {x.OpenAt}-{x.CloseAt} @{x.X}") ?? new string[0])}");
+        }
     }
 
     private void CheckWorld()
