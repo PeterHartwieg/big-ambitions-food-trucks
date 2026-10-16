@@ -188,6 +188,20 @@ namespace FoodTrucks.Core.Fleet
                    !list.GroupBy(s => (s.Station ?? Serving(1), s.Day)).Any(g => Clash(g.ToList()));
         }
 
+        // The shifts CheckShifts accepts, in order: one with bad hours, or at the same hour as an earlier one for its crew
+        // member or on its row, is left out (shifts read back from the game's Schedule tab are written to the save only so).
+        public static List<CrewShift> Sanitize(IEnumerable<CrewShift> shifts, out int dropped)
+        {
+            var kept = new List<CrewShift>();
+            dropped = 0;
+            foreach (var shift in shifts ?? Enumerable.Empty<CrewShift>())
+            {
+                if (CheckShifts(kept.Append(shift))) kept.Add(shift);
+                else dropped++;
+            }
+            return kept;
+        }
+
         // The first of `stations` with no shift that day overlapping [start, end) (other than `except`'s), else the last.
         public static string FreeStation(IEnumerable<CrewShift> shifts, DayOfWeek day, int start, int end, IReadOnlyList<string> stations,
             string? except = null) =>
@@ -233,7 +247,7 @@ namespace FoodTrucks.Core.Fleet
             return shifts.RemoveAll(s => s == null || !crew.Contains(s.EmployeeId)) > 0;
         }
 
-        internal static void SortShifts(HireSchedule schedule) =>
+        public static void SortShifts(HireSchedule schedule) =>
             schedule.CrewShifts = schedule.CrewShifts.Where(s => s != null).OrderBy(s => Position(s.Day)).ThenBy(s => s.Start)
                 .ThenBy(s => s.EmployeeId, StringComparer.Ordinal).ToList();
 

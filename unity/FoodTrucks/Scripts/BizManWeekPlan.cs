@@ -26,13 +26,12 @@ namespace FoodTrucks
 {
     // The vehicle page's two tabs and its Week plan tab (Peter, 16 October 2026; mockup build/ui-mockup/week-plan.html):
     // a vehicle is planned per weekday like a shop. Across the page: the day tiles (copies of the game's schedule day
-    // button, with its open toggle and its copy, paste, paste to all, clear and auto schedule buttons on the chosen
-    // tile), the crew slots, the chosen day's route (the commissary at both ends, drive rows, stop cards; a copy of the
-    // logistics plan's reorderable list, as before) beside its map, and the shift grid: one row per crew member over the
-    // route day's hours, shift bars to drag and resize (copies of the game's WorkShiftSlider, driven by the mod's own
-    // pointer handler), the route day as a band on top and red where nobody is on shift. Every change writes the mod's
-    // save at once, as the game's schedule screen applies edits without a save button. No instruction text: only real
-    // problems, in red.
+    // button, with its open toggle and its copy, paste, paste to all and clear buttons on the chosen tile), the crew
+    // slots, the chosen day's route (the commissary at both ends, drive rows, stop cards; a copy of the logistics plan's
+    // reorderable list, as before) beside its map, and the shifts: who is missing from the route day, in red, and a button
+    // that opens the game's own Schedule tab for the vehicle (VehicleSchedule; Peter's decision: the crew's shifts are set
+    // there, not on a grid of ours). Every change writes the mod's save at once. No instruction text: only real problems,
+    // in red.
     internal static class BizManWeekPlan
     {
         // ---- State ----
@@ -45,16 +44,15 @@ namespace FoodTrucks
 
         // The copied parts and the paths of their pieces.
         private static BizManList? builtFor;
-        private static GameObject? tabTemplate, dayTemplate, sliderTemplate;
+        private static GameObject? tabTemplate, dayTemplate;
         private static Color? tabColour;
         private static string dayLabelPath = "", dayTogglePath = "", daySelectPath = "", dayOpenPath = "", dayClosedPath = "", daySelectedPath = "";
         private static string dayCopyPath = "", dayPastePath = "", dayAutoPath = "", dayClearPath = "", dayPasteAllPath = "";
-        private static string sliderNamePath = "", sliderHoursPath = "", sliderBackgroundPath = "", sliderLeftPath = "", sliderRightPath = "";
 
         internal static void Reset()
         {
             builtFor = null;
-            tabTemplate = dayTemplate = sliderTemplate = null;
+            tabTemplate = dayTemplate = null;
             tabColour = null;
             WeekTab = false;
             copied = null;
@@ -78,7 +76,7 @@ namespace FoodTrucks
             var holder = BizManFleet.EnsurePage(list);
             if (holder == null) return;
             builtFor = list;
-            tabTemplate = dayTemplate = sliderTemplate = null;
+            tabTemplate = dayTemplate = null;
             var found = new List<string>();
             var missing = new List<string>();
             var business = bizMan!.business;
@@ -110,19 +108,6 @@ namespace FoodTrucks
             {
                 dayTemplate = null;
                 missing.Add("the schedule day button: " + ex.Message);
-            }
-            try
-            {
-                var scroller = schedule == null ? null : Traverse.Create(schedule).Field("scrollerController").GetValue<ScheduleScrollerController>();
-                var cell = scroller == null ? null : scroller.prefab;
-                var slider = cell == null ? null : Traverse.Create(cell).Field("workShiftSliderPrefab").GetValue<WorkShiftSlider>();
-                if (slider != null) TakeSlider(slider, holder, found);
-                else missing.Add("the schedule screen's work shift bar (ScheduleCellView.workShiftSliderPrefab)");
-            }
-            catch (Exception ex)
-            {
-                sliderTemplate = null;
-                missing.Add("the work shift bar: " + ex.Message);
             }
             Log.Info($"BizMan: week plan parts copied: {(found.Count == 0 ? "none" : string.Join(", ", found))}" +
                      (missing.Count == 0 ? "; nothing missing." : $"; missing {string.Join("; ", missing)} (plain ones drawn instead)."));
@@ -160,36 +145,6 @@ namespace FoodTrucks
             dayTemplate = copy;
             found.Add($"the schedule day button ({PathTo(source)}; label '{dayLabelPath}', toggle '{dayTogglePath}', buttons " +
                       $"{string.Join(", ", new[] { dayCopyPath, dayPastePath, dayPasteAllPath, dayClearPath, dayAutoPath }.Select(p => p.Length == 0 ? "-" : p))})");
-        }
-
-        private static void TakeSlider(WorkShiftSlider slider, Transform holder, List<string> found)
-        {
-            var copy = Object.Instantiate(slider.gameObject, holder);
-            copy.name = "FoodTrucks.ShiftBar";
-            var own = copy.GetComponent<WorkShiftSlider>();
-            string PathOf(string field)
-            {
-                var value = Traverse.Create(own).Field(field).GetValue<object>();
-                var transform = value is Component c ? c.transform : value is GameObject g ? g.transform : null;
-                return transform == null ? "" : BizManFleet.PathBelow(transform, copy.transform) ?? "";
-            }
-            sliderNamePath = PathOf("employeeNameLabel");
-            sliderHoursPath = PathOf("hoursLabel");
-            sliderBackgroundPath = PathOf("background");
-            sliderLeftPath = PathOf("leftHandle");
-            sliderRightPath = PathOf("rightHandle");
-            foreach (var hidden in new[] { PathOf("warningObj"), PathOf("sickOverlayObj") })
-                if (hidden.Length > 0 && copy.transform.Find(hidden) is Transform part) part.gameObject.SetActive(false);
-            // The game's drag, handles, tooltip and the bar itself write the open building's schedule: all go.
-            foreach (var behaviour in copy.GetComponentsInChildren<MonoBehaviour>(true).ToList())
-            {
-                var type = behaviour.GetType();
-                if (type == typeof(WorkShiftSlider) || type == typeof(WorkShiftDrag) || type == typeof(WorkShiftSliderHandle) || type.Name == "EmployeeTooltip")
-                    Object.DestroyImmediate(behaviour);
-            }
-            foreach (var label in copy.GetComponentsInChildren<TextLocalizationComponent>(true)) label.Key = "";
-            sliderTemplate = copy;
-            found.Add($"the work shift bar ({copy.GetComponentsInChildren<Graphic>(true).Length} graphics; name '{sliderNamePath}', hours '{sliderHoursPath}', handles '{sliderLeftPath}', '{sliderRightPath}')");
         }
 
         // ---- Tabs ----
@@ -325,7 +280,6 @@ namespace FoodTrucks
                 if (copied != null) box.Button(Text("foodtrucks:bizman_week_paste"), () => Paste(id, chosenDay, all: false), canWrite);
                 if (copied != null && copied.From == chosenDay) box.Button(Text("foodtrucks:bizman_week_paste_all"), () => Paste(id, chosenDay, all: true), canWrite);
                 box.Button(Text("foodtrucks:bizman_week_clear"), () => Clear(id, chosenDay), canWrite);
-                box.Button(Text("foodtrucks:bizman_week_auto_day"), () => Auto(id, kind, chosenDay), canWrite && crew.Count > 0);
             }
         }
 
@@ -353,7 +307,8 @@ namespace FoodTrucks
                 TileButton(tile, dayPastePath, copied != null && !closed, canWrite, () => Paste(id, day, all: false));
                 TileButton(tile, dayPasteAllPath, selected && copied != null && copied.From == day, canWrite, () => Paste(id, day, all: true));
                 TileButton(tile, dayClearPath, selected, canWrite, () => Clear(id, day));
-                TileButton(tile, dayAutoPath, selected && !closed && hasCrew, canWrite, () => Auto(id, kind, day));
+                // The auto schedule is on the game's Schedule tab now.
+                TileButton(tile, dayAutoPath, false, canWrite, () => { });
             }
             else
             {
@@ -760,201 +715,19 @@ namespace FoodTrucks
 
         // ---- Shifts ----
 
-        // The shift grid for the chosen day: hours across, from an hour before the route day to an hour after it (06:00 to
-        // 22:00 on a day without a route), hours after midnight belonging to the next weekday; the route day as a band on
-        // top; one row per crew member with their shift bars and their week against what they want; who is on shift, red
-        // where nobody is; where the vehicle waits closed; Auto schedule for the week.
+        // The shifts for the chosen day: where nobody is on shift during the route day (red), and the button to the game's
+        // own Schedule tab, where the crew's shifts are set.
         private static void Shifts(Transform column, RuleTables rules, VehicleState? vehicle, string id, string kind, DayOfWeek day,
             IReadOnlyList<RouteDay> routeDays, List<string> crew, bool canWrite)
         {
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
-            var unit = BizManParts.SmallLabelHeight();
             var schedule = vehicle?.Schedule;
             var routeDay = routeDays[WeekPlan.Position(day)];
             var box = new BizManParts.Box(column, Format("foodtrucks:bizman_week_shifts_title", ("day", DayName(day))));
-            if (crew.Count == 0)
-            {
-                box.Paragraph(Text("foodtrucks:bizman_week_no_crew"));
-                return;
-            }
-            var next = WeekPlan.Next(day);
-            var mine = (schedule?.CrewShifts ?? new List<CrewShift>()).Where(s => crew.Contains(s.EmployeeId)).ToList();
-            var (h0, h1) = HourRange(routeDay, mine.Where(s => s.Day == day), mine.Where(s => s.Day == next));
-            var span = h1 - h0;
-            var rowHeight = unit * 2.4f;
-            var bandHeight = unit * 1.3f;
-            const float labelWidth = 0.24f;
-
-            var grid = Rect("FoodTrucks.ShiftGrid", box.Root);
-            box.Add(grid);
-            var top = 0f;
-            RectTransform Line(string name, float height)
-            {
-                var line = Rect(name, grid);
-                line.anchorMin = new Vector2(0f, 1f);
-                line.anchorMax = new Vector2(1f, 1f);
-                line.pivot = new Vector2(0.5f, 1f);
-                line.anchoredPosition = new Vector2(0f, -top);
-                line.sizeDelta = new Vector2(0f, height);
-                top += height + unit * 0.2f;
-                return line;
-            }
-            RectTransform Track(RectTransform line)
-            {
-                var track = Rect("Track", line);
-                Place(track, labelWidth, 0f, 1f, 1f);
-                return track;
-            }
-            float X(double hour) => (float)((hour - h0) / span);
-
-            // Hour labels.
-            var hoursLine = Track(Line("FoodTrucks.Hours", unit));
-            for (var h = h0; h < h1; h++)
-                if (BizManParts.SmallLabel(hoursLine, $"{h % 24:D2}") is RectTransform label)
-                {
-                    Place(label, X(h), 0f, X(h + 1), 1f);
-                    BizManParts.Colour(label, h >= 24 ? (Color)colors.blue : (Color)colors.darkGrey);
-                }
-
-            // The route day: restock, drives, stops (numbered as on the route), the drive back.
-            var bandLine = Line("FoodTrucks.Band", bandHeight);
-            Caption(bandLine, Text("foodtrucks:bizman_week_band"), colors.darkGrey, labelWidth);
-            var band = Track(bandLine);
-            var dayStops = WeekPlan.StopsOf(schedule, day);
-            foreach (var leg in routeDay.Plan.Legs)
-            {
-                var a = Math.Max(leg.Start / 60.0, h0);
-                var b = Math.Min(leg.End / 60.0, h1);
-                if (b <= a) continue;
-                var block = Rect("Leg", band);
-                Place(block, X(a), 0.1f, X(b), 0.9f);
-                var image = block.gameObject.AddComponent<Image>();
-                image.raycastTarget = false;
-                image.color = leg.Kind == LegKind.Open ? new Color(0.30f, 0.69f, 0.31f) : leg.Kind == LegKind.Restock ? new Color(0.56f, 0.60f, 0.64f)
-                    : new Color(0.61f, 0.76f, 0.93f);
-                if (leg.Kind == LegKind.Open && BizManParts.SmallLabel(block, (dayStops.IndexOf(leg.StopIndex) + 1).ToString()) is RectTransform number)
-                {
-                    Place(number, 0f, 0f, 1f, 1f);
-                    BizManParts.Colour(number, Color.white);
-                    BizManParts.Centre(number);
-                }
-            }
-
-            // A row per crew member.
-            foreach (var employeeId in crew)
-            {
-                var employee = HireCrew.Find(employeeId);
-                var wish = employee == null ? new CrewWish(employeeId) : HireCrew.Wish(employee);
-                var week = WeekPlan.WeekHours(schedule, employeeId);
-                var line = Line("FoodTrucks.Crew." + employeeId, rowHeight);
-                var name = employee == null ? employeeId : HireCrew.Name(employee);
-                var labels = Rect("Label", line);
-                Place(labels, 0f, 0f, labelWidth - 0.01f, 1f);
-                if (BizManParts.SmallLabel(labels, name) is RectTransform nameLabel)
-                {
-                    Place(nameLabel, 0f, 0.5f, 1f, 1f);
-                    BizManParts.Colour(nameLabel, colors.midnight);
-                }
-                var weekText = Format(wish.MinHours == null && wish.MaxHours == null ? "foodtrucks:bizman_week_hours" : "foodtrucks:bizman_week_hours_wanted",
-                    ("hours", week.ToString()), ("min", (wish.MinHours ?? 0).ToString()), ("max", (wish.MaxHours ?? 0).ToString()),
-                    ("wage", employee == null ? "-" : CartSelling.Money((long)Math.Round(employee.hourlyWage * 100))),
-                    ("satisfaction", employee == null ? "-" : employee.satisfaction.ToString("F0")));
-                if (BizManParts.SmallLabel(labels, weekText) is RectTransform weekLabel)
-                {
-                    Place(weekLabel, 0f, 0f, 1f, 0.5f);
-                    BizManParts.Colour(weekLabel, wish.Fulfilled(week) ? (Color)colors.darkGrey : (Color)colors.red);
-                }
-                var track = Track(line);
-                // Hour cells: light inside the route day, grey outside (still open to a shift, paid); a click adds a shift.
-                for (var h = h0; h < h1; h++)
-                {
-                    var cell = Rect("Hour", track);
-                    Place(cell, X(h), 0.06f, X(h + 1), 0.94f);
-                    var image = cell.gameObject.AddComponent<Image>();
-                    var inside = !routeDay.Empty && h * 60 < routeDay.End && (h + 1) * 60 > routeDay.Start;
-                    image.color = inside ? new Color(0.95f, 0.96f, 0.97f) : new Color(0.86f, 0.88f, 0.91f);
-                    if (h >= 24) image.color *= new Color(0.94f, 0.96f, 1f);
-                    var hour = h;
-                    if (!canWrite) continue;
-                    var button = cell.gameObject.AddComponent<Button>();
-                    button.transition = Selectable.Transition.None;
-                    button.onClick.AddListener(() => Guard(() => AddShift(id, employeeId, hour >= 24 ? next : day, hour % 24, routeDay)));
-                }
-                // The member's bars: today's shift, and the next day's early one when the grid runs past midnight.
-                foreach (var (shift, offset) in mine.Where(s => s.EmployeeId == employeeId && (s.Day == day || (s.Day == next && h1 > 24)))
-                             .Select(s => (s, s.Day == day ? 0 : 24)))
-                {
-                    var a = Math.Max(shift.Start + offset, h0);
-                    var b = Math.Min(shift.End + offset, h1);
-                    if (b <= a) continue;
-                    Bar(track, shift, offset, a, b, h0, span, employee, canWrite, (start, end) => SetShift(id, employeeId, shift.Day, start - offset, end - offset),
-                        () => RemoveShift(id, employeeId, shift.Day), colors, unit);
-                }
-            }
-
-            // Who is on shift: red where the route day has nobody.
-            var gaps = routeDay.Empty ? new List<CoverageGap>() : WeekPlan.Gaps(routeDay, schedule, crew).ToList();
-            var cover = Line("FoodTrucks.OnShift", unit);
-            Caption(cover, Text("foodtrucks:bizman_week_on_shift"), colors.darkGrey, labelWidth);
-            var coverTrack = Track(cover);
-            if (!routeDay.Empty)
-            {
-                var day0 = Rect("RouteDay", coverTrack);
-                Place(day0, X(Math.Max(routeDay.Start / 60.0, h0)), 0.35f, X(Math.Min(routeDay.End / 60.0, h1)), 0.65f);
-                var image = day0.gameObject.AddComponent<Image>();
-                image.color = new Color(0.30f, 0.69f, 0.31f, 0.6f);
-                image.raycastTarget = false;
-            }
-            foreach (var gap in gaps)
-            {
-                var a = Math.Max(gap.Start / 60.0, h0);
-                var b = Math.Min(gap.End / 60.0, h1);
-                if (b <= a) continue;
-                var block = Rect("Gap", coverTrack);
-                Place(block, X(a), 0.1f, X(b), 0.9f);
-                var image = block.gameObject.AddComponent<Image>();
-                image.color = colors.red;
-                image.raycastTarget = false;
-            }
-            var element = grid.gameObject.AddComponent<LayoutElement>();
-            element.minHeight = element.preferredHeight = top;
-            element.flexibleWidth = 1f;
-
-            foreach (var gap in gaps) box.Paragraph(GapText(gap, schedule, day), (Color)colors.red);
-            var off = crew.Where(c => HireCrew.Find(c) is EmployeeInstance e && !HireCrew.Wish(e).Fulfilled(WeekPlan.WeekHours(schedule, c))).ToList();
-            foreach (var c in off)
-            {
-                var e = HireCrew.Find(c)!;
-                var wish = HireCrew.Wish(e);
-                box.Paragraph(Format("foodtrucks:bizman_week_hours_off", ("name", HireCrew.Name(e)), ("hours", WeekPlan.WeekHours(schedule, c).ToString()),
-                    ("min", (wish.MinHours ?? 0).ToString()), ("max", (wish.MaxHours ?? 0).ToString())), (Color)colors.red);
-            }
-            box.Button(Text("foodtrucks:bizman_week_auto_week"), () => Guard(() =>
-                HudConfirm.Show(headerKey: "foodtrucks:bizman_week_auto_week", bodyKey: "foodtrucks:bizman_week_auto_week_confirm",
-                    onConfirmAction: () => Guard(() => Auto(id, kind, null)), allowConfirmationSkip: true, isNegative: false)), canWrite);
-        }
-
-        // The grid's hours: an hour either side of the route day, widened to the shifts shown; 06:00 to 22:00 without either.
-        internal static (int From, int To) HourRange(RouteDay routeDay, IEnumerable<CrewShift> today, IEnumerable<CrewShift> nextDay)
-        {
-            int? from = null, to = null;
-            if (!routeDay.Empty)
-            {
-                from = (int)Math.Floor(routeDay.Start / 60.0) - 1;
-                to = (int)Math.Ceiling(routeDay.End / 60.0) + 1;
-            }
-            foreach (var s in today)
-            {
-                from = Math.Min(from ?? s.Start, s.Start);
-                to = Math.Max(to ?? s.End, s.End);
-            }
-            // The next day's early shifts show only when the route day runs past midnight.
-            if (to > 24)
-                foreach (var s in nextDay.Where(s => s.Start < to - 24))
-                    to = Math.Max(to.Value, s.End + 24);
-            var a = Math.Max(0, from ?? 6);
-            var b = Math.Min(30, Math.Max(a + 4, to ?? 22));
-            return (a, b);
+            if (crew.Count == 0) box.Paragraph(Text("foodtrucks:bizman_week_no_crew"));
+            else if (!routeDay.Empty)
+                foreach (var gap in WeekPlan.Gaps(routeDay, schedule, crew)) box.Paragraph(GapText(gap, schedule, day), (Color)colors.red);
+            box.Button(Text("foodtrucks:bizman_week_schedule"), () => Guard(() => VehicleSchedule.Open(id)), canWrite && crew.Count > 0);
         }
 
         private static string GapText(CoverageGap gap, HireSchedule? schedule, DayOfWeek day)
@@ -966,85 +739,6 @@ namespace FoodTrucks
                 : gap.Kind == LegKind.Travel ? "foodtrucks:bizman_week_gap_drive"
                 : "foodtrucks:bizman_week_gap_stop";
             return Format(key, ("from", Clock(gap.Start)), ("to", Clock(gap.End)), ("number", number));
-        }
-
-        // A shift bar: a copy of the game's work shift bar (or a plain one) on the member's row, the name and hours on it,
-        // in the employee's colour as the game's schedule draws it. Drag the bar to move it, an end to resize it, whole
-        // hours, 1 to 12; right-click removes it.
-        private static void Bar(RectTransform track, CrewShift shift, int offset, int a, int b, int h0, int span, EmployeeInstance? employee, bool canWrite,
-            Action<int, int> moved, System.Action removed, Colors colors, float unit)
-        {
-            RectTransform bar;
-            if (sliderTemplate != null)
-            {
-                bar = (RectTransform)Object.Instantiate(sliderTemplate, track).transform;
-                bar.gameObject.SetActive(true);
-            }
-            else
-            {
-                bar = Rect("FoodTrucks.ShiftBar", track);
-                bar.gameObject.AddComponent<Image>();
-            }
-            bar.name = "FoodTrucks.Shift." + shift.Day;
-            Place(bar, (float)(a - h0) / span, 0.12f, (float)(b - h0) / span, 0.88f);
-            var colour = EmployeeColour(employee, colors);
-            var background = (sliderBackgroundPath.Length > 0 ? bar.Find(sliderBackgroundPath) : null)?.GetComponent<Image>() ?? bar.GetComponent<Image>();
-            if (background != null)
-            {
-                background.color = colour;
-                background.raycastTarget = true;
-            }
-            var label = $"{shift.Start:D2}–{shift.End:D2}";
-            var hours = Format("foodtrucks:bizman_week_shift_hours", ("hours", (shift.End - shift.Start).ToString()));
-            var nameText = sliderNamePath.Length > 0 ? bar.Find(sliderNamePath) : null;
-            var hoursText = sliderHoursPath.Length > 0 ? bar.Find(sliderHoursPath) : null;
-            if (nameText != null) BizManParts.SetText(nameText, label);
-            else if (BizManParts.SmallLabel(bar, label) is RectTransform text)
-            {
-                Place(text, 0.05f, 0f, 1f, 1f);
-                BizManParts.Colour(text, Color.white);
-            }
-            if (hoursText != null) BizManParts.SetText(hoursText, hours);
-            if (!canWrite) return;
-            var span0 = span;
-            ShiftBarDrag Handle(Transform target, int mode)
-            {
-                var drag = target.gameObject.AddComponent<ShiftBarDrag>();
-                // Within its own weekday's hours on the grid.
-                drag.Set(bar, track, mode, a, b, h0, span0, Math.Max(h0, offset), Math.Min(h0 + span0, offset + 24), DemandData.Rules?.Fleet.MaxShiftHours ?? 12,
-                    moved, removed);
-                return drag;
-            }
-            Handle(bar, 0);
-            foreach (var (path, mode) in new[] { (sliderLeftPath, -1), (sliderRightPath, 1) })
-            {
-                var end = path.Length > 0 ? bar.Find(path) : null;
-                if (end == null)
-                {
-                    var made = Rect(mode < 0 ? "LeftEnd" : "RightEnd", bar);
-                    made.anchorMin = new Vector2(mode < 0 ? 0f : 1f, 0f);
-                    made.anchorMax = new Vector2(mode < 0 ? 0f : 1f, 1f);
-                    made.pivot = new Vector2(mode < 0 ? 0f : 1f, 0.5f);
-                    made.sizeDelta = new Vector2(unit * 0.5f, 0f);
-                    var image = made.gameObject.AddComponent<Image>();
-                    image.color = new Color(1f, 1f, 1f, 0.25f);
-                    end = made;
-                }
-                else if (end.GetComponent<Graphic>() == null) end.gameObject.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0f);
-                Handle(end, mode);
-            }
-        }
-
-        // The game's colour for an employee on its schedule (ScheduleHelper.GetEmployeeColor): their primary skill's
-        // colour gradient at a point picked by their id.
-        private static Color EmployeeColour(EmployeeInstance? employee, Colors colors)
-        {
-            try
-            {
-                if (employee != null) return SkillHelper.GetData(employee.GetPrimarySkill()).associatedColorGradient.EvaluateRandom(employee.id.GetHashCode());
-            }
-            catch (Exception ex) { Log.Error("Week plan: employee colour: " + ex.Message); }
-            return colors.blue;
         }
 
         // ---- Changes ----
@@ -1059,60 +753,8 @@ namespace FoodTrucks
             return StreetSales.Find(FoodTrucksSession.CurrentState, id);
         }
 
-        // Shifts changed: today is planned again, the crew's weekly hours follow, the save is marked, the page refreshed.
-        private static void ShiftsChanged(VehicleState vehicle)
-        {
-            // Every unfinished plan, yesterday's late one too, is planned again with the new shifts.
-            HireRunner.ReplanShifts(vehicle, HireCrew.Now());
-            HireCrew.SetWeeklyWork(vehicle);
-            FoodTrucksSession.MarkChanged();
-            BizManVehiclePage.RefreshLater();
-        }
-
-        private static void SetShift(string id, string employeeId, DayOfWeek day, int start, int end)
-        {
-            var vehicle = Writable(id);
-            var rules = DemandData.Rules;
-            if (vehicle == null || rules == null) return;
-            var problem = WeekPlan.SetShift(rules.Fleet, vehicle, employeeId, day, start, end);
-            if (problem != ShiftProblem.None)
-            {
-                Log.Info($"Week plan: shift {start:D2}-{end:D2} on {day} for {employeeId} on {id} refused: {problem}.");
-                if (problem == ShiftProblem.TooLong) CartSelling.Notify("foodtrucks:notification_shift_too_long", ("max", rules.Fleet.MaxShiftHours.ToString()));
-                BizManVehiclePage.RefreshLater();
-                return;
-            }
-            Log.Info($"Week plan: {employeeId} on {id} works {day} {start:D2}:00-{end:D2}:00 (BizMan page).");
-            ShiftsChanged(vehicle);
-        }
-
-        // A click on an empty hour: a shift from there, up to four hours, to the route day's end where that is sooner.
-        private static void AddShift(string id, string employeeId, DayOfWeek day, int hour, RouteDay routeDay)
-        {
-            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
-            if (vehicle?.Schedule != null && WeekPlan.ShiftOf(vehicle.Schedule, employeeId, day) != null) return;
-            var end = Math.Min(24, hour + 4);
-            if (!routeDay.Empty && day == routeDay.Day)
-            {
-                var routeEnd = (int)Math.Ceiling(routeDay.End / 60.0);
-                if (routeEnd > hour) end = Math.Min(end, Math.Min(24, routeEnd));
-            }
-            SetShift(id, employeeId, day, hour, Math.Max(hour + 1, end));
-        }
-
-        private static void RemoveShift(string id, string employeeId, DayOfWeek day)
-        {
-            var vehicle = Writable(id);
-            if (vehicle == null || !WeekPlan.RemoveShift(vehicle, employeeId, day)) return;
-            Log.Info($"Week plan: {employeeId}'s {day} shift on {id} removed (BizMan page).");
-            ShiftsChanged(vehicle);
-        }
-
-        // The test bridge's crew auto_schedule: Auto schedule week, without the question.
-        internal static void AutoSchedule(string id, string kind) => Auto(id, kind, null);
-
-        // Auto schedule for one day, or the week (`day` null), as Core's WeekPlan.AutoSchedule decides.
-        private static void Auto(string id, string kind, DayOfWeek? day)
+        // The test bridge's crew auto_schedule: Core's auto schedule for the week.
+        internal static void AutoSchedule(string id, string kind)
         {
             var vehicle = Writable(id);
             var rules = DemandData.Rules;
@@ -1122,11 +764,13 @@ namespace FoodTrucks
                 HireRoutes.HomePoint(home), home?.BayStops);
             var wishes = vehicle.Crew.Select(c => HireCrew.Find(c) is EmployeeInstance e ? HireCrew.Wish(e) : new CrewWish(c)).ToList();
             vehicle.Schedule ??= new HireSchedule();
-            vehicle.Schedule.CrewShifts = WeekPlan.AutoSchedule(rules.Fleet, routeDays, wishes, HireCrew.Limit(kind), vehicle.Schedule.CrewShifts,
-                day == null ? null : new[] { day.Value });
-            Log.Info($"Week plan: auto schedule for {id} ({(day == null ? "the week" : day.ToString())}): " +
-                     string.Join(", ", vehicle.Schedule.CrewShifts.Select(s => $"{s.EmployeeId} {s.Day} {s.Start:D2}-{s.End:D2}")) + ".");
-            ShiftsChanged(vehicle);
+            vehicle.Schedule.CrewShifts = WeekPlan.AutoSchedule(rules.Fleet, routeDays, wishes, HireCrew.Limit(kind), vehicle.Schedule.CrewShifts);
+            Log.Info($"Week plan: auto schedule for {id}: " +
+                     string.Join(", ", vehicle.Schedule.CrewShifts.Select(s => $"{s.EmployeeId} {s.Day} {s.Start:D2}-{s.End:D2} {s.Station}")) + ".");
+            HireRunner.ReplanShifts(vehicle, HireCrew.Now());
+            HireCrew.SetWeeklyWork(vehicle);
+            FoodTrucksSession.MarkChanged();
+            BizManVehiclePage.RefreshLater();
         }
 
         private static void Copy(string id, DayOfWeek day)

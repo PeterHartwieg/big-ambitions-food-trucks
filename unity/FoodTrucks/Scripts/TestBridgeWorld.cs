@@ -940,10 +940,12 @@ namespace FoodTrucks
         }
 
         // { "op": "assign" | "unassign", "vehicle", "employee_id" }: the BizMan vehicle page's crew dropdown.
-        // { "op": "auto_schedule", "vehicle" }: the Week plan tab's Auto schedule week (the crew's shifts for the week).
+        // { "op": "auto_schedule", "vehicle" }: Core's auto schedule for the week (the Schedule tab's auto-fill).
+        // { "op": "schedule", "vehicle", "employee_id", "day", "start", "end", "station"? }: one shift on the Schedule tab's
+        // rows (start == end removes the crew member's shifts that day).
         private static object Crew(JObject args)
         {
-            var op = Need(args, "op", "assign, unassign or auto_schedule");
+            var op = Need(args, "op", "assign, unassign, schedule or auto_schedule");
             var id = Need(args, "vehicle", "the food vehicle's id");
             var vehicle = FoodVehicle(id);
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
@@ -955,6 +957,21 @@ namespace FoodTrucks
                     return new JObject { ["done"] = shifts > 0, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
                 });
             var employeeId = Need(args, "employee_id", "the employee's id (state.employees)");
+            if (op == "schedule")
+            {
+                var dayText = Need(args, "day", "a weekday, monday to sunday");
+                if (!Enum.TryParse<DayOfWeek>(dayText, true, out var day)) throw new BridgeError($"Unknown day '{dayText}': monday to sunday.");
+                var start = (int)(TestBridgeCommands.Num(args, "start") ?? throw new BridgeError("Missing \"start\": the starting hour, 0 to 23."));
+                var end = (int)(TestBridgeCommands.Num(args, "end") ?? throw new BridgeError("Missing \"end\": the ending hour, 1 to 24 (the start removes)."));
+                var station = TestBridgeCommands.Str(args, "station");
+                if (station != null && station != "driving" && station != "serving1" && station != "serving2")
+                    throw new BridgeError($"Unknown station '{station}': serving1, serving2 or driving.");
+                return WithNotices(() =>
+                {
+                    var problem = VehicleSchedule.SetForBridge(id, employeeId, day, start, end, station);
+                    if (problem != FoodTrucks.Core.Fleet.ShiftProblem.None) throw new BridgeError($"Shift refused: {problem}.");
+                }, notices => new JObject { ["done"] = true, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) });
+            }
             var record = FoodTrucks.Core.Saves.StreetSales.Find(state, id);
             var crew = record?.Crew ?? new System.Collections.Generic.List<string>();
             return WithNotices(() =>
@@ -975,7 +992,7 @@ namespace FoodTrucks
                         BizManVehiclePage.ChooseCrew(id, slot, null);
                         break;
                     default:
-                        throw new BridgeError($"Unknown crew op '{op}': assign, unassign or auto_schedule.");
+                        throw new BridgeError($"Unknown crew op '{op}': assign, unassign, schedule or auto_schedule.");
                 }
             }, notices =>
             {

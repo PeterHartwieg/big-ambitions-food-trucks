@@ -70,6 +70,32 @@ namespace FoodTrucks
             Patch(typeof(BizManList), "OnDisable", Type.EmptyTypes, typeof(BizManFleet), postfix: nameof(BizManFleet.ListClosedPostfix));
             BizManFleet.CheckReady();
 
+            // A vehicle's crew shifts on the game's own Schedule tab, on an in-memory stand-in registration (VehicleSchedule).
+            // Every patch here does nothing unless that stand-in is on the business page.
+            var schedule = typeof(UI.Smartphone.Apps.BizMan.Schedule.ScheduleHelper);
+            Patch(typeof(BizManBusiness), "RefreshData", Type.EmptyTypes, typeof(VehicleSchedule), prefix: nameof(VehicleSchedule.RefreshPrefix));
+            Patch(typeof(BizManBusiness), "LoadAlerts", Type.EmptyTypes, typeof(VehicleSchedule), prefix: nameof(VehicleSchedule.AlertsPrefix));
+            Patch(typeof(BizManBusiness), "OnDisable", Type.EmptyTypes, typeof(VehicleSchedule), prefix: nameof(VehicleSchedule.BusinessClosedPrefix));
+            Patch(typeof(UI.Smartphone.Apps.BizMan.Schedule.BizManSchedule), "OnDisable", Type.EmptyTypes, typeof(VehicleSchedule),
+                prefix: nameof(VehicleSchedule.ScheduleClosedPrefix));
+            Patch(schedule, "FetchEmployees", new[] { typeof(Address) }, typeof(VehicleSchedule), prefix: nameof(VehicleSchedule.EmployeesPrefix));
+            Patch(schedule, "FetchWorkstations", Type.EmptyTypes, typeof(VehicleSchedule), prefix: nameof(VehicleSchedule.WorkstationsPrefix));
+            Patch(schedule, "UpdateEmployeeAfterWorkShiftChange", new[] { typeof(EmployeeInstance), typeof(bool) }, typeof(VehicleSchedule),
+                prefix: nameof(VehicleSchedule.EmployeeChangedPrefix));
+            Patch(schedule, "UpdateEmployeesAfterWorkShiftChange", new[] { typeof(List<EmployeeInstance>) }, typeof(VehicleSchedule),
+                prefix: nameof(VehicleSchedule.EmployeeChangedPrefix));
+            Patch(typeof(EmployeeInstance), "UpdateWeeklyHoursAndDays", new[] { typeof(List<ScheduleDay>) }, typeof(VehicleSchedule),
+                postfix: nameof(VehicleSchedule.WeeklyHoursPostfix));
+            Patch(typeof(ScheduleAutoFillerHelper), "AutoFillSchedule", null, typeof(VehicleSchedule), prefix: nameof(VehicleSchedule.AutoFillPrefix));
+            Patch(typeof(UI.Smartphone.Apps.BizMan.Schedule.ScheduleDaySelectionController), "UpdateHrManagerAvailability", new[] { typeof(bool) },
+                typeof(VehicleSchedule), postfix: nameof(VehicleSchedule.AutoAvailablePostfix));
+            Patch(typeof(UI.Smartphone.Apps.BizMan.Schedule.ScheduleHourToggle), "OnPointerDown", new[] { typeof(UnityEngine.EventSystems.PointerEventData) },
+                typeof(VehicleSchedule), prefix: nameof(VehicleSchedule.HourTogglePrefix));
+            Patch(typeof(UI.Smartphone.Apps.BizMan.Schedule.ScheduleDayButton), "OnOpenToggleChange", new[] { typeof(bool) }, typeof(VehicleSchedule),
+                prefix: nameof(VehicleSchedule.DayTogglePrefix));
+            Patch(typeof(UI.Smartphone.Apps.BizMan.Schedule.ScheduleScrollerController), "LoadStation", new[] { typeof(ItemInstance) }, typeof(VehicleSchedule),
+                postfix: nameof(VehicleSchedule.StationPostfix));
+
             // City map pick: "Add as a stop" in a building's card while the BizMan vehicle page's map pick is on.
             Patch(typeof(UI.InGameUI.BuildingResume), "SetButtons", Type.EmptyTypes, typeof(StopPicker), postfix: nameof(StopPicker.SetButtonsPostfix));
             StopPicker.CheckReady();

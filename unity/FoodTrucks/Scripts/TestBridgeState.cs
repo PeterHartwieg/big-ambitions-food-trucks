@@ -281,7 +281,7 @@ namespace FoodTrucks
                     ["wants_max"] = wish.MaxHours,
                     ["shifts"] = new JArray(vehicle.Schedule!.CrewShifts.Where(s => s.EmployeeId == id).Select(s => new JObject
                     {
-                        ["day"] = s.Day.ToString().ToLowerInvariant(), ["start"] = s.Start, ["end"] = s.End,
+                        ["day"] = s.Day.ToString().ToLowerInvariant(), ["start"] = s.Start, ["end"] = s.End, ["station"] = s.Station ?? "serving1",
                     })),
                 };
             }));

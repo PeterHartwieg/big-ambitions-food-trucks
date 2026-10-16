@@ -559,5 +559,10 @@
     "foodtrucks:bizman_week_gap_stop": "Nobody on shift {from}–{to}: stop {number} stays closed.",
     "foodtrucks:bizman_week_gap_back": "Nobody on shift {from}–{to}: it waits at its last stop before the drive back.",
     "foodtrucks:bizman_page_route_uncovered": "Part of a route day has nobody on shift: the vehicle waits closed there until a shift starts.",
-    "foodtrucks:notification_shift_too_long": "A shift is at most {max} hours."
+    "foodtrucks:notification_shift_too_long": "A shift is at most {max} hours.",
+    "foodtrucks:bizman_week_schedule": "Schedule",
+    "foodtrucks:schedule_row_serving": "Serving {number}",
+    "foodtrucks:schedule_row_driving": "Driving",
+    "foodtrucks:notification_schedule_hours_route": "The opening hours follow the vehicle's route.",
+    "foodtrucks:notification_schedule_day_route": "Days are opened and closed on the vehicle's Week plan tab."
 }
