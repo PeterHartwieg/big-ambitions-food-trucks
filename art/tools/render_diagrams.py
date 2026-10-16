@@ -39,7 +39,7 @@ def unity(x, y, z):
 
 KINDS = [
     {
-        "kind": "truck", "label": "Truck", "size": (1200, 700),
+        "kind": "truck", "label": "Truck", "size": (1200, 700), "out": (2400, 800),
         "fbx": "truck/FoodTruck.fbx", "tex": "truck/T_FoodTruck_BC.png",
         "hide": ["Truck_Collision"],
         # The hatch open: Unity localEulerAngles.z = +80 about its hinge, which is +80 degrees about Blender +Y.
@@ -54,7 +54,7 @@ KINDS = [
                    ("EquipmentLine1", unity(-0.62, 1.75, -0.425)), ("EquipmentLine4", unity(-0.62, 1.75, -1.775))],
     },
     {
-        "kind": "cart", "label": "Cart", "size": (900, 700),
+        "kind": "cart", "label": "Cart", "size": (900, 700), "out": (2400, 800),
         "fbx": "cart/FoodCart.fbx", "tex": "cart/T_FoodCart_BC.png",
         "hide": ["Cart_Collision", "Cart_Canopy"],
         # Cash register: Unity (0.29, 0.95, 0.615), +90 degrees about Y (Blender -90 about Z), scale 1.
@@ -232,6 +232,15 @@ def render_kind(spec, models):
     x0, x1, y0, y1 = bounds()
     cam.data.shift_x = ((x0 + x1) / 2 - 0.5)
     cam.data.shift_y = ((y0 + y1) / 2 - 0.5) * h / w
+    # Widen to the output size: the same vertical view (so the vehicle keeps its size against the image height),
+    # more to the left and right. Blender's sensor width and shifts are along the image's longer side, the width.
+    W, H = spec["out"]
+    old = cam.data.sensor_width
+    cam.data.sensor_width = old * h / w * W / H
+    cam.data.shift_x *= old / cam.data.sensor_width
+    cam.data.shift_y *= old / cam.data.sensor_width
+    w, h = W, H
+    scene.render.resolution_x, scene.render.resolution_y = w, h
     bpy.context.view_layer.update()
 
     right = cam.matrix_world.to_3x3() @ Vector((1, 0, 0))
