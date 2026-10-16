@@ -250,7 +250,7 @@ namespace FoodTrucks.Core.Fleet
         public static DayCopy CopyDay(HireSchedule? schedule, DayOfWeek day) => new DayCopy(day, WeekPlan.IsClosed(schedule, day),
             WeekPlan.StopsOf(schedule, day).Select(i => WeekPlan.CopyStop(schedule!.Stops[i], day)).ToList(),
             (schedule?.CrewShifts ?? new List<CrewShift>()).Where(s => s != null && s.Day == day)
-                .Select(s => new CrewShift { EmployeeId = s.EmployeeId, Day = day, Start = s.Start, End = s.End }).ToList());
+                .Select(s => new CrewShift { EmployeeId = s.EmployeeId, Day = day, Start = s.Start, End = s.End, Station = s.Station }).ToList());
 
         // The copied day replaces `day`'s stops, shifts (of crew still on the vehicle) and closed mark. Refused, with
         // nothing changed, when the week wouldn't validate (a night running into the next morning).
@@ -284,7 +284,7 @@ namespace FoodTrucks.Core.Fleet
             schedule.Closed = closed.Distinct().OrderBy(WeekPlan.Position).ToList();
             schedule.CrewShifts = (schedule.CrewShifts ?? new List<CrewShift>()).Where(s => s != null && !days.Contains(s.Day))
                 .Concat(days.SelectMany(d => copy.Shifts.Where(s => crew.Contains(s.EmployeeId))
-                    .Select(s => new CrewShift { EmployeeId = s.EmployeeId, Day = d, Start = s.Start, End = s.End })))
+                    .Select(s => new CrewShift { EmployeeId = s.EmployeeId, Day = d, Start = s.Start, End = s.End, Station = s.Station })))
                 .ToList();
             WeekPlan.SortShifts(schedule);
             vehicle.Schedule = schedule;
