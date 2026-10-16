@@ -95,6 +95,8 @@ namespace FoodTrucks
                 prefix: nameof(VehicleSchedule.DayTogglePrefix));
             Patch(typeof(UI.Smartphone.Apps.BizMan.Schedule.ScheduleScrollerController), "LoadStation", new[] { typeof(ItemInstance) }, typeof(VehicleSchedule),
                 postfix: nameof(VehicleSchedule.StationPostfix));
+            Patch(typeof(BizManBusiness), "SetAddress", new[] { typeof(Address) }, typeof(VehicleSchedule), prefix: nameof(VehicleSchedule.SetAddressPrefix));
+            VehicleSchedule.CheckReady();
 
             // City map pick: "Add as a stop" in a building's card while the BizMan vehicle page's map pick is on.
             Patch(typeof(UI.InGameUI.BuildingResume), "SetButtons", Type.EmptyTypes, typeof(StopPicker), postfix: nameof(StopPicker.SetButtonsPostfix));

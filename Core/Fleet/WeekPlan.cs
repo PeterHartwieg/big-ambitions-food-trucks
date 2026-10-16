@@ -188,6 +188,32 @@ namespace FoodTrucks.Core.Fleet
                    !list.GroupBy(s => (s.Station ?? Serving(1), s.Day)).Any(g => Clash(g.ToList()));
         }
 
+        // Shifts saved before the Schedule tab's rows (no Station) each get the first row free at their hours: serving1,
+        // serving2, then driving. One that fits no row, or overlaps the same crew member's, is dropped; the notes say so.
+        public static List<string> AssignStations(VehicleState vehicle)
+        {
+            var notes = new List<string>();
+            var schedule = vehicle?.Schedule;
+            if (schedule?.CrewShifts == null || schedule.CrewShifts.All(s => s == null || s.Station != null)) return notes;
+            var rows = new[] { Serving(1), Serving(2), Driving };
+            var kept = schedule.CrewShifts.Where(s => s != null && s.Station != null).ToList();
+            foreach (var shift in schedule.CrewShifts.Where(s => s != null && s.Station == null).ToList())
+            {
+                var free = rows.FirstOrDefault(row => !kept.Any(k => k.Day == shift.Day && k.Station == row && k.Start < shift.End && shift.Start < k.End));
+                var own = kept.Any(k => k.Day == shift.Day && k.EmployeeId == shift.EmployeeId && k.Start < shift.End && shift.Start < k.End);
+                if (free == null || own)
+                {
+                    notes.Add($"Schedule: {vehicle!.VehicleId}'s shift {shift.EmployeeId} {shift.Day} {shift.Start:D2}-{shift.End:D2} from an earlier build fits no row; dropped.");
+                    continue;
+                }
+                shift.Station = free;
+                kept.Add(shift);
+            }
+            schedule.CrewShifts = kept;
+            SortShifts(schedule);
+            return notes;
+        }
+
         // The shifts CheckShifts accepts, in order: one with bad hours, or at the same hour as an earlier one for its crew
         // member or on its row, is left out (shifts read back from the game's Schedule tab are written to the save only so).
         public static List<CrewShift> Sanitize(IEnumerable<CrewShift> shifts, out int dropped)
@@ -212,7 +238,7 @@ namespace FoodTrucks.Core.Fleet
         // One shift a day for this crew member (the test bridge, and tests): a new one replaces their shifts that day, on
         // `station` or the first free serving row.
         public static ShiftProblem SetShift(FleetRules rules, VehicleState vehicle, string employeeId, DayOfWeek day, int start, int end,
-            string? station = null)
+            string? station = null, int staff = 2)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var problem = CheckShift(rules, start, end);
@@ -221,7 +247,7 @@ namespace FoodTrucks.Core.Fleet
             var schedule = vehicle.Schedule ??= new HireSchedule();
             schedule.CrewShifts ??= new List<CrewShift>();
             schedule.CrewShifts.RemoveAll(s => s == null || (s.Day == day && s.EmployeeId == employeeId));
-            var rows = Enumerable.Range(1, Math.Max(1, vehicle.Crew.Count)).Select(Serving).Append(Driving).ToList();
+            var rows = Stations(staff);
             schedule.CrewShifts.Add(new CrewShift
             {
                 EmployeeId = employeeId, Day = day, Start = start, End = end,
@@ -278,8 +304,9 @@ namespace FoodTrucks.Core.Fleet
 
         public static int WeekHours(HireSchedule? schedule, string employeeId) => WeeklyWork(schedule, employeeId).Hours;
 
-        // When at least one of `crew` is on shift, over [from, to) in absolute minutes.
-        public static Coverage CoverageOf(HireSchedule? schedule, IEnumerable<string>? crew, long from, long to)
+        // When at least one of `crew` is on shift, over [from, to) in absolute minutes; `serving`: on a serving row (someone
+        // who serves at the window), not just the driver.
+        public static Coverage CoverageOf(HireSchedule? schedule, IEnumerable<string>? crew, long from, long to, bool serving = false)
         {
             var ids = new HashSet<string>(crew ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
             var spans = new List<(long, long)>();
@@ -291,7 +318,7 @@ namespace FoodTrucks.Core.Fleet
             {
                 var weekday = Common.GameDays.Weekday(day);
                 foreach (var s in shifts)
-                    if (s != null && s.Day == weekday && ids.Contains(s.EmployeeId))
+                    if (s != null && s.Day == weekday && ids.Contains(s.EmployeeId) && (!serving || Serves(s)))
                         spans.Add((HireSchedules.Absolute(day, s.Start * 60), HireSchedules.Absolute(day, s.End * 60)));
             }
             return new Coverage(spans);
@@ -338,9 +365,21 @@ namespace FoodTrucks.Core.Fleet
             // The route day's minutes on a calendar Monday-first week, its weekday at day 8 (a Monday) + position.
             var day = 8 + Position(routeDay.Day);
             var origin = HireSchedules.Absolute(day, 0);
-            var coverage = CoverageOf(schedule, crew, origin + routeDay.Start - 1440, origin + routeDay.End + 1440);
+            var ids = (crew ?? Enumerable.Empty<string>()).ToList();
+            var coverage = CoverageOf(schedule, ids, origin + routeDay.Start - 1440, origin + routeDay.End + 1440);
+            var serving = CoverageOf(schedule, ids, origin + routeDay.Start - 1440, origin + routeDay.End + 1440, serving: true);
+            // Nobody at all, or only a driver while a stop is open (nobody serves: review round 3).
+            var missing = coverage.Gaps(origin + routeDay.Start, origin + routeDay.End)
+                .Concat(routeDay.Plan.Legs.Where(l => l.Kind == LegKind.Open).SelectMany(l => serving.Gaps(origin + l.Start, origin + l.End)));
+            var merged = new List<(long Start, long End)>();
+            foreach (var (a, b) in missing.OrderBy(g => g.Item1))
+            {
+                if (merged.Count > 0 && a <= merged[merged.Count - 1].End)
+                    merged[merged.Count - 1] = (merged[merged.Count - 1].Start, Math.Max(merged[merged.Count - 1].End, b));
+                else merged.Add((a, b));
+            }
             var gaps = new List<CoverageGap>();
-            foreach (var (a, b) in coverage.Gaps(origin + routeDay.Start, origin + routeDay.End))
+            foreach (var (a, b) in merged)
             {
                 var start = (int)(a - origin);
                 var leg = routeDay.Plan.LegAt(start) ?? routeDay.Plan.Legs.LastOrDefault(l => l.End <= start);

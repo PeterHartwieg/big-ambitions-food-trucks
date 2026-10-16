@@ -111,11 +111,19 @@ namespace FoodTrucks.Core.Saves
 
                 var state = document.ToObject<SaveState>(JsonSerializer.Create(settings))
                     ?? throw new JsonSerializationException("Save state must be a JSON object.");
-                // Routes saved before the week plan become the same stops on each of their days.
+                // Routes saved before the week plan become the same stops on each of their days; shifts saved before the
+                // Schedule tab's rows get a free row (never a reason to reject the save).
+                var notes = new List<string>();
                 foreach (var vehicle in state.Vehicles ?? new List<VehicleState>())
-                    if (vehicle != null) FoodTrucks.Core.Fleet.WeekPlan.Upgrade(vehicle);
+                {
+                    if (vehicle == null) continue;
+                    FoodTrucks.Core.Fleet.WeekPlan.Upgrade(vehicle);
+                    notes.AddRange(FoodTrucks.Core.Fleet.WeekPlan.AssignStations(vehicle));
+                }
                 ValidateState(state);
-                return new LoadResult(status, state);
+                var result = new LoadResult(status, state);
+                result.Notes.AddRange(notes);
+                return result;
             }
             catch (Exception exception)
             {

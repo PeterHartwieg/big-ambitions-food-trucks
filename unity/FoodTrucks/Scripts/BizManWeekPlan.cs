@@ -727,7 +727,8 @@ namespace FoodTrucks
             if (crew.Count == 0) box.Paragraph(Text("foodtrucks:bizman_week_no_crew"));
             else if (!routeDay.Empty)
                 foreach (var gap in WeekPlan.Gaps(routeDay, schedule, crew)) box.Paragraph(GapText(gap, schedule, day), (Color)colors.red);
-            box.Button(Text("foodtrucks:bizman_week_schedule"), () => Guard(() => VehicleSchedule.Open(id)), canWrite && crew.Count > 0);
+            // Offered only while every guard patch of the Schedule tab is active (VehicleSchedule.Ready).
+            box.Button(Text("foodtrucks:bizman_week_schedule"), () => Guard(() => VehicleSchedule.Open(id)), canWrite && crew.Count > 0 && VehicleSchedule.Ready);
         }
 
         private static string GapText(CoverageGap gap, HireSchedule? schedule, DayOfWeek day)

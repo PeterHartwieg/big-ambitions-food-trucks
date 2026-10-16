@@ -14,7 +14,7 @@ Branch `ui-week` (spec: the plan's "Vehicle week plan and crew shifts"). A vehic
 
 | # | Do | Look for |
 |---|---|---|
-| WK1 | Start the game; read the log | The `Patch …: Active.` lines for BizManBusiness.RefreshData, LoadAlerts, OnDisable, BizManSchedule.OnDisable, ScheduleHelper.FetchEmployees, FetchWorkstations, UpdateEmployeeAfterWorkShiftChange, UpdateEmployeesAfterWorkShiftChange, EmployeeInstance.UpdateWeeklyHoursAndDays, ScheduleAutoFillerHelper.AutoFillSchedule, ScheduleDaySelectionController.UpdateHrManagerAvailability, ScheduleHourToggle.OnPointerDown, ScheduleDayButton.OnOpenToggleChange, ScheduleScrollerController.LoadStation |
+| WK1 | Start the game; read the log | The `Patch …: Active.` lines for BizManBusiness.RefreshData, LoadAlerts, OnDisable, BizManSchedule.OnDisable, ScheduleHelper.FetchEmployees, FetchWorkstations, UpdateEmployeeAfterWorkShiftChange, UpdateEmployeesAfterWorkShiftChange, EmployeeInstance.UpdateWeeklyHoursAndDays, ScheduleAutoFillerHelper.AutoFillSchedule, ScheduleDaySelectionController.UpdateHrManagerAvailability, ScheduleHourToggle.OnPointerDown, ScheduleDayButton.OnOpenToggleChange, ScheduleScrollerController.LoadStation, BizManBusiness.SetAddress, then `Schedule: on (a vehicle's crew shifts on the game's Schedule tab).` (with `off` the Week plan tab's Schedule button is disabled) |
 | WK2 | BizMan, Street food, the truck, Week plan tab, Schedule | The game's business page with only the Schedule tab, the truck's name in the name box (not changeable), "Food truck", no requirements or alerts; rows Serving 1, Serving 2 and Driving (cash register icons, no "customers per hour"); the crew on the right; opening hours are the route day's; log `Schedule: the game's Schedule tab opened for truck …` and `the vehicle's rows are copies of ba:itemname_cashregister` |
 | WK3 | Add a shift for each crew member (click a row's + at the opening), drag it, resize it, remove one; switch days | Works as for a shop; each change logs `Schedule: <id> now has N shifts: …`; the crew's week hours on the right follow (against the hours they want) and satisfaction drifts as in a shop; no "idle" to-do for the crew, nobody unassigned |
 | WK4 | Click an opening-hour toggle in the header; untick a day's open box | Refused with "The opening hours follow the vehicle's route." / "Days are opened and closed on the vehicle's Week plan tab."; nothing changes |
@@ -30,6 +30,10 @@ Branch `ui-week` (spec: the plan's "Vehicle week plan and crew shifts"). A vehic
 | WK14 | While the crew has a stop open, paste another day onto today on the Week plan tab | The window closes and the crew carries on with today's new stops |
 | WK15 | Stand by a crewed truck when its last stop ends, walk off an hour later; then save and load | It drives back to its bay once you're gone, with someone on shift for the whole drive; after the load it still goes |
 | WK16 | Bridge: `crew schedule`, then `state` | `route.shifts` shows the shift with its station; `route.week` gaps follow |
+| WK17 | Send one crew member to training (or wait for a sick day) with a shift that day, open the Schedule tab on that day | Their bar shows; no error in the log |
+| WK18 | Start the game's auto-fill on a real shop, open a vehicle's Schedule tab, click the shop's "schedule done" notification; edit the shop's schedule, close BizMan | The shop's own schedule shows; log `Schedule: the business page moved on from …`; the shop's customers and alerts follow its edit |
+| WK19 | Load `FT bridge 2` (shifts from the previous build) | It loads; shifts get rows; any shift that fits no row logs `Schedule: … fits no row; dropped.` |
+| WK20 | A stop with a driver on shift and no server | The crew doesn't open (or closes) there; the Week plan tab lists the stretch in red; at 04:00 such a vehicle isn't spared the fine as a late stop |
 
 # Vehicle warnings as to-dos (next build)
 

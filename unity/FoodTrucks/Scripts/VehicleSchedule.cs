@@ -49,6 +49,48 @@ namespace FoodTrucks
 
         // The stand-in is on the business page.
         internal static bool Showing { get; private set; }
+        // The stand-in's business page is closing: its schedule's OnDisable (which may run after the page's own) is
+        // skipped too. Cleared on the next frame, and by any other business page.
+        private static bool closing;
+        private static bool ready;
+
+        // Every guard patch is active (Patches.Apply, then CheckReady). Without one of them a stand-in with no address
+        // would reach game code that then works on every employee in the save, so the tab isn't offered (fail closed).
+        internal static bool Ready => ready;
+
+        private static readonly (Type Type, string Method, Type[]? Args, bool Postfix)[] Guards =
+        {
+            (typeof(BizManBusiness), "RefreshData", Type.EmptyTypes, false),
+            (typeof(BizManBusiness), "LoadAlerts", Type.EmptyTypes, false),
+            (typeof(BizManBusiness), "OnDisable", Type.EmptyTypes, false),
+            (typeof(BizManBusiness), "SetAddress", new[] { typeof(Address) }, false),
+            (typeof(BizManSchedule), "OnDisable", Type.EmptyTypes, false),
+            (typeof(ScheduleHelper), "FetchEmployees", new[] { typeof(Address) }, false),
+            (typeof(ScheduleHelper), "FetchWorkstations", Type.EmptyTypes, false),
+            (typeof(ScheduleHelper), "UpdateEmployeeAfterWorkShiftChange", new[] { typeof(EmployeeInstance), typeof(bool) }, false),
+            (typeof(ScheduleHelper), "UpdateEmployeesAfterWorkShiftChange", new[] { typeof(List<EmployeeInstance>) }, false),
+            (typeof(EmployeeInstance), "UpdateWeeklyHoursAndDays", new[] { typeof(List<ScheduleDay>) }, true),
+            (typeof(ScheduleAutoFillerHelper), "AutoFillSchedule", null, false),
+            (typeof(ScheduleDaySelectionController), "UpdateHrManagerAvailability", new[] { typeof(bool) }, true),
+            (typeof(ScheduleHourToggle), "OnPointerDown", new[] { typeof(UnityEngine.EventSystems.PointerEventData) }, false),
+            (typeof(ScheduleDayButton), "OnOpenToggleChange", new[] { typeof(bool) }, false),
+            (typeof(ScheduleScrollerController), "LoadStation", new[] { typeof(ItemInstance) }, true),
+        };
+
+        internal static void CheckReady()
+        {
+            var missing = new List<string>();
+            foreach (var (type, method, args, postfix) in Guards)
+            {
+                var original = AccessTools.Method(type, method, args);
+                var info = original == null ? null : Harmony.GetPatchInfo(original);
+                var patches = info == null ? null : postfix ? info.Postfixes : info.Prefixes;
+                if (patches == null || !patches.Any(p => p.PatchMethod.DeclaringType == typeof(VehicleSchedule))) missing.Add($"{type.Name}.{method}");
+            }
+            ready = missing.Count == 0;
+            Log.Info(ready ? "Schedule: on (a vehicle's crew shifts on the game's Schedule tab)."
+                : $"Schedule: off, patches not active: {string.Join(", ", missing)}; the vehicle page's Schedule button is disabled.");
+        }
 
         private static bool IsStandIn(BuildingRegistration? registration) => Showing && registration != null && registration == standIn;
 
@@ -76,6 +118,11 @@ namespace FoodTrucks
                 CartSelling.Notify("foodtrucks:notification_page_unavailable");
                 return;
             }
+            if (!ready)
+            {
+                CartSelling.Notify("foodtrucks:notification_page_unavailable");
+                return;
+            }
             var item = BaseItemName();
             if (item == null)
             {
@@ -98,15 +145,32 @@ namespace FoodTrucks
             registration.scheduleDays = Days(vehicle, id);
             var business = bizMan.business;
             if (!Showing) saved = (business.address, business.building, business.buildingRegistration);
+            closing = false;
             standIn = registration;
             vehicleId = id;
             Showing = true;
-            business.address = null;
-            business.building = null;
-            business.buildingRegistration = registration;
-            business.SetInitialTab("Schedule");
-            ((Component)bizMan.list).gameObject.SetActive(false);
-            business.Open();
+            try
+            {
+                business.address = null;
+                business.building = null;
+                business.buildingRegistration = registration;
+                business.SetInitialTab("Schedule");
+                ((Component)bizMan.list).gameObject.SetActive(false);
+                business.Open();
+            }
+            catch (Exception ex)
+            {
+                // Back as it was: the page's own fields, no stand-in, the list.
+                var (address, building, previous) = saved ?? (null, null, null);
+                business.address = address;
+                business.building = building;
+                business.buildingRegistration = previous;
+                Reset();
+                ((Component)bizMan.list).gameObject.SetActive(true);
+                Log.Error($"Schedule: opening the Schedule tab for {id} failed: {ex}");
+                CartSelling.Notify("foodtrucks:notification_page_unavailable");
+                return;
+            }
             Log.Info($"Schedule: the game's Schedule tab opened for {kind} {id} ({vehicle.Crew.Count} crew, {vehicle.Schedule?.CrewShifts.Count ?? 0} shifts).");
         }
 
@@ -164,7 +228,7 @@ namespace FoodTrucks
         }
 
         private static List<WorkShift> Shifts(VehicleState vehicle, string id, DayOfWeek day) =>
-            (vehicle.Schedule?.CrewShifts ?? new List<CrewShift>()).Where(s => s.Day == day && vehicle.Crew.Contains(s.EmployeeId))
+            (vehicle.Schedule?.CrewShifts ?? new List<CrewShift>()).Where(s => s.Day == day && vehicle.Crew.Contains(s.EmployeeId) && HireCrew.Find(s.EmployeeId) != null)
             .Select(s => new WorkShift
             {
                 startingHour = s.Start, endingHour = s.End, employeeId = s.EmployeeId,
@@ -287,6 +351,7 @@ namespace FoodTrucks
         public static bool BusinessClosedPrefix(BizManBusiness __instance)
         {
             if (!IsStandIn(__instance.buildingRegistration)) return true;
+            var id = vehicleId;
             try
             {
                 SyncBack();
@@ -303,24 +368,50 @@ namespace FoodTrucks
                 __instance.address = address;
                 __instance.building = building;
                 __instance.buildingRegistration = registration;
-                var id = vehicleId;
                 Log.Info($"Schedule: the Schedule tab for {id} closed.");
-                // Its children's OnDisable may run after this one: the stand-in stays known until the next frame.
-                HireRoutes.Later(() =>
-                {
-                    Reset();
-                    var bizMan = InstanceBehavior<UIs>.Instance?.fullMenu?.bizMan;
-                    if (id != null && bizMan != null && ((Component)bizMan).gameObject.activeInHierarchy) BizManVehiclePage.OpenFor(id);
-                });
             }
             catch (Exception ex) { Log.Error("Schedule: closing: " + ex); }
+            finally
+            {
+                // The session ends here whatever happened; the schedule's own OnDisable, which may come after this one, is
+                // skipped through `closing` until the next frame.
+                Reset();
+                closing = true;
+                HireRoutes.Later(() =>
+                {
+                    closing = false;
+                    var bizMan = InstanceBehavior<UIs>.Instance?.fullMenu?.bizMan;
+                    if (id != null && bizMan != null && ((Component)bizMan).gameObject.activeInHierarchy && !((Component)bizMan.business).gameObject.activeSelf)
+                        BizManVehiclePage.OpenFor(id);
+                });
+            }
             return false;
+        }
+
+        // BizManBusiness.SetAddress: the page moves to a real business (BizMan.Open from a notification, the name
+        // dropdown) while the stand-in shows: the vehicle's session ends first, its shifts read back.
+        public static void SetAddressPrefix(BizManBusiness __instance)
+        {
+            closing = false;
+            if (!IsStandIn(__instance.buildingRegistration)) return;
+            var id = vehicleId;
+            try
+            {
+                SyncBack();
+                var page = Traverse.Create(__instance);
+                if (page.Field("businessNameDropdown").GetValue<GameDropdown>() is GameDropdown names) names.SetInteractable(true);
+                Log.Info($"Schedule: the business page moved on from {id}'s Schedule tab.");
+            }
+            catch (Exception ex) { Log.Error("Schedule: leaving for another business: " + ex); }
+            finally { Reset(); }
         }
 
         // BizManSchedule.OnDisable: no customer entries, theatre or missing-employee checks or address event for the stand-in.
         public static bool ScheduleClosedPrefix(BizManSchedule __instance)
         {
-            if (!Showing) return true;
+            // Only the stand-in's own page (or its closing, when the page's OnDisable ran first): never a real business's.
+            var shown = Traverse.Create(__instance).Field("bizManBusiness").GetValue<BizManBusiness>()?.buildingRegistration;
+            if (!closing && !IsStandIn(shown)) return true;
             try
             {
                 if (__instance.scheduleConfirm != null) ((Component)__instance.scheduleConfirm).gameObject.SetActive(false);
@@ -335,7 +426,10 @@ namespace FoodTrucks
         {
             if (!Here) return true;
             var vehicle = vehicleId == null ? null : StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
-            var crew = vehicle == null ? new List<EmployeeInstance>() : HireCrew.Present(vehicle);
+            // Every crew member who exists, off sick, training or being replaced too: the game draws their shift bars and
+            // looks them up by id (GetEmployeeColor). Who works is decided by the mod's own rules, not this list.
+            var crew = vehicle == null ? new List<EmployeeInstance>()
+                : vehicle.Crew.Select(HireCrew.Find).Where(e => e != null).Select(e => e!).ToList();
             Traverse.Create(typeof(ScheduleHelper)).Property("Employees").SetValue(crew);
             ScheduleHelper.EmployeesById ??= new Dictionary<string, EmployeeInstance>();
             ScheduleHelper.EmployeesById.Clear();
@@ -445,7 +539,7 @@ namespace FoodTrucks
                 problem = vehicle.Crew.Contains(employeeId) ? ShiftProblem.None : ShiftProblem.NotCrew;
                 if (problem == ShiftProblem.None) WeekPlan.RemoveShift(vehicle, employeeId, day);
             }
-            else problem = WeekPlan.SetShift(rules.Fleet, vehicle, employeeId, day, start, end, station);
+            else problem = WeekPlan.SetShift(rules.Fleet, vehicle, employeeId, day, start, end, station, HireCrew.Limit(vehicle.VehicleType));
             if (problem != ShiftProblem.None) return problem;
             HireRunner.ReplanShifts(vehicle, HireCrew.Now());
             HireCrew.SetWeeklyWork(vehicle);
