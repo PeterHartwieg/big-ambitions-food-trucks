@@ -72,7 +72,7 @@ namespace FoodTrucks.Core.Fleet
         // how many of its hires still exist (null: count vehicle.Crew); `itemExists` says whether a food exists in the game
         // now (null: all do).
         public static IReadOnlyList<VehicleWarning> For(DemandTables tables, FleetRules rules, SaveState state, VehicleState vehicle,
-            IEnumerable<CargoLine> cargo, int? crew = null, Func<string, bool>? itemExists = null)
+            IEnumerable<CargoLine> cargo, int? crew = null, Func<string, bool>? itemExists = null, double gameSpeed = 1.0)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
             if (rules == null) throw new ArgumentNullException(nameof(rules));
@@ -98,7 +98,7 @@ namespace FoodTrucks.Core.Fleet
             var hires = Math.Max(0, crew ?? vehicle.Crew?.Count ?? 0);
             if (hasRoute && info != null && hires < info.Staff)
                 warnings.Add(new VehicleWarning(VehicleWarningKind.MissingCrew, id));
-            if (hasRoute && new HireRunner(rules).RouteProblem(vehicle) != ScheduleProblem.None)
+            if (hasRoute && new HireRunner(rules).RouteProblem(vehicle, gameSpeed) != ScheduleProblem.None)
                 warnings.Add(new VehicleWarning(VehicleWarningKind.RouteProblem, id));
 
             if (!vehicle.HasPermit) warnings.Add(new VehicleWarning(VehicleWarningKind.NoPermit, id));

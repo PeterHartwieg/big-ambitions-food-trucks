@@ -641,8 +641,28 @@ namespace FoodTrucks
             var template = listGo.transform.Find(entryPath);
             // Once the list is laid out, the captions move over the first stop's two time dropdowns.
             if (header != null) HireRoutes.Later(() => Guard(() => AlignHeader(header, listGo.transform)));
-            for (var i = 0; i < schedule.Stops.Count; i++)
+            // The day from the bay where it rents its space, through the stops, and back (Peter, 16 October 2026): fixed
+            // rows that aren't stops (no ReorderableListItem, so the list's drag leaves them out; the page is rebuilt after
+            // a drag, putting them back in place), with the drive (or walk) between each two.
+            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
+            var fleet = DemandData.Rules!.Fleet;
+            var mode = Travel.ModeFor(vehicle?.VehicleType);
+            var speed = HireRoutes.GameSpeed();
+            var home = vehicle == null ? null : HireRoutes.HomeOf(vehicle);
+            var homeName = home == null ? null : HomeName(home.Value.SiteId);
+            int Minutes(double fromX, double fromZ, double toX, double toZ) => Travel.Between(fleet, fromX, fromZ, toX, toZ, mode, speed);
+            var stops = schedule.Stops;
+            if (home != null)
             {
+                var place = home.Value.Place;
+                var drive = Minutes(place.X, place.Z, stops[0].X, stops[0].Z);
+                FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_leaves", ("commissary", homeName!), ("time", Clock(stops[0].OpenAt - drive))), bold: true);
+                FixedRow(listGo.transform, TravelText(mode, drive), bold: false);
+            }
+            else FixedRow(listGo.transform, Text("foodtrucks:bizman_page_route_no_space"), bold: true);
+            for (var i = 0; i < stops.Count; i++)
+            {
+                if (i > 0) FixedRow(listGo.transform, TravelText(mode, Minutes(stops[i - 1].X, stops[i - 1].Z, stops[i].X, stops[i].Z)), bold: false);
                 var entry = Object.Instantiate(template, listGo.transform);
                 entry.name = "FoodTrucks.Stop";
                 var item = entry.GetComponent<ReorderableListItem>();
@@ -650,8 +670,81 @@ namespace FoodTrucks
                 FillStop(entry, id, schedule, i, canWrite);
                 entry.gameObject.SetActive(true);
             }
+            if (home != null)
+            {
+                var last = stops[stops.Count - 1];
+                if (home.Value.EndsThere)
+                    FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_ends_in_bay", ("commissary", homeName!)), bold: true);
+                else
+                {
+                    var place = home.Value.Place;
+                    var back = Minutes(last.X, last.Z, place.X, place.Z);
+                    FixedRow(listGo.transform, Format(mode == TravelMode.Push ? "foodtrucks:bizman_page_route_walk_back" : "foodtrucks:bizman_page_route_drive_back",
+                        ("minutes", back.ToString())), bold: false);
+                    FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_back", ("commissary", homeName!), ("time", Clock(last.CloseAt + back))), bold: true);
+                    // Back after the 04:00 check: it isn't in the bay then (no refusal; the check sees it on its way).
+                    var check = DemandData.Rules?.Commissary.NightCheckMinute ?? 240;
+                    if (last.CloseAt + back > 1440 + check)
+                    {
+                        Log.Info($"Route: {vehicle!.VehicleType} {id} gets back to its bay at {Clock(last.CloseAt + back)}, after the {Clock(check)} check.");
+                        FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_back_late", ("time", Clock(check))), bold: true);
+                    }
+                }
+            }
             if (canWrite) reorder.OnItemReordered += (from, to) => Guard(() => MoveStop(id, from, to));
             reorder.Reinitialize();
+        }
+
+        private static string TravelText(TravelMode mode, int minutes) =>
+            Format(mode == TravelMode.Push ? "foodtrucks:bizman_page_route_walk" : "foodtrucks:bizman_page_route_drive", ("minutes", minutes.ToString()));
+
+        private static string Clock(int minute) => StaffDialog.Clock(((minute % 1440) + 1440) % 1440);
+
+        private static string HomeName(string siteId)
+        {
+            var site = DemandData.Commissaries?.Site(siteId);
+            return site == null ? siteId : ShortName(site);
+        }
+
+        // A slim line between the stop cards, in the box's section-label style: grey for a drive with the vehicle icon
+        // before it, dark for the commissary at either end. Not a stop: it can't be dragged or removed.
+        private static void FixedRow(Transform list, string text, bool bold)
+        {
+            var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
+            var unit = BizManParts.SmallLabelHeight();
+            var go = new GameObject(bold ? "FoodTrucks.CommissaryRow" : "FoodTrucks.TravelRow", typeof(RectTransform));
+            var row = (RectTransform)go.transform;
+            row.SetParent(list, false);
+            var element = go.AddComponent<LayoutElement>();
+            element.minHeight = element.preferredHeight = unit * 1.2f;
+            element.flexibleWidth = 1f;
+            var indent = 0f;
+            if (!bold)
+            {
+                var icon = new GameObject("Icon", typeof(RectTransform));
+                var iconRect = (RectTransform)icon.transform;
+                iconRect.SetParent(row, false);
+                iconRect.anchorMin = iconRect.anchorMax = new Vector2(0f, 0.5f);
+                iconRect.pivot = new Vector2(0f, 0.5f);
+                iconRect.sizeDelta = new Vector2(unit * 0.8f, unit * 0.8f);
+                iconRect.anchoredPosition = new Vector2(unit * 0.5f, 0f);
+                var image = icon.AddComponent<Image>();
+                image.sprite = InstanceBehavior<GlobalReferences>.Instance.vehiclePOIIcon;
+                image.preserveAspect = true;
+                image.color = colors.darkGrey;
+                image.raycastTarget = false;
+                indent = unit * 1.6f;
+            }
+            if (BizManParts.SmallLabel(row, text) is RectTransform label)
+            {
+                var labelElement = label.GetComponent<LayoutElement>();
+                if (labelElement != null) labelElement.ignoreLayout = true;
+                label.anchorMin = Vector2.zero;
+                label.anchorMax = Vector2.one;
+                label.offsetMin = new Vector2(indent, 0f);
+                label.offsetMax = Vector2.zero;
+                BizManParts.Colour(label, bold ? (Color)colors.midnight : (Color)colors.darkGrey);
+            }
         }
 
         // One line over the stops: "Opens" and "Closes", in the box's section-label style. Until the list is laid out they
@@ -749,7 +842,12 @@ namespace FoodTrucks
                 Compact(dd.transform);
             }
 
-            var opens = RouteEditor.OpenTimes(schedule, RouteStops.Step, latest, index);
+            // Only times the drive from the stop before allows, as the crew's plan counts it.
+            var fleet = DemandData.Rules!.Fleet;
+            var mode = Travel.ModeFor(StreetSales.Find(FoodTrucksSession.CurrentState, id)?.VehicleType);
+            var speed = HireRoutes.GameSpeed();
+            var opens = RouteEditor.OpenTimes(schedule, RouteStops.Step, latest, index,
+                from => RouteEditor.TravelMinutes(fleet, from, stop, mode, speed));
             if (!opens.Contains(stop.OpenAt)) opens.Add(stop.OpenAt);
             opens.Sort();
             SetUp(open, opens.Select(StaffDialog.Clock).ToList(), opens.IndexOf(stop.OpenAt), canWrite,

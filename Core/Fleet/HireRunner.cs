@@ -43,8 +43,9 @@ namespace FoodTrucks.Core.Fleet
     public readonly struct VehicleWhere
     {
         public VehicleWhere(double x, double z, bool leaveAlone, bool canSellHere = true, bool hasStock = true, bool stayPut = false,
-            bool canRestock = false, string? stockKey = null, IReadOnlyCollection<int>? bayStops = null)
+            bool canRestock = false, string? stockKey = null, IReadOnlyCollection<int>? bayStops = null, (double X, double Z)? home = null)
         {
+            Home = home;
             CanRestock = canRestock;
             BayStops = bayStops;
             StockKey = stockKey;
@@ -76,6 +77,9 @@ namespace FoodTrucks.Core.Fleet
         // stop counts as reached only when the vehicle is in the bay by the restock test (CanRestock), not within the
         // usual stop radius, so a truck parked 20 m off never takes it for its bay. Null or empty means none.
         public IReadOnlyCollection<int>? BayStops { get; }
+        // The bay of the commissary where it rents its space, which the crew drives back to after the last stop
+        // (HireSchedules.HomeIndex); null without a space (or while its bay isn't known).
+        public (double X, double Z)? Home { get; }
     }
 
     // Runs a hire's route minute by minute. The saved day plan says what the hire should be doing now;
@@ -96,18 +100,25 @@ namespace FoodTrucks.Core.Fleet
 
         // Why the vehicle's route gets no plan: None when it has no stops or is valid. A route saved under older rules can
         // fail today's (a stop running into the next morning's, say); the game side logs it and BizMan shows it.
-        public ScheduleProblem RouteProblem(VehicleState vehicle)
+        // Unreachable (a stop opening before the drive from the one before can end) comes after Validate's: the route still
+        // gets its plan, the stop opening late.
+        public ScheduleProblem RouteProblem(VehicleState vehicle, double gameSpeed = 1.0)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var schedule = vehicle.Schedule;
             if (schedule?.Stops == null || schedule.Stops.Count == 0) return ScheduleProblem.None;
-            return schedules.Validate(schedule);
+            var problem = schedules.Validate(schedule);
+            if (problem != ScheduleProblem.None) return problem;
+            return schedules.UnreachableStop(schedule, Travel.ModeFor(vehicle.VehicleType), gameSpeed) >= 0 ? ScheduleProblem.Unreachable : ScheduleProblem.None;
         }
 
         // A crewed vehicle with a valid route gets a plan for the day that contains `now`, starting from where
         // it will be: the last stop of a plan still running past midnight, or where it stands. A plan made in
         // the middle of the day starts now, so stops already over are skipped. Old plans are dropped.
-        public void EnsurePlan(VehicleState vehicle, long now, double x, double z, double gameSpeed = 1.0)
+        // `home`: the vehicle's own commissary bay, where each day ends (unless `endsAtHome`: the route's last stop is
+        // already there); a day after one that ended there starts from the bay.
+        public void EnsurePlan(VehicleState vehicle, long now, double x, double z, double gameSpeed = 1.0,
+            (double X, double Z)? home = null, bool endsAtHome = false)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             vehicle.Shifts ??= new List<ShiftPlan>();
@@ -125,15 +136,17 @@ namespace FoodTrucks.Core.Fleet
             var running = vehicle.Shifts.Where(p => p.Legs.Count > 0 && End(p) > now).OrderBy(End).LastOrDefault();
             if (running != null)
             {
-                var last = schedule.Stops.ElementAtOrDefault(running.Legs[running.Legs.Count - 1].StopIndex);
+                var lastIndex = running.Legs[running.Legs.Count - 1].StopIndex;
+                var last = lastIndex == HireSchedules.HomeIndex ? null : schedule.Stops.ElementAtOrDefault(lastIndex);
                 if (last != null)
                 {
                     x = last.X;
                     z = last.Z;
                 }
+                else if (lastIndex == HireSchedules.HomeIndex && home != null) (x, z) = home.Value;
                 from = End(running);
             }
-            var plan = schedules.PlanDay(schedule, day, GameDays.Weekday(day), x, z, from, Travel.ModeFor(vehicle.VehicleType), gameSpeed);
+            var plan = schedules.PlanDay(schedule, day, GameDays.Weekday(day), x, z, from, Travel.ModeFor(vehicle.VehicleType), gameSpeed, home, endsAtHome);
             vehicle.Shifts.Add(new ShiftPlan
             {
                 Day = day,
@@ -201,6 +214,7 @@ namespace FoodTrucks.Core.Fleet
                     : new HireAction(HireActionKind.Close);
             }
             if (want == null || vehicle.Crew == null || vehicle.Crew.Count == 0) return HireAction.None;
+            if (want.StopIndex == HireSchedules.HomeIndex) return Home(vehicle, now, where, gameSpeed);
             var stop = vehicle.Schedule?.Stops?.ElementAtOrDefault(want.StopIndex);
             if (stop == null) return HireAction.None;
             if (vehicle.Skipped != null && now < vehicle.Skipped.Until &&
@@ -230,6 +244,17 @@ namespace FoodTrucks.Core.Fleet
             return want.Kind == LegKind.Open ? new HireAction(HireActionKind.Open, want.StopIndex) : HireAction.None;
         }
 
+        // The drive back to its own bay after the last stop: nothing once it is in the bay (or has no bay to go to), or
+        // while the player keeps it, or after a failed try until the hour is out; else it leaves for the bay.
+        private HireAction Home(VehicleState vehicle, long now, VehicleWhere where, double gameSpeed)
+        {
+            if (where.Home == null || where.CanRestock || where.StayPut) return HireAction.None;
+            if (vehicle.Skipped != null && now < vehicle.Skipped.Until && vehicle.Skipped.SpotKey == HireSchedules.HomeSpotKey) return HireAction.None;
+            var (x, z) = where.Home.Value;
+            var minutes = Travel.Between(rules, where.X, where.Z, x, z, Travel.ModeFor(vehicle.VehicleType), gameSpeed);
+            return new HireAction(HireActionKind.Depart, HireSchedules.HomeIndex, now + Math.Max(1, minutes));
+        }
+
         // The crew restocked (or tried to) for the leg running now, leaving the commissary's stock of its foods at
         // `stockKeyAfter`: not again in this leg unless that stock changes (CrewRestock.Due).
         public static void Restocked(VehicleState vehicle, long now, string? stockKeyAfter = null)
@@ -256,23 +281,27 @@ namespace FoodTrucks.Core.Fleet
         }
 
         // Puts the vehicle in transit to the stop, from where it stands (x, y, z, heading).
-        public static void Depart(VehicleState vehicle, HireAction action, long now, double x, double y, double z, double heading)
+        // A trip back to the bay (action.Stop is HomeIndex) goes to `home`, a place in the bay the game side chose.
+        public static void Depart(VehicleState vehicle, HireAction action, long now, double x, double y, double z, double heading,
+            ScheduleStop? home = null)
         {
             if (action.Kind != HireActionKind.Depart) throw new ArgumentException("Not a departure.", nameof(action));
-            var stop = vehicle.Schedule!.Stops[action.Stop];
+            var toHome = action.Stop == HireSchedules.HomeIndex;
+            if (toHome && home == null) throw new ArgumentException("A trip back to the bay needs the bay.", nameof(home));
+            var stop = toHome ? home! : vehicle.Schedule!.Stops[action.Stop];
             vehicle.Service = null;
             vehicle.IsOpen = false;
             vehicle.HireStop = null;
             vehicle.Arrival = null;
             vehicle.Transit = new TransitState
             {
-                ToStopIndex = action.Stop,
-                ToCloseAt = OpenEnd(vehicle, action.Stop, now),
+                ToStopIndex = toHome ? (int?)null : action.Stop,
+                ToCloseAt = toHome ? null : OpenEnd(vehicle, action.Stop, now),
                 FromX = x,
                 FromY = y,
                 FromZ = z,
                 FromHeading = heading,
-                ToSpotKey = stop.SpotKey,
+                ToSpotKey = toHome ? HireSchedules.HomeSpotKey : stop.SpotKey,
                 ToX = stop.X,
                 ToZ = stop.Z,
                 ToY = stop.Y,
@@ -301,7 +330,8 @@ namespace FoodTrucks.Core.Fleet
 
         // Shift minutes as the plans will be once today's exists, without saving anything: the game's payroll
         // can count midnight's hour before the routes have planned the new day.
-        public long PlannedShiftMinutes(VehicleState vehicle, long from, long to, double x, double z, double gameSpeed = 1.0)
+        public long PlannedShiftMinutes(VehicleState vehicle, long from, long to, double x, double z, double gameSpeed = 1.0,
+            (double X, double Z)? home = null, bool endsAtHome = false)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var preview = new VehicleState
@@ -313,7 +343,7 @@ namespace FoodTrucks.Core.Fleet
                 Shifts = (vehicle.Shifts ?? new List<ShiftPlan>()).ToList()
             };
             // EnsurePlan drops only plans that ended by `from`, which count nothing here anyway.
-            EnsurePlan(preview, from, x, z, gameSpeed);
+            EnsurePlan(preview, from, x, z, gameSpeed, home, endsAtHome);
             return ShiftMinutes(preview, from, to);
         }
 
@@ -373,6 +403,44 @@ namespace FoodTrucks.Core.Fleet
         }
 
         private static long End(ShiftPlan plan) => plan.Legs.Count == 0 ? 0 : plan.Legs.Max(l => l.End);
+    }
+
+    // A stop the route editor moved later for the drive from the stop before.
+    public sealed class RetimedStop
+    {
+        public RetimedStop(int index, int oldOpen, int oldClose, int newOpen, int newClose, int driveMinutes)
+        {
+            Index = index;
+            OldOpen = oldOpen;
+            OldClose = oldClose;
+            NewOpen = newOpen;
+            NewClose = newClose;
+            DriveMinutes = driveMinutes;
+        }
+
+        public int Index { get; }
+        public int OldOpen { get; }
+        public int OldClose { get; }
+        public int NewOpen { get; }
+        public int NewClose { get; }
+        public int DriveMinutes { get; }
+    }
+
+    public sealed class TravelFit
+    {
+        public TravelFit(IReadOnlyList<RetimedStop> moved, int? stuck, ScheduleProblem problem)
+        {
+            Moved = moved;
+            Stuck = stuck;
+            Problem = problem;
+        }
+
+        public static readonly TravelFit Nothing = new TravelFit(Array.Empty<RetimedStop>(), null, ScheduleProblem.None);
+
+        public IReadOnlyList<RetimedStop> Moved { get; }
+        // The first stop that can't be moved late enough (the route is left as it was); null when all fit.
+        public int? Stuck { get; }
+        public ScheduleProblem Problem { get; }
     }
 
     public static class RouteEditor
@@ -481,16 +549,70 @@ namespace FoodTrucks.Core.Fleet
         }
 
         // Opening times, every `step` minutes of the day, at which a stop of at least `step` minutes fits between the
-        // route's other stops (all but `except`): what the time pickers offer.
-        public static List<int> OpenTimes(HireSchedule? schedule, int step, int latestClose, int? except = null)
+        // route's other stops (all but `except`): what the time pickers offer. With `travelFrom` (minutes from another stop
+        // to this one) a time must also leave the drive from the stop that would come before it: no earlier than that
+        // stop's close plus the drive.
+        public static List<int> OpenTimes(HireSchedule? schedule, int step, int latestClose, int? except = null,
+            Func<ScheduleStop, int>? travelFrom = null)
         {
             if (step <= 0) throw new ArgumentOutOfRangeException(nameof(step));
             var others = Others(schedule, except);
             var overnight = HireSchedules.RunsOnConsecutiveDays(schedule);
             var times = new List<int>();
             for (var open = 0; open < 1440; open += step)
-                if (open + step <= latestClose && Free(others, open, open + step, overnight)) times.Add(open);
+            {
+                if (open + step > latestClose || !Free(others, open, open + step, overnight)) continue;
+                var before = others.Where(s => s.CloseAt <= open).OrderBy(s => s.CloseAt).LastOrDefault();
+                if (travelFrom != null && before != null && open < before.CloseAt + travelFrom(before)) continue;
+                times.Add(open);
+            }
             return times;
+        }
+
+        // Minutes of the drive (or push) between two stops, as the crew's plan counts it.
+        public static int TravelMinutes(FleetRules rules, ScheduleStop from, ScheduleStop to, TravelMode mode, double gameSpeed = 1.0) =>
+            Travel.Between(rules, from.X, from.Z, to.X, to.Z, mode, gameSpeed);
+
+        // After any change to a route (a stop added, moved, retimed or removed): each stop, in order, opens no earlier
+        // than the stop before closes plus the drive between them, rounded up to `step`. A stop that opens too early
+        // moves to that time and keeps its length (at least `step`), closing no later than `latestClose`. The route is
+        // changed only when every stop fits and the result validates; otherwise nothing changes and Stuck names the first
+        // stop that doesn't fit (or the whole route, with Problem, when the moved times don't validate).
+        public static TravelFit FitTravel(HireSchedules schedules, FleetRules rules, HireSchedule schedule, TravelMode mode, double gameSpeed,
+            int step, int latestClose)
+        {
+            if (schedules == null) throw new ArgumentNullException(nameof(schedules));
+            if (rules == null) throw new ArgumentNullException(nameof(rules));
+            if (schedule?.Stops == null || schedule.Stops.Count < 2) return TravelFit.Nothing;
+            if (step <= 0) throw new ArgumentOutOfRangeException(nameof(step));
+            var times = schedule.Stops.Select(s => (Open: s.OpenAt, Close: s.CloseAt)).ToList();
+            var moved = new List<RetimedStop>();
+            for (var i = 1; i < times.Count; i++)
+            {
+                var drive = TravelMinutes(rules, schedule.Stops[i - 1], schedule.Stops[i], mode, gameSpeed);
+                var ready = times[i - 1].Close + drive;
+                if (times[i].Open >= ready) continue;
+                var open = (ready + step - 1) / step * step;
+                var length = Math.Max(step, times[i].Close - times[i].Open);
+                var close = Math.Min(open + length, latestClose);
+                if (open >= 1440 || close - open < step) return new TravelFit(Array.Empty<RetimedStop>(), i, ScheduleProblem.Unreachable);
+                moved.Add(new RetimedStop(i, times[i].Open, times[i].Close, open, close, drive));
+                times[i] = (open, close);
+            }
+            if (moved.Count == 0) return TravelFit.Nothing;
+            var candidate = new HireSchedule
+            {
+                Days = schedule.Days,
+                Stops = schedule.Stops.Select((s, i) => Copy(s, times[i].Open, times[i].Close)).ToList()
+            };
+            var problem = schedules.Validate(candidate);
+            if (problem != ScheduleProblem.None) return new TravelFit(Array.Empty<RetimedStop>(), moved[0].Index, problem);
+            for (var i = 0; i < times.Count; i++)
+            {
+                schedule.Stops[i].OpenAt = times[i].Open;
+                schedule.Stops[i].CloseAt = times[i].Close;
+            }
+            return new TravelFit(moved, null, ScheduleProblem.None);
         }
 
         // Closing times, every `step` minutes after `open`, up to the next stop's opening or the latest close.
@@ -549,8 +671,10 @@ namespace FoodTrucks.Core.Fleet
         {
             foreach (var plan in vehicle.Shifts ?? new List<ShiftPlan>())
             {
-                plan.Legs.RemoveAll(l => map(l.StopIndex) < 0);
-                foreach (var leg in plan.Legs) leg.StopIndex = map(leg.StopIndex);
+                // The drive back to the bay belongs to no stop and stays.
+                plan.Legs.RemoveAll(l => l.StopIndex != HireSchedules.HomeIndex && map(l.StopIndex) < 0);
+                foreach (var leg in plan.Legs)
+                    if (leg.StopIndex != HireSchedules.HomeIndex) leg.StopIndex = map(leg.StopIndex);
             }
             if (vehicle.HireStop != null)
             {

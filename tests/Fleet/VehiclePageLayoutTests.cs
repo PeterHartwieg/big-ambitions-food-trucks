@@ -99,6 +99,16 @@ public class RouteMapTests
     }
 
     [Fact]
+    public void TheBayIsOnTheMapAndTheRouteRunsFromItAndBackInsteadOfLooping()
+    {
+        var map = RouteMap.Layout(new[] { (0.0, 0.0), (400.0, 0.0) }, null, runsDaily: true, aspect: 2, home: (-400.0, 0.0));
+
+        Assert.False(map.Loops);
+        Assert.True(map.Home!.Value.U < map.Stops[0].U);
+        Assert.InRange(map.Home.Value.U, 0, 1);
+    }
+
+    [Fact]
     public void NoStopsGiveAnEmptyMap() =>
         Assert.Empty(RouteMap.Layout(Array.Empty<(double, double)>(), null, true, 2).Stops);
 

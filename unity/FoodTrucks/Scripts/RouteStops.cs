@@ -96,12 +96,38 @@ namespace FoodTrucks
             Log.Info($"Route: stop {index + 1} removed from {vehicle.VehicleType} {vehicle.VehicleId}.");
         }
 
-        // The route changed: plan today again, the crew's weekly hours follow, the save is marked.
+        // The route changed: each stop opens no earlier than the drive from the one before allows (Core
+        // RouteEditor.FitTravel, said in one notice), today is planned again, the crew's weekly hours follow, the save is marked.
         public static void Changed(VehicleState vehicle)
         {
+            FitTravel(vehicle);
             HireRunner.Replan(vehicle, HireCrew.Now());
             HireCrew.SetWeeklyWork(vehicle);
             FoodTrucksSession.MarkChanged();
+        }
+
+        private static void FitTravel(VehicleState vehicle)
+        {
+            var rules = DemandData.Rules;
+            if (rules == null || vehicle.Schedule == null) return;
+            var walk = Travel.ModeFor(vehicle.VehicleType) == TravelMode.Push;
+            var fit = RouteEditor.FitTravel(new HireSchedules(rules.Fleet), rules.Fleet, vehicle.Schedule, Travel.ModeFor(vehicle.VehicleType),
+                HireRoutes.GameSpeed(), Step, LatestClose);
+            if (fit.Stuck is int stuck)
+            {
+                Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId}: stop {stuck + 1} can't be moved late enough for the {(walk ? "walk" : "drive")} from stop {stuck} ({fit.Problem}); the times stay.");
+                CartSelling.Notify("foodtrucks:notification_route_travel_stuck", ("number", (stuck + 1).ToString()), ("from", stuck.ToString()));
+                return;
+            }
+            if (fit.Moved.Count == 0) return;
+            var lines = fit.Moved.Select(m => LocalizorManager.GetLocalization(walk ? "foodtrucks:route_moved_walk" : "foodtrucks:route_moved_drive",
+                new Dictionary<string, string>
+                {
+                    ["number"] = (m.Index + 1).ToString(), ["open"] = StaffDialog.Clock(m.NewOpen), ["from"] = m.Index.ToString(),
+                    ["minutes"] = m.DriveMinutes.ToString()
+                })).ToList();
+            Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId}: {string.Join("; ", fit.Moved.Select(m => $"stop {m.Index + 1} {StaffDialog.Clock(m.OldOpen)}-{StaffDialog.Clock(m.OldClose)} now {StaffDialog.Clock(m.NewOpen)}-{StaffDialog.Clock(m.NewClose)} ({m.DriveMinutes} min from stop {m.Index})"))}.");
+            CartSelling.Notify("foodtrucks:notification_route_travel_moved", ("stops", string.Join(". ", lines)));
         }
 
         // A stop's name for lists: the premium spot it is at, else the nearest building's address and the
@@ -145,6 +171,7 @@ namespace FoodTrucks
         // What the BizMan page says about a route that fails today's rules (HireRunner.RouteProblem).
         internal static string ProblemKey(ScheduleProblem problem) =>
             problem == ScheduleProblem.Overlap ? "foodtrucks:bizman_page_route_invalid_overlap"
+            : problem == ScheduleProblem.Unreachable ? "foodtrucks:bizman_page_route_invalid_travel"
             : problem == ScheduleProblem.BadTimes ? "foodtrucks:bizman_page_route_invalid_times"
             : "foodtrucks:bizman_page_route_invalid";
     }

@@ -158,7 +158,7 @@ namespace FoodTrucks.Core.Saves
                 if (vehicle.Crew == null || vehicle.Crew.Any(string.IsNullOrEmpty) || vehicle.Crew.Distinct(StringComparer.Ordinal).Count() != vehicle.Crew.Count)
                     throw new JsonSerializationException("Crew must list distinct, non-empty employee IDs.");
                 if (vehicle.Shifts == null || vehicle.Shifts.Any(p => p == null || p.Legs == null || p.Legs.Any(l =>
-                        l == null || !Enum.IsDefined(typeof(FoodTrucks.Core.Fleet.LegKind), l.Kind) || l.StopIndex < 0 || l.End < l.Start)))
+                        l == null || !Enum.IsDefined(typeof(FoodTrucks.Core.Fleet.LegKind), l.Kind) || l.StopIndex < FoodTrucks.Core.Fleet.HireSchedules.HomeIndex || l.End < l.Start)))
                     throw new JsonSerializationException("Shifts must be plans with legs that end no earlier than they start.");
                 if ((vehicle.Arrival != null && vehicle.Arrival.SpotKey == null) || (vehicle.Skipped != null && vehicle.Skipped.SpotKey == null))
                     throw new JsonSerializationException("Arrival and Skipped must name their spot.");

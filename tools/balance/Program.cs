@@ -749,10 +749,10 @@ if (opts.Wants("pass"))
     };
 
     // A crew's route, built and checked by Core (HireSchedules.Validate, PlanDay), as the game runs it. The vehicle
-    // restocks only in the bay of the commissary where it rents (Core CrewRestock), so every route has a bay stop: either
-    // in the evening after the pitch (it spends the night in the bay; the pitch closes early enough for the bay stop to
-    // open before midnight, as Validate requires) or in the morning before it (it spends the night at the pitch and is
-    // fined at 04:00). With `breaks` the evening form also gets a midday bay stop. A crew that sells out stays sold out
+    // restocks only in the bay of the commissary where it rents (Core CrewRestock). Since 16 October 2026 every route day
+    // ends with the drive back to that bay (PlanDay's home leg, HireSchedules.HomeIndex), unless its last stop already is
+    // the bay; the drive back is paid like the other drives. The forms: a bay stop in the evening after the pitch, or one
+    // in the morning before it (the night is then spent in the bay too, after the drive back). With `breaks` the evening form also gets a midday bay stop. A crew that sells out stays sold out
     // until a bay stop comes; it may drive there with nothing on board (HireRunner.Step, VehicleWhere.BayStops). Each
     // form that validates is simulated on a steady-state day (planned from where the day before ended, no earlier than
     // its last leg) and the best net is kept; the note says which, and which forms Core refused. Sales at bay stops
@@ -774,7 +774,7 @@ if (opts.Wants("pass"))
         var shortened = close < day.To ? $", pitch shortened to {Clock(close)}" : "";
         forms.Add(($"pitch, bay{shortened}", new() { P("pitch", day.From, close), B("bay", CeilHalf(close + t)) }, false));
         var morningBay = FloorHalf(day.From - t) - 30;
-        forms.Add(("bay, pitch (night at the pitch)", new() { B("bay", morningBay), P("pitch", day.From, day.To) }, true));
+        forms.Add(("bay, pitch, back to the bay", new() { B("bay", morningBay), P("pitch", day.From, day.To) }, false));
         foreach (var b in breaks ?? Array.Empty<int>())
         {
             var bayOpen = CeilHalf(b + t);
@@ -785,15 +785,19 @@ if (opts.Wants("pass"))
         var unlimited = Selling.Run(cart, spot, day.From, day.To, c, Selling.Unlimited(cart));
         var refused = new List<string>();
         (double Net, DayEval Eval)? best = null;
-        foreach (var (name, stops, nightAtPitch) in forms)
+        foreach (var (name, stops, _) in forms)
         {
             var schedule = new FoodTrucks.Core.Saves.HireSchedule { Stops = stops };
             var problem = hireSchedules.Validate(schedule);
             if (problem != FoodTrucks.Core.Fleet.ScheduleProblem.None) { refused.Add($"{name}: {problem}"); continue; }
-            var (endX, endZ) = nightAtPitch ? (spot.X, spot.Z) : (bay.X, bay.Z);
-            var first = hireSchedules.PlanDay(schedule, 2, DayOfWeek.Tuesday, endX, endZ, FoodTrucks.Core.Fleet.HireSchedules.Absolute(2, 0) - 1440, mode);
+            // Each day ends back in the bay (the home leg), or at the bay stop that ends it.
+            var (endX, endZ) = (bay.X, bay.Z);
+            var endsAtHome = stops[^1].SpotKey.StartsWith("bay");
+            var first = hireSchedules.PlanDay(schedule, 2, DayOfWeek.Tuesday, endX, endZ, FoodTrucks.Core.Fleet.HireSchedules.Absolute(2, 0) - 1440, mode,
+                home: (bay.X, bay.Z), endsAtHome: endsAtHome);
             if (first.Legs.Count == 0) { refused.Add($"{name}: no plan"); continue; }
-            var plan = hireSchedules.PlanDay(schedule, 3, DayOfWeek.Wednesday, endX, endZ, first.Legs[^1].End, mode);
+            var plan = hireSchedules.PlanDay(schedule, 3, DayOfWeek.Wednesday, endX, endZ, first.Legs[^1].End, mode,
+                home: (bay.X, bay.Z), endsAtHome: endsAtHome);
             if (plan.Legs.Count == 0 || plan.Skipped.Count > 0) { refused.Add($"{name}: stops skipped"); continue; }
             var origin = FoodTrucks.Core.Fleet.HireSchedules.Absolute(3, 0);
             var stock = Selling.Load(cart, spot, day.From, day.To, c);
@@ -821,14 +825,14 @@ if (opts.Wants("pass"))
             var check = FoodTrucks.Core.Fleet.HireSchedules.Absolute(3, cr.NightCheckMinute);
             var legs = first.Legs.Concat(plan.Legs).ToList();
             var during = legs.FirstOrDefault(l => l.Start <= check && check < l.End);
-            bool InBayStop(int stopIndex) => stops[stopIndex].SpotKey.StartsWith("bay");
+            bool InBayStop(int stopIndex) => stopIndex == FoodTrucks.Core.Fleet.HireSchedules.HomeIndex || stops[stopIndex].SpotKey.StartsWith("bay");
             bool fined;
             if (during.End > during.Start) fined = false; // on its way, or open at a stop
             else
             {
                 var before = legs.Where(l => l.End <= check).OrderBy(l => l.End).LastOrDefault();
-                // Before its first leg ever the vehicle is where the day before left it: where the route ends.
-                var stopIndex = before.End > before.Start ? before.StopIndex : stops.Count - 1;
+                // Before its first leg ever the vehicle is where the day before left it: back in the bay.
+                var stopIndex = before.End > before.Start ? before.StopIndex : FoodTrucks.Core.Fleet.HireSchedules.HomeIndex;
                 fined = !InBayStop(stopIndex);
             }
             var fine = fined ? cr.OvernightFineCents / 100.0 : 0;
