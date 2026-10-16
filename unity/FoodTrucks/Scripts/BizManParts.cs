@@ -263,7 +263,14 @@ namespace FoodTrucks
                 if (label == null) return;
                 var wanted = LayoutUtility.GetPreferredWidth((RectTransform)label.transform) + 48f;
                 var room = rowRect.rect.width > 1f ? rowRect.rect.width : wanted;
-                if (wanted > rect.rect.width) rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, Mathf.Min(wanted, room));
+                var width = Mathf.Min(Mathf.Max(wanted, rect.rect.width), room);
+                // Every button on the box's left edge, in line with the title and text: grown from its centre, buttons of
+                // different captions stood at different places (seen in game 16 October 2026).
+                rect.anchorMin = new Vector2(0f, rect.anchorMin.y);
+                rect.anchorMax = new Vector2(0f, rect.anchorMax.y);
+                rect.pivot = new Vector2(0f, rect.pivot.y);
+                rect.anchoredPosition = new Vector2(0f, rect.anchoredPosition.y);
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
             }
 
             // A line of text in the address line's style, wrapping (hints, refusals, the read-only note).
@@ -277,6 +284,7 @@ namespace FoodTrucks
                 SetText(part, text);
                 Colour(part, colour);
                 Wrap(part);
+                NoMargin(part);
             }
 
             // Any other part (the stops list), at the end of the box.
@@ -351,6 +359,15 @@ namespace FoodTrucks
                 overflow.SetValue(graphic, Enum.Parse(overflow.PropertyType, "Overflow"));
             var element = part.GetComponent<LayoutElement>();
             if (element != null) element.preferredHeight = element.minHeight = -1f;
+        }
+
+        // The address line leaves room on its left for the destination button; a paragraph made from it starts at the
+        // box's left edge like the title (it stood indented in game, 16 October 2026).
+        private static void NoMargin(Transform part)
+        {
+            var graphic = part.GetComponent<Graphic>();
+            var margin = graphic == null ? null : graphic.GetType().GetProperty("margin", BindingFlags.Instance | BindingFlags.Public);
+            if (margin != null && margin.CanWrite && margin.PropertyType == typeof(Vector4)) margin.SetValue(graphic, Vector4.zero);
         }
 
         private static float Height(Transform part) => part is RectTransform rect ? rect.rect.height : 0f;

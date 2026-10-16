@@ -312,8 +312,8 @@
     "foodtrucks:bizman_page_partner": "Partner",
     "foodtrucks:bizman_page_partner_none": "No partner",
     "foodtrucks:bizman_page_partner_option": "{venue} (your {kind})",
-    "foodtrucks:bizman_page_partner_hint": "One of your own venues within reach of where the vehicle stands now.",
-    "foodtrucks:bizman_page_partner_none_near": "None of your venues is within reach of where the vehicle stands now.",
+    "foodtrucks:bizman_page_partner_hint": "A partner is one of your own nightclubs, theatres, cinemas, offices or factories. Parked within {metres} m of it, the vehicle gets more of its guests, and the venue's guests are happier.",
+    "foodtrucks:bizman_page_partner_none_near": "Own a nightclub, theatre, cinema, office or factory? Park this vehicle within {metres} m of it and pick it here as a partner: the vehicle gets more of its guests, and the venue's guests are happier.",
     "foodtrucks:notification_page_unavailable": "The vehicle page couldn't be opened. See Player.log.",
     "foodtrucks:notification_route_full": "The route already has {max} stops.",
     "foodtrucks:notification_route_no_time": "No time of day is free on this route for another stop.",
@@ -517,6 +517,7 @@
     "foodtrucks:bizman_page_space_since_value": "Day {day}",
     "foodtrucks:bizman_page_space_call": "Call commissary",
     "foodtrucks:bizman_page_space_call_named": "Call {commissary}",
-    "foodtrucks:bizman_page_space_none": "No commissary space: a {fine} fine every night at 04:00. Rent one under Spaces in a commissary's call.",
+    "foodtrucks:bizman_page_space_none_how": "No space yet. Call a commissary and choose Spaces to rent one for this vehicle.",
+    "foodtrucks:bizman_page_space_word": "Commissary",
     "foodtrucks:bizman_page_space_visit": "Visit a commissary first: its contact appears on the first visit."
 }

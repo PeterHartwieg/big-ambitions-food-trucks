@@ -394,7 +394,6 @@ namespace FoodTrucks
         // way to that call.
         private static void CommissarySpace(Transform column, SaveState state, string id, string kind)
         {
-            var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
             var box = new BizManParts.Box(column, Text("foodtrucks:bizman_page_space_header"));
             var sites = DemandData.Commissaries;
             var rules = DemandData.Rules?.Commissary;
@@ -410,14 +409,22 @@ namespace FoodTrucks
                 box.Button(Text("foodtrucks:bizman_page_space_call"), () => Call(siteId));
                 return;
             }
-            box.Paragraph(Format("foodtrucks:bizman_page_space_none", ("fine", CartSelling.Money(rules?.OvernightFineCents ?? 0))), (Color)colors.lightRed);
+            // The missing space is a to-do (its fine there); here only how to get one (Peter, 16 October 2026).
             var known = state.Commissary.Unlocked.Select(u => sites?.Site(u)).Where(s => s != null).Select(s => s!).ToList();
-            if (known.Count == 0) box.Paragraph(Text("foodtrucks:bizman_page_space_visit"));
+            box.Paragraph(Text(known.Count == 0 ? "foodtrucks:bizman_page_space_visit" : "foodtrucks:bizman_page_space_none_how"));
             foreach (var other in known)
             {
                 var otherId = other.Id;
-                box.Button(Format("foodtrucks:bizman_page_space_call_named", ("commissary", Commissary.Name(other))), () => Call(otherId));
+                box.Button(Format("foodtrucks:bizman_page_space_call_named", ("commissary", ShortName(other))), () => Call(otherId));
             }
+        }
+
+        // "Hell's Kitchen" for "Hell's Kitchen Commissary": the buttons sit under the Commissary space title.
+        private static string ShortName(FoodTrucks.Core.Commissary.CommissarySite site)
+        {
+            var name = Commissary.Name(site);
+            var word = Text("foodtrucks:bizman_page_space_word");
+            return name.EndsWith(" " + word, StringComparison.OrdinalIgnoreCase) ? name.Substring(0, name.Length - word.Length - 1) : name;
         }
 
         private static void Call(string siteId)
@@ -448,7 +455,8 @@ namespace FoodTrucks
             }
             AddRow(box, Text("foodtrucks:bizman_page_partner"), labels, current != null ? 1 : 0, canWrite && venues.Count > 1,
                 chosen => ChoosePartner(id, venues[chosen]));
-            box.Paragraph(Text(venues.Count > 1 ? "foodtrucks:bizman_page_partner_hint" : "foodtrucks:bizman_page_partner_none_near"));
+            var metres = ((int)(DemandData.Pitches?.Partnerships?.RadiusMetres ?? 50)).ToString();
+            box.Paragraph(Format(venues.Count > 1 ? "foodtrucks:bizman_page_partner_hint" : "foodtrucks:bizman_page_partner_none_near", ("metres", metres)));
         }
 
         private static void AddStops(BizManParts.Box box, string id, HireSchedule schedule, bool canWrite)
