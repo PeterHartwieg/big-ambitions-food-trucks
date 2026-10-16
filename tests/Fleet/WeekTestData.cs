@@ -14,7 +14,10 @@ internal static class WeekTestData
     {
         vehicle.Schedule ??= new HireSchedule();
         vehicle.Schedule.CrewShifts = (vehicle.Crew ?? new List<string>())
-            .SelectMany(id => WeekPlan.Days.Select(d => new CrewShift { EmployeeId = id, Day = d, Start = 0, End = 24 })).ToList();
+            .SelectMany((id, i) => WeekPlan.Days.Select(d => new CrewShift
+            {
+                EmployeeId = id, Day = d, Start = 0, End = 24, Station = i < 2 ? WeekPlan.Serving(i + 1) : WeekPlan.Driving
+            })).ToList();
         return vehicle;
     }
 

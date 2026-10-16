@@ -95,6 +95,7 @@ namespace FoodTrucks
             current.modData.TryGetValue(SaveKey, out var json);
 
             var result = Codec.Load(json);
+            foreach (var note in result.Notes) Log.Info(note);
             LastLoadStatus = result.Status;
             game = current;
             state = result.State;

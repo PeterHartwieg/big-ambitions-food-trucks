@@ -133,6 +133,44 @@ public class WeekPlanRunnerTests
     }
 
     [Fact]
+    public void OpeningAwayFromTheBayWithoutDrivingThereOwesTheDriveBack()
+    {
+        // Already parked at its Wednesday 11:00-14:00 pitch; shifts Wednesday 09:00-14:00 and Friday 09:00-12:00.
+        var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 660, 840));
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 9, 14);
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Friday, 9, 12);
+        runner.EnsurePlan(truck, At(3, 6), 0, 0, home: Bay);
+
+        Assert.Equal(HireActionKind.Open, runner.Step(truck, At(3, 11), AtStop()).Kind);
+        Assert.True(truck.ReturnPending);
+        truck.IsOpen = true;
+        truck.HireStop = 0;
+        Assert.Equal(HireActionKind.Close, runner.Step(truck, At(3, 14), AtStop()).Kind);
+        truck.IsOpen = false;
+        truck.HireStop = null;
+        runner.EnsurePlan(truck, At(5, 9), 0, 0, home: Bay);
+        Assert.Equal((HireActionKind.Depart, HireSchedules.HomeIndex), (runner.Step(truck, At(5, 9), AtStop()).Kind, runner.Step(truck, At(5, 9), AtStop()).Stop));
+    }
+
+    [Fact]
+    public void ADriverAloneNeitherOpensNorKeepsAWindowOpen()
+    {
+        var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 0, 1440));
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 0, 3);
+        truck.Crew.Add("e2");
+        WeekPlan.SetShift(rules, truck, "e2", DayOfWeek.Wednesday, 3, 6, WeekPlan.Driving);
+        runner.EnsurePlan(truck, At(3, 0), 0, 0);
+        truck.IsOpen = true;
+        truck.HireStop = 0;
+
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 2), AtStop()).Kind);
+        Assert.Equal(HireActionKind.Close, runner.Step(truck, At(3, 4), AtStop()).Kind);
+        truck.IsOpen = false;
+        truck.HireStop = null;
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 4), AtStop()).Kind);
+    }
+
+    [Fact]
     public void ADriveBackThatWouldOutrunTheShiftWaits()
     {
         var truck = OutAtTheStop(shiftEnd: 16);
