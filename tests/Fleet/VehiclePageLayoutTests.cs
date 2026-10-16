@@ -26,7 +26,20 @@ public class VehicleDiagramsTests
         Assert.Null(diagrams.For("van"));
     }
 
+    [Fact]
+    public void TheShippedFileReadsWithTheTruckAndCartPlaces()
+    {
+        var json = System.IO.File.ReadAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "data", "vehicle-diagrams.json"));
+        var diagrams = VehicleDiagrams.Parse(json);
+
+        Assert.Equal("VehicleDiagram_Truck.png", diagrams.For("truck")!.Image);
+        Assert.Equal(4, diagrams.For("truck")!.Places.Count);
+        Assert.Equal(2, diagrams.For("cart")!.Places.Count);
+        Assert.All(diagrams.For("truck")!.Places, p => Assert.InRange(p.Size, 0.01, 0.5));
+    }
+
     [Theory]
+    [InlineData(@"{ ""schemaVersion"": 2, ""truck"": { ""image"": ""a.png"", ""places"": [] } }")]
     [InlineData(@"{ ""truck"": { ""places"": [] } }")]
     [InlineData(@"{ ""truck"": { ""image"": ""a.png"" } }")]
     [InlineData(@"{ ""truck"": { ""image"": ""a.png"", ""places"": [ { ""x"": 1.5, ""y"": 0.2 } ] } }")]

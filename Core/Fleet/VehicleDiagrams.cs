@@ -35,7 +35,8 @@ namespace FoodTrucks.Core.Fleet
         public IReadOnlyList<DiagramPlace> Places { get; }
     }
 
-    // data/vehicle-diagrams.json: per vehicle kind, the drawing on the vehicle page's Menu box and its equipment places.
+    // data/vehicle-diagrams.json: per vehicle kind, the drawing on the vehicle page's Menu box and its equipment places,
+    // in the order VehicleDisplays fills them. Other keys (width, height, a place's name and baseX/baseY) are read past.
     //   { "truck": { "image": "VehicleDiagram_Truck.png", "iconSize": 0.18,
     //                "places": [ { "x": 0.21, "y": 0.55 }, { "x": 0.40, "y": 0.55, "size": 0.2 } ] }, "cart": { … } }
     // A place's own "size" (or "iconSize") wins over the kind's "iconSize".
@@ -54,8 +55,13 @@ namespace FoodTrucks.Core.Fleet
             if (string.IsNullOrWhiteSpace(json)) throw new FormatException("vehicle-diagrams.json is empty.");
             var root = JObject.Parse(json);
             var kinds = new Dictionary<string, VehicleDiagram>(StringComparer.Ordinal);
+            var version = root["schemaVersion"];
+            if (version != null && (version.Type != JTokenType.Integer || (int)version != 1))
+                throw new FormatException("vehicle-diagrams.json: schemaVersion must be 1.");
             foreach (var property in root.Properties())
             {
+                // Notes (keys starting with "_") and the schema version aren't vehicle kinds.
+                if (property.Name.StartsWith("_", StringComparison.Ordinal) || property.Name == "schemaVersion") continue;
                 if (!(property.Value is JObject kind)) throw new FormatException($"vehicle-diagrams.json: {property.Name} must be an object.");
                 var image = (string?)kind["image"];
                 if (string.IsNullOrWhiteSpace(image)) throw new FormatException($"vehicle-diagrams.json: {property.Name} has no image.");

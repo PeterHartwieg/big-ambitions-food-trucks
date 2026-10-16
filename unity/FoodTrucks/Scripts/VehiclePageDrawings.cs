@@ -19,7 +19,7 @@ namespace FoodTrucks
     {
         // The drawings' PNGs, in the mod's bundle (every asset under the mod folder is packed by the SDK's builder).
         private const string ImageFolder = "Assets/Mods/FoodTrucks/UI/";
-        private const float DiagramHeight = 220f;
+        private const float DiagramHeight = 250f;
         private const float MapHeight = 240f;
         private static readonly Dictionary<string, Texture2D?> textures = new Dictionary<string, Texture2D?>(StringComparer.Ordinal);
 
