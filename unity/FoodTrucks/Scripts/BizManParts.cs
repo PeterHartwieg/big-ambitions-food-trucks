@@ -45,26 +45,31 @@ namespace FoodTrucks
         // edge and ends Pad from its right; nothing adds an offset of its own.
         internal static class Layout
         {
-            // Inside a box: left, right, top and bottom.
-            internal const int Pad = 16;
+            // Inside a box: left, right, top and bottom. (BizMan's canvas units: about half a screen pixel at 1080p.)
+            internal const int Pad = 24;
             // Between boxes in a column, between columns side by side, and between tabs.
-            internal const float BoxGap = 16f;
+            internal const float BoxGap = 24f;
             // Between the parts of a box, between cards in a list and between controls in a row.
-            internal const float Gap = 8f;
+            internal const float Gap = 16f;
+            // Text inside a grey pill or field starts this far in from the pill's left edge (the game's slot rows).
+            internal const float TextInset = 16f;
+            // The light grey of a field on a white box (the page's dropdowns).
+            internal static readonly Color FieldGrey = new Color32(232, 234, 236, 255);
+            // A fixed card (the commissary at either end of a route day): the whole card grey.
+            internal static readonly Color FixedCardGrey = new Color32(214, 218, 222, 255);
             // A label and value row (Box.Row, Box.DropdownRow): the label column ends and the values start here, as a
             // share of the box's inner width; the second value column starts at SecondValue.
             internal const float ValueStart = 0.4f;
             internal const float SecondValue = 0.72f;
             // The space a cell leaves before the next column.
-            internal const float CellGap = 8f;
+            internal const float CellGap = 12f;
             // A control in a fixed column (a stop's time dropdown).
             internal const float TimeWidth = 200f;
             // A tab row's height and a slim row's (drive rows), in the box's section-label height.
             internal static float TabHeight => SmallLabelHeight() * 1.8f;
             internal static float SlimHeight => SmallLabelHeight() * 1.2f;
-            // A slim row's icon and the text after it.
+            // A slim row's icon.
             internal static float IconSize => SmallLabelHeight() * 0.8f;
-            internal static float IconIndent => SmallLabelHeight() * 1.2f;
 
             // A vertical or horizontal stack (a column's content, the route list) with the given gap and no padding.
             internal static void Stack(HorizontalOrVerticalLayoutGroup? group, float spacing)
@@ -231,9 +236,12 @@ namespace FoodTrucks
                 var height = Height(entry);
                 var rowElement = row.GetComponent<LayoutElement>() ?? row.gameObject.AddComponent<LayoutElement>();
                 if (height > 1f) rowElement.minHeight = rowElement.preferredHeight = height;
+                // A row without a third value gives the second the rest of the row (no cut-off commissary names).
+                var wide = string.IsNullOrEmpty(third);
                 Column(row.Find("SlotNumber"), 0f, Layout.ValueStart);
-                Column(row.Find("VehicleName"), Layout.ValueStart, Layout.SecondValue);
+                Column(row.Find("VehicleName"), Layout.ValueStart, wide ? 1f : Layout.SecondValue);
                 Column(row.Find("DriverStatus"), Layout.SecondValue, 1f);
+                if (wide) Hide(row, "DriverStatus");
                 row.gameObject.SetActive(true);
                 return row;
             }
@@ -328,6 +336,15 @@ namespace FoodTrucks
                 rect.pivot = new Vector2(0f, rect.pivot.y);
                 rect.anchoredPosition = new Vector2(0f, rect.anchoredPosition.y);
                 rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+                // The row is the button's own height, the button filling it: the template's row was 30 units taller than
+                // its button, a gap under every button but none above it (seen in game, 16 October 2026).
+                var height = rect.rect.height > 1f ? rect.rect.height : 50f;
+                var element = row.GetComponent<LayoutElement>() ?? row.gameObject.AddComponent<LayoutElement>();
+                element.minHeight = element.preferredHeight = height;
+                rect.anchorMin = new Vector2(0f, 0f);
+                rect.anchorMax = new Vector2(0f, 1f);
+                rect.offsetMin = new Vector2(0f, 0f);
+                rect.offsetMax = new Vector2(width, 0f);
             }
 
             // A line of text in the address line's style, wrapping (hints, refusals, the read-only note).
@@ -485,6 +502,19 @@ namespace FoodTrucks
             if (element != null) element.preferredHeight = element.minHeight = -1f;
         }
 
+        // One line that may run past its cell instead of wrapping into a narrow column (the overview's status).
+        internal static void NoWrap(Transform? part)
+        {
+            var graphic = part == null ? null : part.GetComponent<Graphic>();
+            if (graphic == null) return;
+            var type = graphic.GetType();
+            var wrapping = type.GetProperty("enableWordWrapping");
+            if (wrapping != null && wrapping.CanWrite) wrapping.SetValue(graphic, false);
+            var overflow = type.GetProperty("overflowMode");
+            if (overflow != null && overflow.CanWrite && overflow.PropertyType.IsEnum)
+                overflow.SetValue(graphic, Enum.Parse(overflow.PropertyType, "Overflow"));
+        }
+
         // A small caption in the box's section-label style ("Opens" over a stop's time), left-aligned on one line. Null
         // without the template.
         internal static Transform? SmallLabel(Transform parent, string text)
@@ -558,8 +588,9 @@ namespace FoodTrucks
             rect.anchorMin = new Vector2(from, 0f);
             rect.anchorMax = new Vector2(to, 1f);
             rect.pivot = new Vector2(0f, 0.5f);
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = new Vector2(to < 1f ? -Layout.CellGap : 0f, 0f);
+            // The text starts TextInset into its cell, as the game's own slot rows (it stood flush on the pill's edge).
+            rect.offsetMin = new Vector2(Layout.TextInset, 0f);
+            rect.offsetMax = new Vector2(to < 1f ? -Layout.CellGap : -Layout.TextInset, 0f);
             OneLine(cell);
         }
 

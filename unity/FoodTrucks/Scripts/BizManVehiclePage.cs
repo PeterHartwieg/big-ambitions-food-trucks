@@ -457,6 +457,10 @@ namespace FoodTrucks
                 // colour, grey for an automatic price.
                 text.color = line.Custom ? (Color)colors.midnight : (Color)colors.darkGrey;
             }
+            // The currency sign before the price was white, as on the game's dark table: on the grey field it takes the
+            // price's colour (Peter's playtest, 16 October 2026: a white $ on white).
+            foreach (var graphic in copy.GetComponentsInChildren<Graphic>(true))
+                if (graphic.name == "Prefix") graphic.color = text != null ? text.color : (Color)colors.midnight;
             var background = copy.GetComponent<Image>();
             if (!priceFieldLogged)
             {
@@ -471,7 +475,7 @@ namespace FoodTrucks
             {
                 // The game's field is a dark translucent block made for its dark table (RGBA 0, 0, 0, 0.65 in game); on the
                 // white box it takes the light grey of the page's dropdowns, tinted yellow or red as the game tints its own.
-                Color32 tint = fieldGrey ?? new Color(0.93f, 0.94f, 0.95f, 1f);
+                Color32 tint = BizManParts.Layout.FieldGrey;
                 if (line.RedCents > 0 && line.PriceCents >= line.RedCents) tint = colors.red;
                 else if (line.YellowCents > 0 && line.PriceCents > line.YellowCents) tint = colors.yellow;
                 tint.a = 255;
