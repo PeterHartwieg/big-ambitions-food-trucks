@@ -119,6 +119,19 @@ namespace FoodTrucks
                     click.onClick = new Button.ButtonClickedEvent();
                     click.enabled = false;
                 }
+                // The card's own hover zoom (CardHover) replaces the game's, which let go whenever the pointer reached a
+                // button inside the card. Same zoom as the game's card.
+                var hover = root.gameObject.AddComponent<CardHover>();
+                foreach (var effects in root.GetComponents<MonoBehaviour>())
+                {
+                    if (effects == null || effects.GetType().Name != "ButtonEffects") continue;
+                    var field = effects.GetType().GetField("hoverScale", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var on = effects.GetType().GetField("scaleOnHover", BindingFlags.Instance | BindingFlags.NonPublic);
+                    if (on?.GetValue(effects) is bool scales && scales && field?.GetValue(effects) is float value) hover.HoverScale = value;
+                    else if (on?.GetValue(effects) is bool none && !none) hover.HoverScale = 1f;
+                    effects.enabled = false;
+                }
+                root.localScale = Vector3.one;
                 // Everything but the title and the white card behind the box starts hidden; the page adds copies of the
                 // parts it needs, in order. (The card is the child `Background`: hiding it left the text on BizMan's blur,
                 // seen in game 15 October 2026.)
