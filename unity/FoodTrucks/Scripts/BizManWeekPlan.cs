@@ -566,13 +566,20 @@ namespace FoodTrucks
             open.transform.SetSiblingIndex(0);
             foreach (var dd in new[] { open, close })
             {
-                if (dd.GetComponent<LayoutElement>() == null) dd.gameObject.AddComponent<LayoutElement>();
+                // The game's Dropdown sets its own LayoutElement's preferredWidth to its widest option a frame after
+                // SetOptions (Dropdown.SetPreferredWidth), so each card's times came out a different width. That element
+                // drops to priority 0; a second one of ours, at a higher priority, holds the fixed width.
+                var own = Traverse.Create(dd).Field("dropdownLayoutElement").GetValue<LayoutElement>();
+                LayoutElement? fixedWidth = null;
                 foreach (var element in dd.GetComponents<LayoutElement>())
                 {
-                    element.minWidth = element.preferredWidth = BizManParts.Layout.ControlWidth;
-                    element.flexibleWidth = 0f;
-                    element.layoutPriority = 10;
+                    if (element == own) element.layoutPriority = 0;
+                    else fixedWidth ??= element;
                 }
+                fixedWidth ??= dd.gameObject.AddComponent<LayoutElement>();
+                fixedWidth.minWidth = fixedWidth.preferredWidth = BizManParts.Layout.TimeWidth;
+                fixedWidth.flexibleWidth = 0f;
+                fixedWidth.layoutPriority = 10;
                 foreach (var fitter in dd.GetComponents<ContentSizeFitter>()) fitter.enabled = false;
                 Compact(dd.transform);
             }

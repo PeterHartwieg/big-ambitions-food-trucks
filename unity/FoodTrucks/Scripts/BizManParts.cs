@@ -58,7 +58,7 @@ namespace FoodTrucks
             // The space a cell leaves before the next column.
             internal const float CellGap = 8f;
             // A control in a fixed column (a stop's time dropdown).
-            internal const float ControlWidth = 120f;
+            internal const float TimeWidth = 200f;
             // A tab row's height and a slim row's (drive rows), in the box's section-label height.
             internal static float TabHeight => SmallLabelHeight() * 1.8f;
             internal static float SlimHeight => SmallLabelHeight() * 1.2f;
