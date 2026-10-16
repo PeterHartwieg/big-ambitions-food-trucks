@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# Renders the BizMan vehicle page's equipment diagrams (art/tools/render_diagrams.py): the truck and the cart
-# with empty equipment places, into unity/FoodTrucks/UI/VehicleDiagram_*.png, and the places' image positions
-# into data/vehicle-diagrams.json. Writes build/diagram-check.png with the places circled, for a look.
-# Usage: art/tools/render_diagrams.sh [art_dir]   (art_dir defaults to this checkout's art/; a worktree without
-# the binaries can pass the main checkout's)
+# Renders the BizMan vehicle page's vehicle drawings in layers (art/tools/render_diagrams.py): the truck and the cart
+# with empty places (unity/FoodTrucks/UI/VehicleDiagram_*.png), one layer per place and display model
+# (VehicleLayer_*.png), data/vehicle-diagrams.json, and build/diagram-check.png with some places filled. Old layers are
+# removed first; a new PNG gets a .meta (Sprite, 2048, bundle foodtrucks) with a fresh GUID, existing metas are kept.
+# Usage: art/tools/render_diagrams.sh [art_dir]   (art_dir defaults to this checkout's art/)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 BLENDER="${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}"
 ART="${1:-$REPO/art}"
-mkdir -p "$REPO/unity/FoodTrucks/UI" "$REPO/build"
+UI="$REPO/unity/FoodTrucks/UI"
+mkdir -p "$UI" "$REPO/build"
+rm -f "$UI"/VehicleLayer_*.png
 "$BLENDER" -b --factory-startup --python "$REPO/art/tools/render_diagrams.py" -- \
-  "$ART" "$REPO/unity/FoodTrucks/UI" "$REPO/data/vehicle-diagrams.json" "$REPO/build/diagram-check.png" \
-  2>&1 | grep -E "^DIAGRAM|^CHECK|Error|Traceback" || true
+  "$ART" "$UI" "$REPO/data/vehicle-diagrams.json" "$REPO/data/economy.json" "$REPO/build/diagram-check.png" \
+  2>&1 | grep -E "^DIAGRAM|^CHECK|^EMPTY|Error|Traceback" || true
+python3 "$REPO/art/tools/diagram_metas.py" "$UI"

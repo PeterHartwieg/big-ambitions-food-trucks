@@ -1,61 +1,791 @@
 {
-  "_notes": "Equipment diagrams on the BizMan vehicle page, rendered by art/tools/render_diagrams.sh. Per kind: the image (in unity/FoodTrucks/UI), its size in pixels, the suggested icon size as a fraction of the image height (a 0.40 m piece), and the places in the order VehicleDisplays fills them. x runs right and y down, 0 to 1 of the image; x/y is the icon centre (0.22 m above the place, about the middle of a piece), baseX/baseY the place itself on the counter. Keys starting with an underscore are notes.",
-  "schemaVersion": 1,
+  "_notes": "Vehicle drawings on the BizMan vehicle page, rendered in layers by art/tools/render_diagrams.sh (images in unity/FoodTrucks/UI). Per kind: the background image (the vehicle with empty places) and its size in pixels; drawOrder, the places from back to front; places in the order VehicleDisplays fills them. Per place: x/y, the place's hotspot (0 to 1 of the image, x right, y down, 0.25 m above the counter), size, a fallback icon size as a fraction of the image height (iconSize is the largest); layers, per game item (economy.json's equipment gameItems) the layer of its display model: the file, cropped to its pixels, with its top-left corner x/y (y down) and width/height in pixels of the full image. Draw the background, then each filled place's layer in drawOrder. Keys starting with an underscore are notes.",
+  "schemaVersion": 2,
   "truck": {
     "image": "VehicleDiagram_Truck.png",
     "width": 1200,
-    "height": 400,
-    "iconSize": 0.33,
+    "height": 700,
+    "iconSize": 0.0855,
+    "drawOrder": [
+      "EquipmentLine4",
+      "EquipmentLine3",
+      "EquipmentLine2",
+      "EquipmentLine1"
+    ],
     "places": [
       {
         "place": "EquipmentLine2",
-        "x": 0.5619,
-        "y": 0.4058,
-        "baseX": 0.5619,
-        "baseY": 0.5785
+        "x": 0.5152,
+        "y": 0.3081,
+        "size": 0.0835,
+        "layers": {
+          "ba:itemname_hotdoggrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_HotDogRoller.png",
+            "x": 584,
+            "y": 214,
+            "width": 68,
+            "height": 45
+          },
+          "ba:itemname_industrialgrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_BurgerStation.png",
+            "x": 583,
+            "y": 205,
+            "width": 70,
+            "height": 55
+          },
+          "ba:itemname_industrialfryermachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_BurgerStation.png",
+            "x": 583,
+            "y": 205,
+            "width": 70,
+            "height": 55
+          },
+          "ba:itemname_concessionsdisplaycase": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_PopcornMachine.png",
+            "x": 585,
+            "y": 167,
+            "width": 69,
+            "height": 93
+          },
+          "ba:itemname_slushimachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_SlushieMachine.png",
+            "x": 586,
+            "y": 179,
+            "width": 66,
+            "height": 81
+          },
+          "foodtrucks:itemname_dumplingsteamer": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_DumplingSteamer.png",
+            "x": 593,
+            "y": 188,
+            "width": 58,
+            "height": 72
+          },
+          "foodtrucks:itemname_griddle": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_Griddle.png",
+            "x": 586,
+            "y": 217,
+            "width": 67,
+            "height": 43
+          },
+          "foodtrucks:itemname_corngrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_CornGrill.png",
+            "x": 585,
+            "y": 220,
+            "width": 67,
+            "height": 38
+          },
+          "ba:itemname_industrialcoffeemachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_CoffeeStation.png",
+            "x": 594,
+            "y": 185,
+            "width": 58,
+            "height": 75
+          },
+          "bakeryxx:itemname_bistromachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_CoffeeStation.png",
+            "x": 594,
+            "y": 185,
+            "width": 58,
+            "height": 75
+          },
+          "ba:itemname_icecreamcounter": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_IceCreamCabinet.png",
+            "x": 583,
+            "y": 178,
+            "width": 70,
+            "height": 82
+          },
+          "ba:itemname_pizzaoven": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_PizzaOven.png",
+            "x": 583,
+            "y": 176,
+            "width": 70,
+            "height": 83
+          },
+          "ba:itemname_drinksfridge": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_DrinksCooler.png",
+            "x": 584,
+            "y": 168,
+            "width": 69,
+            "height": 91
+          },
+          "ba:itemname_largedrinksfridge": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_DrinksCooler.png",
+            "x": 584,
+            "y": 168,
+            "width": 69,
+            "height": 91
+          },
+          "ba:itemname_bakeryshowcase": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_PastryCase.png",
+            "x": 583,
+            "y": 168,
+            "width": 71,
+            "height": 92
+          },
+          "bakeryxx:itemname_breadcounter": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_PastryCase.png",
+            "x": 583,
+            "y": 168,
+            "width": 71,
+            "height": 92
+          },
+          "foodtrucks:itemname_storagecabinet": {
+            "file": "VehicleLayer_Truck_EquipmentLine2_StorageCabinet.png",
+            "x": 584,
+            "y": 168,
+            "width": 69,
+            "height": 90
+          }
+        }
       },
       {
         "place": "EquipmentLine3",
-        "x": 0.4381,
-        "y": 0.4058,
-        "baseX": 0.4381,
-        "baseY": 0.5785
+        "x": 0.4611,
+        "y": 0.3039,
+        "size": 0.0815,
+        "layers": {
+          "ba:itemname_hotdoggrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_HotDogRoller.png",
+            "x": 519,
+            "y": 211,
+            "width": 69,
+            "height": 42
+          },
+          "ba:itemname_industrialgrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_BurgerStation.png",
+            "x": 518,
+            "y": 203,
+            "width": 70,
+            "height": 52
+          },
+          "ba:itemname_industrialfryermachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_BurgerStation.png",
+            "x": 518,
+            "y": 203,
+            "width": 70,
+            "height": 52
+          },
+          "ba:itemname_concessionsdisplaycase": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_PopcornMachine.png",
+            "x": 518,
+            "y": 184,
+            "width": 70,
+            "height": 71
+          },
+          "ba:itemname_slushimachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_SlushieMachine.png",
+            "x": 518,
+            "y": 184,
+            "width": 70,
+            "height": 71
+          },
+          "foodtrucks:itemname_dumplingsteamer": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_DumplingSteamer.png",
+            "x": 519,
+            "y": 185,
+            "width": 61,
+            "height": 70
+          },
+          "foodtrucks:itemname_griddle": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_Griddle.png",
+            "x": 518,
+            "y": 215,
+            "width": 70,
+            "height": 39
+          },
+          "foodtrucks:itemname_corngrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_CornGrill.png",
+            "x": 519,
+            "y": 217,
+            "width": 68,
+            "height": 36
+          },
+          "ba:itemname_industrialcoffeemachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_CoffeeStation.png",
+            "x": 518,
+            "y": 185,
+            "width": 68,
+            "height": 70
+          },
+          "bakeryxx:itemname_bistromachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_CoffeeStation.png",
+            "x": 518,
+            "y": 185,
+            "width": 68,
+            "height": 70
+          },
+          "ba:itemname_icecreamcounter": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_IceCreamCabinet.png",
+            "x": 517,
+            "y": 184,
+            "width": 72,
+            "height": 71
+          },
+          "ba:itemname_pizzaoven": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_PizzaOven.png",
+            "x": 518,
+            "y": 184,
+            "width": 70,
+            "height": 70
+          },
+          "ba:itemname_drinksfridge": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_DrinksCooler.png",
+            "x": 518,
+            "y": 184,
+            "width": 70,
+            "height": 70
+          },
+          "ba:itemname_largedrinksfridge": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_DrinksCooler.png",
+            "x": 518,
+            "y": 184,
+            "width": 70,
+            "height": 70
+          },
+          "ba:itemname_bakeryshowcase": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_PastryCase.png",
+            "x": 518,
+            "y": 184,
+            "width": 69,
+            "height": 70
+          },
+          "bakeryxx:itemname_breadcounter": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_PastryCase.png",
+            "x": 518,
+            "y": 184,
+            "width": 69,
+            "height": 70
+          },
+          "foodtrucks:itemname_storagecabinet": {
+            "file": "VehicleLayer_Truck_EquipmentLine3_StorageCabinet.png",
+            "x": 519,
+            "y": 184,
+            "width": 69,
+            "height": 69
+          }
+        }
       },
       {
         "place": "EquipmentLine1",
-        "x": 0.6856,
-        "y": 0.4058,
-        "baseX": 0.6856,
-        "baseY": 0.5785
+        "x": 0.5707,
+        "y": 0.3124,
+        "size": 0.0855,
+        "layers": {
+          "ba:itemname_hotdoggrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_HotDogRoller.png",
+            "x": 650,
+            "y": 217,
+            "width": 26,
+            "height": 43
+          },
+          "ba:itemname_industrialgrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_BurgerStation.png",
+            "x": 650,
+            "y": 208,
+            "width": 27,
+            "height": 54
+          },
+          "ba:itemname_industrialfryermachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_BurgerStation.png",
+            "x": 650,
+            "y": 208,
+            "width": 27,
+            "height": 54
+          },
+          "ba:itemname_concessionsdisplaycase": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_PopcornMachine.png",
+            "x": 649,
+            "y": 163,
+            "width": 28,
+            "height": 98
+          },
+          "ba:itemname_slushimachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_SlushieMachine.png",
+            "x": 650,
+            "y": 165,
+            "width": 27,
+            "height": 97
+          },
+          "foodtrucks:itemname_dumplingsteamer": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_DumplingSteamer.png",
+            "x": 651,
+            "y": 194,
+            "width": 26,
+            "height": 68
+          },
+          "foodtrucks:itemname_griddle": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_Griddle.png",
+            "x": 650,
+            "y": 220,
+            "width": 26,
+            "height": 41
+          },
+          "foodtrucks:itemname_corngrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_CornGrill.png",
+            "x": 651,
+            "y": 223,
+            "width": 25,
+            "height": 37
+          },
+          "ba:itemname_industrialcoffeemachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_CoffeeStation.png",
+            "x": 650,
+            "y": 197,
+            "width": 27,
+            "height": 65
+          },
+          "bakeryxx:itemname_bistromachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_CoffeeStation.png",
+            "x": 650,
+            "y": 197,
+            "width": 27,
+            "height": 65
+          },
+          "ba:itemname_icecreamcounter": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_IceCreamCabinet.png",
+            "x": 650,
+            "y": 179,
+            "width": 27,
+            "height": 83
+          },
+          "ba:itemname_pizzaoven": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_PizzaOven.png",
+            "x": 650,
+            "y": 177,
+            "width": 27,
+            "height": 84
+          },
+          "ba:itemname_drinksfridge": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_DrinksCooler.png",
+            "x": 650,
+            "y": 168,
+            "width": 27,
+            "height": 93
+          },
+          "ba:itemname_largedrinksfridge": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_DrinksCooler.png",
+            "x": 650,
+            "y": 168,
+            "width": 27,
+            "height": 93
+          },
+          "ba:itemname_bakeryshowcase": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_PastryCase.png",
+            "x": 650,
+            "y": 168,
+            "width": 27,
+            "height": 93
+          },
+          "bakeryxx:itemname_breadcounter": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_PastryCase.png",
+            "x": 650,
+            "y": 168,
+            "width": 27,
+            "height": 93
+          },
+          "foodtrucks:itemname_storagecabinet": {
+            "file": "VehicleLayer_Truck_EquipmentLine1_StorageCabinet.png",
+            "x": 650,
+            "y": 161,
+            "width": 27,
+            "height": 99
+          }
+        }
       },
       {
         "place": "EquipmentLine4",
-        "x": 0.3144,
-        "y": 0.4058,
-        "baseX": 0.3144,
-        "baseY": 0.5785
+        "x": 0.4082,
+        "y": 0.2998,
+        "size": 0.0796,
+        "layers": {
+          "ba:itemname_hotdoggrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_HotDogRoller.png",
+            "x": 455,
+            "y": 208,
+            "width": 70,
+            "height": 44
+          },
+          "ba:itemname_industrialgrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_BurgerStation.png",
+            "x": 454,
+            "y": 200,
+            "width": 72,
+            "height": 53
+          },
+          "ba:itemname_industrialfryermachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_BurgerStation.png",
+            "x": 454,
+            "y": 200,
+            "width": 72,
+            "height": 53
+          },
+          "ba:itemname_concessionsdisplaycase": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_PopcornMachine.png",
+            "x": 454,
+            "y": 181,
+            "width": 71,
+            "height": 72
+          },
+          "ba:itemname_slushimachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_SlushieMachine.png",
+            "x": 454,
+            "y": 182,
+            "width": 71,
+            "height": 71
+          },
+          "foodtrucks:itemname_dumplingsteamer": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_DumplingSteamer.png",
+            "x": 456,
+            "y": 183,
+            "width": 68,
+            "height": 70
+          },
+          "foodtrucks:itemname_griddle": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_Griddle.png",
+            "x": 454,
+            "y": 212,
+            "width": 71,
+            "height": 41
+          },
+          "foodtrucks:itemname_corngrill": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_CornGrill.png",
+            "x": 455,
+            "y": 215,
+            "width": 69,
+            "height": 36
+          },
+          "ba:itemname_industrialcoffeemachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_CoffeeStation.png",
+            "x": 455,
+            "y": 183,
+            "width": 70,
+            "height": 70
+          },
+          "bakeryxx:itemname_bistromachine": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_CoffeeStation.png",
+            "x": 455,
+            "y": 183,
+            "width": 70,
+            "height": 70
+          },
+          "ba:itemname_icecreamcounter": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_IceCreamCabinet.png",
+            "x": 453,
+            "y": 182,
+            "width": 73,
+            "height": 71
+          },
+          "ba:itemname_pizzaoven": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_PizzaOven.png",
+            "x": 454,
+            "y": 181,
+            "width": 71,
+            "height": 71
+          },
+          "ba:itemname_drinksfridge": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_DrinksCooler.png",
+            "x": 454,
+            "y": 181,
+            "width": 72,
+            "height": 71
+          },
+          "ba:itemname_largedrinksfridge": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_DrinksCooler.png",
+            "x": 454,
+            "y": 181,
+            "width": 72,
+            "height": 71
+          },
+          "ba:itemname_bakeryshowcase": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_PastryCase.png",
+            "x": 454,
+            "y": 181,
+            "width": 70,
+            "height": 72
+          },
+          "bakeryxx:itemname_breadcounter": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_PastryCase.png",
+            "x": 454,
+            "y": 181,
+            "width": 70,
+            "height": 72
+          },
+          "foodtrucks:itemname_storagecabinet": {
+            "file": "VehicleLayer_Truck_EquipmentLine4_StorageCabinet.png",
+            "x": 455,
+            "y": 181,
+            "width": 70,
+            "height": 70
+          }
+        }
       }
     ]
   },
   "cart": {
     "image": "VehicleDiagram_Cart.png",
-    "width": 800,
-    "height": 400,
-    "iconSize": 0.33,
+    "width": 900,
+    "height": 700,
+    "iconSize": 0.1251,
+    "drawOrder": [
+      "EquipmentRear",
+      "EquipmentFront"
+    ],
     "places": [
       {
         "place": "EquipmentFront",
-        "x": 0.6177,
-        "y": 0.4631,
-        "baseX": 0.6177,
-        "baseY": 0.6233
+        "x": 0.5755,
+        "y": 0.4678,
+        "size": 0.1251,
+        "layers": {
+          "ba:itemname_hotdoggrill": {
+            "file": "VehicleLayer_Cart_EquipmentFront_HotDogRoller.png",
+            "x": 456,
+            "y": 314,
+            "width": 124,
+            "height": 93
+          },
+          "ba:itemname_industrialgrill": {
+            "file": "VehicleLayer_Cart_EquipmentFront_BurgerStation.png",
+            "x": 455,
+            "y": 302,
+            "width": 125,
+            "height": 107
+          },
+          "ba:itemname_industrialfryermachine": {
+            "file": "VehicleLayer_Cart_EquipmentFront_BurgerStation.png",
+            "x": 455,
+            "y": 302,
+            "width": 125,
+            "height": 107
+          },
+          "ba:itemname_concessionsdisplaycase": {
+            "file": "VehicleLayer_Cart_EquipmentFront_PopcornMachine.png",
+            "x": 451,
+            "y": 230,
+            "width": 131,
+            "height": 179
+          },
+          "ba:itemname_slushimachine": {
+            "file": "VehicleLayer_Cart_EquipmentFront_SlushieMachine.png",
+            "x": 454,
+            "y": 236,
+            "width": 127,
+            "height": 174
+          },
+          "foodtrucks:itemname_dumplingsteamer": {
+            "file": "VehicleLayer_Cart_EquipmentFront_DumplingSteamer.png",
+            "x": 457,
+            "y": 279,
+            "width": 120,
+            "height": 129
+          },
+          "foodtrucks:itemname_griddle": {
+            "file": "VehicleLayer_Cart_EquipmentFront_Griddle.png",
+            "x": 453,
+            "y": 320,
+            "width": 128,
+            "height": 89
+          },
+          "foodtrucks:itemname_corngrill": {
+            "file": "VehicleLayer_Cart_EquipmentFront_CornGrill.png",
+            "x": 457,
+            "y": 326,
+            "width": 120,
+            "height": 74
+          },
+          "ba:itemname_industrialcoffeemachine": {
+            "file": "VehicleLayer_Cart_EquipmentFront_CoffeeStation.png",
+            "x": 454,
+            "y": 274,
+            "width": 125,
+            "height": 136
+          },
+          "bakeryxx:itemname_bistromachine": {
+            "file": "VehicleLayer_Cart_EquipmentFront_CoffeeStation.png",
+            "x": 454,
+            "y": 274,
+            "width": 125,
+            "height": 136
+          },
+          "ba:itemname_icecreamcounter": {
+            "file": "VehicleLayer_Cart_EquipmentFront_IceCreamCabinet.png",
+            "x": 453,
+            "y": 255,
+            "width": 129,
+            "height": 155
+          },
+          "ba:itemname_pizzaoven": {
+            "file": "VehicleLayer_Cart_EquipmentFront_PizzaOven.png",
+            "x": 455,
+            "y": 251,
+            "width": 128,
+            "height": 157
+          },
+          "ba:itemname_drinksfridge": {
+            "file": "VehicleLayer_Cart_EquipmentFront_DrinksCooler.png",
+            "x": 456,
+            "y": 238,
+            "width": 127,
+            "height": 170
+          },
+          "ba:itemname_largedrinksfridge": {
+            "file": "VehicleLayer_Cart_EquipmentFront_DrinksCooler.png",
+            "x": 456,
+            "y": 238,
+            "width": 127,
+            "height": 170
+          },
+          "ba:itemname_bakeryshowcase": {
+            "file": "VehicleLayer_Cart_EquipmentFront_PastryCase.png",
+            "x": 453,
+            "y": 238,
+            "width": 129,
+            "height": 170
+          },
+          "bakeryxx:itemname_breadcounter": {
+            "file": "VehicleLayer_Cart_EquipmentFront_PastryCase.png",
+            "x": 453,
+            "y": 238,
+            "width": 129,
+            "height": 170
+          },
+          "foodtrucks:itemname_storagecabinet": {
+            "file": "VehicleLayer_Cart_EquipmentFront_StorageCabinet.png",
+            "x": 456,
+            "y": 226,
+            "width": 127,
+            "height": 178
+          }
+        }
       },
       {
         "place": "EquipmentRear",
-        "x": 0.3823,
-        "y": 0.3913,
-        "baseX": 0.3823,
-        "baseY": 0.5515
+        "x": 0.4372,
+        "y": 0.433,
+        "size": 0.1124,
+        "layers": {
+          "ba:itemname_hotdoggrill": {
+            "file": "VehicleLayer_Cart_EquipmentRear_HotDogRoller.png",
+            "x": 335,
+            "y": 291,
+            "width": 119,
+            "height": 87
+          },
+          "ba:itemname_industrialgrill": {
+            "file": "VehicleLayer_Cart_EquipmentRear_BurgerStation.png",
+            "x": 334,
+            "y": 280,
+            "width": 121,
+            "height": 100
+          },
+          "ba:itemname_industrialfryermachine": {
+            "file": "VehicleLayer_Cart_EquipmentRear_BurgerStation.png",
+            "x": 334,
+            "y": 280,
+            "width": 121,
+            "height": 100
+          },
+          "ba:itemname_concessionsdisplaycase": {
+            "file": "VehicleLayer_Cart_EquipmentRear_PopcornMachine.png",
+            "x": 326,
+            "y": 211,
+            "width": 130,
+            "height": 168
+          },
+          "ba:itemname_slushimachine": {
+            "file": "VehicleLayer_Cart_EquipmentRear_SlushieMachine.png",
+            "x": 334,
+            "y": 217,
+            "width": 121,
+            "height": 164
+          },
+          "foodtrucks:itemname_dumplingsteamer": {
+            "file": "VehicleLayer_Cart_EquipmentRear_DumplingSteamer.png",
+            "x": 337,
+            "y": 257,
+            "width": 115,
+            "height": 122
+          },
+          "foodtrucks:itemname_griddle": {
+            "file": "VehicleLayer_Cart_EquipmentRear_Griddle.png",
+            "x": 333,
+            "y": 297,
+            "width": 122,
+            "height": 82
+          },
+          "foodtrucks:itemname_corngrill": {
+            "file": "VehicleLayer_Cart_EquipmentRear_CornGrill.png",
+            "x": 336,
+            "y": 302,
+            "width": 116,
+            "height": 70
+          },
+          "ba:itemname_industrialcoffeemachine": {
+            "file": "VehicleLayer_Cart_EquipmentRear_CoffeeStation.png",
+            "x": 334,
+            "y": 253,
+            "width": 121,
+            "height": 127
+          },
+          "bakeryxx:itemname_bistromachine": {
+            "file": "VehicleLayer_Cart_EquipmentRear_CoffeeStation.png",
+            "x": 334,
+            "y": 253,
+            "width": 121,
+            "height": 127
+          },
+          "ba:itemname_icecreamcounter": {
+            "file": "VehicleLayer_Cart_EquipmentRear_IceCreamCabinet.png",
+            "x": 331,
+            "y": 235,
+            "width": 124,
+            "height": 145
+          },
+          "ba:itemname_pizzaoven": {
+            "file": "VehicleLayer_Cart_EquipmentRear_PizzaOven.png",
+            "x": 331,
+            "y": 231,
+            "width": 123,
+            "height": 148
+          },
+          "ba:itemname_drinksfridge": {
+            "file": "VehicleLayer_Cart_EquipmentRear_DrinksCooler.png",
+            "x": 331,
+            "y": 219,
+            "width": 124,
+            "height": 160
+          },
+          "ba:itemname_largedrinksfridge": {
+            "file": "VehicleLayer_Cart_EquipmentRear_DrinksCooler.png",
+            "x": 331,
+            "y": 219,
+            "width": 124,
+            "height": 160
+          },
+          "ba:itemname_bakeryshowcase": {
+            "file": "VehicleLayer_Cart_EquipmentRear_PastryCase.png",
+            "x": 329,
+            "y": 219,
+            "width": 125,
+            "height": 160
+          },
+          "bakeryxx:itemname_breadcounter": {
+            "file": "VehicleLayer_Cart_EquipmentRear_PastryCase.png",
+            "x": 329,
+            "y": 219,
+            "width": 125,
+            "height": 160
+          },
+          "foodtrucks:itemname_storagecabinet": {
+            "file": "VehicleLayer_Cart_EquipmentRear_StorageCabinet.png",
+            "x": 332,
+            "y": 207,
+            "width": 123,
+            "height": 169
+          }
+        }
       }
     ]
   }
