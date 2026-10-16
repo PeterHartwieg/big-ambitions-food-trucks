@@ -25,10 +25,12 @@ namespace FoodTrucks
 {
     // A vehicle's crew shifts on the game's own Schedule tab (Peter, 16 October 2026): the BizMan business page opens on
     // an in-memory BuildingRegistration that stands in for the vehicle. It is never added to the game's registrations or
-    // saved, has no building, and holds the vehicle's week as the game's ScheduleDays: each weekday open, its opening
-    // hours the route day's hours (WeekPlan.RouteHours: they follow the route, so the hour and day toggles are refused),
+    // saved, has no building, and holds the vehicle's week as the game's ScheduleDays: each weekday open unless its route
+    // is closed (the day buttons' open toggle opens and closes the route day, as for a shop: Peter, 16 October 2026), its
+    // opening hours the route day's hours (WeekPlan.RouteHours: they follow the route, so the hour toggles are refused),
     // and the crew's shifts on the vehicle's rows, synthetic workstations copied from a vanilla cash register (customer
-    // service): Serving 1 (and 2 on a truck) and Driving, ids ft:<vehicle>:serving1 / serving2 / driving.
+    // service): one per staff place, Serving 1 (and 2 on a truck), ids ft:<vehicle>:serving1 / serving2. Anyone on shift
+    // serves, drives and restocks (no driving row: Peter).
     //
     // The mod's save keeps Core's model (HireSchedule.CrewShifts with their row); the stand-in's days are built from it
     // when the tab opens and every change the game makes is read back into it (SyncBack), so nothing of the game's types
@@ -142,6 +144,10 @@ namespace FoodTrucks
                 var instance = new ItemInstance(item) { id = RowId(id, row), alias = RowName(row).ToUpperInvariant() };
                 registration.itemInstances[instance.id] = instance;
             }
+            // Shifts on a row the vehicle hasn't (an old driving row, a second row on a cart) move to a free one or go.
+            var notes = WeekPlan.RepairShifts(vehicle, WeekPlan.Stations(HireCrew.Limit(kind)));
+            foreach (var note in notes) Log.Info(note);
+            if (notes.Count > 0) FoodTrucksSession.MarkChanged();
             registration.scheduleDays = Days(vehicle, id);
             var business = bizMan.business;
             if (!Showing) saved = (business.address, business.building, business.buildingRegistration);
@@ -195,8 +201,7 @@ namespace FoodTrucks
         }
 
         private static string RowName(string station) =>
-            station == WeekPlan.Driving ? BizManVehiclePage.Text("foodtrucks:schedule_row_driving")
-            : BizManVehiclePage.Format("foodtrucks:schedule_row_serving", ("number", station.Substring("serving".Length)));
+            BizManVehiclePage.Format("foodtrucks:schedule_row_serving", ("number", station.Substring("serving".Length)));
 
         // The game's weekday for one of ours, and back, by name (the game's days are numbered 1 to 7 from Monday).
         private static DayOfWeek WeekdayOf(DayOfWeekOrdered day) =>
@@ -218,8 +223,8 @@ namespace FoodTrucks
                 days.Add(new ScheduleDay
                 {
                     day = ordered,
-                    // Always open: shifts outside the route day may be set (paid, nothing to do); the route closes days.
-                    isOpen = true,
+                    // Open unless the route day is closed; shifts outside the route's hours may be set (paid, nothing to do).
+                    isOpen = !WeekPlan.IsClosed(vehicle.Schedule, day),
                     openingHourSlots = WeekPlan.OpeningSlots(hours, day).Select(s => new OpeningHourSlot(s.Start, s.End)).ToList(),
                     workShifts = Shifts(vehicle, id, day),
                 });
@@ -437,7 +442,7 @@ namespace FoodTrucks
             return false;
         }
 
-        // ScheduleHelper.FetchWorkstations: the vehicle's rows, serving first, then driving.
+        // ScheduleHelper.FetchWorkstations: the vehicle's rows.
         public static bool WorkstationsPrefix()
         {
             if (!Here) return true;
@@ -505,13 +510,52 @@ namespace FoodTrucks
             return false;
         }
 
-        // ScheduleDayButton.OnOpenToggleChange: a day is closed on the vehicle's Week plan tab, not here.
+        // ScheduleDayButton.OnOpenToggleChange: the day's open toggle opens or closes the vehicle's route that weekday, as for
+        // a shop (Peter, 16 October 2026). The route is changed first (RouteEditor.SetClosed, refused as before when a night
+        // would run into a working morning: the toggle goes back); then the game's own handler marks the day and reloads it.
+        // Today is planned again (RouteStops.Changed): a window open at a stop of a closed day closes and its drive back
+        // stays owed (VehicleState.ReturnPending), so nothing is stranded.
         public static bool DayTogglePrefix(ScheduleDayButton __instance, bool isOpen)
         {
             if (!Here) return true;
-            Traverse.Create(__instance).Field("openToggle").GetValue<Toggle>()?.SetIsOnWithoutNotify(!isOpen);
-            CartSelling.Notify("foodtrucks:notification_schedule_day_route");
-            return false;
+            try
+            {
+                var state = FoodTrucksSession.CurrentState;
+                var rules = DemandData.Rules;
+                var vehicle = state == null || vehicleId == null ? null : StreetSales.Find(state, vehicleId);
+                var day = WeekdayOf((DayOfWeekOrdered)__instance.dayIndex);
+                var problem = vehicle == null || rules == null || !FoodTrucksSession.CanWrite ? ScheduleProblem.NoStops
+                    : RouteEditor.SetClosed(new HireSchedules(rules.Fleet), vehicle, day, !isOpen);
+                if (problem != ScheduleProblem.None)
+                {
+                    Traverse.Create(__instance).Field("openToggle").GetValue<Toggle>()?.SetIsOnWithoutNotify(!isOpen);
+                    Log.Info($"Schedule: {(isOpen ? "opening" : "closing")} {day} for {vehicleId} refused: {problem}.");
+                    CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
+                    return false;
+                }
+                RouteStops.Changed(vehicle!);
+                OpeningHours(vehicle!);
+                Log.Info($"Schedule: {vehicleId} {(isOpen ? "open" : "closed")} on {day} (the Schedule tab's day toggle).");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Schedule: day toggle: " + ex);
+                Traverse.Create(__instance).Field("openToggle").GetValue<Toggle>()?.SetIsOnWithoutNotify(!isOpen);
+                return false;
+            }
+        }
+
+        // The stand-in's opening hours again after the route changed (in place: the screen holds the days).
+        private static void OpeningHours(VehicleState vehicle)
+        {
+            if (standIn?.scheduleDays == null) return;
+            var rules = DemandData.Rules!;
+            var home = HireRoutes.HomeOf(vehicle);
+            var hours = WeekPlan.RouteHours(WeekPlan.RouteDays(new HireSchedules(rules.Fleet), vehicle.Schedule, Travel.ModeFor(vehicle.VehicleType),
+                HireRoutes.GameSpeed(), HireRoutes.HomePoint(home), home?.BayStops));
+            foreach (var day in standIn.scheduleDays)
+                day.openingHourSlots = WeekPlan.OpeningSlots(hours, WeekdayOf(day.day)).Select(s => new OpeningHourSlot(s.Start, s.End)).ToList();
         }
 
         // ScheduleScrollerController.LoadStation: a vehicle's row brings no customers and has nothing attached.

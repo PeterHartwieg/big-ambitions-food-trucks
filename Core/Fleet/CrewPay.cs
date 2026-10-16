@@ -30,13 +30,12 @@ namespace FoodTrucks.Core.Fleet
         // (Peter, 16 October 2026), at a window whoever opened it. Not while it is on its way somewhere.
         public static bool OnShift(VehicleState vehicle, long minute) => OnShiftCrew(vehicle, minute).Count > 0;
 
-        // The crew on shift at the vehicle at that minute who serve (a serving row on the Schedule tab), in crew order;
-        // none while it is on its way.
+        // The crew on shift at the vehicle at that minute, in crew order; none while it is on its way.
         public static List<string> OnShiftCrew(VehicleState vehicle, long minute)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             if (vehicle.Crew == null || vehicle.Crew.Count == 0 || vehicle.Transit != null) return new List<string>();
-            return WeekPlan.OnShiftCrew(vehicle, minute, serving: true);
+            return WeekPlan.OnShiftCrew(vehicle, minute);
         }
 
         // A window the player opened: the route leaves it alone and doesn't pay for it.

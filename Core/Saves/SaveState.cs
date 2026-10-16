@@ -283,8 +283,8 @@ namespace FoodTrucks.Core.Saves
     // One crew member's shift on a weekday, in whole hours from that day's midnight: Start < End <= 24, at most
     // FleetRules.MaxShiftHours long, as the game's own work shifts. A late route past midnight needs a shift on the
     // next weekday from 00:00. Shifts are set on the game's own Schedule tab (Peter, 16 October 2026), on the vehicle's
-    // rows: Station names the row, "serving1" and "serving2" (who serve at the window) or "driving" (on shift, drives,
-    // doesn't serve). A crew member may have more than one shift a day, never two at the same hour, and a row never
+    // rows: Station names the row, "serving1" and "serving2" (a truck's two staff places, a cart's one); anyone on shift
+    // serves, drives and restocks. A crew member may have more than one shift a day, never two at the same hour, and a row never
     // holds two shifts at the same hour (WeekPlan.CheckShifts).
     public class CrewShift
     {

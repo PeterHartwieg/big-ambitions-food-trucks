@@ -391,7 +391,7 @@ namespace FoodTrucks
                 var tables = DemandData.Tables;
                 hasStock = tables == null || CartDemand.StockOf(instance, CartDemand.MenuOf(tables, instance).Menu).Count > 0;
                 // The player just stepped out (to buy stock, say) or stands right by it: it stays where it is.
-                // So does a vehicle with nobody of its crew on shift (any row: a driver moves it) or all off sick, training or replaced.
+                // So does a vehicle with nobody of its crew on shift, or all of them off sick, training or replaced.
                 stayPut = (lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes) ||
                           (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres) ||
                           !HireCrew.Present(vehicle).Any(e => WeekPlan.OnShift(vehicle.Schedule, e.id, t));
@@ -407,7 +407,7 @@ namespace FoodTrucks
             // the player's use, which would keep it an hour longer).
             return new VehicleWhere(position.x, position.z, held || indoors || Catering.BusyAt(vehicle.VehicleId, t), canSell, hasStock, stayPut,
                 canRestock: restockAt != null, stockKey: stockKey, bayStops: bayStops, home: HomePoint(home),
-                // Someone able to serve on a serving row now (HireCrew.OnShift leaves out the sick, training and replaced).
+                // Someone on shift able to serve now (HireCrew.OnShift leaves out the sick, training and replaced).
                 canServe: HireCrew.OnShift(vehicle, t).Count > 0);
         }
 

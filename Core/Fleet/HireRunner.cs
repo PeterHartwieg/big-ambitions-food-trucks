@@ -82,8 +82,8 @@ namespace FoodTrucks.Core.Fleet
         // The bay of the commissary where it rents its space, which the crew drives back to after the last stop
         // (HireSchedules.HomeIndex); null without a space (or while its bay isn't known).
         public (double X, double Z)? Home { get; }
-        // Someone of the crew on a serving row is there and able to work (not off sick, training or being replaced):
-        // without one, a crew window closes.
+        // Someone of the crew on shift is there and able to work (not off sick, training or being replaced): without one,
+        // a crew window closes.
         public bool CanServe { get; }
     }
 
@@ -163,7 +163,6 @@ namespace FoodTrucks.Core.Fleet
             }
             var origin = HireSchedules.Absolute(day, 0);
             var coverage = WeekPlan.CoverageOf(schedule, vehicle.Crew, origin - 2 * 1440, origin + 4 * 1440);
-            var serving = WeekPlan.CoverageOf(schedule, vehicle.Crew, origin - 2 * 1440, origin + 4 * 1440, serving: true);
             var mode = Travel.ModeFor(vehicle.VehicleType);
             bool Add(int d, bool keepEmpty, long? startsBefore)
             {
@@ -178,7 +177,7 @@ namespace FoodTrucks.Core.Fleet
                     else if (lastIndex == HireSchedules.HomeIndex && home != null) (px, pz) = home.Value;
                     from = End(running);
                 }
-                var plan = schedules.PlanDay(schedule, d, GameDays.Weekday(d), px, pz, from, mode, gameSpeed, home, bayStops, coverage, serving);
+                var plan = schedules.PlanDay(schedule, d, GameDays.Weekday(d), px, pz, from, mode, gameSpeed, home, bayStops, coverage);
                 if (!keepEmpty && plan.Legs.Count == 0) return false;
                 if (startsBefore != null && (plan.Legs.Count == 0 || plan.Legs[0].Start >= startsBefore)) return false;
                 vehicle.Shifts.Add(new ShiftPlan
@@ -239,11 +238,10 @@ namespace FoodTrucks.Core.Fleet
             return null;
         }
 
-        // Whether the vehicle's crew has someone on shift the whole of [from, to) (a drive), or at `from` when to <= from;
-        // `serving`: someone who serves.
-        private static bool Covered(VehicleState vehicle, long from, long to, bool serving = false)
+        // Whether the vehicle's crew has someone on shift the whole of [from, to) (a drive), or at `from` when to <= from.
+        private static bool Covered(VehicleState vehicle, long from, long to)
         {
-            var coverage = WeekPlan.CoverageOf(vehicle.Schedule, vehicle.Crew, from - 1440, Math.Max(from, to) + 1440, serving);
+            var coverage = WeekPlan.CoverageOf(vehicle.Schedule, vehicle.Crew, from - 1440, Math.Max(from, to) + 1440);
             return to <= from ? coverage.Covers(from) : coverage.Earliest(from, to - from, to) == from;
         }
 
@@ -283,7 +281,7 @@ namespace FoodTrucks.Core.Fleet
                 if (!where.CanRestock) vehicle.ReturnPending = true;
                 if (!where.CanServe) return new HireAction(HireActionKind.Close);
                 // Still the stop it is open at, even if a fresh plan has a short leg "to" it first, while someone is on shift.
-                return want != null && want.StopIndex == vehicle.HireStop && Covered(vehicle, now, now, serving: true)
+                return want != null && want.StopIndex == vehicle.HireStop && Covered(vehicle, now, now)
                     ? HireAction.None
                     : new HireAction(HireActionKind.Close);
             }
@@ -328,7 +326,7 @@ namespace FoodTrucks.Core.Fleet
                 return new HireAction(HireActionKind.Depart, want.StopIndex, arrives);
             }
             if (!where.HasStock && !where.StayPut && CrewRestock.Due(vehicle, want, where)) return new HireAction(HireActionKind.Restock, want.StopIndex);
-            if (want.Kind != LegKind.Open || !Covered(vehicle, now, now, serving: true) || !where.CanServe) return HireAction.None;
+            if (want.Kind != LegKind.Open || !Covered(vehicle, now, now) || !where.CanServe) return HireAction.None;
             // Serving away from its own bay: the drive back is owed, whether or not it drove here (review round 3).
             if (!where.CanRestock) vehicle.ReturnPending = true;
             return new HireAction(HireActionKind.Open, want.StopIndex);

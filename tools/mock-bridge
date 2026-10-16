@@ -1340,7 +1340,7 @@ class Mock:
                 if not isinstance(start,int): raise ValueError('Missing "start": the starting hour, 0 to 23.')
                 if not isinstance(end,int): raise ValueError('Missing "end": the ending hour, 1 to 24 (the start removes).')
                 station=args.get('station') or 'serving1'
-                if station not in ('serving1','serving2','driving'): raise ValueError(f"Unknown station '{station}': serving1, serving2 or driving.")
+                if station not in ('serving1','serving2'): raise ValueError(f"Unknown station '{station}': serving1 or serving2.")
                 employee=next((e for e in self.employees if e['id']==employee_id),None)
                 if employee is None or employee['name'] not in v['crew']: raise ValueError('Shift refused: NotCrew.')
                 if start!=end and (start<0 or end>24 or start>end): raise ValueError('Shift refused: BadHours.')

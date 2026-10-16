@@ -24,14 +24,13 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // The vehicle page's two tabs and its Week plan tab (Peter, 16 October 2026; mockup build/ui-mockup/week-plan.html):
-    // a vehicle is planned per weekday like a shop. Across the page: the day tiles (copies of the game's schedule day
-    // button, with its open toggle and its copy, paste, paste to all and clear buttons on the chosen tile), the crew
-    // slots, the chosen day's route (the commissary at both ends, drive rows, stop cards; a copy of the logistics plan's
-    // reorderable list, as before) beside its map, and the shifts: who is missing from the route day, in red, and a button
-    // that opens the game's own Schedule tab for the vehicle (VehicleSchedule; Peter's decision: the crew's shifts are set
-    // there, not on a grid of ours). Every change writes the mod's save at once. No instruction text: only real problems,
-    // in red.
+    // The vehicle page's two tabs and its Week plan tab (Peter, 16 October 2026): a vehicle is planned per weekday like a
+    // shop. Across the page: a row of weekday tabs that picks which day's route to edit (today and closed days marked;
+    // a day is opened and closed, copied and pasted on the game's own Schedule tab, as for a shop: Peter's playtest), the
+    // crew slots, the chosen day's route (the commissary at both ends, drive rows, stop cards; a copy of the logistics
+    // plan's reorderable list) beside its map, and the shifts: who is missing from the route day, in red, and a button
+    // that opens the game's own Schedule tab for the vehicle (VehicleSchedule). Every change writes the mod's save at
+    // once. No instruction text: only real problems, in red.
     internal static class BizManWeekPlan
     {
         // ---- State ----
@@ -39,23 +38,18 @@ namespace FoodTrucks
         // Week plan or Overview, kept while the phone stays open; each vehicle's chosen weekday.
         internal static bool WeekTab { get; private set; }
         private static readonly Dictionary<string, DayOfWeek> chosen = new Dictionary<string, DayOfWeek>(StringComparer.Ordinal);
-        // The copied day, as the game's ScheduleDayButton.CopiedScheduleDay (any vehicle's).
-        private static DayCopy? copied;
 
         // The copied parts and the paths of their pieces.
         private static BizManList? builtFor;
-        private static GameObject? tabTemplate, dayTemplate;
+        private static GameObject? tabTemplate;
         private static Color? tabColour;
-        private static string dayLabelPath = "", dayTogglePath = "", daySelectPath = "", dayOpenPath = "", dayClosedPath = "", daySelectedPath = "";
-        private static string dayCopyPath = "", dayPastePath = "", dayAutoPath = "", dayClearPath = "", dayPasteAllPath = "";
 
         internal static void Reset()
         {
             builtFor = null;
-            tabTemplate = dayTemplate = null;
+            tabTemplate = null;
             tabColour = null;
             WeekTab = false;
-            copied = null;
             chosen.Clear();
         }
 
@@ -65,9 +59,8 @@ namespace FoodTrucks
 
         // ---- The game's parts ----
 
-        // Copies, once per BizMan list, the business page's tab title, the schedule screen's day button and its work shift
-        // bar into the Street food page's template holder, taking their game logic out. Each is optional: without it the
-        // page draws a plain one. One log line names what was copied.
+        // Copies, once per BizMan list, the business page's tab title into the Street food page's template holder. Without
+        // it the tabs are plain labels. One log line says which.
         private static void EnsureParts()
         {
             var bizMan = InstanceBehavior<UIs>.Instance?.fullMenu?.bizMan;
@@ -76,7 +69,7 @@ namespace FoodTrucks
             var holder = BizManFleet.EnsurePage(list);
             if (holder == null) return;
             builtFor = list;
-            tabTemplate = dayTemplate = null;
+            tabTemplate = null;
             var found = new List<string>();
             var missing = new List<string>();
             var business = bizMan!.business;
@@ -96,67 +89,51 @@ namespace FoodTrucks
             }
             catch (Exception ex) { missing.Add("the business page's tab: " + ex.Message); }
 
-            var schedule = business == null ? null : business.bizManSchedule;
-            try
-            {
-                var days = schedule == null ? null : Traverse.Create(schedule).Field("daySelectionController").GetValue<ScheduleDaySelectionController>();
-                var source = days == null ? null : Traverse.Create(days).Field("scheduleDayButtonTemplate").GetValue<Transform>();
-                if (source != null && source.GetComponent<ScheduleDayButton>() != null) TakeDayButton(source, holder, found);
-                else missing.Add("the schedule screen's day button (ScheduleDaySelectionController.scheduleDayButtonTemplate)");
-            }
-            catch (Exception ex)
-            {
-                dayTemplate = null;
-                missing.Add("the schedule day button: " + ex.Message);
-            }
             Log.Info($"BizMan: week plan parts copied: {(found.Count == 0 ? "none" : string.Join(", ", found))}" +
                      (missing.Count == 0 ? "; nothing missing." : $"; missing {string.Join("; ", missing)} (plain ones drawn instead)."));
         }
 
-        private static void TakeDayButton(Transform source, Transform holder, List<string> found)
-        {
-            var copy = Object.Instantiate(source.gameObject, holder);
-            copy.name = "FoodTrucks.DayTile";
-            var button = copy.GetComponent<ScheduleDayButton>();
-            string PathOf(string field)
-            {
-                var value = Traverse.Create(button).Field(field).GetValue<object>();
-                var transform = value is Component c ? c.transform : value is GameObject g ? g.transform : null;
-                return transform == null ? "" : BizManFleet.PathBelow(transform, copy.transform) ?? "";
-            }
-            dayLabelPath = PathOf("dayLabel");
-            if (dayLabelPath.Length == 0) dayLabelPath = PathOf("dayText");
-            dayTogglePath = PathOf("openToggle");
-            daySelectPath = PathOf("selectDayButton");
-            dayOpenPath = PathOf("openBackground");
-            dayClosedPath = PathOf("closedBackground");
-            daySelectedPath = PathOf("selectedBackground");
-            dayCopyPath = PathOf("copyScheduleButton");
-            dayPastePath = PathOf("pasteScheduleButton");
-            dayAutoPath = PathOf("autoScheduleButton");
-            dayClearPath = PathOf("clearScheduleButton");
-            dayPasteAllPath = PathOf("pasteToAllDaysButton");
-            Object.DestroyImmediate(button);
-            // Its labels keep the game's day key otherwise.
-            foreach (var label in copy.GetComponentsInChildren<TextLocalizationComponent>(true)) label.Key = "";
-            // The buttons' own calls went to the game's day button (persistent listeners): dropped, the page sets its own.
-            foreach (var b in copy.GetComponentsInChildren<Button>(true)) b.onClick = new Button.ButtonClickedEvent();
-            foreach (var t in copy.GetComponentsInChildren<Toggle>(true)) t.onValueChanged = new Toggle.ToggleEvent();
-            dayTemplate = copy;
-            found.Add($"the schedule day button ({PathTo(source)}; label '{dayLabelPath}', toggle '{dayTogglePath}', buttons " +
-                      $"{string.Join(", ", new[] { dayCopyPath, dayPastePath, dayPasteAllPath, dayClearPath, dayAutoPath }.Select(p => p.Length == 0 ? "-" : p))})");
-        }
-
         // ---- Tabs ----
 
-        // Overview and Week plan, at the top of the first column, in the business page's tab style: the chosen one white,
-        // the other in the game's own tab colour, a line under the chosen one.
+        // Overview and Week plan, at the top of the first column, in the business page's tab style.
         internal static void Tabs(Transform column)
         {
             EnsureParts();
+            TabRow(column, "FoodTrucks.Tabs", new[] { (false, "foodtrucks:bizman_week_tab_overview"), (true, "foodtrucks:bizman_week_tab_week") }
+                .Select(t => (Text(t.Item2), t.Item1 == WeekTab, (Color?)null, (System.Action)(() =>
+                {
+                    if (WeekTab == t.Item1) return;
+                    WeekTab = t.Item1;
+                    Log.Info($"BizMan: vehicle page tab {(t.Item1 ? "Week plan" : "Overview")}.");
+                    BizManVehiclePage.RefreshLater();
+                }))).ToList());
+        }
+
+        // Monday to Sunday, the same tabs: which day's route the tab edits. Today says so; a closed day is greyed.
+        private static void DayTabs(Transform column, string id, DayOfWeek chosenDay, HireSchedule? schedule)
+        {
+            var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
+            var today = Core.Common.GameDays.Weekday(Math.Max(1, SaveGameManager.Current?.Day ?? 1));
+            TabRow(column, "FoodTrucks.DayTabs", WeekPlan.Days.Select(day =>
+            {
+                var name = DayName(day);
+                var text = day == today ? Format("foodtrucks:bizman_week_day_today", ("day", name)) : name;
+                Color? colour = WeekPlan.IsClosed(schedule, day) && day != chosenDay ? (Color)colors.darkGrey : (Color?)null;
+                return (text, day == chosenDay, colour, (System.Action)(() =>
+                {
+                    chosen[id] = day;
+                    BizManVehiclePage.RefreshLater();
+                }));
+            }).ToList());
+        }
+
+        // A row of tabs in the business page's tab style: the chosen one white with a line under it, the others in the
+        // game's own tab colour (or `colour`).
+        private static void TabRow(Transform column, string name, List<(string Text, bool Selected, Color? Colour, System.Action Click)> tabs)
+        {
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
             var unit = BizManParts.SmallLabelHeight();
-            var row = Rect("FoodTrucks.Tabs", column);
+            var row = Rect(name, column);
             var element = row.gameObject.AddComponent<LayoutElement>();
             element.minHeight = element.preferredHeight = unit * 1.8f;
             var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -164,23 +141,22 @@ namespace FoodTrucks
             layout.childControlWidth = layout.childControlHeight = true;
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = true;
-            foreach (var (week, key) in new[] { (false, "foodtrucks:bizman_week_tab_overview"), (true, "foodtrucks:bizman_week_tab_week") })
+            foreach (var (label, selected, colour, click) in tabs)
             {
-                var selected = week == WeekTab;
                 Transform tab;
                 if (tabTemplate != null)
                 {
                     tab = Object.Instantiate(tabTemplate, row).transform;
                     tab.gameObject.SetActive(true);
-                    BizManParts.SetText(tab, Text(key));
+                    BizManParts.SetText(tab, label);
                 }
                 else
                 {
-                    tab = BizManParts.SmallLabel(row, Text(key)) ?? Rect("Tab", row);
+                    tab = BizManParts.SmallLabel(row, label) ?? Rect("Tab", row);
                     tab.gameObject.AddComponent<Button>();
                 }
-                tab.name = week ? "FoodTrucks.TabWeek" : "FoodTrucks.TabOverview";
-                BizManParts.Colour(tab, selected ? (Color)colors.white : tabColour ?? (Color)colors.lightGrey);
+                tab.name = "FoodTrucks.Tab";
+                BizManParts.Colour(tab, selected ? (Color)colors.white : colour ?? tabColour ?? (Color)colors.lightGrey);
                 var tabElement = tab.GetComponent<LayoutElement>() ?? tab.gameObject.AddComponent<LayoutElement>();
                 var text = tab.GetComponent<Graphic>();
                 tabElement.preferredWidth = text is ILayoutElement layoutElement && layoutElement.preferredWidth > 1f ? layoutElement.preferredWidth + unit : unit * 6f;
@@ -198,14 +174,8 @@ namespace FoodTrucks
                 var button = tab.GetComponent<Button>();
                 if (button == null) continue;
                 button.onClick = new Button.ButtonClickedEvent();
-                var target = week;
-                button.onClick.AddListener(() => Guard(() =>
-                {
-                    if (WeekTab == target) return;
-                    WeekTab = target;
-                    Log.Info($"BizMan: vehicle page tab {(target ? "Week plan" : "Overview")}.");
-                    BizManVehiclePage.RefreshLater();
-                }));
+                var action = click;
+                button.onClick.AddListener(() => Guard(action));
             }
         }
 
@@ -224,7 +194,7 @@ namespace FoodTrucks
             var routeDays = WeekPlan.RouteDays(schedules, schedule, mode, speed, HireRoutes.HomePoint(home), home?.BayStops);
             var crew = (vehicle?.Crew ?? new List<string>()).ToList();
 
-            DayBar(column, rules, vehicle, id, kind, day, routeDays, crew, canWrite);
+            DayTabs(column, id, day, schedule);
             Crew(column, state, vehicle, id, kind, canWrite);
 
             // The day's route beside its map.
@@ -242,146 +212,6 @@ namespace FoodTrucks
             else map.Paragraph(Text("foodtrucks:bizman_page_route_no_stops"));
 
             Shifts(column, rules, vehicle, id, kind, day, routeDays, crew, canWrite);
-        }
-
-        // ---- Day tiles ----
-
-        private static void DayBar(Transform column, RuleTables rules, VehicleState? vehicle, string id, string kind, DayOfWeek chosenDay,
-            IReadOnlyList<RouteDay> routeDays, List<string> crew, bool canWrite)
-        {
-            var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
-            var unit = BizManParts.SmallLabelHeight();
-            var box = new BizManParts.Box(column, Text("foodtrucks:bizman_week_days_title"));
-            var row = Rect("FoodTrucks.DayTiles", box.Root);
-            box.Add(row);
-            var element = row.gameObject.AddComponent<LayoutElement>();
-            var tileHeight = dayTemplate != null && dayTemplate.transform is RectTransform t && t.rect.height > 1f ? t.rect.height : unit * 2.6f;
-            element.minHeight = element.preferredHeight = tileHeight + unit * 1.2f;
-            var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = unit * 0.35f;
-            layout.childControlWidth = layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-            layout.childAlignment = TextAnchor.UpperLeft;
-            var today = Core.Common.GameDays.Weekday(Math.Max(1, SaveGameManager.Current?.Day ?? 1));
-            var schedule = vehicle?.Schedule;
-            foreach (var day in WeekPlan.Days)
-            {
-                var routeDay = routeDays[WeekPlan.Position(day)];
-                var gaps = crew.Count > 0 && !routeDay.Empty && WeekPlan.Gaps(routeDay, schedule, crew).Count > 0;
-                var closed = WeekPlan.IsClosed(schedule, day);
-                var hours = routeDay.Empty ? "–" : $"{Clock(routeDay.Start)}–{Clock(routeDay.End)}";
-                Tile(row, day, day == chosenDay, closed, hours, gaps, day == today, id, kind, rules, vehicle, canWrite, unit, tileHeight, colors);
-            }
-            // Without the game's tile, the chosen day's actions as the box's own buttons.
-            if (dayTemplate == null)
-            {
-                box.Button(Text("foodtrucks:bizman_week_copy"), () => Copy(id, chosenDay), canWrite);
-                if (copied != null) box.Button(Text("foodtrucks:bizman_week_paste"), () => Paste(id, chosenDay, all: false), canWrite);
-                if (copied != null && copied.From == chosenDay) box.Button(Text("foodtrucks:bizman_week_paste_all"), () => Paste(id, chosenDay, all: true), canWrite);
-                box.Button(Text("foodtrucks:bizman_week_clear"), () => Clear(id, chosenDay), canWrite);
-            }
-        }
-
-        private static void Tile(Transform row, DayOfWeek day, bool selected, bool closed, string hours, bool gaps, bool today, string id, string kind,
-            RuleTables rules, VehicleState? vehicle, bool canWrite, float unit, float tileHeight, Colors colors)
-        {
-            var name = DayName(day);
-            Transform tile;
-            Button? select;
-            Toggle? open = null;
-            if (dayTemplate != null)
-            {
-                tile = Object.Instantiate(dayTemplate, row).transform;
-                tile.gameObject.SetActive(true);
-                BizManParts.SetText(Part(tile, dayLabelPath), name);
-                BizManParts.Colour(Part(tile, dayLabelPath), selected ? (Color)colors.black : (Color)colors.white);
-                Show(tile, daySelectedPath, selected);
-                Show(tile, dayOpenPath, !selected && !closed);
-                Show(tile, dayClosedPath, !selected && closed);
-                select = Part(tile, daySelectPath)?.GetComponent<Button>() ?? tile.GetComponent<Button>();
-                open = Part(tile, dayTogglePath)?.GetComponent<Toggle>();
-                // The chosen tile's own day buttons, as the game's (copy, paste, paste to all days, clear, auto schedule).
-                var hasCrew = vehicle?.Crew?.Count > 0;
-                TileButton(tile, dayCopyPath, selected && !closed, canWrite, () => Copy(id, day));
-                TileButton(tile, dayPastePath, copied != null && !closed, canWrite, () => Paste(id, day, all: false));
-                TileButton(tile, dayPasteAllPath, selected && copied != null && copied.From == day, canWrite, () => Paste(id, day, all: true));
-                TileButton(tile, dayClearPath, selected, canWrite, () => Clear(id, day));
-                // The auto schedule is on the game's Schedule tab now.
-                TileButton(tile, dayAutoPath, false, canWrite, () => { });
-            }
-            else
-            {
-                tile = Rect("FoodTrucks.DayTile", row);
-                var background = tile.gameObject.AddComponent<Image>();
-                background.color = selected ? (Color)colors.white : closed ? new Color(0.23f, 0.26f, 0.30f, 0.9f) : new Color(0.11f, 0.13f, 0.17f, 0.9f);
-                select = tile.gameObject.AddComponent<Button>();
-                if (BizManParts.SmallLabel(tile, name) is RectTransform label)
-                {
-                    Place(label, 0.08f, 0.5f, 1f, 1f);
-                    BizManParts.Colour(label, selected ? (Color)colors.black : (Color)colors.white);
-                }
-            }
-            var tileElement = tile.GetComponent<LayoutElement>() ?? tile.gameObject.AddComponent<LayoutElement>();
-            tileElement.minWidth = 0f;
-            tileElement.preferredWidth = unit * 5f;
-            tileElement.flexibleWidth = 1f;
-            tileElement.minHeight = tileElement.preferredHeight = tileHeight;
-            tile.name = "FoodTrucks.Day." + day;
-
-            // The route day's hours, "Today", and a red dot when part of the day has nobody on shift.
-            var lower = Rect("FoodTrucks.DayHours", tile);
-            Place(lower, 0.08f, 0f, 1f, 0.45f);
-            if (BizManParts.SmallLabel(lower, hours) is RectTransform hoursLabel)
-            {
-                Place(hoursLabel, 0f, 0f, 1f, 1f);
-                BizManParts.Colour(hoursLabel, selected ? (Color)colors.darkGrey : (Color)colors.lightGrey);
-            }
-            if (today && BizManParts.SmallLabel(tile, Text("foodtrucks:bizman_week_today")) is RectTransform todayLabel)
-            {
-                Place(todayLabel, 0.55f, 0.55f, 0.9f, 1f);
-                BizManParts.Colour(todayLabel, selected ? (Color)colors.green : (Color)colors.lime);
-            }
-            if (gaps)
-            {
-                var dot = Rect("FoodTrucks.Gap", tile);
-                dot.anchorMin = dot.anchorMax = dot.pivot = new Vector2(1f, 1f);
-                dot.anchoredPosition = new Vector2(-unit * 0.3f, -unit * 0.3f);
-                dot.sizeDelta = new Vector2(unit * 0.4f, unit * 0.4f);
-                var image = dot.gameObject.AddComponent<Image>();
-                image.sprite = VehiclePageDrawings.Circle();
-                image.color = selected ? (Color)colors.red : (Color)colors.lightRed;
-                image.raycastTarget = false;
-            }
-
-            if (select != null)
-            {
-                select.onClick = new Button.ButtonClickedEvent();
-                select.onClick.AddListener(() => Guard(() =>
-                {
-                    chosen[id] = day;
-                    BizManVehiclePage.RefreshLater();
-                }));
-            }
-            if (open != null)
-            {
-                open.onValueChanged = new Toggle.ToggleEvent();
-                open.SetIsOnWithoutNotify(!closed);
-                open.interactable = canWrite;
-                open.onValueChanged.AddListener(isOn => Guard(() => SetClosed(id, day, !isOn, rules)));
-            }
-        }
-
-        private static void TileButton(Transform tile, string path, bool visible, bool canWrite, System.Action click)
-        {
-            var part = Part(tile, path);
-            if (part == null) return;
-            part.gameObject.SetActive(visible);
-            var button = part.GetComponent<Button>();
-            if (button == null) return;
-            button.onClick = new Button.ButtonClickedEvent();
-            button.interactable = canWrite;
-            button.onClick.AddListener(() => Guard(click));
         }
 
         // ---- Crew ----
@@ -774,80 +604,6 @@ namespace FoodTrucks
             BizManVehiclePage.RefreshLater();
         }
 
-        private static void Copy(string id, DayOfWeek day)
-        {
-            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
-            copied = RouteEditor.CopyDay(vehicle?.Schedule, day);
-            Log.Info($"Week plan: {day} of {id} copied ({copied.Stops.Count} stops, {copied.Shifts.Count} shifts).");
-            BizManVehiclePage.RefreshLater();
-        }
-
-        private static void Paste(string id, DayOfWeek day, bool all)
-        {
-            if (copied == null) return;
-            var copy = copied;
-            void Apply()
-            {
-                var vehicle = Writable(id);
-                var rules = DemandData.Rules;
-                if (vehicle == null || rules == null) return;
-                var schedules = new HireSchedules(rules.Fleet);
-                // A crew window open at a stop the paste replaces closes first, as for a removed stop (review round 1).
-                var targets = all ? WeekPlan.Days.Where(d => d != copy.From).ToList() : new List<DayOfWeek> { day };
-                if (RouteEditor.TakesOpenStop(vehicle, targets)) CartSelling.CloseByCrew(vehicle, HireCrew.Now());
-                var problem = all ? RouteEditor.PasteToAllDays(schedules, vehicle, copy) : RouteEditor.PasteDay(schedules, vehicle, copy, day);
-                if (problem != ScheduleProblem.None)
-                {
-                    Log.Info($"Week plan: pasting {copy.From} onto {(all ? "every day" : day.ToString())} of {id} refused: {problem}.");
-                    CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
-                    BizManVehiclePage.RefreshLater();
-                    return;
-                }
-                Log.Info($"Week plan: {copy.From} pasted onto {(all ? "every day" : day.ToString())} of {id}.");
-                RouteStops.Changed(vehicle, shifts: true);
-                BizManVehiclePage.RefreshLater();
-            }
-            if (!all)
-            {
-                Guard(Apply);
-                return;
-            }
-            // The game's own question for pasting a day onto all days.
-            HudConfirm.Show(bodyKey: "bizman_schedule_paste_to_all_days_confirm", onConfirmAction: () => Guard(Apply), allowConfirmationSkip: true, isNegative: false);
-        }
-
-        private static void Clear(string id, DayOfWeek day)
-        {
-            HudConfirm.Show(bodyKey: "bizman_schedule_clear_schedule_day", onConfirmAction: () => Guard(() =>
-            {
-                var vehicle = Writable(id);
-                if (vehicle == null) return;
-                foreach (var index in WeekPlan.StopsOf(vehicle.Schedule, day))
-                    if (vehicle.IsOpen && vehicle.HireStop == index) CartSelling.CloseByCrew(vehicle, HireCrew.Now());
-                RouteEditor.ClearDay(vehicle, day);
-                Log.Info($"Week plan: {day} of {id} cleared.");
-                RouteStops.Changed(vehicle, shifts: true);
-                BizManVehiclePage.RefreshLater();
-            }), allowConfirmationSkip: true, isNegative: true);
-        }
-
-        private static void SetClosed(string id, DayOfWeek day, bool closed, RuleTables rules)
-        {
-            var vehicle = Writable(id);
-            if (vehicle == null) return;
-            var problem = RouteEditor.SetClosed(new HireSchedules(rules.Fleet), vehicle, day, closed);
-            if (problem != ScheduleProblem.None)
-            {
-                Log.Info($"Week plan: opening {day} of {id} refused: {problem}.");
-                CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
-                BizManVehiclePage.RefreshLater();
-                return;
-            }
-            Log.Info($"Week plan: {id} {(closed ? "closed" : "open")} on {day}.");
-            RouteStops.Changed(vehicle);
-            BizManVehiclePage.RefreshLater();
-        }
-
         // A new opening time keeps the stop's length where it fits; a new closing time keeps its opening.
         private static void Retime(string id, int index, int open, int? close)
         {
@@ -1008,14 +764,6 @@ namespace FoodTrucks
                 Place(label, 0f, 0f, width - 0.01f, 1f);
                 BizManParts.Colour(label, colour);
             }
-        }
-
-        private static Transform? Part(Transform root, string path) => path.Length == 0 ? null : root.Find(path);
-
-        private static void Show(Transform root, string path, bool on)
-        {
-            var part = Part(root, path);
-            if (part != null) part.gameObject.SetActive(on);
         }
 
         private static string PathTo(Transform target)
