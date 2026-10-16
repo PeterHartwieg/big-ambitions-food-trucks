@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using FoodTrucks.Core.Commissary;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Pitches;
 using FoodTrucks.Core.Rules;
 
@@ -20,6 +21,8 @@ namespace FoodTrucks
         public static PitchTables? Pitches { get; private set; }
         // commissaries.json: the commissary garages.
         public static CommissaryTables? Commissaries { get; private set; }
+        // vehicle-diagrams.json: the vehicle page's equipment drawing (optional).
+        public static VehicleDiagrams? Diagrams { get; private set; }
         public static string? Error { get; private set; }
 
         public static void Load(string modRootPath)
@@ -70,6 +73,23 @@ namespace FoodTrucks
             {
                 Commissaries = null;
                 Log.Error("Commissaries not loaded; no renting, ordering or overnight check. " + ex.Message);
+            }
+            // Optional: without it the vehicle page's Menu box lists its equipment as a line of text.
+            Diagrams = null;
+            try
+            {
+                var path = Path.Combine(modRootPath, "data", "vehicle-diagrams.json");
+                if (File.Exists(path))
+                {
+                    Diagrams = VehicleDiagrams.Parse(File.ReadAllText(path));
+                    Log.Info($"Vehicle diagrams loaded: {string.Join(", ", Diagrams.Kinds.Select(k => $"{k} {Diagrams.For(k)!.Places.Count} places"))}.");
+                }
+                else Log.Info("Vehicle diagrams: no data/vehicle-diagrams.json; the vehicle page lists equipment as text.");
+            }
+            catch (Exception ex)
+            {
+                Diagrams = null;
+                Log.Error("Vehicle diagrams not loaded; the vehicle page lists equipment as text. " + ex.Message);
             }
         }
 

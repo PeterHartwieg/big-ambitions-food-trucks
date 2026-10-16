@@ -358,7 +358,7 @@ namespace FoodTrucks
         private const string IconFolder = "Assets/Mods/FoodTrucks/Vehicles/EquipmentArt/Icons/";
         private static readonly Dictionary<string, Sprite?> icons = new Dictionary<string, Sprite?>(StringComparer.Ordinal);
 
-        private static Sprite Icon(string item)
+        internal static Sprite Icon(string item)
         {
             var display = DemandData.Tables?.EquipmentForGameItem(item)?.Display;
             if (string.IsNullOrEmpty(display)) return ItemHelper.GetIconWithFallback(item);

@@ -46,6 +46,8 @@ namespace FoodTrucks
         // A copy of the game's product price field (InventoryProductCellView.retailPrice); null when it isn't there.
         private static GameObject? priceFieldTemplate;
         private static bool priceFieldLogged;
+        // The page dropdowns' light box colour (read from the copied dropdown), the price fields' background.
+        private static Color? fieldGrey;
         private static string entryPath = "", entryNamePath = "", entryRemovePath = "", entryDropdownPath = "";
         private static readonly List<string> entryHiddenPaths = new List<string>();
         // Buttons in the stop row that stay but no longer do anything (1.0: the collapse button is the whole header).
@@ -188,6 +190,13 @@ namespace FoodTrucks
             // on a crew/day/partner row. Instantiate remaps the dropdown's internal button and option references.
             dropdownTemplate = Object.Instantiate(dropdown.gameObject, holder);
             dropdownTemplate.name = "FoodTrucks.PageDropdown";
+            // The dropdown's light box, for the price fields: its middle box, else its header's background, else its
+            // lightest opaque image.
+            var grey = dropdownTemplate.transform.Find("Header/MiddleBox")?.GetComponent<Image>()
+                       ?? dropdownTemplate.transform.Find("Header/Background")?.GetComponent<Image>()
+                       ?? dropdownTemplate.GetComponentsInChildren<Image>(true).Where(i => i.color.a > 0.9f)
+                           .OrderByDescending(i => i.color.r + i.color.g + i.color.b).FirstOrDefault();
+            fieldGrey = grey != null ? grey.color : (Color?)null;
             listTemplate = Object.Instantiate(reorderable.gameObject, holder);
             listTemplate.name = "FoodTrucks.PageStops";
             // A drag disables the list's layout group and adds, then removes, a LayoutElement on its object. Both references
@@ -228,7 +237,7 @@ namespace FoodTrucks
             Log.Info($"BizMan: vehicle page parts copied: the warehouse Drivers tab's dropdown ({PathTo(station.transform)}) and the logistics plan's " +
                      $"stop list ({PathTo(plan.transform)}; stop rows dragged by {(handle == null ? "the whole row" : handlePath)}; " +
                      $"collapse button {(entryInertPaths.Count > 0 ? "kept, switched off" : "hidden")} at '{collapsePath}'; the copied list's {string.Join(", ", listLayout)}); " +
-                     $"price field: {priceField}.");
+                     $"price field: {priceField}; field colour {(fieldGrey?.ToString() ?? "not found, a light grey")}.");
         }
 
         // The game's product price field (the inventory pricing row's retailPrice), copied alone. Optional: without it the
@@ -293,7 +302,7 @@ namespace FoodTrucks
 
             Summary(first, state, vehicle, instance, name, withDriver, canWrite);
             Menu(first, id, vehicle, instance, canWrite);
-            CrewAndRoute(first, state, rules, vehicle, id, kind, canWrite);
+            CrewAndRoute(first, state, rules, vehicle, instance, id, kind, canWrite);
             Alerts(second, id);
             CommissarySpace(second, state, id, kind);
             Partner(third, state, id, instance, canWrite);
@@ -324,7 +333,7 @@ namespace FoodTrucks
         // Crew: one row per staff slot, and one for each member past it (the truck's staff went from 3 to 2 on 14 October
         // 2026), so they can be taken off. While the crew is over the limit no row offers anyone new: replacing someone
         // would take them off and then refuse the newcomer. Route: days, stops, add.
-        private static void CrewAndRoute(Transform column, SaveState state, RuleTables rules, VehicleState? vehicle, string id, string kind, bool canWrite)
+        private static void CrewAndRoute(Transform column, SaveState state, RuleTables rules, VehicleState? vehicle, VehicleInstance? instance, string id, string kind, bool canWrite)
         {
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
             var box = new BizManParts.Box(column, Text("foodtrucks:bizman_page_crew_title"));
@@ -368,6 +377,7 @@ namespace FoodTrucks
                     if (vehicle != null && !vehicle.HasPermit) box.Paragraph(Text("foodtrucks:bizman_page_route_no_permit"), (Color)colors.red);
                 }
                 if (count > 1) box.Paragraph(Text("foodtrucks:bizman_page_route_hint"));
+                if (instance != null) VehiclePageDrawings.Route(box, schedule, instance, vehicle, fieldGrey ?? new Color(0.93f, 0.94f, 0.95f, 1f));
                 AddStops(box, id, schedule, canWrite);
             }
             else box.Paragraph(Text(StopPicker.Ready ? "foodtrucks:bizman_page_route_empty" : "foodtrucks:bizman_page_route_empty_nomap"));
@@ -412,6 +422,7 @@ namespace FoodTrucks
                 box.Paragraph(Text("foodtrucks:bizman_page_stock_none"));
                 return;
             }
+            var drawn = VehiclePageDrawings.Equipment(box, instance, view, tables);
             var foods = StockLevels.Stocked(tables, view, vehicle, VehicleTodos.ItemExists);
             var prices = PriceDialog.Lines(id).ToDictionary(l => l.Item, StringComparer.Ordinal);
             box.TableHeader(MenuColumns, Text("foodtrucks:bizman_page_menu_food"), Text("foodtrucks:bizman_page_menu_price"),
@@ -438,7 +449,7 @@ namespace FoodTrucks
                     priced && canWrite && !useField ? () => ChangePrice(id, item, name) : (Action?)null);
                 if (row != null && useField) PriceField(row, id, line);
             }
-            box.Paragraph(Format("foodtrucks:bizman_page_menu_equipment", ("pieces", Equipment(view, instance))));
+            if (!drawn) box.Paragraph(Format("foodtrucks:bizman_page_menu_equipment", ("pieces", Equipment(view, instance))));
             if (canWrite && priceFieldTemplate != null) box.Paragraph(Text("foodtrucks:bizman_page_prices_hint"));
         }
 
@@ -504,11 +515,12 @@ namespace FoodTrucks
             }
             if (background != null)
             {
-                Color32 tint = background.color;
-                var alpha = tint.a;
+                // The game's field is a dark translucent block made for its dark table (RGBA 0, 0, 0, 0.65 in game); on the
+                // white box it takes the light grey of the page's dropdowns, tinted yellow or red as the game tints its own.
+                Color32 tint = fieldGrey ?? new Color(0.93f, 0.94f, 0.95f, 1f);
                 if (line.RedCents > 0 && line.PriceCents >= line.RedCents) tint = colors.red;
                 else if (line.YellowCents > 0 && line.PriceCents > line.YellowCents) tint = colors.yellow;
-                tint.a = alpha;
+                tint.a = 255;
                 background.color = tint;
             }
             var input = Traverse.Create(field).Field("tmpInputField").GetValue<Selectable>();

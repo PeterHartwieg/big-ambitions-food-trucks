@@ -453,6 +453,15 @@ namespace FoodTrucks
             return height > 1f ? height : 24f;
         }
 
+        // Centred text (a route pin's number).
+        internal static void Centre(Transform part)
+        {
+            var graphic = part.GetComponent<Graphic>();
+            var alignment = graphic == null ? null : graphic.GetType().GetProperty("alignment");
+            if (alignment != null && alignment.CanWrite && alignment.PropertyType.IsEnum && Enum.IsDefined(alignment.PropertyType, "Center"))
+                alignment.SetValue(graphic, Enum.Parse(alignment.PropertyType, "Center"));
+        }
+
         // One line, cut with an ellipsis, left-aligned, no margin: a table cell.
         private static void OneLine(Transform part)
         {
