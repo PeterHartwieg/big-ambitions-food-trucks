@@ -4,58 +4,58 @@
   "truck": {
     "image": "VehicleDiagram_Truck.png",
     "width": 1200,
-    "height": 500,
-    "iconSize": 0.1044,
+    "height": 400,
+    "iconSize": 0.33,
     "places": [
       {
         "place": "EquipmentLine2",
-        "x": 0.432,
-        "y": 0.3522,
-        "baseX": 0.432,
-        "baseY": 0.4074
+        "x": 0.5619,
+        "y": 0.4058,
+        "baseX": 0.5619,
+        "baseY": 0.5785
       },
       {
         "place": "EquipmentLine3",
-        "x": 0.3831,
-        "y": 0.3522,
-        "baseX": 0.3831,
-        "baseY": 0.4074
+        "x": 0.4381,
+        "y": 0.4058,
+        "baseX": 0.4381,
+        "baseY": 0.5785
       },
       {
         "place": "EquipmentLine1",
-        "x": 0.481,
-        "y": 0.3522,
-        "baseX": 0.481,
-        "baseY": 0.4074
+        "x": 0.6856,
+        "y": 0.4058,
+        "baseX": 0.6856,
+        "baseY": 0.5785
       },
       {
         "place": "EquipmentLine4",
-        "x": 0.3342,
-        "y": 0.3522,
-        "baseX": 0.3342,
-        "baseY": 0.4074
+        "x": 0.3144,
+        "y": 0.4058,
+        "baseX": 0.3144,
+        "baseY": 0.5785
       }
     ]
   },
   "cart": {
     "image": "VehicleDiagram_Cart.png",
     "width": 800,
-    "height": 500,
-    "iconSize": 0.1646,
+    "height": 400,
+    "iconSize": 0.33,
     "places": [
       {
         "place": "EquipmentFront",
-        "x": 0.5808,
-        "y": 0.4537,
-        "baseX": 0.5808,
-        "baseY": 0.5376
+        "x": 0.6177,
+        "y": 0.4631,
+        "baseX": 0.6177,
+        "baseY": 0.6233
       },
       {
         "place": "EquipmentRear",
-        "x": 0.434,
-        "y": 0.4251,
-        "baseX": 0.434,
-        "baseY": 0.509
+        "x": 0.3823,
+        "y": 0.3913,
+        "baseX": 0.3823,
+        "baseY": 0.5515
       }
     ]
   }

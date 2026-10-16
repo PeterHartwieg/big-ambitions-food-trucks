@@ -25,7 +25,7 @@ CHECK = args[3] if len(args) > 3 else None
 
 PIECE = 0.40          # a piece's footprint along the line (m): the icon's suggested size
 PIECE_HALF_HEIGHT = 0.22  # icon centre above the place (a typical piece is 0.40 to 0.50 m tall)
-MARGIN = 0.04
+ICON_FRACTION = 0.33  # a 0.40 m piece as a fraction of the image height
 METALLIC = 1.0
 
 
@@ -35,19 +35,19 @@ def unity(x, y, z):
 
 KINDS = [
     {
-        "kind": "truck", "image": "VehicleDiagram_Truck.png", "size": (1200, 500),
+        "kind": "truck", "image": "VehicleDiagram_Truck.png", "size": (1200, 400), "lift": 0.10,
         "fbx": "truck/FoodTruck.fbx", "tex": "truck/T_FoodTruck_BC.png",
         "hide": ["Truck_Collision", "Truck_Hatch"],
-        "azimuth": 0, "elevation": 16,
+        "azimuth": 0, "elevation": 18,
         # VehicleDisplays' Truck layout: filled from the middle out.
         "places": [("EquipmentLine2", unity(-0.62, 1.75, -0.875)), ("EquipmentLine3", unity(-0.62, 1.75, -1.325)),
                    ("EquipmentLine1", unity(-0.62, 1.75, -0.425)), ("EquipmentLine4", unity(-0.62, 1.75, -1.775))],
     },
     {
-        "kind": "cart", "image": "VehicleDiagram_Cart.png", "size": (800, 500),
+        "kind": "cart", "image": "VehicleDiagram_Cart.png", "size": (800, 400), "lift": 0.12,
         "fbx": "cart/FoodCart.fbx", "tex": "cart/T_FoodCart_BC.png",
         "hide": ["Cart_Collision", "Cart_Canopy"],
-        "azimuth": 18, "elevation": 22,
+        "azimuth": 18, "elevation": 28,
         "places": [("EquipmentFront", unity(0, 0.963, 0.30)), ("EquipmentRear", unity(0, 0.963, -0.30))],
         # Cash register: Unity (0.29, 0.95, 0.615), +90 degrees about Y (Blender -90 about Z), scale 1.
         "register": (unity(0.29, 0.95, 0.615), -90, 1.0),
@@ -172,21 +172,16 @@ def render(spec):
     cam.data.type = "ORTHO"
     scene.collection.objects.link(cam)
     scene.camera = cam
-    bpy.context.view_layer.update()
-    pts = [o.matrix_world @ v.co for o in meshes for v in o.data.vertices]
-    centre = sum(pts, Vector()) / len(pts)
+    # A close-up of the places: centred on them (raised by the spec's "lift"), scaled so a 0.40 m piece is
+    # ICON_FRACTION of the image height. The rest of the model runs off the edges.
+    centre = sum((p for _, p in spec["places"]), Vector()) / len(spec["places"]) + Vector((0, 0, spec["lift"]))
     cam.location = centre + direction * 20
     cam.rotation_euler = (-direction).to_track_quat("-Z", "Y").to_euler()
     cam.data.clip_end = 100
-    bpy.context.view_layer.update()
-    inv = cam.matrix_world.inverted()
-    local = [inv @ p for p in pts]
-    xs, ys = [p.x for p in local], [p.y for p in local]
-    cam.location = cam.matrix_world @ Vector(((max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2, 0))
     w, h = spec["size"]
-    span_x, span_y = max(xs) - min(xs), max(ys) - min(ys)
     cam.data.sensor_fit = "HORIZONTAL"
-    cam.data.ortho_scale = max(span_x, span_y * w / h) / (1 - 2 * MARGIN)
+    cam.data.ortho_scale = w / (ICON_FRACTION * h / PIECE)
+    bpy.context.view_layer.update()
 
     # Lights relative to the view: key from the front left and above, soft fill from the right, a little rim.
     right = cam.matrix_world.to_3x3() @ Vector((1, 0, 0))
