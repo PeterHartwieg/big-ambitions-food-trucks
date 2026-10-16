@@ -45,6 +45,7 @@ namespace FoodTrucks
         private static GameObject? dropdownTemplate, listTemplate;
         // A copy of the game's product price field (InventoryProductCellView.retailPrice); null when it isn't there.
         private static GameObject? priceFieldTemplate;
+        private static bool priceFieldLogged;
         private static string entryPath = "", entryNamePath = "", entryRemovePath = "", entryDropdownPath = "";
         private static readonly List<string> entryHiddenPaths = new List<string>();
         // Buttons in the stop row that stay but no longer do anything (1.0: the collapse button is the whole header).
@@ -99,6 +100,7 @@ namespace FoodTrucks
         {
             builtFor = null;
             dropdownTemplate = listTemplate = priceFieldTemplate = null;
+            priceFieldLogged = false;
             vehicleId = null;
         }
 
@@ -123,6 +125,7 @@ namespace FoodTrucks
                 broken = true;
                 Log.Error($"BizMan vehicle page: {ex.Message} Vehicle pages aren't offered; prices, crew and routes can't be changed this session.");
                 dropdownTemplate = listTemplate = priceFieldTemplate = null;
+            priceFieldLogged = false;
                 return false;
             }
         }
@@ -289,10 +292,10 @@ namespace FoodTrucks
             var withDriver = IsWithDriver(id);
 
             Summary(first, state, vehicle, instance, name, withDriver, canWrite);
-            Alerts(first, id);
+            Menu(first, id, vehicle, instance, canWrite);
             CrewAndRoute(first, state, rules, vehicle, id, kind, canWrite);
-            Menu(second, id, vehicle, instance, canWrite);
-            CommissarySpace(third, state, id, kind);
+            Alerts(second, id);
+            CommissarySpace(second, state, id, kind);
             Partner(third, state, id, instance, canWrite);
             foreach (var column in new[] { first, second, third })
                 LayoutRebuilder.MarkLayoutForRebuild((RectTransform)column);
@@ -390,7 +393,7 @@ namespace FoodTrucks
         }
 
         // The table's columns: Food, Price, Market price, On board, status (left edges as fractions of the row).
-        private static readonly float[] MenuColumns = { 0f, 0.30f, 0.48f, 0.64f, 0.80f };
+        private static readonly float[] MenuColumns = { 0f, 0.36f, 0.54f, 0.68f, 0.84f };
 
         // Menu: one row per food the vehicle stocks (StockLevels.Stocked, the to-dos' own rule), priced the way the game's
         // inventory pricing shows a shop's product (InventoryProductCellView): the price now, typed into a copy of the
@@ -427,7 +430,7 @@ namespace FoodTrucks
                     name,
                     !priced ? "-" : useField ? "" : CartSelling.Money(line.PriceCents),
                     priced ? CartSelling.Money(line.MarketCents) : "-",
-                    Format("foodtrucks:bizman_fleet_storage_units", ("load", food.Units.ToString()), ("capacity", food.Capacity.ToString())),
+                    Format("foodtrucks:bizman_page_menu_stock_value", ("load", food.Units.ToString()), ("capacity", food.Capacity.ToString())),
                     status,
                 };
                 var colours = new Color?[] { null, priced ? PriceColour(line, colors) : null, null, null, status.Length > 0 ? (Color)colors.red : (Color?)null };
@@ -475,11 +478,30 @@ namespace FoodTrucks
             var field = copy.GetComponent<GameInput>();
             if (field == null) return;
             var culture = CultureHelper.CultureInfo;
-            field.SetText(line.Custom ? (line.PriceCents / 100f).ToString("N2", culture) : "", notify: false);
-            var placeholder = Traverse.Create(field).Field("placeholder").GetValue<TextLocalizationComponent>();
-            if (placeholder != null) placeholder.SetValue((line.AutomaticCents / 100f).ToString("N2", culture), true);
-            var background = copy.GetComponent<Image>();
+            // The price it charges now, always, as the game's row does (retailPrice.SetText(price "N2", notify: false)):
+            // a set price in the field's own text colour, the automatic one in grey.
+            field.SetText((line.PriceCents / 100f).ToString("N2", culture), notify: false);
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
+            var tmp = Traverse.Create(field).Field("tmpInputField").GetValue<Selectable>();
+            if (tmp != null) tmp.interactable = true;
+            var text = tmp == null ? null : Traverse.Create(tmp).Property("textComponent").GetValue() as Graphic;
+            var hint = tmp == null ? null : Traverse.Create(tmp).Property("placeholder").GetValue() as Graphic;
+            if (text != null && text.transform.IsChildOf(copy.transform))
+            {
+                // The game's field sits on a dark table with white text; on the white box its text takes the box's dark text
+                // colour, grey for an automatic price.
+                text.color = line.Custom ? (Color)colors.midnight : (Color)colors.darkGrey;
+            }
+            var background = copy.GetComponent<Image>();
+            if (!priceFieldLogged)
+            {
+                priceFieldLogged = true;
+                Log.Info($"BizMan: price field for {line.Item}: text '{field.GetRawValue()}' ({(line.Custom ? "set" : "automatic")}), " +
+                         $"input {(tmp == null ? "missing" : tmp.interactable ? "interactable" : "not interactable")}, " +
+                         $"text component {(text == null ? "missing" : text.transform.IsChildOf(copy.transform) ? $"inside, colour {text.color}" : "OUTSIDE the copy")}, " +
+                         $"placeholder {(hint == null ? "none" : hint.transform.IsChildOf(copy.transform) ? "inside" : "OUTSIDE the copy")}, " +
+                         $"background {(background == null ? "none" : background.color.ToString())}.");
+            }
             if (background != null)
             {
                 Color32 tint = background.color;
@@ -500,6 +522,7 @@ namespace FoodTrucks
             var item = line.Item;
             var name = line.Name;
             var was = line.Custom ? line.PriceCents : (long?)null;
+            var shown = line.PriceCents;
             endEdit.AddListener(_ => Guard(() =>
             {
                 var raw = field.GetRawValue()?.Trim() ?? "";
@@ -517,7 +540,8 @@ namespace FoodTrucks
                         return;
                     }
                     var cents = (long)Math.Round(dollars * 100.0);
-                    if (was == cents) return;
+                    // The shown price left as it was: nothing to set (an automatic price stays automatic).
+                    if (cents == shown) return;
                     PriceDialog.SetPrice(id, item, name, (cents / 100.0).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
                 }
                 RefreshLater();
