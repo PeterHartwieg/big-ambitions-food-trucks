@@ -438,7 +438,7 @@ namespace FoodTrucks
             rect.anchorMax = cellRect.anchorMax;
             rect.pivot = new Vector2(0f, 0.5f);
             rect.offsetMin = new Vector2(0f, 2f);
-            rect.offsetMax = new Vector2(-6f, -2f);
+            rect.offsetMax = new Vector2(-BizManParts.Layout.CellGap, -2f);
             copy.SetActive(true);
             var field = copy.GetComponent<GameInput>();
             if (field == null) return;

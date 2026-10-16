@@ -313,6 +313,13 @@ namespace FoodTrucks
                     child.gameObject.SetActive(false);
                     Object.Destroy(child.gameObject);
                 }
+                // Boxes the column's full width, BoxGap apart (BizManParts.Layout). The content's own padding stays: it
+                // keeps the boxes' drop shadows inside the scroll view's mask.
+                if (content.GetComponent<HorizontalOrVerticalLayoutGroup>() is { } stack)
+                {
+                    stack.spacing = BizManParts.Layout.BoxGap;
+                    stack.childControlWidth = stack.childForceExpandWidth = true;
+                }
                 // The content grows downwards from the top: with the copied pivot it grew both ways as boxes went in, and a
                 // column taller than the screen opened partway down, its first box's title out of sight (seen in game
                 // 15 October 2026). Back to the top once the boxes are laid out.

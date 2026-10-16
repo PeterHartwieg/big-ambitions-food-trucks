@@ -43,12 +43,15 @@ namespace FoodTrucks
         private static BizManList? builtFor;
         private static GameObject? tabTemplate;
         private static Color? tabColour;
+        // The day's route copied with Copy route (any vehicle's), for Paste route.
+        private static DayCopy? copiedRoute;
 
         internal static void Reset()
         {
             builtFor = null;
             tabTemplate = null;
             tabColour = null;
+            copiedRoute = null;
             WeekTab = false;
             chosen.Clear();
         }
@@ -135,9 +138,9 @@ namespace FoodTrucks
             var unit = BizManParts.SmallLabelHeight();
             var row = Rect(name, column);
             var element = row.gameObject.AddComponent<LayoutElement>();
-            element.minHeight = element.preferredHeight = unit * 1.8f;
+            element.minHeight = element.preferredHeight = BizManParts.Layout.TabHeight;
             var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = unit;
+            layout.spacing = BizManParts.Layout.BoxGap;
             layout.childControlWidth = layout.childControlHeight = true;
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = true;
@@ -200,7 +203,7 @@ namespace FoodTrucks
             // The day's route beside its map.
             var pair = Rect("FoodTrucks.RouteAndMap", column);
             var pairLayout = pair.gameObject.AddComponent<HorizontalLayoutGroup>();
-            pairLayout.spacing = BizManParts.SmallLabelHeight();
+            pairLayout.spacing = BizManParts.Layout.BoxGap;
             pairLayout.childControlWidth = pairLayout.childControlHeight = true;
             pairLayout.childForceExpandWidth = true;
             pairLayout.childForceExpandHeight = false;
@@ -267,11 +270,62 @@ namespace FoodTrucks
             var full = stops.Count >= rules.Fleet.MaxStops;
             if (StopPicker.Ready) box.Button(Text("foodtrucks:bizman_page_add_stop"), () => AddOnMap(id, day), canWrite && !full);
             box.Button(Text("foodtrucks:bizman_page_add_here"), () => AddWhereItStands(id, day), canWrite && !full);
+            // Copy and paste of a day's route, as the game's schedule copies a day (Peter, 16 October 2026).
+            box.Button(Text("foodtrucks:bizman_week_copy_route"), () => CopyRoute(id, day), stops.Count > 0);
+            var copy = copiedRoute;
+            box.Button(copy == null ? Text("foodtrucks:bizman_week_paste_route_none")
+                    : Format("foodtrucks:bizman_week_paste_route", ("day", DayName(copy.From))),
+                () => PasteRoute(id, day, all: false), canWrite && copy != null && copy.From != day);
+            if (copy != null && copy.From == day)
+                box.Button(Text("foodtrucks:bizman_week_paste_route_all"), () => PasteRoute(id, day, all: true), canWrite);
         }
 
-        // The day from the bay where it rents its space, through the day's stops, and back (Peter, 16 October 2026): fixed
-        // rows that aren't stops (no ReorderableListItem, so the list's drag leaves them out; the page is rebuilt after a
-        // drag, putting them back in place), with the drive (or walk) between each two. The times come from the route day
+        private static void CopyRoute(string id, DayOfWeek day)
+        {
+            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
+            copiedRoute = RouteEditor.CopyDay(vehicle?.Schedule, day);
+            Log.Info($"Week plan: {day}'s route of {id} copied ({copiedRoute.Stops.Count} stops).");
+            BizManVehiclePage.RefreshLater();
+        }
+
+        // The copied stops replace the day's (or every other day's); refused as any route edit when a night would run
+        // into the next morning.
+        private static void PasteRoute(string id, DayOfWeek day, bool all)
+        {
+            var copy = copiedRoute;
+            if (copy == null) return;
+            void Apply()
+            {
+                var vehicle = Writable(id);
+                var rules = DemandData.Rules;
+                if (vehicle == null || rules == null) return;
+                var schedules = new HireSchedules(rules.Fleet);
+                // A crew window at a stop that goes is marked lost (RouteEditor.Remap) and the runner closes it.
+                var problem = all ? RouteEditor.PasteRouteToAllDays(schedules, vehicle, copy) : RouteEditor.PasteRoute(schedules, vehicle, copy, day);
+                if (problem != ScheduleProblem.None)
+                {
+                    Log.Info($"Week plan: pasting {copy.From}'s route onto {(all ? "every day" : day.ToString())} of {id} refused: {problem}.");
+                    CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
+                    BizManVehiclePage.RefreshLater();
+                    return;
+                }
+                Log.Info($"Week plan: {copy.From}'s route pasted onto {(all ? "every day" : day.ToString())} of {id}.");
+                RouteStops.Changed(vehicle);
+                BizManVehiclePage.RefreshLater();
+            }
+            if (!all)
+            {
+                Guard(Apply);
+                return;
+            }
+            // The game's own question for pasting a day onto all days.
+            HudConfirm.Show(bodyKey: "bizman_schedule_paste_to_all_days_confirm", onConfirmAction: () => Guard(Apply), allowConfirmationSkip: true, isNegative: false);
+        }
+
+        // The day from the bay where it rents its space, through the day's stops, and back (Peter, 16 October 2026): the
+        // commissary at both ends on the stops' own card, greyed, its times as text, without remove or drag (no
+        // ReorderableListItem, so the list's drag leaves it out; the page is rebuilt after a drag, putting it back in
+        // place), with the drive (or walk) between each two as a slim row. The times come from the route day
         // (Core WeekPlan.RouteDayOf), so the page and the crew agree.
         private static void AddStops(BizManParts.Box box, string id, HireSchedule schedule, DayOfWeek day, RouteDay routeDay, bool canWrite)
         {
@@ -279,6 +333,8 @@ namespace FoodTrucks
             listGo.name = "FoodTrucks.Stops";
             box.Add(listGo.transform);
             listGo.SetActive(true);
+            // Cards the list's full width, Gap apart, no padding of the logistics list's own (BizManParts.Layout).
+            BizManParts.Layout.Stack(listGo.GetComponent<HorizontalOrVerticalLayoutGroup>(), BizManParts.Layout.Gap);
             var reorder = listGo.GetComponent<ReorderableList>();
             var template = listGo.transform.Find(BizManVehiclePage.entryPath);
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
@@ -292,7 +348,10 @@ namespace FoodTrucks
             var stops = indices.Select(i => schedule.Stops[i]).ToList();
             var legs = routeDay.Plan.Legs;
             var drives = new List<int>();
-            RectTransform first;
+            // "Opens" and "Closes" on a slim line over the cards, over the stops' two time dropdowns once laid out.
+            var first = FixedRow(listGo.transform, "", bold: true);
+            Captions(first);
+            HireRoutes.Later(() => Guard(() => AlignHeader(first, listGo.transform)));
             if (home != null)
             {
                 var place = home.Value.Place;
@@ -303,14 +362,11 @@ namespace FoodTrucks
                     ? Format("foodtrucks:bizman_week_route_restock", ("commissary", homeName!), ("start", Clock((int)restock.Start)),
                         ("time", Clock((int)restock.End)))
                     : Format("foodtrucks:bizman_page_route_leaves", ("commissary", homeName!), ("time", Clock(leave.End > leave.Start ? (int)leave.Start : stops[0].OpenAt - drive)));
-                first = FixedRow(listGo.transform, text, bold: true);
+                FixedCard(listGo.transform, template, text);
                 FixedRow(listGo.transform, TravelText(mode, drive), bold: false);
                 drives.Add(drive);
             }
-            else first = FixedRow(listGo.transform, Text("foodtrucks:bizman_page_route_no_space"), bold: true);
-            // "Opens" and "Closes" on that first line, over the stops' two time dropdowns once the list is laid out.
-            Captions(first);
-            HireRoutes.Later(() => Guard(() => AlignHeader(first, listGo.transform)));
+            else FixedCard(listGo.transform, template, Text("foodtrucks:bizman_page_route_no_space"));
             for (var k = 0; k < stops.Count; k++)
             {
                 if (k > 0)
@@ -321,6 +377,7 @@ namespace FoodTrucks
                 }
                 var entry = Object.Instantiate(template, listGo.transform);
                 entry.name = "FoodTrucks.Stop";
+                BizManParts.NoHover(entry);
                 var item = entry.GetComponent<ReorderableListItem>();
                 if (item != null) item.list = canWrite ? reorder : null;
                 FillStop(entry, id, schedule, indices[k], k, canWrite);
@@ -331,7 +388,7 @@ namespace FoodTrucks
                 var last = stops[stops.Count - 1];
                 var back = legs.LastOrDefault(l => l.StopIndex == HireSchedules.HomeIndex);
                 if (home.Value.BayStops.Contains(indices[indices.Count - 1]))
-                    FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_ends_in_bay", ("commissary", homeName!)), bold: true);
+                    FixedCard(listGo.transform, template, Format("foodtrucks:bizman_page_route_ends_in_bay", ("commissary", homeName!)));
                 else
                 {
                     var place = home.Value.Place;
@@ -340,7 +397,7 @@ namespace FoodTrucks
                     var arrive = back.End > back.Start ? (int)back.End : last.CloseAt + minutes;
                     FixedRow(listGo.transform, Format(mode == TravelMode.Push ? "foodtrucks:bizman_page_route_walk_back" : "foodtrucks:bizman_page_route_drive_back",
                         ("minutes", minutes.ToString())), bold: false);
-                    FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_back", ("commissary", homeName!), ("time", Clock(arrive))), bold: true);
+                    FixedCard(listGo.transform, template, Format("foodtrucks:bizman_page_route_back", ("commissary", homeName!), ("time", Clock(arrive))));
                     // Back after the 04:00 check: it isn't in the bay then (no refusal; the check sees it on its way).
                     var check = DemandData.Rules?.Commissary.NightCheckMinute ?? 240;
                     if (arrive > 1440 + check)
@@ -376,10 +433,9 @@ namespace FoodTrucks
         private static RectTransform FixedRow(Transform list, string text, bool bold)
         {
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
-            var unit = BizManParts.SmallLabelHeight();
             var row = Rect(bold ? "FoodTrucks.CommissaryRow" : "FoodTrucks.TravelRow", list);
             var element = row.gameObject.AddComponent<LayoutElement>();
-            element.minHeight = element.preferredHeight = unit * 1.2f;
+            element.minHeight = element.preferredHeight = BizManParts.Layout.SlimHeight;
             element.flexibleWidth = 1f;
             var indent = 0f;
             if (!bold)
@@ -387,14 +443,14 @@ namespace FoodTrucks
                 var icon = Rect("Icon", row);
                 icon.anchorMin = icon.anchorMax = new Vector2(0f, 0.5f);
                 icon.pivot = new Vector2(0f, 0.5f);
-                icon.sizeDelta = new Vector2(unit * 0.8f, unit * 0.8f);
-                icon.anchoredPosition = new Vector2(unit * 0.5f, 0f);
+                icon.sizeDelta = new Vector2(BizManParts.Layout.IconSize, BizManParts.Layout.IconSize);
+                icon.anchoredPosition = Vector2.zero;
                 var image = icon.gameObject.AddComponent<Image>();
                 image.sprite = InstanceBehavior<GlobalReferences>.Instance.vehiclePOIIcon;
                 image.preserveAspect = true;
                 image.color = colors.darkGrey;
                 image.raycastTarget = false;
-                indent = unit * 1.6f;
+                indent = BizManParts.Layout.IconIndent;
             }
             if (BizManParts.SmallLabel(row, text) is RectTransform label)
             {
@@ -408,6 +464,28 @@ namespace FoodTrucks
                 BizManParts.Colour(label, bold ? (Color)colors.midnight : (Color)colors.darkGrey);
             }
             return row;
+        }
+
+        // The commissary at either end of the day on a stop card, greyed: its text in the card's name, no time dropdowns,
+        // no remove button, and not a list item (it can't be dragged).
+        private static void FixedCard(Transform list, Transform template, string text)
+        {
+            var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
+            var card = Object.Instantiate(template, list);
+            card.name = "FoodTrucks.CommissaryCard";
+            var item = card.GetComponent<ReorderableListItem>();
+            if (item != null) Object.DestroyImmediate(item);
+            BizManParts.NoHover(card);
+            BizManParts.SetText(card.Find(BizManVehiclePage.entryNamePath), text);
+            BizManParts.Colour(card.Find(BizManVehiclePage.entryNamePath), (Color)colors.darkGrey);
+            foreach (var path in new[] { BizManVehiclePage.entryDropdownPath, BizManVehiclePage.entryRemovePath })
+            {
+                var part = card.Find(path);
+                if (part != null) part.gameObject.SetActive(false);
+            }
+            var background = card.GetComponent<Image>();
+            if (background != null) background.color = Color.Lerp(background.color, (Color)colors.lightGrey, 0.6f);
+            card.gameObject.SetActive(true);
         }
 
         // "Opens" and "Closes" on the first fixed row, in the box's section-label style: until the list is laid out on the
@@ -475,10 +553,13 @@ namespace FoodTrucks
             rowElement.preferredHeight = openRect.rect.height > 1f ? openRect.rect.height : openElement != null ? openElement.preferredHeight : -1f;
             rowElement.flexibleWidth = 1f;
             var horizontal = times.gameObject.AddComponent<HorizontalLayoutGroup>();
-            horizontal.spacing = 8f;
+            // Two columns of one fixed width at the card's right edge, so every card's times line up under Opens and
+            // Closes whatever the time's text (Peter's playtest, 16 October 2026: 15:30 narrow, 18:30 wide).
+            horizontal.spacing = BizManParts.Layout.Gap;
+            horizontal.childAlignment = TextAnchor.MiddleRight;
             horizontal.childControlWidth = true;
             horizontal.childControlHeight = true;
-            horizontal.childForceExpandWidth = true;
+            horizontal.childForceExpandWidth = false;
             horizontal.childForceExpandHeight = true;
             var close = Object.Instantiate(open.gameObject, times).GetComponent<GameDropdown>();
             open.transform.SetParent(times, false);
@@ -488,9 +569,11 @@ namespace FoodTrucks
                 if (dd.GetComponent<LayoutElement>() == null) dd.gameObject.AddComponent<LayoutElement>();
                 foreach (var element in dd.GetComponents<LayoutElement>())
                 {
-                    element.minWidth = element.preferredWidth = 0f;
-                    element.flexibleWidth = 1f;
+                    element.minWidth = element.preferredWidth = BizManParts.Layout.ControlWidth;
+                    element.flexibleWidth = 0f;
+                    element.layoutPriority = 10;
                 }
+                foreach (var fitter in dd.GetComponents<ContentSizeFitter>()) fitter.enabled = false;
                 Compact(dd.transform);
             }
 
@@ -741,29 +824,11 @@ namespace FoodTrucks
             layout.childControlWidth = layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
-            layout.spacing = BizManParts.SmallLabelHeight() * 0.5f;
+            layout.spacing = BizManParts.Layout.BoxGap;
             var element = stack.gameObject.AddComponent<LayoutElement>();
             element.flexibleWidth = weight;
             element.minWidth = 0f;
             return stack;
-        }
-
-        private static void Place(RectTransform rect, float xMin, float yMin, float xMax, float yMax)
-        {
-            var element = rect.GetComponent<LayoutElement>();
-            if (element != null) element.ignoreLayout = true;
-            rect.anchorMin = new Vector2(xMin, yMin);
-            rect.anchorMax = new Vector2(xMax, yMax);
-            rect.offsetMin = rect.offsetMax = Vector2.zero;
-        }
-
-        private static void Caption(RectTransform line, string text, Color colour, float width)
-        {
-            if (BizManParts.SmallLabel(line, text) is RectTransform label)
-            {
-                Place(label, 0f, 0f, width - 0.01f, 1f);
-                BizManParts.Colour(label, colour);
-            }
         }
 
         private static string PathTo(Transform target)

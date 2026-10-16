@@ -557,5 +557,9 @@
     "foodtrucks:bizman_week_schedule": "Schedule",
     "foodtrucks:schedule_row_serving": "Serving {number}",
     "foodtrucks:notification_schedule_hours_route": "The opening hours follow the vehicle's route.",
-    "foodtrucks:bizman_week_day_today": "{day} (today)"
+    "foodtrucks:bizman_week_day_today": "{day} (today)",
+    "foodtrucks:bizman_week_copy_route": "Copy route",
+    "foodtrucks:bizman_week_paste_route": "Paste {day}'s route",
+    "foodtrucks:bizman_week_paste_route_none": "Paste route",
+    "foodtrucks:bizman_week_paste_route_all": "Paste to all days"
 }

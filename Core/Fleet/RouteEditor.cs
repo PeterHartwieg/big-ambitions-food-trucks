@@ -245,20 +245,21 @@ namespace FoodTrucks.Core.Fleet
             return new TravelFit(moved, null, ScheduleProblem.None);
         }
 
-        // ---- The day tile's copy, paste and clear ----
+        // ---- Copy and paste of a day's route (the Week plan tab's route box) and clear ----
 
         public static DayCopy CopyDay(HireSchedule? schedule, DayOfWeek day) => new DayCopy(day, WeekPlan.IsClosed(schedule, day),
             WeekPlan.StopsOf(schedule, day).Select(i => WeekPlan.CopyStop(schedule!.Stops[i], day)).ToList(),
             (schedule?.CrewShifts ?? new List<CrewShift>()).Where(s => s != null && s.Day == day)
                 .Select(s => new CrewShift { EmployeeId = s.EmployeeId, Day = day, Start = s.Start, End = s.End, Station = s.Station }).ToList());
 
-        // The copied day replaces `day`'s stops, shifts (of crew still on the vehicle) and closed mark. Refused, with
-        // nothing changed, when the week wouldn't validate (a night running into the next morning).
-        public static ScheduleProblem PasteDay(HireSchedules schedules, VehicleState vehicle, DayCopy copy, DayOfWeek day) =>
+        // The copied day's stops replace `day`'s stops; its shifts and open or closed mark stay (they are set on the game's
+        // Schedule tab: Peter, 16 October 2026). Refused, with nothing changed, when the week wouldn't validate (a night
+        // running into the next morning).
+        public static ScheduleProblem PasteRoute(HireSchedules schedules, VehicleState vehicle, DayCopy copy, DayOfWeek day) =>
             PasteDays(schedules, vehicle, copy, new[] { day });
 
-        // The copied day on every other weekday ("Paste to all days").
-        public static ScheduleProblem PasteToAllDays(HireSchedules schedules, VehicleState vehicle, DayCopy copy) =>
+        // The copied day's stops on every other weekday ("Paste to all days").
+        public static ScheduleProblem PasteRouteToAllDays(HireSchedules schedules, VehicleState vehicle, DayCopy copy) =>
             PasteDays(schedules, vehicle, copy, WeekPlan.Days.Where(d => d != copy.From).ToList());
 
         private static ScheduleProblem PasteDays(HireSchedules schedules, VehicleState vehicle, DayCopy copy, IReadOnlyCollection<DayOfWeek> days)
@@ -270,23 +271,13 @@ namespace FoodTrucks.Core.Fleet
             var before = schedule.Stops?.ToList() ?? new List<ScheduleStop>();
             var stops = WeekPlan.Ordered(before.Where(s => !days.Contains(s.Day))
                 .Concat(days.SelectMany(d => copy.Stops.Select(s => WeekPlan.CopyStop(s, d)))));
-            var closed = (schedule.Closed ?? new List<DayOfWeek>()).Where(d => !days.Contains(d)).ToList();
-            if (copy.Closed) closed.AddRange(days);
             var candidate = Like(schedule, stops);
-            candidate.Closed = closed;
             if (stops.Count > 0)
             {
                 var problem = schedules.Validate(candidate);
                 if (problem != ScheduleProblem.None) return problem;
             }
-            var crew = new HashSet<string>(vehicle.Crew ?? new List<string>(), StringComparer.Ordinal);
             schedule.Stops = stops;
-            schedule.Closed = closed.Distinct().OrderBy(WeekPlan.Position).ToList();
-            schedule.CrewShifts = (schedule.CrewShifts ?? new List<CrewShift>()).Where(s => s != null && !days.Contains(s.Day))
-                .Concat(days.SelectMany(d => copy.Shifts.Where(s => crew.Contains(s.EmployeeId))
-                    .Select(s => new CrewShift { EmployeeId = s.EmployeeId, Day = d, Start = s.Start, End = s.End, Station = s.Station })))
-                .ToList();
-            WeekPlan.SortShifts(schedule);
             vehicle.Schedule = schedule;
             Remap(vehicle, before, stops);
             DropIfEmpty(vehicle);

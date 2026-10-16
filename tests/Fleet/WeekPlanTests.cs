@@ -239,19 +239,22 @@ public class WeekPlanTests
     }
 
     [Fact]
-    public void ADayIsCopiedPastedAndClearedWithItsShifts()
+    public void ADaysRouteIsCopiedAndPastedWithoutItsShiftsOrClosedMark()
     {
         var truck = Truck(Stop(DayOfWeek.Monday, "a", 0, 660, 840), Stop(DayOfWeek.Tuesday, "b", 0, 700, 900));
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 9, 16);
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Tuesday, 10, 12);
+        truck.Schedule!.Closed.Add(DayOfWeek.Wednesday);
         var copy = RouteEditor.CopyDay(truck.Schedule, DayOfWeek.Monday);
 
-        Assert.Equal(ScheduleProblem.None, RouteEditor.PasteDay(schedules, truck, copy, DayOfWeek.Tuesday));
+        Assert.Equal(ScheduleProblem.None, RouteEditor.PasteRoute(schedules, truck, copy, DayOfWeek.Tuesday));
         Assert.Equal(new[] { "Monday a", "Tuesday a" }, truck.Schedule!.Stops.Select(s => $"{s.Day} {s.SpotKey}").ToArray());
-        Assert.Equal((9, 16), Shift(truck.Schedule.CrewShifts, "e1", DayOfWeek.Tuesday));
+        Assert.Equal((10, 12), Shift(truck.Schedule.CrewShifts, "e1", DayOfWeek.Tuesday));
 
-        Assert.Equal(ScheduleProblem.None, RouteEditor.PasteToAllDays(schedules, truck, copy));
+        Assert.Equal(ScheduleProblem.None, RouteEditor.PasteRouteToAllDays(schedules, truck, copy));
         Assert.Equal(7, truck.Schedule.Stops.Count);
-        Assert.Equal(7, truck.Schedule.CrewShifts.Count);
+        Assert.Equal(2, truck.Schedule.CrewShifts.Count);
+        Assert.Equal(new[] { DayOfWeek.Wednesday }, truck.Schedule.Closed);
 
         RouteEditor.ClearDay(truck, DayOfWeek.Sunday);
         Assert.Equal(6, truck.Schedule.Stops.Count);
@@ -264,7 +267,7 @@ public class WeekPlanTests
         var truck = Truck(Stop(DayOfWeek.Monday, "night", 0, 22 * 60, 26 * 60), Stop(DayOfWeek.Wednesday, "early", 0, 60, 180));
         var before = truck.Schedule!.Stops.ToList();
 
-        Assert.Equal(ScheduleProblem.Overlap, RouteEditor.PasteDay(schedules, truck, RouteEditor.CopyDay(truck.Schedule, DayOfWeek.Monday), DayOfWeek.Tuesday));
+        Assert.Equal(ScheduleProblem.Overlap, RouteEditor.PasteRoute(schedules, truck, RouteEditor.CopyDay(truck.Schedule, DayOfWeek.Monday), DayOfWeek.Tuesday));
 
         Assert.Equal(before, truck.Schedule.Stops);
     }
@@ -275,7 +278,7 @@ public class WeekPlanTests
         var truck = Truck(Stop(DayOfWeek.Monday, "a", 0, 660, 840), Stop(DayOfWeek.Friday, "f", 0, 660, 840));
         truck.HireStop = 1;
         // Pasting Monday onto Tuesday puts a stop before Friday's.
-        RouteEditor.PasteDay(schedules, truck, RouteEditor.CopyDay(truck.Schedule, DayOfWeek.Monday), DayOfWeek.Tuesday);
+        RouteEditor.PasteRoute(schedules, truck, RouteEditor.CopyDay(truck.Schedule, DayOfWeek.Monday), DayOfWeek.Tuesday);
 
         Assert.Equal("f", truck.Schedule!.Stops[truck.HireStop!.Value].SpotKey);
     }
