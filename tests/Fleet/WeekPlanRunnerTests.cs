@@ -63,6 +63,76 @@ public class WeekPlanRunnerTests
     }
 
     [Fact]
+    public void AfterALateStopTheDriveBackGoesThoughTomorrowIsPlanned()
+    {
+        // Sunday's stop 22:00-02:00 and Monday's 11:00-14:00, 2 km from the bay (day 7 is a Sunday).
+        var truck = Truck(Stop(DayOfWeek.Sunday, "bars", 1320, 1560), Stop(DayOfWeek.Monday, "office", 660, 840));
+        truck.Crew.Add("e2");
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Sunday, 12, 24);
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 0, 4);
+        WeekPlan.SetShift(rules, truck, "e2", DayOfWeek.Monday, 8, 20);
+        runner.EnsurePlan(truck, At(7, 23), 0, 0, home: Bay);
+        truck.ReturnPending = true;
+        runner.EnsurePlan(truck, At(8, 0, 1), 0, 0, home: Bay);
+        Assert.Contains(truck.Shifts, p => p.Day == 8 && p.Legs.Count > 0);
+
+        var back = runner.Step(truck, At(8, 2), AtStop());
+        Assert.Equal((HireActionKind.Depart, HireSchedules.HomeIndex, At(8, 3, 20)), (back.Kind, back.Stop, back.ArrivesAt));
+        // Held by the player past the planned drive back: Monday's restock comes next, so it still goes (02:40 to 04:00 is
+        // on shift); at 03:30 the drive would outrun the 04:00 shift end, so it waits for Monday's 08:00 shift.
+        Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(8, 2, 40), AtStop()).Kind);
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(8, 3, 30), AtStop()).Kind);
+        Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(8, 8), AtStop()).Kind);
+    }
+
+    [Fact]
+    public void TodaysDriveBackGoesWhenTomorrowWasPlannedAtNoon()
+    {
+        // Wednesday 11:00-14:00, and Thursday's 00:30 stop whose restock starts Wednesday 22:40.
+        var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 660, 840), Stop(DayOfWeek.Thursday, "night market", 30, 90));
+        truck.Crew.Add("e2");
+        WeekPlan.SetShift(rules, truck, "e2", DayOfWeek.Wednesday, 9, 15);
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 14, 24);
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Thursday, 0, 3);
+        runner.EnsurePlan(truck, At(3, 6), Bay.X, Bay.Z, home: Bay);
+        truck.ReturnPending = true;
+        runner.EnsurePlan(truck, At(3, 14), 0, 0, home: Bay);
+        Assert.Contains(truck.Shifts, p => p.Day == 4);
+
+        Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 14), AtStop()).Kind);
+        // Held until 16:00, after the planned drive back: the next leg is the restock, so it drives back.
+        Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 16), AtStop()).Kind);
+    }
+
+    [Fact]
+    public void AnOwedDriveBackWaitsWhenTheNextLegIsAStop()
+    {
+        // Stops 11:00-12:00 and 15:00-16:00 at the same place; between them nothing to do and the drive back owed.
+        var truck = Truck(Stop(DayOfWeek.Wednesday, "a", 660, 720), Stop(DayOfWeek.Wednesday, "b", 900, 960));
+        WeekTestData.AllDay(truck);
+        runner.EnsurePlan(truck, At(3, 6), 0, 0, home: Bay);
+        truck.ReturnPending = true;
+
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 13), AtStop()).Kind);
+    }
+
+    [Fact]
+    public void ARestockReplannedByAShiftEditIsntMadeTwice()
+    {
+        var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 660, 840));
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 9, 18);
+        runner.EnsurePlan(truck, At(3, 6), Bay.X, Bay.Z, home: Bay);
+        Assert.Equal(HireActionKind.Restock, runner.Step(truck, At(3, 9, 10), InBay()).Kind);
+        HireRunner.Restocked(truck, At(3, 9, 10));
+
+        HireRunner.ReplanShifts(truck, At(3, 9, 15));
+        runner.EnsurePlan(truck, At(3, 9, 15), Bay.X, Bay.Z, home: Bay);
+
+        Assert.Equal(LegKind.Restock, HireRunner.Want(truck, At(3, 9, 20))!.Kind);
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 9, 20), InBay()).Kind);
+    }
+
+    [Fact]
     public void ADriveBackThatWouldOutrunTheShiftWaits()
     {
         var truck = OutAtTheStop(shiftEnd: 16);
