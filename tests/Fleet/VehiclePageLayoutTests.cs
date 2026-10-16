@@ -86,6 +86,19 @@ public class RouteMapTests
     }
 
     [Fact]
+    public void AShortRouteShowsAtLeast250MetresAndStreetsAreCulledToTheMap()
+    {
+        var map = RouteMap.Layout(new[] { (0.0, 0.0), (30.0, 0.0) }, null, runsDaily: true, aspect: 2);
+
+        Assert.Equal(250, map.HeightMetres, 6);
+        Assert.Equal(500, map.WidthMetres, 6);
+        Assert.Equal(map.Stops[1], map.Place(30, 0));
+        Assert.True(map.Shows(-300, 0, 300, 0));
+        Assert.False(map.Shows(400, 0, 500, 10));
+        Assert.False(map.Shows(0, 200, 10, 300));
+    }
+
+    [Fact]
     public void NoStopsGiveAnEmptyMap() =>
         Assert.Empty(RouteMap.Layout(Array.Empty<(double, double)>(), null, true, 2).Stops);
 

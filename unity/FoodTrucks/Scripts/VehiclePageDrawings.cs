@@ -20,10 +20,14 @@ namespace FoodTrucks
         // The drawings' PNGs, in the mod's bundle (every asset under the mod folder is packed by the SDK's builder).
         private const string ImageFolder = "Assets/Mods/FoodTrucks/UI/";
         private const float DiagramHeight = 250f;
-        private const float MapHeight = 240f;
         private static readonly Dictionary<string, Texture2D?> textures = new Dictionary<string, Texture2D?>(StringComparer.Ordinal);
 
-        internal static void Reset() => textures.Clear();
+        internal static void Reset()
+        {
+            textures.Clear();
+            streets = null;
+            logged = false;
+        }
 
         // ---- The vehicle and its equipment ----
 
@@ -132,23 +136,28 @@ namespace FoodTrucks
 
         // ---- The route ----
 
-        // The route on a light panel, north up (the city map's own view has no picture to crop: it is the 3D city seen by
-        // a camera, CityMap/CityMapCam). Numbered pins at the stops in order with their hours, straight lines joining them
-        // (back to the first when the route runs on consecutive days, as the crew starts each day where it ended), and the
-        // vehicle where it stands.
-        internal static void Route(BizManParts.Box box, HireSchedule schedule, VehicleInstance instance, VehicleState? vehicle, Color panel)
+        // The route on a light panel, north up as the game's city map opens (that map is the 3D city under a camera,
+        // CityMap/CityMapCam, with no picture to crop). Under it the streets: the traffic system's lanes, light grey.
+        // Round numbered pins at the stops in order with their hours beside them, lines joining them (back to the first
+        // when the route runs on consecutive days, as the crew starts each day where it ended), and the vehicle where it
+        // stands. Sizes follow the box's own text: the canvas is in game units (a business row is 100 high), so fixed
+        // pixel sizes came out as dots without text (16 October 2026).
+        internal static void Route(BizManParts.Box box, HireSchedule schedule, VehicleInstance instance, VehicleState? vehicle)
         {
             if (schedule.Stops.Count == 0) return;
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
+            var unit = BizManParts.SmallLabelHeight();
+            var mapHeight = unit * 8f;
             var root = Rect("FoodTrucks.RouteMap", box.Root);
             box.Add(root);
             var size = root.gameObject.AddComponent<LayoutElement>();
-            size.minHeight = size.preferredHeight = MapHeight;
+            size.minHeight = size.preferredHeight = mapHeight;
             var background = root.gameObject.AddComponent<Image>();
-            background.color = panel;
+            background.color = new Color(0.93f, 0.94f, 0.96f, 1f);
             background.raycastTarget = false;
+            root.gameObject.AddComponent<RectMask2D>();
             var width = box.Root is RectTransform boxRect ? boxRect.rect.width : 0f;
-            var aspect = width > 1f ? width / MapHeight : 2f;
+            var aspect = width > 1f ? width / mapHeight : 2f;
 
             (double, double)? where = null;
             if (vehicle?.Transit == null && SaveGameManager.Current?.VehicleInstances.Any(v => v.id == instance.id) == true)
@@ -159,19 +168,20 @@ namespace FoodTrucks
             }
             var map = RouteMap.Layout(schedule.Stops.Select(s => (s.X, s.Z)).ToList(), where, HireSchedules.RunsOnConsecutiveDays(schedule), aspect);
 
-            var lines = Rect("Lines", root);
-            lines.anchorMin = Vector2.zero;
-            lines.anchorMax = Vector2.one;
-            lines.offsetMin = lines.offsetMax = Vector2.zero;
-            var drawn = lines.gameObject.AddComponent<RouteLines>();
+            var streets = Streets();
+            if (streets.Count > 0)
+            {
+                var shown = streets.Where(s => map.Shows(s.Ax, s.Az, s.Bx, s.Bz))
+                    .Select(s => (Point(map.Place(s.Ax, s.Az)), Point(map.Place(s.Bx, s.Bz)))).ToList();
+                Lines(root, "Streets", new Color(0.78f, 0.80f, 0.84f, 1f)).SetSegments(shown, unit * 0.18f);
+            }
             Color line = colors.darkBlue;
-            line.a = 0.7f;
-            drawn.color = line;
-            drawn.Set(map.Stops.Select(p => new Vector2((float)p.U, (float)p.V)), map.Loops, 3f);
+            line.a = 0.8f;
+            Lines(root, "Route", line).Set(map.Stops.Select(Point).ToList(), map.Loops, unit * 0.12f);
 
             if (map.Vehicle is { } at)
             {
-                var marker = Pin(root, at, 20f, "FoodTrucks.Vehicle");
+                var marker = Pin(root, at, unit * 1.1f, "FoodTrucks.Vehicle");
                 var image = marker.gameObject.AddComponent<Image>();
                 image.sprite = InstanceBehavior<GlobalReferences>.Instance.vehiclePOIIcon;
                 image.preserveAspect = true;
@@ -181,28 +191,112 @@ namespace FoodTrucks
             for (var i = 0; i < map.Stops.Count; i++)
             {
                 var stop = schedule.Stops[i];
-                var pin = Pin(root, map.Stops[i], 22f, "FoodTrucks.Stop");
+                var pin = Pin(root, map.Stops[i], unit * 1.15f, "FoodTrucks.Stop");
                 var dot = pin.gameObject.AddComponent<Image>();
+                dot.sprite = Circle();
                 dot.color = colors.darkBlue;
                 dot.raycastTarget = false;
-                var number = BizManParts.SmallLabel(pin, (i + 1).ToString());
-                if (number is RectTransform numberRect)
+                if (BizManParts.SmallLabel(pin, (i + 1).ToString()) is RectTransform number)
                 {
-                    Fill(numberRect);
-                    BizManParts.Colour(numberRect, Color.white);
-                    BizManParts.Centre(numberRect);
+                    Fill(number);
+                    BizManParts.Colour(number, Color.white);
+                    BizManParts.Centre(number);
                 }
-                var hours = BizManParts.SmallLabel(pin, $"{StaffDialog.Clock(stop.OpenAt)}–{StaffDialog.Clock(stop.CloseAt)}");
-                if (hours is RectTransform hoursRect)
+                if (BizManParts.SmallLabel(pin, $"{StaffDialog.Clock(stop.OpenAt)}–{StaffDialog.Clock(stop.CloseAt)}") is RectTransform hours)
                 {
-                    hoursRect.anchorMin = hoursRect.anchorMax = new Vector2(1f, 0.5f);
-                    hoursRect.pivot = new Vector2(0f, 0.5f);
-                    hoursRect.anchoredPosition = new Vector2(4f, 0f);
-                    hoursRect.sizeDelta = new Vector2(120f, 22f);
-                    BizManParts.Colour(hoursRect, colors.midnight);
+                    hours.anchorMin = hours.anchorMax = new Vector2(1f, 0.5f);
+                    hours.pivot = new Vector2(0f, 0.5f);
+                    hours.anchoredPosition = new Vector2(unit * 0.25f, 0f);
+                    hours.sizeDelta = new Vector2(unit * 5f, unit);
+                    BizManParts.Colour(hours, colors.midnight);
                 }
             }
+            if (!logged)
+            {
+                logged = true;
+                Log.Info($"BizMan: route map {map.WidthMetres:F0} x {map.HeightMetres:F0} m, {streets.Count} street segments in the city" +
+                         (streets.Count == 0 ? " (traffic lanes not readable: no streets drawn)" : "") + $", text unit {unit:F0}.");
+            }
         }
+
+        private static bool logged;
+        private static List<(double Ax, double Az, double Bx, double Bz)>? streets;
+
+        // Every lane segment of the traffic system once per city load, both directions as one, at ground level only by
+        // x and z. Empty (and tried again next time) while the traffic system isn't running.
+        private static List<(double Ax, double Az, double Bx, double Bz)> Streets()
+        {
+            if (streets != null) return streets;
+            var found = new List<(double, double, double, double)>();
+            try
+            {
+                // Instance makes a new manager when there is none, so HasInstance first (as HatchCheck).
+                if (!GleyTrafficSystem.TrafficManager.HasInstance || !GleyTrafficSystem.TrafficManager.IsInitialized) return found;
+                var manager = GleyTrafficSystem.TrafficManager.Instance;
+                var all = new List<GleyTrafficSystem.Waypoint>();
+                // The game's search calls the filter for every waypoint within the radius: the whole city.
+                manager.GetClosestWaypoint(Vector3.zero, 100000f, w =>
+                {
+                    if (w != null) all.Add(w);
+                    return false;
+                });
+                var seen = new HashSet<(long, long, long, long)>();
+                foreach (var waypoint in all)
+                    foreach (var index in waypoint.neighbors ?? new List<int>())
+                    {
+                        var other = manager.GetWaypoint(index);
+                        if (other == null) continue;
+                        var a = waypoint.position;
+                        var b = other.position;
+                        var keyA = (Mathf.RoundToInt(a.x * 2), Mathf.RoundToInt(a.z * 2));
+                        var keyB = (Mathf.RoundToInt(b.x * 2), Mathf.RoundToInt(b.z * 2));
+                        var key = keyA.CompareTo(keyB) <= 0
+                            ? ((long)keyA.Item1, (long)keyA.Item2, (long)keyB.Item1, (long)keyB.Item2)
+                            : ((long)keyB.Item1, (long)keyB.Item2, (long)keyA.Item1, (long)keyA.Item2);
+                        if (seen.Add(key)) found.Add((a.x, a.z, b.x, b.z));
+                    }
+                streets = found;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("BizMan route map, reading the traffic lanes: " + ex.Message);
+            }
+            return found;
+        }
+
+        private static Sprite? circle;
+
+        // A round marker, drawn once: the game has no plain circle sprite to borrow.
+        private static Sprite Circle()
+        {
+            if (circle != null) return circle;
+            const int side = 64;
+            var texture = new Texture2D(side, side, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[side * side];
+            var centre = (side - 1) / 2f;
+            for (var y = 0; y < side; y++)
+                for (var x = 0; x < side; x++)
+                {
+                    var distance = Mathf.Sqrt((x - centre) * (x - centre) + (y - centre) * (y - centre));
+                    var alpha = Mathf.Clamp01(side / 2f - distance);
+                    pixels[y * side + x] = new Color32(255, 255, 255, (byte)(alpha * 255));
+                }
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            circle = Sprite.Create(texture, new Rect(0, 0, side, side), new Vector2(0.5f, 0.5f), 100f);
+            return circle;
+        }
+
+        private static RouteLines Lines(Transform parent, string name, Color colour)
+        {
+            var rect = Rect(name, parent);
+            Fill(rect);
+            var lines = rect.gameObject.AddComponent<RouteLines>();
+            lines.color = colour;
+            return lines;
+        }
+
+        private static Vector2 Point((double U, double V) at) => new Vector2((float)at.U, (float)at.V);
 
         private static RectTransform Pin(Transform parent, (double U, double V) at, float side, string name)
         {

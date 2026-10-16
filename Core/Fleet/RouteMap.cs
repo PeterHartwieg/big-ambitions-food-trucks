@@ -10,12 +10,32 @@ namespace FoodTrucks.Core.Fleet
     // points are centred and keep `margin` (a fraction of the panel) clear on every side.
     public sealed class RouteMap
     {
-        private RouteMap(IReadOnlyList<(double U, double V)> stops, (double U, double V)? vehicle, bool loops)
+        private RouteMap(IReadOnlyList<(double U, double V)> stops, (double U, double V)? vehicle, bool loops,
+            double centreX = 0, double centreZ = 0, double width = 0, double height = 0)
         {
             Stops = stops;
             Vehicle = vehicle;
             Loops = loops;
+            CentreX = centreX;
+            CentreZ = centreZ;
+            WidthMetres = width;
+            HeightMetres = height;
         }
+
+        // The world area the panel shows: centre and size in metres.
+        public double CentreX { get; }
+        public double CentreZ { get; }
+        public double WidthMetres { get; }
+        public double HeightMetres { get; }
+
+        // A world point on the panel (outside 0..1 when off it).
+        public (double U, double V) Place(double x, double z) =>
+            WidthMetres <= 0 || HeightMetres <= 0 ? (0.5, 0.5) : (0.5 + (x - CentreX) / WidthMetres, 0.5 + (z - CentreZ) / HeightMetres);
+
+        // Whether the segment from a to b may cross the panel (its bounding box overlaps the panel's).
+        public bool Shows(double ax, double az, double bx, double bz) =>
+            Math.Max(ax, bx) >= CentreX - WidthMetres / 2 && Math.Min(ax, bx) <= CentreX + WidthMetres / 2 &&
+            Math.Max(az, bz) >= CentreZ - HeightMetres / 2 && Math.Min(az, bz) <= CentreZ + HeightMetres / 2;
 
         public IReadOnlyList<(double U, double V)> Stops { get; }
         public (double U, double V)? Vehicle { get; }
@@ -24,7 +44,7 @@ namespace FoodTrucks.Core.Fleet
 
         // `aspect`: the panel's width over its height.
         public static RouteMap Layout(IReadOnlyList<(double X, double Z)> stops, (double X, double Z)? vehicle, bool runsDaily,
-            double aspect, double margin = 0.12, double minimumMetres = 80)
+            double aspect, double margin = 0.12, double minimumMetres = 250)
         {
             if (stops == null) throw new ArgumentNullException(nameof(stops));
             if (stops.Count == 0) return new RouteMap(Array.Empty<(double, double)>(), null, false);
@@ -38,14 +58,14 @@ namespace FoodTrucks.Core.Fleet
             var maxZ = all.Max(p => p.Z);
             var midX = (minX + maxX) / 2;
             var midZ = (minZ + maxZ) / 2;
-            // Metres per panel height: what fits both ways, never less than minimumMetres (a one-stop route isn't a dot
-            // in an endless zoom).
+            // Metres per panel height: what fits both ways, never less than minimumMetres, so a short route still shows a
+            // few blocks round it.
             var usable = 1 - 2 * margin;
             var height = Math.Max(minimumMetres, Math.Max(maxZ - minZ, (maxX - minX) / aspect) / usable);
             var width = height * aspect;
             (double, double) Place((double X, double Z) p) => (0.5 + (p.X - midX) / width, 0.5 + (p.Z - midZ) / height);
             return new RouteMap(stops.Select(Place).ToList(), vehicle == null ? ((double, double)?)null : Place(vehicle.Value),
-                runsDaily && stops.Count > 1);
+                runsDaily && stops.Count > 1, midX, midZ, width, height);
         }
     }
 }

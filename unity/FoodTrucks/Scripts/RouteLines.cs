@@ -5,19 +5,27 @@ using UnityEngine.UI;
 
 namespace FoodTrucks
 {
-    // The straight lines joining a route's stops on the vehicle page's route map, drawn in the graphic's own rectangle so
-    // they follow its size: points are fractions of the rectangle (u from the left, v from the bottom).
+    // Straight lines on the vehicle page's route map (the streets, and the route joining its stops), drawn in the
+    // graphic's own rectangle so they follow its size: points are fractions of the rectangle (u from the left, v from the
+    // bottom). The map's RectMask2D cuts what runs past its edge.
     internal sealed class RouteLines : MaskableGraphic
     {
-        private readonly List<Vector2> points = new List<Vector2>();
-        private bool loops;
+        private readonly List<(Vector2 A, Vector2 B)> segments = new List<(Vector2, Vector2)>();
         private float thickness = 3f;
 
-        internal void Set(IEnumerable<Vector2> path, bool closed, float width)
+        // A path through the points in order, back to the first when closed.
+        internal void Set(IList<Vector2> path, bool closed, float width)
         {
-            points.Clear();
-            points.AddRange(path);
-            loops = closed;
+            var pieces = new List<(Vector2, Vector2)>();
+            var count = closed ? path.Count : path.Count - 1;
+            for (var i = 0; i < count; i++) pieces.Add((path[i], path[(i + 1) % path.Count]));
+            SetSegments(pieces, width);
+        }
+
+        internal void SetSegments(IEnumerable<(Vector2 A, Vector2 B)> lines, float width)
+        {
+            segments.Clear();
+            segments.AddRange(lines);
             thickness = width;
             raycastTarget = false;
             SetVerticesDirty();
@@ -27,11 +35,10 @@ namespace FoodTrucks
         {
             vh.Clear();
             var rect = rectTransform.rect;
-            var count = loops ? points.Count : points.Count - 1;
-            for (var i = 0; i < count; i++)
+            foreach (var (from, to) in segments)
             {
-                var a = Place(points[i], rect);
-                var b = Place(points[(i + 1) % points.Count], rect);
+                var a = Place(from, rect);
+                var b = Place(to, rect);
                 var along = b - a;
                 if (along.sqrMagnitude < 0.01f) continue;
                 var side = new Vector2(-along.y, along.x).normalized * (thickness / 2f);

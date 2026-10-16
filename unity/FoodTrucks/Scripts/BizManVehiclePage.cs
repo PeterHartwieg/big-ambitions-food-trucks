@@ -377,7 +377,7 @@ namespace FoodTrucks
                     if (vehicle != null && !vehicle.HasPermit) box.Paragraph(Text("foodtrucks:bizman_page_route_no_permit"), (Color)colors.red);
                 }
                 if (count > 1) box.Paragraph(Text("foodtrucks:bizman_page_route_hint"));
-                if (instance != null) VehiclePageDrawings.Route(box, schedule, instance, vehicle, fieldGrey ?? new Color(0.93f, 0.94f, 0.95f, 1f));
+                if (instance != null) VehiclePageDrawings.Route(box, schedule, instance, vehicle);
                 AddStops(box, id, schedule, canWrite);
             }
             else box.Paragraph(Text(StopPicker.Ready ? "foodtrucks:bizman_page_route_empty" : "foodtrucks:bizman_page_route_empty_nomap"));
@@ -632,12 +632,15 @@ namespace FoodTrucks
 
         private static void AddStops(BizManParts.Box box, string id, HireSchedule schedule, bool canWrite)
         {
+            var header = StopsHeader(box);
             var listGo = Object.Instantiate(listTemplate!, box.Root);
             listGo.name = "FoodTrucks.Stops";
             box.Add(listGo.transform);
             listGo.SetActive(true);
             var reorder = listGo.GetComponent<ReorderableList>();
             var template = listGo.transform.Find(entryPath);
+            // Once the list is laid out, the captions move over the first stop's two time dropdowns.
+            if (header != null) HireRoutes.Later(() => Guard(() => AlignHeader(header, listGo.transform)));
             for (var i = 0; i < schedule.Stops.Count; i++)
             {
                 var entry = Object.Instantiate(template, listGo.transform);
@@ -649,6 +652,56 @@ namespace FoodTrucks
             }
             if (canWrite) reorder.OnItemReordered += (from, to) => Guard(() => MoveStop(id, from, to));
             reorder.Reinitialize();
+        }
+
+        // One line over the stops: "Opens" and "Closes", in the box's section-label style. Until the list is laid out they
+        // split the line's right part; AlignHeader then puts each over its dropdown column.
+        private static RectTransform? StopsHeader(BizManParts.Box box)
+        {
+            var go = new GameObject("FoodTrucks.StopsHeader", typeof(RectTransform));
+            var header = (RectTransform)go.transform;
+            box.Add(header);
+            var height = BizManParts.SmallLabelHeight();
+            var element = go.AddComponent<LayoutElement>();
+            element.minHeight = element.preferredHeight = height;
+            var opens = BizManParts.SmallLabel(header, Text("foodtrucks:bizman_page_opens_label")) as RectTransform;
+            var closes = BizManParts.SmallLabel(header, Text("foodtrucks:bizman_page_closes_label")) as RectTransform;
+            if (opens == null || closes == null)
+            {
+                Object.Destroy(go);
+                return null;
+            }
+            foreach (var (label, from, to) in new[] { (opens, 0.5f, 0.75f), (closes, 0.75f, 1f) })
+            {
+                label.name = label == opens ? "Opens" : "Closes";
+                label.anchorMin = new Vector2(from, 0f);
+                label.anchorMax = new Vector2(to, 1f);
+                label.offsetMin = label.offsetMax = Vector2.zero;
+            }
+            return header;
+        }
+
+        private static void AlignHeader(RectTransform header, Transform list)
+        {
+            if (header == null || list == null) return;
+            var times = list.GetComponentsInChildren<RectTransform>(true).FirstOrDefault(t => t.name == "FoodTrucks.Times");
+            if (times == null || times.childCount < 2) return;
+            Canvas.ForceUpdateCanvases();
+            var rect = header.rect;
+            for (var i = 0; i < 2; i++)
+            {
+                var label = header.Find(i == 0 ? "Opens" : "Closes") as RectTransform;
+                var column = times.GetChild(i) as RectTransform;
+                if (label == null || column == null) continue;
+                var corners = new Vector3[4];
+                column.GetWorldCorners(corners);
+                var left = header.InverseTransformPoint(corners[0]).x;
+                var right = header.InverseTransformPoint(corners[2]).x;
+                if (rect.width <= 1f || right <= left) continue;
+                label.anchorMin = new Vector2(Mathf.Clamp01((left - rect.xMin) / rect.width), 0f);
+                label.anchorMax = new Vector2(Mathf.Clamp01((right - rect.xMin) / rect.width), 1f);
+                label.offsetMin = label.offsetMax = Vector2.zero;
+            }
         }
 
         private static void FillStop(Transform entry, string id, HireSchedule schedule, int index, bool canWrite)
@@ -682,39 +735,19 @@ namespace FoodTrucks
             var close = Object.Instantiate(open.gameObject, row).GetComponent<GameDropdown>();
             open.transform.SetParent(row, false);
             open.transform.SetSiblingIndex(0);
-            // Two equal halves, each a small caption ("Opens", "Closes") over its dropdown, which shows only the time. The
-            // halves and the dropdowns have no width of their own (the copied dropdown carries two LayoutElements, one with
-            // its own width, which made "Opens" narrow and "Closes" wide in game, 16 October 2026).
-            var dropdownHeight = rowElement.preferredHeight > 1f ? rowElement.preferredHeight : 40f;
-            var caption = BizManParts.SmallLabelHeight();
-            const float gap = 2f;
-            foreach (var (dd, key) in new[] { (open, "foodtrucks:bizman_page_opens_label"), (close, "foodtrucks:bizman_page_closes_label") })
+            // Two equal halves showing only the time; "Opens" and "Closes" stand once over the list (StopsHeader). The
+            // dropdowns have no width of their own (the copied dropdown carries two LayoutElements, one with its own width,
+            // which made "Opens" narrow and "Closes" wide in game, 16 October 2026).
+            foreach (var dd in new[] { open, close })
             {
-                var half = new GameObject("FoodTrucks.TimeColumn", typeof(RectTransform));
-                half.transform.SetParent(row, false);
-                half.transform.SetSiblingIndex(dd == open ? 0 : 1);
-                var halfElement = half.AddComponent<LayoutElement>();
-                halfElement.minWidth = halfElement.preferredWidth = 0f;
-                halfElement.flexibleWidth = 1f;
-                var stack = half.AddComponent<VerticalLayoutGroup>();
-                stack.spacing = gap;
-                stack.childControlWidth = stack.childControlHeight = true;
-                stack.childForceExpandWidth = true;
-                stack.childForceExpandHeight = false;
-                BizManParts.SmallLabel(half.transform, Text(key));
-                dd.transform.SetParent(half.transform, false);
                 if (dd.GetComponent<LayoutElement>() == null) dd.gameObject.AddComponent<LayoutElement>();
                 foreach (var element in dd.GetComponents<LayoutElement>())
                 {
-                    element.ignoreLayout = false;
                     element.minWidth = element.preferredWidth = 0f;
                     element.flexibleWidth = 1f;
-                    element.minHeight = element.preferredHeight = dropdownHeight;
                 }
                 Compact(dd.transform);
             }
-            // The row grows by the captions, and so does everything holding it up to the stop row.
-            Grow(row, entry, caption + gap);
 
             var opens = RouteEditor.OpenTimes(schedule, RouteStops.Step, latest, index);
             if (!opens.Contains(stop.OpenAt)) opens.Add(stop.OpenAt);
@@ -742,24 +775,6 @@ namespace FoodTrucks
 
         // A stop's time dropdown without the game's ‹ › step buttons: two of them side by side left the time itself no
         // room (Peter, 16 October 2026: "What are the arrows for?"). The middle box takes the whole header.
-        // Makes room for `by` more height from `part` up to `top`: a set preferred height grows; a part placed by its
-        // anchors (its parent lays nothing out) grows its rectangle.
-        private static void Grow(Transform part, Transform top, float by)
-        {
-            for (var node = part; node != null; node = node.parent)
-            {
-                var element = node.GetComponent<LayoutElement>();
-                var laidOut = node.parent != null && node.parent.GetComponent<LayoutGroup>() != null;
-                if (element != null && element.preferredHeight > 0f)
-                {
-                    element.preferredHeight += by;
-                    if (element.minHeight > 0f) element.minHeight += by;
-                }
-                else if (!laidOut && node is RectTransform rect) rect.sizeDelta = new Vector2(rect.sizeDelta.x, rect.sizeDelta.y + by);
-                if (node == top) break;
-            }
-        }
-
         private static void Compact(Transform dropdown)
         {
             var header = dropdown.Find("Header");
