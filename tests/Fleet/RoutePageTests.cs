@@ -16,8 +16,9 @@ public class RoutePageTests
     private static readonly HireSchedules schedules = new(rules);
     private const int Step = 30;
 
+    // Monday's stops; Monday comes first in the kept order, so their indices are the same with other days' stops after.
     private static ScheduleStop Stop(string key, double x, int open, int close) =>
-        new() { SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
+        new() { Day = DayOfWeek.Monday, SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
 
     private static VehicleState Truck(params ScheduleStop[] stops) => new()
     {
@@ -92,7 +93,7 @@ public class RoutePageTests
     {
         var route = new HireSchedule { Stops = { Stop("office", 100, 11 * 60, 14 * 60), Stop("bars", 200, 18 * 60, 23 * 60) } };
 
-        var opens = RouteEditor.OpenTimes(route, Step, rules.LatestCloseMinute);
+        var opens = RouteEditor.OpenTimes(route, DayOfWeek.Monday, Step, rules.LatestCloseMinute);
         Assert.Contains(10 * 60 + 30, opens);
         Assert.DoesNotContain(11 * 60, opens);
         Assert.DoesNotContain(13 * 60 + 30, opens);
@@ -102,87 +103,94 @@ public class RoutePageTests
         Assert.Contains(23 * 60, opens);
 
         // From 14:00 a stop can run up to the bars' opening.
-        var closes = RouteEditor.CloseTimes(route, 14 * 60, Step, rules.LatestCloseMinute);
+        var closes = RouteEditor.CloseTimes(route, DayOfWeek.Monday, 14 * 60, Step, rules.LatestCloseMinute);
         Assert.Equal(14 * 60 + 30, closes.First());
         Assert.Equal(18 * 60, closes.Last());
 
         // The stop being edited doesn't stand in its own way.
-        Assert.Contains(12 * 60, RouteEditor.OpenTimes(route, Step, rules.LatestCloseMinute, except: 0));
-        Assert.Equal(rules.LatestCloseMinute, RouteEditor.CloseTimes(route, 23 * 60, Step, rules.LatestCloseMinute, except: 1).Last());
+        Assert.Contains(12 * 60, RouteEditor.OpenTimes(route, DayOfWeek.Monday, Step, rules.LatestCloseMinute, except: 0));
+        Assert.Equal(rules.LatestCloseMinute, RouteEditor.CloseTimes(route, DayOfWeek.Monday, 23 * 60, Step, rules.LatestCloseMinute, except: 1).Last());
     }
 
     [Fact]
     public void ThePickersSeeAStopRunningPastMidnightAsTheNextDaysToo()
     {
         // The bars run 22:00 to 02:00 the next morning.
-        var route = new HireSchedule { Stops = { Stop("bars", 200, 22 * 60, 26 * 60) } };
+        var route = WeekTestData.EveryDay(Stop("bars", 200, 22 * 60, 26 * 60));
 
-        var opens = RouteEditor.OpenTimes(route, Step, rules.LatestCloseMinute);
+        var opens = RouteEditor.OpenTimes(route, DayOfWeek.Monday, Step, rules.LatestCloseMinute);
         Assert.DoesNotContain(60, opens);
         Assert.DoesNotContain(90, opens);
         Assert.Contains(2 * 60, opens);
         // From 00:00 nothing fits before the bars' carry-over ends at 02:00.
-        Assert.Empty(RouteEditor.CloseTimes(route, 0, Step, rules.LatestCloseMinute));
+        Assert.Empty(RouteEditor.CloseTimes(route, DayOfWeek.Monday, 0, Step, rules.LatestCloseMinute));
         // An early stop from 02:00 runs up to the bars' opening, not into the night.
-        Assert.Equal(22 * 60, RouteEditor.CloseTimes(route, 2 * 60, Step, rules.LatestCloseMinute).Last());
+        Assert.Equal(22 * 60, RouteEditor.CloseTimes(route, DayOfWeek.Monday, 2 * 60, Step, rules.LatestCloseMinute).Last());
     }
 
     [Fact]
     public void AStopIsNeverOfferedLongerThanADay()
     {
-        var closes = RouteEditor.CloseTimes(new HireSchedule(), 0, Step, rules.LatestCloseMinute);
+        var closes = RouteEditor.CloseTimes(new HireSchedule(), DayOfWeek.Monday, 0, Step, rules.LatestCloseMinute);
         Assert.Equal(24 * 60, closes.Last());
     }
 
     [Fact]
     public void RoutesThatRunIntoTheNextDayAreRefused()
     {
-        // The last stop's carry-over into the first stop's next day.
-        var wrap = new HireSchedule { Stops = { Stop("early", 100, 60, 4 * 60), Stop("bars", 200, 22 * 60, 26 * 60) } };
+        // Every day: each night's carry-over runs into the next morning's early stop.
+        var wrap = WeekTestData.EveryDay(Stop("early", 100, 60, 4 * 60), Stop("bars", 200, 22 * 60, 26 * 60));
         Assert.Equal(ScheduleProblem.Overlap, schedules.Validate(wrap));
         // Touching ends are fine.
-        wrap.Stops[0].OpenAt = 2 * 60;
+        foreach (var early in wrap.Stops.Where(s => s.SpotKey == "early")) early.OpenAt = 2 * 60;
         Assert.Equal(ScheduleProblem.None, schedules.Validate(wrap));
         // A stop open longer than a day runs into its own opening.
         Assert.Equal(ScheduleProblem.BadTimes, schedules.Validate(new HireSchedule { Stops = { Stop("all day", 100, 0, 25 * 60) } }));
-        // And the editor refuses both, changing nothing.
-        var truck = Truck(Stop("early", 100, 2 * 60, 4 * 60), Stop("bars", 200, 22 * 60, 23 * 60));
+        // And the editor refuses a late close that runs into Tuesday's early stop, changing nothing.
+        var truck = Truck();
+        truck.Schedule!.Stops = WeekTestData.On(new[] { Stop("early", 100, 2 * 60, 4 * 60), Stop("bars", 200, 22 * 60, 23 * 60) },
+            DayOfWeek.Monday, DayOfWeek.Tuesday);
         Assert.Equal(ScheduleProblem.Overlap, RouteEditor.SetTimes(schedules, truck, 1, 22 * 60, 26 * 60 + 30));
-        Assert.Equal(23 * 60, truck.Schedule!.Stops[1].CloseAt);
+        Assert.Equal(23 * 60, truck.Schedule.Stops[1].CloseAt);
     }
 
     [Fact]
-    public void TheOvernightRuleAppliesOnlyWhenTheRouteRunsTwoDaysInARow()
+    public void TheOvernightRuleAppliesOnlyWhenTheNextDayRuns()
     {
         var stops = new[] { Stop("early", 100, 60, 4 * 60), Stop("bars", 200, 22 * 60, 26 * 60) };
         // Monday, Wednesday and Friday: no night runs into a working morning.
-        var alternate = new HireSchedule { Days = { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday }, Stops = stops.ToList() };
+        var alternate = new HireSchedule { Stops = WeekTestData.On(stops, DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday) };
         Assert.Equal(ScheduleProblem.None, schedules.Validate(alternate));
-        Assert.Contains(60, RouteEditor.OpenTimes(new HireSchedule { Days = alternate.Days, Stops = { stops[1] } }, Step, rules.LatestCloseMinute));
-        // Monday to Friday: Monday night runs into Tuesday's early stop.
-        var weekdays = new HireSchedule { Days = { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday }, Stops = stops.ToList() };
-        Assert.Equal(ScheduleProblem.Overlap, schedules.Validate(weekdays));
-        // Saturday and Sunday run in a row (Saturday into Sunday).
-        Assert.True(HireSchedules.RunsOnConsecutiveDays(new HireSchedule { Days = { DayOfWeek.Saturday, DayOfWeek.Sunday } }));
-        Assert.True(HireSchedules.RunsOnConsecutiveDays(new HireSchedule { Days = { DayOfWeek.Saturday, DayOfWeek.Sunday, DayOfWeek.Monday } }));
-        Assert.False(HireSchedules.RunsOnConsecutiveDays(new HireSchedule { Days = { DayOfWeek.Saturday } }));
+        Assert.Contains(60, RouteEditor.OpenTimes(new HireSchedule { Stops = WeekTestData.On(new[] { stops[1] }, DayOfWeek.Monday, DayOfWeek.Wednesday) },
+            DayOfWeek.Wednesday, Step, rules.LatestCloseMinute));
+        // Monday and Tuesday: Monday night runs into Tuesday's early stop.
+        var both = new HireSchedule { Stops = WeekTestData.On(stops, DayOfWeek.Monday, DayOfWeek.Tuesday) };
+        Assert.Equal(ScheduleProblem.Overlap, schedules.Validate(both));
+        // Unless Tuesday is closed.
+        both.Closed.Add(DayOfWeek.Tuesday);
+        Assert.Equal(ScheduleProblem.None, schedules.Validate(both));
+        // Sunday's night runs into Monday's morning.
+        Assert.Equal(ScheduleProblem.Overlap, schedules.Validate(new HireSchedule { Stops = WeekTestData.On(stops, DayOfWeek.Sunday, DayOfWeek.Monday) }));
     }
 
     [Fact]
-    public void NewDaysThatTheStopsDontFitAreRefusedAndARouteThatFailsSaysWhy()
+    public void OpeningADayTheStopsDontFitIsRefusedAndARouteThatFailsSaysWhy()
     {
-        var truck = Truck(Stop("early", 100, 60, 4 * 60), Stop("bars", 200, 22 * 60, 26 * 60));
-        truck.Schedule!.Days = new List<DayOfWeek> { DayOfWeek.Monday, DayOfWeek.Wednesday };
+        var truck = Truck();
+        truck.Schedule!.Stops = WeekTestData.On(new[] { Stop("early", 100, 60, 4 * 60), Stop("bars", 200, 22 * 60, 26 * 60) },
+            DayOfWeek.Monday, DayOfWeek.Tuesday);
+        truck.Schedule.Closed.Add(DayOfWeek.Tuesday);
         var runner = new HireRunner(rules);
+        WeekTestData.AllDay(truck);
         Assert.Equal(ScheduleProblem.None, runner.RouteProblem(truck));
 
-        Assert.Equal(ScheduleProblem.Overlap, RouteEditor.SetDays(schedules, truck, Array.Empty<DayOfWeek>()));
-        Assert.Equal(new[] { DayOfWeek.Monday, DayOfWeek.Wednesday }, truck.Schedule.Days);
-        Assert.Equal(ScheduleProblem.None, RouteEditor.SetDays(schedules, truck, new[] { DayOfWeek.Friday }));
-        Assert.Equal(new[] { DayOfWeek.Friday }, truck.Schedule.Days);
+        Assert.Equal(ScheduleProblem.Overlap, RouteEditor.SetClosed(schedules, truck, DayOfWeek.Tuesday, false));
+        Assert.Equal(new[] { DayOfWeek.Tuesday }, truck.Schedule.Closed);
+        Assert.Equal(ScheduleProblem.None, RouteEditor.SetClosed(schedules, truck, DayOfWeek.Monday, true));
+        Assert.Equal(new[] { DayOfWeek.Monday, DayOfWeek.Tuesday }, truck.Schedule.Closed);
 
-        // A route saved under the old rules (every day, a night into the morning): no plan, and the reason.
-        truck.Schedule.Days = new List<DayOfWeek>();
+        // A route that fails the rules (a night into the morning): no plan, and the reason.
+        truck.Schedule.Closed.Clear();
         Assert.Equal(ScheduleProblem.Overlap, runner.RouteProblem(truck));
         runner.EnsurePlan(truck, HireSchedules.Absolute(1, 0), 0, 0);
         Assert.Empty(truck.Shifts!);

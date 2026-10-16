@@ -237,11 +237,19 @@ namespace FoodTrucks.Core.Saves
     }
 
     // A hire's daily route: stops in order, each with its opening hours (minutes after the day's midnight).
+    // A vehicle's week plan (Peter, 16 October 2026): each weekday has its own stops (ScheduleStop.Day) or none, and each
+    // crew member has their own shifts per weekday. A weekday with stops runs unless it is in Closed. Stops are kept
+    // grouped by weekday, Monday first, each day's in time order (WeekPlan.Order); a stop's index is its place in this
+    // one list, so plans, the open window and a trip on its way name a stop of any day without ambiguity.
+    // Saves written before the week plan had one stop list and a "days" list (empty meaning every day); WeekPlan.Upgrade
+    // turns that into the same stops on each of those days when the save loads.
     public class HireSchedule
     {
-        // Days of the week the route runs; empty means every day.
-        public List<DayOfWeek> Days { get; set; } = new List<DayOfWeek>();
         public List<ScheduleStop> Stops { get; set; } = new List<ScheduleStop>();
+        // Weekdays the vehicle stays closed although it has stops there (the day tile's tick box).
+        public List<DayOfWeek> Closed { get; set; } = new List<DayOfWeek>();
+        // Each crew member's shifts, at most one per weekday (WeekPlan.SetShift).
+        public List<CrewShift> CrewShifts { get; set; } = new List<CrewShift>();
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -249,6 +257,8 @@ namespace FoodTrucks.Core.Saves
 
     public class ScheduleStop
     {
+        // The weekday this stop belongs to; its times count from that day's midnight.
+        public DayOfWeek Day { get; set; }
         // The game side's key for the spot, the same key regulars use.
         public string SpotKey { get; set; } = string.Empty;
         public double X { get; set; }
@@ -258,6 +268,20 @@ namespace FoodTrucks.Core.Saves
         public double Heading { get; set; }
         public int OpenAt { get; set; }
         public int CloseAt { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
+    }
+
+    // One crew member's shift on a weekday, in whole hours from that day's midnight: Start < End <= 24, at most
+    // FleetRules.MaxShiftHours long, as the game's own work shifts. A late route past midnight needs a shift on the
+    // next weekday from 00:00.
+    public class CrewShift
+    {
+        public string EmployeeId { get; set; } = string.Empty;
+        public DayOfWeek Day { get; set; }
+        public int Start { get; set; }
+        public int End { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

@@ -23,7 +23,9 @@ namespace FoodTrucks.Core.Fleet
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             if (want == null) throw new ArgumentNullException(nameof(want));
             if (!where.CanRestock) return false;
-            return vehicle.RestockedFor != want.Start || (where.StockKey != null && where.StockKey != vehicle.RestockStockKey);
+            // The morning restock is keyed by its end, the start of the drive it belongs to (HireRunner.Restocked).
+            var key = want.Kind == LegKind.Restock ? want.End : want.Start;
+            return vehicle.RestockedFor != key || (where.StockKey != null && where.StockKey != vehicle.RestockStockKey);
         }
 
         // What the commissary holds of the foods the vehicle's fitted pieces serve, as one string ("item=units;…", by

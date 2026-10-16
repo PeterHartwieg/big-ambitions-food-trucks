@@ -111,6 +111,9 @@ namespace FoodTrucks.Core.Saves
 
                 var state = document.ToObject<SaveState>(JsonSerializer.Create(settings))
                     ?? throw new JsonSerializationException("Save state must be a JSON object.");
+                // Routes saved before the week plan become the same stops on each of their days.
+                foreach (var vehicle in state.Vehicles ?? new List<VehicleState>())
+                    if (vehicle != null) FoodTrucks.Core.Fleet.WeekPlan.Upgrade(vehicle);
                 ValidateState(state);
                 return new LoadResult(status, state);
             }
@@ -150,9 +153,13 @@ namespace FoodTrucks.Core.Saves
                 if (vehicle.Health != null) FoodTrucks.Core.Reputation.ReputationValidation.Validate(vehicle.Health);
                 if (vehicle.VehicleType == null)
                     throw new JsonSerializationException("VehicleType must not be null.");
-                if (vehicle.Schedule != null && (vehicle.Schedule.Days == null || vehicle.Schedule.Stops == null ||
-                                                 vehicle.Schedule.Stops.Any(s => s == null || s.SpotKey == null)))
-                    throw new JsonSerializationException("Schedule Days and Stops must be lists without null entries.");
+                if (vehicle.Schedule != null && (vehicle.Schedule.Closed == null || vehicle.Schedule.Stops == null ||
+                                                 vehicle.Schedule.Stops.Any(s => s == null || s.SpotKey == null || !Enum.IsDefined(typeof(DayOfWeek), s.Day))))
+                    throw new JsonSerializationException("Schedule Closed and Stops must be lists without null entries, each stop on a weekday.");
+                if (vehicle.Schedule != null && (vehicle.Schedule.CrewShifts == null || vehicle.Schedule.CrewShifts.Any(s =>
+                        s == null || string.IsNullOrEmpty(s.EmployeeId) || !Enum.IsDefined(typeof(DayOfWeek), s.Day) || s.Start < 0 || s.End > 24 || s.Start >= s.End) ||
+                    vehicle.Schedule.CrewShifts.GroupBy(s => (s.EmployeeId, s.Day)).Any(g => g.Count() > 1)))
+                    throw new JsonSerializationException("CrewShifts must be one shift per employee and weekday, in whole hours from 0 to 24.");
                 if (vehicle.Transit != null && (vehicle.Transit.ToSpotKey == null || vehicle.Transit.ArrivesAt < vehicle.Transit.DepartsAt))
                     throw new JsonSerializationException("Transit must name its spot and arrive no earlier than it departs.");
                 if (vehicle.Crew == null || vehicle.Crew.Any(string.IsNullOrEmpty) || vehicle.Crew.Distinct(StringComparer.Ordinal).Count() != vehicle.Crew.Count)

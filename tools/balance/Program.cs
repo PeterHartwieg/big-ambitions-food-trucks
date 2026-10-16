@@ -705,17 +705,12 @@ if (opts.Wants("pass"))
     var truckMenu = new[] { HotDog, Coffee, Croissant, Soda };
     int CeilHalf(int minute) => (minute + 29) / 30 * 30;
 
-    // What the game pays a hire for (Core CrewPay). A route hour: the planned shift, from leaving for the first stop to
-    // the last stop's close, covers at least half of it (HireCrew.CountHour, HireRunner.PlannedShiftMinutes), whether
-    // anything is left to sell or not. An open hour of a window the player opened: the hire serves at some minute of
-    // its first half (CrewPay.CloseHours); during a restock trip the window is shut.
-    int RouteHours(int start, int end)
-    {
-        var hours = 0;
-        for (var h = (int)Math.Floor(start / 60.0); h * 60 < end; h++)
-            if (Math.Min(end, h * 60 + 60) - Math.Max(start, h * 60) >= FoodTrucks.Core.Fleet.CrewPay.HalfHour) hours++;
-        return hours;
-    }
+    // What the game pays a hire for (Core CrewPay). A shift hour: every whole hour of the hire's shifts on the week plan
+    // (HireCrew.CountHour, WeekPlan.OnShift), worked or idle. The model's crew all serve the whole route day, so each is
+    // scheduled for every whole hour it touches, from the morning restock to back in the bay (WeekPlan's route day).
+    // An open hour of a window the player opened: the hire serves at some minute of its first half (CrewPay.CloseHours);
+    // during a restock trip the window is shut.
+    int RouteHours(int start, int end) => end <= start ? 0 : (int)Math.Ceiling(end / 60.0) - (int)Math.Floor(start / 60.0);
     int OpenHours(Stay stay)
     {
         var hours = 0;
@@ -756,8 +751,9 @@ if (opts.Wants("pass"))
     // until a bay stop comes; it may drive there with nothing on board (HireRunner.Step, VehicleWhere.BayStops). Each
     // form that validates is simulated on a steady-state day (planned from where the day before ended, no earlier than
     // its last leg) and the best net is kept; the note says which, and which forms Core refused. Sales at bay stops
-    // are left out. Wages: each hour the shift (first leg to last) covers at least half of; consecutive days don't
-    // overlap, so each hour is paid once.
+    // are left out. Wages: every whole hour of the route day (restock to back in the bay), as shifts covering it are
+    // paid (consecutive days don't overlap, so each hour is paid once). The stops run on Tuesday and Wednesday (the
+    // week plan's stops are per weekday); Wednesday is the day measured.
     var hireSchedules = new FoodTrucks.Core.Fleet.HireSchedules(rules.Fleet);
     int FloorHalf(int minute) => minute / 30 * 30;
     Func<Spot, Conditions, DayEval?> Route(Cart cart, (int From, int To) day, int hires, FoodTrucks.Core.Fleet.TravelMode mode, int[]? breaks = null) => (spot, c) =>
@@ -767,8 +763,8 @@ if (opts.Wants("pass"))
         if (bay == null) return null;
         var metres = Math.Sqrt((bay.X - spot.X) * (bay.X - spot.X) + (bay.Z - spot.Z) * (bay.Z - spot.Z));
         var t = FoodTrucks.Core.Fleet.Travel.Minutes(rules.Fleet, metres, mode);
-        FoodTrucks.Core.Saves.ScheduleStop P(string key, int open, int close) => new() { SpotKey = key, X = spot.X, Z = spot.Z, OpenAt = open, CloseAt = close };
-        FoodTrucks.Core.Saves.ScheduleStop B(string key, int open) => new() { SpotKey = key, X = bay.X, Z = bay.Z, OpenAt = open, CloseAt = open + 30 };
+        FoodTrucks.Core.Saves.ScheduleStop P(string key, int open, int close) => new() { Day = DayOfWeek.Tuesday, SpotKey = key, X = spot.X, Z = spot.Z, OpenAt = open, CloseAt = close };
+        FoodTrucks.Core.Saves.ScheduleStop B(string key, int open) => new() { Day = DayOfWeek.Tuesday, SpotKey = key, X = bay.X, Z = bay.Z, OpenAt = open, CloseAt = open + 30 };
         var forms = new List<(string Name, List<FoodTrucks.Core.Saves.ScheduleStop> Stops, bool NightAtPitch)>();
         var close = Math.Min(day.To, FloorHalf(1410 - t));
         var shortened = close < day.To ? $", pitch shortened to {Clock(close)}" : "";
@@ -785,19 +781,21 @@ if (opts.Wants("pass"))
         var unlimited = Selling.Run(cart, spot, day.From, day.To, c, Selling.Unlimited(cart));
         var refused = new List<string>();
         (double Net, DayEval Eval)? best = null;
-        foreach (var (name, stops, _) in forms)
+        foreach (var (name, day1, _) in forms)
         {
-            var schedule = new FoodTrucks.Core.Saves.HireSchedule { Stops = stops };
+            var schedule = new FoodTrucks.Core.Saves.HireSchedule { Stops = FoodTrucks.Core.Fleet.WeekPlan.Ordered(
+                day1.Concat(day1.Select(s => FoodTrucks.Core.Fleet.WeekPlan.CopyStop(s, DayOfWeek.Wednesday)))) };
+            var stops = schedule.Stops;
+            var bayStops = stops.Select((s, i) => (s, i)).Where(x => x.s.SpotKey.StartsWith("bay")).Select(x => x.i).ToList();
             var problem = hireSchedules.Validate(schedule);
             if (problem != FoodTrucks.Core.Fleet.ScheduleProblem.None) { refused.Add($"{name}: {problem}"); continue; }
             // Each day ends back in the bay (the home leg), or at the bay stop that ends it.
             var (endX, endZ) = (bay.X, bay.Z);
-            var endsAtHome = stops[^1].SpotKey.StartsWith("bay");
             var first = hireSchedules.PlanDay(schedule, 2, DayOfWeek.Tuesday, endX, endZ, FoodTrucks.Core.Fleet.HireSchedules.Absolute(2, 0) - 1440, mode,
-                home: (bay.X, bay.Z), endsAtHome: endsAtHome);
+                home: (bay.X, bay.Z), bayStops: bayStops);
             if (first.Legs.Count == 0) { refused.Add($"{name}: no plan"); continue; }
             var plan = hireSchedules.PlanDay(schedule, 3, DayOfWeek.Wednesday, endX, endZ, first.Legs[^1].End, mode,
-                home: (bay.X, bay.Z), endsAtHome: endsAtHome);
+                home: (bay.X, bay.Z), bayStops: bayStops);
             if (plan.Legs.Count == 0 || plan.Skipped.Count > 0) { refused.Add($"{name}: stops skipped"); continue; }
             var origin = FoodTrucks.Core.Fleet.HireSchedules.Absolute(3, 0);
             var stock = Selling.Load(cart, spot, day.From, day.To, c);

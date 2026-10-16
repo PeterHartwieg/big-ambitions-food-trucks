@@ -59,7 +59,7 @@
     "licenceFee": 250,
     "permitFee": 500,
     "travel": { "driveMinutesPerMetre": 0.04, "pushMetresPerSecond": 1.2, "roadFactor": 1.0 },
-    "schedules": { "maxStops": 6, "latestCloseMinute": 1620, "stopRadiusMetres": 25 },
+    "schedules": { "maxStops": 6, "latestCloseMinute": 1620, "stopRadiusMetres": 25, "restockMinutes": 30, "maxShiftHours": 12 },
     "course": { "hours": 6, "pricePerHour": 25 }
   },
 
