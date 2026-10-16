@@ -1,5 +1,5 @@
 """Unity .meta files for the vehicle drawings in unity/FoodTrucks/UI: Sprite, alpha is transparency, no mipmaps,
-not readable, max size 2048, bundle foodtrucks. A PNG without a meta gets one with a fresh GUID; an existing meta
+not readable, max size 4096 for the backgrounds (2400 px wide) and 2048 for the layers, bundle foodtrucks. A PNG without a meta gets one with a fresh GUID; an existing meta
 keeps its GUID and gets the current settings; a meta without its PNG is removed.
 
 Usage: python3 art/tools/diagram_metas.py <ui dir>
@@ -39,7 +39,7 @@ TextureImporter:
   cubemapConvolution: 0
   seamlessCubemap: 0
   textureFormat: 1
-  maxTextureSize: 2048
+  maxTextureSize: {size}
   textureSettings:
     serializedVersion: 2
     filterMode: 1
@@ -77,7 +77,7 @@ TextureImporter:
   platformSettings:
   - serializedVersion: 3
     buildTarget: DefaultTexturePlatform
-    maxTextureSize: 2048
+    maxTextureSize: {size}
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 1
@@ -90,7 +90,7 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 3
     buildTarget: Standalone
-    maxTextureSize: 2048
+    maxTextureSize: {size}
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 1
@@ -143,5 +143,5 @@ for name in sorted(os.listdir(ui)):
     else:
         made += 1
     with open(meta, "w") as f:
-        f.write(TEMPLATE.format(guid=guid, sprite=sprite))
+        f.write(TEMPLATE.format(guid=guid, sprite=sprite, size=4096 if name.startswith("VehicleDiagram_") else 2048))
 print(f"METAS {made} new, {kept} kept, {removed} removed")
