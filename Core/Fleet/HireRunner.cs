@@ -240,9 +240,14 @@ namespace FoodTrucks.Core.Fleet
             return to <= from ? coverage.Covers(from) : coverage.Earliest(from, to - from, to) == from;
         }
 
-        // A leg to a stop (not the drive back) that hasn't ended.
-        private static bool StopLegAhead(VehicleState vehicle, long now) =>
-            vehicle.Shifts != null && vehicle.Shifts.Any(p => p.Legs.Any(l => l.StopIndex != HireSchedules.HomeIndex && l.End > now));
+        // Whether the next leg still to come (after `now`, with no leg running) is a drive to or an opening at a stop: an
+        // owed drive back waits for it. A restock next (it starts in the bay), the drive back, or nothing: it goes now.
+        private static bool NextLegAtAStop(VehicleState vehicle, long now)
+        {
+            var next = (vehicle.Shifts ?? new List<ShiftPlan>()).SelectMany(p => p.Legs).Where(l => l.End > now)
+                .OrderBy(l => l.Start).FirstOrDefault();
+            return next != null && next.StopIndex != HireSchedules.HomeIndex && next.Kind != LegKind.Restock;
+        }
 
         // The next thing to do for a hired vehicle. Rules, in order:
         // a vehicle in transit arrives when its time is up and does nothing else meanwhile; a vehicle the
@@ -273,11 +278,14 @@ namespace FoodTrucks.Core.Fleet
             }
             vehicle.CrewWindowLost = false;
             if (vehicle.Crew == null || vehicle.Crew.Count == 0) return HireAction.None;
-            if (want == null || want.StopIndex == HireSchedules.HomeIndex)
+            if (want != null && want.StopIndex == HireSchedules.HomeIndex)
             {
-                if (want != null) vehicle.ReturnPending = true;
-                return vehicle.ReturnPending && !StopLegAhead(vehicle, now) ? Home(vehicle, now, where, gameSpeed) : HireAction.None;
+                // The plan's own drive back: it comes before anything planned after it (review round 2).
+                vehicle.ReturnPending = true;
+                return Home(vehicle, now, where, gameSpeed);
             }
+            if (want == null)
+                return vehicle.ReturnPending && !NextLegAtAStop(vehicle, now) ? Home(vehicle, now, where, gameSpeed) : HireAction.None;
             // The morning restock in the bay before it leaves: nothing elsewhere, the drive then leaves from where it is.
             if (want.Kind == LegKind.Restock)
                 return !where.StayPut && CrewRestock.Due(vehicle, want, where) ? new HireAction(HireActionKind.Restock, want.StopIndex) : HireAction.None;

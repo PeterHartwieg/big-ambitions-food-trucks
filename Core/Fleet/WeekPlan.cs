@@ -166,8 +166,53 @@ namespace FoodTrucks.Core.Fleet
             return end - start > rules.MaxShiftHours ? ShiftProblem.TooLong : ShiftProblem.None;
         }
 
-        // One shift per crew member a day, as the game's: a new one replaces the day's old one.
-        public static ShiftProblem SetShift(FleetRules rules, VehicleState vehicle, string employeeId, DayOfWeek day, int start, int end)
+        // The vehicle's rows on the Schedule tab: a serving row for each of its staff, then the driving row.
+        public const string Driving = "driving";
+        public static string Serving(int number) => "serving" + number;
+        public static IReadOnlyList<string> Stations(int staff) =>
+            Enumerable.Range(1, Math.Max(1, staff)).Select(Serving).Append(Driving).ToList();
+
+        // Whether a shift's crew member serves at the window (a serving row, or a shift saved before rows had names).
+        public static bool Serves(CrewShift shift) => shift.Station == null || !shift.Station.StartsWith(Driving, StringComparison.Ordinal);
+
+        // Whole hours from 0 to 24, and never two shifts at the same hour for one crew member or on one row.
+        public static bool CheckShifts(IEnumerable<CrewShift>? shifts)
+        {
+            var list = (shifts ?? Enumerable.Empty<CrewShift>()).ToList();
+            if (list.Any(s => s == null || string.IsNullOrEmpty(s.EmployeeId) || !Enum.IsDefined(typeof(DayOfWeek), s.Day) || s.Start < 0 ||
+                              s.End > 24 || s.Start >= s.End))
+                return false;
+            bool Clash(IEnumerable<CrewShift> group) =>
+                group.SelectMany((a, i) => group.Skip(i + 1).Select(b => (a, b))).Any(p => p.a.Start < p.b.End && p.b.Start < p.a.End);
+            return !list.GroupBy(s => (s.EmployeeId, s.Day)).Any(g => Clash(g.ToList())) &&
+                   !list.GroupBy(s => (s.Station ?? Serving(1), s.Day)).Any(g => Clash(g.ToList()));
+        }
+
+        // The shifts CheckShifts accepts, in order: one with bad hours, or at the same hour as an earlier one for its crew
+        // member or on its row, is left out (shifts read back from the game's Schedule tab are written to the save only so).
+        public static List<CrewShift> Sanitize(IEnumerable<CrewShift> shifts, out int dropped)
+        {
+            var kept = new List<CrewShift>();
+            dropped = 0;
+            foreach (var shift in shifts ?? Enumerable.Empty<CrewShift>())
+            {
+                if (CheckShifts(kept.Append(shift))) kept.Add(shift);
+                else dropped++;
+            }
+            return kept;
+        }
+
+        // The first of `stations` with no shift that day overlapping [start, end) (other than `except`'s), else the last.
+        public static string FreeStation(IEnumerable<CrewShift> shifts, DayOfWeek day, int start, int end, IReadOnlyList<string> stations,
+            string? except = null) =>
+            stations.FirstOrDefault(st => !shifts.Any(s => s != null && s.Day == day && (s.Station ?? Serving(1)) == st && s.EmployeeId != except &&
+                                                           s.Start < end && start < s.End))
+            ?? stations[stations.Count - 1];
+
+        // One shift a day for this crew member (the test bridge, and tests): a new one replaces their shifts that day, on
+        // `station` or the first free serving row.
+        public static ShiftProblem SetShift(FleetRules rules, VehicleState vehicle, string employeeId, DayOfWeek day, int start, int end,
+            string? station = null)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var problem = CheckShift(rules, start, end);
@@ -176,7 +221,12 @@ namespace FoodTrucks.Core.Fleet
             var schedule = vehicle.Schedule ??= new HireSchedule();
             schedule.CrewShifts ??= new List<CrewShift>();
             schedule.CrewShifts.RemoveAll(s => s == null || (s.Day == day && s.EmployeeId == employeeId));
-            schedule.CrewShifts.Add(new CrewShift { EmployeeId = employeeId, Day = day, Start = start, End = end });
+            var rows = Enumerable.Range(1, Math.Max(1, vehicle.Crew.Count)).Select(Serving).Append(Driving).ToList();
+            schedule.CrewShifts.Add(new CrewShift
+            {
+                EmployeeId = employeeId, Day = day, Start = start, End = end,
+                Station = station ?? FreeStation(schedule.CrewShifts, day, start, end, rows)
+            });
             SortShifts(schedule);
             return ShiftProblem.None;
         }
@@ -197,25 +247,25 @@ namespace FoodTrucks.Core.Fleet
             return shifts.RemoveAll(s => s == null || !crew.Contains(s.EmployeeId)) > 0;
         }
 
-        internal static void SortShifts(HireSchedule schedule) =>
+        public static void SortShifts(HireSchedule schedule) =>
             schedule.CrewShifts = schedule.CrewShifts.Where(s => s != null).OrderBy(s => Position(s.Day)).ThenBy(s => s.Start)
                 .ThenBy(s => s.EmployeeId, StringComparer.Ordinal).ToList();
 
         // Whether the crew member is on shift at that absolute game minute (day 1 is a Monday).
-        public static bool OnShift(HireSchedule? schedule, string employeeId, long minute)
+        public static bool OnShift(HireSchedule? schedule, string employeeId, long minute, bool serving = false)
         {
             var shifts = schedule?.CrewShifts;
             if (shifts == null || string.IsNullOrEmpty(employeeId)) return false;
             var day = HireRunner.DayOf(minute);
             var weekday = Common.GameDays.Weekday(Math.Max(1, day));
             var hour = (int)((minute - HireSchedules.Absolute(day, 0)) / 60);
-            return shifts.Any(s => s != null && s.Day == weekday && s.Start <= hour && hour < s.End &&
+            return shifts.Any(s => s != null && s.Day == weekday && s.Start <= hour && hour < s.End && (!serving || Serves(s)) &&
                                    string.Equals(s.EmployeeId, employeeId, StringComparison.Ordinal));
         }
 
-        // The vehicle's crew on shift at that minute, in crew order.
-        public static List<string> OnShiftCrew(VehicleState vehicle, long minute) =>
-            (vehicle?.Crew ?? new List<string>()).Where(id => OnShift(vehicle!.Schedule, id, minute)).ToList();
+        // The vehicle's crew on shift at that minute, in crew order; `serving`: only those on a serving row (who serve).
+        public static List<string> OnShiftCrew(VehicleState vehicle, long minute, bool serving = false) =>
+            (vehicle?.Crew ?? new List<string>()).Where(id => OnShift(vehicle!.Schedule, id, minute, serving)).ToList();
 
         // A crew member's scheduled hours in the week, and the weekdays they work: the game's job demands read these
         // (EmployeeInstance.assignedWeeklyHours, assignedWeeklyDays).
@@ -324,22 +374,15 @@ namespace FoodTrucks.Core.Fleet
             var ids = crew.Select(c => c.EmployeeId).ToList();
             var shifts = (existing ?? Enumerable.Empty<CrewShift>())
                 .Where(s => s != null && ids.Contains(s.EmployeeId) && !redo.Contains(s.Day))
-                .Select(s => new CrewShift { EmployeeId = s.EmployeeId, Day = s.Day, Start = s.Start, End = s.End }).ToList();
+                .Select(s => new CrewShift { EmployeeId = s.EmployeeId, Day = s.Day, Start = s.Start, End = s.End, Station = s.Station }).ToList();
+            var rows = Stations(staff);
             if (crew.Count == 0) return shifts;
 
-            // The hours of the week each route day needs (Monday 00:00 is hour 0), spilling into the next weekday.
-            var need = new bool[168];
-            foreach (var routeDay in routeDays.Where(d => d != null && !d.Empty))
-            {
-                var first = (int)Math.Floor(routeDay.Start / 60.0);
-                var last = (int)Math.Ceiling(routeDay.End / 60.0);
-                for (var h = first; h < last; h++)
-                {
-                    var week = ((Position(routeDay.Day) * 24 + h) % 168 + 168) % 168;
-                    // Only the weekdays being scheduled.
-                    if (redo.Contains(Days[week / 24])) need[week] = true;
-                }
-            }
+            // The hours of the week each route day needs (Monday 00:00 is hour 0), spilling into the next weekday; only the
+            // weekdays being scheduled.
+            var need = RouteHours(routeDays);
+            for (var h = 0; h < 168; h++)
+                if (!redo.Contains(Days[h / 24])) need[h] = false;
 
             int Hours(string id) => shifts.Where(s => s.EmployeeId == id).Sum(s => s.End - s.Start);
             CrewShift? On(string id, DayOfWeek day) => shifts.FirstOrDefault(s => s.EmployeeId == id && s.Day == day);
@@ -367,7 +410,7 @@ namespace FoodTrucks.Core.Fleet
                         var pick = Ranked(free.Where(c => Allows(c, b - a))).FirstOrDefault() ?? Ranked(free).FirstOrDefault();
                         if (pick != null)
                         {
-                            shifts.Add(new CrewShift { EmployeeId = pick.EmployeeId, Day = day, Start = a, End = b });
+                            shifts.Add(new CrewShift { EmployeeId = pick.EmployeeId, Day = day, Start = a, End = b, Station = FreeStation(shifts, day, a, b, rows) });
                             continue;
                         }
                         // Everyone works this day already: stretch a shift that stays within the cap.
@@ -376,6 +419,7 @@ namespace FoodTrucks.Core.Fleet
                         if (stretch == null) continue;
                         stretch.Start = Math.Min(stretch.Start, a);
                         stretch.End = Math.Max(stretch.End, b);
+                        stretch.Station = FreeStation(shifts, day, stretch.Start, stretch.End, rows, stretch.EmployeeId);
                     }
                 }
             }
@@ -402,11 +446,13 @@ namespace FoodTrucks.Core.Fleet
                         var end = own == null ? b : Math.Max(own.End, b);
                         var extra = end - start - (own == null ? 0 : own.End - own.Start);
                         if (end - start > max || !Allows(who, extra)) continue;
-                        if (own == null) shifts.Add(new CrewShift { EmployeeId = who.EmployeeId, Day = day, Start = start, End = end });
+                        if (own == null)
+                            shifts.Add(new CrewShift { EmployeeId = who.EmployeeId, Day = day, Start = start, End = end, Station = FreeStation(shifts, day, start, end, rows) });
                         else
                         {
                             own.Start = start;
                             own.End = end;
+                            own.Station = FreeStation(shifts, day, start, end, rows, own.EmployeeId);
                         }
                         break;
                     }
@@ -415,6 +461,35 @@ namespace FoodTrucks.Core.Fleet
             var result = new HireSchedule { CrewShifts = shifts };
             SortShifts(result);
             return result.CrewShifts;
+        }
+
+        // The whole hours of the week the route days touch, Monday 00:00 first (168 entries): a late route's hours after
+        // midnight fall on the next weekday, a restock before midnight on the day before.
+        public static bool[] RouteHours(IEnumerable<RouteDay> routeDays)
+        {
+            var hours = new bool[168];
+            foreach (var routeDay in (routeDays ?? Enumerable.Empty<RouteDay>()).Where(d => d != null && !d.Empty))
+            {
+                var first = (int)Math.Floor(routeDay.Start / 60.0);
+                var last = (int)Math.Ceiling(routeDay.End / 60.0);
+                for (var h = first; h < last; h++) hours[((Position(routeDay.Day) * 24 + h) % 168 + 168) % 168] = true;
+            }
+            return hours;
+        }
+
+        // A weekday's hours from RouteHours as runs [start, end) within 0 to 24: the opening hours the Schedule tab shows.
+        public static List<(int Start, int End)> OpeningSlots(bool[] weekHours, DayOfWeek day)
+        {
+            var slots = new List<(int, int)>();
+            var offset = Position(day) * 24;
+            for (var h = 0; h < 24;)
+            {
+                if (!weekHours[offset + h]) { h++; continue; }
+                var start = h;
+                while (h < 24 && weekHours[offset + h]) h++;
+                slots.Add((start, h));
+            }
+            return slots;
         }
 
         // [start, end) in pieces of at most `max` hours, an hour together at each handover, as even as they come.

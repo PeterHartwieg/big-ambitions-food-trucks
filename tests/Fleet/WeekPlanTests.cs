@@ -65,7 +65,14 @@ public class WeekPlanTests
         Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load(json).Status);
         var twice = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
                     "{\"employeeId\":\"e1\",\"day\":1,\"start\":8,\"end\":12},{\"employeeId\":\"e1\",\"day\":1,\"start\":14,\"end\":16}]}}]}";
-        Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load(twice).Status);
+        // Two shifts a day for one crew member are fine (the game's schedule allows them), at the same hour they aren't.
+        Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load(twice).Status);
+        Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load(twice.Replace("\"start\":14", "\"start\":11")).Status);
+        // Nor two shifts on one row at once.
+        var row = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
+                  "{\"employeeId\":\"e1\",\"day\":1,\"start\":8,\"end\":12,\"station\":\"driving\"},{\"employeeId\":\"e2\",\"day\":1,\"start\":10,\"end\":16,\"station\":\"driving\"}]}}]}";
+        Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load(row).Status);
+        Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load(row.Replace("\"station\":\"driving\"}]", "\"station\":\"serving1\"}]")).Status);
     }
 
     [Fact]
@@ -177,6 +184,18 @@ public class WeekPlanTests
     }
 
     [Fact]
+    public void TheOpeningHoursAreTheRouteDaysWholeHours()
+    {
+        // Thursday 16:50 to Friday 01:40 (a late stop, 1 km from the bay).
+        var truck = Truck(Stop(DayOfWeek.Thursday, "bars", -1000, 18 * 60, 25 * 60));
+        var hours = WeekPlan.RouteHours(Days(truck));
+
+        Assert.Equal(new[] { (16, 24) }, WeekPlan.OpeningSlots(hours, DayOfWeek.Thursday));
+        Assert.Equal(new[] { (0, 2) }, WeekPlan.OpeningSlots(hours, DayOfWeek.Friday));
+        Assert.Empty(WeekPlan.OpeningSlots(hours, DayOfWeek.Monday));
+    }
+
+    [Fact]
     public void ChunksAreAtMostTheCapWithAnHourOfOverlap()
     {
         Assert.Equal(new[] { (0, 9), (8, 17), (16, 24) }, WeekPlan.Chunks(0, 24, 12));
@@ -251,6 +270,30 @@ public class WeekPlanTests
         HireRunner.Restocked(truck, HireSchedules.Absolute(3, 9 * 60 + 10));
         Assert.Equal(HireActionKind.None, runner.Step(truck, HireSchedules.Absolute(3, 9 * 60 + 20), inBay).Kind);
         Assert.Equal(HireActionKind.Depart, runner.Step(truck, HireSchedules.Absolute(3, 9 * 60 + 40), inBay).Kind);
+    }
+
+    [Fact]
+    public void ADriverIsOnShiftButDoesntServe()
+    {
+        var truck = Truck();
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 9, 12, WeekPlan.Driving);
+        WeekPlan.SetShift(rules, truck, "e2", DayOfWeek.Monday, 9, 12);
+
+        Assert.Equal(new[] { "e1", "e2" }, WeekPlan.OnShiftCrew(truck, HireSchedules.Absolute(1, 600)));
+        Assert.Equal(new[] { "e2" }, CrewPay.OnShiftCrew(truck, HireSchedules.Absolute(1, 600)));
+        Assert.Equal("serving1", truck.Schedule!.CrewShifts.Single(s => s.EmployeeId == "e2").Station);
+    }
+
+    [Fact]
+    public void AutoScheduleKeepsEachRowFreeOfOverlaps()
+    {
+        // A long day split with an hour together, on a cart (one serving row): the handover's second shift drives.
+        var truck = Truck(Stop(DayOfWeek.Monday, "early", -1000, 7 * 60, 14 * 60), Stop(DayOfWeek.Monday, "late", -1000, 15 * 60, 23 * 60));
+
+        var shifts = WeekPlan.AutoSchedule(rules, Days(truck), new[] { new CrewWish("e1"), new CrewWish("e2") }, staff: 1);
+
+        Assert.True(WeekPlan.CheckShifts(shifts));
+        Assert.Equal(new[] { "serving1", "driving" }, shifts.OrderBy(s => s.Start).Select(s => s.Station));
     }
 
     [Fact]

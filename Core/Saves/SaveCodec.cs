@@ -158,8 +158,8 @@ namespace FoodTrucks.Core.Saves
                     throw new JsonSerializationException("Schedule Closed and Stops must be lists without null entries, each stop on a weekday.");
                 if (vehicle.Schedule != null && (vehicle.Schedule.CrewShifts == null || vehicle.Schedule.CrewShifts.Any(s =>
                         s == null || string.IsNullOrEmpty(s.EmployeeId) || !Enum.IsDefined(typeof(DayOfWeek), s.Day) || s.Start < 0 || s.End > 24 || s.Start >= s.End) ||
-                    vehicle.Schedule.CrewShifts.GroupBy(s => (s.EmployeeId, s.Day)).Any(g => g.Count() > 1)))
-                    throw new JsonSerializationException("CrewShifts must be one shift per employee and weekday, in whole hours from 0 to 24.");
+                    !FoodTrucks.Core.Fleet.WeekPlan.CheckShifts(vehicle.Schedule.CrewShifts)))
+                    throw new JsonSerializationException("CrewShifts must be whole hours from 0 to 24, never two at once for an employee or on a row.");
                 if (vehicle.Transit != null && (vehicle.Transit.ToSpotKey == null || vehicle.Transit.ArrivesAt < vehicle.Transit.DepartsAt))
                     throw new JsonSerializationException("Transit must name its spot and arrive no earlier than it departs.");
                 if (vehicle.Crew == null || vehicle.Crew.Any(string.IsNullOrEmpty) || vehicle.Crew.Distinct(StringComparer.Ordinal).Count() != vehicle.Crew.Count)

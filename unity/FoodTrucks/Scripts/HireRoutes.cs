@@ -391,10 +391,10 @@ namespace FoodTrucks
                 var tables = DemandData.Tables;
                 hasStock = tables == null || CartDemand.StockOf(instance, CartDemand.MenuOf(tables, instance).Menu).Count > 0;
                 // The player just stepped out (to buy stock, say) or stands right by it: it stays where it is.
-                // So does a vehicle whose crew are all off sick, training or being replaced.
+                // So does a vehicle with nobody of its crew on shift (any row: a driver moves it) or all off sick, training or replaced.
                 stayPut = (lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes) ||
                           (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres) ||
-                          HireCrew.OnShift(vehicle, t).Count == 0;
+                          !HireCrew.Present(vehicle).Any(e => WeekPlan.OnShift(vehicle.Schedule, e.id, t));
                 // In its own commissary's bay: the crew restocks (or finds what is short) before it sets off, once per leg
                 // and again when the commissary's stock of its foods changes (Core CrewRestock.Due).
                 restockAt = Commissary.CrewRestockSite(FoodTrucksSession.CurrentState!, instance);

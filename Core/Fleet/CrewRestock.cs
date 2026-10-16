@@ -25,7 +25,10 @@ namespace FoodTrucks.Core.Fleet
             if (!where.CanRestock) return false;
             // The morning restock is keyed by its end, the start of the drive it belongs to (HireRunner.Restocked).
             var key = want.Kind == LegKind.Restock ? want.End : want.Start;
-            return vehicle.RestockedFor != key || (where.StockKey != null && where.StockKey != vehicle.RestockStockKey);
+            // A restock leg planned again (a shift edit) with other times: a restock already made within it counts.
+            var done = vehicle.RestockedFor == key ||
+                       (want.Kind == LegKind.Restock && vehicle.RestockedFor >= want.Start && vehicle.RestockedFor <= want.End + (want.End - want.Start));
+            return !done || (where.StockKey != null && where.StockKey != vehicle.RestockStockKey);
         }
 
         // What the commissary holds of the foods the vehicle's fitted pieces serve, as one string ("item=units;…", by

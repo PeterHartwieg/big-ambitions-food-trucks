@@ -172,6 +172,21 @@ class OperationTests(unittest.TestCase):
         self.mock.can_write=False
         with self.assertRaisesRegex(BridgeError,'read-only'): self.bridge.call('crew',{'op':'assign',**args})
 
+    def test_crew_schedule_sets_and_removes_a_shift_on_a_row(self):
+        v=self.mock.spawn('truck')
+        self.bridge.call('debug',{'action':'hire'})
+        employee=self.bridge.call('state')['result']['employees'][0]
+        args={'vehicle':v['id'],'employee_id':employee['id']}
+        with self.assertRaisesRegex(BridgeError,'NotCrew'): self.bridge.call('crew',{'op':'schedule','day':'monday','start':9,'end':17,**args})
+        self.bridge.call('crew',{'op':'assign',**args})
+        reply=self.bridge.call('crew',{'op':'schedule','day':'Monday','start':9,'end':17,'station':'driving',**args})['result']
+        shifts=reply['state']['route']['shifts'][0]
+        self.assertEqual((shifts['week_hours'],shifts['shifts']),(8,[{'day':'monday','start':9,'end':17,'station':'driving'}]))
+        with self.assertRaisesRegex(BridgeError,'TooLong'): self.bridge.call('crew',{'op':'schedule','day':'monday','start':6,'end':19,**args})
+        with self.assertRaisesRegex(BridgeError,'station'): self.bridge.call('crew',{'op':'schedule','day':'monday','start':6,'end':9,'station':'grill',**args})
+        reply=self.bridge.call('crew',{'op':'schedule','day':'monday','start':9,'end':9,**args})['result']
+        self.assertEqual(reply['state']['route']['shifts'][0]['shifts'],[])
+
     def test_panel_refusal_has_done_false(self):
         v=self.mock.spawn('truck')
         reply=self.bridge.call('vehicle',{'id':v['id'],'op':'open'})
