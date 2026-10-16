@@ -33,6 +33,11 @@ Branch `ui-week` (spec: the plan's "Vehicle week plan and crew shifts"). A vehic
 | WK17 | Send one crew member to training (or wait for a sick day) with a shift that day, open the Schedule tab on that day | Their bar shows; no error in the log |
 | WK18 | Start the game's auto-fill on a real shop, open a vehicle's Schedule tab, click the shop's "schedule done" notification; edit the shop's schedule, close BizMan | The shop's own schedule shows; log `Schedule: the business page moved on from …`; the shop's customers and alerts follow its edit |
 | WK19 | Load `FT bridge 2` (shifts from the previous build, some on the old Driving row) | It loads; shifts get serving rows; any shift that fits no row logs `Schedule: … fits no row; dropped.` |
+| WK20 | Week plan, a day with three stops of different times (15:30 and 18:30 among them) | Every Opens and Closes dropdown has the same width; both columns line up under the Opens / Closes captions on every card |
+| WK21 | Hover the boxes and stop cards on the vehicle page (Overview and Week plan) and on the overview | No zoom or shake on any box or card; buttons and dropdowns inside still react |
+| WK22 | A route day from a rented commissary space | The commissary at the start and the end is on a stop card, greyed, its times in its text; no dropdowns, no remove button, it can't be dragged; the drive rows between stay slim rows |
+| WK23 | Copy route on Monday; pick Tuesday, Paste Monday's route; on Monday, Paste to all days (confirm) | Tuesday's stops become Monday's, Tuesday's shifts and open/closed mark stay; Paste to all copies Monday's stops onto every other day; a paste that would run a night into the next morning is refused with the overlap notice and nothing changes; log `Week plan: Monday's route pasted onto …` |
+| WK24 | Alignment, on the Street food overview, a vehicle's Overview and Week plan | Inside every box the title, text, rows, buttons and dropdowns start at the same left edge and end at the same right edge; label and value rows have their values in one column across boxes (summary, commissary space, partner, crew); boxes in a column are the same distance apart; the route and the map beside it are the same distance apart as boxes |
 
 # Vehicle warnings as to-dos (next build)
 

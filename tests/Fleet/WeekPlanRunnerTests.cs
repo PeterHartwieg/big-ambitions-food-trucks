@@ -336,7 +336,7 @@ public class WeekPlanRunnerTests
         Assert.True(RouteEditor.TakesOpenStop(truck, new[] { DayOfWeek.Tuesday }));
         Assert.False(RouteEditor.TakesOpenStop(truck, new[] { DayOfWeek.Friday }));
 
-        Assert.Equal(ScheduleProblem.None, RouteEditor.PasteDay(schedules, truck, copy, DayOfWeek.Tuesday));
+        Assert.Equal(ScheduleProblem.None, RouteEditor.PasteRoute(schedules, truck, copy, DayOfWeek.Tuesday));
 
         Assert.Null(truck.HireStop);
         Assert.True(truck.CrewWindowLost);

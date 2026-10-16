@@ -37,6 +37,55 @@ namespace FoodTrucks
 
         public static bool Ready => template != null;
 
+        // ---- Shared layout ----
+
+        // One set of measures for every Street food page (the overview's columns, a vehicle's Overview and Week plan), so
+        // edges line up down the page and columns across cards (Peter, 16 October 2026: "a bunch of small things are at
+        // different positions instead of having clear boundaries"). Everything inside a box starts at Pad from its left
+        // edge and ends Pad from its right; nothing adds an offset of its own.
+        internal static class Layout
+        {
+            // Inside a box: left, right, top and bottom.
+            internal const int Pad = 16;
+            // Between boxes in a column, between columns side by side, and between tabs.
+            internal const float BoxGap = 16f;
+            // Between the parts of a box, between cards in a list and between controls in a row.
+            internal const float Gap = 8f;
+            // A label and value row (Box.Row, Box.DropdownRow): the label column ends and the values start here, as a
+            // share of the box's inner width; the second value column starts at SecondValue.
+            internal const float ValueStart = 0.4f;
+            internal const float SecondValue = 0.72f;
+            // The space a cell leaves before the next column.
+            internal const float CellGap = 8f;
+            // A control in a fixed column (a stop's time dropdown).
+            internal const float ControlWidth = 120f;
+            // A tab row's height and a slim row's (drive rows), in the box's section-label height.
+            internal static float TabHeight => SmallLabelHeight() * 1.8f;
+            internal static float SlimHeight => SmallLabelHeight() * 1.2f;
+            // A slim row's icon and the text after it.
+            internal static float IconSize => SmallLabelHeight() * 0.8f;
+            internal static float IconIndent => SmallLabelHeight() * 1.2f;
+
+            // A vertical or horizontal stack (a column's content, the route list) with the given gap and no padding.
+            internal static void Stack(HorizontalOrVerticalLayoutGroup? group, float spacing)
+            {
+                if (group == null) return;
+                group.padding = new RectOffset(0, 0, 0, 0);
+                group.spacing = spacing;
+                group.childControlWidth = true;
+                group.childForceExpandWidth = true;
+            }
+        }
+
+        // The game's hover zoom off on a copied card (ButtonEffects on a box or a stop card): Peter, 16 October 2026, no
+        // zoom on the page's cards at all.
+        internal static void NoHover(Transform root)
+        {
+            foreach (var effects in root.GetComponents<MonoBehaviour>())
+                if (effects != null && effects.GetType().Name == "ButtonEffects") effects.enabled = false;
+            root.localScale = Vector3.one;
+        }
+
         // Keeps a copy of the warehouse box under the page's inactive holder. Returns what is missing (empty when all is
         // there); the title is required, the rest degrades.
         internal static List<string> Take(Transform warehouseBox, Transform holder)
@@ -105,13 +154,14 @@ namespace FoodTrucks
                 if (template == null) throw new InvalidOperationException("The box template isn't there.");
                 root = Object.Instantiate(template.gameObject, parent).transform;
                 root.name = "FoodTrucks.Box";
-                if (root.GetComponent<LayoutGroup>() == null)
-                {
-                    var layout = root.gameObject.AddComponent<VerticalLayoutGroup>();
-                    layout.childControlWidth = layout.childControlHeight = true;
-                    layout.childForceExpandWidth = true;
-                    layout.childForceExpandHeight = false;
-                }
+                // Every part spans the box's inner width, Pad in from both edges (the template's title was narrower than
+                // its address line and rows, so their right edges differed).
+                var layout = root.GetComponent<VerticalLayoutGroup>() ?? root.gameObject.AddComponent<VerticalLayoutGroup>();
+                layout.padding = new RectOffset(Layout.Pad, Layout.Pad, Layout.Pad, Layout.Pad);
+                layout.spacing = Layout.Gap;
+                layout.childControlWidth = layout.childControlHeight = true;
+                layout.childForceExpandWidth = true;
+                layout.childForceExpandHeight = false;
                 // The warehouse box opens its business page; a vehicle's box does nothing on a click.
                 var click = root.GetComponent<Button>();
                 if (click != null)
@@ -119,19 +169,10 @@ namespace FoodTrucks
                     click.onClick = new Button.ButtonClickedEvent();
                     click.enabled = false;
                 }
-                // The card's own hover zoom (CardHover) replaces the game's, which let go whenever the pointer reached a
-                // button inside the card. Same zoom as the game's card.
-                var hover = root.gameObject.AddComponent<CardHover>();
-                foreach (var effects in root.GetComponents<MonoBehaviour>())
-                {
-                    if (effects == null || effects.GetType().Name != "ButtonEffects") continue;
-                    var field = effects.GetType().GetField("hoverScale", BindingFlags.Instance | BindingFlags.NonPublic);
-                    var on = effects.GetType().GetField("scaleOnHover", BindingFlags.Instance | BindingFlags.NonPublic);
-                    if (on?.GetValue(effects) is bool scales && scales && field?.GetValue(effects) is float value) hover.HoverScale = value;
-                    else if (on?.GetValue(effects) is bool none && !none) hover.HoverScale = 1f;
-                    effects.enabled = false;
-                }
-                root.localScale = Vector3.one;
+                // No hover zoom (Peter, 16 October 2026).
+                NoHover(root);
+                var background = root.Find(BackgroundPath)?.GetComponent<LayoutElement>();
+                if (background != null) background.ignoreLayout = true;
                 // Everything but the title and the white card behind the box starts hidden; the page adds copies of the
                 // parts it needs, in order. (The card is the child `Background`: hiding it left the text on BizMan's blur,
                 // seen in game 15 October 2026.)
@@ -186,6 +227,13 @@ namespace FoodTrucks
                 SetText(row.Find("DriverStatus"), third);
                 Colour(row.Find("VehicleName"), secondColour);
                 Colour(row.Find("DriverStatus"), thirdColour);
+                // The label and the two values at the shared column edges, so rows line up across boxes.
+                var height = Height(entry);
+                var rowElement = row.GetComponent<LayoutElement>() ?? row.gameObject.AddComponent<LayoutElement>();
+                if (height > 1f) rowElement.minHeight = rowElement.preferredHeight = height;
+                Column(row.Find("SlotNumber"), 0f, Layout.ValueStart);
+                Column(row.Find("VehicleName"), Layout.ValueStart, Layout.SecondValue);
+                Column(row.Find("DriverStatus"), Layout.SecondValue, 1f);
                 row.gameObject.SetActive(true);
                 return row;
             }
@@ -203,12 +251,8 @@ namespace FoodTrucks
                 var rect = (RectTransform)copy.transform;
                 var element = copy.GetComponent<LayoutElement>() ?? copy.AddComponent<LayoutElement>();
                 element.ignoreLayout = true;
-                // Over the second and third columns, the label keeping the first (a slot number's width).
-                var labelRect = row.Find("SlotNumber") as RectTransform;
-                var start = labelRect != null && row is RectTransform rowRect && rowRect.rect.width > 1f
-                    ? Mathf.Clamp(labelRect.rect.width / rowRect.rect.width, 0.25f, 0.45f)
-                    : 0.35f;
-                rect.anchorMin = new Vector2(start, 0f);
+                // Over the value columns, from the shared value edge to the box's inner right edge.
+                rect.anchorMin = new Vector2(Layout.ValueStart, 0f);
                 rect.anchorMax = Vector2.one;
                 rect.pivot = new Vector2(0.5f, 0.5f);
                 rect.offsetMin = rect.offsetMax = Vector2.zero;
@@ -345,7 +389,7 @@ namespace FoodTrucks
                     rect.anchorMax = new Vector2(i + 1 < edges.Length ? edges[i + 1] : 1f, 1f);
                     rect.pivot = new Vector2(0f, 0.5f);
                     rect.offsetMin = Vector2.zero;
-                    rect.offsetMax = new Vector2(-4f, 0f);
+                    rect.offsetMax = new Vector2(i + 1 < edges.Length ? -Layout.CellGap : 0f, 0f);
                     SetText(cell, cells[i]);
                     if (colours != null && i < colours.Length) Colour(cell, colours[i]);
                     OneLine(cell);
@@ -504,6 +548,20 @@ namespace FoodTrucks
         }
 
         private static float Height(Transform part) => part is RectTransform rect ? rect.rect.height : 0f;
+
+        // A cell placed by anchors between two shared edges (fractions of its row), out of the row's own layout.
+        private static void Column(Transform? cell, float from, float to)
+        {
+            if (!(cell is RectTransform rect)) return;
+            var element = cell.GetComponent<LayoutElement>() ?? cell.gameObject.AddComponent<LayoutElement>();
+            element.ignoreLayout = true;
+            rect.anchorMin = new Vector2(from, 0f);
+            rect.anchorMax = new Vector2(to, 1f);
+            rect.pivot = new Vector2(0f, 0.5f);
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = new Vector2(to < 1f ? -Layout.CellGap : 0f, 0f);
+            OneLine(cell);
+        }
 
         private static void Hide(Transform root, string path)
         {
