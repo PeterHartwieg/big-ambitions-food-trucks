@@ -43,8 +43,10 @@ namespace FoodTrucks.Core.Fleet
     public readonly struct VehicleWhere
     {
         public VehicleWhere(double x, double z, bool leaveAlone, bool canSellHere = true, bool hasStock = true, bool stayPut = false,
-            bool canRestock = false, string? stockKey = null, IReadOnlyCollection<int>? bayStops = null, (double X, double Z)? home = null)
+            bool canRestock = false, string? stockKey = null, IReadOnlyCollection<int>? bayStops = null, (double X, double Z)? home = null,
+            bool canServe = true)
         {
+            CanServe = canServe;
             Home = home;
             CanRestock = canRestock;
             BayStops = bayStops;
@@ -80,6 +82,9 @@ namespace FoodTrucks.Core.Fleet
         // The bay of the commissary where it rents its space, which the crew drives back to after the last stop
         // (HireSchedules.HomeIndex); null without a space (or while its bay isn't known).
         public (double X, double Z)? Home { get; }
+        // Someone of the crew on a serving row is there and able to work (not off sick, training or being replaced):
+        // without one, a crew window closes.
+        public bool CanServe { get; }
     }
 
     // Runs a hire's route minute by minute. The saved day plan says what the hire should be doing now;
@@ -273,6 +278,10 @@ namespace FoodTrucks.Core.Fleet
             {
                 if (vehicle.HireStop == null)
                     return vehicle.CrewWindowLost ? new HireAction(HireActionKind.Close) : HireAction.None;
+                // A crew window away from its own bay owes the drive back, whenever it was opened (a save from before
+                // opening armed it: review round 4).
+                if (!where.CanRestock) vehicle.ReturnPending = true;
+                if (!where.CanServe) return new HireAction(HireActionKind.Close);
                 // Still the stop it is open at, even if a fresh plan has a short leg "to" it first, while someone is on shift.
                 return want != null && want.StopIndex == vehicle.HireStop && Covered(vehicle, now, now, serving: true)
                     ? HireAction.None
@@ -319,7 +328,7 @@ namespace FoodTrucks.Core.Fleet
                 return new HireAction(HireActionKind.Depart, want.StopIndex, arrives);
             }
             if (!where.HasStock && !where.StayPut && CrewRestock.Due(vehicle, want, where)) return new HireAction(HireActionKind.Restock, want.StopIndex);
-            if (want.Kind != LegKind.Open || !Covered(vehicle, now, now, serving: true)) return HireAction.None;
+            if (want.Kind != LegKind.Open || !Covered(vehicle, now, now, serving: true) || !where.CanServe) return HireAction.None;
             // Serving away from its own bay: the drive back is owed, whether or not it drove here (review round 3).
             if (!where.CanRestock) vehicle.ReturnPending = true;
             return new HireAction(HireActionKind.Open, want.StopIndex);

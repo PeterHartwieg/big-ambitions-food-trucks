@@ -1345,6 +1345,9 @@ class Mock:
                 if employee is None or employee['name'] not in v['crew']: raise ValueError('Shift refused: NotCrew.')
                 if start!=end and (start<0 or end>24 or start>end): raise ValueError('Shift refused: BadHours.')
                 if end-start>12: raise ValueError('Shift refused: TooLong.')
+                taken=[x for e in (v['route'] or {}).get('shifts',[]) if e['id']!=employee_id for x in e['shifts']]
+                if start!=end and any(x['day']==day and x['station']==station and x['start']<end and start<x['end'] for x in taken):
+                    raise ValueError('Shift refused: Clash.')
                 route=v['route'] or {'stops':0,'next':None,'week':[{'day':d,'closed':False,'stops':[],'route_day':None,'gaps':[]} for d in WEEK],'shifts':[],'problem':None}
                 v['route']=route
                 entry=next((x for x in route['shifts'] if x['id']==employee_id),None)
