@@ -44,12 +44,11 @@ KINDS = [
         "hide": ["Truck_Collision"],
         # The hatch open: Unity localEulerAngles.z = +80 about its hinge, which is +80 degrees about Blender +Y.
         "hatch": ("Truck_Hatch", 80),
-        # Cash register on the serving counter: Unity (0.90, 1.80, -0.82), -90 about Y, scale 2.2.
-        "register": (unity(0.90, 1.80, -0.82), 90, 2.2),
+        # No cash register: in game it stands on the serving counter, in front of the middle places.
         # Camera: azimuth from the hatch side (-X) towards the rear (+Y), elevation, height of the eye, lens.
-        "aim": unity(-0.2, 2.0, -1.10), "azimuth": -14, "elevation": 11, "lens": 40,
-        # What must be in the picture: the box body and the back of the cab.
-        "frame": [Vector((x, y, z)) for x in (-1.26, 1.1) for y in (-1.6, 3.15) for z in (0.0, 3.25)],
+        "aim": unity(-0.2, 2.2, -1.10), "azimuth": -5, "elevation": 8, "lens": 85,
+        # What must be in the picture: the window with the menu sign behind it, the awning and the roofline.
+        "frame": [Vector((-1.1, y, z)) for y in (0.06, 2.68) for z in (1.70, 3.18)],
         # VehicleDisplays' Truck layout: filled from the middle out.
         "places": [("EquipmentLine2", unity(-0.62, 1.75, -0.875)), ("EquipmentLine3", unity(-0.62, 1.75, -1.325)),
                    ("EquipmentLine1", unity(-0.62, 1.75, -0.425)), ("EquipmentLine4", unity(-0.62, 1.75, -1.775))],
@@ -179,8 +178,8 @@ def render_kind(spec, models):
         hinge = hatch.matrix_world.translation.copy()
         hatch.matrix_world = (Matrix.Translation(hinge) @ Matrix.Rotation(math.radians(angle), 4, "Y")
                               @ Matrix.Translation(-hinge) @ hatch.matrix_world)
-    pos, turn, scale = spec["register"]
-    for ob in import_meshes(os.path.join(ART, "props/CashRegister/CashRegister.fbx"),
+    pos, turn, scale = spec.get("register", (None, 0, 1))
+    for ob in [] if pos is None else import_meshes(os.path.join(ART, "props/CashRegister/CashRegister.fbx"),
                             os.path.join(ART, "props/CashRegister/T_CashRegister_BC.png"),
                             lambda ob: ob.name.endswith("_Body")):
         place(ob, pos, turn, scale)
