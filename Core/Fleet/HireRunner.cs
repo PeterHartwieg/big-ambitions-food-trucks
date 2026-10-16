@@ -203,6 +203,18 @@ namespace FoodTrucks.Core.Fleet
             if (vehicle.Transit != null) vehicle.Transit.ToCloseAt = null;
         }
 
+        // A route day was opened or closed: yesterday's day drops yesterday's unfinished night too (a late stop of a day
+        // just closed stops now and the owed drive back goes under the shift left, review round 6); any other day plans
+        // from now as for a route edit.
+        public static void ReplanRouteDay(VehicleState vehicle, long now, DayOfWeek day)
+        {
+            if (IsYesterday(now, day)) ReplanShifts(vehicle, now);
+            else Replan(vehicle, now);
+        }
+
+        // Whether a weekday is yesterday's at this moment.
+        public static bool IsYesterday(long now, DayOfWeek day) => DayOf(now) > 1 && GameDays.Weekday(DayOf(now) - 1) == day;
+
         // The shifts or the crew changed: every unfinished plan goes, yesterday's late one included, and EnsurePlan plans
         // what is left of them again with the new shifts.
         public static void ReplanShifts(VehicleState vehicle, long now)

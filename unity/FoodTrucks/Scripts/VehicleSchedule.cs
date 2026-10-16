@@ -533,7 +533,8 @@ namespace FoodTrucks
                     CartSelling.Notify(problem == ScheduleProblem.Overlap ? "foodtrucks:notification_route_overlap" : "foodtrucks:notification_route_refused");
                     return false;
                 }
-                RouteStops.Changed(vehicle!);
+                // Yesterday's weekday drops yesterday's unfinished night as well (HireRunner.ReplanRouteDay).
+                RouteStops.Changed(vehicle!, shifts: HireRunner.IsYesterday(HireCrew.Now(), day));
                 OpeningHours(vehicle!);
                 Log.Info($"Schedule: {vehicleId} {(isOpen ? "open" : "closed")} on {day} (the Schedule tab's day toggle).");
                 return true;

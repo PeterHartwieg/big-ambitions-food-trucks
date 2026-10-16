@@ -242,6 +242,35 @@ public class WeekPlanRunnerTests
         Assert.Equal(HireSchedules.HomeIndex, back.Stop);
     }
 
+    // Review round 6: closing Sunday at Monday 01:00 while Sunday's late stop (22:00-03:00) is open. The window closes
+    // now and the 80-minute drive back goes under the shift ending at 03:00, not after it.
+    [Fact]
+    public void ClosingYesterdaysLateStopClosesTheWindowAndDrivesBackUnderTheShift()
+    {
+        var truck = Truck(Stop(DayOfWeek.Sunday, "bars", 1320, 1620));
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Sunday, 20, 24);
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 0, 3);
+        runner.EnsurePlan(truck, At(7, 23), 0, 0, home: Bay);
+        truck.IsOpen = true;
+        truck.HireStop = 0;
+        truck.ReturnPending = true;
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(8, 1), AtStop()).Kind);
+
+        Assert.Equal(ScheduleProblem.None, RouteEditor.SetClosed(schedules, truck, DayOfWeek.Sunday, true));
+        Assert.True(HireRunner.IsYesterday(At(8, 1), DayOfWeek.Sunday));
+        HireRunner.ReplanRouteDay(truck, At(8, 1), DayOfWeek.Sunday);
+        runner.EnsurePlan(truck, At(8, 1), 0, 0, home: Bay);
+
+        Assert.Equal(HireActionKind.Close, runner.Step(truck, At(8, 1), AtStop()).Kind);
+        truck.IsOpen = false;
+        truck.HireStop = null;
+        Assert.True(truck.ReturnPending);
+        var back = runner.Step(truck, At(8, 1), AtStop());
+        Assert.Equal(HireActionKind.Depart, back.Kind);
+        Assert.Equal(HireSchedules.HomeIndex, back.Stop);
+        Assert.True(back.ArrivesAt <= At(8, 3));
+    }
+
     [Fact]
     public void AReplanAfterTheLastStopKeepsTheDriveBack()
     {
