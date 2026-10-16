@@ -513,8 +513,15 @@ namespace FoodTrucks
             open.transform.SetSiblingIndex(0);
             foreach (var dd in new[] { open, close })
             {
-                var element = dd.GetComponent<LayoutElement>() ?? dd.gameObject.AddComponent<LayoutElement>();
-                element.flexibleWidth = 1f;
+                // Two equal halves: the copied dropdown carries two LayoutElements, one with its own width.
+                if (dd.GetComponent<LayoutElement>() == null) dd.gameObject.AddComponent<LayoutElement>();
+                foreach (var element in dd.GetComponents<LayoutElement>())
+                {
+                    element.minWidth = 0f;
+                    element.preferredWidth = -1f;
+                    element.flexibleWidth = 1f;
+                }
+                Compact(dd.transform);
             }
 
             var opens = RouteEditor.OpenTimes(schedule, RouteStops.Step, latest, index);
@@ -539,6 +546,26 @@ namespace FoodTrucks
                 HudConfirm.Show(LanguageChangeEventDataHolder.Create("foodtrucks:bizman_page_remove_header"), body,
                     () => Guard(() => RemoveStop(id, index)), null, allowConfirmationSkip: false, isNegative: true);
             }));
+        }
+
+        // A stop's time dropdown without the game's ‹ › step buttons: two of them side by side left the time itself no
+        // room (Peter, 16 October 2026: "What are the arrows for?"). The middle box takes the whole header.
+        private static void Compact(Transform dropdown)
+        {
+            var header = dropdown.Find("Header");
+            if (header == null) return;
+            foreach (var side in new[] { "LeftButton", "RightButton" })
+            {
+                var button = header.Find(side);
+                if (button != null) button.gameObject.SetActive(false);
+            }
+            if (header.Find("MiddleBox") is RectTransform middle)
+            {
+                middle.anchorMin = new Vector2(0f, middle.anchorMin.y);
+                middle.anchorMax = new Vector2(1f, middle.anchorMax.y);
+                middle.offsetMin = new Vector2(0f, middle.offsetMin.y);
+                middle.offsetMax = new Vector2(0f, middle.offsetMax.y);
+            }
         }
 
         // ---- Parts ----
