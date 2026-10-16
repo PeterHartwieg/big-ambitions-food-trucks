@@ -106,20 +106,37 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
         }
 
-        private static void FitTravel(VehicleState vehicle)
+        // A route saved before the travel rule, or whose drives grew with the game speed, is fitted too, without an edit:
+        // when its page opens and as the crew plans (HireRoutes). Only a route that changes is written, said in the same
+        // notice; one that can't be fitted is only logged, once per vehicle and problem stop.
+        internal static void FitIfNeeded(VehicleState vehicle, string why)
+        {
+            if (vehicle?.Schedule == null || vehicle.Schedule.Stops.Count < 2 || !FoodTrucksSession.CanWrite) return;
+            if (!FitTravel(vehicle, quiet: true)) return;
+            Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} fitted to its travel times ({why}).");
+            HireRunner.Replan(vehicle, HireCrew.Now());
+            HireCrew.SetWeeklyWork(vehicle);
+            FoodTrucksSession.MarkChanged();
+        }
+
+        private static readonly HashSet<(string, int)> stuckShown = new HashSet<(string, int)>();
+
+        // True when stops moved.
+        private static bool FitTravel(VehicleState vehicle, bool quiet = false)
         {
             var rules = DemandData.Rules;
-            if (rules == null || vehicle.Schedule == null) return;
+            if (rules == null || vehicle.Schedule == null) return false;
             var walk = Travel.ModeFor(vehicle.VehicleType) == TravelMode.Push;
             var fit = RouteEditor.FitTravel(new HireSchedules(rules.Fleet), rules.Fleet, vehicle.Schedule, Travel.ModeFor(vehicle.VehicleType),
                 HireRoutes.GameSpeed(), Step, LatestClose);
             if (fit.Stuck is int stuck)
             {
+                if (quiet && !stuckShown.Add((vehicle.VehicleId, stuck))) return false;
                 Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId}: stop {stuck + 1} can't be moved late enough for the {(walk ? "walk" : "drive")} from stop {stuck} ({fit.Problem}); the times stay.");
-                CartSelling.Notify("foodtrucks:notification_route_travel_stuck", ("number", (stuck + 1).ToString()), ("from", stuck.ToString()));
-                return;
+                if (!quiet) CartSelling.Notify("foodtrucks:notification_route_travel_stuck", ("number", (stuck + 1).ToString()), ("from", stuck.ToString()));
+                return false;
             }
-            if (fit.Moved.Count == 0) return;
+            if (fit.Moved.Count == 0) return false;
             var lines = fit.Moved.Select(m => LocalizorManager.GetLocalization(walk ? "foodtrucks:route_moved_walk" : "foodtrucks:route_moved_drive",
                 new Dictionary<string, string>
                 {
@@ -128,6 +145,7 @@ namespace FoodTrucks
                 })).ToList();
             Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId}: {string.Join("; ", fit.Moved.Select(m => $"stop {m.Index + 1} {StaffDialog.Clock(m.OldOpen)}-{StaffDialog.Clock(m.OldClose)} now {StaffDialog.Clock(m.NewOpen)}-{StaffDialog.Clock(m.NewClose)} ({m.DriveMinutes} min from stop {m.Index})"))}.");
             CartSelling.Notify("foodtrucks:notification_route_travel_moved", ("stops", string.Join(". ", lines)));
+            return true;
         }
 
         // A stop's name for lists: the premium spot it is at, else the nearest building's address and the

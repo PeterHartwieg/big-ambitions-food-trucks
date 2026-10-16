@@ -40,6 +40,23 @@ public class RouteTravelTests
     }
 
     [Fact]
+    public void PetersRouteSavedBeforeTheRuleMovesItsSecondStop()
+    {
+        // A truck route played on 16 October 2026: 11:00-14:00, then 14:00-17:00 about a kilometre away. Fitted without
+        // an edit (as the page opens and the crew plans), the second stop opens at 15:00 (14:40 rounded up) until 18:00.
+        var route = Route(Stop("3rd avenue 13", 0, 660, 840), Stop("2nd avenue 7", 1000, 840, 1020));
+
+        Assert.Equal(1, schedules.UnreachableStop(route, TravelMode.Drive));
+        var fit = Fit(route);
+
+        Assert.Equal(40, Assert.Single(fit.Moved).DriveMinutes);
+        Assert.Equal((900, 1080), (route.Stops[1].OpenAt, route.Stops[1].CloseAt));
+        Assert.Equal(-1, schedules.UnreachableStop(route, TravelMode.Drive));
+        // A second fit finds nothing to move: the route is written once.
+        Assert.Empty(Fit(route).Moved);
+    }
+
+    [Fact]
     public void AStopFarEnoughAfterTheDriveStaysWhereItIs()
     {
         var route = Route(Stop("a", 0, 600, 720), Stop("b", 1000, 780, 840));
