@@ -533,12 +533,6 @@
     "foodtrucks:bizman_page_space_none": "No commissary space.",
     "foodtrucks:bizman_week_tab_overview": "Overview",
     "foodtrucks:bizman_week_tab_week": "Week plan",
-    "foodtrucks:bizman_week_days_title": "Week",
-    "foodtrucks:bizman_week_today": "Today",
-    "foodtrucks:bizman_week_copy": "Copy day",
-    "foodtrucks:bizman_week_paste": "Paste",
-    "foodtrucks:bizman_week_paste_all": "Paste to all days",
-    "foodtrucks:bizman_week_clear": "Clear day",
     "foodtrucks:bizman_week_auto_day": "Auto schedule day",
     "foodtrucks:bizman_week_auto_week": "Auto schedule week",
     "foodtrucks:bizman_week_auto_week_confirm": "Replace this vehicle's shifts for the whole week with the auto schedule?",
@@ -562,7 +556,6 @@
     "foodtrucks:notification_shift_too_long": "A shift is at most {max} hours.",
     "foodtrucks:bizman_week_schedule": "Schedule",
     "foodtrucks:schedule_row_serving": "Serving {number}",
-    "foodtrucks:schedule_row_driving": "Driving",
     "foodtrucks:notification_schedule_hours_route": "The opening hours follow the vehicle's route.",
-    "foodtrucks:notification_schedule_day_route": "Days are opened and closed on the vehicle's Week plan tab."
+    "foodtrucks:bizman_week_day_today": "{day} (today)"
 }

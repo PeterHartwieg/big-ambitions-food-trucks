@@ -272,10 +272,8 @@ namespace FoodTrucks.Core.Fleet
         // piece left is skipped. Null coverage: always someone on shift.
         public DayPlan PlanDay(HireSchedule schedule, int day, DayOfWeek weekday, double fromX, double fromZ, long availableFrom,
             TravelMode mode, double gameSpeed = 1.0, (double X, double Z)? home = null, IReadOnlyCollection<int>? bayStops = null,
-            Coverage? coverage = null, Coverage? serving = null)
+            Coverage? coverage = null)
         {
-            // Opening needs someone who serves; a driver alone covers the restock and the drives (review round 3).
-            serving ??= coverage;
             if (Validate(schedule) != ScheduleProblem.None || !RunsOn(schedule, weekday)) return DayPlan.Empty;
             var legs = new List<PlannedLeg>();
             var skipped = new List<int>();
@@ -310,9 +308,9 @@ namespace FoodTrucks.Core.Fleet
                     skipped.Add(i);
                     continue;
                 }
-                var pieces = serving == null
+                var pieces = coverage == null
                     ? new List<(long Start, long End)> { (Math.Max(arrive, open), close) }
-                    : serving.Clip(Math.Max(arrive, open), close).ToList();
+                    : coverage.Clip(Math.Max(arrive, open), close).ToList();
                 if (pieces.Count == 0)
                 {
                     skipped.Add(i);

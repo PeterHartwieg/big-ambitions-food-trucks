@@ -1108,7 +1108,7 @@ namespace FoodTrucks
                     BayGrace = site != null && !withDriver.Contains(vehicle.id) && NoBay(site),
                     PlayerInside = game.ActiveVehicleId == vehicle.id || TruckWindow.PlayerAt(vehicle.id),
                     // Only a window the crew has open at a stop right now: a route that sold out and closed early is out like any other.
-                    // and someone serving it (a driver alone doesn't keep a window: review round 3).
+                    // and someone of its crew on shift and able to serve it.
                     OnLateStop = saved != null && saved.IsOpen && saved.HireStop != null && HireCrew.OnShift(saved, HireCrew.Now()).Count > 0,
                     InTransit = withDriver.Contains(vehicle.id) || saved?.Transit != null,
                     AtPlayerProperty = !withDriver.Contains(vehicle.id) && AtProperty(vehicle, property)

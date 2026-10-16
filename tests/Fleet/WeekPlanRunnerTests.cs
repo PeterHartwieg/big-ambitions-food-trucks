@@ -153,25 +153,6 @@ public class WeekPlanRunnerTests
     }
 
     [Fact]
-    public void ADriverAloneNeitherOpensNorKeepsAWindowOpen()
-    {
-        var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 0, 1440));
-        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 0, 3);
-        truck.Crew.Add("e2");
-        WeekPlan.SetShift(rules, truck, "e2", DayOfWeek.Wednesday, 3, 6, WeekPlan.Driving);
-        runner.EnsurePlan(truck, At(3, 0), 0, 0);
-        truck.IsOpen = true;
-        truck.HireStop = 0;
-
-        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 2), AtStop()).Kind);
-        Assert.Equal(HireActionKind.Close, runner.Step(truck, At(3, 4), AtStop()).Kind);
-        truck.IsOpen = false;
-        truck.HireStop = null;
-        // It doesn't open again; the driver takes it back to the bay instead.
-        Assert.Equal((HireActionKind.Depart, HireSchedules.HomeIndex), (runner.Step(truck, At(3, 4), AtStop()).Kind, runner.Step(truck, At(3, 4), AtStop()).Stop));
-    }
-
-    [Fact]
     public void AWindowLoadedOpenAwayFromTheBayOwesTheDriveBack()
     {
         // Saved open at the Wednesday 11:00-14:00 pitch by a build that didn't arm the drive back on opening; shifts
@@ -238,6 +219,27 @@ public class WeekPlanRunnerTests
         // 15:00 plus 80 minutes is 16:20, after the shift: it waits (and the next shift takes it back).
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 15), AtStop()).Kind);
         Assert.True(truck.ReturnPending);
+    }
+
+    // Peter, 16 October 2026: the Schedule tab's day toggle closes the route day. Closed while the window is open at
+    // the stop, the window closes and the drive back still goes with the shift.
+    [Fact]
+    public void ClosingTodayAtTheStopClosesTheWindowAndStillDrivesBack()
+    {
+        var truck = OutAtTheStop(shiftEnd: 18);
+        truck.IsOpen = true;
+        truck.HireStop = 0;
+        Assert.Equal(ScheduleProblem.None, RouteEditor.SetClosed(schedules, truck, DayOfWeek.Wednesday, true));
+        HireRunner.Replan(truck, At(3, 12));
+        runner.EnsurePlan(truck, At(3, 12), 0, 0, home: Bay);
+
+        Assert.Equal(HireActionKind.Close, runner.Step(truck, At(3, 12), AtStop()).Kind);
+        truck.IsOpen = false;
+        truck.HireStop = null;
+        Assert.True(truck.ReturnPending);
+        var back = runner.Step(truck, At(3, 12), AtStop());
+        Assert.Equal(HireActionKind.Depart, back.Kind);
+        Assert.Equal(HireSchedules.HomeIndex, back.Stop);
     }
 
     [Fact]

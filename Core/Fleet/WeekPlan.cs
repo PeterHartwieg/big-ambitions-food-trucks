@@ -168,14 +168,14 @@ namespace FoodTrucks.Core.Fleet
             return end - start > rules.MaxShiftHours ? ShiftProblem.TooLong : ShiftProblem.None;
         }
 
-        // The vehicle's rows on the Schedule tab: a serving row for each of its staff, then the driving row.
-        public const string Driving = "driving";
+        // The vehicle's rows on the Schedule tab: one serving row per staff place (Peter, 16 October 2026: no driving row,
+        // "driving is only a small part of the job a customer service employee already does"). Anyone on shift on any row
+        // serves, drives and restocks.
         public static string Serving(int number) => "serving" + number;
-        public static IReadOnlyList<string> Stations(int staff) =>
-            Enumerable.Range(1, Math.Max(1, staff)).Select(Serving).Append(Driving).ToList();
+        public static IReadOnlyList<string> Stations(int staff) => Enumerable.Range(1, Math.Max(1, staff)).Select(Serving).ToList();
 
-        // Whether a shift's crew member serves at the window (a serving row, or a shift saved before rows had names).
-        public static bool Serves(CrewShift shift) => shift.Station == null || !shift.Station.StartsWith(Driving, StringComparison.Ordinal);
+        // The rows a saved shift may name (a truck's two; a cart uses the first).
+        public static readonly IReadOnlyList<string> KnownRows = Stations(2);
 
         // Whole hours from 0 to 24, and never two shifts at the same hour for one crew member or on one row.
         public static bool CheckShifts(IEnumerable<CrewShift>? shifts)
@@ -190,16 +190,18 @@ namespace FoodTrucks.Core.Fleet
                    !list.GroupBy(s => (s.Station ?? Serving(1), s.Day)).Any(g => Clash(g.ToList()));
         }
 
-        // Shifts saved before the Schedule tab's rows (no Station) each get the first row free at their hours: serving1,
-        // serving2, then driving. One that fits no row, or overlaps the same crew member's, is dropped; the notes say so.
-        public static List<string> AssignStations(VehicleState vehicle)
+        // Shifts on no known row (saved before the Schedule tab's rows, or on the driving row it had for a while) each get
+        // the first serving row free at their hours, within `rows`. One that fits no row, or overlaps the same crew member's,
+        // is dropped; the notes say so.
+        public static List<string> AssignStations(VehicleState vehicle, IReadOnlyList<string>? rows = null)
         {
             var notes = new List<string>();
             var schedule = vehicle?.Schedule;
-            if (schedule?.CrewShifts == null || schedule.CrewShifts.All(s => s == null || s.Station != null)) return notes;
-            var rows = new[] { Serving(1), Serving(2), Driving };
-            var kept = schedule.CrewShifts.Where(s => s != null && s.Station != null).ToList();
-            foreach (var shift in schedule.CrewShifts.Where(s => s != null && s.Station == null).ToList())
+            rows ??= KnownRows;
+            bool Known(CrewShift s) => s.Station != null && rows.Contains(s.Station);
+            if (schedule?.CrewShifts == null || schedule.CrewShifts.All(s => s == null || Known(s))) return notes;
+            var kept = schedule.CrewShifts.Where(s => s != null && Known(s)).ToList();
+            foreach (var shift in schedule.CrewShifts.Where(s => s != null && !Known(s)).ToList())
             {
                 var free = rows.FirstOrDefault(row => !kept.Any(k => k.Day == shift.Day && k.Station == row && k.Start < shift.End && shift.Start < k.End));
                 var own = kept.Any(k => k.Day == shift.Day && k.EmployeeId == shift.EmployeeId && k.Start < shift.End && shift.Start < k.End);
@@ -219,9 +221,9 @@ namespace FoodTrucks.Core.Fleet
         // Before a save's checks: rows for shifts from before rows (AssignStations), then any shift that still collides
         // with an earlier one (bad hours, its crew member's or its row's) is dropped with a note: a save never fails to
         // load over its shifts.
-        public static List<string> RepairShifts(VehicleState vehicle)
+        public static List<string> RepairShifts(VehicleState vehicle, IReadOnlyList<string>? rows = null)
         {
-            var notes = AssignStations(vehicle);
+            var notes = AssignStations(vehicle, rows);
             var schedule = vehicle?.Schedule;
             if (schedule?.CrewShifts == null || CheckShifts(schedule.CrewShifts)) return notes;
             var kept = new List<CrewShift>();
@@ -249,12 +251,11 @@ namespace FoodTrucks.Core.Fleet
             return kept;
         }
 
-        // The first of `stations` with no shift that day overlapping [start, end) (other than `except`'s), else the last.
-        public static string FreeStation(IEnumerable<CrewShift> shifts, DayOfWeek day, int start, int end, IReadOnlyList<string> stations,
+        // The first of `stations` with no shift that day overlapping [start, end) (other than `except`'s), else null.
+        public static string? FreeStation(IEnumerable<CrewShift> shifts, DayOfWeek day, int start, int end, IReadOnlyList<string> stations,
             string? except = null) =>
             stations.FirstOrDefault(st => !shifts.Any(s => s != null && s.Day == day && (s.Station ?? Serving(1)) == st && s.EmployeeId != except &&
-                                                           s.Start < end && start < s.End))
-            ?? stations[stations.Count - 1];
+                                                           s.Start < end && start < s.End));
 
         // One shift a day for this crew member (the test bridge, and tests): a new one replaces their shifts that day, on
         // `station` or the first free serving row.
@@ -272,7 +273,7 @@ namespace FoodTrucks.Core.Fleet
             var shift = new CrewShift
             {
                 EmployeeId = employeeId, Day = day, Start = start, End = end,
-                Station = station ?? FreeStation(others, day, start, end, rows)
+                Station = station ?? FreeStation(others, day, start, end, rows) ?? rows[0]
             };
             // Refused, and nothing changed, when the row is taken then (review round 4: such a save wouldn't load).
             if (!CheckShifts(others.Append(shift))) return ShiftProblem.Clash;
@@ -303,20 +304,20 @@ namespace FoodTrucks.Core.Fleet
                 .ThenBy(s => s.EmployeeId, StringComparer.Ordinal).ToList();
 
         // Whether the crew member is on shift at that absolute game minute (day 1 is a Monday).
-        public static bool OnShift(HireSchedule? schedule, string employeeId, long minute, bool serving = false)
+        public static bool OnShift(HireSchedule? schedule, string employeeId, long minute)
         {
             var shifts = schedule?.CrewShifts;
             if (shifts == null || string.IsNullOrEmpty(employeeId)) return false;
             var day = HireRunner.DayOf(minute);
             var weekday = Common.GameDays.Weekday(Math.Max(1, day));
             var hour = (int)((minute - HireSchedules.Absolute(day, 0)) / 60);
-            return shifts.Any(s => s != null && s.Day == weekday && s.Start <= hour && hour < s.End && (!serving || Serves(s)) &&
+            return shifts.Any(s => s != null && s.Day == weekday && s.Start <= hour && hour < s.End &&
                                    string.Equals(s.EmployeeId, employeeId, StringComparison.Ordinal));
         }
 
-        // The vehicle's crew on shift at that minute, in crew order; `serving`: only those on a serving row (who serve).
-        public static List<string> OnShiftCrew(VehicleState vehicle, long minute, bool serving = false) =>
-            (vehicle?.Crew ?? new List<string>()).Where(id => OnShift(vehicle!.Schedule, id, minute, serving)).ToList();
+        // The vehicle's crew on shift at that minute, in crew order.
+        public static List<string> OnShiftCrew(VehicleState vehicle, long minute) =>
+            (vehicle?.Crew ?? new List<string>()).Where(id => OnShift(vehicle!.Schedule, id, minute)).ToList();
 
         // A crew member's scheduled hours in the week, and the weekdays they work: the game's job demands read these
         // (EmployeeInstance.assignedWeeklyHours, assignedWeeklyDays).
@@ -329,9 +330,8 @@ namespace FoodTrucks.Core.Fleet
 
         public static int WeekHours(HireSchedule? schedule, string employeeId) => WeeklyWork(schedule, employeeId).Hours;
 
-        // When at least one of `crew` is on shift, over [from, to) in absolute minutes; `serving`: on a serving row (someone
-        // who serves at the window), not just the driver.
-        public static Coverage CoverageOf(HireSchedule? schedule, IEnumerable<string>? crew, long from, long to, bool serving = false)
+        // When at least one of `crew` is on shift, over [from, to) in absolute minutes.
+        public static Coverage CoverageOf(HireSchedule? schedule, IEnumerable<string>? crew, long from, long to)
         {
             var ids = new HashSet<string>(crew ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
             var spans = new List<(long, long)>();
@@ -343,7 +343,7 @@ namespace FoodTrucks.Core.Fleet
             {
                 var weekday = Common.GameDays.Weekday(day);
                 foreach (var s in shifts)
-                    if (s != null && s.Day == weekday && ids.Contains(s.EmployeeId) && (!serving || Serves(s)))
+                    if (s != null && s.Day == weekday && ids.Contains(s.EmployeeId))
                         spans.Add((HireSchedules.Absolute(day, s.Start * 60), HireSchedules.Absolute(day, s.End * 60)));
             }
             return new Coverage(spans);
@@ -390,21 +390,9 @@ namespace FoodTrucks.Core.Fleet
             // The route day's minutes on a calendar Monday-first week, its weekday at day 8 (a Monday) + position.
             var day = 8 + Position(routeDay.Day);
             var origin = HireSchedules.Absolute(day, 0);
-            var ids = (crew ?? Enumerable.Empty<string>()).ToList();
-            var coverage = CoverageOf(schedule, ids, origin + routeDay.Start - 1440, origin + routeDay.End + 1440);
-            var serving = CoverageOf(schedule, ids, origin + routeDay.Start - 1440, origin + routeDay.End + 1440, serving: true);
-            // Nobody at all, or only a driver while a stop is open (nobody serves: review round 3).
-            var missing = coverage.Gaps(origin + routeDay.Start, origin + routeDay.End)
-                .Concat(routeDay.Plan.Legs.Where(l => l.Kind == LegKind.Open).SelectMany(l => serving.Gaps(origin + l.Start, origin + l.End)));
-            var merged = new List<(long Start, long End)>();
-            foreach (var (a, b) in missing.OrderBy(g => g.Item1))
-            {
-                if (merged.Count > 0 && a <= merged[merged.Count - 1].End)
-                    merged[merged.Count - 1] = (merged[merged.Count - 1].Start, Math.Max(merged[merged.Count - 1].End, b));
-                else merged.Add((a, b));
-            }
+            var coverage = CoverageOf(schedule, crew, origin + routeDay.Start - 1440, origin + routeDay.End + 1440);
             var gaps = new List<CoverageGap>();
-            foreach (var (a, b) in merged)
+            foreach (var (a, b) in coverage.Gaps(origin + routeDay.Start, origin + routeDay.End))
             {
                 var start = (int)(a - origin);
                 var leg = routeDay.Plan.LegAt(start) ?? routeDay.Plan.Legs.LastOrDefault(l => l.End <= start);
@@ -474,16 +462,22 @@ namespace FoodTrucks.Core.Fleet
                         var pick = Ranked(free.Where(c => Allows(c, b - a))).FirstOrDefault() ?? Ranked(free).FirstOrDefault();
                         if (pick != null)
                         {
-                            shifts.Add(new CrewShift { EmployeeId = pick.EmployeeId, Day = day, Start = a, End = b, Station = FreeStation(shifts, day, a, b, rows) });
+                            // No row free for the hour together at a handover (a cart): this shift starts as the other ends.
+                            var from = a;
+                            var row = FreeStation(shifts, day, from, b, rows);
+                            while (row == null && from < b - 1) row = FreeStation(shifts, day, ++from, b, rows);
+                            if (row != null) shifts.Add(new CrewShift { EmployeeId = pick.EmployeeId, Day = day, Start = from, End = b, Station = row });
                             continue;
                         }
                         // Everyone works this day already: stretch a shift that stays within the cap.
                         var stretch = crew.Select(c => On(c.EmployeeId, day)).Where(s => s != null)
                             .Where(s => Math.Max(s!.End, b) - Math.Min(s.Start, a) <= max).OrderBy(s => Math.Max(s!.End, b) - Math.Min(s.Start, a)).FirstOrDefault();
                         if (stretch == null) continue;
+                        var stretchRow = FreeStation(shifts.Where(s => s != stretch), day, Math.Min(stretch.Start, a), Math.Max(stretch.End, b), rows);
+                        if (stretchRow == null) continue;
                         stretch.Start = Math.Min(stretch.Start, a);
                         stretch.End = Math.Max(stretch.End, b);
-                        stretch.Station = FreeStation(shifts, day, stretch.Start, stretch.End, rows, stretch.EmployeeId);
+                        stretch.Station = stretchRow;
                     }
                 }
             }
@@ -510,13 +504,15 @@ namespace FoodTrucks.Core.Fleet
                         var end = own == null ? b : Math.Max(own.End, b);
                         var extra = end - start - (own == null ? 0 : own.End - own.Start);
                         if (end - start > max || !Allows(who, extra)) continue;
+                        var free = FreeStation(shifts.Where(s => s != own), day, start, end, rows);
+                        if (free == null) continue;
                         if (own == null)
-                            shifts.Add(new CrewShift { EmployeeId = who.EmployeeId, Day = day, Start = start, End = end, Station = FreeStation(shifts, day, start, end, rows) });
+                            shifts.Add(new CrewShift { EmployeeId = who.EmployeeId, Day = day, Start = start, End = end, Station = free });
                         else
                         {
                             own.Start = start;
                             own.End = end;
-                            own.Station = FreeStation(shifts, day, start, end, rows, own.EmployeeId);
+                            own.Station = free;
                         }
                         break;
                     }

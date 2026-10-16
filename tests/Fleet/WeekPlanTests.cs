@@ -77,17 +77,17 @@ public class WeekPlanTests
         Assert.Single(overlap.Notes);
         // With rows named, the later colliding shift is dropped the same way.
         var named = new SaveCodec().Load(twice.Replace("\"start\":14", "\"start\":11").Replace("\"end\":12}", "\"end\":12,\"station\":\"serving1\"}")
-            .Replace("\"end\":16}", "\"end\":16,\"station\":\"driving\"}"));
+            .Replace("\"end\":16}", "\"end\":16,\"station\":\"serving2\"}"));
         Assert.Equal(LoadStatus.Loaded, named.Status);
         Assert.Single(named.Notes);
         // Nor two shifts on one row at once: the later one goes, with a note.
         var row = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
-                  "{\"employeeId\":\"e1\",\"day\":1,\"start\":8,\"end\":12,\"station\":\"driving\"},{\"employeeId\":\"e2\",\"day\":1,\"start\":10,\"end\":16,\"station\":\"driving\"}]}}]}";
+                  "{\"employeeId\":\"e1\",\"day\":1,\"start\":8,\"end\":12,\"station\":\"serving2\"},{\"employeeId\":\"e2\",\"day\":1,\"start\":10,\"end\":16,\"station\":\"serving2\"}]}}]}";
         var clash = new SaveCodec().Load(row);
         Assert.Equal(LoadStatus.Loaded, clash.Status);
         Assert.Equal("e1", Assert.Single(clash.State!.Vehicles.Single().Schedule!.CrewShifts).EmployeeId);
         Assert.Contains("collides", Assert.Single(clash.Notes));
-        Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load(row.Replace("\"station\":\"driving\"}]", "\"station\":\"serving1\"}]")).Status);
+        Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load(row.Replace("\"station\":\"serving2\"}]", "\"station\":\"serving1\"}]")).Status);
     }
 
     [Fact]
@@ -102,23 +102,12 @@ public class WeekPlanTests
 
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
         var shifts = loaded.State!.Vehicles.Single().Schedule!.CrewShifts;
-        Assert.Equal(new[] { "e1 serving1", "e2 serving2", "e3 driving" }, shifts.OrderBy(s => s.EmployeeId).Select(s => $"{s.EmployeeId} {s.Station}"));
-        Assert.Contains("e4", Assert.Single(loaded.Notes));
-    }
-
-    [Fact]
-    public void ADriverAloneIsAGapWhileAStopIsOpen()
-    {
-        // Wednesday: restock 9:10, drive, open 11:00-14:00, back 15:20. A driver all day, a server only until 13:00.
-        var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 0, 660, 840));
-        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 9, 16, WeekPlan.Driving);
-        WeekPlan.SetShift(rules, truck, "e2", DayOfWeek.Wednesday, 9, 13);
-        var day = Days(truck)[WeekPlan.Position(DayOfWeek.Wednesday)];
-
-        var gap = Assert.Single(WeekPlan.Gaps(day, truck.Schedule, truck.Crew));
-
-        Assert.Equal((13 * 60, 14 * 60), (gap.Start, gap.End));
-        Assert.Equal(LegKind.Open, gap.Kind);
+        // Two serving rows: the third and fourth fit no row and go, with notes.
+        Assert.Equal(new[] { "e1 serving1", "e2 serving2" }, shifts.OrderBy(s => s.EmployeeId).Select(s => $"{s.EmployeeId} {s.Station}"));
+        Assert.Equal(2, loaded.Notes.Count);
+        // A shift on the old driving row moves to a free serving row.
+        var driving = new SaveCodec().Load(json.Replace("\"start\":10,\"end\":12}", "\"start\":17,\"end\":19,\"station\":\"driving\"}"));
+        Assert.Contains(driving.State!.Vehicles.Single().Schedule!.CrewShifts, s => s.EmployeeId == "e3" && s.Station == "serving1");
     }
 
     [Fact]
@@ -319,27 +308,16 @@ public class WeekPlanTests
     }
 
     [Fact]
-    public void ADriverIsOnShiftButDoesntServe()
-    {
-        var truck = Truck();
-        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 9, 12, WeekPlan.Driving);
-        WeekPlan.SetShift(rules, truck, "e2", DayOfWeek.Monday, 9, 12);
-
-        Assert.Equal(new[] { "e1", "e2" }, WeekPlan.OnShiftCrew(truck, HireSchedules.Absolute(1, 600)));
-        Assert.Equal(new[] { "e2" }, CrewPay.OnShiftCrew(truck, HireSchedules.Absolute(1, 600)));
-        Assert.Equal("serving1", truck.Schedule!.CrewShifts.Single(s => s.EmployeeId == "e2").Station);
-    }
-
-    [Fact]
     public void AutoScheduleKeepsEachRowFreeOfOverlaps()
     {
-        // A long day split with an hour together, on a cart (one serving row): the handover's second shift drives.
+        // A long day split with an hour together, on a cart (one serving row): the second shift starts as the first ends.
         var truck = Truck(Stop(DayOfWeek.Monday, "early", -1000, 7 * 60, 14 * 60), Stop(DayOfWeek.Monday, "late", -1000, 15 * 60, 23 * 60));
 
         var shifts = WeekPlan.AutoSchedule(rules, Days(truck), new[] { new CrewWish("e1"), new CrewWish("e2") }, staff: 1);
 
         Assert.True(WeekPlan.CheckShifts(shifts));
-        Assert.Equal(new[] { "serving1", "driving" }, shifts.OrderBy(s => s.Start).Select(s => s.Station));
+        Assert.Equal(new[] { "serving1", "serving1" }, shifts.OrderBy(s => s.Start).Select(s => s.Station));
+        Assert.Equal(shifts.Min(s => s.End), shifts.Max(s => s.Start));
     }
 
     [Fact]
