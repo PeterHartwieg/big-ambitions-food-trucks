@@ -93,6 +93,23 @@ namespace FoodTrucks
                     : !VehicleWarnings.IsFleetKind(KindOf(t)) && string.Equals(t.itemInstanceId, vehicleId, StringComparison.Ordinal))
                 .Select(t => (Name(KindOf(t)), t.itemName)).ToList();
 
+        // For the vehicle page's Alerts box: each to-do of this vehicle as its text (without the vehicle's name) and the
+        // game's priority (2 red, 1 yellow, 0 white), most urgent first.
+        internal static IReadOnlyList<(string Text, int Priority)> For(string vehicleId) =>
+            Ours().Where(t => !VehicleWarnings.IsFleetKind(KindOf(t)) && string.Equals(t.itemInstanceId, vehicleId, StringComparison.Ordinal))
+                .Select(t => (TextOf(t), (int)t.priority))
+                .OrderByDescending(t => t.Item2).ToList();
+
+        private static string TextOf(TodoTask task)
+        {
+            var data = new Dictionary<string, string>
+            {
+                ["itemname"] = string.IsNullOrEmpty(task.itemName) ? "" : LocalizorManager.GetLocalization(task.itemName, null),
+                ["day"] = (FoodTrucksSession.CurrentState?.Licence.LicenceExpiresOnDay ?? 0).ToString(),
+            };
+            return LocalizorManager.GetLocalization(Keys.TryGetValue(KindOf(task), out var key) ? key : "foodtrucks:todo_unknown", data);
+        }
+
         private static IEnumerable<TodoTask> Ours() =>
             SaveGameManager.Current?.TodoTasks?.Where(IsOurs) ?? Enumerable.Empty<TodoTask>();
 

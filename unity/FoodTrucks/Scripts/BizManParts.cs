@@ -287,6 +287,73 @@ namespace FoodTrucks
                 NoMargin(part);
             }
 
+            // A table in the box's inventory list: rows at the inventory row's height with its splitter, cells made from
+            // the row's item name (the header's from the section label), each cell at fixed fractions of the row's width
+            // (`edges`: the left edge of each column, the last column running to the right edge), so columns line up.
+            internal void TableHeader(float[] edges, params string[] cells)
+            {
+                var row = TableRow(edges, cells, null, null, header: true);
+                if (row != null) lastItem = null;
+            }
+
+            // A body row; returns the row, its cells named FoodTrucks.Cell0, Cell1, …
+            internal Transform? TableRow(float[] edges, string[] cells, Color?[]? colours, Action? click) =>
+                TableRow(edges, cells, colours, click, header: false);
+
+            private Transform? TableRow(float[] edges, string[] cells, Color?[]? colours, Action? click, bool header)
+            {
+                rows = null;
+                if (items == null)
+                {
+                    items = Part(ItemListPath);
+                    lastItem = null;
+                    if (items == null) return null;
+                    Hide(items, ItemEntryName);
+                }
+                var entry = items.Find(ItemEntryName);
+                var source = header ? template?.Find(SectionPath)?.GetComponentsInChildren<TextLocalizationComponent>(true).FirstOrDefault()?.transform
+                                    : entry?.Find("ItemName");
+                if (entry == null || source == null) return null;
+                var height = Height(entry);
+                var row = Object.Instantiate(entry.gameObject, items).transform;
+                row.name = header ? "FoodTrucks.TableHeader" : "FoodTrucks.TableRow";
+                foreach (Transform child in row) child.gameObject.SetActive(false);
+                var element = row.GetComponent<LayoutElement>() ?? row.gameObject.AddComponent<LayoutElement>();
+                if (height > 1f) element.minHeight = element.preferredHeight = height;
+                for (var i = 0; i < cells.Length; i++)
+                {
+                    var cell = Object.Instantiate(source.gameObject, row).transform;
+                    cell.name = "FoodTrucks.Cell" + i;
+                    cell.gameObject.SetActive(true);
+                    var cellElement = cell.GetComponent<LayoutElement>() ?? cell.gameObject.AddComponent<LayoutElement>();
+                    cellElement.ignoreLayout = true;
+                    var rect = (RectTransform)cell;
+                    rect.anchorMin = new Vector2(edges[i], 0f);
+                    rect.anchorMax = new Vector2(i + 1 < edges.Length ? edges[i + 1] : 1f, 1f);
+                    rect.pivot = new Vector2(0f, 0.5f);
+                    rect.offsetMin = Vector2.zero;
+                    rect.offsetMax = new Vector2(-4f, 0f);
+                    SetText(cell, cells[i]);
+                    if (colours != null && i < colours.Length) Colour(cell, colours[i]);
+                    OneLine(cell);
+                }
+                if (!header)
+                {
+                    var splitter = row.Find("Splitter");
+                    if (splitter != null) splitter.gameObject.SetActive(false);
+                    if (lastItem != null) Show(lastItem, "Splitter");
+                    lastItem = row;
+                }
+                if (click != null)
+                {
+                    var button = row.GetComponent<Button>() ?? row.gameObject.AddComponent<Button>();
+                    button.onClick = new Button.ButtonClickedEvent();
+                    button.onClick.AddListener(() => Guard(click));
+                }
+                row.gameObject.SetActive(true);
+                return row;
+            }
+
             // Any other part (the stops list), at the end of the box.
             internal void Add(Transform part)
             {
@@ -359,6 +426,50 @@ namespace FoodTrucks
                 overflow.SetValue(graphic, Enum.Parse(overflow.PropertyType, "Overflow"));
             var element = part.GetComponent<LayoutElement>();
             if (element != null) element.preferredHeight = element.minHeight = -1f;
+        }
+
+        // A small caption in the box's section-label style ("Opens" over a stop's time), left-aligned on one line. Null
+        // without the template.
+        internal static Transform? SmallLabel(Transform parent, string text)
+        {
+            var source = template?.Find(SectionPath)?.GetComponentsInChildren<TextLocalizationComponent>(true).FirstOrDefault()?.transform;
+            if (source == null) return null;
+            var copy = Object.Instantiate(source.gameObject, parent).transform;
+            copy.name = "FoodTrucks.Caption";
+            copy.gameObject.SetActive(true);
+            SetText(copy, text);
+            OneLine(copy);
+            var element = copy.GetComponent<LayoutElement>() ?? copy.gameObject.AddComponent<LayoutElement>();
+            element.ignoreLayout = false;
+            var height = Height(source);
+            element.minHeight = element.preferredHeight = height > 1f ? height : 24f;
+            return copy;
+        }
+
+        internal static float SmallLabelHeight()
+        {
+            var source = template?.Find(SectionPath)?.GetComponentsInChildren<TextLocalizationComponent>(true).FirstOrDefault()?.transform;
+            var height = source == null ? 0f : Height(source);
+            return height > 1f ? height : 24f;
+        }
+
+        // One line, cut with an ellipsis, left-aligned, no margin: a table cell.
+        private static void OneLine(Transform part)
+        {
+            var graphic = part.GetComponent<Graphic>();
+            if (graphic == null) return;
+            var type = graphic.GetType();
+            var wrapping = type.GetProperty("enableWordWrapping");
+            if (wrapping != null && wrapping.CanWrite) wrapping.SetValue(graphic, false);
+            var overflow = type.GetProperty("overflowMode");
+            if (overflow != null && overflow.CanWrite && overflow.PropertyType.IsEnum)
+                overflow.SetValue(graphic, Enum.Parse(overflow.PropertyType, "Ellipsis"));
+            var alignment = type.GetProperty("alignment");
+            if (alignment != null && alignment.CanWrite && alignment.PropertyType.IsEnum && Enum.IsDefined(alignment.PropertyType, "MidlineLeft"))
+                alignment.SetValue(graphic, Enum.Parse(alignment.PropertyType, "MidlineLeft"));
+            var rich = type.GetProperty("richText");
+            if (rich != null && rich.CanWrite) rich.SetValue(graphic, true);
+            NoMargin(part);
         }
 
         // The address line leaves room on its left for the destination button; a paragraph made from it starts at the
