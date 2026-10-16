@@ -15,19 +15,20 @@ public class HireRunnerTests
     private static readonly HireRunner runner = new(rules);
 
     private static ScheduleStop Stop(string key, double x, int open, int close) =>
-        new() { SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
+        new() { Day = DayOfWeek.Wednesday, SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
 
     // Day 3 is a Wednesday.
     private static long At(int day, int hour, int minute = 0) => HireSchedules.Absolute(day, hour * 60 + minute);
 
-    private static VehicleState Truck(params ScheduleStop[] stops) => new()
+    // Stops on Wednesday; the crew on shift around the clock.
+    private static VehicleState Truck(params ScheduleStop[] stops) => WeekTestData.AllDay(new VehicleState
     {
         VehicleId = "t1",
         VehicleType = "truck",
         HasPermit = true,
         Crew = new List<string> { "e1" },
         Schedule = new HireSchedule { Stops = stops.ToList() }
-    };
+    });
 
     private static VehicleWhere At(double x) => new(x, 0, leaveAlone: false);
 
@@ -123,49 +124,70 @@ public class HireRunnerTests
     }
 
     [Fact]
-    public void ShiftMinutesCoverTheWholeShiftDrivingIncluded()
+    public void WithNobodyOnShiftTheTruckWaitsWhereItIsUntilAShiftStarts()
     {
+        // The shift starts at 10:00, after the planned 9:40 departure: it leaves at 10:00 and opens on arrival at 11:20.
         var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60));
+        truck.Schedule!.CrewShifts.Clear();
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 10, 13);
         runner.EnsurePlan(truck, At(3, 6), 0, 0);
 
-        // The shift runs 9:40 to 14:00.
-        Assert.Equal(20, HireRunner.ShiftMinutes(truck, At(3, 9), At(3, 10)));
-        Assert.Equal(60, HireRunner.ShiftMinutes(truck, At(3, 12), At(3, 13)));
-        Assert.Equal(0, HireRunner.ShiftMinutes(truck, At(3, 14), At(3, 15)));
+        var legs = truck.Shifts.Single().Legs;
+        Assert.Equal((LegKind.Travel, At(3, 10), At(3, 11, 20)), (legs[0].Kind, legs[0].Start, legs[0].End));
+        // Open only while someone is on shift: until 13:00, not the stop's 14:00.
+        Assert.Equal((LegKind.Open, At(3, 11, 20), At(3, 13)), (legs[1].Kind, legs[1].Start, legs[1].End));
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 9, 40), At(0)).Kind);
+        Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 10), At(0)).Kind);
     }
 
     [Fact]
-    public void WeeklyWorkForTheGamesJobDemands()
+    public void AStopWithNobodyOnShiftAtAllIsSkipped()
     {
-        var route = new HireSchedule
-        {
-            Days = new List<DayOfWeek> { DayOfWeek.Monday, DayOfWeek.Friday },
-            Stops = new List<ScheduleStop> { Stop("a", 0, 11 * 60, 14 * 60), Stop("b", 0, 18 * 60, 22 * 60) }
-        };
+        var truck = Truck(Stop("office", 0, 11 * 60, 14 * 60), Stop("bars", 0, 18 * 60, 22 * 60));
+        truck.Schedule!.CrewShifts.Clear();
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 17, 23);
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
 
-        var (hours, days) = HireRunner.WeeklyWork(route);
+        var plan = truck.Shifts.Single();
+        Assert.Equal(new[] { 1 }, plan.Legs.Select(l => l.StopIndex).Distinct().ToArray());
+    }
 
-        Assert.Equal(22, hours);
+    [Fact]
+    public void WeeklyWorkForTheGamesJobDemandsFollowsTheShifts()
+    {
+        var truck = Truck(Stop("a", 0, 11 * 60, 14 * 60));
+        truck.Crew.Add("e2");
+        truck.Schedule!.CrewShifts.Clear();
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 10, 15);
+        WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Friday, 17, 23);
+        WeekPlan.SetShift(rules, truck, "e2", DayOfWeek.Friday, 18, 24);
+
+        var (hours, days) = WeekPlan.WeeklyWork(truck.Schedule, "e1");
+
+        Assert.Equal(11, hours);
         Assert.Equal(new[] { DayOfWeek.Monday, DayOfWeek.Friday }, days);
-        Assert.Equal(7, HireRunner.WeeklyWork(new HireSchedule { Stops = route.Stops }).Days.Count);
+        Assert.Equal(6, WeekPlan.WeekHours(truck.Schedule, "e2"));
+        Assert.Equal(0, WeekPlan.WeekHours(truck.Schedule, "nobody"));
     }
 
     [Fact]
-    public void WeeklyWorkCountsHoursAsThePayrollDoes()
+    public void ShiftsAreWholeHoursUpToTwelveOnePerDay()
     {
-        // 11:30 to 12:30 covers half of two hours: two worked hours.
-        var lunch = new HireSchedule { Days = new List<DayOfWeek> { DayOfWeek.Monday }, Stops = new List<ScheduleStop> { Stop("a", 0, 11 * 60 + 30, 12 * 60 + 30) } };
-        Assert.Equal(2, HireRunner.WeeklyWork(lunch).Hours);
+        var truck = Truck(Stop("a", 0, 11 * 60, 14 * 60));
+        truck.Schedule!.CrewShifts.Clear();
 
-        // Friday 22:00 to 02:00 works Friday night and Saturday morning.
-        var late = new HireSchedule { Days = new List<DayOfWeek> { DayOfWeek.Friday }, Stops = new List<ScheduleStop> { Stop("b", 0, 22 * 60, 26 * 60) } };
-        var (hours, days) = HireRunner.WeeklyWork(late);
-        Assert.Equal(4, hours);
-        Assert.Equal(new[] { DayOfWeek.Friday, DayOfWeek.Saturday }, days);
+        Assert.Equal(ShiftProblem.TooLong, WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 6, 19));
+        Assert.Equal(ShiftProblem.BadHours, WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 20, 25));
+        Assert.Equal(ShiftProblem.BadHours, WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 9, 9));
+        Assert.Equal(ShiftProblem.NotCrew, WeekPlan.SetShift(rules, truck, "stranger", DayOfWeek.Monday, 9, 10));
+        Assert.Equal(ShiftProblem.None, WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 12, 24));
+        Assert.Equal(ShiftProblem.None, WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 8, 12));
 
-        // Every day 01:00 to 27:00 (03:00): the nights overlap the next morning's hours, counted once.
-        var allDay = new HireSchedule { Stops = new List<ScheduleStop> { Stop("c", 0, 60, 27 * 60) } };
-        Assert.Equal(7 * 24, HireRunner.WeeklyWork(allDay).Hours);
+        Assert.Equal((8, 12), (truck.Schedule.CrewShifts.Single().Start, truck.Schedule.CrewShifts.Single().End));
+        // Monday is day 1: on shift 08:00 to 12:00, not at 12:00.
+        Assert.True(WeekPlan.OnShift(truck.Schedule, "e1", At(1, 8)));
+        Assert.False(WeekPlan.OnShift(truck.Schedule, "e1", At(1, 12)));
+        Assert.True(WeekPlan.OnShift(truck.Schedule, "e1", At(8, 11, 59)));
     }
 
     [Fact]
@@ -234,7 +256,8 @@ public class HireRunnerTests
         Assert.Equal("bars", truck.Schedule!.Stops[HireRunner.Want(truck, At(4, 1))!.StopIndex].SpotKey);
         RouteEditor.RemoveStop(truck, 0);
         Assert.Null(truck.HireStop);
-        Assert.Null(truck.Schedule);
+        // The shifts keep the week plan.
+        Assert.Empty(truck.Schedule!.Stops);
         Assert.Null(HireRunner.Want(truck, At(4, 1)));
     }
 
@@ -248,16 +271,6 @@ public class HireRunnerTests
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), new VehicleWhere(0, 0, leaveAlone: false, hasStock: false)).Kind);
         // At the stop, staying put doesn't stop it opening.
         Assert.Equal(HireActionKind.Open, runner.Step(truck, At(3, 12), new VehicleWhere(2000, 0, leaveAlone: false, stayPut: true)).Kind);
-    }
-
-    [Fact]
-    public void MidnightsHourCountsFromAPreviewWithoutSavingIt()
-    {
-        var truck = Truck(Stop("early", 0, 0, 3 * 60));
-        runner.EnsurePlan(truck, At(3, 6), 0, 0);
-
-        Assert.Equal(60, runner.PlannedShiftMinutes(truck, At(4, 0), At(4, 1), 0, 0));
-        Assert.DoesNotContain(truck.Shifts, p => p.Day == 4);
     }
 
     [Fact]

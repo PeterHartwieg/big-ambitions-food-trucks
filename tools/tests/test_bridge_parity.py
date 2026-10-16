@@ -272,6 +272,19 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(self.mock.call('debug',{'action':'status'})['notices'],[])
         self.assertEqual(self.mock.saves['FT commissary-pay-on-delivery']['state']['commissary']['orders'],[])
 
+    def test_route_carries_the_week_plan_in_the_bridges_shape(self):
+        route=NS['week_route'](510,1440,393.2,217.6)
+        self.assertEqual(set(route),{'stops','next','week','shifts','problem'})
+        self.assertEqual([d['day'] for d in route['week']],['monday','tuesday','wednesday','thursday','friday','saturday','sunday'])
+        self.assertEqual(set(route['week'][0]),{'day','closed','stops','route_day','gaps'})
+        self.assertEqual(set(route['week'][0]['stops'][0]),{'open','close','x','z'})
+        self.assertEqual(route['week'][0]['route_day'],{'start':510,'end':1440})
+        self.assertEqual(route['next'],'stop 1, 08:30 to 00:00 at x 393.2, z 217.6')
+        # The game side writes the same keys (TestBridgeState.WeekOf and ShiftsOf).
+        source=(TOOLS.parent/'unity/FoodTrucks/Scripts/TestBridgeState.cs').read_text()
+        for key in ('week','shifts','problem','day','closed','route_day','gaps','employee','week_hours','wants_min','wants_max'):
+            self.assertIn(f'["{key}"]',source)
+
     def test_ui_option_ids_and_selection_confirmation(self):
         self.mock.state['player']['in_vehicle']=self.id
         self.mock.place_vehicle(self.v,'hells-kitchen')

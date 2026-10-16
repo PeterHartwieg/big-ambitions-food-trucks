@@ -10,8 +10,10 @@ namespace FoodTrucks.Core.Fleet
         public FleetRules(int licenceDays = 60, int renewWindowDays = 10, long licenceFeeCents = 250_00, long permitFeeCents = 500_00,
             double driveMinutesPerMetre = 0.04, double pushMetresPerSecond = 1.2, double roadFactor = 1.0,
             int maxStops = 6, int latestCloseMinute = 27 * 60, double stopRadiusMetres = 25,
-            int courseMinutes = 6 * 60, int coursePricePerHour = 25)
+            int courseMinutes = 6 * 60, int coursePricePerHour = 25, int restockMinutes = 30, int maxShiftHours = 12)
         {
+            RestockMinutes = restockMinutes;
+            MaxShiftHours = maxShiftHours;
             LicenceDays = licenceDays;
             RenewWindowDays = renewWindowDays;
             LicenceFeeCents = licenceFeeCents;
@@ -45,6 +47,11 @@ namespace FoodTrucks.Core.Fleet
         public int LatestCloseMinute { get; }
         // A vehicle this close to a stop is at it; further away, the hire moves it there first.
         public double StopRadiusMetres { get; }
+        // A route day starts this long before the vehicle leaves its commissary bay: the morning restock, which needs
+        // someone on shift (Peter, 16 October 2026).
+        public int RestockMinutes { get; }
+        // The longest shift a crew member may have in a day, the game's ScheduleHelper.ShiftLengthCap.
+        public int MaxShiftHours { get; }
         // The Food Safety course the business school's Market Demands door offers: its length and its
         // price per hour in whole dollars, as the game's DiplomaData stores them.
         public int CourseMinutes { get; }
@@ -62,7 +69,7 @@ namespace FoodTrucks.Core.Fleet
             var travel = r.Object(obj, "travel");
             r.OnlyKeys(travel, "driveMinutesPerMetre", "pushMetresPerSecond", "roadFactor");
             var schedules = r.Object(obj, "schedules");
-            r.OnlyKeys(schedules, "maxStops", "latestCloseMinute", "stopRadiusMetres");
+            r.OnlyKeys(schedules, "maxStops", "latestCloseMinute", "stopRadiusMetres", "restockMinutes", "maxShiftHours");
             var course = r.Object(obj, "course");
             r.OnlyKeys(course, "hours", "pricePerHour");
             return new FleetRules(licenceDays, renewWindow, licenceFee, permitFee,
@@ -73,7 +80,9 @@ namespace FoodTrucks.Core.Fleet
                 r.Integer(schedules, "latestCloseMinute", 60, 48 * 60),
                 r.Number(schedules, "stopRadiusMetres", 1, 500),
                 r.Integer(course, "hours", 1, 100) * 60,
-                r.Integer(course, "pricePerHour", 0, 10_000));
+                r.Integer(course, "pricePerHour", 0, 10_000),
+                r.Integer(schedules, "restockMinutes", 0, 240),
+                r.Integer(schedules, "maxShiftHours", 1, 24));
         }
 
         private static long Cents(double dollars) => (long)Math.Round(dollars * 100);

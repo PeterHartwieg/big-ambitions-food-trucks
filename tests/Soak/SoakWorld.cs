@@ -75,6 +75,7 @@ internal sealed partial class SoakWorld
             foreach (var food in ShippedData.Tables.EquipmentForGameItem(piece)!.Products)
                 van.Cargo.Add(new Lot(food, 8, 100));
             v.Schedule = NewRoute(i == 0 ? 1 : random.Next(4));
+            Staff(v);
             Rent(v, "a");
         }
         state.Licence.HasVendorLicence = true;
@@ -164,7 +165,7 @@ internal sealed partial class SoakWorld
             case 6: ChangeRoute(v); break;
             case 7:
                 if (v.Crew.Count < ShippedData.Tables.Vehicle(v.VehicleType)!.Staff)
-                { v.Crew.Add($"e{nextEmployee++}"); HireRunner.Replan(v, now); }
+                { v.Crew.Add($"e{nextEmployee++}"); Staff(v); HireRunner.Replan(v, now); }
                 break;
             case 8:
                 if (v.Crew.Count > 0)
@@ -185,21 +186,34 @@ internal sealed partial class SoakWorld
         }
     }
 
-    private HireSchedule NewRoute(int kind)
+    // One day's stops, on the weekdays the kind runs (every day for 0 and 1).
+    private HireSchedule NewRoute(int kind, Action<List<ScheduleStop>>? change = null)
     {
         ScheduleStop Stop(string name, int open, int close) => new() { SpotKey = name, X = random.Next(0, 500),
             Z = random.Next(0, 100), OpenAt = open, CloseAt = close };
-        var route = new HireSchedule();
-        if (kind == 1) route.Stops.Add(Stop("night", 23 * 60 + 30, 26 * 60 + 30));
-        else if (kind == 2) { route.Stops.Add(Stop("early", 30, 120)); route.Stops.Add(Stop("night", 1380, 1590)); route.Days.Add(DayOfWeek.Friday); }
-        else { route.Stops.Add(Stop("lunch", 660 + random.Next(2) * 30, 810)); route.Stops.Add(Stop("evening", 1080, 1200)); }
-        if (kind == 3) route.Days = new() { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday };
-        return route;
+        var day = new List<ScheduleStop>();
+        var days = new List<DayOfWeek>();
+        if (kind == 1) day.Add(Stop("night", 23 * 60 + 30, 26 * 60 + 30));
+        else if (kind == 2) { day.Add(Stop("early", 30, 120)); day.Add(Stop("night", 1380, 1590)); days.Add(DayOfWeek.Friday); }
+        else { day.Add(Stop("lunch", 660 + random.Next(2) * 30, 810)); day.Add(Stop("evening", 1080, 1200)); }
+        if (kind == 3) days = new() { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday };
+        change?.Invoke(day);
+        return new HireSchedule { Stops = FoodTrucks.Core.Tests.Fleet.WeekTestData.On(day, days.ToArray()) };
+    }
+
+    // The crew's shifts from the auto schedule; now and then one shift is left out, so the route waits for a shift.
+    private void Staff(VehicleState v)
+    {
+        if (v.Schedule == null) return;
+        var days = WeekPlan.RouteDays(schedules, v.Schedule, Travel.ModeFor(v.VehicleType));
+        v.Schedule.CrewShifts = WeekPlan.AutoSchedule(ShippedData.Rules.Fleet, days, v.Crew.Select(e => new CrewWish(e)).ToList(),
+            ShippedData.Tables.Vehicle(v.VehicleType)!.Staff, v.Schedule.CrewShifts);
+        if (v.Schedule.CrewShifts.Count > 0 && random.Next(4) == 0) v.Schedule.CrewShifts.RemoveAt(random.Next(v.Schedule.CrewShifts.Count));
     }
 
     private void ChangeRoute(VehicleState v)
     {
-        if (v.Schedule == null || v.Schedule.Stops.Count == 0) v.Schedule = NewRoute(random.Next(4));
+        if (v.Schedule == null || v.Schedule.Stops.Count == 0) { v.Schedule = NewRoute(random.Next(4)); Staff(v); }
         // Edits use RouteEditor, preserving yesterday's late legs and remapping indices.
         var before = codec.Serialize(state);
         var index = random.Next(v.Schedule.Stops.Count);
@@ -212,24 +226,33 @@ internal sealed partial class SoakWorld
         else HireRunner.Replan(v, now);
         if (random.Next(4) == 0)
         {
-            var days = random.Next(2) == 0 ? new List<DayOfWeek>() : new List<DayOfWeek> { DayOfWeek.Friday };
+            var day = WeekPlan.Days[random.Next(7)];
             before = codec.Serialize(state);
-            problem = RouteEditor.SetDays(schedules, v, days);
-            if (problem != ScheduleProblem.None) Require(before == codec.Serialize(state), "refused days edit mutated state");
+            problem = RouteEditor.SetClosed(schedules, v, day, !WeekPlan.IsClosed(v.Schedule, day));
+            if (problem != ScheduleProblem.None) Require(before == codec.Serialize(state), "refused closed-day edit mutated state");
             else HireRunner.Replan(v, now);
         }
-        // Malformed older saves enter through public state. Probe a copy, not a live edited route.
-        var bad = new VehicleState { VehicleId = "old", VehicleType = v.VehicleType, Crew = new() { "probe" }, Schedule = NewRoute(0) };
-        switch (random.Next(4))
+        if (random.Next(6) == 0 && v.Schedule != null)
         {
-            case 0: bad.Schedule.Stops[0].CloseAt = bad.Schedule.Stops[0].OpenAt + 1441; break;
-            case 1: bad.Schedule.Stops[1].OpenAt = bad.Schedule.Stops[0].CloseAt - 30; break;
-            case 2: bad.Schedule.Stops[0].OpenAt = -30; break;
-            case 3:
-                bad.Schedule.Stops[0].OpenAt = 30; bad.Schedule.Stops[0].CloseAt = 120;
-                bad.Schedule.Stops[1].OpenAt = 1380; bad.Schedule.Stops[1].CloseAt = 1590;
-                break;
+            Staff(v);
+            HireRunner.Replan(v, now);
         }
+        // Malformed older saves enter through public state. Probe a copy, not a live edited route.
+        var probe = random.Next(4);
+        var bad = new VehicleState { VehicleId = "old", VehicleType = v.VehicleType, Crew = new() { "probe" }, Schedule = NewRoute(0, stops =>
+        {
+            switch (probe)
+            {
+                case 0: stops[0].CloseAt = stops[0].OpenAt + 1441; break;
+                case 1: stops[1].OpenAt = stops[0].CloseAt - 30; break;
+                case 2: stops[0].OpenAt = -30; break;
+                case 3:
+                    stops[0].OpenAt = 30; stops[0].CloseAt = 120;
+                    stops[1].OpenAt = 1380; stops[1].CloseAt = 1590;
+                    break;
+            }
+        }) };
+        FoodTrucks.Core.Tests.Fleet.WeekTestData.AllDay(bad);
         // SaveCodec deliberately preserves structurally sound old routes; HireRunner refuses their plans.
         var old = codec.Load(codec.Serialize(new SaveState { Vehicles = new() { bad } }));
         Require(old.Status == LoadStatus.Loaded, "old invalid route could not load");
@@ -322,7 +345,8 @@ internal sealed partial class SoakWorld
         var van = vans[v.VehicleId];
         if (!v.IsOpen || v.Service == null) return;
         var player = Awake && atWindow == v.VehicleId && PlayerServing.Serves(v.VehicleType, true, 0, 8);
-        var team = CrewPay.Team(v.Crew.Select(e => (e, 60.0)), player ? 80.0 : (double?)null, ShippedData.Tables.Vehicle(v.VehicleType)!.Staff,
+        // Only the crew on shift serve.
+        var team = CrewPay.Team(WeekPlan.OnShiftCrew(v, from).Select(e => (e, 60.0)), player ? 80.0 : (double?)null, ShippedData.Tables.Vehicle(v.VehicleType)!.Staff,
             playerHeld: v.VehicleType == "truck");
         var serviceTeam = ShippedData.Rules.Service.Team(team.Skills);
         var input = new SalesInput { Menu = Menu.FromCargo(ShippedData.Tables, v.VehicleType, Lines(v)).Menu.Items,
@@ -419,9 +443,9 @@ internal sealed partial class SoakWorld
         CrewPay.Prune(state, hour);
         foreach (var v in state.Vehicles)
         {
-            var van = vans[v.VehicleId]; var from = HireRunner.PlanFrom(v, van.X, van.Z);
-            if (runner.PlannedShiftMinutes(v, now, now + 60, from.X, from.Z) < 30) continue;
-            foreach (var e in v.Crew) if (CrewPay.TryPay(state, e, hour)) Credit(e, v.VehicleId, hour);
+            // Each crew member is paid every hour of their own shift (the week plan), worked or idle.
+            foreach (var e in v.Crew)
+                if (WeekPlan.OnShift(v.Schedule, e, hour * 60) && CrewPay.TryPay(state, e, hour)) Credit(e, v.VehicleId, hour);
         }
     }
 

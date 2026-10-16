@@ -44,7 +44,10 @@ namespace FoodTrucks
 
         // The page: the layout copy, its rows and headers, the table, the vehicle page's columns and the Back button.
         private static Transform? section, holder, table, tableRows, column1;
-        private static Transform? row2, row3, header1, header2, header3;
+        private static Transform? row1, row2, row3, header1, header2, header3;
+        // The first row's own rectangle and layout sizes, kept while the Week plan tab widens it (Widen).
+        private static (Vector2 Min, Vector2 Max, Vector2 OffsetMin, Vector2 OffsetMax)? row1Rect;
+        private static (float Preferred, float Flexible)? row1Element;
         private static Transform? content1, content2, content3;
         private static Button? back;
         private static GameObject? cellPrefab;
@@ -232,7 +235,9 @@ namespace FoodTrucks
 
         private static void Clear()
         {
-            section = holder = table = tableRows = column1 = row2 = row3 = header1 = header2 = header3 = null;
+            section = holder = table = tableRows = column1 = row1 = row2 = row3 = header1 = header2 = header3 = null;
+            row1Rect = null;
+            row1Element = null;
             content1 = content2 = content3 = null;
             back = null;
             cellPrefab = null;
@@ -271,6 +276,7 @@ namespace FoodTrucks
         private static void ShowOverview()
         {
             if (table == null) return;
+            Widen(false);
             table.gameObject.SetActive(true);
             if (column1 != null) column1.gameObject.SetActive(false);
             if (row2 != null) row2.gameObject.SetActive(false);
@@ -282,14 +288,16 @@ namespace FoodTrucks
 
         // The vehicle page's three columns, emptied, with the vehicle's name over the first and Back to the overview.
         // Null when the page isn't built. A layout without a third column puts the third's boxes in the second.
-        internal static (Transform First, Transform Second, Transform Third)? ShowVehicleColumns(string title)
+        // `wide` (the Week plan tab): only the first column shows, across the page's whole width, for the shift grid.
+        internal static (Transform First, Transform Second, Transform Third)? ShowVehicleColumns(string title, bool wide = false)
         {
             if (section == null || table == null || content1 == null || content2 == null || column1 == null) return null;
             ShowSectionView();
             table.gameObject.SetActive(false);
             column1.gameObject.SetActive(true);
-            if (row2 != null) row2.gameObject.SetActive(true);
-            if (row3 != null) row3.gameObject.SetActive(true);
+            if (row2 != null) row2.gameObject.SetActive(!wide);
+            if (row3 != null) row3.gameObject.SetActive(!wide);
+            Widen(wide);
             SetHeader(header1, title);
             SetHeader(header2, Text(content3 == null ? "foodtrucks:bizman_page_column_both" : "foodtrucks:bizman_page_column_menu"));
             SetHeader(header3, Text("foodtrucks:bizman_page_column_commissary"));
@@ -323,6 +331,44 @@ namespace FoodTrucks
                 }
             }
             return (content1, content2, content3 ?? content2);
+        }
+
+        // The first row across the page (the Week plan tab) or back to its own width. Under a layout group the row's layout
+        // element takes the three rows' width; placed by anchors, its right edge goes to the last row's.
+        private static void Widen(bool wide)
+        {
+            if (!(row1 is RectTransform rect)) return;
+            var group = rect.parent == null ? null : rect.parent.GetComponent<HorizontalOrVerticalLayoutGroup>();
+            var element = rect.GetComponent<LayoutElement>();
+            row1Rect ??= (rect.anchorMin, rect.anchorMax, rect.offsetMin, rect.offsetMax);
+            if (element != null) row1Element ??= (element.preferredWidth, element.flexibleWidth);
+            if (!wide)
+            {
+                var (min, max, offsetMin, offsetMax) = row1Rect.Value;
+                rect.anchorMin = min;
+                rect.anchorMax = max;
+                rect.offsetMin = offsetMin;
+                rect.offsetMax = offsetMax;
+                if (element != null && row1Element is { } sizes)
+                {
+                    element.preferredWidth = sizes.Preferred;
+                    element.flexibleWidth = sizes.Flexible;
+                }
+            }
+            else if (group != null && group.enabled)
+            {
+                element ??= rect.gameObject.AddComponent<LayoutElement>();
+                row1Element ??= (-1f, 0f);
+                var width = new[] { row1, row2, row3 }.OfType<RectTransform>().Sum(r => r.rect.width) + group.spacing * 2f;
+                element.preferredWidth = width > 1f ? width : -1f;
+                element.flexibleWidth = 1f;
+            }
+            else if ((row3 ?? row2) is RectTransform last)
+            {
+                rect.anchorMax = new Vector2(last.anchorMax.x, rect.anchorMax.y);
+                rect.offsetMax = new Vector2(last.offsetMax.x, rect.offsetMax.y);
+            }
+            if (rect.parent is RectTransform parent) LayoutRebuilder.MarkLayoutForRebuild(parent);
         }
 
         private static void SetHeader(Transform? header, string text)
@@ -486,6 +532,7 @@ namespace FoodTrucks
             }
 
             section = copy;
+            BizManFleet.row1 = row1;
             row2 = r2;
             row3 = r3;
             table = tableCopy;

@@ -14,9 +14,10 @@ namespace FoodTrucks
 {
     // The game's own employees as a vehicle's crew (Peter, 8 October 2026). A crew member stays unassigned
     // in the game: no building, so the game's schedules, stations and sick days leave them alone. The mod
-    // keeps the employee IDs on the vehicle, logs their route hours and the hours they serve a window the player
-    // opened, so the game's midnight payroll pays them (as unassigned wages, tax-deductible), sets their weekly hours
-    // and days from the route so their job demands can be met, and keeps the "no task" complaint from firing.
+    // keeps the employee IDs on the vehicle, logs the hours of their shifts on its week plan and the hours they serve a
+    // window the player opened, so the game's midnight payroll pays them (as unassigned wages, tax-deductible), sets
+    // their weekly hours and days from their shifts so their job demands can be met, and keeps the "no task" complaint
+    // from firing.
     internal static class HireCrew
     {
         internal const string CustomerServiceSkill = "ba:skill_customerservice";
@@ -46,11 +47,14 @@ namespace FoodTrucks
 
         public static string Name(EmployeeInstance employee) => employee.characterData?.name ?? employee.id;
 
-        // The crew on the vehicle's window now, minus anyone off sick or training: at an open window, whoever opened it
-        // and wherever (CrewPay.OnShift), and during the route's hours. Someone a headhunter is replacing is on the
-        // way out: the game stops paying them, so they don't serve.
-        public static List<EmployeeInstance> OnShift(VehicleState vehicle, long now) =>
-            CrewPay.OnShift(vehicle, now) ? Present(vehicle) : new List<EmployeeInstance>();
+        // The crew at the vehicle now: those on a shift of its week plan (CrewPay.OnShiftCrew; none while it is on its
+        // way), minus anyone off sick or training. Someone a headhunter is replacing is on the way out: the game stops
+        // paying them, so they don't serve.
+        public static List<EmployeeInstance> OnShift(VehicleState vehicle, long now)
+        {
+            var ids = new HashSet<string>(CrewPay.OnShiftCrew(vehicle, now), StringComparer.Ordinal);
+            return ids.Count == 0 ? new List<EmployeeInstance>() : Present(vehicle).Where(e => ids.Contains(e.id)).ToList();
+        }
 
         // Who serves at the window: the best of the crew on shift and the player (their skill, when at the window), up
         // to the vehicle's staff. Only the crew chosen here serve, and only they are paid for serving.
@@ -60,6 +64,16 @@ namespace FoodTrucks
 
         // Who serves at the window with the player away.
         public static List<EmployeeInstance> Serving(VehicleState vehicle, long now) => Team(vehicle, now, null).Crew;
+
+        // The hours a week the employee wants: the game's HoursWorkingPerWeek job demand among their demands (min and max
+        // as its slider has them); no bounds without one.
+        public static CrewWish Wish(EmployeeInstance employee)
+        {
+            foreach (var name in employee.demands ?? new List<string>())
+                if (Entities.Employee.JobDemands.JobDemandHelper.GetByName(name) is Entities.Employee.JobDemands.Requirements.HoursWorkingPerWeek hours)
+                    return new CrewWish(employee.id, hours.MinHours, hours.MaxHours);
+            return new CrewWish(employee.id);
+        }
 
         public static string Names(IEnumerable<EmployeeInstance> employees) => string.Join(", ", employees.Select(Name));
 
@@ -84,6 +98,8 @@ namespace FoodTrucks
         public static void Remove(VehicleState vehicle, string employeeId, string reason)
         {
             if (vehicle.Crew == null || !vehicle.Crew.Remove(employeeId)) return;
+            // Their shifts go with them.
+            WeekPlan.DropCrew(vehicle.Schedule, employeeId);
             var employee = Find(employeeId);
             if (employee != null)
             {
@@ -153,14 +169,16 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
         }
 
-        // The route's hours and days stand in for a building's work shifts in the game's job demands.
+        // Each crew member's shifts on the week plan stand in for a building's work shifts in the game's job demands:
+        // their weekly hours and days (EmployeeInstance.assignedWeeklyHours, assignedWeeklyDays), which the game's
+        // HoursWorkingPerWeek.Fulfilled and the other schedule demands read for the employee's satisfaction, as in a shop.
         public static void SetWeeklyWork(VehicleState vehicle)
         {
-            var (hours, days) = HireRunner.WeeklyWork(vehicle.Schedule);
             foreach (var employee in (vehicle.Crew ?? new List<string>()).Select(Find))
             {
                 // A building job's hours are the game's to set.
                 if (employee == null || employee.IsAssignedToAnyBusiness() || employee.isBeingReplaced) continue;
+                var (hours, days) = WeekPlan.WeeklyWork(vehicle.Schedule, employee.id);
                 employee.assignedWeeklyHours = hours;
                 var list = (IList)employee.assignedWeeklyDays;
                 list.Clear();
@@ -198,8 +216,9 @@ namespace FoodTrucks
         // Before the game's hourly employee run, which counts the hour that is starting for anyone on a work
         // shift. First the hour that just ended is closed: the sales are caught up to this hour's start and each hire
         // who served a window the player opened in that hour's first half is paid it (CrewPay.CloseHours). Then the
-        // hour that is starting counts for each crew member on route shift for at least half of it. The game pays
-        // worked hours at midnight, as unassigned wages. [code, unverified in game]
+        // hour that is starting counts for each crew member whose own shift on the vehicle's week plan has it (Peter,
+        // 16 October 2026: paid per scheduled hour, as a shop's staff). The game pays worked hours at midnight, as
+        // unassigned wages. [code, unverified in game]
         public static void CountHour()
         {
             gameCountBefore = null;
@@ -209,10 +228,6 @@ namespace FoodTrucks
             Check(state);
             // The hour that is starting, as the game counts it: its own minute may still hold later hours.
             var hourStart = HireSchedules.Absolute(TimeHelper.CurrentDay, TimeHelper.CurrentHour * 60);
-            // Counted from the plans without changing them: making and dropping plans is the routes' job, which may
-            // still be catching up on the minutes before this hour. A day not planned yet is previewed.
-            var rules = DemandData.Rules;
-            var runner = rules == null ? null : new HireRunner(rules.Fleet);
             // Hours whose wage was never paid (a hire let go before midnight) don't stay in the save.
             CrewLog.Prune(state, TimeHelper.CurrentDay - 2);
             CrewLog.Begin(state, TimeHelper.CurrentDay);
@@ -221,22 +236,12 @@ namespace FoodTrucks
             CloseHours(state, hourStart, TimeHelper.CurrentDay);
             foreach (var vehicle in state.Vehicles)
             {
-                if (vehicle.Crew == null || vehicle.Crew.Count == 0 || runner == null) continue;
-                // With the private driver, it waits in the game's own list, at its saved position.
-                var instance = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId)
-                               ?? SaveGameManager.Current?.privateDriverVehicleInstances?.FirstOrDefault(v => v.id == vehicle.VehicleId);
-                var controller = instance == null ? null : VehicleHelper.GetVehicleController(instance);
-                var standing = controller != null ? controller.transform.position
-                    : instance != null ? (UnityEngine.Vector3)instance.position : UnityEngine.Vector3.zero;
-                var (planX, planZ) = HireRunner.PlanFrom(vehicle, standing.x, standing.z);
+                if (vehicle.Crew == null || vehicle.Crew.Count == 0) continue;
                 // The game clears these only when a building's shifts change, so they should hold; once an hour is cheap.
                 SetWeeklyWork(vehicle);
-                // The same drive back to the bay as the route runs (HireRoutes.HomeOf): paid like any other drive.
-                var home = HireRoutes.HomeOf(vehicle);
-                if (runner.PlannedShiftMinutes(vehicle, hourStart, hourStart + 60, planX, planZ, HireRoutes.GameSpeed(),
-                        HireRoutes.HomePoint(home), home?.EndsThere == true) < CrewPay.HalfHour) continue;
                 foreach (var employee in Present(vehicle))
-                    if (!employee.IsAssignedToAnyBusiness() && CrewPay.TryPay(state, employee.id, hour))
+                    if (!employee.IsAssignedToAnyBusiness() && WeekPlan.OnShift(vehicle.Schedule, employee.id, hourStart) &&
+                        CrewPay.TryPay(state, employee.id, hour))
                         CountOn(state, vehicle.VehicleId, employee, TimeHelper.CurrentDay);
             }
             // What every employee has worked today before the game's own count, to see whose hour the game counts.

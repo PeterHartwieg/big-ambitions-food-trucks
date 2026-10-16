@@ -182,15 +182,18 @@ namespace FoodTrucks
 
         // ---- The route ----
 
-        // The route on a light panel, north up as the game's city map opens (that map is the 3D city under a camera,
-        // CityMap/CityMapCam, with no picture to crop). Under it the streets: the traffic system's lanes, light grey.
-        // Round numbered pins at the stops in order with their hours beside them, lines joining them (back to the first
-        // when the route runs on consecutive days, as the crew starts each day where it ended), and the vehicle where it
-        // stands. Sizes follow the box's own text: the canvas is in game units (a business row is 100 high), so fixed
-        // pixel sizes came out as dots without text (16 October 2026).
-        internal static void Route(BizManParts.Box box, HireSchedule schedule, VehicleInstance instance, VehicleState? vehicle)
+        // One weekday's route on a light panel, north up as the game's city map opens (that map is the 3D city under a
+        // camera, CityMap/CityMapCam, with no picture to crop). Under it the streets: the traffic system's lanes, light
+        // grey. Round numbered pins at the day's stops in order with their hours beside them, the commissary as a square
+        // "C" at both ends of the line, lines joining them (without a commissary, back to the first when the next day
+        // runs too, as the crew starts each day where it ended), and the vehicle where it stands. Sizes follow the box's
+        // own text: the canvas is in game units (a business row is 100 high), so fixed pixel sizes came out as dots
+        // without text (16 October 2026).
+        internal static void Route(BizManParts.Box box, HireSchedule schedule, DayOfWeek day, VehicleInstance instance, VehicleState? vehicle)
         {
-            if (schedule.Stops.Count == 0) return;
+            var indices = WeekPlan.StopsOf(schedule, day);
+            if (indices.Count == 0) return;
+            var dayStops = indices.Select(i => schedule.Stops[i]).ToList();
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
             var unit = BizManParts.SmallLabelHeight();
             var mapHeight = unit * 8f;
@@ -214,7 +217,8 @@ namespace FoodTrucks
             }
             // The bay where it rents its space starts and ends the day: on the map as its own pin, the line from it and back.
             var home = vehicle == null ? null : HireRoutes.HomeOf(vehicle);
-            var map = RouteMap.Layout(schedule.Stops.Select(s => (s.X, s.Z)).ToList(), where, HireSchedules.RunsOnConsecutiveDays(schedule), aspect,
+            var endsThere = home != null && home.Value.BayStops.Contains(indices[indices.Count - 1]);
+            var map = RouteMap.Layout(dayStops.Select(s => (s.X, s.Z)).ToList(), where, home == null && WeekPlan.RunsOn(schedule, WeekPlan.Next(day)), aspect,
                 home: HireRoutes.HomePoint(home));
 
             var streets = Streets();
@@ -230,14 +234,14 @@ namespace FoodTrucks
             if (map.Home is { } bay)
             {
                 path.Insert(0, Point(bay));
-                if (home?.EndsThere != true) path.Add(Point(bay));
+                if (!endsThere) path.Add(Point(bay));
             }
             Lines(root, "Route", line).Set(path, map.Loops, unit * 0.12f);
             if (map.Home is { } at0)
             {
                 var pin = Pin(root, at0, unit * 1.3f, "FoodTrucks.Commissary");
+                // A square, so it reads apart from the round stops.
                 var dot = pin.gameObject.AddComponent<Image>();
-                dot.sprite = Circle();
                 dot.color = colors.green;
                 dot.raycastTarget = false;
                 if (BizManParts.SmallLabel(pin, LocalizorManager.GetLocalization("foodtrucks:bizman_page_map_commissary", null)) is RectTransform letter)
@@ -259,7 +263,7 @@ namespace FoodTrucks
             }
             for (var i = 0; i < map.Stops.Count; i++)
             {
-                var stop = schedule.Stops[i];
+                var stop = dayStops[i];
                 var pin = Pin(root, map.Stops[i], unit * 1.15f, "FoodTrucks.Stop");
                 var dot = pin.gameObject.AddComponent<Image>();
                 dot.sprite = Circle();
@@ -336,7 +340,7 @@ namespace FoodTrucks
         private static Sprite? circle;
 
         // A round marker, drawn once: the game has no plain circle sprite to borrow.
-        private static Sprite Circle()
+        internal static Sprite Circle()
         {
             if (circle != null) return circle;
             const int side = 64;

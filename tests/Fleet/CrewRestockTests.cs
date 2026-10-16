@@ -29,8 +29,9 @@ public class CrewRestockTests
             VehicleType = "truck",
             HasPermit = true,
             Crew = new List<string> { "e1" },
-            Schedule = new HireSchedule { Stops = new List<ScheduleStop> { new() { SpotKey = "office", X = 2000, OpenAt = 11 * 60, CloseAt = 14 * 60 } } }
+            Schedule = new HireSchedule { Stops = new List<ScheduleStop> { new() { Day = System.DayOfWeek.Wednesday, SpotKey = "office", X = 2000, OpenAt = 11 * 60, CloseAt = 14 * 60 } } }
         };
+        WeekTestData.AllDay(truck);
         runner.EnsurePlan(truck, At(3, 6), 0, 0);
         return truck;
     }
@@ -52,12 +53,13 @@ public class CrewRestockTests
             {
                 Stops = new List<ScheduleStop>
                 {
-                    new() { SpotKey = "pitch", X = 2000, OpenAt = 11 * 60, CloseAt = 13 * 60 },
-                    new() { SpotKey = "bay", X = 0, OpenAt = 14 * 60 + 30, CloseAt = 15 * 60 },
-                    new() { SpotKey = "pitch-again", X = 2000, OpenAt = 16 * 60, CloseAt = 18 * 60 }
+                    new() { Day = System.DayOfWeek.Wednesday, SpotKey = "pitch", X = 2000, OpenAt = 11 * 60, CloseAt = 13 * 60 },
+                    new() { Day = System.DayOfWeek.Wednesday, SpotKey = "bay", X = 0, OpenAt = 14 * 60 + 30, CloseAt = 15 * 60 },
+                    new() { Day = System.DayOfWeek.Wednesday, SpotKey = "pitch-again", X = 2000, OpenAt = 16 * 60, CloseAt = 18 * 60 }
                 }
             }
         };
+        WeekTestData.AllDay(truck);
         runner.EnsurePlan(truck, At(3, 6), 2000, 0);
         return truck;
     }

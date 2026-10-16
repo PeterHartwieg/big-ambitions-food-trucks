@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FoodTrucks.Core.Commissary;
@@ -36,7 +37,7 @@ public class VehicleWarningsTests
         VehicleWarnings.For(ShippedData.Tables, Rules, state, vehicle, cargo, crew).ToList();
 
     private static HireSchedule Route(int open = 11 * 60, int close = 14 * 60) =>
-        new() { Stops = new List<ScheduleStop> { new() { SpotKey = "office", X = 100, Z = 100, OpenAt = open, CloseAt = close } } };
+        new() { Stops = WeekTestData.On(new[] { new ScheduleStop { SpotKey = "office", X = 100, Z = 100, OpenAt = open, CloseAt = close } }) };
 
     [Fact]
     public void ACompleteVehicleHasNoWarnings()
@@ -121,9 +122,14 @@ public class VehicleWarningsTests
         Assert.Equal(new VehicleWarning(VehicleWarningKind.MissingCrew, "v1"), Assert.Single(For(state, vehicle, cargo, crew: 1)));
         Assert.Empty(For(state, vehicle, cargo, crew: 2));
 
-        // Without the count given, the saved crew list counts.
+        // Without the count given, the saved crew list counts (on shift around the clock here).
         vehicle.Crew = new List<string> { "e1", "e2" };
+        WeekTestData.AllDay(vehicle);
         Assert.Empty(For(state, vehicle, cargo));
+        // With part of the route day nobody on shift, the route has a problem.
+        vehicle.Schedule.CrewShifts.RemoveAll(s => s.Day == DayOfWeek.Wednesday);
+        Assert.Equal(new VehicleWarning(VehicleWarningKind.RouteProblem, "v1"), Assert.Single(For(state, vehicle, cargo)));
+        WeekTestData.AllDay(vehicle);
         // A route without stops is no route.
         vehicle.Crew.Clear();
         vehicle.Schedule = new HireSchedule();

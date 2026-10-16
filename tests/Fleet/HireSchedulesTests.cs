@@ -13,10 +13,13 @@ public class HireSchedulesTests
     private static readonly FleetRules rules = ShippedData.Rules.Fleet;
     private static readonly HireSchedules schedules = new(rules);
 
+    // Monday's stops unless a test says otherwise.
     private static ScheduleStop Stop(string key, double x, int open, int close) =>
-        new() { SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
+        new() { Day = DayOfWeek.Monday, SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
 
     private static HireSchedule Route(params ScheduleStop[] stops) => new() { Stops = stops.ToList() };
+
+    private static HireSchedule RouteOn(DayOfWeek day, params ScheduleStop[] stops) => new() { Stops = WeekTestData.On(stops, day) };
 
     [Theory]
     [InlineData(1000, TravelMode.Drive, 1.0, 40)]
@@ -59,7 +62,7 @@ public class HireSchedulesTests
     public void TheTruckLeavesInTimeToOpenOnTime()
     {
         // 2 km to the first stop is 80 minutes; 3 km between stops is 120.
-        var route = Route(Stop("office", 2000, 11 * 60, 14 * 60), Stop("bars", 5000, 18 * 60, 23 * 60));
+        var route = RouteOn(DayOfWeek.Wednesday, Stop("office", 2000, 11 * 60, 14 * 60), Stop("bars", 5000, 18 * 60, 23 * 60));
 
         var plan = schedules.PlanDay(route, 3, DayOfWeek.Wednesday, 0, 0, HireSchedules.Absolute(3, 6 * 60), TravelMode.Drive);
 
@@ -110,7 +113,7 @@ public class HireSchedulesTests
     [Fact]
     public void ALateStopRunsPastMidnight()
     {
-        var route = Route(Stop("bars", 0, 22 * 60, 26 * 60));
+        var route = RouteOn(DayOfWeek.Friday, Stop("bars", 0, 22 * 60, 26 * 60));
 
         var plan = schedules.PlanDay(route, 1, DayOfWeek.Friday, 0, 0, 0, TravelMode.Drive);
 
@@ -118,13 +121,79 @@ public class HireSchedulesTests
     }
 
     [Fact]
-    public void DaysOffGiveNoPlan()
+    public void ADayWithoutStopsOrClosedGivesNoPlan()
     {
         var route = Route(Stop("office", 0, 11 * 60, 14 * 60));
-        route.Days = new List<DayOfWeek> { DayOfWeek.Monday };
 
         Assert.Empty(schedules.PlanDay(route, 2, DayOfWeek.Tuesday, 0, 0, 0, TravelMode.Drive).Legs);
         Assert.NotEmpty(schedules.PlanDay(route, 1, DayOfWeek.Monday, 0, 0, 0, TravelMode.Drive).Legs);
+        route.Closed.Add(DayOfWeek.Monday);
+        Assert.Empty(schedules.PlanDay(route, 1, DayOfWeek.Monday, 0, 0, 0, TravelMode.Drive).Legs);
+    }
+
+    [Fact]
+    public void EachWeekdayHasItsOwnStops()
+    {
+        var route = new HireSchedule { Stops = WeekPlan.Ordered(new[]
+        {
+            Stop("tuesday lunch", 1000, 11 * 60, 14 * 60) is var t ? WeekPlan.CopyStop(t, DayOfWeek.Tuesday) : null!,
+            Stop("monday lunch", 0, 12 * 60, 15 * 60)
+        }) };
+
+        var monday = schedules.PlanDay(route, 1, DayOfWeek.Monday, 0, 0, 0, TravelMode.Drive);
+        var tuesday = schedules.PlanDay(route, 2, DayOfWeek.Tuesday, 0, 0, 0, TravelMode.Drive);
+
+        Assert.Equal("monday lunch", route.Stops[monday.Legs.Single().StopIndex].SpotKey);
+        Assert.Equal("tuesday lunch", route.Stops[tuesday.Legs.Last().StopIndex].SpotKey);
+        Assert.Equal(1, tuesday.Legs.Last().StopIndex);
+    }
+
+    [Fact]
+    public void ANightRunningIntoTheNextDaysMorningIsRefusedOnlyWhenBothRun()
+    {
+        var late = Stop("bars", 0, 22 * 60, 26 * 60);
+        var early = WeekPlan.CopyStop(Stop("market", 0, 60, 4 * 60), DayOfWeek.Tuesday);
+        var route = new HireSchedule { Stops = WeekPlan.Ordered(new[] { late, early }) };
+
+        Assert.Equal(ScheduleProblem.Overlap, schedules.Validate(route));
+        route.Closed.Add(DayOfWeek.Tuesday);
+        Assert.Equal(ScheduleProblem.None, schedules.Validate(route));
+    }
+
+    [Fact]
+    public void ADayFromTheBayStartsWithTheRestockAndEndsBackThere()
+    {
+        // The bay is 1 km from the stop: 40 minutes each way; the restock takes 30 minutes before leaving.
+        var route = Route(Stop("office", 1000, 11 * 60, 14 * 60));
+
+        var plan = schedules.PlanDay(route, 1, DayOfWeek.Monday, 0, 0, 0, TravelMode.Drive, home: (0, 0));
+
+        Assert.Collection(plan.Legs,
+            l => Assert.Equal((LegKind.Restock, 0, 9 * 60 + 50L, 10 * 60 + 20L), (l.Kind, l.StopIndex, l.Start, l.End)),
+            l => Assert.Equal((LegKind.Travel, 0, 10 * 60 + 20L, 11 * 60L), (l.Kind, l.StopIndex, l.Start, l.End)),
+            l => Assert.Equal((LegKind.Open, 0, 11 * 60L, 14 * 60L), (l.Kind, l.StopIndex, l.Start, l.End)),
+            l => Assert.Equal((LegKind.Travel, HireSchedules.HomeIndex, 14 * 60L, 14 * 60 + 40L), (l.Kind, l.StopIndex, l.Start, l.End)));
+        // Away from the bay there is no restock.
+        Assert.DoesNotContain(schedules.PlanDay(route, 1, DayOfWeek.Monday, 500, 0, 0, TravelMode.Drive, home: (0, 0)).Legs,
+            l => l.Kind == LegKind.Restock);
+    }
+
+    [Fact]
+    public void ShiftsDecideWhenItMovesAndOpens()
+    {
+        var route = Route(Stop("office", 1000, 11 * 60, 14 * 60));
+        // On shift 09:00 to 10:00 and 10:30 to 13:00.
+        var coverage = new Coverage(new[] { (9 * 60L, 10 * 60L), (10 * 60 + 30L, 13 * 60L) });
+
+        var plan = schedules.PlanDay(route, 1, DayOfWeek.Monday, 0, 0, 0, TravelMode.Drive, home: (0, 0), coverage: coverage);
+
+        // Restock and drive need someone throughout: 09:50 to 11:00 has a gap, so from 10:30; open only until 13:00; no one
+        // is on shift for the drive back.
+        Assert.Collection(plan.Legs,
+            l => Assert.Equal((LegKind.Restock, 10 * 60 + 30L, 11 * 60L), (l.Kind, l.Start, l.End)),
+            l => Assert.Equal((LegKind.Travel, 11 * 60L, 11 * 60 + 40L), (l.Kind, l.Start, l.End)),
+            l => Assert.Equal((LegKind.Open, 11 * 60 + 40L, 13 * 60L), (l.Kind, l.Start, l.End)));
+        Assert.Empty(plan.Skipped);
     }
 
     [Fact]

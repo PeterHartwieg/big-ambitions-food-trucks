@@ -14,8 +14,9 @@ internal sealed partial class SoakWorld
         var v = state.Vehicles[0];
         v.Schedule = new HireSchedule { Stops = new()
         {
-            new() { SpotKey = "night", OpenAt = 1380, CloseAt = 1560 }
+            new() { Day = System.DayOfWeek.Sunday, SpotKey = "night", OpenAt = 1380, CloseAt = 1560 }
         } };
+        FoodTrucks.Core.Tests.Fleet.WeekTestData.AllDay(v);
         now = HireSchedules.Absolute(28, 1424);
         Open(v, 0, now);
         void ReadyCustomer(long id)

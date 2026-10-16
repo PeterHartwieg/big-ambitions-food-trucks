@@ -8,9 +8,11 @@ namespace FoodTrucks.Core.Fleet
     // When a vehicle's crew works, and which of those hours the game pays. The game side counts each paid hour on
     // the game's own counters (HireCrew), so the game's midnight payroll pays it as an unassigned wage.
     //
-    // Two kinds of hour are paid. A route hour: the planned shift covers at least half of it, counted as the hour
-    // starts (HireCrew.CountHour, as before). An open hour: a window the player opened is paid to the crew who serve
-    // it for each hour they serve at some minute of its first half. The sales note who served (Served) as they reach
+    // Two kinds of hour are paid. A shift hour: every hour of the crew member's own shift on the vehicle's week plan,
+    // counted as the hour starts (HireCrew.CountHour; Peter, 16 October 2026: paid per scheduled hour, worked or idle).
+    // An open hour: a window the player opened is paid to the crew who serve it for each hour they serve at some minute
+    // of its first half. Crew serve only on shift, so an open hour is nearly always a shift hour paid already; the
+    // marker below keeps it from being paid twice. The sales note who served (Served) as they reach
     // each minute; the hour is decided once, when it is over (CloseHours): at the next hour's start, or at midnight
     // just before the game's payroll, after the sales have been caught up to that moment. So the decisions come in
     // the order of the hours, interleaved with the game's own hourly count: hour h's open pay is decided before hour
@@ -24,13 +26,16 @@ namespace FoodTrucks.Core.Fleet
         // The game hour a minute falls in: (day - 1) × 24 + hour.
         public static long HourOf(long minute) => (long)Math.Floor(minute / 60.0);
 
-        // Whether the crew is at the vehicle's window at that minute (before anyone's absence): at a window that is
-        // open, whoever opened it, or during the route's hours. Not while it is on its way somewhere.
-        public static bool OnShift(VehicleState vehicle, long minute)
+        // Whether any of the crew is at the vehicle at that minute (before anyone's absence): on a shift of the week plan
+        // (Peter, 16 October 2026), at a window whoever opened it. Not while it is on its way somewhere.
+        public static bool OnShift(VehicleState vehicle, long minute) => OnShiftCrew(vehicle, minute).Count > 0;
+
+        // The crew on shift at the vehicle at that minute, in crew order; none while it is on its way.
+        public static List<string> OnShiftCrew(VehicleState vehicle, long minute)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
-            if (vehicle.Crew == null || vehicle.Crew.Count == 0 || vehicle.Transit != null) return false;
-            return vehicle.IsOpen || HireRunner.Want(vehicle, minute) != null;
+            if (vehicle.Crew == null || vehicle.Crew.Count == 0 || vehicle.Transit != null) return new List<string>();
+            return WeekPlan.OnShiftCrew(vehicle, minute);
         }
 
         // A window the player opened: the route leaves it alone and doesn't pay for it.

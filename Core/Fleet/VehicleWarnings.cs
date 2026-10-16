@@ -72,7 +72,8 @@ namespace FoodTrucks.Core.Fleet
         // how many of its hires still exist (null: count vehicle.Crew); `itemExists` says whether a food exists in the game
         // now (null: all do).
         public static IReadOnlyList<VehicleWarning> For(DemandTables tables, FleetRules rules, SaveState state, VehicleState vehicle,
-            IEnumerable<CargoLine> cargo, int? crew = null, Func<string, bool>? itemExists = null, double gameSpeed = 1.0)
+            IEnumerable<CargoLine> cargo, int? crew = null, Func<string, bool>? itemExists = null, double gameSpeed = 1.0,
+            (double X, double Z)? home = null, IReadOnlyCollection<int>? bayStops = null)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
             if (rules == null) throw new ArgumentNullException(nameof(rules));
@@ -92,13 +93,14 @@ namespace FoodTrucks.Core.Fleet
                     else if (food.Level == StockLevel.Low) warnings.Add(new VehicleWarning(VehicleWarningKind.LowStock, id, food.Item));
                 }
 
-            // Crew and route: only a vehicle with a route (stops; no days means every day) needs crew.
-            var hasRoute = vehicle.Schedule?.Stops != null && vehicle.Schedule.Stops.Count > 0;
+            // Crew and route: only a vehicle with a route (a weekday with stops that isn't closed) needs crew. A route day
+            // with nobody on shift is a route problem (Uncovered), as are stops that fail the rules or can't be reached.
+            var hasRoute = WeekPlan.RunsAnyDay(vehicle.Schedule);
             var info = tables.Vehicle(vehicle.VehicleType);
             var hires = Math.Max(0, crew ?? vehicle.Crew?.Count ?? 0);
             if (hasRoute && info != null && hires < info.Staff)
                 warnings.Add(new VehicleWarning(VehicleWarningKind.MissingCrew, id));
-            if (hasRoute && new HireRunner(rules).RouteProblem(vehicle, gameSpeed) != ScheduleProblem.None)
+            if (hasRoute && new HireRunner(rules).RouteProblem(vehicle, gameSpeed, home, bayStops) != ScheduleProblem.None)
                 warnings.Add(new VehicleWarning(VehicleWarningKind.RouteProblem, id));
 
             if (!vehicle.HasPermit) warnings.Add(new VehicleWarning(VehicleWarningKind.NoPermit, id));

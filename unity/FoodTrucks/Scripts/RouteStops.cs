@@ -27,39 +27,40 @@ namespace FoodTrucks
         internal const int DefaultOpen = 11 * 60;
         internal const int DefaultLength = 3 * 60;
 
-        // Adds a stop at the default hours. `done` runs after either outcome, so the caller goes back to the page.
-        public static void AddWithDefaultTimes(string vehicleId, Vector3 position, float heading, Action? done = null)
+        // Adds a stop to `day` (the weekday chosen on the Week plan tab) at the default hours. `done` runs after either
+        // outcome, so the caller goes back to the page.
+        public static void AddWithDefaultTimes(string vehicleId, DayOfWeek day, Vector3 position, float heading, Action? done = null)
         {
             try
             {
                 var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
                 var rules = DemandData.Rules;
-                if (rules != null && vehicle?.Schedule != null && vehicle.Schedule.Stops.Count >= rules.Fleet.MaxStops)
+                if (rules != null && WeekPlan.StopsOf(vehicle?.Schedule, day).Count >= rules.Fleet.MaxStops)
                 {
                     CartSelling.Notify("foodtrucks:notification_route_full", ("max", rules.Fleet.MaxStops.ToString()));
                     return;
                 }
-                var opens = RouteEditor.OpenTimes(vehicle?.Schedule, Step, LatestClose);
+                var opens = RouteEditor.OpenTimes(vehicle?.Schedule, day, Step, LatestClose);
                 if (opens.Count == 0)
                 {
                     CartSelling.Notify("foodtrucks:notification_route_no_time");
                     return;
                 }
                 var open = opens.Where(m => m >= DefaultOpen).DefaultIfEmpty(opens[0]).First();
-                var closes = RouteEditor.CloseTimes(vehicle?.Schedule, open, Step, LatestClose);
+                var closes = RouteEditor.CloseTimes(vehicle?.Schedule, day, open, Step, LatestClose);
                 if (closes.Count == 0)
                 {
                     CartSelling.Notify("foodtrucks:notification_route_no_time");
                     return;
                 }
                 var close = closes.Where(m => m <= open + DefaultLength).DefaultIfEmpty(closes[0]).Max();
-                Add(vehicleId, position, heading, open, close);
+                Add(vehicleId, day, position, heading, open, close);
             }
             catch (Exception ex) { Log.Error("Route stop: " + ex); }
             finally { done?.Invoke(); }
         }
 
-        public static bool Add(string vehicleId, Vector3 position, float heading, int open, int close)
+        public static bool Add(string vehicleId, DayOfWeek day, Vector3 position, float heading, int open, int close)
         {
             var state = FoodTrucksSession.CurrentState;
             var rules = DemandData.Rules;
@@ -69,7 +70,7 @@ namespace FoodTrucks
                 vehicle.VehicleType = FoodTrucksMod.KindOf(SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicleId)?.vehicleTypeName) ?? "cart";
             var x = position.x;
             var z = position.z;
-            var stop = new ScheduleStop { SpotKey = StaffDialog.SpotKey(x, z), X = x, Y = position.y, Z = z, Heading = heading, OpenAt = open, CloseAt = close };
+            var stop = new ScheduleStop { Day = day, SpotKey = StaffDialog.SpotKey(x, z), X = x, Y = position.y, Z = z, Heading = heading, OpenAt = open, CloseAt = close };
             var problem = RouteEditor.AddStop(new HireSchedules(rules.Fleet), vehicle, stop);
             if (problem != ScheduleProblem.None)
             {
@@ -80,9 +81,9 @@ namespace FoodTrucks
             var schedule = vehicle.Schedule!;
             Changed(vehicle);
             Log.Info($"Route: stop {stop.SpotKey} at x {x:F1}, z {z:F1}, heading {heading:F0} {StaffDialog.Clock(open)}-{StaffDialog.Clock(close)} " +
-                     $"added to {vehicle.VehicleType} {vehicleId}; {schedule.Stops.Count} stops.");
+                     $"added to {vehicle.VehicleType} {vehicleId} on {day}; {WeekPlan.StopsOf(schedule, day).Count} stops that day.");
             CartSelling.Notify("foodtrucks:notification_route_added", ("open", StaffDialog.Clock(open)), ("close", StaffDialog.Clock(close)),
-                ("count", schedule.Stops.Count.ToString()));
+                ("count", WeekPlan.StopsOf(schedule, day).Count.ToString()));
             return true;
         }
 
@@ -93,7 +94,7 @@ namespace FoodTrucks
             if (vehicle.IsOpen && vehicle.HireStop == index) CartSelling.CloseByCrew(vehicle, HireCrew.Now());
             RouteEditor.RemoveStop(vehicle, index);
             Changed(vehicle);
-            Log.Info($"Route: stop {index + 1} removed from {vehicle.VehicleType} {vehicle.VehicleId}.");
+            Log.Info($"Route: stop {index + 1} of the week removed from {vehicle.VehicleType} {vehicle.VehicleId}.");
         }
 
         // The route changed: each stop opens no earlier than the drive from the one before allows (Core
@@ -132,20 +133,29 @@ namespace FoodTrucks
             if (fit.Stuck is int stuck)
             {
                 if (quiet && !stuckShown.Add((vehicle.VehicleId, stuck))) return false;
-                Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId}: stop {stuck + 1} can't be moved late enough for the {(walk ? "walk" : "drive")} from stop {stuck} ({fit.Problem}); the times stay.");
-                if (!quiet) CartSelling.Notify("foodtrucks:notification_route_travel_stuck", ("number", (stuck + 1).ToString()), ("from", stuck.ToString()));
+                var stuckNumber = Number(vehicle.Schedule, stuck);
+                Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId}: {vehicle.Schedule.Stops[stuck].Day}'s stop {stuckNumber} can't be moved late enough for the {(walk ? "walk" : "drive")} from stop {stuckNumber - 1} ({fit.Problem}); the times stay.");
+                if (!quiet) CartSelling.Notify("foodtrucks:notification_route_travel_stuck", ("number", stuckNumber.ToString()), ("from", (stuckNumber - 1).ToString()));
                 return false;
             }
             if (fit.Moved.Count == 0) return false;
             var lines = fit.Moved.Select(m => LocalizorManager.GetLocalization(walk ? "foodtrucks:route_moved_walk" : "foodtrucks:route_moved_drive",
                 new Dictionary<string, string>
                 {
-                    ["number"] = (m.Index + 1).ToString(), ["open"] = StaffDialog.Clock(m.NewOpen), ["from"] = m.Index.ToString(),
+                    ["number"] = Number(vehicle.Schedule, m.Index).ToString(), ["open"] = StaffDialog.Clock(m.NewOpen),
+                    ["from"] = (Number(vehicle.Schedule, m.Index) - 1).ToString(),
                     ["minutes"] = m.DriveMinutes.ToString()
                 })).ToList();
-            Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId}: {string.Join("; ", fit.Moved.Select(m => $"stop {m.Index + 1} {StaffDialog.Clock(m.OldOpen)}-{StaffDialog.Clock(m.OldClose)} now {StaffDialog.Clock(m.NewOpen)}-{StaffDialog.Clock(m.NewClose)} ({m.DriveMinutes} min from stop {m.Index})"))}.");
+            Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId}: {string.Join("; ", fit.Moved.Select(m => $"{vehicle.Schedule.Stops[m.Index].Day}'s stop {Number(vehicle.Schedule, m.Index)} {StaffDialog.Clock(m.OldOpen)}-{StaffDialog.Clock(m.OldClose)} now {StaffDialog.Clock(m.NewOpen)}-{StaffDialog.Clock(m.NewClose)} ({m.DriveMinutes} min from stop {m.Index})"))}.");
             CartSelling.Notify("foodtrucks:notification_route_travel_moved", ("stops", string.Join(". ", lines)));
             return true;
+        }
+
+        // A stop's number on its weekday's route, from 1.
+        internal static int Number(HireSchedule? schedule, int index)
+        {
+            var stop = schedule?.Stops?.ElementAtOrDefault(index);
+            return stop == null ? index + 1 : WeekPlan.StopsOf(schedule, stop.Day).IndexOf(index) + 1;
         }
 
         // A stop's name for lists: the premium spot it is at, else the nearest building's address and the
@@ -191,6 +201,7 @@ namespace FoodTrucks
             problem == ScheduleProblem.Overlap ? "foodtrucks:bizman_page_route_invalid_overlap"
             : problem == ScheduleProblem.Unreachable ? "foodtrucks:bizman_page_route_invalid_travel"
             : problem == ScheduleProblem.BadTimes ? "foodtrucks:bizman_page_route_invalid_times"
+            : problem == ScheduleProblem.Uncovered ? "foodtrucks:bizman_page_route_uncovered"
             : "foodtrucks:bizman_page_route_invalid";
     }
 }

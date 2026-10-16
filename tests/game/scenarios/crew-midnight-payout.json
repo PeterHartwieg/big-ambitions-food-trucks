@@ -101,6 +101,18 @@
       "equals": true
     },
     {
+      "call": "crew",
+      "args": {
+        "op": "auto_schedule",
+        "vehicle": "$truck"
+      }
+    },
+    {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
       "expect": "state",
       "path": "vehicles[kind=truck].crew",
       "length": 1
@@ -134,6 +146,18 @@
         "op": "assign",
         "vehicle": "$truck",
         "employee_id": "$worker"
+      }
+    },
+    {
+      "expect": "result",
+      "path": "done",
+      "equals": true
+    },
+    {
+      "call": "crew",
+      "args": {
+        "op": "auto_schedule",
+        "vehicle": "$truck"
       }
     },
     {

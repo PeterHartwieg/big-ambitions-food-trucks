@@ -25,42 +25,49 @@ public class CrewPayTests
         vehicle.Shifts.Add(new ShiftPlan { Day = HireRunner.DayOf(start), Legs = { new ShiftLeg { Kind = LegKind.Open, StopIndex = 0, Start = start, End = end } } });
 
     [Fact]
-    public void CrewServeAWindowThePlayerOpenedWithNoRoute()
+    public void CrewServeAWindowThePlayerOpenedOnlyOnShift()
     {
         var truck = Truck(open: true);
-
-        Assert.True(CrewPay.OnShift(truck, At(3, 15)));
+        Assert.False(CrewPay.OnShift(truck, At(3, 15)));
         Assert.True(CrewPay.PlayerWindow(truck));
+
+        // Day 3 is a Wednesday.
+        WeekPlan.SetShift(Demand.ShippedData.Rules.Fleet, truck, "e1", System.DayOfWeek.Wednesday, 14, 18);
+        Assert.True(CrewPay.OnShift(truck, At(3, 15)));
+        Assert.Equal(new[] { "e1" }, CrewPay.OnShiftCrew(truck, At(3, 15)));
+        Assert.False(CrewPay.OnShift(truck, At(3, 18)));
+        Assert.False(CrewPay.OnShift(truck, At(4, 15)));
     }
 
     [Fact]
-    public void AClosedVehicleHasItsCrewOnlyInRouteHours()
+    public void AClosedVehicleHasItsCrewInTheirShiftsNotTheRoutesLegs()
     {
         var truck = Truck();
+        Leg(truck, At(3, 11), At(3, 14));
         Assert.False(CrewPay.OnShift(truck, At(3, 12)));
 
-        Leg(truck, At(3, 11), At(3, 14));
+        WeekPlan.SetShift(Demand.ShippedData.Rules.Fleet, truck, "e1", System.DayOfWeek.Wednesday, 10, 13);
         Assert.True(CrewPay.OnShift(truck, At(3, 12)));
-        Assert.False(CrewPay.OnShift(truck, At(3, 15)));
+        Assert.False(CrewPay.OnShift(truck, At(3, 13)));
     }
 
     [Fact]
     public void NobodyServesOnTheWayOrWithoutCrew()
     {
-        var moving = Truck(open: true);
+        var moving = WeekTestData.AllDay(Truck(open: true));
         moving.Transit = new TransitState { ToSpotKey = "s", DepartsAt = 0, ArrivesAt = 10 };
         Assert.False(CrewPay.OnShift(moving, At(3, 12)));
 
-        var empty = Truck(open: true);
+        var empty = WeekTestData.AllDay(Truck(open: true));
         empty.Crew.Clear();
         Assert.False(CrewPay.OnShift(empty, At(3, 12)));
         Assert.False(CrewPay.PlayerWindow(empty));
     }
 
     [Fact]
-    public void ARouteWindowIsPaidByTheRouteNotAsAnOpenHour()
+    public void ARouteWindowIsPaidByTheShiftsNotAsAnOpenHour()
     {
-        var truck = Truck(open: true, hireStop: 0);
+        var truck = WeekTestData.AllDay(Truck(open: true, hireStop: 0));
 
         Assert.True(CrewPay.OnShift(truck, At(3, 12)));
         Assert.False(CrewPay.PlayerWindow(truck));

@@ -16,8 +16,9 @@ public class RouteTravelTests
     private static readonly HireSchedules schedules = new(rules);
     private const int Step = 30;
 
+    // Wednesday's stops (day 3).
     private static ScheduleStop Stop(string key, double x, int open, int close) =>
-        new() { SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
+        new() { Day = DayOfWeek.Wednesday, SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
 
     private static HireSchedule Route(params ScheduleStop[] stops) => new() { Stops = stops.ToList() };
 
@@ -129,7 +130,7 @@ public class RouteTravelTests
     {
         var route = Route(Stop("a", 0, 600, 720), Stop("b", 1000, 840, 900));
 
-        var times = RouteEditor.OpenTimes(route, Step, rules.LatestCloseMinute, except: 1,
+        var times = RouteEditor.OpenTimes(route, DayOfWeek.Wednesday, Step, rules.LatestCloseMinute, except: 1,
             travelFrom: from => RouteEditor.TravelMinutes(rules, from, route.Stops[1], TravelMode.Drive));
 
         Assert.DoesNotContain(720, times);
@@ -141,11 +142,11 @@ public class RouteTravelTests
     [Fact]
     public void AnUnreachableStopIsTheRoutesProblemButItsCrewStillGetsAPlan()
     {
-        var truck = new VehicleState
+        var truck = WeekTestData.AllDay(new VehicleState
         {
             VehicleId = "t1", VehicleType = "truck", Crew = new List<string> { "e1" },
             Schedule = Route(Stop("a", 0, 600, 720), Stop("b", 1000, 720, 840))
-        };
+        });
         var runner = new HireRunner(rules);
 
         Assert.Equal(1, schedules.UnreachableStop(truck.Schedule, TravelMode.Drive));
@@ -164,16 +165,19 @@ public class RouteHomeTests
     private static readonly HireRunner runner = new(rules);
     private static readonly (double X, double Z) Bay = (-2000, 0);
 
+    // Wednesday's stops (day 3).
     private static ScheduleStop Stop(string key, double x, int open, int close) =>
-        new() { SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
+        new() { Day = DayOfWeek.Wednesday, SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
 
     private static long At(int day, int hour, int minute = 0) => HireSchedules.Absolute(day, hour * 60 + minute);
 
-    private static VehicleState Truck(params ScheduleStop[] stops) => new()
+    // The stops on Wednesday and Thursday (days 3 and 4); Thursday's first stop comes after Wednesday's. The crew on shift
+    // around the clock.
+    private static VehicleState Truck(params ScheduleStop[] stops) => WeekTestData.AllDay(new VehicleState
     {
         VehicleId = "t1", VehicleType = "truck", HasPermit = true, Crew = new List<string> { "e1" },
-        Schedule = new HireSchedule { Stops = stops.ToList() }
-    };
+        Schedule = new HireSchedule { Stops = WeekTestData.On(stops, DayOfWeek.Wednesday, DayOfWeek.Thursday) }
+    });
 
     [Fact]
     public void TheDayEndsWithTheDriveBackToTheBay()
@@ -185,8 +189,9 @@ public class RouteHomeTests
         var back = plan.Legs.Last();
         // 3 km back from the bars at 23:00: 120 minutes.
         Assert.Equal((LegKind.Travel, HireSchedules.HomeIndex, At(3, 23), At(4, 1)), (back.Kind, back.StopIndex, back.Start, back.End));
-        // The morning: 2 km from the bay is 80 minutes, leaving at 9:40 to open at 11:00.
-        Assert.Equal((LegKind.Travel, 0, At(3, 9, 40)), (plan.Legs[0].Kind, plan.Legs[0].StopIndex, plan.Legs[0].Start));
+        // The morning: the restock from 9:10, then 2 km from the bay is 80 minutes, leaving at 9:40 to open at 11:00.
+        Assert.Equal((LegKind.Restock, 0, At(3, 9, 10)), (plan.Legs[0].Kind, plan.Legs[0].StopIndex, plan.Legs[0].Start));
+        Assert.Equal((LegKind.Travel, 0, At(3, 9, 40)), (plan.Legs[1].Kind, plan.Legs[1].StopIndex, plan.Legs[1].Start));
         Assert.Equal(2000 + 1000 + 3000, plan.Metres, 6);
     }
 
@@ -195,7 +200,7 @@ public class RouteHomeTests
     {
         var route = new HireSchedule { Stops = { Stop("office", 0, 660, 840), Stop("bay", Bay.X, 900, 930) } };
 
-        var endsInBay = schedules.PlanDay(route, 3, DayOfWeek.Wednesday, 0, 0, At(3, 0), TravelMode.Drive, home: Bay, endsAtHome: true);
+        var endsInBay = schedules.PlanDay(route, 3, DayOfWeek.Wednesday, 0, 0, At(3, 0), TravelMode.Drive, home: Bay, bayStops: new[] { 1 });
         var noSpace = schedules.PlanDay(route, 3, DayOfWeek.Wednesday, 0, 0, At(3, 0), TravelMode.Drive);
 
         Assert.DoesNotContain(endsInBay.Legs, l => l.StopIndex == HireSchedules.HomeIndex);
@@ -224,10 +229,11 @@ public class RouteHomeTests
         // In the bay: nothing more to do.
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 15, 30), new VehicleWhere(Bay.X, Bay.Z, leaveAlone: false, canRestock: true, home: Bay)).Kind);
 
-        // The next day starts from the bay, where it stands.
+        // The next day starts from the bay, where it stands, with the restock: Thursday's stop is index 1.
         runner.EnsurePlan(truck, At(4, 0), Bay.X, Bay.Z, home: Bay);
-        var morning = truck.Shifts.Single(p => p.Day == 4).Legs[0];
-        Assert.Equal((LegKind.Travel, 0, At(4, 9, 40)), (morning.Kind, morning.StopIndex, morning.Start));
+        var morning = truck.Shifts.Single(p => p.Day == 4).Legs;
+        Assert.Equal((LegKind.Restock, 1, At(4, 9, 10)), (morning[0].Kind, morning[0].StopIndex, morning[0].Start));
+        Assert.Equal((LegKind.Travel, 1, At(4, 9, 40)), (morning[1].Kind, morning[1].StopIndex, morning[1].Start));
     }
 
     [Fact]
@@ -240,8 +246,9 @@ public class RouteHomeTests
 
         runner.EnsurePlan(truck, At(4, 0), 12345, 0, home: Bay);
 
-        var morning = truck.Shifts.Single(p => p.Day == 4).Legs[0];
-        Assert.Equal((LegKind.Travel, 0, At(4, 9, 40)), (morning.Kind, morning.StopIndex, morning.Start));
+        var morning = truck.Shifts.Single(p => p.Day == 4).Legs;
+        Assert.Equal((LegKind.Restock, 2, At(4, 9, 10)), (morning[0].Kind, morning[0].StopIndex, morning[0].Start));
+        Assert.Equal((LegKind.Travel, 2, At(4, 9, 40)), (morning[1].Kind, morning[1].StopIndex, morning[1].Start));
     }
 
     [Fact]
@@ -257,15 +264,15 @@ public class RouteHomeTests
     }
 
     [Fact]
-    public void TheDriveBackIsPaidLikeTheOtherDrives()
+    public void TheRouteDayRunsFromTheRestockToBackInTheBay()
     {
         var truck = Truck(Stop("office", 0, 660, 840));
-        var withBay = runner.PlannedShiftMinutes(truck, At(3, 0), At(4, 0), Bay.X, Bay.Z, home: Bay);
-        var without = runner.PlannedShiftMinutes(truck, At(3, 0), At(4, 0), Bay.X, Bay.Z);
 
-        // 80 minutes out, the stop, 80 minutes back.
-        Assert.Equal(80 + 180 + 80, withBay);
-        Assert.Equal(80 + 180, without);
+        var day = WeekPlan.RouteDayOf(schedules, truck.Schedule, DayOfWeek.Wednesday, TravelMode.Drive, home: Bay);
+
+        // Restock from 9:10, 80 minutes out, the stop, 80 minutes back: 9:10 to 15:20.
+        Assert.Equal((9 * 60 + 10, 15 * 60 + 20), (day.Start, day.End));
+        Assert.True(WeekPlan.RouteDayOf(schedules, truck.Schedule, DayOfWeek.Friday, TravelMode.Drive, home: Bay).Empty);
     }
 
     [Fact]
@@ -289,6 +296,7 @@ public class RouteHomeTests
 
         Assert.Contains(truck.Shifts.Single().Legs, l => l.StopIndex == HireSchedules.HomeIndex);
         Assert.All(truck.Shifts.Single().Legs.Where(l => l.StopIndex != HireSchedules.HomeIndex), l => Assert.Equal(0, l.StopIndex));
+        Assert.Equal("bars", truck.Schedule!.Stops[0].SpotKey);
     }
 
     [Fact]
