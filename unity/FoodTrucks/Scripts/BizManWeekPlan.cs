@@ -337,6 +337,7 @@ namespace FoodTrucks
             BizManParts.Layout.Stack(listGo.GetComponent<HorizontalOrVerticalLayoutGroup>(), BizManParts.Layout.Gap);
             var reorder = listGo.GetComponent<ReorderableList>();
             var template = listGo.transform.Find(BizManVehiclePage.entryPath);
+            MeasureCard(template);
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, id);
             var fleet = DemandData.Rules!.Fleet;
             var mode = Travel.ModeFor(vehicle?.VehicleType);
@@ -381,6 +382,7 @@ namespace FoodTrucks
                 var item = entry.GetComponent<ReorderableListItem>();
                 if (item != null) item.list = canWrite ? reorder : null;
                 FillStop(entry, id, schedule, indices[k], k, canWrite);
+                CardLayout(entry, times: true, remove: true);
                 entry.gameObject.SetActive(true);
             }
             if (home != null)
@@ -444,14 +446,15 @@ namespace FoodTrucks
                 icon.anchorMin = icon.anchorMax = new Vector2(0f, 0.5f);
                 icon.pivot = new Vector2(0f, 0.5f);
                 icon.sizeDelta = new Vector2(BizManParts.Layout.IconSize, BizManParts.Layout.IconSize);
-                icon.anchoredPosition = Vector2.zero;
+                icon.anchoredPosition = new Vector2(Mathf.Max(0f, dragCentre - BizManParts.Layout.IconSize / 2f), 0f);
                 var image = icon.gameObject.AddComponent<Image>();
                 image.sprite = InstanceBehavior<GlobalReferences>.Instance.vehiclePOIIcon;
                 image.preserveAspect = true;
                 image.color = colors.darkGrey;
                 image.raycastTarget = false;
-                indent = BizManParts.Layout.IconIndent;
             }
+            // Drive rows and the caption line start their text where the cards' names start.
+            indent = nameLeft;
             if (BizManParts.SmallLabel(row, text) is RectTransform label)
             {
                 label.name = "FoodTrucks.RowText";
@@ -477,15 +480,74 @@ namespace FoodTrucks
             if (item != null) Object.DestroyImmediate(item);
             BizManParts.NoHover(card);
             BizManParts.SetText(card.Find(BizManVehiclePage.entryNamePath), text);
-            BizManParts.Colour(card.Find(BizManVehiclePage.entryNamePath), (Color)colors.darkGrey);
+            BizManParts.Colour(card.Find(BizManVehiclePage.entryNamePath), (Color)colors.midnight);
             foreach (var path in new[] { BizManVehiclePage.entryDropdownPath, BizManVehiclePage.entryRemovePath })
             {
                 var part = card.Find(path);
                 if (part != null) part.gameObject.SetActive(false);
             }
-            var background = card.GetComponent<Image>();
-            if (background != null) background.color = Color.Lerp(background.color, (Color)colors.lightGrey, 0.6f);
+            CardLayout(card, times: false, remove: false);
+            // The whole card grey (its white background is the header's Background image), and no drag handle.
+            var header = card.Find(BizManVehiclePage.entryNamePath)?.parent;
+            var background = header?.Find("Background")?.GetComponent<Image>();
+            if (background != null) background.color = BizManParts.Layout.FixedCardGrey;
+            var drag = header?.Find("DragArea");
+            if (drag != null) drag.gameObject.SetActive(false);
             card.gameObject.SetActive(true);
+        }
+
+        // Where a card's parts stand, from the stop template (the logistics row): its drag handle's middle and the left
+        // edge of its name. Drive rows use the same edges, so their icon and text line up with the cards'.
+        private static float dragCentre = 42f, nameLeft = 100f;
+
+        private static void MeasureCard(Transform? template)
+        {
+            var name = template?.Find(BizManVehiclePage.entryNamePath);
+            var drag = name?.parent?.Find("DragArea") as RectTransform;
+            var width = drag != null && drag.rect.width > 1f ? drag.rect.width : 85f;
+            dragCentre = BizManParts.Layout.Pad + width / 2f;
+            nameLeft = BizManParts.Layout.Pad + width + BizManParts.Layout.Gap;
+        }
+
+        // One layout for every card in the route list (Peter's playtest, 16 October 2026: names wrapped into a narrow
+        // column because Remove stood right after them). From the right: the two time dropdowns at the card's edge, then
+        // Remove; the drag handle at the left; the name takes all the width between, so it wraps only when it must.
+        private static void CardLayout(Transform card, bool times, bool remove)
+        {
+            if (!(card.Find(BizManVehiclePage.entryNamePath) is RectTransform name) || !(name.parent is RectTransform header)) return;
+            var pad = BizManParts.Layout.Pad;
+            var gap = BizManParts.Layout.Gap;
+            var right = (float)pad;
+            void AtRight(RectTransform part, float width, float height)
+            {
+                var element = part.GetComponent<LayoutElement>();
+                if (element != null) element.ignoreLayout = true;
+                part.anchorMin = part.anchorMax = new Vector2(1f, 0.5f);
+                part.pivot = new Vector2(1f, 0.5f);
+                part.sizeDelta = new Vector2(width, height);
+                part.anchoredPosition = new Vector2(-right, 0f);
+                right += width + gap * 2f;
+            }
+            if (times && header.Find("FoodTrucks.Times") is RectTransform row)
+                AtRight(row, BizManParts.Layout.TimeWidth * 2f + gap, row.rect.height > 1f ? row.rect.height : 80f);
+            if (remove && card.Find(BizManVehiclePage.entryRemovePath) is RectTransform button && button.gameObject.activeSelf)
+                AtRight(button, button.rect.width > 1f ? button.rect.width : 320f, button.rect.height > 1f ? button.rect.height : 60f);
+            if (header.Find("DragArea") is RectTransform drag)
+            {
+                var width = drag.rect.width > 1f ? drag.rect.width : 85f;
+                var height = drag.rect.height > 1f ? drag.rect.height : 120f;
+                drag.anchorMin = drag.anchorMax = new Vector2(0f, 0.5f);
+                drag.pivot = new Vector2(0f, 0.5f);
+                drag.sizeDelta = new Vector2(width, height);
+                drag.anchoredPosition = new Vector2(pad, 0f);
+            }
+            var nameElement = name.GetComponent<LayoutElement>();
+            if (nameElement != null) nameElement.ignoreLayout = true;
+            name.anchorMin = new Vector2(0f, 0f);
+            name.anchorMax = new Vector2(1f, 1f);
+            name.pivot = new Vector2(0f, 0.5f);
+            name.offsetMin = new Vector2(nameLeft, 0f);
+            name.offsetMax = new Vector2(-right + gap, 0f);
         }
 
         // "Opens" and "Closes" on the first fixed row, in the box's section-label style: until the list is laid out on the
@@ -833,8 +895,11 @@ namespace FoodTrucks
             layout.childForceExpandHeight = false;
             layout.spacing = BizManParts.Layout.BoxGap;
             var element = stack.gameObject.AddComponent<LayoutElement>();
+            // Only the weights share the row: with the content's preferred width counted first, the route box changed
+            // width from one weekday to the next (Peter's playtest, 16 October 2026).
             element.flexibleWidth = weight;
-            element.minWidth = 0f;
+            element.minWidth = element.preferredWidth = 0f;
+            element.layoutPriority = 10;
             return stack;
         }
 
