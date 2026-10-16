@@ -11,8 +11,9 @@ namespace FoodTrucks.Core.Fleet
     public sealed class RouteMap
     {
         private RouteMap(IReadOnlyList<(double U, double V)> stops, (double U, double V)? vehicle, bool loops,
-            double centreX = 0, double centreZ = 0, double width = 0, double height = 0)
+            double centreX = 0, double centreZ = 0, double width = 0, double height = 0, (double U, double V)? home = null)
         {
+            Home = home;
             Stops = stops;
             Vehicle = vehicle;
             Loops = loops;
@@ -39,12 +40,16 @@ namespace FoodTrucks.Core.Fleet
 
         public IReadOnlyList<(double U, double V)> Stops { get; }
         public (double U, double V)? Vehicle { get; }
+        // The bay of the commissary where the vehicle rents its space, where each day starts and ends.
+        public (double U, double V)? Home { get; }
         // The line runs from the last stop back to the first: the crew starts the next day from where it ended.
         public bool Loops { get; }
 
         // `aspect`: the panel's width over its height.
+        // With `home` the map takes in the commissary's bay too, and the route doesn't loop: it runs from the bay through
+        // the stops and back.
         public static RouteMap Layout(IReadOnlyList<(double X, double Z)> stops, (double X, double Z)? vehicle, bool runsDaily,
-            double aspect, double margin = 0.12, double minimumMetres = 250)
+            double aspect, double margin = 0.12, double minimumMetres = 250, (double X, double Z)? home = null)
         {
             if (stops == null) throw new ArgumentNullException(nameof(stops));
             if (stops.Count == 0) return new RouteMap(Array.Empty<(double, double)>(), null, false);
@@ -52,6 +57,7 @@ namespace FoodTrucks.Core.Fleet
             margin = Math.Max(0, Math.Min(0.4, margin));
             var all = stops.ToList();
             if (vehicle != null) all.Add(vehicle.Value);
+            if (home != null) all.Add(home.Value);
             var minX = all.Min(p => p.X);
             var maxX = all.Max(p => p.X);
             var minZ = all.Min(p => p.Z);
@@ -65,7 +71,7 @@ namespace FoodTrucks.Core.Fleet
             var width = height * aspect;
             (double, double) Place((double X, double Z) p) => (0.5 + (p.X - midX) / width, 0.5 + (p.Z - midZ) / height);
             return new RouteMap(stops.Select(Place).ToList(), vehicle == null ? ((double, double)?)null : Place(vehicle.Value),
-                runsDaily && stops.Count > 1, midX, midZ, width, height);
+                home == null && runsDaily && stops.Count > 1, midX, midZ, width, height, home == null ? ((double, double)?)null : Place(home.Value));
         }
     }
 }

@@ -7,6 +7,7 @@ using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
 using Helpers;
+using Localizor;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -166,7 +167,10 @@ namespace FoodTrucks
                 var position = controller != null ? controller.transform.position : (Vector3)instance.position;
                 where = (position.x, position.z);
             }
-            var map = RouteMap.Layout(schedule.Stops.Select(s => (s.X, s.Z)).ToList(), where, HireSchedules.RunsOnConsecutiveDays(schedule), aspect);
+            // The bay where it rents its space starts and ends the day: on the map as its own pin, the line from it and back.
+            var home = vehicle == null ? null : HireRoutes.HomeOf(vehicle);
+            var map = RouteMap.Layout(schedule.Stops.Select(s => (s.X, s.Z)).ToList(), where, HireSchedules.RunsOnConsecutiveDays(schedule), aspect,
+                home: HireRoutes.HomePoint(home));
 
             var streets = Streets();
             if (streets.Count > 0)
@@ -177,7 +181,27 @@ namespace FoodTrucks
             }
             Color line = colors.darkBlue;
             line.a = 0.8f;
-            Lines(root, "Route", line).Set(map.Stops.Select(Point).ToList(), map.Loops, unit * 0.12f);
+            var path = map.Stops.Select(Point).ToList();
+            if (map.Home is { } bay)
+            {
+                path.Insert(0, Point(bay));
+                if (home?.EndsThere != true) path.Add(Point(bay));
+            }
+            Lines(root, "Route", line).Set(path, map.Loops, unit * 0.12f);
+            if (map.Home is { } at0)
+            {
+                var pin = Pin(root, at0, unit * 1.3f, "FoodTrucks.Commissary");
+                var dot = pin.gameObject.AddComponent<Image>();
+                dot.sprite = Circle();
+                dot.color = colors.green;
+                dot.raycastTarget = false;
+                if (BizManParts.SmallLabel(pin, LocalizorManager.GetLocalization("foodtrucks:bizman_page_map_commissary", null)) is RectTransform letter)
+                {
+                    Fill(letter);
+                    BizManParts.Colour(letter, Color.white);
+                    BizManParts.Centre(letter);
+                }
+            }
 
             if (map.Vehicle is { } at)
             {

@@ -231,7 +231,10 @@ namespace FoodTrucks
                 var (planX, planZ) = HireRunner.PlanFrom(vehicle, standing.x, standing.z);
                 // The game clears these only when a building's shifts change, so they should hold; once an hour is cheap.
                 SetWeeklyWork(vehicle);
-                if (runner.PlannedShiftMinutes(vehicle, hourStart, hourStart + 60, planX, planZ, HireRoutes.GameSpeed()) < CrewPay.HalfHour) continue;
+                // The same drive back to the bay as the route runs (HireRoutes.HomeOf): paid like any other drive.
+                var home = HireRoutes.HomeOf(vehicle);
+                if (runner.PlannedShiftMinutes(vehicle, hourStart, hourStart + 60, planX, planZ, HireRoutes.GameSpeed(),
+                        HireRoutes.HomePoint(home), home?.EndsThere == true) < CrewPay.HalfHour) continue;
                 foreach (var employee in Present(vehicle))
                     if (!employee.IsAssignedToAnyBusiness() && CrewPay.TryPay(state, employee.id, hour))
                         CountOn(state, vehicle.VehicleId, employee, TimeHelper.CurrentDay);

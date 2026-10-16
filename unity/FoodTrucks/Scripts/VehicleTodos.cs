@@ -166,7 +166,7 @@ namespace FoodTrucks
                     if (string.IsNullOrEmpty(saved.VehicleType))
                         saved = new VehicleState { VehicleId = vehicle.id, VehicleType = kind, HasPermit = saved.HasPermit, Schedule = saved.Schedule, Crew = saved.Crew, Health = saved.Health, Sold = saved.Sold };
                     var crew = saved.Crew.Count(id => HireCrew.Find(id) != null);
-                    wanted.AddRange(VehicleWarnings.For(tables, rules, state, saved, CargoLimit.Lines(vehicle), crew, ItemExists));
+                    wanted.AddRange(VehicleWarnings.For(tables, rules, state, saved, CargoLimit.Lines(vehicle), crew, ItemExists, HireRoutes.GameSpeed()));
                 }
                 wanted.AddRange(VehicleWarnings.Fleet(rules, state.Licence, game.Day));
             }

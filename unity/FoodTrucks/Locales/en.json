@@ -520,5 +520,21 @@
     "foodtrucks:bizman_page_route_no_crew": "No crew: the route doesn't run until someone is assigned.",
     "foodtrucks:bizman_page_route_short_crew": "Short of crew: {count} of {limit}. It runs short-handed.",
     "foodtrucks:bizman_page_route_no_permit": "No vending permit: it can't open at its stops. Buy one from the City.",
-    "foodtrucks:bizman_page_menu_stock_value": "{load} / {capacity}"
+    "foodtrucks:bizman_page_menu_stock_value": "{load} / {capacity}",
+    "foodtrucks:route_moved_drive": "Stop {number} now opens at {open} ({minutes} min drive from stop {from})",
+    "foodtrucks:route_moved_walk": "Stop {number} now opens at {open} ({minutes} min walk from stop {from})",
+    "foodtrucks:notification_route_travel_moved": "{stops}.",
+    "foodtrucks:notification_route_travel_stuck": "Stop {number} opens before the crew can get there from stop {from}, and there's no later time left for it. Change its hours or the stops before it.",
+    "foodtrucks:bizman_page_route_invalid_travel": "A stop opens before the crew can get there from the one before, so it opens late. Give it a later opening.",
+    "foodtrucks:bizman_page_route_leaves": "{commissary}: leaves about {time}",
+    "foodtrucks:bizman_page_route_no_space": "No commissary space: the day starts and ends where the vehicle stands.",
+    "foodtrucks:bizman_page_route_drive": "Drive about {minutes} min",
+    "foodtrucks:bizman_page_route_walk": "Walk about {minutes} min",
+    "foodtrucks:bizman_page_route_drive_back": "Drive back about {minutes} min",
+    "foodtrucks:bizman_page_route_walk_back": "Walk back about {minutes} min",
+    "foodtrucks:bizman_page_route_back": "{commissary}: back about {time}",
+    "foodtrucks:bizman_page_route_back_late": "Back after the {time} check, so it isn't in the bay for it.",
+    "foodtrucks:bizman_page_route_ends_in_bay": "Ends at its last stop, in the {commissary} bay",
+    "foodtrucks:bizman_page_map_commissary": "C",
+    "foodtrucks:bizman_fleet_where_home": "On the way back to its commissary"
 }

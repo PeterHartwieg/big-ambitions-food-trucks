@@ -30,6 +30,10 @@ namespace FoodTrucks.Core.Fleet
             return Math.Sqrt(dx * dx + dz * dz);
         }
 
+        // Minutes from one place to another, as PlanDay, the runner and the route editor all count them.
+        public static int Between(FleetRules rules, double fromX, double fromZ, double toX, double toZ, TravelMode mode, double gameSpeed = 1.0) =>
+            Minutes(rules, Distance(fromX, fromZ, toX, toZ), mode, gameSpeed);
+
         // Whole game minutes, rounded up. Driving is TaxiSystem.GetTravelDurationMinutes: straight-line
         // metres × 0.04 × game speed; the game's bridge skip uses the same rate. Pushing is metres ÷
         // walking speed in real seconds, and a real second is GameSpeed game minutes (GameManager's
@@ -57,7 +61,11 @@ namespace FoodTrucks.Core.Fleet
         // Opening at or after closing, before midnight, closing after the latest close, or open longer than a day.
         BadTimes,
         // A stop opens before the one before it closes, or the last one runs past midnight into the first one's next day.
-        Overlap
+        Overlap,
+        // A stop opens before the vehicle can get there from the one before (its close plus the drive). Not one of
+        // Validate's: such a route still runs, the stop opening late on arrival (PlanDay); the route's to-do and the
+        // BizMan page say so (HireRunner.RouteProblem).
+        Unreachable
     }
 
     public enum LegKind
@@ -123,6 +131,26 @@ namespace FoodTrucks.Core.Fleet
 
         public static long Absolute(int day, int minute) => (day - 1) * 1440L + minute;
 
+        // A leg's stop index for the vehicle's own commissary bay (where it rents its space): the drive back after the
+        // last stop (Peter, 16 October 2026). Not a stop of the route.
+        public const int HomeIndex = -1;
+        // A trip back to the bay names this spot.
+        public const string HomeSpotKey = "foodtrucks:commissary-bay";
+
+        // The first stop (from the second on) that opens before the vehicle can get there from the stop before, or -1.
+        // The first stop isn't limited by where the day starts: the crew leaves early enough.
+        public int UnreachableStop(HireSchedule schedule, TravelMode mode, double gameSpeed = 1.0)
+        {
+            if (schedule?.Stops == null) return -1;
+            for (var i = 1; i < schedule.Stops.Count; i++)
+            {
+                var before = schedule.Stops[i - 1];
+                var stop = schedule.Stops[i];
+                if (stop.OpenAt < before.CloseAt + Travel.Between(rules, before.X, before.Z, stop.X, stop.Z, mode, gameSpeed)) return i;
+            }
+            return -1;
+        }
+
         public ScheduleProblem Validate(HireSchedule schedule)
         {
             if (schedule == null) throw new ArgumentNullException(nameof(schedule));
@@ -163,8 +191,12 @@ namespace FoodTrucks.Core.Fleet
         // availableFrom. The vehicle leaves as late as it can and still open on time; when it can't,
         // it opens on arrival and closes at the usual time, and a stop it can't reach before closing
         // is skipped. An invalid schedule or a day off gives an empty plan.
+        // With `home` (the vehicle's own commissary bay) the day ends with a drive back there after the last stop it
+        // reached, unless `endsAtHome` (the route's last stop is already in that bay): a Travel leg to HomeIndex from the
+        // last close for the drive's length. The morning needs no leg of its own: a vehicle that came back the night
+        // before leaves the bay as late as it can and still open the first stop on time.
         public DayPlan PlanDay(HireSchedule schedule, int day, DayOfWeek weekday, double fromX, double fromZ, long availableFrom,
-            TravelMode mode, double gameSpeed = 1.0)
+            TravelMode mode, double gameSpeed = 1.0, (double X, double Z)? home = null, bool endsAtHome = false)
         {
             if (Validate(schedule) != ScheduleProblem.None || !RunsOn(schedule, weekday)) return DayPlan.Empty;
             var legs = new List<PlannedLeg>();
@@ -193,6 +225,16 @@ namespace FoodTrucks.Core.Fleet
                 x = stop.X;
                 z = stop.Z;
                 free = close;
+            }
+            if (home != null && !endsAtHome && legs.Count > 0)
+            {
+                var back = Travel.Distance(x, z, home.Value.X, home.Value.Z);
+                var minutes = Travel.Minutes(rules, back, mode, gameSpeed);
+                if (minutes > 0)
+                {
+                    legs.Add(new PlannedLeg(LegKind.Travel, HomeIndex, free, free + minutes));
+                    metres += back;
+                }
             }
             return new DayPlan(legs, skipped, metres);
         }

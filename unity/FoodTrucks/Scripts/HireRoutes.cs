@@ -305,26 +305,31 @@ namespace FoodTrucks
             // The same starting point as the payroll's preview (HireRunner.PlanFrom).
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
             var (planX, planZ) = HireRunner.PlanFrom(vehicle, position.x, position.z);
-            // A route that fails today's rules (saved under older ones) gets no plan: said once in the log.
-            var problem = runner!.RouteProblem(vehicle);
+            // A route that fails today's rules (saved under older ones) gets no plan: said once in the log. One with a stop
+            // it can't reach in time still runs, that stop opening late.
+            var problem = runner!.RouteProblem(vehicle, GameSpeed());
             if (problem == ScheduleProblem.None) routeProblems.Remove(vehicle.VehicleId);
             else if (!routeProblems.TryGetValue(vehicle.VehicleId, out var known) || known != problem)
             {
                 routeProblems[vehicle.VehicleId] = problem;
-                Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} has no plan: its route fails the rules ({problem}); the crew waits until the route is changed on the BizMan page.");
+                Log.Info(problem == ScheduleProblem.Unreachable
+                    ? $"Route: {vehicle.VehicleType} {vehicle.VehicleId}: a stop opens before the drive from the one before can end; it opens late, on arrival."
+                    : $"Route: {vehicle.VehicleType} {vehicle.VehicleId} has no plan: its route fails the rules ({problem}); the crew waits until the route is changed on the BizMan page.");
             }
-            runner.EnsurePlan(vehicle, t, planX, planZ, GameSpeed());
+            // The day ends back in the bay where it rents its space (Peter, 16 October 2026).
+            var home = HomeOf(vehicle);
+            runner.EnsurePlan(vehicle, t, planX, planZ, GameSpeed(), HomePoint(home), home?.EndsThere == true);
             for (var i = 0; i < MaxSteps; i++)
             {
                 // Read after planning: the checks below depend on the leg the plan has running.
-                var where = Where(vehicle, instance, t);
+                var where = Where(vehicle, instance, t, home);
                 var action = runner.Step(vehicle, t, where, GameSpeed());
                 if (action.Kind == HireActionKind.None || !Do(vehicle, instance, action, t)) return;
             }
         }
 
         // Where the vehicle stands, and whether the crew may touch it or sell there.
-        private VehicleWhere Where(VehicleState vehicle, VehicleInstance instance, long t)
+        private VehicleWhere Where(VehicleState vehicle, VehicleInstance instance, long t, (ScheduleStop Place, string SiteId, bool EndsThere)? home)
         {
             var controller = VehicleHelper.GetVehicleController(instance);
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
@@ -384,8 +389,42 @@ namespace FoodTrucks
             // A truck at a catering gig at this minute stays there, as one the player holds does (without counting as
             // the player's use, which would keep it an hour longer).
             return new VehicleWhere(position.x, position.z, held || indoors || Catering.BusyAt(vehicle.VehicleId, t), canSell, hasStock, stayPut,
-                canRestock: restockAt != null, stockKey: stockKey, bayStops: bayStops);
+                canRestock: restockAt != null, stockKey: stockKey, bayStops: bayStops, home: HomePoint(home));
         }
+
+        // The bay of the commissary where the vehicle rents its space, which its crew drives back to after the last stop
+        // (Core HireSchedules.HomeIndex), as the bay's first place; and whether the route's last stop is already in that
+        // bay (no second drive then). Null without a space, or while the bay has no places yet (logged once): the day then
+        // ends at the last stop, as before.
+        internal static (ScheduleStop Place, string SiteId, bool EndsThere)? HomeOf(VehicleState vehicle)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || Commissary.Uninstalled) return null;
+            var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.VehicleId);
+            var site = space == null ? null : DemandData.Commissaries?.Site(space.CommissaryId);
+            if (site == null) return null;
+            var places = Commissary.BayPlaces(site, KindOf(vehicle) == "truck" ? TruckHalfSize.z : CartHalfSize.z);
+            if (places.Count == 0)
+            {
+                if (homeMissing.Add(vehicle.VehicleId))
+                    Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId}: the bay of {site.Id} has no places yet; its day ends at its last stop until it has.");
+                return null;
+            }
+            if (homeMissing.Remove(vehicle.VehicleId)) Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} drives back to the bay of {site.Id} after its last stop.");
+            var (position, rotation) = places[0];
+            var stops = vehicle.Schedule?.Stops;
+            var endsThere = stops != null && stops.Count > 0 && Commissary.CrewBayStops(state, vehicle).Contains(stops.Count - 1);
+            var place = new ScheduleStop
+            {
+                SpotKey = HireSchedules.HomeSpotKey, X = position.x, Y = position.y, Z = position.z, Heading = rotation.eulerAngles.y
+            };
+            return (place, site.Id, endsThere);
+        }
+
+        internal static (double X, double Z)? HomePoint((ScheduleStop Place, string SiteId, bool EndsThere)? home) =>
+            home == null ? ((double, double)?)null : (home.Value.Place.X, home.Value.Place.Z);
+
+        private static readonly HashSet<string> homeMissing = new HashSet<string>();
 
         // The commissary each vehicle could restock at, as the last Where read it.
         private readonly Dictionary<string, string?> restockSites = new Dictionary<string, string?>();
@@ -400,6 +439,7 @@ namespace FoodTrucks
                     CartSelling.CloseByCrew(vehicle, t);
                     return !vehicle.IsOpen;
                 case HireActionKind.Depart:
+                    if (action.Stop == HireSchedules.HomeIndex && HomeOf(vehicle) == null) return false;
                     Depart(vehicle, instance, action, t, kind);
                     return true;
                 case HireActionKind.Arrive:
@@ -451,11 +491,12 @@ namespace FoodTrucks
             var parking = instance.parkingState;
             // No parking fees or tickets while it's away (ParkingSimulator skips Undefined).
             instance.parkingState = ParkingState.Undefined;
-            HireRunner.Depart(vehicle, action, t, position.x, position.y, position.z, heading);
+            var home = action.Stop == HireSchedules.HomeIndex ? HomeOf(vehicle) : null;
+            HireRunner.Depart(vehicle, action, t, position.x, position.y, position.z, heading, home?.Place);
             vehicle.Transit!.FromParkingState = (int)parking;
             FoodTrucksSession.MarkChanged();
-            var stop = vehicle.Schedule!.Stops[action.Stop];
-            Log.Info($"Route: {kind} {vehicle.VehicleId} leaves for stop {action.Stop + 1} ({stop.SpotKey}), arriving at minute {action.ArrivesAt} ({action.ArrivesAt - t} minutes).");
+            var where = home != null ? $"its bay at {home.Value.SiteId}" : $"stop {action.Stop + 1} ({vehicle.Schedule!.Stops[action.Stop].SpotKey})";
+            Log.Info($"Route: {kind} {vehicle.VehicleId} leaves for {where}, arriving at minute {action.ArrivesAt} ({action.ArrivesAt - t} minutes).");
             CartSelling.Say("foodtrucks:notification_hire_departs", kind, ("crew", CrewNames(vehicle)),
                 ("time", StaffDialog.Clock((int)(action.ArrivesAt % 1440))));
         }
@@ -656,7 +697,9 @@ namespace FoodTrucks
             fallback = false;
             var state = FoodTrucksSession.CurrentState;
             var index = transit.ToStopIndex;
-            if (state == null || index == null || !Commissary.CrewBayStops(state, vehicle).Contains(index.Value)) return null;
+            // A bay stop of the route, or the drive back to its bay after the last stop.
+            var home = transit.ToSpotKey == HireSchedules.HomeSpotKey;
+            if (state == null || (!home && (index == null || !Commissary.CrewBayStops(state, vehicle).Contains(index.Value)))) return null;
             var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.VehicleId);
             var site = space == null ? null : DemandData.Commissaries?.Site(space.CommissaryId);
             if (site == null) return null;

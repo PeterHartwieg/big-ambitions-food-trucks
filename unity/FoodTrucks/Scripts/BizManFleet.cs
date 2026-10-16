@@ -775,6 +775,7 @@ namespace FoodTrucks
             if (vehicle?.Transit != null)
                 return vehicle.Transit.ToStopIndex is int stop
                     ? Format("foodtrucks:bizman_fleet_where_transit", ("stop", (stop + 1).ToString()))
+                    : vehicle.Transit.ToSpotKey == FoodTrucks.Core.Fleet.HireSchedules.HomeSpotKey ? Text("foodtrucks:bizman_fleet_where_home")
                     : Text("foodtrucks:bizman_fleet_where_moving");
             if (withDriver) return Text("foodtrucks:bizman_fleet_where_driver");
             var place = !string.IsNullOrEmpty(instance.streetName) ? instance.Address.ToFormattedString()
