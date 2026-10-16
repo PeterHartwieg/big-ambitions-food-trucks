@@ -305,6 +305,8 @@ namespace FoodTrucks
             // The same starting point as the payroll's preview (HireRunner.PlanFrom).
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
             var (planX, planZ) = HireRunner.PlanFrom(vehicle, position.x, position.z);
+            // A route saved before the travel rule (or with drives longer at today's game speed) is fitted first.
+            RouteStops.FitIfNeeded(vehicle, "planning");
             // A route that fails today's rules (saved under older ones) gets no plan: said once in the log. One with a stop
             // it can't reach in time still runs, that stop opening late.
             var problem = runner!.RouteProblem(vehicle, GameSpeed());

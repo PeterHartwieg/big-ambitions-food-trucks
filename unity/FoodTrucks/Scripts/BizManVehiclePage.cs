@@ -296,6 +296,8 @@ namespace FoodTrucks
             }
             HireCrew.Check(state);
             var vehicle = StreetSales.Find(state, id);
+            // A route saved before the travel rule is fitted as its page opens (the crew's planning does it too).
+            if (vehicle != null) RouteStops.FitIfNeeded(vehicle, "page opened");
             var kind = FoodTrucksMod.KindOf(instance.vehicleTypeName) ?? "cart";
             var canWrite = FoodTrucksSession.CanWrite;
             var withDriver = IsWithDriver(id);
@@ -319,7 +321,7 @@ namespace FoodTrucks
             var canGo = !withDriver && vehicle?.Transit == null;
             box.Subtitle(BizManFleet.Where(instance, vehicle, withDriver), BizManFleet.StatusColour(vehicle, withDriver, colors),
                 canGo ? () => BizManFleet.GoTo(instance, name) : (Action?)null);
-            if (!canWrite) box.Paragraph(Text("foodtrucks:bizman_page_readonly"), (Color)colors.lightRed);
+            if (!canWrite) box.Paragraph(Text("foodtrucks:bizman_page_readonly"), (Color)colors.red);
             var alerts = VehicleTodos.CountFor(instance.id);
             box.Row(Text("foodtrucks:bizman_page_alerts"),
                 alerts == 0 ? "0" : LocalizorManager.GetLocalization("bizman_number_of_alerts", new Dictionary<string, string> { ["amount"] = alerts.ToString() }), "",
@@ -376,11 +378,10 @@ namespace FoodTrucks
                         box.Paragraph(Format("foodtrucks:bizman_page_route_short_crew", ("count", hands.ToString()), ("limit", limit.ToString())), (Color)colors.red);
                     if (vehicle != null && !vehicle.HasPermit) box.Paragraph(Text("foodtrucks:bizman_page_route_no_permit"), (Color)colors.red);
                 }
-                if (count > 1) box.Paragraph(Text("foodtrucks:bizman_page_route_hint"));
                 if (instance != null) VehiclePageDrawings.Route(box, schedule, instance, vehicle);
                 AddStops(box, id, schedule, canWrite);
             }
-            else box.Paragraph(Text(StopPicker.Ready ? "foodtrucks:bizman_page_route_empty" : "foodtrucks:bizman_page_route_empty_nomap"));
+            else box.Paragraph(Text("foodtrucks:bizman_page_route_no_stops"));
             if (StopPicker.Ready) box.Button(Text("foodtrucks:bizman_page_add_stop"), () => AddOnMap(id), canWrite && count < rules.Fleet.MaxStops);
             box.Button(Text("foodtrucks:bizman_page_add_here"), () => AddWhereItStands(id), canWrite && count < rules.Fleet.MaxStops);
         }
@@ -450,7 +451,6 @@ namespace FoodTrucks
                 if (row != null && useField) PriceField(row, id, line);
             }
             if (!drawn) box.Paragraph(Format("foodtrucks:bizman_page_menu_equipment", ("pieces", Equipment(view, instance))));
-            if (canWrite && priceFieldTemplate != null) box.Paragraph(Text("foodtrucks:bizman_page_prices_hint"));
         }
 
         // A price's colour, as InventoryProductCellView.UpdateAmountBackground: red at the red price, yellow above the
@@ -580,9 +580,10 @@ namespace FoodTrucks
                 box.Button(Text("foodtrucks:bizman_page_space_call"), () => Call(siteId));
                 return;
             }
-            // The missing space is a to-do (its fine there); here only how to get one (Peter, 16 October 2026).
+            // The missing space is a to-do (its fine there); here the commissaries it could call (Peter, 16 October 2026: no
+            // lines explaining the page).
             var known = state.Commissary.Unlocked.Select(u => sites?.Site(u)).Where(s => s != null).Select(s => s!).ToList();
-            box.Paragraph(Text(known.Count == 0 ? "foodtrucks:bizman_page_space_visit" : "foodtrucks:bizman_page_space_none_how"));
+            box.Paragraph(Text("foodtrucks:bizman_page_space_none"));
             foreach (var other in known)
             {
                 var otherId = other.Id;
@@ -626,21 +627,16 @@ namespace FoodTrucks
             }
             AddRow(box, Text("foodtrucks:bizman_page_partner"), labels, current != null ? 1 : 0, canWrite && venues.Count > 1,
                 chosen => ChoosePartner(id, venues[chosen]));
-            var metres = ((int)(DemandData.Pitches?.Partnerships?.RadiusMetres ?? 50)).ToString();
-            box.Paragraph(Format(venues.Count > 1 ? "foodtrucks:bizman_page_partner_hint" : "foodtrucks:bizman_page_partner_none_near", ("metres", metres)));
         }
 
         private static void AddStops(BizManParts.Box box, string id, HireSchedule schedule, bool canWrite)
         {
-            var header = StopsHeader(box);
             var listGo = Object.Instantiate(listTemplate!, box.Root);
             listGo.name = "FoodTrucks.Stops";
             box.Add(listGo.transform);
             listGo.SetActive(true);
             var reorder = listGo.GetComponent<ReorderableList>();
             var template = listGo.transform.Find(entryPath);
-            // Once the list is laid out, the captions move over the first stop's two time dropdowns.
-            if (header != null) HireRoutes.Later(() => Guard(() => AlignHeader(header, listGo.transform)));
             // The day from the bay where it rents its space, through the stops, and back (Peter, 16 October 2026): fixed
             // rows that aren't stops (no ReorderableListItem, so the list's drag leaves them out; the page is rebuilt after
             // a drag, putting them back in place), with the drive (or walk) between each two.
@@ -652,17 +648,28 @@ namespace FoodTrucks
             var homeName = home == null ? null : HomeName(home.Value.SiteId);
             int Minutes(double fromX, double fromZ, double toX, double toZ) => Travel.Between(fleet, fromX, fromZ, toX, toZ, mode, speed);
             var stops = schedule.Stops;
+            var drives = new List<int>();
+            RectTransform first;
             if (home != null)
             {
                 var place = home.Value.Place;
                 var drive = Minutes(place.X, place.Z, stops[0].X, stops[0].Z);
-                FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_leaves", ("commissary", homeName!), ("time", Clock(stops[0].OpenAt - drive))), bold: true);
+                first = FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_leaves", ("commissary", homeName!), ("time", Clock(stops[0].OpenAt - drive))), bold: true);
                 FixedRow(listGo.transform, TravelText(mode, drive), bold: false);
+                drives.Add(drive);
             }
-            else FixedRow(listGo.transform, Text("foodtrucks:bizman_page_route_no_space"), bold: true);
+            else first = FixedRow(listGo.transform, Text("foodtrucks:bizman_page_route_no_space"), bold: true);
+            // "Opens" and "Closes" on that first line, over the stops' two time dropdowns once the list is laid out.
+            Captions(first);
+            HireRoutes.Later(() => Guard(() => AlignHeader(first, listGo.transform)));
             for (var i = 0; i < stops.Count; i++)
             {
-                if (i > 0) FixedRow(listGo.transform, TravelText(mode, Minutes(stops[i - 1].X, stops[i - 1].Z, stops[i].X, stops[i].Z)), bold: false);
+                if (i > 0)
+                {
+                    var drive = Minutes(stops[i - 1].X, stops[i - 1].Z, stops[i].X, stops[i].Z);
+                    FixedRow(listGo.transform, TravelText(mode, drive), bold: false);
+                    drives.Add(drive);
+                }
                 var entry = Object.Instantiate(template, listGo.transform);
                 entry.name = "FoodTrucks.Stop";
                 var item = entry.GetComponent<ReorderableListItem>();
@@ -679,6 +686,7 @@ namespace FoodTrucks
                 {
                     var place = home.Value.Place;
                     var back = Minutes(last.X, last.Z, place.X, place.Z);
+                    drives.Add(back);
                     FixedRow(listGo.transform, Format(mode == TravelMode.Push ? "foodtrucks:bizman_page_route_walk_back" : "foodtrucks:bizman_page_route_drive_back",
                         ("minutes", back.ToString())), bold: false);
                     FixedRow(listGo.transform, Format("foodtrucks:bizman_page_route_back", ("commissary", homeName!), ("time", Clock(last.CloseAt + back))), bold: true);
@@ -693,6 +701,8 @@ namespace FoodTrucks
             }
             if (canWrite) reorder.OnItemReordered += (from, to) => Guard(() => MoveStop(id, from, to));
             reorder.Reinitialize();
+            Log.Info($"BizMan: route rows for {id}: {(mode == TravelMode.Push ? "walks" : "drives")} {string.Join(", ", drives)} min at game speed {speed:0.##}" +
+                     (home == null ? ", no commissary space." : $", from and back to {home.Value.SiteId}."));
         }
 
         private static string TravelText(TravelMode mode, int minutes) =>
@@ -708,7 +718,7 @@ namespace FoodTrucks
 
         // A slim line between the stop cards, in the box's section-label style: grey for a drive with the vehicle icon
         // before it, dark for the commissary at either end. Not a stop: it can't be dragged or removed.
-        private static void FixedRow(Transform list, string text, bool bold)
+        private static RectTransform FixedRow(Transform list, string text, bool bold)
         {
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
             var unit = BizManParts.SmallLabelHeight();
@@ -737,6 +747,7 @@ namespace FoodTrucks
             }
             if (BizManParts.SmallLabel(row, text) is RectTransform label)
             {
+                label.name = "FoodTrucks.RowText";
                 var labelElement = label.GetComponent<LayoutElement>();
                 if (labelElement != null) labelElement.ignoreLayout = true;
                 label.anchorMin = Vector2.zero;
@@ -745,33 +756,26 @@ namespace FoodTrucks
                 label.offsetMax = Vector2.zero;
                 BizManParts.Colour(label, bold ? (Color)colors.midnight : (Color)colors.darkGrey);
             }
+            return row;
         }
 
-        // One line over the stops: "Opens" and "Closes", in the box's section-label style. Until the list is laid out they
-        // split the line's right part; AlignHeader then puts each over its dropdown column.
-        private static RectTransform? StopsHeader(BizManParts.Box box)
+        // "Opens" and "Closes" on the first fixed row, in the box's section-label style: until the list is laid out on the
+        // right half of the row; AlignHeader then puts each over its dropdown column and ends the row's own text before them.
+        private static void Captions(RectTransform row)
         {
-            var go = new GameObject("FoodTrucks.StopsHeader", typeof(RectTransform));
-            var header = (RectTransform)go.transform;
-            box.Add(header);
-            var height = BizManParts.SmallLabelHeight();
-            var element = go.AddComponent<LayoutElement>();
-            element.minHeight = element.preferredHeight = height;
-            var opens = BizManParts.SmallLabel(header, Text("foodtrucks:bizman_page_opens_label")) as RectTransform;
-            var closes = BizManParts.SmallLabel(header, Text("foodtrucks:bizman_page_closes_label")) as RectTransform;
-            if (opens == null || closes == null)
-            {
-                Object.Destroy(go);
-                return null;
-            }
+            var opens = BizManParts.SmallLabel(row, Text("foodtrucks:bizman_page_opens_label")) as RectTransform;
+            var closes = BizManParts.SmallLabel(row, Text("foodtrucks:bizman_page_closes_label")) as RectTransform;
+            if (opens == null || closes == null) return;
             foreach (var (label, from, to) in new[] { (opens, 0.5f, 0.75f), (closes, 0.75f, 1f) })
             {
                 label.name = label == opens ? "Opens" : "Closes";
+                var element = label.GetComponent<LayoutElement>();
+                if (element != null) element.ignoreLayout = true;
                 label.anchorMin = new Vector2(from, 0f);
                 label.anchorMax = new Vector2(to, 1f);
                 label.offsetMin = label.offsetMax = Vector2.zero;
             }
-            return header;
+            if (row.Find("FoodTrucks.RowText") is RectTransform text) text.anchorMax = new Vector2(0.5f, 1f);
         }
 
         private static void AlignHeader(RectTransform header, Transform list)
@@ -794,6 +798,7 @@ namespace FoodTrucks
                 label.anchorMin = new Vector2(Mathf.Clamp01((left - rect.xMin) / rect.width), 0f);
                 label.anchorMax = new Vector2(Mathf.Clamp01((right - rect.xMin) / rect.width), 1f);
                 label.offsetMin = label.offsetMax = Vector2.zero;
+                if (i == 0 && header.Find("FoodTrucks.RowText") is RectTransform text) text.anchorMax = new Vector2(label.anchorMin.x, 1f);
             }
         }
 
