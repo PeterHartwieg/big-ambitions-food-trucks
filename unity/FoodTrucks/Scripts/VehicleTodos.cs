@@ -439,6 +439,17 @@ namespace FoodTrucks
                 return;
             }
             var vehicle = game.VehicleInstances.FirstOrDefault(v => v.id == task.itemInstanceId);
+            // No space yet: the pin leads to the nearest commissary, where one is rented (the first blind playtest, 17
+            // October 2026: nothing told the player where a commissary was). The map's Street food filter shows them all.
+            if (KindOf(task) == VehicleWarningKind.NoCommissarySpace && vehicle != null)
+            {
+                var near = NearestCommissary(vehicle);
+                if (near != null)
+                {
+                    GoToAddress(near);
+                    return;
+                }
+            }
             if (vehicle == null)
             {
                 // With the private driver: nowhere to go to.
@@ -464,6 +475,26 @@ namespace FoodTrucks
             game.customDestination = null;
             GuidersManager.SetGuiderTarget(position, name, references.vehiclePOIIcon, references.vehiclePOIBackgroundColor, DirectionGuiderType.Destination);
             Notices.Show(NotificationType.Success, "notification_destination_set", new Dictionary<string, string> { { "address", name } }, 4f);
+        }
+
+        // The address of the commissary whose door is nearest the vehicle, or null when none is in this city.
+        private static Address? NearestCommissary(VehicleInstance vehicle)
+        {
+            var controller = VehicleHelper.GetVehicleController(vehicle);
+            var position = controller != null ? controller.transform.position : (Vector3)vehicle.position;
+            Address? best = null;
+            var bestDistance = float.MaxValue;
+            foreach (var site in DemandData.Commissaries?.Sites ?? Enumerable.Empty<FoodTrucks.Core.Commissary.CommissarySite>())
+            {
+                var address = World.BuildingAt(site.Address)?.building?.Address;
+                var doors = World.EntrancesOf(site.Address);
+                if (address == null || doors == null || doors.Length == 0) continue;
+                var distance = doors.Min(d => Vector3.Distance(d, position));
+                if (distance >= bestDistance) continue;
+                bestDistance = distance;
+                best = address;
+            }
+            return best;
         }
 
         // As the game's own destination button does.

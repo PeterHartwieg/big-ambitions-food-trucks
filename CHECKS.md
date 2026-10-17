@@ -1,3 +1,23 @@
+# First blind playtest fixes (next build)
+
+Branch `blind1-fixes`, from the first blind AI playtest (17 October 2026; issues in `build/logs/game/blind-1/notes/issues.md` of the main checkout). Nothing here has run in game. Use a throwaway FT save with two carts, one crew member with a route, and a commissary space for one cart only.
+
+| # | Do | Look for |
+|---|---|---|
+| BP1 | Stand beside a crewed cart in its bay when its shift starts and the route says it should set off | One notice: "<crew> waits with Food cart N: a crew doesn't move a vehicle while you're close to it, or for an hour after you've used it."; the log line `Route: cart …: the crew would set off but waits…`; not again that day; walk 15 m off (and wait out the hour if you pushed it): the crew sets off |
+| BP2 | Let a crewed vehicle run its day while you're elsewhere | No "sets off with" or "opened the" notices; the log has `Route: … leaves for …` and `Route: …: the crew opened at stop N.`; BizMan shows the vehicle on its way, then "Open at <the stop's name>". Standing by the stop when the crew opens still shows "opened the cart" |
+| BP3 | The cart without a commissary space: phone to-dos, click the to-do's destination button | The to-do ends "The pin leads to the nearest commissary"; the GPS goes to the nearest commissary's door (not the City) |
+| BP4 | Rent that cart a space by phone while the game is paused | The "No commissary space" to-do goes at once, without unpausing |
+| BP5 | A commissary's order list | A food reads "Hotdog for the Hotdog Grill, box of 500 (… here…)"; a machine reads "Industrial Grill (N here): Burger, Chicken Kabob Skewer"; the rows aren't cut off (look at the longest, with the weekly limit) |
+| BP6 | BizMan, a vehicle's Overview, Menu box | Under the foods, one line per fitted piece: "Hotdog Grill cooks Hotdog"; Extra Storage has none; the box isn't cut off |
+| BP7 | With carts "Food cart 1" and "Food cart 2", buy a third, then save and load | The two keep their names; the new one is "Food cart 3" in BizMan, Econoview and the commissary's Spaces list |
+| BP8 | Fire a crew member (or let one quit) | "<name> has left the company: Food cart N has one worker less." |
+| BP9 | BizMan Street food overview with a cart in its bay, one at a route stop and one elsewhere on the street | "Closed, at Hell's Kitchen Commissary" (or its name), "Open at <stop name>", and a neighbourhood for the third; never "an unknown spot" |
+| BP10 | Week plan for a crewed cart: add a stop about 100 m from its bay, then one about 300 m off | "Walk about 25 min" for 100 m, about 75 for 300 m (4 m/s, your own jog with a cart; it was 84 and 250); run the day: the cart arrives about then. Say whether that feels right next to how fast you push a cart yourself. The crew isn't seen pushing on the way (the cart is off the map until it arrives) |
+| BP11 | Tester (agent, bridge): stand by a cart, `tools/play vehicle ID enter`, then `tools/play walk --to bay:hells-kitchen`; then `look` | The character pushes the cart there on foot at the normal jog (no jump); the clock runs at speed 1 meanwhile and stops again; the cart reads in the bay and parked legally (if not, note where it stopped: the walk ends where the cart's handle is, not the cart) |
+| BP12 | Tester: `tools/play walk X Z` to a point across a street about 80 m off, and to a point inside a block | The first walks there; the second is refused ("No walkable ground…" or "No walking route…"); a long walk that the city's NavMesh gives only part of stops short and says so |
+| BP13 | Tester: `tools/play map filters`, then `map commissaries`, `map for_rent:ba:buildingtype_residential` and `map offices` | The filters list the game's own (for rent by type, business types, for sale, yours) and Street food's; each list matches what the game's map lights with that filter on (open the map by hand to compare one) |
+
 # Latest PC playtest feedback — 15 October 2026
 
 Peter's notes on commissary rental and ordering, delivery times, product labels, equipment artwork/scale, back-alley bays and their markings, selectable stock transfers, serving fast-forward, queues near obstacles and park pitch visibility are recorded in [the implementation plan](docs/implementation-plan.md#pc-playtest-feedback--15-october-2026). These are follow-up requirements and observations; no fix is claimed. Do not treat the historical checks below as acceptance of the reported behavior.

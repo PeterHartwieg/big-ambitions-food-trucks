@@ -28,6 +28,7 @@ SITES = [s['id'] for s in json.loads((ROOT / 'data/commissaries.json').read_text
 MEASURED = {s['id']: s['bay'] for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries'] if s.get('bay')}
 CITY = json.loads((ROOT / 'tools/balance/city.json').read_text())['buildings']
 BUILDINGS = {b['key'] for b in CITY}
+CLASSIFIER = json.loads((ROOT / 'data/demand.json').read_text())['classifier']
 # Made-up park triggers for parks (name, kind, min x/y/z, max x/y/z); the game's come from the scene.
 PARKS = [('Park_Trigger', 'parkarea', (1180.0, 9.5, 600.0, 1290.0, 19.5, 700.0)),
          ('SkatePark_Trigger', 'skatepark', (1490.0, 9.8, 440.0, 1520.0, 14.8, 470.0))]
@@ -485,6 +486,87 @@ class Mock:
                         'business':business.title() if business else None,'business_type':business,'yours':False,
                         'commissary':{'site':site['id'],'name':LOCALE.get(site['name'],site['id'])} if site else None,'distance':round(d)})
         return {'radius':radius,'places':out}
+
+    # ---- walk: the game's click-to-move, pushing a held cart (the mock moves at once) ----
+    def walk(self, args):
+        player=self.state['player']
+        if self.state['clock']['paused']: raise ValueError('The game is paused: walking takes real time. Set a speed first.')
+        held=self.vehicle(player['in_vehicle']) if player['in_vehicle'] else None
+        if held is not None and held['kind']!='cart':
+            raise ValueError("You're in a vehicle you drive: get out first (vehicle ID exit), or push a cart instead.")
+        if player['at_hatch']: raise ValueError("You're at a truck's hatch: step out first (vehicle ID exit).")
+        place=args.get('place'); bay=None
+        if place is not None:
+            kind,_,identifier=str(place).partition(':')
+            if kind in ('bay','commissary'):
+                if identifier not in SITES: raise ValueError(f"No commissary '{identifier}'. Commissaries: {', '.join(SITES)}.")
+                if kind=='bay': self.require_bay(identifier); bay=identifier
+                x,z=393.2+SITES.index(identifier)*100,217.6
+            elif kind=='vehicle':
+                v=self.vehicle(identifier); x,z=v['x']+(2.6 if v['kind']=='truck' else 2.1),v['z']
+            elif kind=='address':
+                if not re.fullmatch(r'ba:street_[a-z0-9]+#[0-9]+',identifier):
+                    raise ValueError(f"address: takes a building's address as the game writes it, ba:street_<name>#<number>; got '{identifier}'.")
+                building=next((b for b in CITY if b['key']==identifier),None)
+                if building is None: raise ValueError(f'no building at {identifier} in this city')
+                x,z=building['x']+6.,building['z']
+            else: raise ValueError(f"Unknown place '{place}': use bay:<site>, commissary:<site>, vehicle:<id> or address:<address>.")
+        else:
+            x,z=num(args,'x'),num(args,'z')
+            if x is None or z is None: raise ValueError('walk needs "x" and "z", or "place".')
+        metres=math.hypot(player['x']-x,player['z']-z)
+        player.update(x=float(x),z=float(z))
+        if held is not None:
+            if bay: self.place_vehicle(held,bay)
+            else: held.update(x=float(x),z=float(z),commissary=None)
+            player.update(x=held['x'],z=held['z'])
+        self.event(f"Test bridge: walking to x {x:.1f}, z {z:.1f} ({metres:.0f} m{', pushing '+held['id'] if held else ''}).")
+        return {'x':round(player['x'],2),'y':0.,'z':round(player['z'],2),'heading':round(player['heading'],2),'arrived':True,'from_goal':0.,
+                'goal':{'x':round(x,2),'z':round(z,2)},'path':'complete','metres':round(metres),'holding':held['id'] if held else None}
+
+    # ---- map: the city map's highlights as data (the mock's city: the balance tool's buildings) ----
+    def map_command(self, args):
+        p=self.state['player']
+        sites={s['address']:s for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']}
+        pitches={s['address'] for s in json.loads((ROOT / 'data/pitches.json').read_text())['premium']['spots']}
+        def lit(b):
+            out=[]; btype=b.get('buildingType'); business=b.get('businessType')
+            if not business and btype not in ('ba:buildingtype_special',None):
+                out+=['for_rent','for_rent:'+btype]
+            if business: out.append('business:'+business)
+            # Core StreetFoodMap over AreaClassifier.RuleFor: a business's rule before its building's (data/demand.json).
+            rule=CLASSIFIER['businessTypes'].get(business) if business else None
+            if rule is None and btype: rule=CLASSIFIER['buildingTypes'].get(btype)
+            rule=rule or {}
+            shows={'ba:buildingtype_theater','ba:buildingtype_cinema','ba:businesstype_theater','ba:businesstype_cinema'}
+            show=(business in shows) if business and business!='ba:businesstype_empty' else (btype in shows)
+            if rule.get('office',0)>0: out.append('offices')
+            if rule.get('industrial',0)>0: out.append('factories')
+            if not show and rule.get('nightlife',0)>0: out.append('nightlife')
+            if show: out.append('shows')
+            if b['key'] in pitches: out.append('pitches')
+            if b['key'] in sites: out.append('commissaries')
+            return out
+        rows=[(math.hypot(b['x']-p['x'],b['z']-p['z']),b,lit(b)) for b in CITY]
+        if args.get('op')=='filters':
+            counts={}
+            for _,_,fs in rows:
+                for f in fs: counts[f]=counts.get(f,0)+1
+            return {'filters':[{'filter':f,'label':f,'buildings':n} for f,n in sorted(counts.items())]}
+        f=need(args,'filter','a map filter (op "filters" lists them)')
+        limit=int(max(1,min(100,num(args,'limit') if num(args,'limit') is not None else 30)))
+        matched=sorted(((d,b) for d,b,fs in rows if f in fs),key=lambda t:t[0])
+        out=[]
+        for d,b in matched[:limit]:
+            street,number=b['key'].replace('ba:street_','').split('#')
+            site=sites.get(b['key']); business=b.get('businessType')
+            out.append({'address':b['key'],'name':f'{number} {street.title()}','distance':round(d),'x':b['x'],'z':b['z'],
+                        'building_type':(b.get('buildingType') or '').replace('ba:buildingtype_','').title(),'size':b.get('size'),
+                        'business':business.replace('ba:businesstype_','').title() if business else None,'business_type':business,
+                        'for_rent':'for_rent' in lit(b),'rent_per_day':round(b.get('m2',100)*0.5,2) if 'for_rent' in lit(b) else None,
+                        'neighbourhood':b.get('hood'),
+                        'commissary':{'site':site['id'],'name':LOCALE.get(site['name'],site['id'])} if site else None})
+        return {'filter':f,'count':len(matched),'buildings':out}
 
     # ---- vehicle buy: the debug spawn beside the player, paid at the dealer's price ----
     def buy(self, args):
@@ -1451,7 +1533,7 @@ class Mock:
 
     def call(self, cmd, args):
         if self.stopped: raise ValueError('the bridge stopped')
-        if cmd in ('console','debug','time','money','teleport','vehicle','commissary','crew','route','fixture','save'): self.require_ft(cmd)
+        if cmd in ('console','debug','time','money','teleport','walk','vehicle','commissary','crew','route','fixture','save'): self.require_ft(cmd)
         if cmd=='state': return self.read_state()
         if cmd=='day_summary':
             self.require_city(cmd)
@@ -1461,6 +1543,10 @@ class Mock:
         if cmd=='places':
             self.require_city(cmd)
             return self.places(args)
+        if cmd=='map':
+            self.require_city(cmd)
+            return self.map_command(args)
+        if cmd=='walk': return self.walk(args)
         if cmd=='fixture': return self.fixture(args)
         if cmd=='logistics':
             self.require_city(cmd)
@@ -1826,7 +1912,7 @@ class Mock:
             self.event(f'Mock console: {line}')
             return {'output':[f'Mock console accepted: {line}']}
         if cmd=='quit': return {}
-        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, route, fixture, logistics, parks, day_summary, places, ui, shoot, save, load, new_game, quit, op.")
+        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, vehicle, commissary, crew, route, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.")
 
 
 class Handler(BaseHTTPRequestHandler):

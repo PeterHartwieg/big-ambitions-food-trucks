@@ -603,6 +603,91 @@ namespace FoodTrucks
             }
         }
 
+        // ---- walk ----
+
+        // How long a walk may take in real seconds before the bridge gives up and says where the player is.
+        private const float WalkSeconds = 600f;
+        // Within this of the goal (flat) the walk has arrived; standing still this long short of it, it has stopped.
+        private const float ArrivedMetres = 1.5f;
+        private const float StoppedSeconds = 3f;
+
+        // { "x", "z" } or { "place": bay:<site> | commissary:<site> | vehicle:<id> | address:<address> }: the game's
+        // click-to-move (PlayerController.SetNewDestination, the same call as a click on the ground), so the character
+        // walks there on its own navigation at its own pace, pushing the cart or hand truck it holds. Never a teleport.
+        // Refused in a car or truck (a vehicle is driven, not walked), indoors to a place outside, while paused (walking
+        // takes real time) and when no walking route reaches the place. The reply comes once the player arrives or stops:
+        // { arrived, x, z, from_goal, path, metres, holding }.
+        private static object Walk(JObject args)
+        {
+            var player = PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.");
+            if (Paused() == true) throw new BridgeError("The game is paused: walking takes real time. Set a speed first.");
+            var game = SaveGameManager.Current;
+            var holding = string.IsNullOrEmpty(game.ActiveVehicleId) ? null : game.ActiveVehicleId;
+            var selected = InstanceBehavior<GameManager>.Instance.selectedVehicle;
+            if (holding != null && (selected == null || selected.vehicleType == null || !selected.vehicleType.spawnInPlayerObject))
+                throw new BridgeError("You're in a vehicle you drive: get out first (vehicle ID exit), or push a cart instead.");
+            if (TruckWindow.PlayerAt(holding ?? "") || game.VehicleInstances.Any(v => v != null && TruckWindow.PlayerAt(v.id)))
+                throw new BridgeError("You're at a truck's hatch: step out first (vehicle ID exit).");
+            var place = Str(args, "place");
+            Vector3 target;
+            if (place != null) (target, _) = Place(place, "player", null);
+            else
+            {
+                var x = Num(args, "x") ?? throw new BridgeError("walk needs \"x\" and \"z\", or \"place\".");
+                var z = Num(args, "z") ?? throw new BridgeError("walk needs \"x\" and \"z\", or \"place\".");
+                target = new Vector3((float)x, player.transform.position.y, (float)z);
+            }
+            var agent = player.Character != null ? player.Character.navmeshAgent : null;
+            if (agent == null || !agent.enabled) throw new BridgeError("The player can't walk now (navigation is off: sitting, working or in a menu).");
+            var filter = PlayerFilter(out _);
+            if (!NavMesh.SamplePosition(player.transform.position, out var from, 2f, filter))
+                throw new BridgeError("You aren't standing on walkable ground.");
+            // The place's walkable ground: within 3 m, as a click on the ground takes it, nearest the place's height.
+            if (!NavMesh.SamplePosition(target, out var to, 3f, filter) && !NavMesh.SamplePosition(new Vector3(target.x, from.position.y, target.z), out to, 3f, filter))
+                throw new BridgeError($"No walkable ground within 3 m of x {target.x:F1}, z {target.z:F1}.");
+            var path = new NavMeshPath();
+            if (!NavMesh.CalculatePath(from.position, to.position, filter, path) || path.status == NavMeshPathStatus.PathInvalid)
+                throw new BridgeError($"No walking route to x {to.position.x:F1}, z {to.position.z:F1} from here.");
+            var metres = 0f;
+            for (var i = 1; i < path.corners.Length; i++) metres += Vector3.Distance(path.corners[i - 1], path.corners[i]);
+            var complete = path.status == NavMeshPathStatus.PathComplete;
+            var goal = to.position;
+            player.SetNewDestination(goal, showParticleEffect: true);
+            if (!agent.hasPath && !agent.pathPending && Flat(player.transform.position, goal) > ArrivedMetres)
+                throw new BridgeError("The game didn't start the walk (a menu or the map may be open, or navigation is blocked here).");
+            Log.Info($"Test bridge: walking to x {goal.x:F1}, z {goal.z:F1} ({metres:F0} m{(complete ? "" : ", part of the way")}" +
+                     $"{(holding != null ? ", pushing " + holding : "")}).");
+            var deadline = UnityEngine.Time.realtimeSinceStartup + WalkSeconds;
+            var last = player.transform.position;
+            var stillSince = UnityEngine.Time.realtimeSinceStartup;
+            JObject Reply(bool arrived)
+            {
+                var now = player.transform.position;
+                var reply = Pose(now, player.transform.eulerAngles.y);
+                reply["arrived"] = arrived;
+                reply["from_goal"] = Math.Round(Flat(now, goal), 2);
+                reply["goal"] = new JObject { ["x"] = TestBridgeState.Round(goal.x), ["z"] = TestBridgeState.Round(goal.z) };
+                reply["path"] = complete ? "complete" : "partial";
+                reply["metres"] = Math.Round(metres);
+                reply["holding"] = holding;
+                return reply;
+            }
+            return new Deferred(() =>
+            {
+                var now = player.transform.position;
+                if (Flat(now, goal) <= ArrivedMetres) return Reply(true);
+                if (Vector3.Distance(now, last) > 0.05f)
+                {
+                    last = now;
+                    stillSince = UnityEngine.Time.realtimeSinceStartup;
+                }
+                // Stopped short (blocked, a partial route's end, the walk taken over by a click or a key): where it is.
+                if (UnityEngine.Time.realtimeSinceStartup - stillSince > StoppedSeconds && !agent.pathPending) return Reply(false);
+                if (UnityEngine.Time.realtimeSinceStartup > deadline) return Reply(false);
+                return null;
+            });
+        }
+
         private static object TeleportPlayer(Vector3 target, float? heading, bool clear)
         {
             var player = PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.");

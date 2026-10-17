@@ -107,7 +107,7 @@ Status, 17 October 2026: Phase A's runner and its bridge pieces are built and te
 
 ## Next, from Peter during the first blind run (17 October 2026)
 
-Not started; the first blind run keeps going as it is.
+Built on branch `blind1-fixes` (17 October 2026), not yet run in game: no notice per route update, `tools/play walk` and `tools/play map` (bridge `walk` and `map`, docs/test-bridge.md), and the route to-do's cause (merged before).
 
 - **Notifications:** don't post a notice for every route update of every street food vehicle. Crew route progress belongs in the log and the vehicle page, not in the notice stream.
 - **Walking for the tester:** a `walk` control that sends the player to a point and lets the character's own navigation take it there (the game's click-to-move, no WASD). This also covers pushing a cart into a bay, and real walking to buildings.

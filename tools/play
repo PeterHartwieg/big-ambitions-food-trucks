@@ -12,6 +12,14 @@ Commands (each also takes --help):
   notices [--follow]           Notices and phone texts since you last looked.
   places [--radius M]          Buildings near you: address, type, business, commissaries.
   go ADDRESS                   Take a taxi to a building (address as places prints it, e.g. ba:street_secondavenue#8).
+  walk X Z | walk --to PLACE   Walk there on foot, as a click on the ground does. Holding a cart (vehicle ID enter),
+                               you push it along. PLACE: address:ADDRESS, bay:SITE (a commissary's bay, to push a
+                               cart into it), commissary:SITE (its door) or vehicle:ID (beside it). The clock runs
+                               at speed 1 while you walk, and stops again if it was stopped.
+  map filters | map FILTER [--limit N]
+                               The city map's highlights: the filters there are, or the buildings one lights, nearest
+                               first. For example: commissaries, for_rent, for_rent:ba:buildingtype_residential,
+                               business:ba:businesstype_supermarket, offices, nightlife, pitches, yours.
   screen NAME [--fetch DIR]    A picture of the screen.
   ui list | ui click TEXT | ui click --id N | ui escape
                                The buttons and texts on screen, and pressing them.
@@ -25,7 +33,10 @@ Commands (each also takes --help):
   order SITE ITEM BOXES [ITEM BOXES ...]
                                Order stock by phone from a commissary where you rent a space; it arrives at 08:00.
   hire                         Hire a worker (they wait unassigned).
-  licence                      Get the vendor licence and a permit for each vehicle.
+  licence                      Get the vendor licence and a permit for each vehicle you own now: a free test
+                               shortcut (its notice says "Debug"). In a normal game the licence follows the Food
+                               Safety course and is bought, with each permit, by calling the City. Run it again
+                               after buying a vehicle.
   crew assign VEHICLE EMPLOYEE | crew schedule VEHICLE EMPLOYEE DAY START END [STATION] | crew auto VEHICLE
                                Put a hire on a vehicle's crew; set a shift (whole hours); or auto-fill the week.
   route add VEHICLE ADDRESS [--days monday,...] [--open HH:MM --close HH:MM]
@@ -165,6 +176,41 @@ class Play:
         r = self.call('teleport', {'who': 'player', 'place': f'address:{address}'}, 60)
         self.out(f"You're at {address} (x {r['x']}, z {r['z']}).")
 
+    def walk(self, x=None, z=None, place=None):
+        self.acting()
+        args = {'place': place} if place else {'x': x, 'z': z}
+        clock = self.call('state')['clock']
+        # Walking takes real time; at a higher speed the day would run past while you walk.
+        was_paused, was_speed = clock.get('paused'), clock.get('speed')
+        if was_paused or was_speed != 1: self.call('time', {'speed': 1})
+        try:
+            r = self.call('walk', args, 630)
+        finally:
+            if was_paused: self.call('time', {'pause': True, **({'speed': was_speed} if was_speed not in (None, 1) else {})})
+            elif was_speed not in (None, 1): self.call('time', {'speed': was_speed})
+        pushing = f", pushing {r['holding']}" if r.get('holding') else ''
+        if r['arrived']:
+            self.out(f"You walked {r['metres']} m{pushing}; now at x {r['x']}, z {r['z']}.")
+        else:
+            self.out(f"You stopped {r['from_goal']} m short{pushing}, at x {r['x']}, z {r['z']}"
+                     f"{' (the way there only goes part of the way)' if r.get('path') == 'partial' else ''}.")
+
+    def map(self, what, limit=None):
+        if what == 'filters':
+            for f in self.call('map', {'op': 'filters'})['filters']:
+                self.out(f"{f['filter']}: {f['label']} ({f['buildings']} buildings)")
+            return
+        args = {'filter': what}
+        if limit: args['limit'] = limit
+        r = self.call('map', args)
+        self.out(f"{r['count']} buildings lit by {what}; nearest first:")
+        for b in r['buildings']:
+            what_ = b.get('business') or b.get('business_type') or b.get('building_type')
+            extra = f", for rent at {money(b['rent_per_day'])} a day" if b.get('for_rent') else ''
+            com = f"; commissary {b['commissary']['name']} (site {b['commissary']['site']})" if b.get('commissary') else ''
+            self.out(f"{b['distance']:>5} m  {b['address']}  {b['name']}: {what_}{', ' + b['size'] if b.get('size') else ''}"
+                     f"{', ' + b['neighbourhood'] if b.get('neighbourhood') else ''}{extra}{com}")
+
     def ui(self, op, text=None, ident=None):
         if op == 'list':
             r = self.call('ui', {'op': 'list'})
@@ -290,6 +336,9 @@ def parser():
     n = sub.add_parser('notices', help='notices and phone texts'); n.add_argument('--follow', action='store_true')
     n = sub.add_parser('places', help='buildings near you'); n.add_argument('--radius', type=float, default=150)
     n = sub.add_parser('go', help='take a taxi to a building'); n.add_argument('address')
+    n = sub.add_parser('walk', help='walk somewhere, pushing a cart you hold'); n.add_argument('coords', nargs='*', type=float)
+    n.add_argument('--to')
+    n = sub.add_parser('map', help="the city map's highlights"); n.add_argument('what'); n.add_argument('--limit', type=int)
     n = sub.add_parser('screen', help='a picture of the screen'); n.add_argument('name'); n.add_argument('--fetch')
     n = sub.add_parser('ui', help='buttons and texts on screen'); n.add_argument('op', choices=('list', 'click', 'escape'))
     n.add_argument('text', nargs='?'); n.add_argument('--id', type=int)
@@ -317,6 +366,11 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
         elif c == 'notices': play.notices(args.follow)
         elif c == 'places': play.places(args.radius)
         elif c == 'go': play.go(args.address)
+        elif c == 'walk':
+            if args.to and not args.coords: play.walk(place=args.to)
+            elif len(args.coords) == 2 and not args.to: play.walk(args.coords[0], args.coords[1])
+            else: raise Refused('walk X Z | walk --to PLACE')
+        elif c == 'map': play.map(args.what, args.limit)
         elif c == 'screen': play.screen(args.name, args.fetch)
         elif c == 'ui': play.ui(args.op, args.text, args.id)
         elif c == 'time':

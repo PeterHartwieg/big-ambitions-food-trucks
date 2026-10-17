@@ -50,6 +50,10 @@ namespace FoodTrucks.Core.Saves
         // additive field: older saves read none).
         public List<CrewTaking> CrewTakings { get; set; } = new List<CrewTaking>();
 
+        // Each food vehicle's number in its name ("Food cart 2"), kept so a vehicle bought later never renumbers the
+        // others (FleetNames; additive field: older saves read none and number their vehicles in ID order once).
+        public List<VehicleNumber> VehicleNumbers { get; set; } = new List<VehicleNumber>();
+
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
 
@@ -58,6 +62,17 @@ namespace FoodTrucks.Core.Saves
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (state.SaveCount < int.MaxValue) state.SaveCount++;
         }
+    }
+
+    public class VehicleNumber
+    {
+        public string Id { get; set; } = string.Empty;
+        // The game's vehicle type name: each kind is numbered on its own.
+        public string Kind { get; set; } = string.Empty;
+        public int Number { get; set; }
+
+        [JsonExtensionData]
+        public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
     public class LicenceState

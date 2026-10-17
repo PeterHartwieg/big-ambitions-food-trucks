@@ -284,19 +284,31 @@ namespace FoodTrucks
         }
 
         // The rows' item, box size and stock, as the item list shows them; the price beside it is the box price.
-        // Equipment reads plainly, by the piece ("Hot dog grill (1 here)"); food keeps "Hot dog, box of 500 (… here)" and
-        // says how many boxes of it are left under its weekly limit in the delivery's week, one limit for all commissaries
-        // together (Core CommissarySupply).
+        // Equipment reads plainly, by the piece, with the foods it cooks ("Industrial Grill (1 here): Burger, Chicken Kabob
+        // Skewer"); food names the piece that cooks it ("Hotdog for the Hotdog Grill, box of 500 (… here)") and says how
+        // many boxes of it are left under its weekly limit in the delivery's week, one limit for all commissaries together
+        // (Core CommissarySupply). The first blind playtest bought an Industrial Grill for hot dogs: nothing said which
+        // machine cooks what.
         private static LanguageChangeEventDataHolder Label(Line line, string siteId)
         {
-            var piece = DemandData.Tables?.EquipmentForGameItem(line.Item) != null;
+            var tables = DemandData.Tables;
+            var equipment = tables?.EquipmentForGameItem(line.Item);
+            var piece = equipment != null;
+            var foods = equipment == null ? "" : StoragePanel.Foods(equipment);
+            var cookedOn = piece || tables == null ? null : StoragePanel.PieceFor(tables, line.Item);
             var state = FoodTrucksSession.CurrentState;
             var rules = DemandData.Rules?.Commissary;
             var limited = !piece && state != null && rules != null && !Commissary.LimitsLifted;
             var left = limited ? CommissarySupply.Left(state!.Commissary, rules!, line.Item, TimeHelper.CurrentDay + 1) : 0;
-            return LocalizorManager.Localize(piece ? "foodtrucks:commissary_form_piece" : limited ? "foodtrucks:commissary_form_item_left" : "foodtrucks:commissary_form_item", new
+            var name = LocalizorManager.GetLocalization(line.Item, null);
+            var item = cookedOn != null
+                ? LocalizorManager.GetLocalization("foodtrucks:commissary_form_food_for", new Dictionary<string, string> { { "food", name }, { "piece", cookedOn } })
+                : name;
+            return LocalizorManager.Localize(piece ? foods.Length > 0 ? "foodtrucks:commissary_form_piece_foods" : "foodtrucks:commissary_form_piece"
+                : limited ? "foodtrucks:commissary_form_item_left" : "foodtrucks:commissary_form_item", new
             {
-                item = LocalizorManager.GetLocalization(line.Item, null),
+                item,
+                foods,
                 box = line.Box.ToString(),
                 stock = line.InStock.ToString(),
                 left = left.ToString()

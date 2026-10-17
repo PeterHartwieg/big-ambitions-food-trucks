@@ -6,6 +6,7 @@ using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
 using Helpers;
 using Streets;
+using UnityEngine;
 using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks
@@ -100,6 +101,109 @@ namespace FoodTrucks
                 ["radius"] = radius,
                 ["places"] = new JArray(list.OrderBy(p => p.Distance).Take(40).Select(p => p.Entry)),
             };
+        }
+
+        // ---- map ----
+
+        // The city map's highlights as data, filtered the way a player filters the map (docs/ai-playtest-plan.md, "The map
+        // for the tester"). { "op": "filters" }: the filters there are, each with how many buildings it lights now.
+        // { "filter", "limit"?: N (default 30, at most 100) }: the buildings that filter lights, nearest the player first.
+        // Filters, as the game's map and the mod's Street food line have them:
+        //   for_rent, for_rent:<building type>  buildings on the market (AvailableForRent), all or of one type
+        //   business:<business type>             active businesses of one type (ba:businesstype_…)
+        //   for_sale, yours                      buildings for sale; buildings you rent or own
+        //   offices, factories, nightlife, shows Street food's building filters (Core StreetFoodMap)
+        //   pitches, commissaries                Street food's premium spots and coming events; the commissaries
+        // Reads only. The game's own map isn't opened or changed.
+        private static JToken MapCommand(JObject args)
+        {
+            var game = SaveGameManager.Current;
+            var tables = DemandData.Tables ?? throw new BridgeError("The mod's tables aren't loaded.");
+            var classifier = new FoodTrucks.Core.Demand.AreaClassifier(tables);
+            var registrations = World.Registrations();
+            var forSale = new HashSet<string>((game.buildingsForSale ?? new List<BuildingForSale>()).Where(b => b?.address != null)
+                .Select(b => World.AddressKey(b.address.streetName, b.address.streetNumber)), StringComparer.Ordinal);
+            var owned = new HashSet<string>((game.realEstate ?? new List<Entities.RealEstate>()).Where(r => r?.address != null)
+                .Select(r => World.AddressKey(r.address.streetName, r.address.streetNumber)), StringComparer.Ordinal);
+            var pitches = MapFilters.PitchAddresses();
+            var sites = DemandData.Commissaries?.Sites ?? new List<FoodTrucks.Core.Commissary.CommissarySite>();
+            var commissaries = new HashSet<string>(sites.Select(s => s.Address), StringComparer.Ordinal);
+            var at = PlayerHelper.GetPosition();
+
+            // Every filter that lights a building, for one building.
+            IEnumerable<string> Lit(string key, string? buildingType, BuildingRegistration? registration)
+            {
+                var business = registration?.businessTypeName;
+                var hasBusiness = !string.IsNullOrEmpty(business) && business != "ba:businesstype_empty";
+                if (registration?.AvailableForRent == true)
+                {
+                    yield return "for_rent";
+                    if (!string.IsNullOrEmpty(buildingType)) yield return "for_rent:" + buildingType;
+                }
+                if (hasBusiness) yield return "business:" + business;
+                if (forSale.Contains(key) && !owned.Contains(key)) yield return "for_sale";
+                if (owned.Contains(key) || registration?.RentedByPlayer == true) yield return "yours";
+                foreach (var f in FoodTrucks.Core.Demand.StreetFoodMap.BuildingFilters)
+                    if (FoodTrucks.Core.Demand.StreetFoodMap.Highlights(classifier, f, buildingType, business)) yield return f;
+                if (pitches.Contains(key)) yield return "pitches";
+                if (commissaries.Contains(key)) yield return "commissaries";
+            }
+
+            var buildings = new List<(string Key, CityBuildingController Controller, Vector3 Door, double Distance, BuildingRegistration? Registration, List<string> Lit)>();
+            foreach (var (controller, doors) in World.AllBuildings())
+            {
+                var address = controller.building?.Address;
+                if (address == null || doors.Length == 0) continue;
+                var key = World.AddressKey(address.streetName, address.streetNumber);
+                registrations.TryGetValue((address.streetName, address.streetNumber), out var registration);
+                var door = doors.OrderBy(d => (d - at).sqrMagnitude).First();
+                buildings.Add((key, controller, door, Math.Sqrt((door.x - at.x) * (door.x - at.x) + (door.z - at.z) * (door.z - at.z)),
+                    registration, Lit(key, controller.building!.BuildingType, registration).ToList()));
+            }
+
+            if (Str(args, "op") == "filters")
+            {
+                string Label(string id)
+                {
+                    var colon = id.IndexOf(':');
+                    if (colon < 0) return id;
+                    var name = Localizor.LocalizorManager.GetLocalization(id.Substring(colon + 1), null);
+                    return (id.StartsWith("for_rent:", StringComparison.Ordinal) ? "for rent: " : "") + name;
+                }
+                var counts = buildings.SelectMany(b => b.Lit).GroupBy(f => f, StringComparer.Ordinal)
+                    .OrderBy(g => g.Key, StringComparer.Ordinal)
+                    .Select(g => new JObject { ["filter"] = g.Key, ["label"] = Label(g.Key), ["buildings"] = g.Count() });
+                return new JObject { ["filters"] = new JArray(counts) };
+            }
+
+            var filter = Need(args, "filter", "a map filter (op \"filters\" lists them)");
+            var limit = (int)Math.Max(1, Math.Min(100, Num(args, "limit") ?? 30));
+            var lit = buildings.Where(b => b.Lit.Contains(filter)).OrderBy(b => b.Distance).ToList();
+            var list = new JArray();
+            foreach (var b in lit.Take(limit))
+            {
+                var registration = b.Registration;
+                var business = registration?.businessTypeName;
+                var hasBusiness = !string.IsNullOrEmpty(business) && business != "ba:businesstype_empty";
+                var site = sites.FirstOrDefault(s => s.Address == b.Key);
+                list.Add(new JObject
+                {
+                    ["address"] = b.Key,
+                    ["name"] = b.Controller.building!.Address.ToFormattedString(),
+                    ["distance"] = Math.Round(b.Distance),
+                    ["x"] = TestBridgeState.Round(b.Door.x), ["z"] = TestBridgeState.Round(b.Door.z),
+                    ["building_type"] = Localizor.LocalizorManager.GetLocalization(b.Controller.building.BuildingType, null),
+                    ["size"] = string.IsNullOrEmpty(b.Controller.building.BuildingSize) ? null : Localizor.LocalizorManager.GetLocalization(b.Controller.building.BuildingSize, null),
+                    ["business"] = hasBusiness ? registration!.BusinessName : null,
+                    ["business_type"] = hasBusiness ? Localizor.LocalizorManager.GetLocalization(business!, null) : null,
+                    ["for_rent"] = registration?.AvailableForRent ?? false,
+                    ["rent_per_day"] = registration?.AvailableForRent == true ? Math.Round(registration.RentPerDay, 2) : (double?)null,
+                    ["neighbourhood"] = string.IsNullOrEmpty(b.Controller.building.Neighbourhood) ? null
+                        : Localizor.LocalizorManager.GetLocalization(b.Controller.building.Neighbourhood, null),
+                    ["commissary"] = site == null ? null : new JObject { ["site"] = site.Id, ["name"] = Localizor.LocalizorManager.GetLocalization(site.Name, null) },
+                });
+            }
+            return new JObject { ["filter"] = filter, ["count"] = lit.Count, ["buildings"] = list };
         }
 
         // ---- route ----

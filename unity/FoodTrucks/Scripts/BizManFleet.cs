@@ -841,10 +841,52 @@ namespace FoodTrucks
                     : Text("foodtrucks:bizman_fleet_where_moving");
             if (withDriver) return Text("foodtrucks:bizman_fleet_where_driver");
             var place = !string.IsNullOrEmpty(instance.streetName) ? instance.Address.ToFormattedString()
-                : !string.IsNullOrEmpty(instance.parkingNeighbourhood) ? Text(instance.parkingNeighbourhood)
-                : Text("foodtrucks:bizman_fleet_place_unknown");
+                : OutdoorPlace(instance, vehicle)
+                  ?? (!string.IsNullOrEmpty(instance.parkingNeighbourhood) ? Text(instance.parkingNeighbourhood) : Text("foodtrucks:bizman_fleet_place_unknown"));
             return Format(vehicle?.IsOpen == true ? "foodtrucks:bizman_fleet_where_open" : "foodtrucks:bizman_fleet_where_closed", ("place", place));
         }
+
+        // Where a vehicle on the street stands, as the player knows the place: the route stop it is at (the one it is
+        // open at, else one within the stop radius), a commissary's bay, else the nearest building's neighbourhood. The
+        // game sets a vehicle's parkingNeighbourhood only for its own parking, so a cart read "an unknown spot" in the
+        // bay and at its stops (the first blind playtest, 17 October 2026). Null when none is known.
+        private static string? OutdoorPlace(VehicleInstance instance, VehicleState? vehicle)
+        {
+            try
+            {
+                var controller = VehicleHelper.GetVehicleController(instance);
+                var position = controller != null ? controller.transform.position : (Vector3)instance.position;
+                var stops = vehicle?.Schedule?.Stops;
+                if (stops != null && stops.Count > 0)
+                {
+                    var radius = DemandData.Rules?.Fleet.StopRadiusMetres ?? 25.0;
+                    var stop = vehicle!.IsOpen && vehicle.HireStop is int open && open < stops.Count ? stops[open]
+                        : stops.Where(st => Distance(position, st) <= radius).OrderBy(st => Distance(position, st)).FirstOrDefault();
+                    if (stop != null) return RouteStops.Label(stop);
+                }
+                var site = Commissary.SiteOf(instance);
+                if (site != null) return Commissary.Name(site);
+                string? neighbourhood = null;
+                var nearest = float.MaxValue;
+                foreach (var (building, doors) in World.AllBuildings())
+                    foreach (var door in doors)
+                    {
+                        var d = (door.x - position.x) * (door.x - position.x) + (door.z - position.z) * (door.z - position.z);
+                        if (d >= nearest || string.IsNullOrEmpty(building.building?.Neighbourhood)) continue;
+                        nearest = d;
+                        neighbourhood = building.building!.Neighbourhood;
+                    }
+                return neighbourhood == null ? null : Text(neighbourhood);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Street food place: " + ex.Message);
+                return null;
+            }
+        }
+
+        private static double Distance(Vector3 position, FoodTrucks.Core.Saves.ScheduleStop stop) =>
+            Math.Sqrt((position.x - stop.X) * (position.x - stop.X) + (position.z - stop.Z) * (position.z - stop.Z));
 
         // The player's food vehicles, those left with the private driver included.
         internal static List<(VehicleInstance Instance, bool WithDriver)> Vehicles()

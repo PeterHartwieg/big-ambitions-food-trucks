@@ -274,6 +274,21 @@ public class HireRunnerTests
     }
 
     [Fact]
+    public void WouldMoveSaysTheCrewWaitsOnlyForThePlayer()
+    {
+        var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60));
+        runner.EnsurePlan(truck, At(3, 6), 0, 0);
+        var where = new VehicleWhere(0, 0, leaveAlone: false, stayPut: true);
+
+        Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), where).Kind);
+        // Without the player by it, the crew would set off now.
+        Assert.True(runner.WouldMove(truck, At(3, 12), where.WithStayPut(false)));
+        // At the stop it opens rather than moves; with nothing to sell it wouldn't leave either.
+        Assert.False(runner.WouldMove(truck, At(3, 12), new VehicleWhere(2000, 0, leaveAlone: false)));
+        Assert.False(runner.WouldMove(truck, At(3, 12), new VehicleWhere(0, 0, leaveAlone: false, hasStock: false)));
+    }
+
+    [Fact]
     public void ALegOutOfRangeIsDroppedOnEdit()
     {
         var truck = Truck(Stop("office", 0, 11 * 60, 14 * 60));

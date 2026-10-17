@@ -1233,7 +1233,7 @@ namespace FoodTrucks
         }
 
         // Close enough to see the window: the queue view's range, outdoors.
-        private static bool PlayerNear(VehicleInstance cart)
+        internal static bool PlayerNear(VehicleInstance cart)
         {
             if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking) return false;
             var controller = VehicleHelper.GetVehicleController(cart);

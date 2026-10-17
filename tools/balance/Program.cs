@@ -767,10 +767,18 @@ if (opts.Wants("pass"))
         FoodTrucks.Core.Saves.ScheduleStop B(string key, int open) => new() { Day = DayOfWeek.Tuesday, SpotKey = key, X = bay.X, Z = bay.Z, OpenAt = open, CloseAt = open + 30 };
         var forms = new List<(string Name, List<FoodTrucks.Core.Saves.ScheduleStop> Stops, bool NightAtPitch)>();
         var close = Math.Min(day.To, FloorHalf(1410 - t));
+        // One person can't cover more than one shift of MaxShiftHours a day (WeekPlan.AutoSchedule): with a crew of one,
+        // the pitch ends early enough for the whole route day, restock and drives included, to fit in it. The 1.2 m/s
+        // walk used to force that through the drive time alone; at 4 m/s a cart's day ran past the shift (17 October 2026).
+        var oneShift = Math.Min(Math.Max(1, hires), tables.Vehicle(cart.VehicleKind)!.Staff) == 1 ? rules.Fleet.MaxShiftHours * 60 : int.MaxValue / 4;
+        var dayStart = day.From - t - rules.Fleet.RestockMinutes;
+        close = Math.Min(close, FloorHalf(dayStart + oneShift - t - 30));
         var shortened = close < day.To ? $", pitch shortened to {Clock(close)}" : "";
         forms.Add(($"pitch, bay{shortened}", new() { P("pitch", day.From, close), B("bay", CeilHalf(close + t)) }, false));
         var morningBay = FloorHalf(day.From - t) - 30;
-        forms.Add(("bay, pitch, back to the bay", new() { B("bay", morningBay), P("pitch", day.From, day.To) }, false));
+        var lateClose = Math.Min(day.To, FloorHalf(morningBay + oneShift - t));
+        forms.Add(($"bay, pitch, back to the bay{(lateClose < day.To ? $", pitch shortened to {Clock(lateClose)}" : "")}",
+            new() { B("bay", morningBay), P("pitch", day.From, lateClose) }, false));
         foreach (var b in breaks ?? Array.Empty<int>())
         {
             var bayOpen = CeilHalf(b + t);

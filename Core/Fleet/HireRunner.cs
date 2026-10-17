@@ -82,6 +82,11 @@ namespace FoodTrucks.Core.Fleet
         // The bay of the commissary where it rents its space, which the crew drives back to after the last stop
         // (HireSchedules.HomeIndex); null without a space (or while its bay isn't known).
         public (double X, double Z)? Home { get; }
+
+        // The same place with StayPut set as given (HireRunner.WouldMove asks what the crew would do without the player).
+        public VehicleWhere WithStayPut(bool stayPut) =>
+            new VehicleWhere(X, Z, LeaveAlone, CanSellHere, HasStock, stayPut, CanRestock, StockKey, BayStops, Home, CanServe);
+
         // Someone of the crew on shift is there and able to work (not off sick, training or being replaced): without one,
         // a crew window closes.
         public bool CanServe { get; }
@@ -362,6 +367,14 @@ namespace FoodTrucks.Core.Fleet
             // Serving away from its own bay: the drive back is owed, whether or not it drove here (review round 3).
             if (!where.CanRestock) vehicle.ReturnPending = true;
             return new HireAction(HireActionKind.Open, want.StopIndex);
+        }
+
+        // Whether the crew would set off or restock now at `where` (taken as is, StayPut included): the game side asks it
+        // with the player's part of StayPut left out, to say why a crew on shift waits by a vehicle the player is beside.
+        public bool WouldMove(VehicleState vehicle, long now, VehicleWhere where, double gameSpeed = 1.0)
+        {
+            var kind = Step(vehicle, now, where, gameSpeed).Kind;
+            return kind == HireActionKind.Depart || kind == HireActionKind.Restock;
         }
 
         // The drive back to its own bay: nothing once it is in the bay (or has no bay to go to), or while the player keeps

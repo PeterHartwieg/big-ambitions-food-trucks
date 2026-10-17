@@ -8,7 +8,7 @@ namespace FoodTrucks.Core.Fleet
     public sealed class FleetRules
     {
         public FleetRules(int licenceDays = 60, int renewWindowDays = 10, long licenceFeeCents = 250_00, long permitFeeCents = 500_00,
-            double driveMinutesPerMetre = 0.04, double pushMetresPerSecond = 1.2, double roadFactor = 1.0,
+            double driveMinutesPerMetre = 0.04, double pushMetresPerSecond = 4.0, double roadFactor = 1.0,
             int maxStops = 6, int latestCloseMinute = 27 * 60, double stopRadiusMetres = 25,
             int courseMinutes = 6 * 60, int coursePricePerHour = 25, int restockMinutes = 30, int maxShiftHours = 12)
         {
