@@ -1,3 +1,22 @@
+# The recruitment agency recruits for the street food fleet (next build)
+
+Branch `fleet-recruit` (17 October 2026), Peter's decision after blind run 2. Nothing here has run in game. Use a fresh FT playtest character with a cart and no building business. Check the patches' startup lines first: `Patch RecruitmentAgencyDialog.NoBusinesses: Active.`, `...OnRecruitmentSettingsSet`, `RecruitmentSettings.OnEnable`, `RecruitmentSettings.SelectBusiness(Int32)`, `RecruitmentCampaignsList.SetUpContract(RecruitmentCampaign)`.
+
+| # | Do | Look for |
+|---|---|---|
+| FR1 | Without the Basic HR course, talk to a recruitment agency's receptionist (or call it) | The game's own refusal about the course, unchanged |
+| FR2 | With Basic HR, no food vehicle and no building business | The game's own "no businesses" answer, unchanged |
+| FR3 | With Basic HR and a cart (no building business) | The agency greets you and opens the campaign form; the log has `Fleet recruiting: the agency offers a campaign…`; the business list's last entry is "Street food fleet" |
+| FR4 | Pick "Street food fleet" | The skill list offers Customer Service only; picking it shows the part time and full time toggles; Confirm without a schedule gives the game's "select a schedule" |
+| FR5 | Set the deadline and candidates, Confirm | The game's price is charged (`Recruitment campaign` in the bank), the conversation goes on as for a business, the log has `Fleet recruiting: campaign for …` |
+| FR6 | The agency's campaign list (talk again, "manage campaigns") | The campaign shows "Street food fleet" as its business, with candidates and days left; cancelling it works as the game's |
+| FR7 | Let the days pass | Candidates arrive in My Employees; hired, each is unassigned (the game's "unassigned" to-do); the vehicle page's crew list and `tools/play crew assign` take them |
+| FR8 | A player with a named shop too | The list has the shop and the fleet; a campaign for the shop works exactly as before and its candidates arrive assigned to the shop |
+| FR9 | Save with a fleet campaign running, load | The campaign still runs and lists as the fleet's |
+| FR10 | Ctrl+Shift+F11 (uninstall) with a fleet campaign running | The campaign is gone from the agency's list and the price of the candidates not found yet is paid back (`Uninstall: fleet recruitment campaign ended …` in the log) |
+| FR10a | Sell your last food vehicle with a fleet campaign running, then Ctrl+Shift+F11 twice | The campaign ends and its unfound candidates' price comes back, as in FR10; with the fleet form open during the uninstall, its Confirm says "select a business" and charges nothing |
+| FR11 | Tester: `tools/play --help` | The hiring hint names the agency, its HR course and the fleet, with no numbers |
+
 # Driving a truck for the blind tester (next build)
 
 Branch `claude/angry-solomon-1b998f` (17 October 2026): bridge `drive` and `tools/play drive`; the self-driving mod (HART. Self Driving, rc7 or later) does the ride through its test rig. Seen in game on 17 October 2026 in the fresh save `FT playtest drive 1` (log in `build/logs/game/drive-1/`): DR1, DR2 (450 m in 54 s, `Complete: arrived`), DR3, DR4 (0 fines at 04:00) and DR5. Every ride had one or two low-speed bumps the truck caused (2 to 4 km/h into a stopped car ahead), a Self Driving finding. DR6 to DR9 are still open. For a new run: a fresh FT save (`new_game`), Self Driving on, the game started with `-foodtrucks-test`, other gameplay mods off.

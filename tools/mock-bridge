@@ -55,7 +55,11 @@ CATALOG.update({key:(LOCALE.get(key,key.split('itemname_')[-1].title()),1,750.) 
 # The player's life in the mock (docs/test-bridge.md, "The player's life"). The dialogs it opens, and those that are an
 # activity panel holding the clock. The game's own numbers where the 1.0 code has them: the taxi's $0.15 and 0.04 game
 # minutes a metre, a bed's 0.35 energy a minute, the hospital at -20. The shops' goods and prices are made up.
-LIFE_DIALOGS = {'taxi_map', 'presentation', 'purchase', 'sleep', 'course', 'course_choice', 'phone_app', 'city', 'agency'}
+LIFE_DIALOGS = {'taxi_map', 'presentation', 'purchase', 'sleep', 'course', 'course_choice', 'phone_app', 'city', 'agency', 'agency_form'}
+# The Basic HR course the recruitment agency wants (made-up hours and price; the game's are its DiplomaData), and the agency's
+# campaign form: the game's price, $50 per candidate per day short of the longest deadline plus one.
+BASIC_HR = {'hours': 4, 'pricePerHour': 30}
+AGENCY_DAYS, AGENCY_CANDIDATES = 7, 5
 LIFE_PANELS = {'sleep', 'course'}
 TAXI_PER_METRE, TAXI_MINUTES_PER_METRE, BED_ENERGY_PER_MINUTE = .15, .04, .35
 SHOPS = {'ba:businesstype_fastfoodrestaurant': [('ba:itemname_burger', 'Burger', 8., 'food', 45)],
@@ -225,7 +229,7 @@ class Mock:
         # The player's life (docs/test-bridge.md, "The player's life"): where they are inside, what they hold, the homes they
         # rent and the beds set down there, a taxi waiting, the course's hours, candidates on the phone.
         self.life = {'inside': None, 'hands': None, 'homes': [], 'beds': {}, 'taxi': False, 'course_minutes': 0,
-                     'candidates': [], 'activity': None, 'purchase': None, 'contact': None, 'city_step': 'start', 'app': None}
+                     'candidates': [], 'diplomas': [], 'campaigns': [], 'studied': {}, 'activity': None, 'purchase': None, 'contact': None, 'city_step': 'start', 'app': None}
         self.state['player']['needs']['happiness_modifiers'] = [MOOD['no_home']]
         self.state['player']['needs']['warnings'] = []
         self.last_use = []
@@ -1068,6 +1072,7 @@ class Mock:
         self.spend_needs()
         if m % 60 == 0:
             self.flush_hour(before // 1440 + 1, (before % 1440) // 60)
+            self.life_hour()
         if m == 0:
             for v in self.state['vehicles']:
                 if v['crew'] and (v['route'] or {}).get('stops',0):
@@ -1174,7 +1179,7 @@ class Mock:
         if self.dialog in LIFE_DIALOGS:
             for entry in self.life_buttons():
                 add(entry['text'], entry.get('kind', 'button'), entry.get('row', ''))
-                entries[-1].update({k: v for k, v in entry.items() if k in ('value', 'min', 'max', 'whole_numbers')})
+                entries[-1].update({k: v for k, v in entry.items() if k in ('value', 'min', 'max', 'whole_numbers', 'on')})
             return entries
         if self.dialog == 'commissary':
             # Commissary stock: Fill up, a take per item in stock here, a return per item on board.
@@ -1595,6 +1600,7 @@ class Mock:
             def thing(kind,name,click,**extra): out.append({'kind':kind,'name':name,'click':click,'x':round(p['x']+1.5,2),'z':round(p['z'],2),'distance':1.5,**extra})
             if business=='ba:businesstype_school':
                 thing('EducationDoorController','Market Demands','Click to learn')
+                thing('EducationDoorController','Basic HR','Click to learn')
             if business=='ba:businesstype_recruitmentagency':
                 thing('BusinessEmployeeController','Receptionist','Click to talk')
             for key,name,price,kind,_ in SHOPS.get(business,[]):
@@ -1673,10 +1679,12 @@ class Mock:
             wanted=need(args,'contact',"a contact's id or name (call list shows them)")
             match=[c for c in contacts if c['id']==wanted] or [c for c in contacts if c['name'].casefold()==wanted.casefold()]
             if not match: raise ValueError(f"No contact '{wanted}' in your phone (call list shows them).")
-            if self.dialog in ('city','agency','phone','order','confirm','items'): raise ValueError("You're in a call or a conversation already: finish it first (its own buttons, or ui escape).")
+            if self.dialog in ('city','agency','agency_form','phone','order','confirm','items'): raise ValueError("You're in a call or a conversation already: finish it first (its own buttons, or ui escape).")
             contact=match[0]
             life['contact']=contact['id']; life['city_step']='start'
-            self.dialog='city' if contact['id']=='the_city_of_new_york' else 'phone' if contact['id'].startswith('foodtrucks_commissary_') else 'agency'
+            if contact['id']=='the_city_of_new_york': self.dialog='city'
+            elif contact['id'].startswith('foodtrucks_commissary_'): self.dialog='phone'
+            else: self.agency_open()
             return {'contact':contact['id'],'name':contact['name'],'calling':True,'open':['phone','call'],'notices':[]}
         if cmd=='eat':
             hands=life['hands']
@@ -1734,10 +1742,13 @@ class Mock:
             if life['hands']: self.event('You need empty hands to do that.','notice'); return True
             self.dialog='sleep'; life['activity']={'minutes':480}; return True
         if kind=='EducationDoorController':
+            if t['name']=='Basic HR':
+                if 'basic_hr' in life['diplomas']: return True
+                self.dialog='course'; life['activity']={'hours':1,'course':'basic_hr'}; return True
             if self.state['licence']['course_done']: self.dialog='closed'; return True
             self.dialog='course_choice'; return True
         if kind=='BusinessEmployeeController':
-            self.dialog='agency'; return True
+            self.agency_open(); return True
         b=self.building(life['inside']) or {}
         goods=SHOPS.get(b.get('businessType'),[])
         if kind=='ItemController':
@@ -1768,7 +1779,8 @@ class Mock:
         elif self.dialog=='course_choice':
             out+= [{'text':'Food Safety Course'},{'text':'Market Demands'}]
         elif self.dialog=='course':
-            left=(TUNING['fleet']['course']['hours']*60-life['course_minutes'])//60
+            course=self.course()
+            left=(course['hours']*60-life['studied'].get(life['activity'].get('course','food_safety'),0))//60
             out+= [{'text':'Hours','kind':'slider','row':'Slider','value':life['activity']['hours'],'min':1,'max':max(1,left),'whole_numbers':True},{'text':'Start'},{'text':'Cancel'}]
         elif self.dialog=='phone_app':
             if life['app']=='employees':
@@ -1785,7 +1797,42 @@ class Mock:
             out.append({'text':'Hang up'})
         elif self.dialog=='agency':
             out.append({'text':'Hang up'})
+        elif self.dialog=='agency_form':
+            form=life['form']
+            out.append({'text':'Street food fleet','kind':'option','row':'Business'})
+            if form['business']: out.append({'text':'Customer Service','kind':'option','row':'Skill'})
+            if form['skill']:
+                out+= [{'text':'Part time','kind':'toggle','row':'PartTime','on':form['part']},{'text':'Full time','kind':'toggle','row':'FullTime','on':form['full']}]
+            out+= [{'text':'Deadline','kind':'slider','row':'Deadline','value':form['days'],'min':1,'max':AGENCY_DAYS,'whole_numbers':True},
+                   {'text':'Candidates','kind':'slider','row':'Candidates','value':form['candidates'],'min':1,'max':AGENCY_CANDIDATES,'whole_numbers':True},
+                   {'text':'Confirm'},{'text':'Cancel'}]
         return out
+
+    def course(self):
+        return BASIC_HR if (self.life['activity'] or {}).get('course')=='basic_hr' else TUNING['fleet']['course']
+
+    def agency_open(self):
+        # The game's order: an active campaign, then the Basic HR course, then a business (the mod adds the fleet).
+        life=self.life
+        if 'basic_hr' not in life['diplomas']: self.dialog='agency'; life['agency_says']='diploma'; return
+        if not self.state['vehicles']: self.dialog='agency'; life['agency_says']='no_business'; return
+        self.dialog='agency_form'; life['form']={'business':False,'skill':False,'part':False,'full':False,'days':AGENCY_DAYS,'candidates':1}
+        self.event('Fleet recruiting: the agency offers a campaign for the street food fleet (no building business).')
+
+    def agency_price(self):
+        form=self.life['form']
+        return 50.*(AGENCY_DAYS-form['days']+1)*form['candidates']
+
+    def life_hour(self):
+        # The game's hourly run (RecruitmentHelper.RunHourly): candidates at their find times, unassigned for the fleet.
+        c=self.state['clock']; day=c['day']; hour=int(c['time'][:2]); life=self.life
+        for campaign in list(life['campaigns']):
+            for when in [w for w in campaign['times'] if w==(day,hour)]:
+                n=len(life['candidates'])+len(self.employees)+1
+                life['candidates'].append({'id':f'candidate-{n}','name':f'Mock candidate {n}','skill':35.,'satisfaction':50.,'wage':9.5})
+                campaign['found']+=1
+                self.event(f'Candidate received: Mock candidate {n} (customer service, unassigned).')
+            if campaign['found']>=campaign['candidates']: life['campaigns'].remove(campaign)
 
     def life_texts(self):
         life=self.life
@@ -1799,7 +1846,10 @@ class Mock:
             return [clean(LOCALE[key].format(fee=f'${fee:,.2f}',days=TUNING['fleet']['licenceDays'],day=lic['until_day'],left=0,
                                             permits=len(self.state['vehicles'])-lic['permits'],events=0))]
         if self.dialog=='agency':
-            return ['To start a recruitment campaign, you need a business of your own with a name.']
+            return ['You need to complete the Basic HR course before we can work together.' if life.get('agency_says')=='diploma'
+                    else 'To start a recruitment campaign, you need a business of your own with a name.']
+        if self.dialog=='agency_form':
+            return [f'Price: ${self.agency_price():,.2f}']
         if self.dialog=='course_choice':
             return ['Which course?']
         return []
@@ -1813,6 +1863,8 @@ class Mock:
         value=round(max(entry['min'],min(entry['max'],value)))
         if self.dialog=='sleep': self.life['activity']['minutes']=value
         elif self.dialog=='course': self.life['activity']['hours']=value
+        elif self.dialog=='agency_form' and entry['text']=='Deadline': self.life['form']['days']=value
+        elif self.dialog=='agency_form' and entry['text']=='Candidates': self.life['form']['candidates']=value
         else: raise ValueError(f"Entry {int(ident)} ({entry['text']}) is no longer on screen; list again.")
         self.event(f'Test bridge: set "{entry["text"]}" to {value}.')
         return {'set':entry['text'],'value':float(value),'min':entry['min'],'max':entry['max'],'texts':[]}
@@ -1860,15 +1912,36 @@ class Mock:
             else: self.dialog='closed'
             return
         if self.dialog=='course' and text=='Start':
-            hours=life['activity']['hours']; price=TUNING['fleet']['course']['pricePerHour']*hours
+            course=self.course(); which=life['activity'].get('course','food_safety')
+            hours=life['activity']['hours']; price=course['pricePerHour']*hours
             if self.state['money']<price: self.event('Not enough money.','notice'); return
             self.pay(-int(price*100),'ba:transaction_education'); self.dialog='closed'
             self.time_skip=True
             try: self.skip(hours*60)
             finally: self.time_skip=False
-            life['course_minutes']+=hours*60
-            if life['course_minutes']>=TUNING['fleet']['course']['hours']*60: self.state['licence']['course_done']=True
+            life['studied'][which]=life['studied'].get(which,0)+hours*60
+            if life['studied'][which]>=course['hours']*60:
+                if which=='basic_hr': life['diplomas'].append('basic_hr')
+                else: self.state['licence']['course_done']=True
             return
+        if self.dialog=='agency_form':
+            form=life['form']
+            if text=='Street food fleet': form['business']=True; return
+            if text=='Customer Service': form['skill']=True; return
+            if text=='Part time': form['part']=not form['part']; return
+            if text=='Full time': form['full']=not form['full']; return
+            if text=='Confirm':
+                if not form['business']: self.event('Select a business.','notice'); return
+                if not form['skill']: self.event('Select a skill.','notice'); return
+                if not (form['part'] or form['full']): self.event('Select a schedule.','notice'); return
+                price=self.agency_price()
+                if self.state['money']<price: self.event('Not enough money.','notice'); return
+                self.pay(-int(round(price*100)),'ba:transaction_recruitmentcampaign')
+                day=self.state['clock']['day']
+                times=[(day+1+i%form['days'],10+i) for i in range(form['candidates'])]
+                life['campaigns'].append({'candidates':form['candidates'],'found':0,'times':times,'price':price})
+                self.event(f"Fleet recruiting: campaign for {form['candidates']} ba:skill_customerservice candidates for the street food fleet, ${price:.2f}.")
+                self.dialog='closed'; return
         if self.dialog=='phone_app' and text.startswith('Hire '):
             c=next(c for c in life['candidates'] if text=='Hire '+c['name'])
             life['candidates'].remove(c)

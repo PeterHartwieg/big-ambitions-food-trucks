@@ -80,8 +80,10 @@ How the city works (hints, not a plan):
     commissary's bay for the night is safe.
   - Selling street food needs the city's vendor licence, and a permit for each vehicle. The City of New York sells
     them by phone, and the licence first wants a food safety course, taught at the business school.
-  - Staff are found the way the city finds them: through its recruitment and job channels, then hired from the
-    candidates on your phone.
+  - Staff come through a recruitment agency. It works only with people who have passed the business school's HR
+    course, and once you own a cart or a truck it recruits for your street food fleet. A campaign costs money and
+    takes days; the candidates it finds wait on your phone, where you hire them, and a hire then joins a vehicle's
+    crew.
   - Schools, shops and offices keep opening hours.
 
 If the referee stops the game, every command that acts refuses and says why (the file named by FT_PLAY_STOP)."""

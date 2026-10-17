@@ -139,7 +139,7 @@ NullReferenceException: unrelated
 
     def test_rules_compile_and_patch_names_match_source(self):
         rules=read_rules(ROOT/'tests/game/logchecks/0.9.10.txt')
-        self.assertEqual(sum(r.id.startswith('patch.') for r in rules),54)
+        self.assertEqual(sum(r.id.startswith('patch.') for r in rules),59)
         self.assertGreater(len(rules),90)
         self.assertTrue(any('BusinessHelper.RunDaily' in r.id for r in rules))
 

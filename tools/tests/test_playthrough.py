@@ -414,6 +414,16 @@ class BridgeOpsParityTests(unittest.TestCase):
             self.assertIn(text, life + world)
         self.assertEqual({c['id'] for c in self.mock.call('call', {'op': 'list'})['contacts']}, {'the_city_of_new_york'})
         self.assertIn('the_city_of_new_york', (TOOLS.parent / 'unity/FoodTrucks/Scripts/CityLicensing.cs').read_text())
+        fleet = (TOOLS.parent / 'unity/FoodTrucks/Scripts/FleetRecruiting.cs').read_text()
+        patches = (TOOLS.parent / 'unity/FoodTrucks/Scripts/Patches.cs').read_text()
+        rules = (TOOLS.parent / 'tests/game/logchecks/0.9.10.txt').read_text()
+        for method in ('NoBusinesses', 'OnRecruitmentSettingsSet', 'OnEnable', 'SelectBusiness', 'SetUpContract'):
+            self.assertIn(f'"{method}"', patches)
+            self.assertIn(f'.{method}', rules)
+        for line in ('Fleet recruiting: the agency offers a campaign for the street food fleet (no building business).',
+                     'Fleet recruiting: campaign for '):
+            self.assertIn(line, fleet)
+        self.assertIn('FleetRecruiting.EndForUninstall()', (TOOLS.parent / 'unity/FoodTrucks/Scripts/Uninstall.cs').read_text())
         for key in ('contact', 'name', 'calling', 'open', 'contacts', 'category', 'unread', 'app', 'item', 'done', 'hunger', 'energy', 'placed', 'why', 'rotation'):
             self.assertIn(f'["{key}"]', life)
         for key in ('name', 'amount', 'shows_time'):
@@ -744,6 +754,73 @@ class BlindPlayTests(unittest.TestCase):
         lic = self.session.mock.state['licence']
         self.assertTrue(lic['until_day'])
         self.assertEqual(lic['permits'], 1)
+
+    def test_the_agency_recruits_for_the_fleet_after_the_hr_course(self):
+        city = {b['key']: b for b in runpy.run_path(str(TOOLS / 'mock-bridge'), run_name='mock_city')['CITY']}
+        school = next(k for k, b in city.items() if b.get('businessType') == 'ba:businesstype_school')
+        agency = next(k for k, b in city.items() if b.get('businessType') == 'ba:businesstype_recruitmentagency')
+        self.session.mock.state['player'].update(x=city[agency]['x'], z=city[agency]['z'])
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.session.bridge.call('time', {'speed': 1})
+        door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == agency)
+        self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
+        # Before the HR course the agency turns you away, as the game's does.
+        self.assertEqual(self.play('use', self.thing('Receptionist')), 0, self.lines)
+        self.assertEqual(self.play('ui', 'list'), 0, self.lines)
+        self.assertTrue(any('Basic HR course' in line for line in self.lines), self.lines)
+        self.ui_click('Hang up')
+        self.assertEqual(self.play('walk', '--to', 'exit'), 0, self.lines)
+        # The course at the school's Basic HR door.
+        self.ride(school)
+        door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == school)
+        self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
+        self.assertEqual(self.play('use', self.thing('Basic HR')), 0, self.lines)
+        self.assertEqual(self.play('ui', 'list'), 0, self.lines)
+        slider = next(line for line in self.lines if '(slider' in line).split(']')[0][1:]
+        self.assertEqual(self.play('ui', 'set', slider, '4'), 0, self.lines)
+        self.ui_click('Start')
+        self.assertIn('basic_hr', self.session.mock.life['diplomas'])
+        self.assertEqual(self.play('walk', '--to', 'exit'), 0, self.lines)
+        # Still no business and no vehicle: the agency says so.
+        self.ride(agency)
+        door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == agency)
+        self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
+        self.assertEqual(self.play('use', self.thing('Receptionist')), 0, self.lines)
+        self.assertEqual(self.play('ui', 'list'), 0, self.lines)
+        self.assertTrue(any('business of your own' in line for line in self.lines), self.lines)
+        self.ui_click('Hang up')
+        # With a cart, the fleet is in the form: business, skill, part or full time, the deadline, then Confirm.
+        self.assertEqual(self.play('walk', '--to', 'exit'), 0, self.lines)
+        self.assertEqual(self.play('buy', 'cart'), 0, self.lines)
+        door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == agency)
+        self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
+        self.assertEqual(self.play('use', self.thing('Receptionist')), 0, self.lines)
+        self.ui_click('Street food fleet')
+        self.ui_click('Confirm')
+        self.assertEqual(self.session.mock.dialog, 'agency_form')
+        self.ui_click('Customer Service')
+        self.assertEqual(self.play('ui', 'list'), 0, self.lines)
+        self.assertTrue(any('Part time (toggle, off)' in line for line in self.lines), self.lines)
+        self.ui_click('Part time')
+        self.assertEqual(self.play('ui', 'list'), 0, self.lines)
+        deadline = next(line for line in self.lines if 'Deadline (slider' in line).split(']')[0][1:]
+        self.assertEqual(self.play('ui', 'set', deadline, '2'), 0, self.lines)
+        money = self.session.mock.state['money']
+        self.ui_click('Confirm')
+        self.assertEqual(self.session.mock.state['money'], money - 300)
+        t = self.session.mock.read_state()['transactions_today'][-1]
+        self.assertEqual(t['type'], 'ba:transaction_recruitmentcampaign')
+        # The candidate turns up over the next days, unassigned; hired on the phone, it can join the cart's crew.
+        self.assertEqual(self.play('walk', '--to', 'exit'), 0, self.lines)
+        self.assertEqual(self.play('time', 'until', '+1', '12:00'), 0, self.lines)
+        self.assertTrue(any('Candidate received' in e['text'] for e in self.session.mock.ring))
+        candidate = self.session.mock.life['candidates'][0]['name']
+        self.assertEqual(self.play('phone', 'employees'), 0, self.lines)
+        self.ui_click('Hire ' + candidate)
+        self.ui_click('Close')
+        employee = self.session.mock.read_state()['employees'][0]['id']
+        cart = self.session.mock.state['vehicles'][0]['id']
+        self.assertEqual(self.play('crew', 'assign', cart, employee), 0, self.lines)
 
     def test_a_taxi_charges_its_fare_and_takes_its_time(self):
         self.session.mock.state['player'].update(x=1440., z=420.)
