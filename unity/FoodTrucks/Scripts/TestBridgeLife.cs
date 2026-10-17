@@ -438,31 +438,58 @@ namespace FoodTrucks
                 ? "The game allows putting items down only inside a building you can edit; outside, load a hand truck instead."
                 : "You can place furniture only inside a building you rent.");
             if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode) throw new BridgeError("Something is being placed already.");
-            var hands = PlayerHelper.ItemInstanceInHands;
-            var cargo = hands?.cargoInstances?.FirstOrDefault();
-            if (!keepContainer && (hands == null || hands.itemName != "ba:itemname_closedcardboardbox" || cargo == null || cargo.ItemCached == null || !cargo.ItemCached.isFurniture))
-                throw new BridgeError("You aren't holding a box of furniture (shops pack what you buy in a box).");
-            if (keepContainer && (hands == null || hands.ItemCached == null || PlayerHelper.IsHoldingShoppingBasket ||
-                !(hands.ItemCached.HasTag(TagRef.Itemtag.isbox) || (hands.ItemCached.HasTag(TagRef.Itemtag.isbag) && hands.cargoInstances.Count > 0))))
-                throw new BridgeError("The game offers no put-down action for this item; return it or load it into storage.");
-            if (!keepContainer && !cargo!.paid) throw new BridgeError("You haven't paid for it.");
-            var item = keepContainer ? hands!.ItemCached : cargo!.ItemCached;
+            if (GroundPositionMethod == null || PlacementValidField == null) throw new BridgeError("The game's placement step wasn't found (game update?).");
+            // "move": furniture already standing in this building (the nearest whose name contains it) is picked up and set
+            // down again through the game's own move (PlacementHelper.StartPlacementMode); a refused move puts it back.
+            var moveName = keepContainer ? null : Str(args, "move");
+            ItemInstance? hands = null;
+            ItemController? moving = null;
+            Item item;
+            string itemName;
+            if (moveName != null)
+            {
+                var me = PlayerHelper.GetPosition();
+                moving = InstanceBehavior<BuildingManager>.Instance.allItemControllers
+                    .Where(c => c != null && c.ItemInstance?.ItemCached != null && c.ItemInstance.ItemCached.isFurniture &&
+                                (c.itemName.IndexOf(moveName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 LocalizorManager.GetLocalization(c.itemName, null).IndexOf(moveName, StringComparison.OrdinalIgnoreCase) >= 0))
+                    .OrderBy(c => Vector3.Distance(c.transform.position, me)).FirstOrDefault()
+                    ?? throw new BridgeError($"No furniture called '{moveName}' in this building.");
+                item = moving.ItemInstance.ItemCached;
+                itemName = moving.itemName;
+            }
+            else
+            {
+                hands = PlayerHelper.ItemInstanceInHands;
+                var cargo = hands?.cargoInstances?.FirstOrDefault();
+                if (!keepContainer && (hands == null || hands.itemName != "ba:itemname_closedcardboardbox" || cargo == null || cargo.ItemCached == null || !cargo.ItemCached.isFurniture))
+                    throw new BridgeError("You aren't holding a box of furniture (shops pack what you buy in a box). To move furniture that stands here, add --move NAME.");
+                if (keepContainer && (hands == null || hands.ItemCached == null || PlayerHelper.IsHoldingShoppingBasket ||
+                    !(hands.ItemCached.HasTag(TagRef.Itemtag.isbox) || (hands.ItemCached.HasTag(TagRef.Itemtag.isbag) && hands.cargoInstances.Count > 0))))
+                    throw new BridgeError("The game offers no put-down action for this item; return it or load it into storage.");
+                if (!keepContainer && !cargo!.paid) throw new BridgeError("You haven't paid for it.");
+                item = keepContainer ? hands!.ItemCached : cargo!.ItemCached;
+                itemName = keepContainer ? hands!.itemName : cargo!.itemName;
+            }
             if (item.wallMounted || item.stackType != 0)
                 throw new BridgeError("That goes on a wall or on other furniture; place covers only furniture that stands on the floor.");
-            if (GroundPositionMethod == null || PlacementValidField == null) throw new BridgeError("The game's placement step wasn't found (game update?).");
-            var name = LocalizorManager.GetLocalization(keepContainer ? hands!.itemName : cargo!.itemName, null);
+            var name = LocalizorManager.GetLocalization(itemName, null);
             var step = item.degreesPerRotation > 0 ? item.degreesPerRotation : 45f;
             var yRotation = (float)(Math.Round(rotation / step) * step % 360 + 360) % 360;
             var caught = Notices.BeginCapture();
-            bool placed = false, valid = false, blocked = false, inside = false, stuck = false, started = false;
+            bool placed = false, valid = false, blocked = false, inside = false, stuck = false, started = false, reachable = true;
             var floorSeen = "";
             Vector3 at = default;
             try
             {
-                var panel = InstanceBehavior<UIs>.Instance.playerHUD.itemPanelUI;
-                panel.SetItemInstance(hands, spawnIntoPlayerHands: false);
-                if (keepContainer) panel.ClickPlaceBox();
-                else panel.ClickPlace();
+                if (moving != null) Buildings.Indoors.InteriorDesign.PlacementHelper.StartPlacementMode(moving, warpCursor: false);
+                else
+                {
+                    var panel = InstanceBehavior<UIs>.Instance.playerHUD.itemPanelUI;
+                    panel.SetItemInstance(hands, spawnIntoPlayerHands: false);
+                    if (keepContainer) panel.ClickPlaceBox();
+                    else panel.ClickPlace();
+                }
                 var placing = BigAmbitions.PlacementSystem.PlacementSystem.CurrentPlaceableItemBeingPlaced as ItemController;
                 started = placing != null;
                 if (placing != null)
@@ -493,6 +520,10 @@ namespace FoodTrucks
                         BigAmbitions.PlacementSystem.PlacementSystem.SaveCurrentItemBeingMovedPosition();
                         Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementMode();
                         placed = true;
+                        // The game's own reach test (the one behind "I can't reach that"): the walk-to points are refreshed now,
+                        // as the game does a few frames later, so the reply can say when nobody could get to it to use it.
+                        placing.UpdateNavMeshTargets();
+                        reachable = placing.GetClosestNavMeshTargetPosition(PlayerHelper.GetPosition()) != Vector3.zero;
                     }
                     else Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
                 }
@@ -509,16 +540,62 @@ namespace FoodTrucks
                 Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
                 stuck = BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode;
             }
-            Log.Info($"Test bridge: {(keepContainer ? "drop" : "place")} {name} at x {x:F1}, z {z:F1}, rotation {yRotation:F0}: {(placed ? "placed" : !inside ? "not this building's floor" : blocked ? "blocked area" : "no room")}{(stuck ? ", still placing" : "")}; floor {floorSeen}.");
+            Log.Info($"Test bridge: {(keepContainer ? "drop" : moving != null ? "place (move)" : "place")} {itemName} at x {x:F1}, z {z:F1}, rotation {yRotation:F0}: {(placed ? "placed" : !inside ? "not this building's floor" : blocked ? "blocked area" : "no room")}{(placed && !reachable ? ", unreachable" : "")}{(stuck ? ", still placing" : "")}; floor {floorSeen}.");
             Notices.EndCapture(caught);
             return new JObject
             {
-                ["item"] = name, ["placed"] = placed, ["still_placing"] = stuck,
+                ["item"] = name, ["placed"] = placed, ["moved"] = moving != null, ["reachable"] = placed ? reachable : (bool?)null, ["still_placing"] = stuck,
                 ["why"] = placed ? null : stuck ? "still being placed: ui escape cancels it"
                     : !started ? "the game didn't start placing it" : !inside ? "that point isn't the floor of this building"
                     : blocked ? "that part of the floor can't take furniture" : "no room there (a wall or another thing is in the way)",
                 ["x"] = TestBridgeState.Round(at.x), ["z"] = TestBridgeState.Round(at.z), ["rotation"] = yRotation,
                 ["notices"] = new JArray(caught),
+            };
+        }
+
+        private static readonly System.Reflection.FieldInfo? NavTargetsField =
+            HarmonyLib.AccessTools.Field(typeof(EntityController), "navMeshTargets");
+
+        // { "radius"? }: read only. For each item near the player, its walk-to points as the game's reach check sees them
+        // (EntityController.GetClosestNavMeshTargetPosition): the wall test, the path status and how far the path ends short.
+        private static object NavProbe(JObject args)
+        {
+            var radius = (float)(Num(args, "radius") ?? 6);
+            var me = PlayerHelper.GetPosition();
+            var onMesh = UnityEngine.AI.NavMesh.SamplePosition(me, out var meHit, 2f, -1);
+            var items = new JArray();
+            foreach (var item in InstanceBehavior<BuildingManager>.Instance.allItemControllers)
+            {
+                if (item == null || Vector3.Distance(item.transform.position, me) > radius) continue;
+                var targets = new JArray();
+                foreach (var t in (NavTargetsField?.GetValue(item) as Transform[]) ?? new Transform[0])
+                {
+                    if (t == null) continue;
+                    var wall = PathHelper.IsThereAWallBetweenTargetAndEntity(t.position, item.transform.position + item.transform.forward * 0.1f);
+                    var path = new UnityEngine.AI.NavMeshPath();
+                    UnityEngine.AI.NavMesh.CalculatePath(me, t.position, PlayerController.navMeshQueryFilter, path);
+                    var sampled = UnityEngine.AI.NavMesh.SamplePosition(t.position, out var tHit, 3f, -1);
+                    targets.Add(new JObject
+                    {
+                        ["x"] = TestBridgeState.Round(t.position.x), ["y"] = TestBridgeState.Round(t.position.y), ["z"] = TestBridgeState.Round(t.position.z),
+                        ["wall_between"] = wall, ["path"] = path.status.ToString(), ["corners"] = path.corners.Length,
+                        ["end_gap"] = path.corners.Length > 0 ? Math.Round(Vector3.Distance(path.corners[path.corners.Length - 1], t.position), 2) : (double?)null,
+                        ["navmesh_gap"] = sampled ? Math.Round(Vector3.Distance(tHit.position, t.position), 2) : (double?)null,
+                    });
+                }
+                var closest = item.GetClosestNavMeshTargetPosition(me);
+                items.Add(new JObject
+                {
+                    ["item"] = item.itemName, ["x"] = TestBridgeState.Round(item.transform.position.x), ["y"] = TestBridgeState.Round(item.transform.position.y),
+                    ["z"] = TestBridgeState.Round(item.transform.position.z), ["rotation"] = TestBridgeState.Round(item.transform.eulerAngles.y),
+                    ["reachable"] = closest != Vector3.zero, ["targets"] = targets,
+                });
+            }
+            return new JObject
+            {
+                ["player"] = new JObject { ["x"] = TestBridgeState.Round(me.x), ["y"] = TestBridgeState.Round(me.y), ["z"] = TestBridgeState.Round(me.z),
+                    ["on_navmesh"] = onMesh, ["navmesh_gap"] = onMesh ? Math.Round(Vector3.Distance(meHit.position, me), 2) : (double?)null },
+                ["items"] = items,
             };
         }
 

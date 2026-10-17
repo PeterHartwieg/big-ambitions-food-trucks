@@ -51,6 +51,7 @@ namespace FoodTrucks
                 case "drop": RequireFtCity(cmd); return Drop(args);
                 case "pickup": RequireFtCity(cmd); return Pickup(args);
                 case "handtruck": return HandTruckCommand(args);
+                case "nav_probe": RequireFtCity(cmd); return NavProbe(args);
                 case "ui": return TestBridgeUi.Run(args);
                 case "shoot": RequireCity(cmd); return TestBridgeShoot.Shoot(args);
                 case "save": RequireFtCity(cmd); return Save(args);
