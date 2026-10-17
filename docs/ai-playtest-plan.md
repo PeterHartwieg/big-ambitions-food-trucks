@@ -98,6 +98,8 @@ At the end, `build/playtest/<run>/report.md`: what was played, a table of daily 
 
 Order: the two bridge pieces with the runner first (Phase A can run without driving), the ride wrapper and the lane and kerb teleports second.
 
+Status, 17 October 2026: Phase A's runner and its bridge pieces are built and tested against the mock only (`tools/playthrough`, `vehicle buy`, `day_summary`, and a `route` command for stops by address, which Phase A needed; see docs/test-bridge.md, "Playthrough runner"). Two shortcuts differ from the plan above: crews are hired with the `hire` debug action rather than the game's hire flow, and the licence comes from the `licence` debug action, free. The ride wrapper and the lane and kerb teleports are not built. Peter's later decisions (17 October): Phase A starts with one cart on the character's own money, with an optional growth step that buys a truck when money less a reserve covers it; the books check compares only the mod's own lines; and the AI tester plays blind through `tools/play` while `tools/playthrough watch` referees.
+
 ## Open questions for Peter
 
 - Truck price taken off by hand ($15,000 at General US Trucks), or should the agent go to the dealer by `ui` clicks and buy for real? Recommended: by hand, since the dealer is the game's code, not ours.

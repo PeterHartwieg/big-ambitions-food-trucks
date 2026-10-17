@@ -306,6 +306,8 @@ namespace FoodTrucks
                     ["label"] = Notices.Text(t.transactionType ?? "", t.transactionData),
                     ["type"] = t.transactionType,
                     ["amount"] = Math.Round(t.amount, 2),
+                    // The game's balance after it (floored to whole dollars), which tells two equal transactions apart.
+                    ["balance"] = Math.Round(t.balance, 2),
                     ["day"] = t.timestamp.Day,
                     ["time"] = $"{t.timestamp.Hour:D2}:{(int)t.timestamp.Minute:D2}",
                 });

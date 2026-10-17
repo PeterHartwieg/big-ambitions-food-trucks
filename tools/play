@@ -1,0 +1,345 @@
+#!/usr/bin/env python3
+"""Food Trucks, played from the command line. Your controls in the game, nothing more.
+
+You run a street food business in Big Ambitions: buy a cart or a truck, rent a space at a commissary, order stock,
+hire a crew, set a route and shifts, and watch the money. You only see what a player sees: the clock, your money,
+your vehicles and crew, the phone's notices, the buttons on screen, a picture of the screen, and the buildings round
+you on the map.
+
+Commands (each also takes --help):
+
+  look                         Where you are, the time, your money, vehicles, crew, commissary stock and orders.
+  notices [--follow]           Notices and phone texts since you last looked.
+  places [--radius M]          Buildings near you: address, type, business, commissaries.
+  go ADDRESS                   Take a taxi to a building (address as places prints it, e.g. ba:street_secondavenue#8).
+  screen NAME [--fetch DIR]    A picture of the screen.
+  ui list | ui click TEXT | ui click --id N | ui escape
+                               The buttons and texts on screen, and pressing them.
+  time pause | time speed N | time until [DAY] HH:MM [--speed N]
+                               Pause, set the game speed (at most 20), or let time run until a moment (then pause).
+                               DAY is a day number or +N days from today.
+  buy truck|cart               Buy a vehicle; it is delivered next to you.
+  vehicle ID open|close|enter|exit|back_to_hatch|restock|rent_bay
+  vehicle ID take|return ITEM [UNITS]
+                               Use a vehicle. take/return move stock or equipment between it and the commissary.
+  order SITE ITEM BOXES [ITEM BOXES ...]
+                               Order stock by phone from a commissary where you rent a space; it arrives at 08:00.
+  hire                         Hire a worker (they wait unassigned).
+  licence                      Get the vendor licence and a permit for each vehicle.
+  crew assign VEHICLE EMPLOYEE | crew schedule VEHICLE EMPLOYEE DAY START END [STATION] | crew auto VEHICLE
+                               Put a hire on a vehicle's crew; set a shift (whole hours); or auto-fill the week.
+  route add VEHICLE ADDRESS [--days monday,...] [--open HH:MM --close HH:MM]
+  route paste VEHICLE FROM_DAY TO_DAY[,TO_DAY...]|all
+                               A vehicle's weekly route: add a stop by a building, or copy one day onto others.
+  save NAME                    Save the game (the name must start with "FT playtest").
+  load NAME                    Load a save whose name starts with "FT playtest".
+
+If the referee stops the game, every command that acts refuses and says why (the file named by FT_PLAY_STOP)."""
+import argparse
+import json
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ftlib.bridge import Bridge, BridgeError  # noqa: E402
+
+PREFIX = 'FT playtest'
+MAX_SPEED = 20
+WEEK = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+VEHICLE_OPS = ('open', 'close', 'enter', 'exit', 'back_to_hatch', 'restock', 'rent_bay')
+
+
+class Refused(Exception):
+    pass
+
+
+def money(value):
+    return '-' if value is None else f"{'-' if value < 0 else ''}${abs(value):,.2f}"
+
+
+class Play:
+    def __init__(self, bridge, out=print, stop_file=None, memory=None):
+        self.bridge = bridge
+        # Where `notices` remembers what you've read, per game session.
+        self.memory = memory or os.environ.get('FT_PLAY_MEMORY') or os.path.expanduser('~/.ft-play.json')
+        self.out = out
+        self.stop_file = stop_file if stop_file is not None else os.environ.get('FT_PLAY_STOP')
+
+    def call(self, cmd, args=None, timeout_s=30):
+        return self.bridge.call(cmd, args or {}, timeout_s)['result']
+
+    def acting(self):
+        """Every command that changes the game: refused once the referee stopped it, or outside an FT playtest save."""
+        if self.stop_file and os.path.exists(self.stop_file):
+            with open(self.stop_file) as f:
+                raise Refused('The referee stopped the game: ' + f.read().strip())
+        health = self.bridge.health()
+        if health.get('scene') != 'city' or not (health.get('save') or '').startswith(PREFIX):
+            raise Refused(f"You can only play in a save whose name starts with '{PREFIX}' (now: {health.get('save')!r}, {health.get('scene')}).")
+
+    # ---- looking ----
+    def look(self):
+        s = self.call('state')
+        c = s.get('clock') or {}
+        p = s.get('player') or {}
+        self.out(f"Day {c.get('day')} ({c.get('weekday')}) {c.get('time')}{', paused' if c.get('paused') else ', speed ' + str(c.get('speed'))}. "
+                 f"Money {money(s.get('money'))}.")
+        where = f"in {p['in_vehicle']}" if p.get('in_vehicle') else f"at the hatch of {p['at_hatch']}" if p.get('at_hatch') else p.get('activity') or 'on foot'
+        needs = p.get('needs') or {}
+        self.out(f"You: {where} at x {p.get('x')}, z {p.get('z')}; energy {needs.get('energy')}, hunger {needs.get('hunger')}.")
+        lic = s.get('licence') or {}
+        self.out(f"Licence: {'until day ' + str(lic['until_day']) if lic.get('until_day') else 'none'}, permits {lic.get('permits', 0)}, "
+                 f"food safety course {'done' if lic.get('course_done') else 'not done'}.")
+        for v in s.get('vehicles') or []:
+            com = v.get('commissary') or {}
+            self.out(f"{v['kind'].title()} {v['id']}: {'OPEN' if v.get('open') else 'closed'}, serving {v.get('serving')}, "
+                     f"{'parked legally' if v.get('legal') else 'not parked legally'} at x {v.get('x')}, z {v.get('z')}"
+                     f"{', in the bay at ' + com['bay_site'] if com.get('in_bay') else ''}; space at {com.get('site') or 'no commissary'}.")
+            self.out(f"  equipment: {', '.join(x['item'] for x in v.get('pieces') or []) or 'none'}; "
+                     f"stock: {', '.join(str(x['amount']) + ' ' + x['item'] for x in v.get('stock') or []) or 'none'}; crew: {', '.join(v.get('crew') or []) or 'none'}.")
+            route = v.get('route') or {}
+            for d in route.get('week') or []:
+                if d['stops']:
+                    self.out(f"  {d['day']}: " + '; '.join(f"{x['open']}-{x['close']} at x {x['x']}, z {x['z']}" for x in d['stops']))
+            for shift in route.get('shifts') or []:
+                self.out(f"  shifts of {shift['employee']} ({shift['id']}): " + ', '.join(f"{x['day']} {x['start']}-{x['end']}" for x in shift['shifts']))
+            for t in v.get('todos') or []:
+                self.out(f"  to-do: {t['kind'].replace('_', ' ')}{' (' + t['item'] + ')' if t.get('item') else ''}")
+        com = s.get('commissary') or {}
+        for sp in com.get('spaces') or []:
+            self.out(f"Commissary space at {sp['site']} for {sp['vehicle']}.")
+        for line in com.get('stock') or []:
+            self.out(f"Commissary stock at {line['site']}: {line['amount']} {line['item']} ({line.get('key')}).")
+        for o in com.get('orders') or []:
+            self.out(f"On order: {o['items']} to {o['site']}, arriving day {o['due_day']} at 08:00, {money(o.get('total'))} on delivery.")
+        for e in s.get('employees') or []:
+            self.out(f"Unassigned hire: {e['name']} ({e['id']}), customer service {e['skill']}, {money(e['wage'])} an hour.")
+        for t in (s.get('transactions_today') or [])[-8:]:
+            self.out(f"Bank: day {t['day']} {t['time']} {t['label']}: {money(t['amount'])}")
+
+    def notices(self, follow=False, since=None):
+        session = self.bridge.health().get('session')
+        try:
+            with open(self.memory) as f: remembered = json.load(f)
+        except (OSError, ValueError):
+            remembered = {}
+        cursor = since or (remembered.get('next', 1) if remembered.get('session') == session else 1)
+        while True:
+            batch = self.bridge.events(cursor)
+            for e in batch['events']:
+                if e['kind'] in ('notice', 'phone'):
+                    self.out(f"[day {e['day']} {e['time']}] {e['text']}")
+            cursor = batch['next']
+            try:
+                with open(self.memory, 'w') as f: json.dump({'session': session, 'next': cursor}, f)
+            except OSError:
+                pass
+            if not follow: return cursor
+            time.sleep(1)
+
+    def places(self, radius):
+        r = self.call('places', {'radius': radius})
+        for p in r['places']:
+            what = p['business'] or p['business_type'] or p['building_type']
+            extra = f"; commissary {p['commissary']['name']} (site {p['commissary']['site']})" if p.get('commissary') else ''
+            mine = ' (yours)' if p.get('yours') else ''
+            self.out(f"{p['distance']:>4} m  {p['address']}  {p['name']}: {what}{mine}{extra}")
+
+    def screen(self, name, fetch=None):
+        s = self.call('state')
+        p = s['player']
+        r = self.call('shoot', {'name': name, 'x': p['x'], 'y': p['y'] + 30, 'z': p['z'] - 20, 'look_at': {'x': p['x'], 'y': p['y'], 'z': p['z']},
+                                'game_view': True}, 60)
+        path = r.get('game_path') or r['path']
+        if fetch:
+            from ftlib.shots import fetch_shot
+            path = str(fetch_shot(path, fetch))
+        self.out(f"Screen: {path}{' (' + r['game_error'] + ')' if r.get('game_error') else ''}")
+
+    # ---- acting ----
+    def go(self, address):
+        self.acting()
+        r = self.call('teleport', {'who': 'player', 'place': f'address:{address}'}, 60)
+        self.out(f"You're at {address} (x {r['x']}, z {r['z']}).")
+
+    def ui(self, op, text=None, ident=None):
+        if op == 'list':
+            r = self.call('ui', {'op': 'list'})
+            for b in r['buttons']:
+                self.out(f"[{b['id']}] {b['text']}{' (option)' if b.get('kind') == 'option' else ''}")
+            for t in r['texts']:
+                self.out(f"text: {t}")
+            return
+        self.acting()
+        if op == 'click':
+            r = self.call('ui', {'op': 'click', **({'id': ident} if ident is not None else {'text': text})})
+            self.out(f"Clicked {r['clicked']}.")
+        elif op == 'escape':
+            self.out(f"Closed {self.call('ui', {'op': 'escape'})['closed']}.")
+        else:
+            raise Refused(f'Unknown ui op {op}: list, click or escape.')
+
+    def time(self, op, value=None, speed=None, day=None, wait=True):
+        self.acting()
+        if op == 'pause':
+            self.call('time', {'pause': True}); self.out('Paused.'); return
+        if op == 'speed':
+            if not 0 < value <= MAX_SPEED: raise Refused(f'Speed is above 0 and at most {MAX_SPEED}.')
+            self.call('time', {'speed': value}); self.out(f'Speed {value}.'); return
+        if op != 'until': raise Refused(f'Unknown time op {op}: pause, speed or until.')
+        speed = speed or MAX_SPEED
+        if not 0 < speed <= MAX_SPEED: raise Refused(f'Speed is above 0 and at most {MAX_SPEED}.')
+        clock = self.call('state')['clock']
+        target_day = clock['day'] if day is None else (clock['day'] + int(day[1:]) if str(day).startswith('+') else int(day))
+        if day is None and value <= clock['time']: target_day += 1
+        cursor = self.bridge.events(1)['next']
+        self.call('time', {'run_until': {'day': target_day, 'time': value}, 'speed': speed})
+        if not wait:
+            self.out(f'Running until day {target_day} {value}.'); return
+        while True:
+            c = self.call('state')['clock']
+            if c.get('arrived_at') == f'day {target_day} {value}' or (c.get('paused') and c.get('run_until') is None): break
+            if self.stop_file and os.path.exists(self.stop_file): break
+            time.sleep(.5)
+        self.out(f"Day {c['day']} {c['time']}, paused.")
+        self.notices(since=cursor)
+
+    def buy(self, kind):
+        self.acting()
+        r = self.call('vehicle', {'op': 'buy', 'kind': kind})
+        self.out(f"Bought a {kind} ({r['id']}) for {money(r['price'])}; money {money(r['money'])}." if r['done'] else
+                 f"Not bought: {'; '.join(r['notices']) or 'no room here'}.")
+
+    def vehicle(self, ident, op, item=None, units=None):
+        self.acting()
+        args = {'id': ident, 'op': op}
+        if op in ('take', 'return'):
+            args.update(op='transfer', direction=op, item=item)
+            if units is not None: args['units'] = units
+        elif op not in VEHICLE_OPS:
+            raise Refused(f"Unknown vehicle action {op}: {', '.join(VEHICLE_OPS)}, take or return.")
+        r = self.call('vehicle', args)
+        self.out(f"{op}: {'done' if r['done'] else 'not done'}{' (' + r['why'] + ')' if r.get('why') else ''}.")
+        for n in r.get('notices') or []: self.out(f'  {n}')
+
+    def order(self, site, pairs):
+        self.acting()
+        if not pairs or len(pairs) % 2: raise Refused('order SITE ITEM BOXES [ITEM BOXES ...]')
+        items = [{'item': pairs[i], 'boxes': int(pairs[i + 1])} for i in range(0, len(pairs), 2)]
+        r = self.call('commissary', {'op': 'order', 'site': site, 'items': items})
+        for o in r['orders']:
+            self.out(f"Ordered {o['units']} {o['item']} for {money(o['total'])}, paid on delivery, arriving day {o['due_day']} at 08:00.")
+
+    def debug(self, action):
+        self.acting()
+        r = self.call('debug', {'action': action})
+        for n in r.get('notices') or []: self.out(n)
+        if not r.get('notices'): self.out('Done.')
+
+    def crew(self, op, rest):
+        self.acting()
+        if op == 'assign' and len(rest) == 2:
+            r = self.call('crew', {'op': 'assign', 'vehicle': rest[0], 'employee_id': rest[1]})
+        elif op == 'schedule' and len(rest) in (5, 6):
+            args = {'op': 'schedule', 'vehicle': rest[0], 'employee_id': rest[1], 'day': rest[2], 'start': int(rest[3]), 'end': int(rest[4])}
+            if len(rest) == 6: args['station'] = rest[5]
+            r = self.call('crew', args)
+        elif op == 'auto' and len(rest) == 1:
+            r = self.call('crew', {'op': 'auto_schedule', 'vehicle': rest[0]})
+        else:
+            raise Refused('crew assign VEHICLE EMPLOYEE | crew schedule VEHICLE EMPLOYEE DAY START END [STATION] | crew auto VEHICLE')
+        self.out(f"{op}: {'done' if r['done'] else 'not done'}.")
+        for n in r.get('notices') or []: self.out(f'  {n}')
+
+    def route(self, op, rest, days=None, open_=None, close=None):
+        self.acting()
+        if op == 'add' and len(rest) == 2:
+            args = {'op': 'add_stop', 'vehicle': rest[0], 'address': rest[1], 'days': days.split(',') if days else 'all'}
+            if open_ or close: args.update(open=open_, close=close)
+            r = self.call('route', args)
+            self.out(f"Stop by {rest[1]}: " + ', '.join(f"{d['day']} {'added' if d['added'] else 'refused'}" for d in r['days']) + '.')
+        elif op == 'paste' and len(rest) == 3:
+            to = 'all' if rest[2] == 'all' else rest[2].split(',')
+            r = self.call('route', {'op': 'paste_day', 'vehicle': rest[0], 'from': rest[1], 'to': to})
+            self.out(f"Pasted: {'done' if r['done'] else 'refused (' + str(r.get('problem')) + ')'}.")
+        else:
+            raise Refused('route add VEHICLE ADDRESS [--days ...] [--open HH:MM --close HH:MM] | route paste VEHICLE FROM TO')
+        for n in r.get('notices') or []: self.out(f'  {n}')
+
+    def save(self, name):
+        self.acting()
+        if not name.startswith(PREFIX): raise Refused(f"Save names start with '{PREFIX}'.")
+        self.call('save', {'name': name}, 120)
+        self.out(f"Saved '{name}'.")
+
+    def load(self, name):
+        if self.stop_file and os.path.exists(self.stop_file): self.acting()
+        if not name.startswith(PREFIX): raise Refused(f"You can only load saves whose name starts with '{PREFIX}'.")
+        self.call('load', {'name': name}, 60)
+        while (self.call('state').get('load') or {}).get('status') == 'pending': time.sleep(1)
+        self.out(f"Loaded '{name}': {(self.call('state').get('load') or {}).get('status')}.")
+
+
+def parser():
+    p = argparse.ArgumentParser(prog='play', description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = p.add_subparsers(dest='cmd', required=True)
+    sub.add_parser('look', help='the time, your money, vehicles, crew and commissary')
+    n = sub.add_parser('notices', help='notices and phone texts'); n.add_argument('--follow', action='store_true')
+    n = sub.add_parser('places', help='buildings near you'); n.add_argument('--radius', type=float, default=150)
+    n = sub.add_parser('go', help='take a taxi to a building'); n.add_argument('address')
+    n = sub.add_parser('screen', help='a picture of the screen'); n.add_argument('name'); n.add_argument('--fetch')
+    n = sub.add_parser('ui', help='buttons and texts on screen'); n.add_argument('op', choices=('list', 'click', 'escape'))
+    n.add_argument('text', nargs='?'); n.add_argument('--id', type=int)
+    n = sub.add_parser('time', help='pause, speed or run until a moment'); n.add_argument('op', choices=('pause', 'speed', 'until'))
+    n.add_argument('value', nargs='*'); n.add_argument('--speed', type=float); n.add_argument('--no-wait', action='store_true')
+    n = sub.add_parser('buy', help='buy a truck or a cart'); n.add_argument('kind', choices=('truck', 'cart'))
+    n = sub.add_parser('vehicle', help='use a vehicle'); n.add_argument('id'); n.add_argument('op'); n.add_argument('item', nargs='?')
+    n.add_argument('units', nargs='?', type=int)
+    n = sub.add_parser('order', help='order stock from a commissary'); n.add_argument('site'); n.add_argument('pairs', nargs='+')
+    sub.add_parser('hire', help='hire a worker'); sub.add_parser('licence', help='vendor licence and permits')
+    n = sub.add_parser('crew', help='crew and shifts'); n.add_argument('op', choices=('assign', 'schedule', 'auto')); n.add_argument('rest', nargs='+')
+    n = sub.add_parser('route', help='a vehicle\'s route'); n.add_argument('op', choices=('add', 'paste')); n.add_argument('rest', nargs='+')
+    n.add_argument('--days'); n.add_argument('--open'); n.add_argument('--close')
+    n = sub.add_parser('save', help='save the game'); n.add_argument('name')
+    n = sub.add_parser('load', help='load a playtest save'); n.add_argument('name')
+    return p
+
+
+def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
+    args = parser().parse_args(argv)
+    play = Play(bridge or Bridge(), out, stop_file, memory)
+    try:
+        c = args.cmd
+        if c == 'look': play.look()
+        elif c == 'notices': play.notices(args.follow)
+        elif c == 'places': play.places(args.radius)
+        elif c == 'go': play.go(args.address)
+        elif c == 'screen': play.screen(args.name, args.fetch)
+        elif c == 'ui': play.ui(args.op, args.text, args.id)
+        elif c == 'time':
+            if args.op == 'until':
+                if len(args.value) not in (1, 2): raise Refused('time until [DAY] HH:MM [--speed N]')
+                play.time('until', args.value[-1], args.speed, args.value[0] if len(args.value) == 2 else None, not args.no_wait)
+            else:
+                play.time(args.op, float(args.value[0]) if args.value else None)
+        elif c == 'buy': play.buy(args.kind)
+        elif c == 'vehicle': play.vehicle(args.id, args.op, args.item, args.units)
+        elif c == 'order': play.order(args.site, args.pairs)
+        elif c == 'hire': play.debug('hire')
+        elif c == 'licence': play.debug('licence')
+        elif c == 'crew': play.crew(args.op, args.rest)
+        elif c == 'route': play.route(args.op, args.rest, args.days, args.open, args.close)
+        elif c == 'save': play.save(args.name)
+        elif c == 'load': play.load(args.name)
+        return 0
+    except Refused as exc:
+        out(f'Refused: {exc}')
+        return 2
+    except BridgeError as exc:
+        out(f'The game says: {exc}')
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

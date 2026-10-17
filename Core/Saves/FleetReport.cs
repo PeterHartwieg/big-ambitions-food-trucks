@@ -134,7 +134,7 @@ namespace FoodTrucks.Core.Saves
             return days.Count == 0 ? 0 : (long)Math.Round(total / (double)days.Count, MidpointRounding.AwayFromZero);
         }
 
-        private static long DayProfitCents(DailySales entry)
+        internal static long DayProfitCents(DailySales entry)
         {
             var total = entry.RevenueCents - entry.CostCents - entry.LicenceCents - entry.EventPlacesCents - entry.DeliveryFeesCents;
             foreach (var day in entry.ByVehicle ?? new List<VehicleDay>())
