@@ -497,7 +497,7 @@ public class SaveCodecTests
     }
 
     [Fact]
-    public void EarlierDevelopmentSchemasHaveNoRegisteredMigrations()
+    public void SchemaZeroHasNoRegisteredMigration()
     {
         var result = codec.Load("{\"schemaVersion\":0}");
 
@@ -516,11 +516,6 @@ public class SaveCodecTests
         Assert.Equal(LoadStatus.NewerVersion, oldCode.Status);
         Assert.Equal(json, oldCode.RawJson);
         Assert.Null(oldCode.State);
-        const string developmentSave = "{\"schemaVersion\":1,\"crewTakings\":[{\"vehicleId\":\"cart\",\"day\":1,\"cents\":900,\"sales\":1}]}";
-        var oldSave = codec.Load(developmentSave);
-        Assert.Equal(LoadStatus.Corrupt, oldSave.Status);
-        Assert.Equal(developmentSave, oldSave.RawJson);
-        Assert.Contains("Missing migration from schema version 1 to 2", oldSave.Error);
     }
 
     [Theory]

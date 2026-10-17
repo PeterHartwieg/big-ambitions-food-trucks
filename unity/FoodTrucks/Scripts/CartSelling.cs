@@ -1254,7 +1254,19 @@ namespace FoodTrucks
         internal static bool PayAllTakingsNow()
         {
             var state = FoodTrucksSession.CurrentState;
-            if (state == null || !FoodTrucksSession.CanWrite) return false;
+            if (state == null)
+            {
+                Log.Info("Uninstall: no readable window sales state; no takings to settle.");
+                return true;
+            }
+            if (!FoodTrucksSession.CanWrite)
+            {
+                var nothingOwed = !state.CrewTakings.Any(t => t.Cents > 0);
+                Log.Info(nothingOwed
+                    ? "Uninstall: read-only window sales state has no unpaid takings; cleanup can continue."
+                    : "Uninstall: read-only window sales state has unpaid takings; cleanup blocked.");
+                return nothingOwed;
+            }
             instance?.PayAllHeld();
             PayTakings(state, all: true);
             return state.CrewTakings.Count == 0;

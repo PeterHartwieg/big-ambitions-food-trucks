@@ -12,7 +12,7 @@ namespace FoodTrucks.Core.Saves
     public class SaveState
     {
         // Schema 2: all window sales wait in CrewTakings, including sales served by the player.
-        // Earlier development schemas deliberately have no migration.
+        // Schema 1 migrates unchanged: its pot contains only unpaid crew sales, with player sales already paid.
         public const int CurrentSchemaVersion = 2;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
