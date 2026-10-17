@@ -42,6 +42,7 @@ def main(argv=None, bridge=None, out=print):
     p.add_argument('--run', required=True)
     p.add_argument('--stop-file', help='Written with the reason on a hard failure (default build/playtest/<run>/STOP)')
     p.add_argument('--poll', type=float, default=2.0, help='Real seconds between looks at the clock (default 2)')
+    p.add_argument('--record-only', action='store_true', help='Only take the daily snapshots; never pause or stop the game (run check afterwards)')
     p.add_argument('--polls', type=int, help=argparse.SUPPRESS)
     p = sub.add_parser('check', help="The checks again over a run's snapshots, and the log rules on a Player.log")
     p.add_argument('--run', required=True)
@@ -68,7 +69,7 @@ def main(argv=None, bridge=None, out=print):
             runner = pt.Run(bridge or Bridge(), run_dir, log=out)
             stop = args.stop_file or str(run_dir / 'STOP')
             out(f'Watching; on a hard failure the game is paused and the reason written to {stop}.')
-            return runner.watch(stop, args.poll, getattr(args, 'polls', None))
+            return runner.watch(stop, args.poll, getattr(args, 'polls', None), record_only=args.record_only)
         if args.cmd == 'check':
             results, log = pt.check_folder(run_dir, args.log, args.version)
             ok = all(r['ok'] for r in results)

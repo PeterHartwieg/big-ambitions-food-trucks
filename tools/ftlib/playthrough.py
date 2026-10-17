@@ -702,9 +702,10 @@ class Run:
             raise
 
     # -- the referee: watch a game someone else plays --
-    def watch(self, stop_file, poll_s=2.0, polls=None):
+    def watch(self, stop_file, poll_s=2.0, polls=None, record_only=False):
         """Takes a snapshot after each in-game 05:00 and runs the checks; changes nothing. On a hard failure it pauses the
-        game and writes the reason to `stop_file`. Returns 0 when `polls` ran out, 2 after a stop."""
+        game and writes the reason to `stop_file`. Returns 0 when `polls` ran out, 2 after a stop. With `record_only` it
+        only takes the snapshots, for `check` to run over afterwards, and never pauses or stops the game."""
         if self.meta is None:
             health = self.guard()
             self.meta = {'mode': 'watch', 'plan': {'vehicles': [], 'changes': []}, 'save': health['save'], 'vehicles': {}, 'purchases': [],
@@ -730,6 +731,12 @@ class Run:
                 else:
                     cur = self.take(f"day {health['day']} 05:00")
                     self.learn(cur)
+                    if record_only:
+                        self.save_meta()
+                        self.log(f"Day {cur['day']} {cur['time']}: money {money_text(cur['money'])}; recorded.")
+                        prev = cur
+                        time.sleep(poll_s)
+                        continue
                     try:
                         if cur['day'] - prev['day'] > 1:
                             self.note(f"day {cur['day']}: {cur['day'] - prev['day']} days passed between two looks (a sleep or a load?); "
