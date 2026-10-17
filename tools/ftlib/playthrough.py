@@ -5,6 +5,7 @@ The checks are pure functions over snapshots (one per stop of the clock), so `ch
 a run folder. Money is reconciled in whole cents against the game's own transactions (`state.transactions_today`),
 stock per food at each commissary and on each vehicle, moves from where each vehicle stands at 05:00."""
 from collections import Counter
+from .bridge import BridgeError
 import csv
 import json
 import math
@@ -446,7 +447,15 @@ class Run:
         return health
 
     def events(self):
-        batch = self.bridge.events(self.meta.get('events_next', 1))
+        try:
+            batch = self.bridge.events(self.meta.get('events_next', 1))
+        except BridgeError as e:
+            # The game was restarted (an install between sessions): its bridge counts events from 1 again, so read
+            # them all from there instead of stopping.
+            if not getattr(e, 'restart', False): raise
+            self.log('Bridge restarted: reading its events from the start.')
+            self.bridge.reconnect()
+            batch = self.bridge.events(1)
         if batch.get('dropped'):
             raise Violation('log', f"{batch['dropped']} bridge events were lost before the runner read them")
         self.meta['events_next'] = batch['next']
