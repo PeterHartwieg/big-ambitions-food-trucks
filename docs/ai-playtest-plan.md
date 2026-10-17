@@ -117,6 +117,7 @@ Built on branch `blind1-fixes` (17 October 2026), not yet run in game: no notice
 ## Peter's notes while watching blind run 2 (17 October 2026)
 
 - **Order menu:** item names in the commissary's order list are still very long, and some run underneath the item's picture.
+- **Queue on the road:** a cart opened standing perpendicular to the pavement puts its customers on the road, in traffic, instead of on the pavement. The queue line should follow the pavement whatever way the cart faces (or opening should turn the cart to the pavement first).
 - **Street food overview:** text overlaps in the list where you pick a cart or truck (BizMan Street food); it looked like the warning text.
 - **Sale notifications:** no notice for each sale when the player stands near a truck or cart; selling should be quiet (the cash sound and the day's totals are enough).
 - **The tester still progresses by shortcuts**, so the next run should play the real game:
