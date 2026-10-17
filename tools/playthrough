@@ -72,10 +72,17 @@ def main(argv=None, bridge=None, out=print):
             return runner.watch(stop, args.poll, getattr(args, 'polls', None), record_only=args.record_only)
         if args.cmd == 'check':
             results, log = pt.check_folder(run_dir, args.log, args.version)
-            ok = all(r['ok'] for r in results)
             for r in results:
-                if not r['ok']: out(f"FAIL {r['window']}: {r['check']}: {r['message']}")
-            out(f"{'PASS' if ok else 'FAIL'}: {sum(r['ok'] for r in results)} of {len(results)} windows pass the money, stock, moves and log checks.")
+                if r['status'] == 'fail': out(f"FAIL {r['window']}: {r['check']}: {r['message']}")
+            for r in results:
+                for n in r['notes']: out(f"note {r['window']}: {n}")
+            windows = len({r['window'] for r in results})
+            for check in pt.CHECKS:
+                mine = [r for r in results if r['check'] == check]
+                count = lambda status: sum(r['status'] == status for r in mine)
+                out(f"{check}: {count('pass')} pass, {count('fail')} fail, {count('not checkable')} not checkable, of {windows} windows.")
+            ok = not any(r['status'] == 'fail' for r in results)
+            out(f"{'PASS' if ok else 'FAIL'}: ledger.csv and check.json rebuilt in {run_dir}.")
             if log is not None:
                 from ftlib.logcheck import format_report
                 out(format_report(log))

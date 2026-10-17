@@ -87,11 +87,33 @@ namespace FoodTrucks
         internal static int FleetCount() => Ours().Count(t => VehicleWarnings.IsFleetKind(KindOf(t)));
 
         // For the test bridge: each to-do of this vehicle (null: the fleet's) as its kind's name and food.
-        internal static List<(string Kind, string? Item)> ListFor(string? vehicleId) =>
+        internal static List<(string Kind, string? Item, string Text)> ListFor(string? vehicleId) =>
             Ours().Where(t => vehicleId == null
                     ? VehicleWarnings.IsFleetKind(KindOf(t))
                     : !VehicleWarnings.IsFleetKind(KindOf(t)) && string.Equals(t.itemInstanceId, vehicleId, StringComparison.Ordinal))
-                .Select(t => (Name(KindOf(t)), t.itemName)).ToList();
+                .Select(t => (Name(KindOf(t)), t.itemName, TextOf(t))).ToList();
+
+        // What a route to-do says is wrong (Core RouteCause): the stops' times, which stop can't be reached, or which days
+        // and hours have nobody on shift. Worked out when the text shows, so it follows edits to the route and shifts.
+        internal static string RouteCauseText(string? vehicleId)
+        {
+            try
+            {
+                var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId ?? "");
+                var rules = DemandData.Rules;
+                if (vehicle == null || rules == null) return LocalizorManager.GetLocalization("foodtrucks:route_cause_times", null);
+                var home = HireRoutes.HomeOf(vehicle);
+                var cause = new HireRunner(rules.Fleet).RouteCauseOf(vehicle, HireRoutes.GameSpeed(), HireRoutes.HomePoint(home), home?.BayStops)
+                            ?? new RouteCause(ScheduleProblem.BadTimes);
+                return cause.Describe((key, values) => LocalizorManager.GetLocalization(key, values.ToDictionary(p => p.Key, p => p.Value)),
+                    walk: Travel.ModeFor(vehicle.VehicleType) == TravelMode.Push);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Route to-do text: " + ex);
+                return LocalizorManager.GetLocalization("foodtrucks:route_cause_times", null);
+            }
+        }
 
         // For the vehicle page's Alerts box: each to-do of this vehicle as its text (without the vehicle's name) and the
         // game's priority (2 red, 1 yellow, 0 white), most urgent first.
@@ -107,6 +129,7 @@ namespace FoodTrucks
                 ["itemname"] = string.IsNullOrEmpty(task.itemName) ? "" : LocalizorManager.GetLocalization(task.itemName, null),
                 ["day"] = (FoodTrucksSession.CurrentState?.Licence.LicenceExpiresOnDay ?? 0).ToString(),
             };
+            if (KindOf(task) == VehicleWarningKind.RouteProblem) data["cause"] = RouteCauseText(task.itemInstanceId);
             return LocalizorManager.GetLocalization(Keys.TryGetValue(KindOf(task), out var key) ? key : "foodtrucks:todo_unknown", data);
         }
 
@@ -326,6 +349,7 @@ namespace FoodTrucks
                     ["itemname"] = task.itemName ?? "",
                     ["day"] = (FoodTrucksSession.CurrentState?.Licence.LicenceExpiresOnDay ?? 0).ToString(),
                 };
+                if (kind == VehicleWarningKind.RouteProblem) data["cause"] = RouteCauseText(task.itemInstanceId);
                 __result = LanguageChangeEventDataHolder.Create(Keys.TryGetValue(kind, out var key) ? key : "foodtrucks:todo_unknown", data);
                 if (showBusinessName) __result.Prefix = Owner(task) + ": ";
                 return false;

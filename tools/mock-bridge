@@ -78,6 +78,20 @@ def week_route(open_minute, close_minute, x, z):
     return {'stops': 1, 'next': f'stop 1, {clock(open_minute)} to {clock(close_minute)} at x {x}, z {z}', 'week': days, 'shifts': [], 'problem': None}
 
 
+def week_days(days):
+    # "Monday to Friday", "Saturday and Sunday", "Monday, Wednesday and Friday" (Core RouteCause.Days).
+    order=sorted(set(days),key=WEEK.index)
+    parts=[]; i=0
+    while i<len(order):
+        j=i
+        while j+1<len(order) and WEEK.index(order[j+1])==WEEK.index(order[j])+1: j+=1
+        name=lambda d: LOCALE['foodtrucks:weekday_'+d]
+        if j-i>=2: parts.append(LOCALE['foodtrucks:days_range'].format(first=name(order[i]),last=name(order[j])))
+        else: parts.extend(name(d) for d in order[i:j+1])
+        i=j+1
+    return parts[0] if len(parts)==1 else LOCALE['foodtrucks:days_and'].format(list=', '.join(parts[:-1]),last=parts[-1])
+
+
 def need(args, key, what):
     value = args.get(key)
     if value is None or isinstance(value, (dict, list)):
@@ -582,6 +596,16 @@ class Mock:
         return {'stops':len(todays),'next':(f"stop 1, {clock(todays[0]['open'])} to {clock(todays[0]['close'])} at x {todays[0]['x']}, z {todays[0]['z']}" if todays else None),
                 'week':week,'shifts':shifts if shifts is not None else old.get('shifts',[]),'problem':None}
 
+    def route_todos(self, v):
+        # The route to-do with its cause, as the game side's VehicleTodos and Core RouteCause word it: here only whole
+        # route days with nobody of the crew on shift.
+        if not self.plans.get(v['id']) or not v['crew'] or not v['route']: return []
+        shifts={x['day'] for e in v['route'].get('shifts',[]) if e['employee'] in v['crew'] for x in e['shifts']}
+        bare=[d['day'] for d in v['route']['week'] if d['stops'] and d['day'] not in shifts]
+        if not bare: return []
+        text=LOCALE['foodtrucks:todo_route_problem'].format(cause=LOCALE['foodtrucks:route_cause_nobody'].format(days=week_days(bare)))
+        return [{'kind':'route_problem','item':None,'text':text}]
+
     def plan_hour(self, day, m):
         # The planned vehicles at minute m of `day`: the morning restock in the bay, opening and closing at each stop, the
         # drive back; crew wages for every shift hour, worked or idle (Core CrewPay); sales one unit every ten minutes.
@@ -767,6 +791,7 @@ class Mock:
                 for key in ('goods','fee'): order.pop(key,None)
             for v in result['vehicles']:
                 v['serving']=self.serving(v)
+                v['todos']=v['todos']+self.route_todos(v)
                 if v['kind']=='cart' and not v['open']: v['hatch_side']=None
             for position in [result['player'],*result['vehicles']]:
                 for key in ('x','y','z','heading'):

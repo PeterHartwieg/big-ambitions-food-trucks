@@ -150,6 +150,44 @@ class CheckTests(unittest.TestCase):
         self.assertTrue(pt.compare_balance(ledger, expected, from_day=2)[0]['outside'])
 
 
+class OfflineCheckTests(unittest.TestCase):
+    """check over a run folder: every window and check on its own, gaps reported as not checkable."""
+
+    def folder(self, snaps, orders=()):
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__('shutil').rmtree(folder))
+        (folder / 'run.json').write_text(json.dumps({'mode': 'watch', 'plan': {'vehicles': []}, 'vehicles': {}, 'purchases': [], 'orders': list(orders)}))
+        (folder / 'snapshots.jsonl').write_text(''.join(json.dumps(s) + '\n' for s in snaps))
+        return folder
+
+    def test_orders_count_only_in_the_window_they_arrive_and_every_check_runs(self):
+        a = snap(1, '08:00', 1000_00, {}, {}, [summary(1, {})])
+        b = snap(2, '05:00', 1000_00, {}, {}, [summary(1, {}), summary(2, {})])
+        c = snap(3, '05:00', 1000_00 - 750_00, {HOTDOG: 500}, {}, [summary(2, {}), summary(3, {})], [txn(pt.ORDER_TYPE, -750.0, 2)])
+        d = snap(4, '05:00', 1000_00 - 750_00 + 1, {HOTDOG: 500}, {}, [summary(3, {}), summary(4, {})], [txn(pt.ORDER_TYPE, -750.0, 2)])
+        d['stock'] = None
+        for s in (a, b, c, d): s['label'] = f"day {s['day']} 05:00"; s['vehicles'] = []
+        # Order 1 (500 hot dogs) arrives day 2; order 2 (an equipment order) and order 3 (burgers, due day 9) don't count before.
+        orders = [{'n': 1, 'site': 'hells-kitchen', 'item': HOTDOG, 'units': 500, 'total': 750.0, 'due_day': 2, 'goods': 750_00},
+                  {'n': 3, 'site': 'hells-kitchen', 'item': 'ba:itemname_burger', 'units': 1500, 'total': 900.0, 'due_day': 9, 'goods': 900_00}]
+        results, _ = pt.check_folder(self.folder([a, b, c, d], orders))
+        status = {(r['window'], r['check']): r['status'] for r in results}
+        self.assertEqual(status[('day 1 05:00 to day 2 05:00', 'stock')], 'pass')
+        self.assertEqual(status[('day 2 05:00 to day 3 05:00', 'stock')], 'pass')
+        self.assertEqual(status[('day 2 05:00 to day 3 05:00', 'books')], 'pass')
+        # The last window: money off by a cent too many fails, stock is not checkable, and the others still run.
+        self.assertEqual(status[('day 3 05:00 to day 4 05:00', 'stock')], 'not checkable')
+        self.assertEqual(status[('day 3 05:00 to day 4 05:00', 'money')], 'fail')
+        self.assertEqual(status[('day 3 05:00 to day 4 05:00', 'moves')], 'pass')
+        self.assertEqual(len(results), 3 * len(pt.CHECKS))
+
+    def test_the_games_own_errors_are_notes_and_ours_fail(self):
+        game = {'kind': 'unity_error', 'day': 3, 'time': '11:30', 'text': 'NullReferenceException\nUI.Components.ReorderableList.InitializeItems ()'}
+        self.assertEqual(len(pt.check_events([game, game])), 1)
+        with self.assertRaises(pt.Violation):
+            pt.check_events([{**game, 'text': 'NullReferenceException\nFoodTrucks.CartSelling.Tick ()'}])
+
+
 class PlaythroughRunTests(unittest.TestCase):
     """Setup and three days against the mock bridge, which models money (every charge a transaction), stock (deliveries,
     the crews' morning loads and sales) and the crews' routes, so the checks have something to catch."""
@@ -319,6 +357,23 @@ class BridgeOpsParityTests(unittest.TestCase):
             self.assertIn(f'["{key}"]', self.source)
         self.mock.state['save'] = 'Non-FT mock'
         with self.assertRaises(ValueError): self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6'})
+
+    def test_a_route_to_do_names_the_days_with_nobody_on_shift(self):
+        v = self.mock.spawn('cart')
+        self.mock.call('debug', {'action': 'hire'})
+        self.mock.call('crew', {'op': 'assign', 'vehicle': v['id'], 'employee_id': self.mock.read_state()['employees'][0]['id']})
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6'})
+        todo = next(x for x in self.mock.read_state()['vehicles'] if x['id'] == v['id'])['todos'][0]
+        self.assertEqual((todo['kind'], todo['text']), ('route_problem', 'Route: nobody on shift Monday to Sunday'))
+        self.mock.call('crew', {'op': 'auto_schedule', 'vehicle': v['id']})
+        employee = self.mock.read_state()['vehicles'][0]['route']['shifts'][0]['id']
+        for day in ('saturday', 'sunday'):
+            self.mock.call('crew', {'op': 'schedule', 'vehicle': v['id'], 'employee_id': employee, 'day': day, 'start': 10, 'end': 10})
+        todo = next(x for x in self.mock.read_state()['vehicles'] if x['id'] == v['id'])['todos'][0]
+        self.assertEqual(todo['text'], 'Route: nobody on shift Saturday and Sunday')
+        self.assertEqual(NAMESPACE['week_days'](['friday', 'monday', 'wednesday']), 'Monday, Wednesday and Friday')
+        self.assertIn('["text"] = t.Text', self.source)
+        self.assertIn('data["cause"] = RouteCauseText(task.itemInstanceId)', (TOOLS.parent / 'unity/FoodTrucks/Scripts/VehicleTodos.cs').read_text())
 
     def test_transactions_carry_the_balance_after_them(self):
         self.mock.call('vehicle', {'op': 'buy', 'kind': 'cart'})
