@@ -62,6 +62,9 @@ SHOPS = {'ba:businesstype_fastfoodrestaurant': [('ba:itemname_burger', 'Burger',
          'ba:businesstype_coffeeshop': [('ba:itemname_cupofcoffee', 'Cup of coffee', 4., 'food', 10)],
          'ba:businesstype_supermarket': [('ba:itemname_sandwich', 'Sandwich', 5., 'food', 30)],
          'ba:businesstype_furniturestore': [('ba:itemname_kingsizebed', 'King size bed', 900., 'furniture', 0)]}
+# Happiness modifiers as the game lists them (made-up amounts; the game's are asset data).
+MOOD = {'no_home': {'type': 'ba:happinessmodifier_no_home', 'name': 'No home', 'amount': -20, 'hours_left': -1, 'shows_time': False},
+        'first_apartment': {'type': 'ba:happinessmodifier_first_apartment', 'name': 'First apartment', 'amount': 10, 'hours_left': 168, 'shows_time': True}}
 FULL_SERVICE = {'ba:businesstype_fastfoodrestaurant', 'ba:businesstype_coffeeshop'}
 
 POSES = {'hatch-pavement', 'hatch-close', 'vehicle-side', 'vehicle-overhead', 'queue',
@@ -219,7 +222,7 @@ class Mock:
         # rent and the beds set down there, a taxi waiting, the course's hours, candidates on the phone.
         self.life = {'inside': None, 'hands': None, 'homes': [], 'beds': {}, 'taxi': False, 'course_minutes': 0,
                      'candidates': [], 'activity': None, 'purchase': None, 'contact': None, 'city_step': 'start', 'app': None}
-        self.state['player']['needs']['happiness_modifiers'] = [{'type': 'ba:happinessmodifier_no_home', 'hours_left': -1}]
+        self.state['player']['needs']['happiness_modifiers'] = [MOOD['no_home']]
         self.state['player']['needs']['warnings'] = []
         self.last_use = []
 
@@ -1818,7 +1821,7 @@ class Mock:
             if self.state['money']<rent+deposit: self.event('Not enough money.','notice'); return
             self.pay(-int(deposit*100),'ba:transaction_deposit'); self.pay(-int(rent*100),'ba:transaction_rent')
             life['homes'].append(life['presentation'])
-            p['needs']['happiness_modifiers']=[m for m in p['needs']['happiness_modifiers'] if m['type']!='ba:happinessmodifier_no_home']
+            p['needs']['happiness_modifiers']=[m for m in p['needs']['happiness_modifiers'] if m['type']!='ba:happinessmodifier_no_home']+[MOOD['first_apartment']]
             self.event(f"Rented {life['presentation']}.")
             self.dialog='closed'; return
         if self.dialog=='purchase':

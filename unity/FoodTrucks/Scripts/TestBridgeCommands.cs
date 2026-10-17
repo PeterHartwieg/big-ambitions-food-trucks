@@ -291,13 +291,39 @@ namespace FoodTrucks
                 // a minimum player happiness (50 by default) loses satisfaction below it (live session 5: 100 to 40 in a
                 // two-day run) [code, 1.0: EnergySettings, MinimumPlayerHappiness].
                 ["happiness_modifiers"] = new JArray((game.happinessModifiers ?? new List<Helpers.HappinessModifierData>())
-                    .Where(m => m != null).Select(m => new JObject { ["type"] = m.type, ["hours_left"] = m.hoursLeft })),
+                    .Where(m => m != null).Select(HappinessModifierJson)),
                 ["max"] = settings == null ? (JToken?)null : settings.MaxEnergyHungerHappinessValue,
                 ["collapse_at"] = settings == null ? (JToken?)null : settings.HospitalizationEnergyThreshold,
                 ["energy_off"] = game.gameVariables?.disableEnergy,
                 ["going_to_hospital"] = Helpers.EnergyHelper.goingToHospital,
                 ["kept_up"] = keepNeeds,
                 ["warnings"] = new JArray(NeedWarnings(game, settings)),
+            };
+        }
+
+        // A happiness modifier as the phone's Persona app lists it (CharacterStats.SetUpHappinessModifiers): its name, its
+        // amount (happiness is their sum, held to 0 to 100, HappinessHelper.UpdateHappiness), and the time left unless the
+        // game hides it (-1 or hideDuration: no time shown).
+        private static readonly FieldInfo? HappinessModifiersField = AccessTools.Field(typeof(Helpers.HappinessHelper), "Modifiers");
+
+        private static JObject HappinessModifierJson(Helpers.HappinessModifierData m)
+        {
+            int? amount = null;
+            try
+            {
+                // The game's table is private; GetHappinessModifierFromType would log an error for an unknown type.
+                if (HappinessModifiersField?.GetValue(null) is Dictionary<string, Helpers.HappinessModifier> table && m.type != null &&
+                    table.TryGetValue(m.type, out var known) && known != null)
+                    amount = known.amount;
+            }
+            catch (Exception) { }
+            return new JObject
+            {
+                ["type"] = m.type,
+                ["name"] = string.IsNullOrEmpty(m.type) ? null : Localizor.LocalizorManager.GetLocalization(m.type, null),
+                ["amount"] = amount,
+                ["hours_left"] = m.hoursLeft,
+                ["shows_time"] = m.hoursLeft != -1 && !m.hideDuration,
             };
         }
 

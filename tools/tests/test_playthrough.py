@@ -410,6 +410,8 @@ class BridgeOpsParityTests(unittest.TestCase):
         self.assertIn('the_city_of_new_york', (TOOLS.parent / 'unity/FoodTrucks/Scripts/CityLicensing.cs').read_text())
         for key in ('contact', 'name', 'calling', 'open', 'contacts', 'category', 'unread', 'app', 'item', 'done', 'hunger', 'energy', 'placed', 'why', 'rotation'):
             self.assertIn(f'["{key}"]', life)
+        for key in ('name', 'amount', 'shows_time'):
+            self.assertIn(f'["{key}"]', (TOOLS.parent / 'unity/FoodTrucks/Scripts/TestBridgeCommands.cs').read_text())
         for key in ('value', 'min', 'max', 'whole_numbers', 'on'):
             self.assertIn(f'["{key}"]', ui)
         self.assertIn('case "set":', ui)
@@ -595,7 +597,7 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.play('look'), 0, self.lines)
         self.assertTrue(any('you are hungry' in line for line in self.lines), self.lines)
         self.assertTrue(any(line == 'Home: none.' for line in self.lines), self.lines)
-        self.assertTrue(any('no home' in line for line in self.lines), self.lines)
+        self.assertIn('  happiness: No home -20%', self.lines)
         # A burger: in through the door, order at the till, eat from the bag.
         self.session.bridge.call('time', {'speed': 1})
         door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == burger)
@@ -621,6 +623,9 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
         self.ui_click('Rent building')
         self.assertEqual(self.session.mock.read_state()['player']['homes'], [flat])
+        self.assertEqual(self.play('look'), 0, self.lines)
+        self.assertIn('  happiness: First apartment +10%, 7 days left', self.lines)
+        self.assertFalse(any('No home' in line for line in self.lines), self.lines)
         # A bed: bought in a shop, carried home in its box, set down on the floor.
         self.ride(furniture)
         door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == furniture)

@@ -63,6 +63,10 @@ How the city works (hints, not a plan):
   - You need a home to sleep in. Buildings for rent are on the map; a building you can't walk into may offer itself
     for rent when you click its entrance. A rented flat starts empty: a bed is furniture, sold in shops, and you set it
     down yourself. Sleep is a click on your bed. Without sleep you collapse, and the hospital sends a bill.
+  - You also have a happiness level, the sum of what is going on in your life (look lists it, as the phone's Persona
+    app does). Having no home weighs on it; a home, a good sleep, rest and things to do lift it, and some lifts wear
+    off after a while. Low happiness wears you out faster and makes sleep restore less, and some staff only stay
+    content working for a boss who is happy.
   - Taxis wait in the street; a ride costs money and takes time. Walking is free but slow.
   - Selling street food needs the city's vendor licence, and a permit for each vehicle. The City of New York sells
     them by phone, and the licence first wants a food safety course, taught at the business school.
@@ -133,8 +137,12 @@ class Play:
         feelings = [FEELINGS.get(w, w.replace('_', ' ')) for w in needs.get('warnings') or []]
         self.out(f"How you feel: energy {needs.get('energy')}, hunger {needs.get('hunger')}, happiness {needs.get('happiness')} (of {needs.get('max', 100)})"
                  + (f"; {'; '.join(feelings)}." if feelings else '.'))
-        moods = [m.get('type', '').replace('ba:happinessmodifier_', '').replace('_', ' ') for m in needs.get('happiness_modifiers') or []]
-        if moods: self.out(f"  what weighs on your mood: {', '.join(moods)}.")
+        for m in needs.get('happiness_modifiers') or []:
+            name = m.get('name') or m.get('type', '').replace('ba:happinessmodifier_', '').replace('_', ' ')
+            amount = m.get('amount')
+            left = m.get('hours_left')
+            when = (f", {round(left / 24)} days left" if left > 24 else f", {left} hours left") if m.get('shows_time') and left is not None else ''
+            self.out(f"  happiness: {name}{f' {amount:+d}%' if amount is not None else ''}{when}")
         if p.get('clock_held_by'): self.out(f"  The clock is held by: {p['clock_held_by']}.")
         hands = p.get('hands')
         if hands:
