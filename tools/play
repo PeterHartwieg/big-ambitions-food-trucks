@@ -40,6 +40,14 @@ Commands (each also takes --help):
                                Pause, set the game speed (at most 20), or let time run until a moment (then pause).
                                DAY is a day number or +N days from today.
   buy truck|cart               Buy a vehicle; it is delivered next to you.
+  drive TRUCK PLACE [--speed N]
+                               Drive your truck while you sit in it (vehicle ID enter first). PLACE: bay:SITE (its
+                               commissary's bay), address:ADDRESS (a building) or stop:N (stop N of the truck's route
+                               today). You pull out of your space onto the road, the truck drives itself there with the
+                               traffic (the self-driving system, at N times real time, 1 to 3, 3 if left out), and you
+                               park on arrival: in the bay, or in a free space by the kerb with the hatch to the
+                               pavement. It takes real minutes; the clock runs at speed 1 meanwhile. You stay in the
+                               driver's seat: vehicle ID exit gets you out.
   vehicle ID open|close|enter|exit|back_to_hatch|restock|rent_bay
   vehicle ID take|return ITEM [UNITS]
                                Use a vehicle. take/return move stock or equipment between it and the commissary.
@@ -68,6 +76,8 @@ How the city works (hints, not a plan):
     off after a while. Low happiness wears you out faster and makes sleep restore less, and some staff only stay
     content working for a boss who is happy.
   - Taxis wait in the street; a ride costs money and takes time. Walking is free but slow.
+  - A truck is driven, a cart is pushed. A vehicle left where parking isn't allowed is fined; a truck back in its
+    commissary's bay for the night is safe.
   - Selling street food needs the city's vendor licence, and a permit for each vehicle. The City of New York sells
     them by phone, and the licence first wants a food safety course, taught at the business school.
   - Staff are found the way the city finds them: through its recruitment and job channels, then hired from the
@@ -93,6 +103,8 @@ FEELINGS = {'hungry': 'you are hungry', 'very_hungry': 'you are starving', 'tire
             'exhausted': 'you are exhausted', 'out_of_energy': 'you have no energy left: you can barely walk and will soon collapse'}
 # How long a click may hold a time skip (sleep, a course) before the tool stops waiting, in real seconds.
 SKIP_WAIT_S = 600
+# How long a drive may take before the tool stops waiting, in real seconds (the self-driving ride gives up after 20 minutes).
+DRIVE_WAIT_S = 25 * 60
 
 
 class Refused(Exception):
@@ -414,6 +426,46 @@ class Play:
         self.out(f"Bought a {kind} ({r['id']}) for {money(r['price'])}; money {money(r['money'])}." if r['done'] else
                  f"Not bought: {'; '.join(r['notices']) or 'no room here'}.")
 
+    def drive(self, ident, place, speed=None):
+        self.acting()
+        if speed is not None and speed not in (1, 2, 3): raise Refused('--speed is 1, 2 or 3 (times real time).')
+        args = {'op': 'start', 'id': ident, 'place': place, **({'speed': speed} if speed else {})}
+
+        def work():
+            status = self.call('drive', args)
+            deadline = time.time() + DRIVE_WAIT_S
+            while status.get('running') and time.time() < deadline:
+                time.sleep(1)
+                status = self.call('drive', {'op': 'status'})
+            return status
+        s = self.clock_at_one(work)
+        if s.get('running'):
+            self.out(f"The drive is still going after {DRIVE_WAIT_S // 60} minutes; look shows where the truck is.")
+            return
+        out = s.get('pull_out')
+        if out: self.out(f"You pulled {ident} out of its space onto the road (x {out['x']}, z {out['z']}).")
+        ride = s.get('ride')
+        if ride:
+            end = ride.get('end') or ride.get('refused') or ride.get('error')
+            hits = ride.get('contactsCaused')
+            self.out(f"The drive: {end}, {ride.get('seconds', 0):.0f} s"
+                     + (f", it stopped {ride['carMetres']:.0f} m from where it was going" if ride.get('carMetres') is not None else '')
+                     + (f", {hits} bump{'s' if hits != 1 else ''} it caused" if hits else '') + '.')
+        park = s.get('park')
+        if park:
+            self.out(('Parked in the bay.' if park.get('where', '').startswith('bay:') else 'Parked by the kerb.') if park.get('parked')
+                     else f"Not parked: {park.get('why')}.")
+        if s.get('error'): self.out(f"The drive failed: {s['error']}.")
+        v = s.get('vehicle') or {}
+        com = v.get('commissary') or {}
+        mins = s.get('game_minutes')
+        self.out(f"{ident} stands at x {v.get('x')}, z {v.get('z')}, {'parked legally' if v.get('legal') else 'not parked legally'}"
+                 + (f", in the bay at {com['bay_site']}" if com.get('in_bay') else '')
+                 + (', hatch to the pavement' if v.get('hatch_to_pavement') else ', hatch not to the pavement' if v.get('hatch_to_pavement') is False else '')
+                 + f". It took {s.get('seconds', 0):.0f} s" + (f" ({mins:.0f} game minutes)" if mins is not None else '') + '.')
+        c = self.call('state')['clock']
+        self.out(f"Day {c['day']} {c['time']}, {'paused' if c.get('paused') else 'speed ' + str(c.get('speed'))}.")
+
     def vehicle(self, ident, op, item=None, units=None):
         self.acting()
         args = {'id': ident, 'op': op}
@@ -508,6 +560,8 @@ def parser():
     n = sub.add_parser('time', help='pause, speed or run until a moment'); n.add_argument('op', choices=('pause', 'speed', 'until'))
     n.add_argument('value', nargs='*'); n.add_argument('--speed', type=float); n.add_argument('--no-wait', action='store_true')
     n = sub.add_parser('buy', help='buy a truck or a cart'); n.add_argument('kind', choices=('truck', 'cart'))
+    n = sub.add_parser('drive', help='drive your truck somewhere'); n.add_argument('truck'); n.add_argument('place')
+    n.add_argument('--speed', type=int)
     n = sub.add_parser('vehicle', help='use a vehicle'); n.add_argument('id'); n.add_argument('op'); n.add_argument('item', nargs='?')
     n.add_argument('units', nargs='?', type=int)
     n = sub.add_parser('order', help='order stock from a commissary'); n.add_argument('site'); n.add_argument('pairs', nargs='+')
@@ -553,6 +607,7 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
             else:
                 play.time(args.op, float(args.value[0]) if args.value else None)
         elif c == 'buy': play.buy(args.kind)
+        elif c == 'drive': play.drive(args.truck, args.place, args.speed)
         elif c == 'vehicle': play.vehicle(args.id, args.op, args.item, args.units)
         elif c == 'order': play.order(args.site, args.pairs)
         elif c == 'crew': play.crew(args.op, args.rest)

@@ -30,6 +30,7 @@ namespace FoodTrucks
                 case "money": RequireFtCity(cmd); return Money(args);
                 case "teleport": RequireFtCity(cmd); return Teleport(args);
                 case "walk": RequireFtCity(cmd); return Walk(args);
+                case "drive": RequireCity(cmd); return Drive(args);
                 case "vehicle": RequireFtCity(cmd); return Vehicle(args);
                 case "commissary": RequireFtCity(cmd); return CommissaryCommand(args);
                 case "crew": RequireFtCity(cmd); return Crew(args);
@@ -54,7 +55,7 @@ namespace FoodTrucks
                 case "new_game": return NewGame(args);
                 case "quit": return Quit();
                 default:
-                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, place, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.");
+                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, drive, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, place, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.");
             }
         }
 
@@ -458,6 +459,8 @@ namespace FoodTrucks
             if (unpausing && control.isTimeControlDisabled)
                 throw new BridgeError("A screen holds the clock (the phone, the map, a call, an activity or a menu): close it first (ui escape).");
 
+            // A time skip ends a Self Driving ride (drive).
+            if (until != null && Driving) throw new BridgeError($"A drive is under way ({DrivingVehicle}), and run_until would end its ride: wait for it (drive status).");
             var game = SaveGameManager.Current;
             // The whole request is checked before anything changes: a refused call leaves the clock, run_until and
             // keep_needs as they were (review round 6: a refused run_until used to leave the needs top-ups on).
@@ -882,6 +885,7 @@ namespace FoodTrucks
         internal static void Reset()
         {
             if (runUntil != null && SaveGameManager.Current != null) SetSpeed(1);
+            ResetDrive();
             RestoreAllInterpolation();
             runUntil = null;
             arrivedAt = null;

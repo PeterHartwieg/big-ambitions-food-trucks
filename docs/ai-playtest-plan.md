@@ -18,6 +18,7 @@ It does not judge fun, clarity or how things look. That stays with Peter.
   - It writes one JSON line per ride to `DrivenRides/tests/ride-results.jsonl`, with `end`, `seconds`, `arrivedMetres` and `contactsCaused`.
   - It is driven from the Mac with `tools/turn-tests.sh homepc send|status|fetch` in that repo.
   - rc7 lets another mod's vehicle type plan as its own. Whether our truck finds a drivable prefab is the first thing to check (step P1).
+  - Checked on 17 October 2026: the truck plans and drives with rc7 (the game's prefab lookup finds `FoodTruck` by file name under `Vehicles/PlayerVehicles/foodtruck`). The blind tester drives with `tools/play drive TRUCK PLACE`, through the bridge's `drive` (docs/test-bridge.md), which also does the pull-out and the parking by teleport.
 
 What the agent can't do: the character creator (Peter makes the character), map picks (stops go in by address through the bridge), and the dealer's purchase screen (spawn plus the price taken off the money).
 

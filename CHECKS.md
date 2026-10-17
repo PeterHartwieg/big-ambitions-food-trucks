@@ -1,3 +1,19 @@
+# Driving a truck for the blind tester (next build)
+
+Branch `claude/angry-solomon-1b998f` (17 October 2026): bridge `drive` and `tools/play drive`; the self-driving mod (HART. Self Driving, rc7 or later) does the ride through its test rig. Seen in game on 17 October 2026 in the fresh save `FT playtest drive 1` (log in `build/logs/game/drive-1/`): DR1, DR2 (450 m in 54 s, `Complete: arrived`), DR3, DR4 (0 fines at 04:00) and DR5. Every ride had one or two low-speed bumps the truck caused (2 to 4 km/h into a stopped car ahead), a Self Driving finding. DR6 to DR9 are still open. For a new run: a fresh FT save (`new_game`), Self Driving on, the game started with `-foodtrucks-test`, other gameplay mods off.
+
+| # | Do | Look for |
+|---|---|---|
+| DR1 | `ft call drive '{"op":"check"}'` in the city | `self_driving` true, `rig_ready` true, `drivable_prefab` true, `prefab` FoodTruck, 4 wheels, no problems; the log has `Self Driving link (DrivenRides test rig, …): Active.` |
+| DR2 | Buy a truck (`play buy truck`), `vehicle ID enter`, `play drive ID address:` a building 500 to 800 m away | The truck stands on the nearest driving lane facing with traffic (no car inside it), then drives itself; the rig's line ends `Complete: arrived` with 0 contacts caused. If it refuses with "no drivable shape" or "pull out into the lane first", note the reason: that is the self-driving finding |
+| DR3 | After DR2 | The truck is parked by the kerb, LEGAL, hatch to the pavement; `drive` reports seconds and game minutes; you are still in the driver's seat; `vehicle ID exit` parks it as the game does and the parking state stays legal |
+| DR4 | Rent a space at a commissary, then `play drive ID bay:SITE` | The truck ends in the bay's paint, `in the bay at SITE`, legal; after `vehicle exit` and `time until +1 04:30` no fine for it in the bank or notices |
+| DR5 | Add a stop (`route add ID ADDRESS --days` today), `play drive ID stop:1` | Parked by the stop at the kerb, hatch to the pavement, no parked car or building inside the truck (no `ERROR: ` line `stands in something after the move`) |
+| DR6 | Stop the game's time first (paused), then `play drive …` | The clock runs at speed 1 during the drive and is paused again afterwards |
+| DR7 | Switch Self Driving off in the Mods menu, restart with the flag, `play drive …` | Refused: "HART. Self Driving isn't loaded"; the truck doesn't move; the log has `Self Driving link (DrivenRides test rig): Not active` |
+| DR8 | During a drive, `ft call time '{"run_until":{"time":"23:00"}}'` and `ft call teleport` the truck | Both refused with "drive status"; the ride goes on |
+| DR9 | A drive to a place the self-driving mod can't reach (a gated community's building) | The ride is refused before it drives; the truck goes back into the space it pulled out of, legal as before |
+
 # The game's own mechanics for the blind tester (next build)
 
 Branch `real-mechanics` (17 October 2026): `tools/play` without shortcuts and the bridge ops it needs (`use`, `taxi`, `phone`, `call`, `eat`, `place`, `ui set`, `walk --to exit`; docs/test-bridge.md). Nothing here has run in game. Run them with the bridge (`tools/play` or `tools/ft`) in a fresh FT playtest character (`new_game`), never a series save.
