@@ -1,6 +1,6 @@
 # All window sales paid at midnight (next build)
 
-Peter's decision, 17 October 2026. **Pending in game.** Use a fresh FT save (save schema 2; earlier dev saves have no migration and stay untouched/read-only). Startup: `BusinessHelper.RunDaily` and `VehicleHelper.Delete(VehicleInstance, VehicleController)` patches must say `Active`. The bank label is now "Street food sales: …", for player and crew together.
+Peter's decision, 17 October 2026. **Pending in game.** Save schema 2; a schema 1 save (run 3's "FT playtest 3 break 3") migrates on load and its unpaid crew takings are paid once at midnight. Startup: `BusinessHelper.RunDaily` and `VehicleHelper.Delete(VehicleInstance, VehicleController)` patches must say `Active`. The bank label is now "Street food sales: …", for player and crew together.
 
 | # | Do | Look for |
 |---|---|---|
