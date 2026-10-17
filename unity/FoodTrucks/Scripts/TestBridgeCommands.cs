@@ -841,6 +841,8 @@ namespace FoodTrucks
             LoadStatus = null;
             loadError = null;
             doomedLoad = false;
+            newGame = false;
+            newGameStep = null;
             characterChecks.Clear();
             saving = null;
             SaveHooks = 0;
@@ -858,7 +860,7 @@ namespace FoodTrucks
         private const float LoadSeconds = 300f;
 
         internal static JObject? LoadJson() => LoadTarget == null ? null
-            : new JObject { ["name"] = LoadTarget, ["status"] = LoadStatus, ["error"] = loadError };
+            : new JObject { ["name"] = LoadTarget, ["status"] = LoadStatus, ["error"] = loadError, ["new_game"] = newGameStep };
 
         private static void BeginLoad(string name)
         {
@@ -866,6 +868,8 @@ namespace FoodTrucks
             LoadStatus = "pending";
             loadError = null;
             doomedLoad = false;
+            newGame = false;
+            newGameStep = null;
             loadAttachesAtStart = FoodTrucksSession.Attaches;
             loadDeadline = UnityEngine.Time.realtimeSinceStartup + LoadSeconds;
             TransitionToSave.saveGameLoadErrored = false;
@@ -873,6 +877,7 @@ namespace FoodTrucks
 
         private static void EndLoad(string status, string? error)
         {
+            newGame = false;
             LoadStatus = status;
             loadError = error;
             if (status == "done") Log.Info($"Test bridge: load '{LoadTarget}' done: day {SaveGameManager.Current?.Day}, the mod's save data attached.");
@@ -892,19 +897,216 @@ namespace FoodTrucks
             if (Scene() == "city" && SaveGameManager.Current?.SaveGameName == LoadTarget &&
                 FoodTrucksSession.Attaches > loadAttachesAtStart)
             {
-                EndLoad("done", null);
-                return;
+                if (!newGame)
+                {
+                    EndLoad("done", null);
+                    return;
+                }
+                if (newGameStep != "saving" && TestBridgePump.Instance != null)
+                {
+                    newGameStep = "saving";
+                    TestBridgePump.Instance.StartCoroutine(NewGameSave(LoadTarget!));
+                }
             }
-            if (UnityEngine.Time.realtimeSinceStartup > loadDeadline) EndLoad("failed", $"not in the city with it after {LoadSeconds:F0} seconds; {Where()}");
+            if (UnityEngine.Time.realtimeSinceStartup > loadDeadline)
+                EndLoad("failed", $"not in the city with it after {(newGame ? NewGameSeconds : LoadSeconds):F0} seconds; {Where()}");
         }
 
+        // ---- new_game ----
+
+        // The new game's character: the creator has one name field, so first name "FT", last name "Playtest".
+        internal const string NewGameCharacter = "FT Playtest";
+        private const float NewGameSeconds = 600f;
+        // Set while the pending load is a new game: the city's arrival saves it under LoadTarget before the load is done.
+        private static bool newGame;
+        // Where a new game is ("main menu", "character creator", "city", "saving", "saved"), for state.load.new_game.
+        private static string? newGameStep;
+        private static readonly FieldInfo? NameField = AccessTools.Field(typeof(Character.Customization.NamePicker), "nameField");
+
+        // From the main menu: the menu's Start new game as a custom game with the Normal preset's values (the custom
+        // panel's own SetPreset turns the tutorial off and marks the difficulty custom), then the character creator's
+        // Start with its random look and the name "FT Playtest"; with the tutorial off the intro's transition goes
+        // straight to the city [code, 1.0: MainMenuController.StartNewGame, CustomGameOptionsHandler.SetPreset,
+        // IntroCharacterCustomizer.StartGame, IntroToGameTransition.OnEnable]. Once the city is up the clock is paused
+        // and the game saved under the name; state.load is done after that save.
         private static JToken NewGame(JObject args)
         {
-            var name = Str(args, "name");
-            if (name != null && !IsFt(name)) throw new BridgeError($"The bridge starts only games whose name starts with FT, not '{name}'.");
-            throw new BridgeError("new_game isn't available: the game builds a new game's character only in the character creator's screens " +
-                                  "(MainMenuController.StartNewGame, then the Intro scene), which the bridge can't fill in reliably. " +
-                                  "Start a game by hand once, save it under an FT name, and use load.");
+            var name = Need(args, "name", "the new game's save name");
+            if (!IsFt(name)) throw new BridgeError($"The bridge starts only games whose name starts with FT, not '{name}'.");
+            if (Blueprints.FileSystemHelper.MakeValidFilename(name).Trim() != name)
+                throw new BridgeError($"'{name}' has characters a save's file name can't hold.");
+            var scene = Scene();
+            if (scene != "menu" || !InstanceBehavior<MainMenuController>.IsInitialized)
+                throw new BridgeError($"new_game works from the main menu only; the game is at the {(scene == "menu" ? "character creator" : scene)} now.");
+            if (LoadStatus == "pending") throw new BridgeError($"A load of '{LoadTarget}' is under way; wait for it (state.load).");
+            if (SaveGamePathHelper.GetAllSaveGamesFromVersion().Any(s => s != null && s.name == name))
+                throw new BridgeError($"A save named '{name}' exists already; new_game never writes over a save: pick another FT name.");
+            var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's runner is gone.");
+            var (variables, preset) = NewGameVariables();
+            BeginLoad(name);
+            newGame = true;
+            newGameStep = "main menu";
+            loadDeadline = UnityEngine.Time.realtimeSinceStartup + NewGameSeconds;
+            pump.StartCoroutine(NewGameFlow(name, variables));
+            return new JObject { ["loading"] = true, ["name"] = name, ["character"] = NewGameCharacter, ["preset"] = preset };
+        }
+
+        // The Normal preset's values as the custom game panel takes them: difficulty custom, tutorial off.
+        private static (GameVariables Variables, string Preset) NewGameVariables()
+        {
+            var settings = InstanceBehavior<GlobalReferences>.Instance?.difficultySettings;
+            if (settings == null || settings.Length == 0) throw new BridgeError("The game's difficulty presets aren't there.");
+            var setting = settings.FirstOrDefault(s => s != null && s.key != null && s.key.IndexOf("normal", StringComparison.OrdinalIgnoreCase) >= 0)
+                          ?? settings.FirstOrDefault(s => s != null && Convert.ToInt32(s.difficulty) == 2)
+                          ?? settings.First(s => s != null);
+            var variables = setting.ToGameVariables();
+            variables.difficulty = default;
+            variables.tutorialEnabled = false;
+            return (variables, setting.key);
+        }
+
+        private static IEnumerator NewGameFlow(string name, GameVariables variables)
+        {
+            // As a load from the menu: the menu's last loading screen gone first (LoadFromMenu).
+            var deadline = UnityEngine.Time.realtimeSinceStartup + MenuSeconds;
+            while (LoadScene.isLoading || LoadingScreenUp() || !InstanceBehavior<MainMenuController>.IsInitialized)
+            {
+                if (LoadStatus != "pending") yield break;
+                if (UnityEngine.Time.realtimeSinceStartup > deadline)
+                {
+                    EndLoad("failed", $"the main menu's last loading screen didn't go within {MenuSeconds:F0} seconds; {Where()}");
+                    yield break;
+                }
+                yield return null;
+            }
+            yield return null;
+            yield return null;
+            if (LoadStatus != "pending") yield break;
+            if (LoadScene.isLoading)
+            {
+                EndLoad("failed", $"the game started another load first; {Where()}");
+                yield break;
+            }
+            Log.Info($"Test bridge: new game '{name}' (custom, Normal values, tutorial off), to the character creator.");
+            newGameStep = "character creator";
+            InstanceBehavior<MainMenuController>.Instance.StartNewGame(variables);
+
+            // The creator, with its loading screen gone (its Start picks the body panel the frame after it wakes).
+            Intro.IntroCharacterCustomizer? creator = null;
+            deadline = UnityEngine.Time.realtimeSinceStartup + MenuSeconds;
+            while (true)
+            {
+                if (LoadStatus != "pending") yield break;
+                if (UnityEngine.Time.realtimeSinceStartup > deadline)
+                {
+                    EndLoad("failed", $"the character creator didn't come up within {MenuSeconds:F0} seconds; {Where()}");
+                    yield break;
+                }
+                if (!LoadScene.isLoading && !LoadingScreenUp())
+                {
+                    creator = UnityEngine.Object.FindAnyObjectByType<Intro.IntroCharacterCustomizer>();
+                    if (creator != null && creator.isActiveAndEnabled) break;
+                }
+                yield return null;
+            }
+            for (var i = 0; i < 10; i++) yield return null;
+            if (LoadStatus != "pending") yield break;
+            if (creator == null || creator.characterNamePicker == null || NameField == null || !(NameField.GetValue(creator.characterNamePicker) is object field))
+            {
+                EndLoad("failed", "the character creator's name field isn't there (NamePicker.nameField)");
+                yield break;
+            }
+            var text = field.GetType().GetProperty("text");
+            if (text == null)
+            {
+                EndLoad("failed", "the character creator's name field has no text property");
+                yield break;
+            }
+            text.SetValue(field, NewGameCharacter);
+            newGameStep = "city";
+            try { creator.StartGame(); }
+            catch (Exception ex)
+            {
+                EndLoad("failed", "the character creator's Start failed: " + ex.Message);
+                yield break;
+            }
+            var game = SaveGameManager.Current;
+            if (game?.charactersData == null || game.charactersData.Count == 0 || game.charactersData[0].name != NewGameCharacter)
+            {
+                EndLoad("failed", "the character creator didn't take the character (no name set?)");
+                yield break;
+            }
+            // The creator names the save after the character; the bridge's name instead, before the city is built.
+            game.SaveGameName = name;
+            Log.Info($"Test bridge: new game character '{NewGameCharacter}' made; to the city as '{name}'.");
+            // With the tutorial off the intro's transition starts the city's load itself; if it didn't, its Continue.
+            var started = UnityEngine.Time.realtimeSinceStartup;
+            while (UnityEngine.Time.realtimeSinceStartup - started < 3f)
+            {
+                if (LoadStatus != "pending" || LoadScene.isLoading || Scene() != "menu") yield break;
+                yield return null;
+            }
+            var transition = UnityEngine.Object.FindAnyObjectByType<Intro.IntroToGameTransition>(FindObjectsInactive.Include);
+            if (transition == null)
+            {
+                EndLoad("failed", $"the city didn't start loading after the character creator, and the intro's transition isn't there; {Where()}");
+                yield break;
+            }
+            Log.Info("Test bridge: the intro didn't go on by itself; its Continue.");
+            transition.Continue();
+        }
+
+        // The city is up with the new game: the clock paused, then the save under the bridge's name, then done.
+        private static IEnumerator NewGameSave(string name)
+        {
+            while (LoadScene.isLoading || LoadingScreenUp())
+            {
+                if (LoadStatus != "pending") yield break;
+                yield return null;
+            }
+            yield return new WaitForSecondsRealtime(2f);
+            if (LoadStatus != "pending") yield break;
+            try { InstanceBehavior<UIs>.Instance?.gameSpeed?.SetPlayerPause(true); }
+            catch (Exception ex) { Log.Error("Test bridge: new game, pausing: " + ex.Message); }
+            // The game refuses a save while something holds it (a placement, a screen): a few tries a few seconds apart.
+            Deferred? write = null;
+            string? refusal = null;
+            for (var attempt = 0; attempt < 10 && write == null; attempt++)
+            {
+                if (LoadStatus != "pending") yield break;
+                try { write = Save(new JObject { ["name"] = name }) as Deferred; }
+                catch (Exception ex) { refusal = ex.Message; }
+                if (write == null) yield return new WaitForSecondsRealtime(3f);
+            }
+            if (write == null)
+            {
+                EndLoad("failed", $"the new game is in the city as '{SaveGameManager.Current?.SaveGameName}', but the bridge couldn't save it: {refusal}");
+                yield break;
+            }
+            while (true)
+            {
+                if (LoadStatus != "pending")
+                {
+                    write.OnStop?.Invoke();
+                    yield break;
+                }
+                JToken? result;
+                try { result = write.Poll(); }
+                catch (Exception ex)
+                {
+                    write.OnStop?.Invoke();
+                    EndLoad("failed", $"the new game is in the city, but its save failed: {ex.Message}");
+                    yield break;
+                }
+                if (result != null)
+                {
+                    newGameStep = "saved";
+                    Log.Info($"Test bridge: new game saved as '{name}' ({result["bytes"]} bytes); paused.");
+                    EndLoad("done", null);
+                    yield break;
+                }
+                yield return null;
+            }
         }
 
         private static JToken Quit()

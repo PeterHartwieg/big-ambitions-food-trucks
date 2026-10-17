@@ -223,10 +223,30 @@ class ParityTests(unittest.TestCase):
                          ('load',"The bridge loads only saves whose name starts with FT, not 'Other'."),
                          ('save',"The bridge saves only under names that start with FT, not 'Other'.")]:
             self.refused(cmd,{'name':'Other'},text)
-        with self.assertRaisesRegex(ValueError,"new_game isn't available:"): self.mock.call('new_game',{'name':'FT new'})
+        self.refused('new_game',{'name':'FT new'},'new_game works from the main menu only; the game is at the city now.')
         reply=self.mock.call('load',{'name':'FT bridge'})
         self.assertEqual(reply,{'loading':True,'name':'FT bridge','character':'Mock character'})
         self.refused('load',{'name':'FT bridge'},'The game is loading; wait until /health says menu or city.')
+
+    def test_new_game_from_the_menu_saves_a_character_of_its_own(self):
+        self.mock.state.update(scene='menu',save=None)
+        self.mock.character_creator=True
+        self.refused('new_game',{'name':'FT new'},'new_game works from the main menu only; the game is at the character creator now.')
+        self.mock.character_creator=False
+        self.refused('new_game',{'name':'FT bridge'},"A save named 'FT bridge' exists already; new_game never writes over a save: pick another FT name.")
+        self.refused('new_game',{'name':'FT a/b'},"'FT a/b' has characters a save's file name can't hold.")
+        reply=self.mock.call('new_game',{'name':'FT new'})
+        self.assertEqual(reply,{'loading':True,'name':'FT new','character':'FT Playtest','preset':'difficulty_normal'})
+        self.assertEqual(self.mock.load,{'name':'FT new','status':'pending','error':None,'new_game':'main menu'})
+        self.refused('new_game',{'name':'FT other'},'new_game works from the main menu only; the game is at the loading now.')
+        _,finish=self.mock.pending[-1]
+        finish()
+        self.assertEqual(self.mock.load,{'name':'FT new','status':'done','error':None,'new_game':'saved'})
+        state=self.mock.call('state',{})
+        self.assertEqual((state['save'],state['clock']['day'],state['clock']['time'],state['clock']['paused'],state['money']),('FT new',1,'08:00',True,10000.))
+        self.assertEqual(state['vehicles'],[])
+        self.assertIn('FT new',self.mock.saves)
+        self.assertNotEqual(self.mock.saves['FT new']['character'],self.mock.saves['FT bridge']['character'])
 
     def test_inclusive_events_and_drops(self):
         since=self.mock.events(0)['next']

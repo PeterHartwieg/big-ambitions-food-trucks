@@ -4,7 +4,7 @@
   "needs": {},
   "steps": [
     {
-      "note": "Use FT saves from a new character of their own, never a series city saved under a new name. Prepare 'FT commissary-pay-on-delivery' by hand: exactly one licensed, closed truck with a space rented and the commissary unlocked at Hell's Kitchen, on foot nearby before delivery hour, no open screens, other orders, commissary stock or order transactions in the last two days. Do not confirm an order beforehand. The scenario creates one; new_game is unavailable."
+      "note": "Use FT saves from a new character of their own, never a series city saved under a new name. Prepare 'FT commissary-pay-on-delivery' by hand: exactly one licensed, closed truck with a space rented and the commissary unlocked at Hell's Kitchen, on foot nearby before delivery hour, no open screens, other orders, commissary stock or order transactions in the last two days. Do not confirm an order beforehand. The scenario creates one; new_game can start the character, the rest is by hand."
     },
     {
       "call": "load",
