@@ -1256,6 +1256,12 @@ namespace FoodTrucks
             var state = FoodTrucksSession.CurrentState;
             if (state == null)
             {
+                // A newer mod version's block can hold unpaid takings this version can't read: that version settles them.
+                if (FoodTrucksSession.LastLoadStatus == FoodTrucks.Core.Saves.LoadStatus.NewerVersion)
+                {
+                    Log.Info("Uninstall: this save was written by a newer Food Trucks version, whose unpaid takings this version can't read; cleanup blocked (uninstall with that version).");
+                    return false;
+                }
                 Log.Info("Uninstall: no readable window sales state; no takings to settle.");
                 return true;
             }

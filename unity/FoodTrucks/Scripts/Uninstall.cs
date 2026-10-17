@@ -154,8 +154,11 @@ namespace FoodTrucks
         {
             try { if (CartSelling.PayAllTakingsNow()) return true; }
             catch (Exception ex) { Log.Error("Uninstall: window sales: " + ex); }
-            Log.Error("Uninstall: unsettled window sales remain; cleanup stopped. Run the uninstall step again.");
-            CartSelling.Notify("foodtrucks:notification_uninstall_sales_failed");
+            var newer = FoodTrucksSession.CurrentState == null && FoodTrucksSession.LastLoadStatus == FoodTrucks.Core.Saves.LoadStatus.NewerVersion;
+            Log.Error(newer
+                ? "Uninstall: the save was written by a newer Food Trucks version; cleanup stopped. Uninstall with that version."
+                : "Uninstall: unsettled window sales remain; cleanup stopped. Run the uninstall step again.");
+            CartSelling.Notify(newer ? "foodtrucks:notification_uninstall_newer_version" : "foodtrucks:notification_uninstall_sales_failed");
             return false;
         }
 
