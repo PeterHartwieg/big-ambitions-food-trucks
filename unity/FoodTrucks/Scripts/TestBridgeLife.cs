@@ -426,6 +426,7 @@ namespace FoodTrucks
             var yRotation = (float)(Math.Round(rotation / step) * step % 360 + 360) % 360;
             var caught = Notices.BeginCapture();
             bool placed = false, valid = false, blocked = false, inside = false, stuck = false, started = false;
+            var floorSeen = "";
             Vector3 at = default;
             try
             {
@@ -444,8 +445,15 @@ namespace FoodTrucks
                     // The floor under the point must be this building's own (its placement grid): the game's camera never
                     // aims the mouse at ground outside the walls, but a point can be anywhere.
                     var grid = BigAmbitions.PlacementSystem.PlacementSystem.currentBuildingGrid;
-                    inside = Physics.Raycast(ray, out var floor, 100f, (int)LayerHelper.groundLayerMask) && grid != null &&
-                             (grid.GetGroundGrid(floor.collider) != null || OnGrid(grid, floor.point));
+                    // A home's floor isn't always one of the grid's own colliders, so a floor that belongs to the building's
+                    // own model counts too; the street outside never does.
+                    var hit = Physics.Raycast(ray, out var floor, 100f, (int)LayerHelper.groundLayerMask);
+                    var building = grid as Component;
+                    inside = hit && grid != null &&
+                             (grid.GetGroundGrid(floor.collider) != null || OnGrid(grid, floor.point) ||
+                              (building != null && floor.collider.transform.IsChildOf(building.transform)));
+                    floorSeen = !hit ? "no floor under the point" : $"{floor.collider.name} (layer {floor.collider.gameObject.layer}, y {floor.point.y:F2}" +
+                        $"{(building != null && floor.collider.transform.IsChildOf(building.transform) ? ", in the building" : "")})";
                     if (inside) GroundPositionMethod.Invoke(null, new object[] { ray });
                     valid = inside && PlacementValidField.GetValue(null) is bool b && b;
                     blocked = BigAmbitions.PlacementSystem.PlacementSystem.placedInBlockedArea;
@@ -472,7 +480,7 @@ namespace FoodTrucks
                 Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
                 stuck = BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode;
             }
-            Log.Info($"Test bridge: place {cargo.itemName} at x {x:F1}, z {z:F1}, rotation {yRotation:F0}: {(placed ? "placed" : !inside ? "not this building's floor" : blocked ? "blocked area" : "no room")}{(stuck ? ", still placing" : "")}.");
+            Log.Info($"Test bridge: place {cargo.itemName} at x {x:F1}, z {z:F1}, rotation {yRotation:F0}: {(placed ? "placed" : !inside ? "not this building's floor" : blocked ? "blocked area" : "no room")}{(stuck ? ", still placing" : "")}; floor {floorSeen}.");
             Notices.EndCapture(caught);
             return new JObject
             {
