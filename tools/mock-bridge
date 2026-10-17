@@ -155,6 +155,9 @@ class Mock:
         self.next_op = 1
         self.operation_delays = {}
         self.bay_status = {}
+        # Fixture result for both meshes, off-street ground and a complete player path. No baked mesh here;
+        # the real adapter's fallback scan and individual safety gates run in test_cart_serving.py.
+        self.cart_serving_safe = lambda vehicle, point: True
         # The self-driving mod (drive): loaded, and the ride it refuses (None: it drives).
         self.self_driving = True
         self.ride_refusal = None
@@ -1316,6 +1319,23 @@ class Mock:
         v['serving']='player'
         self.event(f"Truck window: player placed at the hatch of truck {v['id']} ({how}) at (0, 0, 0).")
 
+    def place_cart_server(self, v):
+        angle = math.radians(v['heading'])
+        side = -1 if v['hatch_side'] == 'left' else 1
+        outward = (side*math.cos(angle), -side*math.sin(angle))
+        forward = (math.sin(angle), math.cos(angle))
+        candidates = [('behind the cart, opposite the queue', -outward[0]*.85, -outward[1]*.85),
+                      ('at the front end beside the window', forward[0]*1.07, forward[1]*1.07),
+                      ('at the rear end beside the window', -forward[0]*1.07, -forward[1]*1.07)]
+        for placement, dx, dz in candidates:
+            point = (v['x']+dx, v['y'], v['z']+dz)
+            if not self.cart_serving_safe(v, point): continue
+            facing = (math.degrees(math.atan2(outward[0]*1.05-dx, outward[1]*1.05-dz)) + 360) % 360
+            self.state['player'].update(x=point[0], y=point[1], z=point[2], heading=facing)
+            self.event(f"Cart serving: {v['id']}: player placed {placement} at {point}; pedestrian ground, off street, complete player path (mock).")
+            return
+        self.event(f"Cart serving: {v['id']}: no safe reachable serving point behind the cart or at either end; player left where they stand.")
+
     def operate(self, v, op, args=None):
         player = self.state['player']
         start=self.seq
@@ -1346,7 +1366,10 @@ class Mock:
                 if v['kind']=='truck':
                     self.activity_starting=True
                     self.walks.append((time.monotonic()+.05,lambda:self.at_hatch(v,'opened')))
-                else: v.update(serving='player',hatch_side='right')
+                else:
+                    v['hatch_side'] = v['hatch_side'] or 'right'
+                    self.place_cart_server(v)
+                    v['serving'] = self.serving(v)
         elif op=='back_to_hatch':
             if v['kind']!='truck' or not v['open'] or player['in_vehicle'] or player['carrying'] or player['at_hatch'] or self.walks:
                 raise ValueError("Back to the hatch isn't offered now: it needs an open truck and the player on foot, empty-handed and not at a hatch.")
