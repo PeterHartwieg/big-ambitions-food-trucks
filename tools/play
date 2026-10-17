@@ -283,7 +283,7 @@ class Play:
         self.acting()
         r = self.call('place', {'x': x, 'z': z, **({'rotation': rotation} if rotation is not None else {})})
         self.out(f"{r['item']}: placed at x {r['x']}, z {r['z']}, turned {r['rotation']:.0f} degrees." if r['placed']
-                 else f"{r['item']}: not placed ({r['why']}); it is back in its box.")
+                 else f"{r['item']}: not placed ({r['why']})" + ('.' if r.get('still_placing') else '; it is back in its box.'))
         for n in r.get('notices') or []: self.out(f'  {n}')
 
     def phone(self, app):
@@ -372,7 +372,8 @@ class Play:
         settle = time.time() + 1
         while time.time() < deadline:
             player = self.call('state').get('player') or {}
-            busy = self.bridge.health().get('time_skip') or player.get('riding') or player.get('activity') == 'walking'
+            health = self.bridge.health()
+            busy = health.get('time_skip') or player.get('riding') or (player.get('activity') == 'walking' and not health.get('paused'))
             if busy: skipped = True
             elif skipped or time.time() > settle: break
             time.sleep(.3)

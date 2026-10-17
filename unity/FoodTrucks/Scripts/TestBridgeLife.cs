@@ -444,7 +444,8 @@ namespace FoodTrucks
                     // The floor under the point must be this building's own (its placement grid): the game's camera never
                     // aims the mouse at ground outside the walls, but a point can be anywhere.
                     var grid = BigAmbitions.PlacementSystem.PlacementSystem.currentBuildingGrid;
-                    inside = Physics.Raycast(ray, out var floor, 100f, (int)LayerHelper.groundLayerMask) && grid != null && grid.GetGroundGrid(floor.collider) != null;
+                    inside = Physics.Raycast(ray, out var floor, 100f, (int)LayerHelper.groundLayerMask) && grid != null &&
+                             (grid.GetGroundGrid(floor.collider) != null || OnGrid(grid, floor.point));
                     if (inside) GroundPositionMethod.Invoke(null, new object[] { ray });
                     valid = inside && PlacementValidField.GetValue(null) is bool b && b;
                     blocked = BigAmbitions.PlacementSystem.PlacementSystem.placedInBlockedArea;
@@ -475,13 +476,27 @@ namespace FoodTrucks
             Notices.EndCapture(caught);
             return new JObject
             {
-                ["item"] = name, ["placed"] = placed,
+                ["item"] = name, ["placed"] = placed, ["still_placing"] = stuck,
                 ["why"] = placed ? null : stuck ? "still being placed: ui escape cancels it"
                     : !started ? "the game didn't start placing it" : !inside ? "that point isn't the floor of this building"
                     : blocked ? "that part of the floor can't take furniture" : "no room there (a wall or another thing is in the way)",
                 ["x"] = TestBridgeState.Round(at.x), ["z"] = TestBridgeState.Round(at.z), ["rotation"] = yRotation,
                 ["notices"] = new JArray(caught),
             };
+        }
+
+        // A floor hit that isn't a grid's own collider still counts when it lies over one of the building's ground grids.
+        private static bool OnGrid(BigAmbitions.PlacementSystem.IBuildingGrid grid, Vector3 point)
+        {
+            if (!(grid is BigAmbitions.PlacementSystem.BuildingGridBase grids)) return false;
+            foreach (var g in grids.GetGroundGrids() ?? new List<BigAmbitions.PlacementSystem.GroundGrid>())
+            {
+                if (g == null || g.col == null) continue;
+                var b = g.col.bounds;
+                if (point.x >= b.min.x && point.x <= b.max.x && point.z >= b.min.z && point.z <= b.max.z && Math.Abs(point.y - b.center.y) < b.extents.y + 0.5f)
+                    return true;
+            }
+            return false;
         }
 
         // ---- What the player has: hands, home ----

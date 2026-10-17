@@ -1668,7 +1668,7 @@ class Mock:
             wanted=need(args,'contact',"a contact's id or name (call list shows them)")
             match=[c for c in contacts if c['id']==wanted] or [c for c in contacts if c['name'].casefold()==wanted.casefold()]
             if not match: raise ValueError(f"No contact '{wanted}' in your phone (call list shows them).")
-            if self.dialog!='closed': raise ValueError("You're in a call or a conversation already: finish it first (its own buttons, or ui escape).")
+            if self.dialog in ('city','agency','phone','order','confirm','items'): raise ValueError("You're in a call or a conversation already: finish it first (its own buttons, or ui escape).")
             contact=match[0]
             life['contact']=contact['id']; life['city_step']='start'
             self.dialog='city' if contact['id']=='the_city_of_new_york' else 'phone' if contact['id'].startswith('foodtrucks_commissary_') else 'agency'
@@ -1703,7 +1703,7 @@ class Mock:
             life['beds'].setdefault(life['inside'],[]).append((x,z,rotation))
             name=hands['contents'][0]['item']; life['hands']=None
             self.event(f'Test bridge: place {name} at x {x:.1f}, z {z:.1f}, rotation {rotation:.0f}: placed.')
-            return {'item':name,'placed':True,'why':None,'x':round(x,2),'z':round(z,2),'rotation':float(rotation),'notices':[]}
+            return {'item':name,'placed':True,'still_placing':False,'why':None,'x':round(x,2),'z':round(z,2),'rotation':float(rotation),'notices':[]}
 
     def contacts(self):
         out=[{'id':'the_city_of_new_york','name':'The City of New York','category':'General','unread':False}]
