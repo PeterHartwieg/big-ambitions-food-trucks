@@ -1943,6 +1943,10 @@ class Mock:
             if int(what)>len(stops):
                 raise ValueError(f"{identifier} has {len(stops)} stop{'' if len(stops)==1 else 's'} on today's route ({today}); no stop {what}.")
             stop=stops[int(what)-1]; goal=(stop['x'],stop['z'])
+            # A stop in the truck's own commissary's bay is parked in the bay (Commissary.CrewBayStops: within its radius).
+            space=next((x['site'] for x in self.state['commissary']['spaces'] if x['vehicle']==identifier),None)
+            if space and math.hypot(goal[0]-(393.2+SITES.index(space)*100),goal[1]-217.6)<=15:
+                site=space; goal=(393.2+SITES.index(space)*100,217.6)
         else: raise ValueError(f"Unknown place '{place}': use bay:<site>, address:<address> or stop:<N> (today's route).")
         distance=math.hypot(v['x']-goal[0],v['z']-goal[1])
         rides=distance>40

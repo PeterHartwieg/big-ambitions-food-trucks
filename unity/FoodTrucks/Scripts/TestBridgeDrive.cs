@@ -277,13 +277,22 @@ namespace FoodTrucks
                 {
                     if (!int.TryParse(what, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number < 1)
                         throw new BridgeError($"stop: takes the stop's number on today's route, from 1; got '{what}'.");
-                    var schedule = FoodTrucks.Core.Saves.StreetSales.Find(state, vehicle.id)?.Schedule;
+                    var record = FoodTrucks.Core.Saves.StreetSales.Find(state, vehicle.id);
+                    var schedule = record?.Schedule;
                     var today = FoodTrucks.Core.Common.GameDays.Weekday(Math.Max(1, HireRunner.DayOf(HireCrew.Now())));
                     var stops = WeekPlan.StopsOf(schedule, today);
                     if (number > stops.Count)
                         throw new BridgeError($"{vehicle.id} has {stops.Count} stop{(stops.Count == 1 ? "" : "s")} on today's route ({today}); no stop {number}.");
                     var stop = schedule!.Stops[stops[number - 1]];
-                    run.Goal = Ground((float)stop.X, (float)stop.Z);
+                    // A stop in the truck's own commissary's bay (as crews count one, Commissary.CrewBayStops) is parked in
+                    // the bay, not at the kerb nearby, so the truck isn't fined at 04:00 (review round 1, Sol).
+                    var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.id);
+                    if (space != null && global::FoodTrucks.Commissary.CrewBayStops(state, record!).Contains(stops[number - 1]))
+                    {
+                        run.Site = space.CommissaryId;
+                        run.Goal = Bay(space.CommissaryId).Point;
+                    }
+                    else run.Goal = Ground((float)stop.X, (float)stop.Z);
                     RideTargetNear(run, run.Goal);
                     return;
                 }
