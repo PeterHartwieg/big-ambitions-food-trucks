@@ -52,6 +52,10 @@ class Violation(RuntimeError):
         return {'check': self.check, 'day': self.day, 'message': self.message, 'details': self.details}
 
 
+class NotCheckable(Violation):
+    """The snapshots lack what a check needs. A live run stops on it; the offline check reports the window as not checkable."""
+
+
 def cents(value):
     return int(round(float(value) * 100))
 
@@ -84,8 +88,9 @@ def snapshot(state, summaries, events=(), label=''):
             'problem': (v.get('route') or {}).get('problem'),
             'legal': v.get('legal'),
         })
-    commissary = state.get('commissary') or {}
-    stock = {}
+    commissary = state.get('commissary')
+    stock = None if commissary is None else {}
+    commissary = commissary or {}
     for line in commissary.get('stock') or []:
         if line.get('key') in FOODS and line.get('amount'):
             site = stock.setdefault(line['site'], {})
@@ -111,7 +116,7 @@ def new_transactions(prev, cur):
     """Transactions in `cur` not already in `prev`. Both hold the game's transactions of their today and yesterday; a
     transaction of a day both cover counts once (as a multiset: two equal ones are two)."""
     if cur['day'] - prev['day'] > 1:
-        raise Violation('money', f"the snapshots are {cur['day'] - prev['day']} days apart: state only lists today's and yesterday's transactions, "
+        raise NotCheckable('money', f"the snapshots are {cur['day'] - prev['day']} days apart: state only lists today's and yesterday's transactions, "
                                  'so a day in between can\'t be reconciled', cur['day'])
     seen = Counter(transaction_key(t) for t in prev['transactions'] if t['day'] >= cur['day'] - 1)
     fresh = []
@@ -187,11 +192,11 @@ def sold_between(prev, cur, vehicle_id):
     for day in range(prev['day'], cur['day'] + 1):
         now = units(cur, day)
         if now is None:
-            raise Violation('stock', f"day {day}'s sold counts for {vehicle_id} aren't in the day {cur['day']} snapshot", cur['day'])
+            raise NotCheckable('stock', f"day {day}'s sold counts for {vehicle_id} aren't in the day {cur['day']} snapshot", cur['day'])
         total.update(now)
     before = units(prev, prev['day'])
     if before is None:
-        raise Violation('stock', f"day {prev['day']}'s sold counts for {vehicle_id} aren't in the day {prev['day']} snapshot", prev['day'])
+        raise NotCheckable('stock', f"day {prev['day']}'s sold counts for {vehicle_id} aren't in the day {prev['day']} snapshot", prev['day'])
     total.subtract(before)
     return {k: n for k, n in total.items() if n}
 
@@ -200,7 +205,10 @@ def delivered_between(prev, cur, placed, refused):
     """Orders delivered between two snapshots: those waiting at `prev` or placed since (`placed`), gone at `cur`, and not
     refused. Returns [(order)], each with site, item, units, total."""
     waiting = {o['n']: o for o in prev['orders']}
-    for o in placed: waiting.setdefault(o['n'], o)
+    # An order the snapshots never showed counts only in the window its 08:00 delivery falls in.
+    start, end = (prev['day'], prev['time']), (cur['day'], cur['time'])
+    for o in placed:
+        if start < (o['due_day'], '08:00') <= end: waiting.setdefault(o['n'], o)
     still = {o['n'] for o in cur['orders']}
     return [o for n, o in sorted(waiting.items()) if n not in still and n not in refused]
 
@@ -222,6 +230,8 @@ def check_stock(prev, cur, delivered):
                                          f"with {sold.get(food, 0)} sold, so {-loaded} vanished", cur['day'])
         site = cur['spaces'].get(v['id'])
         groups.setdefault(site, []).append((start, v['stock'], sold))
+    if prev.get('stock') is None or cur.get('stock') is None:
+        raise NotCheckable('stock', 'a snapshot has no commissary stock (the state had no commissary block)', cur['day'])
     sites = set(prev['stock']) | set(cur['stock']) | {o['site'] for o in delivered}
     for site in sites | set(groups):
         foods = set(prev['stock'].get(site, {})) | set(cur['stock'].get(site, {})) | {o['item'] for o in delivered if o['site'] == site}
@@ -242,7 +252,8 @@ def check_moves(snap, crewed_only=False):
     """At 05:00 each vehicle stands in its own commissary's bay, or at a stop of yesterday's route that runs past
     midnight, and none is open otherwise. A route Core finds a problem with is returned as a note."""
     yesterday = WEEK[(WEEK.index(snap['weekday']) - 1) % 7] if snap['weekday'] in WEEK else None
-    notes = [f"day {snap['day']}: {v['kind']} {v['id']}: Core's route check says {v['problem']}" for v in snap['vehicles'] if v['problem']]
+    notes = [f"day {snap['day']}: {v['kind']} {v['id']}: Core's route check says {v['problem']}" for v in snap['vehicles']
+             if v['problem'] and v['problem'] != 'none']
     for v in snap['vehicles']:
         if crewed_only and (not v['crew'] or not any(d['stops'] for d in v['week']) or snap.get('player_with') == v['id']):
             continue  # the player's own vehicle goes where the player takes it
@@ -259,9 +270,19 @@ def check_moves(snap, crewed_only=False):
 
 
 def check_events(events):
+    """The mod's own error lines, and Unity errors that name one of its types, stop the run. Other Unity errors (the
+    game's own) are returned as notes, once per message."""
+    notes = []
     for e in events:
-        if e.get('kind') in ('error', 'unity_error') or 'ERROR: ' in e.get('text', ''):
-            raise Violation('log', f"day {e.get('day')} {e.get('time')}: {e['text']}", e.get('day'), {'event': e})
+        text, kind = e.get('text', ''), e.get('kind')
+        if 'ERROR: ' in text or kind == 'error' or (kind == 'unity_error' and 'FoodTrucks' in text):
+            raise Violation('log', f"day {e.get('day')} {e.get('time')}: {text}", e.get('day'), {'event': e})
+        if kind == 'unity_error':
+            first = text.strip().splitlines()[0] if text.strip() else text
+            where = next((line.strip() for line in text.splitlines()[1:] if line.strip()), '')
+            note = f"day {e.get('day')} {e.get('time')}: a game error, not the mod's: {first} ({where})"
+            if not any(n.split(': ', 1)[-1] == note.split(': ', 1)[-1] for n in notes): notes.append(note)
+    return notes
 
 
 def _minute(text):
@@ -666,7 +687,7 @@ class Run:
     # -- checks over a window --
     def check_window(self, prev, cur, moves=False, crewed_only=False):
         try:
-            check_events(cur['events'])
+            for text in check_events(cur['events']): self.note(text)
             check_money(prev, cur)
             self.meta.setdefault('delivered', [])
             self.meta.setdefault('refused', [])
@@ -785,30 +806,73 @@ class Run:
         return next((s for s in self.snapshots() if s['day'] == day and s['time'] == clock), None)
 
 
-def check_folder(folder, log_path=None, version=None):
-    """`check`: the checks again over a run folder's snapshots, offline, and the log rules on a Player.log."""
+# Stock runs before books: it works out the deliveries the books then compare with.
+CHECKS = ('log', 'money', 'stock', 'books', 'moves')
+
+
+def check_folder(folder, log_path=None, version=None, write=True):
+    """`check`: every check on every window of a run folder's snapshots, offline, each on its own, and the log rules on a
+    Player.log. A window whose snapshots lack what a check needs is "not checkable" for it, not failed. Rebuilds
+    ledger.csv from the snapshots and writes check.json. Returns (results, log): one result per window and check, with
+    `status` pass, fail or not checkable."""
     folder = Path(folder)
     meta = json.loads((folder / 'run.json').read_text())
     snaps = [json.loads(line) for line in (folder / 'snapshots.jsonl').read_text().splitlines()]
-    results = []
-    settled = set()
+    crewed_only = meta.get('mode') == 'watch'
+    orders = meta.get('orders', [])
+    purchases = meta.get('purchases', [])
+    results, rows, settled, delivered_all = [], [], set(), []
+    def result(window, check, status, message='', day=None, notes=()):
+        results.append({'window': window, 'check': check, 'status': status, 'message': message, 'day': day, 'notes': list(notes)})
     for prev, cur in zip(snaps, snaps[1:]):
-        try:
-            check_events(cur['events'])
-            check_money(prev, cur)
-            settled |= refused_orders(cur['events'])
-            delivered = delivered_between(prev, cur, [o for o in meta.get('orders', []) if o['n'] not in settled], settled)
-            settled |= {o['n'] for o in delivered}
-            check_stock(prev, cur, delivered)
-            if cur['label'].endswith('05:00'): check_moves(cur)
-            results.append({'window': f"{prev['label']} to {cur['label']}", 'ok': True})
-        except Violation as violation:
-            results.append({'window': f"{prev['label']} to {cur['label']}", 'ok': False, **violation.as_dict()})
-            break
+        window = f"{prev['label']} to {cur['label']}"
+        for check in CHECKS:
+            try:
+                notes = []
+                if check == 'log':
+                    notes += check_events(cur['events'])
+                elif check == 'money':
+                    check_money(prev, cur)
+                elif check == 'stock':
+                    refused = refused_orders(cur['events'])
+                    settled |= refused
+                    delivered = delivered_between(prev, cur, [o for o in orders if o['n'] not in settled], settled)
+                    settled |= {o['n'] for o in delivered}
+                    delivered_all.extend({**o, 'day': o['due_day']} for o in delivered)
+                    if prev.get('stock') is None or cur.get('stock') is None:
+                        raise NotCheckable('stock', "a snapshot has no commissary stock")
+                    check_stock(prev, cur, delivered)
+                elif check == 'books':
+                    days = [d for d in range(prev['day'], cur['day']) if str(d) in cur['summaries']]
+                    if not days: raise NotCheckable('books', 'no finished day with its day summary in this window')
+                    for d in days:
+                        goods = sum(next((p['goods'] for p in orders if p['n'] == o['n']), cents(o.get('total') or 0))
+                                    for o in delivered_all if o['day'] == d)
+                        bought = sum(p['cents'] for p in purchases if p['day'] == d)
+                        if cur['day'] - prev['day'] > 1 and d < cur['day'] - 1:
+                            raise NotCheckable('books', f"day {d}'s transactions are no longer in the state")
+                        notes += check_day_books(d, cur['transactions'], cur['summaries'][str(d)], goods, bought)
+                        start = next((s for s in snaps if s['day'] == d and s['label'].endswith('05:00')), prev)
+                        rows += ledger_rows(d, cur['summaries'][str(d)], start, cur, [o for o in delivered_all if o['day'] == d],
+                                            purchases, cur['transactions'])
+                elif check == 'moves':
+                    if not cur['label'].endswith('05:00'): raise NotCheckable('moves', 'not a 05:00 look')
+                    notes += check_moves(cur, crewed_only)
+                result(window, check, 'pass', day=cur['day'], notes=notes)
+            except NotCheckable as gap:
+                result(window, check, 'not checkable', gap.message, cur['day'])
+            except Violation as violation:
+                result(window, check, 'fail', violation.message, violation.day or cur['day'])
     log = None
     if log_path:
         from .logcheck import check_log
         log = check_log(log_path, version, None)
+    if write:
+        ledger = folder / 'ledger.csv'
+        if ledger.exists(): ledger.unlink()
+        seen = set()
+        append_ledger(ledger, [r for r in rows if (r['day'], r['vehicle']) not in seen and not seen.add((r['day'], r['vehicle']))])
+        (folder / 'check.json').write_text(json.dumps({'results': results, 'log_ok': None if log is None else log['ok']}, indent=1))
     return results, log
 
 
@@ -875,6 +939,25 @@ def write_report(folder, balance_rows=None, balance_note=None):
     if not findings and not notes:
         out.append('None.')
     out.append('')
+    check = folder / 'check.json'
+    if check.exists():
+        results = json.loads(check.read_text())['results']
+        out.append('## Offline check')
+        out.append('')
+        out.append('| Check | Pass | Fail | Not checkable |')
+        out.append('|---|---|---|---|')
+        for name in CHECKS:
+            mine = [r for r in results if r['check'] == name]
+            out.append(f"| {name} | {sum(r['status'] == 'pass' for r in mine)} | {sum(r['status'] == 'fail' for r in mine)} | "
+                       f"{sum(r['status'] == 'not checkable' for r in mine)} |")
+        out.append('')
+        for r in results:
+            if r['status'] == 'fail': out.append(f"- Fail, {r['window']}, {r['check']}: {r['message']}")
+        for r in results:
+            for n in r['notes']: out.append(f"- Note, {r['window']}: {n}")
+        gaps = sorted({r['message'] for r in results if r['status'] == 'not checkable'})
+        for g in gaps: out.append(f"- Not checkable: {g}")
+        out.append('')
     out.append('## Balance against tools/balance')
     out.append('')
     if balance_rows:

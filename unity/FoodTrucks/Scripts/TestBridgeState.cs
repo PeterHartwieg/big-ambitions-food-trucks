@@ -292,7 +292,7 @@ namespace FoodTrucks
         // The phone's to-dos the mod made for this vehicle (null: the fleet's, the vendor licence), as they stand after the
         // last minute's reconcile: kind and food.
         private static JArray Todos(string? vehicleId) =>
-            new JArray(VehicleTodos.ListFor(vehicleId).Select(t => new JObject { ["kind"] = t.Kind, ["item"] = t.Item }));
+            new JArray(VehicleTodos.ListFor(vehicleId).Select(t => new JObject { ["kind"] = t.Kind, ["item"] = t.Item, ["text"] = t.Text }));
 
         // The game's transactions of today and yesterday, oldest first: label as the bank app shows it, amount, day, time.
         private static JArray Transactions(GameInstance game)

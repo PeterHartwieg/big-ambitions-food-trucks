@@ -136,6 +136,38 @@ namespace FoodTrucks.Core.Fleet
             return problems;
         }
 
+        // The cause behind RouteProblem, for the route's to-do: which stop can't be reached, or which days and hours have
+        // nobody on shift. Null when the route has no problem.
+        public RouteCause? RouteCauseOf(VehicleState vehicle, double gameSpeed = 1.0, (double X, double Z)? home = null,
+            IReadOnlyCollection<int>? bayStops = null)
+        {
+            var problem = RouteProblem(vehicle, gameSpeed, home, bayStops);
+            if (problem == ScheduleProblem.None) return null;
+            var schedule = vehicle.Schedule!;
+            var mode = Travel.ModeFor(vehicle.VehicleType);
+            if (problem == ScheduleProblem.Unreachable)
+            {
+                var index = schedules.UnreachableStop(schedule, mode, gameSpeed);
+                var stop = schedule.Stops[index];
+                return new RouteCause(problem, stop.Day, WeekPlan.StopsOf(schedule, stop.Day).IndexOf(index) + 1);
+            }
+            if (problem != ScheduleProblem.Uncovered) return new RouteCause(problem);
+            var groups = new List<(bool Whole, int Start, int End, bool Before, List<DayOfWeek> Days)>();
+            foreach (var routeDay in WeekPlan.RouteDays(schedules, schedule, mode, gameSpeed, home, bayStops))
+            {
+                var gaps = WeekPlan.Gaps(routeDay, schedule, vehicle.Crew);
+                if (gaps.Count == 0) continue;
+                var gap = gaps[0];
+                var whole = gaps.Count == 1 && gap.Start <= routeDay.Start && gap.End >= routeDay.End;
+                var before = gap.Start <= routeDay.Start && (gap.Kind == LegKind.Restock || gap.Kind == LegKind.Travel);
+                var key = (whole, whole ? 0 : gap.Start, whole ? 0 : gap.End, !whole && before);
+                var group = groups.FindIndex(g => (g.Whole, g.Start, g.End, g.Before) == key);
+                if (group < 0) groups.Add((key.Item1, key.Item2, key.Item3, key.Item4, new List<DayOfWeek> { routeDay.Day }));
+                else groups[group].Days.Add(routeDay.Day);
+            }
+            return new RouteCause(problem, uncovered: groups.Select(g => new UncoveredDays(g.Days, g.Whole, g.Start, g.End, g.Before)).ToList());
+        }
+
         // A crewed vehicle with a valid route gets a plan for the day that contains `now`, starting from where
         // it will be: the end of a plan still running (a late stop past midnight, the drive back), or where it stands. A
         // plan made in the middle of the day starts now, so stops already over are skipped. Old plans are dropped.

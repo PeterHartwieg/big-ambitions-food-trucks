@@ -91,6 +91,8 @@ class Play:
         lic = s.get('licence') or {}
         self.out(f"Licence: {'until day ' + str(lic['until_day']) if lic.get('until_day') else 'none'}, permits {lic.get('permits', 0)}, "
                  f"food safety course {'done' if lic.get('course_done') else 'not done'}.")
+        for t in lic.get('todos') or []:
+            self.out(f"  to-do: {t.get('text') or t['kind'].replace('_', ' ')}")
         for v in s.get('vehicles') or []:
             com = v.get('commissary') or {}
             self.out(f"{v['kind'].title()} {v['id']}: {'OPEN' if v.get('open') else 'closed'}, serving {v.get('serving')}, "
@@ -105,7 +107,7 @@ class Play:
             for shift in route.get('shifts') or []:
                 self.out(f"  shifts of {shift['employee']} ({shift['id']}): " + ', '.join(f"{x['day']} {x['start']}-{x['end']}" for x in shift['shifts']))
             for t in v.get('todos') or []:
-                self.out(f"  to-do: {t['kind'].replace('_', ' ')}{' (' + t['item'] + ')' if t.get('item') else ''}")
+                self.out(f"  to-do: {t.get('text') or t['kind'].replace('_', ' ') + (' (' + t['item'] + ')' if t.get('item') else '')}")
         com = s.get('commissary') or {}
         for sp in com.get('spaces') or []:
             self.out(f"Commissary space at {sp['site']} for {sp['vehicle']}.")
