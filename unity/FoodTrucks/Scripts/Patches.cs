@@ -206,7 +206,7 @@ namespace FoodTrucks
             // The recruitment agency recruits for the street food fleet without a building business (FleetRecruiting).
             Patch(typeof(Dialogs.RecruitmentAgencyDialog), "NoBusinesses", Type.EmptyTypes, typeof(FleetRecruiting), prefix: nameof(FleetRecruiting.NoBusinessesPrefix));
             Patch(typeof(Dialogs.RecruitmentAgencyDialog), "OnRecruitmentSettingsSet", Type.EmptyTypes, typeof(FleetRecruiting),
-                postfix: nameof(FleetRecruiting.SettingsSetPostfix));
+                prefix: nameof(FleetRecruiting.SettingsSetPrefix), postfix: nameof(FleetRecruiting.SettingsSetPostfix));
             Patch(typeof(UI.Dialog.RecruitmentSettings), "OnEnable", Type.EmptyTypes, typeof(FleetRecruiting), postfix: nameof(FleetRecruiting.SettingsEnablePostfix));
             Patch(typeof(UI.Dialog.RecruitmentSettings), "SelectBusiness", new[] { typeof(int) }, typeof(FleetRecruiting), prefix: nameof(FleetRecruiting.SelectBusinessPrefix));
             Patch(typeof(UI.Dialog.RecruitmentCampaignsList), "SetUpContract", new[] { typeof(RecruitmentCampaign) }, typeof(FleetRecruiting),

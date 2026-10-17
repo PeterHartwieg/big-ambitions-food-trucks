@@ -129,7 +129,9 @@ namespace FoodTrucks
                 var list = Registrations(__instance);
                 if (list == null || list.Any(r => r is FleetEntry)) return;
                 list.Add(new FleetEntry());
-                BusinessDropdown(__instance).SetOptions(list.Select(r => r.GetDisplayName()).ToList(), localize: false);
+                var dropdown = BusinessDropdown(__instance);
+                dropdown.SetOptions(list.Select(r => r.GetDisplayName()).ToList(), localize: false);
+                dropdown.SetPlaceholder("dialog_select_business");
             }
             catch (Exception ex) { Fail("the campaign form's list", ex); }
         }
@@ -160,6 +162,25 @@ namespace FoodTrucks
             catch (Exception ex)
             {
                 Fail("picking the fleet", ex);
+                return true;
+            }
+        }
+
+        // Prefix on RecruitmentAgencyDialog.OnRecruitmentSettingsSet: a form still open on the fleet after the uninstall step
+        // starts nothing (review round 1): the game's own "select a business", and the form stays.
+        internal static bool SettingsSetPrefix(ref DialogEntry? __result)
+        {
+            try
+            {
+                var form = DialogController.current?.GetInputTransform<RecruitmentSettings>(null);
+                if (form == null || !(form.selectedBusiness is FleetEntry) || CanWork) return true;
+                UI.Notification.Notifications.ShowError("common_notification_select_business");
+                __result = null;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Fail("checking the form", ex);
                 return true;
             }
         }
@@ -223,13 +244,18 @@ namespace FoodTrucks
             foreach (var campaign in campaigns.Where(IsFleet).ToList())
             {
                 var cents = FleetRecruitment.RefundCents((long)Math.Round(campaign.price * 100.0), campaign.amountOfCandidates, campaign.candidatesFound);
-                campaigns.Remove(campaign);
+                // Paid back first; a refused refund keeps the campaign, so nothing is lost and the step can run again.
                 if (cents > 0)
                 {
                     var info = new TransactionInfo("ba:transaction_recruitmentcampaign", new Dictionary<string, string> { { "businessName", FleetName() } });
-                    if (Payments.PayIn(cents, info)) refunded += cents;
-                    else Log.Error($"Uninstall: the refund of {CartSelling.Money(cents)} for a fleet recruitment campaign was refused.");
+                    if (!Payments.PayIn(cents, info))
+                    {
+                        Log.Error($"Uninstall: the refund of {CartSelling.Money(cents)} for a fleet recruitment campaign was refused; the campaign stays.");
+                        continue;
+                    }
+                    refunded += cents;
                 }
+                campaigns.Remove(campaign);
                 Log.Info($"Uninstall: fleet recruitment campaign ended ({campaign.candidatesFound} of {campaign.amountOfCandidates} found), {CartSelling.Money(cents)} back.");
             }
             return refunded;

@@ -14,6 +14,7 @@ Branch `fleet-recruit` (17 October 2026), Peter's decision after blind run 2. No
 | FR8 | A player with a named shop too | The list has the shop and the fleet; a campaign for the shop works exactly as before and its candidates arrive assigned to the shop |
 | FR9 | Save with a fleet campaign running, load | The campaign still runs and lists as the fleet's |
 | FR10 | Ctrl+Shift+F11 (uninstall) with a fleet campaign running | The campaign is gone from the agency's list and the price of the candidates not found yet is paid back (`Uninstall: fleet recruitment campaign ended …` in the log) |
+| FR10a | Sell your last food vehicle with a fleet campaign running, then Ctrl+Shift+F11 twice | The campaign ends and its unfound candidates' price comes back, as in FR10; with the fleet form open during the uninstall, its Confirm says "select a business" and charges nothing |
 | FR11 | Tester: `tools/play --help` | The hiring hint names the agency, its HR course and the fleet, with no numbers |
 
 # Driving a truck for the blind tester (next build)

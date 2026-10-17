@@ -43,6 +43,9 @@ namespace FoodTrucks
                 RemoveMarketEntries(game);
                 try { Commissary.RemoveForUninstall(); }
                 catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
+                // A fleet campaign can outlive the last vehicle (review round 1).
+                try { FleetRecruiting.EndForUninstall(); }
+                catch (Exception ex) { Log.Error("Uninstall: fleet recruitment campaigns: " + ex); }
                 try { VehicleTodos.RemoveAll("uninstall"); }
                 catch (Exception ex) { Log.Error("Uninstall: to-dos: " + ex); }
                 CartSelling.Notify("foodtrucks:notification_uninstall_none");
