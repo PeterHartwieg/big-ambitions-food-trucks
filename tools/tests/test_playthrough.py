@@ -386,7 +386,7 @@ class BridgeOpsParityTests(unittest.TestCase):
             self.assertIn(f'["{key}"]', life)
         self.mock.state['clock']['paused'] = False
         clicked = self.mock.call('use', {'op': 'click', 'id': 1})
-        self.assertEqual(set(clicked), {'clicked', 'kind', 'click', 'handled', 'still_walking', 'inside', 'inside_before', 'open', 'notices', 'x', 'z'})
+        self.assertEqual(set(clicked), {'clicked', 'kind', 'click', 'handled', 'placing_cancelled', 'still_walking', 'inside', 'inside_before', 'open', 'notices', 'x', 'z'})
         for key in clicked:
             self.assertIn(f'["{key}"]', life)
         rode = self.mock.call('taxi', {'address': 'ba:street_thirdstreet#6'})
@@ -399,6 +399,12 @@ class BridgeOpsParityTests(unittest.TestCase):
                  "The game is paused: the walk over takes real time. Set a speed first."]
         self.refused('taxi', {'address': 'ba:street_thirdstreet#6'}, texts[0])
         self.refused('eat', {}, texts[1])
+        self.refused('use', {'op': 'right_click', 'id': 1}, "Unknown use op 'right_click': list or click.")
+        self.assertIn("Unknown use op '{op}': list or click.", life)
+        self.mock.dialog = 'agency'
+        self.refused('call', {'contact': 'the_city_of_new_york'}, "You're in a call or a conversation already: finish it first (its own buttons, or ui escape).")
+        self.assertIn("You're in a call or a conversation already: finish it first (its own buttons, or ui escape).", life)
+        self.mock.dialog = 'closed'
         self.refused('place', {'x': 1, 'z': 1}, texts[2])
         self.refused('walk', {'place': 'exit'}, texts[4])
         self.mock.state['clock']['paused'] = True

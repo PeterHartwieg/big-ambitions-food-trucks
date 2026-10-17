@@ -42,11 +42,12 @@ namespace FoodTrucks
                     RequireCity("use list");
                     return UseList(args);
                 case "click":
-                case "right_click":
                     RequireFtCity("use " + op);
-                    return UseClick(args, op == "right_click");
+                    return UseClick(args);
                 default:
-                    throw new BridgeError($"Unknown use op '{op}': list, click or right_click.");
+                    // No right click: on the player's own furniture it starts moving it, which follows the real mouse
+                    // (review round 1). Placing a bought piece is place's.
+                    throw new BridgeError($"Unknown use op '{op}': list or click.");
             }
         }
 
@@ -77,12 +78,12 @@ namespace FoodTrucks
             var found = new List<(EntityController Entity, Vector3 At, float Distance)>();
             foreach (var entity in Object.FindObjectsOfType<EntityController>())
             {
-                if (!Clickable(entity)) continue;
+                if (entity == null) continue;
                 var at = UsePoint(entity, from);
                 // Another floor of the building isn't in reach.
                 if (Math.Abs(at.y - from.y) > 4f && !(entity is CityBuildingController)) continue;
                 var distance = (float)Flat(at, from);
-                if (distance <= radius) found.Add((entity, at, distance));
+                if (distance <= radius && Clickable(entity)) found.Add((entity, at, distance));
             }
             var near = found.OrderBy(f => f.Distance).Take(UseMaxEntries).ToList();
             lastUse = near.Select(n => n.Entity).ToList();
@@ -155,7 +156,7 @@ namespace FoodTrucks
             return entity.gameObject.name;
         }
 
-        private static object UseClick(JObject args, bool right)
+        private static object UseClick(JObject args)
         {
             var id = Num(args, "id") ?? throw new BridgeError("use click needs \"id\" from the last use list.");
             var index = (int)id - 1;
@@ -163,27 +164,33 @@ namespace FoodTrucks
             var entity = lastUse[index];
             if (entity == null || !Clickable(entity)) throw new BridgeError($"Thing {id} is gone or can't be clicked now; list again.");
             if (Paused() == true) throw new BridgeError("The game is paused: the walk over takes real time. Set a speed first.");
+            RequireFreeHands("a click");
+            // What the mouse's click handling waits for too (MouseController): the interior designer, the subway, placing.
+            if (UI.InteriorDesigner.InteriorDesignerUI.IsOpen || SubwaySystem.IsRiding || BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode)
+                throw new BridgeError("Not now: close what is open first (ui escape).");
             var name = ThingName(entity);
             var (ctaKey, _) = Cta(entity);
             var player = PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.");
             var insideBefore = InsideAddress();
             var caught = Notices.BeginCapture();
             bool handled;
+            var placingCancelled = false;
             try
             {
-                if (right)
-                {
-                    entity.OnIoRightClick();
-                    handled = true;
-                }
-                else handled = entity.OnIoLeftClick();
+                // The hover sets the call to action before the click, as the mouse does (OnIoLeftClick skips it while an
+                // overlay shows over the thing).
+                CtaManager.UpdateCta(entity);
+                handled = entity.OnIoLeftClick();
+                // Moving furniture by hand isn't one of the tester's controls: it follows the real mouse.
+                if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode)
+                    placingCancelled = Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
             }
             catch
             {
                 Notices.EndCapture(caught);
                 throw;
             }
-            Log.Info($"Test bridge: {(right ? "right-clicked" : "clicked")} {entity.GetType().Name} \"{name}\" ({(handled ? "handled" : "not handled")}).");
+            Log.Info($"Test bridge: clicked {entity.GetType().Name} \"{name}\" ({(handled ? "handled" : "not handled")}{(placingCancelled ? ", placing cancelled" : "")}).");
             var started = UnityEngine.Time.realtimeSinceStartup;
             var deadline = started + UseSeconds;
             return new Deferred(() =>
@@ -203,6 +210,7 @@ namespace FoodTrucks
                     ["kind"] = entity == null ? null : entity.GetType().Name,
                     ["click"] = string.IsNullOrEmpty(ctaKey) ? null : LocalizorManager.GetLocalization(ctaKey, null),
                     ["handled"] = handled,
+                    ["placing_cancelled"] = placingCancelled,
                     ["still_walking"] = walking,
                     ["inside"] = InsideAddress(),
                     ["inside_before"] = insideBefore,
@@ -278,19 +286,20 @@ namespace FoodTrucks
         private static readonly Dictionary<string, AppName> PhoneApps = new Dictionary<string, AppName>(StringComparer.OrdinalIgnoreCase)
         {
             ["persona"] = AppName.Persona, ["contacts"] = AppName.Contacts, ["employees"] = AppName.MyEmployees,
-            ["bizman"] = AppName.BizMan, ["econoview"] = AppName.EconoView, ["maps"] = AppName.VoogleMaps,
+            ["bizman"] = AppName.BizMan, ["econoview"] = AppName.EconoView,
             ["market"] = AppName.MarketInsider, ["rivals"] = AppName.Rivals,
+            // Not VoogleMaps: the game opens the map through SmartphoneUI.OpenApp, not the full menu (review round 1);
+            // the tester reads the map with the map command, and a taxi opens it in taxi mode.
         };
 
-        // { "app" }: the phone opened on one of its apps, as its key and app buttons do.
+        // { "app" }: the phone opened on one of its full-menu apps, as its key and app buttons do.
         private static object Phone(JObject args)
         {
             var name = Need(args, "app", string.Join(", ", PhoneApps.Keys));
             if (!PhoneApps.TryGetValue(name, out var app)) throw new BridgeError($"No phone app '{name}': {string.Join(", ", PhoneApps.Keys)}.");
             RequireFreeHands("the phone");
-            InstanceBehavior<UIs>.Instance.fullMenu.ShowApp(app);
             Log.Info($"Test bridge: phone opened on {app}.");
-            return WithNotices(() => { }, notices => new JObject { ["app"] = name, ["open"] = FullMenu.IsOpen, ["notices"] = new JArray(notices) });
+            return WithNotices(() => InstanceBehavior<UIs>.Instance.fullMenu.ShowApp(app), notices => new JObject { ["app"] = name, ["open"] = FullMenu.IsOpen, ["notices"] = new JArray(notices) });
         }
 
         private static void RequireFreeHands(string what)
@@ -323,10 +332,14 @@ namespace FoodTrucks
             if (matches.Count == 0) throw new BridgeError($"No contact '{wanted}' in your phone (call list shows them).");
             if (matches.Count > 1) throw new BridgeError($"{matches.Count} contacts are called '{wanted}': use the id ({string.Join(", ", matches.Select(c => c.id))}).");
             RequireFreeHands("a call");
+            var talking = InstanceBehavior<UIs>.Instance?.playerHUD?.dialogUI;
+            if (DialogController.current != null || (talking != null && talking.isPanelOpen))
+                throw new BridgeError("You're in a call or a conversation already: finish it first (its own buttons, or ui escape).");
             var contact = matches[0];
-            ContactsApp.OpenAndStartCall(contact);
             Log.Info($"Test bridge: calling {contact.id}.");
-            return WithNotices(() => { }, notices => new JObject
+            // The conversation opened, and a frame later its call button pressed only if the game shows it usable
+            // (ContactsApp.StartCall would press it regardless: a contact with no call button would call the last one).
+            return WithNotices(() => ModContacts.OpenAndCall(contact), notices => new JObject
             {
                 ["contact"] = contact.id, ["name"] = ContactName(contact),
                 ["calling"] = DialogController.current != null && DialogController.current.contact == contact,
@@ -348,12 +361,13 @@ namespace FoodTrucks
         // food in the bag when no item is named.
         private static object Eat(JObject args)
         {
+            RequireFreeHands("eating");
             var hands = PlayerHelper.ItemInstanceInHands;
             if (hands == null) throw new BridgeError("Your hands are empty: food you buy comes in a bag to eat from.");
             if (hands.ItemCached == null || !hands.ItemCached.HasTag(BigAmbitions.Tags.TagRef.Itemtag.isbag))
                 throw new BridgeError($"You're holding {LocalizorManager.GetLocalization(hands.itemName, null)}, not a bag: only food in a paper bag is eaten from the hands.");
             var wanted = Str(args, "item");
-            var foods = hands.cargoInstances.Where(c => c != null && c.amount > 0 && c.paid && !c.IsSealed && c.ItemCached != null && c.ItemCached.isConsumable).ToList();
+            var foods = (hands.cargoInstances ?? new List<CargoInstance>()).Where(c => c != null && c.amount > 0 && c.paid && !c.IsSealed && c.ItemCached != null && c.ItemCached.isConsumable).ToList();
             var cargo = wanted == null ? foods.FirstOrDefault()
                 : foods.FirstOrDefault(c => c.itemName == wanted || string.Equals(LocalizorManager.GetLocalization(c.itemName, null), wanted, StringComparison.OrdinalIgnoreCase));
             if (cargo == null)
@@ -411,7 +425,7 @@ namespace FoodTrucks
             var step = item.degreesPerRotation > 0 ? item.degreesPerRotation : 45f;
             var yRotation = (float)(Math.Round(rotation / step) * step % 360 + 360) % 360;
             var caught = Notices.BeginCapture();
-            bool placed = false, valid = false, blocked = false;
+            bool placed = false, valid = false, blocked = false, inside = false, stuck = false, started = false;
             Vector3 at = default;
             try
             {
@@ -419,16 +433,22 @@ namespace FoodTrucks
                 panel.SetItemInstance(hands, spawnIntoPlayerHands: false);
                 panel.ClickPlace();
                 var placing = BigAmbitions.PlacementSystem.PlacementSystem.CurrentPlaceableItemBeingPlaced as ItemController;
+                started = placing != null;
                 if (placing != null)
                 {
                     placing.ItemInstance.yRotation = yRotation;
                     var euler = placing.transform.eulerAngles;
                     placing.transform.eulerAngles = new Vector3(euler.x, yRotation, euler.z);
                     var top = new Vector3((float)x, PlayerHelper.GetPosition().y + 2f, (float)z);
-                    GroundPositionMethod.Invoke(null, new object[] { new Ray(top, Vector3.down) });
-                    valid = PlacementValidField.GetValue(null) is bool b && b;
+                    var ray = new Ray(top, Vector3.down);
+                    // The floor under the point must be this building's own (its placement grid): the game's camera never
+                    // aims the mouse at ground outside the walls, but a point can be anywhere.
+                    var grid = BigAmbitions.PlacementSystem.PlacementSystem.currentBuildingGrid;
+                    inside = Physics.Raycast(ray, out var floor, 100f, (int)LayerHelper.groundLayerMask) && grid != null && grid.GetGroundGrid(floor.collider) != null;
+                    if (inside) GroundPositionMethod.Invoke(null, new object[] { ray });
+                    valid = inside && PlacementValidField.GetValue(null) is bool b && b;
                     blocked = BigAmbitions.PlacementSystem.PlacementSystem.placedInBlockedArea;
-                    at = placing.transform.position;
+                    if (inside) at = placing.transform.position;
                     if (valid && !blocked)
                     {
                         placing.ItemInstance.position = at;
@@ -445,12 +465,20 @@ namespace FoodTrucks
                 Notices.EndCapture(caught);
                 throw;
             }
-            Log.Info($"Test bridge: place {cargo.itemName} at x {x:F1}, z {z:F1}, rotation {yRotation:F0}: {(placed ? "placed" : valid ? "blocked area" : "no room")}.");
+            // Never left half placed: whatever the game didn't finish is cancelled, and if even that fails the reply says so.
+            if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode)
+            {
+                Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
+                stuck = BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode;
+            }
+            Log.Info($"Test bridge: place {cargo.itemName} at x {x:F1}, z {z:F1}, rotation {yRotation:F0}: {(placed ? "placed" : !inside ? "not this building's floor" : blocked ? "blocked area" : "no room")}{(stuck ? ", still placing" : "")}.");
             Notices.EndCapture(caught);
             return new JObject
             {
                 ["item"] = name, ["placed"] = placed,
-                ["why"] = placed ? null : blocked ? "that part of the floor can't take furniture" : at == default ? "the game didn't start placing it" : "no room there (a wall or another thing is in the way, or it isn't floor)",
+                ["why"] = placed ? null : stuck ? "still being placed: ui escape cancels it"
+                    : !started ? "the game didn't start placing it" : !inside ? "that point isn't the floor of this building"
+                    : blocked ? "that part of the floor can't take furniture" : "no room there (a wall or another thing is in the way)",
                 ["x"] = TestBridgeState.Round(at.x), ["z"] = TestBridgeState.Round(at.z), ["rotation"] = yRotation,
                 ["notices"] = new JArray(caught),
             };
@@ -467,7 +495,7 @@ namespace FoodTrucks
             {
                 ["item"] = LocalizorManager.GetLocalization(hands.itemName, null),
                 ["key"] = hands.itemName,
-                ["contents"] = new JArray(hands.cargoInstances.Where(c => c != null && c.amount > 0).Select(c => new JObject
+                ["contents"] = new JArray((hands.cargoInstances ?? new List<CargoInstance>()).Where(c => c != null && c.amount > 0).Select(c => new JObject
                 {
                     ["item"] = LocalizorManager.GetLocalization(c.itemName, null), ["key"] = c.itemName, ["amount"] = c.amount, ["paid"] = c.paid,
                     ["food"] = c.ItemCached != null && c.ItemCached.isConsumable,

@@ -20,6 +20,7 @@ Branch `real-mechanics` (17 October 2026): `tools/play` without shortcuts and th
 | RM14 | A slider and a toggle on screen (the sleep panel, a recruitment form) | `ui list` shows "(slider value, from … to …)" and "(toggle, on/off)"; `ui set` moves the slider; `ui click` flips the toggle |
 | RM15 | Let energy run out | Collapse at the hospital threshold: the game takes you to hospital and bills the stay; the log has `Test bridge: the player collapsed…` |
 | RM16 | `play look` next to the phone's Persona app, with no home, after renting one, after a sleep | The same happiness value and the same modifiers, names, signed percentages and time left ("N days left" or none) as Persona lists them |
+| RM17 | Inside the flat, `place` at a point outside its walls (a few metres past the outer wall), and `use` on your own bed | "that point isn't the floor of this building", the bed back in its box; `use` on the bed offers sleep only (no moving it). Throughout: keep the PC's mouse off the game's UI, since a click on a building checks the pointer |
 
 # First blind playtest fixes (next build)
 

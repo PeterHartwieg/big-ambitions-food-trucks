@@ -21,7 +21,7 @@ Commands (each also takes --help):
                                cart into it), commissary:SITE (its door), vehicle:ID (beside it) or exit (out of the
                                building you're in). The clock runs at speed 1 while you walk, and stops again if it
                                was stopped.
-  use [--radius M] | use ID [--right]
+  use [--radius M] | use ID
                                The things near you that react to a click (a door, a shelf, a till, a bed, a taxi, a
                                building's entrance), or a click on one by its number in the last list. The clock runs
                                at speed 1 while you walk over to it.
@@ -29,8 +29,8 @@ Commands (each also takes --help):
                                ba:street_secondavenue#8). You get into one with use.
   eat [ITEM]                   Eat from the bag of food you hold.
   place X Z [--rotation DEG]   Set down the furniture in the box you hold, on the floor of a building you rent.
-  phone APP                    Open the phone on an app: contacts, employees, bizman, econoview, maps, market,
-                               persona or rivals.
+  phone APP                    Open the phone on an app: contacts, employees, bizman, econoview, market, persona or
+                               rivals.
   call list | call CONTACT     Your phone's contacts, or call one (by name or id). Its options are then on screen (ui).
   screen NAME [--fetch DIR]    A picture of the screen.
   ui list | ui click TEXT | ui click --id N | ui set ID VALUE | ui escape
@@ -88,7 +88,7 @@ PREFIX = 'FT playtest'
 MAX_SPEED = 20
 WEEK = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
 VEHICLE_OPS = ('open', 'close', 'enter', 'exit', 'back_to_hatch', 'restock', 'rent_bay')
-PHONE_APPS = ('contacts', 'employees', 'bizman', 'econoview', 'maps', 'market', 'persona', 'rivals')
+PHONE_APPS = ('contacts', 'employees', 'bizman', 'econoview', 'market', 'persona', 'rivals')
 FEELINGS = {'hungry': 'you are hungry', 'very_hungry': 'you are starving', 'tired': 'you are tired',
             'exhausted': 'you are exhausted', 'out_of_energy': 'you have no energy left: you can barely walk and will soon collapse'}
 # How long a click may hold a time skip (sleep, a course) before the tool stops waiting, in real seconds.
@@ -227,6 +227,8 @@ class Play:
         r = self.call('taxi', {'address': address}, 150)
         if r['done']:
             self.out(f"The taxi set you down at {address} (x {r['x']}, z {r['z']}) after {r['minutes']:.0f} minutes; fare {money(r['fare'])}, money {money(r['money'])}.")
+            c = self.call('state')['clock']
+            self.out(f"Day {c['day']} {c['time']}, {'paused' if c.get('paused') else 'speed ' + str(c.get('speed'))}.")
         else:
             self.out(f"No ride: {'; '.join(r.get('notices') or []) or 'the taxi did not go'}.")
 
@@ -246,7 +248,7 @@ class Play:
                 # The click opened a screen that holds the clock (the map, a panel): the game keeps it until that closes.
                 self.out('The clock is held by the screen that opened; it runs again once you close it.')
 
-    def use(self, ident=None, radius=None, right=False):
+    def use(self, ident=None, radius=None):
         if ident is None:
             r = self.call('use', {'op': 'list', **({'radius': radius} if radius else {})})
             self.out(f"Near you{' inside ' + r['inside'] if r.get('inside') else ''} (within {r['radius']:.0f} m):")
@@ -262,7 +264,7 @@ class Play:
             return
         self.acting()
         cursor = self.bridge.events(1)['next']
-        r = self.clock_at_one(lambda: self.call('use', {'op': 'right_click' if right else 'click', 'id': ident}, 150))
+        r = self.clock_at_one(lambda: self.call('use', {'op': 'click', 'id': ident}, 150))
         self.out(f"Clicked {r['clicked']}{' (' + r['click'] + ')' if r.get('click') else ''}"
                  + ('' if r['handled'] else ': nothing happened') + '.')
         if r.get('inside') != r.get('inside_before'):
@@ -364,11 +366,16 @@ class Play:
         """A click that started a time skip (sleep, a course, a ride): wait until the game's clock is back, then say what
         came in meanwhile."""
         deadline = time.time() + SKIP_WAIT_S
-        time.sleep(.3)
         skipped = False
-        while self.bridge.health().get('time_skip') and time.time() < deadline:
-            skipped = True
-            time.sleep(.5)
+        # A skip can start a moment after the click (a ride's fade, the walk to the bed or the school's chair): it counts
+        # as started while the player walks there, rides or the skip runs.
+        settle = time.time() + 1
+        while time.time() < deadline:
+            player = self.call('state').get('player') or {}
+            busy = self.bridge.health().get('time_skip') or player.get('riding') or player.get('activity') == 'walking'
+            if busy: skipped = True
+            elif skipped or time.time() > settle: break
+            time.sleep(.3)
         if skipped:
             c = self.call('state')['clock']
             self.out(f"Time passed: now day {c['day']} {c['time']}.")
@@ -485,7 +492,7 @@ def parser():
     n = sub.add_parser('places', help='buildings near you'); n.add_argument('--radius', type=float, default=150)
     n = sub.add_parser('go', help='tell the taxi you are in where to go'); n.add_argument('address')
     n = sub.add_parser('use', help='things near you that react to a click, or click one'); n.add_argument('id', nargs='?', type=int)
-    n.add_argument('--radius', type=float); n.add_argument('--right', action='store_true')
+    n.add_argument('--radius', type=float)
     n = sub.add_parser('eat', help='eat from the bag you hold'); n.add_argument('item', nargs='?')
     n = sub.add_parser('place', help='set down the furniture you hold'); n.add_argument('x', type=float); n.add_argument('z', type=float)
     n.add_argument('--rotation', type=float)
@@ -521,7 +528,7 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
         elif c == 'notices': play.notices(args.follow)
         elif c == 'places': play.places(args.radius)
         elif c == 'go': play.go(args.address)
-        elif c == 'use': play.use(args.id, args.radius, args.right)
+        elif c == 'use': play.use(args.id, args.radius)
         elif c == 'eat': play.eat(args.item)
         elif c == 'place': play.place(args.x, args.z, args.rotation)
         elif c == 'phone': play.phone(args.app)

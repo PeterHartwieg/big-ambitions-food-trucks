@@ -304,6 +304,8 @@ namespace FoodTrucks
             var dialog = InstanceBehavior<UIs>.Instance?.playerHUD?.dialogUI;
             if (dialog != null && dialog.isPanelOpen) open.Add("call");
             if (PlayerActivityUI.IsPanelOpen) open.Add("activity panel");
+            // Furniture being placed (a right click on it, or place's start): Esc cancels it.
+            if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode) open.Add("placing furniture");
             return open;
         }
 
