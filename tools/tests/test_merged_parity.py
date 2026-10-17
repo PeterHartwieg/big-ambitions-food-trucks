@@ -223,7 +223,7 @@ class MergedParityTests(unittest.TestCase):
         self.bridge.call('load',{'name':'FT bridge'})
         self.assertEqual(set(self.bridge.health()['load']),{'name','status'})
         self.bridge.wait_state('load.status',{'equals':'done'},1)
-        self.assertEqual(set(self.bridge.call('state')['result']['load']),{'name','status','error'})
+        self.assertEqual(set(self.bridge.call('state')['result']['load']),{'name','status','error','new_game'})
         for status in ('pending','failed'):
             self.mock.bay_status['hells-kitchen']=status
             bay=next(b for b in self.mock.bays() if b['site']=='hells-kitchen')

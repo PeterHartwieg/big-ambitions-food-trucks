@@ -101,6 +101,11 @@ def png(path, width, height, colour):
     Path(path).write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!IIBBBBB', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b''))
 
 
+# new_game's character and the Normal preset's starting money (live run, 17 October 2026).
+NEW_GAME_CHARACTER = 'FT Playtest'
+NEW_GAME_MONEY = 10000.
+
+
 class Mock:
     def __init__(self, shots, clock_rate=1):
         self.clock_rate = clock_rate
@@ -294,9 +299,23 @@ class Mock:
         self.reset('Non-FT mock')
         self.store('Non-FT mock')
 
+    def finish_new_game(self, name):
+        # A fresh character of its own: day 1 08:00, the Normal preset's money, no home, nothing owned; paused, saved.
+        self.character=NEW_GAME_CHARACTER+' '+uuid.uuid4().hex[:6]
+        self.reset(name)
+        self.state['clock']['time']='08:00'
+        self.absolute=480
+        self.state['money']=NEW_GAME_MONEY
+        self.state['licence']={'until_day': None, 'permits': 0, 'course_done': False, 'todos': []}
+        self.event(f"Test bridge: new game character '{NEW_GAME_CHARACTER}' made; to the city as '{name}'.")
+        result=self.save_city(name)
+        self.load={'name':name,'status':'done','error':None,'new_game':'saved'}
+        self.event(f"Test bridge: new game saved as '{name}' ({result['bytes']} bytes); paused.")
+        self.event(f"Test bridge: load '{name}' done: day 1, the mod's save data attached.")
+
     def finish_load(self, name):
         self.restore(name, emit=False)
-        self.load={'name':name,'status':'done','error':None}
+        self.load={'name':name,'status':'done','error':None,'new_game':None}
         if self.logistics and self.logistics['plan']['destinations']:
             dests=self.logistics['plan']['destinations']
             self.event(f"Commissary logistics: {len(dests)} plan destinations at commissaries: "+'; '.join(f"{d['site']} from {self.logistics['warehouse']['name']}, {len(d['targets'])} targets" for d in dests)+'.')
@@ -1439,16 +1458,26 @@ class Mock:
             self.require_character(self.saves[name]['character'])
             if self.state['scene']=='city': self.require_character()
             if self.state['scene']=='menu' and self.character_creator: raise ValueError('load works from the main menu or the city, not the character creator.')
-            self.load={'name':name,'status':'pending','error':None}
+            self.load={'name':name,'status':'pending','error':None,'new_game':None}
             self.state['scene']='loading'
             self.event(f"Test bridge: loading '{name}' (Mock character, day {self.saves[name]['state']['clock']['day']}).")
             self.pending.append((time.monotonic()+.05,lambda:self.finish_load(name)))
             return {'loading':True,'name':name,'character':'Mock character'}
         if cmd=='new_game':
-            name=args.get('name')
-            if name is not None and not str(name).startswith('FT'):
+            name=need(args,'name',"the new game's save name")
+            if not name.startswith('FT'):
                 raise ValueError(f"The bridge starts only games whose name starts with FT, not '{name}'.")
-            raise ValueError("new_game isn't available: the game builds a new game's character only in the character creator's screens (MainMenuController.StartNewGame, then the Intro scene), which the bridge can't fill in reliably. Start a game by hand once, save it under an FT name, and use load.")
+            if re.sub(r'[<>:"/\\|?*]','_',name).strip()!=name: raise ValueError(f"'{name}' has characters a save's file name can't hold.")
+            scene=self.state['scene']
+            if scene!='menu' or self.character_creator:
+                raise ValueError(f"new_game works from the main menu only; the game is at the {'character creator' if scene=='menu' else scene} now.")
+            if self.load and self.load['status']=='pending': raise ValueError(f"A load of '{self.load['name']}' is under way; wait for it (state.load).")
+            if name in self.saves: raise ValueError(f"A save named '{name}' exists already; new_game never writes over a save: pick another FT name.")
+            self.load={'name':name,'status':'pending','error':None,'new_game':'main menu'}
+            self.state['scene']='loading'
+            self.event(f"Test bridge: new game '{name}' (custom, Normal values, tutorial off), to the character creator.")
+            self.pending.append((time.monotonic()+.05,lambda:self.finish_new_game(name)))
+            return {'loading':True,'name':name,'character':NEW_GAME_CHARACTER,'preset':'difficulty_normal'}
         if cmd=='money':
             balance=num(args,'set')
             if balance is None: raise ValueError('money needs "set": the new balance.')

@@ -119,7 +119,7 @@ Positions are world metres (`x`, `y`, `z`); `heading` is degrees clockwise from 
 | `shoot` | `{ "name": "bay-day", "pose": "<pose>", "target": "<vehicle id>" \| "bay:<site>" \| "commissary:<site>", "width": 1600, "height": 900 }` or a free camera `{ "name", "x", "y", "z", "yaw", "pitch", "fov" }` or `{ "name", "x", "y", "z", "look_at": { "x", "y", "z" }, "fov" }` | Renders one frame from a camera of the bridge's own (the game's camera is untouched, no UI in the picture) and writes a PNG. A named pose stands clear of walls (see "Game side") | `{ "path": "C:\\…\\FoodTrucksTest\\shots\\bay-day.png", "camera": { "x", "y", "z", "yaw", "pitch", "fov" }, "pose_note": null, "uncovered": [], "outlined": [], "asis_path": null, "game_path": null, "game_error": null }`; `"compare": true` adds the as-is picture, `"game_view": true` the game's own frame | built, not yet run in game |
 | `save` | `{ "name": "FT bridge" }` | Saves the city under that name | `{ "name", "path", "bytes" }` | built, not yet run in game |
 | `load` | `{ "name": "FT bridge" }` | Loads a save from the main menu or from the city | `{ "loading": true }`; poll `/health` for `scene: "city"` | built, not yet run in game |
-| `new_game` | `{ "name": "FT bridge" }` | Starts a new game from the main menu with defaults (story mode off if the game allows, Normal), skipping intros and pop-ups the bridge can close | `{ "loading": true }` | not available: `ok: false` (see "Game side, as built") |
+| `new_game` | `{ "name": "FT playtest" }` | From the main menu only: a new custom game with the Normal preset's values and the tutorial off, a character "FT Playtest" with the creator's random look, then the city paused and saved under the name | `{ "loading": true, "name", "character": "FT Playtest", "preset" }`; poll `/health` or `state.load` for `done` | run in game (17 October 2026: day 1 08:02, $10,000, no home, Hell's Kitchen, no pop-ups) |
 | `quit` | `{}` | Quits the game | `{}` | built, not yet run in game |
 
 Poses for `shoot` (the camera is placed relative to the target and looks at it):
@@ -142,7 +142,7 @@ Poses for `shoot` (the camera is placed relative to the target and looks at it):
 {
   "save": "FT bridge", "scene": "city",
   "clock": { "day": 3, "weekday": "Wednesday", "time": "14:05", "paused": false, "speed": 1, "run_until": null, "arrived_at": null, "keep_needs": false },
-  "load": { "name": "FT bridge", "status": "done", "error": null },
+  "load": { "name": "FT bridge", "status": "done", "error": null, "new_game": null },
   "money": 8164.0,
   "player": { "x": 0, "y": 0, "z": 0, "heading": 0, "in_vehicle": null, "at_hatch": null, "carrying": null,
               "activity": "on_foot", "clock_held_by": null,
@@ -274,7 +274,7 @@ A load that dies anyway is cleared only when the bridge can show it died. With t
 
 **Limits** (from `docs/test-bridge-mac-review.md`, kept as they are). A list picker takes two clicks, the option and then the game's confirm button, whose label only a live `ui list` shows. Map picks, drags and placing items in the world can't be done through `ui`. `ui list` checks canvases, fading and the screen's edges, not scroll masks or windows on top, so a clipped or covered control can still be listed; list again after any change before clicking by id.
 
-**`new_game`.** Not available: `ok: false`. The game makes a new game's character only in the character creator's screens (`MainMenuController.StartNewGame`, then the Intro scene sets the character and the save name), which the bridge can't fill in reliably. Start a game by hand once, save it under an FT name and use `load`.
+**`new_game`.** From the main menu only (not the character creator, not the city), with the test flag like every command. Refused for a name not starting with FT, a name the game would change to make a file name, a save of that name already there (it never writes over a save), or a load under way. It runs the game's own steps, not clicks: `MainMenuController.StartNewGame` with the Normal preset's values as the custom game panel takes them (`CustomGameOptionsHandler.SetPreset`: difficulty custom, tutorial off), then in the character creator the name field set to `FT Playtest` (the creator has one name field) and `IntroCharacterCustomizer.StartGame`, with the random look the creator picked on waking. The creator names the save after the character; the bridge renames it to the given name before the city loads. With the tutorial off the intro goes straight to the city (`IntroToGameTransition.OnEnable`); if no load has started 3 seconds later the bridge calls its `Continue`. Once the city is up with the mod attached and the loading screen gone, the clock is paused and the city saved under the name as `save` does (up to 10 tries 3 s apart while the game refuses); `load` is `done` only after that save. `state.load.new_game` names the step (`main menu`, `character creator`, `city`, `saving`, `saved`; null for a plain load). It fails after 600 seconds. Each new game is a character of its own, so its saves pass the FT character check. Log lines `Test bridge: new game '<name>' (custom, Normal values, tutorial off), to the character creator.`, `Test bridge: new game character 'FT Playtest' made; to the city as '<name>'.`, `Test bridge: new game saved as '<name>' (N bytes); paused.`
 
 **`quit`.** Replies, then half a second later waits for any save being written and calls `Application.Quit`.
 
@@ -375,7 +375,7 @@ Rules: `must` (at least once), `never`, `count=N`, `count>=N`, `order` (the rege
 
 ## Using the Mac tools
 
-Make FT saves by hand from a new character of their own, never a series city saved under a new name. `new_game` is unavailable. The bridge refuses changing commands or loading a target whose character also has a non-FT save, excluding the game's `Recover #N` and `Recover Midnight` files. Run scenarios from the menu or a throwaway FT city: loading from an FT city discards its unsaved changes; loading from a non-FT city is refused. Start the game with `-foodtrucks-test`. Open the tunnel, then check health in another terminal:
+Make FT saves from a new character of their own, with `new_game` from the main menu or by hand, never a series city saved under a new name. The bridge refuses changing commands or loading a target whose character also has a non-FT save, excluding the game's `Recover #N` and `Recover Midnight` files. Run scenarios from the menu or a throwaway FT city: loading from an FT city discards its unsaved changes; loading from a non-FT city is refused. Start the game with `-foodtrucks-test`. Open the tunnel, then check health in another terminal:
 
 ```sh
 export BA_GAME_HOST=homepc
