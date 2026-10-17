@@ -1,3 +1,14 @@
+# Home entrance with a carried bag — issue 34 (next build)
+
+Source checked against the 1.0 decompile; **pending in game**. Entry has no held-bag/box or paid-cargo restriction. The bridge's old building click could be swallowed by the physical pointer over UI; issue 34's old reply cannot identify the exact rejected guard. Building ID clicks now use native navigation and virtual `Interact`, with refusal/loading reasons. No entry Harmony patch or pocket control was added.
+
+| # | Do | Look for |
+|---|---|---|
+| HB1 | Rent Third Street 9, leave in the morning, buy/pay for 5 banana bags at a grocery, return carrying the paper bag; leave the physical pointer over the bag HUD and `use` its entrance ID | Enter home with the same 5 paid banana bags; no money/cargo change. Repeat with the pointer over the world and with empty hands |
+| HB2 | Repeat with a shopping bag and a paid cardboard box, then enter a grocery while carrying the paper bag | Normal native walks and door loading; cargo and paid flags survive each entry/exit. Hand-truck pickup/load/release still work; no stowing needed |
+| HB3 | Try another person's home, a closed shop, and a building undergoing installation; try while the phone/map is open | Native refusal/notice or the game's rental screen as appropriate; no forced entry. Bridge/CLI names the refusal; no "nothing happened". Retain DLC/goal/fee prompts where applicable |
+| HB4 | Try an unreachable entrance and a click with a lingering Map navigation blocker; inspect a walk/door still pending at the bridge timeout | A cannot-reach notice or named blocker; `why`, `still_walking`/`still_entering` tell the tester to wait/inspect. Save the `Test bridge: use result …` log if entry still fails |
+
 # Queue pavement (next build)
 
 Blind run 3: an angled cart's line passed the traffic-lane checks but stood on the carriageway. Code checked against 1.0: `Streets.Pedestrians.PedestrianBuildingPositionProvider.TryGetSampleTarget` uses `Extensions.NavMeshHelper.NpcNavMeshFilter` (HGExtensions: agent **0**, all areas). The queue used the player's **1479372276** mesh. Queue places, agents and paths now use the NPC mesh, with parking/lane/bridge/crosswalk exclusions for both vehicle kinds. No road/sidewalk area name is assumed; `Swimmable` is the helper's only named area. Hatch and stop probes keep their existing filter. **Pending in game:** the baked NPC mesh's coverage, including parks and junctions; missing pedestrian ground hides the queue rather than falling back to the player mesh.

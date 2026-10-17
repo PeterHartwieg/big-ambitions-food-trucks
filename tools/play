@@ -294,8 +294,11 @@ class Play:
         self.acting()
         cursor = self.bridge.events(1)['next']
         r = self.clock_at_one(lambda: self.call('use', {'op': 'click', 'id': ident}, 150))
+        why = r.get('why')
+        if not why and not r['handled']:
+            why = '; '.join(r.get('notices') or []) or 'the game declined the click without giving a reason; inspect look and ui list'
         self.out(f"Clicked {r['clicked']}{' (' + r['click'] + ')' if r.get('click') else ''}"
-                 + ('' if r['handled'] else ': nothing happened') + '.')
+                 + (f": {why.rstrip('.')}" if why else '') + '.')
         if r.get('inside') != r.get('inside_before'):
             self.out(f"You're now {'inside ' + r['inside'] if r.get('inside') else 'outside'}.")
         if r.get('open'): self.out(f"Open now: {', '.join(r['open'])} (ui list shows it).")

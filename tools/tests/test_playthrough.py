@@ -386,7 +386,7 @@ class BridgeOpsParityTests(unittest.TestCase):
             self.assertIn(f'["{key}"]', life)
         self.mock.state['clock']['paused'] = False
         clicked = self.mock.call('use', {'op': 'click', 'id': 1})
-        self.assertEqual(set(clicked), {'clicked', 'kind', 'click', 'handled', 'placing_cancelled', 'still_walking', 'inside', 'inside_before', 'open', 'notices', 'x', 'z'})
+        self.assertEqual(set(clicked), {'clicked', 'kind', 'click', 'handled', 'why', 'placing_cancelled', 'still_walking', 'still_entering', 'inside', 'inside_before', 'open', 'notices', 'x', 'z'})
         for key in clicked:
             self.assertIn(f'["{key}"]', life)
         rode = self.mock.call('taxi', {'address': 'ba:street_thirdstreet#6'})

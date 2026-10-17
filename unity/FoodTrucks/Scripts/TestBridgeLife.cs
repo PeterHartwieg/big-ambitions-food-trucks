@@ -10,6 +10,7 @@ using Localizor;
 using Newtonsoft.Json.Linq;
 using Player.HUD.ItemInfoOverlays;
 using UI;
+using UI.Notification;
 using UI.Smartphone;
 using UI.Smartphone.Apps.Contacts;
 using UnityEngine;
@@ -157,6 +158,57 @@ namespace FoodTrucks
             return entity.gameObject.name;
         }
 
+        // Notices.BeginCapture only sees the mod's Notices.Show wrapper. A world click must also report vanilla
+        // refusals. The game's event carries exactly the key/data that NotificationsUI localizes for the screen.
+        private sealed class UseNoticeCapture : IDisposable
+        {
+            internal readonly List<string> Messages = new List<string>();
+            internal string? LastError { get; private set; }
+            internal UseNoticeCapture() { Notifications.onShow += Capture; }
+            private void Capture(NotificationType type, string key, Dictionary<string, string> data, float seconds,
+                string duplicateIdentifier, Action onClick, bool sound, bool track)
+            {
+                var message = Notices.Text(key, data);
+                Messages.Add(message);
+                if (type == NotificationType.Error) LastError = message;
+            }
+            public void Dispose() { Notifications.onShow -= Capture; }
+        }
+
+        // An id click has no screen position. CityBuildingController.OnIoLeftClick tests the *desktop* pointer's
+        // IsPointerOverGameObject, so a pointer left over the hands HUD can swallow a perfectly valid door click.
+        // Use the native entity navigation and virtual Interact instead. Interact still decides access, opening
+        // hours, DLC, goals, installation, entrance fees and the door id; never call BuildingManager.EnterBuilding.
+        private static bool UseBuildingClick(CityBuildingController building, PlayerController player, out string? why)
+        {
+            why = null;
+            if (FullMenu.IsOpen || CityMap.IsOpen)
+                why = "Close the phone or map before clicking a building in the world (ui escape).";
+            else if (player.NavigationDisabled && !PlayerHelper.IsUsingVehicle)
+                why = "The player can't interact now" + Blockers(player) + ".";
+            else if (GameManager.IsAnyMiniGameActive())
+                why = "Finish the minigame before clicking a building.";
+            else if (!player.IsOnNavmesh())
+                // In 1.0 IsOnNavmesh means on foot or using a spawnInPlayerObject vehicle (e.g. a hand truck).
+                why = "Leave the motor vehicle before walking to a building entrance.";
+            if (why != null) return false;
+
+            building.UpdateNavMeshTargets();
+            if (PlayerHelper.IsWithinPlayerDistance(building)) return building.Interact();
+            var target = building.GetClosestNavMeshTargetPosition(PlayerHelper.GetPosition());
+            // Ask the game to emit its own cannot-reach notice too (the mouse's WalkOverAndInteract is silent here).
+            if (!player.ExistsRoute(target, showErrorNotification: true, entityController: building))
+            {
+                why = target == Vector3.zero ? "The game found no reachable interaction point for this entrance."
+                    : "The game found no complete walking route to this entrance.";
+                return false;
+            }
+            building.MoveTowardsEntity(() => { if (building != null) building.Interact(); });
+            if (player.hasOnGoalReachedAction) return true;
+            why = "The game didn't start the entrance walk" + Blockers(player) + ".";
+            return false;
+        }
+
         private static object UseClick(JObject args)
         {
             var id = Num(args, "id") ?? throw new BridgeError("use click needs \"id\" from the last use list.");
@@ -173,22 +225,27 @@ namespace FoodTrucks
             var (ctaKey, _) = Cta(entity);
             var player = PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.");
             var insideBefore = InsideAddress();
-            var caught = Notices.BeginCapture();
+            var capture = new UseNoticeCapture();
+            var caught = capture.Messages;
             bool handled;
+            string? why = null;
             var placingCancelled = false;
             try
             {
                 // The hover sets the call to action before the click, as the mouse does (OnIoLeftClick skips it while an
                 // overlay shows over the thing).
                 CtaManager.UpdateCta(entity);
-                handled = entity.OnIoLeftClick();
+                handled = entity is CityBuildingController building ? UseBuildingClick(building, player, out why) : entity.OnIoLeftClick();
+                if (!handled && why == null)
+                    why = player.NavigationDisabled ? "The player can't interact now" + Blockers(player) + "."
+                        : "The game's click handler declined this interaction without giving a reason; inspect look and ui list.";
                 // Moving furniture by hand isn't one of the tester's controls: it follows the real mouse.
                 if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode)
                     placingCancelled = Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
             }
             catch
             {
-                Notices.EndCapture(caught);
+                capture.Dispose();
                 throw;
             }
             Log.Info($"Test bridge: clicked {entity.GetType().Name} \"{name}\" ({(handled ? "handled" : "not handled")}{(placingCancelled ? ", placing cancelled" : "")}).");
@@ -203,23 +260,34 @@ namespace FoodTrucks
                 var walking = player.hasOnGoalReachedAction;
                 var entering = InstanceBehavior<BuildingManager>.Instance != null && InstanceBehavior<BuildingManager>.Instance.enteringBuilding;
                 if ((walking || entering || TaxiSystem.IsTraveling) && now < deadline) return null;
-                Notices.EndCapture(caught);
+                capture.Dispose();
                 var position = PlayerHelper.GetPosition();
+                var inside = InsideAddress();
+                var open = TestBridgeUi.Open();
+                var resultWhy = why;
+                if (walking) resultWhy = "Still walking; inspect look before repeating the click.";
+                else if (entering) resultWhy = "The building is still loading; wait and inspect look before repeating the click.";
+                else if (entity is CityBuildingController && inside == insideBefore && open.Count == 0)
+                    resultWhy = capture.LastError ?? resultWhy ?? "The building interaction ended without entering or opening a screen; inspect look before repeating.";
+                else if (!handled) resultWhy = capture.LastError ?? resultWhy;
+                Log.Info($"Test bridge: use result for {name}: handled {handled}, inside {inside ?? "outside"}, holding {PlayerHelper.ItemInstanceInHands?.itemName ?? "nothing"}: {resultWhy ?? "done"}.");
                 return new JObject
                 {
                     ["clicked"] = name,
                     ["kind"] = entity == null ? null : entity.GetType().Name,
                     ["click"] = string.IsNullOrEmpty(ctaKey) ? null : LocalizorManager.GetLocalization(ctaKey, null),
                     ["handled"] = handled,
+                    ["why"] = resultWhy,
                     ["placing_cancelled"] = placingCancelled,
                     ["still_walking"] = walking,
-                    ["inside"] = InsideAddress(),
+                    ["still_entering"] = entering,
+                    ["inside"] = inside,
                     ["inside_before"] = insideBefore,
-                    ["open"] = new JArray(TestBridgeUi.Open()),
+                    ["open"] = new JArray(open),
                     ["notices"] = new JArray(caught),
                     ["x"] = TestBridgeState.Round(position.x), ["z"] = TestBridgeState.Round(position.z),
                 };
-            }, () => Notices.EndCapture(caught));
+            }, () => capture.Dispose());
         }
 
         // The building the player is inside, by address, or null outside.

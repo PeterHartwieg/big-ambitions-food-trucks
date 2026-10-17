@@ -230,6 +230,7 @@ class Mock:
         # rent and the beds set down there, a taxi waiting, the course's hours, candidates on the phone.
         self.life = {'inside': None, 'hands': None, 'homes': [], 'beds': {}, 'bed_floors': {}, 'taxi': False, 'course_minutes': 0,
                      'dropped': [], 'handtrucks': [], 'drop_blocked': False, 'floorplan_blocked': False, 'floorplan_unreachable': False,
+                     'use_on_navmesh': True, 'use_route': 'complete', 'use_navigation_blockers': [],
                      'candidates': [], 'diplomas': [], 'campaigns': [], 'studied': {}, 'activity': None, 'purchase': None, 'contact': None, 'city_step': 'start', 'app': None}
         self.state['player']['needs']['happiness_modifiers'] = [MOOD['no_home']]
         self.state['player']['needs']['warnings'] = []
@@ -1876,9 +1877,16 @@ class Mock:
             if not 1<=int(ident)<=len(self.last_use): raise ValueError(f'No thing {int(ident)} in the last use list; list again.')
             if self.state['clock']['paused']: raise ValueError('The game is paused: the walk over takes real time. Set a speed first.')
             t=self.last_use[int(ident)-1]; before=life['inside']; start=self.seq
-            handled=self.life_use(t)
+            why=self.building_use_blocker() if t['kind']=='CityBuildingController' else None
+            handled=False if why else self.life_use(t)
+            notices=[e['text'] for e in self.ring if e['seq']>start and e['kind']=='notice']
+            opened=[x for x in [self.clock_held_by()] if x]
+            if t['kind']=='CityBuildingController' and life['inside']==before and not opened:
+                why=next(reversed(notices),None) or why or 'The building interaction ended without entering or opening a screen; inspect look before repeating.'
+            elif not handled:
+                why=next(reversed(notices),None) or why or "The game's click handler declined this interaction without giving a reason; inspect look and ui list."
             return {'clicked':t['name'],'kind':t['kind'],'click':t['click'],'handled':handled,'placing_cancelled':False,'still_walking':False,'inside':life['inside'],
-                    'inside_before':before,'open':[x for x in [self.clock_held_by()] if x],'notices':[e['text'] for e in self.ring if e['seq']>start and e['kind']=='notice'],
+                    'why':why,'still_entering':False,'inside_before':before,'open':opened,'notices':notices,
                     'x':round(p['x'],2),'z':round(p['z'],2)}
         self.require_ft(cmd)
         if cmd=='taxi':
@@ -1942,6 +1950,20 @@ class Mock:
         for site in {s['site'] for s in self.state['commissary']['spaces']}:
             out.append({'id':'foodtrucks_commissary_'+site,'name':LOCALE['foodtrucks:commissary_'+site],'category':'Business','unread':False})
         return out
+
+    def building_use_blocker(self):
+        life=self.life
+        if self.dialog in ('phone_app','presentation','crew','fleet','taxi_map'):
+            return 'Close the phone or map before clicking a building in the world (ui escape).'
+        if life['use_navigation_blockers'] and not self.state['player']['in_vehicle']:
+            return "The player can't interact now; navigation blocked by " + ', '.join(life['use_navigation_blockers']) + '.'
+        if not life['use_on_navmesh']:
+            return 'Leave the motor vehicle before walking to a building entrance.'
+        if life['use_route']!='complete':
+            self.event("Can't reach item.",'notice')
+            return ('The game found no reachable interaction point for this entrance.' if life['use_route']=='missing'
+                    else 'The game found no complete walking route to this entrance.')
+        return None
 
     def life_use(self, t):
         life=self.life; p=self.state['player']; kind=t['kind']
