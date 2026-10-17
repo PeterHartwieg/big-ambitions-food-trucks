@@ -117,6 +117,7 @@ Built on branch `blind1-fixes` (17 October 2026), not yet run in game: no notice
 ## Peter's notes while watching blind run 2 (17 October 2026)
 
 - **Order menu:** item names in the commissary's order list are still very long, and some run underneath the item's picture.
+- **Sale notifications:** no notice for each sale when the player stands near a truck or cart; selling should be quiet (the cash sound and the day's totals are enough).
 - **The tester still progresses by shortcuts**, so the next run should play the real game:
   - `go` is a free teleport; it should be the game's own taxi (fare and travel time) or walking.
   - `time until` keeps the player's needs up (the bridge's `keep_needs` defaults to true with `run_until`); the tester should manage hunger and energy itself.
