@@ -50,9 +50,13 @@ namespace FoodTrucks
 
         internal static readonly List<string> RegisteredVehicleTypes = new List<string>();
 
+        // The game's id for this mod (its folder for a local mod), for the late attach's log line.
+        internal static string? ModId { get; private set; }
+
         public Task OnLoadAsync(ModContext context)
         {
             Log.Init(context.Logger);
+            ModId = context.ModId;
             Log.Info($"Version {Version} loading.");
             DemandData.Load(context.ModRootPath);
 
@@ -70,6 +74,8 @@ namespace FoodTrucks
             }
 
             Patches.Apply();
+            BigAmbitions.ModsInternal.ModDiscoveryRegistry.OnDiscoveryUpdated -= SaveGuard.DiscoveryUpdated;
+            BigAmbitions.ModsInternal.ModDiscoveryRegistry.OnDiscoveryUpdated += SaveGuard.DiscoveryUpdated;
             // Only with -foodtrucks-test on the game's command line (docs/test-bridge.md); started here so it answers at
             // the main menu.
             try { TestBridge.Start(); }
@@ -112,6 +118,7 @@ namespace FoodTrucks
             try { TestBridge.Stop(); }
             catch (Exception ex) { Log.Error("Test bridge: " + ex); }
             Patches.Remove();
+            BigAmbitions.ModsInternal.ModDiscoveryRegistry.OnDiscoveryUpdated -= SaveGuard.DiscoveryUpdated;
             FoodSafetyCourse.Unregister();
             foreach (var typeName in registered)
                 ModdingAPI.UnregisterModVehicleType(typeName);

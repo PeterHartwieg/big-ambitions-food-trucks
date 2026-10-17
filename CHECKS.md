@@ -1,3 +1,14 @@
+# Save guard and late attach (next build)
+
+Branch `save-guard`, from blind playtest 2 (a load from the city came up without the mod's city part). Nothing here has run in game. Use a throwaway FT save.
+
+| # | Do | Look for |
+|---|---|---|
+| SG1 | Load an FT save normally | One `Save data in the save file: save count N…` line before `Save data Loaded`; no `Late attach` line; `Save data written` on the next save and no `ERROR: Save data:` line |
+| SG2 | Save, then quit to the main menu and load it again | Same as SG1; the save count goes up by one |
+| SG3 | While the game runs, touch a file at the top of ModsLocal (a new empty folder), click another window, click back into the game during a load from the city | `Game mod discovery: running again…` and `…done…` lines with the loading flag; if the city part is skipped: `ERROR: Late attach: …` naming the loader's state, then `Late attach: done`, the notice "Food Trucks started late…", and the vehicles, crew and licence all there. Remove the folder afterwards |
+| SG4 | After a late attach, save and load that save | The vehicles and their stock as before; no `ERROR: Save data:` line |
+
 # First blind playtest fixes (next build)
 
 Branch `blind1-fixes`, from the first blind AI playtest (17 October 2026; issues in `build/logs/game/blind-1/notes/issues.md` of the main checkout). Nothing here has run in game. Use a throwaway FT save with two carts, one crew member with a route, and a commissary space for one cart only.

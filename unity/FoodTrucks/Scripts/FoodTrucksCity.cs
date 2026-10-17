@@ -26,8 +26,7 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Item icons: " + ex); }
             // GlobalEvents.Init() clears subscribers before each city load, so subscribe per city scope.
             GlobalEvents.RegisterOnGameLoadedLateCallback(OnCityReady);
-            GlobalEvents.onSaveGame += OnSaveGame;
-            GlobalEvents.onGameUnloaded += OnGameUnloaded;
+            FoodTrucksSession.SubscribeGameEvents();
             return Task.CompletedTask;
         }
 
@@ -41,24 +40,10 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error(ex); }
         }
 
-        private static void OnSaveGame()
-        {
-            // Runs synchronously before the game serializes the save. Never throw into the game's save.
-            // Sales Core has made but the queue view still holds are paid first, so the save has them.
-            // Apart, so a failed payment never stops the mod's data from being written.
-            try { CartSelling.PayAllHeldNow(); }
-            catch (Exception ex) { Log.Error(ex); }
-            try { FoodTrucksSession.WriteToSave(); }
-            catch (Exception ex) { Log.Error(ex); }
-        }
-
-        private static void OnGameUnloaded() => FoodTrucksSession.Detach();
-
         public Task OnUnloadAsync()
         {
             loaded = false;
-            GlobalEvents.onSaveGame -= OnSaveGame;
-            GlobalEvents.onGameUnloaded -= OnGameUnloaded;
+            FoodTrucksSession.UnsubscribeGameEvents();
             FoodTrucksSession.Detach();
             return Task.CompletedTask;
         }
@@ -77,6 +62,44 @@ namespace FoodTrucks
 
         public static LoadStatus LastLoadStatus { get; private set; }
 
+        // The block each loaded save came with, and the last one the mod wrote, so a save never goes out without it
+        // (SaveGuard).
+        internal static readonly SaveBlockKeeper Keeper = new SaveBlockKeeper();
+
+        // Whether the session is on this game instance, also read-only (data from a newer mod version, or unreadable:
+        // state is null then, and the block stays in the save untouched).
+        public static bool IsAttachedTo(GameInstance? current) =>
+            current != null && game != null && ReferenceEquals(game, current);
+
+        // The game's save and unload events. GlobalEvents.Init() clears subscribers before each load, so the city part
+        // and a late attach subscribe again; removing first keeps one subscription each.
+        public static void SubscribeGameEvents()
+        {
+            GlobalEvents.onSaveGame -= OnSaveGame;
+            GlobalEvents.onSaveGame += OnSaveGame;
+            GlobalEvents.onGameUnloaded -= OnGameUnloaded;
+            GlobalEvents.onGameUnloaded += OnGameUnloaded;
+        }
+
+        public static void UnsubscribeGameEvents()
+        {
+            GlobalEvents.onSaveGame -= OnSaveGame;
+            GlobalEvents.onGameUnloaded -= OnGameUnloaded;
+        }
+
+        private static void OnSaveGame()
+        {
+            // Runs synchronously before the game serializes the save. Never throw into the game's save.
+            // Sales Core has made but the queue view still holds are paid first, so the save has them.
+            // Apart, so a failed payment never stops the mod's data from being written.
+            try { CartSelling.PayAllHeldNow(); }
+            catch (Exception ex) { Log.Error(ex); }
+            try { WriteToSave(); }
+            catch (Exception ex) { Log.Error(ex); }
+        }
+
+        private static void OnGameUnloaded() => Detach();
+
         // False for data written by a newer mod version: it is read for tax but never changed.
         public static bool CanWrite => canWrite && CurrentState != null;
 
@@ -89,10 +112,24 @@ namespace FoodTrucks
 
         public static void Attach(GameInstance current)
         {
+            // Twice on one game (the city part after a late attach) would read the save's block again over the
+            // session's unsaved changes.
+            if (IsAttachedTo(current))
+            {
+                Log.Info("Save data: already attached to this game; nothing read again.");
+                return;
+            }
             Detach();
             Attaches++;
             if (current.modData == null) current.modData = new Dictionary<string, string>();
             current.modData.TryGetValue(SaveKey, out var json);
+            if (string.IsNullOrWhiteSpace(json) && Keeper.BlockFor(current) is string known)
+            {
+                // Something took the block out of the game since its load: read the one it came with, never a fresh start.
+                Log.Error($"Save data: the game's Food Trucks block went missing after the load; put back the one read with the save ({SaveBlockKeeper.Describe(known)}).");
+                current.modData[SaveKey] = known;
+                json = known;
+            }
 
             var result = Codec.Load(json);
             foreach (var note in result.Notes) Log.Info(note);
@@ -158,6 +195,7 @@ namespace FoodTrucks
             var json = Codec.SerializeForSave(state, FoodTrucksMod.Version);
             if (game.modData == null) game.modData = new Dictionary<string, string>();
             game.modData[SaveKey] = json;
+            Keeper.Written(game, json);
             Log.Info($"Save data written: save count {state.SaveCount}.");
         }
 
