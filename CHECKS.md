@@ -14,6 +14,9 @@ Branch `blind1-fixes`, from the first blind AI playtest (17 October 2026; issues
 | BP8 | Fire a crew member (or let one quit) | "<name> has left the company: Food cart N has one worker less." |
 | BP9 | BizMan Street food overview with a cart in its bay, one at a route stop and one elsewhere on the street | "Closed, at Hell's Kitchen Commissary" (or its name), "Open at <stop name>", and a neighbourhood for the third; never "an unknown spot" |
 | BP10 | Week plan for a crewed cart: add a stop about 100 m from its bay, then one about 300 m off | "Walk about 25 min" for 100 m, about 75 for 300 m (4 m/s, your own jog with a cart; it was 84 and 250); run the day: the cart arrives about then. Say whether that feels right next to how fast you push a cart yourself. The crew isn't seen pushing on the way (the cart is off the map until it arrives) |
+| BP11 | Tester (agent, bridge): stand by a cart, `tools/play vehicle ID enter`, then `tools/play walk --to bay:hells-kitchen`; then `look` | The character pushes the cart there on foot at the normal jog (no jump); the clock runs at speed 1 meanwhile and stops again; the cart reads in the bay and parked legally (if not, note where it stopped: the walk ends where the cart's handle is, not the cart) |
+| BP12 | Tester: `tools/play walk X Z` to a point across a street about 80 m off, and to a point inside a block | The first walks there; the second is refused ("No walkable ground…" or "No walking route…"); a long walk that the city's NavMesh gives only part of stops short and says so |
+| BP13 | Tester: `tools/play map filters`, then `map commissaries`, `map for_rent:ba:buildingtype_residential` and `map offices` | The filters list the game's own (for rent by type, business types, for sale, yours) and Street food's; each list matches what the game's map lights with that filter on (open the map by hand to compare one) |
 
 # Latest PC playtest feedback — 15 October 2026
 

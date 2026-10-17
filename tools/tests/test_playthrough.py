@@ -5,6 +5,7 @@ from pathlib import Path
 import runpy
 import sys
 import tempfile
+import time
 import unittest
 
 TOOLS = Path(__file__).resolve().parents[1]
@@ -407,14 +408,56 @@ class BlindPlayTests(unittest.TestCase):
         text = io.StringIO()
         with contextlib.redirect_stdout(text), self.assertRaises(SystemExit):
             PLAY(['--help'])
-        for command in ('look', 'places', 'go ADDRESS', 'buy truck|cart', 'order SITE', 'crew assign', 'route add', 'time until'):
+        for command in ('look', 'places', 'go ADDRESS', 'walk X Z', 'map filters', 'buy truck|cart', 'order SITE', 'crew assign', 'route add', 'time until'):
             self.assertIn(command, text.getvalue())
         import argparse
         names = set(runpy.run_path(str(TOOLS / 'play'), run_name='play_test')['parser']()._subparsers._group_actions[0].choices)
-        self.assertEqual(names, {'look', 'notices', 'places', 'go', 'screen', 'ui', 'time', 'buy', 'vehicle', 'order', 'hire', 'licence',
-                                 'crew', 'route', 'save', 'load'})
+        self.assertEqual(names, {'look', 'notices', 'places', 'go', 'walk', 'map', 'screen', 'ui', 'time', 'buy', 'vehicle', 'order', 'hire',
+                                 'licence', 'crew', 'route', 'save', 'load'})
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             PLAY(['money', 'set', '1000000'])
+
+    def test_walking_pushes_a_held_cart_into_the_bay_and_keeps_the_clock_stopped(self):
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.session.mock.state['player'].update(x=380., z=210.)
+        self.assertEqual(self.play('buy', 'cart'), 0, self.lines)
+        cart = self.session.mock.state['vehicles'][0]['id']
+        self.session.bridge.call('time', {'speed': 1})
+        self.assertEqual(self.play('vehicle', cart, 'enter'), 0, self.lines)
+        # Entering walks to the cart first.
+        for _ in range(50):
+            if self.session.bridge.call('state')['result']['player']['in_vehicle'] == cart: break
+            time.sleep(.05)
+        self.session.bridge.call('time', {'pause': True})
+        self.assertEqual(self.play('walk', '--to', 'bay:hells-kitchen'), 0, self.lines)
+        self.assertIn(f'pushing {cart}', self.lines[0])
+        v = self.session.mock.state['vehicles'][0]
+        self.assertTrue(v['commissary']['in_bay'])
+        self.assertTrue(self.session.mock.state['clock']['paused'])
+        # Out of the cart, a walk to a point; a truck can't be walked.
+        self.session.bridge.call('time', {'speed': 1})
+        self.assertEqual(self.play('vehicle', cart, 'exit'), 0, self.lines)
+        self.assertEqual(self.play('walk', '400', '230'), 0, self.lines)
+        self.assertIn('You walked', self.lines[0])
+        self.assertEqual(self.play('walk', '400'), 2)
+        self.assertEqual(self.play('buy', 'truck'), 0, self.lines)
+        truck = self.session.mock.state['vehicles'][1]['id']
+        self.session.bridge.call('time', {'speed': 1})
+        self.assertEqual(self.play('vehicle', truck, 'enter'), 0, self.lines)
+        for _ in range(50):
+            if self.session.bridge.call('state')['result']['player']['in_vehicle'] == truck: break
+            time.sleep(.05)
+        self.assertEqual(self.play('walk', '410', '230'), 1)
+        self.assertIn('get out first', self.lines[0])
+
+    def test_the_map_lists_its_filters_and_the_buildings_one_lights(self):
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.assertEqual(self.play('map', 'filters'), 0, self.lines)
+        self.assertTrue(any(line.startswith('commissaries:') for line in self.lines), self.lines)
+        self.assertEqual(self.play('map', 'commissaries', '--limit', '3'), 0, self.lines)
+        self.assertIn('buildings lit by commissaries', self.lines[0])
+        self.assertEqual(len(self.lines), 4)
+        self.assertTrue(all('commissary' in line for line in self.lines[1:]), self.lines)
 
     def test_controls_refuse_outside_a_playtest_save_and_past_the_speed_cap(self):
         self.assertEqual(self.play('buy', 'cart'), 2)

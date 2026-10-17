@@ -223,7 +223,7 @@ namespace FoodTrucks
         }
 
         // Every premium spot, and the places of events today or later.
-        private static HashSet<string> PitchAddresses()
+        internal static HashSet<string> PitchAddresses()
         {
             var set = new HashSet<string>(StringComparer.Ordinal);
             var pitches = DemandData.Pitches;
