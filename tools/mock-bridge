@@ -1708,15 +1708,22 @@ class Mock:
             x,z=num(args,'x'),num(args,'z')
             if x is None or z is None: raise ValueError('place needs "x" and "z": a point on the floor (state\'s player x and z, or use list\'s).')
             if life['inside'] not in life['homes']: raise ValueError('You can place furniture only inside a building you rent.')
+            rotation=round((num(args,'rotation') or 0)/45)*45%360
+            move=args.get('move')
+            if move:
+                beds=life['beds'].get(life['inside']) or []
+                if not beds or move.lower() not in 'bed (individual modern) ba:itemname_bedindividualmodern': raise ValueError(f"No furniture called '{move}' in this building.")
+                beds[-1]=(x,z,rotation)
+                self.event(f'Test bridge: place (move) ba:itemname_bedindividualmodern at x {x:.1f}, z {z:.1f}, rotation {rotation:.0f}: placed.')
+                return {'item':'Bed (Individual Modern)','placed':True,'moved':True,'reachable':True,'still_placing':False,'why':None,'x':round(x,2),'z':round(z,2),'rotation':float(rotation),'notices':[]}
             hands=life['hands']
             if not hands or hands['key']!='ba:itemname_closedcardboardbox' or not hands['contents'] or not hands['contents'][0].get('furniture'):
                 raise ValueError("You aren't holding a box of furniture (shops pack what you buy in a box).")
             if not hands['contents'][0]['paid']: raise ValueError("You haven't paid for it.")
-            rotation=round((num(args,'rotation') or 0)/45)*45%360
             life['beds'].setdefault(life['inside'],[]).append((x,z,rotation))
             name=hands['contents'][0]['item']; life['hands']=None
             self.event(f'Test bridge: place {name} at x {x:.1f}, z {z:.1f}, rotation {rotation:.0f}: placed.')
-            return {'item':name,'placed':True,'still_placing':False,'why':None,'x':round(x,2),'z':round(z,2),'rotation':float(rotation),'notices':[]}
+            return {'item':name,'placed':True,'moved':False,'reachable':True,'still_placing':False,'why':None,'x':round(x,2),'z':round(z,2),'rotation':float(rotation),'notices':[]}
 
     def contacts(self):
         out=[{'id':'the_city_of_new_york','name':'The City of New York','category':'General','unread':False}]

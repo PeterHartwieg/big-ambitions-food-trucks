@@ -28,7 +28,10 @@ Commands (each also takes --help):
   go ADDRESS                   Tell the taxi you got into where to go (address as places or map prints it, e.g.
                                ba:street_secondavenue#8). You get into one with use.
   eat [ITEM]                   Eat from the bag of food you hold.
-  place X Z [--rotation DEG]   Set down the furniture in the box you hold, on the floor of a building you rent.
+  place X Z [--rotation DEG] [--move NAME]
+                               Set down the furniture in the box you hold, on the floor of a building you rent.
+                               With --move, pick up furniture already standing there (nearest with NAME in its name)
+                               and set it down at X Z instead.
   phone APP                    Open the phone on an app: contacts, employees, bizman, econoview, market, persona or
                                rivals.
   call list | call CONTACT     Your phone's contacts, or call one (by name or id). Its options are then on screen (ui).
@@ -293,11 +296,15 @@ class Play:
         self.out(f"{'Ate' if r['done'] else 'Did not eat'} {r['item']}: hunger {r['hunger']}, energy {r['energy']}.")
         for n in r.get('notices') or []: self.out(f'  {n}')
 
-    def place(self, x, z, rotation=None):
+    def place(self, x, z, rotation=None, move=None):
         self.acting()
-        r = self.call('place', {'x': x, 'z': z, **({'rotation': rotation} if rotation is not None else {})})
+        r = self.call('place', {'x': x, 'z': z, **({'rotation': rotation} if rotation is not None else {}), **({'move': move} if move else {})})
         self.out(f"{r['item']}: placed at x {r['x']}, z {r['z']}, turned {r['rotation']:.0f} degrees." if r['placed']
-                 else f"{r['item']}: not placed ({r['why']})" + ('.' if r.get('still_placing') else '; it is back in its box.'))
+                 else f"{r['item']}: not placed ({r['why']})" + ('.' if r.get('still_placing') else
+                                                                 '; it stays where it was.' if r.get('moved') else '; it is back in its box.'))
+        if r['placed'] and r.get('reachable') is False:
+            self.out("  You can't get to it from here to use it: a wall stands between it and the spot you'd use it from. "
+                     "Move it with place X Z --move NAME.")
         for n in r.get('notices') or []: self.out(f'  {n}')
 
     def phone(self, app):
@@ -550,7 +557,7 @@ def parser():
     n.add_argument('--radius', type=float)
     n = sub.add_parser('eat', help='eat from the bag you hold'); n.add_argument('item', nargs='?')
     n = sub.add_parser('place', help='set down the furniture you hold'); n.add_argument('x', type=float); n.add_argument('z', type=float)
-    n.add_argument('--rotation', type=float)
+    n.add_argument('--rotation', type=float); n.add_argument('--move')
     n = sub.add_parser('phone', help='open the phone on an app'); n.add_argument('app', choices=PHONE_APPS)
     n = sub.add_parser('call', help='your contacts, or call one'); n.add_argument('contact')
     n = sub.add_parser('walk', help='walk somewhere, pushing a cart you hold'); n.add_argument('coords', nargs='*', type=float)
@@ -587,7 +594,7 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
         elif c == 'go': play.go(args.address)
         elif c == 'use': play.use(args.id, args.radius)
         elif c == 'eat': play.eat(args.item)
-        elif c == 'place': play.place(args.x, args.z, args.rotation)
+        elif c == 'place': play.place(args.x, args.z, args.rotation, args.move)
         elif c == 'phone': play.phone(args.app)
         elif c == 'call': play.call_contact(args.contact)
         elif c == 'walk':
