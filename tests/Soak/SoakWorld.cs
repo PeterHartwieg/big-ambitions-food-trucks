@@ -626,7 +626,8 @@ internal sealed partial class SoakWorld
     }
 
     // A vehicle whose route is fully staffed doesn't owe the drive back for more than two nights in a row (the player
-    // standing by it, its own building and a route with problems aside).
+    // standing by it, its own building and a route with problems aside). A crew with no shifts in the week can't drive it
+    // (the long soak's seed 6, day 273): the vehicle waits for the player, as in the game.
     private void CheckOwedReturns()
     {
         foreach (var v in state.Vehicles)
@@ -634,7 +635,7 @@ internal sealed partial class SoakWorld
             var van = vans[v.VehicleId];
             var home = HomeOf(v);
             var owed = v.ReturnPending && v.Transit == null && !v.IsOpen && home != null && !van.Property && atWindow != v.VehicleId &&
-                       v.Crew.Count > 0 && runner.RouteProblems(v, 1.0, home).Count == 0;
+                       v.Crew.Count > 0 && (v.Schedule?.CrewShifts.Count ?? 0) > 0 && runner.RouteProblems(v, 1.0, home).Count == 0;
             // Out at a late stop or with stops still ahead at midnight isn't owing yet; that night isn't counted.
             var busy = HireRunner.Want(v, now) != null || v.Shifts.Any(p => p.Legs.Any(l => l.StopIndex != HireSchedules.HomeIndex && l.End > now));
             if (owed && busy) continue;
