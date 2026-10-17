@@ -1,0 +1,40 @@
+{
+  "name": "phase-a",
+  "about": "Phase A of docs/ai-playtest-plan.md: one truck and one cart run by their crews from the Hell's Kitchen commissary for a week. The truck works the district's three premium spots (data/pitches.json); the cart three buildings near the commissary, since a pushed cart walks between stops. Every stop takes the default hours (from 11:00, three hours each, as the map pick gives them). A fresh character can't pay for a truck, so the run starts the books at starting_money (set with the bridge's money, before the first snapshot); the licence and permits come from the debug action, free.",
+  "save": "FT playtest",
+  "starting_money": 40000,
+  "commissary": "hells-kitchen",
+  "licence": "debug",
+  "vehicles": [
+    {
+      "name": "truck",
+      "kind": "truck",
+      "crew": 2,
+      "equipment": ["ba:itemname_hotdoggrill", "foodtrucks:itemname_griddle"],
+      "foods": ["ba:itemname_hotdog", "foodtrucks:itemname_tacos"],
+      "stops": ["ba:street_secondstreet#3", "ba:street_fourthstreet#4", "ba:street_fourthavenue#22"]
+    },
+    {
+      "name": "cart",
+      "kind": "cart",
+      "crew": 1,
+      "equipment": ["ba:itemname_hotdoggrill", "ba:itemname_industrialcoffeemachine"],
+      "foods": ["ba:itemname_hotdog", "ba:itemname_cupofcoffee"],
+      "stops": ["ba:street_thirdstreet#6", "ba:street_secondavenue#4", "ba:street_secondavenue#12"]
+    }
+  ],
+  "orders": [
+    { "item": "ba:itemname_hotdoggrill", "boxes": 2 },
+    { "item": "foodtrucks:itemname_griddle", "boxes": 1 },
+    { "item": "ba:itemname_industrialcoffeemachine", "boxes": 1 },
+    { "item": "ba:itemname_hotdog", "boxes": 2 },
+    { "item": "foodtrucks:itemname_tacos", "boxes": 1 },
+    { "item": "ba:itemname_cupofcoffee", "boxes": 1 }
+  ],
+  "changes": [
+    { "day": 4, "op": "paste_day", "vehicle": "truck", "from": "monday", "to": ["saturday"],
+      "why": "a player copies Monday's route onto Saturday" },
+    { "day": 4, "op": "shift", "vehicle": "cart", "crew": 0, "weekday": "sunday", "start": 9, "end": 21,
+      "why": "a player starts the cart's Sunday shift an hour earlier" }
+  ]
+}

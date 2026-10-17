@@ -27,10 +27,10 @@ namespace FoodTrucks
         private static readonly bool Testing = Environment.GetCommandLineArgs().Any(a =>
             string.Equals(a, TestBridge.Flag, StringComparison.OrdinalIgnoreCase));
 
-        private static readonly Action SpawnTruckAction = () => SpawnVehicle(FoodTrucksMod.TruckTypeName);
+        private static readonly Action SpawnTruckAction = () => { SpawnVehicle(FoodTrucksMod.TruckTypeName); };
         private static readonly Action LicenceAction = CityLicensing.GrantForTesting;
-        private static readonly Action SpawnCartAction = () => SpawnVehicle(FoodTrucksMod.CartTypeName);
-        private static readonly Action SpawnHandTruckAction = () => SpawnVehicle("ba:vehicletype_handtruck");
+        private static readonly Action SpawnCartAction = () => { SpawnVehicle(FoodTrucksMod.CartTypeName); };
+        private static readonly Action SpawnHandTruckAction = () => { SpawnVehicle("ba:vehicletype_handtruck"); };
         private static readonly Action GripAction = LogGrip;
         private static readonly Action ZonePointAction = MarkZonePoint;
         private static readonly Action TaxFixtureAction = TaxFixture;
@@ -265,18 +265,19 @@ namespace FoodTrucks
         }
 
         // A free player-owned vehicle in front of the player, where buying one at the dealer would take too long.
-        private static void SpawnVehicle(string typeName)
+        // The spawned vehicle, or null when it wasn't spawned (a notice says why). The test bridge's vehicle buy uses it too.
+        internal static VehicleInstance? SpawnVehicle(string typeName)
         {
             if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking)
             {
                 Notify("Go outside first: vehicles spawn on the street.");
-                return;
+                return null;
             }
             var type = VehicleTypeHelper.GetVehicleType(typeName);
             if (type == null)
             {
                 Notify($"Vehicle type {typeName} is not registered.");
-                return;
+                return null;
             }
             var player = PlayerHelper.PlayerController.transform;
             var instance = new VehicleInstance(typeName) { fuel = type.maxFuel * 0.97f };
@@ -287,12 +288,13 @@ namespace FoodTrucks
             {
                 Log.Info($"Not spawned {typeName}: no room in front of or beside the player at x {player.position.x:F1}, z {player.position.z:F1} (in front: {blocked}).");
                 Notify("No room to spawn here: move to an open spot.");
-                return;
+                return null;
             }
             var at = free.Value;
             var controller = VehicleHelper.CreateAndSpawnVehicle(instance, at, player.rotation);
             Log.Info($"Spawned {typeName}: id {instance.id}, controller {(controller == null ? "none" : controller.GetType().Name)}, at x {at.x:F1}, z {at.z:F1}.");
             Notify($"Spawned {typeName}.");
+            return instance;
         }
 
         // In front of the player, else beside that place, else further on, where the new vehicle's box is free and the

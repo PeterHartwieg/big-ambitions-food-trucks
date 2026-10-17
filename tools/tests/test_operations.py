@@ -146,14 +146,16 @@ class OperationTests(unittest.TestCase):
         self.assertEqual(before['clock']['arrived_at'],'day 2 07:59')
         self.assertIsNone(before['clock']['run_until'])
         self.assertEqual(before['clock']['speed'],1)
-        self.assertEqual(before['transactions_today'],[])
+        # The commissary's daily rent is charged at midnight; only the order's payment matters here.
+        orders=lambda transactions:[t for t in transactions if t['type']=='foodtrucks:transaction_commissary_order']
+        self.assertEqual(orders(before['transactions_today']),[])
         self.bridge.call('time',{'run_until':{'day':2,'time':'08:00'},'speed':60})
         self.bridge.wait_state('clock.paused',{'equals':True},3)
-        paid=self.bridge.call('state')['result']['transactions_today']
+        paid=orders(self.bridge.call('state')['result']['transactions_today'])
         self.assertEqual(len(paid),1)
         self.assertEqual((paid[0]['amount'],paid[0]['day'],paid[0]['time']),(-order['total'],2,'08:00'))
         self.mock.state['clock']['day']=3
-        self.assertEqual(len(self.mock.read_state()['transactions_today']),1)
+        self.assertEqual(len(orders(self.mock.read_state()['transactions_today'])),1)
         self.mock.state['clock']['day']=4
         self.assertEqual(self.mock.read_state()['transactions_today'],[])
 

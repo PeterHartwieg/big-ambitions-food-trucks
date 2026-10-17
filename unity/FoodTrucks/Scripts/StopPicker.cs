@@ -216,7 +216,7 @@ namespace FoodTrucks
 
         // Where a stop by this entrance goes: position, heading and metres from the entrance; null with the refusal's
         // message key. `how` says what was found, for the log.
-        private static (Vector3 Position, float Heading, float Distance)? Snap(string kind, Vector3 door, out string refusal, out string how)
+        internal static (Vector3 Position, float Heading, float Distance)? Snap(string kind, Vector3 door, out string refusal, out string how)
         {
             refusal = kind == "truck" ? "foodtrucks:notification_pick_none_truck" : "foodtrucks:notification_pick_none_cart";
             var probe = new Legality.ParkingProbe(door, (float)StopSnap.MaxMetres + 5f);

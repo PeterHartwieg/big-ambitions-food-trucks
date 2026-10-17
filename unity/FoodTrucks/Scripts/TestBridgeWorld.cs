@@ -758,8 +758,9 @@ namespace FoodTrucks
 
         private static object Vehicle(JObject args)
         {
+            var op = Need(args, "op", "open, close, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy");
+            if (op == "buy") return Buy(args);
             var id = Need(args, "id", "the food vehicle's id");
-            var op = Need(args, "op", "open, close, step_out, back_to_hatch, enter, exit, restock, transfer or rent_bay");
             var vehicle = FoodVehicle(id);
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
             var game = SaveGameManager.Current;
@@ -835,9 +836,49 @@ namespace FoodTrucks
                         why = global::FoodTrucks.Commissary.RentBayForTesting(vehicle);
                         break;
                     default:
-                        throw new BridgeError($"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock, transfer or rent_bay.");
+                        throw new BridgeError($"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy.");
                 }
             }, notices => VehicleReply(op, id, vehicle, state, notices, why, IsOpen, Cargo, Space, cargoBefore, spaceBefore));
+        }
+
+        // { "op": "buy", "kind": "truck" | "cart" }: the debug spawn beside the player, paid at the dealer's price (the vehicle
+        // type's price) as the dealer's own purchase books it (ShowcaseVehicleController.Purchase: ba:transaction_vehiclebought
+        // with the type's name, tax-deductible as tax_vehicle when the type is), so the game's books and day totals see it.
+        // Refused, with nothing spawned, when the money is short. A spawn that finds no room charges nothing (done false).
+        private static object Buy(JObject args)
+        {
+            var kind = Need(args, "kind", "truck or cart");
+            var typeName = kind == "truck" ? FoodTrucksMod.TruckTypeName : kind == "cart" ? FoodTrucksMod.CartTypeName
+                : throw new BridgeError($"Unknown kind '{kind}': truck or cart.");
+            var type = Vehicles.VehicleTypes.VehicleTypeHelper.GetVehicleType(typeName) ?? throw new BridgeError($"Vehicle type {typeName} is not registered.");
+            var cents = (long)Math.Round(type.price * 100.0);
+            var game = SaveGameManager.Current;
+            if (!string.IsNullOrEmpty(game.ActiveVehicleId)) throw new BridgeError($"The player is in {game.ActiveVehicleId}: vehicle exit first (the vehicle spawns beside the player on foot).");
+            if (game.Money * 100.0 < cents)
+                throw new BridgeError($"Not enough money for the {kind}: it costs {CartSelling.Money(cents)} and the player has {CartSelling.Money((long)Math.Floor(game.Money * 100.0))}.");
+            VehicleInstance? bought = null;
+            var paid = false;
+            return WithNotices(() =>
+            {
+                bought = DebugActions.SpawnVehicle(typeName);
+                if (bought == null) return;
+                var info = new TransactionInfo("ba:transaction_vehiclebought", new Dictionary<string, string> { { "vehicleName", typeName } });
+                if (type.taxDeductible) info.SetTaxDeductibleName("tax_vehicle");
+                paid = Payments.TryPayOut(cents, info, showNotification: false);
+                if (!paid) Log.Error($"Test bridge: vehicle buy: {kind} {bought.id} spawned but the payment of {CartSelling.Money(cents)} was refused.");
+            }, notices =>
+            {
+                Log.Info(bought == null
+                    ? $"Test bridge: vehicle buy {kind}: not spawned, nothing charged."
+                    : $"Test bridge: vehicle buy {kind}: {bought.id} for {CartSelling.Money(cents)}{(paid ? "" : " (payment refused)")}.");
+                var state = FoodTrucksSession.CurrentState;
+                return new JObject
+                {
+                    ["done"] = bought != null && paid, ["id"] = bought?.id, ["kind"] = kind, ["price"] = cents / 100.0,
+                    ["money"] = Math.Round(game.Money, 2), ["notices"] = new JArray(notices),
+                    ["state"] = bought == null || state == null ? null : TestBridgeState.Vehicle(state, bought),
+                };
+            });
         }
 
         // Whether the operation happened, read from the state it should have changed (a refusal leaves only its notice).

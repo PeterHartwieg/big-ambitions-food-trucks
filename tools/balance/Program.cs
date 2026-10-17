@@ -1103,6 +1103,72 @@ if (opts.Wants("costs"))
     o.AppendLine();
 }
 
+// The AI playthrough's plan (tools/playthrough writes it from the game's routes): each vehicle's foods and its week of
+// stops at their hours, priced as its crew sells them. The crew load in the bay before the first stop and carry that
+// stock through the day (RestockMode.None, as Core's CrewRestock loads only in the bay). Each stop is the city's
+// building nearest the stop's position (city.json positions are approximate). Revenue and units per weekday, for the
+// runner's ±25% comparison; written as JSON with --json-out.
+if (opts.Wants("playthrough"))
+{
+    if (opts.Plan == null) throw new ArgumentException("--reports playthrough needs --plan FILE (tools/playthrough report writes balance-plan.json).");
+    var plan = JObject.Parse(File.ReadAllText(opts.Plan));
+    var proposal = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(opts.City))!, "new-foods-proposal.json");
+    var priced = new JArray();
+    var buildingSpots = spots.Where(sp => !sp.Name.Contains("(archetype)")).ToList();
+    Spot Nearest(double x, double z) => buildingSpots.OrderBy(sp => (sp.X - x) * (sp.X - x) + (sp.Z - z) * (sp.Z - z)).First();
+    o.AppendLine("## Playthrough plan");
+    o.AppendLine();
+    o.AppendLine("| Vehicle | Menu | Servers | Week revenue | Week units |");
+    o.AppendLine("|---|---|---|---|---|");
+    foreach (var v in plan["vehicles"] ?? new JArray())
+    {
+        var id = (string?)v["id"] ?? "?";
+        var kind = (string?)v["kind"] ?? "cart";
+        var menu = (v["menu"] ?? new JArray()).Select(t => (string)t!).Where(i => tables.Product(i) != null).ToArray();
+        // The new foods' prices are only in the proposal's game section (game-prices.json predates them).
+        if (menu.Any(i => !prices.Items.ContainsKey(i)) && File.Exists(proposal) && JObject.Parse(File.ReadAllText(proposal))["game"] is JObject newPrices)
+            prices.Merge(newPrices);
+        menu = menu.Where(prices.Items.ContainsKey).ToArray();
+        if (menu.Length == 0)
+        {
+            o.AppendLine($"| {id} | none priced | | | |");
+            continue;
+        }
+        var servers = (int?)v["servers"];
+        var cart = MakeCart(menu, $"{kind} {id}", false, null, kind, servers is > 0 ? servers : null);
+        var planner = new Planner(cart, city, kind == "truck" ? drive : travel) { Mode = RestockMode.None };
+        var byDay = new JObject();
+        double weekRevenue = 0, weekUnits = 0;
+        foreach (var d in v["week"] ?? new JArray())
+        {
+            var name = (string)d["day"]!;
+            var stops = (d["stops"] ?? new JArray()).ToList();
+            double revenue = 0, cost = 0, units = 0;
+            if (stops.Count > 0)
+            {
+                var c = Cond(Enum.Parse<DayOfWeek>(name, true));
+                var first = (int)stops[0]["open"]!;
+                var last = (int)stops[^1]["close"]!;
+                Dictionary<string, double>? stock = null;
+                foreach (var stop in stops)
+                {
+                    var spot = Nearest((double)stop["x"]!, (double)stop["z"]!);
+                    stock ??= Selling.Load(cart, spot, first, last, c);
+                    var stay = planner.SellAt(spot, (int)stop["open"]!, (int)stop["close"]!, c, stock);
+                    revenue += stay.Result.Revenue; cost += stay.Result.Cost; units += stay.Result.Units;
+                    stock = stay.Left;
+                }
+            }
+            byDay[name] = new JObject { ["revenue"] = Math.Round(revenue, 2), ["stock_cost"] = Math.Round(cost, 2), ["units"] = Math.Round(units, 1) };
+            weekRevenue += revenue; weekUnits += units;
+        }
+        priced.Add(new JObject { ["id"] = id, ["kind"] = kind, ["menu"] = new JArray(menu), ["servers"] = cart.Servers, ["days"] = byDay });
+        o.AppendLine($"| {id} ({kind}) | {string.Join(", ", menu)} | {cart.Servers} | {Money(weekRevenue)} | {weekUnits:0} |");
+    }
+    o.AppendLine();
+    if (opts.JsonOut != null) File.WriteAllText(opts.JsonOut, new JObject { ["vehicles"] = priced }.ToString());
+}
+
 if (opts.Out != null) File.WriteAllText(opts.Out, o.ToString());
 Console.Write(o.ToString());
 
@@ -1151,6 +1217,9 @@ sealed class Options
     public double FeeSharing = 1;
     public double CartPrice = 1200;
     public bool Parks = true;
+    // The playthrough report's plan and its JSON output (tools/playthrough).
+    public string? Plan;
+    public string? JsonOut;
     // --service queue (default): the game's queue since 0.4.0. --service fluid: the old min(buyers, capacity).
     public bool Queue = true;
     public string[] Carts = { "hotdog+cooler", "coffee+bakery", "truck-like" };
@@ -1181,6 +1250,8 @@ sealed class Options
                 case "--prices": o.Prices = Next(); break;
                 case "--patch": o.Patch = Next(); break;
                 case "--out": o.Out = Next(); break;
+                case "--plan": o.Plan = Next(); break;
+                case "--json-out": o.JsonOut = Next(); break;
                 case "--pricing":
                     o.Pricing = Next() switch
                     {
