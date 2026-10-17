@@ -68,3 +68,29 @@ later sales ticks (`unity/FoodTrucks/Scripts/CartSelling.cs`, `CatchUpDay`,
 `PayCrewTakings`, `SoldThroughOf`). Deliberately missing that first catch-up and
 retrying at a later midnight is fault injection for the gate, not an assertion
 that the normal game waits an extra day. Core remains unchanged.
+
+## Owed drive back and the midnight replan (17 October 2026)
+
+On the blind-playtest fixes (33f14b1) the long run failed 19 of 200 seeds: 17 on "owed the drive back for three
+nights", 2 on "route sale outside stop hours" (seed 35 showed it once the Core fix moved the random sequence).
+
+**One Core defect.** Seed 3: a truck the player had moved to x 769, sold out on Sunday evening. A sold-out crew never
+leaves for a pitch, so it stayed there, but the plan's drive back after the stop was timed from the stop (7 minutes)
+while the real drive was 31, past the shift's end at 24:00. The next shift was on Thursday, so the truck stood out
+for four nights, fined at 04:00 each time. `HireRunner.Step` now sends a sold-out crew with a rented bay straight
+back there (while someone is on shift for the whole drive) instead of waiting. Test:
+`CrewRestockTests.ASoldOutTruckWithABayDrivesBackThereInsteadOfWaitingForTheDriveBack`.
+
+**The owed-nights check was too strict.** The other failures had no chance to drive back: shifts with days off (one
+three-hour shift a week, say), or a failed arrival (the harness's 1-in-10 misfit) whose retry fell after the shift's
+end. The runner rightly never drives without crew on shift for the whole drive. A night now counts only if, during
+the day before it, the soak saw the vehicle idle, owing the drive, with nothing planned, free to go and with crew on
+shift for the whole drive (`HomeChance`). That alone hardly ever fires, so at each such moment the runner's step must
+now be the drive back. Both checks together catch a runner with the drive back removed, or with only the delayed
+drive back removed, within three seeds.
+
+**The sale-hours check was too strict.** Seeds 127 and 192 (and 35): shifts scheduled again at midnight replan a late
+stop that is still open, with a short Travel or Restock leg first. `HireRunner.Step` keeps the window open
+through that leg by design, and the sales were within the stop's hours, but `RouteSaleAllowed` measured yesterday's
+plans from the replanned opening instead of the stop's opening time. It now uses the stop's hours on the plan's own
+day. Test: `RouteReplanTests.ALateStopReplannedAfterMidnightKeepsServingWithinItsHours`.

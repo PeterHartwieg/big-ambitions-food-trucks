@@ -121,6 +121,31 @@ public class CrewRestockTests
     }
 
     [Fact]
+    public void ASoldOutTruckWithABayDrivesBackThereInsteadOfWaitingForTheDriveBack()
+    {
+        // Moved by the player to x 500 and sold out, with its rented bay at x 0 but not among its stops: it doesn't
+        // wait for the plan's drive back (timed from the pitch it won't reach, which may not fit the shift from here),
+        // it drives to the bay now (soak seed 3: a truck left out for four nights).
+        var truck = Truck();
+        var soldOut = new VehicleWhere(500, 0, leaveAlone: false, hasStock: false, home: (0, 0));
+        var home = runner.Step(truck, At(3, 9, 40), soldOut);
+        Assert.Equal((HireActionKind.Depart, HireSchedules.HomeIndex, At(3, 10)), (home.Kind, home.Stop, home.ArrivesAt));
+        HireRunner.Depart(truck, home, At(3, 9, 40), 500, 0, 0, 0, new ScheduleStop { SpotKey = HireSchedules.HomeSpotKey });
+        HireRunner.Arrived(truck, 0, 0, atStop: true, At(3, 10));
+        Assert.False(truck.ReturnPending);
+        // In the bay it restocks and sets off for the pitch.
+        var bay = new VehicleWhere(0, 0, leaveAlone: false, hasStock: false, canRestock: true, home: (0, 0));
+        Assert.Equal(HireActionKind.Restock, runner.Step(truck, At(3, 10), bay).Kind);
+        HireRunner.Restocked(truck, At(3, 10));
+        Assert.Equal((HireActionKind.Depart, 0), (runner.Step(truck, At(3, 10), Bay()).Kind, runner.Step(truck, At(3, 10), Bay()).Stop));
+        // With nobody on shift for the whole drive it stays.
+        var late = Truck();
+        late.Schedule!.CrewShifts.RemoveAll(c => c.Day != System.DayOfWeek.Wednesday);
+        late.Schedule.CrewShifts.ForEach(c => c.End = 10);
+        Assert.Equal(HireActionKind.None, runner.Step(late, At(3, 9, 45), soldOut).Kind);
+    }
+
+    [Fact]
     public void InTheBayTheCrewRestocksOnceBeforeItSetsOff()
     {
         var truck = Truck();
