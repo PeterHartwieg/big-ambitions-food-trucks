@@ -93,6 +93,12 @@ namespace FoodTrucks
                 throw new BridgeError("Return the mop or shopping basket before using a hand truck.");
             if (op == "grab" && active == id) throw new BridgeError("You're already pushing that hand truck.");
             if (op == "load" && !PlayerHelper.IsHoldingItem) throw new BridgeError("Your hands are empty.");
+            // Bag conversion into storage drops the contents' paid flags; refuse before the game can convert it.
+            if (op == "load" || op == "grab")
+            {
+                var unpaid = PlayerHelper.ItemInstanceInHands?.cargoInstances?.FirstOrDefault(c => c != null && c.amount > 0 && !c.paid);
+                if (unpaid != null) throw new BridgeError($"Pay for it first: {LocalizorManager.GetLocalization(unpaid.itemName, null)}.");
+            }
             if (op == "take" && PlayerHelper.IsHoldingItem) throw new BridgeError("Empty your hands before taking a box.");
             var wanted = op == "take" ? Need(args, "item", "a cargo item key or name from handtruck list") : null;
             var cargo = op == "take" ? truck.vehicleInstance.cargoInstances.FirstOrDefault(c => c.amount > 0 &&

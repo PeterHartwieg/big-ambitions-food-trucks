@@ -1718,6 +1718,9 @@ class Mock:
             raise ValueError('Return the mop or shopping basket before using a hand truck.')
         if op=='grab' and active==ident: raise ValueError("You're already pushing that hand truck.")
         if op=='load' and not life['hands']: raise ValueError('Your hands are empty.')
+        if op in ('load','grab'):
+            unpaid=next((c for c in (life['hands'] or {}).get('contents',[]) if c['amount']>0 and not c['paid']),None)
+            if unpaid: raise ValueError(f"Pay for it first: {unpaid['item']}.")
         if op=='take' and life['hands']: raise ValueError('Empty your hands before taking a box.')
         done=True
         if op=='release': p['in_vehicle']=None; self.dialog='closed'

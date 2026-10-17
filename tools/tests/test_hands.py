@@ -65,7 +65,7 @@ class HandsTests(unittest.TestCase):
         self.assertIsNone(self.mock.state['player']['in_vehicle'])
         self.assertEqual(self.mock.life['hands'], self.box)
         self.truck['capacity'] = 1
-        second = {**self.bed, 'key': 'ba:itemname_chair', 'item': 'Chair', 'paid': False}
+        second = {**self.bed, 'key': 'ba:itemname_chair', 'item': 'Chair'}
         self.mock.life['hands']['contents'].append(second)
         self.assertFalse(self.call_unpaused('handtruck', op='load', id=self.truck['id'])['done'])
         self.assertEqual(self.mock.life['hands']['contents'], [second])
@@ -75,7 +75,7 @@ class HandsTests(unittest.TestCase):
         self.assertIsNone(self.mock.life['hands'])
         self.assertEqual(self.play('look'), 0, self.lines)
         self.assertTrue(any('pushing Hand truck' in line for line in self.lines))
-        self.assertTrue(any('King size bed' in line and 'Chair' in line and '(not paid)' in line for line in self.lines))
+        self.assertTrue(any('King size bed' in line and 'Chair' in line for line in self.lines))
         self.assertFalse(any('912345' in line or 'price' in line for line in self.lines))
         self.assertEqual(self.play('handtruck', 'release'), 0, self.lines)
         self.assertIsNone(self.mock.state['player']['in_vehicle'])
@@ -154,6 +154,27 @@ class HandsTests(unittest.TestCase):
         ident = next(t['id'] for t in self.call('use')['things'] if t['kind'] == 'DroppedContainer')
         self.assertEqual(self.play('pickup', str(ident)), 0, self.lines)
         self.assertEqual(self.mock.life['hands'], bag)
+
+    def test_load_and_grab_refuse_any_unpaid_box_or_bag_contents_without_changes(self):
+        for key, name in [('ba:itemname_closedcardboardbox', 'Closed cardboard box'),
+                          ('ba:itemname_paperbag', 'Paper bag')]:
+            for op in ('load', 'grab'):
+                with self.subTest(container=name, op=op):
+                    self.mock.life['hands'] = {'key': key, 'item': name, 'contents': [
+                        {'key': 'ba:itemname_bottledwater', 'item': 'Bottled water', 'amount': 1, 'paid': True, 'food': True},
+                        {'key': 'ba:itemname_burger', 'item': 'Burger', 'amount': 2, 'paid': False, 'food': True}]}
+                    self.truck['contents'] = []
+                    self.mock.state['player']['in_vehicle'] = None
+                    before = copy.deepcopy(self.mock.life['hands'])
+                    with self.assertRaisesRegex(BridgeError, 'Pay for it first: Burger'):
+                        self.call_unpaused('handtruck', op=op, id=self.truck['id'])
+                    self.assertEqual(self.mock.life['hands'], before)
+                    self.assertEqual(self.truck['contents'], [])
+                    self.assertIsNone(self.mock.state['player']['in_vehicle'])
+                    self.mock.life['hands']['contents'][1]['paid'] = True
+                    self.assertTrue(self.call_unpaused('handtruck', op=op, id=self.truck['id'])['done'])
+                    self.assertIsNone(self.mock.life['hands'])
+                    self.assertEqual(self.mock.state['player']['in_vehicle'], self.truck['id'] if op == 'grab' else None)
 
     def test_game_bindings_use_native_controls_without_cargo_or_position_writes(self):
         source = (TOOLS.parent / 'unity/FoodTrucks/Scripts/TestBridgeHands.cs').read_text()
