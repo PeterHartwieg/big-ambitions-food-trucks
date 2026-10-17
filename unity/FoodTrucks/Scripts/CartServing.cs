@@ -110,8 +110,11 @@ namespace FoodTrucks
         {
             var path = new NavMeshPath(); // reused for exact samples and every fallback, on all three sides
             bool Safe(Vector3 p) =>
-                NavMesh.SamplePosition(p, out var pedestrian, 0.05f, Extensions.NavMeshHelper.NpcNavMeshFilter) &&
-                Vector3.Distance(p, pedestrian.position) <= 0.01f && // no snapping from road to nearby pavement
+                // The two meshes are separate bakes whose heights rarely agree to the centimetre, so the queue's own
+                // PlaceAt tolerances apply: no more than 0.1 m sideways (no snapping from road to nearby pavement).
+                NavMesh.SamplePosition(p, out var pedestrian, 0.5f, Extensions.NavMeshHelper.NpcNavMeshFilter) &&
+                (p.x - pedestrian.position.x) * (p.x - pedestrian.position.x) + (p.z - pedestrian.position.z) * (p.z - pedestrian.position.z) <= 0.01f &&
+                Mathf.Abs(p.y - pedestrian.position.y) <= 0.3f &&
                 QueueLine.OnStreet(p, lanes) == null &&
                 NavMesh.CalculatePath(start, p, filter, path) && path.status == NavMeshPathStatus.PathComplete;
 

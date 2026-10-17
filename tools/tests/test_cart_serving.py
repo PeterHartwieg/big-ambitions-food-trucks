@@ -262,7 +262,7 @@ class Harness {
             var (s,p,c)=Setup();
             switch(rejected) {
                 case "NPC": NavMesh.PedestrianGround=(at,r)=>null; break;
-                case "NPC snap": NavMesh.PedestrianGround=(at,r)=>at+new Vector3(.04f,0,0); break;
+                case "NPC snap": NavMesh.PedestrianGround=(at,r)=>at+new Vector3(.3f,0,0); break;
                 case "player": NavMesh.Ground=(at,r)=>null; break;
                 case "street": QueueLine.Street=at=>"Crosswalk trigger"; break;
                 case "path": NavMesh.Route=at=>(true,NavMeshPathStatus.PathPartial); break;
