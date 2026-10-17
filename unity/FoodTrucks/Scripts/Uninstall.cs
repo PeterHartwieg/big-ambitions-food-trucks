@@ -83,6 +83,9 @@ namespace FoodTrucks
             Catering.RemoveContact();
             try { Commissary.RemoveForUninstall(); }
             catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
+            // The fleet's recruitment campaigns: the game can't list one without the mod.
+            try { FleetRecruiting.EndForUninstall(); }
+            catch (Exception ex) { Log.Error("Uninstall: fleet recruitment campaigns: " + ex); }
             // The vehicles' and the licence's to-dos; none come back once the commissary is uninstalled.
             try { VehicleTodos.RemoveAll("uninstall"); }
             catch (Exception ex) { Log.Error("Uninstall: to-dos: " + ex); }
