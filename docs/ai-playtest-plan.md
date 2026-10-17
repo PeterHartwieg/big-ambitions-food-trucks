@@ -113,3 +113,13 @@ Built on branch `blind1-fixes` (17 October 2026), not yet run in game: no notice
 - **Walking for the tester:** a `walk` control that sends the player to a point and lets the character's own navigation take it there (the game's click-to-move, no WASD). This also covers pushing a cart into a bay, and real walking to buildings.
 - **The map for the tester:** the map's highlights given to the tester as data, filtered the way a player filters the map (business types, commissaries, free buildings for rent and so on). With walking, this lets a blind run rent a home and live a normal game day around the business.
 - **Route warning text (agreed, after the first blind run):** the "route problem" to-do says "check the stops' times" for every problem. In the first run all three carts had it because parts of their route days had nobody on shift: days off with the route still running, and a shift starting at 10:00 while the restock and the 52-minute walk start the route day at 09:38. The to-do should name the real cause per problem (stops' times, an unreachable stop, or nobody on shift on which days and from when), and `tools/play look` should show that text, not only the kind.
+
+## Peter's notes while watching blind run 2 (17 October 2026)
+
+- **Order menu:** item names in the commissary's order list are still very long, and some run underneath the item's picture.
+- **The tester still progresses by shortcuts**, so the next run should play the real game:
+  - `go` is a free teleport; it should be the game's own taxi (fare and travel time) or walking.
+  - `time until` keeps the player's needs up (the bridge's `keep_needs` defaults to true with `run_until`); the tester should manage hunger and energy itself.
+  - `licence` is the free debug licence; the tester should take the Food Safety course at the business school and buy the licence and permits from the City.
+  - `hire` is the debug hire; the tester should hire through the game's own hiring.
+  - No flat: the tester should rent a home (needs walking and the map, both there now).
