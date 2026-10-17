@@ -86,6 +86,7 @@ namespace FoodTrucks
         private readonly HashSet<string> heldFailed = new HashSet<string>();
         private SalesSimulator? simulator;
         private float nextTick;
+        private readonly CartServing cartServing = new CartServing();
 
         // A held sale is paid anyway after this many in-game minutes, whatever the view does.
         private const double MaxHeldMinutes = 60;
@@ -128,6 +129,7 @@ namespace FoodTrucks
 
         private void OnDisable()
         {
+            cartServing.Release("session ended");
             GlobalEvents.onEnterVehicle -= OnEnterVehicle;
             GlobalEvents.onTimeMachineStarted -= OnTimeMachineStarted;
             GlobalEvents.onTimeMachineEnded -= OnTimeMachineEnded;
@@ -136,6 +138,7 @@ namespace FoodTrucks
 
         private void OnTimeMachineStarted()
         {
+            cartServing.Release("time skip");
             skipping = true;
             CartQueueView.Suspended = true;
             try
@@ -313,8 +316,10 @@ namespace FoodTrucks
             Say(key, kind, ("units", plan.StockUnits.ToString()), ("rate", rate.ToString()), ("customers", customers),
                 ("grade", GradeText(vehicle)), ("crew", HireCrew.Names(serving)), ("later", LunchOutlook(cart, position, service, rate)));
             if (pitch != null) Say(pitch.Value.Key, kind, pitch.Value.Data);
+            cartServing.Release("another window opened");
             // To the hatch: the player serves from inside the truck (placed there when beside it, else walked to its rear door).
             if (kind == "truck") TruckWindow.EnterFromOutside(controller);
+            else cartServing.Open(controller);
         }
 
         // Opened quietly in the morning: what lunch should bring, so "Hardly anyone comes by" doesn't read as the whole day
@@ -463,6 +468,7 @@ namespace FoodTrucks
         // vehicle open into a new working day gets that day's inspector's chance.
         private void LateUpdate()
         {
+            cartServing.LateUpdate();
             if (FoodTrucksSession.CurrentState == null || SaveGameManager.Current == null) return;
             var hour = HireCrew.Now() / 60;
             if (hour == closedAtHour) return;
@@ -672,6 +678,7 @@ namespace FoodTrucks
 
         private void OnEnterVehicle(VehicleController controller)
         {
+            cartServing.Release("entered a vehicle");
             try
             {
                 var cart = controller?.vehicleInstance;
@@ -702,6 +709,7 @@ namespace FoodTrucks
         // at: the game minute the window closes, when the sales clock is catching up behind the live one.
         private void Close(VehicleState vehicle, string messageKey, double? at = null)
         {
+            cartServing.Closed(vehicle.VehicleId);
             // Closing doesn't clean, for the crew either: cleaning happens only in the vehicle's own commissary bay (the
             // on-foot menu's Clean, or standing there at the 04:00 check).
             var state = FoodTrucksSession.CurrentState;
@@ -1267,6 +1275,9 @@ namespace FoodTrucks
 
         // For the test bridge's state: the player serves this window now, as the sales tick reads it.
         internal static bool PlayerServesNow(VehicleInstance cart) => PlayerIsAtCart(cart);
+
+        // For crew placement only: the player occupies the cart's middle serving spot while its idle stance holds.
+        internal static bool PlayerAtServingSpot(string id) => instance != null && instance.cartServing.PlayerAt(id);
 
         // Core decides (PlayerServing): a truck only from its hatch (or while the player is being placed there
         // after Open), a cart within reach of its window.

@@ -1,6 +1,7 @@
 import copy
 import csv
 import json
+import math
 from pathlib import Path
 import runpy
 import sys
@@ -296,6 +297,30 @@ class BridgeOpsParityTests(unittest.TestCase):
         with self.assertRaises(ValueError) as exc:
             self.mock.call(cmd, args)
         self.assertEqual(str(exc.exception), text)
+
+    def test_cart_open_places_the_player_opposite_customers_and_allows_walking_away(self):
+        v = self.mock.spawn('cart')
+        v.update(x=20., z=30., pieces=[{'item': 'hotdoggrill', 'units': 40, 'cap': 40}],
+                 stock=[{'item': 'Hotdog', 'key': HOTDOG, 'amount': 40}])
+        self.mock.state['licence']['until_day'] = 60
+        player = self.mock.state['player']
+        for heading in (0., 45., 90., 180., 270.):
+            with self.subTest(heading=heading):
+                v['heading'] = heading
+                player.update(x=20., z=29., heading=heading)
+                self.assertTrue(self.mock.operate(v, 'open')['done'])
+                angle = math.radians(heading)
+                self.assertAlmostEqual(player['x'], v['x']-.85*math.cos(angle))
+                self.assertAlmostEqual(player['z'], v['z']+.85*math.sin(angle))
+                self.assertEqual(player['heading'], (heading+90)%360)
+                self.assertIsNone(player['in_vehicle'])
+                self.assertIsNone(player['at_hatch'])
+                self.assertEqual(self.mock.serving(v), 'player')
+                # An open cart keeps its existing distance rule and never pulls a walker back.
+                player.update(x=40., z=30.)
+                self.assertEqual(self.mock.serving(v), 'nobody')
+                self.mock.operate(v, 'close')
+                self.assertEqual((player['x'], player['z']), (40., 30.))
 
     def test_vehicle_buy_charges_the_dealers_price_as_the_games_purchase(self):
         money = self.mock.state['money']

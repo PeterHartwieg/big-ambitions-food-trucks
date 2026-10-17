@@ -1345,7 +1345,13 @@ class Mock:
                 if v['kind']=='truck':
                     self.activity_starting=True
                     self.walks.append((time.monotonic()+.05,lambda:self.at_hatch(v,'opened')))
-                else: v.update(serving='player',hatch_side='right')
+                else:
+                    v.update(serving='player',hatch_side='right')
+                    # Made-up unobstructed ground: mirror the runtime's non-customer serving pose. The mock
+                    # has no baked NavMesh and cannot exercise a blocked spot or the fallback search.
+                    angle=math.radians(v['heading'])
+                    player.update(x=v['x']-.85*math.cos(angle),y=v['y'],z=v['z']+.85*math.sin(angle),
+                                  heading=(v['heading']+90)%360)
         elif op=='back_to_hatch':
             if v['kind']!='truck' or not v['open'] or player['in_vehicle'] or player['carrying'] or player['at_hatch'] or self.walks:
                 raise ValueError("Back to the hatch isn't offered now: it needs an open truck and the player on foot, empty-handed and not at a hatch.")

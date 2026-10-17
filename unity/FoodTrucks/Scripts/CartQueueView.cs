@@ -98,6 +98,18 @@ namespace FoodTrucks
         public static int? QueueSide(string vehicleId) =>
             instance != null && instance.lines.TryGetValue(vehicleId, out var line) && line.Side != 0 ? line.Side : (int?)null;
 
+        // Lay out this opening's line before placing its server. Waiting for CheckLines would let the player
+        // take the right-hand serving place before the queue chose the left. No customers are spawned here.
+        internal static (int Side, Vector3? Window)? PrepareServing(VehicleController controller)
+        {
+            var self = instance;
+            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, controller.vehicleInstance.id);
+            if (self == null || !self.enabled || Suspended || vehicle?.IsOpen != true || vehicle.Service == null ||
+                DemandData.Rules == null) return null;
+            var line = self.EnsureLine(vehicle, controller);
+            return line.Side == 0 ? null : (line.Side, line.WindowPlace);
+        }
+
         // Where the open line's people stand, the window first, or null while no line is laid out (for the test bridge).
         public static IReadOnlyList<Vector3>? PlacesOf(string vehicleId) =>
             instance != null && instance.lines.TryGetValue(vehicleId, out var line) && line.HasPlaces ? line.Places : null;
@@ -209,13 +221,7 @@ namespace FoodTrucks
                 if (game.ActiveVehicleId == vehicle.VehicleId) continue;
                 var controller = ControllerOf(game, vehicle.VehicleId);
                 if (controller == null || Vector3.Distance(player, controller.transform.position) > ViewMetres) continue;
-                var kind = FoodTrucksMod.KindOf(controller.vehicleInstance?.vehicleTypeName) ?? "cart";
-                var limit = rules.Service.QueueLimit(kind, rules.Queue.MaxQueue);
-                var line = QueueLine.Create(vehicle.VehicleId, controller.transform, limit, vehicle.Service, WindowShape.For(kind));
-                line.OnSpawned = () => spawnedTotal++;
-                var id = vehicle.VehicleId;
-                line.Paid = customer => CartSelling.Paid(id, customer);
-                lines[vehicle.VehicleId] = line;
+                EnsureLine(vehicle, controller);
             }
 
             // The crew on shift stands at each window in view.
@@ -228,6 +234,24 @@ namespace FoodTrucks
                 var kind = FoodTrucksMod.KindOf(controller.vehicleInstance?.vehicleTypeName) ?? "cart";
                 WindowCrew.Sync(line.VehicleId, controller.transform, kind, line.WindowPlace, HireCrew.OnShift(vehicle, now), CartSelling.ServingNow(vehicle, kind));
             }
+        }
+
+        private QueueLine EnsureLine(VehicleState vehicle, VehicleController controller)
+        {
+            if (lines.TryGetValue(vehicle.VehicleId, out var existing))
+            {
+                if (ReferenceEquals(existing.Service, vehicle.Service)) return existing;
+                Retire(vehicle.VehicleId);
+            }
+            var rules = DemandData.Rules!;
+            var kind = FoodTrucksMod.KindOf(controller.vehicleInstance?.vehicleTypeName) ?? "cart";
+            var limit = rules.Service.QueueLimit(kind, rules.Queue.MaxQueue);
+            var line = QueueLine.Create(vehicle.VehicleId, controller.transform, limit, vehicle.Service!, WindowShape.For(kind));
+            line.OnSpawned = () => spawnedTotal++;
+            var id = vehicle.VehicleId;
+            line.Paid = customer => CartSelling.Paid(id, customer);
+            lines[id] = line;
+            return line;
         }
 
         private static VehicleController? ControllerOf(GameInstance game, string vehicleId)
