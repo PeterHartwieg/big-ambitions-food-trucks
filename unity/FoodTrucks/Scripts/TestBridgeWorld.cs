@@ -585,8 +585,21 @@ namespace FoodTrucks
                     var point = flat + Vector3.Project(along, controller.transform.forward) + outward * (halfWidth + 1.5f);
                     return (point, heading ?? Heading(-outward));
                 }
+                case "address":
+                {
+                    // Like a taxi to a building: 1.5 m out from its first entrance, away from the building, facing it.
+                    if (who != "player") throw new BridgeError("address: places the player at a building's entrance.");
+                    if (!AddressForm.IsMatch(id))
+                        throw new BridgeError($"address: takes a building's address as the game writes it, ba:street_<name>#<number>; got '{id}'.");
+                    var doors = World.EntrancesOf(id) ?? throw new BridgeError($"no building at {id} in this city");
+                    var building = World.BuildingAt(id);
+                    var door = doors[0];
+                    var outward = building == null ? Vector3.forward : Vector3.ProjectOnPlane(door - building.transform.position, Vector3.up);
+                    outward = outward.sqrMagnitude < 0.01f ? Vector3.forward : outward.normalized;
+                    return (door + outward * 1.5f, heading ?? Heading(-outward));
+                }
                 default:
-                    throw new BridgeError($"Unknown place '{place}': use bay:<site>, commissary:<site> or vehicle:<id>.");
+                    throw new BridgeError($"Unknown place '{place}': use bay:<site>, commissary:<site>, vehicle:<id> or address:<address>.");
             }
         }
 

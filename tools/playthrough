@@ -38,6 +38,11 @@ def main(argv=None, bridge=None, out=print):
     p.add_argument('--speed', type=float, default=20)
     p.add_argument('--day-timeout', type=float, default=900, help='Real seconds a game day may take (default 900)')
     p.add_argument('--reload-every', type=int, default=7, help='Load the day\'s save again every N days (days 1+N, 1+2N, ...; default 7, 0 never)')
+    p = sub.add_parser('watch', help='The referee: check a game someone else plays after each in-game 05:00, without acting')
+    p.add_argument('--run', required=True)
+    p.add_argument('--stop-file', help='Written with the reason on a hard failure (default build/playtest/<run>/STOP)')
+    p.add_argument('--poll', type=float, default=2.0, help='Real seconds between looks at the clock (default 2)')
+    p.add_argument('--polls', type=int, help=argparse.SUPPRESS)
     p = sub.add_parser('check', help="The checks again over a run's snapshots, and the log rules on a Player.log")
     p.add_argument('--run', required=True)
     p.add_argument('--log')
@@ -59,6 +64,11 @@ def main(argv=None, bridge=None, out=print):
                 runner.run_days(args.days)
                 out(f'{args.days} days run, every check passed: {run_dir / "ledger.csv"}')
             return 0
+        if args.cmd == 'watch':
+            runner = pt.Run(bridge or Bridge(), run_dir, log=out)
+            stop = args.stop_file or str(run_dir / 'STOP')
+            out(f'Watching; on a hard failure the game is paused and the reason written to {stop}.')
+            return runner.watch(stop, args.poll, getattr(args, 'polls', None))
         if args.cmd == 'check':
             results, log = pt.check_folder(run_dir, args.log, args.version)
             ok = all(r['ok'] for r in results)

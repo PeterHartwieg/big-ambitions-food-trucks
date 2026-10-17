@@ -436,6 +436,23 @@ class Mock:
                          'delivery_fees':entry['delivery_fees']/100,'profit':fleet_profit/100},
                 'fees_paid_at':sorted({site for site,d in self.fees_paid if d==day}),'vehicles':vehicles}
 
+    def places(self, args):
+        # The buildings round the player as the map shows them (the balance tool's city), no demand figures.
+        radius=max(20,min(500,num(args,'radius') if num(args,'radius') is not None else 150))
+        p=self.state['player']
+        sites={s['address']:s for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']}
+        near=sorted(((math.hypot(b['x']-p['x'],b['z']-p['z']),b) for b in CITY),key=lambda t:t[0])
+        out=[]
+        for d,b in near:
+            if d>radius or len(out)>=40: break
+            street,number=b['key'].replace('ba:street_','').split('#')
+            site=sites.get(b['key'])
+            business=(b.get('businessType') or '').replace('ba:businesstype_','') or None
+            out.append({'address':b['key'],'name':f'{number} {street.title()}','building_type':(b.get('buildingType') or '').replace('ba:buildingtype_','').title(),
+                        'business':business.title() if business else None,'business_type':business,'yours':False,
+                        'commissary':{'site':site['id'],'name':LOCALE.get(site['name'],site['id'])} if site else None,'distance':round(d)})
+        return {'radius':radius,'places':out}
+
     # ---- vehicle buy: the debug spawn beside the player, paid at the dealer's price ----
     def buy(self, args):
         kind=need(args,'kind','truck or cart')
@@ -448,6 +465,10 @@ class Mock:
         start=self.seq
         v=self.spawn(kind)
         v.update(x=player['x']+3.,z=player['z']+(6. if kind=='truck' else 2.))
+        # Bought at a commissary's door, the mock puts it in that commissary's bay (in game: wherever the spawn finds room).
+        for site in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']:
+            building=next((b for b in CITY if b['key']==site['address']),None)
+            if building and math.hypot(building['x']-player['x'],building['z']-player['z'])<=40: self.place_vehicle(v,site['id'])
         self.pay(-cents,'ba:transaction_vehiclebought')
         self.event(f"Test bridge: vehicle buy {kind}: {v['id']} for ${cents/100:,.2f}.")
         notices=[e['text'][8:] for e in self.ring if e['seq']>start and e['kind']=='notice']
@@ -1393,6 +1414,9 @@ class Mock:
             if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
             return self.day_summary(args)
         if cmd=='route': return self.route_command(args)
+        if cmd=='places':
+            self.require_city(cmd)
+            return self.places(args)
         if cmd=='fixture': return self.fixture(args)
         if cmd=='logistics':
             self.require_city(cmd)
@@ -1507,7 +1531,14 @@ class Mock:
                 elif kind=='vehicle':
                     if who!='player': raise ValueError('vehicle: places the player beside a vehicle.')
                     v=self.vehicle(identifier); x,z=v['x']+(2.6 if v['kind']=='truck' else 2.1),v['z']
-                else: raise ValueError(f"Unknown place '{place}': use bay:<site>, commissary:<site> or vehicle:<id>.")
+                elif kind=='address':
+                    if who!='player': raise ValueError('address: places the player at a building\'s entrance.')
+                    if not re.fullmatch(r'ba:street_[a-z0-9]+#[0-9]+',identifier):
+                        raise ValueError(f"address: takes a building's address as the game writes it, ba:street_<name>#<number>; got '{identifier}'.")
+                    building=next((b for b in CITY if b['key']==identifier),None)
+                    if building is None: raise ValueError(f'no building at {identifier} in this city')
+                    x,z=building['x']+6.,building['z']
+                else: raise ValueError(f"Unknown place '{place}': use bay:<site>, commissary:<site>, vehicle:<id> or address:<address>.")
             surface=None
             if place is None:
                 x,z=num(args,'x'),num(args,'z')
@@ -1741,7 +1772,7 @@ class Mock:
             self.event(f'Mock console: {line}')
             return {'output':[f'Mock console accepted: {line}']}
         if cmd=='quit': return {}
-        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, route, fixture, logistics, parks, day_summary, ui, shoot, save, load, new_game, quit, op.")
+        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, route, fixture, logistics, parks, day_summary, places, ui, shoot, save, load, new_game, quit, op.")
 
 
 class Handler(BaseHTTPRequestHandler):

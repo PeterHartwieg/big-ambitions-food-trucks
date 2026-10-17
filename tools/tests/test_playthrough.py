@@ -15,6 +15,7 @@ from offline_transport import OfflineSession, NAMESPACE
 
 PLAN = TOOLS.parent / 'tests/game/playthrough/phase-a.json'
 MAIN = runpy.run_path(str(TOOLS / 'playthrough'), run_name='playthrough_test')['main']
+PLAY = runpy.run_path(str(TOOLS / 'play'), run_name='play_test')['main']
 HOTDOG, TACOS = 'ba:itemname_hotdog', 'foodtrucks:itemname_tacos'
 
 
@@ -66,11 +67,18 @@ class CheckTests(unittest.TestCase):
         books = [txn(pt.SALES_TYPES[1], 26.0, 2), txn(pt.WAGE_TYPE, -110.0, 2), txn(pt.RENT_TYPE, -41.1, 2),
                  txn(pt.ORDER_TYPE, -1500.0, 2), txn(pt.PURCHASE_TYPE, -15000.0, 2), txn(pt.WAGE_TYPE, -99.0, 3)]
         pt.check_day_books(2, books, day, 1500_00, 15000_00)
+        self.assertEqual(pt.check_day_books(2, books, day, 1500_00, 15000_00), [])
+        # The game's other spending isn't ours: more wages or vehicles than the crews' and the runner's is a note.
+        notes = pt.check_day_books(2, books, summary(2, sales=26.0, wages=100.0, commissary_rent=41.1), 1500_00, 15000_00)
+        self.assertEqual(len(notes), 1)
+        self.assertIn('wages', notes[0])
+        self.assertEqual(len(pt.check_day_books(2, books + [txn('ba:transaction_rent', -900.0, 2)], day, 1500_00, 0)), 1)
+        # Less than ours, or any of our own lines off, stops the run.
         with self.assertRaises(pt.Violation) as caught:
-            pt.check_day_books(2, books, summary(2, sales=26.0, wages=100.0, commissary_rent=41.1), 1500_00, 15000_00)
+            pt.check_day_books(2, books, summary(2, sales=26.0, wages=120.0, commissary_rent=41.1), 1500_00, 15000_00)
         self.assertIn('wages', caught.exception.message)
         with self.assertRaises(pt.Violation):
-            pt.check_day_books(2, books, day, 1500_00, 0)
+            pt.check_day_books(2, books, summary(2, sales=27.0, wages=110.0, commissary_rent=41.1), 1500_00, 15000_00)
 
     def test_stock_is_conserved_per_food_with_deliveries_and_sales(self):
         prev = snap(2, '05:00', 0, {HOTDOG: 920}, {HOTDOG: 40}, [summary(1), summary(2, {HOTDOG: 0})])
@@ -102,6 +110,15 @@ class CheckTests(unittest.TestCase):
         pt.check_moves(snap(3, '05:00', 0, {}, {}, [], in_bay=False, x=100., z=50., week=night))
         with self.assertRaises(pt.Violation):
             pt.check_moves(snap(3, '05:00', 0, {}, {}, [], open_=True))
+        # The referee leaves the player's own vehicle alone, and a vehicle without a crewed route.
+        mine = snap(3, '05:00', 0, {}, {}, [], in_bay=False, x=100., z=50., week=[{'day': 'monday', 'stops': [{'open': '11:00', 'close': '14:00', 'x': 0, 'z': 0}]}])
+        mine['player_with'] = 'truck-1'
+        self.assertEqual(pt.check_moves(mine, crewed_only=True), [])
+        no_route = snap(3, '05:00', 0, {}, {}, [], in_bay=False, x=100., z=50.)
+        pt.check_moves(no_route, crewed_only=True)
+        problem = snap(3, '05:00', 0, {}, {}, [])
+        problem['vehicles'][0]['problem'] = 'overlap'
+        self.assertEqual(len(pt.check_moves(problem)), 1)
 
     def test_error_lines_stop_the_run(self):
         pt.check_events([{'kind': 'log', 'text': 'Crew sales paid in: …'}])
@@ -157,8 +174,8 @@ class PlaythroughRunTests(unittest.TestCase):
         self.assertEqual(self.main('setup', str(PLAN), '--run', 'a'), 0, self.lines)
         run = Path(self.folder.name) / 'a'
         meta = json.loads((run / 'run.json').read_text())
-        self.assertEqual(set(meta['vehicles']), {'truck', 'cart'})
-        self.assertEqual(sorted(p['cents'] for p in meta['purchases']), [1200_00, 15000_00])
+        self.assertEqual(set(meta['vehicles']), {'cart'})
+        self.assertEqual([p['cents'] for p in meta['purchases']], [1200_00])
         state = self.session.mock.read_state()
         types = {t['type'] for t in state['transactions_today']}
         self.assertIn('ba:transaction_vehiclebought', types)
@@ -166,7 +183,7 @@ class PlaythroughRunTests(unittest.TestCase):
         self.assertTrue(any("reloaded 'FT playtest d3'" in line for line in self.lines))
         ledger = pt.read_ledger(run / 'ledger.csv')
         self.assertEqual(sorted({int(r['day']) for r in ledger}), [1, 2, 3, 4])
-        self.assertEqual(len(ledger), 4 * 3)
+        self.assertEqual(len(ledger), 4 * 2)
         for r in ledger:
             if r['vehicle'] != 'fleet' and int(r['day']) >= 2:
                 self.assertGreater(float(r['revenue']), 0)
@@ -180,6 +197,26 @@ class PlaythroughRunTests(unittest.TestCase):
         self.assertIn('| Day |', report)
         saves = [n for n in self.session.mock.saves if n.startswith('FT playtest d')]
         self.assertEqual(sorted(saves), ['FT playtest d1', 'FT playtest d2', 'FT playtest d3', 'FT playtest d4', 'FT playtest d5'])
+
+    def test_growth_buys_the_truck_once_money_less_the_reserve_covers_it(self):
+        plan = json.loads(PLAN.read_text())
+        plan['growth'].update(enabled=True, reserve=1000)
+        path = Path(self.folder.name) / 'grow.json'
+        path.write_text(json.dumps(plan))
+        with self.session.mock.lock:
+            self.session.mock.state['money'] = 40000.0
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.assertEqual(self.main('setup', str(path), '--run', 'g'), 0, self.lines)
+        self.assertEqual(self.main('run', '--run', 'g', '--days', '3', '--reload-every', '0'), 0, self.lines)
+        meta = json.loads((Path(self.folder.name) / 'g' / 'run.json').read_text())
+        self.assertEqual(meta['grown']['day'], 3)
+        self.assertTrue(meta['grown']['ready'])
+        self.assertEqual(sorted(p['kind'] for p in meta['purchases']), ['cart', 'truck'])
+        truck = meta['vehicles']['truck']
+        rows = [r for r in pt.read_ledger(Path(self.folder.name) / 'g' / 'ledger.csv') if r['vehicle'] == truck]
+        self.assertGreater(float(next(r for r in rows if r['day'] == '4')['revenue']), 0)
+        self.assertEqual(self.main('report', '--run', 'g', '--balance', 'off'), 0)
+        self.assertIn('growth: truck', (Path(self.folder.name) / 'g' / 'report.md').read_text())
 
     def test_stock_that_vanishes_stops_the_run_with_the_food_and_place(self):
         self.session.bridge.call('save', {'name': 'FT playtest'})
@@ -292,3 +329,104 @@ class BridgeOpsParityTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class BlindPlayTests(unittest.TestCase):
+    """tools/play, the tester's only controls, and the referee watching it (playthrough watch)."""
+
+    def setUp(self):
+        self.session = OfflineSession().__enter__()
+        self.addCleanup(self.session.__exit__, None, None, None)
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.stop = str(Path(self.folder.name) / 'STOP')
+        self.lines = []
+
+    def play(self, *argv):
+        self.lines.clear()
+        return PLAY(list(argv), bridge=self.session.bridge, out=self.lines.append, stop_file=self.stop,
+                    memory=str(Path(self.folder.name) / 'memory.json'))
+
+    def test_the_manual_lists_the_commands_and_nothing_else_is_there(self):
+        import contextlib, io
+        text = io.StringIO()
+        with contextlib.redirect_stdout(text), self.assertRaises(SystemExit):
+            PLAY(['--help'])
+        for command in ('look', 'places', 'go ADDRESS', 'buy truck|cart', 'order SITE', 'crew assign', 'route add', 'time until'):
+            self.assertIn(command, text.getvalue())
+        import argparse
+        names = set(runpy.run_path(str(TOOLS / 'play'), run_name='play_test')['parser']()._subparsers._group_actions[0].choices)
+        self.assertEqual(names, {'look', 'notices', 'places', 'go', 'screen', 'ui', 'time', 'buy', 'vehicle', 'order', 'hire', 'licence',
+                                 'crew', 'route', 'save', 'load'})
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            PLAY(['money', 'set', '1000000'])
+
+    def test_controls_refuse_outside_a_playtest_save_and_past_the_speed_cap(self):
+        self.assertEqual(self.play('buy', 'cart'), 2)
+        self.assertIn("starts with 'FT playtest'", self.lines[0])
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.assertEqual(self.play('time', 'speed', '60'), 2)
+        self.assertEqual(self.play('save', 'FT mine'), 2)
+        self.assertEqual(self.play('load', 'FT mock'), 2)
+        self.assertEqual(self.play('vehicle', 'cart-1', 'teleport'), 2)
+
+    def test_a_blind_week_start_with_the_referee_watching(self):
+        # The fresh character's home is in Hell's Kitchen.
+        self.session.mock.state['player'].update(x=1440., z=420.)
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.assertEqual(self.play('places', '--radius', '500'), 0)
+        self.assertFalse(any('demand' in line or 'appetite' in line for line in self.lines))
+        commissary = next(line for line in self.lines if 'commissary' in line)
+        address = commissary.split()[2]
+        self.assertEqual(self.play('go', address), 0, self.lines)
+        self.assertEqual(self.play('buy', 'cart'), 0, self.lines)
+        cart = self.session.mock.state['vehicles'][0]['id']
+        for argv in (('vehicle', cart, 'rent_bay'), ('licence',), ('hire',)):
+            self.assertEqual(self.play(*argv), 0, self.lines)
+        employee = self.session.mock.read_state()['employees'][0]['id']
+        self.assertEqual(self.play('crew', 'assign', cart, employee), 0, self.lines)
+        self.assertEqual(self.play('order', 'hells-kitchen', 'ba:itemname_hotdoggrill', '1', 'Hotdog', '1'), 0, self.lines)
+        self.assertEqual(self.play('route', 'add', cart, 'ba:street_thirdstreet#6'), 0, self.lines)
+        self.assertEqual(self.play('look'), 0)
+        self.assertTrue(any('On order' in line for line in self.lines))
+
+        referee_bridge = pt_bridge(self.session)
+        referee = pt.Run(referee_bridge, Path(self.folder.name) / 'w', log=lambda *_: None)
+        import threading
+        result = {}
+        watcher = threading.Thread(target=lambda: result.update(code=referee.watch(self.stop, poll_s=.05, polls=400)))
+        watcher.start()
+        self.assertEqual(self.play('time', 'until', '+1', '08:05'), 0, self.lines)
+        self.assertEqual(self.play('vehicle', cart, 'enter'), 0, self.lines)  # the walk there waits for the clock
+        self.assertEqual(self.play('time', 'speed', '1'), 0)
+        import time as clock
+        deadline = clock.time() + 5
+        while self.session.mock.state['player']['in_vehicle'] != cart and clock.time() < deadline: clock.sleep(.02)
+        for argv in (('vehicle', cart, 'take', 'ba:itemname_hotdoggrill'), ('vehicle', cart, 'restock'), ('vehicle', cart, 'exit'),
+                     ('time', 'pause'), ('crew', 'auto', cart), ('time', 'until', '+1', '06:00')):
+            self.assertEqual(self.play(*argv), 0, (argv, self.lines))
+        clock.sleep(.5)
+        self.assertFalse(Path(self.stop).exists())
+        # Stock that vanishes behind the player's back: the referee stops the game and says why.
+        with self.session.mock.lock:
+            line = next(s for s in self.session.mock.state['commissary']['stock'] if s['key'] == HOTDOG)
+            line['amount'] -= 3
+        self.assertEqual(self.play('time', 'until', '+1', '06:00'), 0)
+        watcher.join(30)
+        self.assertEqual(result.get('code'), 2)
+        reason = Path(self.stop).read_text()
+        self.assertIn('stock', reason)
+        self.assertTrue(self.session.mock.state['clock']['paused'])
+        self.assertEqual(self.play('time', 'speed', '5'), 2)
+        self.assertIn('referee stopped', self.lines[0])
+        ledger = pt.read_ledger(Path(self.folder.name) / 'w' / 'ledger.csv')
+        self.assertTrue(ledger)
+
+
+def pt_bridge(session):
+    """A second client on the same mock, as the referee runs its own beside the tester's."""
+    from ftlib.bridge import Bridge
+    from offline_transport import MemoryHTTP
+    bridge = Bridge(session.url)
+    bridge.http = MemoryHTTP(session.mock)
+    return bridge

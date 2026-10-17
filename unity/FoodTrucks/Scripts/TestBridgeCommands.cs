@@ -36,6 +36,7 @@ namespace FoodTrucks
                 case "logistics": RequireCity(cmd); return Logistics(args);
                 case "parks": RequireCity(cmd); return Parks();
                 case "day_summary": RequireCity(cmd); return DaySummaryCommand(args);
+                case "places": RequireCity(cmd); return PlacesCommand(args);
                 case "route": RequireFtCity(cmd); return RouteCommand(args);
                 case "ui": return TestBridgeUi.Run(args);
                 case "shoot": RequireCity(cmd); return TestBridgeShoot.Shoot(args);
@@ -44,7 +45,7 @@ namespace FoodTrucks
                 case "new_game": return NewGame(args);
                 case "quit": return Quit();
                 default:
-                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, route, fixture, logistics, parks, day_summary, ui, shoot, save, load, new_game, quit, op.");
+                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, vehicle, commissary, crew, route, fixture, logistics, parks, day_summary, places, ui, shoot, save, load, new_game, quit, op.");
             }
         }
 

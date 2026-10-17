@@ -8,6 +8,7 @@ from collections import Counter
 import csv
 import json
 import math
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -19,6 +20,9 @@ ECONOMY = json.loads((ROOT / 'data/economy.json').read_text())
 FOODS = set(ECONOMY['products'])
 WEEK = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
 SAVE_PREFIX = 'FT playtest'
+# The dealer's prices, as the bridge's vehicle buy charges them (the vehicle type assets).
+PRICES = {kind: float(re.search(r'^\s*price: ([0-9.]+)', (ROOT / f'unity/FoodTrucks/Vehicles/Food{kind.title()}.asset').read_text(), re.M).group(1))
+          for kind in ('truck', 'cart')}
 SALES_TYPES = ('foodtrucks:transaction_sale', 'foodtrucks:transaction_crew_sales', 'foodtrucks:transaction_catering')
 WAGE_TYPE = 'ba:transaction_unassignedwage'
 RENT_TYPE = 'foodtrucks:transaction_commissary_rent'
@@ -32,10 +36,10 @@ SLACK_PER_TRANSACTION = .2
 BALANCE_BAND = .25
 # Money columns of the ledger, written in dollars with cents.
 MONEY_FIELDS = ('revenue', 'stock_cost', 'wages', 'commissary_rent', 'delivery_fees', 'fines', 'purchases', 'money_before', 'money_after',
-                'game_day_total')
+                'game_day_total', 'game_other')
 LEDGER_FIELDS = ('day', 'vehicle', 'kind', 'stops_served', 'minutes_open', 'sold', 'revenue', 'stock_cost', 'wages',
                  'commissary_rent', 'delivery_fees', 'fines', 'purchases', 'stock_start', 'stock_end', 'loaded', 'deliveries',
-                 'money_before', 'money_after', 'game_day_total')
+                 'money_before', 'money_after', 'game_day_total', 'game_other')
 
 
 class Violation(RuntimeError):
@@ -88,6 +92,7 @@ def snapshot(state, summaries, events=(), label=''):
             site[line['key']] = site.get(line['key'], 0) + line['amount']
     return {
         'label': label, 'save': state.get('save'), 'day': clock.get('day'), 'time': clock.get('time'),
+        'player_with': ((state.get('player') or {}).get('in_vehicle') or (state.get('player') or {}).get('at_hatch')),
         'weekday': (clock.get('weekday') or '').lower(), 'money': cents(state.get('money') or 0),
         'vehicles': vehicles, 'stock': stock,
         'orders': [{k: o.get(k) for k in ('n', 'site', 'item', 'units', 'total', 'due_day')} for o in commissary.get('orders') or []],
@@ -136,27 +141,37 @@ def check_money(prev, cur):
     return fresh
 
 
+OUR_TYPES = SALES_TYPES + (WAGE_TYPE, RENT_TYPE, ORDER_TYPE, FINE_TYPE, PURCHASE_TYPE)
+
+
 def check_day_books(day, transactions, summary, delivered_goods, purchases):
-    """One finished day: the mod's ledger (day_summary) against the game's transactions booked into that day, line by line.
+    """One finished day: the mod's own lines (day_summary) against the game's transactions of those types booked into
+    that day. The game's other spending (the apartment, taxes, other hires' wages, other vehicles) isn't ours: wages and
+    vehicle purchases may be above ours, which is returned as a note; below ours, or any other line off, stops the run.
     `delivered_goods`: cents of goods in the orders delivered that day; `purchases`: cents of vehicles the runner bought."""
+    notes = []
     of_day = [t for t in transactions if t['day'] == day]
     def booked(types):
         rows = [t for t in of_day if t['type'] in types]
         return -sum(cents(t['amount']) for t in rows) if types != SALES_TYPES else sum(cents(t['amount']) for t in rows), len(rows)
     vehicles = summary['vehicles']
     lines = [
-        ('sales', SALES_TYPES, sum(cents(v['sales']) + cents(v['catering']) for v in vehicles)),
-        ('wages', (WAGE_TYPE,), sum(cents(v['wages']) for v in vehicles)),
-        ('commissary rent', (RENT_TYPE,), sum(cents(v['commissary_rent']) for v in vehicles)),
-        ('overnight fines', (FINE_TYPE,), sum(cents(v['overnight_fines']) for v in vehicles)),
-        ('commissary orders', (ORDER_TYPE,), delivered_goods + cents(summary['fleet']['delivery_fees'])),
-        ('vehicle purchases', (PURCHASE_TYPE,), purchases),
+        ('sales', SALES_TYPES, sum(cents(v['sales']) + cents(v['catering']) for v in vehicles), False),
+        ('wages', (WAGE_TYPE,), sum(cents(v['wages']) for v in vehicles), True),
+        ('commissary rent', (RENT_TYPE,), sum(cents(v['commissary_rent']) for v in vehicles), False),
+        ('overnight fines', (FINE_TYPE,), sum(cents(v['overnight_fines']) for v in vehicles), False),
+        ('commissary orders', (ORDER_TYPE,), delivered_goods + cents(summary['fleet']['delivery_fees']), False),
+        ('vehicle purchases', (PURCHASE_TYPE,), purchases, True),
     ]
-    for name, types, expected in lines:
+    for name, types, expected, others in lines:
         got, count = booked(types)
-        if abs(got - expected) > slack(count):
+        if others and got > expected + slack(count):
+            notes.append(f"day {day}: the game booked {money_text(got)} of {name}, {money_text(got - expected)} more than the crews' and "
+                         "the runner's (another hire or vehicle of the player's)")
+        elif abs(got - expected) > slack(count):
             raise Violation('books', f"day {day}: the game booked {money_text(got)} of {name} in {count} transactions, "
                                      f"the mod's ledger and the runner's records say {money_text(expected)}", day)
+    return notes
 
 
 def sold_between(prev, cur, vehicle_id):
@@ -223,13 +238,14 @@ def check_stock(prev, cur, delivered):
     return sold_by
 
 
-def check_moves(snap):
+def check_moves(snap, crewed_only=False):
     """At 05:00 each vehicle stands in its own commissary's bay, or at a stop of yesterday's route that runs past
-    midnight; none is open otherwise, and Core finds no problem with a route."""
+    midnight, and none is open otherwise. A route Core finds a problem with is returned as a note."""
     yesterday = WEEK[(WEEK.index(snap['weekday']) - 1) % 7] if snap['weekday'] in WEEK else None
+    notes = [f"day {snap['day']}: {v['kind']} {v['id']}: Core's route check says {v['problem']}" for v in snap['vehicles'] if v['problem']]
     for v in snap['vehicles']:
-        if v['problem']:
-            raise Violation('moves', f"{v['kind']} {v['id']}: Core's route check says {v['problem']}", snap['day'])
+        if crewed_only and (not v['crew'] or not any(d['stops'] for d in v['week']) or snap.get('player_with') == v['id']):
+            continue  # the player's own vehicle goes where the player takes it
         site = snap['spaces'].get(v['id'])
         if site and v['in_bay'] and v['bay_site'] == site and not v['open']:
             continue
@@ -239,6 +255,7 @@ def check_moves(snap):
         where = f"at x {v['x']}, z {v['z']}" if v['x'] is not None else 'off the map'
         raise Violation('moves', f"{v['kind']} {v['id']} is {where}{', open' if v['open'] else ''} at day {snap['day']} {snap['time']}, "
                                  f"not in its bay at {site or 'its commissary (it has no space)'} or at an overnight stop", snap['day'])
+    return notes
 
 
 def check_events(events):
@@ -267,6 +284,8 @@ def ledger_rows(day, summary, prev, cur, delivered, purchases, transactions):
     at the two snapshots around the day (05:00 to 05:00 in the day loop)."""
     rows = []
     game_total = sum(cents(t['amount']) for t in transactions if t['day'] == day)
+    # Everything the game booked that day that isn't one of the mod's lines, a crew wage or a vehicle bought.
+    other = sum(cents(t['amount']) for t in transactions if t['day'] == day and t['type'] not in OUR_TYPES)
     for v in summary['vehicles']:
         start = next((x['stock'] for x in prev['vehicles'] if x['id'] == v['id']), {})
         end = next((x['stock'] for x in cur['vehicles'] if x['id'] == v['id']), {})
@@ -278,7 +297,7 @@ def ledger_rows(day, summary, prev, cur, delivered, purchases, transactions):
             'wages': cents(v['wages']), 'commissary_rent': cents(v['commissary_rent']), 'delivery_fees': 0,
             'fines': cents(v['overnight_fines']), 'purchases': sum(p['cents'] for p in purchases if p['id'] == v['id'] and p['day'] == day),
             'stock_start': _items(start), 'stock_end': _items(end), 'loaded': _items({k: n for k, n in loaded.items() if n}),
-            'deliveries': '', 'money_before': prev['money'], 'money_after': cur['money'], 'game_day_total': game_total,
+            'deliveries': '', 'money_before': prev['money'], 'money_after': cur['money'], 'game_day_total': game_total, 'game_other': other,
         })
     rows.append({
         'day': day, 'vehicle': 'fleet', 'kind': '', 'stops_served': '', 'minutes_open': '', 'sold': '',
@@ -286,7 +305,7 @@ def ledger_rows(day, summary, prev, cur, delivered, purchases, transactions):
         'delivery_fees': cents(summary['fleet']['delivery_fees']), 'fines': '', 'purchases': sum(p['cents'] for p in purchases if p['day'] == day),
         'stock_start': '', 'stock_end': '', 'loaded': '',
         'deliveries': _items(Counter({f"{o['site']}/{o['item']}": o['units'] for o in delivered})),
-        'money_before': prev['money'], 'money_after': cur['money'], 'game_day_total': game_total,
+        'money_before': prev['money'], 'money_after': cur['money'], 'game_day_total': game_total, 'game_other': other,
     })
     return rows
 
@@ -448,7 +467,7 @@ class Run:
             raise Violation('guard', f'{self.folder} already holds a run; pick another --run name')
         health = self.guard()
         self.meta = {'plan': plan, 'save': health['save'], 'vehicles': {}, 'purchases': [], 'orders': [], 'events_next': 1,
-                     'checked_days': [], 'findings': [], 'stopped': None, 'started': time.strftime('%Y-%m-%d %H:%M:%S')}
+                     'checked_days': [], 'findings': [], 'notes': [], 'stopped': None, 'started': time.strftime('%Y-%m-%d %H:%M:%S')}
         self.folder.mkdir(parents=True, exist_ok=True)
         self.save_meta()
         self.call('time', {'pause': True})
@@ -456,66 +475,92 @@ class Run:
         if state['vehicles']:
             raise Violation('guard', f"the save already has {len(state['vehicles'])} food vehicles; Phase A starts from a fresh character")
         if plan.get('starting_money') is not None:
-            # A fresh character can't pay for a truck: the plan's starting balance, set before the books start (no transaction).
+            # Optional: a starting balance set before the books start (no transaction). Phase A keeps the character's own.
             self.call('money', {'set': plan['starting_money']})
         before = self.take('setup start')
-        site = plan['commissary']
-        self.log(f'Setup on day {before["day"]} {before["time"]}: {len(plan["vehicles"])} vehicles at {site}.')
-        self.call('teleport', {'who': 'player', 'place': f'commissary:{site}'})
-        for v in plan['vehicles']:
-            reply = self.done(self.call('vehicle', {'op': 'buy', 'kind': v['kind']}), f"buying the {v['name']} ({v['kind']})")
-            self.meta['vehicles'][v['name']] = reply['id']
-            self.meta['purchases'].append({'id': reply['id'], 'kind': v['kind'], 'cents': cents(reply['price']), 'day': before['day']})
-            self.log(f"  bought the {v['name']}: {reply['id']} for {money_text(cents(reply['price']))}")
-            self.save_meta()
-        for v in plan['vehicles']:
-            vid = self.meta['vehicles'][v['name']]
-            self.call('teleport', {'who': vid, 'place': f'bay:{site}', 'clear': True})
-            self.done(self.call('vehicle', {'id': vid, 'op': 'rent_bay'}), f"renting a space at {site} for the {v['name']}")
-        if plan.get('licence', 'debug') == 'debug':
-            # The debug action grants the vendor licence and a permit for every food vehicle, free of charge (no transaction).
-            self.call('debug', {'action': 'licence'})
-        for v in plan['vehicles']:
-            vid = self.meta['vehicles'][v['name']]
-            for _ in range(v.get('crew', 1)):
-                self.call('debug', {'action': 'hire'})
-                free = self.state()['employees']
-                if not free: raise Violation('refused', "the debug hire left no unassigned hire to put on the crew")
-                self.done(self.call('crew', {'op': 'assign', 'vehicle': vid, 'employee_id': free[0]['id']}), f"putting {free[0]['name']} on the {v['name']}")
-        batch, boxes = [], 0
-        for line in plan['orders'] + [None]:
-            if line is None or boxes + line['boxes'] > 10:
-                if batch:
-                    reply = self.call('commissary', {'op': 'order', 'site': site, 'items': batch})
-                    for o in reply['orders']:
-                        self.meta['orders'].append({'n': o['n'], 'site': o['site'], 'item': o['item'], 'units': o['units'],
-                                                    'goods': cents(o['goods']), 'due_day': o['due_day']})
-                batch, boxes = [], 0
-                if line is None: break
-            batch.append({'item': line['item'], 'boxes': line['boxes']})
-            boxes += line['boxes']
-        self.save_meta()
-        for v in plan['vehicles']:
-            vid = self.meta['vehicles'][v['name']]
-            for address in v['stops']:
-                self.done(self.call('route', {'op': 'add_stop', 'vehicle': vid, 'address': address, 'days': 'all'}),
-                          f"adding the stop by {address} to the {v['name']}'s week")
+        self.log(f'Setup on day {before["day"]} {before["time"]}: {len(plan["vehicles"])} vehicles at {plan["commissary"]}, money {money_text(before["money"])}.')
+        due = self.establish(plan['vehicles'], plan['orders'], before['day'], licence=plan.get('licence', 'debug') == 'debug')
         self.save_game()
         # The order arrives at 08:00 the next morning: fit the equipment and fill up in the bay, then plan the shifts.
-        due = max(o['due_day'] for o in self.meta['orders'])
         self.run_clock_to(due, '08:05')
-        for v in plan['vehicles']:
-            self.fit(v, self.meta['vehicles'][v['name']])
-        for v in plan['vehicles']:
-            vid = self.meta['vehicles'][v['name']]
-            self.done(self.call('crew', {'op': 'auto_schedule', 'vehicle': vid}), f"the auto schedule for the {v['name']}")
-        self.call('time', {'pause': True})
+        self.ready(plan['vehicles'])
         after = self.take('setup end')
         self.meta['first_run_day'] = after['day']
         self.check_window(before, after)
         self.save_game()
         self.log(f'Setup done on day {after["day"]} {after["time"]}: money {money_text(after["money"])}.')
         return after
+
+    def establish(self, vehicles, orders, day, licence=False):
+        """Buys the vehicles, rents their spaces, hires their crews, orders the stock and adds the stops. Returns the
+        day the order arrives."""
+        site = self.meta['plan']['commissary']
+        self.call('teleport', {'who': 'player', 'place': f'commissary:{site}'})
+        for v in vehicles:
+            reply = self.done(self.call('vehicle', {'op': 'buy', 'kind': v['kind']}), f"buying the {v['name']} ({v['kind']})")
+            self.meta['vehicles'][v['name']] = reply['id']
+            self.meta['purchases'].append({'id': reply['id'], 'kind': v['kind'], 'cents': cents(reply['price']), 'day': day})
+            self.log(f"  bought the {v['name']}: {reply['id']} for {money_text(cents(reply['price']))}")
+            self.save_meta()
+        for v in vehicles:
+            vid = self.meta['vehicles'][v['name']]
+            self.call('teleport', {'who': vid, 'place': f'bay:{site}', 'clear': True})
+            self.done(self.call('vehicle', {'id': vid, 'op': 'rent_bay'}), f"renting a space at {site} for the {v['name']}")
+        if licence:
+            # The debug action grants the vendor licence and a permit for every food vehicle, free of charge (no transaction).
+            self.call('debug', {'action': 'licence'})
+        for v in vehicles:
+            vid = self.meta['vehicles'][v['name']]
+            for _ in range(v.get('crew', 1)):
+                self.call('debug', {'action': 'hire'})
+                free = self.state()['employees']
+                if not free: raise Violation('refused', "the debug hire left no unassigned hire to put on the crew")
+                self.done(self.call('crew', {'op': 'assign', 'vehicle': vid, 'employee_id': free[0]['id']}), f"putting {free[0]['name']} on the {v['name']}")
+        placed = []
+        batch, boxes = [], 0
+        for line in list(orders) + [None]:
+            if line is None or boxes + line['boxes'] > 10:
+                if batch:
+                    reply = self.call('commissary', {'op': 'order', 'site': site, 'items': batch})
+                    for o in reply['orders']:
+                        placed.append({'n': o['n'], 'site': o['site'], 'item': o['item'], 'units': o['units'],
+                                       'goods': cents(o['goods']), 'due_day': o['due_day']})
+                batch, boxes = [], 0
+                if line is None: break
+            batch.append({'item': line['item'], 'boxes': line['boxes']})
+            boxes += line['boxes']
+        self.meta['orders'].extend(placed)
+        self.save_meta()
+        for v in vehicles:
+            vid = self.meta['vehicles'][v['name']]
+            for address in v['stops']:
+                self.done(self.call('route', {'op': 'add_stop', 'vehicle': vid, 'address': address, 'days': 'all'}),
+                          f"adding the stop by {address} to the {v['name']}'s week")
+        return max((o['due_day'] for o in placed), default=day + 1)
+
+    def ready(self, vehicles):
+        """After the delivery: fit and fill each vehicle in the bay, then the crews' auto schedule."""
+        for v in vehicles:
+            self.fit(v, self.meta['vehicles'][v['name']])
+        for v in vehicles:
+            vid = self.meta['vehicles'][v['name']]
+            self.done(self.call('crew', {'op': 'auto_schedule', 'vehicle': vid}), f"the auto schedule for the {v['name']}")
+        self.call('time', {'pause': True})
+
+    def grow(self, cur):
+        """The plan's growth: once money less the reserve covers the next vehicle's price, buy it with its crew, stock and
+        stops, as a player would. Returns True when it did."""
+        growth = self.meta['plan'].get('growth') or {}
+        if not growth.get('enabled') or self.meta.get('grown') is not None: return False
+        vehicles = growth['vehicles']
+        price = sum(cents(PRICES[v['kind']]) for v in vehicles)
+        if cur['money'] - cents(growth.get('reserve', 0)) < price: return False
+        self.log(f"  growth on day {cur['day']}: money {money_text(cur['money'])} covers {money_text(price)} with "
+                 f"{money_text(cents(growth.get('reserve', 0)))} kept; buying {', '.join(v['name'] for v in vehicles)}.")
+        due = self.establish(vehicles, growth.get('orders', []), cur['day'])
+        self.meta['grown'] = {'day': cur['day'], 'due': due}
+        self.save_meta()
+        return True
 
     def fit(self, v, vid):
         """In the bay: the player gets in, takes each piece of equipment from the commissary's stock, fills up and parks."""
@@ -564,6 +609,19 @@ class Run:
             if self.reload_every and (day - 1) % self.reload_every == 0:
                 cur = self.reload(name, cur)
             self.apply_changes(day)
+            grown = self.meta.get('grown')
+            if grown and grown['due'] == day and not grown.get('ready'):
+                self.run_clock_to(day, '08:05')
+                self.ready(self.meta['plan']['growth']['vehicles'])
+                after = self.take(f'day {day} grown')
+                self.check_window(cur, after)
+                grown['ready'] = True
+                self.save_meta()
+                cur = after
+            elif self.grow(cur):
+                after = self.take(f'day {day} buying')
+                self.check_window(cur, after)
+                cur = after
             prev = cur
         return prev
 
@@ -606,7 +664,7 @@ class Run:
             self.log(f"  change on day {day}: {change.get('why', change['op'])}.")
 
     # -- checks over a window --
-    def check_window(self, prev, cur, moves=False):
+    def check_window(self, prev, cur, moves=False, crewed_only=False):
         try:
             check_events(cur['events'])
             check_money(prev, cur)
@@ -614,14 +672,15 @@ class Run:
             self.meta.setdefault('refused', [])
             new_refusals = refused_orders(cur['events']) - set(self.meta['refused'])
             if new_refusals:
-                raise Violation('refused', f"commissary orders {', '.join(map(str, sorted(new_refusals)))} weren't delivered: the payment was refused "
-                                           '(see events.jsonl)', cur['day'])
-            refused = set(self.meta['refused'])
+                self.note(f"day {cur['day']}: commissary orders {', '.join(map(str, sorted(new_refusals)))} weren't delivered: the payment was "
+                          'refused (see events.jsonl)')
+            refused = set(self.meta['refused']) | new_refusals
             settled = {d['n'] for d in self.meta['delivered']} | refused
             placed = [o for o in self.meta['orders'] if o['n'] not in settled]
             delivered = delivered_between(prev, cur, placed, refused)
             check_stock(prev, cur, delivered)
-            if moves: check_moves(cur)
+            if moves:
+                for text in check_moves(cur, crewed_only): self.note(text)
             self.meta['refused'] = sorted(refused)
             for o in delivered:
                 # Orders arrive at 08:00 on their due day and are paid then.
@@ -631,7 +690,7 @@ class Run:
                 summary = cur['summaries'][str(day)]
                 goods = sum(self.goods(o) for o in self.meta['delivered'] if o['day'] == day)
                 bought = sum(p['cents'] for p in self.meta['purchases'] if p['day'] == day)
-                check_day_books(day, cur['transactions'], summary, goods, bought)
+                for text in check_day_books(day, cur['transactions'], summary, goods, bought): self.note(text)
                 day_start = self.snapshot_at(day, '05:00') or prev
                 append_ledger(self.folder / 'ledger.csv', ledger_rows(day, summary, day_start, cur,
                                                                      [o for o in self.meta['delivered'] if o['day'] == day],
@@ -641,6 +700,75 @@ class Run:
         except Violation as violation:
             self.record_violation(violation)
             raise
+
+    # -- the referee: watch a game someone else plays --
+    def watch(self, stop_file, poll_s=2.0, polls=None):
+        """Takes a snapshot after each in-game 05:00 and runs the checks; changes nothing. On a hard failure it pauses the
+        game and writes the reason to `stop_file`. Returns 0 when `polls` ran out, 2 after a stop."""
+        if self.meta is None:
+            health = self.guard()
+            self.meta = {'mode': 'watch', 'plan': {'vehicles': [], 'changes': []}, 'save': health['save'], 'vehicles': {}, 'purchases': [],
+                         'orders': [], 'events_next': 1, 'checked_days': [], 'findings': [], 'notes': [], 'stopped': None,
+                         'started': time.strftime('%Y-%m-%d %H:%M:%S')}
+            self.folder.mkdir(parents=True, exist_ok=True)
+            self.save_meta()
+        if self.meta.get('stopped'):
+            raise Violation('guard', f"this run stopped at {self.meta['stopped']['check']}: {self.meta['stopped']['message']}")
+        snaps = self.snapshots()
+        prev = snaps[-1] if snaps else self.take('watch start')
+        self.learn(prev)
+        if not snaps: self.meta['first_run_day'] = prev['day'] + 1
+        self.save_meta()
+        count = 0
+        while polls is None or count < polls:
+            count += 1
+            if os.path.exists(stop_file): return 2
+            health = self.bridge.health()
+            if health.get('scene') == 'city' and health.get('day') and (health['day'], health['time']) >= (prev['day'] + 1, '05:00'):
+                if not (health.get('save') or '').startswith(SAVE_PREFIX):
+                    self.note(f"day {health['day']}: the save is now '{health.get('save')}'; the referee only checks FT playtest saves")
+                else:
+                    cur = self.take(f"day {health['day']} 05:00")
+                    self.learn(cur)
+                    try:
+                        if cur['day'] - prev['day'] > 1:
+                            self.note(f"day {cur['day']}: {cur['day'] - prev['day']} days passed between two looks (a sleep or a load?); "
+                                      'money and stock not reconciled for them')
+                            check_events(cur['events'])
+                        else:
+                            self.check_window(prev, cur, moves=True, crewed_only=True)
+                    except Violation as violation:
+                        if self.meta.get('stopped') is None: self.record_violation(violation)
+                        try: self.call('time', {'pause': True})
+                        except Exception: pass
+                        Path(stop_file).write_text(f"day {cur['day']} {cur['time']}, {violation.check}: {violation.message}\n")
+                        self.log(f'STOP: {violation.check}: {violation.message}')
+                        return 2
+                    self.log(f"Day {cur['day']} {cur['time']}: money {money_text(cur['money'])}; checks pass.")
+                    prev = cur
+            time.sleep(poll_s)
+        return 0
+
+    def learn(self, snap):
+        """What the player did since the last look, as the referee can see it: new orders and vehicles bought."""
+        known = {o['n'] for o in self.meta['orders']}
+        for o in snap['orders']:
+            if o['n'] not in known:
+                self.meta['orders'].append({**o, 'goods': cents(o.get('total') or 0)})
+        owned = {p['id'] for p in self.meta['purchases']}
+        bought = [t for t in snap['transactions'] if t['type'] == PURCHASE_TYPE]
+        for v in snap['vehicles']:
+            if v['id'] in owned: continue
+            paid = next((t for t in bought if cents(t['amount']) == -cents(PRICES[v['kind']])), None)
+            if paid is not None:
+                bought.remove(paid)
+                self.meta['purchases'].append({'id': v['id'], 'kind': v['kind'], 'cents': cents(PRICES[v['kind']]), 'day': paid['day']})
+            self.meta['vehicles'].setdefault(v['id'], v['id'])
+
+    def note(self, text):
+        # Something odd that doesn't stop the run: in run.json's notes and the report.
+        self.meta.setdefault('notes', []).append(text)
+        self.log(f'  note: {text}')
 
     def goods(self, order):
         placed = next((o for o in self.meta['orders'] if o['n'] == order['n']), None)
@@ -699,6 +827,10 @@ def write_report(folder, balance_rows=None, balance_note=None):
     for v in plan.get('vehicles', []):
         out.append(f"- {v['name']} ({v['kind']}, `{meta['vehicles'].get(v['name'])}`): crew {v.get('crew')}, foods {', '.join(v['foods'])}, "
                    f"stops by {', '.join(v['stops'])}.")
+    grown = meta.get('grown')
+    for v in ((plan.get('growth') or {}).get('vehicles', []) if grown else []):
+        out.append(f"- Day {grown['day']}, growth: {v['name']} ({v['kind']}, `{meta['vehicles'].get(v['name'])}`): crew {v.get('crew')}, "
+                   f"foods {', '.join(v['foods'])}, stops by {', '.join(v['stops'])}.")
     for c in meta.get('changes_done', []):
         out.append(f"- Day {c['day']}: {c.get('why', c['op'])}.")
     out.append('')
@@ -726,12 +858,14 @@ def write_report(folder, balance_rows=None, balance_note=None):
     out.append('## Findings')
     out.append('')
     findings = meta.get('findings', [])
-    if findings:
-        for f in findings:
-            out.append(f"- Day {f['day']}, {f['check']}: {f['message']}")
-            if f.get('details', {}).get('event'):
-                out.append(f"  - log line: `{f['details']['event']['text']}`")
-    else:
+    notes = meta.get('notes', [])
+    for f in findings:
+        out.append(f"- Day {f['day']}, {f['check']} (stopped the run): {f['message']}")
+        if f.get('details', {}).get('event'):
+            out.append(f"  - log line: `{f['details']['event']['text']}`")
+    for n in notes:
+        out.append(f"- Note, {n}")
+    if not findings and not notes:
         out.append('None.')
     out.append('')
     out.append('## Balance against tools/balance')

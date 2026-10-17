@@ -1,19 +1,10 @@
 {
   "name": "phase-a",
-  "about": "Phase A of docs/ai-playtest-plan.md: one truck and one cart run by their crews from the Hell's Kitchen commissary for a week. The truck works the district's three premium spots (data/pitches.json); the cart three buildings near the commissary, since a pushed cart walks between stops. Every stop takes the default hours (from 11:00, three hours each, as the map pick gives them). A fresh character can't pay for a truck, so the run starts the books at starting_money (set with the bridge's money, before the first snapshot); the licence and permits come from the debug action, free.",
+  "about": "Phase A of docs/ai-playtest-plan.md, started as a player would: one cart run by its crew from the Hell's Kitchen commissary, paid from the fresh character's own money. The cart works three buildings near the commissary, since a pushed cart walks between stops; every stop takes the default hours (from 11:00, three hours each, as the map pick gives them). The licence and permits come from the debug action, free. Growth is off here: with it on, the run buys the truck, its crew, stock and route once money less the reserve covers the truck.",
   "save": "FT playtest",
-  "starting_money": 40000,
   "commissary": "hells-kitchen",
   "licence": "debug",
   "vehicles": [
-    {
-      "name": "truck",
-      "kind": "truck",
-      "crew": 2,
-      "equipment": ["ba:itemname_hotdoggrill", "foodtrucks:itemname_griddle"],
-      "foods": ["ba:itemname_hotdog", "foodtrucks:itemname_tacos"],
-      "stops": ["ba:street_secondstreet#3", "ba:street_fourthstreet#4", "ba:street_fourthavenue#22"]
-    },
     {
       "name": "cart",
       "kind": "cart",
@@ -24,15 +15,33 @@
     }
   ],
   "orders": [
-    { "item": "ba:itemname_hotdoggrill", "boxes": 2 },
-    { "item": "foodtrucks:itemname_griddle", "boxes": 1 },
+    { "item": "ba:itemname_hotdoggrill", "boxes": 1 },
     { "item": "ba:itemname_industrialcoffeemachine", "boxes": 1 },
-    { "item": "ba:itemname_hotdog", "boxes": 2 },
-    { "item": "foodtrucks:itemname_tacos", "boxes": 1 },
+    { "item": "ba:itemname_hotdog", "boxes": 1 },
     { "item": "ba:itemname_cupofcoffee", "boxes": 1 }
   ],
+  "growth": {
+    "enabled": false,
+    "reserve": 5000,
+    "vehicles": [
+      {
+        "name": "truck",
+        "kind": "truck",
+        "crew": 2,
+        "equipment": ["ba:itemname_hotdoggrill", "foodtrucks:itemname_griddle"],
+        "foods": ["ba:itemname_hotdog", "foodtrucks:itemname_tacos"],
+        "stops": ["ba:street_secondstreet#3", "ba:street_fourthstreet#4", "ba:street_fourthavenue#22"]
+      }
+    ],
+    "orders": [
+      { "item": "ba:itemname_hotdoggrill", "boxes": 1 },
+      { "item": "foodtrucks:itemname_griddle", "boxes": 1 },
+      { "item": "ba:itemname_hotdog", "boxes": 1 },
+      { "item": "foodtrucks:itemname_tacos", "boxes": 1 }
+    ]
+  },
   "changes": [
-    { "day": 4, "op": "paste_day", "vehicle": "truck", "from": "monday", "to": ["saturday"],
+    { "day": 4, "op": "paste_day", "vehicle": "cart", "from": "monday", "to": ["saturday"],
       "why": "a player copies Monday's route onto Saturday" },
     { "day": 4, "op": "shift", "vehicle": "cart", "crew": 0, "weekday": "sunday", "start": 9, "end": 21,
       "why": "a player starts the cart's Sunday shift an hour earlier" }

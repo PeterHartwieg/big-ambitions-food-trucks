@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
+using Helpers;
+using Streets;
 using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks
@@ -57,6 +59,46 @@ namespace FoodTrucks
                 },
                 ["fees_paid_at"] = new JArray(report.FeesPaidAt),
                 ["vehicles"] = vehicles,
+            };
+        }
+
+        // ---- places ----
+
+        // { "radius"?: 150 }: the buildings round the player as the map shows them: address, street, building type,
+        // the business there (name and type, whether it is the player's) and the mod's commissaries. No demand
+        // figures. Nearest first, at most 40. Reads only.
+        private static JToken PlacesCommand(JObject args)
+        {
+            var radius = Math.Max(20, Math.Min(500, Num(args, "radius") ?? 150));
+            var at = PlayerHelper.GetPosition();
+            var registrations = World.Registrations();
+            var sites = DemandData.Commissaries?.Sites ?? new List<FoodTrucks.Core.Commissary.CommissarySite>();
+            var list = new List<(double Distance, JObject Entry)>();
+            foreach (var (controller, doors) in World.AllBuildings())
+            {
+                var address = controller.building?.Address;
+                if (address == null) continue;
+                var distance = doors.Min(d => Math.Sqrt((d.x - at.x) * (d.x - at.x) + (d.z - at.z) * (d.z - at.z)));
+                if (distance > radius) continue;
+                var key = World.AddressKey(address.streetName, address.streetNumber);
+                registrations.TryGetValue((address.streetName, address.streetNumber), out var registration);
+                var hasBusiness = registration != null && registration.businessTypeName != "ba:businesstype_empty";
+                var site = sites.FirstOrDefault(s => s.Address == key);
+                list.Add((distance, new JObject
+                {
+                    ["address"] = key, ["name"] = address.ToFormattedString(),
+                    ["building_type"] = Localizor.LocalizorManager.GetLocalization(controller.building!.BuildingType, null),
+                    ["business"] = hasBusiness ? registration!.BusinessName : null,
+                    ["business_type"] = hasBusiness ? Localizor.LocalizorManager.GetLocalization(registration!.businessTypeName, null) : null,
+                    ["yours"] = registration?.RentedByPlayer ?? false,
+                    ["commissary"] = site == null ? null : new JObject { ["site"] = site.Id, ["name"] = Localizor.LocalizorManager.GetLocalization(site.Name, null) },
+                    ["distance"] = Math.Round(distance),
+                }));
+            }
+            return new JObject
+            {
+                ["radius"] = radius,
+                ["places"] = new JArray(list.OrderBy(p => p.Distance).Take(40).Select(p => p.Entry)),
             };
         }
 
