@@ -298,7 +298,7 @@ namespace FoodTrucks.Core.Fleet
         // timed from where it really is, and only when someone is on shift for the whole drive), and one at i opens once
         // the stop's hours have begun. A vehicle in its commissary's bay restocks first, once per leg (CrewRestock): before
         // it leaves, or at its stop with nothing to sell. A vehicle with nothing to sell leaves only for a stop in its own
-        // commissary's bay (VehicleWhere.BayStops). With no stop ahead, a crew that owes the drive back
+        // commissary's bay (VehicleWhere.BayStops), or else back to the bay. With no stop ahead, a crew that owes the drive back
         // (VehicleState.ReturnPending) drives back as soon as someone is on shift for the whole drive.
         public HireAction Step(VehicleState vehicle, long now, VehicleWhere where, double gameSpeed = 1.0)
         {
@@ -352,7 +352,10 @@ namespace FoodTrucks.Core.Fleet
                 if (where.StayPut) return HireAction.None;
                 if (CrewRestock.Due(vehicle, want, where)) return new HireAction(HireActionKind.Restock, want.StopIndex);
                 // Sold out: no point driving to a pitch, but a stop in its own bay is where it restocks (review round 2).
-                if (!where.HasStock && where.BayStops?.Contains(want.StopIndex) != true) return HireAction.None;
+                // With a bay to go back to, it drives there now, while someone is on shift: the plan's drive back is
+                // timed from the stop it won't reach, and from where it stands it may not fit the shift any more, which
+                // left a crewed truck away from its bay (and fined at 04:00) until its next shift (soak seed 3).
+                if (!where.HasStock && where.BayStops?.Contains(want.StopIndex) != true) return Home(vehicle, now, where, gameSpeed);
                 var minutes = Travel.Minutes(rules, distance, Travel.ModeFor(vehicle.VehicleType), gameSpeed);
                 var arrives = now + Math.Max(1, minutes);
                 // Moved away by the player too far to make it back before the stop closes: wait for the next one.

@@ -36,6 +36,8 @@ internal sealed partial class SoakWorld
     // owed the drive back with a fully staffed route.
     private int homeTrips, delayedHome, midnightShiftEdits;
     private readonly Dictionary<string, int> owedNights = new();
+    // Vehicles that had a HomeChance since the last midnight.
+    private readonly HashSet<string> homeChance = new();
 
     // Each commissary's bay in the soak's world.
     private static (double X, double Z) BayAt(string site) => site == "a" ? (0, 0) : (600, 0);
@@ -294,6 +296,7 @@ internal sealed partial class SoakWorld
             var from = HireRunner.PlanFrom(v, van.X, van.Z);
             var home = HomeOf(v);
             runner.EnsurePlan(v, t, from.X, from.Z, home: home);
+            var homeNow = HomeChance(v, t, home);
             for (var guard = 0; guard < 4; guard++)
             {
                 // In the bay of its own commissary space with stock there: the crew may restock (CrewRestock).
@@ -302,6 +305,10 @@ internal sealed partial class SoakWorld
                     hasStock: Stock(v).Values.Any(n => n > 0), stayPut: Awake && atWindow == v.VehicleId,
                     canRestock: ownBay, stockKey: ownBay ? CrewRestock.StockKey(ShippedData.Tables, v.VehicleType, Lines(v), Available(van.Bay!)) : null,
                     home: home));
+                // Free to drive back, owing it, with crew on shift for the whole drive: it goes now.
+                if (guard == 0 && homeNow)
+                    Require(action.Kind == HireActionKind.Depart && action.Stop == HireSchedules.HomeIndex,
+                        $"an owed drive back didn't leave with crew on shift for all of it: {v.VehicleId} got {action.Kind} {action.Stop}");
                 if (action.Kind == HireActionKind.None) break;
                 Note($"{v.VehicleId}: route {action.Kind} stop {action.Stop}");
                 switch (action.Kind)
@@ -358,6 +365,22 @@ internal sealed partial class SoakWorld
         // CartSelling.SoldThroughOf. Only Advance moves the open window's clock.
         van.RoutedThrough = until;
         now = hourStart;
+    }
+
+    // Whether the vehicle stands idle away from its bay owing the drive back with nothing planned, free to go (no skip,
+    // not held by the player) and with crew on shift for the whole drive from now; noted for CheckOwedReturns.
+    private bool HomeChance(VehicleState v, long t, (double X, double Z)? home)
+    {
+        var van = vans[v.VehicleId];
+        if (home == null || !v.ReturnPending || v.Transit != null || v.IsOpen || van.Property || (Awake && atWindow == v.VehicleId) ||
+            v.Crew.Count == 0 || v.Shifts.Any(p => p.Legs.Any(l => l.End > t)) ||
+            (v.Skipped != null && v.Skipped.Until > t) ||
+            (van.Bay != null && state.Commissary.Spaces.Any(s => s.VehicleId == v.VehicleId && s.CommissaryId == van.Bay)))
+            return false;
+        var drive = Math.Max(1, Travel.Between(ShippedData.Rules.Fleet, van.X, van.Z, home.Value.X, home.Value.Z, Travel.ModeFor(v.VehicleType)));
+        if (WeekPlan.CoverageOf(v.Schedule, v.Crew, t - 1440, t + drive + 1440).Earliest(t, drive, t + drive) != t) return false;
+        homeChance.Add(v.VehicleId);
+        return true;
     }
 
     private List<CargoLine> Lines(VehicleState v) => vans[v.VehicleId].Cargo.Select(l => new CargoLine(l.Item, l.Units, false)).ToList();
@@ -453,8 +476,9 @@ internal sealed partial class SoakWorld
         var opening = plan.Legs.FirstOrDefault(l => l.Kind == LegKind.Open &&
             l.StopIndex == v.HireStop && l.End > minute);
         if (opening == null) return false;
-        var starts = plan.Day < GameDays.DayOf(minute) ? opening.Start :
-            HireSchedules.Absolute(plan.Day, v.Schedule!.Stops[v.HireStop.Value].OpenAt);
+        // The stop's hours on the plan's own day, yesterday's for a late stop replanned after midnight (soak seed 35:
+        // the shifts scheduled again at 00:00 put a restock leg before a bay stop open since 23:30).
+        var starts = HireSchedules.Absolute(plan.Day, v.Schedule!.Stops[v.HireStop.Value].OpenAt);
         return minute >= starts && minute < opening.End;
     }
 
@@ -636,9 +660,14 @@ internal sealed partial class SoakWorld
             var home = HomeOf(v);
             var owed = v.ReturnPending && v.Transit == null && !v.IsOpen && home != null && !van.Property && atWindow != v.VehicleId &&
                        v.Crew.Count > 0 && (v.Schedule?.CrewShifts.Count ?? 0) > 0 && runner.RouteProblems(v, 1.0, home).Count == 0;
+            var chance = homeChance.Remove(v.VehicleId);
             // Out at a late stop or with stops still ahead at midnight isn't owing yet; that night isn't counted.
             var busy = HireRunner.Want(v, now) != null || v.Shifts.Any(p => p.Legs.Any(l => l.StopIndex != HireSchedules.HomeIndex && l.End > now));
             if (owed && busy) continue;
+            // A night counts only when the crew had a free chance to drive back during the day before it (homeChance):
+            // shifts with days off, the player keeping the vehicle, or a failed arrival whose retry falls after the
+            // shift's end leave none, and the runner rightly never drives without crew on shift for the whole drive.
+            if (owed && !chance) continue;
             owedNights[v.VehicleId] = owed ? owedNights.GetValueOrDefault(v.VehicleId) + 1 : 0;
             Require(owedNights[v.VehicleId] <= 2, $"a fully staffed vehicle owed the drive back for three nights: {v.VehicleId} at x {van.X}, z {van.Z}, bay {van.Bay}, home {home}, " +
                 $"arrival {v.Arrival?.SpotKey}, skipped {v.Skipped?.SpotKey} until {v.Skipped?.Until}, legs {string.Join("; ", v.Shifts.SelectMany(p => p.Legs).Select(l => $"{l.Kind} {l.StopIndex} {l.Start}-{l.End}"))}, " +
