@@ -518,7 +518,7 @@ class BlindPlayTests(unittest.TestCase):
         import argparse
         names = set(runpy.run_path(str(TOOLS / 'play'), run_name='play_test')['parser']()._subparsers._group_actions[0].choices)
         self.assertEqual(names, {'look', 'notices', 'places', 'go', 'walk', 'map', 'screen', 'ui', 'time', 'buy', 'vehicle', 'order',
-                                 'crew', 'price', 'route', 'save', 'load', 'use', 'eat', 'place', 'phone', 'call', 'drive'})
+                                 'crew', 'price', 'route', 'save', 'load', 'use', 'eat', 'place', 'drop', 'pickup', 'handtruck', 'phone', 'call', 'drive'})
         # No shortcuts: no money, teleport, spawn, fixture or debug op is reachable, and the old licence and hire are gone.
         for argv in (['money', 'set', '1000000'], ['licence'], ['hire'], ['teleport', 'x'], ['debug', 'hire']):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):

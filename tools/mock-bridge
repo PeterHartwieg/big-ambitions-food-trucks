@@ -229,6 +229,7 @@ class Mock:
         # The player's life (docs/test-bridge.md, "The player's life"): where they are inside, what they hold, the homes they
         # rent and the beds set down there, a taxi waiting, the course's hours, candidates on the phone.
         self.life = {'inside': None, 'hands': None, 'homes': [], 'beds': {}, 'taxi': False, 'course_minutes': 0,
+                     'dropped': [], 'handtrucks': [], 'drop_blocked': False,
                      'candidates': [], 'diplomas': [], 'campaigns': [], 'studied': {}, 'activity': None, 'purchase': None, 'contact': None, 'city_step': 'start', 'app': None}
         self.state['player']['needs']['happiness_modifiers'] = [MOOD['no_home']]
         self.state['player']['needs']['warnings'] = []
@@ -374,11 +375,11 @@ class Mock:
         if self.dialog in ('crew','fleet'): screens.append('phone')
         elif self.dialog=='taxi_map': screens.append('map')
         elif self.dialog in ('phone_app','presentation'): screens.append('phone')
-        elif self.dialog in LIFE_PANELS or self.dialog in ('purchase','course_choice'): pass
+        elif self.dialog in LIFE_PANELS or self.dialog in ('purchase','course_choice','handtruck_cargo'): pass
         elif self.dialog not in ('closed','commissary','items','opens','closes'): screens.append('call')
         if self.activity_starting or self.state['player']['at_hatch'] or self.dialog in LIFE_PANELS: screens.append('activity panel')
         if self.dialog=='course_choice': screens.append('confirmation')
-        return ', '.join(screens) if screens else None if self.dialog in ('closed','purchase') else 'a screen'
+        return ', '.join(screens) if screens else None if self.dialog in ('closed','purchase','handtruck_cargo') else 'a screen'
 
     def bays(self):
         return [{'site':site,'status':self.bay_status.get(site,'resolved'),'point':{'x':393.2+i*100,'z':217.6,'along_x':0.,'along_z':1.} if self.bay_status.get(site,'resolved')=='resolved' else None,
@@ -526,7 +527,7 @@ class Mock:
         player=self.state['player']
         if self.state['clock']['paused']: raise ValueError('The game is paused: walking takes real time. Set a speed first.')
         held=self.vehicle(player['in_vehicle']) if player['in_vehicle'] else None
-        if held is not None and held['kind']!='cart':
+        if held is not None and held['kind'] not in ('cart','handtruck'):
             raise ValueError("You're in a vehicle you drive: get out first (vehicle ID exit), or push a cart instead.")
         if player['at_hatch']: raise ValueError("You're at a truck's hatch: step out first (vehicle ID exit).")
         place=args.get('place'); bay=None
@@ -543,9 +544,10 @@ class Mock:
                 left=self.life['inside']; self.life['inside']=None
                 door=self.door(left)
                 player.update(x=door[0],z=door[1])
+                if held and held['kind']=='handtruck': held.update(x=door[0],z=door[1],inside=None)
                 self.event(f'Test bridge: walking to x {door[0]:.1f}, z {door[1]:.1f} (out of {left}).')
                 return {'x':round(door[0],2),'y':0.,'z':round(door[1],2),'heading':round(player['heading'],2),'arrived':True,'from_goal':0.,
-                        'goal':{'x':round(door[0],2),'z':round(door[1],2)},'path':'complete','metres':8,'holding':None,'inside':None,'left':left}
+                        'goal':{'x':round(door[0],2),'z':round(door[1],2)},'path':'complete','metres':8,'holding':held['id'] if held else None,'inside':None,'left':left}
             elif kind=='address':
                 if not re.fullmatch(r'ba:street_[a-z0-9]+#[0-9]+',identifier):
                     raise ValueError(f"address: takes a building's address as the game writes it, ba:street_<name>#<number>; got '{identifier}'.")
@@ -560,7 +562,7 @@ class Mock:
         metres=math.hypot(player['x']-x,player['z']-z)
         player.update(x=float(x),z=float(z))
         if held is not None:
-            if bay: self.place_vehicle(held,bay)
+            if bay and held['kind']!='handtruck': self.place_vehicle(held,bay)
             else: held.update(x=float(x),z=float(z),commissary=None)
             player.update(x=held['x'],z=held['z'])
         self.event(f"Test bridge: walking to x {x:.1f}, z {z:.1f} ({metres:.0f} m{', pushing '+held['id'] if held else ''}).")
@@ -923,6 +925,8 @@ class Mock:
             player['activity']='driving' if player['in_vehicle'] and self.vehicle(player['in_vehicle'])['kind']=='truck' else 'pushing' if player['in_vehicle'] else 'starting' if self.activity_starting else 'at_hatch' if player['at_hatch'] else 'walking' if self.walks else 'on_foot'
             player['clock_held_by']=self.clock_held_by()
             player.update(hands=copy.deepcopy(self.life['hands']),inside=self.life['inside'],homes=list(self.life['homes']),riding=False)
+            pushing=next((t for t in self.life['handtrucks'] if t['id']==player['in_vehicle']),None)
+            player['handtruck']=self.handtruck_entry(pushing) if pushing else None
             needs=player['needs']
             needs['warnings']=[w for w in (('very_hungry' if needs['hunger']<=5 else 'hungry' if needs['hunger']<=25 else None),
                                             ('out_of_energy' if needs['energy']<=0 else 'exhausted' if needs['energy']<=5 else 'tired' if needs['energy']<=25 else None)) if w]
@@ -963,7 +967,7 @@ class Mock:
 
     def vehicle(self, identifier=None):
         identifier = identifier or self.state['player']['in_vehicle'] or self.selected
-        found = next((v for v in self.state['vehicles'] if v['id'] == identifier), None)
+        found = next((v for v in self.state['vehicles']+self.life['handtrucks'] if v['id'] == identifier), None)
         if found is None:
             ids = ', '.join(v['id'] for v in self.state['vehicles']) or 'none'
             raise ValueError(f"No food cart or truck with id '{identifier}'. Food vehicles: {ids}.")
@@ -1170,7 +1174,7 @@ class Mock:
         def add(text, kind='button', row=''):
             entries.append({'id':len(entries)+1, 'text':clean(text), 'kind':kind,
                             'path':f'Mock/{self.dialog}/{row or len(entries)}'})
-        if self.state['player']['in_vehicle'] and self.dialog == 'closed':
+        if self.state['player']['in_vehicle'] and not any(t['id']==self.state['player']['in_vehicle'] for t in self.life['handtrucks']) and self.dialog == 'closed':
             add(LOCALE['foodtrucks:itempanel_commissary_stock'])
         if not self.state['player']['in_vehicle'] and not self.state['player']['at_hatch'] and self.dialog == 'closed':
             # The on-foot menu of the mock's vehicle, as if it had been clicked.
@@ -1594,6 +1598,14 @@ class Mock:
 
     def things(self, radius):
         p=self.state['player']; life=self.life; out=[]
+        for box in life['dropped']:
+            d=math.hypot(box['x']-p['x'],box['z']-p['z'])
+            if box['inside']==life['inside'] and d<=radius:
+                out.append({'kind':'DroppedContainer','name':box['hands']['item'],'click':'Click to grab','x':box['x'],'z':box['z'],
+                            'distance':round(d,1),'box_id':box['id']})
+        for t in self.near_handtrucks():
+            out.append({'kind':'HandTruck','name':t['name'],'click':'Click to use','x':t['x'],'z':t['z'],
+                        'distance':self.handtruck_entry(t)['distance'],'truck_id':t['id']})
         if life['inside']:
             b=self.building(life['inside']) or {}
             business=b.get('businessType')
@@ -1626,6 +1638,102 @@ class Mock:
         for _ in range(int(round(minutes))):
             self.tick()
             if regen: needs['energy']=min(needs['max'],needs['energy']+regen+.056)
+
+    def carry_guard(self):
+        if self.time_skip: raise ValueError('Time is skipping (sleep, a course, a ride): carrying controls waits until it ends.')
+        if self.clock_held_by() or self.dialog=='purchase': raise ValueError('Not now: close what is open first (ui escape).')
+
+    def carry_command(self, cmd, args):
+        self.require_ft(cmd)
+        self.carry_guard()
+        life=self.life; p=self.state['player']
+        if cmd=='pickup':
+            ident=num(args,'id')
+            if ident is None: raise ValueError('pickup needs id from the last use list.')
+            if ident!=int(ident) or not 1<=ident<=len(self.last_use) or self.last_use[int(ident)-1]['kind']!='DroppedContainer':
+                raise ValueError("That isn't a placed box or bag in the last use list; list again.")
+            if not any(b['id']==self.last_use[int(ident)-1]['box_id'] for b in life['dropped']):
+                raise ValueError("That isn't a placed box or bag in the last use list; list again.")
+            return self.life_command('use',{'op':'click','id':ident})
+        hands=life['hands']
+        if not hands: raise ValueError('Your hands are empty.')
+        if hands['key']=='ba:itemname_mop':
+            life['hands']=None
+            return {'item':'mop','placed':True,'why':None,'notices':[]}
+        x,z=num(args,'x'),num(args,'z')
+        if (x is None)!=(z is None): raise ValueError('drop takes both x and z, or neither.')
+        if life['inside'] not in life['homes']:
+            raise ValueError('The game allows putting items down only inside a building you can edit; outside, load a hand truck instead.')
+        if hands['key'] not in ('ba:itemname_closedcardboardbox','ba:itemname_paperbag') or (hands['key']=='ba:itemname_paperbag' and not hands['contents']):
+            raise ValueError('The game offers no put-down action for this item; return it or load it into storage.')
+        x,z=(p['x'],p['z']) if x is None else (x,z)
+        placed=not life['drop_blocked']
+        if placed:
+            life['dropped'].append({'id':uuid.uuid4().hex,'inside':life['inside'],'x':x,'z':z,'hands':hands})
+            life['hands']=None
+        return {'item':hands['item'],'placed':placed,'still_placing':False,'why':None if placed else 'no room there (a wall or another thing is in the way)',
+                'x':round(x,2),'z':round(z,2),'rotation':0.,'notices':[]}
+
+    def near_handtrucks(self):
+        p=self.state['player']
+        return sorted((t for t in self.life['handtrucks'] if t['inside']==self.life['inside'] and abs(t['y']-p['y'])<=4 and
+                       math.hypot(t['x']-p['x'],t['z']-p['z'])<=20),key=lambda t:math.hypot(t['x']-p['x'],t['z']-p['z']))
+
+    def handtruck_entry(self, t):
+        p=self.state['player']
+        return {'id':t['id'],'name':t['name'],'pushing':p['in_vehicle']==t['id'],'distance':round(math.hypot(t['x']-p['x'],t['z']-p['z']),1),
+                'contents':[{k:c[k] for k in ('item','key','amount','paid')} for c in t['contents'] if c['amount']>0]}
+
+    def handtruck_load(self, truck):
+        hands=self.life['hands']
+        if not hands: return
+        if hands['key']!='ba:itemname_closedcardboardbox':
+            if len(truck['contents'])<truck['capacity']:
+                truck['contents'].append({'key':hands['key'],'item':hands['item'],'amount':1,
+                                          'paid':all(c['paid'] for c in hands['contents']),'held':hands})
+                self.life['hands']=None
+            return
+        # The game may load only part of a box, leaving the rest in hands. Mock slots represent whole cargo boxes.
+        while hands['contents'] and len(truck['contents'])<truck['capacity']:
+            truck['contents'].append(hands['contents'].pop(0))
+        if not hands['contents']: self.life['hands']=None
+
+    def handtruck_command(self, args):
+        op=args.get('op') or 'list'
+        if op=='list':
+            self.require_city('handtruck list')
+            return {'handtrucks':[self.handtruck_entry(t) for t in self.near_handtrucks()]}
+        self.require_ft('handtruck '+op)
+        if op not in ('grab','release','load','take'): raise ValueError(f"Unknown handtruck op '{op}': list, grab, release, load, take.")
+        self.carry_guard()
+        if self.state['clock']['paused']: raise ValueError('The game is paused: set a speed before using a hand truck.')
+        p=self.state['player']; active=p['in_vehicle']; life=self.life
+        ident=args.get('id') or (active if op=='release' else None)
+        if not ident: raise ValueError('handtruck needs id from handtruck list.')
+        truck=next((t for t in self.near_handtrucks() if t['id']==ident),None)
+        if not truck: raise ValueError("That hand truck isn't near you on this floor; list again.")
+        if active and active!=ident: raise ValueError('Let go of your current vehicle first.')
+        if op=='release' and active!=ident: raise ValueError("You aren't pushing that hand truck.")
+        if op in ('grab','load') and (life['hands'] or {}).get('key') in ('ba:itemname_mop','ba:itemname_shoppingbasket'):
+            raise ValueError('Return the mop or shopping basket before using a hand truck.')
+        if op=='grab' and active==ident: raise ValueError("You're already pushing that hand truck.")
+        if op=='load' and not life['hands']: raise ValueError('Your hands are empty.')
+        if op=='take' and life['hands']: raise ValueError('Empty your hands before taking a box.')
+        done=True
+        if op=='release': p['in_vehicle']=None; self.dialog='closed'
+        elif op in ('load','grab'):
+            self.handtruck_load(truck)
+            done=not life['hands']
+            if done and op=='grab': p['in_vehicle']=ident
+        else:
+            wanted=need(args,'item','a cargo item key or name from handtruck list')
+            cargo=next((c for c in truck['contents'] if c['key']==wanted or c['item'].casefold()==wanted.casefold()),None)
+            if not cargo: raise ValueError("That item isn't on the hand truck; list again.")
+            truck['contents'].remove(cargo)
+            life['hands']=cargo.get('held') or {'key':'ba:itemname_closedcardboardbox','item':'Closed cardboard box','contents':[cargo]}
+            p['in_vehicle']=None; self.dialog='closed'
+        return {'done':done,'why':None if done else "the hand truck couldn't take everything; remaining cargo stays in your hands",
+                'handtruck':self.handtruck_entry(truck),'hands':copy.deepcopy(life['hands']),'notices':[]}
 
     def life_command(self, cmd, args):
         life=self.life; p=self.state['player']
@@ -1726,6 +1834,17 @@ class Mock:
 
     def life_use(self, t):
         life=self.life; p=self.state['player']; kind=t['kind']
+        if kind=='DroppedContainer':
+            box=next((b for b in life['dropped'] if b['id']==t['box_id'] and b['inside']==life['inside']),None)
+            if not box: raise ValueError('That placed box or bag is gone; list again.')
+            if life['hands'] or p['in_vehicle']:
+                self.event('Your hands are full.','notice'); return True
+            life['hands']=box['hands']; life['dropped'].remove(box); return True
+        if kind=='HandTruck':
+            truck=next(h for h in life['handtrucks'] if h['id']==t['truck_id'])
+            if p['in_vehicle']: self.dialog='handtruck_cargo'; return True
+            if life['hands']: self.handtruck_load(truck); return True
+            self.handtruck_command({'op':'grab','id':truck['id']}); return True
         if kind=='TaxiController':
             self.dialog='taxi_map'; life['taxi']=True; return True
         if kind=='CityBuildingController':
@@ -1736,6 +1855,11 @@ class Mock:
             if b.get('buildingType')=='ba:buildingtype_residential' and address not in life['homes']:
                 self.event('Private property.','notice'); return True
             life['inside']=address
+            held=next((h for h in life['handtrucks'] if h['id']==p['in_vehicle']),None)
+            if held: held.update(x=p['x'],z=p['z'],inside=address)
+            if address in life['homes'] and not any(h.get('home')==address for h in life['handtrucks']):
+                life['handtrucks'].append({'id':f'handtruck-{len(life["handtrucks"])+1}','name':'Hand truck','kind':'handtruck','home':address,
+                                           'inside':address,'x':p['x'],'y':p['y'],'z':p['z'],'contents':[],'capacity':4})
             self.event(f'Entered {address}.')
             return True
         if kind=='BedController':
@@ -1760,7 +1884,7 @@ class Mock:
             return True
         if kind=='CashRegisterController':
             if b.get('businessType') in FULL_SERVICE:
-                if life['hands']: self.event('You need empty hands to order.','notice'); return True
+                if life['hands'] or p['in_vehicle']: self.event('You need empty hands to order.','notice'); return True
                 self.dialog='purchase'; life['purchase']={'choice':None,'goods':goods}; return True
             unpaid=[c for c in (life['hands'] or {}).get('contents',[]) if not c['paid']]
             if not unpaid: self.event('Nothing to pay for.','notice'); return True
@@ -2116,6 +2240,8 @@ class Mock:
             return self.map_command(args)
         if cmd=='walk': return self.walk(args)
         if cmd=='drive': return self.drive_command(args)
+        if cmd in ('drop','pickup'): return self.carry_command(cmd,args)
+        if cmd=='handtruck': return self.handtruck_command(args)
         if cmd in ('use','taxi','phone','call','eat','place'): return self.life_command(cmd, args)
         if cmd=='fixture': return self.fixture(args)
         if cmd=='logistics':
@@ -2287,6 +2413,9 @@ class Mock:
             op=need(args,'op','open, close, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy')
             if op=='buy': return self.buy(args)
             identifier=need(args,'id',"the food vehicle's id")
+            if any(t['id']==identifier for t in self.life['handtrucks']):
+                ids=', '.join(v['id'] for v in self.state['vehicles']) or 'none'
+                raise ValueError(f"No food cart or truck with id '{identifier}'. Food vehicles: {ids}.")
             if identifier==self.driving(): raise ValueError(f'{identifier} is on a drive: wait for it (drive status).')
             return self.operate(self.vehicle(identifier),op,args)
         if cmd=='commissary':
@@ -2493,7 +2622,7 @@ class Mock:
             self.event(f'Mock console: {line}')
             return {'output':[f'Mock console accepted: {line}']}
         if cmd=='quit': return {}
-        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, drive, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, place, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.")
+        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, drive, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, place, drop, pickup, handtruck, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.")
 
 
 class Handler(BaseHTTPRequestHandler):

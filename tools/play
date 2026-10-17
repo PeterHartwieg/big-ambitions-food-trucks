@@ -29,6 +29,13 @@ Commands (each also takes --help):
                                ba:street_secondavenue#8). You get into one with use.
   eat [ITEM]                   Eat from the bag of food you hold.
   place X Z [--rotation DEG]   Set down the furniture in the box you hold, on the floor of a building you rent.
+  drop [X Z]                  Put the box or bag you hold down, still packed, on an editable building's floor
+                               (at your feet if no point is given); return a mop to its station. No street drop.
+  pickup ID                    Pick up a placed box or bag, by its number in the last use list.
+  handtruck                    List nearby hand trucks and the boxes on them.
+  handtruck ID grab|load        Grab it (loading what you hold first), or load your held item without grabbing it.
+  handtruck ID take ITEM        Take one cargo box by key or name; taking it while pushing also lets go.
+  handtruck release            Let go using the game's Park button; its cargo stays on it.
   phone APP                    Open the phone on an app: contacts, employees, bizman, econoview, market, persona or
                                rivals.
   call list | call CONTACT     Your phone's contacts, or call one (by name or id). Its options are then on screen (ui).
@@ -144,7 +151,8 @@ class Play:
         p = s.get('player') or {}
         self.out(f"Day {c.get('day')} ({c.get('weekday')}) {c.get('time')}{', paused' if c.get('paused') else ', speed ' + str(c.get('speed'))}. "
                  f"Money {money(s.get('money'))}.")
-        where = 'in a taxi' if p.get('riding') else f"in {p['in_vehicle']}" if p.get('in_vehicle') else f"at the hatch of {p['at_hatch']}" if p.get('at_hatch') else p.get('activity') or 'on foot'
+        truck = p.get('handtruck')
+        where = 'in a taxi' if p.get('riding') else f"pushing {truck['name']} ({truck['id']})" if truck else f"in {p['in_vehicle']}" if p.get('in_vehicle') else f"at the hatch of {p['at_hatch']}" if p.get('at_hatch') else p.get('activity') or 'on foot'
         inside = f", inside {p['inside']}" if p.get('inside') else ''
         self.out(f"You: {where}{inside} at x {p.get('x')}, z {p.get('z')}.")
         needs = p.get('needs') or {}
@@ -159,6 +167,7 @@ class Play:
             self.out(f"  happiness: {name}{f' {amount:+d}%' if amount is not None else ''}{when}")
         if p.get('clock_held_by'): self.out(f"  The clock is held by: {p['clock_held_by']}.")
         hands = p.get('hands')
+        if truck: self.out(f"  On the hand truck: {self.cargo_text(truck.get('contents'))}.")
         if hands:
             inside_ = ', '.join(f"{c['amount']} {c['item']}{'' if c.get('paid', True) else ' (not paid)'}" for c in hands.get('contents') or [])
             self.out(f"You hold: {hands['item']}{': ' + inside_ if inside_ else ''}.")
@@ -291,6 +300,44 @@ class Play:
         self.acting()
         r = self.call('eat', {'item': item} if item else {})
         self.out(f"{'Ate' if r['done'] else 'Did not eat'} {r['item']}: hunger {r['hunger']}, energy {r['energy']}.")
+        for n in r.get('notices') or []: self.out(f'  {n}')
+
+    @staticmethod
+    def cargo_text(contents):
+        return ', '.join(f"{c['amount']} {c['item']}{'' if c.get('paid', True) else ' (not paid)'}" for c in contents or []) or 'empty'
+
+    def drop(self, coords):
+        if len(coords) not in (0, 2): raise Refused('drop [X Z]')
+        self.acting()
+        r = self.call('drop', dict(zip(('x', 'z'), coords)))
+        self.out(f"Put down {r['item']}." if r['placed'] else f"Not put down: {r.get('why') or 'the game refused'}.")
+        for n in r.get('notices') or []: self.out(f'  {n}')
+
+    def pickup(self, ident):
+        self.acting()
+        r = self.clock_at_one(lambda: self.call('pickup', {'id': ident}, 150))
+        self.out(f"Clicked {r['clicked']} to pick it up{' (still walking)' if r.get('still_walking') else ''}; look shows what you hold.")
+        for n in r.get('notices') or []: self.out(f'  {n}')
+
+    def handtruck(self, words):
+        if not words or words == ['list']:
+            trucks = self.call('handtruck', {'op': 'list'})['handtrucks']
+            if not trucks: self.out('No hand trucks nearby on this floor.')
+            for t in trucks:
+                self.out(f"{t['id']}: {t['name']}, {t['distance']} m{' (pushing)' if t['pushing'] else ''}; {self.cargo_text(t.get('contents'))}.")
+                for c in t.get('contents') or []: self.out(f"  {c['key']}: {c['amount']} {c['item']}")
+            return
+        if words == ['release']: args = {'op': 'release'}
+        elif len(words) == 2 and words[1] in ('grab', 'load', 'release'): args = {'id': words[0], 'op': words[1]}
+        elif len(words) == 3 and words[1] == 'take': args = {'id': words[0], 'op': 'take', 'item': words[2]}
+        else: raise Refused('handtruck [list | release | ID grab|load|release | ID take ITEM]')
+        self.acting()
+        r = self.clock_at_one(lambda: self.call('handtruck', args, 150))
+        t = r['handtruck']
+        self.out(f"{args['op']}: {'done' if r['done'] else r.get('why') or 'the game refused'}; "
+                 f"{'pushing' if t['pushing'] else 'not pushing'} {t['id']}; on it: {self.cargo_text(t.get('contents'))}.")
+        hands = r.get('hands')
+        self.out(f"You hold: {hands['item']}: {self.cargo_text(hands.get('contents'))}." if hands else 'Your hands are empty.')
         for n in r.get('notices') or []: self.out(f'  {n}')
 
     def place(self, x, z, rotation=None):
@@ -549,6 +596,9 @@ def parser():
     n = sub.add_parser('use', help='things near you that react to a click, or click one'); n.add_argument('id', nargs='?', type=int)
     n.add_argument('--radius', type=float)
     n = sub.add_parser('eat', help='eat from the bag you hold'); n.add_argument('item', nargs='?')
+    n = sub.add_parser('drop', help='put down a packed box or bag on an editable floor, or return a mop'); n.add_argument('coords', nargs='*', type=float)
+    n = sub.add_parser('pickup', help='pick up a placed box or bag from the last use list'); n.add_argument('id', type=int)
+    n = sub.add_parser('handtruck', help='list, grab, release, load, or take a box from a hand truck'); n.add_argument('words', nargs='*')
     n = sub.add_parser('place', help='set down the furniture you hold'); n.add_argument('x', type=float); n.add_argument('z', type=float)
     n.add_argument('--rotation', type=float)
     n = sub.add_parser('phone', help='open the phone on an app'); n.add_argument('app', choices=PHONE_APPS)
@@ -587,6 +637,9 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
         elif c == 'go': play.go(args.address)
         elif c == 'use': play.use(args.id, args.radius)
         elif c == 'eat': play.eat(args.item)
+        elif c == 'drop': play.drop(args.coords)
+        elif c == 'pickup': play.pickup(args.id)
+        elif c == 'handtruck': play.handtruck(args.words)
         elif c == 'place': play.place(args.x, args.z, args.rotation)
         elif c == 'phone': play.phone(args.app)
         elif c == 'call': play.call_contact(args.contact)

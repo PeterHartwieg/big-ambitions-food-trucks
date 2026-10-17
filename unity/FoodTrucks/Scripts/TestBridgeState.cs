@@ -105,6 +105,7 @@ namespace FoodTrucks
                 ["at_hatch"] = atHatch,
                 ["carrying"] = hands?.itemName,
                 ["hands"] = TestBridgeCommands.Hands(),
+                ["handtruck"] = TestBridgeCommands.PushingHandTruck(),
                 ["inside"] = TestBridgeCommands.InsideAddress(),
                 ["homes"] = TestBridgeCommands.Homes(),
                 ["riding"] = TaxiSystem.IsTraveling,

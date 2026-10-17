@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using BigAmbitions.Items;
+using BigAmbitions.Tags;
 using Entities;
 using Helpers;
 using Localizor;
@@ -406,22 +407,50 @@ namespace FoodTrucks
         // the furniture back in its box. Only inside a building of the player's own; one mouse-free step, so the
         // per-frame mouse follow never runs in between.
         private static object Place(JObject args)
+            => PlaceHeld(args, false);
+
+        // Uses the same floor/grid/collision checks as furniture placement, but keeps the container closed.
+        private static object Drop(JObject args)
+        {
+            RequireCarryControl();
+            if (!PlayerHelper.IsHoldingItem) throw new BridgeError("Your hands are empty.");
+            if (PlayerHelper.IsHoldingAMop)
+                return WithNotices(() => CleaningStationController.ReturnMopToStation(), notices => new JObject
+                {
+                    ["item"] = "mop", ["placed"] = !PlayerHelper.IsHoldingAMop,
+                    ["why"] = PlayerHelper.IsHoldingAMop ? "the game couldn't return the mop to its station" : null,
+                    ["notices"] = new JArray(notices),
+                });
+            var at = PlayerHelper.GetPosition();
+            var point = (JObject)args.DeepClone();
+            if ((Num(args, "x") == null) != (Num(args, "z") == null)) throw new BridgeError("drop takes both x and z, or neither.");
+            point["x"] = Num(args, "x") ?? at.x;
+            point["z"] = Num(args, "z") ?? at.z;
+            return PlaceHeld(point, true);
+        }
+
+        private static object PlaceHeld(JObject args, bool keepContainer)
         {
             var x = Num(args, "x") ?? throw new BridgeError("place needs \"x\" and \"z\": a point on the floor (state's player x and z, or use list's).");
             var z = Num(args, "z") ?? throw new BridgeError("place needs \"x\" and \"z\".");
             var rotation = Num(args, "rotation") ?? 0;
-            if (!BuildingManager.CanBuildOnCurrentBuilding) throw new BridgeError("You can place furniture only inside a building you rent.");
+            if (!BuildingManager.CanBuildOnCurrentBuilding) throw new BridgeError(keepContainer
+                ? "The game allows putting items down only inside a building you can edit; outside, load a hand truck instead."
+                : "You can place furniture only inside a building you rent.");
             if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode) throw new BridgeError("Something is being placed already.");
             var hands = PlayerHelper.ItemInstanceInHands;
             var cargo = hands?.cargoInstances?.FirstOrDefault();
-            if (hands == null || hands.itemName != "ba:itemname_closedcardboardbox" || cargo == null || cargo.ItemCached == null || !cargo.ItemCached.isFurniture)
+            if (!keepContainer && (hands == null || hands.itemName != "ba:itemname_closedcardboardbox" || cargo == null || cargo.ItemCached == null || !cargo.ItemCached.isFurniture))
                 throw new BridgeError("You aren't holding a box of furniture (shops pack what you buy in a box).");
-            if (!cargo.paid) throw new BridgeError("You haven't paid for it.");
-            if (cargo.ItemCached.wallMounted || cargo.ItemCached.stackType != 0)
+            if (keepContainer && (hands == null || hands.ItemCached == null || PlayerHelper.IsHoldingShoppingBasket ||
+                !(hands.ItemCached.HasTag(TagRef.Itemtag.isbox) || (hands.ItemCached.HasTag(TagRef.Itemtag.isbag) && hands.cargoInstances.Count > 0))))
+                throw new BridgeError("The game offers no put-down action for this item; return it or load it into storage.");
+            if (!keepContainer && !cargo!.paid) throw new BridgeError("You haven't paid for it.");
+            var item = keepContainer ? hands!.ItemCached : cargo!.ItemCached;
+            if (item.wallMounted || item.stackType != 0)
                 throw new BridgeError("That goes on a wall or on other furniture; place covers only furniture that stands on the floor.");
             if (GroundPositionMethod == null || PlacementValidField == null) throw new BridgeError("The game's placement step wasn't found (game update?).");
-            var name = LocalizorManager.GetLocalization(cargo.itemName, null);
-            var item = cargo.ItemCached;
+            var name = LocalizorManager.GetLocalization(keepContainer ? hands!.itemName : cargo!.itemName, null);
             var step = item.degreesPerRotation > 0 ? item.degreesPerRotation : 45f;
             var yRotation = (float)(Math.Round(rotation / step) * step % 360 + 360) % 360;
             var caught = Notices.BeginCapture();
@@ -432,7 +461,8 @@ namespace FoodTrucks
             {
                 var panel = InstanceBehavior<UIs>.Instance.playerHUD.itemPanelUI;
                 panel.SetItemInstance(hands, spawnIntoPlayerHands: false);
-                panel.ClickPlace();
+                if (keepContainer) panel.ClickPlaceBox();
+                else panel.ClickPlace();
                 var placing = BigAmbitions.PlacementSystem.PlacementSystem.CurrentPlaceableItemBeingPlaced as ItemController;
                 started = placing != null;
                 if (placing != null)
@@ -460,7 +490,6 @@ namespace FoodTrucks
                     if (inside) at = placing.transform.position;
                     if (valid && !blocked)
                     {
-                        placing.ItemInstance.position = at;
                         BigAmbitions.PlacementSystem.PlacementSystem.SaveCurrentItemBeingMovedPosition();
                         Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementMode();
                         placed = true;
@@ -480,7 +509,7 @@ namespace FoodTrucks
                 Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
                 stuck = BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode;
             }
-            Log.Info($"Test bridge: place {cargo.itemName} at x {x:F1}, z {z:F1}, rotation {yRotation:F0}: {(placed ? "placed" : !inside ? "not this building's floor" : blocked ? "blocked area" : "no room")}{(stuck ? ", still placing" : "")}; floor {floorSeen}.");
+            Log.Info($"Test bridge: {(keepContainer ? "drop" : "place")} {name} at x {x:F1}, z {z:F1}, rotation {yRotation:F0}: {(placed ? "placed" : !inside ? "not this building's floor" : blocked ? "blocked area" : "no room")}{(stuck ? ", still placing" : "")}; floor {floorSeen}.");
             Notices.EndCapture(caught);
             return new JObject
             {
