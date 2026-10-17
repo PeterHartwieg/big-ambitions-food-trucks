@@ -400,7 +400,7 @@ namespace FoodTrucks
         private static readonly System.Reflection.FieldInfo? PlacementValidField =
             HarmonyLib.AccessTools.Field(typeof(BigAmbitions.PlacementSystem.PlacementSystem), "IsNewItemPlacementValid");
 
-        // { "x", "z", "rotation"? }: the hands panel's Place for a box of furniture (ItemPanelUI.ClickPlace: the bed out of
+        // { "square" } or { "x", "z" }, with "rotation", "move", "check": the hands panel's Place for a box of furniture (ItemPanelUI.ClickPlace: the bed out of
         // its box), moved to that point of the floor as the mouse moves it there (PlacementSystem's ground step from a ray
         // straight down: the floor hit, blocked areas, the item's grid) and turned to the nearest of its rotation steps
         // (degrees, clockwise), then confirmed when the game finds the place free, as a click does. A refused place puts
@@ -431,12 +431,25 @@ namespace FoodTrucks
 
         private static object PlaceHeld(JObject args, bool keepContainer)
         {
-            var x = Num(args, "x") ?? throw new BridgeError("place needs \"x\" and \"z\": a point on the floor (state's player x and z, or use list's).");
-            var z = Num(args, "z") ?? throw new BridgeError("place needs \"x\" and \"z\".");
-            var rotation = Num(args, "rotation") ?? 0;
             if (!BuildingManager.CanBuildOnCurrentBuilding) throw new BridgeError(keepContainer
                 ? "The game allows putting items down only inside a building you can edit; outside, load a hand truck instead."
                 : "You can place furniture only inside a building you rent.");
+            var plan = CurrentFloorPlan();
+            var square = Str(args, "square");
+            if (square != null && (args["x"] != null || args["z"] != null)) throw new BridgeError("place takes a square or x and z, not both.");
+            var requested = square != null ? plan.Resolve(square) : new Vector3(
+                (float)(Num(args, "x") ?? throw new BridgeError("place needs a square, or x and z.")), plan.Y,
+                (float)(Num(args, "z") ?? throw new BridgeError("place needs both x and z.")));
+            var x = requested.x;
+            var z = requested.z;
+            if (!keepContainer && args["check"] != null && args["check"]!.Type != JTokenType.Boolean)
+                throw new BridgeError("place check must be true or false.");
+            var check = !keepContainer && (Bool(args, "check") ?? false);
+            var rotation = Num(args, "rotation") ?? 0;
+            if (float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(z) || float.IsInfinity(z) || double.IsNaN(rotation) || double.IsInfinity(rotation))
+                throw new BridgeError("Placement coordinates and rotation must be finite.");
+            if (NavTargetsField == null) throw new BridgeError("The game's use targets weren't found (game update?).");
+            if (PlacementRotationInput()) throw new BridgeError("Release the placement rotation controls before trying again.");
             if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode) throw new BridgeError("Something is being placed already.");
             if (GroundPositionMethod == null || PlacementValidField == null) throw new BridgeError("The game's placement step wasn't found (game update?).");
             // "move": furniture already standing in this building (the nearest whose name contains it) is picked up and set
@@ -450,7 +463,7 @@ namespace FoodTrucks
             {
                 var me = PlayerHelper.GetPosition();
                 moving = InstanceBehavior<BuildingManager>.Instance.allItemControllers
-                    .Where(c => c != null && c.ItemInstance?.ItemCached != null && c.ItemInstance.ItemCached.isFurniture &&
+                    .Where(c => c != null && c.ItemInstance?.ItemCached != null && c.ItemInstance.ItemCached.isFurniture && OnPlayerFloor(plan, c) &&
                                 (c.itemName.IndexOf(moveName, StringComparison.OrdinalIgnoreCase) >= 0 ||
                                  LocalizorManager.GetLocalization(c.itemName, null).IndexOf(moveName, StringComparison.OrdinalIgnoreCase) >= 0))
                     .OrderBy(c => Vector3.Distance(c.transform.position, me)).FirstOrDefault()
@@ -471,15 +484,22 @@ namespace FoodTrucks
                 item = keepContainer ? hands!.ItemCached : cargo!.ItemCached;
                 itemName = keepContainer ? hands!.itemName : cargo!.itemName;
             }
-            if (item.wallMounted || item.stackType != 0)
-                throw new BridgeError("That goes on a wall or on other furniture; place covers only furniture that stands on the floor.");
+            if (item.wallMounted || item.stackType != 0 || item.snapToCeiling)
+                throw new BridgeError("That goes on a wall, ceiling or other furniture; place covers only furniture that stands on the floor.");
             var name = LocalizorManager.GetLocalization(itemName, null);
             var step = item.degreesPerRotation > 0 ? item.degreesPerRotation : 45f;
             var yRotation = (float)(Math.Round(rotation / step) * step % 360 + 360) % 360;
+            // Snapshot what native cancellation must conserve, including children and attachment relationships.
+            var before = PlacementSnapshot();
+            var oldSnap = BigAmbitions.PlacementSystem.PlacementSystem.snapFreePlacement;
             var caught = Notices.BeginCapture();
-            bool placed = false, valid = false, blocked = false, inside = false, stuck = false, started = false, reachable = true;
+            bool placed = false, valid = false, blocked = false, inside = false, stuck = false, started = false, resolved = false;
+            bool? reachable = null;
+            string? blocker = null, placedId = null;
+            var use = new JArray();
+            var navBefore = new Dictionary<Transform, Vector3>();
             var floorSeen = "";
-            Vector3 at = default;
+            Vector3 at = requested;
             try
             {
                 if (moving != null) Buildings.Indoors.InteriorDesign.PlacementHelper.StartPlacementMode(moving, warpCursor: false);
@@ -497,58 +517,91 @@ namespace FoodTrucks
                     placing.ItemInstance.yRotation = yRotation;
                     var euler = placing.transform.eulerAngles;
                     placing.transform.eulerAngles = new Vector3(euler.x, yRotation, euler.z);
-                    var top = new Vector3((float)x, PlayerHelper.GetPosition().y + 2f, (float)z);
+                    placedId = placing.ItemInstance.id;
+                    BigAmbitions.PlacementSystem.PlacementSystem.snapFreePlacement = false;
+                    Physics.SyncTransforms();
+                    var top = new Vector3(x, plan.Y + .35f, z);
                     var ray = new Ray(top, Vector3.down);
-                    // The floor under the point must be this building's own (its placement grid): the game's camera never
-                    // aims the mouse at ground outside the walls, but a point can be anywhere.
-                    var grid = BigAmbitions.PlacementSystem.PlacementSystem.currentBuildingGrid;
-                    // A home's floor isn't always one of the grid's own colliders, so a floor that belongs to the building's
-                    // own model counts too; the street outside never does.
-                    var hit = Physics.Raycast(ray, out var floor, 100f, (int)LayerHelper.groundLayerMask);
-                    var building = grid as Component;
-                    inside = hit && grid != null &&
-                             (grid.GetGroundGrid(floor.collider) != null || OnGrid(grid, floor.point) ||
-                              (building != null && floor.collider.transform.IsChildOf(building.transform)));
-                    floorSeen = !hit ? "no floor under the point" : $"{floor.collider.name} (layer {floor.collider.gameObject.layer}, y {floor.point.y:F2}" +
-                        $"{(building != null && floor.collider.transform.IsChildOf(building.transform) ? ", in the building" : "")})";
+                    inside = plan.Hit(requested, out var floor);
+                    floorSeen = inside ? $"{floor.collider.name} (y {floor.point.y:F2})" : "no floor on the player's level";
                     if (inside) GroundPositionMethod.Invoke(null, new object[] { ray });
-                    valid = inside && PlacementValidField.GetValue(null) is bool b && b;
-                    blocked = BigAmbitions.PlacementSystem.PlacementSystem.placedInBlockedArea;
-                    if (inside) at = placing.transform.position;
-                    if (valid && !blocked)
+                    blocked = inside && BigAmbitions.PlacementSystem.PlacementSystem.placedInBlockedArea;
+                    // A blocked surface returns before the native updater moves the ghost. Don't report its old pose
+                    // or old use targets as the candidate's resolved position/reachability.
+                    at = requested;
+                    if (inside && !blocked)
                     {
+                        at = placing.transform.position;
+                        resolved = plan.Hit(at, out _) && Math.Abs(at.y - plan.Y) < .35f;
+                        inside = resolved;
+                    }
+                    yRotation = placing.transform.eulerAngles.y;
+                    valid = resolved && PlacementValidField.GetValue(null) is bool b && b;
+                    if (blocked) blocker = floor.collider.name;
+                    if (!valid && !blocked && inside)
+                    {
+                        var overlap = BigAmbitions.PlacementSystem.PlacementValidation.CurrentOverlappingCollider;
+                        if (overlap != null)
+                        {
+                            var other = overlap.GetComponentInParent<ItemController>();
+                            blocker = other != null ? LocalizorManager.GetLocalization(other.itemName, null) : overlap.name;
+                        }
+                    }
+                    if (resolved)
+                    {
+                        // Preview needs refreshed candidate targets too; restore their caches after cancellation.
+                        foreach (var member in placing.GetComponentsInChildren<EntityController>(true))
+                            foreach (var t in (NavTargetsField?.GetValue(member) as Transform[]) ?? Array.Empty<Transform>())
+                                if (t != null && !navBefore.ContainsKey(t)) navBefore[t] = t.localPosition;
+                        placing.UpdateNavMeshTargets();
+                        use = UseSquares(plan, placing);
+                        reachable = placing.GetClosestNavMeshTargetPosition(PlayerHelper.GetPosition()) != Vector3.zero;
+                    }
+                    if (valid && !blocked && !check)
+                    {
+                        placing.ItemInstance.position = placing.transform.position;
+                        placing.OnItemPositionUpdated();
                         BigAmbitions.PlacementSystem.PlacementSystem.SaveCurrentItemBeingMovedPosition();
                         Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementMode();
                         placed = true;
-                        // The game's own reach test (the one behind "I can't reach that"): the walk-to points are refreshed now,
-                        // as the game does a few frames later, so the reply can say when nobody could get to it to use it.
                         placing.UpdateNavMeshTargets();
+                        use = UseSquares(plan, placing);
                         reachable = placing.GetClosestNavMeshTargetPosition(PlayerHelper.GetPosition()) != Vector3.zero;
                     }
                     else Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
                 }
             }
-            catch
+            finally
             {
-                if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode) Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
-                Notices.EndCapture(caught);
-                throw;
+                try
+                {
+                    if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode)
+                        Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
+                    stuck = BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode;
+                    if (!placed)
+                        foreach (var target in navBefore) if (target.Key != null) target.Key.localPosition = target.Value;
+                    Physics.SyncTransforms();
+                }
+                finally
+                {
+                    BigAmbitions.PlacementSystem.PlacementSystem.snapFreePlacement = oldSnap;
+                    Notices.EndCapture(caught);
+                }
             }
-            // Never left half placed: whatever the game didn't finish is cancelled, and if even that fails the reply says so.
-            if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode)
-            {
-                Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
-                stuck = BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode;
-            }
-            Log.Info($"Test bridge: {(keepContainer ? "drop" : moving != null ? "place (move)" : "place")} {itemName} at x {x:F1}, z {z:F1}, rotation {yRotation:F0}: {(placed ? "placed" : !inside ? "not this building's floor" : blocked ? "blocked area" : "no room")}{(placed && !reachable ? ", unreachable" : "")}{(stuck ? ", still placing" : "")}; floor {floorSeen}.");
-            Notices.EndCapture(caught);
+            var restored = !placed && !stuck && JToken.DeepEquals(before, PlacementSnapshot());
+            Log.Info($"Test bridge: {(keepContainer ? "drop" : moving != null ? "place (move)" : "place")} {itemName} at x {x:F1}, z {z:F1}, rotation {yRotation:F0}: {(placed ? "placed" : check && valid && restored ? "fits (check, cancelled)" : !inside ? "not this building's floor" : blocked ? "blocked area" : "no room")}{(placed && reachable == false ? ", unreachable" : "")}{(stuck ? ", still placing" : "")}; floor {floorSeen}.");
             return new JObject
             {
-                ["item"] = name, ["placed"] = placed, ["moved"] = moving != null, ["reachable"] = placed ? reachable : (bool?)null, ["still_placing"] = stuck,
-                ["why"] = placed ? null : stuck ? "still being placed: ui escape cancels it"
+                ["item"] = name, ["placed"] = placed, ["moved"] = moving != null, ["reachable"] = reachable, ["still_placing"] = stuck,
+                ["checked"] = check, ["fits"] = inside && valid && !blocked, ["blocked_by"] = blocker,
+                ["restored"] = placed ? (bool?)null : restored, ["id"] = placed ? placedId : moving?.ItemInstance.id,
+                ["square"] = plan.Square(at), ["position_resolved"] = resolved, ["requested_square"] = square?.ToUpperInvariant(),
+                ["floor"] = plan.Floor + 1, ["use"] = use,
+                ["why"] = placed || (check && valid && !blocked && restored) ? null : stuck ? "still being placed: ui escape cancels it"
+                    : !restored ? "native cancellation did not restore the original item/cargo state"
                     : !started ? "the game didn't start placing it" : !inside ? "that point isn't the floor of this building"
                     : blocked ? "that part of the floor can't take furniture" : "no room there (a wall or another thing is in the way)",
-                ["x"] = TestBridgeState.Round(at.x), ["z"] = TestBridgeState.Round(at.z), ["rotation"] = yRotation,
+                ["x"] = TestBridgeState.Round(at.x), ["y"] = TestBridgeState.Round(at.y), ["z"] = TestBridgeState.Round(at.z), ["rotation"] = yRotation,
                 ["notices"] = new JArray(caught),
             };
         }
@@ -597,20 +650,6 @@ namespace FoodTrucks
                     ["on_navmesh"] = onMesh, ["navmesh_gap"] = onMesh ? Math.Round(Vector3.Distance(meHit.position, me), 2) : (double?)null },
                 ["items"] = items,
             };
-        }
-
-        // A floor hit that isn't a grid's own collider still counts when it lies over one of the building's ground grids.
-        private static bool OnGrid(BigAmbitions.PlacementSystem.IBuildingGrid grid, Vector3 point)
-        {
-            if (!(grid is BigAmbitions.PlacementSystem.BuildingGridBase grids)) return false;
-            foreach (var g in grids.GetGroundGrids() ?? new List<BigAmbitions.PlacementSystem.GroundGrid>())
-            {
-                if (g == null || g.col == null) continue;
-                var b = g.col.bounds;
-                if (point.x >= b.min.x && point.x <= b.max.x && point.z >= b.min.z && point.z <= b.max.z && Math.Abs(point.y - b.center.y) < b.extents.y + 0.5f)
-                    return true;
-            }
-            return false;
         }
 
         // ---- What the player has: hands, home ----

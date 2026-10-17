@@ -279,7 +279,9 @@ These choices do not block the observation and placement-correctness work. The u
 
 ## Suggestion under discussion (17 October 2026)
 
-Peter's suggestion: give the agent the room's floor plan from the game's own placement grid squares, and let it place items one after another by naming squares on that plan instead of raw world points. Not decided yet.
+Peter's suggestion, now agreed and built as the first floor-plan controls: give the agent the room's floor plan from the game's own placement grid squares, and let it place items one after another by naming squares on that plan instead of raw world points. Built, not yet run in game; see [test-bridge.md](test-bridge.md#floor-plan-controls) for the precise mapping, native paths, limits and pending checks.
 
 Refined in discussion: the game has one clear base grid, so the plan uses that grid's squares. A building has at most two floors (rare); the plan always shows the floor the player stands on, so the same code covers both. Additions talked through: per item, the squares it covers and the square someone uses it from, with reachability; a check that tries a spot without placing; wall segments and stacking slots as small lists beside the plan; a text map for overview plus a list for exact work; geometry only, no layout advice.
 Grids come in standard layouts (the game's building sizes), so a plan is known per layout and the same squares mean the same places in every building of that layout.
+
+The agreed first scope is `floorplan` and `place SQUARE [--rotation DEG] [--move NAME] [--check]`, retaining X/Z. Only the player's current physical floor in a rented/editable building, with item footprints, nav-target use squares and reachability. Wall-item controls, stacking slots, the designer, finishes and blueprints remain out of scope. Maps identify building size and structure version and sample physical floor geometry on the 0.5 m native world lattice; size alone does not imply identical geometry across versions. No layout suggestions.

@@ -28,10 +28,12 @@ Commands (each also takes --help):
   go ADDRESS                   Tell the taxi you got into where to go (address as places or map prints it, e.g.
                                ba:street_secondavenue#8). You get into one with use.
   eat [ITEM]                   Eat from the bag of food you hold.
-  place X Z [--rotation DEG] [--move NAME]
+  floorplan                    The floor you stand on: labelled 0.5 m squares, walls, openings, furniture and use spots.
+  place SQUARE | place X Z [--rotation DEG] [--move NAME] [--check]
                                Set down the furniture in the box you hold, on the floor of a building you rent.
                                With --move, pick up furniture already standing there (nearest with NAME in its name)
-                               and set it down at X Z instead.
+                               and set it down there instead. SQUARE (for example C4) is the item's anchor on floorplan.
+                               --check tries the same placement and reach test, then cancels it without keeping changes.
   drop [X Z]                  Put the box or bag you hold down, still packed, on an editable building's floor
                                (at your feet if no point is given); return a mop to its station. No street drop.
   pickup ID                    Pick up a placed box or bag, by its number in the last use list.
@@ -100,6 +102,7 @@ If the referee stops the game, every command that acts refuses and says why (the
 import argparse
 import json
 import os
+import re
 import sys
 import time
 
@@ -343,15 +346,44 @@ class Play:
         self.out(f"You hold: {hands['item']}: {self.cargo_text(hands.get('contents'))}." if hands else 'Your hands are empty.')
         for n in r.get('notices') or []: self.out(f'  {n}')
 
-    def place(self, x, z, rotation=None, move=None):
+    def floorplan(self):
+        r = self.call('floorplan')
+        self.out(f"Floor plan: {r['address']}, floor {r['floor']}; {r['square_size']:g} m squares. Columns +X, rows +Z.")
+        columns = r['columns']
+        width = len(str(r['rows']))
+        # Multiple header lines keep each map square exactly one character wide, even past column Z.
+        header_height = max(map(len, columns))
+        for digit in range(header_height):
+            self.out(' ' * (width + 1) + ''.join(c.rjust(header_height)[digit] for c in columns))
+        for row, line in reversed(list(enumerate(r['map'], 1))): self.out(f"{row:>{width}} {line}")
+        self.out('Legend: . floor, # wall, = door/opening, X blocked, space void, @ you, letters/digits items, * shared items.')
+        self.out(f"You: {r['player'].get('square') or 'outside plan'}. A1 anchor: x {r['origin']['x']}, z {r['origin']['z']}.")
+        for item in r['items']:
+            uses = ', '.join(f"{u.get('square') or 'outside plan'} ({'reachable' if u['reachable'] else 'unreachable'})" for u in item.get('use') or []) or 'none'
+            self.out(f"{item['label']}: {item['item']} [{item['id']}]; covers {', '.join(item['squares']) or 'none'}; "
+                     f"turned {item['rotation']:g} degrees; use {uses}; {'reachable' if item['reachable'] else 'unreachable'}.")
+        if r.get('geometry'): self.out(r['geometry'])
+
+    def place(self, x, z=None, rotation=None, move=None, check=False):
         self.acting()
-        r = self.call('place', {'x': x, 'z': z, **({'rotation': rotation} if rotation is not None else {}), **({'move': move} if move else {})})
-        self.out(f"{r['item']}: placed at x {r['x']}, z {r['z']}, turned {r['rotation']:.0f} degrees." if r['placed']
-                 else f"{r['item']}: not placed ({r['why']})" + ('.' if r.get('still_placing') else
-                                                                 '; it stays where it was.' if r.get('moved') else '; it is back in its box.'))
-        if r['placed'] and r.get('reachable') is False:
-            self.out("  You can't get to it from here to use it: a wall stands between it and the spot you'd use it from. "
-                     "Move it with place X Z --move NAME.")
+        if z is None:
+            if not re.fullmatch(r'[A-Za-z]+[1-9][0-9]*', str(x)): raise Refused('place takes SQUARE (for example C4), or X Z.')
+            target = {'square': str(x).upper()}
+        else:
+            try: target = {'x': float(x), 'z': float(z)}
+            except ValueError: raise Refused('place takes SQUARE (for example C4), or X Z.')
+        r = self.call('place', {**target, **({'rotation': rotation} if rotation is not None else {}),
+                               **({'move': move} if move else {}), **({'check': True} if check else {})})
+        where = f"{r.get('square') or 'outside plan'} (x {r['x']}, z {r['z']}), turned {r['rotation']:g} degrees"
+        if check:
+            self.out(f"{r['item']}: {'fits' if r['fits'] else 'blocked'} at {where}." + (f" {r['why']}." if r.get('why') else ''))
+            self.out('  Cancelled; original item and cargo restored.' if r.get('restored') else '  Restoration not confirmed; inspect the game before another placement.')
+        elif r['placed']: self.out(f"{r['item']}: placed at {where}.")
+        else:
+            self.out(f"{r['item']}: not placed ({r['why']}).")
+            if r.get('restored'): self.out('  Original item and cargo restored.')
+        if r.get('blocked_by'): self.out(f"  Blocked by: {r['blocked_by']}.")
+        self.out('  Reachable from you: ' + ('yes' if r.get('reachable') is True else 'no' if r.get('reachable') is False else 'unknown') + '.')
         for n in r.get('notices') or []: self.out(f'  {n}')
 
     def phone(self, app):
@@ -606,8 +638,9 @@ def parser():
     n = sub.add_parser('drop', help='put down a packed box or bag on an editable floor, or return a mop'); n.add_argument('coords', nargs='*', type=float)
     n = sub.add_parser('pickup', help='pick up a placed box or bag from the last use list'); n.add_argument('id', type=int)
     n = sub.add_parser('handtruck', help='list, grab, release, load, or take a box from a hand truck'); n.add_argument('words', nargs='*')
-    n = sub.add_parser('place', help='set down the furniture you hold'); n.add_argument('x', type=float); n.add_argument('z', type=float)
-    n.add_argument('--rotation', type=float); n.add_argument('--move')
+    sub.add_parser('floorplan', help='the floor you stand on, in grid squares, with furniture and use spots')
+    n = sub.add_parser('place', help='place furniture at SQUARE or X Z; --check tries and cancels'); n.add_argument('x', metavar='SQUARE|X'); n.add_argument('z', nargs='?', type=float)
+    n.add_argument('--rotation', type=float); n.add_argument('--move'); n.add_argument('--check', action='store_true')
     n = sub.add_parser('phone', help='open the phone on an app'); n.add_argument('app', choices=PHONE_APPS)
     n = sub.add_parser('call', help='your contacts, or call one'); n.add_argument('contact')
     n = sub.add_parser('walk', help='walk somewhere, pushing a cart you hold'); n.add_argument('coords', nargs='*', type=float)
@@ -647,7 +680,8 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
         elif c == 'drop': play.drop(args.coords)
         elif c == 'pickup': play.pickup(args.id)
         elif c == 'handtruck': play.handtruck(args.words)
-        elif c == 'place': play.place(args.x, args.z, args.rotation, args.move)
+        elif c == 'floorplan': play.floorplan()
+        elif c == 'place': play.place(args.x, args.z, args.rotation, args.move, args.check)
         elif c == 'phone': play.phone(args.app)
         elif c == 'call': play.call_contact(args.contact)
         elif c == 'walk':

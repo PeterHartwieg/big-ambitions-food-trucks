@@ -228,8 +228,8 @@ class Mock:
         self.visits = {}
         # The player's life (docs/test-bridge.md, "The player's life"): where they are inside, what they hold, the homes they
         # rent and the beds set down there, a taxi waiting, the course's hours, candidates on the phone.
-        self.life = {'inside': None, 'hands': None, 'homes': [], 'beds': {}, 'taxi': False, 'course_minutes': 0,
-                     'dropped': [], 'handtrucks': [], 'drop_blocked': False,
+        self.life = {'inside': None, 'hands': None, 'homes': [], 'beds': {}, 'bed_floors': {}, 'taxi': False, 'course_minutes': 0,
+                     'dropped': [], 'handtrucks': [], 'drop_blocked': False, 'floorplan_blocked': False, 'floorplan_unreachable': False,
                      'candidates': [], 'diplomas': [], 'campaigns': [], 'studied': {}, 'activity': None, 'purchase': None, 'contact': None, 'city_step': 'start', 'app': None}
         self.state['player']['needs']['happiness_modifiers'] = [MOOD['no_home']]
         self.state['player']['needs']['warnings'] = []
@@ -1738,6 +1738,126 @@ class Mock:
         return {'done':done,'why':None if done else "the hand truck couldn't take everything; remaining cargo stays in your hands",
                 'handtruck':self.handtruck_entry(truck),'hands':copy.deepcopy(life['hands']),'notices':[]}
 
+    # A small deliberately fake 6 x 5 m room on the native world lattice. No tuning or layout advice.
+    @staticmethod
+    def plan_column(n):
+        word=''
+        while n>=0:
+            word=chr(65+n%26)+word; n=n//26-1
+        return word
+
+    def plan_square(self,x,z):
+        col=math.floor(x/.5+.5)+1; row=math.floor(z/.5+.5)+1
+        return self.plan_column(col)+str(row+1) if 0<=col<14 and 0<=row<12 else None
+
+    def plan_point(self,square):
+        m=re.fullmatch(r'([A-Za-z]+)([1-9][0-9]*)',square)
+        if not m or len(m[1])>4: raise ValueError('A square is a column and row, for example C4; read floorplan first.')
+        col=0
+        for c in m[1].upper(): col=col*26+ord(c)-64
+        row=int(m[2])
+        if col>14 or row>12: raise ValueError(f'Square {square} is outside this floor plan; read floorplan again.')
+        return (col-2)*.5,(row-2)*.5
+
+    def plan_bed_geometry(self,x,z,rotation):
+        # Fake collider and use target, transformed like an ordinary ground item around its anchor.
+        angle=math.radians(rotation); cosine=math.cos(angle); sine=math.sin(angle)
+        def world(a,b): return x+a*cosine+b*sine,z+b*cosine-a*sine
+        polygon=[world(a,b) for a,b in ((-.25,-.25),(.75,-.25),(.75,1.25),(-.25,1.25))]
+        axes=[(1.,0.),(0.,1.)]+[(polygon[(i+1)%4][1]-p[1],p[0]-polygon[(i+1)%4][0]) for i,p in enumerate(polygon)]
+        squares=[]
+        for row in range(12):
+            for col in range(14):
+                cx,cz=(col-1)*.5,(row-1)*.5
+                for a,b in axes:
+                    projection=[px*a+pz*b for px,pz in polygon]; centre=cx*a+cz*b; half=(abs(a)+abs(b))*.25
+                    if max(projection)<=centre-half+1e-6 or min(projection)>=centre+half-1e-6: break
+                else: squares.append(self.plan_column(col)+str(row+1))
+        return squares,world(-.5,.5)
+
+    def floorplan(self,args):
+        self.require_ft('floorplan')
+        if self.life['inside'] not in self.life['homes']: raise ValueError('floorplan needs the inside of a building you rent or can edit.')
+        p=self.state['player']; y=p['y']; floor=2 if y>=3 else 1
+        cells=[]; lines=[]; items=[]
+        for row in range(12):
+            line=[]
+            for col in range(14):
+                square=self.plan_column(col)+str(row+1)
+                kind='wall' if col in (0,13) or row in (0,11) else 'floor'
+                if square=='G1': kind='opening'
+                if square=='L9': kind='blocked'
+                if square=='M10': kind='void'
+                cells.append({'square':square,'kind':kind})
+                line.append({'wall':'#','floor':'.','opening':'=','blocked':'X','void':' '}[kind])
+            lines.append(line)
+        for i,(x,z,rotation) in enumerate(self.life['beds'].get(self.life['inside'],[])):
+            if self.life['bed_floors'].get(self.life['inside'],{}).get(i,1)!=floor: continue
+            label='ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuvwxyz0123456789'[i] if i<61 else '*'
+            squares,(use_x,use_z)=self.plan_bed_geometry(x,z,rotation)
+            use=self.plan_square(use_x,use_z)
+            reachable=not self.life['floorplan_unreachable']
+            items.append({'label':label,'id':f'mock-bed-{i+1}','item':'Bed (Individual Modern)','key':'ba:itemname_bedindividualmodern',
+                          'anchor':{'square':self.plan_square(x,z),'x':x,'y':y,'z':z},'squares':squares,'rotation':rotation,
+                          'use':[{'square':use,'x':use_x,'y':y,'z':use_z,'reachable':reachable,'wall_between':not reachable,
+                                  'path':'PathComplete' if reachable else 'PathInvalid'}], 'reachable':reachable,'footprint':'fake room boxes'})
+            for square in squares:
+                a,b=self.plan_point(square); col=round(a/.5)+1; row=round(b/.5)+1
+                lines[row][col]='*' if lines[row][col].isalnum() else label
+        square=self.plan_square(p['x'],p['z'])
+        if square:
+            x,z=self.plan_point(square); lines[round(z/.5)+1][round(x/.5)+1]='@'
+        return {'address':self.life['inside'],'session':self.session,'floor':floor,'building_size':'mock-small-room','building_version':1,
+                'square_size':.5,'origin':{'square':'A1','x':-.5,'y':y,'z':-.5},'columns':[self.plan_column(i) for i in range(14)],'rows':12,
+                'map':[''.join(line) for line in lines],'cells':cells,'items':items,'player':{'square':square,'x':p['x'],'y':y,'z':p['z']},
+                'geometry':'fake room; native 0.5 m world-grid anchors; no game geometry or navigation simulated'}
+
+    def place_furniture(self,args):
+        life=self.life
+        square=args.get('square')
+        if square is not None and ('x' in args or 'z' in args): raise ValueError('place takes a square or x and z, not both.')
+        if square is not None: x,z=self.plan_point(square)
+        else:
+            x,z=num(args,'x'),num(args,'z')
+            if x is None or z is None: raise ValueError('place needs a square, or x and z.')
+        if life['inside'] not in life['homes']: raise ValueError('You can place furniture only inside a building you rent.')
+        if not all(math.isfinite(v) for v in (x,z,num(args,'rotation') or 0)): raise ValueError('Placement coordinates and rotation must be finite.')
+        x=math.floor(x/.5+.5)*.5; z=math.floor(z/.5+.5)*.5
+        rotation=round((num(args,'rotation') or 0)/45)*45%360
+        if 'check' in args and not isinstance(args['check'],bool): raise ValueError('place check must be true or false.')
+        move=args.get('move'); check=args.get('check') is True
+        beds=life['beds'].get(life['inside']) or []
+        floor=2 if self.state['player']['y']>=3 else 1
+        on_floor=[i for i in range(len(beds)) if life['bed_floors'].get(life['inside'],{}).get(i,1)==floor]
+        selected=min(on_floor,key=lambda i: math.hypot(beds[i][0]-self.state['player']['x'],beds[i][1]-self.state['player']['z'])) if on_floor else None
+        if move:
+            if selected is None or move.lower() not in 'bed (individual modern) ba:itemname_bedindividualmodern': raise ValueError(f"No furniture called '{move}' in this building.")
+            name='Bed (Individual Modern)'
+        else:
+            hands=life['hands']
+            if not hands or hands['key']!='ba:itemname_closedcardboardbox' or not hands['contents'] or not hands['contents'][0].get('furniture'):
+                raise ValueError("You aren't holding a box of furniture (shops pack what you buy in a box).")
+            if not hands['contents'][0]['paid']: raise ValueError("You haven't paid for it.")
+            name=hands['contents'][0]['item']
+        resolved=self.plan_square(x,z)
+        kind=next((c['kind'] for c in self.floorplan({})['cells'] if c['square']==resolved),'void')
+        fits=kind in ('floor','opening') and not life['floorplan_blocked']
+        why=None if fits else 'that part of the floor can\'t take furniture' if kind=='blocked' else 'no room there (a wall or another thing is in the way)'
+        if fits and not check:
+            if move: beds[selected]=(x,z,rotation)
+            else:
+                life['beds'].setdefault(life['inside'],[]).append((x,z,rotation)); life['hands']=None
+                life['bed_floors'].setdefault(life['inside'],{})[len(life['beds'][life['inside']])-1]=floor
+            self.event(f'Test bridge: place {name} at x {x:.1f}, z {z:.1f}, rotation {rotation:.0f}: placed.')
+        _,(use_x,use_z)=self.plan_bed_geometry(x,z,rotation)
+        return {'item':name,'placed':fits and not check,'moved':bool(move),'reachable':None if kind in ('blocked','void') else not life['floorplan_unreachable'],
+                'checked':check,'fits':fits,'restored':True if check or not fits else None,'blocked_by':'Mock pillar' if life['floorplan_blocked'] else 'Mock wall' if kind=='wall' else None,
+                'id':f'mock-bed-{selected+1}' if move else f'mock-bed-{len(life['beds'][life['inside']])}' if fits and not check else None,
+                'square':resolved,'position_resolved':kind not in ('blocked','void'),'requested_square':square.upper() if square else None,
+                'floor':2 if self.state['player']['y']>=3 else 1,'use':[] if kind in ('blocked','void') else [{'square':self.plan_square(use_x,use_z),'x':use_x,'y':self.state['player']['y'],'z':use_z,
+                    'reachable':not life['floorplan_unreachable'],'wall_between':life['floorplan_unreachable'],'path':'PathInvalid' if life['floorplan_unreachable'] else 'PathComplete'}],
+                'still_placing':False,'why':why,'x':x,'y':self.state['player']['y'],'z':z,'rotation':float(rotation),'notices':[]}
+
     def life_command(self, cmd, args):
         life=self.life; p=self.state['player']
         if cmd=='use':
@@ -1815,26 +1935,7 @@ class Mock:
             if not hands['contents']: life['hands']=None
             self.event(f"Test bridge: ate {food['key']}.")
             return {'item':food['item'],'done':True,'hunger':round(needs['hunger'],1),'energy':round(needs['energy'],1),'notices':[]}
-        if cmd=='place':
-            x,z=num(args,'x'),num(args,'z')
-            if x is None or z is None: raise ValueError('place needs "x" and "z": a point on the floor (state\'s player x and z, or use list\'s).')
-            if life['inside'] not in life['homes']: raise ValueError('You can place furniture only inside a building you rent.')
-            rotation=round((num(args,'rotation') or 0)/45)*45%360
-            move=args.get('move')
-            if move:
-                beds=life['beds'].get(life['inside']) or []
-                if not beds or move.lower() not in 'bed (individual modern) ba:itemname_bedindividualmodern': raise ValueError(f"No furniture called '{move}' in this building.")
-                beds[-1]=(x,z,rotation)
-                self.event(f'Test bridge: place (move) ba:itemname_bedindividualmodern at x {x:.1f}, z {z:.1f}, rotation {rotation:.0f}: placed.')
-                return {'item':'Bed (Individual Modern)','placed':True,'moved':True,'reachable':True,'still_placing':False,'why':None,'x':round(x,2),'z':round(z,2),'rotation':float(rotation),'notices':[]}
-            hands=life['hands']
-            if not hands or hands['key']!='ba:itemname_closedcardboardbox' or not hands['contents'] or not hands['contents'][0].get('furniture'):
-                raise ValueError("You aren't holding a box of furniture (shops pack what you buy in a box).")
-            if not hands['contents'][0]['paid']: raise ValueError("You haven't paid for it.")
-            life['beds'].setdefault(life['inside'],[]).append((x,z,rotation))
-            name=hands['contents'][0]['item']; life['hands']=None
-            self.event(f'Test bridge: place {name} at x {x:.1f}, z {z:.1f}, rotation {rotation:.0f}: placed.')
-            return {'item':name,'placed':True,'moved':False,'reachable':True,'still_placing':False,'why':None,'x':round(x,2),'z':round(z,2),'rotation':float(rotation),'notices':[]}
+        if cmd=='place': return self.place_furniture(args)
 
     def contacts(self):
         out=[{'id':'the_city_of_new_york','name':'The City of New York','category':'General','unread':False}]
@@ -2248,6 +2349,7 @@ class Mock:
         if cmd=='map':
             self.require_city(cmd)
             return self.map_command(args)
+        if cmd=='floorplan': return self.floorplan(args)
         if cmd=='walk': return self.walk(args)
         if cmd=='drive': return self.drive_command(args)
         if cmd in ('drop','pickup'): return self.carry_command(cmd,args)
@@ -2632,7 +2734,7 @@ class Mock:
             self.event(f'Mock console: {line}')
             return {'output':[f'Mock console accepted: {line}']}
         if cmd=='quit': return {}
-        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, drive, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, place, drop, pickup, handtruck, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.")
+        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, drive, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, floorplan, place, drop, pickup, handtruck, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.")
 
 
 class Handler(BaseHTTPRequestHandler):
