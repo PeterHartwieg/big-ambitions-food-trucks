@@ -242,7 +242,7 @@ namespace FoodTrucks
     // (art/README.md: opening at x 1.10, centre z -1.10), so its line is always on the right.
     internal sealed class WindowShape
     {
-        private WindowShape(float sideways, float reach, float along, int[] sides, bool pavementOnly, float spacing, bool preferBack,
+        private WindowShape(float sideways, float reach, float along, int[] sides, float spacing, bool preferBack,
             float tolerance, bool strict, bool outward)
         {
             Outward = outward;
@@ -250,7 +250,6 @@ namespace FoodTrucks
             Strict = strict;
             Spacing = spacing;
             PreferBack = preferBack;
-            PavementOnly = pavementOnly;
             Sideways = sideways;
             Reach = reach;
             Along = along;
@@ -262,11 +261,6 @@ namespace FoodTrucks
         // space has its hatch side over the lane, and the line starts at the kerb instead.
         public float Reach { get; }
         public float Along { get; }
-        // No place on a driving lane, the strip beside one, the road layer or a crosswalk: a truck's line forms beside
-        // the street. A cart's line keeps only off the driving lanes and the road layer, and prefers places away from
-        // the strip beside them. The driving lanes come from the traffic system (TrafficLanes); the road layer is
-        // known only on bridges.
-        public bool PavementOnly { get; }
         // The line may also run straight out from the window, away from the vehicle, instead of along its length:
         // a cart pushed in at right angles to the kerb has its length across the pavement, so a line along it would
         // run into the street (blind run 2, Peter). Whichever keeps more places on the pavement wins, along on a tie.
@@ -294,9 +288,9 @@ namespace FoodTrucks
         // the middle) is 2 m from the end of the body rather than 3.8 m, so most of it stands along open pavement. Each
         // place is checked where the NavMesh put it (within 0.2 m of the wanted point, still 2.0 m out at least, 0.9 m
         // or more from the one before), so the clearance and spacing hold as built.
-        private static readonly WindowShape Cart = new WindowShape(1.05f, 1.05f, 0f, new[] { 1, -1 }, pavementOnly: false, spacing: 0.8f, preferBack: false,
+        private static readonly WindowShape Cart = new WindowShape(1.05f, 1.05f, 0f, new[] { 1, -1 }, spacing: 0.8f, preferBack: false,
             tolerance: 0.45f, strict: false, outward: true);
-        private static readonly WindowShape Truck = new WindowShape(2.00f, 3.40f, -1.10f, new[] { 1 }, pavementOnly: true, spacing: 1.0f, preferBack: true,
+        private static readonly WindowShape Truck = new WindowShape(2.00f, 3.40f, -1.10f, new[] { 1 }, spacing: 1.0f, preferBack: true,
             tolerance: 0.2f, strict: true, outward: false);
 
         public static WindowShape For(string kind) => kind == "truck" ? Truck : Cart;
@@ -332,7 +326,7 @@ namespace FoodTrucks
         private readonly List<Vector3> ends;
         // The driving lanes near the line, so every walk a customer starts is checked against them (QueuePerson.Walk).
         private readonly TrafficLanes? lanes;
-        // Customers taken out of view because their next walk would cross a driving lane: not shown again.
+        // Customers taken out of view because their next walk is unsafe: not shown again.
         private readonly HashSet<long> unseen = new HashSet<long>();
         private readonly GameObject root;
         private readonly Dictionary<long, QueuePerson> people = new Dictionary<long, QueuePerson>();
@@ -472,7 +466,7 @@ namespace FoodTrucks
                 if (pair.Value != null && pair.Value.UnsafeWalk)
                 {
                     unseen.Add(pair.Key);
-                    Log.Info($"Queue view: {Kind} {VehicleId}: a customer's walk would cross a driving lane; taken out of view.");
+                    Log.Info($"Queue view: {Kind} {VehicleId}: a customer's walk rejected by {pair.Value.UnsafeWalkTest}; taken out of view.");
                 }
                 else if (pair.Value != null && pair.Value.Blocked)
                 {
@@ -489,6 +483,8 @@ namespace FoodTrucks
             {
                 var person = leaving[i];
                 if (person != null && !person.Tick()) continue;
+                if (person != null && person.UnsafeWalk)
+                    Log.Info($"Queue view: {Kind} {VehicleId}: a customer's way out rejected by {person.UnsafeWalkTest}; taken out of view.");
                 if (person != null) Object.Destroy(person.gameObject);
                 leaving.RemoveAt(i);
             }
@@ -643,17 +639,22 @@ namespace FoodTrucks
         {
             if (person == null) return;
             var target = ends.Count > 0 ? ends[UnityEngine.Random.Range(0, ends.Count)] : AwayFrom(person.Position);
-            person.Leave(target, exit);
+            if (target == null)
+            {
+                Object.Destroy(person.gameObject);
+                return;
+            }
+            person.Leave(target.Value, exit);
             leaving.Add(person);
         }
 
-        // Without ways out: a point on the NavMesh about 15 m from the window, past the person.
-        private Vector3 AwayFrom(Vector3 position)
+        // Without ways out, try the same pavement/path checks; never fall back to an unchecked point in the street.
+        private Vector3? AwayFrom(Vector3 position)
         {
             var away = position - windowLook;
             away.y = 0f;
             var wanted = position + (away.sqrMagnitude > 0.01f ? away.normalized : Vector3.forward) * 15f;
-            return NavMesh.SamplePosition(wanted, out var hit, 4f, QueuePerson.Filter) ? hit.position : wanted;
+            return lanes == null ? null : WayIn(wanted, position, QueuePerson.PedestrianFilter, lanes, new NavMeshPath(), new Rejections());
         }
 
         // The line runs from a window place beside the vehicle along its length (a cart: or straight out from it,
@@ -665,9 +666,10 @@ namespace FoodTrucks
             var forward = Direction(cart.forward);
             var right = Direction(cart.right);
             var center = cart.position + forward * shape.Along;
-            var filter = QueuePerson.Filter;
-            // The driving lanes, so a line and its ways in stay off the street the NavMesh also covers (carts too
-            // since blind run 2: a cart's customers queued out into a driving lane).
+            var filter = QueuePerson.PedestrianFilter;
+            var rejected = new Rejections();
+            // The NPC mesh is the positive pedestrian-ground test. Lane/parking/bridge checks remain extra exclusions,
+            // not evidence of pavement: the player mesh and gaps between traffic lanes also cover carriageways.
             var lanes = TrafficLanes.Near(center, 30f);
 
             var best = new List<Vector3>();
@@ -680,29 +682,25 @@ namespace FoodTrucks
             {
                 var outward = right * side;
                 var placed = new List<Vector3>();
-                var roads = 0;
-                var roadside = 0;
                 for (var k = 0; k < count; k++)
                 {
                     var wanted = straightOut
                         ? center + outward * (lineOut + k * shape.Spacing)
                         : center + outward * lineOut + forward * (direction * k * shape.Spacing);
-                    var place = PlaceAt(wanted, shape, filter, lanes);
+                    var place = PlaceAt(wanted, shape, filter, lanes, rejected);
                     if (place == null) break;
                     if (shape.Strict)
                     {
-                        if (Vector3.Dot(place.Value - cart.position, outward) < shape.Sideways - 0.01f) break;
-                        if (placed.Count > 0 && FlatDistance(placed[placed.Count - 1], place.Value) < WindowShape.MinSeparation) break;
+                        if (Vector3.Dot(place.Value - cart.position, outward) < shape.Sideways - 0.01f)
+                        { rejected.Add("vehicle clearance"); break; }
+                        if (placed.Count > 0 && FlatDistance(placed[placed.Count - 1], place.Value) < WindowShape.MinSeparation)
+                        { rejected.Add("place spacing"); break; }
                     }
-                    // People move up from place to place: no step between two of them may cross a driving lane.
-                    if (placed.Count > 0 && CrossesRoad(placed[placed.Count - 1], place.Value, lanes)) break;
-                    if (Legality.RoadBelow(place.Value)) roads++;
-                    if (OnStreet(place.Value, lanes)) roadside++;
+                    if (placed.Count > 0 && CrossesRoad(placed[placed.Count - 1], place.Value, lanes, out var test))
+                    { rejected.Add(test); break; }
                     placed.Add(place.Value);
                 }
-                // A cart's place beside a driving lane (HatchSide's roadside strip, a crosswalk) counts for much less
-                // than one on the pavement, but more than none.
-                var score = placed.Count * 10 - roads * 3 - roadside * 8 + (shape.PreferBack && direction < 0 ? 1 : 0);
+                var score = placed.Count * 10 + (shape.PreferBack && direction < 0 ? 1 : 0);
                 if (score > bestScore)
                 {
                     best = placed;
@@ -725,7 +723,7 @@ namespace FoodTrucks
             if (shape.Outward)
                 foreach (var side in shape.Sides)
                     Try(side, 1, shape.Sideways, straightOut: true);
-            if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the window at {center}; nobody shown", 0, lanes);
+            if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the window at {center}; nobody shown{rejected}", 0, lanes);
 
             // Ways in and out: points on the pavement a little way along the line's direction both ways, reachable from
             // the window. A path that crosses a driving lane (from the far pavement, or round an obstacle through the
@@ -734,27 +732,26 @@ namespace FoodTrucks
             var crossAxis = bestOutward ? forward : right * bestSide;
             var ends = new List<Vector3>();
             var path = new NavMeshPath();
-            var unsafeWays = 0;
             foreach (var along in new[] { 11f, -9f, 15f, -13f, 19f, -17f })
             {
                 var wanted = center + lineAxis * along + crossAxis * UnityEngine.Random.Range(shape.Sideways - 0.45f, shape.Reach + 1.35f);
-                if (WayIn(wanted, best[0], shape, filter, lanes, path, ref unsafeWays) is { } way) ends.Add(way);
+                if (WayIn(wanted, best[0], filter, lanes, path, rejected) is { } way) ends.Add(way);
             }
             for (var attempt = 0; ends.Count < 2 && attempt < 8; attempt++)
             {
                 var angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
                 var offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
                 // A truck's fallback ways stay on the hatch side's half too.
-                if (shape.PavementOnly && Vector3.Dot(offset, right * bestSide) < 0f) offset -= 2f * Vector3.Dot(offset, right * bestSide) * (right * bestSide);
+                if (shape.Strict && Vector3.Dot(offset, right * bestSide) < 0f) offset -= 2f * Vector3.Dot(offset, right * bestSide) * (right * bestSide);
                 var wanted = center + offset * UnityEngine.Random.Range(9f, 16f);
-                if (WayIn(wanted, best[0], shape, filter, lanes, path, ref unsafeWays) is { } way) ends.Add(way);
+                if (WayIn(wanted, best[0], filter, lanes, path, rejected) is { } way) ends.Add(way);
             }
             var shapeText = bestOutward
                 ? $"straight out from the {(bestSide > 0 ? "right" : "left")} side"
                 : $"on the {(bestSide > 0 ? "right" : "left")} side towards the {(bestDirection > 0 ? "front" : "back")}";
             var detail = $"{best.Count} of {count} places {shapeText}, " +
                          $"{shape.Spacing:F1} m apart as wanted, {bestOut:F1} m out from the middle; as placed: {Geometry(best, cart, right * bestSide, shape)}, " +
-                         $"{ends.Count} ways in and out{(unsafeWays > 0 ? $" ({unsafeWays} crossing a driving lane left out)" : "")}";
+                         $"{ends.Count} ways in and out{rejected}";
             return (best, center, ends, detail, bestSide, lanes);
         }
 
@@ -768,59 +765,75 @@ namespace FoodTrucks
             return text + (gaps.Count == 0 ? "" : $", {gaps.Min():F2}…{gaps.Max():F2} m apart");
         }
 
-        // The NavMesh point at a wanted place, if it is walkable there (not a parking lane or a driving lane; for a
-        // truck, pavement).
-        private static Vector3? PlaceAt(Vector3 wanted, WindowShape shape, NavMeshQueryFilter filter, TrafficLanes lanes)
+        // Counts rejected candidate places and ways across all layouts, including layouts that did not win.
+        private sealed class Rejections
         {
-            if (!NavMesh.SamplePosition(wanted, out var hit, 0.6f, filter) || FlatDistance(hit.position, wanted) > shape.Tolerance) return null;
-            if (Legality.InParkingLane(hit.position)) return null;
-            if (shape.PavementOnly ? OnStreet(hit.position, lanes) : OnRoad(hit.position, lanes)) return null;
+            private readonly Dictionary<string, int> counts = new Dictionary<string, int>();
+            public void Add(string test) => counts[test] = counts.TryGetValue(test, out var count) ? count + 1 : 1;
+            public override string ToString() => counts.Count == 0 ? "" :
+                "; candidates rejected by " + string.Join(", ", counts.Select(p => $"{p.Key}: {p.Value}"));
+        }
+
+        private static Vector3? PlaceAt(Vector3 wanted, WindowShape shape, NavMeshQueryFilter filter, TrafficLanes lanes, Rejections rejected)
+        {
+            if (!NavMesh.SamplePosition(wanted, out var hit, 0.6f, filter))
+            { rejected.Add("NPC NavMesh (agent 0)"); return null; }
+            if (FlatDistance(hit.position, wanted) > shape.Tolerance)
+            { rejected.Add("placement tolerance on NPC NavMesh"); return null; }
+            if (OnStreet(hit.position, lanes) is { } test)
+            { rejected.Add(test); return null; }
             return hit.position;
         }
 
-        // A way in for a customer: a NavMesh point near the wanted one, off the street, with a complete path to the
-        // line's first place that (for a truck) crosses no driving lane. Null when there is none.
-        private static Vector3? WayIn(Vector3 wanted, Vector3 first, WindowShape shape, NavMeshQueryFilter filter, TrafficLanes lanes, NavMeshPath path, ref int unsafeWays)
+        // An endpoint on pedestrian ground and a complete NPC path. The actual walk is checked again by the agent,
+        // in both directions and to every place, since a path to the window need not be the path to the line's tail.
+        private static Vector3? WayIn(Vector3 wanted, Vector3 first, NavMeshQueryFilter filter, TrafficLanes lanes, NavMeshPath path, Rejections rejected)
         {
-            if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter)) return null;
-            if (shape.PavementOnly ? OnStreet(hit.position, lanes) : OnRoad(hit.position, lanes)) return null;
-            if (!NavMesh.CalculatePath(hit.position, first, filter, path) || path.status != NavMeshPathStatus.PathComplete) return null;
-            if (CrossesRoad(path.corners, lanes))
-            {
-                unsafeWays++;
-                return null;
-            }
+            if (!NavMesh.SamplePosition(wanted, out var hit, 2.5f, filter))
+            { rejected.Add("NPC NavMesh (agent 0)"); return null; }
+            if (OnStreet(hit.position, lanes) is { } test)
+            { rejected.Add(test); return null; }
+            if (!NavMesh.CalculatePath(hit.position, first, filter, path) || path.status != NavMeshPathStatus.PathComplete)
+            { rejected.Add("complete NPC path"); return null; }
+            if (CrossesRoad(path.corners, lanes, out var pathTest))
+            { rejected.Add(pathTest); return null; }
             return hit.position;
         }
 
-        // Not pavement for a truck's customers to stand on or walk in from: HatchSide's reading, as for the hatch
-        // check, so a driving lane, the strip beside one (a wide lane's edge, a parking lane the colliders miss), a
-        // parking lane, a crosswalk and the road layer are all out. Without traffic data only the last three count.
-        private static bool OnStreet(Vector3 position, TrafficLanes lanes) =>
-            HatchSide.Classify(lanes.Distance(position), Legality.RoadBelow(position), Legality.InParkingLane(position),
-                Legality.NearCrosswalk(position, 0.5f), walkable: true) != Ground.Pavement;
-
-        // A driving lane or the road layer: no place for anyone to stand, a cart's customers included.
-        private static bool OnRoad(Vector3 position, TrafficLanes lanes) =>
-            lanes.Distance(position) <= HatchSide.LaneHalfWidthMetres || Legality.RoadBelow(position);
-
-        // Whether a NavMesh path (its corners) goes over a driving lane or the road layer anywhere.
-        internal static bool CrossesRoad(Vector3[] corners, TrafficLanes lanes)
+        // Extra exclusions for carts and trucks alike. Never infer pavement from the absence of these signals.
+        // Crosswalk triggers are the game's pedestrian crossing objects (PedestrianMovementHandler.OnTriggerEnter).
+        // Queues use the same pavement throughout; they do not send customers across a crossing or wait on one.
+        internal static string? OnStreet(Vector3 position, TrafficLanes lanes)
         {
-            if (corners.Length == 1) return CrossesRoad(corners[0], corners[0], lanes);
+            if (Legality.InParkingLane(position)) return "parking lane";
+            if (Legality.NearCrosswalk(position, 0.5f)) return "Crosswalk trigger";
+            if (Legality.RoadBelow(position)) return "Roads layer";
+            if (lanes.Distance(position) <= HatchSide.RoadsideMetres) return "traffic lane / roadside strip";
+            return null;
+        }
+
+        // Empty paths are unproven, not safe. Every segment must stay on the NPC mesh and off the street.
+        internal static bool CrossesRoad(Vector3[] corners, TrafficLanes lanes, out string test)
+        {
+            test = "empty NPC path";
+            if (corners.Length == 0) return true;
+            if (corners.Length == 1) return CrossesRoad(corners[0], corners[0], lanes, out test);
             for (var i = 1; i < corners.Length; i++)
-                if (CrossesRoad(corners[i - 1], corners[i], lanes)) return true;
+                if (CrossesRoad(corners[i - 1], corners[i], lanes, out test)) return true;
             return false;
         }
 
-        // Whether walking straight from a to b goes over a driving lane or the road layer, sampled every half metre.
-        private static bool CrossesRoad(Vector3 a, Vector3 b, TrafficLanes lanes)
+        // Raycast on the pedestrian mesh catches gaps between places, even with no traffic data. Unlike sampling,
+        // it cannot step over a narrow road/mesh boundary. The extra collider/lane exclusions are sampled too.
+        private static bool CrossesRoad(Vector3 a, Vector3 b, TrafficLanes lanes, out string test)
         {
+            test = "NPC NavMesh (agent 0) boundary";
+            if (NavMesh.Raycast(a, b, out _, QueuePerson.PedestrianFilter)) return true;
             var steps = Mathf.Max(1, Mathf.CeilToInt(FlatDistance(a, b) / 0.5f));
             for (var i = 0; i <= steps; i++)
             {
                 var point = Vector3.Lerp(a, b, i / (float)steps);
-                if (lanes.Distance(point) <= HatchSide.LaneHalfWidthMetres || Legality.RoadBelow(point)) return true;
+                if (OnStreet(point, lanes) is { } reason) { test = reason; return true; }
             }
             return false;
         }
@@ -868,8 +881,6 @@ namespace FoodTrucks
         private bool walking;
         private bool hasTarget;
         private bool leavingNow;
-        // No complete path to the target: a person in line is put there, a leaving one removed.
-        private bool noPath;
         // The driving lanes every walk is checked against (null only for a person made outside a line).
         private TrafficLanes? lanes;
         private float walkStarted;
@@ -883,13 +894,20 @@ namespace FoodTrucks
         // Set when a walk ended by circling: how far from the place they stopped, and whether they were put there.
         public (float Miss, bool Warped)? Circled { get; set; }
 
+        // Existing hatch/stop probes use the player mesh. Keep those readings unchanged.
         public static NavMeshQueryFilter Filter => new NavMeshQueryFilter { agentTypeID = PlayerAgentTypeId, areaMask = NavMesh.AllAreas };
+        // 1.0: PedestrianBuildingPositionProvider.TryGetSampleTarget samples NavMeshHelper.NpcNavMeshFilter;
+        // Extensions.NavMeshHelper (HGExtensions) defines it as agent 0, all areas. The player uses 1479372276.
+        // These are different baked meshes, not different area names. Use the game's pedestrian mesh for the line
+        // AND its agents; a player agent can walk straight across roads even when its targets are on pavement.
+        public static NavMeshQueryFilter PedestrianFilter => Extensions.NavMeshHelper.NpcNavMeshFilter;
         // The walking pace of the first customer's NavMesh agent; null until one exists.
         public static float? WalkMetresPerSecond { get; private set; }
 
         public bool Arrived => hasTarget && !walking;
-        // Their last walk would have crossed a driving lane, so they didn't take it: the line takes them out of view.
+        // A walk failed the pedestrian-ground/path checks: the line takes this customer out of view.
         public bool UnsafeWalk { get; private set; }
+        public string UnsafeWalkTest { get; private set; } = "NPC NavMesh (agent 0)";
         // Waited BlockedSeconds for their place to be free: the line takes them out of view.
         public bool Blocked { get; private set; }
         // When they started waiting for their place to be free, or negative.
@@ -922,25 +940,31 @@ namespace FoodTrucks
         {
             character = PrefabHelper.CreatePrefab<ThirdPersonCharacter>(CharacterPrefab, transform);
             if (character == null) throw new InvalidOperationException($"Prefab {CharacterPrefab} not found.");
-            character.navmeshAgent.agentTypeID = PlayerAgentTypeId;
+            character.navmeshAgent.agentTypeID = PedestrianFilter.agentTypeID;
+            character.navmeshAgent.areaMask = PedestrianFilter.areaMask;
             character.gameObject.SetActive(true);
             character.isPlayer = false;
             character.appearanceSetter.SetRandomAppearance();
             var agent = character.navmeshAgent;
-            if (!NavMesh.SamplePosition(start, out var hit, 2f, Filter) || !agent.Warp(hit.position))
+            if (!NavMesh.SamplePosition(start, out var hit, 0.2f, PedestrianFilter) ||
+                (lanes != null && QueueLine.OnStreet(hit.position, lanes) != null) || !agent.Warp(hit.position))
             {
-                Log.Error($"Queue view: no NavMesh near {start}.");
+                Log.Info($"Queue view: customer start rejected by NPC NavMesh / pavement check near {start}.");
                 return false;
             }
             character.SetWalkingSpeed(ThirdPersonCharacter.WalkingSpeed.Walk);
             var prefabStopping = agent.stoppingDistance;
             agent.stoppingDistance = Mathf.Max(agent.stoppingDistance, StoppingMetres);
             agent.autoBraking = true;
+            // Keep the checked path. A new obstacle makes the view retry/drop the walk rather than silently
+            // re-pathing through a crossing that was not checked.
+            agent.autoRepath = false;
             if (!agentLogged)
             {
                 agentLogged = true;
                 Log.Info($"Queue view: customer agent speed {agent.speed:F2} m/s, stopping distance {prefabStopping:F2} m (now {agent.stoppingDistance:F2}), radius {agent.radius:F2} m, " +
-                         $"acceleration {agent.acceleration:F1}, angular speed {agent.angularSpeed:F0}, avoidance {agent.obstacleAvoidanceType}; arrives within {ArriveMetres:F2} m.");
+                         $"acceleration {agent.acceleration:F1}, angular speed {agent.angularSpeed:F0}, avoidance {agent.obstacleAvoidanceType}; arrives within {ArriveMetres:F2} m; " +
+                         $"NavMesh agent {agent.agentTypeID}, area mask {agent.areaMask}.");
                 if (agent.speed > 0.1f) WalkMetresPerSecond = agent.speed;
             }
             return true;
@@ -991,9 +1015,9 @@ namespace FoodTrucks
                 // Close to the target and no closer for a while: circling it (avoidance, or a target the agent can't
                 // stand on exactly). This is what showed as people spinning on the pavement (0.9.7 playtest).
                 // A walk round an obstacle can stay this close in a straight line, so the path left must be short too.
-                var circling = !noPath && distance <= CircleNearMetres && Time.time - closerSince > CircleSeconds &&
+                var circling = distance <= CircleNearMetres && Time.time - closerSince > CircleSeconds &&
                                (!agent.hasPath || agent.remainingDistance <= CircleNearMetres + 0.5f);
-                var stuck = noPath || Time.time - walkStarted > (leavingNow ? LeaveSeconds : StuckSeconds);
+                var stuck = Time.time - walkStarted > (leavingNow ? LeaveSeconds : StuckSeconds);
                 if (leavingNow) return reached || stuck || circling;
                 if (!((circling || stuck) && !reached)) blockedSince = -1f;
                 if (reached) Stop();
@@ -1043,7 +1067,6 @@ namespace FoodTrucks
             target = to;
             hasTarget = true;
             walking = true;
-            noPath = false;
             walkStarted = Time.time;
             closerSince = Time.time;
             blockedSince = -1f;
@@ -1051,7 +1074,7 @@ namespace FoodTrucks
             Walks++;
             if (!agent.isOnNavMesh)
             {
-                noPath = true;
+                UnsafeWalk = true;
                 return;
             }
             agent.isStopped = false;
@@ -1059,20 +1082,25 @@ namespace FoodTrucks
             var path = new NavMeshPath();
             if (agent.CalculatePath(to, path) && path.status == NavMeshPathStatus.PathComplete)
             {
-                // A customer never walks over a driving lane: the walk isn't taken, and the person goes from
-                // view (QueueLine.Tick), arriving, moving up or leaving alike. No warp or other way round instead.
-                if (lanes != null && QueueLine.CrossesRoad(path.corners, lanes))
+                // Check the NPC agent's actual path, arriving, moving up and leaving alike.
+                if (lanes != null && QueueLine.CrossesRoad(path.corners, lanes, out var test))
                 {
                     agent.ResetPath();
+                    UnsafeWalkTest = test;
                     UnsafeWalk = true;
                     return;
                 }
-                agent.SetPath(path);
+                if (!agent.SetPath(path))
+                {
+                    UnsafeWalkTest = "NPC agent SetPath";
+                    UnsafeWalk = true;
+                }
             }
             else
             {
                 agent.ResetPath();
-                noPath = true;
+                UnsafeWalkTest = "complete NPC agent path";
+                UnsafeWalk = true;
             }
         }
 
