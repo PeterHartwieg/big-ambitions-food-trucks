@@ -28,6 +28,7 @@ SITES = [s['id'] for s in json.loads((ROOT / 'data/commissaries.json').read_text
 MEASURED = {s['id']: s['bay'] for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries'] if s.get('bay')}
 CITY = json.loads((ROOT / 'tools/balance/city.json').read_text())['buildings']
 BUILDINGS = {b['key'] for b in CITY}
+CLASSIFIER = json.loads((ROOT / 'data/demand.json').read_text())['classifier']
 # Made-up park triggers for parks (name, kind, min x/y/z, max x/y/z); the game's come from the scene.
 PARKS = [('Park_Trigger', 'parkarea', (1180.0, 9.5, 600.0, 1290.0, 19.5, 700.0)),
          ('SkatePark_Trigger', 'skatepark', (1490.0, 9.8, 440.0, 1520.0, 14.8, 470.0))]
@@ -533,10 +534,16 @@ class Mock:
             if not business and btype not in ('ba:buildingtype_special',None):
                 out+=['for_rent','for_rent:'+btype]
             if business: out.append('business:'+business)
-            if btype=='ba:buildingtype_office': out.append('offices')
-            if btype=='ba:buildingtype_warehouse': out.append('factories')
-            if business in ('ba:businesstype_nightclub','ba:businesstype_bar'): out.append('nightlife')
-            if btype in ('ba:buildingtype_theater','ba:buildingtype_cinema'): out.append('shows')
+            # Core StreetFoodMap over AreaClassifier.RuleFor: a business's rule before its building's (data/demand.json).
+            rule=CLASSIFIER['businessTypes'].get(business) if business else None
+            if rule is None and btype: rule=CLASSIFIER['buildingTypes'].get(btype)
+            rule=rule or {}
+            shows={'ba:buildingtype_theater','ba:buildingtype_cinema','ba:businesstype_theater','ba:businesstype_cinema'}
+            show=(business in shows) if business and business!='ba:businesstype_empty' else (btype in shows)
+            if rule.get('office',0)>0: out.append('offices')
+            if rule.get('industrial',0)>0: out.append('factories')
+            if not show and rule.get('nightlife',0)>0: out.append('nightlife')
+            if show: out.append('shows')
             if b['key'] in pitches: out.append('pitches')
             if b['key'] in sites: out.append('commissaries')
             return out

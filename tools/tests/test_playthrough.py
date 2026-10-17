@@ -450,10 +450,28 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.play('walk', '410', '230'), 1)
         self.assertIn('get out first', self.lines[0])
 
+    def test_a_walk_from_a_stopped_clock_puts_back_its_speed(self):
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.session.bridge.call('time', {'pause': True, 'speed': 4})
+        self.assertEqual(self.play('walk', '400', '230'), 0, self.lines)
+        clock = self.session.bridge.call('state')['result']['clock']
+        self.assertEqual((clock['paused'], clock['speed']), (True, 4))
+        # Refused by the game after the clock was started: put back all the same.
+        self.assertEqual(self.play('walk', '--to', 'vehicle:no-such-cart'), 1, self.lines)
+        clock = self.session.bridge.call('state')['result']['clock']
+        self.assertEqual((clock['paused'], clock['speed']), (True, 4))
+
     def test_the_map_lists_its_filters_and_the_buildings_one_lights(self):
         self.session.bridge.call('save', {'name': 'FT playtest'})
         self.assertEqual(self.play('map', 'filters'), 0, self.lines)
         self.assertTrue(any(line.startswith('commissaries:') for line in self.lines), self.lines)
+        # The Street food filters follow Core's rule: a business decides before its building (a liquor store in a
+        # shop draws the night crowd, a recruitment agency in a special building draws offices).
+        city = {b['key']: b for b in runpy.run_path(str(TOOLS / 'mock-bridge'), run_name='mock_city')['CITY']}
+        for address, filter_ in (('ba:street_fifthavenue#44', 'nightlife'), ('ba:street_broadwaystreet#5', 'offices')):
+            self.session.mock.state['player'].update(x=city[address]['x'], z=city[address]['z'])
+            first = self.session.bridge.call('map', {'filter': filter_, 'limit': 5})['result']['buildings']
+            self.assertIn(address, [x['address'] for x in first], filter_)
         self.assertEqual(self.play('map', 'commissaries', '--limit', '3'), 0, self.lines)
         self.assertIn('buildings lit by commissaries', self.lines[0])
         self.assertEqual(len(self.lines), 4)

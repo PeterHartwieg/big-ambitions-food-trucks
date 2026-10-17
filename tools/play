@@ -186,7 +186,7 @@ class Play:
         try:
             r = self.call('walk', args, 630)
         finally:
-            if was_paused: self.call('time', {'pause': True})
+            if was_paused: self.call('time', {'pause': True, **({'speed': was_speed} if was_speed not in (None, 1) else {})})
             elif was_speed not in (None, 1): self.call('time', {'speed': was_speed})
         pushing = f", pushing {r['holding']}" if r.get('holding') else ''
         if r['arrived']:
