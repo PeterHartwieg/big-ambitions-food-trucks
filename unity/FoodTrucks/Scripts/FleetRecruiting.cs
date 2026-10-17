@@ -124,7 +124,7 @@ namespace FoodTrucks
         {
             try
             {
-                if (!CanWork || Registrations == null || AgencySkills == null || BusinessDropdown == null) return;
+                if (!CanWork || Registrations == null || AgencySkills == null || BusinessDropdown == null || SkillsDropdown == null) return;
                 if (FleetRecruitment.Skills(FoodVehicles(), AgencySkills(__instance)).Count == 0) return;
                 var list = Registrations(__instance);
                 if (list == null || list.Any(r => r is FleetEntry)) return;

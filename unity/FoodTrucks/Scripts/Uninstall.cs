@@ -159,6 +159,7 @@ namespace FoodTrucks
             catch (Exception ex)
             {
                 Log.Error("Uninstall: fleet recruitment campaigns: " + ex);
+                CartSelling.Notify("foodtrucks:notification_uninstall_fleet_campaigns_failed");
                 return 1;
             }
         }
