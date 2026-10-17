@@ -79,6 +79,8 @@ namespace FoodTrucks
             result["ledger_today"] = new JObject
             {
                 ["street_food"] = (today?.RevenueCents ?? 0) / 100.0,
+                ["sales_waiting"] = state.CrewTakings.Sum(t => t.Cents) / 100.0,
+                // Historical alias for existing scenarios; both now include player and crew sales.
                 ["crew_waiting"] = state.CrewTakings.Sum(t => t.Cents) / 100.0,
             };
             return result;

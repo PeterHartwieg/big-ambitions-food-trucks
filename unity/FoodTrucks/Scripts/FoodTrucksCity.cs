@@ -90,8 +90,8 @@ namespace FoodTrucks
         private static void OnSaveGame()
         {
             // Runs synchronously before the game serializes the save. Never throw into the game's save.
-            // Sales Core has made but the queue view still holds are paid first, so the save has them.
-            // Apart, so a failed payment never stops the mod's data from being written.
+            // Sales Core has made but the queue view still holds are booked into the midnight pot first, so the save has them.
+            // Apart, so failed booking never stops the mod's data from being written.
             try { CartSelling.PayAllHeldNow(); }
             catch (Exception ex) { Log.Error(ex); }
             try { WriteToSave(); }

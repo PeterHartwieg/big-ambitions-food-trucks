@@ -9,7 +9,7 @@ namespace FoodTrucks.Core.Tests.Saves;
 public class SaveCodecTests
 {
     [Fact]
-    public void CustomPricesRoundTripWithOrdinalItemNamesInSchemaOne()
+    public void CustomPricesRoundTripWithOrdinalItemNamesInCurrentSchema()
     {
         var codec = new SaveCodec();
         var state = new SaveState();
@@ -22,7 +22,7 @@ public class SaveCodecTests
         var result = codec.Load(json);
 
         Assert.Equal(LoadStatus.Loaded, result.Status);
-        Assert.Equal(1, result.State!.SchemaVersion);
+        Assert.Equal(SaveState.CurrentSchemaVersion, result.State!.SchemaVersion);
         var loaded = Assert.Single(result.State.Vehicles);
         Assert.Equal(590, loaded.CustomPriceCents["ba:itemname_cupofcoffee"]);
         Assert.Equal(1_000_000, loaded.CustomPriceCents["BA:ITEMNAME_CUPOFCOFFEE"]);
@@ -34,7 +34,7 @@ public class SaveCodecTests
     [Fact]
     public void OlderVehiclesLoadWithIndependentEmptyCustomPrices()
     {
-        var result = new SaveCodec().Load("{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\"},{\"vehicleId\":\"cart-2\"}]}");
+        var result = new SaveCodec().Load("{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart-1\"},{\"vehicleId\":\"cart-2\"}]}");
 
         Assert.Equal(LoadStatus.Loaded, result.Status);
         Assert.All(result.State!.Vehicles, vehicle => Assert.Empty(vehicle.CustomPriceCents));
@@ -51,7 +51,7 @@ public class SaveCodecTests
     [InlineData("{\"\":1165}")]
     public void InvalidCustomPricesAreCorruptWithAClearFieldError(string prices)
     {
-        var json = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"customPriceCents\":" + prices + "}]}";
+        var json = "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"customPriceCents\":" + prices + "}]}";
         var result = new SaveCodec().Load(json);
 
         Assert.Equal(LoadStatus.Corrupt, result.Status);
@@ -64,27 +64,27 @@ public class SaveCodecTests
 
     public static TheoryData<string, string> UnusableStates => new()
     {
-        { "{\"schemaVersion\":1,\"licence\":null}", "Licence" },
-        { "{\"schemaVersion\":1,\"vehicles\":[null]}", "Vehicles" },
-        { "{\"schemaVersion\":1,\"dailySales\":[null]}", "DailySales" },
-        { "{\"schemaVersion\":1,\"dailySales\":[{\"day\":1,\"revenueCents\":-1}]}", "RevenueCents" },
-        { "{\"schemaVersion\":1,\"dailySales\":[{\"day\":1},{\"day\":1}]}", "duplicate Day 1" },
-        { "{\"schemaVersion\":1,\"dailySales\":[{\"day\":1,\"revenueCents\":9223372036854775807},{\"day\":2,\"revenueCents\":1}]}", "overflow" },
-        { "{\"schemaVersion\":1,\"writtenByModVersion\":\"99.0\"}", "WrittenByModVersion" },
-        { "{\"schemaVersion\":1,\"writtenByModVersion\":\"garbage\"}", "WrittenByModVersion" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{\"lifetimeSales\":-1}]}", "LifetimeSales" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{\"lifetimeRevenueCents\":-1}]}", "LifetimeRevenueCents" },
-        { "{\"schemaVersion\":1,\"saveCount\":-1}", "SaveCount" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{}]}", "VehicleId" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":null}]}", "VehicleId" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"\"}]}", "VehicleId" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\"},{\"vehicleId\":\"cart-1\"}]}", "duplicate VehicleId" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":-0.1}]}", "SaleProgress" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":1}]}", "SaleProgress" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":2}]}", "SaleProgress" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":\"NaN\"}]}", "SaleProgress" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":\"Infinity\"}]}", "SaleProgress" },
-        { "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":\"-Infinity\"}]}", "SaleProgress" }
+        { "{\"schemaVersion\":2,\"licence\":null}", "Licence" },
+        { "{\"schemaVersion\":2,\"vehicles\":[null]}", "Vehicles" },
+        { "{\"schemaVersion\":2,\"dailySales\":[null]}", "DailySales" },
+        { "{\"schemaVersion\":2,\"dailySales\":[{\"day\":1,\"revenueCents\":-1}]}", "RevenueCents" },
+        { "{\"schemaVersion\":2,\"dailySales\":[{\"day\":1},{\"day\":1}]}", "duplicate Day 1" },
+        { "{\"schemaVersion\":2,\"dailySales\":[{\"day\":1,\"revenueCents\":9223372036854775807},{\"day\":2,\"revenueCents\":1}]}", "overflow" },
+        { "{\"schemaVersion\":2,\"writtenByModVersion\":\"99.0\"}", "WrittenByModVersion" },
+        { "{\"schemaVersion\":2,\"writtenByModVersion\":\"garbage\"}", "WrittenByModVersion" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{\"lifetimeSales\":-1}]}", "LifetimeSales" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{\"lifetimeRevenueCents\":-1}]}", "LifetimeRevenueCents" },
+        { "{\"schemaVersion\":2,\"saveCount\":-1}", "SaveCount" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{}]}", "VehicleId" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":null}]}", "VehicleId" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"\"}]}", "VehicleId" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart-1\"},{\"vehicleId\":\"cart-1\"}]}", "duplicate VehicleId" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":-0.1}]}", "SaleProgress" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":1}]}", "SaleProgress" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":2}]}", "SaleProgress" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":\"NaN\"}]}", "SaleProgress" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":\"Infinity\"}]}", "SaleProgress" },
+        { "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart-1\",\"saleProgress\":\"-Infinity\"}]}", "SaleProgress" }
     };
 
     [Theory]
@@ -97,7 +97,7 @@ public class SaveCodecTests
 
         Assert.Equal(LoadStatus.Fresh, result.Status);
         var state = Assert.IsType<SaveState>(result.State);
-        Assert.Equal(1, state.SchemaVersion);
+        Assert.Equal(SaveState.CurrentSchemaVersion, state.SchemaVersion);
         Assert.Equal(string.Empty, state.WrittenByModVersion);
         Assert.Equal(0, state.SaveCount);
         Assert.False(state.Licence.HasVendorLicence);
@@ -170,7 +170,7 @@ public class SaveCodecTests
         var json = codec.Serialize(state);
         var document = JObject.Parse(json);
 
-        Assert.Equal(1, document["schemaVersion"]!.Value<int>());
+        Assert.Equal(SaveState.CurrentSchemaVersion, document["schemaVersion"]!.Value<int>());
         Assert.NotNull(document["writtenByModVersion"]);
         Assert.NotNull(document["saveCount"]);
         Assert.NotNull(document["licence"]!["hasVendorLicence"]);
@@ -186,7 +186,7 @@ public class SaveCodecTests
     public void UnknownPropertiesSurviveAtEveryLevel()
     {
         const string json = """
-            {"schemaVersion":1,"FutureRoot":{"MixedCaseKey":[1,true,null]},
+            {"schemaVersion":2,"FutureRoot":{"MixedCaseKey":[1,true,null]},
              "futureDate":"2026-10-07T12:34:56+02:00","$type":"future-state",
              "licence":{"FutureLicence":["a","b"]},
              "vehicles":[{"vehicleId":"cart-1","FutureVehicle":{"grade":"A"}},
@@ -211,14 +211,14 @@ public class SaveCodecTests
     public void VersionOneBeforeSaleProgressStillLoadsWithZeroProgress()
     {
         const string json = """
-            {"schemaVersion":1,"writtenByModVersion":"0.0.1-spike","saveCount":3,
+            {"schemaVersion":2,"writtenByModVersion":"0.0.1-spike","saveCount":3,
              "vehicles":[{"vehicleId":"cart-1","isOpen":true,"lifetimeSales":7,"lifetimeRevenueCents":875}]}
             """;
 
         var result = codec.Load(json);
 
         Assert.Equal(LoadStatus.Loaded, result.Status);
-        Assert.Equal(1, result.State!.SchemaVersion);
+        Assert.Equal(SaveState.CurrentSchemaVersion, result.State!.SchemaVersion);
         var vehicle = Assert.Single(result.State.Vehicles);
         Assert.Equal(0, vehicle.SaleProgress);
         Assert.Equal(7, vehicle.LifetimeSales);
@@ -229,7 +229,7 @@ public class SaveCodecTests
     public void FutureVehicleFieldSurvivesAlongsideSaleProgress()
     {
         const string json = """
-            {"schemaVersion":1,"vehicles":[{"vehicleId":"cart-1","saleProgress":0.5,
+            {"schemaVersion":2,"vehicles":[{"vehicleId":"cart-1","saleProgress":0.5,
              "FutureServing":{"Mode":"fast","slots":[1,2]}}]}
             """;
 
@@ -246,7 +246,7 @@ public class SaveCodecTests
     [Fact]
     public void VehicleIdUniquenessUsesOrdinalComparison()
     {
-        var result = codec.Load("{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart-1\"},{\"vehicleId\":\"Cart-1\"}]}");
+        var result = codec.Load("{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart-1\"},{\"vehicleId\":\"Cart-1\"}]}");
 
         Assert.Equal(LoadStatus.Loaded, result.Status);
         Assert.Equal(2, result.State!.Vehicles.Count);
@@ -271,7 +271,7 @@ public class SaveCodecTests
         Assert.Equal("0.1.0", state.WrittenByModVersion);
         Assert.Equal(expectedCount, result.State!.SaveCount);
         Assert.Equal("0.1.0", result.State.WrittenByModVersion);
-        Assert.Equal(1, result.State.SchemaVersion);
+        Assert.Equal(SaveState.CurrentSchemaVersion, result.State.SchemaVersion);
         Assert.Equal(0, state.SchemaVersion);
         Assert.Equal(0.5, Assert.Single(result.State.Vehicles).SaleProgress);
         Assert.True(JToken.DeepEquals(state.ExtensionData["FutureRoot"], result.State.ExtensionData["FutureRoot"]));
@@ -320,7 +320,7 @@ public class SaveCodecTests
     [Fact]
     public void NewerVersionKeepsOriginalJsonWithoutDeserializingState()
     {
-        const string json = " {\"schemaVersion\":2,\"vehicles\":\"future format\"} \n";
+        const string json = " {\"schemaVersion\":3,\"vehicles\":\"future format\"} \n";
 
         var result = codec.Load(json);
 
@@ -332,13 +332,13 @@ public class SaveCodecTests
 
     [Theory]
     [InlineData("{broken")]
-    [InlineData("{\"schemaVersion\":1")]
-    [InlineData("{\"schemaVersion\":1} trailing")]
-    [InlineData("{\"schemaVersion\":1}{\"schemaVersion\":1}")]
+    [InlineData("{\"schemaVersion\":2")]
+    [InlineData("{\"schemaVersion\":2} trailing")]
+    [InlineData("{\"schemaVersion\":2}{\"schemaVersion\":2}")]
     [InlineData("[]")]
     [InlineData("null")]
-    [InlineData("{\"schemaVersion\":1,\"vehicles\":42}")]
-    [InlineData("{\"schemaVersion\":1,\"saveCount\":\"invalid\"}")]
+    [InlineData("{\"schemaVersion\":2,\"vehicles\":42}")]
+    [InlineData("{\"schemaVersion\":2,\"saveCount\":\"invalid\"}")]
     public void CorruptInputDoesNotThrowAndKeepsOriginalJson(string json)
     {
         LoadResult? result = null;
@@ -371,7 +371,7 @@ public class SaveCodecTests
     [Fact]
     public void NullOptionalPropertiesRetainNonNullDefaults()
     {
-        var result = codec.Load("{\"schemaVersion\":1,\"writtenByModVersion\":null,\"vehicles\":null,\"dailySales\":null}");
+        var result = codec.Load("{\"schemaVersion\":2,\"writtenByModVersion\":null,\"vehicles\":null,\"dailySales\":null}");
         var state = Assert.IsType<SaveState>(result.State);
         Assert.Equal(string.Empty, state.WrittenByModVersion);
         Assert.NotNull(state.Licence);
@@ -427,7 +427,7 @@ public class SaveCodecTests
     [Fact]
     public void EmptyWrittenByModVersionLoads()
     {
-        var result = codec.Load("{\"schemaVersion\":1,\"writtenByModVersion\":\"\"}");
+        var result = codec.Load("{\"schemaVersion\":2,\"writtenByModVersion\":\"\"}");
 
         Assert.Equal(LoadStatus.Loaded, result.Status);
         Assert.Equal(string.Empty, result.State!.WrittenByModVersion);
@@ -438,7 +438,7 @@ public class SaveCodecTests
     [Fact]
     public void DailySalesTotalAtTheLimitLoads()
     {
-        var result = codec.Load("{\"schemaVersion\":1,\"dailySales\":[{\"day\":1,\"revenueCents\":9223372036854775806},{\"day\":2,\"revenueCents\":1}]}");
+        var result = codec.Load("{\"schemaVersion\":2,\"dailySales\":[{\"day\":1,\"revenueCents\":9223372036854775806},{\"day\":2,\"revenueCents\":1}]}");
 
         Assert.Equal(LoadStatus.Loaded, result.Status);
         Assert.Equal(long.MaxValue, SalesLedger.SumCents(result.State, 1, 2));
@@ -497,12 +497,25 @@ public class SaveCodecTests
     }
 
     [Fact]
-    public void VersionOneHasNoRegisteredMigrations()
+    public void SchemaZeroHasNoRegisteredMigration()
     {
         var result = codec.Load("{\"schemaVersion\":0}");
 
         Assert.Equal(LoadStatus.Corrupt, result.Status);
         Assert.Contains("Missing migration from schema version 0 to 1", result.Error);
+    }
+
+    [Fact]
+    public void SchemaTwoKeepsUnsettledSalesAndOlderCodeMustPreserveItReadOnly()
+    {
+        var state = new SaveState();
+        CrewTakings.Accrue(state, "cart", 1, 900);
+        var json = codec.Serialize(state);
+        Assert.Equal(2, JObject.Parse(json)["schemaVersion"]!.Value<int>());
+        var oldCode = new SaveCodec(1).Load(json);
+        Assert.Equal(LoadStatus.NewerVersion, oldCode.Status);
+        Assert.Equal(json, oldCode.RawJson);
+        Assert.Null(oldCode.State);
     }
 
     [Theory]

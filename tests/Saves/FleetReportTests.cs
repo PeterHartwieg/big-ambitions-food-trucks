@@ -52,7 +52,7 @@ public class SoldCountsTests
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
         Assert.Equal(3, SoldCounts.On(loaded.State!.Vehicles.Single(), 7).Single().Units);
 
-        var older = codec.Load("{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart\"}]}");
+        var older = codec.Load("{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart\"}]}");
         Assert.Equal(LoadStatus.Loaded, older.Status);
         Assert.Empty(older.State!.Vehicles.Single().Sold);
     }
@@ -64,7 +64,7 @@ public class SoldCountsTests
     [InlineData("[null]")]
     public void InvalidCountsAreCorrupt(string sold)
     {
-        var result = new SaveCodec().Load("{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"cart\",\"sold\":" + sold + "}]}");
+        var result = new SaveCodec().Load("{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"cart\",\"sold\":" + sold + "}]}");
         Assert.Equal(LoadStatus.Corrupt, result.Status);
         Assert.Contains("Sold", result.Error);
     }

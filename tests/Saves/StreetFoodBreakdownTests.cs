@@ -138,7 +138,7 @@ public class VehicleLedgerTests
         Assert.Equal(-2_000, day.EventPlacesCents);
         Assert.Equal(1_000 - 50_000 + 2_000, day.SummaryCents);
 
-        var old = codec.Load("{\"schemaVersion\":1,\"licence\":{},\"dailySales\":[{\"day\":1,\"revenueCents\":500,\"costCents\":100,\"inSummary\":true}]}");
+        var old = codec.Load("{\"schemaVersion\":2,\"licence\":{},\"dailySales\":[{\"day\":1,\"revenueCents\":500,\"costCents\":100,\"inSummary\":true}]}");
         Assert.Equal(LoadStatus.Loaded, old.Status);
         var oldDay = old.State!.DailySales.Single();
         Assert.Empty(oldDay.ByVehicle);
@@ -150,7 +150,7 @@ public class VehicleLedgerTests
     public void UnknownVehicleFieldsAreKept()
     {
         var codec = new SaveCodec();
-        var json = "{\"schemaVersion\":1,\"licence\":{},\"dailySales\":[{\"day\":1,\"byVehicle\":[{\"vehicleId\":\"cart\",\"salesCents\":5,\"tipsCents\":9}]}]}";
+        var json = "{\"schemaVersion\":2,\"licence\":{},\"dailySales\":[{\"day\":1,\"byVehicle\":[{\"vehicleId\":\"cart\",\"salesCents\":5,\"tipsCents\":9}]}]}";
         var loaded = codec.Load(json);
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
         Assert.Contains("\"tipsCents\":9", codec.Serialize(loaded.State!));
@@ -164,7 +164,7 @@ public class VehicleLedgerTests
     public void BadVehicleLinesAreCorrupt(string byVehicle)
     {
         var codec = new SaveCodec();
-        var result = codec.Load("{\"schemaVersion\":1,\"licence\":{},\"dailySales\":[{\"day\":1,\"byVehicle\":" + byVehicle + "}]}");
+        var result = codec.Load("{\"schemaVersion\":2,\"licence\":{},\"dailySales\":[{\"day\":1,\"byVehicle\":" + byVehicle + "}]}");
         Assert.Equal(LoadStatus.Corrupt, result.Status);
     }
 }
@@ -373,11 +373,11 @@ public class CrewLogTests
         var hours = loaded.State!.CrewHours.Single();
         Assert.Equal((4, "emp", "truck", 2), (hours.Day, hours.EmployeeId, hours.VehicleId, hours.Hours));
 
-        var old = codec.Load("{\"schemaVersion\":1,\"licence\":{}}");
+        var old = codec.Load("{\"schemaVersion\":2,\"licence\":{}}");
         Assert.Equal(LoadStatus.Loaded, old.Status);
         Assert.Empty(old.State!.CrewHours);
 
-        var bad = codec.Load("{\"schemaVersion\":1,\"licence\":{},\"crewHours\":[{\"day\":1,\"employeeId\":\"e\",\"vehicleId\":\"v\",\"hours\":0}]}");
+        var bad = codec.Load("{\"schemaVersion\":2,\"licence\":{},\"crewHours\":[{\"day\":1,\"employeeId\":\"e\",\"vehicleId\":\"v\",\"hours\":0}]}");
         Assert.Equal(LoadStatus.Corrupt, bad.Status);
     }
 }
@@ -435,7 +435,7 @@ public class CrewWageAttributionTests
         Assert.Empty(CrewLog.Attribute(state, 3, "emp", 500, 2, null));
 
         var codec = new SaveCodec();
-        Assert.Null(codec.Load("{\"schemaVersion\":1,\"licence\":{}}").State!.CrewHoursSince);
+        Assert.Null(codec.Load("{\"schemaVersion\":2,\"licence\":{}}").State!.CrewHoursSince);
         CrewLog.Begin(state, 3);
         Assert.Equal(4, codec.Load(codec.Serialize(state)).State!.CrewHoursSince);
     }

@@ -245,7 +245,7 @@
       "after_step": 29
     },
     {
-      "no_event": "Sale:|Crew sales paid in:",
+      "no_event": "Sale:|Street food sales paid in:",
       "from_step": 29
     },
     {
@@ -292,7 +292,7 @@
       "after_step": 40
     },
     {
-      "wait_event": "Crew sales paid in: .+ \\(.+\\), day (?P<day>[0-9]+): (?P<sales>[0-9]+) items, \\$(?P<amount>[0-9,]+\\.[0-9]{2})\\.",
+      "wait_event": "Street food sales paid in: .+ \\(.+\\), day (?P<day>[0-9]+): (?P<sales>[0-9]+) items, \\$(?P<amount>[0-9,]+\\.[0-9]{2})\\.",
       "captures": {
         "paid_amount": "amount",
         "paid_day": "day",
@@ -389,7 +389,7 @@
       "length": 1
     },
     {
-      "no_event": "Crew sales paid in:",
+      "no_event": "Street food sales paid in:",
       "from_step": 54
     },
     {

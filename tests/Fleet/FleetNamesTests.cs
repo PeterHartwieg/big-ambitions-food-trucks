@@ -62,16 +62,16 @@ public class FleetNamesTests
     {
         foreach (var spelling in new[] { "vehicleNumbers", "VehicleNumbers", "VEHICLENUMBERS" })
         {
-            var spelled = new SaveCodec().Load("{\"schemaVersion\":1,\"" + spelling + "\":" + numbers + "}");
+            var spelled = new SaveCodec().Load("{\"schemaVersion\":2,\"" + spelling + "\":" + numbers + "}");
             Assert.Equal(LoadStatus.Loaded, spelled.Status);
             Assert.Equal("b", Assert.Single(spelled.State!.VehicleNumbers).Id);
         }
-        var result = new SaveCodec().Load("{\"schemaVersion\":1,\"vehicleNumbers\":" + numbers + "}");
+        var result = new SaveCodec().Load("{\"schemaVersion\":2,\"vehicleNumbers\":" + numbers + "}");
         Assert.Equal(LoadStatus.Loaded, result.Status);
         var only = Assert.Single(result.State!.VehicleNumbers);
         Assert.Equal("b", only.Id);
-        Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load("{\"schemaVersion\":1,\"vehicleNumbers\":{\"a\":1}}").Status);
-        Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load("{\"schemaVersion\":1,\"vehicleNumbers\":[{\"Number\":\"bad\"},{\"ID\":\"b\",\"Kind\":\"cart\",\"NUMBER\":2}]}").Status);
+        Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load("{\"schemaVersion\":2,\"vehicleNumbers\":{\"a\":1}}").Status);
+        Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load("{\"schemaVersion\":2,\"vehicleNumbers\":[{\"Number\":\"bad\"},{\"ID\":\"b\",\"Kind\":\"cart\",\"NUMBER\":2}]}").Status);
     }
 
     [Fact]

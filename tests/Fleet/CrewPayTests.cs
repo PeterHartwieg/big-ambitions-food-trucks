@@ -299,7 +299,7 @@ public class CrewPayTests
         Assert.True(CrewPay.Unpaid(loaded.State!, "e1", 88));
         Assert.Equal(("t1", 88L), (loaded.State!.CrewServedHour["e2"].VehicleId, loaded.State!.CrewServedHour["e2"].Hour));
 
-        var old = codec.Load("{\"schemaVersion\":1,\"licence\":{}}");
+        var old = codec.Load("{\"schemaVersion\":2,\"licence\":{}}");
         Assert.Equal(LoadStatus.Loaded, old.Status);
         Assert.Empty(old.State!.CrewPaidHour);
         Assert.Empty(old.State!.CrewServedHour);

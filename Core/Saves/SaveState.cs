@@ -11,7 +11,9 @@ namespace FoodTrucks.Core.Saves
 {
     public class SaveState
     {
-        public const int CurrentSchemaVersion = 1;
+        // Schema 2: all window sales wait in CrewTakings, including sales served by the player.
+        // Schema 1 migrates unchanged: its pot contains only unpaid crew sales, with player sales already paid.
+        public const int CurrentSchemaVersion = 2;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string WrittenByModVersion { get; set; } = string.Empty;
@@ -46,8 +48,8 @@ namespace FoodTrucks.Core.Saves
         // The hour in whose first half each hire last served a window the player opened, and on which vehicle, until
         // that hour is over and decided (CrewPay.CloseHours; additive field: older saves read none).
         public Dictionary<string, CrewServed> CrewServedHour { get; set; } = new Dictionary<string, CrewServed>(StringComparer.Ordinal);
-        // Crew sales not paid in yet, per vehicle and day; paid in after midnight like the game's shops (CrewTakings;
-        // additive field: older saves read none).
+        // All window sales not paid in yet, per vehicle and day; player and crew paid together at midnight.
+        // The historical CrewTakings field name is retained.
         public List<CrewTaking> CrewTakings { get; set; } = new List<CrewTaking>();
 
         // Each food vehicle's number in its name ("Food cart 2"), kept so a vehicle bought later never renumbers the

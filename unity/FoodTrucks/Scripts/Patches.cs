@@ -111,9 +111,12 @@ namespace FoodTrucks
             // a route counts as their task, and the "unassigned" to-do stays away while they have a vehicle.
             Patch(typeof(EmployeeHelper), "RunHourly", Type.EmptyTypes, typeof(Patches), prefix: nameof(CountCrewHour), postfix: nameof(AfterGameCount));
             Patch(typeof(EmployeeHelper), "PayDailyWages", Type.EmptyTypes, nameof(CloseCrewDay), prefix: true);
-            // Crew takings: the closing day's crew sales are paid in where the game pays its shops' day (BusinessHelper.RunDaily
+            // Window takings: player and crew sales are paid together where the game pays its shops' day (BusinessHelper.RunDaily
             // in GameManager.NewDay), before the day summary, taxes and the midnight bank balance.
-            Patch(typeof(BusinessHelper), "RunDaily", Type.EmptyTypes, nameof(SettleCrewTakings), prefix: true);
+            Patch(typeof(BusinessHelper), "RunDaily", Type.EmptyTypes, nameof(SettleSalesTakings), prefix: true);
+            // Flush customers while cargo exists; the next sales tick refunds takings once deletion succeeded.
+            Patch(typeof(VehicleHelper), "Delete", new[] { typeof(VehicleInstance), typeof(VehicleController) }, typeof(Patches),
+                prefix: nameof(VehicleRemoving));
             // A change of employment settles what the mod owes a hire on the spot, before the game's own payout: a building
             // or warehouse job (the game clears the old shifts first), a replacement, resigning, fired or retired.
             Patch(typeof(EmployeeHelper), "UnassignEmployeeFromAllWorkshifts", new[] { typeof(EmployeeInstance) }, nameof(SettleOnShiftsCleared), prefix: true);
@@ -439,10 +442,16 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error(ex); }
         }
 
-        private static void SettleCrewTakings()
+        private static void SettleSalesTakings()
         {
             try { CartSelling.SettleClosingDay(); }
-            catch (Exception ex) { Log.Error("Crew takings at midnight: " + ex); }
+            catch (Exception ex) { Log.Error("Window takings at midnight: " + ex); }
+        }
+
+        private static void VehicleRemoving(VehicleInstance vehicleInstance)
+        {
+            try { CartSelling.BeforeVehicleRemoved(vehicleInstance); }
+            catch (Exception ex) { Log.Error("Window takings before vehicle removal: " + ex); }
         }
 
         // The hours the game counted itself this hour (building shifts), so a crew's serving doesn't count them again.

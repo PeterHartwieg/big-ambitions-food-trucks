@@ -30,6 +30,63 @@ class ParityTests(unittest.TestCase):
             self.mock.call(cmd,args)
         self.assertEqual(str(exc.exception),text)
 
+    def test_player_and_crew_sales_share_saved_midnight_payment_for_each_vehicle_kind(self):
+        for kind in ('cart', 'truck'):
+            with self.subTest(kind=kind):
+                self.mock.restore('FT hatch-only-selling', emit=False)
+                v = self.mock.state['vehicles'][0]
+                v.update(kind=kind, open=True)
+                self.mock.state['player'].update(x=v['x'], y=v['y'], z=v['z'], at_hatch=v['id'] if kind=='truck' else None)
+                money = self.mock.state['money']
+                notices = list(self.mock.recent)
+                for _ in range(30): self.mock.tick()
+                self.assertEqual(self.mock.state['money'], money)
+                self.assertEqual(list(self.mock.recent), notices)
+                # Crew serves the same vehicle after the player leaves.
+                self.mock.state['player'].update(x=v['x']+200, at_hatch=None)
+                v['crew'] = ['Worker']
+                for _ in range(10): self.mock.tick()
+                self.assertEqual(self.mock.state['money'], money)
+                self.assertFalse(self.mock.state['transactions_today'])
+                waiting = 4*NS['SALE_CENTS']/100
+                self.assertEqual(self.mock.state['ledger_today']['sales_waiting'], waiting)
+                self.assertEqual(self.mock.state['ledger_today']['crew_waiting'], waiting)
+                before = self.mock.call('day_summary', {'day':1})
+                self.assertEqual(before['fleet']['revenue'], waiting)
+                v['open'] = False
+                self.mock.store('FT unsettled')
+                self.mock.takings.clear()
+                self.mock.restore('FT unsettled', emit=False)
+                self.assertEqual(sum(self.mock.takings.values()), 4)
+                for _ in range(1440-self.mock.absolute): self.mock.tick()
+                payments = [t for t in self.mock.state['transactions_today'] if t['type']=='foodtrucks:transaction_crew_sales']
+                self.assertEqual([(t['amount'], t['day']) for t in payments], [(waiting, 1)])
+                self.assertIn(v['name'], payments[0]['label'])
+                self.assertEqual(self.mock.call('day_summary', {'day':1})['fleet']['revenue'], before['fleet']['revenue'])
+                self.assertEqual(self.mock.state['ledger_today']['sales_waiting'], 0)
+                self.mock.settle_takings()
+                self.assertEqual(len([t for t in self.mock.state['transactions_today'] if t['type']=='foodtrucks:transaction_crew_sales']), 1)
+
+    def test_removed_vehicle_and_uninstall_refund_current_takings_once_and_retry_failed_payment(self):
+        self.mock.takings[(self.id, 1)] = 3
+        self.mock.state['vehicles'].remove(self.v)
+        money = self.mock.state['money']
+        pay = self.mock.pay
+        def fail(*args, **kwargs): raise RuntimeError('payment unavailable')
+        self.mock.pay = fail
+        with self.assertRaises(RuntimeError): self.mock.settle_takings()
+        self.assertEqual(sum(self.mock.takings.values()), 3)
+        self.mock.pay = pay
+        self.mock.settle_takings()
+        self.assertEqual(self.mock.state['money'], money+3*NS['SALE_CENTS']/100)
+        self.mock.takings[(self.mock.spawn('cart')['id'], 1)] = 2
+        self.mock.settle_takings(all=True)
+        self.mock.settle_takings(all=True)
+        self.assertFalse(self.mock.takings)
+        payments = [t for t in self.mock.state['transactions_today'] if t['type']=='foodtrucks:transaction_crew_sales']
+        self.assertEqual(len(payments), 2)
+        self.assertEqual(sum(t['amount'] for t in payments), 5*NS['SALE_CENTS']/100)
+
     def test_fixture_logistics_refuses_inside_and_filters_by_warehouse(self):
         self.mock.inside_building=True
         self.refused('fixture',{'name':'logistics'},"The player is inside a building; the game places furniture and vehicles only in buildings the player isn't in. Teleport the player outside first.")

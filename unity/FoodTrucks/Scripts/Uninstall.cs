@@ -36,9 +36,8 @@ namespace FoodTrucks
                     return;
                 }
                 armedUntil = -1f;
-                // Crew sales of vehicles since sold still wait for midnight: paid in now.
-                try { CartSelling.PayAllCrewTakingsNow(); }
-                catch (Exception ex) { Log.Error("Uninstall: crew sales: " + ex); }
+                // All sales still waiting for midnight, even of vehicles since sold, must be paid before cleanup.
+                if (!SettleTakings()) return;
                 Catering.RemoveContact();
                 RemoveMarketEntries(game);
                 try { Commissary.RemoveForUninstall(); }
@@ -78,9 +77,8 @@ namespace FoodTrucks
             try { HireCrew.SettleAll(); }
             catch (Exception ex) { Log.Error("Uninstall: settling crew hours: " + ex); }
             CartSelling.CloseAllQuietly();
-            // The crew's sales waiting for midnight, today's too, are paid in before the mod goes.
-            try { CartSelling.PayAllCrewTakingsNow(); }
-            catch (Exception ex) { Log.Error("Uninstall: crew sales: " + ex); }
+            // Today's player and crew sales too. A refused payment keeps vehicles and unpaid takings for a retry.
+            if (!SettleTakings()) return;
             HireCrew.ReleaseAll();
             RemoveMarketEntries(game);
             Catering.RemoveContact();
@@ -150,6 +148,18 @@ namespace FoodTrucks
             Log.Info($"Uninstall: {removed} removed, {left} left, refunded {CartSelling.Money(refundCents)}, unpaid {CartSelling.Money(unpaidCents)}.");
             CartSelling.Notify(left == 0 && unpaidCents == 0 && campaignsLeft == 0 ? "foodtrucks:notification_uninstall_done" : "foodtrucks:notification_uninstall_partial",
                 ("count", removed.ToString()), ("left", left.ToString()), ("refund", CartSelling.Money(refundCents)), ("unpaid", CartSelling.Money(unpaidCents)));
+        }
+
+        private static bool SettleTakings()
+        {
+            try { if (CartSelling.PayAllTakingsNow()) return true; }
+            catch (Exception ex) { Log.Error("Uninstall: window sales: " + ex); }
+            var newer = FoodTrucksSession.CurrentState == null && FoodTrucksSession.LastLoadStatus == FoodTrucks.Core.Saves.LoadStatus.NewerVersion;
+            Log.Error(newer
+                ? "Uninstall: the save was written by a newer Food Trucks version; cleanup stopped. Uninstall with that version."
+                : "Uninstall: unsettled window sales remain; cleanup stopped. Run the uninstall step again.");
+            CartSelling.Notify(newer ? "foodtrucks:notification_uninstall_newer_version" : "foodtrucks:notification_uninstall_sales_failed");
+            return false;
         }
 
         // The fleet's recruitment campaigns, which the game can't list without the mod; how many are left (one that threw counts).

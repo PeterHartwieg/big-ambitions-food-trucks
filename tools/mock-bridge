@@ -47,7 +47,7 @@ PER_PIECE = {kind: v['unitsPerPiece'] for kind, v in ECONOMY['vehicles'].items()
 # The dealer's price: the vehicle type asset's (the bridge reads VehicleType.price).
 PRICES = {kind: float(re.search(r'^\s*price: ([0-9.]+)', (ROOT / f'unity/FoodTrucks/Vehicles/Food{kind.title()}.asset').read_text(), re.M).group(1))
           for kind in ('truck', 'cart')}
-# The mock's crew sell one unit every ten minutes at this price; each unit cost CATALOG's wholesale price.
+# The mock's windows sell one unit every ten minutes at this price; each unit cost CATALOG's wholesale price.
 SALE_CENTS = 1300
 WAGE_CENTS = 1000
 CATALOG.update({key:(LOCALE.get(key,key.split('itemname_')[-1].title()),1,750.) for e in ECONOMY['equipment'].values() for key in e['gameItems']})
@@ -207,7 +207,7 @@ class Mock:
                        'needs': {'energy': 100., 'hunger': 100., 'happiness': 80., 'happiness_modifiers': [], 'max': 100., 'collapse_at': -20., 'energy_off': False, 'going_to_hospital': False, 'kept_up': False}},
             'licence': {'until_day': None, 'permits': 0, 'course_done': False, 'todos': []},
             'vehicles': [], 'commissary': {'spaces': [], 'orders': [], 'stock': [], 'unpaid': {'rent': 0, 'fines': 0}},
-            'ledger_today': {'street_food': 0., 'crew_waiting': 0.}, 'notices_recent': list(self.recent)}
+            'ledger_today': {'street_food': 0., 'sales_waiting': 0., 'crew_waiting': 0.}, 'notices_recent': list(self.recent)}
         self.absolute = 420
         self.until = None
         self.dialog = 'closed'
@@ -1047,6 +1047,20 @@ class Mock:
             if count:
                 self.event(f"Crew sales: {v['id']}, day {day} {hour:02d}:00 hour: {count} customers, {count} items, ${count*13:.2f}, paid in after midnight; {sum(s['amount'] for s in v['stock'])} units left.", day=day)
 
+    def settle_takings(self, all=False):
+        # Player and crew share one saved pot per vehicle/day. Removed vehicles refund today's pot too.
+        owned = {v['id']: v for v in self.state['vehicles']}
+        today = self.state['clock']['day']
+        for (vid, day), total in sorted(list(self.takings.items()), key=lambda e: (e[0][1], e[0][0])):
+            if not all and vid in owned and day >= today: continue
+            name = owned[vid]['name'] if vid in owned else vid
+            self.pay(total*SALE_CENTS, 'foodtrucks:transaction_crew_sales', day=day, vehicle=name, sales=total)
+            self.takings.pop((vid, day))
+            self.event(f"Street food sales paid in: {name} ({vid}), day {day}: {total} items, ${total*SALE_CENTS/100:.2f}.", day=day)
+        waiting = sum(self.takings.values())*SALE_CENTS/100
+        self.state['ledger_today']['sales_waiting'] = waiting
+        self.state['ledger_today']['crew_waiting'] = waiting
+
     def spend_needs(self):
         # The game's average burn (0.056 energy a minute, 1.5 hunger per energy); the bridge tops both up below 40 while
         # keep_needs is on, as the game side does through the game's needs API.
@@ -1085,15 +1099,12 @@ class Mock:
             for v in self.state['vehicles']:
                 if v['crew'] and (v['route'] or {}).get('stops',0):
                     self.event(f"Route: truck {v['id']} caught up to minute {self.absolute} for the day's close.")
-                total = self.takings.pop(v['id'], 0)
-                if total:
-                    self.pay(total*SALE_CENTS,'foodtrucks:transaction_crew_sales',day=day-1,vehicle=v['name'],sales=total)
-                    self.event(f"Crew sales paid in: {v['name']} ({v['id']}), day {day-1}: {total} items, ${total*SALE_CENTS/100:.2f}.", day=day-1)
+            self.settle_takings()
             self.pay_wages(day-1)
             self.charge_rent(day)
             for vid in list(self.sold):
                 self.sold[vid]={k:n for k,n in self.sold[vid].items() if int(k)>=day-1}
-            self.state['ledger_today'] = {'street_food': 0., 'crew_waiting': 0.}
+            self.state['ledger_today'] = {'street_food': 0., 'sales_waiting': 0., 'crew_waiting': 0.}
             self.event(f'Day summary: day {day-1}.')
         if m == 480:
             self.deliver()
@@ -1128,13 +1139,14 @@ class Mock:
                     self.book(day, v['id'], 'stock_cost', int(round(CATALOG.get(stock['key'], ('', 500, 1.5))[2]*100)))
                     sold = self.sold.setdefault(v['id'], {}).setdefault(str(day), {})
                     sold[stock['key']] = sold.get(stock['key'], 0) + 1
+                    self.state['ledger_today']['sales_waiting'] += SALE_CENTS/100
+                    self.state['ledger_today']['crew_waiting'] += SALE_CENTS/100
+                    self.takings[(v['id'], day)] = self.takings.get((v['id'], day), 0) + 1
                     if v['serving'] == 'crew':
-                        self.state['ledger_today']['crew_waiting'] += SALE_CENTS/100
-                        self.takings[v['id']] = self.takings.get(v['id'], 0) + 1
                         self.hours[v['id']] = self.hours.get(v['id'], 0) + 1
                     else:
-                        self.pay(SALE_CENTS, 'foodtrucks:transaction_sale', itemName=stock['item'])
                         self.event(f"Sale: {stock['key']} for ${SALE_CENTS/100:.2f} on day {day}, {stock['amount']} of it left.")
+        self.settle_takings()
         if self.until is not None and self.absolute >= self.until:
             self.until = None
             c.update(paused=True, speed=1, run_until=None, arrived_at=f"day {c['day']} {c['time']}", keep_needs=False)
