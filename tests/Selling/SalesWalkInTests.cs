@@ -218,7 +218,7 @@ public class SalesWalkInTests
 public class WalkInSaveTests
 {
     private static string Save(string service) =>
-        "{\"schemaVersion\":1,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"cart-1\",\"service\":" + service + "}],\"dailySales\":[]}";
+        "{\"schemaVersion\":2,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"cart-1\",\"service\":" + service + "}],\"dailySales\":[]}";
 
     [Fact]
     public void CustomersWalkingUpSurviveASaveAndLoad()

@@ -122,7 +122,7 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(len(pt.check_moves(problem)), 1)
 
     def test_error_lines_stop_the_run(self):
-        pt.check_events([{'kind': 'log', 'text': 'Crew sales paid in: …'}])
+        pt.check_events([{'kind': 'log', 'text': 'Street food sales paid in: …'}])
         with self.assertRaises(pt.Violation) as caught:
             pt.check_events([{'kind': 'log', 'day': 3, 'time': '10:00', 'text': '[Mod:Food Trucks] ERROR: Route: boom'}])
         self.assertEqual(caught.exception.check, 'log')

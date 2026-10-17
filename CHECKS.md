@@ -1,3 +1,15 @@
+# All window sales paid at midnight (next build)
+
+Peter's decision, 17 October 2026. **Pending in game.** Use a fresh FT save (save schema 2; earlier dev saves have no migration and stay untouched/read-only). Startup: `BusinessHelper.RunDaily` and `VehicleHelper.Delete(VehicleInstance, VehicleController)` patches must say `Active`. The bank label is now "Street food sales: …", for player and crew together.
+
+| # | Do | Look for |
+|---|---|---|
+| MS1 | Serve at your cart, then at your truck's hatch; sell food with an add-on drink | Stock falls and cash sounds/per-sale logs remain; no per-sale balance change, money popup or sale notice. Bridge `ledger_today.sales_waiting` rises |
+| MS2 | Let crew sell on the same vehicle/day, then pass midnight while still serving (also try a time skip) | Exactly one sales payment per vehicle for the finished day, combining player and crew; booked on that day and included in the midnight balance. New-day sales wait for the next midnight; no second payment on another tick |
+| MS3 | Save/load before midnight, including while visible customers are leaving the window | Unpaid takings and sold stock survive; saving/loading pays nothing today; midnight pays the saved total once. Day summary, Econoview, BizMan and bridge `day_summary` still show sales and stock cost on the sold day |
+| MS4 | Before midnight sell a truck with takings, then pass midnight; separately leave it with the private driver | Sold truck: its unpaid sales are paid back on the next sales tick, once; the sold day's books remain. Private driver: no early payout; it is still owned and waits for midnight |
+| MS5 | With unpaid cart/truck sales run the confirmed uninstall step, save and load without the mod; repeat the step before removal too | All unpaid sales, today's included, paid once in addition to vehicle/stock refunds. No takings left. If a sales payment fails, cleanup stops with a retry notice, retaining the unpaid data |
+
 # Queue pavement (next build)
 
 Blind run 3: an angled cart's line passed the traffic-lane checks but stood on the carriageway. Code checked against 1.0: `Streets.Pedestrians.PedestrianBuildingPositionProvider.TryGetSampleTarget` uses `Extensions.NavMeshHelper.NpcNavMeshFilter` (HGExtensions: agent **0**, all areas). The queue used the player's **1479372276** mesh. Queue places, agents and paths now use the NPC mesh, with parking/lane/bridge/crosswalk exclusions for both vehicle kinds. No road/sidewalk area name is assumed; `Swimmable` is the helper's only named area. Hatch and stop probes keep their existing filter. **Pending in game:** the baked NPC mesh's coverage, including parks and junctions; missing pedestrian ground hides the queue rather than falling back to the player mesh.

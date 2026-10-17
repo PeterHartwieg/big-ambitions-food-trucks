@@ -2,6 +2,8 @@
 
 Runs the mod's own Core demand model over the city to price a cart day. The findings are in [docs/balance/cart-economics.md](../../docs/balance/cart-economics.md). Nothing here ships with the mod: `tools/build-mod.sh` packages only `unity/FoodTrucks`, and this project is not in `FoodTrucks.sln`.
 
+Revenue and profit here are earned on the day sold, for player and crew alike. In game, all window takings are paid at midnight in one transaction per vehicle/day (17 October 2026); this calculator does not model the bank balance or funds available for restocking. The payment timing changes no sales, cost or profit calculation here.
+
 ## Run it
 
 ```sh

@@ -5,8 +5,8 @@ namespace FoodTrucks.Core.Tests.Saves;
 
 public class SaveBlockKeeperTests
 {
-    private const string FromFile = "{\"schemaVersion\":1,\"saveCount\":47}";
-    private const string Newer = "{\"schemaVersion\":1,\"saveCount\":48}";
+    private const string FromFile = "{\"schemaVersion\":2,\"saveCount\":47}";
+    private const string Newer = "{\"schemaVersion\":2,\"saveCount\":48}";
 
     [Fact]
     public void APresentBlockGoesOutUnchanged()

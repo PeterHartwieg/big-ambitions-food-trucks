@@ -215,7 +215,7 @@ Pending in-game checks: a home with model-floor tiles and a business, grid visua
     "stock": [ { "site": "…", "item": "Hotdog", "amount": 500 } ],
     "unpaid": { "rent": 0, "fines": 0 }
   },
-  "ledger_today": { "street_food": 0.0, "crew_waiting": 0.0 },
+  "ledger_today": { "street_food": 0.0, "sales_waiting": 0.0, "crew_waiting": 0.0 },
   "notices_recent": ["the last 20 notice texts, newest last"],
   "transactions_today": [ { "label": "…", "type": "…", "amount": -1544.84, "day": 3, "time": "08:00" } ],
   "employees": [ { "id": "…", "name": "…", "skill": 60.0, "satisfaction": 80.0, "wage": 14.5 } ]
@@ -341,7 +341,7 @@ A load that dies anyway is cleared only when the bridge can show it died. With t
 - `player.handtruck` is null unless the player pushes an ordinary hand truck or flatbed; otherwise it has the same entry as `handtruck list`, including the cargo shown in its panel. Food carts remain in `vehicles`.
 - `employees` are the hires the crew dropdown offers (hired, without a building or vehicle), best customer service first.
 - `load` is null before the first `load` call.
-- `ledger_today.street_food` is today's street food revenue in the mod's ledger; `crew_waiting` is the crew's takings not yet paid in.
+- `ledger_today.street_food` is today's street food revenue in the mod's ledger; `sales_waiting` is all player and crew takings not yet paid in, across saved days. `crew_waiting` remains an alias for compatibility. Both kinds accrue without per-sale balance changes and pay together at midnight, one payment per vehicle/day (`foodtrucks:transaction_crew_sales`, now labelled "Street food sales: …"). `day_summary` records sales on their sold day regardless of payout timing.
 
 ## Playthrough runner
 
@@ -415,7 +415,7 @@ Step kinds: `call` (with optional `expect_ok: false`), `remember` (a value into 
 ```
 # id | rule | regex
 patch.runDaily | must | Patch BusinessHelper\.RunDaily: Active\.
-crew.paidIn | must | Crew sales paid in: .+, day \d+: \d+ items
+crew.paidIn | must | Street food sales paid in: .+, day \d+: \d+ items
 no.notActive | never | Patch .+: Not active
 ```
 

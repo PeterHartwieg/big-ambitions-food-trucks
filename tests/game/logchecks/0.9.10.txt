@@ -80,8 +80,8 @@ crew.soldOut | count>=0 | closed \(foodtrucks:notification_sold_out\) | row 0.9.
 player.sale | must | Sale: .+? | row 0.9.10/15
 route.oldOverlap | count>=0 | Route: truck .+? has no plan: its route fails the rules \(Overlap\); the crew waits until a stop is changed on the BizMan page\. | row bizman/6
 crew.catchUp | must | Route: truck .+? caught up to minute \d+ for the day's close\. | row 0.9.10/16,0.9.10/17,0.9.10/18
-crew.paid | must | Crew sales paid in: .+? \(.+?\), day \d+: \d+ items, \$.+?\. | row 0.9.10/16,0.9.10/17,0.9.10/18
-crew.order | order | Route: truck .+? caught up to minute \d+ for the day's close\. >> Crew sales paid in: .+? \(.+?\), day \d+: \d+ items, \$.+?\. | row 0.9.10/16,0.9.10/17,0.9.10/18
+crew.paid | must | Street food sales paid in: .+? \(.+?\), day \d+: \d+ items, \$.+?\. | row 0.9.10/16,0.9.10/17,0.9.10/18
+crew.order | order | Route: truck .+? caught up to minute \d+ for the day's close\. >> Street food sales paid in: .+? \(.+?\), day \d+: \d+ items, \$.+?\. | row 0.9.10/16,0.9.10/17,0.9.10/18
 crew.lastHour | must | Crew sales: .+?, day \d+ 23:00 hour: .+? | row 0.9.10/16
 order.iconFallback | count>=0 | Commissary order form: no icon Icon_.+? in the mod's bundle; .+? shows the game's icon\. | row 0.9.10/13
 bizman.build | must | (?m)^(?:\[Mod:FoodTrucks\] )?BizMan: vehicle page built from the warehouse driver row \([^\n]+\) and the logistics plan \([^\n]+; stop rows dragged by [^\n]+\); it sits in [^\n]+ \((?:laid out by its parent|sized by itself), (?:scrolling|no scroll view)\)\.$ | row bizman/1

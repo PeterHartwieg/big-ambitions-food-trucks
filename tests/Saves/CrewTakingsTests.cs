@@ -125,4 +125,60 @@ public class CrewTakingsTests
         Assert.Equal(new[] { "cart" }, due.Select(t => t.VehicleId));
         Assert.Equal(2, CrewTakings.Due(state, 6, _ => midnight).Count);
     }
+
+    [Fact]
+    public void PlayerAndCrewShareOneSavedTakingWithoutChangingTheBooksAtPayout()
+    {
+        var state = new SaveState();
+        var vehicle = StreetSales.GetOrAdd(state, "truck");
+        vehicle.VehicleType = "truck";
+        // A player order with a drink, then a crew order on the same vehicle/day.
+        foreach (var price in new long[] { 800, 200, 600 })
+        {
+            StreetSales.Record(state, "truck", 3, price, 1);
+            CrewTakings.Accrue(state, "truck", 3, price);
+            SoldCounts.Record(vehicle, 3, "food", 1);
+            SalesLedger.RecordCost(state, 3, "truck", 100);
+        }
+        var codec = new SaveCodec();
+        var loaded = codec.Load(codec.SerializeForSave(state, "0.9.10")).State!;
+        var taking = Assert.Single(loaded.CrewTakings);
+        Assert.Equal((1600L, 3), (taking.Cents, taking.Sales));
+        Assert.Empty(CrewTakings.Due(loaded, 3));
+        var before = DaySummary.For(loaded, 3, 4);
+        Assert.Equal(1600, before.RevenueCents);
+        Assert.Equal(1300, before.ProfitCents);
+        Assert.Equal(3, Assert.Single(Assert.Single(before.Vehicles).Sold!).Units);
+        Assert.Equal(1300, FleetReport.AvgDailyProfitCents(loaded, "truck", 4));
+        Assert.Same(taking, Assert.Single(CrewTakings.Due(loaded, 4)));
+        Assert.True(CrewTakings.Settled(loaded, taking));
+        Assert.Empty(CrewTakings.Due(loaded, 4));
+        Assert.Equal(before.RevenueCents, DaySummary.For(loaded, 3, 4).RevenueCents);
+        Assert.Equal(1300, SalesLedger.DayProfitCents(loaded, 3));
+        Assert.Equal(1600, StreetSales.Find(loaded, "truck")!.LifetimeRevenueCents);
+    }
+
+    [Fact]
+    public void RemovedVehiclesRefundAllDaysEvenWithALaggingClockAndRetryUntilSettled()
+    {
+        var state = new SaveState();
+        CrewTakings.Accrue(state, "sold", 3, 500);
+        CrewTakings.Accrue(state, "sold", 4, 200);
+        CrewTakings.Accrue(state, "owned", 4, 300);
+        // Saved after removal, before a payment succeeds: no VehicleState is required to retain the money.
+        var codec = new SaveCodec();
+        state = codec.Load(codec.Serialize(state)).State!;
+        var due = CrewTakings.Due(state, 4, _ => 0, id => id == "owned");
+        Assert.Equal(new[] { ("sold", 3), ("sold", 4) }, due.Select(t => (t.VehicleId, t.Day)));
+        Assert.Equal(700, due.Sum(t => t.Cents));
+        Assert.Equal(due, CrewTakings.Due(state, 4, _ => 0, id => id == "owned"));
+        foreach (var taking in due) Assert.True(CrewTakings.Settled(state, taking));
+        Assert.Empty(CrewTakings.Due(state, 4, _ => 0, id => id == "owned"));
+        // Uninstall pays even the still-owned vehicle's current day; repeated settlement can't pay twice.
+        var uninstall = Assert.Single(CrewTakings.All(state));
+        Assert.Equal(300, uninstall.Cents);
+        Assert.True(CrewTakings.Settled(state, uninstall));
+        Assert.False(CrewTakings.Settled(state, uninstall));
+        Assert.Empty(CrewTakings.All(state));
+    }
 }

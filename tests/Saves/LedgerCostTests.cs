@@ -50,7 +50,7 @@ public class LedgerCostTests
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
         Assert.Equal(200, loaded.State!.DailySales.Single().CostCents);
 
-        var old = codec.Load("{\"schemaVersion\":1,\"licence\":{},\"dailySales\":[{\"day\":1,\"revenueCents\":500}]}");
+        var old = codec.Load("{\"schemaVersion\":2,\"licence\":{},\"dailySales\":[{\"day\":1,\"revenueCents\":500}]}");
         Assert.Equal(LoadStatus.Loaded, old.Status);
         Assert.Equal(0, old.State!.DailySales.Single().CostCents);
     }
@@ -59,7 +59,7 @@ public class LedgerCostTests
     public void NegativeCostInASaveIsCorrupt()
     {
         var codec = new SaveCodec();
-        var result = codec.Load("{\"schemaVersion\":1,\"licence\":{},\"dailySales\":[{\"day\":1,\"revenueCents\":500,\"costCents\":-1}]}");
+        var result = codec.Load("{\"schemaVersion\":2,\"licence\":{},\"dailySales\":[{\"day\":1,\"revenueCents\":500,\"costCents\":-1}]}");
         Assert.Equal(LoadStatus.Corrupt, result.Status);
     }
 }
