@@ -145,11 +145,21 @@ namespace FoodTrucks
                 if (Registrations == null || SkillsDropdown == null || AgencySkills == null) return true;
                 var list = Registrations(__instance);
                 if (list == null || businessIndex < 0 || businessIndex >= list.Count || !(list[businessIndex] is FleetEntry fleet)) return true;
-                var skills = FleetRecruitment.Skills(FoodVehicles(), AgencySkills(__instance));
-                if (skills.Count == 0) return true;
+                // The stand-in never reaches the game's own SelectBusiness, which reads its building's type (review round 2).
+                var skills = CanWork ? FleetRecruitment.Skills(FoodVehicles(), AgencySkills(__instance)) : Array.Empty<string>();
+                var dropdown = SkillsDropdown(__instance);
+                if (skills.Count == 0)
+                {
+                    UI.Notification.Notifications.Show(UI.Notification.NotificationType.Warning, "dialog_recruitment_no_skills_available_notification", null, 4f,
+                        "dialog_recruitment_no_skills_available_notification");
+                    __instance.selectedBusiness = null;
+                    __instance.hasSelectedSkill = false;
+                    dropdown.ResetSelectedOption();
+                    dropdown.SetInteractable(interactable: false);
+                    return false;
+                }
                 __instance.selectedBusiness = fleet;
                 __instance.businessSkills = skills.ToList();
-                var dropdown = SkillsDropdown(__instance);
                 if (__instance.hasSelectedSkill)
                 {
                     __instance.hasSelectedSkill = false;
@@ -235,12 +245,14 @@ namespace FoodTrucks
         }
 
         // The uninstall step: the fleet's campaigns end, and the price of the candidates not found yet comes back, so no
-        // campaign the game can't show is left in the save. Returns the refund in cents.
-        internal static long EndForUninstall()
+        // campaign the game can't show is left in the save. A campaign whose refund is refused stays, and the player is
+        // told to run the step again before removing the mod. Returns the refund in cents and the campaigns left.
+        internal static (long Refunded, int Left) EndForUninstall()
         {
             var campaigns = SaveGameManager.Current?.RecruitmentCampaigns;
-            if (campaigns == null) return 0;
+            if (campaigns == null) return (0, 0);
             long refunded = 0;
+            var left = 0;
             foreach (var campaign in campaigns.Where(IsFleet).ToList())
             {
                 var cents = FleetRecruitment.RefundCents((long)Math.Round(campaign.price * 100.0), campaign.amountOfCandidates, campaign.candidatesFound);
@@ -251,6 +263,7 @@ namespace FoodTrucks
                     if (!Payments.PayIn(cents, info))
                     {
                         Log.Error($"Uninstall: the refund of {CartSelling.Money(cents)} for a fleet recruitment campaign was refused; the campaign stays.");
+                        left++;
                         continue;
                     }
                     refunded += cents;
@@ -258,7 +271,8 @@ namespace FoodTrucks
                 campaigns.Remove(campaign);
                 Log.Info($"Uninstall: fleet recruitment campaign ended ({campaign.candidatesFound} of {campaign.amountOfCandidates} found), {CartSelling.Money(cents)} back.");
             }
-            return refunded;
+            if (left > 0) CartSelling.Notify("foodtrucks:notification_uninstall_fleet_campaigns_left", ("count", left.ToString()));
+            return (refunded, left);
         }
     }
 }

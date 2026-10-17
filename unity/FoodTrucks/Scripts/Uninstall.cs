@@ -44,11 +44,11 @@ namespace FoodTrucks
                 try { Commissary.RemoveForUninstall(); }
                 catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
                 // A fleet campaign can outlive the last vehicle (review round 1).
-                try { FleetRecruiting.EndForUninstall(); }
-                catch (Exception ex) { Log.Error("Uninstall: fleet recruitment campaigns: " + ex); }
+                var campaignsLeft = EndFleetCampaigns();
                 try { VehicleTodos.RemoveAll("uninstall"); }
                 catch (Exception ex) { Log.Error("Uninstall: to-dos: " + ex); }
-                CartSelling.Notify("foodtrucks:notification_uninstall_none");
+                // Not "safe to remove" while a fleet campaign is left (its own notice says to run the step again).
+                if (campaignsLeft == 0) CartSelling.Notify("foodtrucks:notification_uninstall_none");
                 return;
             }
             if (vehicles.Any(v => v.id == game.ActiveVehicleId))
@@ -87,8 +87,7 @@ namespace FoodTrucks
             try { Commissary.RemoveForUninstall(); }
             catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
             // The fleet's recruitment campaigns: the game can't list one without the mod.
-            try { FleetRecruiting.EndForUninstall(); }
-            catch (Exception ex) { Log.Error("Uninstall: fleet recruitment campaigns: " + ex); }
+            var campaignsLeft = EndFleetCampaigns();
             // The vehicles' and the licence's to-dos; none come back once the commissary is uninstalled.
             try { VehicleTodos.RemoveAll("uninstall"); }
             catch (Exception ex) { Log.Error("Uninstall: to-dos: " + ex); }
@@ -149,8 +148,19 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
             var left = vehicles.Count - removed;
             Log.Info($"Uninstall: {removed} removed, {left} left, refunded {CartSelling.Money(refundCents)}, unpaid {CartSelling.Money(unpaidCents)}.");
-            CartSelling.Notify(left == 0 && unpaidCents == 0 ? "foodtrucks:notification_uninstall_done" : "foodtrucks:notification_uninstall_partial",
+            CartSelling.Notify(left == 0 && unpaidCents == 0 && campaignsLeft == 0 ? "foodtrucks:notification_uninstall_done" : "foodtrucks:notification_uninstall_partial",
                 ("count", removed.ToString()), ("left", left.ToString()), ("refund", CartSelling.Money(refundCents)), ("unpaid", CartSelling.Money(unpaidCents)));
+        }
+
+        // The fleet's recruitment campaigns, which the game can't list without the mod; how many are left (one that threw counts).
+        private static int EndFleetCampaigns()
+        {
+            try { return FleetRecruiting.EndForUninstall().Left; }
+            catch (Exception ex)
+            {
+                Log.Error("Uninstall: fleet recruitment campaigns: " + ex);
+                return 1;
+            }
         }
 
         // What was paid for the mod's own items in the vehicle's cargo (nested cargo included).
