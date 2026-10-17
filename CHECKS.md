@@ -1,3 +1,15 @@
+# Queue pavement (next build)
+
+Blind run 3: an angled cart's line passed the traffic-lane checks but stood on the carriageway. Code checked against 1.0: `Streets.Pedestrians.PedestrianBuildingPositionProvider.TryGetSampleTarget` uses `Extensions.NavMeshHelper.NpcNavMeshFilter` (HGExtensions: agent **0**, all areas). The queue used the player's **1479372276** mesh. Queue places, agents and paths now use the NPC mesh, with parking/lane/bridge/crosswalk exclusions for both vehicle kinds. No road/sidewalk area name is assumed; `Swimmable` is the helper's only named area. Hatch and stop probes keep their existing filter. **Pending in game:** the baked NPC mesh's coverage, including parks and junctions; missing pedestrian ground hides the queue rather than falling back to the player mesh.
+
+| # | Do | Look for |
+|---|---|---|
+| QP1 | Open a cart angled about 20°, 45° and 70° to the kerb, then turn it the other way | The longest available line stays on pavement, along or outward on either side; a shorter line is fine when space runs out. Nobody stands in the parking strip or carriageway |
+| QP2 | Repeat with a cart parallel and at right angles to the kerb, then a legally parked truck | Parallel/perpendicular lines still work; the truck keeps its hatch-side clearance and spacing. Everyone stays on pavement |
+| QP3 | Open beside a junction, a wide parking strip and a park path | No place on the road between lanes or around the junction. A park's pedestrian path still supports a queue; no safe places means nobody shown, with sales continuing |
+| QP4 | Watch arrivals, the line moving up, served/abandoning customers and closing, including near a tree/bench or crossing | Every walk stays on the same pavement; no detour through the street or crosswalk. With no safe way out a customer disappears; nobody is sent to an unchecked fallback point |
+| QP5 | Read each `Queue view: line at cart/truck …` line and the first customer's agent line | Agent line says `NavMesh agent 0, area mask -1`. Existing count, shape, geometry and ways in/out remain; rejected candidates append `candidates rejected by …` with test names/counts (NPC NavMesh/tolerance/boundary, parking, traffic strip, Roads layer, Crosswalk trigger, complete path or geometry). Rejected runtime walks name their test |
+
 # The recruitment agency recruits for the street food fleet (next build)
 
 Branch `fleet-recruit` (17 October 2026), Peter's decision after blind run 2. Nothing here has run in game. Use a fresh FT playtest character with a cart and no building business. Check the patches' startup lines first: `Patch RecruitmentAgencyDialog.NoBusinesses: Active.`, `...OnRecruitmentSettingsSet`, `RecruitmentSettings.OnEnable`, `RecruitmentSettings.SelectBusiness(Int32)`, `RecruitmentCampaignsList.SetUpContract(RecruitmentCampaign)`.
