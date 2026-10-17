@@ -376,6 +376,61 @@ class BridgeOpsParityTests(unittest.TestCase):
         self.assertIn('["text"] = t.Text', self.source)
         self.assertIn('data["cause"] = RouteCauseText(task.itemInstanceId)', (TOOLS.parent / 'unity/FoodTrucks/Scripts/VehicleTodos.cs').read_text())
 
+    def test_the_players_life_ops_match_the_game_side(self):
+        life = (TOOLS.parent / 'unity/FoodTrucks/Scripts/TestBridgeLife.cs').read_text()
+        world = (TOOLS.parent / 'unity/FoodTrucks/Scripts/TestBridgeWorld.cs').read_text()
+        ui = (TOOLS.parent / 'unity/FoodTrucks/Scripts/TestBridgeUi.cs').read_text()
+        listed = self.mock.call('use', {'op': 'list'})
+        self.assertEqual(set(listed), {'radius', 'inside', 'things'})
+        for key in set(listed) | {'id', 'kind', 'name', 'click', 'x', 'z', 'distance', 'address', 'business', 'for_rent', 'yours', 'sells', 'sells_key'}:
+            self.assertIn(f'["{key}"]', life)
+        self.mock.state['clock']['paused'] = False
+        clicked = self.mock.call('use', {'op': 'click', 'id': 1})
+        self.assertEqual(set(clicked), {'clicked', 'kind', 'click', 'handled', 'placing_cancelled', 'still_walking', 'inside', 'inside_before', 'open', 'notices', 'x', 'z'})
+        for key in clicked:
+            self.assertIn(f'["{key}"]', life)
+        rode = self.mock.call('taxi', {'address': 'ba:street_thirdstreet#6'})
+        self.assertEqual(set(rode), {'done', 'address', 'fare', 'minutes', 'money', 'notices', 'x', 'z'})
+        for key in rode:
+            self.assertIn(f'["{key}"]', life)
+        texts = ['No taxi is waiting for you: click a taxi in the street first (use list shows the ones near you; use click gets in), then say where to.',
+                 "Your hands are empty: food you buy comes in a bag to eat from.", "You can place furniture only inside a building you rent.",
+                 "You aren't holding a box of furniture (shops pack what you buy in a box).", "You're not inside a building.",
+                 "The game is paused: the walk over takes real time. Set a speed first."]
+        self.refused('taxi', {'address': 'ba:street_thirdstreet#6'}, texts[0])
+        self.refused('eat', {}, texts[1])
+        self.refused('use', {'op': 'right_click', 'id': 1}, "Unknown use op 'right_click': list or click.")
+        self.assertIn("Unknown use op '{op}': list or click.", life)
+        self.mock.dialog = 'agency'
+        self.refused('call', {'contact': 'the_city_of_new_york'}, "You're in a call or a conversation already: finish it first (its own buttons, or ui escape).")
+        self.assertIn("You're in a call or a conversation already: finish it first (its own buttons, or ui escape).", life)
+        self.mock.dialog = 'closed'
+        self.refused('place', {'x': 1, 'z': 1}, texts[2])
+        self.refused('walk', {'place': 'exit'}, texts[4])
+        self.mock.state['clock']['paused'] = True
+        self.mock.call('use', {'op': 'list'})
+        self.refused('use', {'op': 'click', 'id': 1}, texts[5])
+        for text in texts:
+            self.assertIn(text, life + world)
+        self.assertEqual({c['id'] for c in self.mock.call('call', {'op': 'list'})['contacts']}, {'the_city_of_new_york'})
+        self.assertIn('the_city_of_new_york', (TOOLS.parent / 'unity/FoodTrucks/Scripts/CityLicensing.cs').read_text())
+        for key in ('contact', 'name', 'calling', 'open', 'contacts', 'category', 'unread', 'app', 'item', 'done', 'hunger', 'energy', 'placed', 'why', 'rotation'):
+            self.assertIn(f'["{key}"]', life)
+        for key in ('name', 'amount', 'shows_time'):
+            self.assertIn(f'["{key}"]', (TOOLS.parent / 'unity/FoodTrucks/Scripts/TestBridgeCommands.cs').read_text())
+        for key in ('value', 'min', 'max', 'whole_numbers', 'on'):
+            self.assertIn(f'["{key}"]', ui)
+        self.assertIn('case "set":', ui)
+        state = self.mock.read_state()['player']
+        for key in ('hands', 'inside', 'homes', 'riding'):
+            self.assertIn(key, state)
+            self.assertIn(f'["{key}"]', self.source)
+        self.assertIn('["warnings"]', (TOOLS.parent / 'unity/FoodTrucks/Scripts/TestBridgeCommands.cs').read_text())
+        self.mock.state['save'] = 'Non-FT mock'
+        for cmd, args in (('taxi', {'address': 'ba:street_thirdstreet#6'}), ('eat', {}), ('place', {'x': 1, 'z': 1}), ('phone', {'app': 'contacts'}),
+                          ('call', {'contact': 'the_city_of_new_york'}), ('use', {'op': 'click', 'id': 1})):
+            with self.assertRaises(ValueError): self.mock.call(cmd, args)
+
     def test_transactions_carry_the_balance_after_them(self):
         self.mock.call('vehicle', {'op': 'buy', 'kind': 'cart'})
         t = self.mock.read_state()['transactions_today'][-1]
@@ -403,19 +458,63 @@ class BlindPlayTests(unittest.TestCase):
         return PLAY(list(argv), bridge=self.session.bridge, out=self.lines.append, stop_file=self.stop,
                     memory=str(Path(self.folder.name) / 'memory.json'))
 
+    def ride(self, address):
+        """Into the taxi waiting in the street, then to the address."""
+        self.session.bridge.call('time', {'speed': 1})
+        self.assertEqual(self.play('use'), 0, self.lines)
+        taxi = next(line for line in self.lines if 'Taxi' in line).split(']')[0][1:]
+        self.assertEqual(self.play('use', taxi), 0, self.lines)
+        self.assertEqual(self.play('go', address), 0, self.lines)
+        self.assertIn('The taxi set you down', self.lines[0])
+
+    def ui_click(self, text):
+        self.assertEqual(self.play('ui', 'click', text), 0, self.lines)
+
+    def thing(self, name):
+        self.assertEqual(self.play('use'), 0, self.lines)
+        return next(line for line in self.lines if name in line).split(']')[0][1:]
+
+    def licence_by_phone(self):
+        self.assertEqual(self.play('call', 'The City of New York'), 0, self.lines)
+        self.assertEqual(self.play('ui', 'list'), 0, self.lines)
+        buy = next(line for line in self.lines if 'Buy a licence' in line).split('] ', 1)[1]
+        self.ui_click(buy)
+        self.ui_click('Vehicle permits')
+        self.assertEqual(self.play('ui', 'list'), 0, self.lines)
+        self.ui_click(next(line for line in self.lines if 'Buy the permit' in line).split('] ', 1)[1])
+        self.ui_click('Hang up')
+
+    def hire_candidate(self):
+        # The mock has no recruitment campaign: a candidate waits on the phone, as one the game's channels sent.
+        with self.session.mock.lock:
+            self.session.mock.life['candidates'].append({'id': 'candidate-1', 'name': 'Mock candidate', 'skill': 55., 'satisfaction': 100., 'wage': 11.})
+        self.assertEqual(self.play('phone', 'employees'), 0, self.lines)
+        self.ui_click('Hire Mock candidate')
+        self.ui_click('Close')
+        return self.session.mock.read_state()['employees'][0]['id']
+
     def test_the_manual_lists_the_commands_and_nothing_else_is_there(self):
         import contextlib, io
         text = io.StringIO()
         with contextlib.redirect_stdout(text), self.assertRaises(SystemExit):
             PLAY(['--help'])
-        for command in ('look', 'places', 'go ADDRESS', 'walk X Z', 'map filters', 'buy truck|cart', 'order SITE', 'crew assign', 'route add', 'time until'):
+        for command in ('look', 'places', 'go ADDRESS', 'walk X Z', 'map filters', 'buy truck|cart', 'order SITE', 'crew assign', 'route add', 'time until',
+                        'use [--radius M]', 'eat [ITEM]', 'place X Z', 'phone APP', 'call list', 'ui set ID VALUE', 'How the city works'):
             self.assertIn(command, text.getvalue())
+        # Hints, not numbers: no price, fee or duration in the manual's city section.
+        hints = text.getvalue().split('How the city works', 1)[1].split('If the referee', 1)[0]
+        self.assertNotRegex(hints, r'\$|\d')
         import argparse
         names = set(runpy.run_path(str(TOOLS / 'play'), run_name='play_test')['parser']()._subparsers._group_actions[0].choices)
-        self.assertEqual(names, {'look', 'notices', 'places', 'go', 'walk', 'map', 'screen', 'ui', 'time', 'buy', 'vehicle', 'order', 'hire',
-                                 'licence', 'crew', 'price', 'route', 'save', 'load'})
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            PLAY(['money', 'set', '1000000'])
+        self.assertEqual(names, {'look', 'notices', 'places', 'go', 'walk', 'map', 'screen', 'ui', 'time', 'buy', 'vehicle', 'order',
+                                 'crew', 'price', 'route', 'save', 'load', 'use', 'eat', 'place', 'phone', 'call'})
+        # No shortcuts: no money, teleport, spawn, fixture or debug op is reachable, and the old licence and hire are gone.
+        for argv in (['money', 'set', '1000000'], ['licence'], ['hire'], ['teleport', 'x'], ['debug', 'hire']):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                PLAY(argv)
+        source = (TOOLS / 'play').read_text()
+        for cmd in ("'money'", "'teleport'", "'debug'", "'fixture'", "'logistics'", "'console'"):
+            self.assertNotIn(f"self.call({cmd}", source)
 
     def test_price_sets_and_clears_a_food_s_price_and_look_shows_it(self):
         self.session.bridge.call('save', {'name': 'FT playtest'})
@@ -489,6 +588,119 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(len(self.lines), 4)
         self.assertTrue(all('commissary' in line for line in self.lines[1:]), self.lines)
 
+    def test_a_day_of_living_food_a_home_a_bed_and_sleep(self):
+        city = {b['key']: b for b in runpy.run_path(str(TOOLS / 'mock-bridge'), run_name='mock_city')['CITY']}
+        burger = next(k for k, b in city.items() if b.get('businessType') == 'ba:businesstype_fastfoodrestaurant')
+        furniture = next(k for k, b in city.items() if b.get('businessType') == 'ba:businesstype_furniturestore')
+        flat = next(k for k, b in city.items() if b.get('buildingType') == 'ba:buildingtype_residential' and not b.get('businessType'))
+        self.session.mock.state['player'].update(x=city[burger]['x'], z=city[burger]['z'])
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        # Time runs the needs down: nothing tops them up.
+        self.assertEqual(self.play('time', 'until', '+0', '23:00'), 0, self.lines)
+        needs = self.session.mock.state['player']['needs']
+        self.assertLess(needs['hunger'], 25)
+        self.assertFalse(any('needs topped up' in e['text'] for e in self.session.mock.ring))
+        self.assertEqual(self.play('look'), 0, self.lines)
+        self.assertTrue(any('you are hungry' in line for line in self.lines), self.lines)
+        self.assertTrue(any(line == 'Home: none.' for line in self.lines), self.lines)
+        self.assertIn('  happiness: No home -20%', self.lines)
+        # A burger: in through the door, order at the till, eat from the bag.
+        self.session.bridge.call('time', {'speed': 1})
+        door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == burger)
+        self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
+        self.assertIn(f"You're now inside {burger}.", self.lines)
+        self.assertEqual(self.play('use', self.thing('Cash register')), 0, self.lines)
+        self.assertEqual(self.play('ui', 'list'), 0, self.lines)
+        self.ui_click(next(line for line in self.lines if 'Burger' in line).split('] ', 1)[1].split(' (option)')[0])
+        money = self.session.mock.state['money']
+        self.ui_click('Place order')
+        self.assertEqual(self.session.mock.state['money'], money - 8)
+        hunger = needs['hunger']
+        self.assertEqual(self.play('eat'), 0, self.lines)
+        self.assertGreater(needs['hunger'], hunger)
+        self.assertEqual(self.play('eat'), 1, self.lines)
+        self.assertIn('hands are empty', self.lines[0])
+        self.assertEqual(self.play('walk', '--to', 'exit'), 0, self.lines)
+        self.assertIn('You walked out of', self.lines[0])
+        # A flat: its entrance offers it for rent.
+        self.ride(flat)
+        door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == flat)
+        self.assertTrue(door['for_rent'])
+        self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
+        self.ui_click('Rent building')
+        self.assertEqual(self.session.mock.read_state()['player']['homes'], [flat])
+        self.assertEqual(self.play('look'), 0, self.lines)
+        self.assertIn('  happiness: First apartment +10%, 7 days left', self.lines)
+        self.assertFalse(any('No home' in line for line in self.lines), self.lines)
+        # A bed: bought in a shop, carried home in its box, set down on the floor.
+        self.ride(furniture)
+        door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == furniture)
+        self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
+        self.assertEqual(self.play('use', self.thing('King size bed')), 0, self.lines)
+        self.assertEqual(self.play('place', '1', '1'), 1, self.lines)
+        self.assertEqual(self.play('use', self.thing('Cash register')), 0, self.lines)
+        self.ui_click('Pay')
+        self.assertEqual(self.play('walk', '--to', 'exit'), 0, self.lines)
+        self.ride(flat)
+        door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == flat)
+        self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
+        self.assertEqual(self.play('place', '2', '3', '--rotation', '100'), 0, self.lines)
+        self.assertIn('turned 90 degrees', self.lines[0])
+        # Sleep: a click on the bed, the hours on the slider, Start; the time skip passes before the tool answers.
+        needs['energy'] = 20.
+        self.assertEqual(self.play('use', self.thing('Click to sleep')), 0, self.lines)
+        self.assertEqual(self.play('ui', 'list'), 0, self.lines)
+        slider = next(line for line in self.lines if '(slider' in line).split(']')[0][1:]
+        self.assertEqual(self.play('ui', 'set', slider, '120'), 0, self.lines)
+        day_time = self.session.mock.state['clock']['time']
+        self.ui_click('Start sleeping')
+        self.assertGreater(needs['energy'], 50)
+        self.assertNotEqual(self.session.mock.state['clock']['time'], day_time)
+
+    def test_the_licence_needs_the_course_and_a_call_to_the_city(self):
+        city = {b['key']: b for b in runpy.run_path(str(TOOLS / 'mock-bridge'), run_name='mock_city')['CITY']}
+        school = next(k for k, b in city.items() if b.get('businessType') == 'ba:businesstype_school')
+        self.session.mock.state['player'].update(x=city[school]['x'], z=city[school]['z'])
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.assertEqual(self.play('buy', 'cart'), 0, self.lines)
+        # Without the course the City turns the licence down.
+        self.assertEqual(self.play('call', 'list'), 0, self.lines)
+        self.assertIn('The City of New York (the_city_of_new_york)', self.lines)
+        self.assertEqual(self.play('call', 'the_city_of_new_york'), 0, self.lines)
+        self.assertEqual(self.play('ui', 'list'), 0, self.lines)
+        self.ui_click(next(line for line in self.lines if 'Buy a licence' in line).split('] ', 1)[1])
+        self.assertIsNone(self.session.mock.state['licence']['until_day'])
+        # The course: the school's Market Demands door, Food Safety, all its hours on the slider, Start.
+        self.session.bridge.call('time', {'speed': 1})
+        door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == school)
+        self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
+        self.assertEqual(self.play('use', self.thing('Market Demands')), 0, self.lines)
+        self.ui_click('Food Safety Course')
+        self.assertEqual(self.play('ui', 'list'), 0, self.lines)
+        slider = next(line for line in self.lines if '(slider' in line).split(']')[0][1:]
+        self.assertEqual(self.play('ui', 'set', slider, '6'), 0, self.lines)
+        money = self.session.mock.state['money']
+        self.ui_click('Start')
+        self.assertTrue(any(line.startswith('Time passed') for line in self.lines) or self.session.mock.state['licence']['course_done'], self.lines)
+        self.assertTrue(self.session.mock.state['licence']['course_done'])
+        self.assertEqual(self.session.mock.state['money'], money - 150)
+        self.licence_by_phone()
+        lic = self.session.mock.state['licence']
+        self.assertTrue(lic['until_day'])
+        self.assertEqual(lic['permits'], 1)
+
+    def test_a_taxi_charges_its_fare_and_takes_its_time(self):
+        self.session.mock.state['player'].update(x=1440., z=420.)
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.assertEqual(self.play('go', 'ba:street_thirdstreet#6'), 1, self.lines)
+        self.assertIn('No taxi is waiting', self.lines[0])
+        money, minute = self.session.mock.state['money'], self.session.mock.absolute
+        self.ride('ba:street_thirdstreet#6')
+        self.assertLess(self.session.mock.state['money'], money)
+        self.assertGreater(self.session.mock.absolute, minute)
+        t = self.session.mock.read_state()['transactions_today'][-1]
+        self.assertEqual(t['type'], 'ba:transaction_taxiride')
+
     def test_controls_refuse_outside_a_playtest_save_and_past_the_speed_cap(self):
         self.assertEqual(self.play('buy', 'cart'), 2)
         self.assertIn("starts with 'FT playtest'", self.lines[0])
@@ -506,12 +718,14 @@ class BlindPlayTests(unittest.TestCase):
         self.assertFalse(any('demand' in line or 'appetite' in line for line in self.lines))
         commissary = next(line for line in self.lines if 'commissary' in line)
         address = commissary.split()[2]
-        self.assertEqual(self.play('go', address), 0, self.lines)
+        self.ride(address)
         self.assertEqual(self.play('buy', 'cart'), 0, self.lines)
         cart = self.session.mock.state['vehicles'][0]['id']
-        for argv in (('vehicle', cart, 'rent_bay'), ('licence',), ('hire',)):
-            self.assertEqual(self.play(*argv), 0, self.lines)
-        employee = self.session.mock.read_state()['employees'][0]['id']
+        self.assertEqual(self.play('vehicle', cart, 'rent_bay'), 0, self.lines)
+        with self.session.mock.lock:
+            self.session.mock.state['licence'].update(course_done=True)
+        self.licence_by_phone()
+        employee = self.hire_candidate()
         self.assertEqual(self.play('crew', 'assign', cart, employee), 0, self.lines)
         self.assertEqual(self.play('order', 'hells-kitchen', 'ba:itemname_hotdoggrill', '1', 'Hotdog', '1'), 0, self.lines)
         self.assertEqual(self.play('route', 'add', cart, 'ba:street_thirdstreet#6'), 0, self.lines)

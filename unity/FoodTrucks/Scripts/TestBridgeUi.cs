@@ -42,6 +42,10 @@ namespace FoodTrucks
             public Button? Button;
             public Dropdown? Dropdown;
             public int Option;
+            // A slider (the activity panel's hours, a campaign's days) or a toggle (part time, full time): set and
+            // clicked as a drag or a click on them does.
+            public Slider? Slider;
+            public Toggle? Toggle;
         }
 
         // The entries of the last list, for click by id.
@@ -49,7 +53,7 @@ namespace FoodTrucks
 
         internal static JToken Run(JObject args)
         {
-            var op = TestBridgeCommands.Need(args, "op", "list, click, escape or tree");
+            var op = TestBridgeCommands.Need(args, "op", "list, click, set, escape or tree");
             switch (op)
             {
                 case "list":
@@ -59,11 +63,14 @@ namespace FoodTrucks
                 case "click":
                     RequireFtCity(op);
                     return Click(args);
+                case "set":
+                    RequireFtCity(op);
+                    return Set(args);
                 case "escape":
                     RequireFtCity(op);
                     return Escape();
                 default:
-                    throw new BridgeError($"Unknown ui op '{op}': list, click, escape or tree.");
+                    throw new BridgeError($"Unknown ui op '{op}': list, click, set, escape or tree.");
             }
         }
 
@@ -135,7 +142,7 @@ namespace FoodTrucks
 
         private static bool SaveOrLoadControl(Entry entry)
         {
-            var target = (Component?)entry.Button ?? entry.Dropdown;
+            var target = Target(entry);
             if (target == null) return false;
             for (var t = target.transform; t != null; t = t.parent)
                 foreach (var c in t.GetComponents<MonoBehaviour>())
@@ -167,6 +174,8 @@ namespace FoodTrucks
         private static string CurrentText(Entry entry)
         {
             if (entry.Button != null) return Label(entry.Button.transform);
+            if (entry.Slider != null) return ControlLabel(entry.Slider.transform);
+            if (entry.Toggle != null) return ControlLabel(entry.Toggle.transform);
             if (entry.Dropdown != null && OptionsField?.GetValue(entry.Dropdown) is List<string> options && entry.Option < options.Count)
             {
                 var localize = LocalizeField?.GetValue(entry.Dropdown) is bool b && b;
@@ -180,9 +189,23 @@ namespace FoodTrucks
             last = Entries();
             return new JObject
             {
-                ["buttons"] = new JArray(last.Select(e => new JObject { ["id"] = e.Id, ["text"] = e.Text, ["kind"] = e.Kind, ["path"] = e.Path })),
+                ["buttons"] = new JArray(last.Select(Json)),
                 ["texts"] = new JArray(Texts()),
             };
+        }
+
+        private static JObject Json(Entry e)
+        {
+            var json = new JObject { ["id"] = e.Id, ["text"] = e.Text, ["kind"] = e.Kind, ["path"] = e.Path };
+            if (e.Slider != null)
+            {
+                json["value"] = Math.Round(e.Slider.value, 2);
+                json["min"] = Math.Round(e.Slider.minValue, 2);
+                json["max"] = Math.Round(e.Slider.maxValue, 2);
+                json["whole_numbers"] = e.Slider.wholeNumbers;
+            }
+            if (e.Toggle != null) json["on"] = e.Toggle.isOn;
+            return json;
         }
 
         private static List<Entry> Entries()
@@ -204,6 +227,16 @@ namespace FoodTrucks
                     found.Add((at - new Vector2(0f, i + 1), new Entry { Dropdown = dropdown, Option = i, Kind = "option", Text = Clean(text), Path = PathOf(dropdown.transform) + $"/option[{i}]" }));
                 }
             }
+            foreach (var slider in Object.FindObjectsOfType<Slider>())
+            {
+                if (slider == null || !slider.IsActive() || !slider.IsInteractable() || !Visible(slider.transform, out var at)) continue;
+                found.Add((at, new Entry { Slider = slider, Kind = "slider", Text = ControlLabel(slider.transform), Path = PathOf(slider.transform) }));
+            }
+            foreach (var toggle in Object.FindObjectsOfType<Toggle>())
+            {
+                if (toggle == null || !toggle.IsActive() || !toggle.IsInteractable() || !Visible(toggle.transform, out var at)) continue;
+                found.Add((at, new Entry { Toggle = toggle, Kind = "toggle", Text = ControlLabel(toggle.transform), Path = PathOf(toggle.transform) }));
+            }
             // Top to bottom, then left to right, as a person reads the screen.
             var list = found.OrderByDescending(f => Mathf.Round(f.At.y)).ThenBy(f => f.At.x).Select(f => f.Entry).ToList();
             for (var i = 0; i < list.Count; i++) list[i].Id = i + 1;
@@ -218,7 +251,7 @@ namespace FoodTrucks
             if (id != null)
             {
                 entry = last.FirstOrDefault(e => e.Id == (int)id.Value) ?? throw new BridgeError($"No entry {id} in the last ui list; list again.");
-                var target = (Component?)entry.Button ?? entry.Dropdown;
+                var target = Target(entry);
                 if (target == null || !Visible(target.transform, out _)) throw new BridgeError($"Entry {id} ({entry.Text}) is no longer on screen; list again.");
                 var now = CurrentText(entry);
                 if (now != entry.Text) throw new BridgeError($"the control with id {entry.Id} now reads '{now}'; list again.");
@@ -241,10 +274,18 @@ namespace FoodTrucks
             else throw new BridgeError("ui click needs \"id\" (from the last list) or \"text\".");
             if (SaveOrLoadControl(entry)) throw new BridgeError(SaveLoadText);
 
+            if (entry.Slider != null) throw new BridgeError($"\"{entry.Text}\" is a slider: ui set with its id and a value.");
             if (entry.Button != null)
             {
                 if (!entry.Button.IsInteractable()) throw new BridgeError($"\"{entry.Text}\" isn't clickable now.");
                 entry.Button.onClick.Invoke();
+            }
+            else if (entry.Toggle != null)
+            {
+                if (!entry.Toggle.IsInteractable()) throw new BridgeError($"\"{entry.Text}\" isn't clickable now.");
+                // What a click on a toggle does (Toggle.InternalToggle): flip it; one in a group that allows none off stays on.
+                if (entry.Toggle.isOn && entry.Toggle.group != null && !entry.Toggle.group.allowSwitchOff) { }
+                else entry.Toggle.isOn = !entry.Toggle.isOn;
             }
             else entry.Dropdown!.SelectOption(entry.Option);
             Log.Info($"Test bridge: clicked \"{entry.Text}\" ({entry.Path}).");
@@ -263,7 +304,38 @@ namespace FoodTrucks
             var dialog = InstanceBehavior<UIs>.Instance?.playerHUD?.dialogUI;
             if (dialog != null && dialog.isPanelOpen) open.Add("call");
             if (PlayerActivityUI.IsPanelOpen) open.Add("activity panel");
+            // Furniture being placed (a right click on it, or place's start): Esc cancels it.
+            if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode) open.Add("placing furniture");
             return open;
+        }
+
+        private static Component? Target(Entry entry) => (Component?)entry.Button ?? (Component?)entry.Dropdown ?? (Component?)entry.Slider ?? entry.Toggle;
+
+        // { "id", "value" }: a slider from the last list moved to the value, as dragging it does (its onValueChanged runs:
+        // the activity panel's hours, a campaign's days). The value is held to the slider's range and, for a slider of
+        // whole numbers, rounded.
+        private static JToken Set(JObject args)
+        {
+            var id = TestBridgeCommands.Num(args, "id") ?? throw new BridgeError("ui set needs \"id\" (a slider from the last list) and \"value\".");
+            var value = TestBridgeCommands.Num(args, "value") ?? throw new BridgeError("ui set needs \"value\": a number.");
+            var entry = last.FirstOrDefault(e => e.Id == (int)id) ?? throw new BridgeError($"No entry {id} in the last ui list; list again.");
+            var slider = entry.Slider ?? throw new BridgeError($"Entry {id} ({entry.Text}) isn't a slider.");
+            if (!slider.IsActive() || !slider.IsInteractable() || !Visible(slider.transform, out _))
+                throw new BridgeError($"Entry {id} ({entry.Text}) is no longer on screen; list again.");
+            if (SaveOrLoadControl(entry)) throw new BridgeError(SaveLoadText);
+            var wanted = Mathf.Clamp((float)value, slider.minValue, slider.maxValue);
+            if (slider.wholeNumbers) wanted = Mathf.Round(wanted);
+            slider.value = wanted;
+            Log.Info($"Test bridge: set \"{entry.Text}\" to {slider.value} ({entry.Path}).");
+            return new JObject { ["set"] = entry.Text, ["value"] = Math.Round(slider.value, 2), ["min"] = slider.minValue, ["max"] = slider.maxValue, ["texts"] = new JArray(Texts()) };
+        }
+
+        // A slider's or toggle's own text, else the nearest text of its parents (the label beside it).
+        private static string ControlLabel(Transform t)
+        {
+            for (var p = t; p != null; p = p.parent)
+                foreach (var (_, text) in TextBlocks(p)) return text;
+            return t.name;
         }
 
         private static JToken Escape()
@@ -311,6 +383,10 @@ namespace FoodTrucks
                 if (DropdownSelector.isOpen) Add(Object.FindObjectOfType<DropdownSelectorUI>());
                 if (UI.MiniMenu.MiniMenu.IsOpen) Add(uis?.miniMenuUI);
                 if (PlayerActivityUI.IsPanelOpen) Add(Object.FindObjectOfType<PlayerActivityUI>());
+                // The overlays over a clicked object or building, the shop's purchase panel and the map's building card.
+                Add(uis?.overlayUI);
+                if (uis?.playerHUD?.purchaseUI != null && uis.playerHUD.purchaseUI.isActiveAndEnabled) Add(uis.playerHUD.purchaseUI);
+                if (CityMap.IsOpen) Add(uis?.buildingResume);
                 foreach (var notices in Object.FindObjectsOfType<NotificationsUI>()) Add(notices.container);
             }
             var texts = new List<string>();

@@ -104,6 +104,10 @@ namespace FoodTrucks
                 ["in_vehicle"] = string.IsNullOrEmpty(game.ActiveVehicleId) ? null : game.ActiveVehicleId,
                 ["at_hatch"] = atHatch,
                 ["carrying"] = hands?.itemName,
+                ["hands"] = TestBridgeCommands.Hands(),
+                ["inside"] = TestBridgeCommands.InsideAddress(),
+                ["homes"] = TestBridgeCommands.Homes(),
+                ["riding"] = TaxiSystem.IsTraveling,
                 ["needs"] = TestBridgeCommands.Needs(game),
             };
         }
