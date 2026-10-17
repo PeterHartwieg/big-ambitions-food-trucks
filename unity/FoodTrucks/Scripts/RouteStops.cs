@@ -83,7 +83,7 @@ namespace FoodTrucks
             Log.Info($"Route: stop {stop.SpotKey} at x {x:F1}, z {z:F1}, heading {heading:F0} {StaffDialog.Clock(open)}-{StaffDialog.Clock(close)} " +
                      $"added to {vehicle.VehicleType} {vehicleId} on {day}; {WeekPlan.StopsOf(schedule, day).Count} stops that day.");
             CartSelling.Notify("foodtrucks:notification_route_added", ("open", StaffDialog.Clock(open)), ("close", StaffDialog.Clock(close)),
-                ("count", WeekPlan.StopsOf(schedule, day).Count.ToString()));
+                ("count", Notices.Counted(WeekPlan.StopsOf(schedule, day).Count, "foodtrucks:count_stops")));
             return true;
         }
 

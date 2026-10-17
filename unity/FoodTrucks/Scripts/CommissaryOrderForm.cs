@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Extensions;
 using FoodTrucks.Core.Commissary;
 using HarmonyLib;
@@ -284,26 +285,22 @@ namespace FoodTrucks
         }
 
         // The rows' item, box size and stock, as the item list shows them; the price beside it is the box price.
-        // Equipment reads plainly, by the piece, with the foods it cooks ("Industrial Grill (1 here): Burger, Chicken Kabob
-        // Skewer"); food names the piece that cooks it ("Hotdog for the Hotdog Grill, box of 500 (… here)") and says how
-        // many boxes of it are left under its weekly limit in the delivery's week, one limit for all commissaries together
-        // (Core CommissarySupply). The first blind playtest bought an Industrial Grill for hot dogs: nothing said which
-        // machine cooks what.
+        // Equipment reads plainly, by the piece, with the foods it cooks ("Industrial Grill · 1 here · cooks Burger,
+        // Chicken Kabob Skewer"), since the first blind playtest bought an Industrial Grill for hot dogs. Food says how
+        // many boxes of it are left under its weekly limit in the delivery's week, one limit for all commissaries
+        // together (Core CommissarySupply). Kept short (Peter, blind run 2: the names ran under the pictures), and
+        // FitName cuts what still doesn't fit.
         private static LanguageChangeEventDataHolder Label(Line line, string siteId)
         {
             var tables = DemandData.Tables;
             var equipment = tables?.EquipmentForGameItem(line.Item);
             var piece = equipment != null;
             var foods = equipment == null ? "" : StoragePanel.Foods(equipment);
-            var cookedOn = piece || tables == null ? null : StoragePanel.PieceFor(tables, line.Item);
             var state = FoodTrucksSession.CurrentState;
             var rules = DemandData.Rules?.Commissary;
             var limited = !piece && state != null && rules != null && !Commissary.LimitsLifted;
             var left = limited ? CommissarySupply.Left(state!.Commissary, rules!, line.Item, TimeHelper.CurrentDay + 1) : 0;
-            var name = LocalizorManager.GetLocalization(line.Item, null);
-            var item = cookedOn != null
-                ? LocalizorManager.GetLocalization("foodtrucks:commissary_form_food_for", new Dictionary<string, string> { { "food", name }, { "piece", cookedOn } })
-                : name;
+            var item = LocalizorManager.GetLocalization(line.Item, null);
             return LocalizorManager.Localize(piece ? foods.Length > 0 ? "foodtrucks:commissary_form_piece_foods" : "foodtrucks:commissary_form_piece"
                 : limited ? "foodtrucks:commissary_form_item_left" : "foodtrucks:commissary_form_item", new
             {
@@ -357,10 +354,45 @@ namespace FoodTrucks
                 {
                     var (line, entry) = shown[i];
                     entry.Init(Label(line, current.SiteId), Icon(line.Item), line.BoxCents / 100f);
+                    FitName(entry.ItemsListEntry);
                     entry.ItemsListEntry.transform.SetSiblingIndex(first + i);
                 }
             }
             catch (Exception ex) { Fail("item list", ex); }
+        }
+
+        // The game's own rows hold one short name; ours wrap within the name's box, shrink a little, and end with an
+        // ellipsis rather than run out of it under the picture. The entries are this form's own (the list destroys them
+        // when it is refilled), so nothing is put back.
+        private static FieldInfo? nameLabelField;
+
+        private static void FitName(ItemsListEntry entry)
+        {
+            nameLabelField ??= AccessTools.Field(typeof(ItemsListEntry), "nameLabel");
+            var label = nameLabelField?.GetValue(entry) as Component;
+            var graphic = label == null ? null : label.GetComponent<UnityEngine.UI.Graphic>();
+            if (graphic == null)
+            {
+                // The names show as the game sets them, which may run long; the rest of the list is unaffected.
+                if (failed.Add("fit names")) Log.Error("Commissary order form: no name text found on the item list's rows; long names aren't fitted.");
+                return;
+            }
+            var type = graphic.GetType();
+            void Set(string property, object value)
+            {
+                var info = type.GetProperty(property);
+                if (info != null && info.CanWrite) info.SetValue(graphic, value);
+            }
+            Set("enableWordWrapping", true);
+            var overflow = type.GetProperty("overflowMode");
+            if (overflow != null && overflow.CanWrite && overflow.PropertyType.IsEnum)
+                overflow.SetValue(graphic, Enum.Parse(overflow.PropertyType, "Ellipsis"));
+            if (type.GetProperty("fontSize")?.GetValue(graphic) is float size && size > 0f)
+            {
+                Set("fontSizeMax", size);
+                Set("fontSizeMin", size * 0.75f);
+                Set("enableAutoSizing", true);
+            }
         }
 
         // An equipment item shows the compact model a vehicle actually carries (economy.json's `display`), rendered by the

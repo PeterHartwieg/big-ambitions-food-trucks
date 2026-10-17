@@ -7,6 +7,7 @@ using FoodTrucks.Core.Saves;
 using Helpers;
 using Streets;
 using IngameDebugConsole;
+using Localizor;
 using Parking.UndergroundParking;
 using HarmonyLib;
 using UI.Notification;
@@ -265,8 +266,9 @@ namespace FoodTrucks
         }
 
         // A free player-owned vehicle in front of the player, where buying one at the dealer would take too long.
-        // The spawned vehicle, or null when it wasn't spawned (a notice says why). The test bridge's vehicle buy uses it too.
-        internal static VehicleInstance? SpawnVehicle(string typeName)
+        // The spawned vehicle, or null when it wasn't spawned (a notice says why). The test bridge's vehicle buy uses it too,
+        // with its own purchase notice instead of "Spawned" (blind run 2, I10).
+        internal static VehicleInstance? SpawnVehicle(string typeName, bool announce = true)
         {
             if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking)
             {
@@ -293,7 +295,7 @@ namespace FoodTrucks
             var at = free.Value;
             var controller = VehicleHelper.CreateAndSpawnVehicle(instance, at, player.rotation);
             Log.Info($"Spawned {typeName}: id {instance.id}, controller {(controller == null ? "none" : controller.GetType().Name)}, at x {at.x:F1}, z {at.z:F1}.");
-            Notify($"Spawned {typeName}.");
+            if (announce) Notify($"Spawned {LocalizorManager.GetLocalization(typeName, null)}.");
             return instance;
         }
 

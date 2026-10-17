@@ -1,3 +1,25 @@
+# Second blind playtest fixes (next build)
+
+Branch `blind2-fixes`, from the second blind AI playtest and Peter's notes while watching it (17 October 2026; issues in `build/logs/game/blind-2/notes/issues2.md` of the main checkout, plan in docs/ai-playtest-plan.md). Nothing here has run in game. Use a throwaway FT save with a cart, a truck, one crew member with a route, and commissary spaces.
+
+| # | Do | Look for |
+|---|---|---|
+| BR1 | Push a cart so it stands at right angles to the kerb (its front towards the road), open it | Customers queue along the pavement, straight out from the cart's window side; nobody stands in a driving lane. The log's `Queue view: line at cart …` says "straight out from the right/left side" |
+| BR2 | The same cart parallel to the kerb, then a truck at a kerb, open each | As before: the cart's line runs along it on the pavement side ("on the right/left side towards the …"), the truck's along its hatch side; nobody on the road; customers don't walk in across the street |
+| BR3 | Call a commissary, Order stock, open the item list | Foods read "Burger, box of 500 · N here · N left this week"; machines "Industrial Grill · N here · cooks Burger, Chicken Kabob Skewer". No text runs under a picture; a long one ends in "…" or shrinks a little |
+| BR4 | Stand by a cart you opened yourself while it sells | No notice per sale; the cash sound still plays; "Sold out!" and the day's totals still come. The log has `Cart …: sold … for …; N left.` per sale |
+| BR5 | BizMan › Street food with a cart open at a long address and one "On the way back to its commissary" | The status stays in its own column (wrapped, slightly smaller, or cut with "…"); nothing lies over the health grade or the alerts |
+| BR6 | Leave a vehicle out of its bay overnight | At 04:00 a warning notice: "Overnight fine of $250.00 for your Food truck: …"; the City's text as before |
+| BR7 | Bridge: a truck standing just outside its commissary's bay paint (not legally in it), `vehicle ID rent_bay` | Rents the space there, as the phone's Spaces does; far from any bay it still refuses with the notice |
+| BR8 | Two crewed carts with the same stop at the same hour (one there first) | The second turns back after a while with a notice: "Food cart N found its stop at <stop> taken by another vehicle and went back where it came from. …" |
+| BR9 | Fire a crew member, or let one quit | A warning notice "<name> has left the company: …" that stays in the notification list |
+| BR10 | Bridge: `vehicle buy cart` | Notice "You bought a cart for $1,200.00.", not "Spawned foodtrucks:vehicletype_foodcart." |
+| BR11 | Call a commissary with one space and one order; add the first stop to a route | "You have 1 space here, … 1 order on the way and 0 standing orders"; "The route has 1 stop that day." |
+| BR12 | Bank after midnight with crew on an unassigned wage | "Name (Unassigned Daily Wage)" with its closing bracket (the mod's locale fixes the game's own text) |
+| BR13 | Give a cart a route and a crew but no machine | A red to-do "No cooking equipment: its crew is paid but can't sell. …"; it goes once a machine is fitted. The crew's shift is still paid, as the game pays its own staff |
+| BR14 | Open a cart yourself at a premium spot or a park around 09:30 | When it's quiet now: "Hardly anyone comes by here right now. Around lunch it should be about N an hour." before the premium spot's notice. From noon on, no lunch sentence |
+| BR15 | Bridge: enter a truck, open Voogle Maps, `ui escape`, `vehicle ID exit` at once, then `walk` | If the walk is refused, its message now names the navigation blocker left set (expected: Map, the game's map close cut short). Write it down for the follow-up |
+
 # Save guard and late attach (next build)
 
 Branch `save-guard`, from blind playtest 2 (a load from the city came up without the mod's city part). Nothing here has run in game. Use a throwaway FT save.

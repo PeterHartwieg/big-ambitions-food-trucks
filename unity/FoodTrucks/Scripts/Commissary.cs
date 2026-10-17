@@ -15,6 +15,7 @@ using Localizor;
 using UI;
 using UI.InteriorDesigner;
 using UI.ItemPanel;
+using UI.Notification;
 using UI.Smartphone.Apps.Contacts;
 using UnityEngine;
 
@@ -538,6 +539,24 @@ namespace FoodTrucks
         // The commissary whose bay the vehicle is in (legally parked, its middle within the radius), or null.
         internal static CommissarySite? SiteOf(VehicleInstance vehicle) => Sites?.Sites.FirstOrDefault(s => InBay(vehicle, s, out _));
 
+        // The commissary with a resolved bay point nearest the vehicle, within the given metres; null when none is.
+        private static CommissarySite? NearestSite(VehicleInstance vehicle, double metres)
+        {
+            var controller = VehicleHelper.GetVehicleController(vehicle);
+            var position = controller != null ? controller.transform.position : (Vector3)vehicle.position;
+            CommissarySite? nearest = null;
+            var best = metres;
+            foreach (var site in Sites?.Sites ?? Enumerable.Empty<CommissarySite>())
+                foreach (var point in ResolvedBays(site) ?? Array.Empty<CommissaryBayPoint>())
+                {
+                    var d = Math.Sqrt((point.X - position.x) * (point.X - position.x) + (point.Z - position.z) * (point.Z - position.z));
+                    if (d > best) continue;
+                    best = d;
+                    nearest = site;
+                }
+            return nearest;
+        }
+
         // Hourly parking uses the same rented space and bay test as 04:00. A missing or unresolved bay grants no parking
         // exemption; the overnight rule's NoBay grace doesn't mean the vehicle is standing in a rented bay.
         internal static CommissarySite? PublicParkingBay(VehicleInstance vehicle)
@@ -1003,6 +1022,12 @@ namespace FoodTrucks
                     { "fine", CartSelling.Money(fine.Cents) },
                     { "time", CityPitches.Clock(rules.NightCheckMinute) }
                 });
+                // And on screen: the text alone went unseen with the clock running fast (blind run 2, I32).
+                Notices.Show(NotificationType.Warning, "foodtrucks:notification_overnight_fine", new Dictionary<string, string>
+                {
+                    { "vehicle", VehicleName(state, fine.VehicleId) },
+                    { "fine", CartSelling.Money(fine.Cents) }
+                }, 8f);
             }
         }
 
@@ -1247,8 +1272,11 @@ namespace FoodTrucks
         }
 
         // The test bridge's rent_bay: the Spaces choice for this vehicle at the commissary whose bay it stands in (rent or
-        // move), as if picked in that commissary's call, with the same checks, notice and text. Null when it ran;
-        // otherwise why not (a refusal shows its notice first).
+        // move), as if picked in that commissary's call, with the same checks, notice and text. Renting by phone needs no
+        // vehicle in the bay, so one standing near a bay (within RentNearMetres of its points, outside it or not legally
+        // parked) rents there too: blind run 2 (I25) had a bought truck beside the bay that the phone rented and
+        // rent_bay refused. Null when it ran; otherwise why not (a refusal shows its notice first).
+        private const double RentNearMetres = 40.0;
         internal static string? RentBayForTesting(VehicleInstance vehicle)
         {
             const string refused = "the commissary's Spaces refused (see the notice)";
@@ -1260,7 +1288,7 @@ namespace FoodTrucks
                 CartSelling.Notify("foodtrucks:notification_data_readonly");
                 return refused;
             }
-            var site = SiteOf(vehicle);
+            var site = SiteOf(vehicle) ?? NearestSite(vehicle, RentNearMetres);
             if (site == null)
             {
                 SayNotInBay(vehicle, kind);
@@ -2242,10 +2270,10 @@ namespace FoodTrucks
             var data = new
             {
                 commissary = Commissary.Name(site!),
-                spaces = commissary.Spaces.Count(s => s.CommissaryId == site!.Id).ToString(),
-                stock = (commissary.Stock.TryGetValue(site!.Id, out var lines) ? lines.Sum(l => (long)l.Units) : 0).ToString(),
-                orders = commissary.Orders.Count(o => o.CommissaryId == site.Id).ToString(),
-                standing = CommissaryStandingOrders.At(commissary, site.Id).Count.ToString()
+                spaces = Notices.Counted(commissary.Spaces.Count(s => s.CommissaryId == site!.Id), "foodtrucks:count_spaces"),
+                stock = Notices.Counted(commissary.Stock.TryGetValue(site!.Id, out var lines) ? lines.Sum(l => (long)l.Units) : 0, "foodtrucks:count_items"),
+                orders = Notices.Counted(commissary.Orders.Count(o => o.CommissaryId == site.Id), "foodtrucks:count_orders"),
+                standing = Notices.Counted(CommissaryStandingOrders.At(commissary, site.Id).Count, "foodtrucks:count_standing")
             };
             // A new key for the text with standing orders: the phone words old messages again from their key and data.
             Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_start_standing", ToDictionary(data), read: true, isNewInteraction: true));

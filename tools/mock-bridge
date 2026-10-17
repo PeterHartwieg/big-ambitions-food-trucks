@@ -613,13 +613,14 @@ class Mock:
         if self.state['money']*100<cents:
             raise ValueError(f"Not enough money for the {kind}: it costs ${cents/100:,.2f} and the player has ${math.floor(self.state['money']*100)/100:,.2f}.")
         start=self.seq
-        v=self.spawn(kind)
+        v=self.spawn(kind, announce=False)
         v.update(x=player['x']+3.,z=player['z']+(6. if kind=='truck' else 2.))
         # Bought at a commissary's door, the mock puts it in that commissary's bay (in game: wherever the spawn finds room).
         for site in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']:
             building=next((b for b in CITY if b['key']==site['address']),None)
             if building and math.hypot(building['x']-player['x'],building['z']-player['z'])<=40: self.place_vehicle(v,site['id'])
         self.pay(-cents,'ba:transaction_vehiclebought')
+        self.event(f'You bought a {kind} for ${cents/100:,.2f}.', 'notice')
         self.event(f"Test bridge: vehicle buy {kind}: {v['id']} for ${cents/100:,.2f}.")
         notices=[e['text'][8:] for e in self.ring if e['seq']>start and e['kind']=='notice']
         return {'done':True,'id':v['id'],'kind':kind,'price':cents/100,'money':round(self.state['money'],2),'notices':notices,
@@ -791,7 +792,7 @@ class Mock:
                 hours=sum(x['end']-x['start'] for x in entry['shifts'] if x['day']==weekday)
                 if hours<=0 or entry['employee'] not in v['crew']: continue
                 cents=hours*WAGE_CENTS
-                self.pay(-cents,'ba:transaction_unassignedwage',day=day)
+                self.pay(-cents,'ba:transaction_unassignedwage',day=day,employee=entry['employee'],businessName='Unassigned')
                 self.book(day,v['id'],'wages',cents)
                 self.event(f"Wage: {entry['employee']} ({v['id']}), day {day}: {hours} h, ${cents/100:.2f}.",day=day)
 
@@ -960,7 +961,7 @@ class Mock:
             raise ValueError(f"No food cart or truck with id '{identifier}'. Food vehicles: {ids}.")
         return found
 
-    def spawn(self, kind):
+    def spawn(self, kind, announce=True):
         identifier = f'{kind}-{len(self.state["vehicles"])+1}'
         v = dict(id=identifier,kind=kind,name='Food '+kind,x=0.,y=0.,z=0.,heading=0.,legal=True,
                  legal_reason='wheel parking test: legal, mock wheels' if kind=='truck' else 'pavement rule: legal; nearest entrance 10.0 m',hatch_side='right' if kind=='truck' else None,
@@ -970,7 +971,7 @@ class Mock:
         self.state['vehicles'].append(v)
         self.selected = identifier
         self.event(f'Spawned foodtrucks:vehicletype_food{kind}: id {identifier}, controller mock.')
-        self.event(f'Spawned foodtrucks:vehicletype_food{kind}.', 'notice')
+        if announce: self.event(f'Spawned Food {kind}.', 'notice')
         return v
 
     def place_vehicle(self, v, site):
