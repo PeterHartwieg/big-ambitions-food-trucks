@@ -1,4 +1,5 @@
 import copy
+import re
 import json
 from pathlib import Path
 import runpy
@@ -406,6 +407,59 @@ class ParityTests(unittest.TestCase):
         state=self.mock.call('state',{})
         self.assertEqual(set(state['game_camera']),{'x','y','z','yaw','pitch'})
         self.assertEqual(state['view_blocked'],[])
+
+    def test_drive_refusals_and_reply_match_the_bridge(self):
+        source=(TOOLS.parent/'unity/FoodTrucks/Scripts/TestBridgeDrive.cs').read_text()
+        world=(TOOLS.parent/'unity/FoodTrucks/Scripts/TestBridgeWorld.cs').read_text()
+        commands=(TOOLS.parent/'unity/FoodTrucks/Scripts/TestBridgeCommands.cs').read_text()
+        def refusal(cmd,args,text,fragment,where=source):
+            # The mock's whole text, and the C#'s literal piece of it (the rest is interpolated there).
+            self.refused(cmd,args,text)
+            self.assertIn(fragment,where)
+        T=self.id
+        self.refused('drive',{'op':'fly'},"Unknown drive op 'fly': start, status or check.")
+        self.assertIn("Unknown drive op '{op}': start, status or check.",source)
+        self.assertEqual(self.mock.call('drive',{'op':'status'}),{'running':False,'phase':'none'})
+        refusal('drive',{'id':T,'place':'bay:hells-kitchen','speed':5},'speed is a whole number from 1 to 3 (times real time).',
+                'speed is a whole number from {DriveMinSpeed} to {DriveMaxSpeed} (times real time).')
+        refusal('drive',{'id':T,'place':'bay:hells-kitchen'},f"You're not in {T}: get in first (vehicle {T} enter).",
+                "You're not in {id}: get in first (vehicle {id} enter).")
+        cart=self.mock.spawn('cart')['id']
+        refusal('drive',{'id':cart,'place':'bay:hells-kitchen'},f'{cart} is a cart: a cart is pushed (walk), not driven.','{id} is a cart: a cart is pushed (walk), not driven.')
+        self.mock.state['player']['in_vehicle']=T
+        refusal('drive',{'id':T,'place':'bay:hells-kitchen'},'The game is paused: driving takes real time. Set a speed first.',
+                'The game is paused: driving takes real time. Set a speed first.')
+        self.mock.state['clock']['paused']=False
+        refusal('drive',{'id':T,'place':'nowhere'},"Unknown place 'nowhere': use bay:<site>, address:<address> or stop:<N> (today's route).",
+                "Unknown place '{run.Place}': use bay:<site>, address:<address> or stop:<N> (today's route).")
+        refusal('drive',{'id':T,'place':'stop:x'},"stop: takes the stop's number on today's route, from 1; got 'x'.","stop: takes the stop's number on today's route, from 1; got '{what}'.")
+        refusal('drive',{'id':T,'place':'stop:1'},f"{T} has 0 stops on today's route (Monday); no stop 1.",
+                """{vehicle.id} has {stops.Count} stop{(stops.Count == 1 ? "" : "s")} on today's route ({today}); no stop {number}.""")
+        self.mock.self_driving=False
+        refusal('drive',{'id':T,'place':'bay:hells-kitchen'},"HART. Self Driving isn't loaded: the truck can't drive itself. Switch it on in the Mods menu.",
+                "HART. Self Driving isn't loaded: the truck can't drive itself. Switch it on in the Mods menu.")
+        self.assertEqual(self.mock.call('drive',{'op':'check'})['problems'],["HART. Self Driving isn't loaded: switch it on in the Mods menu."])
+        self.assertIn("HART. Self Driving isn't loaded: switch it on in the Mods menu.",source)
+        self.mock.self_driving=True
+        started=self.mock.call('drive',{'id':T,'place':'bay:hells-kitchen'})
+        self.assertTrue(started['running'])
+        keys={'running','phase','id','place','speed','goal','seconds','game_minutes','from','pull_out','attempts','ride_to','ride','park','error','truck','vehicle'}
+        self.assertEqual(set(started),keys)
+        for key in keys: self.assertIn(f'["{key}"]',source)
+        check={'self_driving','rig_folder','rig_ready','truck_type','drivable_prefab','prefab','wheels','last_ride','problems'}
+        self.assertEqual(set(self.mock.call('drive',{'op':'check'})),check)
+        for key in check: self.assertIn(f'["{key}"]',source)
+        # While it drives: no second drive, no run_until, no teleport or vehicle op on that truck.
+        refusal('drive',{'id':T,'place':'bay:hells-kitchen'},f'A drive is under way ({T} to bay:hells-kitchen): wait for it (drive status).',
+                'A drive is under way ({drive!.Id} to {drive.Place}): wait for it (drive status).')
+        refusal('time',{'run_until':{'time':'09:00'}},f'A drive is under way ({T}), and run_until would end its ride: wait for it (drive status).',
+                'A drive is under way ({DrivingVehicle}), and run_until would end its ride: wait for it (drive status).',commands)
+        refusal('teleport',{'who':T,'x':1,'z':1},f'{T} is on a drive: wait for it (drive status).','{who} is on a drive: wait for it (drive status).',world)
+        refusal('vehicle',{'id':T,'op':'exit'},f'{T} is on a drive: wait for it (drive status).','{id} is on a drive: wait for it (drive status).',world)
+        done=self.mock.call('drive',{'op':'status'})
+        self.assertEqual((done['running'],done['phase'],done['error'],done['park']['where']),(False,'done',None,'bay:hells-kitchen'))
+        self.assertEqual(set(done),keys)
+        self.assertIn('walk, drive, vehicle',commands)
 
     def test_health_has_time_skip(self):
         self.assertFalse(self.mock.health()['time_skip'])

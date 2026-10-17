@@ -499,7 +499,8 @@ class BlindPlayTests(unittest.TestCase):
         with contextlib.redirect_stdout(text), self.assertRaises(SystemExit):
             PLAY(['--help'])
         for command in ('look', 'places', 'go ADDRESS', 'walk X Z', 'map filters', 'buy truck|cart', 'order SITE', 'crew assign', 'route add', 'time until',
-                        'use [--radius M]', 'eat [ITEM]', 'place X Z', 'phone APP', 'call list', 'ui set ID VALUE', 'How the city works'):
+                        'use [--radius M]', 'eat [ITEM]', 'place X Z', 'phone APP', 'call list', 'ui set ID VALUE', 'How the city works',
+                        'drive TRUCK PLACE', 'bay:SITE', 'stop:N'):
             self.assertIn(command, text.getvalue())
         # Hints, not numbers: no price, fee or duration in the manual's city section.
         hints = text.getvalue().split('How the city works', 1)[1].split('If the referee', 1)[0]
@@ -507,7 +508,7 @@ class BlindPlayTests(unittest.TestCase):
         import argparse
         names = set(runpy.run_path(str(TOOLS / 'play'), run_name='play_test')['parser']()._subparsers._group_actions[0].choices)
         self.assertEqual(names, {'look', 'notices', 'places', 'go', 'walk', 'map', 'screen', 'ui', 'time', 'buy', 'vehicle', 'order',
-                                 'crew', 'price', 'route', 'save', 'load', 'use', 'eat', 'place', 'phone', 'call'})
+                                 'crew', 'price', 'route', 'save', 'load', 'use', 'eat', 'place', 'phone', 'call', 'drive'})
         # No shortcuts: no money, teleport, spawn, fixture or debug op is reachable, and the old licence and hire are gone.
         for argv in (['money', 'set', '1000000'], ['licence'], ['hire'], ['teleport', 'x'], ['debug', 'hire']):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
@@ -560,6 +561,61 @@ class BlindPlayTests(unittest.TestCase):
             time.sleep(.05)
         self.assertEqual(self.play('walk', '410', '230'), 1)
         self.assertIn('get out first', self.lines[0])
+
+    def enter(self, vehicle):
+        self.session.bridge.call('time', {'speed': 1})
+        self.assertEqual(self.play('vehicle', vehicle, 'enter'), 0, self.lines)
+        for _ in range(50):
+            if self.session.bridge.call('state')['result']['player']['in_vehicle'] == vehicle: break
+            time.sleep(.05)
+        self.session.bridge.call('time', {'pause': True})
+
+    def test_driving_a_truck_to_its_bay_to_a_building_and_to_a_stop(self):
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.session.mock.state['player'].update(x=0., z=0.)
+        self.assertEqual(self.play('buy', 'truck'), 0, self.lines)
+        truck = self.session.mock.state['vehicles'][0]['id']
+        # Only from the driver's seat, and a cart is pushed.
+        self.assertEqual(self.play('drive', truck, 'bay:hells-kitchen'), 1, self.lines)
+        self.assertIn(f'get in first (vehicle {truck} enter)', self.lines[0])
+        self.enter(truck)
+        self.assertEqual(self.play('drive', truck, 'bay:hells-kitchen', '--speed', '4'), 2, self.lines)
+        # To the bay: out of the space, the ride, into the bay; the clock is put back as it was (paused).
+        self.assertEqual(self.play('drive', truck, 'bay:hells-kitchen'), 0, self.lines)
+        self.assertIn('pulled', self.lines[0])
+        self.assertTrue(any(line.startswith('The drive: Complete: arrived') for line in self.lines), self.lines)
+        self.assertIn('Parked in the bay.', self.lines)
+        self.assertTrue(any('parked legally, in the bay at hells-kitchen' in line for line in self.lines), self.lines)
+        self.assertTrue(self.session.mock.state['clock']['paused'])
+        self.assertTrue(self.session.mock.state['vehicles'][0]['commissary']['in_bay'])
+        # To a building: by the kerb, the hatch to the pavement.
+        address = runpy.run_path(str(TOOLS / 'mock-bridge'), run_name='mock_city')['CITY'][3]['key']
+        self.assertEqual(self.play('drive', truck, 'address:' + address), 0, self.lines)
+        self.assertIn('Parked by the kerb.', self.lines)
+        self.assertTrue(any('hatch to the pavement' in line for line in self.lines), self.lines)
+        # To a stop of today's route; a stop that isn't there is the game's refusal.
+        self.assertEqual(self.play('drive', truck, 'stop:1'), 1, self.lines)
+        self.assertIn("has 0 stops on today's route (Monday); no stop 1", self.lines[0])
+        self.session.bridge.call('route', {'op': 'add_stop', 'vehicle': truck, 'address': 'ba:street_secondavenue#8', 'days': ['monday']})
+        self.assertEqual(self.play('drive', truck, 'stop:1'), 0, self.lines)
+        self.assertIn('Parked by the kerb.', self.lines)
+        # A stop in the truck's own commissary's bay is parked in the bay, not at the kerb nearby.
+        self.session.mock.state['commissary']['spaces'].append({'site': 'hells-kitchen', 'vehicle': truck})
+        self.session.mock.plans[truck].append({'day': 'monday', 'address': 'bay', 'x': 595., 'z': 220., 'open': 1200, 'close': 1260})
+        self.assertEqual(self.play('drive', truck, 'stop:2'), 0, self.lines)
+        self.assertIn('Parked in the bay.', self.lines)
+        # Self Driving refuses: the truck goes back where it stood, and the tool says so.
+        before = dict(self.session.mock.state['vehicles'][0])
+        self.session.mock.ride_refusal = 'no route to the destination'
+        self.assertEqual(self.play('drive', truck, 'address:' + address), 0, self.lines)
+        self.assertTrue(any('The drive failed: Self Driving refused the ride from 3 places on the lane: no route to the destination; the truck is back where it stood' in line
+                            for line in self.lines), self.lines)
+        after = self.session.mock.state['vehicles'][0]
+        self.assertEqual((after['x'], after['z']), (before['x'], before['z']))
+        # Without the self-driving mod there is no drive.
+        self.session.mock.self_driving = False
+        self.assertEqual(self.play('drive', truck, 'bay:hells-kitchen'), 1, self.lines)
+        self.assertIn("HART. Self Driving isn't loaded", self.lines[0])
 
     def test_a_walk_from_a_stopped_clock_puts_back_its_speed(self):
         self.session.bridge.call('save', {'name': 'FT playtest'})

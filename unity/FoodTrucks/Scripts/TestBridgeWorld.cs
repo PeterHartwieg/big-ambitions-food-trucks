@@ -163,6 +163,7 @@ namespace FoodTrucks
         private static object Teleport(JObject args)
         {
             var who = Need(args, "who", "\"player\" or a food vehicle's id");
+            if (who == DrivingVehicle) throw new BridgeError($"{who} is on a drive: wait for it (drive status).");
             var place = Str(args, "place");
             var heading = (float?)Num(args, "heading");
             var clear = Bool(args, "clear") == true;
@@ -295,6 +296,8 @@ namespace FoodTrucks
             public UnityEngine.Object? Thing;
             // A delivery-job van the game has hidden for now.
             public bool Hidden;
+            // A traffic car (the AI vehicles' layer), which the game's own clean-up for a placed vehicle removes.
+            public bool Traffic;
         }
 
         // The vehicle's own size in its own frame: each solid collider's own box (a box's centre and size, a sphere's or
@@ -402,7 +405,11 @@ namespace FoodTrucks
                 if (!sceneryCounts && c.attachedRigidbody == null && c.GetComponentInParent<NavMeshObstacle>() == null) continue;
                 var key = (UnityEngine.Object?)c.attachedRigidbody ?? c.transform.root;
                 if (!found.ContainsKey(key))
-                    found[key] = new Blocker { What = $"{c.transform.root.name}/{c.name} (layer {LayerMask.LayerToName(c.gameObject.layer)})", Thing = key is Component k ? (UnityEngine.Object)k.gameObject : key };
+                    found[key] = new Blocker
+                    {
+                        What = $"{c.transform.root.name}/{c.name} (layer {LayerMask.LayerToName(c.gameObject.layer)})", Thing = key is Component k ? (UnityEngine.Object)k.gameObject : key,
+                        Traffic = c.gameObject.layer == LayerHelper.AiVehiclesLayerIndex && c.GetComponentInParent<GleyTrafficSystem.VehicleComponent>() != null,
+                    };
             }
             return found.Values.ToList();
         }
@@ -897,6 +904,7 @@ namespace FoodTrucks
             var op = Need(args, "op", "open, close, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy");
             if (op == "buy") return Buy(args);
             var id = Need(args, "id", "the food vehicle's id");
+            if (id == DrivingVehicle) throw new BridgeError($"{id} is on a drive: wait for it (drive status).");
             var vehicle = FoodVehicle(id);
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
             var game = SaveGameManager.Current;

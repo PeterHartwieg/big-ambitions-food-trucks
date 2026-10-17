@@ -879,7 +879,10 @@ namespace FoodTrucks
 
         // The nearest free parking space to the stop, as the game's private driver finds one: lanes by distance,
         // no disabled or delivery lanes, a random free slot in the lane that no player vehicle blocks.
-        private static (Vector3, Quaternion, string?)? FreeParking(Vector3 target, float maxMetres)
+        // The same search for the test bridge's drive: `self`, the truck being parked, doesn't take a space from itself.
+        internal static (Vector3, Quaternion, string?)? FreeParkingNear(Vector3 target, float maxMetres, VehicleInstance self) => FreeParking(target, maxMetres, self);
+
+        private static (Vector3, Quaternion, string?)? FreeParking(Vector3 target, float maxMetres, VehicleInstance? self = null)
         {
             // The lanes belong to the city scene: found once per city load.
             if (laneCache == null || laneCache.Any(l => l == null))
@@ -911,13 +914,13 @@ namespace FoodTrucks
                     if (HatchRefused(position, turned, traffic, out var turnedHatch))
                     {
                         Log.Info($"Route: the space at {position} has road by the hatch either way round ({hatch}; turned: {turnedHatch}); trying the next lane.");
-                        if (refused == null && !Taken(position, rotation, "truck")) refused = (position, rotation, lane.neighbourhood);
+                        if (refused == null && !Taken(position, rotation, "truck", self)) refused = (position, rotation, lane.neighbourhood);
                         continue;
                     }
                     rotation = turned;
                     Log.Info($"Route: the space at {position} would put the hatch to the road ({hatch}); the truck takes it the other way round.");
                 }
-                if (Taken(position, rotation, "truck")) continue;
+                if (Taken(position, rotation, "truck", self)) continue;
                 return (position, rotation, lane.neighbourhood);
             }
             if (refused != null) Log.Info($"Route: no space near {target} opens; the truck takes the one at {refused.Value.Item1} and the crew says why it can't open.");

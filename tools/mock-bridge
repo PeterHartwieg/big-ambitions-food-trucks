@@ -151,6 +151,10 @@ class Mock:
         self.next_op = 1
         self.operation_delays = {}
         self.bay_status = {}
+        # The self-driving mod (drive): loaded, and the ride it refuses (None: it drives).
+        self.self_driving = True
+        self.ride_refusal = None
+        self.drive_run = None
         self.load = None
         self.save_failure = None
         self.save_in_progress = False
@@ -1887,6 +1891,118 @@ class Mock:
                 if lic['permits']>=len(self.state['vehicles']): life['city_step']='start'
                 return
 
+    # ---- drive: the player's truck, out of its space, driven by the self-driving mod, parked (docs/test-bridge.md) ----
+    DRIVE_RIG='C:/Users/mock/AppData/LocalLow/Hovgaard Games/Big Ambitions/DrivenRides/tests'
+
+    def drive_command(self, args):
+        op=args.get('op') or 'start'
+        if op=='check':
+            self.require_city('drive')
+            problems=[] if self.self_driving else ["HART. Self Driving isn't loaded: switch it on in the Mods menu."]
+            return {'self_driving':self.self_driving,'rig_folder':self.DRIVE_RIG,'rig_ready':self.self_driving,'truck_type':'foodtrucks:vehicletype_foodtruck',
+                    'drivable_prefab':True,'prefab':'FoodTruck','wheels':4,'last_ride':(self.drive_run or {}).get('ride'),'problems':problems}
+        if op=='status':
+            self.require_city('drive')
+            return self.drive_status()
+        if op!='start': raise ValueError(f"Unknown drive op '{op}': start, status or check.")
+        self.require_ft('drive')
+        identifier=need(args,'id',"the truck's id")
+        place=need(args,'place','bay:<site>, address:<address> or stop:<N> (today\'s route)')
+        speed=num(args,'speed')
+        if speed is not None and (speed!=int(speed) or not 1<=speed<=3): raise ValueError('speed is a whole number from 1 to 3 (times real time).')
+        speed=int(speed or 3)
+        run=self.drive_run
+        if run and run['running']: raise ValueError(f"A drive is under way ({run['id']} to {run['place']}): wait for it (drive status).")
+        v=self.vehicle(identifier)
+        if v['kind']!='truck': raise ValueError(f'{identifier} is a cart: a cart is pushed (walk), not driven.')
+        player=self.state['player']
+        if player['in_vehicle']!=identifier: raise ValueError(f"You're not in {identifier}: get in first (vehicle {identifier} enter).")
+        if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
+        if v['open']: raise ValueError(f'{identifier} is open for business: close it first (vehicle close).')
+        if self.life['inside']: raise ValueError('The truck is inside a building: drive it out into the street first.')
+        c=self.state['clock']
+        if c['paused']: raise ValueError('The game is paused: driving takes real time. Set a speed first.')
+        if self.until is not None: raise ValueError('run_until is running, and a time skip would end the ride: wait for it to stop.')
+        if self.time_skip: raise ValueError('A time skip (sleep, a paid activity) is running; wait for it to end.')
+        if not self.self_driving: raise ValueError("HART. Self Driving isn't loaded: the truck can't drive itself. Switch it on in the Mods menu.")
+        kind,_,what=place.partition(':')
+        site=None
+        if kind=='bay':
+            if what not in SITES: raise ValueError(f"No commissary '{what}'. Commissaries: {', '.join(SITES)}.")
+            self.require_bay(what); site=what
+            goal=(393.2+SITES.index(what)*100,217.6)
+        elif kind=='address':
+            if not re.fullmatch(r'ba:street_[a-z0-9]+#[0-9]+',what):
+                raise ValueError(f"address: takes a building's address as the game writes it, ba:street_<name>#<number>; got '{what}'.")
+            building=next((b for b in CITY if b['key']==what),None)
+            if building is None: raise ValueError(f'no building at {what} in this city')
+            goal=(building['x']+6.,building['z'])
+        elif kind=='stop':
+            if not what.isdigit() or int(what)<1: raise ValueError(f"stop: takes the stop's number on today's route, from 1; got '{what}'.")
+            today=c['weekday']
+            stops=sorted((x for x in self.plans.get(identifier,[]) if x['day']==today.lower()),key=lambda x:x['open'])
+            if int(what)>len(stops):
+                raise ValueError(f"{identifier} has {len(stops)} stop{'' if len(stops)==1 else 's'} on today's route ({today}); no stop {what}.")
+            stop=stops[int(what)-1]; goal=(stop['x'],stop['z'])
+            # A stop in the truck's own commissary's bay is parked in the bay (Commissary.CrewBayStops: within its radius).
+            space=next((x['site'] for x in self.state['commissary']['spaces'] if x['vehicle']==identifier),None)
+            if space and math.hypot(goal[0]-(393.2+SITES.index(space)*100),goal[1]-217.6)<=15:
+                site=space; goal=(393.2+SITES.index(space)*100,217.6)
+        else: raise ValueError(f"Unknown place '{place}': use bay:<site>, address:<address> or stop:<N> (today's route).")
+        distance=math.hypot(v['x']-goal[0],v['z']-goal[1])
+        rides=distance>40
+        start=(v['x'],v['z'],v['heading'])
+        pull=None
+        if rides:
+            pull={'x':round(v['x']+3.5,2),'y':0.,'z':round(v['z'],2),'heading':0.,'in_the_way_after':[],'waypoint':1200,'metres':3.5}
+            v.update(x=v['x']+3.5,legal=False,commissary=None)
+        self.drive_run={'running':True,'phase':'riding' if rides else 'parking','id':identifier,'place':place,'speed':speed,'goal':{'x':round(goal[0],2),'z':round(goal[1],2)},
+                        'seconds':0.,'game_minutes':0.,'from':{'x':round(start[0],2),'y':0.,'z':round(start[1],2),'heading':round(start[2],2)},'pull_out':pull,
+                        'attempts':[],'ride_to':f'{place} building' if rides else None,'ride':None,
+                        'park':None,'error':None,'truck':None,'vehicle':None,'_site':site,'_distance':distance,'_start':start}
+        self.event(f"Test bridge: drive {identifier} to {place} (x {goal[0]:.1f}, z {goal[1]:.1f}) at {speed}x: {self.drive_run['phase']}.")
+        return self.drive_status(advance=False)
+
+    def drive_status(self, advance=True):
+        run=self.drive_run
+        if run is None: return {'running':False,'phase':'none'}
+        # The mock's ride ends at the first look after its start.
+        if advance and run['running']: self.finish_drive(run)
+        v=next((x for x in self.state['vehicles'] if x['id']==run['id']),None)
+        out={k:copy.deepcopy(val) for k,val in run.items() if not k.startswith('_')}
+        out['truck']=None if v is None else {'x':round(v['x'],2),'y':0.,'z':round(v['z'],2),'heading':round(v['heading'],2)}
+        return out
+
+    def finish_drive(self, run):
+        v=self.vehicle(run['id'])
+        goal=(run['goal']['x'],run['goal']['z'])
+        if run['phase']=='riding':
+            if self.ride_refusal:
+                # Refused before it drove, from each of three places on the lane; then back into the space.
+                run['ride']={'kind':'own','refused':self.ride_refusal}
+                run['attempts']=[{'pull_out':run['pull_out'],'refused':self.ride_refusal} for _ in range(3)]
+                x,z,h=run['_start']; v.update(x=x,z=z,heading=h,legal=True)
+                return self.end_drive(run,f"Self Driving refused the ride from 3 places on the lane: {self.ride_refusal}; the truck is back where it stood")
+            run['ride']={'kind':'own','end':'Complete: arrived','seconds':round(run['_distance']/8,1),'contacts':0,'contactsCaused':0,'arrivedMetres':9.5,'carMetres':12.0,'inCar':True}
+            run['seconds']=run['ride']['seconds']; run['game_minutes']=round(run['_distance']*0.04,1)
+            v.update(x=goal[0],z=goal[1]+12.)
+        run['phase']='parking'
+        space=next((s['site'] for s in self.state['commissary']['spaces'] if s['vehicle']==v['id']),None)
+        if run['_site']:
+            self.place_vehicle(v,run['_site'])
+            run['park']={'x':round(v['x'],2),'y':0.,'z':round(v['z'],2),'heading':0.,'in_the_way_after':[],'parked':True,'where':'bay:'+run['_site']}
+        else:
+            v.update(x=goal[0],z=goal[1]+4.,heading=90.,legal=True,hatch_to_pavement=True,commissary={'site':space,'in_bay':False,'bay_site':None} if space else None)
+            run['park']={'x':round(v['x'],2),'y':0.,'z':round(v['z'],2),'heading':90.,'in_the_way_after':[],'parked':True,'where':'kerb','from_goal':4.}
+        return self.end_drive(run,None)
+
+    def end_drive(self, run, error):
+        run.update(running=False,phase='failed' if error else 'done',error=error,vehicle=copy.deepcopy(self.vehicle(run['id'])))
+        self.event(f"Test bridge: drive {run['id']} to {run['place']}: {'failed: '+error if error else 'done after '+format(run['seconds'],'.0f')+' s'}.")
+
+    def driving(self):
+        return self.drive_run['id'] if self.drive_run and self.drive_run['running'] else None
+
     def require_city(self, cmd):
         scene=self.state['scene']
         if scene!='city': raise ValueError(f'{cmd} works in the city only; the game is at the {scene} now.')
@@ -1926,6 +2042,7 @@ class Mock:
             self.require_city(cmd)
             return self.map_command(args)
         if cmd=='walk': return self.walk(args)
+        if cmd=='drive': return self.drive_command(args)
         if cmd in ('use','taxi','phone','call','eat','place'): return self.life_command(cmd, args)
         if cmd=='fixture': return self.fixture(args)
         if cmd=='logistics':
@@ -1987,6 +2104,8 @@ class Mock:
             unpausing=until is not None or pause is False or (speed is not None and pause is not True)
             if unpausing and self.clock_held_by():
                 raise ValueError('A screen holds the clock (the phone, the map, a call, an activity or a menu): close it first (ui escape).')
+            if until is not None and self.driving():
+                raise ValueError(f'A drive is under way ({self.driving()}), and run_until would end its ride: wait for it (drive status).')
             # The whole request is checked before anything changes, as the bridge does (review round 6).
             target=None
             if until is not None:
@@ -2039,6 +2158,7 @@ class Mock:
             return {'action':action,'notices':[e['text'][8:] for e in self.ring if e['seq']>start and e['kind']=='notice']}
         if cmd=='teleport':
             who=need(args,'who',"\"player\" or a food vehicle's id")
+            if who==self.driving(): raise ValueError(f'{who} is on a drive: wait for it (drive status).')
             obj=self.state['player'] if who=='player' else self.vehicle(who)
             place=args.get('place'); heading=num(args,'heading')
             if place is not None:
@@ -2093,7 +2213,9 @@ class Mock:
         if cmd=='vehicle':
             op=need(args,'op','open, close, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy')
             if op=='buy': return self.buy(args)
-            return self.operate(self.vehicle(need(args,'id',"the food vehicle's id")),op,args)
+            identifier=need(args,'id',"the food vehicle's id")
+            if identifier==self.driving(): raise ValueError(f'{identifier} is on a drive: wait for it (drive status).')
+            return self.operate(self.vehicle(identifier),op,args)
         if cmd=='commissary':
             op=need(args,'op','order or bay_candidates')
             if op=='bay_candidates': return self.bay_candidates(args)
@@ -2298,7 +2420,7 @@ class Mock:
             self.event(f'Mock console: {line}')
             return {'output':[f'Mock console accepted: {line}']}
         if cmd=='quit': return {}
-        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, place, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.")
+        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, drive, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, place, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.")
 
 
 class Handler(BaseHTTPRequestHandler):
