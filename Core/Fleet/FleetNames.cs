@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using FoodTrucks.Core.Saves;
+using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Fleet
 {
@@ -32,6 +33,29 @@ namespace FoodTrucks.Core.Fleet
                 }
             }
             return changed;
+        }
+
+        // In the raw save, before it is read: `vehicleNumbers` that isn't a list goes, and so does each entry that isn't an
+        // object with a string id and kind and a whole number that fits an int.
+        public static void DropUnreadable(JObject document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var token = document["vehicleNumbers"];
+            if (token == null) return;
+            if (token.Type != JTokenType.Array)
+            {
+                document.Remove("vehicleNumbers");
+                return;
+            }
+            foreach (var entry in ((JArray)token).ToList())
+            {
+                var ok = entry is JObject o &&
+                         (o["id"] == null || o["id"]!.Type == JTokenType.String || o["id"]!.Type == JTokenType.Null) &&
+                         (o["kind"] == null || o["kind"]!.Type == JTokenType.String || o["kind"]!.Type == JTokenType.Null) &&
+                         (o["number"] == null || (o["number"]!.Type == JTokenType.Integer &&
+                                                  o["number"]!.Value<long>() >= int.MinValue && o["number"]!.Value<long>() <= int.MaxValue));
+                if (!ok) entry.Remove();
+            }
         }
 
         // The saved list without what can't name a vehicle: null entries, empty IDs or kinds, numbers below 1, and a second

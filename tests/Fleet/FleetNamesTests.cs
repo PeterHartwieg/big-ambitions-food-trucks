@@ -52,6 +52,19 @@ public class FleetNamesTests
         Assert.Empty(FleetNames.Repaired(null));
     }
 
+    [Theory]
+    [InlineData("[{\"id\":\"a\",\"kind\":\"cart\",\"number\":\"bad\"},{\"id\":\"b\",\"kind\":\"cart\",\"number\":2}]")]
+    [InlineData("[{\"id\":\"a\",\"kind\":\"cart\",\"number\":2147483648},{\"id\":\"b\",\"kind\":\"cart\",\"number\":2}]")]
+    [InlineData("[5,null,{\"id\":7,\"kind\":\"cart\",\"number\":1},{\"id\":\"b\",\"kind\":\"cart\",\"number\":2}]")]
+    public void UnreadableNumbersNeverRejectTheSave(string numbers)
+    {
+        var result = new SaveCodec().Load("{\"schemaVersion\":1,\"vehicleNumbers\":" + numbers + "}");
+        Assert.Equal(LoadStatus.Loaded, result.Status);
+        var only = Assert.Single(result.State!.VehicleNumbers);
+        Assert.Equal("b", only.Id);
+        Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load("{\"schemaVersion\":1,\"vehicleNumbers\":{\"a\":1}}").Status);
+    }
+
     [Fact]
     public void TheNumberShowsOnlyWithMoreThanOneOfAKind()
     {

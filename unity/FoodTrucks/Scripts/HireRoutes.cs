@@ -48,6 +48,8 @@ namespace FoodTrucks
         private const float StayPutMetres = 15f;
         // Set by Where: the crew is on shift and would go, but the player is by the vehicle or used it within the hour.
         private bool keptByPlayer;
+        // Vehicles the player has really held since the load (lastHeld also starts at the load for every vehicle).
+        private readonly HashSet<string> reallyHeld = new HashSet<string>();
         // Vehicles whose crew already said today that they wait for the player to step away: vehicle, day.
         private readonly HashSet<(string, int)> waitShown = new HashSet<(string, int)>();
         // Each truck's last hatch reading, kept while it stands still: the route asks every game minute.
@@ -381,6 +383,7 @@ namespace FoodTrucks
             if (!indoors) indoorsShown.Remove(vehicle.VehicleId);
             // After a load, nobody knows when the player last used it: as if just now, so nothing drives off at once.
             if (held || !lastHeld.ContainsKey(vehicle.VehicleId)) lastHeld[vehicle.VehicleId] = t;
+            if (held) reallyHeld.Add(vehicle.VehicleId);
             // The game's enter event clears the crew's arrival (PlayerTook, from CartSelling); this catches a vehicle the
             // player already had when the save loaded.
             if (held) PlayerTook(vehicle);
@@ -414,11 +417,12 @@ namespace FoodTrucks
                 hasStock = tables == null || CartDemand.StockOf(instance, CartDemand.MenuOf(tables, instance).Menu).Count > 0;
                 // The player just stepped out (to buy stock, say) or stands right by it: it stays where it is.
                 // So does a vehicle with nobody of its crew on shift, or all of them off sick, training or replaced.
-                var playerKeeps = (lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes) ||
-                                  (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres);
+                var recentlyHeld = lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes;
+                var near = !BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres;
                 var nobodyOnShift = !HireCrew.Present(vehicle).Any(e => WeekPlan.OnShift(vehicle.Schedule, e.id, t));
-                stayPut = playerKeeps || nobodyOnShift;
-                keptByPlayer = playerKeeps && !nobodyOnShift;
+                stayPut = recentlyHeld || near || nobodyOnShift;
+                // The hour after a load counts as held too, but the player did nothing: no word about waiting for them then.
+                keptByPlayer = (near || (recentlyHeld && reallyHeld.Contains(vehicle.VehicleId))) && !nobodyOnShift;
                 // In its own commissary's bay: the crew restocks (or finds what is short) before it sets off, once per leg
                 // and again when the commissary's stock of its foods changes (Core CrewRestock.Due).
                 restockAt = Commissary.CrewRestockSite(FoodTrucksSession.CurrentState!, instance);

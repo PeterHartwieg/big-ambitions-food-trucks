@@ -109,6 +109,9 @@ namespace FoodTrucks.Core.Saves
                     document["schemaVersion"] = ++version;
                 }
 
+                // Vehicle numbers only name vehicles: entries that can't even be read are dropped before the typed read,
+                // so a bad one never makes the whole save Corrupt (review round 1, Astra).
+                FoodTrucks.Core.Fleet.FleetNames.DropUnreadable(document);
                 var state = document.ToObject<SaveState>(JsonSerializer.Create(settings))
                     ?? throw new JsonSerializationException("Save state must be a JSON object.");
                 // Routes saved before the week plan become the same stops on each of their days; shifts saved before the
