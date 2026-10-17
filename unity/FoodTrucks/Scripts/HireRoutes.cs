@@ -367,6 +367,17 @@ namespace FoodTrucks
             CartSelling.Say("foodtrucks:notification_hire_waits_for_player", kind, ("crew", CrewNames(vehicle)), ("name", name));
         }
 
+        // A crew that turns back from a stop it couldn't take says so (blind run 2, I21: a cart stood closed for three
+        // hours with no word why). Never while the game sleeps or skips time.
+        private static void SayStopTaken(VehicleState vehicle, TransitState transit, string kind, string key)
+        {
+            if (CartSelling.Skipping) return;
+            var name = StreetFoodBooks.VehicleNames().TryGetValue(vehicle.VehicleId, out var n) ? n : LocalizorManager.GetLocalization("foodtrucks:noun_" + kind, null);
+            var stops = vehicle.Schedule?.Stops;
+            var stop = transit.ToStopIndex is int index && stops != null && index >= 0 && index < stops.Count ? RouteStops.Label(stops[index]) : transit.ToSpotKey;
+            CartSelling.Say(key, kind, ("name", name), ("stop", stop));
+        }
+
         // Where the vehicle stands, and whether the crew may touch it or sell there.
         private VehicleWhere Where(VehicleState vehicle, VehicleInstance instance, long t, (ScheduleStop Place, string SiteId, IReadOnlyCollection<int> BayStops)? home)
         {
@@ -694,6 +705,7 @@ namespace FoodTrucks
                     }
                     atStop = false;
                     Log.Info($"Route: no free parking space for truck {vehicle.VehicleId} near {transit.ToSpotKey}; it goes back towards where it left from.");
+                    SayStopTaken(vehicle, transit, kind, "foodtrucks:notification_hire_stop_no_parking");
                 }
             }
             else
@@ -714,6 +726,7 @@ namespace FoodTrucks
                     rotation = fromRotation;
                     atStop = false;
                     Log.Info($"Route: {kind} {vehicle.VehicleId}'s spot {transit.ToSpotKey} stayed taken; it goes back where it left from.");
+                    SayStopTaken(vehicle, transit, kind, "foodtrucks:notification_hire_stop_taken");
                 }
             }
 

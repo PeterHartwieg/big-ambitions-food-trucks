@@ -333,6 +333,7 @@ namespace FoodTrucks
             [VehicleWarningKind.HealthGradeC] = "foodtrucks:todo_health_grade_c",
             [VehicleWarningKind.LicenceRunningOut] = "foodtrucks:todo_licence_running_out",
             [VehicleWarningKind.LicenceExpired] = "foodtrucks:todo_licence_expired",
+            [VehicleWarningKind.NoEquipment] = "foodtrucks:todo_no_equipment",
         };
 
         // TasksUI.GetTodoDescription: our text ("Food truck 2: Hotdog is low on stock"). The game's switch has no case for

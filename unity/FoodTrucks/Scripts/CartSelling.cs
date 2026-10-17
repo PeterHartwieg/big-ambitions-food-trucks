@@ -311,10 +311,34 @@ namespace FoodTrucks
                 : rate == 1 ? LocalizorManager.GetLocalization("foodtrucks:customers_one", null)
                 : string.Format(LocalizorManager.GetLocalization("foodtrucks:customers_many", null), rate);
             Say(key, kind, ("units", plan.StockUnits.ToString()), ("rate", rate.ToString()), ("customers", customers),
-                ("grade", GradeText(vehicle)), ("crew", HireCrew.Names(serving)));
+                ("grade", GradeText(vehicle)), ("crew", HireCrew.Names(serving)), ("later", LunchOutlook(cart, position, service, rate)));
             if (pitch != null) Say(pitch.Value.Key, kind, pitch.Value.Data);
             // To the hatch: the player serves from inside the truck (placed there when beside it, else walked to its rear door).
             if (kind == "truck") TruckWindow.EnterFromOutside(controller);
+        }
+
+        // Opened quietly in the morning: what lunch should bring, so "Hardly anyone comes by" doesn't read as the whole day
+        // beside a premium spot's "More people pass here" (blind run 2, I23: both at 09:50, then 80 sales by 15:00). Empty
+        // from noon on, when the hour's own estimate is busy enough, or when lunch isn't clearly busier.
+        private static string LunchOutlook(VehicleInstance cart, Vector3 position, Window service, int rate)
+        {
+            try
+            {
+                var now = HireCrew.NowExact();
+                if (now % 1440 >= 12 * 60 || rate >= 3) return "";
+                var lunch = Math.Floor(now / 1440) * 1440 + 12 * 60 + 30;
+                var tables = DemandData.Tables!;
+                var spot = World.ReadSpot(tables, position, lunch, Partners.VenueOf(cart.id));
+                var later = (int)Math.Round(ExpectedSales(CartDemand.Plan(tables, cart, spot, at: lunch), service));
+                return later >= Math.Max(2, 2 * rate)
+                    ? " " + Notices.Text("foodtrucks:customers_lunch", new Dictionary<string, string> { { "rate", later.ToString() } })
+                    : "";
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Open: lunch outlook: " + ex.Message);
+                return "";
+            }
         }
 
         // Where a parked vehicle stands now, as a pitch: null when it could open here, else the message saying why not. A
@@ -1081,8 +1105,9 @@ namespace FoodTrucks
             return spot;
         }
 
-        // One customer's order as Core sold it: each item takes a unit at the cart's price. In person, it is paid now
-        // with one notification per customer; for the crew it waits for midnight, without a notification.
+        // One customer's order as Core sold it: each item takes a unit at the cart's price. In person, it is paid now,
+        // quietly: the cash sound and the day's totals say enough (Peter, blind run 2: a notice per sale was noise);
+        // for the crew it waits for midnight.
         private bool ServeCustomer(SaveState state, VehicleState vehicle, VehicleInstance cart, Menu menu, List<string> items, bool inPerson, double? at = null)
         {
             var labels = new List<string>();
@@ -1107,7 +1132,7 @@ namespace FoodTrucks
                 return true;
             }
             var left = CartDemand.StockOf(cart, menu).Values.Sum();
-            Notify("foodtrucks:notification_sale", ("item", string.Join(" + ", labels)), ("price", Money(cents)), ("units", left.ToString()));
+            Log.Info($"Cart {vehicle.VehicleId}: sold {string.Join(" + ", labels)} for {Money(cents)}; {left} left.");
             return true;
         }
 

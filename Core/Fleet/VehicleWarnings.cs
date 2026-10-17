@@ -20,7 +20,9 @@ namespace FoodTrucks.Core.Fleet
         HealthGradeC = 7,
         // Fleet warnings: the vendor licence, one for all vehicles, pointing at the City.
         LicenceRunningOut = 8,
-        LicenceExpired = 9
+        LicenceExpired = 9,
+        // A vehicle with a route and no cooking equipment: its crew is paid for the shift but has nothing to sell.
+        NoEquipment = 10
     }
 
     // One warning: a to-do in the game's phone. Two warnings with the same kind, vehicle and item are the same to-do.
@@ -102,6 +104,10 @@ namespace FoodTrucks.Core.Fleet
                 warnings.Add(new VehicleWarning(VehicleWarningKind.MissingCrew, id));
             if (hasRoute && new HireRunner(rules).RouteProblem(vehicle, gameSpeed, home, bayStops) != ScheduleProblem.None)
                 warnings.Add(new VehicleWarning(VehicleWarningKind.RouteProblem, id));
+            // Shifts are paid as scheduled, as the game pays its own staff; a route with no machine to cook on says so
+            // (blind run 2, I16: a crew was paid a day in the bay with no word why).
+            if (hasRoute && view != null && view.Pools.Count == 0)
+                warnings.Add(new VehicleWarning(VehicleWarningKind.NoEquipment, id));
 
             if (!vehicle.HasPermit) warnings.Add(new VehicleWarning(VehicleWarningKind.NoPermit, id));
             var spaces = state.Commissary?.Spaces;

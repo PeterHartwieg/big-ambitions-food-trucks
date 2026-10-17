@@ -619,6 +619,19 @@ namespace FoodTrucks
 
         // ---- walk ----
 
+        // The game's navigation blockers set on the player (PlayerController._activeNavigationBlockers), for the walk's
+        // refusal: blind run 2 (I31) had every walk refused after the map was closed from a vehicle, with nothing open.
+        private static string Blockers(PlayerController player)
+        {
+            try
+            {
+                var set = HarmonyLib.Traverse.Create(player).Field("_activeNavigationBlockers").GetValue() as System.Collections.IEnumerable;
+                var names = set == null ? new List<string>() : set.Cast<object>().Select(b => b.ToString()).ToList();
+                return names.Count == 0 ? "; no navigation blocker is set" : $"; navigation blocked by {string.Join(", ", names)}";
+            }
+            catch (Exception ex) { return $"; blockers unreadable ({ex.Message})"; }
+        }
+
         // How long a walk may take in real seconds before the bridge gives up and says where the player is.
         private const float WalkSeconds = 600f;
         // Within this of the goal (flat) the walk has arrived; standing still this long short of it, it has stopped.
@@ -668,7 +681,8 @@ namespace FoodTrucks
             var goal = to.position;
             player.SetNewDestination(goal, showParticleEffect: true);
             if (!agent.hasPath && !agent.pathPending && Flat(player.transform.position, goal) > ArrivedMetres)
-                throw new BridgeError("The game didn't start the walk (a menu or the map may be open, or navigation is blocked here).");
+                throw new BridgeError("The game didn't start the walk (a menu or the map may be open, or navigation is blocked here)" +
+                                      $"{Blockers(player)}.");
             Log.Info($"Test bridge: walking to x {goal.x:F1}, z {goal.z:F1} ({metres:F0} m{(complete ? "" : ", part of the way")}" +
                      $"{(holding != null ? ", pushing " + holding : "")}).");
             var deadline = UnityEngine.Time.realtimeSinceStartup + WalkSeconds;
@@ -982,12 +996,13 @@ namespace FoodTrucks
             var paid = false;
             return WithNotices(() =>
             {
-                bought = DebugActions.SpawnVehicle(typeName);
+                bought = DebugActions.SpawnVehicle(typeName, announce: false);
                 if (bought == null) return;
                 var info = new TransactionInfo("ba:transaction_vehiclebought", new Dictionary<string, string> { { "vehicleName", typeName } });
                 if (type.taxDeductible) info.SetTaxDeductibleName("tax_vehicle");
                 paid = Payments.TryPayOut(cents, info, showNotification: false);
                 if (!paid) Log.Error($"Test bridge: vehicle buy: {kind} {bought.id} spawned but the payment of {CartSelling.Money(cents)} was refused.");
+                else CartSelling.Say("foodtrucks:notification_vehicle_bought", kind, ("price", CartSelling.Money(cents)));
             }, notices =>
             {
                 Log.Info(bought == null

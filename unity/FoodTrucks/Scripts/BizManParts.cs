@@ -502,17 +502,25 @@ namespace FoodTrucks
             if (element != null) element.preferredHeight = element.minHeight = -1f;
         }
 
-        // One line that may run past its cell instead of wrapping into a narrow column (the overview's status).
-        internal static void NoWrap(Transform? part)
+        // Text kept inside its cell (the overview's status): it wraps within the column, shrinks a little, and ends with
+        // an ellipsis when it still doesn't fit. Running past the cell on one line, it lay over the grade and the
+        // alerts once the route warning named its cause (Peter, blind run 2).
+        internal static void FitInCell(Transform? part)
         {
             var graphic = part == null ? null : part.GetComponent<Graphic>();
             if (graphic == null) return;
             var type = graphic.GetType();
             var wrapping = type.GetProperty("enableWordWrapping");
-            if (wrapping != null && wrapping.CanWrite) wrapping.SetValue(graphic, false);
+            if (wrapping != null && wrapping.CanWrite) wrapping.SetValue(graphic, true);
             var overflow = type.GetProperty("overflowMode");
             if (overflow != null && overflow.CanWrite && overflow.PropertyType.IsEnum)
-                overflow.SetValue(graphic, Enum.Parse(overflow.PropertyType, "Overflow"));
+                overflow.SetValue(graphic, Enum.Parse(overflow.PropertyType, "Ellipsis"));
+            if (type.GetProperty("fontSize")?.GetValue(graphic) is float size && size > 0f)
+            {
+                type.GetProperty("fontSizeMax")?.SetValue(graphic, size);
+                type.GetProperty("fontSizeMin")?.SetValue(graphic, size * 0.75f);
+                type.GetProperty("enableAutoSizing")?.SetValue(graphic, true);
+            }
         }
 
         // A small caption in the box's section-label style ("Opens" over a stop's time), left-aligned on one line. Null

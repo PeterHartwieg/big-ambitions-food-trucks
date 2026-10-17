@@ -9,6 +9,7 @@ using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
 using Helpers;
 using Localizor;
+using UI.Notification;
 
 namespace FoodTrucks
 {
@@ -155,8 +156,15 @@ namespace FoodTrucks
                     Remove(vehicle, id, employee == null ? "no longer employed" : "assigned to a building");
                     var vehicleName = StreetFoodBooks.VehicleNames().TryGetValue(vehicle.VehicleId, out var named)
                         ? named : LocalizorManager.GetLocalization("foodtrucks:noun_" + KindOf(vehicle), null);
-                    CartSelling.Say(employee == null ? "foodtrucks:notification_crew_gone" : "foodtrucks:notification_crew_reassigned",
-                        KindOf(vehicle), ("name", name ?? LocalizorManager.GetLocalization("foodtrucks:crew_someone", null)), ("vehiclename", vehicleName));
+                    // A warning kept in the game's notification list, not a passing note: blind run 2 (I34) missed a hire who
+                    // quit with the clock running fast.
+                    Notices.Show(NotificationType.Warning, employee == null ? "foodtrucks:notification_crew_gone" : "foodtrucks:notification_crew_reassigned",
+                        new Dictionary<string, string>
+                        {
+                            { "name", name ?? LocalizorManager.GetLocalization("foodtrucks:crew_someone", null) },
+                            { "vehiclename", vehicleName },
+                            { "vehicle", LocalizorManager.GetLocalization("foodtrucks:noun_" + KindOf(vehicle), null) }
+                        }, 10f);
                 }
             }
         }

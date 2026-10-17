@@ -86,6 +86,10 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Phone log: " + ex.Message); }
         }
 
+        // A count with its noun, "1 space" or "3 spaces": the key's "_one" text for one, else the key's, with {n}.
+        internal static string Counted(long n, string key) =>
+            Text(n == 1 ? key + "_one" : key, new Dictionary<string, string> { { "n", n.ToString() } });
+
         // The text as the game shows it, or the key and its values when the game has no text for the key.
         internal static string Text(string key, Dictionary<string, string>? data)
         {

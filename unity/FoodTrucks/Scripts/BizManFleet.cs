@@ -763,10 +763,9 @@ namespace FoodTrucks
             // The game's own formatting: the name, the type, the income in the short currency format (light red below 0),
             // "N alerts" in light red or a white 0, the status in its colour.
             cell.SetData(model);
-            // The status on one line, running left over the grade column's empty space, not wrapped into three lines
-            // in its narrow column (seen in game, 16 October 2026).
+            // The status kept inside its column (BizManParts.FitInCell).
             if (cell.status != null)
-                BizManParts.NoWrap(cell.status.transform);
+                BizManParts.FitInCell(cell.status.transform);
             // The satisfaction column holds the health grade: C in light red, as satisfaction under 50%.
             var grade = vehicle?.Health?.Grade ?? Grade.Ungraded;
             if (Traverse.Create(cell).Field("satisfaction").GetValue() is Component satisfaction)

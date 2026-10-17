@@ -112,6 +112,23 @@ public class VehicleWarningsTests
     }
 
     [Fact]
+    public void ARouteWithoutEquipmentWarns()
+    {
+        var (state, vehicle) = Setup();
+        // No route: nothing to say about a bare cart.
+        Assert.Empty(For(state, vehicle, new CargoLine[0]));
+
+        vehicle.Crew = new List<string> { "e1" };
+        vehicle.Schedule = Route();
+        WeekTestData.AllDay(vehicle);
+        Assert.Equal(new VehicleWarning(VehicleWarningKind.NoEquipment, "v1"), Assert.Single(For(state, vehicle, new CargoLine[0])));
+        // Food without a machine to cook it on is no equipment either.
+        Assert.Contains(new VehicleWarning(VehicleWarningKind.NoEquipment, "v1"), For(state, vehicle, new[] { L(HotDog, 20) }));
+        // One machine is enough.
+        Assert.DoesNotContain(For(state, vehicle, new[] { L(HotDogGrill, 1), L(HotDog, 40) }), w => w.Kind == VehicleWarningKind.NoEquipment);
+    }
+
+    [Fact]
     public void MissingCrewOnlyWithARoute()
     {
         var (state, vehicle) = Setup("truck");
