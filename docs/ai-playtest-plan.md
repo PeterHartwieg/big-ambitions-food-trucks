@@ -104,3 +104,11 @@ Status, 17 October 2026: Phase A's runner and its bridge pieces are built and te
 
 - Truck price taken off by hand ($15,000 at General US Trucks), or should the agent go to the dealer by `ui` clicks and buy for real? Recommended: by hand, since the dealer is the game's code, not ours.
 - Run length: two weeks (Phases A and B) first, then decide on C? Recommended.
+
+## Next, from Peter during the first blind run (17 October 2026)
+
+Not started; the first blind run keeps going as it is.
+
+- **Notifications:** don't post a notice for every route update of every street food vehicle. Crew route progress belongs in the log and the vehicle page, not in the notice stream.
+- **Walking for the tester:** a `walk` control that sends the player to a point and lets the character's own navigation take it there (the game's click-to-move, no WASD). This also covers pushing a cart into a bay, and real walking to buildings.
+- **The map for the tester:** the map's highlights given to the tester as data, filtered the way a player filters the map (business types, commissaries, free buildings for rent and so on). With walking, this lets a blind run rent a home and live a normal game day around the business.
