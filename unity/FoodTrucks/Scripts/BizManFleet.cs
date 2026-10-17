@@ -385,6 +385,8 @@ namespace FoodTrucks
             BizManParts.SetText(label != null ? label.transform : header, text);
         }
 
+        private const float BackInset = 30f + BizManParts.Layout.BoxGap;
+
         private static void SetBack(string caption, Action action)
         {
             if (back == null) return;
@@ -529,7 +531,9 @@ namespace FoodTrucks
                 element.ignoreLayout = true;
                 var corner = header1 == null ? new Vector2(1f, 1f) : new Vector2(1f, 0.5f);
                 rect.anchorMin = rect.anchorMax = rect.pivot = corner;
-                rect.anchoredPosition = Vector2.zero;
+                // The header runs to the screen's edge on a one-column page (a vehicle's Week plan); the button keeps the
+                // boxes' right edge: the column's scrollbar strip plus the column's own padding (Peter's playtest).
+                rect.anchoredPosition = new Vector2(-BackInset, 0f);
                 var source = BizManPartsButtonHeight(warehouseBox);
                 var height = header1 is RectTransform h && h.rect.height > 1f ? Mathf.Min(source > 1f ? source : h.rect.height, h.rect.height) : source;
                 var tall = height > 1f ? height : Mathf.Max(rect.sizeDelta.y, 1f);

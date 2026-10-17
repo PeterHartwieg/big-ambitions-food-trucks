@@ -30,6 +30,30 @@ namespace FoodTrucks
             InstanceBehavior<UIs>.Instance.fullMenu.ShowApp(AppName.Contacts);
         }
 
+        // Opens the contact's conversation and presses its call button, as the game's ContactsApp.OpenAndStartCall does
+        // (Peter's playtest: "Call commissary" only opened the chat). A contact without a call button only opens.
+        internal static void OpenAndCall(Contact contact)
+        {
+            OpenConversation(contact);
+            var app = InstanceBehavior<UIs>.Instance.fullMenu.contactsApp;
+            if (app != null && app.isActiveAndEnabled) app.StartCoroutine(CallNextFrame(app, contact));
+        }
+
+        private static System.Collections.IEnumerator CallNextFrame(ContactsApp app, Contact contact)
+        {
+            yield return null;
+            try
+            {
+                var button = HarmonyLib.Traverse.Create(app).Field("callButton").GetValue<UnityEngine.UI.Button>();
+                if (button != null && button.isActiveAndEnabled && button.interactable) app.StartCall();
+                else Log.Info($"Contacts: no call button usable for {contact.id}; the conversation is open.");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Contacts: starting the call: " + ex);
+            }
+        }
+
         // Postfix on ContactScrollerController.LoadContact: the card just added has no delete button.
         internal static void LoadContactPostfix(ContactScrollerController __instance, Contact contact)
         {

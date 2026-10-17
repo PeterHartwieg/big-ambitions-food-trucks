@@ -559,8 +559,8 @@ namespace FoodTrucks
 
         private static void Call(string siteId)
         {
-            Log.Info($"BizMan: vehicle page opens the conversation with commissary {siteId}.");
-            ModContacts.OpenConversation(Commissary.ContactFor(siteId));
+            Log.Info($"BizMan: vehicle page calls commissary {siteId}.");
+            ModContacts.OpenAndCall(Commissary.ContactFor(siteId));
         }
 
         // Partner venue: No partner, the current one, and the player's own venues within reach of where the vehicle stands.
