@@ -55,14 +55,23 @@ public class FleetNamesTests
     [Theory]
     [InlineData("[{\"id\":\"a\",\"kind\":\"cart\",\"number\":\"bad\"},{\"id\":\"b\",\"kind\":\"cart\",\"number\":2}]")]
     [InlineData("[{\"id\":\"a\",\"kind\":\"cart\",\"number\":2147483648},{\"id\":\"b\",\"kind\":\"cart\",\"number\":2}]")]
-    [InlineData("[5,null,{\"id\":7,\"kind\":\"cart\",\"number\":1},{\"id\":\"b\",\"kind\":\"cart\",\"number\":2}]")]
+    [InlineData("[{\"Id\":\"a\",\"kind\":\"cart\",\"Number\":\"bad\"},{\"id\":\"b\",\"kind\":\"cart\",\"number\":2}]")]
+    [InlineData("[{\"id\":\"a\",\"kind\":\"cart\",\"number\":99999999999999999999999},{\"id\":\"b\",\"kind\":\"cart\",\"number\":2}]")]
+    [InlineData("[5,null,{\"id\":{\"x\":1},\"kind\":\"cart\",\"number\":1},{\"id\":\"b\",\"kind\":\"cart\",\"number\":2}]")]
     public void UnreadableNumbersNeverRejectTheSave(string numbers)
     {
+        foreach (var spelling in new[] { "vehicleNumbers", "VehicleNumbers", "VEHICLENUMBERS" })
+        {
+            var spelled = new SaveCodec().Load("{\"schemaVersion\":1,\"" + spelling + "\":" + numbers + "}");
+            Assert.Equal(LoadStatus.Loaded, spelled.Status);
+            Assert.Equal("b", Assert.Single(spelled.State!.VehicleNumbers).Id);
+        }
         var result = new SaveCodec().Load("{\"schemaVersion\":1,\"vehicleNumbers\":" + numbers + "}");
         Assert.Equal(LoadStatus.Loaded, result.Status);
         var only = Assert.Single(result.State!.VehicleNumbers);
         Assert.Equal("b", only.Id);
         Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load("{\"schemaVersion\":1,\"vehicleNumbers\":{\"a\":1}}").Status);
+        Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load("{\"schemaVersion\":1,\"vehicleNumbers\":[{\"Number\":\"bad\"},{\"ID\":\"b\",\"Kind\":\"cart\",\"NUMBER\":2}]}").Status);
     }
 
     [Fact]

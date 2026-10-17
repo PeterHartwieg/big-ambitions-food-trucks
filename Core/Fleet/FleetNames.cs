@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using FoodTrucks.Core.Saves;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Fleet
@@ -35,27 +36,30 @@ namespace FoodTrucks.Core.Fleet
             return changed;
         }
 
-        // In the raw save, before it is read: `vehicleNumbers` that isn't a list goes, and so does each entry that isn't an
-        // object with a string id and kind and a whole number that fits an int.
-        public static void DropUnreadable(JObject document)
+        // Takes the vehicle numbers out of the raw save before the typed read, under any spelling of the property (the
+        // typed read matches names without regard to case), and reads each entry on its own: an entry that can't be read
+        // is dropped, so a bad one never makes the whole save Corrupt (review rounds 1 and 2, Astra and Sol).
+        public static List<VehicleNumber> TakeOut(JObject document, JsonSerializer serializer)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            var token = document["vehicleNumbers"];
-            if (token == null) return;
-            if (token.Type != JTokenType.Array)
+            if (serializer == null) throw new ArgumentNullException(nameof(serializer));
+            var taken = new List<VehicleNumber>();
+            foreach (var property in document.Properties().Where(p => string.Equals(p.Name, "vehicleNumbers", StringComparison.OrdinalIgnoreCase)).ToList())
             {
-                document.Remove("vehicleNumbers");
-                return;
+                property.Remove();
+                if (!(property.Value is JArray entries)) continue;
+                foreach (var entry in entries)
+                {
+                    try
+                    {
+                        if (entry is JObject && entry.ToObject<VehicleNumber>(serializer) is VehicleNumber number) taken.Add(number);
+                    }
+                    catch (Exception ex) when (ex is JsonException || ex is OverflowException || ex is FormatException || ex is InvalidCastException || ex is ArgumentException)
+                    {
+                    }
+                }
             }
-            foreach (var entry in ((JArray)token).ToList())
-            {
-                var ok = entry is JObject o &&
-                         (o["id"] == null || o["id"]!.Type == JTokenType.String || o["id"]!.Type == JTokenType.Null) &&
-                         (o["kind"] == null || o["kind"]!.Type == JTokenType.String || o["kind"]!.Type == JTokenType.Null) &&
-                         (o["number"] == null || (o["number"]!.Type == JTokenType.Integer &&
-                                                  o["number"]!.Value<long>() >= int.MinValue && o["number"]!.Value<long>() <= int.MaxValue));
-                if (!ok) entry.Remove();
-            }
+            return taken;
         }
 
         // The saved list without what can't name a vehicle: null entries, empty IDs or kinds, numbers below 1, and a second
