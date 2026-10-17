@@ -81,9 +81,9 @@ public class RouteTravelTests
     [Fact]
     public void ACartIsPushedSoItsStopMovesFurtherThanATrucks()
     {
-        // 100 m: a truck drives it in 4 minutes (12:30), a cart is pushed for 84 (13:30).
-        var truck = Route(Stop("a", 0, 600, 720), Stop("b", 100, 720, 780));
-        var cart = Route(Stop("a", 0, 600, 720), Stop("b", 100, 720, 780));
+        // 300 m: a truck drives it in 12 minutes (12:30), a cart is pushed for 75 at 4 m/s (13:30).
+        var truck = Route(Stop("a", 0, 600, 720), Stop("b", 300, 720, 780));
+        var cart = Route(Stop("a", 0, 600, 720), Stop("b", 300, 720, 780));
 
         Fit(truck, TravelMode.Drive);
         Fit(cart, TravelMode.Push);

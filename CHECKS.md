@@ -13,6 +13,7 @@ Branch `blind1-fixes`, from the first blind AI playtest (17 October 2026; issues
 | BP7 | With carts "Food cart 1" and "Food cart 2", buy a third, then save and load | The two keep their names; the new one is "Food cart 3" in BizMan, Econoview and the commissary's Spaces list |
 | BP8 | Fire a crew member (or let one quit) | "<name> has left the company: Food cart N has one worker less." |
 | BP9 | BizMan Street food overview with a cart in its bay, one at a route stop and one elsewhere on the street | "Closed, at Hell's Kitchen Commissary" (or its name), "Open at <stop name>", and a neighbourhood for the third; never "an unknown spot" |
+| BP10 | Week plan for a crewed cart: add a stop about 100 m from its bay, then one about 300 m off | "Walk about 25 min" for 100 m, about 75 for 300 m (4 m/s, your own jog with a cart; it was 84 and 250); run the day: the cart arrives about then. Say whether that feels right next to how fast you push a cart yourself. The crew isn't seen pushing on the way (the cart is off the map until it arrives) |
 
 # Latest PC playtest feedback — 15 October 2026
 

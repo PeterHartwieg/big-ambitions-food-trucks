@@ -52,13 +52,13 @@
     "maxFootfallBonus": 0.30
   },
 
-  "_fleet": "The vendor licence lasts licenceDays and can be renewed in its last renewWindowDays; the City of New York sells it by phone for licenceFee dollars, and a permit for each cart or truck for permitFee. Both fees are tax-deductible and placeholders until the balance pass. There is no cap on the number of permits. travel is the game's own timing [code, unverified in game]: a taxi takes 0.04 game minutes per straight-line metre, and a cart moves at the 1.2 m/s walking pace, so a hire pushing a cart covers about 72 m per game hour at normal speed. A vehicle within stopRadiusMetres of a stop is at it; further away, the hire moves it there first. How many work a window at once is the vehicle's staff in economy.json. course is the Food Safety course the licence needs: the game has the course's name but no door for it, so the mod offers it at the business school's Market Demands door for hours hours at pricePerHour whole dollars an hour, with no course needed before it.",
+  "_fleet": "The vendor licence lasts licenceDays and can be renewed in its last renewWindowDays; the City of New York sells it by phone for licenceFee dollars, and a permit for each cart or truck for permitFee. Both fees are tax-deductible and placeholders until the balance pass. There is no cap on the number of permits. travel is the game's own timing [code, unverified in game]: a taxi takes 0.04 game minutes per straight-line metre, and a hire pushes a cart at pushMetresPerSecond, the player's own pace with a cart or the game's hand truck (the default jog, GlobalReferences.walkingSpeedJog 4 m/s; Peter, 17 October 2026: the 1.2 m/s walk left only stops beside the commissary worth it), so about 240 m per game hour at normal speed. A vehicle within stopRadiusMetres of a stop is at it; further away, the hire moves it there first. How many work a window at once is the vehicle's staff in economy.json. course is the Food Safety course the licence needs: the game has the course's name but no door for it, so the mod offers it at the business school's Market Demands door for hours hours at pricePerHour whole dollars an hour, with no course needed before it.",
   "fleet": {
     "licenceDays": 60,
     "renewWindowDays": 10,
     "licenceFee": 250,
     "permitFee": 500,
-    "travel": { "driveMinutesPerMetre": 0.04, "pushMetresPerSecond": 1.2, "roadFactor": 1.0 },
+    "travel": { "driveMinutesPerMetre": 0.04, "pushMetresPerSecond": 4.0, "roadFactor": 1.0 },
     "schedules": { "maxStops": 6, "latestCloseMinute": 1620, "stopRadiusMetres": 25, "restockMinutes": 30, "maxShiftHours": 12 },
     "course": { "hours": 6, "pricePerHour": 25 }
   },

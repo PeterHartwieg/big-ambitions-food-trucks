@@ -24,8 +24,9 @@ public class HireSchedulesTests
     [Theory]
     [InlineData(1000, TravelMode.Drive, 1.0, 40)]
     [InlineData(1000, TravelMode.Drive, 2.0, 80)]
-    [InlineData(12, TravelMode.Push, 1.0, 10)]
-    [InlineData(100, TravelMode.Push, 1.0, 84)]
+    [InlineData(12, TravelMode.Push, 1.0, 3)]
+    [InlineData(100, TravelMode.Push, 1.0, 25)]
+    [InlineData(102, TravelMode.Push, 1.0, 26)]
     [InlineData(0, TravelMode.Drive, 1.0, 0)]
     [InlineData(double.NaN, TravelMode.Drive, 1.0, 0)]
     public void TravelFollowsTheGamesTiming(double metres, TravelMode mode, double speed, int minutes)
