@@ -1221,6 +1221,10 @@ namespace FoodTrucks
             var from = space?.CommissaryId;
             var done = choice.Op == "release" ? Release(choice.VehicleId, choice.Kind, siteId) : Rent(choice.VehicleId, choice.Kind, siteId);
             if (!done) return null;
+            // The phone's to-dos follow at once, not at the next game minute: with the game paused while the phone is used,
+            // "No commissary space" stayed up after renting (the first blind playtest, 17 October 2026).
+            try { VehicleTodos.ReconcileNow(); }
+            catch (Exception ex) { Log.Error("To-dos after a space change: " + ex.Message); }
             var name = VehicleName(state, choice.VehicleId);
             var rent = CartSelling.Money(rules.RentPerMonthCents.TryGetValue(choice.Kind, out var monthly) ? monthly : 0);
             var (key, data) = choice.Op switch

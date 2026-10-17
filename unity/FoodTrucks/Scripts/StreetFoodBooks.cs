@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using Entities;
 using FoodTrucks.Core.Commissary;
+using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
 using HarmonyLib;
 using Localizor;
@@ -214,7 +215,8 @@ namespace FoodTrucks
 
         private static string Sign(long[] cents) => cents.Sum() >= 0 ? "Success" : "Danger";
 
-        // "Food cart", "Food truck", numbered when the player has more than one of a kind, in the order of their IDs.
+        // "Food cart", "Food truck", numbered when the player has more than one of a kind. Each keeps its number once it has
+        // one (Core FleetNames, saved in SaveState.VehicleNumbers), so a vehicle bought later never renames the others.
         internal static Dictionary<string, string> VehicleNames()
         {
             var names = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -225,12 +227,18 @@ namespace FoodTrucks
                 .GroupBy(v => v.id, StringComparer.Ordinal).Select(g => g.First())
                 .OrderBy(v => v.id, StringComparer.Ordinal)
                 .ToList();
+            var state = FoodTrucksSession.CurrentState;
+            // Read-only data (a newer mod's save): numbered here as they would be, but nothing is written.
+            var numbers = state != null && FoodTrucksSession.CanWrite
+                ? state.VehicleNumbers
+                : new List<VehicleNumber>(state?.VehicleNumbers ?? new List<VehicleNumber>());
+            if (FleetNames.Assign(numbers, vehicles.Select(v => (v.id, v.vehicleTypeName)).ToList()) && ReferenceEquals(numbers, state?.VehicleNumbers))
+                FoodTrucksSession.MarkChanged();
             foreach (var kind in vehicles.GroupBy(v => v.vehicleTypeName))
             {
                 var list = kind.ToList();
                 var label = LocalizorManager.GetLocalization(kind.Key, null);
-                for (var i = 0; i < list.Count; i++)
-                    names[list[i].id] = list.Count > 1 ? $"{label} {i + 1}" : label;
+                foreach (var vehicle in list) names[vehicle.id] = FleetNames.Name(label, FleetNames.NumberOf(numbers, vehicle.id, kind.Key), list.Count);
             }
             return names;
         }

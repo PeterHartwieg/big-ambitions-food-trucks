@@ -120,6 +120,8 @@ namespace FoodTrucks.Core.Saves
                     FoodTrucks.Core.Fleet.WeekPlan.Upgrade(vehicle);
                     notes.AddRange(FoodTrucks.Core.Fleet.WeekPlan.RepairShifts(vehicle));
                 }
+                // Vehicle numbers only name vehicles: a bad entry is dropped, never a reason to reject the save.
+                state.VehicleNumbers = FoodTrucks.Core.Fleet.FleetNames.Repaired(state.VehicleNumbers);
                 ValidateState(state);
                 var result = new LoadResult(status, state);
                 result.Notes.AddRange(notes);

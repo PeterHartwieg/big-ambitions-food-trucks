@@ -46,6 +46,10 @@ namespace FoodTrucks
         // The crew doesn't drive a vehicle away within this long of the player using it, or with the player this close.
         private const long StayPutMinutes = 60;
         private const float StayPutMetres = 15f;
+        // Set by Where: the crew is on shift and would go, but the player is by the vehicle or used it within the hour.
+        private bool keptByPlayer;
+        // Vehicles whose crew already said today that they wait for the player to step away: vehicle, day.
+        private readonly HashSet<(string, int)> waitShown = new HashSet<(string, int)>();
         // Each truck's last hatch reading, kept while it stands still: the route asks every game minute.
         private static readonly Dictionary<string, (Vector3 Position, Quaternion Rotation, HatchCheck.Result Result)> hatches =
             new Dictionary<string, (Vector3, Quaternion, HatchCheck.Result)>();
@@ -340,8 +344,25 @@ namespace FoodTrucks
                 // Read after planning: the checks below depend on the leg the plan has running.
                 var where = Where(vehicle, instance, t, home);
                 var action = runner.Step(vehicle, t, where, GameSpeed());
-                if (action.Kind == HireActionKind.None || !Do(vehicle, instance, action, t)) return;
+                if (action.Kind == HireActionKind.None)
+                {
+                    if (keptByPlayer && runner.WouldMove(vehicle, t, where.WithStayPut(false), GameSpeed())) SayWaiting(vehicle, t);
+                    return;
+                }
+                if (!Do(vehicle, instance, action, t)) return;
             }
+        }
+
+        // A crew on shift that would set off or restock but stays put because of the player (the first blind playtest,
+        // 17 October 2026: crews sat in the bay for hours with no word why). Said, and logged, once per vehicle and game
+        // day, never while the game sleeps or skips time.
+        private void SayWaiting(VehicleState vehicle, long t)
+        {
+            if (CartSelling.Skipping || !waitShown.Add((vehicle.VehicleId, HireRunner.DayOf(t)))) return;
+            var kind = KindOf(vehicle);
+            Log.Info($"Route: {kind} {vehicle.VehicleId}: the crew would set off but waits, the player is within {StayPutMetres:F0} m or used it in the last {StayPutMinutes} minutes.");
+            var name = StreetFoodBooks.VehicleNames().TryGetValue(vehicle.VehicleId, out var n) ? n : LocalizorManager.GetLocalization("foodtrucks:noun_" + kind, null);
+            CartSelling.Say("foodtrucks:notification_hire_waits_for_player", kind, ("crew", CrewNames(vehicle)), ("name", name));
         }
 
         // Where the vehicle stands, and whether the crew may touch it or sell there.
@@ -363,6 +384,7 @@ namespace FoodTrucks
             // The game's enter event clears the crew's arrival (PlayerTook, from CartSelling); this catches a vehicle the
             // player already had when the save loaded.
             if (held) PlayerTook(vehicle);
+            keptByPlayer = false;
             var canSell = true;
             var hasStock = true;
             var stayPut = false;
@@ -392,9 +414,11 @@ namespace FoodTrucks
                 hasStock = tables == null || CartDemand.StockOf(instance, CartDemand.MenuOf(tables, instance).Menu).Count > 0;
                 // The player just stepped out (to buy stock, say) or stands right by it: it stays where it is.
                 // So does a vehicle with nobody of its crew on shift, or all of them off sick, training or replaced.
-                stayPut = (lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes) ||
-                          (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres) ||
-                          !HireCrew.Present(vehicle).Any(e => WeekPlan.OnShift(vehicle.Schedule, e.id, t));
+                var playerKeeps = (lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes) ||
+                                  (!BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres);
+                var nobodyOnShift = !HireCrew.Present(vehicle).Any(e => WeekPlan.OnShift(vehicle.Schedule, e.id, t));
+                stayPut = playerKeeps || nobodyOnShift;
+                keptByPlayer = playerKeeps && !nobodyOnShift;
                 // In its own commissary's bay: the crew restocks (or finds what is short) before it sets off, once per leg
                 // and again when the commissary's stock of its foods changes (Core CrewRestock.Due).
                 restockAt = Commissary.CrewRestockSite(FoodTrucksSession.CurrentState!, instance);
@@ -479,7 +503,11 @@ namespace FoodTrucks
                     var refusal = CartSelling.OpenByCrew(vehicle, action.Stop, t);
                     if (refusal == null)
                     {
-                        CartSelling.Say("foodtrucks:notification_hire_open", kind, ("crew", CrewNames(vehicle)));
+                        Log.Info($"Route: {kind} {vehicle.VehicleId}: the crew opened at stop {action.Stop + 1}.");
+                        // Route progress goes to the log and the vehicle page, not the notices (Peter, 17 October 2026),
+                        // unless the player stands where they see the window open, as for the crew's routine close.
+                        if (!CartSelling.Skipping && CartSelling.PlayerNear(instance))
+                            CartSelling.Say("foodtrucks:notification_hire_open", kind, ("crew", CrewNames(vehicle)));
                         return true;
                     }
                     if (refusalsShown.Add((vehicle.VehicleId, action.Stop, HireRunner.DayOf(t))))
@@ -514,9 +542,8 @@ namespace FoodTrucks
             vehicle.Transit!.FromParkingState = (int)parking;
             FoodTrucksSession.MarkChanged();
             var where = home != null ? $"its bay at {home.Value.SiteId}" : $"stop {action.Stop + 1} ({vehicle.Schedule!.Stops[action.Stop].SpotKey})";
+            // Log and vehicle page only: no notice for each leg of each route (Peter, 17 October 2026).
             Log.Info($"Route: {kind} {vehicle.VehicleId} leaves for {where}, arriving at minute {action.ArrivesAt} ({action.ArrivesAt - t} minutes).");
-            CartSelling.Say("foodtrucks:notification_hire_departs", kind, ("crew", CrewNames(vehicle)),
-                ("time", StaffDialog.Clock((int)(action.ArrivesAt % 1440))));
         }
 
         // A stopped route never leaves its vehicle off the map: one on its way goes back where it left from, or

@@ -405,6 +405,13 @@ namespace FoodTrucks
                 if (row != null && useField) PriceField(row, id, line);
             }
             if (!drawn) box.Paragraph(Format("foodtrucks:bizman_page_menu_equipment", ("pieces", Equipment(view, instance))));
+            // What each fitted piece cooks, so a food it can't sell is plain before stock is bought (the first blind playtest).
+            foreach (var pool in view.Pools)
+            {
+                var cooks = StoragePanel.Foods(pool.Piece);
+                if (cooks.Length > 0)
+                    box.Paragraph(Format("foodtrucks:bizman_page_menu_cooks", ("piece", StoragePanel.PieceName(instance, pool.Piece)), ("foods", cooks)));
+            }
         }
 
         // A price's colour, as InventoryProductCellView.UpdateAmountBackground: red at the red price, yellow above the

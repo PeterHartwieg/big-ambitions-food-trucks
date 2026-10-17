@@ -25,7 +25,10 @@ Commands (each also takes --help):
   order SITE ITEM BOXES [ITEM BOXES ...]
                                Order stock by phone from a commissary where you rent a space; it arrives at 08:00.
   hire                         Hire a worker (they wait unassigned).
-  licence                      Get the vendor licence and a permit for each vehicle.
+  licence                      Get the vendor licence and a permit for each vehicle you own now: a free test
+                               shortcut (its notice says "Debug"). In a normal game the licence follows the Food
+                               Safety course and is bought, with each permit, by calling the City. Run it again
+                               after buying a vehicle.
   crew assign VEHICLE EMPLOYEE | crew schedule VEHICLE EMPLOYEE DAY START END [STATION] | crew auto VEHICLE
                                Put a hire on a vehicle's crew; set a shift (whole hours); or auto-fill the week.
   route add VEHICLE ADDRESS [--days monday,...] [--open HH:MM --close HH:MM]

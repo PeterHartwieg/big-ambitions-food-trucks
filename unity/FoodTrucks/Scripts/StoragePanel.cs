@@ -34,6 +34,18 @@ namespace FoodTrucks
             return item == null ? piece.Id : LocalizorManager.GetLocalization(item, null);
         }
 
+        // The foods a piece cooks and holds, "Burger, Chicken Kabob Skewer": those the game has now (a Bakery food only with
+        // the Bakery mod). Empty for Extra Storage.
+        public static string Foods(EquipmentInfo piece) =>
+            string.Join(", ", piece.Products.Where(VehicleTodos.ItemExists).Select(p => LocalizorManager.GetLocalization(p, null)));
+
+        // The name of the piece that cooks and holds a food, or null when no piece does.
+        public static string? PieceFor(DemandTables tables, string food)
+        {
+            var piece = tables.EquipmentForProduct(food);
+            return piece == null ? null : PieceName(null, piece);
+        }
+
         // "Hot Dog Grill: 62/80 units", then one line per food in it.
         public static List<string> PoolLines(VehicleInstance vehicle, DemandTables tables, StoragePool pool)
         {

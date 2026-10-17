@@ -45,7 +45,16 @@ namespace FoodTrucks
         public static double Effective(EmployeeInstance employee) =>
             Core.Rules.ServiceRules.EffectiveSkill(Skill(employee), employee.satisfaction);
 
-        public static string Name(EmployeeInstance employee) => employee.characterData?.name ?? employee.id;
+        public static string Name(EmployeeInstance employee)
+        {
+            var name = employee.characterData?.name;
+            if (!string.IsNullOrEmpty(name)) knownNames[employee.id] = name!;
+            return name ?? employee.id;
+        }
+
+        // Crew names as last read, by employee ID, so one who quit (and is gone from the game's employees) is still named
+        // in the notice (the first blind playtest, 17 October 2026). Not saved: read again from the crew after a load.
+        private static readonly Dictionary<string, string> knownNames = new Dictionary<string, string>(StringComparer.Ordinal);
 
         // The crew at the vehicle now: those on a shift of its week plan (CrewPay.OnShiftCrew; none while it is on its
         // way), minus anyone off sick or training. Someone a headhunter is replacing is on the way out: the game stops
@@ -136,11 +145,18 @@ namespace FoodTrucks
                 foreach (var id in vehicle.Crew.ToList())
                 {
                     var employee = Find(id);
-                    if (employee != null && !employee.IsAssignedToAnyBusiness()) continue;
-                    var name = employee != null ? Name(employee) : null;
+                    if (employee != null && !employee.IsAssignedToAnyBusiness())
+                    {
+                        // Remembered while they work here, for the notice if they quit.
+                        Name(employee);
+                        continue;
+                    }
+                    var name = employee != null ? Name(employee) : knownNames.TryGetValue(id, out var known) ? known : null;
                     Remove(vehicle, id, employee == null ? "no longer employed" : "assigned to a building");
+                    var vehicleName = StreetFoodBooks.VehicleNames().TryGetValue(vehicle.VehicleId, out var named)
+                        ? named : LocalizorManager.GetLocalization("foodtrucks:noun_" + KindOf(vehicle), null);
                     CartSelling.Say(employee == null ? "foodtrucks:notification_crew_gone" : "foodtrucks:notification_crew_reassigned",
-                        KindOf(vehicle), ("name", name ?? LocalizorManager.GetLocalization("foodtrucks:crew_someone", null)));
+                        KindOf(vehicle), ("name", name ?? LocalizorManager.GetLocalization("foodtrucks:crew_someone", null)), ("vehiclename", vehicleName));
                 }
             }
         }

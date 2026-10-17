@@ -1,0 +1,62 @@
+using System.Collections.Generic;
+using FoodTrucks.Core.Fleet;
+using FoodTrucks.Core.Saves;
+using Xunit;
+
+namespace FoodTrucks.Core.Tests.Fleet;
+
+public class FleetNamesTests
+{
+    [Fact]
+    public void ANewVehicleNeverRenumbersTheOthers()
+    {
+        var numbers = new List<VehicleNumber>();
+        Assert.True(FleetNames.Assign(numbers, new[] { ("m", "cart"), ("x", "cart") }));
+        Assert.Equal(1, FleetNames.NumberOf(numbers, "m", "cart"));
+        Assert.Equal(2, FleetNames.NumberOf(numbers, "x", "cart"));
+
+        // "c" sorts first by ID but comes last, so it takes the next number.
+        Assert.True(FleetNames.Assign(numbers, new[] { ("m", "cart"), ("x", "cart"), ("c", "cart") }));
+        Assert.Equal(1, FleetNames.NumberOf(numbers, "m", "cart"));
+        Assert.Equal(2, FleetNames.NumberOf(numbers, "x", "cart"));
+        Assert.Equal(3, FleetNames.NumberOf(numbers, "c", "cart"));
+        Assert.False(FleetNames.Assign(numbers, new[] { ("m", "cart"), ("x", "cart"), ("c", "cart") }));
+    }
+
+    [Fact]
+    public void AVehicleMissingForAMomentComesBackUnderItsNumberAndKindsNumberApart()
+    {
+        var numbers = new List<VehicleNumber>();
+        FleetNames.Assign(numbers, new[] { ("a", "cart"), ("b", "cart") });
+        // "a" is gone (or not listed yet): a new cart doesn't take its number.
+        FleetNames.Assign(numbers, new[] { ("b", "cart"), ("t", "truck"), ("z", "cart") });
+        Assert.Equal(2, FleetNames.NumberOf(numbers, "b", "cart"));
+        Assert.Equal(3, FleetNames.NumberOf(numbers, "z", "cart"));
+        Assert.Equal(1, FleetNames.NumberOf(numbers, "t", "truck"));
+        FleetNames.Assign(numbers, new[] { ("a", "cart"), ("b", "cart"), ("z", "cart") });
+        Assert.Equal(1, FleetNames.NumberOf(numbers, "a", "cart"));
+    }
+
+    [Fact]
+    public void ASaveWithBadNumbersLoadsWithoutThem()
+    {
+        var repaired = FleetNames.Repaired(new List<VehicleNumber>
+        {
+            null!, new() { Id = "", Kind = "cart", Number = 1 }, new() { Id = "a", Kind = "cart", Number = 0 },
+            new() { Id = "a", Kind = "cart", Number = 1 }, new() { Id = "a", Kind = "cart", Number = 2 }, new() { Id = "b", Kind = "cart", Number = 1 },
+            new() { Id = "b", Kind = "cart", Number = 3 }
+        });
+        Assert.Equal(2, repaired.Count);
+        Assert.Equal(1, FleetNames.NumberOf(repaired, "a", "cart"));
+        Assert.Equal(3, FleetNames.NumberOf(repaired, "b", "cart"));
+        Assert.Empty(FleetNames.Repaired(null));
+    }
+
+    [Fact]
+    public void TheNumberShowsOnlyWithMoreThanOneOfAKind()
+    {
+        Assert.Equal("Food cart", FleetNames.Name("Food cart", 2, 1));
+        Assert.Equal("Food cart 2", FleetNames.Name("Food cart", 2, 3));
+        Assert.Equal("Food cart", FleetNames.Name("Food cart", 0, 3));
+    }
+}
