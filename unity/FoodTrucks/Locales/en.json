@@ -302,6 +302,8 @@
     "foodtrucks:bizman_page_partner_none": "No partner",
     "foodtrucks:bizman_page_partner_option": "{venue} (your {kind})",
     "foodtrucks:notification_page_unavailable": "The vehicle page couldn't be opened. See Player.log.",
+    "foodtrucks:notification_late_attach": "Food Trucks started late for this save: the game didn't start it with the city. It runs now. If another mod misbehaves, load the save again.",
+    "foodtrucks:notification_saved_detached": "Food Trucks isn't running for this save. Saves keep its street food data from when the save was loaded. Load the save again.",
     "foodtrucks:notification_route_full": "The route already has {max} stops.",
     "foodtrucks:notification_route_no_time": "No time of day is free on this route for another stop.",
     "foodtrucks:notification_crew_cant_join": "{name} can't join this vehicle.",

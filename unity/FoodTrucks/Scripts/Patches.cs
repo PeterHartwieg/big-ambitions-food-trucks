@@ -144,6 +144,17 @@ namespace FoodTrucks
             Patch(typeof(SaveGameManager), "InitializeLoadedSave", Type.EmptyTypes, typeof(VehicleTodos), postfix: nameof(VehicleTodos.LoadedPostfix));
             VehicleTodos.CheckReady();
 
+            // Save data: the block each save was loaded with goes back into a save that would go out without it, and a
+            // city up without the mod's city part (the game's mod loader skipped it) gets the session late (SaveGuard).
+            Patch(typeof(SaveGameManager), "InitializeLoadedSave", Type.EmptyTypes, typeof(SaveGuard), postfix: nameof(SaveGuard.LoadedPostfix));
+            Patch(typeof(SaveGameSerializationHelper), "SerializeJsonData", new[] { typeof(string), typeof(GameInstance) }, typeof(SaveGuard),
+                prefix: nameof(SaveGuard.SerializePrefix));
+            Patch(typeof(SaveGameSerializationHelper), "SerializeBinaryData", new[] { typeof(string), typeof(GameInstance), typeof(bool) }, typeof(SaveGuard),
+                prefix: nameof(SaveGuard.SerializePrefix));
+            Patch(typeof(GlobalEvents), "InvokeOnGameLoaded", Type.EmptyTypes, typeof(SaveGuard), postfix: nameof(SaveGuard.GameLoadedPostfix));
+            Patch(typeof(BigAmbitions.ModsInternal.ModDiscoveryRegistry), "DiscoverAllModsAsync", new[] { typeof(Action<float>) }, typeof(SaveGuard),
+                prefix: nameof(SaveGuard.DiscoveryPrefix));
+
             // Partnerships: a partner venue's facility satisfaction gets the bonus in the game's daily update.
             Patch(typeof(BusinessHelper), "UpdateSatisfaction", new[] { typeof(BuildingRegistration) }, typeof(Partners),
                 prefix: nameof(Partners.SatisfactionPrefix), postfix: nameof(Partners.SatisfactionPostfix));
