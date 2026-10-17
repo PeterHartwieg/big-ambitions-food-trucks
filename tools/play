@@ -39,6 +39,9 @@ Commands (each also takes --help):
                                after buying a vehicle.
   crew assign VEHICLE EMPLOYEE | crew schedule VEHICLE EMPLOYEE DAY START END [STATION] | crew auto VEHICLE
                                Put a hire on a vehicle's crew; set a shift (whole hours); or auto-fill the week.
+  price VEHICLE ITEM DOLLARS|auto
+                               Set what a vehicle charges for a food (look shows the item names), or go back to the
+                               automatic price.
   route add VEHICLE ADDRESS [--days monday,...] [--open HH:MM --close HH:MM]
   route paste VEHICLE FROM_DAY TO_DAY[,TO_DAY...]|all
                                A vehicle's weekly route: add a stop by a building, or copy one day onto others.
@@ -110,7 +113,7 @@ class Play:
                      f"{'parked legally' if v.get('legal') else 'not parked legally'} at x {v.get('x')}, z {v.get('z')}"
                      f"{', in the bay at ' + com['bay_site'] if com.get('in_bay') else ''}; space at {com.get('site') or 'no commissary'}.")
             self.out(f"  equipment: {', '.join(x['item'] for x in v.get('pieces') or []) or 'none'}; "
-                     f"stock: {', '.join(str(x['amount']) + ' ' + x['item'] for x in v.get('stock') or []) or 'none'}; crew: {', '.join(v.get('crew') or []) or 'none'}.")
+                     f"stock: {', '.join(str(x['amount']) + ' ' + x['item'] + (f" (price ${x['set_price']:.2f})" if x.get('set_price') is not None else '') for x in v.get('stock') or []) or 'none'}; crew: {', '.join(v.get('crew') or []) or 'none'}.")
             route = v.get('route') or {}
             for d in route.get('week') or []:
                 if d['stops']:
@@ -300,6 +303,13 @@ class Play:
         self.out(f"{op}: {'done' if r['done'] else 'not done'}.")
         for n in r.get('notices') or []: self.out(f'  {n}')
 
+    def price(self, vehicle, item, price):
+        self.acting()
+        r = self.call('price', {'vehicle': vehicle, 'item': item, 'price': price})
+        set_ = r.get('price')
+        self.out(f"{r['name']}: " + (f"${set_:.2f}" if set_ is not None else 'automatic price') + ('.' if r['done'] else ' (not changed).'))
+        for n in r.get('notices') or []: self.out(f'  {n}')
+
     def route(self, op, rest, days=None, open_=None, close=None):
         self.acting()
         if op == 'add' and len(rest) == 2:
@@ -350,6 +360,7 @@ def parser():
     n = sub.add_parser('order', help='order stock from a commissary'); n.add_argument('site'); n.add_argument('pairs', nargs='+')
     sub.add_parser('hire', help='hire a worker'); sub.add_parser('licence', help='vendor licence and permits')
     n = sub.add_parser('crew', help='crew and shifts'); n.add_argument('op', choices=('assign', 'schedule', 'auto')); n.add_argument('rest', nargs='+')
+    n = sub.add_parser('price', help='what a vehicle charges for a food'); n.add_argument('vehicle'); n.add_argument('item'); n.add_argument('price')
     n = sub.add_parser('route', help='a vehicle\'s route'); n.add_argument('op', choices=('add', 'paste')); n.add_argument('rest', nargs='+')
     n.add_argument('--days'); n.add_argument('--open'); n.add_argument('--close')
     n = sub.add_parser('save', help='save the game'); n.add_argument('name')
@@ -385,6 +396,7 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
         elif c == 'hire': play.debug('hire')
         elif c == 'licence': play.debug('licence')
         elif c == 'crew': play.crew(args.op, args.rest)
+        elif c == 'price': play.price(args.vehicle, args.item, args.price)
         elif c == 'route': play.route(args.op, args.rest, args.days, args.open, args.close)
         elif c == 'save': play.save(args.name)
         elif c == 'load': play.load(args.name)

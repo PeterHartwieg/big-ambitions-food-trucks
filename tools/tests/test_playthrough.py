@@ -413,9 +413,21 @@ class BlindPlayTests(unittest.TestCase):
         import argparse
         names = set(runpy.run_path(str(TOOLS / 'play'), run_name='play_test')['parser']()._subparsers._group_actions[0].choices)
         self.assertEqual(names, {'look', 'notices', 'places', 'go', 'walk', 'map', 'screen', 'ui', 'time', 'buy', 'vehicle', 'order', 'hire',
-                                 'licence', 'crew', 'route', 'save', 'load'})
+                                 'licence', 'crew', 'price', 'route', 'save', 'load'})
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             PLAY(['money', 'set', '1000000'])
+
+    def test_price_sets_and_clears_a_food_s_price_and_look_shows_it(self):
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.assertEqual(self.play('buy', 'cart'), 0, self.lines)
+        cart = self.session.mock.state['vehicles'][0]
+        cart['stock'] = [{'item': 'Hotdog', 'key': 'ba:itemname_hotdog', 'amount': 40}]
+        self.assertEqual(self.play('price', cart['id'], 'Hotdog', '14.50'), 0, self.lines)
+        self.assertIn('Hotdog: $14.50.', self.lines)
+        self.assertEqual(self.play('look'), 0, self.lines)
+        self.assertTrue(any('40 Hotdog (price $14.50)' in line for line in self.lines), self.lines)
+        self.assertEqual(self.play('price', cart['id'], 'ba:itemname_hotdog', 'auto'), 0, self.lines)
+        self.assertIn('Hotdog: automatic price.', self.lines)
 
     def test_walking_pushes_a_held_cart_into_the_bay_and_keeps_the_clock_stopped(self):
         self.session.bridge.call('save', {'name': 'FT playtest'})

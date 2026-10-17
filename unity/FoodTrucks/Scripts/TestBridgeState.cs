@@ -170,6 +170,9 @@ namespace FoodTrucks
                     ["item"] = LocalizorManager.GetLocalization(group.Key, null),
                     ["key"] = group.Key,
                     ["amount"] = group.Sum(c => c.amount),
+                    // The price set on this vehicle's page; null while it sells at the automatic price.
+                    ["set_price"] = record?.CustomPriceCents != null && record.CustomPriceCents.TryGetValue(group.Key, out var setCents)
+                        ? (JToken)(setCents / 100.0) : JValue.CreateNull(),
                 });
 
             JObject? queue = null;

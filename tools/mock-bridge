@@ -591,6 +591,21 @@ class Mock:
                 'state':next(x for x in self.read_state()['vehicles'] if x['id']==v['id'])}
 
     # ---- routes by address (the bridge's route command) ----
+    def price_command(self, args):
+        v=self.vehicle(need(args,'vehicle',"the food vehicle's id"))
+        if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
+        if not self.can_write: raise ValueError("The mod's save data is read-only.")
+        wanted=need(args,'item',"the food's key or name, as look shows it")
+        text=str(args.get('price') or '').strip()
+        if text.lower()=='auto': text=''
+        line=next((x for x in v['stock'] if wanted in (x['key'], x['item']) or wanted.lower()==x['item'].lower()), None)
+        if line is None: raise ValueError(f"no food '{wanted}' on {v['id']}; use the key or name look shows")
+        if text=='': line['set_price']=None
+        else:
+            try: line['set_price']=round(float(text),2)
+            except ValueError: return {'item':line['key'],'name':line['item'],'price':line.get('set_price'),'done':False,'notices':["That isn't a price."],'state':v}
+        return {'item':line['key'],'name':line['item'],'price':line.get('set_price'),'done':True,'notices':[],'state':v}
+
     def route_command(self, args):
         op=need(args,'op','add_stop or paste_day')
         v=self.vehicle(need(args,'vehicle',"the food vehicle's id"))
@@ -1540,6 +1555,7 @@ class Mock:
             if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
             return self.day_summary(args)
         if cmd=='route': return self.route_command(args)
+        if cmd=='price': return self.price_command(args)
         if cmd=='places':
             self.require_city(cmd)
             return self.places(args)

@@ -212,6 +212,41 @@ namespace FoodTrucks
         // map pick's spot by that building (StopPicker.Snap from its first entrance) added to each day, at the given hours or
         // the default ones (RouteStops.AddWithDefaultTimes, as the map pick). { "op": "paste_day", "vehicle", "from", "to":
         // [days] | "all" }: the Week plan tab's copy and paste of a day's route.
+        // A food's selling price on one vehicle, as the vehicle page's price field sets it (PriceDialog.SetPrice): a price
+        // in dollars, or "auto" (or empty) for the automatic price. The blind tester's only way to price (playtest 1 sold
+        // at the default all month).
+        private static object PriceCommand(JObject args)
+        {
+            var id = Need(args, "vehicle", "the food vehicle's id");
+            var instance = FoodVehicle(id);
+            var wanted = Need(args, "item", "the food's key or name, as look shows it");
+            var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
+            if (!FoodTrucksSession.CanWrite) throw new BridgeError("The mod's save data is read-only.");
+            var text = ((string?)args["price"] ?? "").Trim();
+            if (text.Equals("auto", StringComparison.OrdinalIgnoreCase)) text = "";
+            var known = instance.cargoInstances.Where(c => c != null).Select(c => c.itemName)
+                .Concat(StreetSales.Find(state, id)?.CustomPriceCents?.Keys ?? Enumerable.Empty<string>()).Distinct().ToList();
+            var key = known.FirstOrDefault(k => k == wanted)
+                      ?? known.FirstOrDefault(k => string.Equals(Localizor.LocalizorManager.GetLocalization(k, null), wanted, StringComparison.OrdinalIgnoreCase))
+                      ?? (wanted.Contains(":") ? wanted : throw new BridgeError($"no food '{wanted}' on {id}; use the key or name look shows"));
+            var name = Localizor.LocalizorManager.GetLocalization(key, null);
+            return WithNotices(() =>
+            {
+                PriceDialog.SetPrice(id, key, name, text);
+                Log.Info($"Test bridge: price {id} {key} '{text}'.");
+            }, notices =>
+            {
+                var prices = StreetSales.Find(state, id)?.CustomPriceCents;
+                var set = prices != null && prices.TryGetValue(key, out var cents) ? (double?)cents / 100.0 : null;
+                return new JObject
+                {
+                    ["item"] = key, ["name"] = name, ["price"] = set,
+                    ["done"] = text.Length == 0 ? set == null : set != null,
+                    ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, instance),
+                };
+            });
+        }
+
         private static object RouteCommand(JObject args)
         {
             var op = Need(args, "op", "add_stop or paste_day");
