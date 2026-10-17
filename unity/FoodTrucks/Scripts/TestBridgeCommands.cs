@@ -41,6 +41,12 @@ namespace FoodTrucks
                 case "map": RequireCity(cmd); return MapCommand(args);
                 case "route": RequireFtCity(cmd); return RouteCommand(args);
                 case "price": RequireFtCity(cmd); return PriceCommand(args);
+                case "use": return Use(args);
+                case "taxi": RequireFtCity(cmd); return Taxi(args);
+                case "phone": RequireFtCity(cmd); return Phone(args);
+                case "call": return Call(args);
+                case "eat": RequireFtCity(cmd); return Eat(args);
+                case "place": RequireFtCity(cmd); return Place(args);
                 case "ui": return TestBridgeUi.Run(args);
                 case "shoot": RequireCity(cmd); return TestBridgeShoot.Shoot(args);
                 case "save": RequireFtCity(cmd); return Save(args);
@@ -48,7 +54,7 @@ namespace FoodTrucks
                 case "new_game": return NewGame(args);
                 case "quit": return Quit();
                 default:
-                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, vehicle, commissary, crew, route, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.");
+                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, place, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.");
             }
         }
 
@@ -291,7 +297,22 @@ namespace FoodTrucks
                 ["energy_off"] = game.gameVariables?.disableEnergy,
                 ["going_to_hospital"] = Helpers.EnergyHelper.goingToHospital,
                 ["kept_up"] = keepNeeds,
+                ["warnings"] = new JArray(NeedWarnings(game, settings)),
             };
+        }
+
+        // The game's own warnings about the player's needs: the expressions the character shows below the low and too-low
+        // thresholds (EnergyHelper.ShowHungerEmojis and ShowEnergyEmojis), out of energy at 0 (no running, the faint
+        // vignette, notification_low_energy_while_playing), and the hospital below that [code, 1.0].
+        private static IEnumerable<string> NeedWarnings(GameInstance game, Helpers.EnergySettings? settings)
+        {
+            var low = settings?.LowEnergyHungerExpressionThreshold ?? 25f;
+            var tooLow = settings?.TooLowEnergyHungerExpressionThreshold ?? 5f;
+            if (game.Hunger <= tooLow) yield return "very_hungry";
+            else if (game.Hunger <= low) yield return "hungry";
+            if (game.Energy <= 0f) yield return "out_of_energy";
+            else if (game.Energy <= tooLow) yield return "exhausted";
+            else if (game.Energy <= low) yield return "tired";
         }
 
         // The top-ups change the save, so they hold only while it is an FT save of a character with FT saves only, as

@@ -598,8 +598,22 @@ namespace FoodTrucks
                     outward = outward.sqrMagnitude < 0.01f ? Vector3.forward : outward.normalized;
                     return (door + outward * 1.5f, heading ?? Heading(-outward));
                 }
+                case "exit":
+                {
+                    // Out of the building the player is in: the way out a person walks to (the game's exit zone, whose
+                    // trigger takes the player out, ExitZoneDespawner). The nearest one that isn't a parking exit.
+                    if (who != "player") throw new BridgeError("exit: walks the player out of a building.");
+                    if (!BuildingManager.IsInsideBuilding) throw new BridgeError("You're not inside a building.");
+                    var from = PlayerHelper.GetPosition();
+                    var exits = UnityEngine.Object.FindObjectsOfType<ExitZoneDespawner>()
+                        .Where(e => e != null && e.isActiveAndEnabled && !e.isParkingExit && e.GetComponent<Collider>() != null)
+                        .Select(e => e.GetComponent<Collider>().bounds.center)
+                        .OrderBy(p => (p - from).sqrMagnitude).ToList();
+                    if (exits.Count == 0) throw new BridgeError("No way out found in this building.");
+                    return (exits[0], heading);
+                }
                 default:
-                    throw new BridgeError($"Unknown place '{place}': use bay:<site>, commissary:<site>, vehicle:<id> or address:<address>.");
+                    throw new BridgeError($"Unknown place '{place}': use bay:<site>, commissary:<site>, vehicle:<id>, address:<address> or exit.");
             }
         }
 
@@ -658,6 +672,7 @@ namespace FoodTrucks
             Log.Info($"Test bridge: walking to x {goal.x:F1}, z {goal.z:F1} ({metres:F0} m{(complete ? "" : ", part of the way")}" +
                      $"{(holding != null ? ", pushing " + holding : "")}).");
             var deadline = UnityEngine.Time.realtimeSinceStartup + WalkSeconds;
+            var insideBefore = InsideAddress();
             var last = player.transform.position;
             var stillSince = UnityEngine.Time.realtimeSinceStartup;
             JObject Reply(bool arrived)
@@ -670,10 +685,19 @@ namespace FoodTrucks
                 reply["path"] = complete ? "complete" : "partial";
                 reply["metres"] = Math.Round(metres);
                 reply["holding"] = holding;
+                reply["inside"] = InsideAddress();
                 return reply;
             }
             return new Deferred(() =>
             {
+                // Walked into a way out: the game takes the player outside (the place moves with them).
+                if (insideBefore != null && InsideAddress() != insideBefore)
+                {
+                    if (InstanceBehavior<BuildingManager>.Instance != null && InstanceBehavior<BuildingManager>.Instance.enteringBuilding) return null;
+                    var outside = Reply(true);
+                    outside["left"] = insideBefore;
+                    return outside;
+                }
                 var now = player.transform.position;
                 if (Flat(now, goal) <= ArrivedMetres) return Reply(true);
                 if (Vector3.Distance(now, last) > 0.05f)

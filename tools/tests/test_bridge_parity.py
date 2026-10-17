@@ -332,7 +332,7 @@ class ParityTests(unittest.TestCase):
     # free camera and the shot's camera in the reply, health's time_skip.
     def test_needs_in_state_and_kept_up_on_run_until(self):
         needs=self.mock.call('state',{})['player']['needs']
-        self.assertEqual(set(needs),{'energy','hunger','happiness','happiness_modifiers','max','collapse_at','energy_off','going_to_hospital','kept_up'})
+        self.assertEqual(set(needs),{'energy','hunger','happiness','happiness_modifiers','max','collapse_at','energy_off','going_to_hospital','kept_up','warnings'})
         self.refused('time',{'speed':2,'keep_needs':'yes'},'keep_needs must be true or false.')
         self.assertTrue(self.mock.call('time',{'run_until':{'day':'+2','time':'07:00'},'speed':20})['keep_needs'])
         self.mock.state['player']['needs']['energy']=39.5

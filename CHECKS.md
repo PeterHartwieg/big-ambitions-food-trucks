@@ -1,3 +1,25 @@
+# The game's own mechanics for the blind tester (next build)
+
+Branch `real-mechanics` (17 October 2026): `tools/play` without shortcuts and the bridge ops it needs (`use`, `taxi`, `phone`, `call`, `eat`, `place`, `ui set`, `walk --to exit`; docs/test-bridge.md). Nothing here has run in game. Run them with the bridge (`tools/play` or `tools/ft`) in a fresh FT playtest character (`new_game`), never a series save.
+
+| # | Do | Look for |
+|---|---|---|
+| RM1 | Outside, `play use`, then `play use --radius 60` | Building entrances by address (for rent marked), things with their call to action ("Click to …"); taxis nearby, if any stand in the street. Note how often no taxi is in reach: if taxis are rare, say so (the tester then has to walk) |
+| RM2 | `play use ID` on a taxi, then `play go ADDRESS` | The character walks to the taxi and the map opens in taxi mode; the ride fades and skips time, sets you down at the building; the bank has `Taxi ride` for the fare (about $0.15 a metre); `go` without a taxi waiting is refused and nothing is charged |
+| RM3 | `play time until +1 08:00`, then `play look` | Hunger and energy go down (no "needs topped up" log line); below 25 look says hungry or tired; nothing tops them up |
+| RM4 | A fast food restaurant: `use` its entrance (inside), `use` the till, `ui list`, click a product, click the order button, wait; then `play eat` | The till's order panel lists products and the order button; after the cashier serves you a paper bag is in your hands (look: "You hold: Paper bag: 1 …"); `eat` raises hunger; again at full hunger: the game's "too stuffed" notice |
+| RM5 | `play walk --to exit` inside a building | The character walks to the way out and the game takes them outside; the reply says "You walked out of …" (not "stopped short") |
+| RM6 | `play map for_rent:ba:buildingtype_residential`, ride there, `use` the building's entrance | BizMan opens on the building's presentation (rent and deposit); `ui list` shows its rent button; clicking it books the deposit and the first day's rent; look: "Home: <address>", and the "no home" mood goes |
+| RM7 | Inside the rented flat, `use` | Whether the flat has a bed already (the default layout's appliances): if it has, skip to RM9 |
+| RM8 | A furniture store: `use` a bed on display, `use` the till, pay; ride home, inside `play place X Z --rotation 90` at a free floor spot (the player's own x and z, a few metres into the room) | The bed is in a box in your hands, paid after the till; `place` puts the bed down on the floor turned 90°, and a second `place` against a wall says "no room there" with the bed back in its box. Look at the room in a shot: the bed stands where it was placed and the game saves it (save, load) |
+| RM9 | `use` the bed, `ui list`, `ui set ID MINUTES` on the slider, click the start button | The sleep panel opens; the slider moves; Start walks to the bed and the time skip runs; `play ui click` waits and prints "Time passed: …"; energy goes up |
+| RM10 | Ride to the business school, `use` its entrance, `use` the Market Demands door | The game's question: Food Safety course or Market Demands (`ui list`); Food Safety opens the study panel with its hours (slider, if the panel has one) and price; Start runs the time skip and charges the hours; after all hours the door's warning icon says completed |
+| RM11 | `play call list`, `play call "the_city_of_new_york"` (or its name), `ui list`, buy the licence, then a permit per vehicle | The call opens with the City's text and the licence button; before the course: the refusal that names the business school; after it: the licence and permits are bought, look shows them |
+| RM12 | Hiring: ride to a recruitment agency, `use` its receptionist; or `call` it, if it is in the contacts | Expected from the 1.0 code: the agency refuses without a business of your own with a name and without the Basic HR course. **This is a gap for a fleet-only player**: write down exactly what the agency says. Then `play phone employees`: candidates from the job board, if any |
+| RM13 | `play phone contacts`, `phone employees`, `phone bizman`; `ui escape` | Each opens the app; escape closes the phone |
+| RM14 | A slider and a toggle on screen (the sleep panel, a recruitment form) | `ui list` shows "(slider value, from … to …)" and "(toggle, on/off)"; `ui set` moves the slider; `ui click` flips the toggle |
+| RM15 | Let energy run out | Collapse at the hospital threshold: the game takes you to hospital and bills the stay; the log has `Test bridge: the player collapsed…` |
+
 # First blind playtest fixes (next build)
 
 Branch `blind1-fixes`, from the first blind AI playtest (17 October 2026; issues in `build/logs/game/blind-1/notes/issues.md` of the main checkout). Nothing here has run in game. Use a throwaway FT save with two carts, one crew member with a route, and a commissary space for one cart only.

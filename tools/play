@@ -8,21 +8,34 @@ you on the map.
 
 Commands (each also takes --help):
 
-  look                         Where you are, the time, your money, vehicles, crew, commissary stock and orders.
+  look                         Where you are, the time, your money, how you feel, what you hold, your vehicles, crew,
+                               commissary stock and orders.
   notices [--follow]           Notices and phone texts since you last looked.
   places [--radius M]          Buildings near you: address, type, business, commissaries.
-  go ADDRESS                   Take a taxi to a building (address as places prints it, e.g. ba:street_secondavenue#8).
-  walk X Z | walk --to PLACE   Walk there on foot, as a click on the ground does. Holding a cart (vehicle ID enter),
-                               you push it along. PLACE: address:ADDRESS, bay:SITE (a commissary's bay, to push a
-                               cart into it), commissary:SITE (its door) or vehicle:ID (beside it). The clock runs
-                               at speed 1 while you walk, and stops again if it was stopped.
   map filters | map FILTER [--limit N]
                                The city map's highlights: the filters there are, or the buildings one lights, nearest
                                first. For example: commissaries, for_rent, for_rent:ba:buildingtype_residential,
                                business:ba:businesstype_supermarket, offices, nightlife, pitches, yours.
+  walk X Z | walk --to PLACE   Walk there on foot, as a click on the ground does. Holding a cart (vehicle ID enter),
+                               you push it along. PLACE: address:ADDRESS, bay:SITE (a commissary's bay, to push a
+                               cart into it), commissary:SITE (its door), vehicle:ID (beside it) or exit (out of the
+                               building you're in). The clock runs at speed 1 while you walk, and stops again if it
+                               was stopped.
+  use [--radius M] | use ID [--right]
+                               The things near you that react to a click (a door, a shelf, a till, a bed, a taxi, a
+                               building's entrance), or a click on one by its number in the last list. The clock runs
+                               at speed 1 while you walk over to it.
+  go ADDRESS                   Tell the taxi you got into where to go (address as places or map prints it, e.g.
+                               ba:street_secondavenue#8). You get into one with use.
+  eat [ITEM]                   Eat from the bag of food you hold.
+  place X Z [--rotation DEG]   Set down the furniture in the box you hold, on the floor of a building you rent.
+  phone APP                    Open the phone on an app: contacts, employees, bizman, econoview, maps, market,
+                               persona or rivals.
+  call list | call CONTACT     Your phone's contacts, or call one (by name or id). Its options are then on screen (ui).
   screen NAME [--fetch DIR]    A picture of the screen.
-  ui list | ui click TEXT | ui click --id N | ui escape
-                               The buttons and texts on screen, and pressing them.
+  ui list | ui click TEXT | ui click --id N | ui set ID VALUE | ui escape
+                               The buttons, options, sliders and texts on screen; pressing one, moving a slider, or
+                               closing what is open. A click that starts a time skip (sleep, a course) waits for it.
   time pause | time speed N | time until [DAY] HH:MM [--speed N]
                                Pause, set the game speed (at most 20), or let time run until a moment (then pause).
                                DAY is a day number or +N days from today.
@@ -32,11 +45,6 @@ Commands (each also takes --help):
                                Use a vehicle. take/return move stock or equipment between it and the commissary.
   order SITE ITEM BOXES [ITEM BOXES ...]
                                Order stock by phone from a commissary where you rent a space; it arrives at 08:00.
-  hire                         Hire a worker (they wait unassigned).
-  licence                      Get the vendor licence and a permit for each vehicle you own now: a free test
-                               shortcut (its notice says "Debug"). In a normal game the licence follows the Food
-                               Safety course and is bought, with each permit, by calling the City. Run it again
-                               after buying a vehicle.
   crew assign VEHICLE EMPLOYEE | crew schedule VEHICLE EMPLOYEE DAY START END [STATION] | crew auto VEHICLE
                                Put a hire on a vehicle's crew; set a shift (whole hours); or auto-fill the week.
   price VEHICLE ITEM DOLLARS|auto
@@ -47,6 +55,20 @@ Commands (each also takes --help):
                                A vehicle's weekly route: add a stop by a building, or copy one day onto others.
   save NAME                    Save the game (the name must start with "FT playtest").
   load NAME                    Load a save whose name starts with "FT playtest".
+
+How the city works (hints, not a plan):
+
+  - You are a person in the city. You get hungry and tired as the hours pass, and look tells you when it shows. Food
+    comes from places that sell it; what you buy is packed for you to eat from or carry.
+  - You need a home to sleep in. Buildings for rent are on the map; a building you can't walk into may offer itself
+    for rent when you click its entrance. A rented flat starts empty: a bed is furniture, sold in shops, and you set it
+    down yourself. Sleep is a click on your bed. Without sleep you collapse, and the hospital sends a bill.
+  - Taxis wait in the street; a ride costs money and takes time. Walking is free but slow.
+  - Selling street food needs the city's vendor licence, and a permit for each vehicle. The City of New York sells
+    them by phone, and the licence first wants a food safety course, taught at the business school.
+  - Staff are found the way the city finds them: through its recruitment and job channels, then hired from the
+    candidates on your phone.
+  - Schools, shops and offices keep opening hours.
 
 If the referee stops the game, every command that acts refuses and says why (the file named by FT_PLAY_STOP)."""
 import argparse
@@ -62,6 +84,11 @@ PREFIX = 'FT playtest'
 MAX_SPEED = 20
 WEEK = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
 VEHICLE_OPS = ('open', 'close', 'enter', 'exit', 'back_to_hatch', 'restock', 'rent_bay')
+PHONE_APPS = ('contacts', 'employees', 'bizman', 'econoview', 'maps', 'market', 'persona', 'rivals')
+FEELINGS = {'hungry': 'you are hungry', 'very_hungry': 'you are starving', 'tired': 'you are tired',
+            'exhausted': 'you are exhausted', 'out_of_energy': 'you have no energy left: you can barely walk and will soon collapse'}
+# How long a click may hold a time skip (sleep, a course) before the tool stops waiting, in real seconds.
+SKIP_WAIT_S = 600
 
 
 class Refused(Exception):
@@ -99,9 +126,22 @@ class Play:
         p = s.get('player') or {}
         self.out(f"Day {c.get('day')} ({c.get('weekday')}) {c.get('time')}{', paused' if c.get('paused') else ', speed ' + str(c.get('speed'))}. "
                  f"Money {money(s.get('money'))}.")
-        where = f"in {p['in_vehicle']}" if p.get('in_vehicle') else f"at the hatch of {p['at_hatch']}" if p.get('at_hatch') else p.get('activity') or 'on foot'
+        where = 'in a taxi' if p.get('riding') else f"in {p['in_vehicle']}" if p.get('in_vehicle') else f"at the hatch of {p['at_hatch']}" if p.get('at_hatch') else p.get('activity') or 'on foot'
+        inside = f", inside {p['inside']}" if p.get('inside') else ''
+        self.out(f"You: {where}{inside} at x {p.get('x')}, z {p.get('z')}.")
         needs = p.get('needs') or {}
-        self.out(f"You: {where} at x {p.get('x')}, z {p.get('z')}; energy {needs.get('energy')}, hunger {needs.get('hunger')}.")
+        feelings = [FEELINGS.get(w, w.replace('_', ' ')) for w in needs.get('warnings') or []]
+        self.out(f"How you feel: energy {needs.get('energy')}, hunger {needs.get('hunger')}, happiness {needs.get('happiness')} (of {needs.get('max', 100)})"
+                 + (f"; {'; '.join(feelings)}." if feelings else '.'))
+        moods = [m.get('type', '').replace('ba:happinessmodifier_', '').replace('_', ' ') for m in needs.get('happiness_modifiers') or []]
+        if moods: self.out(f"  what weighs on your mood: {', '.join(moods)}.")
+        if p.get('clock_held_by'): self.out(f"  The clock is held by: {p['clock_held_by']}.")
+        hands = p.get('hands')
+        if hands:
+            inside_ = ', '.join(f"{c['amount']} {c['item']}{'' if c.get('paid', True) else ' (not paid)'}" for c in hands.get('contents') or [])
+            self.out(f"You hold: {hands['item']}{': ' + inside_ if inside_ else ''}.")
+        homes = p.get('homes')
+        if homes is not None: self.out(f"Home: {', '.join(homes) if homes else 'none'}.")
         lic = s.get('licence') or {}
         self.out(f"Licence: {'until day ' + str(lic['until_day']) if lic.get('until_day') else 'none'}, permits {lic.get('permits', 0)}, "
                  f"food safety course {'done' if lic.get('course_done') else 'not done'}.")
@@ -176,23 +216,91 @@ class Play:
     # ---- acting ----
     def go(self, address):
         self.acting()
-        r = self.call('teleport', {'who': 'player', 'place': f'address:{address}'}, 60)
-        self.out(f"You're at {address} (x {r['x']}, z {r['z']}).")
+        r = self.call('taxi', {'address': address}, 150)
+        if r['done']:
+            self.out(f"The taxi set you down at {address} (x {r['x']}, z {r['z']}) after {r['minutes']:.0f} minutes; fare {money(r['fare'])}, money {money(r['money'])}.")
+        else:
+            self.out(f"No ride: {'; '.join(r.get('notices') or []) or 'the taxi did not go'}.")
+
+    def clock_at_one(self, work):
+        """Walking takes real time; at a higher speed the day would run past while you walk. Runs work at speed 1 and puts
+        the clock back as it was, also when the game refuses."""
+        clock = self.call('state')['clock']
+        was_paused, was_speed = clock.get('paused'), clock.get('speed')
+        if was_paused or was_speed != 1: self.call('time', {'speed': 1})
+        try:
+            return work()
+        finally:
+            try:
+                if was_paused: self.call('time', {'pause': True, **({'speed': was_speed} if was_speed not in (None, 1) else {})})
+                elif was_speed not in (None, 1): self.call('time', {'speed': was_speed})
+            except BridgeError:
+                # The click opened a screen that holds the clock (the map, a panel): the game keeps it until that closes.
+                self.out('The clock is held by the screen that opened; it runs again once you close it.')
+
+    def use(self, ident=None, radius=None, right=False):
+        if ident is None:
+            r = self.call('use', {'op': 'list', **({'radius': radius} if radius else {})})
+            self.out(f"Near you{' inside ' + r['inside'] if r.get('inside') else ''} (within {r['radius']:.0f} m):")
+            for t in r['things']:
+                what = t['name'] + (f" ({t['address']})" if t.get('address') else '')
+                extra = ''
+                if t.get('sells'): extra += f"; sells {t['sells']}"
+                if t.get('for_rent'): extra += '; for rent'
+                if t.get('yours'): extra += '; yours'
+                if t.get('business') and t['business'] != t['name']: extra += f"; {t['business']}"
+                self.out(f"[{t['id']}] {t['distance']:>5} m  {what}{' - ' + t['click'] if t.get('click') else ''}{extra}")
+            if not r['things']: self.out('  nothing that reacts to a click.')
+            return
+        self.acting()
+        cursor = self.bridge.events(1)['next']
+        r = self.clock_at_one(lambda: self.call('use', {'op': 'right_click' if right else 'click', 'id': ident}, 150))
+        self.out(f"Clicked {r['clicked']}{' (' + r['click'] + ')' if r.get('click') else ''}"
+                 + ('' if r['handled'] else ': nothing happened') + '.')
+        if r.get('inside') != r.get('inside_before'):
+            self.out(f"You're now {'inside ' + r['inside'] if r.get('inside') else 'outside'}.")
+        if r.get('open'): self.out(f"Open now: {', '.join(r['open'])} (ui list shows it).")
+        for n in r.get('notices') or []: self.out(f'  {n}')
+        self.notices(since=cursor)
+
+    def eat(self, item=None):
+        self.acting()
+        r = self.call('eat', {'item': item} if item else {})
+        self.out(f"{'Ate' if r['done'] else 'Did not eat'} {r['item']}: hunger {r['hunger']}, energy {r['energy']}.")
+        for n in r.get('notices') or []: self.out(f'  {n}')
+
+    def place(self, x, z, rotation=None):
+        self.acting()
+        r = self.call('place', {'x': x, 'z': z, **({'rotation': rotation} if rotation is not None else {})})
+        self.out(f"{r['item']}: placed at x {r['x']}, z {r['z']}, turned {r['rotation']:.0f} degrees." if r['placed']
+                 else f"{r['item']}: not placed ({r['why']}); it is back in its box.")
+        for n in r.get('notices') or []: self.out(f'  {n}')
+
+    def phone(self, app):
+        self.acting()
+        if app not in PHONE_APPS: raise Refused(f"No phone app {app}: {', '.join(PHONE_APPS)}.")
+        r = self.call('phone', {'app': app})
+        self.out(f"The phone is {'open on ' + app if r['open'] else 'not open'}; ui list shows its screen.")
+        for n in r.get('notices') or []: self.out(f'  {n}')
+
+    def call_contact(self, contact):
+        if contact == 'list':
+            for c in self.call('call', {'op': 'list'})['contacts']:
+                self.out(f"{c['name']}{' (' + c['id'] + ')' if c['id'] != c['name'] else ''}{', unread messages' if c.get('unread') else ''}")
+            return
+        self.acting()
+        r = self.call('call', {'contact': contact})
+        self.out(f"{'Calling' if r['calling'] else 'Not calling'} {r['name']}; ui list shows the call's options.")
+        for n in r.get('notices') or []: self.out(f'  {n}')
 
     def walk(self, x=None, z=None, place=None):
         self.acting()
         args = {'place': place} if place else {'x': x, 'z': z}
-        clock = self.call('state')['clock']
-        # Walking takes real time; at a higher speed the day would run past while you walk.
-        was_paused, was_speed = clock.get('paused'), clock.get('speed')
-        if was_paused or was_speed != 1: self.call('time', {'speed': 1})
-        try:
-            r = self.call('walk', args, 630)
-        finally:
-            if was_paused: self.call('time', {'pause': True, **({'speed': was_speed} if was_speed not in (None, 1) else {})})
-            elif was_speed not in (None, 1): self.call('time', {'speed': was_speed})
+        r = self.clock_at_one(lambda: self.call('walk', args, 630))
         pushing = f", pushing {r['holding']}" if r.get('holding') else ''
-        if r['arrived']:
+        if r.get('left'):
+            self.out(f"You walked out of {r['left']}; now outside at x {r['x']}, z {r['z']}.")
+        elif r['arrived']:
             self.out(f"You walked {r['metres']} m{pushing}; now at x {r['x']}, z {r['z']}.")
         else:
             self.out(f"You stopped {r['from_goal']} m short{pushing}, at x {r['x']}, z {r['z']}"
@@ -218,18 +326,45 @@ class Play:
         if op == 'list':
             r = self.call('ui', {'op': 'list'})
             for b in r['buttons']:
-                self.out(f"[{b['id']}] {b['text']}{' (option)' if b.get('kind') == 'option' else ''}")
+                kind = b.get('kind')
+                extra = (' (option)' if kind == 'option' else
+                         f" (slider {b.get('value')}, from {b.get('min')} to {b.get('max')})" if kind == 'slider' else
+                         f" (toggle, {'on' if b.get('on') else 'off'})" if kind == 'toggle' else '')
+                self.out(f"[{b['id']}] {b['text']}{extra}")
             for t in r['texts']:
                 self.out(f"text: {t}")
             return
         self.acting()
         if op == 'click':
+            cursor = self.bridge.events(1)['next']
             r = self.call('ui', {'op': 'click', **({'id': ident} if ident is not None else {'text': text})})
             self.out(f"Clicked {r['clicked']}.")
+            self.wait_for_skip(cursor)
+        elif op == 'set':
+            if ident is None or text is None: raise Refused('ui set ID VALUE (a slider from the last ui list)')
+            try: value = float(text)
+            except ValueError: raise Refused('ui set ID VALUE: the value is a number.')
+            r = self.call('ui', {'op': 'set', 'id': ident, 'value': value})
+            self.out(f"{r['set']}: {r['value']} (from {r['min']} to {r['max']}).")
+            for t in r.get('texts') or []: self.out(f'text: {t}')
         elif op == 'escape':
             self.out(f"Closed {self.call('ui', {'op': 'escape'})['closed']}.")
         else:
-            raise Refused(f'Unknown ui op {op}: list, click or escape.')
+            raise Refused(f'Unknown ui op {op}: list, click, set or escape.')
+
+    def wait_for_skip(self, cursor):
+        """A click that started a time skip (sleep, a course, a ride): wait until the game's clock is back, then say what
+        came in meanwhile."""
+        deadline = time.time() + SKIP_WAIT_S
+        time.sleep(.3)
+        skipped = False
+        while self.bridge.health().get('time_skip') and time.time() < deadline:
+            skipped = True
+            time.sleep(.5)
+        if skipped:
+            c = self.call('state')['clock']
+            self.out(f"Time passed: now day {c['day']} {c['time']}.")
+            self.notices(since=cursor)
 
     def time(self, op, value=None, speed=None, day=None, wait=True):
         self.acting()
@@ -245,7 +380,8 @@ class Play:
         target_day = clock['day'] if day is None else (clock['day'] + int(day[1:]) if str(day).startswith('+') else int(day))
         if day is None and value <= clock['time']: target_day += 1
         cursor = self.bridge.events(1)['next']
-        self.call('time', {'run_until': {'day': target_day, 'time': value}, 'speed': speed})
+        # Your needs run down as in any game: nothing tops them up.
+        self.call('time', {'run_until': {'day': target_day, 'time': value}, 'speed': speed, 'keep_needs': False})
         if not wait:
             self.out(f'Running until day {target_day} {value}.'); return
         while True:
@@ -281,12 +417,6 @@ class Play:
         r = self.call('commissary', {'op': 'order', 'site': site, 'items': items})
         for o in r['orders']:
             self.out(f"Ordered {o['units']} {o['item']} for {money(o['total'])}, paid on delivery, arriving day {o['due_day']} at 08:00.")
-
-    def debug(self, action):
-        self.acting()
-        r = self.call('debug', {'action': action})
-        for n in r.get('notices') or []: self.out(n)
-        if not r.get('notices'): self.out('Done.')
 
     def crew(self, op, rest):
         self.acting()
@@ -345,20 +475,26 @@ def parser():
     sub.add_parser('look', help='the time, your money, vehicles, crew and commissary')
     n = sub.add_parser('notices', help='notices and phone texts'); n.add_argument('--follow', action='store_true')
     n = sub.add_parser('places', help='buildings near you'); n.add_argument('--radius', type=float, default=150)
-    n = sub.add_parser('go', help='take a taxi to a building'); n.add_argument('address')
+    n = sub.add_parser('go', help='tell the taxi you are in where to go'); n.add_argument('address')
+    n = sub.add_parser('use', help='things near you that react to a click, or click one'); n.add_argument('id', nargs='?', type=int)
+    n.add_argument('--radius', type=float); n.add_argument('--right', action='store_true')
+    n = sub.add_parser('eat', help='eat from the bag you hold'); n.add_argument('item', nargs='?')
+    n = sub.add_parser('place', help='set down the furniture you hold'); n.add_argument('x', type=float); n.add_argument('z', type=float)
+    n.add_argument('--rotation', type=float)
+    n = sub.add_parser('phone', help='open the phone on an app'); n.add_argument('app', choices=PHONE_APPS)
+    n = sub.add_parser('call', help='your contacts, or call one'); n.add_argument('contact')
     n = sub.add_parser('walk', help='walk somewhere, pushing a cart you hold'); n.add_argument('coords', nargs='*', type=float)
     n.add_argument('--to')
     n = sub.add_parser('map', help="the city map's highlights"); n.add_argument('what'); n.add_argument('--limit', type=int)
     n = sub.add_parser('screen', help='a picture of the screen'); n.add_argument('name'); n.add_argument('--fetch')
-    n = sub.add_parser('ui', help='buttons and texts on screen'); n.add_argument('op', choices=('list', 'click', 'escape'))
-    n.add_argument('text', nargs='?'); n.add_argument('--id', type=int)
+    n = sub.add_parser('ui', help='buttons and texts on screen'); n.add_argument('op', choices=('list', 'click', 'set', 'escape'))
+    n.add_argument('text', nargs='*'); n.add_argument('--id', type=int)
     n = sub.add_parser('time', help='pause, speed or run until a moment'); n.add_argument('op', choices=('pause', 'speed', 'until'))
     n.add_argument('value', nargs='*'); n.add_argument('--speed', type=float); n.add_argument('--no-wait', action='store_true')
     n = sub.add_parser('buy', help='buy a truck or a cart'); n.add_argument('kind', choices=('truck', 'cart'))
     n = sub.add_parser('vehicle', help='use a vehicle'); n.add_argument('id'); n.add_argument('op'); n.add_argument('item', nargs='?')
     n.add_argument('units', nargs='?', type=int)
     n = sub.add_parser('order', help='order stock from a commissary'); n.add_argument('site'); n.add_argument('pairs', nargs='+')
-    sub.add_parser('hire', help='hire a worker'); sub.add_parser('licence', help='vendor licence and permits')
     n = sub.add_parser('crew', help='crew and shifts'); n.add_argument('op', choices=('assign', 'schedule', 'auto')); n.add_argument('rest', nargs='+')
     n = sub.add_parser('price', help='what a vehicle charges for a food'); n.add_argument('vehicle'); n.add_argument('item'); n.add_argument('price')
     n = sub.add_parser('route', help='a vehicle\'s route'); n.add_argument('op', choices=('add', 'paste')); n.add_argument('rest', nargs='+')
@@ -377,13 +513,23 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
         elif c == 'notices': play.notices(args.follow)
         elif c == 'places': play.places(args.radius)
         elif c == 'go': play.go(args.address)
+        elif c == 'use': play.use(args.id, args.radius, args.right)
+        elif c == 'eat': play.eat(args.item)
+        elif c == 'place': play.place(args.x, args.z, args.rotation)
+        elif c == 'phone': play.phone(args.app)
+        elif c == 'call': play.call_contact(args.contact)
         elif c == 'walk':
             if args.to and not args.coords: play.walk(place=args.to)
             elif len(args.coords) == 2 and not args.to: play.walk(args.coords[0], args.coords[1])
             else: raise Refused('walk X Z | walk --to PLACE')
         elif c == 'map': play.map(args.what, args.limit)
         elif c == 'screen': play.screen(args.name, args.fetch)
-        elif c == 'ui': play.ui(args.op, args.text, args.id)
+        elif c == 'ui':
+            if args.op == 'set':
+                if len(args.text) != 2 or not args.text[0].isdigit(): raise Refused('ui set ID VALUE (a slider from the last ui list)')
+                play.ui('set', args.text[1], int(args.text[0]))
+            else:
+                play.ui(args.op, ' '.join(args.text) if args.text else None, args.id)
         elif c == 'time':
             if args.op == 'until':
                 if len(args.value) not in (1, 2): raise Refused('time until [DAY] HH:MM [--speed N]')
@@ -393,8 +539,6 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
         elif c == 'buy': play.buy(args.kind)
         elif c == 'vehicle': play.vehicle(args.id, args.op, args.item, args.units)
         elif c == 'order': play.order(args.site, args.pairs)
-        elif c == 'hire': play.debug('hire')
-        elif c == 'licence': play.debug('licence')
         elif c == 'crew': play.crew(args.op, args.rest)
         elif c == 'price': play.price(args.vehicle, args.item, args.price)
         elif c == 'route': play.route(args.op, args.rest, args.days, args.open, args.close)

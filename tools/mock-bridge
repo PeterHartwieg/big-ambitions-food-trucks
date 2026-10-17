@@ -52,6 +52,18 @@ SALE_CENTS = 1300
 WAGE_CENTS = 1000
 CATALOG.update({key:(LOCALE.get(key,key.split('itemname_')[-1].title()),1,750.) for e in ECONOMY['equipment'].values() for key in e['gameItems']})
 
+# The player's life in the mock (docs/test-bridge.md, "The player's life"). The dialogs it opens, and those that are an
+# activity panel holding the clock. The game's own numbers where the 1.0 code has them: the taxi's $0.15 and 0.04 game
+# minutes a metre, a bed's 0.35 energy a minute, the hospital at -20. The shops' goods and prices are made up.
+LIFE_DIALOGS = {'taxi_map', 'presentation', 'purchase', 'sleep', 'course', 'course_choice', 'phone_app', 'city', 'agency'}
+LIFE_PANELS = {'sleep', 'course'}
+TAXI_PER_METRE, TAXI_MINUTES_PER_METRE, BED_ENERGY_PER_MINUTE = .15, .04, .35
+SHOPS = {'ba:businesstype_fastfoodrestaurant': [('ba:itemname_burger', 'Burger', 8., 'food', 45)],
+         'ba:businesstype_coffeeshop': [('ba:itemname_cupofcoffee', 'Cup of coffee', 4., 'food', 10)],
+         'ba:businesstype_supermarket': [('ba:itemname_sandwich', 'Sandwich', 5., 'food', 30)],
+         'ba:businesstype_furniturestore': [('ba:itemname_kingsizebed', 'King size bed', 900., 'furniture', 0)]}
+FULL_SERVICE = {'ba:businesstype_fastfoodrestaurant', 'ba:businesstype_coffeeshop'}
+
 POSES = {'hatch-pavement', 'hatch-close', 'vehicle-side', 'vehicle-overhead', 'queue',
          'cart-counter', 'bay-pavement', 'bay-road', 'door'}
 
@@ -203,11 +215,18 @@ class Mock:
         self.ledger = {}
         self.sold = {}
         self.visits = {}
+        # The player's life (docs/test-bridge.md, "The player's life"): where they are inside, what they hold, the homes they
+        # rent and the beds set down there, a taxi waiting, the course's hours, candidates on the phone.
+        self.life = {'inside': None, 'hands': None, 'homes': [], 'beds': {}, 'taxi': False, 'course_minutes': 0,
+                     'candidates': [], 'activity': None, 'purchase': None, 'contact': None, 'city_step': 'start', 'app': None}
+        self.state['player']['needs']['happiness_modifiers'] = [{'type': 'ba:happinessmodifier_no_home', 'hours_left': -1}]
+        self.state['player']['needs']['warnings'] = []
+        self.last_use = []
 
     def store(self, name):
         self.saves[name] = copy.deepcopy({key: getattr(self, key) for key in
             ('state', 'character', 'absolute', 'employees', 'selected', 'order_number', 'routes', 'takings', 'hours', 'phone_texts', 'logistics',
-             'plans', 'ledger', 'sold', 'visits', 'fees_paid')})
+             'plans', 'ledger', 'sold', 'visits', 'fees_paid', 'life')})
 
     def save_city(self, name):
         if self.save_in_progress: raise ValueError('A save is already being written; try again in a moment.')
@@ -342,9 +361,13 @@ class Mock:
         if self.confirmation_open: screens.append('confirmation')
         if self.pause_menu_open: screens.append('pause menu')
         if self.dialog in ('crew','fleet'): screens.append('phone')
+        elif self.dialog=='taxi_map': screens.append('map')
+        elif self.dialog in ('phone_app','presentation'): screens.append('phone')
+        elif self.dialog in LIFE_PANELS or self.dialog in ('purchase','course_choice'): pass
         elif self.dialog not in ('closed','commissary','items','opens','closes'): screens.append('call')
-        if self.activity_starting or self.state['player']['at_hatch']: screens.append('activity panel')
-        return ', '.join(screens) if screens else None if self.dialog=='closed' else 'a screen'
+        if self.activity_starting or self.state['player']['at_hatch'] or self.dialog in LIFE_PANELS: screens.append('activity panel')
+        if self.dialog=='course_choice': screens.append('confirmation')
+        return ', '.join(screens) if screens else None if self.dialog in ('closed','purchase') else 'a screen'
 
     def bays(self):
         return [{'site':site,'status':self.bay_status.get(site,'resolved'),'point':{'x':393.2+i*100,'z':217.6,'along_x':0.,'along_z':1.} if self.bay_status.get(site,'resolved')=='resolved' else None,
@@ -504,16 +527,25 @@ class Mock:
                 x,z=393.2+SITES.index(identifier)*100,217.6
             elif kind=='vehicle':
                 v=self.vehicle(identifier); x,z=v['x']+(2.6 if v['kind']=='truck' else 2.1),v['z']
+            elif kind=='exit':
+                if not self.life['inside']: raise ValueError("You're not inside a building.")
+                left=self.life['inside']; self.life['inside']=None
+                door=self.door(left)
+                player.update(x=door[0],z=door[1])
+                self.event(f'Test bridge: walking to x {door[0]:.1f}, z {door[1]:.1f} (out of {left}).')
+                return {'x':round(door[0],2),'y':0.,'z':round(door[1],2),'heading':round(player['heading'],2),'arrived':True,'from_goal':0.,
+                        'goal':{'x':round(door[0],2),'z':round(door[1],2)},'path':'complete','metres':8,'holding':None,'inside':None,'left':left}
             elif kind=='address':
                 if not re.fullmatch(r'ba:street_[a-z0-9]+#[0-9]+',identifier):
                     raise ValueError(f"address: takes a building's address as the game writes it, ba:street_<name>#<number>; got '{identifier}'.")
                 building=next((b for b in CITY if b['key']==identifier),None)
                 if building is None: raise ValueError(f'no building at {identifier} in this city')
                 x,z=building['x']+6.,building['z']
-            else: raise ValueError(f"Unknown place '{place}': use bay:<site>, commissary:<site>, vehicle:<id> or address:<address>.")
+            else: raise ValueError(f"Unknown place '{place}': use bay:<site>, commissary:<site>, vehicle:<id>, address:<address> or exit.")
         else:
             x,z=num(args,'x'),num(args,'z')
             if x is None or z is None: raise ValueError('walk needs "x" and "z", or "place".')
+        if self.life['inside']: raise ValueError('The mock walks only outside: walk --to exit first.')
         metres=math.hypot(player['x']-x,player['z']-z)
         player.update(x=float(x),z=float(z))
         if held is not None:
@@ -522,7 +554,7 @@ class Mock:
             player.update(x=held['x'],z=held['z'])
         self.event(f"Test bridge: walking to x {x:.1f}, z {z:.1f} ({metres:.0f} m{', pushing '+held['id'] if held else ''}).")
         return {'x':round(player['x'],2),'y':0.,'z':round(player['z'],2),'heading':round(player['heading'],2),'arrived':True,'from_goal':0.,
-                'goal':{'x':round(x,2),'z':round(z,2)},'path':'complete','metres':round(metres),'holding':held['id'] if held else None}
+                'goal':{'x':round(x,2),'z':round(z,2)},'path':'complete','metres':round(metres),'holding':held['id'] if held else None,'inside':None}
 
     # ---- map: the city map's highlights as data (the mock's city: the balance tool's buildings) ----
     def map_command(self, args):
@@ -878,6 +910,10 @@ class Mock:
             player=result['player']
             player['activity']='driving' if player['in_vehicle'] and self.vehicle(player['in_vehicle'])['kind']=='truck' else 'pushing' if player['in_vehicle'] else 'starting' if self.activity_starting else 'at_hatch' if player['at_hatch'] else 'walking' if self.walks else 'on_foot'
             player['clock_held_by']=self.clock_held_by()
+            player.update(hands=copy.deepcopy(self.life['hands']),inside=self.life['inside'],homes=list(self.life['homes']),riding=False)
+            needs=player['needs']
+            needs['warnings']=[w for w in (('very_hungry' if needs['hunger']<=5 else 'hungry' if needs['hunger']<=25 else None),
+                                            ('out_of_energy' if needs['energy']<=0 else 'exhausted' if needs['energy']<=5 else 'tired' if needs['energy']<=25 else None)) if w]
             # The mock's game camera hangs over the player; nothing is faded for it.
             result['game_camera']={'x':round(player['x'],2),'y':round(player['y']+18,2),'z':round(player['z']-12,2),'yaw':0.,'pitch':55.}
             result['view_blocked']=[]
@@ -1127,6 +1163,11 @@ class Mock:
             # The on-foot menu of the mock's vehicle, as if it had been clicked.
             v = next((v for v in self.state['vehicles'] if v['id'] == self.selected), None)
             if v and not v['open']: add(LOCALE['foodtrucks:overlay_open'])
+        if self.dialog in LIFE_DIALOGS:
+            for entry in self.life_buttons():
+                add(entry['text'], entry.get('kind', 'button'), entry.get('row', ''))
+                entries[-1].update({k: v for k, v in entry.items() if k in ('value', 'min', 'max', 'whole_numbers')})
+            return entries
         if self.dialog == 'commissary':
             # Commissary stock: Fill up, a take per item in stock here, a return per item on board.
             site = self.vehicle()['commissary']['bay_site']
@@ -1195,6 +1236,11 @@ class Mock:
             entry = matches[0]
             current=entry
         else: raise ValueError('ui click needs "id" (from the last list) or "text".')
+        if self.dialog in LIFE_DIALOGS:
+            if current.get('kind')=='slider': raise ValueError(f"\"{current['text']}\" is a slider: ui set with its id and a value.")
+            self.event(f'Test bridge: clicked "{entry["text"]}" ({entry["path"]}).')
+            self.life_click(current['text'])
+            return {'clicked':entry['text']}
         text = current['text']
         native=re.search(r'(?:LoadGame|SaveGameCompatibilityUI|FuneralUI)',current['path'])
         in_pause=re.search(r'(?:MiniMenu|Pause)(?:/|$)',current['path'])
@@ -1524,6 +1570,318 @@ class Mock:
         self.event(f"Test bridge: logistics run now (the game's 02:00 warehouse deliveries), day {c['day']} {c['time']}: {planned} destinations planned.")
         return {'deliveries':planned,'before':before,'after':plans()}
 
+    # ---- the player's life: clicks on things, the taxi, the phone, eating and furniture ----
+    def door(self, address):
+        b=next((b for b in CITY if b['key']==address),None)
+        if b is None: raise ValueError(f'no building at {address} in this city')
+        return (b['x']+6.,b['z'])
+
+    def building(self, address):
+        return next((b for b in CITY if b['key']==address),None)
+
+    def things(self, radius):
+        p=self.state['player']; life=self.life; out=[]
+        if life['inside']:
+            b=self.building(life['inside']) or {}
+            business=b.get('businessType')
+            def thing(kind,name,click,**extra): out.append({'kind':kind,'name':name,'click':click,'x':round(p['x']+1.5,2),'z':round(p['z'],2),'distance':1.5,**extra})
+            if business=='ba:businesstype_school':
+                thing('EducationDoorController','Market Demands','Click to learn')
+            if business=='ba:businesstype_recruitmentagency':
+                thing('BusinessEmployeeController','Receptionist','Click to talk')
+            for key,name,price,kind,_ in SHOPS.get(business,[]):
+                if business not in FULL_SERVICE: thing('ItemController',name,None,sells=name,sells_key=key)
+            if business in SHOPS: thing('CashRegisterController','Cash register','Click to order' if business in FULL_SERVICE else 'Click to purchase')
+            for i,_ in enumerate(life['beds'].get(life['inside'],[])):
+                thing('BedController','King size bed','Click to sleep')
+            return out
+        out.append({'kind':'TaxiController','name':'Taxi','click':'Click to use taxi','x':round(p['x']+8,2),'z':round(p['z'],2),'distance':8.})
+        for b in CITY:
+            x,z=b['x']+6.,b['z']; d=math.hypot(x-p['x'],z-p['z'])
+            if d>radius: continue
+            yours=b['key'] in life['homes']
+            for_rent=b.get('buildingType')=='ba:buildingtype_residential' and not yours and not b.get('businessType')
+            business=(b.get('businessType') or '').replace('ba:businesstype_','').title() or None
+            out.append({'kind':'CityBuildingController','name':business or (b.get('buildingType') or 'building').replace('ba:buildingtype_','').title(),
+                        'click':None,'x':round(x,2),'z':round(z,2),'distance':round(d,1),'address':b['key'],'business':business,'for_rent':for_rent,'yours':yours})
+        return sorted(out,key=lambda t:t['distance'])[:40]
+
+    def skip(self, minutes, regen=0.):
+        # A time skip: the minutes pass at once, with what they bring (midnight, deliveries); energy builds up meanwhile.
+        needs=self.state['player']['needs']
+        for _ in range(int(round(minutes))):
+            self.tick()
+            if regen: needs['energy']=min(needs['max'],needs['energy']+regen+.056)
+
+    def life_command(self, cmd, args):
+        life=self.life; p=self.state['player']
+        if cmd=='use':
+            op=args.get('op') or 'list'
+            if op=='list':
+                self.require_city('use list')
+                radius=max(3.,min(80.,num(args,'radius') or 20.))
+                things=self.things(radius)
+                for i,t in enumerate(things): t['id']=i+1
+                self.last_use=things
+                return {'radius':radius,'inside':life['inside'],'things':copy.deepcopy(things)}
+            if op not in ('click','right_click'): raise ValueError(f"Unknown use op '{op}': list, click or right_click.")
+            self.require_ft('use '+op)
+            ident=num(args,'id')
+            if ident is None: raise ValueError('use click needs "id" from the last use list.')
+            if not 1<=int(ident)<=len(self.last_use): raise ValueError(f'No thing {int(ident)} in the last use list; list again.')
+            if self.state['clock']['paused']: raise ValueError('The game is paused: the walk over takes real time. Set a speed first.')
+            t=self.last_use[int(ident)-1]; before=life['inside']; start=self.seq
+            handled=self.life_use(t)
+            return {'clicked':t['name'],'kind':t['kind'],'click':t['click'],'handled':handled,'still_walking':False,'inside':life['inside'],
+                    'inside_before':before,'open':[x for x in [self.clock_held_by()] if x],'notices':[e['text'] for e in self.ring if e['seq']>start and e['kind']=='notice'],
+                    'x':round(p['x'],2),'z':round(p['z'],2)}
+        self.require_ft(cmd)
+        if cmd=='taxi':
+            address=need(args,'address',"the building's address, ba:street_<name>#<number>")
+            if not re.fullmatch(r'ba:street_[a-z0-9]+#[0-9]+',address): raise ValueError(f"address takes a building's address as the game writes it, ba:street_<name>#<number>; got '{address}'.")
+            if self.dialog!='taxi_map' or not life['taxi']:
+                raise ValueError('No taxi is waiting for you: click a taxi in the street first (use list shows the ones near you; use click gets in), then say where to.')
+            x,z=self.door(address); d=math.hypot(x-p['x'],z-p['z'])
+            fare=round(d*TAXI_PER_METRE,2); minutes=round(d*TAXI_MINUTES_PER_METRE); start=self.seq; money0=self.state['money']
+            if self.state['money']<fare:
+                self.event("You don't have enough money.",'notice')
+                return {'done':False,'address':address,'fare':0.,'minutes':0,'money':self.state['money'],'notices':["You don't have enough money."],'x':p['x'],'z':p['z']}
+            self.pay(-int(round(fare*100)),'ba:transaction_taxiride')
+            self.dialog='closed'; life['taxi']=False
+            self.skip(minutes)
+            p.update(x=x,z=z)
+            self.event(f'Test bridge: taxi to {address}: riding.')
+            return {'done':True,'address':address,'fare':round(money0-self.state['money'],2),'minutes':minutes,'money':round(self.state['money'],2),
+                    'notices':[e['text'] for e in self.ring if e['seq']>start and e['kind']=='notice'],'x':round(x,2),'z':round(z,2)}
+        if cmd=='phone':
+            app=need(args,'app','an app')
+            apps=('persona','contacts','employees','bizman','econoview','maps','market','rivals')
+            if app not in apps: raise ValueError(f"No phone app '{app}': {', '.join(apps)}.")
+            self.dialog='phone_app'; life['app']=app
+            return {'app':app,'open':True,'notices':[]}
+        if cmd=='call':
+            contacts=self.contacts()
+            if args.get('op')=='list': return {'contacts':contacts}
+            wanted=need(args,'contact',"a contact's id or name (call list shows them)")
+            match=[c for c in contacts if c['id']==wanted] or [c for c in contacts if c['name'].casefold()==wanted.casefold()]
+            if not match: raise ValueError(f"No contact '{wanted}' in your phone (call list shows them).")
+            contact=match[0]
+            life['contact']=contact['id']; life['city_step']='start'
+            self.dialog='city' if contact['id']=='the_city_of_new_york' else 'phone' if contact['id'].startswith('foodtrucks_commissary_') else 'agency'
+            return {'contact':contact['id'],'name':contact['name'],'calling':True,'open':['phone','call'],'notices':[]}
+        if cmd=='eat':
+            hands=life['hands']
+            if not hands: raise ValueError('Your hands are empty: food you buy comes in a bag to eat from.')
+            if hands['key']!='ba:itemname_paperbag': raise ValueError(f"You're holding {hands['item']}, not a bag: only food in a paper bag is eaten from the hands.")
+            foods=[c for c in hands['contents'] if c['food'] and c['paid'] and c['amount']>0]
+            item=args.get('item')
+            food=next((c for c in foods if item is None or item in (c['key'],c['item'])),None)
+            if food is None: raise ValueError('Nothing in the bag can be eaten (unpaid, sealed or not food).' if not foods else f"No '{item}' in the bag: {', '.join(c['item'] for c in foods)}.")
+            needs=p['needs']
+            if round(needs['hunger'])>=100:
+                self.event("You're too stuffed to eat this.",'notice')
+                return {'item':food['item'],'done':False,'hunger':needs['hunger'],'energy':needs['energy'],'notices':["You're too stuffed to eat this."]}
+            needs['hunger']=min(100.,needs['hunger']+food['saturation'])
+            food['amount']-=1
+            hands['contents']=[c for c in hands['contents'] if c['amount']>0]
+            if not hands['contents']: life['hands']=None
+            self.event(f"Test bridge: ate {food['key']}.")
+            return {'item':food['item'],'done':True,'hunger':round(needs['hunger'],1),'energy':round(needs['energy'],1),'notices':[]}
+        if cmd=='place':
+            x,z=num(args,'x'),num(args,'z')
+            if x is None or z is None: raise ValueError('place needs "x" and "z": a point on the floor (state\'s player x and z, or use list\'s).')
+            if life['inside'] not in life['homes']: raise ValueError('You can place furniture only inside a building you rent.')
+            hands=life['hands']
+            if not hands or hands['key']!='ba:itemname_closedcardboardbox' or not hands['contents'] or not hands['contents'][0].get('furniture'):
+                raise ValueError("You aren't holding a box of furniture (shops pack what you buy in a box).")
+            if not hands['contents'][0]['paid']: raise ValueError("You haven't paid for it.")
+            rotation=round((num(args,'rotation') or 0)/45)*45%360
+            life['beds'].setdefault(life['inside'],[]).append((x,z,rotation))
+            name=hands['contents'][0]['item']; life['hands']=None
+            self.event(f'Test bridge: place {name} at x {x:.1f}, z {z:.1f}, rotation {rotation:.0f}: placed.')
+            return {'item':name,'placed':True,'why':None,'x':round(x,2),'z':round(z,2),'rotation':float(rotation),'notices':[]}
+
+    def contacts(self):
+        out=[{'id':'the_city_of_new_york','name':'The City of New York','category':'General','unread':False}]
+        for site in {s['site'] for s in self.state['commissary']['spaces']}:
+            out.append({'id':'foodtrucks_commissary_'+site,'name':LOCALE['foodtrucks:commissary_'+site],'category':'Business','unread':False})
+        return out
+
+    def life_use(self, t):
+        life=self.life; p=self.state['player']; kind=t['kind']
+        if kind=='TaxiController':
+            self.dialog='taxi_map'; life['taxi']=True; return True
+        if kind=='CityBuildingController':
+            address=t['address']; b=self.building(address) or {}
+            p.update(x=t['x'],z=t['z'])
+            if t['for_rent']:
+                self.dialog='presentation'; life['presentation']=address; return True
+            if b.get('buildingType')=='ba:buildingtype_residential' and address not in life['homes']:
+                self.event('Private property.','notice'); return True
+            life['inside']=address
+            self.event(f'Entered {address}.')
+            return True
+        if kind=='BedController':
+            if life['hands']: self.event('You need empty hands to do that.','notice'); return True
+            self.dialog='sleep'; life['activity']={'minutes':480}; return True
+        if kind=='EducationDoorController':
+            if self.state['licence']['course_done']: self.dialog='closed'; return True
+            self.dialog='course_choice'; return True
+        if kind=='BusinessEmployeeController':
+            self.dialog='agency'; return True
+        b=self.building(life['inside']) or {}
+        goods=SHOPS.get(b.get('businessType'),[])
+        if kind=='ItemController':
+            key,name,price,what,saturation=next(g for g in goods if g[1]==t['name'])
+            cargo={'item':name,'key':key,'amount':1,'paid':False,'food':what=='food','furniture':what=='furniture','price':price,'saturation':saturation}
+            if life['hands'] and life['hands']['key']=='ba:itemname_closedcardboardbox': life['hands']['contents'].append(cargo)
+            elif life['hands']: self.event('Your hands are full.','notice'); return True
+            else: life['hands']={'item':'Closed cardboard box','key':'ba:itemname_closedcardboardbox','contents':[cargo]}
+            return True
+        if kind=='CashRegisterController':
+            if b.get('businessType') in FULL_SERVICE:
+                if life['hands']: self.event('You need empty hands to order.','notice'); return True
+                self.dialog='purchase'; life['purchase']={'choice':None,'goods':goods}; return True
+            unpaid=[c for c in (life['hands'] or {}).get('contents',[]) if not c['paid']]
+            if not unpaid: self.event('Nothing to pay for.','notice'); return True
+            self.dialog='purchase'; life['purchase']={'choice':None,'goods':None}; return True
+        return False
+
+    def life_buttons(self):
+        life=self.life; out=[]
+        if self.dialog=='presentation':
+            out+= [{'text':'Rent building'},{'text':'Back'}]
+        elif self.dialog=='purchase':
+            for key,name,price,_,_ in (life['purchase']['goods'] or []): out.append({'text':f'{name} ${price:.2f}','kind':'option','row':'Products'})
+            out+= [{'text':'Place order' if life['purchase']['goods'] else 'Pay'},{'text':'Cancel'}]
+        elif self.dialog=='sleep':
+            out+= [{'text':'Sleep for','kind':'slider','row':'Slider','value':life['activity']['minutes'],'min':5,'max':720,'whole_numbers':True},{'text':'Start sleeping'},{'text':'Cancel'}]
+        elif self.dialog=='course_choice':
+            out+= [{'text':'Food Safety Course'},{'text':'Market Demands'}]
+        elif self.dialog=='course':
+            left=(TUNING['fleet']['course']['hours']*60-life['course_minutes'])//60
+            out+= [{'text':'Hours','kind':'slider','row':'Slider','value':life['activity']['hours'],'min':1,'max':max(1,left),'whole_numbers':True},{'text':'Start'},{'text':'Cancel'}]
+        elif self.dialog=='phone_app':
+            if life['app']=='employees':
+                for c in life['candidates']: out.append({'text':f"Hire {c['name']}",'row':'Candidates/'+c['id']})
+            out.append({'text':'Close'})
+        elif self.dialog=='city':
+            fee=TUNING['fleet']['licenceFee']; permit=TUNING['fleet']['permitFee']; lic=self.state['licence']
+            if life['city_step']=='start':
+                if not lic['until_day']: out.append({'text':LOCALE['foodtrucks:dialog_city_buy'].format(fee=f'${fee:,.2f}')})
+                if lic['until_day'] and lic['permits']<len(self.state['vehicles']): out.append({'text':LOCALE['foodtrucks:dialog_city_permits']})
+            else:
+                out.append({'text':LOCALE['foodtrucks:dialog_city_permit_buy'].format(fee=f'${permit:,.2f}')})
+                out.append({'text':LOCALE['foodtrucks:dialog_city_back']})
+            out.append({'text':'Hang up'})
+        elif self.dialog=='agency':
+            out.append({'text':'Hang up'})
+        return out
+
+    def life_texts(self):
+        life=self.life
+        if self.dialog=='presentation':
+            return [f"{life['presentation']}: rent $60.00 a day, deposit $300.00."]
+        if self.dialog=='city':
+            fee=TUNING['fleet']['licenceFee']; lic=self.state['licence']
+            if life['city_step']=='permit':
+                return [clean(LOCALE['foodtrucks:dialog_city_permit'].format(vehicle='cart',place='the city',number=1,count=len(self.state['vehicles'])-lic['permits'],fee=f"${TUNING['fleet']['permitFee']:,.2f}"))]
+            key='foodtrucks:dialog_city_start_none' if not lic['until_day'] else 'foodtrucks:dialog_city_start_valid'
+            return [clean(LOCALE[key].format(fee=f'${fee:,.2f}',days=TUNING['fleet']['licenceDays'],day=lic['until_day'],left=0,
+                                            permits=len(self.state['vehicles'])-lic['permits'],events=0))]
+        if self.dialog=='agency':
+            return ['To start a recruitment campaign, you need a business of your own with a name.']
+        if self.dialog=='course_choice':
+            return ['Which course?']
+        return []
+
+    def life_set(self, args):
+        ident=num(args,'id'); value=num(args,'value')
+        if ident is None or value is None: raise ValueError('ui set needs "id" (a slider from the last list) and "value".')
+        entry=next((b for b in self.last_ui if b['id']==int(ident)),None)
+        if not entry: raise ValueError(f'No entry {int(ident)} in the last ui list; list again.')
+        if entry['kind']!='slider': raise ValueError(f"Entry {int(ident)} ({entry['text']}) isn't a slider.")
+        value=round(max(entry['min'],min(entry['max'],value)))
+        if self.dialog=='sleep': self.life['activity']['minutes']=value
+        elif self.dialog=='course': self.life['activity']['hours']=value
+        else: raise ValueError(f"Entry {int(ident)} ({entry['text']}) is no longer on screen; list again.")
+        self.event(f'Test bridge: set "{entry["text"]}" to {value}.')
+        return {'set':entry['text'],'value':float(value),'min':entry['min'],'max':entry['max'],'texts':[]}
+
+    def life_click(self, text):
+        life=self.life; p=self.state['player']
+        if text in ('Cancel','Back','Close','Hang up'):
+            if self.dialog=='city' and life['city_step']=='permit' and text=='Back': life['city_step']='start'; return
+            self.dialog='closed'; life['purchase']=None; return
+        if self.dialog=='presentation' and text=='Rent building':
+            rent,deposit=60.,300.
+            if self.state['money']<rent+deposit: self.event('Not enough money.','notice'); return
+            self.pay(-int(deposit*100),'ba:transaction_deposit'); self.pay(-int(rent*100),'ba:transaction_rent')
+            life['homes'].append(life['presentation'])
+            p['needs']['happiness_modifiers']=[m for m in p['needs']['happiness_modifiers'] if m['type']!='ba:happinessmodifier_no_home']
+            self.event(f"Rented {life['presentation']}.")
+            self.dialog='closed'; return
+        if self.dialog=='purchase':
+            if text.endswith(')') or ' $' in text:
+                life['purchase']['choice']=text; return
+            if text=='Place order':
+                choice=life['purchase']['choice']
+                if not choice: self.event('Choose something first.','notice'); return
+                key,name,price,_,saturation=next(g for g in life['purchase']['goods'] if choice.startswith(g[1]))
+                if self.state['money']<price: self.event('Not enough money.','notice'); return
+                self.pay(-int(price*100),'ba:transaction_itempurchase')
+                life['hands']={'item':'Paper bag','key':'ba:itemname_paperbag','contents':[{'item':name,'key':key,'amount':1,'paid':True,'food':True,'furniture':False,'saturation':saturation}]}
+                self.dialog='closed'; life['purchase']=None; return
+            if text=='Pay':
+                unpaid=[c for c in life['hands']['contents'] if not c['paid']]
+                total=sum(c['price'] for c in unpaid)
+                if self.state['money']<total: self.event('Not enough money.','notice'); return
+                self.pay(-int(round(total*100)),'ba:transaction_itempurchase')
+                for c in unpaid: c['paid']=True
+                if all(c['food'] for c in life['hands']['contents']): life['hands'].update(item='Paper bag',key='ba:itemname_paperbag')
+                self.dialog='closed'; life['purchase']=None; return
+        if self.dialog=='sleep' and text=='Start sleeping':
+            minutes=life['activity']['minutes']; self.dialog='closed'
+            self.time_skip=True
+            try: self.skip(minutes,BED_ENERGY_PER_MINUTE)
+            finally: self.time_skip=False
+            self.event(f'Slept {minutes} minutes.'); return
+        if self.dialog=='course_choice':
+            if text=='Food Safety Course': self.dialog='course'; life['activity']={'hours':1}
+            else: self.dialog='closed'
+            return
+        if self.dialog=='course' and text=='Start':
+            hours=life['activity']['hours']; price=TUNING['fleet']['course']['pricePerHour']*hours
+            if self.state['money']<price: self.event('Not enough money.','notice'); return
+            self.pay(-int(price*100),'ba:transaction_education'); self.dialog='closed'
+            self.time_skip=True
+            try: self.skip(hours*60)
+            finally: self.time_skip=False
+            life['course_minutes']+=hours*60
+            if life['course_minutes']>=TUNING['fleet']['course']['hours']*60: self.state['licence']['course_done']=True
+            return
+        if self.dialog=='phone_app' and text.startswith('Hire '):
+            c=next(c for c in life['candidates'] if text=='Hire '+c['name'])
+            life['candidates'].remove(c)
+            self.employees.append({**c,'label':LOCALE['foodtrucks:bizman_page_crew_option'].format(name=c['name'],skill=int(c['skill']),satisfaction=100,wage=f"${c['wage']:.2f}")})
+            self.event(f"Hired {c['name']}."); return
+        if self.dialog=='city':
+            lic=self.state['licence']
+            if text.startswith('Buy a licence'):
+                if not lic['course_done']:
+                    self.event(clean(LOCALE['foodtrucks:dialog_city_no_course']),'phone'); self.dialog='closed'; return
+                fee=TUNING['fleet']['licenceFee']
+                if self.state['money']<fee: self.event('Not enough money.','notice'); return
+                self.pay(-fee*100,'foodtrucks:transaction_licence')
+                lic['until_day']=self.state['clock']['day']-1+TUNING['fleet']['licenceDays']; return
+            if text==LOCALE['foodtrucks:dialog_city_permits']: life['city_step']='permit'; return
+            if text.startswith('Buy the permit'):
+                fee=TUNING['fleet']['permitFee']
+                if self.state['money']<fee: self.event('Not enough money.','notice'); return
+                self.pay(-fee*100,'foodtrucks:transaction_permit'); lic['permits']+=1
+                if lic['permits']>=len(self.state['vehicles']): life['city_step']='start'
+                return
+
     def require_city(self, cmd):
         scene=self.state['scene']
         if scene!='city': raise ValueError(f'{cmd} works in the city only; the game is at the {scene} now.')
@@ -1563,6 +1921,7 @@ class Mock:
             self.require_city(cmd)
             return self.map_command(args)
         if cmd=='walk': return self.walk(args)
+        if cmd in ('use','taxi','phone','call','eat','place'): return self.life_command(cmd, args)
         if cmd=='fixture': return self.fixture(args)
         if cmd=='logistics':
             self.require_city(cmd)
@@ -1846,10 +2205,14 @@ class Mock:
                     # The mock reads back the unshared quote: one flat fee for tomorrow's delivery.
                     fee=per
                     texts=[clean(LOCALE['foodtrucks:dialog_commissary_quote'].format(items='Hotdog',goods=f'${goods:.2f}',fee=f'${fee:.2f}',perDelivery=f'${per:.2f}',total=f'${goods+fee:.2f}',time='08:00'))]
+                if self.dialog in LIFE_DIALOGS: texts=self.life_texts()
                 return {'buttons':self.last_ui,'texts':texts}
             if op=='click':
                 self.require_ui()
                 return self.click(args)
+            if op=='set':
+                self.require_ui()
+                return self.life_set(args)
             if op=='escape':
                 self.require_ui()
                 if self.dialog not in ('commissary','items','opens','closes'):
@@ -1864,7 +2227,9 @@ class Mock:
                     if hatch:
                         self.operate(self.vehicle(hatch),'step_out'); return {'closed':'activity panel'}
                     raise ValueError('Nothing is open to close (Esc would open the pause menu).')
-                closed='list picker' if self.dialog in ('commissary','items','opens','closes') else 'phone'
+                closed='list picker' if self.dialog in ('commissary','items','opens','closes') else 'map' if self.dialog=='taxi_map' else 'activity panel' if self.dialog in LIFE_PANELS else 'phone'
+                if self.dialog=='taxi_map': self.life['taxi']=False
+                if self.dialog=='purchase': self.life['purchase']=None
                 self.dialog='closed'; self.event(f'Test bridge: escape: {closed}.')
                 return {'closed':closed}
             if op=='tree':
@@ -1928,7 +2293,7 @@ class Mock:
             self.event(f'Mock console: {line}')
             return {'output':[f'Mock console accepted: {line}']}
         if cmd=='quit': return {}
-        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, vehicle, commissary, crew, route, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.")
+        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, place, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.")
 
 
 class Handler(BaseHTTPRequestHandler):
