@@ -2793,6 +2793,16 @@ class Mock:
                         self.work['minutes']=max(5,min(720,round(value)))
                         return {'set':entry['text'],'value':self.work['minutes']}
                 return self.life_set(args)
+            if op=='type':
+                self.require_ui()
+                ident=num(args,'id'); text=args.get('text')
+                if ident is None or text is None: raise ValueError('ui type needs "id" (a text field from the last list) and "text".')
+                entry=next((e for e in self.last_ui if e['id']==int(ident)),None)
+                if not entry: raise ValueError(f'No entry {int(ident)} in the last ui list; list again.')
+                if entry.get('kind')!='text field': raise ValueError(f"Entry {int(ident)} ({entry['text']}) isn't a text field.")
+                entry['value']=str(text)
+                self.event(f'Test bridge: typed "{text}" into "{entry["text"]}".')
+                return {'typed':entry['text'],'value':str(text),'texts':[]}
             if op=='escape':
                 self.require_ui()
                 if self.dialog not in ('commissary','items','opens','closes'):
@@ -2815,7 +2825,7 @@ class Mock:
             if op=='tree':
                 need(args,'path',"the end of an object's hierarchy path")
                 return {'found':[]}
-            raise ValueError(f"Unknown ui op '{op}': list, click, escape or tree.")
+            raise ValueError(f"Unknown ui op '{op}': list, click, set, type, escape or tree.")
         if cmd=='shoot':
             self.require_city(cmd)
             name=need(args,'name',"the picture's file name, without .png")

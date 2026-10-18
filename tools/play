@@ -45,7 +45,7 @@ Commands (each also takes --help):
                                rivals.
   call list | call CONTACT     Your phone's contacts, or call one (by name or id). Its options are then on screen (ui).
   screen NAME [--fetch DIR]    A picture of the screen.
-  ui list | ui click TEXT | ui click --id N | ui set ID VALUE | ui escape
+  ui list | ui click TEXT | ui click --id N | ui set ID VALUE | ui type ID TEXT | ui escape
                                The buttons, options, sliders and texts on screen; pressing one, moving a slider, or
                                closing what is open. A click that starts a time skip (sleep, a course) waits for it.
   time pause | time speed N | time until [DAY] HH:MM [--speed N]
@@ -449,7 +449,8 @@ class Play:
                 kind = b.get('kind')
                 extra = (' (option)' if kind == 'option' else
                          f" (slider {b.get('value')}, from {b.get('min')} to {b.get('max')})" if kind == 'slider' else
-                         f" (toggle, {'on' if b.get('on') else 'off'})" if kind == 'toggle' else '')
+                         f" (toggle, {'on' if b.get('on') else 'off'})" if kind == 'toggle' else
+                         f" (text field: \"{b.get('value') or ''}\")" if kind == 'text field' else '')
                 self.out(f"[{b['id']}] {b['text']}{extra}")
             for t in r['texts']:
                 self.out(f"text: {t}")
@@ -467,10 +468,15 @@ class Play:
             r = self.call('ui', {'op': 'set', 'id': ident, 'value': value})
             self.out(f"{r['set']}: {r['value']} (from {r['min']} to {r['max']}).")
             for t in r.get('texts') or []: self.out(f'text: {t}')
+        elif op == 'type':
+            if ident is None or text is None: raise Refused('ui type ID TEXT (a text field from the last ui list)')
+            r = self.call('ui', {'op': 'type', 'id': ident, 'text': text})
+            self.out(f"{r['typed']}: \"{r['value']}\".")
+            for t in r.get('texts') or []: self.out(f'text: {t}')
         elif op == 'escape':
             self.out(f"Closed {self.call('ui', {'op': 'escape'})['closed']}.")
         else:
-            raise Refused(f'Unknown ui op {op}: list, click, set or escape.')
+            raise Refused(f'Unknown ui op {op}: list, click, set, type or escape.')
 
     def wait_for_skip(self, cursor):
         """A click that started a time skip (sleep, a course, a ride): wait until the game's clock is back, then say what
@@ -667,7 +673,7 @@ def parser():
     n.add_argument('--to')
     n = sub.add_parser('map', help="the city map's highlights"); n.add_argument('what'); n.add_argument('--limit', type=int)
     n = sub.add_parser('screen', help='a picture of the screen'); n.add_argument('name'); n.add_argument('--fetch')
-    n = sub.add_parser('ui', help='buttons and texts on screen'); n.add_argument('op', choices=('list', 'click', 'set', 'escape'))
+    n = sub.add_parser('ui', help='buttons and texts on screen'); n.add_argument('op', choices=('list', 'click', 'set', 'type', 'escape'))
     n.add_argument('text', nargs='*'); n.add_argument('--id', type=int)
     n = sub.add_parser('time', help='pause, speed or run until a moment'); n.add_argument('op', choices=('pause', 'speed', 'until'))
     n.add_argument('value', nargs='*'); n.add_argument('--speed', type=float); n.add_argument('--no-wait', action='store_true')
@@ -714,6 +720,9 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
             if args.op == 'set':
                 if len(args.text) != 2 or not args.text[0].isdigit(): raise Refused('ui set ID VALUE (a slider from the last ui list)')
                 play.ui('set', args.text[1], int(args.text[0]))
+            elif args.op == 'type':
+                if len(args.text) < 2 or not args.text[0].isdigit(): raise Refused('ui type ID TEXT (a text field from the last ui list)')
+                play.ui('type', ' '.join(args.text[1:]), int(args.text[0]))
             else:
                 play.ui(args.op, ' '.join(args.text) if args.text else None, args.id)
         elif c == 'time':

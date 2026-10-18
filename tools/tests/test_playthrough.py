@@ -786,6 +786,12 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.play('use', self.thing('Click to sleep')), 0, self.lines)
         self.assertEqual(self.play('ui', 'list'), 0, self.lines)
         slider = next(line for line in self.lines if '(slider' in line).split(']')[0][1:]
+        # A text field (the bank's loan amount): ui type fills it; a slider refuses it.
+        self.assertNotEqual(self.play('ui', 'type', slider, '20000'), 0, self.lines)
+        self.session.mock.last_ui.append({'id': 99, 'text': 'Amount', 'kind': 'text field', 'path': 'Loan/Amount', 'value': ''})
+        self.assertEqual(self.play('ui', 'type', '99', '20000'), 0, self.lines)
+        self.assertIn('Amount: "20000".', self.lines[0])
+        self.session.mock.last_ui.pop()
         self.assertEqual(self.play('ui', 'set', slider, '120'), 0, self.lines)
         day_time = self.session.mock.state['clock']['time']
         self.ui_click('Start sleeping')
