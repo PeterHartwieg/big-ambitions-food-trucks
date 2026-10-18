@@ -30,6 +30,10 @@ namespace FoodTrucks
         private static readonly Type? TmpText = Type.GetType("TMPro.TMP_Text, Unity.TextMeshPro");
         private static readonly PropertyInfo? TmpTextProperty = TmpText?.GetProperty("text");
         private static readonly PropertyInfo? TmpAlphaProperty = TmpText?.GetProperty("alpha");
+        // Text fields (a bank loan's amount, BankLoanSettings.amountInput): TMP_InputField, by reflection too.
+        private static readonly Type? TmpInput = Type.GetType("TMPro.TMP_InputField, Unity.TextMeshPro");
+        private static readonly PropertyInfo? TmpInputText = TmpInput?.GetProperty("text");
+        private static readonly PropertyInfo? TmpInputInteractable = TmpInput?.GetProperty("interactable");
         private static readonly FieldInfo? OptionsField = AccessTools.Field(typeof(Dropdown), "_options");
         private static readonly FieldInfo? LocalizeField = AccessTools.Field(typeof(Dropdown), "_localizeOptions");
 
@@ -46,6 +50,8 @@ namespace FoodTrucks
             // clicked as a drag or a click on them does.
             public Slider? Slider;
             public Toggle? Toggle;
+            // A text field: typed into with ui type.
+            public Component? Input;
         }
 
         // The entries of the last list, for click by id.
@@ -66,11 +72,14 @@ namespace FoodTrucks
                 case "set":
                     RequireFtCity(op);
                     return Set(args);
+                case "type":
+                    RequireFtCity(op);
+                    return TypeText(args);
                 case "escape":
                     RequireFtCity(op);
                     return Escape();
                 default:
-                    throw new BridgeError($"Unknown ui op '{op}': list, click, set, escape or tree.");
+                    throw new BridgeError($"Unknown ui op '{op}': list, click, set, type, escape or tree.");
             }
         }
 
@@ -176,6 +185,7 @@ namespace FoodTrucks
             if (entry.Button != null) return Label(entry.Button.transform);
             if (entry.Slider != null) return ControlLabel(entry.Slider.transform);
             if (entry.Toggle != null) return ControlLabel(entry.Toggle.transform);
+            if (entry.Input != null) return ControlLabel(entry.Input.transform);
             if (entry.Dropdown != null && OptionsField?.GetValue(entry.Dropdown) is List<string> options && entry.Option < options.Count)
             {
                 var localize = LocalizeField?.GetValue(entry.Dropdown) is bool b && b;
@@ -205,6 +215,7 @@ namespace FoodTrucks
                 json["whole_numbers"] = e.Slider.wholeNumbers;
             }
             if (e.Toggle != null) json["on"] = e.Toggle.isOn;
+            if (e.Input != null) json["value"] = TmpInputText?.GetValue(e.Input) as string ?? "";
             return json;
         }
 
@@ -237,6 +248,13 @@ namespace FoodTrucks
                 if (toggle == null || !toggle.IsActive() || !toggle.IsInteractable() || !Visible(toggle.transform, out var at)) continue;
                 found.Add((at, new Entry { Toggle = toggle, Kind = "toggle", Text = ControlLabel(toggle.transform), Path = PathOf(toggle.transform) }));
             }
+            if (TmpInput != null)
+                foreach (var input in Object.FindObjectsOfType(TmpInput).OfType<Component>())
+                {
+                    if (input == null || !(input is Behaviour b) || !b.isActiveAndEnabled || !(TmpInputInteractable?.GetValue(input) is bool on && on) ||
+                        !Visible(input.transform, out var at)) continue;
+                    found.Add((at, new Entry { Input = input, Kind = "text field", Text = ControlLabel(input.transform), Path = PathOf(input.transform) }));
+                }
             // Top to bottom, then left to right, as a person reads the screen.
             var list = found.OrderByDescending(f => Mathf.Round(f.At.y)).ThenBy(f => f.At.x).Select(f => f.Entry).ToList();
             for (var i = 0; i < list.Count; i++) list[i].Id = i + 1;
@@ -275,6 +293,7 @@ namespace FoodTrucks
             if (SaveOrLoadControl(entry)) throw new BridgeError(SaveLoadText);
 
             if (entry.Slider != null) throw new BridgeError($"\"{entry.Text}\" is a slider: ui set with its id and a value.");
+            if (entry.Input != null) throw new BridgeError($"\"{entry.Text}\" is a text field: ui type with its id and the text.");
             if (entry.Button != null)
             {
                 if (!entry.Button.IsInteractable()) throw new BridgeError($"\"{entry.Text}\" isn't clickable now.");
@@ -309,7 +328,7 @@ namespace FoodTrucks
             return open;
         }
 
-        private static Component? Target(Entry entry) => (Component?)entry.Button ?? (Component?)entry.Dropdown ?? (Component?)entry.Slider ?? entry.Toggle;
+        private static Component? Target(Entry entry) => (Component?)entry.Button ?? (Component?)entry.Dropdown ?? (Component?)entry.Slider ?? (Component?)entry.Toggle ?? entry.Input;
 
         // { "id", "value" }: a slider from the last list moved to the value, as dragging it does (its onValueChanged runs:
         // the activity panel's hours, a campaign's days). The value is held to the slider's range and, for a slider of
@@ -328,6 +347,23 @@ namespace FoodTrucks
             slider.value = wanted;
             Log.Info($"Test bridge: set \"{entry.Text}\" to {slider.value} ({entry.Path}).");
             return new JObject { ["set"] = entry.Text, ["value"] = Math.Round(slider.value, 2), ["min"] = slider.minValue, ["max"] = slider.maxValue, ["texts"] = new JArray(Texts()) };
+        }
+
+        // { "id", "text" }: a text field from the last list given that text, as typing it does (its onValueChanged runs:
+        // the bank's loan amount updates the daily payment). Nothing is confirmed: the screen's own buttons do that.
+        private static JToken TypeText(JObject args)
+        {
+            var id = TestBridgeCommands.Num(args, "id") ?? throw new BridgeError("ui type needs \"id\" (a text field from the last list) and \"text\".");
+            var text = TestBridgeCommands.Str(args, "text") ?? throw new BridgeError("ui type needs \"text\".");
+            var entry = last.FirstOrDefault(e => e.Id == (int)id) ?? throw new BridgeError($"No entry {id} in the last ui list; list again.");
+            var input = entry.Input ?? throw new BridgeError($"Entry {id} ({entry.Text}) isn't a text field.");
+            if (!(input is Behaviour b) || !b.isActiveAndEnabled || !Visible(input.transform, out _))
+                throw new BridgeError($"Entry {id} ({entry.Text}) is no longer on screen; list again.");
+            if (SaveOrLoadControl(entry)) throw new BridgeError(SaveLoadText);
+            TmpInputText!.SetValue(input, text);
+            var now = TmpInputText.GetValue(input) as string ?? "";
+            Log.Info($"Test bridge: typed \"{now}\" into \"{entry.Text}\" ({entry.Path}).");
+            return new JObject { ["typed"] = entry.Text, ["value"] = now, ["texts"] = new JArray(Texts()) };
         }
 
         // A slider's or toggle's own text, else the nearest text of its parents (the label beside it).
