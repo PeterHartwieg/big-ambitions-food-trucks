@@ -28,6 +28,8 @@ namespace FoodTrucks
         private Vector3 cartPosition;
         private Quaternion cartRotation;
 
+        internal string? VehicleId => vehicleId;
+
         public bool PlayerAt(string id) => vehicleId == id;
 
         public void Open(VehicleController controller)
@@ -170,7 +172,11 @@ namespace FoodTrucks
 
         // PlayerController emits this for both click/SetGoal navigation and WASD starting. Release without
         // ResetNavigation: the new destination/action belongs to the game and must be allowed to finish.
-        private void OnNavigation() => Release("player started walking or interacting");
+        private void OnNavigation()
+        {
+            if (vehicleId != null) ServingWork.BeforeLeaving(vehicleId);
+            Release("player started walking or interacting");
+        }
 
         public void Closed(string id)
         {
@@ -199,7 +205,7 @@ namespace FoodTrucks
                 var controller = cart;
                 var agent = who?.Character?.navmeshAgent;
                 if (who == null || who != PlayerHelper.PlayerController || controller == null || LoadScene.isLoading ||
-                    StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId)?.IsOpen != true || CartSelling.Skipping ||
+                    StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId)?.IsOpen != true || (CartSelling.Skipping && !ServingWork.IsSkipping(vehicleId)) ||
                     !string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId) || BuildingManager.IsInsideBuilding ||
                     UndergroundParkingManager.IsInsideParking || agent == null || !agent.isActiveAndEnabled || !agent.isOnNavMesh ||
                     Vector3.Distance(controller.transform.position, cartPosition) > 0.1f || Quaternion.Angle(controller.transform.rotation, cartRotation) > 1f ||

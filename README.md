@@ -35,6 +35,8 @@ A save that still holds a Food Trucks vehicle breaks without the mod: a held car
 
 Street food sales, licence and permit fees, commissary rent, orders and overnight fines stay in that save's history, labelled with raw keys (`foodtrucks:transaction_sale`, `foodtrucks:transaction_licence`, `foodtrucks:transaction_permit`, `foodtrucks:transaction_commissary_rent` and so on, and `foodtrucks:transaction_cityfees_label` and `foodtrucks:transaction_commissary_label` on the tax statement) once the mod is gone, and the City of New York's texts about the licence and overnight fines show their raw `foodtrucks:` keys. The mod's own data stays in the save and does nothing without the mod.
 
+Working windows (18 October 2026): **pending in game**. Carts and truck hatches use the native work fast-forward and time-skip controls, a work-duration slider, native work needs drain and a read-only vehicle cargo HUD. Sales keep their minute-by-minute Core rules through acceleration and skips. Stopping cart work now pauses player service even while nearby; Work the window resumes it. Bridge and blind-play controls are documented in [test-bridge.md](docs/test-bridge.md#serving-work-controls); [CHECKS.md](CHECKS.md) starts with the required play checks. Local compilation and automated tests do not establish in-game evidence.
+
 ## Evidence
 
 Each question the mod depends on, and how sure we are. "Checked" means seen in the game. Reading the game's code counts as unverified. Milestone 0 was played on 7 October 2026 with the 1.0 game (build 25482473); the full session report is in [docs/evidence/milestone-0-session-1.md](docs/evidence/milestone-0-session-1.md).

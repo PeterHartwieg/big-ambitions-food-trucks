@@ -901,7 +901,7 @@ namespace FoodTrucks
 
         private static object Vehicle(JObject args)
         {
-            var op = Need(args, "op", "open, close, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy");
+            var op = Need(args, "op", "open, close, fast_forward, skip_work, stop_work, work_window, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy");
             if (op == "buy") return Buy(args);
             var id = Need(args, "id", "the food vehicle's id");
             if (id == DrivingVehicle) throw new BridgeError($"{id} is on a drive: wait for it (drive status).");
@@ -915,6 +915,7 @@ namespace FoodTrucks
             var cargoBefore = Cargo();
             // Why Commissary stock or the commissary's Spaces refused, when it says so without a notice.
             string? why = null;
+            var workAccepted = false;
             var spaceBefore = Space();
             void InIt(string what)
             {
@@ -935,6 +936,26 @@ namespace FoodTrucks
                         if (TruckWindow.PanelClose(id)) break;
                         if (FoodTrucks.Core.Saves.StreetSales.Find(state, id)?.IsOpen != true) throw new BridgeError($"Vehicle {id} isn't open.");
                         CartSelling.CloseByPlayer(id);
+                        break;
+                    case "fast_forward":
+                    case "skip_work":
+                    {
+                        var duration = Num(args, "minutes");
+                        if (op == "skip_work" && (duration == null || duration != Math.Floor(duration.Value) || duration < 5 || duration > 720))
+                            throw new BridgeError("minutes must be a whole number from 5 to 720.");
+                        if (args["enabled"] != null && args["enabled"]!.Type != JTokenType.Boolean) throw new BridgeError("enabled must be true or false.");
+                        ServingWork.Control(id, op, duration == null ? (int?)null : (int)duration.Value, (bool?)args["enabled"] ?? true);
+                        workAccepted = true;
+                        break;
+                    }
+                    case "work_window":
+                        if (!CartSelling.CanWorkCart(vehicle)) throw new BridgeError("Work the window needs an open cart and the player free on foot.");
+                        CartSelling.WorkCart(Spawned(vehicle));
+                        workAccepted = true;
+                        break;
+                    case "stop_work":
+                        if (ServingWork.Current?.VehicleId != id) throw new BridgeError("The player is not working this window.");
+                        ServingWork.Current.Finish();
                         break;
                     case "step_out":
                         if (!TruckWindow.PanelStepOut(id)) throw new BridgeError($"The player isn't at the hatch of {id}.");
@@ -980,9 +1001,9 @@ namespace FoodTrucks
                         why = global::FoodTrucks.Commissary.RentBayForTesting(vehicle);
                         break;
                     default:
-                        throw new BridgeError($"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy.");
+                        throw new BridgeError($"Unknown op '{op}': open, close, fast_forward, skip_work, stop_work, work_window, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy.");
                 }
-            }, notices => VehicleReply(op, id, vehicle, state, notices, why, IsOpen, Cargo, Space, cargoBefore, spaceBefore));
+            }, notices => VehicleReply(op, id, vehicle, state, notices, why, IsOpen, Cargo, Space, cargoBefore, spaceBefore, workAccepted));
         }
 
         // { "op": "buy", "kind": "truck" | "cart" }: the debug spawn beside the player, paid at the dealer's price (the vehicle
@@ -1028,12 +1049,16 @@ namespace FoodTrucks
 
         // Whether the operation happened, read from the state it should have changed (a refusal leaves only its notice).
         private static JObject VehicleReply(string op, string id, VehicleInstance vehicle, FoodTrucks.Core.Saves.SaveState state, List<string> notices,
-            string? why, Func<bool> IsOpen, Func<int> Cargo, Func<string?> Space, int cargoBefore, string? spaceBefore)
+            string? why, Func<bool> IsOpen, Func<int> Cargo, Func<string?> Space, int cargoBefore, string? spaceBefore, bool workAccepted = false)
         {
             var game = SaveGameManager.Current;
             bool done;
             switch (op)
             {
+                case "work_window": done = workAccepted; break;
+                case "fast_forward": done = workAccepted; break;
+                case "skip_work": done = workAccepted; break;
+                case "stop_work": done = ServingWork.VehicleId != id; break;
                 case "open": done = IsOpen(); break;
                 case "close": done = !IsOpen(); break;
                 case "step_out": done = !TruckWindow.PlayerAt(id); break;

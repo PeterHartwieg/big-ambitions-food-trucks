@@ -132,6 +132,11 @@ namespace FoodTrucks.Core.Saves {
     public static class StreetSales { public static VehicleState Vehicle=new(); public static VehicleState Find(object? state,string id)=>Vehicle; }
 }
 namespace FoodTrucks {
+internal static class ServingWork {
+        public static bool OwnedSkip;
+        public static bool IsSkipping(string id) => OwnedSkip;
+        public static void BeforeLeaving(string id) {}
+    }
     public static class FoodTrucksSession { public static object CurrentState=new(); }
     public static class CartSelling { public static bool Skipping; }
     public static class TruckWindow { public static string? CurrentPhase; public static string? Phase()=>CurrentPhase; }
@@ -164,7 +169,7 @@ class Harness {
     static void Near(Vector3 a,Vector3 b,string why)=>Check(Vector3.Distance(a,b)<.001f,why);
     static (CartServing,PlayerController,VehicleController) Setup(int side=1,float yaw=0) {
         PlayerHelper.PlayerController=new(); SaveGameManager.Current=new();
-        FoodTrucks.Core.Saves.StreetSales.Vehicle=new(); CartSelling.Skipping=false;
+        FoodTrucks.Core.Saves.StreetSales.Vehicle=new(); CartSelling.Skipping=false; ServingWork.OwnedSkip=false;
         BuildingManager.IsInsideBuilding=false; TruckWindow.CurrentPhase=null;
         NavMesh.Ground=(p,r)=>p; NavMesh.PedestrianGround=(p,r)=>p;
         NavMesh.Route=p=>(true,NavMeshPathStatus.PathComplete); NavMesh.Paths.Clear(); NavMesh.Destinations.Clear();
@@ -297,6 +302,13 @@ class Harness {
             var (s,p,c)=Setup(); p.Character.navmeshAgent.WarpWorks=false; s.Open(c);
             p.transform.position=new(1,0,0); s.LateUpdate(); Near(p.transform.position,new(1,0,0),"failed warp never held");
             Check(Log.Lines.Any(x=>x.Contains("warp to")),"failed warp logged");
+        }
+        {
+            var (s,p,c)=Setup(); s.Open(c);
+            CartSelling.Skipping=true; ServingWork.OwnedSkip=true; s.LateUpdate();
+            Check(s.PlayerAt(c.vehicleInstance.id),"owned work skip keeps the serving stance");
+            ServingWork.OwnedSkip=false; s.LateUpdate();
+            Check(!s.PlayerAt(c.vehicleInstance.id),"unrelated skip releases the serving stance");
         }
         Check(UnityEngine.Object.Destroyed>0,"temporary teleport targets cleaned up");
         Console.WriteLine("PASS: cart serving pavement, reachable placements, fallback, idle hold and release");

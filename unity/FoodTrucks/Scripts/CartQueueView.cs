@@ -147,7 +147,7 @@ namespace FoodTrucks
         {
             try
             {
-                if (Time.unscaledTime >= nextCheck)
+                if (Time.unscaledTime >= nextCheck || ServingWork.Accelerated)
                 {
                     nextCheck = Time.unscaledTime + CheckSeconds;
                     CheckLines();

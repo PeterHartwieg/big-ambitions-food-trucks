@@ -1,3 +1,19 @@
+# Working a serving window (18 October 2026, next build)
+
+**Pending in game.** Core and mock tests cover the selling clock and controls; the native UI, animation, layout and needs still require play. No mod build or game-PC session was run for this change. At startup, `PlayerActivityUI.SetUpSpeedOptions`, `PlayerActivityUI.OnPlayerActionPressed`, the serving `GameManager.RunMainGameTick`, `ItemPanelUI.UpdateButtonsVisibility`, `ItemPanelUI.SetupCargoSlots` and `VehicleController.DriveVehicle` patches must each log `Active`.
+
+| # | Do | Look for |
+|---|---|---|
+| SW1 | Open a cart, then a truck; wait for the work panel | Native fast-forward toggle, skip button and work-duration slider (5–720 minutes); cart keeps its pavement stance, truck keeps its hatch attachment. Vehicle cargo appears at the bottom; check panel overlap at the game's supported screen sizes |
+| SW2 | Toggle fast-forward by mouse and its native key at each vehicle; turn it off | Game speed uses `TimeSpeed.FastForward`; the clock, world and customers follow the game's speed together. Sales and stock keep up, with no held-order pile-up or duplicate takings when customers leave |
+| SW3 | Save before opening; compare 60 minutes of ordinary service with a 60-minute work skip from the same save, pitch, menu and staffing | Same Core orders, stock consumption, sold counts, stock cost and unpaid takings; no payment before midnight. Include main items with drink add-ons, player plus crew, and a second crewed vehicle elsewhere |
+| SW4 | Set the slider to 15 minutes, then skip; repeat through midnight | Chosen duration is respected (no extra hour added). Needs drain as native register work, including hunger/happiness effects; final minute is sold once. Midnight pays each sold day's pot once and day summaries stay correct |
+| SW5 | Skip with little stock; repeat when a crew route/event closes the window, a licence expires, and energy reaches zero | Skip stops at the first simulated minute that sells out or closes the window (at most one minute granularity); no later sales or needs charged as work. Player can move afterwards; no fast-forward or work spender remains |
+| SW6 | Cancel a running work skip; stop work; step out or drive from the truck; close/grab the cart; save/load and leave the scene | Completed sales survive once. The speed and cargo panel release cleanly. Loading does not restore a work skip or attachment. Unrelated sleep/study skips generate no player window sales |
+| SW7 | Stop at an open cart and remain beside it; choose Work the window to return. Step out of a truck, then Back to the hatch | Player sales pause when work stops. Returning restores controls, needs drain and cargo. Crew can continue alone; cart return never teleports into the street |
+| SW8 | Inspect vehicle cargo during normal and fast service; try cargo buttons, keyboard shortcuts and dragging | Counts refresh after every sale, stock information remains visible, and no taking, selling, unloading or commissary transfer is enabled. Enter/push afterwards: the normal interactive cargo panel works again |
+| SW9 | Blind tools: `play vehicle ID fast_forward on`, `… off`, `… skip_work 30`, `… stop_work`, cart `… work_window`, truck `… back_to_hatch` | Same native controls, no needs top-ups. `player.work` reports vehicle, duration and speed. Skip command waits for the native skip to end, including early sell-out/cancel; commands away from the work panel refuse |
+
 # No opening notice (next build)
 
 Peter, 18 October 2026: opening a cart or truck shows no notice (how busy a place is, the player learns by watching). **Pending in game.** Supersedes BR14 and M23's opening texts.

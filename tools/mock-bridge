@@ -209,6 +209,9 @@ class Mock:
             'vehicles': [], 'commissary': {'spaces': [], 'orders': [], 'stock': [], 'unpaid': {'rent': 0, 'fines': 0}},
             'ledger_today': {'street_food': 0., 'sales_waiting': 0., 'crew_waiting': 0.}, 'notices_recent': list(self.recent)}
         self.absolute = 420
+        self.work = None
+        self.work_goal = None
+        self.time_skip = False
         self.until = None
         self.dialog = 'closed'
         self.employees = []
@@ -285,6 +288,7 @@ class Mock:
         finally: self.save_in_progress=False
 
     def restore(self, name, emit=True):
+        self.finish_work()
         if name not in self.saves:
             raise ValueError('No such mock save: use FT mock or save the current city first')
         arrived_at=self.state['clock'].get('arrived_at')
@@ -364,6 +368,7 @@ class Mock:
         self.event(f"Test bridge: load '{name}' done: day 1, the mod's save data attached.")
 
     def finish_load(self, name):
+        self.finish_work()
         self.restore(name, emit=False)
         self.load={'name':name,'status':'done','error':None,'new_game':None}
         if self.logistics and self.logistics['plan']['destinations']:
@@ -534,6 +539,7 @@ class Mock:
         if held is not None and held['kind'] not in ('cart','handtruck'):
             raise ValueError("You're in a vehicle you drive: get out first (vehicle ID exit), or push a cart instead.")
         if player['at_hatch']: raise ValueError("You're at a truck's hatch: step out first (vehicle ID exit).")
+        if self.work: self.finish_work()
         place=args.get('place'); bay=None
         if place is not None:
             kind,_,identifier=str(place).partition(':')
@@ -915,7 +921,7 @@ class Mock:
         player=self.state['player']
         if not v['open'] or player['in_vehicle']==v['id']: return 'nobody'
         if v['kind']=='truck' and player['at_hatch']==v['id']: return 'player'
-        if v['kind']=='cart' and ((player['x']-v['x'])**2+(player['y']-v['y'])**2+(player['z']-v['z'])**2)**.5<=8: return 'player'
+        if v['kind']=='cart' and self.work and self.work['vehicle']==v['id'] and ((player['x']-v['x'])**2+(player['y']-v['y'])**2+(player['z']-v['z'])**2)**.5<=8: return 'player'
         return 'crew' if v['crew'] else 'nobody'
 
     def read_state(self):
@@ -927,6 +933,7 @@ class Mock:
             result['employees']=[{k:e[k] for k in ('id','name','skill','satisfaction','wage')} for e in self.employees if e['name'] not in assigned]
             player=result['player']
             player['activity']='driving' if player['in_vehicle'] and self.vehicle(player['in_vehicle'])['kind']=='truck' else 'pushing' if player['in_vehicle'] else 'starting' if self.activity_starting else 'at_hatch' if player['at_hatch'] else 'walking' if self.walks else 'on_foot'
+            player['work']=copy.deepcopy(self.work)
             player['clock_held_by']=self.clock_held_by()
             player.update(hands=copy.deepcopy(self.life['hands']),inside=self.life['inside'],homes=list(self.life['homes']),riding=False)
             pushing=next((t for t in self.life['handtrucks'] if t['id']==player['in_vehicle']),None)
@@ -1121,6 +1128,8 @@ class Mock:
                 elif not active and v['open']:
                     v.update(open=False, serving='nobody', queue=None)
                     self.event(f"Truck {v['id']}: closing notice not shown (the crew's window, the player away or asleep).")
+            if v['open'] and (self.state['licence']['until_day'] or 0)<day:
+                v.update(open=False,serving='nobody',queue=None)
             v['serving']=self.serving(v)
             waiting = self.__dict__.get('paused_notice', set())
             if v['id'] in waiting:
@@ -1146,6 +1155,14 @@ class Mock:
                         self.hours[v['id']] = self.hours.get(v['id'], 0) + 1
                     else:
                         self.event(f"Sale: {stock['key']} for ${SALE_CENTS/100:.2f} on day {day}, {stock['amount']} of it left.")
+        if self.work:
+            worked=self.vehicle(self.work['vehicle'])
+            if not any(item['amount']>0 for item in worked['stock']):
+                worked.update(open=False,serving='nobody',queue=None)
+            if (not worked['open'] or self.state['player']['needs']['energy']<=0 or
+                    self.work_goal is not None and self.absolute>=self.work_goal):
+                self.state['player']['at_hatch']=None
+                self.finish_work()
         self.settle_takings()
         if self.until is not None and self.absolute >= self.until:
             self.until = None
@@ -1176,13 +1193,17 @@ class Mock:
                     elif now >= due:
                         self.walks.remove((due,action))
                         action()
-                if c['paused'] or self.state['scene']!='city':
+                work_skip = self.work_goal is not None and self.time_skip
+                if (c['paused'] and not work_skip) or self.state['scene']!='city':
                     credit = 0
                 else:
-                    credit += (now - previous) * c['speed'] * self.clock_rate
-                    while credit >= 1 and not c['paused']:
+                    credit += (now - previous) * (60 if work_skip else c['speed']) * self.clock_rate
+                    while credit >= 1 and (not c['paused'] or self.work_goal is not None):
                         self.tick()
                         credit -= 1
+                        if work_skip and not self.time_skip:
+                            credit=0
+                            break
             previous = now
 
     def buttons(self):
@@ -1196,6 +1217,10 @@ class Mock:
             # The on-foot menu of the mock's vehicle, as if it had been clicked.
             v = next((v for v in self.state['vehicles'] if v['id'] == self.selected), None)
             if v and not v['open']: add(LOCALE['foodtrucks:overlay_open'])
+        if self.work and self.dialog=='closed':
+            add('Fast forward','toggle','Work/FastForward'); entries[-1]['on']=self.work['fast_forward']
+            add('Skip time','button','Work/Skip')
+            add('Work duration','slider','Work/Duration'); entries[-1].update(value=self.work['minutes'],min=5,max=720,whole_numbers=True)
         if self.dialog in LIFE_DIALOGS:
             for entry in self.life_buttons():
                 add(entry['text'], entry.get('kind', 'button'), entry.get('row', ''))
@@ -1269,6 +1294,11 @@ class Mock:
             entry = matches[0]
             current=entry
         else: raise ValueError('ui click needs "id" (from the last list) or "text".')
+        if self.work and current['path'].startswith('Mock/closed/Work/'):
+            if current['kind']=='slider': raise ValueError('Work duration is a slider: ui set with its id and a value.')
+            self.work_control(self.vehicle(self.work['vehicle']), 'fast_forward' if current['kind']=='toggle' else 'skip_work',
+                              {'enabled':not self.work['fast_forward'],'minutes':self.work['minutes']})
+            return {'clicked':entry['text']}
         if self.dialog in LIFE_DIALOGS:
             if current.get('kind')=='slider': raise ValueError(f"\"{current['text']}\" is a slider: ui set with its id and a value.")
             self.event(f'Test bridge: clicked "{entry["text"]}" ({entry["path"]}).')
@@ -1328,6 +1358,7 @@ class Mock:
     def at_hatch(self, v, how):
         self.activity_starting=False
         self.state['player'].update(in_vehicle=None, at_hatch=v['id'])
+        self.start_work(v)
         v['serving']='player'
         self.event(f"Truck window: player placed at the hatch of truck {v['id']} ({how}) at (0, 0, 0).")
 
@@ -1344,12 +1375,51 @@ class Mock:
             if not self.cart_serving_safe(v, point): continue
             facing = (math.degrees(math.atan2(outward[0]*1.05-dx, outward[1]*1.05-dz)) + 360) % 360
             self.state['player'].update(x=point[0], y=point[1], z=point[2], heading=facing)
+            self.start_work(v)
             self.event(f"Cart serving: {v['id']}: player placed {placement} at {point}; pedestrian ground, off street, complete player path (mock).")
             return
         self.event(f"Cart serving: {v['id']}: no safe reachable serving point behind the cart or at either end; player left where they stand.")
 
+    def start_work(self, v):
+        self.finish_work()
+        self.work = {'vehicle': v['id'], 'minutes': 60, 'fast_forward': False, 'time_skip': False, 'stock_read_only': True}
+
+    def finish_work(self):
+        if self.work and self.work['fast_forward']:
+            self.state['clock'].update(speed=1, paused=False)
+        if self.work and self.work['time_skip']:
+            self.time_skip=False
+            self.state['clock'].update(speed=1, paused=False)
+        self.work=None
+        self.work_goal=None
+
+    def work_control(self, v, op, args):
+        if not self.work or self.work['vehicle']!=v['id'] or not v['open']:
+            raise ValueError("Stand at this vehicle's serving window and wait for its work panel first.")
+        if self.time_skip: raise ValueError('A time skip is running; wait for it to end.')
+        if op=='fast_forward':
+            on=args.get('enabled',True)
+            if not isinstance(on,bool): raise ValueError('enabled must be true or false.')
+            self.work['fast_forward']=on
+            self.state['clock'].update(speed=60 if on else 1,paused=False)
+        elif op=='skip_work':
+            minutes=num(args,'minutes')
+            if minutes is None or not math.isfinite(minutes) or int(minutes)!=minutes or not 5<=minutes<=720:
+                raise ValueError('minutes must be a whole number from 5 to 720.')
+            self.work.update(minutes=int(minutes), time_skip=True)
+            self.work_goal=self.absolute+int(minutes)
+            self.time_skip=True
+            self.state['clock'].update(paused=True,keep_needs=False)
+        else:
+            self.finish_work()
+            self.state['player']['at_hatch']=None
+        return {'done':True,'why':None,'notices':[],'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==v['id'])}
+
     def operate(self, v, op, args=None):
         player = self.state['player']
+        args=args or {}
+        if op in ('fast_forward','skip_work','stop_work'): return self.work_control(v,op,args)
+        if op in ('step_out','close','enter') and self.work and self.work['vehicle']==v['id']: self.finish_work()
         start=self.seq
         why=None
         cargo_before=copy.deepcopy(v['stock'])
@@ -1382,6 +1452,10 @@ class Mock:
                     v['hatch_side'] = v['hatch_side'] or 'right'
                     self.place_cart_server(v)
                     v['serving'] = self.serving(v)
+        elif op=='work_window':
+            if v['kind']!='cart' or not v['open'] or player['in_vehicle'] or self.work:
+                raise ValueError('Work the window needs an open cart and the player free on foot.')
+            self.place_cart_server(v)
         elif op=='back_to_hatch':
             if v['kind']!='truck' or not v['open'] or player['in_vehicle'] or player['carrying'] or player['at_hatch'] or self.walks:
                 raise ValueError("Back to the hatch isn't offered now: it needs an open truck and the player on foot, empty-handed and not at a hatch.")
@@ -1432,8 +1506,9 @@ class Mock:
                 why=self.transfer(v,direction,item,units)
             else:
                 self.commissary_panel(v,op)
-        else: raise ValueError(f"Unknown op '{op}': open, close, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy.")
+        else: raise ValueError(f"Unknown op '{op}': open, close, fast_forward, skip_work, stop_work, work_window, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy.")
         done = {'open':v['open'], 'close':not v['open'], 'step_out':player['at_hatch']!=v['id'],
+                'work_window':bool(self.work and self.work['vehicle']==v['id']),
                 'back_to_hatch':bool(self.walks) or player['at_hatch']==v['id'],
                 'enter':player['in_vehicle']==v['id'] or bool(self.walks), 'exit':player['in_vehicle']!=v['id'],
                 'restock':v['stock']!=cargo_before, 'transfer':v['stock']!=cargo_before or len(v['pieces'])!=pieces_before,
@@ -2579,7 +2654,7 @@ class Mock:
             if surface is not None: reply['surface']=surface
             return reply
         if cmd=='vehicle':
-            op=need(args,'op','open, close, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy')
+            op=need(args,'op','open, close, fast_forward, skip_work, stop_work, work_window, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy')
             if op=='buy': return self.buy(args)
             identifier=need(args,'id',"the food vehicle's id")
             if any(t['id']==identifier for t in self.life['handtrucks']):
@@ -2710,6 +2785,13 @@ class Mock:
                 return self.click(args)
             if op=='set':
                 self.require_ui()
+                if self.work and self.dialog=='closed':
+                    entry=next((e for e in self.last_ui if e['id']==num(args,'id')),None)
+                    if entry and entry['path']=='Mock/closed/Work/Duration':
+                        value=num(args,'value')
+                        if value is None or not math.isfinite(value): raise ValueError('value must be a number.')
+                        self.work['minutes']=max(5,min(720,round(value)))
+                        return {'set':entry['text'],'value':self.work['minutes']}
                 return self.life_set(args)
             if op=='type':
                 self.require_ui()

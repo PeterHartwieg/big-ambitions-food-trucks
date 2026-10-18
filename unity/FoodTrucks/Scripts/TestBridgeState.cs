@@ -94,12 +94,19 @@ namespace FoodTrucks
             string? atHatch = null;
             foreach (var v in game.VehicleInstances)
                 if (v != null && TruckWindow.PlayerAt(v.id)) atHatch = v.id;
+            var work = ServingWork.Current;
             var hands = PlayerHelper.ItemInstanceInHands;
             string activity;
             if (!string.IsNullOrEmpty(game.ActiveVehicleId)) activity = VehicleHelper.GetCurrentVehicleBase() is HandTruck ? "pushing" : "driving";
             else activity = TruckWindow.Phase() ?? (controller != null && controller.hasOnGoalReachedAction ? "walking" : "on_foot");
             return new JObject
             {
+                ["work"] = work == null ? null : new JObject
+                {
+                    ["vehicle"] = work.VehicleId, ["minutes"] = work.GetCurrentSliderValue(),
+                    ["fast_forward"] = InstanceBehavior<UI.UIs>.Instance?.gameSpeed?.isFastForwarding ?? false,
+                    ["time_skip"] = ServingWork.IsSkipping(work.VehicleId), ["stock_read_only"] = true,
+                },
                 ["activity"] = activity,
                 ["clock_held_by"] = TestBridgeCommands.ClockHeldBy(),
                 ["x"] = Round(position.x), ["y"] = Round(position.y), ["z"] = Round(position.z), ["heading"] = Round(heading),

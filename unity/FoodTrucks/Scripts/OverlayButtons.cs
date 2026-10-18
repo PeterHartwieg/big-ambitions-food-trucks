@@ -43,6 +43,8 @@ namespace FoodTrucks
         {
             new Spec("FoodTrucks.OpenForBusiness", "foodtrucks:overlay_open",
                 c => CartSelling.CanOfferOpen(c.vehicleInstance), CartSelling.OpenHere),
+            new Spec("FoodTrucks.WorkCart", "foodtrucks:overlay_work_cart",
+                c => CartSelling.CanWorkCart(c.vehicleInstance), CartSelling.WorkCart),
             new Spec("FoodTrucks.BackToHatch", "foodtrucks:overlay_back_to_hatch",
                 c => TruckWindow.CanGoBack(c.vehicleInstance), TruckWindow.BackToHatch),
             new Spec("FoodTrucks.CloseWindow", "foodtrucks:overlay_close",

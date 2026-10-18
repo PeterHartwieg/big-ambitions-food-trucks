@@ -26,7 +26,7 @@ namespace FoodTrucks
     // Selling: "Open for business" in the parked vehicle's on-foot menu opens the cart where it stands (or the truck in
     // a legal parking space), if the player has a vendor licence, the vehicle a permit, and the fitted equipment gives a menu. While it is open, Core's SalesSimulator runs every in-game minute: customers arrive at the rate
     // the demand model gives for the spot and the hour (CartDemand), queue at the window and give up after
-    // a while. The player serves at the speed of their customer service skill while they stay close to a cart or
+    // a while. The player serves at the speed of their customer service skill while they hold a cart serving stance or
     // stand at a truck's hatch; otherwise only a crew serves, and without one the queue waits and thins out. Each customer buys one main
     // item and sometimes a cold drink; each item takes one unit of cargo and pays the cart's price with
     // the mod's label. CartQueueView shows the queue as people near the player. Grabbing the cart closes it.
@@ -128,6 +128,7 @@ namespace FoodTrucks
 
         private void OnDisable()
         {
+            ServingWork.Reset();
             cartServing.Release("session ended");
             GlobalEvents.onEnterVehicle -= OnEnterVehicle;
             GlobalEvents.onTimeMachineStarted -= OnTimeMachineStarted;
@@ -137,8 +138,9 @@ namespace FoodTrucks
 
         private void OnTimeMachineStarted()
         {
-            cartServing.Release("time skip");
             skipping = true;
+            ServingWork.SkipStarted();
+            if (cartServing.VehicleId is { } servingId && !ServingWork.IsSkipping(servingId)) cartServing.Release("time skip");
             CartQueueView.Suspended = true;
             try
             {
@@ -148,14 +150,16 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Time skip start: " + ex); }
         }
 
-        // Skipped time is not the player's working time: every cart the player runs starts counting again from
-        // now, and the people who were waiting have long gone. A crew kept selling through it.
+        // Unrelated skipped time is not player working time: those windows restart from now. A selected work
+        // skip and crew windows retain their clocks and queues, having sold through the elapsed minutes.
         private void OnTimeMachineEnded()
         {
+            CatchUpTo(HireCrew.NowExact());
             skipping = false;
             CartQueueView.Suspended = false;
             try { ResumeAfterSkip(); }
             catch (Exception ex) { Log.Error("Time skip end: " + ex); }
+            ServingWork.SkipEnded();
         }
 
         private void ResumeAfterSkip()
@@ -164,10 +168,10 @@ namespace FoodTrucks
             var state = FoodTrucksSession.CurrentState;
             var crewed = new HashSet<string>(state?.Vehicles.Where(v => RunByRoute(v) || Crewed(v)).Select(v => v.VehicleId) ?? Enumerable.Empty<string>());
             foreach (var id in simulatedUntil.Keys.ToList())
-                if (!crewed.Contains(id)) simulatedUntil[id] = SalesClock.Start(now);
+                if (!crewed.Contains(id) && !ServingWork.WasWorkSkip(id)) simulatedUntil[id] = SalesClock.Start(now);
             if (state == null || !FoodTrucksSession.CanWrite) return;
             // Not counted as walking away at closing: the cart stays open.
-            foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && v.Service != null && !crewed.Contains(v.VehicleId)))
+            foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen && v.Service != null && !crewed.Contains(v.VehicleId) && !ServingWork.WasWorkSkip(v.VehicleId)))
             {
                 if (SalesSimulator.Close(vehicle.Service!).Left.Count > 0) FoodTrucksSession.MarkChanged();
             }
@@ -209,6 +213,16 @@ namespace FoodTrucks
             if (cart == null || FoodTrucksMod.KindOf(cart.vehicleTypeName) == null) return false;
             if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId) || TruckWindow.PlayerAt(cart.id)) return false;
             return StreetSales.Find(FoodTrucksSession.CurrentState, cart.id)?.IsOpen == true;
+        }
+
+        internal static bool CanWorkCart(VehicleInstance? cart) => cart != null && CartDemand.KindOf(cart) == "cart" &&
+            instance != null && !instance.cartServing.PlayerAt(cart.id) && !PlayerActivity.PlayerActivityUI.IsPanelOpen &&
+            string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId) && !Skipping &&
+            StreetSales.Find(FoodTrucksSession.CurrentState, cart.id)?.IsOpen == true;
+
+        internal static void WorkCart(VehicleController controller)
+        {
+            if (CanWorkCart(controller.vehicleInstance)) instance!.cartServing.Open(controller);
         }
 
         private void Open(VehicleController controller)
@@ -432,6 +446,8 @@ namespace FoodTrucks
         private void LateUpdate()
         {
             cartServing.LateUpdate();
+            try { ServingWork.UpdateCart(cartServing); }
+            catch (Exception ex) { Log.Error("Serving work, cart update: " + ex); }
             if (FoodTrucksSession.CurrentState == null || SaveGameManager.Current == null) return;
             var hour = HireCrew.Now() / 60;
             if (hour == closedAtHour) return;
@@ -540,7 +556,7 @@ namespace FoodTrucks
             var now = HireCrew.Now();
             if (!vehicle.IsOpen) return HireCrew.OnShift(vehicle, now);
             var cart = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId);
-            var atWindow = cart != null && !Skipping && PlayerIsAtCart(cart);
+            var atWindow = cart != null && (!Skipping || ServingWork.IsSkipping(cart.id)) && PlayerIsAtCart(cart);
             return HireCrew.Team(vehicle, now, atWindow ? ServiceRules.EffectiveSkill(PlayerSkill(), 100) : (double?)null, kind).Crew;
         }
 
@@ -656,6 +672,7 @@ namespace FoodTrucks
         // The player closes the window: from the truck's hatch, or with Close in the vehicle's on-foot menu.
         internal static void CloseByPlayer(string vehicleId)
         {
+            ServingWork.BeforeLeaving(vehicleId);
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
             if (instance == null || vehicle == null || !vehicle.IsOpen || !FoodTrucksSession.CanWrite)
             {
@@ -668,6 +685,7 @@ namespace FoodTrucks
         // at: the game minute the window closes, when the sales clock is catching up behind the live one.
         private void Close(VehicleState vehicle, string messageKey, double? at = null)
         {
+            ServingWork.WindowClosed(vehicle.VehicleId);
             cartServing.Closed(vehicle.VehicleId);
             // Closing doesn't clean, for the crew either: cleaning happens only in the vehicle's own commissary bay (the
             // on-foot menu's Clean, or standing there at the 04:00 check).
@@ -776,7 +794,7 @@ namespace FoodTrucks
         private void Update()
         {
             // During a skip every frame counts, so a crew's sales follow the clock a frame at a time.
-            if (Time.unscaledTime < nextTick && !Skipping) return;
+            if (Time.unscaledTime < nextTick && !Skipping && !ServingWork.Accelerated) return;
             nextTick = Time.unscaledTime + TickSeconds;
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
@@ -819,7 +837,7 @@ namespace FoodTrucks
             // Sleeping and other time skips run the clock without the player at the window; a crew keeps selling.
             var timeMachine = InstanceBehavior<UIs>.Instance?.timeMachine;
             var inSkip = skipping || (timeMachine != null && timeMachine.isRunning);
-            if (inSkip && !RunByRoute(vehicle) && !Crewed(vehicle))
+            if (inSkip && !ServingWork.IsSkipping(vehicle.VehicleId) && !RunByRoute(vehicle) && !Crewed(vehicle))
             {
                 simulatedUntil[vehicle.VehicleId] = SalesClock.Start(now);
                 return;
@@ -838,7 +856,7 @@ namespace FoodTrucks
             // A truck loaded open, or respawned near the player, shows its hatch open.
             TruckHatch.Set(VehicleHelper.GetVehicleController(cart), true);
             // Customers nobody can see any more, or who never reached the window, pay now.
-            if (!CartQueueView.Showing(vehicle.VehicleId)) PayHeld(vehicle, null);
+            if (ServingWork.Accelerated || inSkip || !CartQueueView.Showing(vehicle.VehicleId)) PayHeld(vehicle, null);
             else PayHeld(vehicle, h => now - h.Minute > MaxHeldMinutes);
             var elapsed = SalesClock.Elapsed(from, now);
             if (elapsed < 1) return;
@@ -846,7 +864,7 @@ namespace FoodTrucks
             var tables = DemandData.Tables;
             var rules = DemandData.Rules;
             if (tables == null || rules == null) return;
-            var atWindow = !inSkip && PlayerIsAtCart(cart);
+            var atWindow = (!inSkip || ServingWork.IsSkipping(vehicle.VehicleId)) && PlayerIsAtCart(cart);
             var window = Service(rules, CartDemand.KindOf(cart), vehicle, atWindow, (long)Math.Floor(from));
             if (window.Servers == 0)
             {
@@ -911,7 +929,7 @@ namespace FoodTrucks
             var inPerson = atWindow;
             CountLost(vehicle.VehicleId, result);
             var failed = false;
-            var showing = CartQueueView.Showing(vehicle.VehicleId);
+            var showing = !ServingWork.Accelerated && !inSkip && CartQueueView.Showing(vehicle.VehicleId);
             // One order per customer: their main item and the drink that came with it. With the queue in view,
             // booking waits for that customer to leave the window; midnight flushes any still held.
             foreach (var customer in result.Sales.GroupBy(s => s.CustomerId))
@@ -1279,7 +1297,7 @@ namespace FoodTrucks
             if (SaveGameManager.Current.ActiveVehicleId == cart.id) return false;
             var controller = VehicleHelper.GetVehicleController(cart);
             double? distance = controller == null ? (double?)null : Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position);
-            return PlayerServing.Serves(CartDemand.KindOf(cart), TruckWindow.PlayerServes(cart.id), distance, WorkingDistance);
+            return PlayerServing.Serves(CartDemand.KindOf(cart), TruckWindow.PlayerServes(cart.id), distance, WorkingDistance, instance?.cartServing.PlayerAt(cart.id) == true);
         }
 
         // One item at the cart's price. All sales wait in CrewTakings for midnight. The crew's
@@ -1336,6 +1354,7 @@ namespace FoodTrucks
                     // ReduceFromCargo only signals when a stack empties; the HUD needs every change.
                     cart.OnItemsInCargoUpdated()?.Invoke();
                     GameEvent.Invoke("ba:gameevent_itemcargochanged");
+                    ServingWork.RefreshStock();
                 }
             }
             catch (Exception ex) { Log.Error("Cargo update listeners: " + ex); }

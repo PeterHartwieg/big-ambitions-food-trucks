@@ -38,10 +38,19 @@ namespace FoodTrucks
             // Delivery would put a hand vehicle into a warehouse slot, which nothing has tested.
             Patch(typeof(VehicleStoreDialog), "OnVehicleSettingsSet", Type.EmptyTypes, nameof(RefuseDelivery), prefix: true);
 
-            // Item panel: the cart's Open button, hidden whenever the panel shows something else.
-            Patch(typeof(ItemPanelUI), "SetVehicle", new[] { typeof(VehicleController) }, nameof(PanelVehicle));
+            // Vehicle cargo panel: commissary stock while driving/pushing; serving owns a read-only view.
+            Patch(typeof(ItemPanelUI), "SetVehicle", new[] { typeof(VehicleController) }, typeof(Patches),
+                prefix: nameof(PanelVehiclePrefix), postfix: nameof(PanelVehicle));
             Patch(typeof(ItemPanelUI), "SetItemInstance", null, nameof(PanelOther));
             Patch(typeof(ItemPanelUI), "SetMiniGameMode", null, nameof(PanelOther));
+
+            // Outdoor serving keeps the native activity toggle, time machine and vehicle cargo HUD.
+            Patch(typeof(PlayerActivity.PlayerActivityUI), "SetUpSpeedOptions", Type.EmptyTypes, typeof(ServingWork), postfix: nameof(ServingWork.SpeedOptionsPostfix));
+            Patch(typeof(PlayerActivity.PlayerActivityUI), "OnPlayerActionPressed", new[] { typeof(PlayerAction) }, typeof(ServingWork), prefix: nameof(ServingWork.ActionPrefix));
+            Patch(typeof(GameManager), "RunMainGameTick", new[] { typeof(float) }, typeof(ServingWork), prefix: nameof(ServingWork.TickPrefix), postfix: nameof(ServingWork.TickPostfix));
+            Patch(typeof(ItemPanelUI), "UpdateButtonsVisibility", Type.EmptyTypes, typeof(ServingWork), postfix: nameof(ServingWork.ReadOnlyButtons));
+            Patch(typeof(ItemPanelUI), "SetupCargoSlots", Type.EmptyTypes, typeof(ServingWork), postfix: nameof(ServingWork.ReadOnlyCargo));
+            Patch(typeof(VehicleController), "DriveVehicle", Type.EmptyTypes, typeof(ServingWork), prefix: nameof(ServingWork.DrivingPrefix));
 
             // Day summary and Econoview: the street food profit counts like a business's, and Econoview breaks it
             // down per vehicle. Crew wages and parking are noted per vehicle as the game charges them, and move
@@ -484,6 +493,12 @@ namespace FoodTrucks
             }
         }
 
+        private static void PanelVehiclePrefix(VehicleController vehicle)
+        {
+            try { ServingWork.VehiclePanel(vehicle); }
+            catch (Exception ex) { Log.Error(ex); }
+        }
+
         private static void PanelVehicle(ItemPanelUI __instance, VehicleController vehicle)
         {
             try { CartButton.OnSetVehicle(__instance, vehicle); }
@@ -492,7 +507,7 @@ namespace FoodTrucks
 
         private static void PanelOther()
         {
-            try { CartButton.Hide(); }
+            try { ServingWork.OtherPanel(); CartButton.Hide(); }
             catch (Exception ex) { Log.Error(ex); }
         }
     }
