@@ -37,12 +37,14 @@ class ParityTests(unittest.TestCase):
                 v = self.mock.state['vehicles'][0]
                 v.update(kind=kind, open=True)
                 self.mock.state['player'].update(x=v['x'], y=v['y'], z=v['z'], at_hatch=v['id'] if kind=='truck' else None)
+                self.mock.start_work(v)
                 money = self.mock.state['money']
                 notices = list(self.mock.recent)
                 for _ in range(30): self.mock.tick()
                 self.assertEqual(self.mock.state['money'], money)
                 self.assertEqual(list(self.mock.recent), notices)
                 # Crew serves the same vehicle after the player leaves.
+                self.mock.finish_work()
                 self.mock.state['player'].update(x=v['x']+200, at_hatch=None)
                 v['crew'] = ['Worker']
                 for _ in range(10): self.mock.tick()
@@ -335,6 +337,8 @@ class ParityTests(unittest.TestCase):
         self.mock.state['player']['x']=100
         self.assertEqual(self.mock.call('state',{})['vehicles'][1]['serving'],'nobody')
         self.mock.state['player']['x']=5
+        self.assertEqual(self.mock.call('state',{})['vehicles'][1]['serving'],'nobody')
+        self.mock.operate(cart,'work_window')
         self.assertEqual(self.mock.call('state',{})['vehicles'][1]['serving'],'player')
         self.mock.place_vehicle(self.v,'hells-kitchen')
         self.assertTrue(self.v['legal'])

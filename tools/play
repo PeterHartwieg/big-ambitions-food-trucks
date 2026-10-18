@@ -73,6 +73,10 @@ Commands (each also takes --help):
   route add VEHICLE ADDRESS [--days monday,...] [--open HH:MM --close HH:MM]
   route paste VEHICLE FROM_DAY TO_DAY[,TO_DAY...]|all
                                A vehicle's weekly route: add a stop by a building, or copy one day onto others.
+  vehicle ID fast_forward [on|off]  Use the work panel's fast-forward while serving.
+  vehicle ID skip_work MINUTES  Choose 5 to 720 minutes on the work slider and skip; wait until it ends.
+  vehicle ID work_window       Return to an open cart’s window.
+  vehicle ID stop_work          Stop working this window (Step out at a truck).
   save NAME                    Save the game (the name must start with "FT playtest").
   load NAME                    Load a save whose name starts with "FT playtest".
 
@@ -112,7 +116,7 @@ from ftlib.bridge import Bridge, BridgeError  # noqa: E402
 PREFIX = 'FT playtest'
 MAX_SPEED = 20
 WEEK = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
-VEHICLE_OPS = ('open', 'close', 'enter', 'exit', 'back_to_hatch', 'restock', 'rent_bay')
+VEHICLE_OPS = ('open', 'close', 'enter', 'exit', 'back_to_hatch', 'work_window', 'stop_work', 'restock', 'rent_bay')
 PHONE_APPS = ('contacts', 'employees', 'bizman', 'econoview', 'market', 'persona', 'rivals')
 FEELINGS = {'hungry': 'you are hungry', 'very_hungry': 'you are starving', 'tired': 'you are tired',
             'exhausted': 'you are exhausted', 'out_of_energy': 'you have no energy left: you can barely walk and will soon collapse'}
@@ -171,6 +175,9 @@ class Play:
             left = m.get('hours_left')
             when = (f", {round(left / 24)} days left" if left > 24 else f", {left} hours left") if m.get('shows_time') and left is not None else ''
             self.out(f"  happiness: {name}{f' {amount:+d}%' if amount is not None else ''}{when}")
+        if p.get('work'):
+            w = p['work']
+            self.out(f"  Working {w['vehicle']}: {'fast-forward' if w['fast_forward'] else 'normal speed'}, skip set to {w['minutes']} min; cargo shown read only.")
         if p.get('clock_held_by'): self.out(f"  The clock is held by: {p['clock_held_by']}.")
         hands = p.get('hands')
         if truck: self.out(f"  On the hand truck: {self.cargo_text(truck.get('contents'))}.")
@@ -563,11 +570,21 @@ class Play:
         if op in ('take', 'return'):
             args.update(op='transfer', direction=op, item=item)
             if units is not None: args['units'] = units
+        elif op == 'fast_forward':
+            if item not in (None, 'on', 'off'): raise Refused('fast_forward takes on or off.')
+            args['enabled'] = item != 'off'
+        elif op == 'skip_work':
+            try: duration = int(item)
+            except (ValueError, TypeError): raise Refused('skip_work takes a whole number of minutes, 5 to 720.')
+            if not 5 <= duration <= 720: raise Refused('skip_work takes a whole number of minutes, 5 to 720.')
+            args['minutes'] = duration
         elif op not in VEHICLE_OPS:
-            raise Refused(f"Unknown vehicle action {op}: {', '.join(VEHICLE_OPS)}, take or return.")
+            raise Refused(f"Unknown vehicle action {op}: {', '.join(VEHICLE_OPS)}, fast_forward, skip_work, take or return.")
+        cursor = self.bridge.events(1)['next'] if op == 'skip_work' else None
         r = self.call('vehicle', args)
         self.out(f"{op}: {'done' if r['done'] else 'not done'}{' (' + r['why'] + ')' if r.get('why') else ''}.")
         for n in r.get('notices') or []: self.out(f'  {n}')
+        if op == 'skip_work' and r['done']: self.wait_for_skip(cursor)
 
     def order(self, site, pairs):
         self.acting()

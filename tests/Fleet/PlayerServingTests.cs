@@ -28,6 +28,13 @@ public class PlayerServingTests
     }
 
     [Fact]
+    public void StoppingWorkAtACartStopsServingEvenWhenStillBesideIt()
+    {
+        Assert.False(PlayerServing.Serves("cart", false, .5, Working, atCart: false));
+        Assert.True(PlayerServing.Serves("cart", false, .5, Working, atCart: true));
+    }
+
+    [Fact]
     public void ACartWithoutAPositionIsNotServed()
     {
         Assert.False(PlayerServing.Serves("cart", atHatch: false, null, Working));

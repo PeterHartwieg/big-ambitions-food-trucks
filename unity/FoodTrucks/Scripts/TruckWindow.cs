@@ -341,7 +341,7 @@ namespace FoodTrucks
         }
 
         // The panel prints each button's key after its label; Close and Drive have none. True once both are done.
-        private static bool ClearKeyLabels()
+        internal static bool ClearKeyLabels(int expected = 2)
         {
             var ui = InstanceBehavior<UIs>.Instance?.playerActivityUI;
             if (ui == null) return false;
@@ -354,7 +354,7 @@ namespace FoodTrucks
                 label.Suffix = string.Empty;
                 done++;
             }
-            return done >= 2;
+            return done >= expected;
         }
 
         // Why the player can't stay at the hatch any more, or null.
@@ -387,6 +387,7 @@ namespace FoodTrucks
         {
             if (vehicleId == null) return;
             var id = vehicleId;
+            ServingWork.BeforeLeaving(id);
             var controller = ControllerOf(id);
             var exit = controller != null ? Exit(controller, drive) : fallbackExit;
             var warped = Release(reason, move: true, exitOverride: exit);
@@ -551,107 +552,29 @@ namespace FoodTrucks
         internal void OnCancelledWhileStarting() => StepOut("cancelled while starting", drive: false);
     }
 
-    // The activity panel while at the hatch: a headline, a line of text and three buttons. It never blocks
-    // saving (the save's position is fixed up instead) and never needs energy.
-    internal sealed class HatchActivity : IPlayerActivity
+    // Native work controls shared with the cart; attachment and the three hatch actions stay here.
+    internal sealed class HatchActivity : ServingActivity
     {
         private readonly TruckWindow owner;
-        private readonly string vehicleId;
-        private PlayerActivityState state = PlayerActivityState.NotStarted;
-        private PlayerActivityState beforeFinishing = PlayerActivityState.NotStarted;
-        // The frame the game last called Perform, and the minutes it passed: the game calls it every running minute
-        // with 1, and at a time skip's end, just before Finish, with the whole skip.
-        private int performedFrame = -1;
-        private int performedMinutes;
-
-        public HatchActivity(TruckWindow owner, string vehicleId)
-        {
-            this.owner = owner;
-            this.vehicleId = vehicleId;
-        }
-
-        public bool RequiresEnergy() => false;
-
-        public bool BlocksAutoSave() => false;
-
-        public PlayerActivityState GetState() => state;
-
-        public PlayerActivityState GetStateBeforeFinishing() => beforeFinishing;
-
-        public void ChangeState(PlayerActivityState next)
+        public HatchActivity(TruckWindow owner, string vehicleId) : base(vehicleId) { this.owner = owner; }
+        public override void ChangeState(PlayerActivityState next)
         {
             var old = state;
-            state = next;
-            // The game's cancel while "moving towards" the activity (the cancel key, or a click) closes the panel
-            // without Finish; the player still has to step out.
+            base.ChangeState(next);
             if (next == PlayerActivityState.NotStarted && old != PlayerActivityState.NotStarted && old != PlayerActivityState.Finished)
                 owner.OnCancelledWhileStarting();
         }
-
-        // Shown, then moving, then started (TruckWindow steps it on).
-        internal void Advance()
+        public override void Finish()
         {
-            if (state == PlayerActivityState.NotStarted) state = PlayerActivityState.MovingTowardsActivity;
-            else if (state == PlayerActivityState.MovingTowardsActivity) state = PlayerActivityState.Started;
-        }
-
-        internal void MarkFinished()
-        {
-            if (state == PlayerActivityState.Finished) return;
-            beforeFinishing = state;
-            state = PlayerActivityState.Finished;
-        }
-
-        public void Perform(int minutes)
-        {
-            performedFrame = Time.frameCount;
-            performedMinutes = minutes;
-        }
-
-        // The game ends it: after a time skip, out of energy, Unstuck.
-        public void Finish()
-        {
-            owner.OnFinishedByGame(performedFrame == Time.frameCount && performedMinutes > 1);
+            owner.OnFinishedByGame(ServingWork.IsSkipping(VehicleId));
             MarkFinished();
         }
-
-        public LabelInfo GetHeadlineLabel() => new LabelInfo("foodtrucks:activity_hatch_title");
-
-        public LabelInfo[] GetLabels() => new[] { new LabelInfo("foodtrucks:activity_hatch_serving") };
-
-        public ButtonInfo[] GetButtons() => new[]
+        public override LabelInfo GetHeadlineLabel() => new LabelInfo("foodtrucks:activity_hatch_title");
+        public override ButtonInfo[] GetButtons() => new[]
         {
             new ButtonInfo("FoodTrucksStepOut", "foodtrucks:activity_hatch_step_out", "gray", owner.OnStepOut, PlayerAction.Cancel),
-            // Close and Drive have no key: the panel needs some action for each, so they get one the game never
-            // hands to an activity panel, and TruckWindow clears its key label once the buttons are built.
-            new ButtonInfo(TruckWindow.CloseButtonName, "foodtrucks:activity_hatch_close", "gray", () => owner.OnClose(vehicleId), TruckWindow.NoKey),
+            new ButtonInfo(TruckWindow.CloseButtonName, "foodtrucks:activity_hatch_close", "gray", () => owner.OnClose(VehicleId), TruckWindow.NoKey),
             new ButtonInfo(TruckWindow.DriveButtonName, "foodtrucks:activity_hatch_drive", "blue", owner.OnDrive, TruckWindow.NoKey)
         };
-
-        public bool HasFastForward() => false;
-
-        public bool HasTimeMachine() => false;
-
-        public int GetRemainingMinutesForTimeMachine() => 0;
-
-        public bool HasProgressBar() => false;
-
-        public float GetProgressBarPercentageValue() => 0f;
-
-        public (string key, object arguments) GetProgressBarLabel() => (null!, null!);
-
-        public bool HasSlider() => false;
-
-        public int GetMinSliderValue() => 0;
-
-        public int GetMaxSliderValue() => 0;
-
-        public float GetCurrentSliderValue() => 0f;
-
-        public void OnSliderValueChanged(int value)
-        {
-        }
-
-        public (string key, object arguments) GetSliderInfo() => (null!, null!);
     }
 }

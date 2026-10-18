@@ -48,6 +48,12 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 
 The day is shaped by the demand curve. A good day is a breakfast or lunch pitch in an office area, a restock, and an evening pitch near nightlife or a market. Finding a good spot is the reward: a pitch where offices, venues and transit meet can carry a whole day, and staying there is fine. Moving pays when a spot's peak has passed and another spot's is starting (Peter, 8 October 2026; replaces the earlier rule that staying must earn clearly less).
 
+## Working at the window (Peter, 18 October 2026)
+
+**Pending in game.** Working a cart's held serving stance or a truck's hatch uses the game's activity panel: native fast-forward, a skip button and a 5–720 minute work-duration slider. Fast-forward speeds the game world together with customers and sales. Work skips keep the same Core sales and stock rules, minute by minute, and native register-work needs drain; stock exhaustion or window closure stops a skip. The native end-of-skip finishes work; the window can remain open for crew. A cart's Work the window action returns to its stance; merely remaining nearby after stopping no longer serves it. Truck Back to the hatch is unchanged.
+
+The bottom vehicle cargo panel shows actual stock while serving and refreshes as sales consume it. Serving offers no cargo transfers or driving actions. Work/skip state is transient and never enters the mod's save schema. All sales still go into the saved pot paid at midnight.
+
 ## Licence and permits
 
 NYC separates the vendor licence (a person) from the permit (a cart or truck), and caps the permits at 5,100 citywide. The mod keeps both layers.

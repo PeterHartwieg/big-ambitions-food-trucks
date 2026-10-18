@@ -84,6 +84,9 @@ class ReviewParityTests(unittest.TestCase):
         self.bridge.call('vehicle',{'id':v['id'],'op':'exit'})
         self.bridge.call('time',{'pause':True})
         v['open']=True
+        v['pieces']=[{'item':'hotdoggrill','units':50,'cap':500}]
+        v['stock']=[{'item':'Hotdog','key':'ba:itemname_hotdog','amount':50}]
+        self.mock.state['licence']['until_day']=60
         self.bridge.call('vehicle',{'id':v['id'],'op':'back_to_hatch'})
         time.sleep(.12)
         self.assertIsNone(self.mock.state['player']['at_hatch'])
