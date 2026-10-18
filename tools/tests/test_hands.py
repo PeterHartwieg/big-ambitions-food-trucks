@@ -24,7 +24,7 @@ class HandsTests(unittest.TestCase):
         self.addCleanup(self.folder.cleanup)
         self.stop = str(Path(self.folder.name) / 'STOP')
         self.lines = []
-        self.flat = 'ba:street_secondavenue#8'
+        self.flat = 'ba:street_thirdstreet#9'
         self.bed = {'key': 'ba:itemname_kingsizebed', 'item': 'King size bed', 'amount': 1, 'paid': True,
                     'food': False, 'furniture': True, 'price': 912345.67}
         self.box = {'key': 'ba:itemname_closedcardboardbox', 'item': 'Closed cardboard box', 'contents': [self.bed]}
@@ -94,6 +94,68 @@ class HandsTests(unittest.TestCase):
             return self.call(cmd, **args)
         finally:
             self.call('time', pause=True)
+
+    def outside_home(self):
+        x, z = self.mock.door(self.flat)
+        self.mock.life['inside'] = None
+        self.mock.state['player'].update(x=x, z=z)
+        return next(t['id'] for t in self.call('use')['things'] if t.get('address') == self.flat)
+
+    def test_home_entry_keeps_paid_bag_box_and_unpaid_flags_without_stowing(self):
+        bag = {'key': 'ba:itemname_paperbag', 'item': 'Paper bag', 'contents': [
+            {'key': 'ba:itemname_banana', 'item': 'Banana bag', 'amount': 5, 'paid': True, 'food': True}]}
+        for hands in (bag, self.box, {**bag, 'key': 'ba:itemname_shoppingbasket'},
+                      {**bag, 'contents': [{**bag['contents'][0], 'paid': False}]}):
+            with self.subTest(container=hands['key'], paid=hands['contents'][0]['paid']):
+                self.mock.life['hands'] = copy.deepcopy(hands)
+                money = self.mock.state['money']
+                ident = self.outside_home()
+                result = self.call_unpaused('use', op='click', id=ident)
+                self.assertTrue(result['handled'])
+                self.assertIsNone(result['why'])
+                self.assertEqual(result['inside'], self.flat)
+                self.assertEqual(self.mock.life['hands'], hands)
+                self.assertEqual(self.mock.state['money'], money)
+
+    def test_home_use_reports_blockers_and_native_route_refusal_without_losing_bag(self):
+        ident = self.outside_home()
+        self.mock.life['hands'] = {'key': 'ba:itemname_paperbag', 'item': 'Paper bag', 'contents': [
+            {'key': 'ba:itemname_banana', 'item': 'Banana bag', 'amount': 5, 'paid': True, 'food': True}]}
+        hands = copy.deepcopy(self.mock.life['hands'])
+        self.mock.life['use_navigation_blockers'] = ['Map']
+        self.assertEqual(self.play('use', str(ident)), 0, self.lines)
+        self.assertTrue(any('navigation blocked by Map' in line for line in self.lines), self.lines)
+        self.assertFalse(any('nothing happened' in line for line in self.lines))
+        self.assertTrue(self.mock.state['clock']['paused'])
+        self.mock.life['use_navigation_blockers'] = []
+        for field, value, expected in [('use_on_navmesh', False, 'Leave the motor vehicle'),
+                                        ('use_route', 'missing', "Can't reach item"),
+                                        ('use_route', 'partial', "Can't reach item")]:
+            with self.subTest(field=field, value=value):
+                self.mock.life[field] = value
+                result = self.call_unpaused('use', op='click', id=ident)
+                self.assertFalse(result['handled'])
+                self.assertIn(expected, result['why'])
+                self.assertIsNone(result['inside'])
+                self.assertEqual(self.mock.life['hands'], hands)
+                self.mock.life.update(use_on_navmesh=True, use_route='complete')
+
+    def test_building_use_keeps_private_property_and_full_menu_refusals(self):
+        ident = self.outside_home()
+        self.mock.dialog = 'phone_app'
+        self.mock.state['clock']['paused'] = False
+        result = self.call('use', op='click', id=ident)
+        self.assertFalse(result['handled'])
+        self.assertIn('Close the phone or map', result['why'])
+        self.mock.dialog = 'closed'
+        self.call('time', pause=True)
+        self.mock.life['homes'] = []
+        self.mock.last_use[ident - 1]['for_rent'] = False  # A residential rented by someone else.
+        result = self.call_unpaused('use', op='click', id=ident)
+        self.assertTrue(result['handled'])  # Handled doesn't mean the game entered the building.
+        self.assertIsNone(result['inside'])
+        self.assertIn('Private property.', result['why'])
+        self.assertEqual(result['notices'], [result['why']])
 
     def test_release_frees_hands_for_cashier_food_then_recovers_bed(self):
         city = runpy.run_path(str(TOOLS / 'mock-bridge'), run_name='hands_city')['CITY']

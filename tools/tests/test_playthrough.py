@@ -1,6 +1,7 @@
 import copy
 import csv
 import json
+import math
 from pathlib import Path
 import runpy
 import sys
@@ -122,7 +123,7 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(len(pt.check_moves(problem)), 1)
 
     def test_error_lines_stop_the_run(self):
-        pt.check_events([{'kind': 'log', 'text': 'Crew sales paid in: …'}])
+        pt.check_events([{'kind': 'log', 'text': 'Street food sales paid in: …'}])
         with self.assertRaises(pt.Violation) as caught:
             pt.check_events([{'kind': 'log', 'day': 3, 'time': '10:00', 'text': '[Mod:Food Trucks] ERROR: Route: boom'}])
         self.assertEqual(caught.exception.check, 'log')
@@ -297,6 +298,74 @@ class BridgeOpsParityTests(unittest.TestCase):
             self.mock.call(cmd, args)
         self.assertEqual(str(exc.exception), text)
 
+    def test_cart_open_places_the_player_opposite_customers_and_allows_walking_away(self):
+        v = self.mock.spawn('cart')
+        v.update(x=20., z=30., pieces=[{'item': 'hotdoggrill', 'units': 40, 'cap': 40}],
+                 stock=[{'item': 'Hotdog', 'key': HOTDOG, 'amount': 40}])
+        self.mock.state['licence']['until_day'] = 60
+        player = self.mock.state['player']
+        for heading in (0., 45., 90., 180., 270.):
+            with self.subTest(heading=heading):
+                v['heading'] = heading
+                player.update(x=20., z=29., heading=heading)
+                self.assertTrue(self.mock.operate(v, 'open')['done'])
+                angle = math.radians(heading)
+                self.assertAlmostEqual(player['x'], v['x']-.85*math.cos(angle))
+                self.assertAlmostEqual(player['z'], v['z']+.85*math.sin(angle))
+                self.assertAlmostEqual(player['heading'], (heading+90)%360)
+                self.assertIsNone(player['in_vehicle'])
+                self.assertIsNone(player['at_hatch'])
+                self.assertEqual(self.mock.serving(v), 'player')
+                # An open cart keeps its existing distance rule and never pulls a walker back.
+                player.update(x=40., z=30.)
+                self.assertEqual(self.mock.serving(v), 'nobody')
+                self.mock.operate(v, 'close')
+                self.assertEqual((player['x'], player['z']), (40., 30.))
+
+    def test_kerbside_cart_tries_safe_ends_then_leaves_the_player_where_they_stand(self):
+        v = self.mock.spawn('cart')
+        v.update(x=20., z=30., pieces=[{'item': 'hotdoggrill', 'units': 40, 'cap': 40}],
+                 stock=[{'item': 'Hotdog', 'key': HOTDOG, 'amount': 40}])
+        self.mock.state['licence']['until_day'] = 60
+        player = self.mock.state['player']
+        for side in (-1, 1):
+            for heading in (0., 45., 90., 180., 270.):
+                for available in ('front', 'rear', 'none'):
+                    with self.subTest(side=side, heading=heading, available=available):
+                        angle = math.radians(heading)
+                        outward = (side*math.cos(angle), -side*math.sin(angle))
+                        forward = (math.sin(angle), math.cos(angle))
+                        tested = []
+
+                        def safe(vehicle, point):
+                            dx, dz = point[0]-vehicle['x'], point[2]-vehicle['z']
+                            tested.append((dx, dz))
+                            pavement = dx*outward[0]+dz*outward[1] >= -.001
+                            # Fixture: front end cut off by a fence when only the rear is reachable.
+                            reachable = available == 'front' or (available == 'rear' and dx*forward[0]+dz*forward[1] < 0)
+                            return pavement and reachable
+
+                        self.mock.cart_serving_safe = safe
+                        v.update(heading=heading, hatch_side='left' if side < 0 else 'right')
+                        player.update(x=20., y=v['y'], z=29., heading=15.)
+                        before = {k: player[k] for k in ('x', 'y', 'z', 'heading')}
+                        self.assertTrue(self.mock.operate(v, 'open')['done'])
+                        self.assertEqual(len(tested), 2 if available == 'front' else 3)
+                        if available == 'none':
+                            self.assertEqual({k: player[k] for k in before}, before)
+                            expected_log = 'player left where they stand'
+                        else:
+                            direction = 1 if available == 'front' else -1
+                            self.assertAlmostEqual(player['x'], v['x']+direction*1.07*forward[0])
+                            self.assertAlmostEqual(player['z'], v['z']+direction*1.07*forward[1])
+                            dx, dz = player['x']-v['x'], player['z']-v['z']
+                            self.assertGreaterEqual(dx*outward[0]+dz*outward[1], -.001)
+                            look_x, look_z = v['x']+outward[0]*1.05, v['z']+outward[1]*1.05
+                            self.assertAlmostEqual(player['heading'], math.degrees(math.atan2(look_x-player['x'], look_z-player['z'])) % 360)
+                            expected_log = f'at the {available} end beside the window'
+                        self.assertTrue(any(expected_log in e['text'] for e in self.mock.events(0)['events']))
+                        self.mock.operate(v, 'close')
+
     def test_vehicle_buy_charges_the_dealers_price_as_the_games_purchase(self):
         money = self.mock.state['money']
         reply = self.mock.call('vehicle', {'op': 'buy', 'kind': 'truck'})
@@ -386,7 +455,7 @@ class BridgeOpsParityTests(unittest.TestCase):
             self.assertIn(f'["{key}"]', life)
         self.mock.state['clock']['paused'] = False
         clicked = self.mock.call('use', {'op': 'click', 'id': 1})
-        self.assertEqual(set(clicked), {'clicked', 'kind', 'click', 'handled', 'placing_cancelled', 'still_walking', 'inside', 'inside_before', 'open', 'notices', 'x', 'z'})
+        self.assertEqual(set(clicked), {'clicked', 'kind', 'click', 'handled', 'why', 'placing_cancelled', 'still_walking', 'still_entering', 'inside', 'inside_before', 'open', 'notices', 'x', 'z'})
         for key in clicked:
             self.assertIn(f'["{key}"]', life)
         rode = self.mock.call('taxi', {'address': 'ba:street_thirdstreet#6'})

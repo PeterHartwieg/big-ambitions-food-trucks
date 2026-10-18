@@ -16,7 +16,7 @@ public class CommissarySaveTests
     [Fact]
     public void OldSavesReadAnEmptyCommissaryAndZeroLedgerExpenses()
     {
-        var load = Codec.Load("{\"schemaVersion\":1,\"dailySales\":[{\"day\":3,\"byVehicle\":[{\"vehicleId\":\"cart\"}]}]}");
+        var load = Codec.Load("{\"schemaVersion\":2,\"dailySales\":[{\"day\":3,\"byVehicle\":[{\"vehicleId\":\"cart\"}]}]}");
         Assert.Equal(LoadStatus.Loaded, load.Status);
         var state = load.State!;
         Assert.Empty(state.Commissary.Unlocked);
@@ -84,7 +84,7 @@ public class CommissarySaveTests
     public void UnknownFieldsOnEverySavedClassSurviveLoadingAndInventoryOperations()
     {
         var json = JObject.Parse("""
-        {"schemaVersion":1,"commissary":{
+        {"schemaVersion":2,"commissary":{
           "futureState":{"x":1},"unlocked":["a"],
           "spaces":[{"vehicleId":"v","kind":"cart","commissaryId":"a","sinceDay":1,"futureSpace":2}],
           "orders":[{"id":1,"commissaryId":"a","itemName":"future-food","units":2,"unitPriceCents":3,"feeCents":1,"orderedDay":1,"deliverDay":2,"futureOrder":3}],
@@ -145,7 +145,7 @@ public class CommissarySaveTests
     [InlineData(2)]
     public void InconsistentSpaceCursorResetsToRentalStartRatherThanFleetCursor(int cursor)
     {
-        var loaded = Codec.Load("{\"schemaVersion\":1,\"commissary\":{\"rentPaidThroughDay\":8," +
+        var loaded = Codec.Load("{\"schemaVersion\":2,\"commissary\":{\"rentPaidThroughDay\":8," +
             "\"spaces\":[{\"vehicleId\":\"cart\",\"kind\":\"cart\",\"commissaryId\":\"a\",\"sinceDay\":5,\"rentPaidThroughDay\":" + cursor + "}]}}");
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
         var c = loaded.State!.Commissary;
@@ -159,7 +159,7 @@ public class CommissarySaveTests
     public void UnknownOrderBatchIdsCannotOverrideStockBatchIdsAcrossDeliveryRestockAndSaving()
     {
         var loaded = Codec.Load("""
-        {"schemaVersion":1,"commissary":{
+        {"schemaVersion":2,"commissary":{
           "orders":[
             {"id":1,"commissaryId":"a","itemName":"taco","units":2,"unitPriceCents":10,"orderedDay":1,"deliverDay":2,"batchId":99,"orderMetadata":{"future":1}},
             {"id":2,"commissaryId":"a","itemName":"taco","units":3,"unitPriceCents":20,"orderedDay":1,"deliverDay":2,"batchId":99}]
@@ -186,7 +186,7 @@ public class CommissarySaveTests
     public void LoadingNormalisesKnownBadEntriesAndArchivesTheirUnknownMetadata()
     {
         var loaded = Codec.Load("""
-        {"schemaVersion":1,"commissary":{
+        {"schemaVersion":2,"commissary":{
           "unlocked":["a","a",""],
           "spaces":[
             {"vehicleId":"v","kind":"cart","commissaryId":"a","sinceDay":1,"futureOldSpace":8},
@@ -231,7 +231,7 @@ public class CommissarySaveTests
     [Fact]
     public void NewerSaveSchemaIsRetainedWithoutNormalisingIt()
     {
-        var json = "{\"schemaVersion\":2,\"commissary\":{\"future\":true}}";
+        var json = "{\"schemaVersion\":3,\"commissary\":{\"future\":true}}";
         var loaded = Codec.Load(json);
         Assert.Equal(LoadStatus.NewerVersion, loaded.Status);
         Assert.Equal(json, loaded.RawJson);
@@ -244,5 +244,5 @@ public class CommissarySaveTests
     [InlineData("{\"charges\":[{\"vehicleId\":\"v\",\"commissaryId\":\"a\",\"day\":1,\"cents\":-1}]}")]
     [InlineData("{\"nightCheckedThroughDay\":-1}")]
     public void InvalidPaymentObligationsAndCursorsAreCorrupt(string commissary) =>
-        Assert.Equal(LoadStatus.Corrupt, Codec.Load("{\"schemaVersion\":1,\"commissary\":" + commissary + "}").Status);
+        Assert.Equal(LoadStatus.Corrupt, Codec.Load("{\"schemaVersion\":2,\"commissary\":" + commissary + "}").Status);
 }

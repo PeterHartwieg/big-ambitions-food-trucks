@@ -282,6 +282,6 @@ internal sealed partial class SoakWorld
         foreach (var v in state.Vehicles) Close(v);
         CheckWorld();
         SaveLoad();
-        foreach (var p in crew) Require(paidCrew.Contains(p.Key), "crew sale never paid");
+        foreach (var p in takingsOracle) Require(paidTakings.Contains(p.Key), "window sale never paid");
     }
 }

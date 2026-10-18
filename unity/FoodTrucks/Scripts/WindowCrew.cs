@@ -107,11 +107,15 @@ namespace FoodTrucks
                 var order = shown.OrderBy(w => Serves(w) ? 0 : 1).ToList();
                 var atWindow = order.Count(Serves);
                 var places = TruckPlaces(atWindow, TruckWindow.PlayerAt(vehicleId));
+                var playerAtCart = kind != "truck" && CartSelling.PlayerAtServingSpot(vehicleId);
                 var idle = 0;
                 for (var i = 0; i < order.Count; i++)
                 {
                     var place = i < atWindow ? places[i] : null;
-                    Stand(order[i], vehicle, kind, windowPlace, place, place.HasValue ? -1 : idle++, i < atWindow);
+                    // A more skilled cart worker can still serve while the player is here (Core's team rule),
+                    // but must stand beside them rather than share the player's middle place.
+                    Stand(order[i], vehicle, kind, windowPlace, place, playerAtCart ? i : place.HasValue ? -1 : idle++,
+                        i < atWindow && !playerAtCart, playerAtCart ? PlayerHelper.GetPosition() : (Vector3?)null);
                 }
                 if (shown.Count == 0) workers.Remove(vehicleId);
             }
@@ -165,7 +169,8 @@ namespace FoodTrucks
         }
 
         // along: the place at the hatch; null with idleIndex for one waiting inside the truck.
-        private static void Stand(Worker worker, Transform vehicle, string kind, Vector3? windowPlace, double? along, int idleIndex, bool serves)
+        private static void Stand(Worker worker, Transform vehicle, string kind, Vector3? windowPlace, double? along, int idleIndex, bool serves,
+            Vector3? playerPlace)
         {
             if (kind == "truck")
             {
@@ -178,7 +183,10 @@ namespace FoodTrucks
             outward.y = 0f;
             outward = outward.sqrMagnitude > 1e-4f ? outward.normalized : vehicle.right;
             // One not serving (the player took the place) waits beside the cart.
-            var beside = serves ? Vector3.zero : Vector3.Cross(Vector3.up, outward) * (CartBeside * (idleIndex + 1));
+            var sideways = Vector3.Cross(Vector3.up, outward);
+            // A fallback serving spot may be along this side too: put the worker on the other end.
+            if (playerPlace.HasValue && Vector3.Dot(playerPlace.Value - vehicle.position, sideways) > 0f) sideways = -sideways;
+            var beside = serves ? Vector3.zero : sideways * (CartBeside * (idleIndex + 1));
             worker.Character.ForceToPosition(vehicle.position - outward * CartBehind + beside);
             worker.Character.ForceToRotation(Quaternion.LookRotation(outward));
         }

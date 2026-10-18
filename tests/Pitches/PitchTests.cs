@@ -401,7 +401,7 @@ public class PitchSaveTests
         Assert.Equal(3, loaded.State.Partnerships.Single().LastWorkedDay);
         Assert.Equal("midtown-fifth-street", loaded.State.Vehicles.Single().PremiumSpot);
 
-        var old = codec.Load("{\"schemaVersion\":1}");
+        var old = codec.Load("{\"schemaVersion\":2}");
         Assert.Equal(LoadStatus.Loaded, old.Status);
         Assert.Empty(old.State!.Events.Events);
         Assert.Empty(old.State.Partnerships);
@@ -417,14 +417,14 @@ public class PitchSaveTests
         var loaded = codec.Load(codec.Serialize(state));
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
         Assert.Equal(6250, loaded.State!.Catering.Unpaid.Single().FeeCents);
-        Assert.Empty(codec.Load("{\"schemaVersion\":1}").State!.Catering.Unpaid);
+        Assert.Empty(codec.Load("{\"schemaVersion\":2}").State!.Catering.Unpaid);
     }
 
     [Fact]
     public void TwoPartnershipsForOneVenueAreRejected()
     {
         var codec = new SaveCodec();
-        var json = "{\"schemaVersion\":1,\"partnerships\":[{\"vehicleId\":\"a\",\"venue\":\"v#1\"},{\"vehicleId\":\"b\",\"venue\":\"v#1\"}]}";
+        var json = "{\"schemaVersion\":2,\"partnerships\":[{\"vehicleId\":\"a\",\"venue\":\"v#1\"},{\"vehicleId\":\"b\",\"venue\":\"v#1\"}]}";
         Assert.Equal(LoadStatus.Corrupt, codec.Load(json).Status);
     }
 }

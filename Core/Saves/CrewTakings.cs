@@ -6,7 +6,7 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Saves
 {
-    // What a vehicle's crew took on one calendar day and the game hasn't paid in yet. The sales themselves are in the
+    // What a vehicle took on one calendar day and the game hasn't paid in yet, whoever served. The sales are in the
     // ledger (StreetSales.Record) the moment they are made, so Econoview, the day summary and the tax statement see
     // them on their day; only the money waits.
     public class CrewTaking
@@ -20,10 +20,10 @@ namespace FoodTrucks.Core.Saves
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
-    // Sales made with nobody but the crew at the window are paid in as the game pays its own shops: the day's orders
+    // All window sales are paid in as the game pays its own shops: the day's orders
     // pile up and the money comes in one transaction per business after midnight, into the day sold
     // (BusinessHelper.ProcessDailyOrders, `ba:transaction_revenue`) [code, 1.0]. Here, one per vehicle and day.
-    // Sales the player makes in person at the window keep their own payment and notice each.
+    // The historical CrewTakings name is kept in the save; it now holds player and crew sales together.
     public static class CrewTakings
     {
         public static bool CanAccrue(SaveState state, string vehicleId, int day, long cents)
@@ -59,11 +59,14 @@ namespace FoodTrucks.Core.Saves
         // Takings of days before `today`, oldest first: what midnight pays in. With soldThrough (the absolute game minute
         // each vehicle has sold up to), a day is due only once that vehicle's sales have passed its end, so a catch-up
         // still selling into it never splits its takings into two payments.
-        public static IReadOnlyList<CrewTaking> Due(SaveState state, int today, Func<string, double>? soldThrough = null)
+        // A removed vehicle's takings, today's too, are paid back immediately rather than waiting for midnight.
+        public static IReadOnlyList<CrewTaking> Due(SaveState state, int today, Func<string, double>? soldThrough = null,
+            Func<string, bool>? vehicleExists = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             return state.CrewTakings
-                .Where(t => t.Day < today && (soldThrough == null || soldThrough(t.VehicleId) >= t.Day * 1440.0))
+                .Where(t => vehicleExists?.Invoke(t.VehicleId) == false ||
+                    t.Day < today && (soldThrough == null || soldThrough(t.VehicleId) >= t.Day * 1440.0))
                 .OrderBy(t => t.Day).ThenBy(t => t.VehicleId, StringComparer.Ordinal).ToList();
         }
 

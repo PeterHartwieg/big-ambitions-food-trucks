@@ -37,7 +37,7 @@ public class WeekPlanTests
     [Fact]
     public void ARouteSavedBeforeTheWeekPlanBecomesTheSameStopsOnItsDays()
     {
-        var json = "{\"schemaVersion\":1,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"t1\",\"crew\":[\"e1\"],\"hireStop\":1," +
+        var json = "{\"schemaVersion\":2,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"t1\",\"crew\":[\"e1\"],\"hireStop\":1," +
                    "\"schedule\":{\"days\":[3,1],\"stops\":[{\"spotKey\":\"b\",\"openAt\":1080,\"closeAt\":1200},{\"spotKey\":\"a\",\"openAt\":660,\"closeAt\":840}]}," +
                    "\"shifts\":[{\"day\":3,\"legs\":[{\"kind\":1,\"stopIndex\":1,\"start\":1,\"end\":2}]}]}],\"dailySales\":[]}";
 
@@ -53,20 +53,20 @@ public class WeekPlanTests
         var again = new SaveCodec().Load(new SaveCodec().Serialize(loaded.State)).State!.Vehicles.Single();
         Assert.Equal(4, again.Schedule!.Stops.Count);
         // An old "every day" route.
-        var every = new SaveCodec().Load("{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"days\":[],\"stops\":[{\"spotKey\":\"a\",\"openAt\":660,\"closeAt\":840}]}}]}");
+        var every = new SaveCodec().Load("{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"days\":[],\"stops\":[{\"spotKey\":\"a\",\"openAt\":660,\"closeAt\":840}]}}]}");
         Assert.Equal(7, every.State!.Vehicles.Single().Schedule!.Stops.Count);
     }
 
     [Fact]
     public void ShiftsThatBreakTheRulesAreDroppedButTheSaveLoads()
     {
-        var json = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
+        var json = "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
                    "{\"employeeId\":\"e1\",\"day\":1,\"start\":20,\"end\":26}]}}]}";
         var bad = new SaveCodec().Load(json);
         Assert.Equal(LoadStatus.Loaded, bad.Status);
         Assert.Empty(bad.State!.Vehicles.Single().Schedule!.CrewShifts);
         Assert.Single(bad.Notes);
-        var twice = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
+        var twice = "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
                     "{\"employeeId\":\"e1\",\"day\":1,\"start\":8,\"end\":12},{\"employeeId\":\"e1\",\"day\":1,\"start\":14,\"end\":16}]}}]}";
         // Two shifts a day for one crew member are fine (the game's schedule allows them), at the same hour they aren't.
         Assert.Equal(LoadStatus.Loaded, new SaveCodec().Load(twice).Status);
@@ -81,7 +81,7 @@ public class WeekPlanTests
         Assert.Equal(LoadStatus.Loaded, named.Status);
         Assert.Single(named.Notes);
         // Nor two shifts on one row at once: the later one goes, with a note.
-        var row = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
+        var row = "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"t1\",\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
                   "{\"employeeId\":\"e1\",\"day\":1,\"start\":8,\"end\":12,\"station\":\"serving2\"},{\"employeeId\":\"e2\",\"day\":1,\"start\":10,\"end\":16,\"station\":\"serving2\"}]}}]}";
         var clash = new SaveCodec().Load(row);
         Assert.Equal(LoadStatus.Loaded, clash.Status);
@@ -94,7 +94,7 @@ public class WeekPlanTests
     public void ShiftsFromBeforeRowsGetFreeRowsAndTheSaveLoads()
     {
         // A truck's two crew both 09:00-16:00 and a third 10:00-12:00, saved by the round 2 build (no rows).
-        var json = "{\"schemaVersion\":1,\"vehicles\":[{\"vehicleId\":\"t1\",\"crew\":[\"e1\",\"e2\",\"e3\",\"e4\"],\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
+        var json = "{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"t1\",\"crew\":[\"e1\",\"e2\",\"e3\",\"e4\"],\"schedule\":{\"stops\":[],\"closed\":[],\"crewShifts\":[" +
                    "{\"employeeId\":\"e1\",\"day\":1,\"start\":9,\"end\":16},{\"employeeId\":\"e2\",\"day\":1,\"start\":9,\"end\":16}," +
                    "{\"employeeId\":\"e3\",\"day\":1,\"start\":10,\"end\":12},{\"employeeId\":\"e4\",\"day\":1,\"start\":11,\"end\":13}]}}]}";
 

@@ -131,7 +131,7 @@ public class ReputationWiringTests
     [Fact]
     public void ASaveWithoutRegularsLoadsEmpty()
     {
-        var json = "{\"schemaVersion\":1,\"licence\":{},\"vehicles\":[],\"dailySales\":[]}";
+        var json = "{\"schemaVersion\":2,\"licence\":{},\"vehicles\":[],\"dailySales\":[]}";
 
         var state = new SaveCodec().Load(json).State!;
 
@@ -141,7 +141,7 @@ public class ReputationWiringTests
     [Fact]
     public void BadRegularsMakeTheSaveCorrupt()
     {
-        var json = "{\"schemaVersion\":1,\"licence\":{},\"vehicles\":[],\"dailySales\":[],\"regulars\":{\"entries\":[{\"spotKey\":\"\",\"weekday\":\"Monday\",\"bonus\":0.1}]}}";
+        var json = "{\"schemaVersion\":2,\"licence\":{},\"vehicles\":[],\"dailySales\":[],\"regulars\":{\"entries\":[{\"spotKey\":\"\",\"weekday\":\"Monday\",\"bonus\":0.1}]}}";
 
         Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load(json).Status);
     }

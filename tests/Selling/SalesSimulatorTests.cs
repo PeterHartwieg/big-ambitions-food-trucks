@@ -768,7 +768,7 @@ public class ServiceStateSaveTests
     [InlineData("null")]
     public void BadQueueEntriesMakeTheSaveCorrupt(string customer)
     {
-        var json = "{\"schemaVersion\":1,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"cart-1\",\"service\":{\"minute\":5,\"nextCustomerId\":2,\"queue\":[" +
+        var json = "{\"schemaVersion\":2,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"cart-1\",\"service\":{\"minute\":5,\"nextCustomerId\":2,\"queue\":[" +
                    customer + "],\"window\":[]}}],\"dailySales\":[]}";
 
         Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load(json).Status);
@@ -777,7 +777,7 @@ public class ServiceStateSaveTests
     [Fact]
     public void AVehicleWithoutServiceStillLoads()
     {
-        var json = "{\"schemaVersion\":1,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"cart-1\"}],\"dailySales\":[]}";
+        var json = "{\"schemaVersion\":2,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"cart-1\"}],\"dailySales\":[]}";
 
         var result = new SaveCodec().Load(json);
 

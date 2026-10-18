@@ -443,7 +443,7 @@ public class HireRunnerTests
     [Fact]
     public void ADuplicateCrewMemberIsCorrupt()
     {
-        var json = "{\"schemaVersion\":1,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"t1\",\"crew\":[\"e1\",\"e1\"]}],\"dailySales\":[]}";
+        var json = "{\"schemaVersion\":2,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"t1\",\"crew\":[\"e1\",\"e1\"]}],\"dailySales\":[]}";
 
         Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load(json).Status);
     }

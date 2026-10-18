@@ -50,8 +50,8 @@ internal sealed partial class SoakWorld
     }
     private readonly Dictionary<(string, int), long> revenue = new();
     private readonly Dictionary<(string, int), long> costs = new();
-    private readonly Dictionary<(string, int), (long Cents, int Sales)> crew = new();
-    private readonly HashSet<(string, int)> paidCrew = new();
+    private readonly Dictionary<(string, int), (long Cents, int Sales)> takingsOracle = new();
+    private readonly HashSet<(string, int)> paidTakings = new();
     private readonly HashSet<(string, long)> creditedHours = new();
     private readonly Dictionary<string, (long From, long Until)> deferred = new();
     private readonly Dictionary<(string, int), int> delayedPayDay = new();
@@ -446,16 +446,13 @@ internal sealed partial class SoakWorld
                 SalesLedger.RecordCost(state, day, v.VehicleId, cost);
                 Add(revenue, (v.VehicleId, day), price); Add(costs, (v.VehicleId, day), cost);
                 Add(sold, sale.Item, 1);
-                if (player) { Move(price, "sale", day, $"{v.VehicleId}:{++playerSales}"); }
-                else
-                {
-                    Require(!paidCrew.Contains((v.VehicleId, day)), "sale arrived after its day was paid");
-                    if (day < liveDay) lateCrewSales++;
-                    CrewTakings.Accrue(state, v.VehicleId, day, price);
-                    crew.TryGetValue((v.VehicleId, day), out var total);
-                    crew[(v.VehicleId, day)] = (total.Cents + price, total.Sales + 1);
-                    crewSales++;
-                }
+                // Every window sale waits for midnight, including the player's. Only the coverage counters differ.
+                Require(!paidTakings.Contains((v.VehicleId, day)), "sale arrived after its day was paid");
+                if (day < liveDay) lateCrewSales++;
+                CrewTakings.Accrue(state, v.VehicleId, day, price);
+                takingsOracle.TryGetValue((v.VehicleId, day), out var total);
+                takingsOracle[(v.VehicleId, day)] = (total.Cents + price, total.Sales + 1);
+                if (player) playerSales++; else crewSales++;
             }
             van.SoldThrough += SalesClock.Elapsed(clock, end);
             if (result.SoldOut) { Close(v); break; }
@@ -556,7 +553,7 @@ internal sealed partial class SoakWorld
         {
             // Payment deadlines are an independent oracle, set when lag is injected;
             // do not derive the expected due set from Core's sold-through filter.
-            var expected = crew.Keys.Where(k => !paidCrew.Contains(k) && k.Item2 < Day &&
+            var expected = takingsOracle.Keys.Where(k => !paidTakings.Contains(k) && k.Item2 < Day &&
                 PaymentDay(k) <= Day).OrderBy(k => k.Item2).ThenBy(k => k.Item1, StringComparer.Ordinal);
             Require(expected.SequenceEqual(due.Select(t => (t.VehicleId, t.Day))),
                 "sold-through gate paid a held day or withheld a completed day");
@@ -564,7 +561,7 @@ internal sealed partial class SoakWorld
             {
                 var taking = state.CrewTakings.Single(t => t.VehicleId == key.Item1 && t.Day == key.Item2);
                 Require(deferred.ContainsKey(key.Item1) && SoldThroughOf(key.Item1) < key.Item2 * 1440L &&
-                    !paidCrew.Contains(key) && crew[key] == (taking.Cents, taking.Sales),
+                    !paidTakings.Contains(key) && takingsOracle[key] == (taking.Cents, taking.Sales),
                     "the incomplete day must retain its entire taking at the first midnight");
                 heldAtMidnight++;
                 Note($"{key.Item1}: day {key.Item2} held at midnight; sold through {SoldThroughOf(key.Item1)}");
@@ -573,21 +570,21 @@ internal sealed partial class SoakWorld
         foreach (var t in due)
         {
             var key = (t.VehicleId, t.Day);
-            Require(crew.TryGetValue(key, out var expected) && expected == (t.Cents, t.Sales), "taking differs from crew sales");
+            Require(takingsOracle.TryGetValue(key, out var expected) && expected == (t.Cents, t.Sales), "taking differs from window sales");
             Require(all || now == (PaymentDay(key) - 1) * 1440L,
                 "taking not paid at its expected midnight after catch-up");
-            Require(paidCrew.Add(key), "crew taking paid twice");
+            Require(paidTakings.Add(key), "window taking paid twice");
             if (delayedPayDay.ContainsKey(key))
             {
                 Require(!all, "a deferred day reached uninstall before its later midnight payout");
                 delayedPayouts++;
                 Note($"{t.VehicleId}: held day {t.Day} paid once at midnight on day {Day}");
             }
-            Move(t.Cents, "crew payout", t.Day, $"{t.VehicleId}:{t.Day}");
+            Move(t.Cents, "sales payout", t.Day, $"{t.VehicleId}:{t.Day}");
             Require(CrewTakings.Settled(state, t), "settlement did not remove taking");
         }
         Require(all ? state.CrewTakings.Count == 0 : state.CrewTakings.All(t => t.Day >= Day ||
-            delayedPayDay.TryGetValue((t.VehicleId, t.Day), out var day) && day > Day), "old crew taking left unpaid");
+            delayedPayDay.TryGetValue((t.VehicleId, t.Day), out var day) && day > Day), "old window taking left unpaid");
     }
 
     private int PaymentDay((string, int) key) => delayedPayDay.TryGetValue(key, out var day) ? day : key.Item2 + 1;
@@ -612,12 +609,12 @@ internal sealed partial class SoakWorld
     {
         foreach (var (id, lag) in deferred.ToList())
         {
-            Require(now == lag.Until && !paidCrew.Contains((id, Day - 1)), "deferred day was paid before late sales");
+            Require(now == lag.Until && !paidTakings.Contains((id, Day - 1)), "deferred day was paid before late sales");
             Note($"{id}: catch up the last 15 minutes after midnight, retaining original sale day");
             RunVehicle(state.Vehicles.Single(v => v.VehicleId == id), lag.Until, lag.From);
             Require(SoldThroughOf(id) >= lag.Until, "late catch-up failed to pass the old day's boundary");
             var taking = state.CrewTakings.Single(t => t.VehicleId == id && t.Day == Day - 1);
-            Require(crew[(id, taking.Day)] == (taking.Cents, taking.Sales), "late sales missing from the held day's taking");
+            Require(takingsOracle[(id, taking.Day)] == (taking.Cents, taking.Sales), "late sales missing from the held day's taking");
             deferred.Remove(id);
         }
     }
@@ -705,7 +702,7 @@ internal sealed partial class SoakWorld
         }
         CheckExpenses();
         foreach (var t in state.CrewTakings)
-            Require(!paidCrew.Contains((t.VehicleId, t.Day)) && crew[(t.VehicleId, t.Day)] == (t.Cents, t.Sales), "waiting takings differ");
+            Require(!paidTakings.Contains((t.VehicleId, t.Day)) && takingsOracle[(t.VehicleId, t.Day)] == (t.Cents, t.Sales), "waiting takings differ");
         CheckInventory();
         CheckLedger(Math.Max(1, Day - (Minute == 0 ? 1 : 0)));
     }

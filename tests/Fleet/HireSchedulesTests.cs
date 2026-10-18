@@ -271,7 +271,7 @@ public class HireSchedulesTests
     [Fact]
     public void ATransitArrivingBeforeItLeavesIsCorrupt()
     {
-        var json = "{\"schemaVersion\":1,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"t1\",\"transit\":{\"toSpotKey\":\"a\",\"departsAt\":10,\"arrivesAt\":5}}],\"dailySales\":[]}";
+        var json = "{\"schemaVersion\":2,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"t1\",\"transit\":{\"toSpotKey\":\"a\",\"departsAt\":10,\"arrivesAt\":5}}],\"dailySales\":[]}";
 
         Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load(json).Status);
     }

@@ -245,7 +245,7 @@ class ScenarioTests(unittest.TestCase):
                 self.assertEqual(sequences,sorted(set(sequences)))
                 if path.stem=='bay-shots':self.assertEqual(len(list(directory.glob('*.png'))),30)
                 if path.stem=='crew-midnight-payout':
-                    paid=[e for e in runner.events if e['text'].startswith('Crew sales paid in:')]
+                    paid=[e for e in runner.events if e['text'].startswith('Street food sales paid in:')]
                     self.assertEqual(len(paid),1)
                     self.assertIn('day 1:',paid[0]['text'])
                     last_hour=next(e for e in runner.events if 'day 1 23:00 hour:' in e['text'])

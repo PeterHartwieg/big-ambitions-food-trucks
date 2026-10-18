@@ -35,10 +35,11 @@ namespace FoodTrucks.Core.Saves
 
             this.currentVersion = currentVersion;
             this.migrations = new Dictionary<int, Func<JObject, JObject>>();
-            if (migrations != null)
+            // Schema 1 has the same layout. Its pot holds only unpaid crew sales; player sales were already paid.
+            migrations ??= new Dictionary<int, Func<JObject, JObject>> { [1] = document => document };
+            foreach (var migration in migrations)
             {
-                foreach (var migration in migrations)
-                    this.migrations.Add(migration.Key, migration.Value);
+                this.migrations.Add(migration.Key, migration.Value);
             }
         }
 

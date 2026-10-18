@@ -1,3 +1,40 @@
+# All window sales paid at midnight (next build)
+
+Peter's decision, 17 October 2026. **Pending in game.** Save schema 2; a schema 1 save (run 3's "FT playtest 3 break 3") migrates on load and its unpaid crew takings are paid once at midnight. Startup: `BusinessHelper.RunDaily` and `VehicleHelper.Delete(VehicleInstance, VehicleController)` patches must say `Active`. The bank label is now "Street food sales: …", for player and crew together.
+
+| # | Do | Look for |
+|---|---|---|
+| MS1 | Serve at your cart, then at your truck's hatch; sell food with an add-on drink | Stock falls and cash sounds/per-sale logs remain; no per-sale balance change, money popup or sale notice. Bridge `ledger_today.sales_waiting` rises |
+| MS2 | Let crew sell on the same vehicle/day, then pass midnight while still serving (also try a time skip) | Exactly one sales payment per vehicle for the finished day, combining player and crew; booked on that day and included in the midnight balance. New-day sales wait for the next midnight; no second payment on another tick |
+| MS3 | Save/load before midnight, including while visible customers are leaving the window | Unpaid takings and sold stock survive; saving/loading pays nothing today; midnight pays the saved total once. Day summary, Econoview, BizMan and bridge `day_summary` still show sales and stock cost on the sold day |
+| MS4 | Before midnight sell a truck with takings, then pass midnight; separately leave it with the private driver | Sold truck: its unpaid sales are paid back on the next sales tick, once; the sold day's books remain. Private driver: no early payout; it is still owned and waits for midnight |
+| MS5 | With unpaid cart/truck sales run the confirmed uninstall step, save and load without the mod; repeat the step before removal too | All unpaid sales, today's included, paid once in addition to vehicle/stock refunds. No takings left. If a sales payment fails, cleanup stops with a retry notice, retaining the unpaid data |
+
+# Cart serving stance (next build)
+
+Pending in game. Opening on foot now uses the queue's chosen side, `PlayerController.ResetNavigation` and `PlayerHelper.Teleport` (the player's NavMesh warp). The idle stance releases on the game's next navigation command; cart proximity selling and the truck's hatch hold keep their existing rules. No save schema change.
+
+Round 1: every serving candidate must also lie on the NPC pedestrian mesh, pass the queue's road/traffic-strip/crosswalk/parking exclusions, and have a complete path from the player's current position on the player's mesh. Try behind the cart opposite the queue, then the front and rear ends beside the window; with none safe, leave the player where they stand. **Run the cart steps in CS1–CS5 with a cart parallel to the kerb and its queue on the pavement too: the player must never be put on the road or in the parking lane.** Automated adapter tests and mock fixtures do not verify the game's baked meshes.
+
+| # | Do | Look for |
+|---|---|---|
+| CS1 | Park after pushing, click the cart on foot, Open for business; repeat with left/right queues, angled carts and a cart parallel to the kerb | Player uses safe pavement behind the cart first, otherwise at either end beside the window, facing the window/queue. Never stands on the road or parking strip. Stays put while idle, including at fast speed; placement log names behind/front/rear |
+| CS2 | Open with a wall, tree or bench blocking the preferred spot; repeat beside a fence/low wall with disconnected ground beyond it, then block both ends too | A reachable pavement fallback behind the cart is preferred, then a safe front/rear end. Player never appears beyond a fence on disconnected ground. Log names `fallback behind the cart` or `front/rear end beside the window`, with `complete player path`. With none safe within each target's 3 m search, position/heading stay unchanged; log says `no safe reachable serving point … player left where they stand` |
+| CS3 | From the serving stance, use WASD, then reopen and click to walk/interact; walk more than 8 m away and return | Walking/interaction works immediately without a snap back or an old handle/storage action firing. Solo sales pause beyond 8 m and resume nearby as before; crew keeps serving |
+| CS4 | Close from the on-foot menu, grab the cart, sell out, skip time, then save/load while serving | Stance releases at closing/grabbing/skip; normal walking, collision and pushing still work. Load leaves normal on-foot navigation. Log has placement/release reasons; no stuck agent or NavMesh errors |
+| CS5 | Open a cart with crew on shift (both higher/lower skill than the player), then open and work a truck | Cart crew stands beside the player without overlapping; who serves follows the existing skill rule. Truck still uses its hatch hold, Step out and Close normally |
+
+# Home entrance with a carried bag — issue 34 (next build)
+
+Source checked against the 1.0 decompile; **pending in game**. Entry has no held-bag/box or paid-cargo restriction. The bridge's old building click could be swallowed by the physical pointer over UI; issue 34's old reply cannot identify the exact rejected guard. Building ID clicks now use native navigation and virtual `Interact`, with refusal/loading reasons. No entry Harmony patch or pocket control was added.
+
+| # | Do | Look for |
+|---|---|---|
+| HB1 | Rent Third Street 9, leave in the morning, buy/pay for 5 banana bags at a grocery, return carrying the paper bag; leave the physical pointer over the bag HUD and `use` its entrance ID | Enter home with the same 5 paid banana bags; no money/cargo change. Repeat with the pointer over the world and with empty hands |
+| HB2 | Repeat with a shopping bag and a paid cardboard box, then enter a grocery while carrying the paper bag | Normal native walks and door loading; cargo and paid flags survive each entry/exit. Hand-truck pickup/load/release still work; no stowing needed |
+| HB3 | Try another person's home, a closed shop, and a building undergoing installation; try while the phone/map is open | Native refusal/notice or the game's rental screen as appropriate; no forced entry. Bridge/CLI names the refusal; no "nothing happened". Retain DLC/goal/fee prompts where applicable |
+| HB4 | Try an unreachable entrance and a click with a lingering Map navigation blocker; inspect a walk/door still pending at the bridge timeout | A cannot-reach notice or named blocker; `why`, `still_walking`/`still_entering` tell the tester to wait/inspect. Save the `Test bridge: use result …` log if entry still fails |
+
 # Queue pavement (next build)
 
 Blind run 3: an angled cart's line passed the traffic-lane checks but stood on the carriageway. Code checked against 1.0: `Streets.Pedestrians.PedestrianBuildingPositionProvider.TryGetSampleTarget` uses `Extensions.NavMeshHelper.NpcNavMeshFilter` (HGExtensions: agent **0**, all areas). The queue used the player's **1479372276** mesh. Queue places, agents and paths now use the NPC mesh, with parking/lane/bridge/crosswalk exclusions for both vehicle kinds. No road/sidewalk area name is assumed; `Swimmable` is the helper's only named area. Hatch and stop probes keep their existing filter. **Pending in game:** the baked NPC mesh's coverage, including parks and junctions; missing pedestrian ground hides the queue rather than falling back to the player mesh.
