@@ -34,6 +34,11 @@ namespace FoodTrucks
         private static readonly Type? TmpInput = Type.GetType("TMPro.TMP_InputField, Unity.TextMeshPro");
         private static readonly PropertyInfo? TmpInputText = TmpInput?.GetProperty("text");
         private static readonly PropertyInfo? TmpInputInteractable = TmpInput?.GetProperty("interactable");
+        // Typing runs every character through the field's own check (its content type and character limit), as a key press does.
+        private static readonly MethodInfo? TmpInputValidate = TmpInput == null ? null
+            : AccessTools.Method(TmpInput, "Validate", new[] { typeof(string), typeof(int), typeof(char) });
+        private static readonly PropertyInfo? TmpInputLimit = TmpInput?.GetProperty("characterLimit");
+        private static readonly PropertyInfo? TmpInputOnValidate = TmpInput?.GetProperty("onValidateInput");
         private static readonly FieldInfo? OptionsField = AccessTools.Field(typeof(Dropdown), "_options");
         private static readonly FieldInfo? LocalizeField = AccessTools.Field(typeof(Dropdown), "_localizeOptions");
 
@@ -360,10 +365,28 @@ namespace FoodTrucks
             if (!(input is Behaviour b) || !b.isActiveAndEnabled || !Visible(input.transform, out _))
                 throw new BridgeError($"Entry {id} ({entry.Text}) is no longer on screen; list again.");
             if (SaveOrLoadControl(entry)) throw new BridgeError(SaveLoadText);
-            TmpInputText!.SetValue(input, text);
+            TmpInputText!.SetValue(input, Typed(input, text));
             var now = TmpInputText.GetValue(input) as string ?? "";
             Log.Info($"Test bridge: typed \"{now}\" into \"{entry.Text}\" ({entry.Path}).");
             return new JObject { ["typed"] = entry.Text, ["value"] = now, ["texts"] = new JArray(Texts()) };
+        }
+
+        // What the field keeps of the text when it is typed key by key: each character through the field's own
+        // onValidateInput (if set) or its Validate (the content type: digits only for the bank's loan amount), up to its
+        // character limit. "$20,000" in a number field becomes "20000", which BankDialog.LoanRequest can parse.
+        private static string Typed(Component input, string text)
+        {
+            var kept = "";
+            var limit = TmpInputLimit?.GetValue(input) is int l ? l : 0;
+            var custom = TmpInputOnValidate?.GetValue(input) as Delegate;
+            foreach (var ch in text)
+            {
+                if (limit > 0 && kept.Length >= limit) break;
+                var result = custom != null ? custom.DynamicInvoke(kept, kept.Length, ch)
+                    : TmpInputValidate != null ? TmpInputValidate.Invoke(input, new object[] { kept, kept.Length, ch }) : ch;
+                if (result is char c && c != '\0') kept += c;
+            }
+            return kept;
         }
 
         // A slider's or toggle's own text, else the nearest text of its parents (the label beside it).
