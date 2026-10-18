@@ -298,51 +298,17 @@ namespace FoodTrucks
             // Where the crew parked it stops counting as at its stop, as when the player takes the vehicle.
             HireRoutes.PlayerTook(vehicle);
             var (plan, pitch) = StartSelling(vehicle, cart, controller, position, kind, hireStop: null);
-            var service = Service(rules, kind, vehicle, true);
             // The crew serves a window the player opened too, wherever and whenever: the message says who.
             var serving = HireCrew.Serving(vehicle, HireCrew.Now());
             var key = serving.Count == 0 ? "foodtrucks:notification_open"
                 : serving.Count == 1 ? "foodtrucks:notification_open_crew_one" : "foodtrucks:notification_open_crew_many";
-            // "About 1 customer an hour", "About 3 customers an hour", and none its own words (live session 5: "About 1
-            // customers an hour"; live session 6: "About 0 customers an hour").
-            var rate = (int)Math.Round(ExpectedSales(plan, service));
-            // Nobody coming and nobody serving but the player: its own words, not "Hardly any customers …, as long as
-            // someone is at the window" (review round 11, Opus).
-            if (rate <= 0 && serving.Count == 0) key = "foodtrucks:notification_open_quiet";
-            var customers = rate <= 0 ? LocalizorManager.GetLocalization("foodtrucks:customers_none", null)
-                : rate == 1 ? LocalizorManager.GetLocalization("foodtrucks:customers_one", null)
-                : string.Format(LocalizorManager.GetLocalization("foodtrucks:customers_many", null), rate);
-            Say(key, kind, ("units", plan.StockUnits.ToString()), ("rate", rate.ToString()), ("customers", customers),
-                ("grade", GradeText(vehicle)), ("crew", HireCrew.Names(serving)), ("later", LunchOutlook(cart, position, service, rate)));
+            // No customer numbers (Peter, blind run 3): how busy a place is, the player learns by watching it.
+            Say(key, kind, ("units", plan.StockUnits.ToString()), ("grade", GradeText(vehicle)), ("crew", HireCrew.Names(serving)));
             if (pitch != null) Say(pitch.Value.Key, kind, pitch.Value.Data);
             cartServing.Release("another window opened");
             // To the hatch: the player serves from inside the truck (placed there when beside it, else walked to its rear door).
             if (kind == "truck") TruckWindow.EnterFromOutside(controller);
             else cartServing.Open(controller);
-        }
-
-        // Opened quietly in the morning: what lunch should bring, so "Hardly anyone comes by" doesn't read as the whole day
-        // beside a premium spot's "More people pass here" (blind run 2, I23: both at 09:50, then 80 sales by 15:00). Empty
-        // from noon on, when the hour's own estimate is busy enough, or when lunch isn't clearly busier.
-        private static string LunchOutlook(VehicleInstance cart, Vector3 position, Window service, int rate)
-        {
-            try
-            {
-                var now = HireCrew.NowExact();
-                if (now % 1440 >= 12 * 60 || rate >= 3) return "";
-                var lunch = Math.Floor(now / 1440) * 1440 + 12 * 60 + 30;
-                var tables = DemandData.Tables!;
-                var spot = World.ReadSpot(tables, position, lunch, Partners.VenueOf(cart.id));
-                var later = (int)Math.Round(ExpectedSales(CartDemand.Plan(tables, cart, spot, at: lunch), service));
-                return later >= Math.Max(2, 2 * rate)
-                    ? " " + Notices.Text("foodtrucks:customers_lunch", new Dictionary<string, string> { { "rate", later.ToString() } })
-                    : "";
-            }
-            catch (Exception ex)
-            {
-                Log.Error("Open: lunch outlook: " + ex.Message);
-                return "";
-            }
         }
 
         // Where a parked vehicle stands now, as a pitch: null when it could open here, else the message saying why not. A
@@ -670,10 +636,6 @@ namespace FoodTrucks
 
         // Each opening gets its own customers: the cart and the minute it opened.
         private static long Seed(string vehicleId) => SeededRandom.SeedFor(vehicleId, (long)Math.Floor(HireCrew.NowExact()));
-
-        // Sales an hour with this window: the customers who buy, up to what the workers can make.
-        private static double ExpectedSales(CartPlan plan, Window window) =>
-            plan.Estimate == null ? 0 : Math.Min(plan.Estimate.CustomersPerHour * plan.Conversion, plan.CapacityPerServer * window.Speed * Math.Max(1, window.Servers));
 
         private void OnEnterVehicle(VehicleController controller)
         {

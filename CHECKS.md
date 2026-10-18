@@ -1,3 +1,11 @@
+# No customer numbers on opening (next build)
+
+Peter, 18 October 2026: how busy a place is, the player learns by watching. **Pending in game.** Supersedes BR14 and M23's per-hour texts.
+
+| # | Do | Look for |
+|---|---|---|
+| NC1 | Open a cart yourself, then a truck with crew | "The … is open with N items, … on the window. It sells while someone is at the window." (crew: "… serves at the window, even when you walk off."); no "customers an hour", no lunch estimate, no "Hardly anyone comes by" |
+
 # All window sales paid at midnight (next build)
 
 Peter's decision, 17 October 2026. **Pending in game.** Save schema 2; a schema 1 save (run 3's "FT playtest 3 break 3") migrates on load and its unpaid crew takings are paid once at midnight. Startup: `BusinessHelper.RunDaily` and `VehicleHelper.Delete(VehicleInstance, VehicleController)` patches must say `Active`. The bank label is now "Street food sales: …", for player and crew together.
