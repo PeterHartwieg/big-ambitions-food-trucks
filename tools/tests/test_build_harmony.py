@@ -66,7 +66,7 @@ class BuildHarmonyTests(unittest.TestCase):
             'tools', 'stubs', 'build/sdk/.git', 'build/sdk/Assets/Mods',
             'build/sdk/Assets/Editor', 'build/sdk/Output/FoodTrucks/Dependencies',
             'build/game-dlls', 'unity/FoodTrucks/Dependencies', 'unity/BuildEditor',
-            'Core/bin/Release/netstandard2.1', 'data',
+            'Core/bin/Release/netstandard2.1', 'data', 'tools/bridge-locks/bin/Release/netstandard2.0',
         ):
             (self.root / directory).mkdir(parents=True, exist_ok=True)
         # All content is synthetic; the build and SDK output are supplied by the harness.
@@ -75,6 +75,8 @@ class BuildHarmonyTests(unittest.TestCase):
             'Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll',
             'build/sdk/Output/FoodTrucks/Dependencies/0Harmony.dll',
             'README.md', 'LICENSE.txt', 'data/fixture.json',
+            # The bridge lock controller build-mod.sh builds with dotnet (stubbed) and copies in.
+            'tools/bridge-locks/bin/Release/netstandard2.0/BridgeControl.dll',
         ):
             (self.root / filename).write_bytes(b'fixture\n')
         (self.deps / '0Harmony.dll').write_bytes(DLL)
