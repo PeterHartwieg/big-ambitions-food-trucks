@@ -1,10 +1,10 @@
-# No customer numbers on opening (next build)
+# No opening notice (next build)
 
-Peter, 18 October 2026: how busy a place is, the player learns by watching. **Pending in game.** Supersedes BR14 and M23's per-hour texts.
+Peter, 18 October 2026: opening a cart or truck shows no notice (how busy a place is, the player learns by watching). **Pending in game.** Supersedes BR14 and M23's opening texts.
 
 | # | Do | Look for |
 |---|---|---|
-| NC1 | Open a cart yourself, then a truck with crew | "The … is open with N items, … on the window. It sells while someone is at the window." (crew: "… serves at the window, even when you walk off."); no "customers an hour", no lunch estimate, no "Hardly anyone comes by" |
+| NC1 | Open a cart yourself, then a truck with crew | No "… is open with N items" notice; the window opens and sells as before; the log has `Open: cart … opened by the player with N items; serving: …`. A premium spot or park still says the vehicle has the spot; refusals (licence, permit, parking, stock) still show |
 
 # All window sales paid at midnight (next build)
 

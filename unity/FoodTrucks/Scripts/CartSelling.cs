@@ -298,12 +298,10 @@ namespace FoodTrucks
             // Where the crew parked it stops counting as at its stop, as when the player takes the vehicle.
             HireRoutes.PlayerTook(vehicle);
             var (plan, pitch) = StartSelling(vehicle, cart, controller, position, kind, hireStop: null);
-            // The crew serves a window the player opened too, wherever and whenever: the message says who.
+            // No notice for opening (Peter, blind run 3): the open window shows it, and how busy a place is the player
+            // learns by watching. The log keeps the line.
             var serving = HireCrew.Serving(vehicle, HireCrew.Now());
-            var key = serving.Count == 0 ? "foodtrucks:notification_open"
-                : serving.Count == 1 ? "foodtrucks:notification_open_crew_one" : "foodtrucks:notification_open_crew_many";
-            // No customer numbers (Peter, blind run 3): how busy a place is, the player learns by watching it.
-            Say(key, kind, ("units", plan.StockUnits.ToString()), ("grade", GradeText(vehicle)), ("crew", HireCrew.Names(serving)));
+            Log.Info($"Open: {kind} {cart.id} opened by the player with {plan.StockUnits} items; serving: {(serving.Count == 0 ? "the player" : HireCrew.Names(serving))}.");
             if (pitch != null) Say(pitch.Value.Key, kind, pitch.Value.Data);
             cartServing.Release("another window opened");
             // To the hatch: the player serves from inside the truck (placed there when beside it, else walked to its rear door).
