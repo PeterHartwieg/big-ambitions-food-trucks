@@ -137,3 +137,8 @@ One gap the next run will hit: the game's hiring doesn't fit a fleet-only player
 - **Hiring for a fleet-only player:** the recruitment agency recruits for the Street food fleet without a building business; the game's Basic HR course stays required.
 - **Crews moving carts:** travel stays off-screen; the jog speed only sets the timing.
 - **A crewed vehicle without a machine:** shifts are paid as scheduled, with the "no equipment" to-do.
+
+## Before run 4 (Peter, 18 October 2026)
+
+- `tools/play buy truck|cart` goes: it is the debug spawn beside the player, kept only while the tester couldn't bring a truck home. Run 3's Astra bought its truck that way (fine for run 3). From run 4 the tester buys at the dealer through the game's own vehicle store (`ui` clicks) and drives the truck away with `drive`; a cart comes from wherever the game sells it. Check first that the dealer's store works through `ui list`/`ui click` and that the bought vehicle spawns where `drive` can take it.
+- Clear the rates Astra wrote into `~/playtest-tester/notes/handbook.md` (customers per hour from the old opening notice) before the next tester starts.
