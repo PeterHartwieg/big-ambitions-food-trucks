@@ -39,6 +39,8 @@ namespace FoodTrucks
             : AccessTools.Method(TmpInput, "Validate", new[] { typeof(string), typeof(int), typeof(char) });
         private static readonly PropertyInfo? TmpInputLimit = TmpInput?.GetProperty("characterLimit");
         private static readonly PropertyInfo? TmpInputOnValidate = TmpInput?.GetProperty("onValidateInput");
+        // Fields that take their value only when editing ends (a shop's AmountSelector quantity) listen to onEndEdit.
+        private static readonly PropertyInfo? TmpInputOnEndEdit = TmpInput?.GetProperty("onEndEdit");
         private static readonly FieldInfo? OptionsField = AccessTools.Field(typeof(Dropdown), "_options");
         private static readonly FieldInfo? LocalizeField = AccessTools.Field(typeof(Dropdown), "_localizeOptions");
 
@@ -367,6 +369,8 @@ namespace FoodTrucks
             if (SaveOrLoadControl(entry)) throw new BridgeError(SaveLoadText);
             TmpInputText!.SetValue(input, Typed(input, text));
             var now = TmpInputText.GetValue(input) as string ?? "";
+            // Then editing ends, as clicking away does, so the next click works with the new value (Sol review).
+            if (TmpInputOnEndEdit?.GetValue(input) is UnityEngine.Events.UnityEvent<string> endEdit) endEdit.Invoke(now);
             Log.Info($"Test bridge: typed \"{now}\" into \"{entry.Text}\" ({entry.Path}).");
             return new JObject { ["typed"] = entry.Text, ["value"] = now, ["texts"] = new JArray(Texts()) };
         }
