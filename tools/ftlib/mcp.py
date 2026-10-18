@@ -20,6 +20,8 @@ def tool(name, description, properties=None, required=()):
 STRING = {'type': 'string'}
 NUMBER = {'type': 'number', 'minimum': 0}
 TOOLS = [
+    tool('ft_lock', 'Read, acquire or release this instance’s ownership lock. Acquisition requires a unique owner name. Mutations and screenshots require ownership; pause and finish pending work before release. Each bridge URL has an independent lock.',
+         {'op': {'type':'string','enum':['status','acquire','release']}, 'owner':STRING, 'purpose':STRING}, ('op',)),
     tool('ft_health', 'Read bridge session, version, scene, clock and load completion (load.status pending/done/failed). Answers during pending calls and after restarts; restarted/reconnect_required report a changed session. Health does not reconnect or allow mutations. Use ft_reconnect to begin a fresh session.'),
     tool('ft_reconnect', 'Explicitly pin the current bridge session and discard old operation ids and event cursors. Use after ft_health reports a restart or a call detects one. Changing calls are refused locally until reconnect; every pinned call also sends expect_session so the bridge rejects a stale request before running it. Resume with events since=1 and fresh scenario values.'),
     tool('ft_state', 'Read game state, optionally at a dotted path or list filter. Includes load progress, clock targets/arrival and keep_needs, player activity/clock holder/needs (energy, hunger, happiness), available hires, bay readiness and today/yesterday transactions.', {'path': STRING}),
@@ -72,7 +74,9 @@ def call_tool(name, args, bridge):
         raise ValueError(f'Unknown tool {name}: call tools/list for available tools')
     validate_args(spec['inputSchema'], args)
     image = None
-    if name == 'ft_health':
+    if name == 'ft_lock':
+        result = bridge.call('lock', args)
+    elif name == 'ft_health':
         result = bridge.health()
     elif name == 'ft_reconnect':
         result = bridge.reconnect()

@@ -43,6 +43,7 @@
         "NaughtyAttributes.Core.dll",
         "0Harmony.dll",
         "FoodTrucks.Core.dll",
+        "BridgeControl.dll",
         "Newtonsoft.Json.dll"
     ],
     "autoReferenced": false,

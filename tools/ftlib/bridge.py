@@ -6,6 +6,7 @@ import time
 import urllib.error
 import urllib.request
 
+from . import locks
 from .paths import lookup, meets, PathError
 
 RESTART_MESSAGE = 'Bridge restarted: events and remembered values from before are void; use ft_reconnect in MCP or start a fresh scenario run'
@@ -33,6 +34,7 @@ class Bridge:
     def __init__(self, url=None):
         self.url = (url or os.environ.get('BA_BRIDGE_URL', 'http://127.0.0.1:8330')).rstrip('/')
         self.http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        self.lock_owner = os.environ.get('BA_LOCK_OWNER')
         self.session = None
         self.reconnect_required = False
         self.operation_ids = set()
@@ -85,7 +87,10 @@ class Bridge:
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
             if body is not None:
                 raise BridgeError(f'Lost call reply at {self.url}: its outcome is unknown; check the game log before repeating a changing command (no operation id received)') from exc
-            raise BridgeError(f'No bridge at {self.url}: start the game with tools/run-remote.sh start, then tools/run-remote.sh tunnel') from exc
+            hint = ('start the local Mac fallback with tools/agent-tests/mac-agent start in the Driven Rides checkout; no tunnel is needed'
+                    if locks.instance_for_url(self.url) == 'agentmac'
+                    else 'start the game with tools/run-remote.sh start, then tools/run-remote.sh tunnel')
+            raise BridgeError(f'No bridge at {self.url}: {hint}') from exc
         except ValueError as exc:
             raise BridgeError(f'Invalid JSON from {self.url}: check the tunnel points to the test bridge') from exc
         if not isinstance(reply, dict) or not isinstance(reply.get('ok'), bool):
@@ -142,7 +147,16 @@ class Bridge:
             raise BridgeError('Invalid timeout_s: use a finite number of seconds (clamped to 1..600)')
         limit = min(600, max(1, limit))
         arguments['timeout_s'] = limit
+        instance = locks.instance_for_url(self.url)
+        owner = arguments.get('owner') or self.lock_owner
+        if cmd == 'lock' and arguments.get('op') == 'acquire':
+            arguments['owner'] = owner
+            if owner: self.lock_owner = owner
+        credential = locks.token(instance, create=cmd == 'lock' and arguments.get('op') == 'acquire', owner=owner)
+        # Old mock/read-only callers retain their transport behavior. A real owner pins health first.
+        if credential and self.session is None: self.health()
         body = {'cmd':cmd, 'args':arguments}
+        if credential: body['lock_token'] = credential
         if self.session is not None: body['expect_session'] = self.session
         try:
             reply = self._request('/call', body, limit + 2)

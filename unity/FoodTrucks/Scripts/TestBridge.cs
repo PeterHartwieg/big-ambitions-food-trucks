@@ -63,6 +63,7 @@ namespace FoodTrucks
             try
             {
                 MainThread = Thread.CurrentThread.ManagedThreadId;
+                BridgeControl.ControlGate.ConfigureProfile(Application.persistentDataPath);
                 Session = Guid.NewGuid().ToString("N").Substring(0, 8);
                 TestBridgePump.Admit();
                 TestBridgeEvents.Hook();
@@ -133,32 +134,37 @@ namespace FoodTrucks
         // Runs a /call on the main thread and waits up to timeoutSeconds for its reply. Runs on an HTTP thread.
         internal static JObject Call(string cmd, JObject args, double timeoutSeconds, int generation)
         {
-            if (cmd == "op") return OpStatus(args);
-            if (TestBridgePump.Stopped) return Fail(StoppedText);
-            Op op;
-            lock (opsGate)
+            try
             {
-                op = new Op { Id = nextOp++, Cmd = cmd };
-                ops[op.Id] = op;
-            }
-            var task = TestBridgePump.Run(() => TestBridgeCommands.Run(cmd, args), generation);
-            task.ContinueWith(t => Finish(op, t));
-            bool finished;
-            try { finished = task.Wait(TimeSpan.FromSeconds(timeoutSeconds)); }
-            catch (AggregateException) { finished = true; }
-            if (!finished)
-                return new JObject
+                if (cmd == "op") return OpStatus(args);
+                if (TestBridgePump.Stopped) return Fail(StoppedText);
+                var intercepted = BridgeControl.ControlGate.Intercept(cmd, args);
+                if (intercepted != null) return intercepted;
+                Op op;
+                lock (opsGate)
                 {
-                    ["ok"] = false, ["op"] = op.Id,
-                    ["error"] = $"timed out on the main thread; the command goes on: ask {{\"cmd\": \"op\", \"args\": {{\"id\": {op.Id}}}}} for its outcome",
-                };
-            Finish(op, task);
-            lock (opsGate)
-            {
-                return op.Status == "done"
-                    ? new JObject { ["ok"] = true, ["op"] = op.Id, ["result"] = op.Result?.DeepClone() }
-                    : new JObject { ["ok"] = false, ["op"] = op.Id, ["error"] = op.Error };
-            }
+                    op = new Op { Id = nextOp++, Cmd = cmd };
+                    ops[op.Id] = op;
+                }
+                var task = BridgeControl.ControlGate.Track(TestBridgePump.Run(() => TestBridgeCommands.Run(cmd, args), generation), args);
+                task.ContinueWith(t => Finish(op, t));
+                bool finished;
+                try { finished = task.Wait(TimeSpan.FromSeconds(timeoutSeconds)); }
+                catch (AggregateException) { finished = true; }
+                if (!finished)
+                    return new JObject
+                    {
+                        ["ok"] = false, ["op"] = op.Id,
+                        ["error"] = $"timed out on the main thread; the command goes on: ask {{\"cmd\": \"op\", \"args\": {{\"id\": {op.Id}}}}} for its outcome",
+                    };
+                Finish(op, task);
+                lock (opsGate)
+                {
+                    return op.Status == "done"
+                        ? new JObject { ["ok"] = true, ["op"] = op.Id, ["result"] = op.Result?.DeepClone() }
+                        : new JObject { ["ok"] = false, ["op"] = op.Id, ["error"] = op.Error };
+                }
+            } finally { BridgeControl.ControlGate.EndUnqueued(args); }
         }
 
         private static void Finish(Op op, Task<JToken?> task)
@@ -299,7 +305,7 @@ namespace FoodTrucks
         internal static JObject HealthJson()
         {
             var s = Current;
-            return new JObject
+            return BridgeControl.ControlGate.Health(new JObject
             {
                 ["ok"] = true,
                 ["mod_version"] = FoodTrucksMod.Version,
@@ -312,7 +318,7 @@ namespace FoodTrucks
                 ["time_skip"] = s.TimeSkip,
                 ["frame"] = s.Frame,
                 ["load"] = s.LoadName == null ? null : new JObject { ["name"] = s.LoadName, ["status"] = s.LoadStatus },
-            };
+            });
         }
     }
 
@@ -387,10 +393,11 @@ namespace FoodTrucks
             try
             {
                 var result = work();
+                TestBridgeCommands.RefreshOwnership();
                 if (result is Deferred later) pending.Add((later, done));
                 else done.SetResult(result as JToken);
             }
-            catch (Exception ex) { done.SetException(ex); }
+            catch (Exception ex) { TestBridgeCommands.RefreshOwnership(); done.SetException(ex); }
         }
 
         // The bridge stops: every queued and pending call fails, and what pending ones hold is released.

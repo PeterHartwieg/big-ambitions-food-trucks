@@ -116,7 +116,7 @@ namespace FoodTrucks
             string body;
             using (var reader = new StreamReader(request.InputStream, Encoding.UTF8)) body = reader.ReadToEnd();
             JObject call;
-            try { call = JObject.Parse(body); }
+            try { call = BridgeControl.ControlGate.PrepareBody(JObject.Parse(body)); }
             catch (JsonException ex) { return TestBridge.Fail("The body is not a JSON object: " + ex.Message); }
             // A client that knew another session must reconnect first: nothing is queued or numbered for it.
             var expect = call["expect_session"] is JValue e && e.Type == JTokenType.String ? e.Value<string>() : null;

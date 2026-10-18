@@ -14,7 +14,7 @@ from ftlib.package import verify, validate_bundles
 REPO = Path(__file__).resolve().parents[1]
 REQUIRED = {
     'FoodTrucks.dll', 'README.md', 'LICENSE.txt', 'Locales/en.json',
-    'Dependencies/FoodTrucks.Core.dll', 'Dependencies/0Harmony.dll', 'Dependencies/Harmony-LICENSE.txt',
+    'Dependencies/FoodTrucks.Core.dll', 'Dependencies/BridgeControl.dll', 'Dependencies/0Harmony.dll', 'Dependencies/Harmony-LICENSE.txt',
     *(f'data/{name}.json' for name in ('economy', 'demand', 'zones', 'rules', 'pitches', 'commissaries')),
     *(f'AssetBundles/{platform}/foodtrucks.unity3d{suffix}'
       for platform in ('Windows', 'Mac') for suffix in ('', '.manifest')),

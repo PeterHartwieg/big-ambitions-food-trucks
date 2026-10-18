@@ -12,4 +12,4 @@ STAGE="FoodTrucks-staged-$(date +%Y%m%d%H%M%S)"
 scp -q -r "$PKG" "$HOST:$STAGE" < /dev/null
 scp -q "$REPO/build/FoodTrucks.sha256" "$HOST:$STAGE.sha256" < /dev/null
 scp -q "$REPO/tools/Install-Windows.ps1" "$HOST:Install-FoodTrucks.ps1" < /dev/null
-ssh "$HOST" "powershell -NoProfile -ExecutionPolicy Bypass -File Install-FoodTrucks.ps1 -Source $STAGE -Manifest $STAGE.sha256" < /dev/null
+BA_GAME_HOST="$HOST" python3 "$REPO/tools/bridge-lock" exec --script Install-FoodTrucks.ps1 --parameters "{\"Source\":\"$STAGE\",\"Manifest\":\"$STAGE.sha256\"}"
