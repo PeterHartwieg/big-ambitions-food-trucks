@@ -39,7 +39,8 @@ namespace FoodTrucks
             Patch(typeof(VehicleStoreDialog), "OnVehicleSettingsSet", Type.EmptyTypes, nameof(RefuseDelivery), prefix: true);
 
             // Vehicle cargo panel: commissary stock while driving/pushing; serving owns a read-only view.
-            Patch(typeof(ItemPanelUI), "SetVehicle", new[] { typeof(VehicleController) }, nameof(PanelVehicle));
+            Patch(typeof(ItemPanelUI), "SetVehicle", new[] { typeof(VehicleController) }, typeof(Patches),
+                prefix: nameof(PanelVehiclePrefix), postfix: nameof(PanelVehicle));
             Patch(typeof(ItemPanelUI), "SetItemInstance", null, nameof(PanelOther));
             Patch(typeof(ItemPanelUI), "SetMiniGameMode", null, nameof(PanelOther));
 
@@ -492,9 +493,15 @@ namespace FoodTrucks
             }
         }
 
+        private static void PanelVehiclePrefix(VehicleController vehicle)
+        {
+            try { ServingWork.VehiclePanel(vehicle); }
+            catch (Exception ex) { Log.Error(ex); }
+        }
+
         private static void PanelVehicle(ItemPanelUI __instance, VehicleController vehicle)
         {
-            try { ServingWork.VehiclePanel(vehicle); CartButton.OnSetVehicle(__instance, vehicle); }
+            try { CartButton.OnSetVehicle(__instance, vehicle); }
             catch (Exception ex) { Log.Error(ex); }
         }
 

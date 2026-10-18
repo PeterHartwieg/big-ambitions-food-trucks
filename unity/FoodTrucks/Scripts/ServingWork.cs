@@ -87,36 +87,73 @@ namespace FoodTrucks
         internal static void End(ServingActivity activity)
         {
             if (active != activity || ending) return;
+            var oldCargo = cargo;
+            var panel = stockPanel;
+            // Teardown may run after Unity has destroyed the HUD. Release ownership before any callbacks
+            // or game calls, so even a failed cleanup cannot block this or the next session's work.
+            active = null;
+            cargo = null;
+            stockPanel = null;
             ending = true;
             try
             {
                 // Book every already simulated order before walking/driving/closing can change service or stock.
-                CartSelling.PayAllHeldNow();
-                cargo?.RemoveCallFromOnItemsInCargoUpdated(RefreshStock);
-                cargo = null;
-                if (string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) stockPanel?.Toggle(false);
-                stockPanel = null;
-                EnergyHelper.RemoveEnergySpender("work");
-                var speed = InstanceBehavior<UIs>.Instance?.gameSpeed;
-                if (speed != null && speed.isFastForwarding)
+                try { CartSelling.PayAllHeldNow(); }
+                catch (Exception ex) { Log.Error("Serving work, held orders: " + ex); }
+                try { oldCargo?.RemoveCallFromOnItemsInCargoUpdated(RefreshStock); }
+                catch (Exception ex) { Log.Error("Serving work, cargo listener: " + ex); }
+                try
                 {
-                    speed.isFastForwarding = false;
-                    speed.Reset();
+                    if (panel != null && string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) panel.Toggle(false);
                 }
-                active = null;
+                catch (Exception ex) { Log.Error("Serving work, stock panel: " + ex); }
+                try { EnergyHelper.RemoveEnergySpender("work"); }
+                catch (Exception ex) { Log.Error("Serving work, energy: " + ex); }
+                try
+                {
+                    var ui = InstanceBehavior<UIs>.Instance;
+                    var speed = ui != null ? ui.gameSpeed : null;
+                    if (speed != null && speed.isFastForwarding)
+                    {
+                        speed.isFastForwarding = false;
+                        speed.Reset();
+                    }
+                }
+                catch (Exception ex) { Log.Error("Serving work, speed: " + ex); }
                 // Keep skipVehicle until the end event has resumed the sales clocks, irrespective of event order.
-                if (InstanceBehavior<UIs>.Instance?.timeMachine?.isRunning == true && skipVehicle == activity.VehicleId)
-                    InstanceBehavior<UIs>.Instance.timeMachine.CancelTimeMachine();
+                try
+                {
+                    var ui = InstanceBehavior<UIs>.Instance;
+                    var machine = ui != null ? ui.timeMachine : null;
+                    if (machine != null && machine.isRunning && skipVehicle == activity.VehicleId) machine.CancelTimeMachine();
+                }
+                catch (Exception ex) { Log.Error("Serving work, time machine: " + ex); }
             }
             finally { ending = false; }
         }
 
         internal static void Reset()
         {
-            active?.MarkFinished();
-            armed = null;
-            skipVehicle = null;
-            skipClosed = false;
+            try
+            {
+                var activity = active;
+                if (activity != null)
+                {
+                    activity.MarkFinished();
+                    End(activity); // Also clean up an activity that was already marked Finished.
+                }
+            }
+            finally
+            {
+                active = null;
+                armed = null;
+                skipVehicle = null;
+                skipClosed = false;
+                cargo = null;
+                stockPanel = null;
+                ending = false;
+                catchingUp = false;
+            }
         }
 
         internal static void Arm(ServingActivity activity) => armed = activity;
@@ -146,20 +183,36 @@ namespace FoodTrucks
             finally { catchingUp = false; }
         }
 
-        internal static void DrivingPrefix(VehicleController __instance) => BeforeLeaving(__instance.vehicleInstance.id);
+        internal static void DrivingPrefix()
+        {
+            var activity = active;
+            if (activity == null) return;
+            try { activity.Finish(); }
+            catch (Exception ex) { Log.Error("Serving work, entering vehicle: " + ex); }
+            finally
+            {
+                activity.MarkFinished();
+                End(activity);
+            }
+        }
 
-        // An interaction may replace the cargo panel before LateUpdate releases the cart stance. Its new
-        // contents belong to the game; ending work must neither hide them nor clear a newly selected vehicle.
+        // Runs BEFORE SetVehicle: its nested button/row updates must already belong to the game when
+        // entering a vehicle, including entry without a navigation event or an intervening LateUpdate.
         internal static void OtherPanel() => stockPanel = null;
         internal static void VehiclePanel(VehicleController vehicle)
         {
-            if (vehicle?.vehicleInstance != cargo || !string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) OtherPanel();
+            if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId))
+            {
+                OtherPanel(); // Never hide or clear the vehicle the game has just selected.
+                DrivingPrefix();
+            }
+            else if (vehicle == null || vehicle.vehicleInstance != cargo) OtherPanel();
         }
 
         // SetVehicle does not select/enter the vehicle. These buttons are driving/loading controls, not serving.
         internal static void ReadOnlyButtons(ItemPanelUI __instance)
         {
-            if (stockPanel != __instance || active == null) return;
+            if (stockPanel != __instance || active == null || !string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) return;
             foreach (var button in new[] { __instance.parkButton, __instance.autoParkButton, __instance.sleepButton,
                 __instance.sellButton, __instance.grabButton, __instance.discardButton, __instance.leaveButton, __instance.placeButton, __instance.useMopButton })
                 if (button != null) button.gameObject.SetActive(false);
@@ -167,7 +220,7 @@ namespace FoodTrucks
 
         internal static void ReadOnlyCargo(ItemPanelUI __instance)
         {
-            if (stockPanel != __instance || active == null) return;
+            if (stockPanel != __instance || active == null || !string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) return;
             foreach (var button in __instance.cargoContainer.GetComponentsInChildren<Button>(true))
             {
                 // Normal driving/pushing creates its rows from this template afterwards. Keep it interactive.

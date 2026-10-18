@@ -446,7 +446,8 @@ namespace FoodTrucks
         private void LateUpdate()
         {
             cartServing.LateUpdate();
-            ServingWork.UpdateCart(cartServing);
+            try { ServingWork.UpdateCart(cartServing); }
+            catch (Exception ex) { Log.Error("Serving work, cart update: " + ex); }
             if (FoodTrucksSession.CurrentState == null || SaveGameManager.Current == null) return;
             var hour = HireCrew.Now() / 60;
             if (hour == closedAtHour) return;
