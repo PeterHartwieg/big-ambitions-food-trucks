@@ -39,6 +39,14 @@ namespace FoodTrucks.Core.Catering
 
     public static class CateringOffers
     {
+        // The adapter can avoid finding locations when the daily rules cannot issue an offer.
+        // ForDay must still run to record the day without consuming random numbers.
+        public static bool CanGenerateOffers(CateringRules rules, int eligibleVehicles, long lifetimeServed)
+        {
+            if (rules == null) throw new ArgumentNullException(nameof(rules));
+            return eligibleVehicles > 0 && lifetimeServed > 0 && rules.MaxOffersPerDay > 0;
+        }
+
         public static IReadOnlyList<CateringOffer> ForDay(CateringRules rules, CateringState state, OfferContext context)
         {
             if (rules == null) throw new ArgumentNullException(nameof(rules));
@@ -51,7 +59,7 @@ namespace FoodTrucks.Core.Catering
             if (context.ReferencePriceCents.Values.Any(p => p < 0)) throw new ArgumentException("Reference prices must not be negative.", nameof(context));
             if (context.CategoryUnits != null && context.CategoryUnits.Values.Any(u => u < 0)) throw new ArgumentOutOfRangeException(nameof(context.CategoryUnits));
             state.LastOfferDay = context.Day;
-            if (context.EligibleVehicles <= 0 || context.LifetimeServed <= 0 || rules.MaxOffersPerDay == 0) return Array.Empty<CateringOffer>();
+            if (!CanGenerateOffers(rules, context.EligibleVehicles, context.LifetimeServed)) return Array.Empty<CateringOffer>();
 
             int MaxGuests(string category)
             {
