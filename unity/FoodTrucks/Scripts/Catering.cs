@@ -178,7 +178,9 @@ namespace FoodTrucks
                 Log.Info($"Catering: offer {expired.Id} expired unanswered.");
             if (day <= state.Catering.LastOfferDay) return;
             var caterers = Caterers(state, rules);
-            var places = Places(tables, rules);
+            var lifetimeServed = state.Vehicles.Sum(v => (long)v.LifetimeSales);
+            var scanPlaces = CateringOffers.CanGenerateOffers(rules, caterers.Count, lifetimeServed);
+            var places = scanPlaces ? Places(tables, rules) : new List<CateringPlace>();
             var prices = new Dictionary<string, long>(StringComparer.Ordinal);
             foreach (var (vehicle, _, _) in caterers)
                 foreach (var item in CartDemand.MenuOf(tables, vehicle).Menu.Items)
@@ -193,14 +195,15 @@ namespace FoodTrucks
                 Day = day,
                 Places = places,
                 EligibleVehicles = caterers.Count,
-                LifetimeServed = state.Vehicles.Sum(v => (long)v.LifetimeSales),
+                LifetimeServed = lifetimeServed,
                 // Storage per piece: for each category, the most food items one truck holds of it, from the pieces fitted today.
                 CategoryUnits = CategoryUnits(tables, caterers),
                 ReferencePriceCents = prices
             };
             var offers = CateringOffers.ForDay(rules, state.Catering, context);
             FoodTrucksSession.MarkChanged();
-            Log.Info($"Catering: day {day}: {offers.Count} offers from {caterers.Count} trucks, {places.Count} places ({places.Count(p => p.Area == "park")} at park gates), {context.LifetimeServed} items sold, booking reputation {state.Catering.BookingReputation:F2}.");
+            var placeReport = scanPlaces ? $"{places.Count} places ({places.Count(p => p.Area == "park")} at park gates)" : "places not scanned (no eligible offers)";
+            Log.Info($"Catering: day {day}: {offers.Count} offers from {caterers.Count} trucks, {placeReport}, {context.LifetimeServed} items sold, booking reputation {state.Catering.BookingReputation:F2}.");
             foreach (var offer in offers)
             {
                 Log.Info($"Catering offer {offer.Id}: {offer.Kind} at {offer.PlaceId} on day {offer.GigDay} {Clock(offer.StartMinute)} for {offer.DurationMinutes} min, {offer.Guests} guests, {offer.RequiredCategory}, {CartSelling.Money(offer.FeeCents)}; reply by day {offer.ReplyByDay}.");
