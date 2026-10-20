@@ -1,0 +1,8 @@
+[b]0.10.2 — hotfix[/b]
+
+[list]
+[*]Quitting the game no longer logs a Harmony error from this mod, and the mod's cleanup on quit now always finishes.
+[*]A game dropdown whose selection had become invalid no longer throws while the game reloads its translations on quit.
+[/list]
+
+Thanks to the player who sent the detailed log report.

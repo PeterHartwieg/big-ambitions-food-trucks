@@ -21,6 +21,10 @@ namespace FoodTrucks
     {
         private const string HarmonyId = "foodtrucks.mod";
         private static Harmony? harmony;
+        // Methods left patched by Remove until the game exits: ones Harmony can't restore (a static method on an interface,
+        // ICargoHolder) and the dropdown guard. A later Apply in the same run (the game reloads mods when the mod list
+        // changes) doesn't patch them twice.
+        private static readonly HashSet<MethodBase> keptPatched = new HashSet<MethodBase>();
 
         public static void Apply()
         {
@@ -95,6 +99,8 @@ namespace FoodTrucks
                 prefix: nameof(VehicleSchedule.EmployeeChangedPrefix));
             Patch(typeof(EmployeeInstance), "UpdateWeeklyHoursAndDays", new[] { typeof(List<ScheduleDay>) }, typeof(VehicleSchedule),
                 postfix: nameof(VehicleSchedule.WeeklyHoursPostfix));
+            // A dropdown with a selected option past its list shows the placeholder instead of throwing (the quit's localization reload).
+            Patch(typeof(UI.Elements.Dropdown), "UpdateSelectedOptionText", Type.EmptyTypes, nameof(StaleDropdownPrefix), prefix: true);
             Patch(typeof(ScheduleAutoFillerHelper), "AutoFillSchedule", null, typeof(VehicleSchedule), prefix: nameof(VehicleSchedule.AutoFillPrefix));
             Patch(typeof(UI.Smartphone.Apps.BizMan.Schedule.ScheduleDaySelectionController), "UpdateHrManagerAvailability", new[] { typeof(bool) },
                 typeof(VehicleSchedule), postfix: nameof(VehicleSchedule.AutoAvailablePostfix));
@@ -293,6 +299,11 @@ namespace FoodTrucks
                     Log.Error($"Patch {name}: Not active, method not found.");
                     return;
                 }
+                if (keptPatched.Contains(original))
+                {
+                    Log.Info($"Patch {name}: Active (kept from before the mods were reloaded).");
+                    return;
+                }
                 HarmonyMethod? Handler(string? handler) => handler == null ? null
                     : new HarmonyMethod(typeof(TestBridgeCommands), handler) { priority = first ? HarmonyLib.Priority.First : HarmonyLib.Priority.Normal };
                 harmony.Patch(original, prefix: Handler(prefix), postfix: Handler(postfix), finalizer: Handler(finalizer));
@@ -305,9 +316,41 @@ namespace FoodTrucks
             }
         }
 
+        // One method at a time: UnpatchAll threw on the interface method above (Harmony rebuilds the original and can't
+        // give it an interface as owner), which stopped the mod's unload and the game's own quit cleanup after it.
         public static void Remove()
         {
-            harmony?.UnpatchAll(HarmonyId);
+            if (harmony == null) return;
+            List<MethodBase> methods;
+            try { methods = harmony.GetPatchedMethods().ToList(); }
+            catch (Exception ex)
+            {
+                // Nothing removed: keep the instance, so a later Apply in this run returns early instead of patching twice.
+                Log.Error("Unpatch: " + ex.Message);
+                return;
+            }
+            foreach (var method in methods)
+            {
+                if (method.DeclaringType == null || method.DeclaringType.IsInterface)
+                {
+                    keptPatched.Add(method);
+                    Log.Info($"Unpatch {method.DeclaringType?.Name}.{method.Name}: kept, Harmony can't restore a method on an interface.");
+                    continue;
+                }
+                // The dropdown guard is needed after the unload: the game reloads localization once the mods are unloaded.
+                if (method.DeclaringType == typeof(UI.Elements.Dropdown) && method.Name == "UpdateSelectedOptionText")
+                {
+                    keptPatched.Add(method);
+                    continue;
+                }
+                try { harmony.Unpatch(method, HarmonyPatchType.All, HarmonyId); }
+                catch (Exception ex)
+                {
+                    // Harmony may have dropped the patch's record while the old detour stays: treat it as still patched.
+                    keptPatched.Add(method);
+                    Log.Error($"Unpatch {method.DeclaringType.Name}.{method.Name}: {ex.Message}");
+                }
+            }
             harmony = null;
         }
 
@@ -332,6 +375,11 @@ namespace FoodTrucks
                 if (original == null)
                 {
                     Log.Error($"Patch {name}: Not active, method not found.");
+                    return;
+                }
+                if (keptPatched.Contains(original))
+                {
+                    Log.Info($"Patch {name}: Active (kept from before the mods were reloaded).");
                     return;
                 }
                 harmony!.Patch(original,
@@ -471,6 +519,22 @@ namespace FoodTrucks
         {
             try { HireCrew.AfterGameCount(); }
             catch (Exception ex) { Log.Error(ex); }
+        }
+
+        // UI.Elements.Dropdown.UpdateSelectedOptionText: a dropdown whose option list was emptied or shortened after it was
+        // set keeps its old selected index, and the next text update threw. The game updates every dropdown's text when it
+        // reloads localization, which it does while unloading mods on quit, so one such dropdown stopped the quit cleanup
+        // (a player's report). Such a dropdown shows its placeholder instead.
+        private static bool loggedStaleDropdown;
+        private static void StaleDropdownPrefix(List<string>? ____options, ref int ____selectedOptionIndex)
+        {
+            if (____selectedOptionIndex < 0 || (____options != null && ____selectedOptionIndex < ____options.Count)) return;
+            if (!loggedStaleDropdown)
+            {
+                loggedStaleDropdown = true;
+                Log.Info($"Dropdown: selected option {____selectedOptionIndex} of {____options?.Count ?? 0}; shown as unselected.");
+            }
+            ____selectedOptionIndex = -1;
         }
 
         private static void CrewHasTask(EmployeeInstance employeeInstance, ref bool __result)
