@@ -189,6 +189,9 @@ namespace FoodTrucks
             // The food vehicle's on-foot menu: Open for business, Back to the hatch, Close and Clean, next to the game's Enter vehicle.
             Patch(typeof(Player.HUD.ItemInfoOverlays.VehicleOverlay), "UpdateOverlay", new[] { typeof(EntityController) },
                 typeof(OverlayButtons), postfix: nameof(OverlayButtons.UpdateOverlayPostfix));
+            // On foot, a click on a cart (or an empty truck) opens that menu instead of pushing or entering it at once.
+            Patch(typeof(Player.HUD.ItemInfoOverlays.VehicleCtaBehavior), "GetCta", new[] { typeof(EntityController) },
+                typeof(OverlayButtons), postfix: nameof(OverlayButtons.CtaPostfix));
 
             // Commissary orders: the game's phone order form (as Square Appliances shows it) in a commissary's conversation,
             // made the commissary's: its address and delivery time, boxes at wholesale, Core's fee and total. Only while
