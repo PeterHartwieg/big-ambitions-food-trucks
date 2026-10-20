@@ -51,8 +51,14 @@ namespace FoodTrucks
             }
             foreach (var list in collectors) list.Add(text);
             Log.Event("notice", "Notice: " + text);
-            Notifications.Show(type, key, data, seconds, duplicateIdentifier, null, notificationSound, trackOnSaveGame);
+            showing = true;
+            try { Notifications.Show(type, key, data, seconds, duplicateIdentifier, null, notificationSound, trackOnSaveGame); }
+            finally { showing = false; }
         }
+
+        // True while Show hands its notice to the game, so the test bridge's hook on the game's notices doesn't log it twice.
+        [ThreadStatic] private static bool showing;
+        internal static bool Showing => showing;
 
         // GameManager.SendTextMessage, logged first.
         internal static void SendText(Contact contact, string key, Dictionary<string, string>? data = null)
