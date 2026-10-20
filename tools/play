@@ -10,7 +10,7 @@ Commands (each also takes --help):
 
   look                         Where you are, the time, your money, how you feel, what you hold, your vehicles, crew,
                                commissary stock and orders.
-  notices [--follow]           Notices and phone texts since you last looked.
+  notices [--follow]           Notices (the game's and the mods') and phone texts since you last looked.
   places [--radius M]          Buildings near you: address, type, business, commissaries.
   map filters | map FILTER [--limit N]
                                The city map's highlights: the filters there are, or the buildings one lights, nearest
@@ -28,12 +28,19 @@ Commands (each also takes --help):
   go ADDRESS                   Tell the taxi you got into where to go (address as places or map prints it, e.g.
                                ba:street_secondavenue#8). You get into one with use.
   eat [ITEM]                   Eat from the bag of food you hold.
+  licence car|commercial [--buy]
+                               A driving licence (Real Life Overhaul): your standing and its price, or buy it for what
+                               the school's lessons and tests cost in person (car: theory, lesson, driven test;
+                               commercial: van lesson and driven test, a valid car licence first). A lesson under way is
+                               called off and its fee returned. It counts once you save.
   floorplan                    The floor you stand on: labelled 0.5 m squares, walls, openings, furniture and use spots.
-  place SQUARE | place X Z [--rotation DEG] [--move NAME] [--check]
+  place SQUARE | place X Z [--rotation DEG] [--move NAME] [--check] | place --on NAME [--check]
                                Set down the furniture in the box you hold, on the floor of a building you rent.
                                With --move, pick up furniture already standing there (nearest with NAME in its name)
                                and set it down there instead. SQUARE (for example C4) is the item's anchor on floorplan.
                                --check tries the same placement and reach test, then cancels it without keeping changes.
+                               --on NAME sets furniture that sits on other furniture (a cash register on a cabinet, a
+                               coffee machine on a counter) on the nearest piece here whose name contains NAME.
   drop [X Z]                  Put the box or bag you hold down, still packed, on an editable building's floor
                                (at your feet if no point is given); return a mop to its station. No street drop.
   pickup ID                    Pick up a placed box or bag, by its number in the last use list.
@@ -50,10 +57,17 @@ Commands (each also takes --help):
                                closing what is open. A click that starts a time skip (sleep, a course) waits for it.
   time pause | time speed N | time until [DAY] HH:MM [--speed N]
                                Pause, set the game speed (at most 20), or let time run until a moment (then pause).
-                               DAY is a day number or +N days from today.
+                               DAY is a day number or +N days from today; without it, HH:MM must still be ahead today.
+  work                         Your running job's minigame (mopping, flyers, shelves, the cart's customers, busking)
+                               played for you as a skilled player would, while time passes; full pay with typical tips.
+                               Start it where the job says: inside the client's building for cleaning, behind the cart,
+                               on your pitch for busking. Driving jobs (parcels, fares) are driven for you too, as
+                               soon as you have taken the job.
   buy truck|cart               Buy a vehicle; it is delivered next to you.
-  drive TRUCK PLACE [--speed N]
-                               Drive your truck while you sit in it (vehicle ID enter first). PLACE: bay:SITE (its
+  drive VEHICLE PLACE [--speed N]
+                               Drive your truck, or any car or van you sit in (a job's hired van: use it to get in;
+                               its id is in look), to PLACE; a car that isn't a food truck takes only address:ADDRESS.
+                               A truck: vehicle ID enter first. PLACE: bay:SITE (its
                                commissary's bay), address:ADDRESS (a building) or stop:N (stop N of the truck's route
                                today). You pull out of your space onto the road, the truck drives itself there with the
                                traffic (the self-driving system, at N times real time, 1 to 3, 3 if left out), and you
@@ -115,6 +129,19 @@ from ftlib.bridge import Bridge, BridgeError  # noqa: E402
 
 PREFIX = 'FT playtest'
 MAX_SPEED = 20
+# FT_PLAY_CLOCK=player: the clock moves only as a player can move it: at normal speed while you act or wait, and
+# further only through the game's own activities (sleep, a bench, rest, a course, a work panel's skip).
+PLAYER_CLOCK = os.environ.get('FT_PLAY_CLOCK') == 'player'
+MAX_WAIT = 120
+if PLAYER_CLOCK:
+    __doc__ = __doc__.replace(
+        '''  time pause | time speed N | time until [DAY] HH:MM [--speed N]
+                               Pause, set the game speed (at most 20), or let time run until a moment (then pause).
+                               DAY is a day number or +N days from today; without it, HH:MM must still be ahead today.''',
+        f'''  time pause | time wait MINUTES
+                               Pause, or stand and let the clock run at normal speed for up to {MAX_WAIT} game minutes
+                               (then pause). To skip further ahead, do what a player does: sleep in a bed or on a bench,
+                               rest, take a course or use a work panel's skip, through ui.''')
 WEEK = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
 VEHICLE_OPS = ('open', 'close', 'enter', 'exit', 'back_to_hatch', 'work_window', 'stop_work', 'restock', 'rent_bay')
 PHONE_APPS = ('contacts', 'employees', 'bizman', 'econoview', 'market', 'persona', 'rivals')
@@ -184,6 +211,23 @@ class Play:
         if hands:
             inside_ = ', '.join(f"{c['amount']} {c['item']}{'' if c.get('paid', True) else ' (not paid)'}" for c in hands.get('contents') or [])
             self.out(f"You hold: {hands['item']}{': ' + inside_ if inside_ else ''}.")
+        job = s.get('job')
+        if job:
+            self.out(f"Job: {job.get('objective') or job.get('id')}")
+            cl = job.get('client')
+            if cl:
+                left = f", {cl['seconds_left']:.0f} s left at speed 1" if cl.get('seconds_left') is not None else ''
+                self.out(f"  The job's building: {cl.get('business') or cl.get('name')} at {cl.get('address')}, "
+                         f"its door at x {cl['x']}, z {cl['z']}{left}. Go in there (use, or walk to the door); any other building ends the job.")
+            ct = job.get('cart')
+            if ct and ct.get('setting_up'):
+                self.out("  Your cart: being set up beside you; stay where you are until its place is shown (time wait 3).")
+                ct = None
+            if ct:
+                state = 'you are at it' if ct.get('standing') else 'walk there to start working'
+                self.out(f"  Your cart: at x {ct['cart_x']}, z {ct['cart_z']}; your place behind it at x {ct['post_x']}, z {ct['post_z']} ({state}).")
+            mk = job.get('marker')
+            if mk and not cl and not ct: self.out(f"  The job points to: {mk.get('label') or 'here'} at x {mk['x']}, z {mk['z']}.")
         homes = p.get('homes')
         if homes is not None: self.out(f"Home: {', '.join(homes) if homes else 'none'}.")
         lic = s.get('licence') or {}
@@ -206,6 +250,9 @@ class Play:
                 self.out(f"  shifts of {shift['employee']} ({shift['id']}): " + ', '.join(f"{x['day']} {x['start']}-{x['end']}" for x in shift['shifts']))
             for t in v.get('todos') or []:
                 self.out(f"  to-do: {t.get('text') or t['kind'].replace('_', ' ') + (' (' + t['item'] + ')' if t.get('item') else '')}")
+        for o in s.get('other_vehicles') or []:
+            where = f" at x {o['x']}, z {o['z']}" if o.get('x') is not None else ''
+            self.out(f"Car {o['id']}: {o.get('type')}{where} (get in: vehicle {o['id']} enter; drive: drive {o['id']} address:ADDRESS).")
         com = s.get('commissary') or {}
         for sp in com.get('spaces') or []:
             self.out(f"Commissary space at {sp['site']} for {sp['vehicle']}.")
@@ -216,9 +263,10 @@ class Play:
         for e in s.get('employees') or []:
             self.out(f"Unassigned hire: {e['name']} ({e['id']}), customer service {e['skill']}, {money(e['wage'])} an hour.")
         for t in (s.get('transactions_today') or [])[-8:]:
-            self.out(f"Bank: day {t['day']} {t['time']} {t['label']}: {money(t['amount'])}")
+            said = ' / '.join(t.get('notices') or [])
+            self.out(f"Bank: day {t['day']} {t['time']} {t['label']}: {money(t['amount'])}" + (f" (notice: {said})" if said else ''))
 
-    def notices(self, follow=False, since=None):
+    def notices(self, follow=False, since=None, shown=()):
         session = self.bridge.health().get('session')
         try:
             with open(self.memory) as f: remembered = json.load(f)
@@ -228,7 +276,7 @@ class Play:
         while True:
             batch = self.bridge.events(cursor)
             for e in batch['events']:
-                if e['kind'] in ('notice', 'phone'):
+                if e['kind'] in ('notice', 'phone') and e['text'].removeprefix('Notice: ') not in shown:
                     self.out(f"[day {e['day']} {e['time']}] {e['text']}")
             cursor = batch['next']
             try:
@@ -310,7 +358,15 @@ class Play:
             self.out(f"You're now {'inside ' + r['inside'] if r.get('inside') else 'outside'}.")
         if r.get('open'): self.out(f"Open now: {', '.join(r['open'])} (ui list shows it).")
         for n in r.get('notices') or []: self.out(f'  {n}')
-        self.notices(since=cursor)
+        self.notices(since=cursor, shown=set(r.get('notices') or []))
+
+    def licence(self, kind, buy=False):
+        if buy: self.acting()
+        r = self.call('licence', {'class': kind, 'buy': buy})
+        if r.get('bought'):
+            self.out(f"Bought a {r['class']} licence for {money(r['price'])}: now {r['standing'].lower()}. Money {money(r['money'])}.")
+        else:
+            self.out(f"{r['class'].capitalize()} licence: {r['standing'].lower()}. Bought outright it costs {money(r['price'])} (licence {r['class']} --buy).")
 
     def eat(self, item=None):
         self.acting()
@@ -374,8 +430,16 @@ class Play:
                      f"turned {item['rotation']:g} degrees; use {uses}; {'reachable' if item['reachable'] else 'unreachable'}.")
         if r.get('geometry'): self.out(r['geometry'])
 
-    def place(self, x, z=None, rotation=None, move=None, check=False):
+    def place(self, x, z=None, rotation=None, move=None, check=False, on=None):
         self.acting()
+        if on:
+            r = self.call('place', {'on': on, **({'check': True} if check else {})})
+            if r.get('fits') and (r['placed'] or check):
+                self.out(f"{r['item']}: {'placed' if r['placed'] else 'fits (checked, cancelled)'} on {r['on']}.")
+            else: self.out(f"{r['item']}: not placed ({r['why']}).")
+            for n in r.get('notices') or []: self.out(f'  {n}')
+            return
+        if x is None: raise Refused('place takes SQUARE, X Z, or --on NAME.')
         if z is None:
             if not re.fullmatch(r'[A-Za-z]+[1-9][0-9]*', str(x)): raise Refused('place takes SQUARE (for example C4), or X Z.')
             target = {'square': str(x).upper()}
@@ -425,6 +489,12 @@ class Play:
         else:
             self.out(f"You stopped {r['from_goal']} m short{pushing}, at x {r['x']}, z {r['z']}"
                      f"{' (the way there only goes part of the way)' if r.get('path') == 'partial' else ''}.")
+        if r.get('crossings'):
+            waited = r.get('waited_for_traffic_s') or 0
+            self.out(f"  You crossed {r['crossings']} road{'s' if r['crossings'] != 1 else ''} at the crossings"
+                     + (f", waiting about {waited:.0f} game minutes for the traffic." if waited >= 1 else '.'))
+        elif r.get('route') == 'straight':
+            self.out('  No pavement route there: you went the direct way, across any road on it.')
 
     def map(self, what, limit=None):
         if what == 'filters':
@@ -451,7 +521,8 @@ class Play:
                          f" (slider {b.get('value')}, from {b.get('min')} to {b.get('max')})" if kind == 'slider' else
                          f" (toggle, {'on' if b.get('on') else 'off'})" if kind == 'toggle' else
                          f" (text field: \"{b.get('value') or ''}\")" if kind == 'text field' else '')
-                self.out(f"[{b['id']}] {b['text']}{extra}")
+                beside = f"  ({b['context']})" if b.get('context') else ''
+                self.out(f"[{b['id']}] {b['text']}{extra}{beside}")
             for t in r['texts']:
                 self.out(f"text: {t}")
             return
@@ -498,19 +569,62 @@ class Play:
             self.out(f"Time passed: now day {c['day']} {c['time']}.")
             self.notices(since=cursor)
 
+    def work(self):
+        """The running job's minigame played for you as a competent player would, as a time skip."""
+        self.acting()
+        cursor = self.bridge.events(1)['next']
+        money_before = self.call('state').get('money')
+        r = self.call('job', {'op': 'auto'})
+        if r.get('simulated'):
+            # A driving shift: paid as a competent driver would earn it, then the clock runs for the driving time.
+            self.out(f"Driving the job ({r['kind']}) as a skilled driver would: {r['units']} "
+                     f"{'fares' if r['kind'] == 'TaxiJob' else 'parcels'}, about {r['minutes']} game minutes, until {r['until']}.")
+            deadline = time.time() + 900
+            while self.call('state')['clock'].get('run_until') and time.time() < deadline:
+                time.sleep(1)
+            s = self.call('state')
+            self.out(f"Time passed: now day {s['clock']['day']} {s['clock']['time']}.")
+            if money_before is not None and s.get('money') is not None:
+                self.out(f"Money {money(money_before)} -> {money(s['money'])}.")
+            return
+        self.out(f"Working the job ({r['kind']}) as a skilled player would, while time passes.")
+        self.wait_for_skip(cursor)
+        # The pay lands as the skip settles, a moment after the clock is back.
+        deadline = time.time() + 5
+        s = self.call('state')
+        while s.get('money') == money_before and time.time() < deadline:
+            time.sleep(.5)
+            s = self.call('state')
+        if money_before is not None and s.get('money') is not None:
+            self.out(f"Money {money(money_before)} -> {money(s['money'])}.")
+
     def time(self, op, value=None, speed=None, day=None, wait=True):
+        if PLAYER_CLOCK and op in ('speed', 'until'):
+            raise Refused('The clock runs at normal speed. Use time wait MINUTES, or skip ahead the way a player does: '
+                          'sleep, rest, a course or a work skip.')
         self.acting()
         if op == 'pause':
             self.call('time', {'pause': True}); self.out('Paused.'); return
         if op == 'speed':
             if not 0 < value <= MAX_SPEED: raise Refused(f'Speed is above 0 and at most {MAX_SPEED}.')
             self.call('time', {'speed': value}); self.out(f'Speed {value}.'); return
+        if op == 'wait':
+            minutes = int(value or 0)
+            if not 0 < minutes <= MAX_WAIT: raise Refused(f'time wait MINUTES: from 1 to {MAX_WAIT}.')
+            clock = self.call('state')['clock']
+            h, m = map(int, clock['time'].split(':'))
+            total = h * 60 + m + minutes
+            op, day, speed, value = 'until', f"+{total // 1440}", 1, f"{(total % 1440) // 60:02d}:{total % 60:02d}"
         if op != 'until': raise Refused(f'Unknown time op {op}: pause, speed or until.')
         speed = speed or MAX_SPEED
         if not 0 < speed <= MAX_SPEED: raise Refused(f'Speed is above 0 and at most {MAX_SPEED}.')
         clock = self.call('state')['clock']
         target_day = clock['day'] if day is None else (clock['day'] + int(day[1:]) if str(day).startswith('+') else int(day))
-        if day is None and value <= clock['time']: target_day += 1
+        # A time already past today is refused rather than read as tomorrow: a day of needs running down unseen.
+        if day is not None and str(day) == '+0': day = None
+        if day is None and value <= clock['time']:
+            raise Refused(f"It is already {clock['time']} on day {clock['day']}, so {value} today has passed. "
+                          f"For tomorrow, give the day: time until +1 {value}.")
         cursor = self.bridge.events(1)['next']
         # Your needs run down as in any game: nothing tops them up.
         self.call('time', {'run_until': {'day': target_day, 'time': value}, 'speed': speed, 'keep_needs': False})
@@ -587,7 +701,8 @@ class Play:
         elif op not in VEHICLE_OPS:
             raise Refused(f"Unknown vehicle action {op}: {', '.join(VEHICLE_OPS)}, fast_forward, skip_work, take or return.")
         cursor = self.bridge.events(1)['next'] if op == 'skip_work' else None
-        r = self.call('vehicle', args)
+        # The game's own buttons (Park among them) don't work while paused: a player lets the clock run to use them.
+        r = self.call('vehicle', args) if op in ('skip_work', 'fast_forward') else self.clock_at_one(lambda: self.call('vehicle', args))
         self.out(f"{op}: {'done' if r['done'] else 'not done'}{' (' + r['why'] + ')' if r.get('why') else ''}.")
         for n in r.get('notices') or []: self.out(f'  {n}')
         if op == 'skip_work' and r['done']: self.wait_for_skip(cursor)
@@ -661,12 +776,13 @@ def parser():
     n = sub.add_parser('use', help='things near you that react to a click, or click one'); n.add_argument('id', nargs='?', type=int)
     n.add_argument('--radius', type=float)
     n = sub.add_parser('eat', help='eat from the bag you hold'); n.add_argument('item', nargs='?')
+    n = sub.add_parser('licence', help='a driving licence: standing and price, or buy it'); n.add_argument('kind', choices=['car', 'commercial']); n.add_argument('--buy', action='store_true')
     n = sub.add_parser('drop', help='put down a packed box or bag on an editable floor, or return a mop'); n.add_argument('coords', nargs='*', type=float)
     n = sub.add_parser('pickup', help='pick up a placed box or bag from the last use list'); n.add_argument('id', type=int)
     n = sub.add_parser('handtruck', help='list, grab, release, load, or take a box from a hand truck'); n.add_argument('words', nargs='*')
     sub.add_parser('floorplan', help='the floor you stand on, in grid squares, with furniture and use spots')
-    n = sub.add_parser('place', help='place furniture at SQUARE or X Z; --check tries and cancels'); n.add_argument('x', metavar='SQUARE|X'); n.add_argument('z', nargs='?', type=float)
-    n.add_argument('--rotation', type=float); n.add_argument('--move'); n.add_argument('--check', action='store_true')
+    n = sub.add_parser('place', help='place furniture at SQUARE or X Z, or on other furniture (--on NAME); --check tries and cancels'); n.add_argument('x', metavar='SQUARE|X', nargs='?'); n.add_argument('z', nargs='?', type=float)
+    n.add_argument('--rotation', type=float); n.add_argument('--move'); n.add_argument('--check', action='store_true'); n.add_argument('--on')
     n = sub.add_parser('phone', help='open the phone on an app'); n.add_argument('app', choices=PHONE_APPS)
     n = sub.add_parser('call', help='your contacts, or call one'); n.add_argument('contact')
     n = sub.add_parser('walk', help='walk somewhere, pushing a cart you hold'); n.add_argument('coords', nargs='*', type=float)
@@ -675,8 +791,9 @@ def parser():
     n = sub.add_parser('screen', help='a picture of the screen'); n.add_argument('name'); n.add_argument('--fetch')
     n = sub.add_parser('ui', help='buttons and texts on screen'); n.add_argument('op', choices=('list', 'click', 'set', 'type', 'escape'))
     n.add_argument('text', nargs='*'); n.add_argument('--id', type=int)
-    n = sub.add_parser('time', help='pause, speed or run until a moment'); n.add_argument('op', choices=('pause', 'speed', 'until'))
+    n = sub.add_parser('time', help='pause, speed or run until a moment'); n.add_argument('op', choices=('pause', 'speed', 'until', 'wait'))
     n.add_argument('value', nargs='*'); n.add_argument('--speed', type=float); n.add_argument('--no-wait', action='store_true')
+    sub.add_parser('work', help="play the running job's minigame as a skilled player, as a time skip")
     n = sub.add_parser('buy', help='buy a truck or a cart'); n.add_argument('kind', choices=('truck', 'cart'))
     n = sub.add_parser('drive', help='drive your truck somewhere'); n.add_argument('truck'); n.add_argument('place')
     n.add_argument('--speed', type=int)
@@ -703,11 +820,12 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
         elif c == 'go': play.go(args.address)
         elif c == 'use': play.use(args.id, args.radius)
         elif c == 'eat': play.eat(args.item)
+        elif c == 'licence': play.licence(args.kind, args.buy)
         elif c == 'drop': play.drop(args.coords)
         elif c == 'pickup': play.pickup(args.id)
         elif c == 'handtruck': play.handtruck(args.words)
         elif c == 'floorplan': play.floorplan()
-        elif c == 'place': play.place(args.x, args.z, args.rotation, args.move, args.check)
+        elif c == 'place': play.place(args.x, args.z, args.rotation, args.move, args.check, args.on)
         elif c == 'phone': play.phone(args.app)
         elif c == 'call': play.call_contact(args.contact)
         elif c == 'walk':
@@ -729,8 +847,12 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
             if args.op == 'until':
                 if len(args.value) not in (1, 2): raise Refused('time until [DAY] HH:MM [--speed N]')
                 play.time('until', args.value[-1], args.speed, args.value[0] if len(args.value) == 2 else None, not args.no_wait)
+            elif args.op == 'wait':
+                if len(args.value) != 1 or not args.value[0].isdigit(): raise Refused('time wait MINUTES')
+                play.time('wait', args.value[0])
             else:
                 play.time(args.op, float(args.value[0]) if args.value else None)
+        elif c == 'work': play.work()
         elif c == 'buy': play.buy(args.kind)
         elif c == 'drive': play.drive(args.truck, args.place, args.speed)
         elif c == 'vehicle': play.vehicle(args.id, args.op, args.item, args.units)

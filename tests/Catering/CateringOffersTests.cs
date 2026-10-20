@@ -52,6 +52,39 @@ public class CateringOffersTests
         Assert.InRange(count / 400.0, rules.OffersPerDayAtMaturity * 0.8, rules.OffersPerDayAtMaturity * 1.2);
     }
 
+    [Theory]
+    [InlineData(0, 500, 3)]
+    [InlineData(1, 0, 3)]
+    [InlineData(0, 0, 3)]
+    [InlineData(1, 500, 0)]
+    public void SkippingLocationsOnIneligibleDaysPreservesStateAndLaterOffers(int vehicles, long served, int maxOffers)
+    {
+        var rules = new CateringRules(maxOffersPerDay: maxOffers);
+        Assert.False(CateringOffers.CanGenerateOffers(rules, vehicles, served));
+        var original = CateringState.New(42);
+        var optimized = CateringState.New(42);
+        for (var day = 1; day <= 3; day++)
+        {
+            var input = Context(day, vehicles, served);
+            var before = CateringOffers.ForDay(rules, original, input);
+            input.Places = Array.Empty<CateringPlace>();
+            var after = CateringOffers.ForDay(rules, optimized, input);
+            Assert.Empty(before);
+            Assert.Empty(after);
+            Assert.Equal(JsonConvert.SerializeObject(original), JsonConvert.SerializeObject(optimized));
+            Assert.Equal(day, optimized.LastOfferDay);
+            Assert.Equal(42, optimized.RandomState);
+        }
+        // A fleet that qualifies later must receive the same seeded offers after the skipped days.
+        rules = new CateringRules(offersPerDayAtMaturity: 60);
+        Assert.True(CateringOffers.CanGenerateOffers(rules, 1, 500));
+        var expected = CateringOffers.ForDay(rules, original, Context(4));
+        var actual = CateringOffers.ForDay(rules, optimized, Context(4));
+        Assert.NotEmpty(actual);
+        Assert.Equal(JsonConvert.SerializeObject(expected), JsonConvert.SerializeObject(actual));
+        Assert.Equal(JsonConvert.SerializeObject(original), JsonConvert.SerializeObject(optimized));
+    }
+
     [Fact]
     public void SameSeedAndReloadGiveTheSameOffersRegardlessOfInputOrder()
     {

@@ -48,6 +48,9 @@ namespace FoodTrucks
         {
             public int Id;
             public string Text = "";
+            // The texts beside a button in its row (a title, a price), when its own label ("Do it", "Open it")
+            // doesn't say what it does.
+            public string Context = "";
             public string Path = "";
             public string Kind = "button";
             public Button? Button;
@@ -201,9 +204,19 @@ namespace FoodTrucks
             return "";
         }
 
+        // Labels that say what to do but not to what: their row's texts go with them.
+        private static readonly HashSet<string> GenericLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "do it", "open", "open it", "choose", "change", "book", "pick", "buy", "select", "go", "ok", "start", "use",
+        };
+
         private static JToken List()
         {
             last = Entries();
+            // Row texts only where the label alone can't tell the buttons apart: a generic word, or one shown twice.
+            var counts = last.GroupBy(e => e.Text).ToDictionary(g => g.Key, g => g.Count());
+            foreach (var e in last)
+                if (e.Text.Length <= 1 || (counts[e.Text] < 2 && !GenericLabels.Contains(e.Text))) e.Context = "";
             return new JObject
             {
                 ["buttons"] = new JArray(last.Select(Json)),
@@ -214,6 +227,7 @@ namespace FoodTrucks
         private static JObject Json(Entry e)
         {
             var json = new JObject { ["id"] = e.Id, ["text"] = e.Text, ["kind"] = e.Kind, ["path"] = e.Path };
+            if (e.Context.Length > 0) json["context"] = e.Context;
             if (e.Slider != null)
             {
                 json["value"] = Math.Round(e.Slider.value, 2);
@@ -232,7 +246,7 @@ namespace FoodTrucks
             foreach (var button in Object.FindObjectsOfType<Button>())
             {
                 if (button == null || !button.IsActive() || !button.IsInteractable() || !Visible(button.transform, out var at)) continue;
-                found.Add((at, new Entry { Button = button, Text = Label(button.transform), Path = PathOf(button.transform) }));
+                found.Add((at, new Entry { Button = button, Text = Label(button.transform), Context = RowContext(button), Path = PathOf(button.transform) }));
             }
             foreach (var dropdown in Object.FindObjectsOfType<Dropdown>())
             {
@@ -451,6 +465,12 @@ namespace FoodTrucks
                 if (uis?.playerHUD?.purchaseUI != null && uis.playerHUD.purchaseUI.isActiveAndEnabled) Add(uis.playerHUD.purchaseUI);
                 if (CityMap.IsOpen) Add(uis?.buildingResume);
                 foreach (var notices in Object.FindObjectsOfType<NotificationsUI>()) Add(notices.container);
+                // The job's shift card (a gig's "Cleaning wanted at ..."), and other mods' windows on the HUD
+                // (Real Life Overhaul's lists: the hotel room, licences, the bank desk).
+                Add(uis?.playerHUD?.currentJobUI);
+                if (uis?.playerHUD != null)
+                    foreach (Transform child in uis.playerHUD.transform)
+                        if (child.name.StartsWith("RealLifeOverhaul", StringComparison.Ordinal)) Add(child);
             }
             var texts = new List<string>();
             var seen = new HashSet<Component>();
@@ -514,6 +534,26 @@ namespace FoodTrucks
                 var text = Clean(value);
                 if (text.Length > 0) yield return (component, text);
             }
+        }
+
+        // The nearest parent that holds texts outside the button and outside other buttons, if that parent is a row
+        // (a few texts) rather than a whole panel or list: its texts, in hierarchy order.
+        private static string RowContext(Button button)
+        {
+            var own = Label(button.transform);
+            var p = button.transform.parent;
+            for (var depth = 0; p != null && depth < 4; depth++, p = p.parent)
+            {
+                var texts = TextBlocks(p)
+                    .Where(b => !b.Component.transform.IsChildOf(button.transform)
+                                && !(b.Component.GetComponentInParent<Button>() is Button other && other.transform.IsChildOf(p)))
+                    .Select(b => b.Text).Where(t => t != own).Distinct().ToList();
+                if (texts.Count == 0) continue;
+                if (texts.Count > 6) return "";
+                var joined = string.Join(" · ", texts);
+                return joined.Length > 160 ? joined.Substring(0, 160) + "…" : joined;
+            }
+            return "";
         }
 
         private static string Label(Transform t)

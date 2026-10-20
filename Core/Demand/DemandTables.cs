@@ -68,10 +68,11 @@ namespace FoodTrucks.Core.Demand
             foreach (var entry in r.Entries(r.Object(demand, "categories")))
             {
                 var obj = AsObject(r, entry);
-                r.OnlyKeys(obj, "appetite", "newCustomerWeight", "addOnFactor");
+                r.OnlyKeys(obj, "appetite", "newCustomerWeight", "addOnFactor", "marketFloor");
                 var weight = obj["newCustomerWeight"] == null ? 1.0 : r.Number(obj, "newCustomerWeight", 0, 1);
                 var addOn = obj["addOnFactor"] == null ? 0.0 : r.Number(obj, "addOnFactor", 0, 100);
-                categories.Add(entry.Name, new CategoryTable(entry.Name, FullTable(r, r.Object(obj, "appetite"), DaypartKeys, 0, 1), weight, addOn));
+                var floor = obj["marketFloor"] == null ? 0.0 : r.Number(obj, "marketFloor", 0, 10);
+                categories.Add(entry.Name, new CategoryTable(entry.Name, FullTable(r, r.Object(obj, "appetite"), DaypartKeys, 0, 1), weight, addOn, floor));
             }
             if (categories.Count == 0) throw r.Fail("categories", "must list at least one category");
 
@@ -599,17 +600,21 @@ namespace FoodTrucks.Core.Demand
     {
         private readonly double[] appetite;
 
-        internal CategoryTable(string name, double[] appetite, double newCustomerWeight, double addOnFactor)
+        internal CategoryTable(string name, double[] appetite, double newCustomerWeight, double addOnFactor, double marketFloor = 0)
         {
             Name = name;
             this.appetite = appetite;
             NewCustomerWeight = newCustomerWeight;
             AddOnFactor = addOnFactor;
+            MarketFloor = marketFloor;
         }
 
         public string Name { get; }
         public double NewCustomerWeight { get; }
         public double AddOnFactor { get; }
+        // The lowest the game's market demand counts for this category's items, above market.floor: a cart walks
+        // to where people are, so shops nearby selling the same thing hurt it less (cold drinks).
+        public double MarketFloor { get; }
         public double Appetite(Daypart daypart) => appetite[(int)daypart];
     }
 
