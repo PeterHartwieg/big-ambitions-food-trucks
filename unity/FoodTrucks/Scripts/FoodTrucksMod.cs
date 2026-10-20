@@ -16,7 +16,7 @@ namespace FoodTrucks
     [ModEntryOnInitializationLoad]
     public sealed class FoodTrucksMod : IModBigAmbitions
     {
-        public const string Version = "0.10.1";
+        public const string Version = "0.10.2";
         internal const string BundleKey = "AssetBundles/foodtrucks.unity3d";
         internal const string TruckTypeName = "foodtrucks:vehicletype_foodtruck";
         internal const string CartTypeName = "foodtrucks:vehicletype_foodcart";
@@ -117,7 +117,8 @@ namespace FoodTrucks
         {
             try { TestBridge.Stop(); }
             catch (Exception ex) { Log.Error("Test bridge: " + ex); }
-            Patches.Remove();
+            try { Patches.Remove(); }
+            catch (Exception ex) { Log.Error("Unpatch: " + ex); }
             BigAmbitions.ModsInternal.ModDiscoveryRegistry.OnDiscoveryUpdated -= SaveGuard.DiscoveryUpdated;
             FoodSafetyCourse.Unregister();
             foreach (var typeName in registered)
