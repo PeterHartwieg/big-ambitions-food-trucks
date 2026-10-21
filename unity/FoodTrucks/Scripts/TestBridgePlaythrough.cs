@@ -202,9 +202,35 @@ namespace FoodTrucks
                     ["neighbourhood"] = string.IsNullOrEmpty(b.Controller.building.Neighbourhood) ? null
                         : Localizor.LocalizorManager.GetLocalization(b.Controller.building.Neighbourhood, null),
                     ["commissary"] = site == null ? null : new JObject { ["site"] = site.Id, ["name"] = Localizor.LocalizorManager.GetLocalization(site.Name, null) },
+                    ["pitch"] = pitches.Contains(b.Key) ? Pitch(b.Key) : null,
                 });
             }
             return new JObject { ["filter"] = filter, ["count"] = lit.Count, ["buildings"] = list };
+        }
+
+        // What makes a building a pitch on the map: the premium spot outside it (its name) and the city's events there today
+        // or later, announced or booked, each with its date and hours, as the city's texts give them.
+        private static JObject Pitch(string address)
+        {
+            var tables = DemandData.Pitches;
+            var state = FoodTrucksSession.CurrentState;
+            var spot = tables?.Spots.FirstOrDefault(s => s.Address == address);
+            var events = new JArray();
+            if (tables != null && state != null)
+                foreach (var city in state.Events.Events.Where(e => e.Day >= SaveGameManager.Current.Day).OrderBy(FoodTrucks.Core.Pitches.CityEvents.StartsAt))
+                {
+                    var place = tables.Place(city.PlaceId);
+                    if (place == null || place.Address != address) continue;
+                    var kind = tables.Kind(city.Kind);
+                    events.Add(new JObject
+                    {
+                        ["event"] = kind == null ? city.Kind : CityPitches.Text(kind.Name), ["place"] = CityPitches.PlaceText(place),
+                        ["day"] = city.Day, ["weekday"] = CityPitches.Weekday(city.Day),
+                        ["start"] = CityPitches.Clock(city.Start), ["end"] = CityPitches.Clock(city.End),
+                        ["booked"] = city.Booked, ["places"] = city.Places,
+                    });
+                }
+            return new JObject { ["premium"] = spot == null ? null : CityPitches.Text(spot.Name), ["events"] = events };
         }
 
         // ---- route ----
@@ -249,7 +275,8 @@ namespace FoodTrucks
         }
 
         // A vehicle's marketing level, as the vehicle page's Marketing dropdown picks it (BizManVehiclePage.ChooseMarketing):
-        // paid at once, a higher level the same day for the difference. done is false when the game refused the payment.
+        // booked from the next day, nothing charged now; the day change charges it. done is false only when the mod's data is
+        // read-only and nothing was booked.
         private static object MarketingCommand(JObject args)
         {
             var id = Need(args, "vehicle", "the food vehicle's id");

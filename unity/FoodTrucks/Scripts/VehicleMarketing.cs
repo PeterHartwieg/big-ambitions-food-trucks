@@ -8,8 +8,9 @@ using Localizor;
 
 namespace FoodTrucks
 {
-    // Marketing for one cart or truck (design: Marketing). Core's MarketingFees decides what is due; this pays it through
-    // the game under the marketing tax label, records it for Econoview and says when a day's fee couldn't be paid.
+    // Marketing for one cart or truck (design: Marketing). Core's MarketingFees decides what is due; this pays each day's
+    // fee through the game under the marketing tax label, records it for Econoview and says when a day's fee couldn't be
+    // paid. A level picked on the vehicle page is booked from the next day.
     internal static class VehicleMarketing
     {
         private const string ExpenseLabel = "foodtrucks:transaction_marketing_label";
@@ -40,7 +41,7 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Marketing: " + ex); }
         }
 
-        // Today's fee for every vehicle the player still has with a level on. A refused fee turns the level off.
+        // Today's fee for every vehicle the player still has with a level booked. A refused fee turns the level off.
         internal static void Renew()
         {
             var state = FoodTrucksSession.CurrentState;
@@ -55,7 +56,7 @@ namespace FoodTrucks
                 {
                     if (BizManVehiclePage.Instance(vehicle.VehicleId) == null) continue;
                     var before = vehicle.MarketingPaidThroughDay;
-                    var charge = MarketingFees.Renew(vehicle, rules, today, c => Pay(state, c, showNotification: false));
+                    var charge = MarketingFees.Renew(vehicle, rules, today, c => Pay(state, c));
                     if (charge == null)
                     {
                         // A level priced at 0 runs today without a payment.
@@ -73,25 +74,17 @@ namespace FoodTrucks
             }
         }
 
-        // The player's pick on the vehicle page (and the test bridge's marketing command). False when the game refused
-        // the payment, with its own "not enough money" notice; the level then stays as it was.
-        internal static bool Choose(SaveState state, VehicleState vehicle, string level)
+        // The player's pick on the vehicle page (and the test bridge's marketing command): booked from the next day, with
+        // nothing to pay now. Today's sales keep the level today paid for, so nothing needs selling up to now first.
+        internal static void Choose(VehicleState vehicle, string level)
         {
             var rules = Rules ?? throw new InvalidOperationException("The marketing rules aren't loaded.");
-            // The minutes not yet sold sell under the old level first, as ServingWork.BeforeLeaving catches up before the
-            // server changes: routes decide their closings, then the player's windows. Neither has a per-vehicle catch-up,
-            // and selling every vehicle up to now is what their next ticks would do anyway.
-            var now = HireCrew.NowExact();
-            try { HireRoutes.CatchUpTo((long)Math.Floor(now)); }
-            catch (Exception ex) { Log.Error("Marketing, routes catch-up before a level change: " + ex); }
-            CartSelling.CatchUpTo(now);
             var today = SaveGameManager.Current.Day;
             var before = vehicle.MarketingLevel;
-            var charge = MarketingFees.Choose(vehicle, rules, level, today, c => Pay(state, c, showNotification: true));
+            MarketingFees.Choose(vehicle, rules, level, today);
             FoodTrucksSession.MarkChanged();
-            Log.Info($"Marketing: {World.Short(vehicle.VehicleId)} from {before ?? MarketingRules.None} to {level} on day {today}" +
-                     (charge == null ? ", nothing to pay." : $", {CartSelling.Money(charge.Cents)} {(charge.Paid ? "paid" : "refused (not enough money); unchanged")}."));
-            return charge == null || charge.Paid;
+            Log.Info($"Marketing: {World.Short(vehicle.VehicleId)} booked from {before ?? MarketingRules.None} to {level} on day {today}" +
+                     (vehicle.MarketingStartsDay is int starts ? $", charged from day {starts}." : "."));
         }
 
         // The level running today, for the page and the bridge; null without one.
@@ -102,9 +95,16 @@ namespace FoodTrucks
             return rules == null || game == null ? null : MarketingFees.Active(vehicle, rules, game.Day);
         }
 
-        private static bool Pay(SaveState state, MarketingCharge charge, bool showNotification)
+        // The booked level the next day change renews; null without one.
+        internal static MarketingLevel? Booked(VehicleState? vehicle)
         {
-            if (!Payments.TryPayOut(charge.Cents, Info(state, charge.VehicleId), showNotification)) return false;
+            var rules = Rules;
+            return rules == null ? null : MarketingFees.Booked(vehicle, rules);
+        }
+
+        private static bool Pay(SaveState state, MarketingCharge charge)
+        {
+            if (!Payments.TryPayOut(charge.Cents, Info(state, charge.VehicleId), showNotification: false)) return false;
             try { SalesLedger.RecordMarketing(state, charge.Day, charge.VehicleId, charge.Cents); }
             catch (Exception ex) { Log.Error($"Marketing: {World.Short(charge.VehicleId)} paid, but the fee wasn't recorded for Econoview: {ex}"); }
             return true;

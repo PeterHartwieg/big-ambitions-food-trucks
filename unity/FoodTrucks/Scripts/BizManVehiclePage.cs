@@ -596,8 +596,9 @@ namespace FoodTrucks
                 chosen => ChoosePartner(id, venues[chosen]));
         }
 
-        // Marketing: None and each level priced for this kind of vehicle, with its extra passers and daily fee; below, whether
-        // today's fee is paid (a level runs only on a paid day, VehicleMarketing).
+        // Marketing: None and each level priced for this kind of vehicle, with its extra passers and daily fee; the pick is
+        // booked from tomorrow. Below, the level today paid for (a level runs only on a paid day, VehicleMarketing) and what
+        // runs from tomorrow.
         private static void Marketing(Transform column, VehicleState? vehicle, string id, string kind, bool canWrite)
         {
             var rules = DemandData.Rules?.Marketing;
@@ -614,6 +615,12 @@ namespace FoodTrucks
             var active = VehicleMarketing.Active(vehicle);
             if (active != null)
                 box.Row(Text("foodtrucks:bizman_page_marketing_today"), Format("foodtrucks:bizman_page_marketing_paid", ("percent", MarketingPercent(active))));
+            var booked = VehicleMarketing.Booked(vehicle);
+            if (booked != null)
+                box.Row(Text("foodtrucks:bizman_page_marketing_tomorrow"), Format("foodtrucks:bizman_page_marketing_booked",
+                    ("percent", MarketingPercent(booked)), ("cost", CartSelling.Money(booked.CostPerDayCents[kind]))));
+            else if (active != null)
+                box.Row(Text("foodtrucks:bizman_page_marketing_tomorrow"), Text("foodtrucks:bizman_page_marketing_none"));
         }
 
         internal static string MarketingPercent(MarketingLevel level) =>
@@ -698,17 +705,17 @@ namespace FoodTrucks
             RefreshLater();
         }
 
-        // The marketing dropdown's choice, a level ID. Also the test bridge's marketing command. False when nothing changed:
-        // read-only data, or the game refused the payment.
+        // The marketing dropdown's choice, a level ID, booked from tomorrow. Also the test bridge's marketing command. False
+        // when nothing changed: read-only data.
         internal static bool ChooseMarketing(string id, string level)
         {
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite) return false;
             var vehicle = StreetSales.GetOrAdd(state, id);
             if (string.IsNullOrEmpty(vehicle.VehicleType)) vehicle.VehicleType = KindOf(id);
-            var done = VehicleMarketing.Choose(state, vehicle, level);
+            VehicleMarketing.Choose(vehicle, level);
             RefreshLater();
-            return done;
+            return true;
         }
 
         // ---- Helpers ----

@@ -1,3 +1,15 @@
+# Street food fixes after playtest 14 (21 October 2026, next build)
+
+**Pending in game.** Core and mock tests and a local SDK build only. Marketing's rows (MK2 to MK7) below changed with it: a level picked now starts the next day. No new Harmony patches.
+
+| # | Do | Look for |
+|---|---|---|
+| SF1 | Fit a hot dog grill on a cart and load a box; then a truck | The cart's grill holds 60 (120 with Extra Storage), the truck's 120 (240); the slot's tooltip says so |
+| SF2 | Wait for a city event text (or sleep a few days with a food vehicle) | It names the place by address and area, e.g. "a weekend market at 62 5th Avenue, Murray Hill"; so do the booking call, the booked text, the morning reminder and the notice on opening there. Does it read naturally? |
+| SF3 | Open a cart at 23 5th Avenue, Murray Hill (a premium spot) | Its notice names "Fifth Avenue offices, Murray Hill", not the market's place |
+| SF4 | City map, the premium spots and events filter, with an event announced for a later day | The event's building is lit before the event starts |
+| SF5 | A cart with stops on Monday and one stop on Sunday: on Sunday, BizMan's fleet page while its crew drives to the stop | "On the way to stop 1", as the Week plan numbers Sunday's stop |
+
 # Vehicle marketing and more passers (21 October 2026, next build)
 
 **Pending in game.** Core tests and a local SDK build only; no game session yet. Base passers per hour rise from 16 to 20. No new Harmony patches; startup logs nothing new besides the loaded rules.
@@ -5,12 +17,12 @@
 | # | Do | Look for |
 |---|---|---|
 | MK1 | Open a cart's BizMan page; open the Marketing dropdown | None, then Flyers, Local ads and Citywide ads with "+10% passers, $20 a day" and the cart prices; a truck shows the truck prices ($60, $140, $240) |
-| MK2 | Pick Flyers with enough money | "Marketing for …" in the bank history ($20, tax-deductible as Street food marketing); the box shows "Today: Paid, +10% passers"; the cart's Marketing line in Econoview and on the fleet page after the day's summary |
-| MK3 | Raise it to Citywide the same day, then drop to None and back to Local | Citywide charges $60 (the difference); None and Local charge nothing more that day |
-| MK4 | Sleep or skip past midnight with a level on, then skip several days with it off and turn it on again | One charge on the new day, none for the skipped days; the box shows "Paid" only on paid days |
+| MK2 | Pick Flyers | Nothing in the bank history; the box shows "From tomorrow: +10% passers, $20 charged at midnight" and no Today row |
+| MK3 | Sleep or skip past midnight | "Marketing for …" in the bank history once ($20, tax-deductible as Street food marketing); the box shows "Today: Paid, +10% passers" and the From tomorrow row; the cart's Marketing line in Econoview and on the fleet page after the day's summary |
+| MK4 | Pick Citywide, then None, then Local the same day | Nothing charged; Today stays "Paid, +10% passers"; From tomorrow follows each pick, "None" after None. At midnight one $45 charge |
 | MK5 | Keep a level on with less money than its fee at midnight | The level turns off and the notice "…'s marketing stopped: the day's $… couldn't be paid." shows; nothing is charged |
-| MK6 | Pick a level with too little money | The game's "not enough money" notice; the dropdown goes back to the old level |
-| MK7 | Save and load with a level on | Level and paid day survive; no second charge for the same day after the load |
+| MK6 | Skip several days with marketing off, then pick a level | Nothing charged for the skipped days or on picking; one charge at the next midnight |
+| MK7 | Save and load after picking a level, the same day; then load a save from before marketing | No charge after the load; the booking survives. The save from before marketing has no level and loads without error |
 
 # Working a serving window (18 October 2026, next build)
 

@@ -1565,7 +1565,7 @@ namespace FoodTrucks
                 });
         }
 
-        // "Tacos, Chopped Cheese: the Griddle is full (160/160)": the piece's foods still in stock here.
+        // "Tacos, Chopped Cheese: the Griddle is full (240/240)": the piece's foods still in stock here.
         private static string PieceFull(VehicleInstance vehicle, StoragePool pool, List<CommissaryStockLine>? stock)
         {
             var foods = pool.Piece.Products.Where(p => stock != null && stock.Any(l => l.ItemName == p && l.Units > 0))
@@ -1575,7 +1575,7 @@ namespace FoodTrucks
                 .Replace("{load}", pool.LoadUnits.ToString()).Replace("{capacity}", pool.Capacity.ToString());
         }
 
-        // The foods loaded, "80 Hotdog (the Hotdog Grill holds 80)": a food whose piece is now full while more of its
+        // The foods loaded, "120 Hotdog (the Hotdog Grill holds 120)": a food whose piece is now full while more of its
         // foods stay in stock says why the load stopped there; for a shared piece the note follows the last of its foods.
         private static List<string> FoodParts(FoodTrucks.Core.Demand.DemandTables tables, VehicleInstance vehicle, StorageView? view,
             Dictionary<string, int> loaded, List<CommissaryStockLine>? stock)
@@ -1593,7 +1593,7 @@ namespace FoodTrucks
             return parts;
         }
 
-        // "(the Hotdog Grill holds 80)", or "(2 Hotdog Grills hold 160)".
+        // "(the Hotdog Grill holds 120)", or "(2 Hotdog Grills hold 240)".
         private static string CapNote(VehicleInstance vehicle, StoragePool pool) =>
             LocalizorManager.GetLocalization(pool.Pieces > 1 ? "foodtrucks:commissary_restock_capped_many" : "foodtrucks:commissary_restock_capped", null)
                 .Replace("{piece}", StoragePanel.PieceName(vehicle, pool.Piece)).Replace("{count}", pool.Pieces.ToString())

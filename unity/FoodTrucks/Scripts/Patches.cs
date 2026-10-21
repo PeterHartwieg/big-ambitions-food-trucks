@@ -229,10 +229,10 @@ namespace FoodTrucks
                 postfix: nameof(ModContacts.LoadContactPostfix));
             Patch(typeof(ContactsHelper), "GetPermanentIds", Type.EmptyTypes, typeof(ModContacts), postfix: nameof(ModContacts.PermanentIdsPostfix));
 
-            // Storage per piece in the vehicle's cargo slots: each piece's "62/80" and a tooltip with its foods.
+            // Storage per piece in the vehicle's cargo slots: each piece's "62/120" and a tooltip with its foods.
             Patch(typeof(UI.PlayerHUD.CargoItemUi), "SetUp", new[] { typeof(CargoItem), typeof(ICargoHolder), typeof(bool) },
                 typeof(StoragePanel), postfix: nameof(StoragePanel.CargoSlotPostfix));
-            // Its sell question reads the amount label: "Sell Hotdog Grill", not "Sell (62/80) Hotdog Grill".
+            // Its sell question reads the amount label: "Sell Hotdog Grill", not "Sell (62/120) Hotdog Grill".
             Patch(typeof(UI.PlayerHUD.CargoItemUi), "OnSellClick", new[] { typeof(CargoItem), typeof(CargoInstance) },
                 typeof(StoragePanel), prefix: nameof(StoragePanel.SellPrefix), finalizer: nameof(StoragePanel.SellFinalizer));
 

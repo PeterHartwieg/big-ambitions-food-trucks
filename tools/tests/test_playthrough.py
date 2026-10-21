@@ -392,7 +392,7 @@ class BridgeOpsParityTests(unittest.TestCase):
         self.assertEqual(set(reply['fleet']), {'revenue', 'stock_cost', 'licence', 'event_places', 'delivery_fees', 'profit'})
         row = reply['vehicles'][0]
         self.assertEqual(row['id'], v['id'])
-        keys = {'id', 'kind', 'sales', 'catering', 'stock_cost', 'wages', 'parking', 'permit', 'commissary_rent', 'overnight_fines',
+        keys = {'id', 'kind', 'sales', 'catering', 'stock_cost', 'wages', 'parking', 'permit', 'commissary_rent', 'overnight_fines', 'marketing',
                 'profit', 'sold', 'stops_served', 'minutes_open', 'stock_now'}
         self.assertEqual(set(row), keys)
         for key in keys | set(reply) | set(reply['fleet']):
