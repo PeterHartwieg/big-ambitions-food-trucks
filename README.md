@@ -103,3 +103,15 @@ To prepare a local release-candidate archive after building, run `python3 tools/
 ## Licence
 
 MIT, see [LICENSE.txt](LICENSE.txt). The food truck is built on the SDK's example car (its physics setup and dirt textures), which Hovgaard Games publishes under MIT. Harmony is MIT, by Andreas Pardeike.
+
+
+### Big Copilot route integration (pending in-game verification)
+
+The optional `BigCopilotSnapshot` provider exposes a read-only state snapshot,
+current route revisions and game speed, plus reviewed single-weekday route writes.
+The Link mod handles pairing and save identity. Street Food resolves legal spots,
+validates the entire week and requires an unchanged review quote before replacing
+that day's stops. Other days, closed-day marks and crew hours are preserved; no
+automatic route or time fitting runs through this interface. Pure synthetic route
+tests pass; SDK compilation is checked separately. In-game smoke testing remains
+pending. This integration does not run unless a compatible Big Copilot Link calls it.
