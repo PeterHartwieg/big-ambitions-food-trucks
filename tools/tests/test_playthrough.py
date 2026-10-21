@@ -369,7 +369,7 @@ class BridgeOpsParityTests(unittest.TestCase):
     def test_vehicle_buy_charges_the_dealers_price_as_the_games_purchase(self):
         money = self.mock.state['money']
         reply = self.mock.call('vehicle', {'op': 'buy', 'kind': 'truck'})
-        self.assertEqual(set(reply), {'done', 'id', 'kind', 'price', 'money', 'notices', 'state'})
+        self.assertEqual(set(reply), {'done', 'id', 'kind', 'price', 'money', 'notices', 'bay', 'state'})
         self.assertEqual((reply['done'], reply['kind'], reply['price']), (True, 'truck', 15000.0))
         self.assertEqual(self.mock.state['money'], money - 15000)
         t = self.mock.read_state()['transactions_today'][-1]
@@ -382,8 +382,490 @@ class BridgeOpsParityTests(unittest.TestCase):
         self.assertIn('Not enough money for the {kind}: it costs {CartSelling.Money(cents)} and the player has', self.source)
         self.refused('vehicle', {'op': 'buy', 'kind': 'van'}, "Unknown kind 'van': truck or cart.")
         self.assertIn("Unknown kind '{kind}': truck or cart.", self.source)
-        for key in ('done', 'id', 'kind', 'price', 'money', 'notices', 'state'):
+        for key in ('done', 'id', 'kind', 'price', 'money', 'notices', 'bay', 'state'):
             self.assertIn(f'["{key}"]', self.source)
+
+    def test_route_remove_stop_removes_one_stop_of_a_day(self):
+        v = self.mock.spawn('cart')
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'days': ['friday']})
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_secondavenue#4', 'days': ['friday']})
+        reply = self.mock.call('route', {'op': 'remove_stop', 'vehicle': v['id'], 'stop': 1, 'day': 'friday'})
+        self.assertEqual(set(reply), {'done', 'day', 'stop', 'place', 'open', 'close', 'notices', 'state'})
+        self.assertEqual((reply['done'], reply['day'], reply['stop'], reply['place'], reply['open'], reply['close']),
+                         (True, 'friday', 1, 'ba:street_thirdstreet#6', '11:00', '14:00'))
+        friday = reply['state']['route']['week'][4]['stops']
+        self.assertEqual([(s['open'], s['close']) for s in friday], [('14:00', '17:00')])
+        self.refused('route', {'op': 'remove_stop', 'vehicle': v['id'], 'stop': 2, 'day': 'friday'}, f"{v['id']} has 1 stop on Friday; no stop 2.")
+        self.refused('route', {'op': 'remove_stop', 'vehicle': v['id'], 'day': 'friday'}, 'Missing "stop": the stop\'s number on that day\'s route, from 1.')
+        for text in ('{id} has {todays.Count} stop{(todays.Count == 1 ? "" : "s")} on {day}; no stop {number}.',
+                     'Missing \\"stop\\": the stop\'s number on that day\'s route, from 1.', 'RouteStops.Remove(vehicle, index)'):
+            self.assertIn(text, self.source)
+        for key in ('done', 'day', 'stop', 'place', 'open', 'close', 'notices', 'state'):
+            self.assertIn(f'["{key}"]', self.source)
+
+    def test_bay_takes_vehicles_nose_to_tail_in_its_lane_and_refuses_when_full(self):
+        # Playtest a14: a cart put beside the truck stood half in the driving lane and read "parked legally, in the bay".
+        truck, cart = self.mock.spawn('truck'), self.mock.spawn('cart')
+        self.mock.place_vehicle(truck, 'hells-kitchen')
+        self.mock.place_vehicle(cart, 'hells-kitchen')
+        self.assertEqual(cart['x'], truck['x'])
+        self.assertGreaterEqual(abs(cart['z'] - truck['z']), 5.8 / 2 + 1.5 / 2 + 0.5)
+        # legal is the pavement rule Open checks (a parking lane isn't a pitch); the lane reading is its own field.
+        self.assertFalse(cart['legal'])
+        self.assertEqual(cart['legal_reason'], 'pavement rule: inside a parking lane; in the bay at hells-kitchen; clear of the driving lanes')
+        self.assertIs(cart['clear_of_lanes'], True)
+        self.assertIsNone(truck['clear_of_lanes'])
+        for text in ('$"; in the bay at {bay.Id}"', '"; clear of the driving lanes"', '"; part of it stands in a driving lane"',
+                     '"; the driving lanes weren\'t read"', '["clear_of_lanes"] = clearOfLanes', 'legal = rule.Legal;'):
+            self.assertIn(text, self.source)
+        for _ in range(2): self.mock.place_vehicle(self.mock.spawn('truck'), 'hells-kitchen')
+        extra = self.mock.spawn('truck')
+        with self.assertRaises(ValueError) as full:
+            self.mock.place_vehicle(extra, 'hells-kitchen')
+        self.assertRegex(str(full.exception), r'^No free place in the bay of hells-kitchen for the truck truck-5: its lane is full \(.*\)\. It stays where it is\.$')
+        self.assertIn('No free place in the bay of {siteId} for the {kind} {id}: its lane is full ({what}). It stays where it is.', self.source)
+        self.assertIn("You didn't set off.", self.source)
+
+    def test_a_cart_bought_at_a_commissary_goes_into_its_bay_lane(self):
+        # Within 25 m beyond the bay's radius, as the bridge's BuyNearBayMetres.
+        self.assertIn('private const float BuyNearBayMetres = 25f;', self.source)
+        bay_x, bay_z = NAMESPACE['bay_xy']('hells-kitchen')
+        self.mock.state['money'] = 100000.0
+        self.mock.state['player'].update(x=bay_x + 15 + 25 + 1, z=bay_z)
+        self.assertIsNone(self.mock.call('vehicle', {'op': 'buy', 'kind': 'cart'})['bay'])
+        self.mock.state['player'].update(x=bay_x + 15 + 24, z=bay_z)
+        truck = self.mock.call('vehicle', {'op': 'buy', 'kind': 'truck'})
+        cart = self.mock.call('vehicle', {'op': 'buy', 'kind': 'cart'})
+        self.assertEqual((truck['bay']['site'], truck['bay']['parked'], cart['bay']['parked']), ('hells-kitchen', True, True))
+        self.assertTrue(cart['state']['commissary']['in_bay'])
+        self.assertNotEqual(cart['bay']['z'], truck['bay']['z'])
+        self.assertEqual((cart['bay']['in_bay'], cart['bay']['clear_of_lanes']), (True, True))
+        for key in ('site', 'parked', 'why', 'fallback', 'in_bay', 'bay_why', 'clear_of_lanes'):
+            self.assertIn(f'["{key}"]', self.source)
+        # A full lane: bought all the same (a dealer delivers anyway), by the kerb nearby, and the reply says so.
+        for _ in range(2): self.mock.call('vehicle', {'op': 'buy', 'kind': 'truck'})
+        self.fill_bay()
+        kerb = self.mock.call('vehicle', {'op': 'buy', 'kind': 'truck'})
+        self.assertTrue(kerb['done'])
+        self.assertEqual((kerb['bay']['parked'], kerb['bay']['fallback']), (False, 'kerb'))
+        self.assertIn(f"It stands at x {kerb['bay']['x']:.1f}, z {kerb['bay']['z']:.1f}, by the kerb nearby.", kerb['bay']['why'])
+        self.assertIn('", by the kerb nearby."', self.source)
+        # No kerb space either: refused before anything is spawned or charged.
+        self.mock.kerb_free = False
+        money, count = self.mock.state['money'], len(self.mock.state['vehicles'])
+        with self.assertRaises(ValueError) as full:
+            self.mock.call('vehicle', {'op': 'buy', 'kind': 'truck'})
+        self.assertRegex(str(full.exception), r'^No safe place for a new truck: the lane of the bay of hells-kitchen is full \(.*\) and no kerb space is free within 60 m\. Nothing was bought\.$')
+        self.assertIn('No safe place for a new {kind}: the lane of the bay of {site.Id} is full ({what}) and no kerb space is free within {KerbMetres:F0} m. Nothing was bought.', self.source)
+        self.assertEqual((self.mock.state['money'], len(self.mock.state['vehicles'])), (money, count))
+
+    def test_the_kerb_fallback_clears_lane_cars_as_its_search_ignores_them(self):
+        # Review round 3: FreeParkingNear doesn't count the lane's parked cars, so placing there with clear false could
+        # refuse and leave a paid vehicle in the road.
+        fallback = self.source[self.source.index('foreach (var space in spaces)'):]
+        self.assertIn('TeleportVehicle(vehicle.id, space.Position, space.Rotation.eulerAngles.y, true);', fallback[:400])
+
+    def test_the_buy_fallback_takes_the_kerb_space_the_preflight_found_first(self):
+        # Review round 4: searched again from the spawn, the only free space (58 m behind the player) was out of reach.
+        self.assertIn('if (HireRoutes.FreeParkingForNew(PlayerHelper.GetPosition(), KerbMetres) is { } space) kerb = (space.Item1, space.Item2);', self.source)
+        self.assertIn('bay = IntoNearBay(bought, kind, nearBay, kerbSpace);', self.source)
+        fallback = self.source[self.source.index('var spaces = new List<(Vector3 Position, Quaternion Rotation)>();'):]
+        self.assertLess(fallback.index('if (kerb != null) spaces.Add(kerb.Value);'), fallback.index('HireRoutes.FreeParkingNear(Spawned(vehicle)'))
+
+    def test_a_refused_action_keeps_the_crew_s_hold_on_its_stop(self):
+        v = self.mock.spawn('cart')
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'days': ['monday']})
+        v.update(open=True, serving='crew', queue={'length': 0, 'places': []})
+        key = self.mock.stop_key(self.mock.plans[v['id']][0])
+        self.mock.serving_stop[v['id']] = key
+        self.mock.bay_pending[v['id']] = 'hells-kitchen'
+        with self.assertRaises(ValueError):
+            self.mock.call('vehicle', {'id': v['id'], 'op': 'open'})
+        self.assertEqual((self.mock.serving_stop.get(v['id']), self.mock.bay_pending.get(v['id'])), (key, 'hells-kitchen'))
+
+    def test_a_cart_bought_at_a_bay_with_unreadable_lanes_goes_to_the_kerb(self):
+        self.mock.call('teleport', {'who': 'player', 'place': 'commissary:hells-kitchen'})
+        self.mock.traffic_lanes = False
+        reply = self.mock.call('vehicle', {'op': 'buy', 'kind': 'cart'})
+        self.assertEqual((reply['bay']['parked'], reply['bay']['fallback']), (False, 'kerb'))
+        self.assertIn("the driving lanes couldn't be read to check it stands clear of them", reply['bay']['why'])
+        self.assertIsNone(reply['state']['clear_of_lanes'])
+        self.assertIsNone(reply['state']['commissary'])
+        self.mock.kerb_free = False
+        with self.assertRaises(ValueError) as refused:
+            self.mock.call('vehicle', {'op': 'buy', 'kind': 'cart'})
+        self.assertEqual(str(refused.exception), "No safe place for a new cart: the bay of hells-kitchen can't take it (the driving lanes can't be read to check a cart "
+                                                 "stands clear of them) and no kerb space is free within 60 m. Nothing was bought.")
+        self.assertIn("No safe place for a new {kind}: the bay of {site.Id} can't take it (the driving lanes can't be read to check a cart stands clear of them) "
+                      "and no kerb space is free within {KerbMetres:F0} m. Nothing was bought.", self.source)
+        # In a bay with the lanes readable again, the reply's clearance is the state's.
+        self.mock.traffic_lanes = True
+        self.mock.kerb_free = True
+        ok = self.mock.call('vehicle', {'op': 'buy', 'kind': 'cart'})
+        self.assertEqual(ok['bay']['clear_of_lanes'], ok['state']['clear_of_lanes'])
+
+    def test_two_buys_at_a_full_bay_get_their_own_kerb_spaces(self):
+        self.mock.state['money'] = 100000.0
+        for _ in range(3): self.mock.place_vehicle(self.mock.spawn('truck'), 'hells-kitchen')
+        self.fill_bay()
+        self.mock.call('teleport', {'who': 'player', 'place': 'commissary:hells-kitchen'})
+        first = self.mock.call('vehicle', {'op': 'buy', 'kind': 'cart'})
+        second = self.mock.call('vehicle', {'op': 'buy', 'kind': 'cart'})
+        self.assertEqual((first['bay']['fallback'], second['bay']['fallback']), ('kerb', 'kerb'))
+        self.assertNotEqual((first['bay']['x'], first['bay']['z']), (second['bay']['x'], second['bay']['z']))
+        self.assertEqual((second['state']['legal'], second['state']['legal_reason']), (False, 'pavement rule: inside a parking lane; clear of the driving lanes'))
+
+    def test_teleporting_a_cart_to_a_bay_without_readable_lanes_is_refused(self):
+        cart = self.mock.spawn('cart')
+        cart.update(x=10., z=20.)
+        self.mock.traffic_lanes = False
+        with self.assertRaises(ValueError) as refused:
+            self.mock.call('teleport', {'who': cart['id'], 'place': 'bay:hells-kitchen'})
+        self.assertEqual(str(refused.exception), f"No place in the bay of hells-kitchen put the cart {cart['id']} in the bay (a cart within the radius, but the driving "
+                                                 "lanes couldn't be read to check it stands clear of them). It is back where it stood (x 10.0, z 20.0).")
+        for text in ("but the driving lanes couldn't be read to check it stands clear of them", 'It is back where it stood (x {now.x:F1}, z {now.z:F1}).'):
+            self.assertIn(text, self.source)
+        state = next(v for v in self.mock.read_state()['vehicles'] if v['id'] == cart['id'])
+        self.assertEqual((state['x'], state['z'], state['clear_of_lanes']), (10., 20., None))
+        self.assertTrue(state['legal_reason'].endswith("; the driving lanes weren't read"))
+
+    def test_a_pending_return_gives_way_to_the_next_day_s_stop(self):
+        cart = self.mock.spawn('cart')
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': cart['id'], 'address': 'ba:street_thirdstreet#6', 'days': ['tuesday']})
+        cart.update(crew=['Mock crew'], pieces=[{'item': 'hotdoggrill', 'units': 40, 'cap': 40}],
+                    stock=[{'item': 'Hotdog', 'key': 'ba:itemname_hotdog', 'amount': 40}])
+        cart['route'] = self.mock.plan_route(cart, [{'employee': 'Mock crew', 'id': 'c1', 'week_hours': 8, 'wants_min': None, 'wants_max': None,
+                                                     'shifts': [{'day': 'tuesday', 'start': 10, 'end': 18, 'station': 'serving1'}]}])
+        # Monday night: no place in its bay, so its return waits; Tuesday it opens at its stop.
+        self.mock.bay_pending[cart['id']] = 'hells-kitchen'
+        for _ in range(3): self.mock.place_vehicle(self.mock.spawn('truck'), 'hells-kitchen')
+        self.fill_bay()
+        stop = self.mock.plans[cart['id']][0]
+        self.mock.plan_hour(2, stop['open'])
+        self.assertTrue(cart['open'])
+        self.assertNotIn(cart['id'], self.mock.bay_pending)
+        # A place frees up while it serves: nothing moves it off its stop.
+        self.mock.state['vehicles'][1].update(x=0., z=0., commissary=None)
+        self.mock.plan_hour(2, stop['open'] + 1)
+        self.assertEqual((cart['x'], cart['z'], cart['open']), (stop['x'], stop['z'], True))
+        # A player action cancels one too.
+        self.mock.bay_pending[cart['id']] = 'hells-kitchen'
+        self.mock.call('teleport', {'who': self.mock.spawn('truck')['id'], 'x': 1, 'z': 1})
+        self.assertIn(cart['id'], self.mock.bay_pending)
+        self.mock.call('vehicle', {'id': cart['id'], 'op': 'close'})
+        self.assertNotIn(cart['id'], self.mock.bay_pending)
+
+    def test_removing_a_stop_leaves_a_window_the_player_reopened(self):
+        v = self.mock.spawn('cart')
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'days': ['monday']})
+        v.update(open=True, serving='crew', queue={'length': 0, 'places': []}, pieces=[{'item': 'hotdoggrill', 'units': 40, 'cap': 40}],
+                 stock=[{'item': 'Hotdog', 'key': 'ba:itemname_hotdog', 'amount': 40}])
+        self.mock.serving_stop[v['id']] = self.mock.stop_key(self.mock.plans[v['id']][0])
+        # The player closes the crew's window and opens one of their own: the crew no longer holds the stop.
+        self.mock.call('vehicle', {'id': v['id'], 'op': 'close'})
+        self.assertNotIn(v['id'], self.mock.serving_stop)
+        self.mock.state['licence']['until_day'] = 60
+        self.mock.call('vehicle', {'id': v['id'], 'op': 'open'})
+        self.assertTrue(v['open'])
+        reply = self.mock.call('route', {'op': 'remove_stop', 'vehicle': v['id'], 'stop': 1, 'day': 'monday'})
+        self.assertTrue(reply['state']['open'])
+
+    def assert_no_footprints_overlap(self):
+        vehicles = [v for v in self.mock.state['vehicles'] if (v['x'], v['z']) != (0., 0.)]
+        for i, a in enumerate(vehicles):
+            for b in vehicles[i + 1:]:
+                self.assertFalse(self.mock.overlaps(self.mock.footprint(a), self.mock.footprint(b)),
+                                 f"{a['id']} at ({a['x']}, {a['z']}, {a['heading']}) overlaps {b['id']} at ({b['x']}, {b['z']}, {b['heading']})")
+
+    def test_footprints_are_measured_at_their_heading(self):
+        # A 5.8 x 2.5 m truck facing +x and a cart 3 m along x from it overlap; along z, 3 m apart they don't touch.
+        truck, cart = self.mock.spawn('truck'), self.mock.spawn('cart')
+        truck.update(x=100., z=100., heading=90.)
+        cart.update(x=103., z=100., heading=90.)
+        self.assertTrue(self.mock.overlaps(self.mock.footprint(truck), self.mock.footprint(cart)))
+        cart.update(x=100., z=103.)
+        self.assertFalse(self.mock.overlaps(self.mock.footprint(truck), self.mock.footprint(cart)))
+        # Perpendicular: the truck turned to face +z (1.25 m to each side) and a cart facing +x (0.75 m nose and tail):
+        # 1.9 m apart they overlap, 2.0 m apart they touch, which keeps clear.
+        truck.update(heading=0.)
+        cart.update(x=101.9, z=100., heading=90.)
+        self.assertTrue(self.mock.overlaps(self.mock.footprint(truck), self.mock.footprint(cart)))
+        cart.update(x=102.)
+        self.assertFalse(self.mock.overlaps(self.mock.footprint(truck), self.mock.footprint(cart)))
+
+    def test_kerb_deliveries_and_drives_to_a_full_bay_never_overlap(self):
+        self.mock.state['money'] = 100000.0
+        for _ in range(3): self.mock.place_vehicle(self.mock.spawn('truck'), 'hells-kitchen')
+        self.fill_bay()
+        self.mock.call('teleport', {'who': 'player', 'place': 'commissary:hells-kitchen'})
+        for kind in ('cart', 'cart', 'truck'):
+            self.assertEqual(self.mock.call('vehicle', {'op': 'buy', 'kind': kind})['bay']['fallback'], 'kerb')
+        truck = self.mock.spawn('truck')
+        self.mock.state['player']['in_vehicle'] = truck['id']
+        self.mock.state['clock']['paused'] = False
+        self.mock.call('drive', {'id': truck['id'], 'place': 'bay:hells-kitchen'})
+        self.assertEqual(self.mock.call('drive', {'op': 'status'})['park']['where'], 'kerb')
+        self.assert_no_footprints_overlap()
+
+    def test_a_bay_place_counts_a_vehicle_moved_there_by_coordinates(self):
+        truck, cart = self.mock.spawn('truck'), self.mock.spawn('cart')
+        x, z = NAMESPACE['bay_xy']('hells-kitchen')
+        self.mock.call('teleport', {'who': truck['id'], 'x': x, 'z': z})
+        self.assertIsNone(truck['commissary'])
+        self.mock.call('teleport', {'who': cart['id'], 'place': 'bay:hells-kitchen'})
+        self.assert_no_footprints_overlap()
+        self.assertGreaterEqual(abs(cart['z'] - truck['z']), 2.9 + 0.75 + 0.5 - 1e-9)
+
+    def test_refusals_answering_done_false_keep_a_pending_return(self):
+        v = self.mock.spawn('truck')
+        self.mock.bay_pending[v['id']] = 'hells-kitchen'
+        # Open without equipment: a notice and done false.
+        self.assertFalse(self.mock.call('vehicle', {'id': v['id'], 'op': 'open'})['done'])
+        self.assertEqual(self.mock.bay_pending.get(v['id']), 'hells-kitchen')
+        # A drive refused before it starts.
+        self.mock.state['clock']['paused'] = False
+        with self.assertRaises(ValueError):
+            self.mock.call('drive', {'id': v['id'], 'place': 'bay:hells-kitchen'})
+        self.assertEqual(self.mock.bay_pending.get(v['id']), 'hells-kitchen')
+
+    def test_a_cart_sent_to_a_bay_facing_across_it_is_checked_at_that_heading(self):
+        # Collisions at the final heading (review round 6); a cart has no wheel test, so it parks.
+        x, z = NAMESPACE['bay_xy']('hells-kitchen')
+        beside = self.mock.spawn('truck')
+        beside.update(x=x + 1.6, z=z, heading=0.)
+        cart = self.mock.spawn('cart')
+        self.mock.call('teleport', {'who': cart['id'], 'place': 'bay:hells-kitchen', 'heading': 90})
+        self.assertEqual(cart['heading'], 90.)
+        self.assertNotEqual(cart['z'], z)
+        self.assert_no_footprints_overlap()
+
+    def test_a_truck_across_the_bay_lane_fails_the_wheel_test_and_stays_put(self):
+        truck = self.mock.spawn('truck')
+        truck.update(x=10., z=20., heading=45.)
+        with self.assertRaises(ValueError) as refused:
+            self.mock.call('teleport', {'who': truck['id'], 'place': 'bay:hells-kitchen', 'heading': 90})
+        self.assertEqual(str(refused.exception), f"No place in the bay of hells-kitchen put the truck {truck['id']} in the bay (not legally parked "
+                                                 "(the game's wheel test)). It is back where it stood (x 10.0, z 20.0).")
+        self.assertEqual((truck['x'], truck['z'], truck['heading'], truck['commissary']), (10., 20., 45., None))
+        # 20 degrees off the lane still parks; so does facing back along it.
+        for heading in (20, 180):
+            self.mock.call('teleport', {'who': truck['id'], 'place': 'bay:hells-kitchen', 'heading': heading})
+            self.assertTrue(truck['commissary']['in_bay'])
+
+    def test_an_outdoor_hand_truck_counts_against_a_bay_place(self):
+        x, z = NAMESPACE['bay_xy']('hells-kitchen')
+        self.mock.life['handtrucks'].append({'id': 'handtruck-1', 'name': 'Hand truck', 'kind': 'handtruck', 'home': None, 'inside': None,
+                                             'x': x, 'y': 0., 'z': z, 'heading': 0., 'contents': [], 'capacity': 4})
+        cart = self.mock.spawn('cart')
+        self.mock.call('teleport', {'who': cart['id'], 'place': 'bay:hells-kitchen'})
+        self.assertFalse(self.mock.overlaps(self.mock.footprint(cart), self.mock.footprint(self.mock.life['handtrucks'][0])))
+        self.assertGreaterEqual(abs(cart['z'] - z), 0.45 + 0.75 + 0.5 - 1e-9)
+        # One indoors doesn't stand in the street.
+        self.mock.life['handtrucks'][0]['inside'] = 'ba:street_secondavenue#8'
+        other = self.mock.spawn('cart')
+        self.mock.call('teleport', {'who': other['id'], 'x': 0, 'z': 0})
+        cart.update(x=0., z=0., commissary=None)
+        self.mock.call('teleport', {'who': other['id'], 'place': 'bay:hells-kitchen'})
+        self.assertEqual((other['x'], other['z']), (x, z))
+
+    def test_helping_at_the_crew_s_window_keeps_its_stop(self):
+        v = self.mock.spawn('cart')
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'days': ['monday']})
+        v.update(open=True, serving='crew', queue={'length': 0, 'places': []}, x=50., z=50.)
+        key = self.mock.stop_key(self.mock.plans[v['id']][0])
+        self.mock.serving_stop[v['id']] = key
+        self.mock.state['player'].update(x=50., z=51., in_vehicle=None)
+        self.mock.call('vehicle', {'id': v['id'], 'op': 'work_window'})
+        self.assertEqual(self.mock.serving_stop.get(v['id']), key)
+        # Removing that stop closes the crew's window, the player helping there or not (RouteStops.Remove).
+        reply = self.mock.call('route', {'op': 'remove_stop', 'vehicle': v['id'], 'stop': 1, 'day': 'monday'})
+        self.assertFalse(reply['state']['open'])
+
+    def crew_window(self):
+        """A cart its crew opened at Monday's stop at 12:00, its one crew member on shift 10-14."""
+        v = self.mock.spawn('cart')
+        self.mock.call('debug', {'action': 'hire'})
+        employee = self.mock.read_state()['employees'][0]['id']
+        self.mock.call('crew', {'op': 'assign', 'vehicle': v['id'], 'employee_id': employee})
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'days': ['monday']})
+        self.mock.call('crew', {'op': 'schedule', 'vehicle': v['id'], 'employee_id': employee, 'day': 'monday', 'start': 10, 'end': 14})
+        self.mock.state['clock'].update(day=1, time='12:00')
+        v.update(open=True, serving='crew', queue={'length': 0, 'places': []})
+        self.mock.serving_stop[v['id']] = self.mock.stop_key(self.mock.plans[v['id']][0])
+        return v, employee
+
+    def test_a_schedule_edit_ends_the_crew_s_service_only_when_nobody_is_on_shift(self):
+        # Core's HireRunner.Step closes a crew window with nobody on shift on its next minute; the mock does it at once.
+        self.assertIn('return want != null && want.StopIndex == vehicle.HireStop && Covered(vehicle, now, now)',
+                      (TOOLS.parent / 'Core/Fleet/HireRunner.cs').read_text())
+        v, employee = self.crew_window()
+        self.mock.call('crew', {'op': 'schedule', 'vehicle': v['id'], 'employee_id': employee, 'day': 'monday', 'start': 17, 'end': 22})
+        self.assertTrue(v['open'])
+        self.mock.call('crew', {'op': 'unschedule', 'vehicle': v['id'], 'employee_id': employee, 'day': 'monday', 'start': 10})
+        self.assertEqual((v['open'], v['serving']), (False, 'nobody'))
+        v, employee = self.crew_window()
+        self.mock.call('crew', {'op': 'schedule', 'vehicle': v['id'], 'employee_id': employee, 'day': 'monday', 'start': 15, 'end': 20, 'replace': True})
+        self.assertFalse(v['open'])
+        v, employee = self.crew_window()
+        self.mock.call('crew', {'op': 'schedule', 'vehicle': v['id'], 'employee_id': employee, 'day': 'monday', 'start': 11, 'end': 16, 'replace': True})
+        self.assertTrue(v['open'])
+
+    def test_a_crew_window_closes_through_a_gap_in_its_shifts(self):
+        # An 11-20 stop with shifts 10-14 and 17-22: closed from 14:00, as HireRunner.Step closes it, with no sales. The
+        # mock doesn't reopen it at 17:00 (the game's runner may, after its own waits; review round 8).
+        v, employee = self.crew_window()
+        v.update(open=False, serving='nobody', queue=None, pieces=[{'item': 'hotdoggrill', 'units': 40, 'cap': 40}],
+                 stock=[{'item': 'Hotdog', 'key': 'ba:itemname_hotdog', 'amount': 40}])
+        self.mock.serving_stop.pop(v['id'], None)
+        stop = self.mock.plans[v['id']][0]
+        stop.update(open=11 * 60, close=20 * 60)
+        self.mock.call('crew', {'op': 'schedule', 'vehicle': v['id'], 'employee_id': employee, 'day': 'monday', 'start': 17, 'end': 22})
+        self.mock.state['licence']['until_day'] = 60
+        self.mock.absolute = 11 * 60 - 1
+        seen = {}
+        while self.mock.absolute < 18 * 60:
+            self.mock.tick()
+            seen[self.mock.absolute] = (v['open'], v['stock'][0]['amount'])
+        self.assertTrue(seen[13 * 60 + 59][0])
+        self.assertLess(seen[13 * 60 + 59][1], 40)
+        self.assertEqual([seen[m][0] for m in (14 * 60, 15 * 60, 17 * 60, 18 * 60)], [False] * 4)
+        self.assertEqual(seen[14 * 60][1], seen[18 * 60][1])
+
+    def test_an_unassigned_hire_s_shifts_go_with_them(self):
+        v, employee = self.crew_window()
+        self.mock.call('crew', {'op': 'unassign', 'vehicle': v['id'], 'employee_id': employee})
+        self.assertEqual(v['route']['shifts'], [])
+        self.assertFalse(v['open'])
+        self.assertIn('WeekPlan.DropCrew(vehicle.Schedule, employeeId);', (TOOLS.parent / 'unity/FoodTrucks/Scripts/HireCrew.cs').read_text())
+
+    def test_closing_a_crew_window_ends_the_player_s_work_there(self):
+        for close in ('remove_stop', 'coverage'):
+            v, employee = self.crew_window()
+            self.mock.state['player'].update(x=v['x'], z=v['z'] + 1, in_vehicle=None)
+            self.mock.call('vehicle', {'id': v['id'], 'op': 'work_window'})
+            self.mock.call('vehicle', {'id': v['id'], 'op': 'fast_forward', 'enabled': True})
+            self.assertIsNotNone(self.mock.work)
+            if close == 'remove_stop':
+                self.mock.call('route', {'op': 'remove_stop', 'vehicle': v['id'], 'stop': 1, 'day': 'monday'})
+            else:
+                self.mock.call('crew', {'op': 'unschedule', 'vehicle': v['id'], 'employee_id': employee, 'day': 'monday', 'start': 10})
+            self.assertFalse(v['open'], close)
+            self.assertIsNone(self.mock.work, close)
+            self.assertIsNone(self.mock.state['player']['at_hatch'], close)
+            self.assertEqual(self.mock.state['clock']['speed'], 1, close)
+            labels = [b['text'] for b in self.mock.call('ui', {'op': 'list'})['buttons']]
+            self.assertNotIn('Work duration', labels, close)
+            with self.assertRaises(ValueError):
+                self.mock.call('vehicle', {'id': v['id'], 'op': 'skip_work', 'minutes': 30})
+
+    def test_buying_at_each_commissary_s_door_puts_the_vehicle_in_its_own_bay(self):
+        self.mock.state['money'] = 100000.0
+        for site in NAMESPACE['SITES']:
+            self.mock.call('teleport', {'who': 'player', 'place': f'commissary:{site}'})
+            reply = self.mock.call('vehicle', {'op': 'buy', 'kind': 'cart'})
+            self.assertEqual((reply['bay']['site'], reply['bay']['parked']), (site, True), site)
+            self.assertEqual(reply['state']['commissary']['bay_site'], site)
+
+    def test_a_full_lane_clear_goes_through_the_checked_placement(self):
+        # Review round 2: clearing the lane's cars at a full bay's middle once teleported there unchecked.
+        self.assertIn('var spaced = InTheWay(controller, middle, rotation, vans, BayGapMetres);', self.source)
+        self.assertIn('return PlaceInBay(vehicle, site, new[] { middle }, rotation, clear, vans);', self.source)
+
+    def test_walking_a_cart_to_a_bay_without_readable_lanes_is_refused(self):
+        cart = self.mock.spawn('cart')
+        self.mock.state['player'].update(in_vehicle=cart['id'], x=0., z=0.)
+        self.mock.state['clock']['paused'] = False
+        self.mock.traffic_lanes = False
+        with self.assertRaises(ValueError) as refused:
+            self.mock.call('walk', {'place': 'bay:hells-kitchen'})
+        self.assertRegex(str(refused.exception), r"^No pavement beside the free place in the bay of hells-kitchen at x .*, z .* to stand on while you park the cart\. You didn't set off\.$")
+        self.assertIn('if (lanes.Unavailable) return null;', self.source)
+        self.assertIn("No pavement beside the free place in the bay of {baySite} at x {slot.x:F1}, z {slot.z:F1} to stand on while you park the cart. You didn't set off.", self.source)
+        self.assertEqual((self.mock.state['player']['x'], self.mock.state['player']['in_vehicle']), (0., cart['id']))
+
+    def test_a_pending_bay_return_never_moves_a_vehicle_the_player_took(self):
+        for _ in range(3): self.mock.place_vehicle(self.mock.spawn('truck'), 'hells-kitchen')
+        self.fill_bay()
+        cart = self.mock.spawn('cart')
+        cart.update(x=50., z=50., commissary=None)
+        self.mock.bay_pending[cart['id']] = 'hells-kitchen'
+        self.mock.state['player'].update(x=50., z=50.)
+        self.mock.operate(cart, 'enter')
+        self.assertNotIn(cart['id'], self.mock.bay_pending)
+        # Even one still pending is left alone while the player holds it.
+        self.mock.bay_pending[cart['id']] = 'hells-kitchen'
+        self.mock.state['vehicles'][0].update(x=0., z=0., commissary=None)
+        self.mock.plan_hour(1, 600)
+        self.assertEqual((cart['x'], cart['z'], cart['commissary']), (50., 50., None))
+        self.assertNotIn(cart['id'], self.mock.bay_pending)
+
+    def test_the_open_stop_and_pending_returns_survive_a_reload(self):
+        v = self.mock.spawn('cart')
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'days': ['monday']})
+        v.update(open=True, serving='crew', queue={'length': 0, 'places': []})
+        self.mock.serving_stop[v['id']] = self.mock.stop_key(self.mock.plans[v['id']][0])
+        self.mock.store('FT reload')
+        self.mock.restore('FT reload', emit=False)
+        reply = self.mock.call('route', {'op': 'remove_stop', 'vehicle': v['id'], 'stop': 1, 'day': 'monday'})
+        self.assertEqual((reply['state']['open'], reply['state']['serving']), (False, 'nobody'))
+        # A return pending in this session doesn't follow into a save stored without it.
+        self.mock.store('FT before')
+        other = self.mock.vehicle(v['id'])
+        self.mock.bay_pending[other['id']] = 'hells-kitchen'
+        self.mock.restore('FT before', emit=False)
+        self.assertEqual(self.mock.bay_pending, {})
+        loaded = self.mock.vehicle(v['id'])
+        before = (loaded['x'], loaded['z'])
+        self.mock.plan_hour(1, 600)
+        self.assertEqual((loaded['x'], loaded['z']), before)
+        # One stored pending comes back with the save.
+        self.mock.bay_pending[loaded['id']] = 'hells-kitchen'
+        self.mock.store('FT pending')
+        self.mock.bay_pending.clear()
+        self.mock.restore('FT pending', emit=False)
+        self.assertEqual(self.mock.bay_pending, {loaded['id']: 'hells-kitchen'})
+
+    def fill_bay(self, site='hells-kitchen'):
+        """Carts into the lane's last gaps until it is full."""
+        while True:
+            cart = self.mock.spawn('cart')
+            try: self.mock.place_vehicle(cart, site)
+            except ValueError:
+                self.mock.state['vehicles'].remove(cart)
+                return
+
+    def test_teleport_to_a_bay_says_whether_it_is_in_the_bay(self):
+        cart = self.mock.spawn('cart')
+        reply = self.mock.call('teleport', {'who': cart['id'], 'place': 'bay:hells-kitchen'})
+        self.assertEqual((reply['in_bay'], reply['bay_why'], reply['clear_of_lanes']), (True, 'a cart within the radius', True))
+
+    def test_removing_the_stop_being_served_closes_the_vehicle_first(self):
+        v = self.mock.spawn('cart')
+        self.mock.call('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'days': ['monday']})
+        stop = self.mock.plans[v['id']][0]
+        v.update(open=True, serving='crew', queue={'length': 0, 'places': []})
+        self.mock.serving_stop[v['id']] = self.mock.stop_key(stop)
+        reply = self.mock.call('route', {'op': 'remove_stop', 'vehicle': v['id'], 'stop': 1, 'day': 'monday'})
+        self.assertTrue(reply['done'])
+        self.assertEqual((reply['state']['open'], reply['state']['serving']), (False, 'nobody'))
+        self.assertIn('if (vehicle.IsOpen && vehicle.HireStop == index) CartSelling.CloseByCrew(vehicle, HireCrew.Now());',
+                      (TOOLS.parent / 'unity/FoodTrucks/Scripts/RouteStops.cs').read_text())
+
+    def test_a_vehicle_back_to_a_full_bay_retries_each_minute_until_parked(self):
+        trucks = [self.mock.spawn('truck') for _ in range(3)]
+        for t in trucks: self.mock.place_vehicle(t, 'hells-kitchen')
+        self.fill_bay()
+        cart = self.mock.spawn('cart')
+        cart.update(x=0., z=0., commissary=None)
+        self.mock.bay_pending[cart['id']] = 'hells-kitchen'
+        self.mock.plan_hour(1, 600)
+        self.assertIsNone(cart['commissary'])
+        self.assertIn(cart['id'], self.mock.bay_pending)
+        # A place frees up: the next minute it is parked, and no longer waits.
+        trucks[0].update(x=0., z=0., commissary=None)
+        self.mock.plan_hour(1, 601)
+        self.assertTrue(cart['commissary']['in_bay'])
+        self.assertNotIn(cart['id'], self.mock.bay_pending)
 
     def test_day_summary_shape_and_guard(self):
         v = self.mock.spawn('truck')
@@ -419,8 +901,8 @@ class BridgeOpsParityTests(unittest.TestCase):
         self.refused('route', {'op': 'add_stop', 'vehicle': v['id'], 'address': 'ba:street_thirdstreet#6', 'open': '11:00'},
                      'Give both "open" and "close", or neither for the default hours.')
         self.refused('route', {'op': 'paste_day', 'vehicle': v['id'], 'from': 'someday', 'to': 'all'}, "Unknown day 'someday': monday to sunday.")
-        self.refused('route', {'op': 'move', 'vehicle': v['id']}, "Unknown route op 'move': add_stop, paste_day.")
-        for text in ('Give both \\"open\\" and \\"close\\", or neither for the default hours.', "Unknown route op '{op}': add_stop, paste_day.",
+        self.refused('route', {'op': 'move', 'vehicle': v['id']}, "Unknown route op 'move': add_stop, remove_stop, paste_day.")
+        for text in ('Give both \\"open\\" and \\"close\\", or neither for the default hours.', "Unknown route op '{op}': add_stop, remove_stop, paste_day.",
                      "Unknown day '{name}': monday to sunday.", 'no building at {address} in this city'):
             self.assertIn(text, self.source)
         for key in ('done', 'address', 'x', 'z', 'heading', 'distance', 'days', 'added', 'stops', 'problem'):
@@ -608,6 +1090,41 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.play('price', cart['id'], 'ba:itemname_hotdog', 'auto'), 0, self.lines)
         self.assertIn('Hotdog: automatic price.', self.lines)
 
+    def test_crew_shifts_are_added_replaced_and_removed_and_a_route_stop_removed(self):
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.assertEqual(self.play('buy', 'cart'), 0, self.lines)
+        cart = self.session.mock.state['vehicles'][0]['id']
+        self.session.bridge.call('debug', {'action': 'hire'})
+        employee = self.session.bridge.call('state')['result']['employees'][0]['id']
+        self.assertEqual(self.play('crew', 'assign', cart, employee), 0, self.lines)
+        self.assertEqual(self.play('crew', 'schedule', cart, employee, 'thursday', '8', '16'), 0, self.lines)
+        self.assertEqual(self.play('crew', 'schedule', cart, employee, 'thursday', '17', '23'), 0, self.lines)
+        self.assertEqual(self.play('crew', 'schedule', cart, employee, 'thursday', '15', '18'), 1, self.lines)
+        self.assertIn('already works 08-16, 17-23 on Thursday', self.lines[0])
+        self.assertEqual(self.play('crew', 'schedule', cart, employee, 'thursday', '10', '14', '--replace'), 0, self.lines)
+        self.assertEqual(self.play('crew', 'unschedule', cart, employee, 'thursday', '10'), 0, self.lines)
+        self.assertEqual(self.play('crew', 'assign', cart, employee, '--replace'), 2, self.lines)
+        self.assertEqual(self.play('route', 'add', cart, 'ba:street_thirdstreet#6', '--days', 'friday'), 0, self.lines)
+        self.assertEqual(self.play('route', 'add', cart, 'ba:street_secondavenue#4', '--days', 'friday'), 0, self.lines)
+        self.assertEqual(self.play('route', 'remove', cart, '1', '--day', 'friday'), 0, self.lines)
+        self.assertEqual(self.lines, ['Removed stop 1 (ba:street_thirdstreet#6, 11:00 to 14:00) from friday.'])
+        self.assertEqual(self.play('route', 'remove', cart, '3', '--day', 'friday'), 1, self.lines)
+
+    def test_look_shows_why_a_cart_isnt_legal_and_its_lane_reading(self):
+        self.session.bridge.call('save', {'name': 'FT playtest'})
+        self.assertEqual(self.play('buy', 'cart'), 0, self.lines)
+        with self.session.mock.lock:
+            cart = self.session.mock.state['vehicles'][0]
+            cart.update(legal=False, legal_reason='pavement rule: inside a parking lane; part of it stands in a driving lane', clear_of_lanes=False)
+        self.assertEqual(self.play('look'), 0, self.lines)
+        line = next(l for l in self.lines if l.startswith(f"Cart {cart['id']}:"))
+        self.assertIn('not parked legally (pavement rule: inside a parking lane; part of it stands in a driving lane) at x', line)
+        self.assertIn('  Part of it stands in a driving lane.', self.lines)
+        with self.session.mock.lock: cart.update(legal=True, legal_reason='pavement rule: legal', clear_of_lanes=None)
+        self.assertEqual(self.play('look'), 0, self.lines)
+        self.assertIn("  Whether it stands clear of the driving lanes couldn't be read.", self.lines)
+        self.assertFalse(any('(pavement rule' in l for l in self.lines), self.lines)
+
     def test_walking_pushes_a_held_cart_into_the_bay_and_keeps_the_clock_stopped(self):
         self.session.bridge.call('save', {'name': 'FT playtest'})
         self.session.mock.state['player'].update(x=380., z=210.)
@@ -622,12 +1139,14 @@ class BlindPlayTests(unittest.TestCase):
         self.session.bridge.call('time', {'pause': True})
         self.assertEqual(self.play('walk', '--to', 'bay:hells-kitchen'), 0, self.lines)
         self.assertIn(f'pushing {cart}', self.lines[0])
+        # Parked in the bay's lane and let go of (playtest a14: pushed up beside the truck it stood in the road).
+        self.assertTrue(any(f"You parked {cart} in the bay's lane" in line for line in self.lines), self.lines)
         v = self.session.mock.state['vehicles'][0]
         self.assertTrue(v['commissary']['in_bay'])
+        self.assertIsNone(self.session.mock.state['player']['in_vehicle'])
         self.assertTrue(self.session.mock.state['clock']['paused'])
-        # Out of the cart, a walk to a point; a truck can't be walked.
+        # On foot, a walk to a point; a truck can't be walked.
         self.session.bridge.call('time', {'speed': 1})
-        self.assertEqual(self.play('vehicle', cart, 'exit'), 0, self.lines)
         self.assertEqual(self.play('walk', '400', '230'), 0, self.lines)
         self.assertIn('You walked', self.lines[0])
         self.assertEqual(self.play('walk', '400'), 2)
@@ -680,7 +1199,8 @@ class BlindPlayTests(unittest.TestCase):
         self.assertIn('Parked by the kerb.', self.lines)
         # A stop in the truck's own commissary's bay is parked in the bay, not at the kerb nearby.
         self.session.mock.state['commissary']['spaces'].append({'site': 'hells-kitchen', 'vehicle': truck})
-        self.session.mock.plans[truck].append({'day': 'monday', 'address': 'bay', 'x': 595., 'z': 220., 'open': 1200, 'close': 1260})
+        bay_x, bay_z = runpy.run_path(str(TOOLS / 'mock-bridge'), run_name='mock_city')['bay_xy']('hells-kitchen')
+        self.session.mock.plans[truck].append({'day': 'monday', 'address': 'bay', 'x': bay_x + 1.8, 'z': bay_z + 2.4, 'open': 1200, 'close': 1260})
         self.assertEqual(self.play('drive', truck, 'stop:2'), 0, self.lines)
         self.assertIn('Parked in the bay.', self.lines)
         # Self Driving refuses: the truck goes back where it stood, and the tool says so.

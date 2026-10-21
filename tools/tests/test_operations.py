@@ -189,6 +189,31 @@ class OperationTests(unittest.TestCase):
         reply=self.bridge.call('crew',{'op':'schedule','day':'monday','start':9,'end':9,**args})['result']
         self.assertEqual(reply['state']['route']['shifts'][0]['shifts'],[])
 
+    def test_crew_schedule_adds_a_shift_replaces_on_request_and_unschedule_removes_one(self):
+        # Playtest a14: an evening shift replaced the day's and closed the truck its crew was serving from.
+        v=self.mock.spawn('truck')
+        self.bridge.call('debug',{'action':'hire'})
+        employee=self.bridge.call('state')['result']['employees'][0]
+        args={'vehicle':v['id'],'employee_id':employee['id']}
+        self.bridge.call('crew',{'op':'assign',**args})
+        self.bridge.call('crew',{'op':'schedule','day':'thursday','start':8,'end':16,**args})
+        reply=self.bridge.call('crew',{'op':'schedule','day':'thursday','start':17,'end':23,**args})['result']
+        shifts=reply['state']['route']['shifts'][0]
+        self.assertEqual([(x['start'],x['end']) for x in shifts['shifts']],[(8,16),(17,23)])
+        self.assertEqual(shifts['week_hours'],14)
+        with self.assertRaisesRegex(BridgeError,r'Shift refused: Overlap: .* already works 08-16, 17-23 on Thursday\. Add "replace": true'):
+            self.bridge.call('crew',{'op':'schedule','day':'thursday','start':15,'end':18,**args})
+        reply=self.bridge.call('crew',{'op':'schedule','day':'thursday','start':10,'end':14,'replace':True,**args})['result']
+        self.assertEqual([(x['start'],x['end']) for x in reply['state']['route']['shifts'][0]['shifts']],[(10,14)])
+        reply=self.bridge.call('crew',{'op':'unschedule','day':'thursday','start':10,**args})['result']
+        self.assertEqual(reply['state']['route']['shifts'][0]['shifts'],[])
+        with self.assertRaisesRegex(BridgeError,'No shift for .* starts at 10:00 on Thursday; their shifts that day: none'):
+            self.bridge.call('crew',{'op':'unschedule','day':'thursday','start':10,**args})
+        with self.assertRaisesRegex(BridgeError,'"start" is a whole hour; got 9.5.'):
+            self.bridge.call('crew',{'op':'schedule','day':'thursday','start':9.5,'end':12,**args})
+        with self.assertRaisesRegex(BridgeError,'"end" is a whole hour; got 12.5.'):
+            self.bridge.call('crew',{'op':'schedule','day':'thursday','start':9,'end':12.5,**args})
+
     def test_panel_refusal_has_done_false(self):
         v=self.mock.spawn('truck')
         reply=self.bridge.call('vehicle',{'id':v['id'],'op':'open'})

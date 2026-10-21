@@ -16,7 +16,9 @@ namespace FoodTrucks.Core.Fleet
         // The employee isn't on the vehicle's crew.
         NotCrew,
         // The row, or the crew member, has another shift at those hours.
-        Clash
+        Clash,
+        // Adding a shift: the crew member already works part of those hours that day (AddShift).
+        Overlap
     }
 
     // A part of a route day with nobody on shift: minutes from the weekday's midnight (may pass 1440), and the leg
@@ -291,6 +293,41 @@ namespace FoodTrucks.Core.Fleet
             SortShifts(schedule);
             return ShiftProblem.None;
         }
+
+        // One more shift that day for this crew member (the test bridge's crew schedule, playtest a14: replacing the day's
+        // shift closed a truck its crew was serving from): their other shifts stay. Refused with Overlap, and nothing
+        // changed, when it overlaps one of theirs that day; with Clash when the row is taken then.
+        public static ShiftProblem AddShift(FleetRules rules, VehicleState vehicle, string employeeId, DayOfWeek day, int start, int end,
+            string? station = null, int staff = 2)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            var problem = CheckShift(rules, start, end);
+            if (problem != ShiftProblem.None) return problem;
+            if (vehicle.Crew == null || !vehicle.Crew.Contains(employeeId)) return ShiftProblem.NotCrew;
+            var schedule = vehicle.Schedule ??= new HireSchedule();
+            schedule.CrewShifts ??= new List<CrewShift>();
+            var shifts = schedule.CrewShifts.Where(s => s != null).ToList();
+            if (shifts.Any(s => s.Day == day && s.EmployeeId == employeeId && s.Start < end && start < s.End)) return ShiftProblem.Overlap;
+            var rows = Stations(staff);
+            var shift = new CrewShift
+            {
+                EmployeeId = employeeId, Day = day, Start = start, End = end,
+                Station = station ?? FreeStation(shifts, day, start, end, rows) ?? rows[0]
+            };
+            if (!CheckShifts(shifts.Append(shift))) return ShiftProblem.Clash;
+            shifts.Add(shift);
+            schedule.CrewShifts = shifts;
+            SortShifts(schedule);
+            return ShiftProblem.None;
+        }
+
+        // A crew member's shifts that day, in order.
+        public static List<CrewShift> ShiftsOf(HireSchedule? schedule, string employeeId, DayOfWeek day) =>
+            (schedule?.CrewShifts ?? new List<CrewShift>()).Where(s => s != null && s.Day == day && s.EmployeeId == employeeId).OrderBy(s => s.Start).ToList();
+
+        // Removes the crew member's one shift that day starting at `start`; false when there is none.
+        public static bool RemoveShiftAt(VehicleState vehicle, string employeeId, DayOfWeek day, int start) =>
+            (vehicle?.Schedule?.CrewShifts?.RemoveAll(s => s != null && s.Day == day && s.EmployeeId == employeeId && s.Start == start) ?? 0) > 0;
 
         public static bool RemoveShift(VehicleState vehicle, string employeeId, DayOfWeek day) =>
             (vehicle?.Schedule?.CrewShifts?.RemoveAll(s => s != null && s.Day == day && s.EmployeeId == employeeId) ?? 0) > 0;

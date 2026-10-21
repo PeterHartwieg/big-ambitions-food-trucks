@@ -565,6 +565,57 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(set(done),keys)
         self.assertIn('walk, drive, vehicle',commands)
 
+    def test_drive_to_a_full_bay_parks_by_the_kerb_and_says_why(self):
+        source=(TOOLS.parent/'unity/FoodTrucks/Scripts/TestBridgeDrive.cs').read_text()
+        for _ in range(3): self.mock.place_vehicle(self.mock.spawn('truck'),'hells-kitchen')
+        self.mock.state['player']['in_vehicle']=self.id
+        self.mock.state['clock']['paused']=False
+        self.mock.call('drive',{'id':self.id,'place':'bay:hells-kitchen'})
+        done=self.mock.call('drive',{'op':'status'})
+        self.assertEqual((done['error'],done['park']['parked'],done['park']['where']),(None,True,'kerb'))
+        self.assertTrue(done['park']['bay_full'].startswith('No free place in the bay of hells-kitchen for the truck'))
+        self.assertIn('reply["bay_full"] = bayFull;',source)
+
+    def test_trucks_driven_to_a_full_bay_get_their_own_kerb_spaces(self):
+        others=[self.mock.spawn('truck') for _ in range(3)]
+        for t in others: self.mock.place_vehicle(t,'hells-kitchen')
+        self.mock.state['clock']['paused']=False
+        def drive(truck):
+            self.mock.state['player']['in_vehicle']=truck['id']
+            self.mock.call('drive',{'id':truck['id'],'place':'bay:hells-kitchen'})
+            return self.mock.call('drive',{'op':'status'})
+        first=drive(self.v)
+        self.assertEqual((first['park']['parked'],first['park']['where']),(True,'kerb'))
+        self.assertIn('bay_full',first['park'])
+        second=drive(self.mock.spawn('truck'))
+        self.assertEqual((second['park']['parked'],second['park']['where']),(True,'kerb'))
+        trucks=[v for v in self.mock.state['vehicles'] if v['kind']=='truck']
+        for a in trucks:
+            for b in trucks:
+                if a is not b and abs(a['x']-b['x'])<2.5: self.assertGreaterEqual(abs(a['z']-b['z']),5.8+0.5-1e-9)
+        self.mock.kerb_free=False
+        none=drive(self.mock.spawn('truck'))
+        self.assertEqual((none['park']['parked'],none['park']['why']),(False,'no free parking space within 200 m of bay:hells-kitchen; the truck stands in the lane'))
+        source=(TOOLS.parent/'unity/FoodTrucks/Scripts/TestBridgeDrive.cs').read_text()
+        self.assertIn('no free parking space within {KerbWideMetres:F0} m of {run.Place}; the truck stands in the lane',source)
+
+    def test_walking_a_cart_to_a_full_bay_is_refused_before_setting_off(self):
+        world=(TOOLS.parent/'unity/FoodTrucks/Scripts/TestBridgeWorld.cs').read_text()
+        for _ in range(3): self.mock.place_vehicle(self.mock.spawn('truck'),'hells-kitchen')
+        while True:
+            filler=self.mock.spawn('cart')
+            try: self.mock.place_vehicle(filler,'hells-kitchen')
+            except ValueError:
+                self.mock.state['vehicles'].remove(filler); break
+        cart=self.mock.spawn('cart')
+        self.mock.state['player'].update(in_vehicle=cart['id'],x=100.,z=100.)
+        self.mock.state['clock']['paused']=False
+        with self.assertRaises(ValueError) as full:
+            self.mock.call('walk',{'place':'bay:hells-kitchen'})
+        self.assertRegex(str(full.exception),r"^No free place in the bay of hells-kitchen for the cart cart-\d+: its lane is full \(.*\)\. You didn't set off\.$")
+        self.assertIn("No free place in the bay of {baySite} for the cart {cart.id}: its lane is full ",world)
+        self.assertEqual((self.mock.state['player']['x'],self.mock.state['player']['in_vehicle']),(100.,cart['id']))
+
     def test_health_has_time_skip(self):
         self.assertFalse(self.mock.health()['time_skip'])
         self.mock.time_skip=True

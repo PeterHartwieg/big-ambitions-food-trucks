@@ -570,8 +570,10 @@ namespace FoodTrucks
 
         // ---- The test bridge ----
 
-        // Sets one crew member's shift (the bridge's crew schedule op): `start` == `end` removes their shifts that day.
-        internal static ShiftProblem SetForBridge(string id, string employeeId, DayOfWeek day, int start, int end, string? station)
+        // One crew member's shift (the bridge's crew schedule op): added to their shifts that day, or with `replace` in
+        // place of them; `start` == `end` removes their shifts that day. Their other shifts stay unless replaced, so a
+        // shift running now isn't ended by adding a later one (playtest a14: replacing closed a truck its crew served).
+        internal static ShiftProblem SetForBridge(string id, string employeeId, DayOfWeek day, int start, int end, string? station, bool replace = false)
         {
             var state = FoodTrucksSession.CurrentState;
             var rules = DemandData.Rules;
@@ -583,13 +585,32 @@ namespace FoodTrucks
                 problem = vehicle.Crew.Contains(employeeId) ? ShiftProblem.None : ShiftProblem.NotCrew;
                 if (problem == ShiftProblem.None) WeekPlan.RemoveShift(vehicle, employeeId, day);
             }
-            else problem = WeekPlan.SetShift(rules.Fleet, vehicle, employeeId, day, start, end, station, HireCrew.Limit(vehicle.VehicleType));
+            else if (replace) problem = WeekPlan.SetShift(rules.Fleet, vehicle, employeeId, day, start, end, station, HireCrew.Limit(vehicle.VehicleType));
+            else problem = WeekPlan.AddShift(rules.Fleet, vehicle, employeeId, day, start, end, station, HireCrew.Limit(vehicle.VehicleType));
             if (problem != ShiftProblem.None) return problem;
+            Changed(vehicle);
+            Log.Info($"Schedule: {employeeId} on {id} {(start == end ? "has no shift" : replace ? "works only" : "also works")} {day}" +
+                     $"{(start == end ? "" : $" {start:D2}-{end:D2}")} (test bridge).");
+            return ShiftProblem.None;
+        }
+
+        // Removes one of a crew member's shifts that day, the one starting at `start` (the bridge's crew unschedule op).
+        // False, with nothing changed, when they have no shift starting then.
+        internal static bool RemoveForBridge(string id, string employeeId, DayOfWeek day, int start)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            var vehicle = state == null ? null : StreetSales.Find(state, id);
+            if (vehicle == null || !WeekPlan.RemoveShiftAt(vehicle, employeeId, day, start)) return false;
+            Changed(vehicle);
+            Log.Info($"Schedule: {employeeId}'s {day} shift from {start:D2}:00 on {id} removed (test bridge).");
+            return true;
+        }
+
+        private static void Changed(VehicleState vehicle)
+        {
             HireRunner.ReplanShifts(vehicle, HireCrew.Now());
             HireCrew.SetWeeklyWork(vehicle);
             FoodTrucksSession.MarkChanged();
-            Log.Info($"Schedule: {employeeId} on {id} works {day} {start:D2}-{end:D2} (test bridge).");
-            return ShiftProblem.None;
         }
     }
 }

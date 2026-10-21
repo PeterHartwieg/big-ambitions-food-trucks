@@ -148,9 +148,11 @@ namespace FoodTrucks
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
             var heading = controller != null ? controller.transform.eulerAngles.y : (float?)null;
             // A truck parks: the game's own wheel test, as its panel's LEGAL/ILLEGAL. A cart stands on the pavement: the
-            // mod's pavement rule.
+            // mod's pavement rule, the one Open checks.
             bool legal;
             string legalReason;
+            // A cart's footprint against the driving lanes (null for a truck, whose wheel test keeps it in its lane).
+            bool? clearOfLanes = null;
             var info = InstanceBehavior<UI.UIs>.Instance?.playerHUD?.itemPanelUI?.vehicleInfo;
             if (kind == "truck" && SaveGameManager.Current.ActiveVehicleId == instance.id && info != null && info.isActiveAndEnabled)
             {
@@ -166,9 +168,15 @@ namespace FoodTrucks
             }
             else
             {
+                // A cart: `legal` is exactly the pavement rule Open checks (Legality.Check, CartSelling), in a bay too.
+                // Whether part of it stands in a driving lane is a reading of its own (clear_of_lanes), also said in
+                // legal_reason (playtest a14: a cart on the driving lane's centre line read only "parked legally").
                 var rule = Legality.Check(position);
                 legal = rule.Legal;
-                legalReason = "pavement rule: " + rule.Detail;
+                clearOfLanes = global::FoodTrucks.Commissary.CartClearOfLanes(instance);
+                var bay = global::FoodTrucks.Commissary.SiteOf(instance);
+                legalReason = "pavement rule: " + rule.Detail + (bay != null ? $"; in the bay at {bay.Id}" : "") +
+                              (clearOfLanes == false ? "; part of it stands in a driving lane" : clearOfLanes == true ? "; clear of the driving lanes" : "; the driving lanes weren't read");
             }
             bool? toPavement = null;
             string? hatchSide = null;
@@ -257,6 +265,7 @@ namespace FoodTrucks
                 ["heading"] = heading == null ? (double?)null : Round(heading.Value),
                 ["legal"] = legal,
                 ["legal_reason"] = legalReason,
+                ["clear_of_lanes"] = clearOfLanes,
                 ["hatch_side"] = hatchSide,
                 ["hatch_to_pavement"] = toPavement,
                 ["open"] = open,

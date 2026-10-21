@@ -86,4 +86,39 @@ public class FootprintTests
         Assert.Null(Footprint.Box(new List<(double[], LocalBox)>()));
         Assert.Throws<ArgumentException>(() => Footprint.Transform(new double[3], (0, 0, 0)));
     }
+
+    private static readonly double[] Identity = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0 };
+
+    [Fact]
+    public void APushedCartIsMeasuredByItsSwitchedOffCollider()
+    {
+        // The cart's hull, ±0.48 across, ±0.70 along (art/README.md), as a collider the game switched off while pushing.
+        var hull = new[] { (Identity, new LocalBox((0, 0.475, 0), (0.96, 0.95, 1.40))) };
+        var none = new (double[] Matrix, LocalBox Box)[0];
+        var box = Footprint.Box(none, hull)!.Value;
+        Assert.Equal((-0.48, 0.70), (box.Min.X, box.Max.Z), new TupleComparer());
+        // An enabled collider wins; with none at all the caller falls back.
+        var enabled = new[] { (Identity, new LocalBox((0, 1, 0), (2, 2, 6))) };
+        Assert.Equal(3, Footprint.Box(enabled, hull)!.Value.Max.Z, 6);
+        Assert.Null(Footprint.Box(none, none));
+    }
+
+    [Fact]
+    public void TheBayGapIsMeasuredBetweenTheWholeFootprints()
+    {
+        // A 5.8 m truck at z 0 and a 1.5 m cart behind it along the same lane: 2.9 + 0.75 + 0.5 = 4.15 m apart keeps the
+        // 0.5 m gap, a centimetre less doesn't (review round 1: shrinking the footprints first left about 0.4 m).
+        var truck = new FlatBox(0, 0, 0, 1, 1.25, 2.9);
+        Assert.True(Footprint.KeepsGap(new FlatBox(0, -4.15, 0, 1, 0.5, 0.75), truck, 0.5));
+        Assert.False(Footprint.KeepsGap(new FlatBox(0, -4.14, 0, 1, 0.5, 0.75), truck, 0.5));
+        Assert.False(Footprint.KeepsGap(new FlatBox(0, -3.75, 0, 1, 0.5, 0.75), truck, 0.5));
+        // Beside the truck, 3 m across: no part of either within the other's lane, so the gap along doesn't matter.
+        Assert.True(Footprint.KeepsGap(new FlatBox(3, 0, 0, 1, 0.5, 0.75), truck, 0.5));
+    }
+
+    private sealed class TupleComparer : IEqualityComparer<(double, double)>
+    {
+        public bool Equals((double, double) a, (double, double) b) => Math.Abs(a.Item1 - b.Item1) < 1e-9 && Math.Abs(a.Item2 - b.Item2) < 1e-9;
+        public int GetHashCode((double, double) t) => 0;
+    }
 }

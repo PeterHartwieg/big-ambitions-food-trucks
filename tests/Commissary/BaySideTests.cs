@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using FoodTrucks.Core.Commissary;
+using FoodTrucks.Core.Fleet;
 using Xunit;
 
 namespace FoodTrucks.Core.Tests.Commissary;
@@ -204,5 +205,51 @@ public class BaySideTests
     public void BaysStoredUnderTheOldRuleAreSearchedAgain()
     {
         Assert.Equal(4, BaySnap.RuleVersion);
+    }
+
+    // Murray Hill as logged in playtest a14: the bay's lane middle at x 43.8 running along z, the driving lane's centre
+    // 3.1 m out at x 46.9, waypoints every 10 m. A cart is 1.0 m across and 1.5 m long (HireRoutes.CartHalfSize).
+    private static List<((double X, double Z) A, (double X, double Z) B)> MurrayHillLane() =>
+        Polyline(Enumerable.Range(0, 11).Select(i => (46.9, -330.0 + i * 10)).ToArray());
+
+    private static FlatBox Cart(double x, double z) => new FlatBox(x, z, 0, -1, 0.5, 0.75);
+
+    [Fact]
+    public void ACartBehindTheTruckInTheParkingLaneIsClearOfTheRoad()
+    {
+        // Where its crew left it: in the lane, 4.3 m behind the truck.
+        Assert.Equal(true, LaneClearance.Clear(Cart(43.8, -286.1), MurrayHillLane()));
+        Assert.Equal(2.6, LaneClearance.Distance(Cart(43.8, -286.1), MurrayHillLane())!.Value, 6);
+        // Up on the pavement too.
+        Assert.Equal(true, LaneClearance.Clear(Cart(40.5, -282), MurrayHillLane()));
+    }
+
+    [Fact]
+    public void ACartBesideTheTruckSticksIntoTheDrivingLane()
+    {
+        // Where the agent pushed it, beside the truck, and where the bought cart spawned, on the lane's centre line.
+        Assert.Equal(false, LaneClearance.Clear(Cart(45.63, -282.67), MurrayHillLane()));
+        Assert.Equal(false, LaneClearance.Clear(Cart(45.11, -282.92), MurrayHillLane()));
+        Assert.Equal(0, LaneClearance.Distance(Cart(46.86, -284.95), MurrayHillLane())!.Value, 6);
+        Assert.Equal(false, LaneClearance.Clear(Cart(46.86, -284.95), MurrayHillLane()));
+    }
+
+    [Fact]
+    public void ATurnedCartIsMeasuredByItsCorners()
+    {
+        // Across the lane (facing +x) its 0.75 m half length reaches the road side: 44.6 + 0.75 = 45.35, 1.55 m off.
+        var across = new FlatBox(44.6, -290, 1, 0, 0.5, 0.75);
+        Assert.Equal(1.55, LaneClearance.Distance(across, MurrayHillLane())!.Value, 6);
+        Assert.Equal(false, LaneClearance.Clear(across, MurrayHillLane()));
+        // Along the lane at the same middle its half width reaches only 45.1: 1.8 m off.
+        Assert.Equal(true, LaneClearance.Clear(new FlatBox(44.6, -290, 0, 1, 0.5, 0.75), MurrayHillLane()));
+    }
+
+    [Fact]
+    public void NoLanesReadIsUnknownNotClear()
+    {
+        Assert.Null(LaneClearance.Clear(Cart(43.8, -286.1), new List<((double X, double Z) A, (double X, double Z) B)>()));
+        // A lone waypoint (a segment with no length) still counts by its distance.
+        Assert.Equal(false, LaneClearance.Clear(Cart(43.8, -286.1), new[] { ((44.5, -286.0), (44.5, -286.0)) }));
     }
 }

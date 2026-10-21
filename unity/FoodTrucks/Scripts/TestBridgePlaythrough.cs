@@ -304,7 +304,7 @@ namespace FoodTrucks
 
         private static object RouteCommand(JObject args)
         {
-            var op = Need(args, "op", "add_stop or paste_day");
+            var op = Need(args, "op", "add_stop, remove_stop or paste_day");
             var id = Need(args, "vehicle", "the food vehicle's id");
             var instance = FoodVehicle(id);
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
@@ -349,6 +349,34 @@ namespace FoodTrucks
                         ["days"] = added, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, instance),
                     });
                 }
+                case "remove_stop":
+                {
+                    // { "stop": N, "day"?: weekday }: stop N of that day's route (today's when left out), removed as the
+                    // week plan's Remove and its confirmation do (RouteStops.Remove: a window the crew opened there is
+                    // closed first).
+                    var vehicle = StreetSales.Find(state, id) ?? throw new BridgeError($"{id} has no route.");
+                    var day = args["day"] == null ? FoodTrucks.Core.Common.GameDays.Weekday(Math.Max(1, HireRunner.DayOf(HireCrew.Now())))
+                        : Days(args["day"], "day", single: true)[0];
+                    var number = Num(args, "stop") ?? throw new BridgeError("Missing \"stop\": the stop's number on that day's route, from 1.");
+                    var todays = WeekPlan.StopsOf(vehicle.Schedule, day);
+                    if (number != Math.Floor(number) || number < 1 || number > todays.Count)
+                        throw new BridgeError($"{id} has {todays.Count} stop{(todays.Count == 1 ? "" : "s")} on {day}; no stop {number}.");
+                    var index = todays[(int)number - 1];
+                    var removed = vehicle.Schedule!.Stops[index];
+                    var label = RouteStops.Label(removed);
+                    return WithNotices(() =>
+                    {
+                        RouteStops.Remove(vehicle, index);
+                        BizManVehiclePage.RefreshLater();
+                        Log.Info($"Test bridge: route remove_stop {id}: {day} stop {number} ({label}).");
+                    }, notices => new JObject
+                    {
+                        ["done"] = WeekPlan.StopsOf(StreetSales.Find(state, id)?.Schedule, day).Count == todays.Count - 1,
+                        ["day"] = day.ToString().ToLowerInvariant(), ["stop"] = (int)number, ["place"] = label,
+                        ["open"] = StaffDialog.Clock(removed.OpenAt), ["close"] = StaffDialog.Clock(removed.CloseAt),
+                        ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, instance),
+                    });
+                }
                 case "paste_day":
                 {
                     var from = Days(args["from"], "from", single: true)[0];
@@ -373,7 +401,7 @@ namespace FoodTrucks
                     });
                 }
                 default:
-                    throw new BridgeError($"Unknown route op '{op}': add_stop, paste_day.");
+                    throw new BridgeError($"Unknown route op '{op}': add_stop, remove_stop, paste_day.");
             }
         }
 

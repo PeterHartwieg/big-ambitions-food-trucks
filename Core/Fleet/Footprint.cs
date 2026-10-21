@@ -52,6 +52,20 @@ namespace FoodTrucks.Core.Fleet
             return (min.Value, max.Value);
         }
 
+        // A vehicle's own box from its solid colliders: the enabled ones; when none is enabled (a pushed cart: the game's
+        // HandTruck.EnterVehicle switches its collider off) the same colliders whatever their state; null when it has none
+        // at all, and the caller falls back to its known hull (review round 1: a pushed cart measured as the 6 m default).
+        public static ((double X, double Y, double Z) Min, (double X, double Y, double Z) Max)? Box(IEnumerable<(double[] Matrix, LocalBox Box)> enabled,
+            IEnumerable<(double[] Matrix, LocalBox Box)> disabled) => Box(enabled) ?? Box(disabled);
+
+        // The footprint made longer by `metres` at its nose and at its tail.
+        public static FlatBox Lengthened(FlatBox box, double metres) =>
+            new FlatBox(box.X, box.Z, box.Forward.X, box.Forward.Z, box.HalfWidth, box.HalfLength + metres);
+
+        // Whether `a`, placed nose to tail beside `b`, keeps at least `gap` metres clear of it along its own length (the
+        // footprints themselves, not shrunk). Exactly `gap` apart keeps it.
+        public static bool KeepsGap(FlatBox a, FlatBox b, double gap) => !Overlap(Lengthened(a, gap), b, -1e-6);
+
         // Whether two footprints on the ground overlap (separating axes), each grown by `margin` metres on every side.
         // Height isn't looked at: the caller has already picked what stands at the vehicle's level.
         public static bool Overlap(FlatBox a, FlatBox b, double margin = 0)
