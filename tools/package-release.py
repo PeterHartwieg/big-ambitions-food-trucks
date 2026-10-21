@@ -15,7 +15,7 @@ REPO = Path(__file__).resolve().parents[1]
 REQUIRED = {
     'FoodTrucks.dll', 'README.md', 'LICENSE.txt', 'Locales/en.json',
     'Dependencies/FoodTrucks.Core.dll', 'Dependencies/BridgeControl.dll', 'Dependencies/0Harmony.dll', 'Dependencies/Harmony-LICENSE.txt',
-    *(f'data/{name}.json' for name in ('economy', 'demand', 'zones', 'rules', 'pitches', 'commissaries')),
+    *(f'data/{name}.json' for name in ('economy', 'demand', 'zones', 'rules', 'pitches', 'commissaries', 'vehicle-diagrams')),
     *(f'AssetBundles/{platform}/foodtrucks.unity3d{suffix}'
       for platform in ('Windows', 'Mac') for suffix in ('', '.manifest')),
 }
@@ -67,7 +67,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=REPO / 'build/FoodTrucks')
     parser.add_argument('--manifest', type=Path, default=REPO / 'build/FoodTrucks.sha256')
-    parser.add_argument('--output', type=Path, default=REPO / 'build/FoodTrucks-0.9.10-rc.zip')
+    version = re.search(r'^  Version: (\S+)$', (REPO / 'unity/FoodTrucks/ModManifest.asset').read_text(), re.MULTILINE)[1]
+    parser.add_argument('--output', type=Path, default=REPO / f'build/FoodTrucks-{version}-rc.zip')
     args = parser.parse_args()
     try:
         print(f'Created local release candidate: {package(args.source, args.manifest, args.output)}')
