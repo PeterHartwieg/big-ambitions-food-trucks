@@ -2,13 +2,13 @@
 
 A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, fit equipment, stock up and serve the crowd yourself or send a crew along a scheduled route.
 
-**Status, 14 October 2026:** development build `0.9.10`, targeting Big Ambitions 1.0. The cart and truck, equipment and menus, demand and visible queues, licences and permits, crew routes, health grades, regulars, competition, catering, venue partnerships, map filters, commissary supply and warehouse logistics are implemented. This is an unreleased development build: Workshop publication has not happened, release review is under way, and the latest changes still need in-game checks. The dedicated Street food page and local Mac validation are being reviewed separately; neither is claimed checked here. See [CHECKS.md](CHECKS.md) for pending checks and [docs/implementation-plan.md](docs/implementation-plan.md) for development history.
+**Version 0.10.3, 21 October 2026:** removes factory water from the cooler menu and commissary catalogue, and includes the 0.10.1 cart interaction and 0.10.2 quit/unload fixes. The cooler serves soda only. There are 19 food and drink options without another mod, plus five optional Bakery products. Existing water stock remains in saves but is not sold or automatically restocked. Core checks cover removal; in-game checks for this update remain pending in [CHECKS.md](CHECKS.md).
 
 Demand depends on the spot, time, nearby businesses, weather and season. Equipment determines both the menu and food capacity; crews use the game's employees and payroll. Street food has its own save data, income and expense breakdown, and income-tax integration. Balance is calculated and still subject to playtesting; the latest study is [docs/balance/balance-pass-2026-10-14.md](docs/balance/balance-pass-2026-10-14.md).
 
 ## Installing a development build
 
-There is no published Workshop release yet. Build from this repository using [Building](#building), or use a complete development package supplied for testing. With the game closed, place the entire `FoodTrucks` package folder in the game's `ModsLocal` folder, preserving its asset bundles, data, locales and dependencies. A source checkout or the DLL alone is not an installable package. Restart the game after installing or replacing it. To remove it from saves, follow [Removing the mod](#removing-the-mod) first.
+The mod is published on [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3822355169). This source update must be packaged and installed before its changes take effect; a local installation does not publish a Workshop update. Build from this repository using [Building](#building), or use a complete package supplied for testing. With the game closed, place the entire `FoodTrucks` package folder in the game's `ModsLocal` folder, preserving its asset bundles, data, locales and dependencies. A source checkout or the DLL alone is not an installable package. Restart the game after installing or replacing it. To remove it from saves, follow [Removing the mod](#removing-the-mod) first.
 
 ## Getting started
 

@@ -1,0 +1,7 @@
+[b]0.10.3 — Water removed[/b]
+
+[list]
+[*]Removed water from the cooler menu and commissary ordering. The game item is a factory ingredient, so it was being sold for cents. Drinks fridges now serve soda only.
+[*]Existing saved water stock is kept, but is no longer sold or automatically restocked. Future standing-order bookings skip water as unavailable; orders already booked retain their delivery behavior.
+[*]Includes the 0.10.1 cart interaction and 0.10.2 quit/unload fixes.
+[/list]

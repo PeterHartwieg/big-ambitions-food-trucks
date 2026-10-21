@@ -130,15 +130,15 @@ public class CargoRulesTests
     [InlineData(null, 80, 500, 500)]
     public void FoodLoadsOnlyWhatFitsItsPiece(string? vehicle, int stock, int incoming, int allowed)
     {
-        // Water belongs to the cooler; hot dogs in the grill and nested stock don't take its room.
+        // Soda belongs to the cooler; hot dogs in the grill and nested stock don't take its room.
         var cargo = new[]
         {
-            new CargoLine("ba:itemname_water", stock, false), new CargoLine(Fridge, 1, false), new CargoLine(HotDog, 30, false),
-            new CargoLine(Grill, 1, false), new CargoLine("ba:itemname_water", 500, true), new CargoLine("ba:itemname_box", 80, false)
+            new CargoLine("ba:itemname_sodacan", stock, false), new CargoLine(Fridge, 1, false), new CargoLine(HotDog, 30, false),
+            new CargoLine(Grill, 1, false), new CargoLine("ba:itemname_sodacan", 500, true), new CargoLine("ba:itemname_box", 80, false)
         };
 
         Assert.Equal(allowed, CargoRules.AllowedUnits(ShippedData.Tables, vehicle, cargo,
-            "ba:itemname_water", incoming, false));
+            "ba:itemname_sodacan", incoming, false));
     }
 
     [Theory]
@@ -202,7 +202,7 @@ public class CargoRulesTests
 
         Assert.Equal(MenuProblem.None, build.Problem);
         Assert.Null(build.Detail);
-        Assert.Equal(new[] { HotDog, "ba:itemname_sodacan", "ba:itemname_water" }, build.Menu.Items);
+        Assert.Equal(new[] { HotDog, "ba:itemname_sodacan" }, build.Menu.Items);
     }
 
     [Fact]
@@ -217,7 +217,7 @@ public class CargoRulesTests
         Assert.Equal("cooler", cart.Detail);
         Assert.Empty(cart.Menu.Items);
         Assert.Equal(MenuProblem.None, truck.Problem);
-        Assert.Equal(new[] { HotDog, "ba:itemname_sodacan", "ba:itemname_water" }, truck.Menu.Items);
+        Assert.Equal(new[] { HotDog, "ba:itemname_sodacan" }, truck.Menu.Items);
     }
 
     [Fact]

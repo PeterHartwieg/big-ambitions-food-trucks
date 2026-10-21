@@ -92,10 +92,12 @@ Each piece of equipment unlocks products. The menu is whatever the fitted equipm
 | Coffee machine | cup of coffee, cup of tea | Breakfast peak |
 | Ice cream counter | ice cream | Strong in summer, weak in winter |
 | Pizza oven | pizza | Slowest, highest margin |
-| Cooler | soda can, water | Add-on sales, no prep time |
+| Cooler | soda can | Add-on sales, no prep time |
 | Display case | croissant, donut, cupcake | Bought in, no baking; Bakery mod goods here if installed |
 
 Item IDs come from the base game (`ba:itemname_hotdog` and so on). The Bakery mod's IDs are read from its bundle (see Technical answers, row 8).
+
+Water was removed from the street-food catalogue on 21 October 2026: `ba:itemname_water` is a factory ingredient, not bottled drinking water. The cooler serves soda only. Old saved water stock is retained, but cannot be sold or automatically restocked as street food.
 
 Each product has a service time. A customer order takes the longest service time of its items, so a burger slows the whole queue.
 

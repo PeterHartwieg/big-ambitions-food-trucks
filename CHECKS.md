@@ -1,3 +1,13 @@
+# Water removal (21 October 2026, next build)
+
+**Pending in game.** Water is a factory ingredient and is no longer in the street-food product table. The cooler serves soda only; the commissary catalogue no longer offers water. Existing save data is retained.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| WR1 | Call a commissary and open Order stock; open a cart/truck Menu with a drinks fridge | Soda is offered; water is absent from both the order catalogue and selling menu |
+| WR2 | Load an older disposable save with water on a vehicle and in commissary stock; serve, Fill up, save and reload | Water is never sold or automatically loaded. Existing stock survives; soda sells normally |
+| WR3 | Let an existing water standing order reach its next booking | Water is reported unavailable, no new water order or delivery fee is created for a water-only booking; other available lines still book normally |
+
 # Working a serving window (18 October 2026, next build)
 
 **Pending in game.** Core and mock tests cover the selling clock and controls; the native UI, animation, layout and needs still require play. No mod build or game-PC session was run for this change. At startup, `PlayerActivityUI.SetUpSpeedOptions`, `PlayerActivityUI.OnPlayerActionPressed`, the serving `GameManager.RunMainGameTick`, `ItemPanelUI.UpdateButtonsVisibility`, `ItemPanelUI.SetupCargoSlots` and `VehicleController.DriveVehicle` patches must each log `Active`.

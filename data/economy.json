@@ -12,7 +12,6 @@
     "ba:itemname_cupoftea": { "category": "coffee", "serviceMinutes": 1.0, "stockWeight": 0.25 },
     "ba:itemname_icecream": { "category": "icecream", "serviceMinutes": 3 },
     "ba:itemname_sodacan": { "category": "colddrinks", "serviceMinutes": 1 },
-    "ba:itemname_water": { "category": "colddrinks", "serviceMinutes": 1 },
     "ba:itemname_croissant": { "category": "bakery", "serviceMinutes": 2, "stockWeight": 0.5 },
     "ba:itemname_donut": { "category": "bakery", "serviceMinutes": 2, "stockWeight": 0.5 },
     "ba:itemname_cupcake": { "category": "bakery", "serviceMinutes": 2, "stockWeight": 0.5 },
@@ -46,7 +45,8 @@
     "coffeemachine": { "products": ["ba:itemname_cupofcoffee", "ba:itemname_cupoftea", "bakeryxx:itemname_latte", "bakeryxx:itemname_americano"], "gameItems": ["ba:itemname_industrialcoffeemachine", "bakeryxx:itemname_bistromachine"], "display": "CoffeeStation" },
     "icecreamcounter": { "products": ["ba:itemname_icecream"], "gameItems": ["ba:itemname_icecreamcounter"], "display": "IceCreamCabinet" },
     "pizzaoven": { "products": ["ba:itemname_pizza"], "gameItems": ["ba:itemname_pizzaoven"], "display": "PizzaOven" },
-    "cooler": { "products": ["ba:itemname_sodacan", "ba:itemname_water"], "gameItems": ["ba:itemname_drinksfridge", "ba:itemname_largedrinksfridge"], "display": "DrinksCooler" },
+    "_cooler": "Soda only. Water is a factory ingredient and is not sold as street food.",
+    "cooler": { "products": ["ba:itemname_sodacan"], "gameItems": ["ba:itemname_drinksfridge", "ba:itemname_largedrinksfridge"], "display": "DrinksCooler" },
     "displaycase": { "products": ["ba:itemname_croissant", "ba:itemname_donut", "ba:itemname_cupcake", "bakeryxx:itemname_bread", "bakeryxx:itemname_bun", "bakeryxx:itemname_chocolatecookie"], "gameItems": ["ba:itemname_bakeryshowcase", "bakeryxx:itemname_breadcounter"], "display": "PastryCase" },
     "storage": { "products": [], "gameItems": ["foodtrucks:itemname_storagecabinet"], "display": "StorageCabinet", "storageFactor": 2 }
   },

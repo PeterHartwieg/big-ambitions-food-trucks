@@ -2,6 +2,10 @@
 
 Turns [design.md](design.md) into ordered work. Written 7 October 2026. The structure follows advice from a Fable 5.1 review of the design: build one playable slice first, then add features in milestones that each end in an in-game check.
 
+## Remove water (Peter, 21 October 2026)
+
+Version 0.10.3 removes water from both the cooler menu and the product table, so the commissary no longer offers it. `ba:itemname_water` is a factory ingredient, not bottled water. Existing cargo and saved commissary stock remain intact, automatic restocking ignores it, and future standing-order bookings use the existing unavailable-item path. Orders already booked retain their original delivery behavior. No save schema change. Player-facing source descriptions now list 19 products without Bakery. **Pending in game and release**; see CHECKS WR1–WR3.
+
 ## Start here
 
 1. Read this plan, then [design.md](design.md). The design's Technical answers table has the code facts, with class names to search for. The NYC research note in `research/` is background only.
