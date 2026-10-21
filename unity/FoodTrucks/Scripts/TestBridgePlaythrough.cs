@@ -250,6 +250,7 @@ namespace FoodTrucks
         private static object RouteCommand(JObject args)
         {
             var op = Need(args, "op", "add_stop or paste_day");
+            if (op == "catalogue") return StopCatalogue(args);
             var id = Need(args, "vehicle", "the food vehicle's id");
             var instance = FoodVehicle(id);
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
