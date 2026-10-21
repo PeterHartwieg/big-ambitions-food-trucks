@@ -1074,22 +1074,32 @@ if (opts.Wants("checks"))
     var cart = carts["hotdog+cooler"].Cart;
     var planner = PlannerFor(cart);
     var c = Cond();
-    var windows = new[] { (9 * 60, 10 * 60), (10 * 60, 13 * 60 + 50), (13 * 60 + 50, 14 * 60 + 50) };
+    // The middle stop must be long enough to empty a piece and restock: 3 h 50 min did at 40 units a piece, and it takes
+    // longer at 60 (21 October 2026), so longer middle stops are tried in turn.
+    var windowSets = new[] { 230, 300, 360, 420 }.Select(len => new[] { (9 * 60, 10 * 60), (10 * 60, 10 * 60 + len), (10 * 60 + len, 11 * 60 + len) }).ToArray();
+    var windows = windowSets[0];
     bool BelowHalf(Dictionary<string, double> stock) => cart.PieceLoads(stock).Values.Any(l => l < cart.PerPiece / 2.0);
     // The first pitch, in name order, where the case happens: the first stop leaves every piece above half (no refill),
     // the middle stop restocks inside its stay and ends above half too, so the third stop needs no refill.
-    var found = spots.OrderBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.Hood, StringComparer.Ordinal).Select(s =>
+    (Spot, Stay)? found = null;
+    foreach (var set in windowSets)
     {
-        var first = planner.SellFull(s, windows[0].Item1, windows[0].Item2, c);
-        if (BelowHalf(first.Left)) return null;
-        var middle = planner.SellAt(s, windows[1].Item1, windows[1].Item2, c, new Dictionary<string, double>(first.Left));
-        return middle.Restocks > 0 && !BelowHalf(middle.Left) ? (s, middle) : ((Spot, Stay)?)null;
-    }).FirstOrDefault(x => x != null) ?? throw new InvalidOperationException("Check route: no pitch restocks inside the middle stop; pick other windows.");
-    var (spot, mid) = found;
+        windows = set;
+        found = spots.OrderBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.Hood, StringComparer.Ordinal).Select(s =>
+        {
+            var first = planner.SellFull(s, windows[0].Item1, windows[0].Item2, c);
+            if (BelowHalf(first.Left)) return null;
+            var middle = planner.SellAt(s, windows[1].Item1, windows[1].Item2, c, new Dictionary<string, double>(first.Left));
+            return middle.Restocks > 0 && !BelowHalf(middle.Left) ? (s, middle) : ((Spot, Stay)?)null;
+        }).FirstOrDefault(x => x != null);
+        if (found != null) break;
+    }
+    if (found == null) throw new InvalidOperationException("Check route: no pitch restocks inside the middle stop; pick other windows.");
+    var (spot, mid) = found.Value;
     var day = planner.Route(new[] { spot, spot, spot }, windows, c);
     o.AppendLine("## Calculator checks");
     o.AppendLine();
-    o.AppendLine($"- Route, three stops at {spot.Name} ({H(spot.Hood)}), 09:00, 10:00 and 13:50: the middle stop restocks {mid.Restocks} times and ends with " +
+    o.AppendLine($"- Route, three stops at {spot.Name} ({H(spot.Hood)}), {Clock(windows[0].Item1)}, {Clock(windows[1].Item1)} and {Clock(windows[2].Item1)}: the middle stop restocks {mid.Restocks} times and ends with " +
                  string.Join(", ", mid.Left.Select(p => $"{p.Value:0.##} {p.Key}")) + $"; route refills {(day == null ? "none (no route)" : day.Refills.ToString())}, expected 0.");
     if (day == null || day.Refills != 0) throw new InvalidOperationException("Check route: the route refilled after a stop that ended above half.");
     o.AppendLine();

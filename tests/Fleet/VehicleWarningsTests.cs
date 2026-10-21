@@ -48,10 +48,10 @@ public class VehicleWarningsTests
     }
 
     [Theory]
-    // A cart's hot dog grill holds 40 hot dogs: low at a quarter of that or less, empty at none.
-    [InlineData(40, null)]
-    [InlineData(11, null)]
-    [InlineData(10, VehicleWarningKind.LowStock)]
+    // A cart's hot dog grill holds 60 hot dogs: low at a quarter of that or less, empty at none.
+    [InlineData(60, null)]
+    [InlineData(16, null)]
+    [InlineData(15, VehicleWarningKind.LowStock)]
     [InlineData(1, VehicleWarningKind.LowStock)]
     [InlineData(0, VehicleWarningKind.EmptyStock)]
     public void StockFollowsTheGamesQuarterRule(int hotDogs, VehicleWarningKind? expected)

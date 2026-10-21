@@ -13,11 +13,11 @@ namespace FoodTrucks.Core.Marketing
         public bool Paid { get; set; }
     }
 
-    // Daily marketing fees (design: Marketing). A level runs only on a day its fee is paid: the first time the day changes
-    // with a level on, that day's whole fee is due; days the game skipped in between are neither charged nor marketed. A
-    // level chosen during the day is paid at once, a higher one for the difference to what that day already paid; a lower
-    // one or none refunds nothing. `pay` takes the money through the game and says whether it did. A level priced at 0
-    // runs without a payment.
+    // Daily marketing fees (design: Marketing). A level runs only on a day its fee is paid. Picking a level books it from
+    // the next day: nothing is charged and today keeps the level it paid for, if any. The first time the day changes with
+    // a level booked, that day's whole fee is due; days the game skipped in between are neither charged nor marketed.
+    // Picking again the same day only replaces the booking. `pay` takes the money through the game and says whether it
+    // did. A level priced at 0 runs without a payment.
     public static class MarketingFees
     {
         // The level that raised the vehicle's passers on `day`: the one paid for that day, the current paid day's or the
@@ -27,20 +27,29 @@ namespace FoodTrucks.Core.Marketing
         {
             if (rules == null) throw new ArgumentNullException(nameof(rules));
             if (vehicle == null) return null;
-            if (vehicle.MarketingPaidThroughDay == day && Running(vehicle, rules, vehicle.MarketingLevel) is MarketingLevel current) return current;
+            if (vehicle.MarketingPaidThroughDay == day && Running(vehicle, rules, vehicle.MarketingPaidLevel) is MarketingLevel current) return current;
             return vehicle.MarketingPreviousDay == day ? Running(vehicle, rules, vehicle.MarketingPreviousLevel) : null;
         }
 
         // DemandQuery.Marketing for the vehicle on `day`.
         public static double Factor(VehicleState? vehicle, MarketingRules rules, int day) => Active(vehicle, rules, day)?.Footfall ?? 1.0;
 
-        // A new day: today's fee for the vehicle's level, once. Null when nothing is to pay: no level, none, an unknown
-        // level, a vehicle kind the level has no price for, today already paid, or a level priced at 0 (which then runs
-        // today). A refused payment turns the level off.
+        // The booked level that renews at the next day change, for the page and the bridge. Null for none, an unknown
+        // level or a vehicle kind the level has no price for.
+        public static MarketingLevel? Booked(VehicleState? vehicle, MarketingRules rules)
+        {
+            if (rules == null) throw new ArgumentNullException(nameof(rules));
+            return vehicle == null ? null : Running(vehicle, rules, vehicle.MarketingLevel);
+        }
+
+        // A new day: today's fee for the booked level, once. Null when nothing is to pay: no level, none, an unknown level,
+        // a vehicle kind the level has no price for, today already paid, a level booked today (it starts tomorrow), or a
+        // level priced at 0 (which then runs today). A refused payment turns the level off.
         public static MarketingCharge? Renew(VehicleState vehicle, MarketingRules rules, int today, Func<MarketingCharge, bool> pay)
         {
-            Check(vehicle, rules, today, pay);
-            if (vehicle.MarketingPaidThroughDay >= today) return null;
+            Check(vehicle, rules, today);
+            if (pay == null) throw new ArgumentNullException(nameof(pay));
+            if (vehicle.MarketingPaidThroughDay >= today || vehicle.MarketingStartsDay > today) return null;
             var level = Running(vehicle, rules, vehicle.MarketingLevel);
             if (level == null) return null;
             var cents = level.CostPerDayCents[vehicle.VehicleType];
@@ -52,34 +61,24 @@ namespace FoodTrucks.Core.Marketing
             var charge = new MarketingCharge { VehicleId = vehicle.VehicleId, Level = level.Id, Day = today, Cents = cents };
             charge.Paid = pay(charge);
             if (charge.Paid) Settle(vehicle, level.Id, today, cents);
-            else Change(vehicle, null, today);
+            else Book(vehicle, null, null);
             return charge;
         }
 
-        // The player picks a level. Null when nothing is to pay (none, a lower level, one today's payment covers, or one
-        // priced at 0), and the level is set. Otherwise the charge: the level is set only if it was paid. Throws for an
-        // unknown level or a vehicle kind it has no price for.
-        public static MarketingCharge? Choose(VehicleState vehicle, MarketingRules rules, string levelId, int today, Func<MarketingCharge, bool> pay)
+        // The player picks a level: it is booked from the next day, and today runs on with whatever today paid for. Throws
+        // for an unknown level or a vehicle kind it has no price for.
+        public static void Choose(VehicleState vehicle, MarketingRules rules, string levelId, int today)
         {
-            Check(vehicle, rules, today, pay);
+            Check(vehicle, rules, today);
             var level = rules.Level(levelId) ?? throw new ArgumentException($"Unknown marketing level '{levelId}'.", nameof(levelId));
             if (level.IsNone)
             {
-                Change(vehicle, null, today);
-                return null;
+                Book(vehicle, null, null);
+                return;
             }
-            if (!level.CostPerDayCents.TryGetValue(vehicle.VehicleType, out var price))
+            if (!level.CostPerDayCents.ContainsKey(vehicle.VehicleType))
                 throw new InvalidOperationException($"Marketing level '{level.Id}' has no price for a {vehicle.VehicleType}.");
-            var paidToday = vehicle.MarketingPaidThroughDay == today ? vehicle.MarketingPaidCents : 0;
-            if (price <= paidToday)
-            {
-                Settle(vehicle, level.Id, today, paidToday);
-                return null;
-            }
-            var charge = new MarketingCharge { VehicleId = vehicle.VehicleId, Level = level.Id, Day = today, Cents = price - paidToday };
-            charge.Paid = pay(charge);
-            if (charge.Paid) Settle(vehicle, level.Id, today, price);
-            return charge;
+            Book(vehicle, level.Id, today + 1);
         }
 
         private static MarketingLevel? Running(VehicleState vehicle, MarketingRules rules, string? levelId)
@@ -88,32 +87,31 @@ namespace FoodTrucks.Core.Marketing
             return level == null || level.IsNone || !level.CostPerDayCents.ContainsKey(vehicle.VehicleType) ? null : level;
         }
 
-        // The level `day` is paid with. Moving to a new day keeps the old paid day and its level as the previous one.
+        // Changes the booking; the paid day keeps the level it paid for.
+        private static void Book(VehicleState vehicle, string? levelId, int? startsDay)
+        {
+            vehicle.MarketingLevel = levelId;
+            vehicle.MarketingStartsDay = startsDay;
+        }
+
+        // The level `day` is paid with. The paid day before it and its level become the previous ones.
         private static void Settle(VehicleState vehicle, string levelId, int day, long paidCents)
         {
-            Change(vehicle, levelId, day);
-            vehicle.MarketingPaidThroughDay = day;
-            vehicle.MarketingPaidCents = paidCents;
-        }
-
-        // Sets the level. Before an earlier paid day loses the level it ran with, that day and level become the previous
-        // ones (once: a second change today must not overwrite them); a change on the paid day itself is that day's level
-        // from now on.
-        private static void Change(VehicleState vehicle, string? levelId, int today)
-        {
-            if (vehicle.MarketingPaidThroughDay is int paid && paid < today && vehicle.MarketingPreviousDay != paid)
+            if (vehicle.MarketingPaidThroughDay is int paid && paid < day)
             {
                 vehicle.MarketingPreviousDay = paid;
-                vehicle.MarketingPreviousLevel = vehicle.MarketingLevel;
+                vehicle.MarketingPreviousLevel = vehicle.MarketingPaidLevel;
             }
-            vehicle.MarketingLevel = levelId;
+            vehicle.MarketingPaidThroughDay = day;
+            vehicle.MarketingPaidLevel = levelId;
+            vehicle.MarketingPaidCents = paidCents;
+            vehicle.MarketingStartsDay = null;
         }
 
-        private static void Check(VehicleState vehicle, MarketingRules rules, int today, Func<MarketingCharge, bool> pay)
+        private static void Check(VehicleState vehicle, MarketingRules rules, int today)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             if (rules == null) throw new ArgumentNullException(nameof(rules));
-            if (pay == null) throw new ArgumentNullException(nameof(pay));
             if (today < 1) throw new ArgumentOutOfRangeException(nameof(today));
         }
     }

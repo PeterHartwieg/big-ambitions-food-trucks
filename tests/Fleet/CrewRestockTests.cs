@@ -188,7 +188,7 @@ public class CrewRestockTests
     {
         var tables = ShippedData.Tables;
         // A hot dog grill filled up; the grill half empty with no burgers or kabobs left at the commissary.
-        var cargo = new[] { new CargoLine(HotDogGrill, 1, false), new CargoLine(HotDog, 80, false), new CargoLine(Grill, 1, false), new CargoLine(Burger, 10, false) };
+        var cargo = new[] { new CargoLine(HotDogGrill, 1, false), new CargoLine(HotDog, 120, false), new CargoLine(Grill, 1, false), new CargoLine(Burger, 10, false) };
         Assert.Equal(new[] { Burger, Kabob }, CrewRestock.Short(tables, "truck", cargo, new Dictionary<string, int>()).OrderBy(x => x));
         // Kabobs still there (the cargo refused them, say): not a shortage.
         Assert.Empty(CrewRestock.Short(tables, "truck", cargo, new Dictionary<string, int> { [Kabob] = 500 }));

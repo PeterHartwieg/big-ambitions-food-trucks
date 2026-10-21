@@ -51,10 +51,10 @@
     "storage": { "products": [], "gameItems": ["foodtrucks:itemname_storagecabinet"], "display": "StorageCabinet", "storageFactor": 2 }
   },
 
-  "_vehicles": "unitsPerPiece is the weighted food each fitted piece holds, separate from the game's cargo slots, which count boxes. Cart 40, truck 80 per piece (Peter, 10 October 2026): a cart's hot dog grill holds 40 hot dogs, a coffee machine 160 coffees; with the Extra storage piece 80 and 320. Foods without a fitted piece can't be loaded.",
+  "_vehicles": "unitsPerPiece is the weighted food each fitted piece holds, separate from the game's cargo slots, which count boxes. Cart 60, truck 120 per piece (Peter, 21 October 2026; 40 and 80 since 10 October): a cart's hot dog grill holds 60 hot dogs, a coffee machine 240 coffees; with the Extra storage piece 120 and 480. Foods without a fitted piece can't be loaded.",
   "vehicles": {
-    "cart": { "equipmentSlots": 2, "staff": 1, "unitsPerPiece": 40 },
-    "truck": { "equipmentSlots": 4, "staff": 2, "unitsPerPiece": 80 }
+    "cart": { "equipmentSlots": 2, "staff": 1, "unitsPerPiece": 60 },
+    "truck": { "equipmentSlots": 4, "staff": 2, "unitsPerPiece": 120 }
   },
 
   "_priceCurve": "Share of customers who still buy at a price, as [price / reference price, share] points; straight lines between them, flat beyond the ends. Smoothed from the game's shop rule (read in the decompile, unverified in game): a customer buys up to max(class index, neighbourhood average index) times the reference price, with class indices 1.2, 1.4 and 1.7. assumedPriceIndex is the neighbourhood average the points are drawn for (a 50/35/15 class mix gives about 1.35); the adapter rescales other neighbourhoods onto it. The 0.8 point is the mod's own small bonus for undercutting.",

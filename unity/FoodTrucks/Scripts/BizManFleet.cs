@@ -834,8 +834,10 @@ namespace FoodTrucks
         internal static string Where(VehicleInstance instance, VehicleState? vehicle, bool withDriver)
         {
             if (vehicle?.Transit != null)
-                return vehicle.Transit.ToStopIndex is int stop
-                    ? Format("foodtrucks:bizman_fleet_where_transit", ("stop", (stop + 1).ToString()))
+                // The stop's number on its day, as the Week plan tab shows it: the index counts across the week (a playtest
+                // read "On the way to stop 6" on a one-stop day).
+                return vehicle.Transit.ToStopIndex is int stop && FoodTrucks.Core.Fleet.WeekPlan.NumberOnDay(vehicle.Schedule, stop) is int number
+                    ? Format("foodtrucks:bizman_fleet_where_transit", ("stop", number.ToString()))
                     : vehicle.Transit.ToSpotKey == FoodTrucks.Core.Fleet.HireSchedules.HomeSpotKey ? Text("foodtrucks:bizman_fleet_where_home")
                     : Text("foodtrucks:bizman_fleet_where_moving");
             if (withDriver) return Text("foodtrucks:bizman_fleet_where_driver");

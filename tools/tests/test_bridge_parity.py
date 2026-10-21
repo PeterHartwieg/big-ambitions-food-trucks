@@ -30,41 +30,41 @@ class ParityTests(unittest.TestCase):
             self.mock.call(cmd,args)
         self.assertEqual(str(exc.exception),text)
 
-    def test_marketing_paid_today_survives_a_reload_and_an_older_save_has_none(self):
-        self.mock.store('FT before marketing')
+    def midnight(self):
+        self.mock.absolute=self.mock.state['clock']['day']*1440-1
+        self.mock.tick()
+
+    def test_marketing_is_booked_from_the_next_day_and_survives_a_reload(self):
         day=self.mock.state['clock']['day']
         money=self.mock.state['money']
+        flyers,local=(next(l for l in NS['TUNING']['marketing']['levels'] if l['id']==i)['costPerDayCents']['truck'] for i in ('flyers','local'))
         r=self.mock.call('marketing',{'vehicle':self.id,'level':'flyers'})
         self.assertTrue(r['done'])
-        self.assertEqual((r['state']['marketing_level'],r['state']['marketing_paid_through_day']),('flyers',day))
+        self.assertEqual((r['level'],r['state']['marketing_starts_day'],r['state']['marketing_today']),('flyers',day+1,None))
+        self.assertEqual(self.mock.state['money'],money)
         self.mock.store('FT marketing')
-        self.mock.marketing_paid={}  # what a fresh session would hold: the paid amount must come from the save
         self.mock.restore('FT marketing', emit=False)
-        flyers,local=(next(l for l in NS['TUNING']['marketing']['levels'] if l['id']==i)['costPerDayCents']['truck'] for i in ('flyers','local'))
-        # Raising the level after the reload pays only the difference, as the paid amount came back with the save.
-        self.assertTrue(self.mock.call('marketing',{'vehicle':self.id,'level':'local'})['done'])
-        self.assertAlmostEqual(self.mock.state['money'],round(money-local/100,2))
-        # A save from before marketing restores nothing paid, so its level costs the full price.
-        self.mock.restore('FT before marketing', emit=False)
-        self.assertEqual(self.mock.marketing_paid,{})
-        before=self.mock.state['money']
-        self.mock.call('marketing',{'vehicle':self.id,'level':'local'})
-        self.assertAlmostEqual(self.mock.state['money'],round(before-local/100,2))
-        self.assertLess(flyers,local)
+        self.midnight()
+        v=self.mock.vehicle(self.id)
+        self.assertEqual((v['marketing_today'],v['marketing_paid_through_day']),('flyers',day+1))
+        self.assertAlmostEqual(self.mock.state['money'],round(money-flyers/100,2))
+        # A new pick the same day only replaces the booking: today stays flyers, tomorrow charges local once.
+        paid=self.mock.state['money']
+        for level in ('citywide','none','local'): self.mock.call('marketing',{'vehicle':self.id,'level':level})
+        self.assertEqual((v['marketing_today'],self.mock.state['money']),('flyers',paid))
+        self.midnight()
+        self.assertEqual(v['marketing_today'],'local')
+        self.assertAlmostEqual(self.mock.state['money'],round(paid-local/100,2))
 
-    def test_marketing_a_free_level_on_a_new_day_does_not_carry_yesterdays_payment(self):
+    def test_marketing_a_free_level_runs_from_the_next_day_without_a_payment(self):
         levels=NS['TUNING']['marketing']['levels']
         levels.insert(1,{'id':'sign','footfall':1.05,'costPerDayCents':{'cart':0,'truck':0}})
         self.addCleanup(lambda: levels.pop(1))
-        citywide=next(l for l in levels if l['id']=='citywide')['costPerDayCents']['truck']
-        self.assertTrue(self.mock.call('marketing',{'vehicle':self.id,'level':'citywide'})['done'])
-        self.mock.call('marketing',{'vehicle':self.id,'level':'none'})
-        self.mock.state['clock']['day']+=1
+        money=self.mock.state['money']
         self.assertTrue(self.mock.call('marketing',{'vehicle':self.id,'level':'sign'})['done'])
-        self.assertEqual(self.mock.marketing_paid[self.id],0)
-        before=self.mock.state['money']
-        self.assertTrue(self.mock.call('marketing',{'vehicle':self.id,'level':'citywide'})['done'])
-        self.assertAlmostEqual(self.mock.state['money'],round(before-citywide/100,2))
+        self.midnight()
+        self.assertEqual(self.mock.vehicle(self.id)['marketing_today'],'sign')
+        self.assertEqual(self.mock.state['money'],money)
 
     def test_marketing_refuses_a_level_without_a_price_for_the_vehicle_kind(self):
         level=next(l for l in NS['TUNING']['marketing']['levels'] if l['id']=='flyers')

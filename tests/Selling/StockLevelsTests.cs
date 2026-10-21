@@ -18,11 +18,11 @@ public class StockLevelsTests
     private static CargoLine L(string item, int amount) => new(item, amount, false);
 
     [Theory]
-    [InlineData(0, 40, StockLevel.Empty)]
-    [InlineData(1, 40, StockLevel.Low)]
-    [InlineData(10, 40, StockLevel.Low)]
-    [InlineData(11, 40, StockLevel.Ok)]
-    [InlineData(40, 40, StockLevel.Ok)]
+    [InlineData(0, 60, StockLevel.Empty)]
+    [InlineData(1, 60, StockLevel.Low)]
+    [InlineData(15, 60, StockLevel.Low)]
+    [InlineData(16, 60, StockLevel.Ok)]
+    [InlineData(60, 60, StockLevel.Ok)]
     [InlineData(3, 0, StockLevel.Ok)]
     public void AQuarterOrLessIsLowAndNoneIsEmpty(int units, int capacity, StockLevel level) =>
         Assert.Equal(level, StockLevels.Level(units, capacity));
@@ -35,9 +35,9 @@ public class StockLevelsTests
         var stock = StockLevels.Of(Tables, view);
 
         var hotDog = stock.Single(s => s.Item == HotDog);
-        Assert.Equal((8, 40, StockLevel.Low), (hotDog.Units, hotDog.Capacity, hotDog.Level));
+        Assert.Equal((8, 60, StockLevel.Low), (hotDog.Units, hotDog.Capacity, hotDog.Level));
         var coffee = stock.Single(s => s.Item == Coffee);
-        Assert.Equal((100, 160, StockLevel.Ok), (coffee.Units, coffee.Capacity, coffee.Level));
+        Assert.Equal((100, 240, StockLevel.Ok), (coffee.Units, coffee.Capacity, coffee.Level));
         Assert.Equal(view.Pools.Sum(p => p.Piece.Products.Count), stock.Count);
     }
 
@@ -47,7 +47,7 @@ public class StockLevelsTests
         var view = Core.Selling.Storage.Of(Tables, "truck", new[] { L(HotDogGrill, 1) })!;
 
         var hotDog = StockLevels.Of(Tables, view).Single(s => s.Item == HotDog);
-        Assert.Equal((0, 80, StockLevel.Empty), (hotDog.Units, hotDog.Capacity, hotDog.Level));
+        Assert.Equal((0, 120, StockLevel.Empty), (hotDog.Units, hotDog.Capacity, hotDog.Level));
     }
 
     [Fact]

@@ -9,7 +9,7 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Selling;
 
-// Storage per piece (Peter, 10 October 2026): each fitted piece holds unitsPerPiece of its own foods,
+// Storage per piece (Peter, 10 October 2026; 40 and 80 until 21 October): each fitted piece holds unitsPerPiece of its own foods,
 // a storage piece doubles every piece, and Restock splits a shared piece evenly.
 public class StorageTests
 {
@@ -31,10 +31,10 @@ public class StorageTests
     private static CargoLine L(string item, int amount, bool nested = false) => new(item, amount, nested);
 
     [Theory]
-    [InlineData("cart", false, 40)]
-    [InlineData("cart", true, 80)]
-    [InlineData("truck", false, 80)]
-    [InlineData("truck", true, 160)]
+    [InlineData("cart", false, 60)]
+    [InlineData("cart", true, 120)]
+    [InlineData("truck", false, 120)]
+    [InlineData("truck", true, 240)]
     public void EachPieceHoldsItsOwnFoodAndTheStoragePieceDoublesIt(string vehicle, bool storage, int capacity)
     {
         var cargo = new List<CargoLine> { L(HotDogGrill, 1), L(Grill, 1) };
@@ -56,8 +56,8 @@ public class StorageTests
 
         var pool = Assert.Single(view.Pools);
         Assert.Equal(2, pool.Pieces);
-        Assert.Equal(160, pool.Capacity);
-        Assert.Equal(60, pool.Room);
+        Assert.Equal(240, pool.Capacity);
+        Assert.Equal(140, pool.Room);
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class StorageTests
         // A save that somehow holds two still counts once.
         var two = Core.Selling.Storage.Of(Tables, "truck", new[] { L(HotDogGrill, 1), L(Storage, 2) })!;
         Assert.Equal(2, two.StoragePieces);
-        Assert.Equal(160, Assert.Single(two.Pools).Capacity);
+        Assert.Equal(240, Assert.Single(two.Pools).Capacity);
     }
 
     [Fact]
@@ -114,26 +114,26 @@ public class StorageTests
     [Fact]
     public void AFullPieceNamesItselfAndItsCapacity()
     {
-        var check = Core.Selling.Storage.Check(Tables, "cart", new[] { L(HotDogGrill, 1), L(HotDog, 30) }, HotDog, 500, false);
+        var check = Core.Selling.Storage.Check(Tables, "cart", new[] { L(HotDogGrill, 1), L(HotDog, 50) }, HotDog, 500, false);
 
         Assert.Equal(10, check.Allowed);
         Assert.Equal(LoadRefusal.PieceFull, check.Refusal);
         Assert.Equal("hotdoggrill", check.EquipmentId);
-        Assert.Equal(40, check.Capacity);
+        Assert.Equal(60, check.Capacity);
     }
 
     [Fact]
     public void StockAboveTheLimitStaysAndOnlyBlocksNewLoads()
     {
-        // An old save with 80 hot dogs on a cart, or a storage piece taken out.
-        var cargo = new[] { L(HotDogGrill, 1), L(HotDog, 80) };
+        // An old save with 90 hot dogs on a cart, or a storage piece taken out.
+        var cargo = new[] { L(HotDogGrill, 1), L(HotDog, 90) };
         var view = Core.Selling.Storage.Of(Tables, "cart", cargo)!;
 
-        Assert.Equal(80, view.Pools[0].Load);
+        Assert.Equal(90, view.Pools[0].Load);
         Assert.Equal(0, view.Pools[0].Room);
         Assert.Equal(0, CargoRules.AllowedUnits(Tables, "cart", cargo, HotDog, 1, false));
         Assert.Empty(Core.Selling.Storage.Restock(Tables, "cart", cargo, new Dictionary<string, int> { [HotDog] = 500 }).Load);
-        Assert.Equal(80, CargoRules.FoodUnits(Tables, cargo));
+        Assert.Equal(90, CargoRules.FoodUnits(Tables, cargo));
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class StorageTests
         var plan = Core.Selling.Storage.Restock(Tables, "cart", cargo,
             new Dictionary<string, int> { [HotDog] = 500, [Burger] = 80, [Fryer] = 1 });
 
-        Assert.Equal(new Dictionary<string, int> { [HotDog] = 28 }, plan.Load);
+        Assert.Equal(new Dictionary<string, int> { [HotDog] = 48 }, plan.Load);
         Assert.Equal(new[] { Burger }, plan.NotHeld);
     }
 
@@ -162,8 +162,8 @@ public class StorageTests
         var plan = Core.Selling.Storage.Restock(Tables, "cart", new[] { L(Grill, 1) },
             new Dictionary<string, int> { [Burger] = 80, [Kabob] = 80 });
 
-        Assert.Equal(20, plan.Load[Burger]);
-        Assert.Equal(20, plan.Load[Kabob]);
+        Assert.Equal(30, plan.Load[Burger]);
+        Assert.Equal(30, plan.Load[Kabob]);
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public class StorageTests
             new Dictionary<string, int> { [Burger] = 5, [Kabob] = 500 });
 
         Assert.Equal(5, plan.Load[Burger]);
-        Assert.Equal(75, plan.Load[Kabob]);
+        Assert.Equal(115, plan.Load[Kabob]);
     }
 
     [Fact]
@@ -183,24 +183,24 @@ public class StorageTests
         var plan = Core.Selling.Storage.Restock(Tables, "truck", cargo,
             new Dictionary<string, int> { [Burger] = 500, [Kabob] = 500 });
 
-        // 80 room in all, 48 free: kabobs come up to the burgers first, then both share the rest.
-        Assert.Equal(40, 30 + plan.Load[Burger]);
-        Assert.Equal(40, 2 + plan.Load[Kabob]);
+        // 120 room in all, 88 free: kabobs come up to the burgers first, then both share the rest.
+        Assert.Equal(60, 30 + plan.Load[Burger]);
+        Assert.Equal(60, 2 + plan.Load[Kabob]);
     }
 
     [Fact]
     public void RestockSplitsByStockWeight()
     {
-        // A cart's display case: 40 units, half for croissants (0.5 each) and half for bread (1.0 each).
+        // A cart's display case: 60 units, half for croissants (0.5 each) and half for bread (1.0 each).
         var plan = Core.Selling.Storage.Restock(Tables, "cart", new[] { L(Showcase, 1) },
             new Dictionary<string, int> { [Croissant] = 500, [Bread] = 500 });
 
-        Assert.Equal(40, plan.Load[Croissant]);
-        Assert.Equal(20, plan.Load[Bread]);
+        Assert.Equal(60, plan.Load[Croissant]);
+        Assert.Equal(30, plan.Load[Bread]);
 
         var odd = Core.Selling.Storage.Restock(Tables, "cart", new[] { L(Concessions, 1), L(Popcorn, 1) },
             new Dictionary<string, int> { [Popcorn] = 500, [CottonCandy] = 500 });
-        Assert.Equal(160, 1 + odd.Load[Popcorn] + odd.Load[CottonCandy]);
+        Assert.Equal(240, 1 + odd.Load[Popcorn] + odd.Load[CottonCandy]);
         Assert.InRange(odd.Load[CottonCandy] - (1 + odd.Load[Popcorn]), 0, 1);
     }
 
@@ -245,10 +245,10 @@ public class StorageTests
     {
         const string Coffee = "ba:itemname_cupofcoffee";
         const string Machine = "ba:itemname_industrialcoffeemachine";
-        var almost = Assert.Single(Core.Selling.Storage.Of(Tables, "cart", new[] { L(Machine, 1), L(Coffee, 159) })!.Pools);
-        Assert.Equal(39, almost.LoadUnits);
-        Assert.Equal(1, Core.Selling.Storage.Check(Tables, "cart", new[] { L(Machine, 1), L(Coffee, 159) }, Coffee, 5, false).Allowed);
-        Assert.Equal(40, Assert.Single(Core.Selling.Storage.Of(Tables, "cart", new[] { L(Machine, 1), L(Coffee, 160) })!.Pools).LoadUnits);
+        var almost = Assert.Single(Core.Selling.Storage.Of(Tables, "cart", new[] { L(Machine, 1), L(Coffee, 239) })!.Pools);
+        Assert.Equal(59, almost.LoadUnits);
+        Assert.Equal(1, Core.Selling.Storage.Check(Tables, "cart", new[] { L(Machine, 1), L(Coffee, 239) }, Coffee, 5, false).Allowed);
+        Assert.Equal(60, Assert.Single(Core.Selling.Storage.Of(Tables, "cart", new[] { L(Machine, 1), L(Coffee, 240) })!.Pools).LoadUnits);
     }
 
     [Fact]
@@ -297,17 +297,17 @@ public class StorageTests
         // Hot dog grill, grill and griddle are all fast food (the grill's kabobs are street meals); the cooler is cold drinks.
         var truck = new[] { L(HotDogGrill, 1), L(Grill, 1), L("foodtrucks:itemname_griddle", 1), L("ba:itemname_drinksfridge", 1) };
         var units = Core.Selling.Storage.CategoryCapacity(Tables, "truck", truck);
-        Assert.Equal(240, units["fastfood"]);
-        Assert.Equal(80, units["colddrinks"]);
-        Assert.Equal(80, units["streetmeal"]);
-        Assert.Equal(480, Core.Selling.Storage.CategoryCapacity(Tables, "truck", truck.Append(L(Storage, 1)))["fastfood"]);
+        Assert.Equal(360, units["fastfood"]);
+        Assert.Equal(120, units["colddrinks"]);
+        Assert.Equal(120, units["streetmeal"]);
+        Assert.Equal(720, Core.Selling.Storage.CategoryCapacity(Tables, "truck", truck.Append(L(Storage, 1)))["fastfood"]);
 
-        // A coffee machine's 80 units are 320 cups at 0.25 each.
-        Assert.Equal(320, Core.Selling.Storage.CategoryCapacity(Tables, "truck", new[] { L("ba:itemname_industrialcoffeemachine", 1) })["coffee"]);
-        // Popcorn and cotton candy share the concessions case, both at 0.25: 320 snacks; a corn grill adds 160 more at 0.5.
-        Assert.Equal(320, Core.Selling.Storage.CategoryCapacity(Tables, "truck", new[] { L(Concessions, 1) })["snacks"]);
-        Assert.Equal(480, Core.Selling.Storage.CategoryCapacity(Tables, "truck", new[] { L(Concessions, 1), L("foodtrucks:itemname_corngrill", 1) })["snacks"]);
-        Assert.Equal(160, Core.Selling.Storage.CategoryCapacity(Tables, "cart", new[] { L(Concessions, 1) })["snacks"]);
+        // A coffee machine's 120 units are 480 cups at 0.25 each.
+        Assert.Equal(480, Core.Selling.Storage.CategoryCapacity(Tables, "truck", new[] { L("ba:itemname_industrialcoffeemachine", 1) })["coffee"]);
+        // Popcorn and cotton candy share the concessions case, both at 0.25: 480 snacks; a corn grill adds 240 more at 0.5.
+        Assert.Equal(480, Core.Selling.Storage.CategoryCapacity(Tables, "truck", new[] { L(Concessions, 1) })["snacks"]);
+        Assert.Equal(720, Core.Selling.Storage.CategoryCapacity(Tables, "truck", new[] { L(Concessions, 1), L("foodtrucks:itemname_corngrill", 1) })["snacks"]);
+        Assert.Equal(240, Core.Selling.Storage.CategoryCapacity(Tables, "cart", new[] { L(Concessions, 1) })["snacks"]);
 
         Assert.Empty(Core.Selling.Storage.CategoryCapacity(Tables, "truck", new[] { L(Storage, 1) }));
         Assert.Empty(Core.Selling.Storage.CategoryCapacity(Tables, "boat", new[] { L(Grill, 1) }));

@@ -256,7 +256,7 @@ namespace FoodTrucks
                      $"{left} units left in stock; storage {(view == null ? "?" : StoragePanel.Summary(vehicle, view))}.");
             var foodText = string.Join(", ", FoodParts(tables, vehicle, view, loaded, rest));
             var notHeld = string.Join(", ", result.NotHeld.Select(Text));
-            // Foods that stayed here because their piece is full, "Tacos: the Griddle is full (160/160)": each full piece
+            // Foods that stayed here because their piece is full, "Tacos: the Griddle is full (240/240)": each full piece
             // none of whose foods went in this time (a piece that took some says so in the loaded list).
             var fullParts = view == null ? new List<string>()
                 : view.Pools.Where(p => Capped(tables, p, rest) && !p.Piece.Products.Any(loaded.ContainsKey)).Select(p => PieceFull(vehicle, p, rest)).ToList();
