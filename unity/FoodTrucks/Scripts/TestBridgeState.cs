@@ -251,6 +251,9 @@ namespace FoodTrucks
                 ["route"] = route,
                 ["parking"] = Parking(instance),
                 ["todos"] = Todos(instance.id),
+                // The chosen level (null for none) and the last game day its fee is paid; it runs only on a paid day.
+                ["marketing_level"] = record?.MarketingLevel,
+                ["marketing_paid_through_day"] = record?.MarketingPaidThroughDay,
             };
         }
 

@@ -405,6 +405,21 @@ public class DemandModelTests
     }
 
     [Fact]
+    public void MarketingScalesFootfallLikePromotion()
+    {
+        var plain = model.Estimate(Query("office", 12));
+        var query = Query("office", 12);
+        query.Marketing = 1.3;
+        query.Promotion = 1.2;
+        var marketed = model.Estimate(query);
+
+        Assert.Equal(plain.Footfall * 1.3 * 1.2, marketed.Footfall, 9);
+        Assert.Equal(plain.Appetite, marketed.Appetite, 9);
+        Assert.Equal(plain.CustomersPerHour * 1.3 * 1.2, marketed.CustomersPerHour, 9);
+        Assert.Equal(1.0, new DemandQuery().Marketing);
+    }
+
+    [Fact]
     public void CustomersAreFootfallTimesAppetite()
     {
         var estimate = model.Estimate(Query("office", 12));
@@ -460,5 +475,12 @@ public class DemandModelTests
         var badPromotion = Query("office", 12);
         badPromotion.Promotion = -1;
         Assert.Throws<ArgumentOutOfRangeException>(() => model.Estimate(badPromotion));
+
+        foreach (var bad in new[] { -0.1, double.NaN, double.PositiveInfinity })
+        {
+            var badMarketing = Query("office", 12);
+            badMarketing.Marketing = bad;
+            Assert.Throws<ArgumentOutOfRangeException>(() => model.Estimate(badMarketing));
+        }
     }
 }

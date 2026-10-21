@@ -178,6 +178,8 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Commissary: " + ex); }
             try { LogisticsCommissary.Attach(); }
             catch (Exception ex) { Log.Error("Commissary logistics: " + ex); }
+            try { VehicleMarketing.Attach(); }
+            catch (Exception ex) { Log.Error("Marketing: " + ex); }
             // The Bakery mod's goods sell from the display case and the coffee machine when it is installed.
             try
             {
@@ -207,6 +209,7 @@ namespace FoodTrucks
             CityLicensing.Detach();
             Catering.Detach();
             Commissary.Detach();
+            VehicleMarketing.Detach();
             StreetFoodBooks.ResetParkingHours();
             MapFilters.Clear();
             TruckHatch.Forget();

@@ -30,6 +30,49 @@ class ParityTests(unittest.TestCase):
             self.mock.call(cmd,args)
         self.assertEqual(str(exc.exception),text)
 
+    def test_marketing_paid_today_survives_a_reload_and_an_older_save_has_none(self):
+        self.mock.store('FT before marketing')
+        day=self.mock.state['clock']['day']
+        money=self.mock.state['money']
+        r=self.mock.call('marketing',{'vehicle':self.id,'level':'flyers'})
+        self.assertTrue(r['done'])
+        self.assertEqual((r['state']['marketing_level'],r['state']['marketing_paid_through_day']),('flyers',day))
+        self.mock.store('FT marketing')
+        self.mock.marketing_paid={}  # what a fresh session would hold: the paid amount must come from the save
+        self.mock.restore('FT marketing', emit=False)
+        flyers,local=(next(l for l in NS['TUNING']['marketing']['levels'] if l['id']==i)['costPerDayCents']['truck'] for i in ('flyers','local'))
+        # Raising the level after the reload pays only the difference, as the paid amount came back with the save.
+        self.assertTrue(self.mock.call('marketing',{'vehicle':self.id,'level':'local'})['done'])
+        self.assertAlmostEqual(self.mock.state['money'],round(money-local/100,2))
+        # A save from before marketing restores nothing paid, so its level costs the full price.
+        self.mock.restore('FT before marketing', emit=False)
+        self.assertEqual(self.mock.marketing_paid,{})
+        before=self.mock.state['money']
+        self.mock.call('marketing',{'vehicle':self.id,'level':'local'})
+        self.assertAlmostEqual(self.mock.state['money'],round(before-local/100,2))
+        self.assertLess(flyers,local)
+
+    def test_marketing_a_free_level_on_a_new_day_does_not_carry_yesterdays_payment(self):
+        levels=NS['TUNING']['marketing']['levels']
+        levels.insert(1,{'id':'sign','footfall':1.05,'costPerDayCents':{'cart':0,'truck':0}})
+        self.addCleanup(lambda: levels.pop(1))
+        citywide=next(l for l in levels if l['id']=='citywide')['costPerDayCents']['truck']
+        self.assertTrue(self.mock.call('marketing',{'vehicle':self.id,'level':'citywide'})['done'])
+        self.mock.call('marketing',{'vehicle':self.id,'level':'none'})
+        self.mock.state['clock']['day']+=1
+        self.assertTrue(self.mock.call('marketing',{'vehicle':self.id,'level':'sign'})['done'])
+        self.assertEqual(self.mock.marketing_paid[self.id],0)
+        before=self.mock.state['money']
+        self.assertTrue(self.mock.call('marketing',{'vehicle':self.id,'level':'citywide'})['done'])
+        self.assertAlmostEqual(self.mock.state['money'],round(before-citywide/100,2))
+
+    def test_marketing_refuses_a_level_without_a_price_for_the_vehicle_kind(self):
+        level=next(l for l in NS['TUNING']['marketing']['levels'] if l['id']=='flyers')
+        saved=dict(level['costPerDayCents'])
+        level['costPerDayCents'].pop('truck')
+        self.addCleanup(lambda: level['costPerDayCents'].update(saved))
+        self.refused('marketing',{'vehicle':self.id,'level':'flyers'},"no marketing level 'flyers' for a truck; levels: none, local, citywide")
+
     def test_player_and_crew_sales_share_saved_midnight_payment_for_each_vehicle_kind(self):
         for kind in ('cart', 'truck'):
             with self.subTest(kind=kind):

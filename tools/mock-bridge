@@ -230,6 +230,8 @@ class Mock:
         self.walks = []
         self.plans = {}
         self.ledger = {}
+        # What each vehicle paid for marketing on its paid-through day (VehicleState.MarketingPaidCents).
+        self.marketing_paid = {}
         self.sold = {}
         self.visits = {}
         # The player's life (docs/test-bridge.md, "The player's life"): where they are inside, what they hold, the homes they
@@ -245,7 +247,7 @@ class Mock:
     def store(self, name):
         self.saves[name] = copy.deepcopy({key: getattr(self, key) for key in
             ('state', 'character', 'absolute', 'employees', 'selected', 'order_number', 'routes', 'takings', 'hours', 'phone_texts', 'logistics',
-             'plans', 'ledger', 'sold', 'visits', 'fees_paid', 'life')})
+             'plans', 'ledger', 'sold', 'visits', 'fees_paid', 'life', 'marketing_paid')})
 
     def save_city(self, name):
         if self.save_in_progress: raise ValueError('A save is already being written; try again in a moment.')
@@ -292,6 +294,8 @@ class Mock:
         if name not in self.saves:
             raise ValueError('No such mock save: use FT mock or save the current city first')
         arrived_at=self.state['clock'].get('arrived_at')
+        # A save stored before marketing has nothing paid; the session's figures must not leak into it.
+        self.marketing_paid = {}
         for key, val in copy.deepcopy(self.saves[name]).items():
             setattr(self, key, val)
         self.until = None
@@ -481,7 +485,7 @@ class Mock:
     # The mod's per-vehicle ledger (Core SalesLedger, VehicleDay), sold counts (SoldCounts) and spots worked (DayRecord).
     def book(self, day, vehicle_id, line, cents):
         entry=self.ledger.setdefault(str(day),{'vehicles':{},'delivery_fees':0,'revenue':0,'stock_cost':0})
-        lines=entry['vehicles'].setdefault(vehicle_id,{k:0 for k in ('sales','catering','stock_cost','wages','parking','permit','commissary_rent','overnight_fines')})
+        lines=entry['vehicles'].setdefault(vehicle_id,{k:0 for k in ('sales','catering','stock_cost','wages','parking','permit','commissary_rent','overnight_fines','marketing')})
         lines[line]+=cents
         if line=='sales': entry['revenue']+=cents
         if line=='stock_cost': entry['stock_cost']+=cents
@@ -496,8 +500,8 @@ class Mock:
         ids=sorted({v['id'] for v in self.state['vehicles']}|set(entry['vehicles']))
         vehicles=[]
         for vid in ids:
-            lines=entry['vehicles'].get(vid,{k:0 for k in ('sales','catering','stock_cost','wages','parking','permit','commissary_rent','overnight_fines')})
-            profit=lines['sales']+lines['catering']-sum(lines[k] for k in ('stock_cost','wages','parking','permit','commissary_rent','overnight_fines'))
+            lines=entry['vehicles'].get(vid,{k:0 for k in ('sales','catering','stock_cost','wages','parking','permit','commissary_rent','overnight_fines','marketing')})
+            profit=lines['sales']+lines['catering']-sum(lines[k] for k in ('stock_cost','wages','parking','permit','commissary_rent','overnight_fines','marketing'))
             v=next((x for x in self.state['vehicles'] if x['id']==vid),None)
             if v is None and profit==0 and lines['sales']==0: continue
             sold=self.sold.get(vid,{}).get(str(day),{})
@@ -508,7 +512,7 @@ class Mock:
                              'minutes_open':sum(visits.values()) if detailed else None,
                              'stock_now':None if v is None else [{'key':s['key'],'amount':s['amount']} for s in v['stock'] if s['amount']>0]+
                                          [{'key':next(k for k,n in PIECES.items() if n==p['item']),'amount':1} for p in v['pieces'] if p['item'] in PIECES.values()]})
-        fleet_profit=entry['revenue']-entry['stock_cost']-entry['delivery_fees']-sum(l[k] for l in entry['vehicles'].values() for k in ('wages','parking','permit','commissary_rent','overnight_fines'))
+        fleet_profit=entry['revenue']-entry['stock_cost']-entry['delivery_fees']-sum(l[k] for l in entry['vehicles'].values() for k in ('wages','parking','permit','commissary_rent','overnight_fines','marketing'))
         return {'day':day,'today':today,'in_summary':str(day) in self.ledger and day<today,
                 'fleet':{'revenue':entry['revenue']/100,'stock_cost':entry['stock_cost']/100,'licence':0.0,'event_places':0.0,
                          'delivery_fees':entry['delivery_fees']/100,'profit':fleet_profit/100},
@@ -826,6 +830,51 @@ class Mock:
                 self.book(day,v['id'],'commissary_rent',cents)
             else: self.state['commissary']['unpaid']['rent']+=cents/100
 
+    # Marketing (Core MarketingFees): a new day charges the day's fee for the level on; a refused fee turns it off.
+    def charge_marketing(self, day):
+        levels={l['id']:l for l in TUNING['marketing']['levels']}
+        for v in self.state['vehicles']:
+            level=levels.get(v.get('marketing_level'))
+            if level is None or level['id']=='none' or v['kind'] not in level['costPerDayCents'] or (v.get('marketing_paid_through_day') or 0)>=day: continue
+            cents=level['costPerDayCents'][v['kind']]
+            # A level priced at 0 runs without a payment, as Core's Renew.
+            if cents<=0: v.update(marketing_paid_through_day=day); self.marketing_paid[v['id']]=0
+            elif self.state['money']*100>=cents:
+                self.pay(-cents,'foodtrucks:transaction_marketing',vehicle=v['name'])
+                self.book(day,v['id'],'marketing',cents)
+                v.update(marketing_paid_through_day=day); self.marketing_paid[v['id']]=cents
+            else:
+                v['marketing_level']=None
+                self.event(LOCALE['foodtrucks:notification_marketing_stopped'].format(vehicle=v['name'],fee=f'${cents/100:,.2f}'),'notice')
+
+    def marketing_command(self, args):
+        v=self.vehicle(need(args,'vehicle',"the food vehicle's id"))
+        if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
+        if not self.can_write: raise ValueError("The mod's save data is read-only.")
+        offered=[l for l in TUNING['marketing']['levels'] if l['id']=='none' or v['kind'] in l['costPerDayCents']]
+        ids=', '.join(l['id'] for l in offered)
+        wanted=need(args,'level','a marketing level: '+ids)
+        level=next((l for l in offered if l['id']==wanted),None)
+        if level is None: raise ValueError(f"no marketing level '{wanted}' for a {v['kind']}; levels: {ids}")
+        day=self.state['clock']['day']
+        start=self.seq
+        done=True
+        if level['id']=='none': v['marketing_level']=None
+        else:
+            paid=self.marketing_paid.get(v['id'],0) if v.get('marketing_paid_through_day')==day else 0
+            cents=level['costPerDayCents'][v['kind']]-paid
+            # Nothing to pay: the day is paid with what it already paid (Core's Settle), a new day with nothing.
+            if cents<=0: v.update(marketing_level=level['id'],marketing_paid_through_day=day); self.marketing_paid[v['id']]=paid
+            elif self.state['money']*100>=cents:
+                self.pay(-cents,'foodtrucks:transaction_marketing',vehicle=v['name'])
+                self.book(day,v['id'],'marketing',cents)
+                v.update(marketing_level=level['id'],marketing_paid_through_day=day); self.marketing_paid[v['id']]=paid+cents
+            else:
+                done=False
+                self.event("You don't have enough money.",'notice')
+        notices=[e['text'][8:] for e in self.ring if e['seq']>start and e['kind']=='notice']
+        return {'vehicle':v['id'],'level':v['marketing_level'] or 'none','done':done,'notices':notices,'state':v}
+
     def operation(self, cmd, args, expect_session=None):
         def refusal():
             if self.stopped: return {'ok':False,'session':self.session,'error':'the bridge stopped'}
@@ -990,7 +1039,7 @@ class Mock:
                  legal_reason='wheel parking test: legal, mock wheels' if kind=='truck' else 'pavement rule: legal; nearest entrance 10.0 m',hatch_side='right' if kind=='truck' else None,
                  hatch_to_pavement=True if kind=='truck' else None, open=False,serving='nobody',crew=[],pieces=[],stock=[],
                  queue=None,commissary=None,route=None,parking={'state':'Legal','neighbourhood':'ba:neighborhood_hellskitchen','hourly_price':5.0,'unpaid':0.},
-                 todos=[])
+                 todos=[],marketing_level=None,marketing_paid_through_day=None)
         self.state['vehicles'].append(v)
         self.selected = identifier
         self.event(f'Spawned foodtrucks:vehicletype_food{kind}: id {identifier}, controller mock.')
@@ -1109,6 +1158,7 @@ class Mock:
             self.settle_takings()
             self.pay_wages(day-1)
             self.charge_rent(day)
+            self.charge_marketing(day)
             for vid in list(self.sold):
                 self.sold[vid]={k:n for k,n in self.sold[vid].items() if int(k)>=day-1}
             self.state['ledger_today'] = {'street_food': 0., 'sales_waiting': 0., 'crew_waiting': 0.}
@@ -2467,7 +2517,7 @@ class Mock:
 
     def call(self, cmd, args):
         if self.stopped: raise ValueError('the bridge stopped')
-        if cmd in ('console','debug','time','money','teleport','walk','vehicle','commissary','crew','route','fixture','save'): self.require_ft(cmd)
+        if cmd in ('console','debug','time','money','teleport','walk','vehicle','commissary','crew','route','fixture','save','marketing'): self.require_ft(cmd)
         if cmd=='state': return self.read_state()
         if cmd=='day_summary':
             self.require_city(cmd)
@@ -2475,6 +2525,7 @@ class Mock:
             return self.day_summary(args)
         if cmd=='route': return self.route_command(args)
         if cmd=='price': return self.price_command(args)
+        if cmd=='marketing': return self.marketing_command(args)
         if cmd=='places':
             self.require_city(cmd)
             return self.places(args)
@@ -2883,7 +2934,7 @@ class Mock:
             self.event(f'Mock console: {line}')
             return {'output':[f'Mock console accepted: {line}']}
         if cmd=='quit': return {}
-        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, drive, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, floorplan, place, drop, pickup, handtruck, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.")
+        raise ValueError(f"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, drive, vehicle, commissary, crew, route, price, marketing, use, taxi, phone, call, eat, floorplan, place, drop, pickup, handtruck, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.")
 
 
 class Handler(BaseHTTPRequestHandler):

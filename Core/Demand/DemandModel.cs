@@ -31,6 +31,8 @@ namespace FoodTrucks.Core.Demand
         public double Promotion { get; set; } = 1.0;
         // A premium spot's or an event's extra passers (PitchBonus); 1.0 on an ordinary pitch.
         public double PitchFootfall { get; set; } = 1.0;
+        // The vehicle's paid marketing for today (MarketingRules); 1.0 without any.
+        public double Marketing { get; set; } = 1.0;
         // A premium spot's or an event's own crowd: each area at least this presence, whatever the venues
         // nearby are doing (AreaLive applies to the spot's own areas only). Null on an ordinary pitch.
         public AreaMix? PitchAreas { get; set; }
@@ -96,6 +98,7 @@ namespace FoodTrucks.Core.Demand
             RequireFactor(query.Reputation, nameof(query.Reputation));
             RequireFactor(query.Promotion, nameof(query.Promotion));
             RequireFactor(query.PitchFootfall, nameof(query.PitchFootfall));
+            RequireFactor(query.Marketing, nameof(query.Marketing));
             foreach (var area in query.Areas.Presences.Keys.Concat(query.PitchAreas?.Presences.Keys ?? Enumerable.Empty<string>()))
                 if (!tables.HasArea(area)) throw new ArgumentException($"Unknown area type '{area}'.", nameof(query));
 
@@ -111,7 +114,7 @@ namespace FoodTrucks.Core.Demand
             var crowdTotal = baseline + areaCrowds.Values.Sum();
             var footfallFactor = tables.PassersPerHour
                 * neighbourhood.Footfall * neighbourhood.DaypartFactor(daypart) * neighbourhood.DayFactor(day) * neighbourhood.SeasonFactor(season)
-                * month.Footfall * (query.Raining ? tables.RainFootfall : 1.0) * query.Promotion * query.PitchFootfall;
+                * month.Footfall * (query.Raining ? tables.RainFootfall : 1.0) * query.Promotion * query.PitchFootfall * query.Marketing;
             var footfall = crowdTotal * footfallFactor;
 
             var shares = new List<(string Category, double WithMarket, double WithoutMarket, double AddOns)>();
