@@ -1,0 +1,7 @@
+[b]0.10.1 — hotfix[/b]
+
+[list]
+[*]Clicking a parked food cart on foot now opens its menu with [b]Open for business[/b], instead of pushing the cart straight away. Use [b]Use cart[/b] in that menu to push it. The same applies to an empty truck, where [b]Enter vehicle[/b] is in the menu.
+[/list]
+
+Thanks to The SearoM for the report.

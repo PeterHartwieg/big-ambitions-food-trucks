@@ -54,6 +54,10 @@ namespace FoodTrucks
         };
 
         private static readonly FieldInfo? EnterField = AccessTools.Field(typeof(VehicleOverlay), "enterVehicleButton");
+        private static readonly FieldInfo? EnterLabelField = AccessTools.Field(typeof(VehicleOverlay), "enterVehicleField");
+        private static readonly FieldInfo? StorageField = AccessTools.Field(typeof(VehicleOverlay), "manageStorageButton");
+        private static readonly FieldInfo? AddHandTruckField = AccessTools.Field(typeof(VehicleOverlay), "addHandTruckToStorageButton");
+        private static readonly FieldInfo? AddItemsField = AccessTools.Field(typeof(VehicleOverlay), "addItemsToStorageButton");
         // The vehicle the overlay showed when the buttons were last set up.
         private static VehicleController? shownFor;
         private static bool failed;
@@ -76,6 +80,7 @@ namespace FoodTrucks
                 var controller = entityController as VehicleController;
                 var food = controller != null && controller.vehicleInstance != null && FoodTrucksMod.KindOf(controller.vehicleInstance.vehicleTypeName) != null;
                 shownFor = food ? controller : null;
+                if (food) NativeOnFootButtons(__instance, enter, controller!);
                 foreach (var spec in Specs)
                 {
                     var button = Find(enter, spec.Name) ?? Make(enter, spec);
@@ -95,6 +100,40 @@ namespace FoodTrucks
                 failed = true;
                 Log.Error("Vehicle overlay buttons: " + ex);
             }
+        }
+
+        // Postfix on VehicleCtaBehavior.GetCta(EntityController). On foot the game gives a hand vehicle (the cart) and
+        // an empty vehicle "click to drive", whose click pushes or enters it at once, so the on-foot menu with these
+        // buttons never opened for a cart. For a food vehicle that click becomes "click to use" without an action:
+        // the click opens the menu, whose own Use cart / Enter vehicle button still drives. Only where the game would
+        // show that menu (OverlayManager.ShouldShowDetailedOverlay), else the click keeps driving.
+        internal static void CtaPostfix(EntityController entityController, ref ValueTuple<string, Action> __result)
+        {
+            try
+            {
+                if (__result.Item1 != "click_to_drive" || failed) return;
+                if (!(entityController is VehicleController controller) || controller.vehicleInstance == null) return;
+                if (FoodTrucksMod.KindOf(controller.vehicleInstance.vehicleTypeName) == null) return;
+                if (PlayerHelper.IsUsingVehicle || PlayerHelper.IsHoldingShoppingBasket || CityMap.IsOpen ||
+                    PlayerActivity.PlayerActivityUI.IsPanelOpen) return;
+                __result = ("click_to_use", null!);
+            }
+            catch (Exception ex) { Log.Error("Vehicle click: " + ex); }
+        }
+
+        // The game sets its own on-foot buttons (Use cart / Enter vehicle, Manage storage) only for a vehicle with cargo, and
+        // leaves them as the last vehicle had them otherwise. Since CtaPostfix opens the menu for an empty food vehicle too,
+        // set them here as the game does for one with cargo, so the menu always has a way to push or enter it.
+        private static void NativeOnFootButtons(VehicleOverlay overlay, Button enter, VehicleController controller)
+        {
+            if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId) || PlayerHelper.ItemInstanceInHands != null) return;
+            if (controller.vehicleInstance.cargoInstances.Count > 0) return;
+            if (EnterLabelField?.GetValue(overlay) is TextLocalizationComponent label)
+                label.Key = CartDemand.KindOf(controller.vehicleInstance) == "cart" ? "use_cart" : "enter_vehicle";
+            if (StorageField?.GetValue(overlay) is Button storage) storage.gameObject.SetActive(true);
+            if (AddHandTruckField?.GetValue(overlay) is Button addHandTruck) addHandTruck.gameObject.SetActive(false);
+            if (AddItemsField?.GetValue(overlay) is Button addItems) addItems.gameObject.SetActive(false);
+            enter.gameObject.SetActive(true);
         }
 
         private static Button? Find(Button enter, string name)
