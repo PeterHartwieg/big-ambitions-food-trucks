@@ -89,7 +89,10 @@ namespace FoodTrucks
             var problem = CopilotRoutes.Preview(previewVehicle, day, stops, rules, speed, out var candidate);
             if (problem != ScheduleProblem.None) return Refuse(problem == ScheduleProblem.Unreachable ? "travel_gap" : "invalid_route");
             var crew = HireCrew.Present(vehicle).Select(e => e.id).OrderBy(i => i, StringComparer.Ordinal).ToArray();
-            var home = HireRoutes.HomeOf(vehicle);
+            // BayStops are indices into this schedule: classify the proposed
+            // stops, while leaving the live vehicle untouched during review.
+            previewVehicle.Schedule = candidate;
+            var home = HireRoutes.HomeOf(previewVehicle);
             var routeDay = WeekPlan.RouteDayOf(new HireSchedules(rules), candidate, day, Travel.ModeFor(kind), speed,
                 HireRoutes.HomePoint(home), home?.BayStops);
             var gaps = WeekPlan.Gaps(routeDay, candidate, crew);
