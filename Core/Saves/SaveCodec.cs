@@ -193,8 +193,8 @@ namespace FoodTrucks.Core.Saves
                     throw new JsonSerializationException("Sold must be one record per day, naming items with at least one unit.");
                 if (vehicle.HireStop < 0)
                     throw new JsonSerializationException("HireStop must not be negative.");
-                if (vehicle.MarketingPaidThroughDay < 0 || vehicle.MarketingPaidCents < 0 || vehicle.MarketingPreviousDay < 0)
-                    throw new JsonSerializationException("MarketingPaidThroughDay, MarketingPaidCents and MarketingPreviousDay must not be negative.");
+                if (vehicle.MarketingPaidThroughDay < 0 || vehicle.MarketingPaidCents < 0 || vehicle.MarketingPreviousDay < 0 || vehicle.MarketingStartsDay < 0)
+                    throw new JsonSerializationException("MarketingPaidThroughDay, MarketingPaidCents, MarketingPreviousDay and MarketingStartsDay must not be negative.");
             }
 
             if (state.Regulars == null)

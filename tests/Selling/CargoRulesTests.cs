@@ -19,16 +19,16 @@ public class CargoRulesTests
     private const string Storage = "foodtrucks:itemname_storagecabinet";
 
     [Fact]
-    public void ACartsCoffeeMachineHoldsOneHundredSixtyCoffees()
+    public void ACartsCoffeeMachineHoldsTwoHundredFortyCoffees()
     {
         var tables = ShippedData.Tables;
         var machine = new CargoLine(CoffeeMachine, 1, false);
-        Assert.Equal(160, CargoRules.AllowedUnits(tables, "cart", new[] { machine }, Coffee, 500, false));
-        var full = new[] { machine, new CargoLine(Coffee, 160, false) };
-        Assert.Equal(40, CargoRules.FoodUnits(tables, full));
+        Assert.Equal(240, CargoRules.AllowedUnits(tables, "cart", new[] { machine }, Coffee, 500, false));
+        var full = new[] { machine, new CargoLine(Coffee, 240, false) };
+        Assert.Equal(60, CargoRules.FoodUnits(tables, full));
         Assert.Equal(0, CargoRules.AllowedUnits(tables, "cart", full, Coffee, 1, false));
-        Assert.Equal(1, CargoRules.AllowedUnits(tables, "cart", new[] { machine, new CargoLine(Coffee, 159, false) }, Coffee, 10, false));
-        Assert.Equal(320, CargoRules.AllowedUnits(tables, "cart", new[] { machine, new CargoLine(Storage, 1, false) }, Coffee, 500, false));
+        Assert.Equal(1, CargoRules.AllowedUnits(tables, "cart", new[] { machine, new CargoLine(Coffee, 239, false) }, Coffee, 10, false));
+        Assert.Equal(480, CargoRules.AllowedUnits(tables, "cart", new[] { machine, new CargoLine(Storage, 1, false) }, Coffee, 500, false));
     }
 
     [Fact]
@@ -43,9 +43,9 @@ public class CargoRulesTests
         };
         Assert.Equal(62.75, CargoRules.FoodLoad(ShippedData.Tables, cargo));
         Assert.Equal(63, CargoRules.FoodUnits(ShippedData.Tables, cargo));
-        Assert.Equal(635, CargoRules.AllowedUnits(ShippedData.Tables, "truck", cargo, Coffee, 1000, false));
-        Assert.Equal(100, CargoRules.AllowedUnits(ShippedData.Tables, "truck", cargo, HotDog, 500, false));
-        Assert.Equal(20, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, HotDog, 500, false));
+        Assert.Equal(955, CargoRules.AllowedUnits(ShippedData.Tables, "truck", cargo, Coffee, 1000, false));
+        Assert.Equal(180, CargoRules.AllowedUnits(ShippedData.Tables, "truck", cargo, HotDog, 500, false));
+        Assert.Equal(60, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, HotDog, 500, false));
         Assert.Equal(0, CargoRules.AllowedUnits(ShippedData.Tables, "truck", cargo, "ba:itemname_donut", 500, false));
     }
 
@@ -62,20 +62,20 @@ public class CargoRulesTests
         var economy = JObject.Parse(ShippedData.Economy);
         economy["products"]![Coffee]!["stockWeight"] = weight;
         var tables = DemandTables.Parse(ShippedData.Demand, economy.ToString(), ShippedData.Zones);
-        for (var existing = 0; existing <= 80; existing++)
+        for (var existing = 0; existing <= 120; existing++)
         {
             var cargo = new List<CargoLine> { new(CoffeeMachine, 1, false), new(Tea, existing * 2, false), new(Coffee, 1, false) };
             var before = CargoRules.FoodLoad(tables, cargo);
             var allowed = CargoRules.AllowedUnits(tables, "cart", cargo, Coffee, int.MaxValue, false);
-            if (before > 40)
+            if (before > 60)
             {
                 Assert.Equal(0, allowed);
                 continue;
             }
             cargo.Add(new CargoLine(Coffee, allowed, false));
-            Assert.True(CargoRules.FoodLoad(tables, cargo) <= 40);
+            Assert.True(CargoRules.FoodLoad(tables, cargo) <= 60);
             if (allowed < int.MaxValue)
-                Assert.True(before + (allowed + 1.0) * weight > 40 || before == 40);
+                Assert.True(before + (allowed + 1.0) * weight > 60 || before == 60);
         }
     }
 
@@ -121,16 +121,16 @@ public class CargoRulesTests
     [Theory]
     [InlineData("cart", 0, 10, 10)]
     [InlineData("cart", 30, 10, 10)]
-    [InlineData("cart", 30, 500, 50)]
-    [InlineData("cart", 40, 500, 40)]
-    [InlineData("cart", 100, 500, 0)]
-    [InlineData("truck", 60, 500, 100)]
-    [InlineData("cart", -5, 500, 80)]
+    [InlineData("cart", 30, 500, 90)]
+    [InlineData("cart", 60, 500, 60)]
+    [InlineData("cart", 150, 500, 0)]
+    [InlineData("truck", 60, 500, 180)]
+    [InlineData("cart", -5, 500, 120)]
     [InlineData("unknown", 80, 500, 500)]
     [InlineData(null, 80, 500, 500)]
     public void FoodLoadsOnlyWhatFitsItsPiece(string? vehicle, int stock, int incoming, int allowed)
     {
-        // Soda belongs to the cooler (80 a cart at stock weight 0.5); hot dogs in the grill and nested stock don't take its room.
+        // Soda belongs to the cooler (120 a cart at stock weight 0.5); hot dogs in the grill and nested stock don't take its room.
         var cargo = new[]
         {
             new CargoLine("ba:itemname_sodacan", stock, false), new CargoLine(Fridge, 1, false), new CargoLine(HotDog, 30, false),
@@ -242,6 +242,6 @@ public class CargoRulesTests
             yield return new CargoLine(HotDog, 20, false);
         }
 
-        Assert.Equal(20, CargoRules.AllowedUnits(ShippedData.Tables, "cart", Cargo(), HotDog, 500, false));
+        Assert.Equal(40, CargoRules.AllowedUnits(ShippedData.Tables, "cart", Cargo(), HotDog, 500, false));
     }
 }

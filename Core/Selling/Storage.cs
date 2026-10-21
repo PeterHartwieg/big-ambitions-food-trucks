@@ -27,8 +27,8 @@ namespace FoodTrucks.Core.Selling
         // Whole items of each of the pool's foods in the cargo, foods with none left out.
         public IReadOnlyDictionary<string, int> Units { get; }
         public double Room => Math.Max(0, Capacity - Load);
-        // Whole weighted units for display, rounded down: a piece reads full ("40/40") only when nothing more fits,
-        // so a coffee machine with 159 cups (39.75 units) reads 39/40.
+        // Whole weighted units for display, rounded down: a piece reads full ("60/60") only when nothing more fits,
+        // so a coffee machine with 239 cups (59.75 units) reads 59/60.
         public int LoadUnits => (int)Math.Min(int.MaxValue, Math.Floor(Load + 1e-9));
     }
 
@@ -268,8 +268,8 @@ namespace FoodTrucks.Core.Selling
         // advertised item fails to load), the pools serving one category added up. Categories no fitted piece serves
         // are left out.
         // The lightest food makes this an upper bound for a shared piece whose foods of one category weigh differently.
-        // Shipped data has one such piece only with the Bakery mod: the display case holds 160 croissants on a truck
-        // but 80 bread. Kept on purpose: a gig takes any food of its category and the player picks the stock, so the
+        // Shipped data has one such piece only with the Bakery mod: the display case holds 240 croissants on a truck
+        // but 120 bread. Kept on purpose: a gig takes any food of its category and the player picks the stock, so the
         // heaviest weight would hide gigs a lighter load can serve; a truck short of food at the gig is NotReady, and
         // the player can restock and come back before the deadline.
         public static IReadOnlyDictionary<string, int> CategoryCapacity(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo)

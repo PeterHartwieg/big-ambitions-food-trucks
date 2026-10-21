@@ -262,7 +262,7 @@ namespace FoodTrucks
                 messageData = LocalizorManager.Localize("foodtrucks:dialog_city_event", new
                 {
                     @event = kind == null ? city.Kind : CityPitches.Text(kind.Name),
-                    place = place == null ? city.PlaceId : CityPitches.Text(place.Name),
+                    place = place == null ? city.PlaceId : CityPitches.PlaceText(place),
                     weekday = CityPitches.Weekday(city.Day),
                     day = city.Day.ToString(),
                     start = CityPitches.Clock(city.Start),
@@ -303,7 +303,7 @@ namespace FoodTrucks
             Notices.Send(Current.contact, new TextMessage("foodtrucks:message_city_event_booked", new Dictionary<string, string>
             {
                 { "event", kind == null ? city.Kind : CityPitches.Text(kind.Name) },
-                { "place", place == null ? city.PlaceId : CityPitches.Text(place.Name) },
+                { "place", place == null ? city.PlaceId : CityPitches.PlaceText(place) },
                 { "weekday", CityPitches.Weekday(city.Day) },
                 { "day", city.Day.ToString() },
                 { "start", CityPitches.Clock(city.Start) },

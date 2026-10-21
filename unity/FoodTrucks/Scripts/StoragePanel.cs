@@ -15,7 +15,7 @@ using UnityEngine.UI;
 namespace FoodTrucks
 {
     // Storage per piece in the game's own cargo slots (the vehicle's item panel): an equipment slot's amount reads
-    // "62/80" and its tooltip "Hot Dog Grill: 62/80 units" with the foods in it; the Extra Storage slot says it
+    // "62/120" and its tooltip "Hot Dog Grill: 62/120 units" with the foods in it; the Extra Storage slot says it
     // doubles every piece; a food slot says which piece holds it, or that none does. Core's Storage decides the numbers.
     internal static class StoragePanel
     {
@@ -46,7 +46,7 @@ namespace FoodTrucks
             return piece == null ? null : PieceName(null, piece);
         }
 
-        // "Hot Dog Grill: 62/80 units", then one line per food in it.
+        // "Hot Dog Grill: 62/120 units", then one line per food in it.
         public static List<string> PoolLines(VehicleInstance vehicle, DemandTables tables, StoragePool pool)
         {
             var lines = new List<string>
@@ -162,7 +162,7 @@ namespace FoodTrucks
                 }
                 else return;
                 // The game shows this info button only on a bundle's slot, where the amount and the "x2" count are
-                // hidden, so it sits over them at the slot's bottom left; on our slots both show ("x1", "80/80"). It
+                // hidden, so it sits over them at the slot's bottom left; on our slots both show ("x1", "120/120"). It
                 // moves to the bottom right, which a paid slot leaves empty; an unpaid slot shows its price there and
                 // gets no button (the tooltip comes back once it is paid).
                 if (PriceField?.GetValue(__instance) is UnityEngine.Component price && price.gameObject.activeSelf) return;
@@ -180,8 +180,8 @@ namespace FoodTrucks
             }
         }
 
-        // OnSellClick builds its question from the amount label ("Sell (62/80) Hotdog Grill?"). For that moment the label
-        // shows what the game would (the slot's item count, shown only above 1); the finalizer puts "62/80" back.
+        // OnSellClick builds its question from the amount label ("Sell (62/120) Hotdog Grill?"). For that moment the label
+        // shows what the game would (the slot's item count, shown only above 1); the finalizer puts "62/120" back.
         internal static void SellPrefix(CargoItemUi __instance, CargoItem cargoItem, out (string Text, bool Active)? __state)
         {
             __state = null;

@@ -99,6 +99,15 @@ namespace FoodTrucks.Core.Fleet
             return result;
         }
 
+        // A stop's number on its own weekday, from 1, as the Week plan tab numbers it (an index counts across the whole
+        // week); null for an index the list hasn't.
+        public static int? NumberOnDay(HireSchedule? schedule, int index)
+        {
+            var stops = schedule?.Stops;
+            if (stops == null || index < 0 || index >= stops.Count || stops[index] == null) return null;
+            return StopsOf(schedule, stops[index].Day).IndexOf(index) + 1;
+        }
+
         public static bool IsClosed(HireSchedule? schedule, DayOfWeek day) => schedule?.Closed != null && schedule.Closed.Contains(day);
 
         // The day has stops and isn't closed.

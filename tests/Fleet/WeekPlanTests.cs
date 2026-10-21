@@ -35,6 +35,19 @@ public class WeekPlanTests
     }
 
     [Fact]
+    public void AStopIsNumberedOnItsOwnDay()
+    {
+        // Playtest, 21 October 2026: a cart on its one Sunday stop read "On the way to stop 6", the stop's index in the week.
+        var truck = Truck(Stop(DayOfWeek.Monday, "a", 0, 600, 700), Stop(DayOfWeek.Monday, "b", 100, 720, 800),
+            Stop(DayOfWeek.Wednesday, "c", 200, 600, 700), Stop(DayOfWeek.Sunday, "d", 300, 660, 900));
+
+        Assert.Equal(new int?[] { 1, 2, 1, 1 }, Enumerable.Range(0, 4).Select(i => WeekPlan.NumberOnDay(truck.Schedule, i)));
+        Assert.Null(WeekPlan.NumberOnDay(truck.Schedule, 4));
+        Assert.Null(WeekPlan.NumberOnDay(truck.Schedule, -1));
+        Assert.Null(WeekPlan.NumberOnDay(null, 0));
+    }
+
+    [Fact]
     public void ARouteSavedBeforeTheWeekPlanBecomesTheSameStopsOnItsDays()
     {
         var json = "{\"schemaVersion\":2,\"licence\":{},\"vehicles\":[{\"vehicleId\":\"t1\",\"crew\":[\"e1\"],\"hireStop\":1," +

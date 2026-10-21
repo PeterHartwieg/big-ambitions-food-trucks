@@ -39,8 +39,10 @@ LOCALE = json.loads((ROOT / 'unity/FoodTrucks/Locales/en.json').read_text())
 
 CATALOG = {key: (LOCALE.get(key,key.split('itemname_')[-1].title()),500,1.5) for key in ECONOMY['products']}
 # What each food is held by (the equipment piece that serves it) and which game item is that piece, from economy.json.
-HOLDS = {product: name for name, e in ECONOMY['equipment'].items() for product in e['products']}
-PIECES = {key: name for name, e in ECONOMY['equipment'].items() for key in e['gameItems']}
+# Keys starting with _ are notes.
+EQUIPMENT = {name: e for name, e in ECONOMY['equipment'].items() if not name.startswith('_')}
+HOLDS = {product: name for name, e in EQUIPMENT.items() for product in e['products']}
+PIECES = {key: name for name, e in EQUIPMENT.items() for key in e['gameItems']}
 SLOTS = {kind: v['equipmentSlots'] for kind, v in ECONOMY['vehicles'].items()}
 STAFF = {kind: v['staff'] for kind, v in ECONOMY['vehicles'].items()}
 PER_PIECE = {kind: v['unitsPerPiece'] for kind, v in ECONOMY['vehicles'].items()}
@@ -50,7 +52,7 @@ PRICES = {kind: float(re.search(r'^\s*price: ([0-9.]+)', (ROOT / f'unity/FoodTru
 # The mock's windows sell one unit every ten minutes at this price; each unit cost CATALOG's wholesale price.
 SALE_CENTS = 1300
 WAGE_CENTS = 1000
-CATALOG.update({key:(LOCALE.get(key,key.split('itemname_')[-1].title()),1,750.) for e in ECONOMY['equipment'].values() for key in e['gameItems']})
+CATALOG.update({key:(LOCALE.get(key,key.split('itemname_')[-1].title()),1,750.) for e in EQUIPMENT.values() for key in e['gameItems']})
 
 # The player's life in the mock (docs/test-bridge.md, "The player's life"). The dialogs it opens, and those that are an
 # activity panel holding the clock. The game's own numbers where the 1.0 code has them: the taxi's $0.15 and 0.04 game
@@ -230,7 +232,7 @@ class Mock:
         self.walks = []
         self.plans = {}
         self.ledger = {}
-        # What each vehicle paid for marketing on its paid-through day (VehicleState.MarketingPaidCents).
+        # The level each vehicle paid for on its paid-through day (VehicleState.MarketingPaidLevel).
         self.marketing_paid = {}
         self.sold = {}
         self.visits = {}
@@ -338,8 +340,8 @@ class Mock:
                 if name != 'FT logistics':
                     self.state['commissary']['spaces'] = [{'site':'hells-kitchen','vehicle':v['id']}]
                     v['commissary']['site'] = 'hells-kitchen'
-                v['pieces'] = [{'item':'griddle', 'units':160, 'cap':160}]
-                v['stock'] = [{'item':'Tacos', 'key':'foodtrucks:itemname_tacos', 'amount':160}]
+                v['pieces'] = [{'item':'griddle', 'units':240, 'cap':240}]
+                v['stock'] = [{'item':'Tacos', 'key':'foodtrucks:itemname_tacos', 'amount':240}]
                 if 'crew-' in name:
                     v['route'] = week_route(510, 1440, 393.2, 217.6)
                     self.routes[v['id']] = (510,1440)
@@ -348,8 +350,8 @@ class Mock:
                     self.state['licence']['permits']=2
                     cart = self.state['vehicles'][-1]
                     cart.update(x=v['x']+3, z=v['z']+6)
-                    cart['pieces'] = [{'item':'hotdoggrill','units':40,'cap':40}, {'item':'coffeemachine','units':40,'cap':40}]
-                    cart['stock'] = [{'item':'Hotdog','key':'ba:itemname_hotdog','amount':40}]
+                    cart['pieces'] = [{'item':'hotdoggrill','units':60,'cap':60}, {'item':'coffeemachine','units':60,'cap':60}]
+                    cart['stock'] = [{'item':'Hotdog','key':'ba:itemname_hotdog','amount':60}]
             self.store(name)
         self.character='Shared mock character'
         self.reset('FT shared character')
@@ -587,7 +589,8 @@ class Mock:
     def map_command(self, args):
         p=self.state['player']
         sites={s['address']:s for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']}
-        pitches={s['address'] for s in json.loads((ROOT / 'data/pitches.json').read_text())['premium']['spots']}
+        spots={s['address']:s for s in json.loads((ROOT / 'data/pitches.json').read_text())['premium']['spots']}
+        pitches=set(spots)
         def lit(b):
             out=[]; btype=b.get('buildingType'); business=b.get('businessType')
             if not business and btype not in ('ba:buildingtype_special',None):
@@ -624,7 +627,9 @@ class Mock:
                         'business':business.replace('ba:businesstype_','').title() if business else None,'business_type':business,
                         'for_rent':'for_rent' in lit(b),'rent_per_day':round(b.get('m2',100)*0.5,2) if 'for_rent' in lit(b) else None,
                         'neighbourhood':b.get('hood'),
-                        'commissary':{'site':site['id'],'name':LOCALE.get(site['name'],site['id'])} if site else None})
+                        'commissary':{'site':site['id'],'name':LOCALE.get(site['name'],site['id'])} if site else None,
+                        # The mock's city announces no events; a premium spot carries its name.
+                        'pitch':{'premium':LOCALE.get(spots[b['key']]['name']),'events':[]} if b['key'] in pitches else None})
         return {'filter':f,'count':len(matched),'buildings':out}
 
     # ---- vehicle buy: the debug spawn beside the player, paid at the dealer's price ----
@@ -830,22 +835,25 @@ class Mock:
                 self.book(day,v['id'],'commissary_rent',cents)
             else: self.state['commissary']['unpaid']['rent']+=cents/100
 
-    # Marketing (Core MarketingFees): a new day charges the day's fee for the level on; a refused fee turns it off.
+    # Marketing (Core MarketingFees): a new day charges the day's fee for the booked level once its start day has come; a
+    # refused fee turns it off. marketing_today follows the day: the paid level on a paid day, else none.
     def charge_marketing(self, day):
         levels={l['id']:l for l in TUNING['marketing']['levels']}
         for v in self.state['vehicles']:
             level=levels.get(v.get('marketing_level'))
-            if level is None or level['id']=='none' or v['kind'] not in level['costPerDayCents'] or (v.get('marketing_paid_through_day') or 0)>=day: continue
-            cents=level['costPerDayCents'][v['kind']]
-            # A level priced at 0 runs without a payment, as Core's Renew.
-            if cents<=0: v.update(marketing_paid_through_day=day); self.marketing_paid[v['id']]=0
-            elif self.state['money']*100>=cents:
-                self.pay(-cents,'foodtrucks:transaction_marketing',vehicle=v['name'])
-                self.book(day,v['id'],'marketing',cents)
-                v.update(marketing_paid_through_day=day); self.marketing_paid[v['id']]=cents
-            else:
-                v['marketing_level']=None
-                self.event(LOCALE['foodtrucks:notification_marketing_stopped'].format(vehicle=v['name'],fee=f'${cents/100:,.2f}'),'notice')
+            if not (level is None or level['id']=='none' or v['kind'] not in level['costPerDayCents'] or (v.get('marketing_paid_through_day') or 0)>=day
+                    or (v.get('marketing_starts_day') or 0)>day):
+                cents=level['costPerDayCents'][v['kind']]
+                # A level priced at 0 runs without a payment, as Core's Renew.
+                if cents<=0: v.update(marketing_paid_through_day=day,marketing_starts_day=None); self.marketing_paid[v['id']]=level['id']
+                elif self.state['money']*100>=cents:
+                    self.pay(-cents,'foodtrucks:transaction_marketing',vehicle=v['name'])
+                    self.book(day,v['id'],'marketing',cents)
+                    v.update(marketing_paid_through_day=day,marketing_starts_day=None); self.marketing_paid[v['id']]=level['id']
+                else:
+                    v.update(marketing_level=None,marketing_starts_day=None)
+                    self.event(LOCALE['foodtrucks:notification_marketing_stopped'].format(vehicle=v['name'],fee=f'${cents/100:,.2f}'),'notice')
+            v['marketing_today']=self.marketing_paid.get(v['id']) if v.get('marketing_paid_through_day')==day else None
 
     def marketing_command(self, args):
         v=self.vehicle(need(args,'vehicle',"the food vehicle's id"))
@@ -858,22 +866,11 @@ class Mock:
         if level is None: raise ValueError(f"no marketing level '{wanted}' for a {v['kind']}; levels: {ids}")
         day=self.state['clock']['day']
         start=self.seq
-        done=True
-        if level['id']=='none': v['marketing_level']=None
-        else:
-            paid=self.marketing_paid.get(v['id'],0) if v.get('marketing_paid_through_day')==day else 0
-            cents=level['costPerDayCents'][v['kind']]-paid
-            # Nothing to pay: the day is paid with what it already paid (Core's Settle), a new day with nothing.
-            if cents<=0: v.update(marketing_level=level['id'],marketing_paid_through_day=day); self.marketing_paid[v['id']]=paid
-            elif self.state['money']*100>=cents:
-                self.pay(-cents,'foodtrucks:transaction_marketing',vehicle=v['name'])
-                self.book(day,v['id'],'marketing',cents)
-                v.update(marketing_level=level['id'],marketing_paid_through_day=day); self.marketing_paid[v['id']]=paid+cents
-            else:
-                done=False
-                self.event("You don't have enough money.",'notice')
+        # Booked from the next day (Core's Choose): nothing is charged now and today keeps what it paid for.
+        if level['id']=='none': v.update(marketing_level=None,marketing_starts_day=None)
+        else: v.update(marketing_level=level['id'],marketing_starts_day=day+1)
         notices=[e['text'][8:] for e in self.ring if e['seq']>start and e['kind']=='notice']
-        return {'vehicle':v['id'],'level':v['marketing_level'] or 'none','done':done,'notices':notices,'state':v}
+        return {'vehicle':v['id'],'level':v['marketing_level'] or 'none','done':True,'notices':notices,'state':v}
 
     def operation(self, cmd, args, expect_session=None):
         def refusal():
@@ -1039,7 +1036,7 @@ class Mock:
                  legal_reason='wheel parking test: legal, mock wheels' if kind=='truck' else 'pavement rule: legal; nearest entrance 10.0 m',hatch_side='right' if kind=='truck' else None,
                  hatch_to_pavement=True if kind=='truck' else None, open=False,serving='nobody',crew=[],pieces=[],stock=[],
                  queue=None,commissary=None,route=None,parking={'state':'Legal','neighbourhood':'ba:neighborhood_hellskitchen','hourly_price':5.0,'unpaid':0.},
-                 todos=[],marketing_level=None,marketing_paid_through_day=None)
+                 todos=[],marketing_level=None,marketing_starts_day=None,marketing_paid_through_day=None,marketing_today=None)
         self.state['vehicles'].append(v)
         self.selected = identifier
         self.event(f'Spawned foodtrucks:vehicletype_food{kind}: id {identifier}, controller mock.')
@@ -2634,8 +2631,8 @@ class Mock:
                 self.event(LOCALE['foodtrucks:notification_debug_licence'].format(day=self.state['licence']['until_day'],count=len(self.state['vehicles'])),'notice')
             elif action=='new items':
                 v=self.vehicle()
-                v['pieces']=[{'item':'griddle','units':160,'cap':160}]
-                v['stock']=[{'item':'Tacos','key':'foodtrucks:itemname_tacos','amount':160}]
+                v['pieces']=[{'item':'griddle','units':240,'cap':240}]
+                v['stock']=[{'item':'Tacos','key':'foodtrucks:itemname_tacos','amount':240}]
             elif action=='hire':
                 name=f'Mock worker {len(self.employees)+1}'
                 self.employees.append({'id':f'worker-{len(self.employees)+1}','name':name,'skill':60.,'satisfaction':100.,'wage':10.,'label':LOCALE['foodtrucks:bizman_page_crew_option'].format(name=name,skill=60,satisfaction=100,wage='$10.00')})

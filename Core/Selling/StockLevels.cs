@@ -40,7 +40,7 @@ namespace FoodTrucks.Core.Selling
             return capacity > 0 && units <= capacity * LowShare ? StockLevel.Low : StockLevel.Ok;
         }
 
-        // Whole items of a food a pool would hold on its own (a coffee machine's 40 units hold 160 cups).
+        // Whole items of a food a pool would hold on its own (a coffee machine's 60 units hold 240 cups).
         public static int CapacityFor(DemandTables tables, StoragePool pool, string item)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));

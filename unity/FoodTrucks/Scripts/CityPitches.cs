@@ -86,7 +86,7 @@ namespace FoodTrucks
             if (here != null && CityEvents.Claim(here.Value.Event, vehicle.VehicleId, minute))
             {
                 Log.Info($"Event {here.Value.Event.Id} ({here.Value.Kind.Id} at {here.Value.Place.Id}): place held by {vehicle.VehicleId}.");
-                message = ("foodtrucks:notification_event_place", new[] { ("event", Text(here.Value.Kind.Name)), ("place", Text(here.Value.Place.Name)), ("end", Clock(here.Value.Event.End)) });
+                message = ("foodtrucks:notification_event_place", new[] { ("event", Text(here.Value.Kind.Name)), ("place", PlaceText(here.Value.Place)), ("end", Clock(here.Value.Event.End)) });
             }
             FoodTrucksSession.MarkChanged();
             return message;
@@ -106,7 +106,7 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
             Log.Info($"Event {here.Value.Event.Id} ({here.Value.Kind.Id} at {here.Value.Place.Id}) started: place held by {vehicle.VehicleId}, open there.");
             CartSelling.Say("foodtrucks:notification_event_place", string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType,
-                ("event", Text(here.Value.Kind.Name)), ("place", Text(here.Value.Place.Name)), ("end", Clock(here.Value.Event.End)));
+                ("event", Text(here.Value.Kind.Name)), ("place", PlaceText(here.Value.Place)), ("end", Clock(here.Value.Event.End)));
             return true;
         }
 
@@ -158,7 +158,7 @@ namespace FoodTrucks
                 Notices.SendText(CityLicensing.City(), "foodtrucks:message_city_event", new Dictionary<string, string>
                 {
                     { "event", Text(kind.Name) },
-                    { "place", Text(place.Name) },
+                    { "place", PlaceText(place) },
                     { "weekday", Weekday(city.Day) },
                     { "day", city.Day.ToString() },
                     { "start", Clock(city.Start) },
@@ -176,7 +176,7 @@ namespace FoodTrucks
                 Notices.SendText(CityLicensing.City(), "foodtrucks:message_city_event_today", new Dictionary<string, string>
                 {
                     { "event", Text(kind.Name) },
-                    { "place", Text(place.Name) },
+                    { "place", PlaceText(place) },
                     { "start", Clock(city.Start) },
                     { "end", Clock(city.End) },
                     { "booked", city.Booked.ToString() }
@@ -228,8 +228,14 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
             var distance = World.DistanceTo(place.Address, position.x, position.z);
             Log.Info($"Debug: event {city.Id} ({kind.Id}) at {place.Id} ({place.Address}, {distance:F0} m away) from {Clock(city.Start)} to {Clock(city.End)}, one place booked.");
-            CartSelling.Notify("foodtrucks:notification_debug_event", ("event", Text(kind.Name)), ("place", Text(place.Name)), ("distance", distance.ToString("F0")), ("end", Clock(city.End)));
+            CartSelling.Notify("foodtrucks:notification_debug_event", ("event", Text(kind.Name)), ("place", PlaceText(place)), ("distance", distance.ToString("F0")), ("end", Clock(city.End)));
         }
+
+        // An event place as the city's texts name it: its address and area ("62 5th Avenue, Murray Hill"), so it never
+        // reads like a premium spot's name.
+        internal static string PlaceText(EventPlace place) =>
+            LocalizorManager.GetLocalization("foodtrucks:event_place",
+                new Dictionary<string, string> { { "address", Catering.PlaceName(place.Address) }, { "area", Text(place.Name) } });
 
         internal static string Clock(int minute) => $"{minute / 60 % 24:D2}:{minute % 60:D2}";
 
