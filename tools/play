@@ -20,8 +20,10 @@ Commands (each also takes --help):
   walk X Z | walk --to PLACE   Walk there on foot, as a click on the ground does. Holding a cart (vehicle ID enter),
                                you push it along. PLACE: address:ADDRESS, bay:SITE (a commissary's bay, to push a
                                cart into it), commissary:SITE (its door), vehicle:ID (beside it) or exit (out of the
-                               building you're in). The clock runs at speed 1 while you walk, and stops again if it
-                               was stopped.
+                               building you're in). Pushing a cart to bay:SITE, you park it in the bay's lane, behind
+                               or in front of what is parked there, and let go of it; with no free place in the
+                               lane you don't set off. The clock runs at speed 1 while you walk, and stops again if
+                               it was stopped.
   use [--radius M] | use ID
                                The things near you that react to a click (a door, a shelf, a till, a bed, a taxi, a
                                building's entrance), or a click on one by its number in the last list. The clock runs
@@ -55,7 +57,9 @@ Commands (each also takes --help):
   screen NAME [--fetch DIR]    A picture of the screen.
   ui list | ui click TEXT | ui click --id N | ui set ID VALUE | ui type ID TEXT | ui escape
                                The buttons, options, sliders and texts on screen; pressing one, moving a slider, or
-                               closing what is open. A click that starts a time skip (sleep, a course) waits for it.
+                               closing what is open. A dropdown's options are listed together, each saying which
+                               dropdown it is in. A click that opens a confirmation says so: click its Confirm to
+                               finish. A click that starts a time skip (sleep, a course) waits for it.
   time pause | time speed N | time until [DAY] HH:MM [--speed N]
                                Pause, set the game speed (at most 20), or let time run until a moment (then pause).
                                DAY is a day number or +N days from today; without it, HH:MM must still be ahead today.
@@ -64,7 +68,8 @@ Commands (each also takes --help):
                                Start it where the job says: inside the client's building for cleaning, behind the cart,
                                on your pitch for busking. Driving jobs (parcels, fares) are driven for you too, as
                                soon as you have taken the job.
-  buy truck|cart               Buy a vehicle; it is delivered next to you.
+  buy truck|cart               Buy a vehicle; it is delivered next to you, or into the bay's lane when you buy it at a
+                               commissary.
   drive VEHICLE PLACE [--speed N]
                                Drive your truck, or any car or van you sit in (a job's hired van: use it to get in;
                                its id is in look), to PLACE; a car that isn't a food truck takes only address:ADDRESS.
@@ -72,16 +77,21 @@ Commands (each also takes --help):
                                commissary's bay), address:ADDRESS (a building) or stop:N (stop N of the truck's route
                                today). You pull out of your space onto the road, the truck drives itself there with the
                                traffic (the self-driving system, at N times real time, 1 to 3, 3 if left out), and you
-                               park on arrival: in the bay, or in a free space by the kerb with the hatch to the
-                               pavement. It takes real minutes; the clock runs at speed 1 meanwhile. You stay in the
-                               driver's seat: vehicle ID exit gets you out.
+                               park on arrival: in the bay's lane, behind or in front of what is parked there, or in
+                               a free space by the kerb with the hatch to the pavement (also when the bay is full).
+                               It takes real minutes; the clock runs at speed 1 meanwhile. You stay in the driver's
+                               seat: vehicle ID exit gets you out.
   vehicle ID open|close|enter|exit|back_to_hatch|restock|rent_bay
   vehicle ID take|return ITEM [UNITS]
                                Use a vehicle. take/return move stock or equipment between it and the commissary.
   order SITE ITEM BOXES [ITEM BOXES ...]
                                Order stock by phone from a commissary where you rent a space; it arrives at 08:00.
-  crew assign VEHICLE EMPLOYEE | crew schedule VEHICLE EMPLOYEE DAY START END [STATION] | crew auto VEHICLE
-                               Put a hire on a vehicle's crew; set a shift (whole hours); or auto-fill the week.
+  crew assign VEHICLE EMPLOYEE | crew schedule VEHICLE EMPLOYEE DAY START END [STATION] [--replace]
+  crew unschedule VEHICLE EMPLOYEE DAY START | crew auto VEHICLE
+                               Put a hire on a vehicle's crew; add a shift that day (whole hours; refused if it
+                               overlaps one of theirs; --replace puts it in place of their shifts that day); remove
+                               their shift that day starting at START; or auto-fill the week. A shift running now
+                               keeps running unless you remove or replace it.
   price VEHICLE ITEM DOLLARS|auto
                                Set what a vehicle charges for a food (look shows the item names), or go back to the
                                automatic price.
@@ -91,8 +101,10 @@ Commands (each also takes --help):
                                next day: nothing is charged now, and each day's fee is charged at midnight. Picking
                                again the same day replaces it; nothing is refunded. A day's fee you can't pay stops it.
   route add VEHICLE ADDRESS [--days monday,...] [--open HH:MM --close HH:MM]
+  route remove VEHICLE STOP [--day DAY]
   route paste VEHICLE FROM_DAY TO_DAY[,TO_DAY...]|all
-                               A vehicle's weekly route: add a stop by a building, or copy one day onto others.
+                               A vehicle's weekly route: add a stop by a building, remove stop STOP of a day (today
+                               if no day is given), or copy one day onto others.
   vehicle ID fast_forward [on|off]  Use the work panel's fast-forward while serving.
   vehicle ID skip_work MINUTES  Choose 5 to 720 minutes on the work slider and skip; wait until it ends.
   vehicle ID work_window       Return to an open cart’s window.
@@ -243,9 +255,14 @@ class Play:
             self.out(f"  to-do: {t.get('text') or t['kind'].replace('_', ' ')}")
         for v in s.get('vehicles') or []:
             com = v.get('commissary') or {}
+            why = f" ({v['legal_reason']})" if not v.get('legal') and v.get('legal_reason') else ''
             self.out(f"{v['kind'].title()} {v['id']}: {'OPEN' if v.get('open') else 'closed'}, serving {v.get('serving')}, "
-                     f"{'parked legally' if v.get('legal') else 'not parked legally'} at x {v.get('x')}, z {v.get('z')}"
+                     f"{'parked legally' if v.get('legal') else 'not parked legally'}{why} at x {v.get('x')}, z {v.get('z')}"
                      f"{', in the bay at ' + com['bay_site'] if com.get('in_bay') else ''}; space at {com.get('site') or 'no commissary'}.")
+            # A cart's footprint against the driving lanes, a reading of its own (legal is the pavement rule Open checks).
+            if v.get('kind') == 'cart' and 'clear_of_lanes' in v:
+                if v['clear_of_lanes'] is False: self.out('  Part of it stands in a driving lane.')
+                elif v['clear_of_lanes'] is None: self.out("  Whether it stands clear of the driving lanes couldn't be read.")
             self.out(f"  equipment: {', '.join(x['item'] for x in v.get('pieces') or []) or 'none'}; "
                      f"stock: {', '.join(str(x['amount']) + ' ' + x['item'] + (f" (price ${x['set_price']:.2f})" if x.get('set_price') is not None else '') for x in v.get('stock') or []) or 'none'}; crew: {', '.join(v.get('crew') or []) or 'none'}.")
             if v.get('marketing_level') or v.get('marketing_today'):
@@ -497,6 +514,10 @@ class Play:
         else:
             self.out(f"You stopped {r['from_goal']} m short{pushing}, at x {r['x']}, z {r['z']}"
                      f"{' (the way there only goes part of the way)' if r.get('path') == 'partial' else ''}.")
+        park = r.get('parked')
+        if park:
+            self.out(f"  You parked {r.get('holding')} in the bay's lane at x {park.get('x')}, z {park.get('z')} and let go of it."
+                     if park.get('parked') else f"  Not parked: {park.get('why')}")
         if r.get('crossings'):
             waited = r.get('waited_for_traffic_s') or 0
             self.out(f"  You crossed {r['crossings']} road{'s' if r['crossings'] != 1 else ''} at the crossings"
@@ -542,7 +563,8 @@ class Play:
         if op == 'click':
             cursor = self.bridge.events(1)['next']
             r = self.call('ui', {'op': 'click', **({'id': ident} if ident is not None else {'text': text})})
-            self.out(f"Clicked {r['clicked']}.")
+            self.out(f"Clicked {r['clicked']}{' (' + r['of'] + ')' if r.get('of') else ''}.")
+            if r.get('confirmation'): self.out(f"  {r['confirmation']['say']}")
             self.wait_for_skip(cursor)
         elif op == 'set':
             if ident is None or text is None: raise Refused('ui set ID VALUE (a slider from the last ui list)')
@@ -655,6 +677,10 @@ class Play:
         r = self.call('vehicle', {'op': 'buy', 'kind': kind})
         self.out(f"Bought a {kind} ({r['id']}) for {money(r['price'])}; money {money(r['money'])}." if r['done'] else
                  f"Not bought: {'; '.join(r['notices']) or 'no room here'}.")
+        bay = r.get('bay')
+        if r['done'] and bay:
+            self.out(f"  Delivered into the bay's lane at {bay['site']} (x {bay.get('x')}, z {bay.get('z')})." if bay.get('parked')
+                     else f"  Not in the bay at {bay['site']}: {bay.get('why')}")
 
     def drive(self, ident, place, speed=None):
         self.acting()
@@ -683,6 +709,7 @@ class Play:
                      + (f", {hits} bump{'s' if hits != 1 else ''} it caused" if hits else '') + '.')
         park = s.get('park')
         if park:
+            if park.get('bay_full'): self.out(f"Not parked in the bay: {park['bay_full']}")
             self.out(('Parked in the bay.' if park.get('where', '').startswith('bay:') else 'Parked by the kerb.') if park.get('parked')
                      else f"Not parked: {park.get('why')}.")
         if s.get('error'): self.out(f"The drive failed: {s['error']}.")
@@ -727,18 +754,27 @@ class Play:
         for o in r['orders']:
             self.out(f"Ordered {o['units']} {o['item']} for {money(o['total'])}, paid on delivery, arriving day {o['due_day']} at 08:00.")
 
-    def crew(self, op, rest):
+    def crew(self, op, rest, replace=False):
         self.acting()
+        usage = ('crew assign VEHICLE EMPLOYEE | crew schedule VEHICLE EMPLOYEE DAY START END [STATION] [--replace] | '
+                 'crew unschedule VEHICLE EMPLOYEE DAY START | crew auto VEHICLE')
+        def hour(text):
+            try: return int(text)
+            except ValueError: raise Refused(f'{usage}: hours are whole numbers.')
+        if replace and op != 'schedule': raise Refused(f'--replace goes with crew schedule. {usage}')
         if op == 'assign' and len(rest) == 2:
             r = self.call('crew', {'op': 'assign', 'vehicle': rest[0], 'employee_id': rest[1]})
         elif op == 'schedule' and len(rest) in (5, 6):
-            args = {'op': 'schedule', 'vehicle': rest[0], 'employee_id': rest[1], 'day': rest[2], 'start': int(rest[3]), 'end': int(rest[4])}
+            args = {'op': 'schedule', 'vehicle': rest[0], 'employee_id': rest[1], 'day': rest[2], 'start': hour(rest[3]), 'end': hour(rest[4])}
             if len(rest) == 6: args['station'] = rest[5]
+            if replace: args['replace'] = True
             r = self.call('crew', args)
+        elif op == 'unschedule' and len(rest) == 4:
+            r = self.call('crew', {'op': 'unschedule', 'vehicle': rest[0], 'employee_id': rest[1], 'day': rest[2], 'start': hour(rest[3])})
         elif op == 'auto' and len(rest) == 1:
             r = self.call('crew', {'op': 'auto_schedule', 'vehicle': rest[0]})
         else:
-            raise Refused('crew assign VEHICLE EMPLOYEE | crew schedule VEHICLE EMPLOYEE DAY START END [STATION] | crew auto VEHICLE')
+            raise Refused(usage)
         self.out(f"{op}: {'done' if r['done'] else 'not done'}.")
         for n in r.get('notices') or []: self.out(f'  {n}')
 
@@ -762,12 +798,20 @@ class Play:
             if open_ or close: args.update(open=open_, close=close)
             r = self.call('route', args)
             self.out(f"Stop by {rest[1]}: " + ', '.join(f"{d['day']} {'added' if d['added'] else 'refused'}" for d in r['days']) + '.')
+        elif op == 'remove' and len(rest) == 2:
+            try: number = int(rest[1])
+            except ValueError: raise Refused('route remove VEHICLE STOP [--day DAY]: STOP is the stop\'s number on that day\'s route.')
+            if days and ',' in days: raise Refused('route remove takes one --day.')
+            args = {'op': 'remove_stop', 'vehicle': rest[0], 'stop': number}
+            if days: args['day'] = days
+            r = self.call('route', args)
+            self.out(f"Removed stop {r['stop']} ({r['place']}, {r['open']} to {r['close']}) from {r['day']}." if r['done'] else 'Not removed.')
         elif op == 'paste' and len(rest) == 3:
             to = 'all' if rest[2] == 'all' else rest[2].split(',')
             r = self.call('route', {'op': 'paste_day', 'vehicle': rest[0], 'from': rest[1], 'to': to})
             self.out(f"Pasted: {'done' if r['done'] else 'refused (' + str(r.get('problem')) + ')'}.")
         else:
-            raise Refused('route add VEHICLE ADDRESS [--days ...] [--open HH:MM --close HH:MM] | route paste VEHICLE FROM TO')
+            raise Refused('route add VEHICLE ADDRESS [--days ...] [--open HH:MM --close HH:MM] | route remove VEHICLE STOP [--day DAY] | route paste VEHICLE FROM TO')
         for n in r.get('notices') or []: self.out(f'  {n}')
 
     def save(self, name):
@@ -818,11 +862,12 @@ def parser():
     n = sub.add_parser('vehicle', help='use a vehicle'); n.add_argument('id'); n.add_argument('op'); n.add_argument('item', nargs='?')
     n.add_argument('units', nargs='?', type=int)
     n = sub.add_parser('order', help='order stock from a commissary'); n.add_argument('site'); n.add_argument('pairs', nargs='+')
-    n = sub.add_parser('crew', help='crew and shifts'); n.add_argument('op', choices=('assign', 'schedule', 'auto')); n.add_argument('rest', nargs='+')
+    n = sub.add_parser('crew', help='crew and shifts'); n.add_argument('op', choices=('assign', 'schedule', 'unschedule', 'auto')); n.add_argument('rest', nargs='+')
+    n.add_argument('--replace', action='store_true')
     n = sub.add_parser('price', help='what a vehicle charges for a food'); n.add_argument('vehicle'); n.add_argument('item'); n.add_argument('price')
     n = sub.add_parser('marketing', help="a vehicle's marketing level"); n.add_argument('vehicle'); n.add_argument('level', choices=('none', 'flyers', 'local', 'citywide'))
-    n = sub.add_parser('route', help='a vehicle\'s route'); n.add_argument('op', choices=('add', 'paste')); n.add_argument('rest', nargs='+')
-    n.add_argument('--days'); n.add_argument('--open'); n.add_argument('--close')
+    n = sub.add_parser('route', help='a vehicle\'s route'); n.add_argument('op', choices=('add', 'remove', 'paste')); n.add_argument('rest', nargs='+')
+    n.add_argument('--days'); n.add_argument('--day', dest='day'); n.add_argument('--open'); n.add_argument('--close')
     n = sub.add_parser('save', help='save the game'); n.add_argument('name')
     n = sub.add_parser('load', help='load a playtest save'); n.add_argument('name')
     return p
@@ -876,10 +921,10 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
         elif c == 'drive': play.drive(args.truck, args.place, args.speed)
         elif c == 'vehicle': play.vehicle(args.id, args.op, args.item, args.units)
         elif c == 'order': play.order(args.site, args.pairs)
-        elif c == 'crew': play.crew(args.op, args.rest)
+        elif c == 'crew': play.crew(args.op, args.rest, args.replace)
         elif c == 'price': play.price(args.vehicle, args.item, args.price)
         elif c == 'marketing': play.marketing(args.vehicle, args.level)
-        elif c == 'route': play.route(args.op, args.rest, args.days, args.open, args.close)
+        elif c == 'route': play.route(args.op, args.rest, (args.day or args.days) if args.op == 'remove' else args.days, args.open, args.close)
         elif c == 'save': play.save(args.name)
         elif c == 'load': play.load(args.name)
         return 0

@@ -191,6 +191,48 @@ public class HireRunnerTests
     }
 
     [Fact]
+    public void AnAddedShiftKeepsTheOneRunningThatDay()
+    {
+        // Playtest a14, day 4 (a Thursday) 12:13: the crew member serving since the morning was given an evening shift,
+        // which replaced the day's shift and closed the truck. Adding keeps the morning one.
+        var truck = Truck(Stop("a", 0, 11 * 60, 14 * 60));
+        truck.Schedule!.CrewShifts.Clear();
+        Assert.Equal(ShiftProblem.None, WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Thursday, 8, 16));
+
+        Assert.Equal(ShiftProblem.None, WeekPlan.AddShift(rules, truck, "e1", DayOfWeek.Thursday, 17, 23));
+
+        Assert.Equal(new[] { (8, 16), (17, 23) }, WeekPlan.ShiftsOf(truck.Schedule, "e1", DayOfWeek.Thursday).Select(x => (x.Start, x.End)).ToArray());
+        Assert.True(WeekPlan.OnShift(truck.Schedule, "e1", At(4, 12, 13)));
+        Assert.True(WeekPlan.OnShift(truck.Schedule, "e1", At(4, 18)));
+        Assert.True(WeekPlan.CheckShifts(truck.Schedule.CrewShifts));
+        Assert.Equal(14, WeekPlan.WeekHours(truck.Schedule, "e1"));
+    }
+
+    [Fact]
+    public void AnAddedShiftOverlappingTheirOwnIsRefusedAndOneCanBeRemoved()
+    {
+        var truck = Truck(Stop("a", 0, 11 * 60, 14 * 60));
+        truck.Crew.Add("e2");
+        truck.Schedule!.CrewShifts.Clear();
+        WeekPlan.AddShift(rules, truck, "e1", DayOfWeek.Monday, 8, 12, "serving1");
+        WeekPlan.AddShift(rules, truck, "e1", DayOfWeek.Monday, 17, 22, "serving1");
+
+        Assert.Equal(ShiftProblem.Overlap, WeekPlan.AddShift(rules, truck, "e1", DayOfWeek.Monday, 11, 14));
+        Assert.Equal(ShiftProblem.TooLong, WeekPlan.AddShift(rules, truck, "e1", DayOfWeek.Monday, 0, 13));
+        Assert.Equal(ShiftProblem.NotCrew, WeekPlan.AddShift(rules, truck, "stranger", DayOfWeek.Monday, 12, 14));
+        // Another crew member on the same row at those hours: the row clashes.
+        Assert.Equal(ShiftProblem.Clash, WeekPlan.AddShift(rules, truck, "e2", DayOfWeek.Monday, 9, 10, "serving1"));
+        Assert.Equal(2, truck.Schedule.CrewShifts.Count);
+        // Without a row, the first free one.
+        Assert.Equal(ShiftProblem.None, WeekPlan.AddShift(rules, truck, "e2", DayOfWeek.Monday, 9, 10));
+        Assert.Equal("serving2", WeekPlan.ShiftsOf(truck.Schedule, "e2", DayOfWeek.Monday).Single().Station);
+
+        Assert.True(WeekPlan.RemoveShiftAt(truck, "e1", DayOfWeek.Monday, 17));
+        Assert.False(WeekPlan.RemoveShiftAt(truck, "e1", DayOfWeek.Monday, 17));
+        Assert.Equal(new[] { (8, 12) }, WeekPlan.ShiftsOf(truck.Schedule, "e1", DayOfWeek.Monday).Select(x => (x.Start, x.End)).ToArray());
+    }
+
+    [Fact]
     public void StopsAreAddedInTimeOrderAndOverlapsRefused()
     {
         var schedules = new HireSchedules(rules);

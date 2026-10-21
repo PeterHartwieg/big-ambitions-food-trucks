@@ -257,10 +257,10 @@ namespace FoodTrucks
         private bool loadHidden;
         // The vehicles' collision hulls as boxes, a little spare (art/README.md): the truck's runs x −1.23…1.26,
         // y 0…3.10, z −3.15…2.65; the cart's body x ±0.48, y 0…0.95, z ±0.70.
-        private static readonly Vector3 TruckHalfSize = new Vector3(1.3f, 1.55f, 2.95f);
-        private static readonly Vector3 TruckCentre = new Vector3(0f, 1.55f, -0.25f);
-        private static readonly Vector3 CartHalfSize = new Vector3(0.5f, 0.5f, 0.75f);
-        private static readonly Vector3 CartCentre = new Vector3(0f, 0.55f, 0f);
+        internal static readonly Vector3 TruckHalfSize = new Vector3(1.3f, 1.55f, 2.95f);
+        internal static readonly Vector3 TruckCentre = new Vector3(0f, 1.55f, -0.25f);
+        internal static readonly Vector3 CartHalfSize = new Vector3(0.5f, 0.5f, 0.75f);
+        internal static readonly Vector3 CartCentre = new Vector3(0f, 0.55f, 0f);
 
         // Steps through the minutes since the last tick in order: each moment a leg starts or ends, or a
         // transit is due, gets its own steps, and the crew's window sells up to it first. So a time skip
@@ -881,6 +881,9 @@ namespace FoodTrucks
         // no disabled or delivery lanes, a random free slot in the lane that no player vehicle blocks.
         // The same search for the test bridge's drive: `self`, the truck being parked, doesn't take a space from itself.
         internal static (Vector3, Quaternion, string?)? FreeParkingNear(Vector3 target, float maxMetres, VehicleInstance self) => FreeParking(target, maxMetres, self);
+
+        // The same for a vehicle not spawned yet (the test bridge's buy, checking a safe place first).
+        internal static (Vector3, Quaternion, string?)? FreeParkingForNew(Vector3 target, float maxMetres) => FreeParking(target, maxMetres);
 
         private static (Vector3, Quaternion, string?)? FreeParking(Vector3 target, float maxMetres, VehicleInstance? self = null)
         {

@@ -213,10 +213,11 @@ namespace FoodTrucks
         private static JToken List()
         {
             last = Entries();
-            // Row texts only where the label alone can't tell the buttons apart: a generic word, or one shown twice.
+            // Row texts only where the label alone can't tell the buttons apart: a generic word, or one shown twice. An
+            // option always says which dropdown it is in.
             var counts = last.GroupBy(e => e.Text).ToDictionary(g => g.Key, g => g.Count());
             foreach (var e in last)
-                if (e.Text.Length <= 1 || (counts[e.Text] < 2 && !GenericLabels.Contains(e.Text))) e.Context = "";
+                if (e.Kind != "option" && (e.Text.Length <= 1 || (counts[e.Text] < 2 && !GenericLabels.Contains(e.Text)))) e.Context = "";
             return new JObject
             {
                 ["buttons"] = new JArray(last.Select(Json)),
@@ -242,27 +243,33 @@ namespace FoodTrucks
 
         private static List<Entry> Entries()
         {
-            var found = new List<(Vector2 At, Entry Entry)>();
+            // Each entry with where it is on screen and, for a dropdown's options, their order after the dropdown itself.
+            var found = new List<(Vector2 At, int Sub, Entry Entry)>();
             foreach (var button in Object.FindObjectsOfType<Button>())
             {
                 if (button == null || !button.IsActive() || !button.IsInteractable() || !Visible(button.transform, out var at)) continue;
-                found.Add((at, new Entry { Button = button, Text = Label(button.transform), Context = RowContext(button), Path = PathOf(button.transform) }));
+                found.Add((at, 0, new Entry { Button = button, Text = Label(button.transform), Context = RowContext(button), Path = PathOf(button.transform) }));
             }
+            // A dropdown's options are listed together, in its own order, each saying which dropdown it belongs to. Two
+            // dropdowns side by side (a stop's Opens and Closes on the week plan) had their options interleaved by
+            // screen position and read the same, so a click meant for Closes set Opens (playtest a14: a stop moved to
+            // 23:30-03:00).
             foreach (var dropdown in Object.FindObjectsOfType<Dropdown>())
             {
                 if (dropdown == null || !dropdown.isActiveAndEnabled || !Visible(dropdown.transform, out var at)) continue;
                 if (!(OptionsField?.GetValue(dropdown) is List<string> options)) continue;
                 var localize = LocalizeField?.GetValue(dropdown) is bool b && b;
+                var caption = DropdownCaption(dropdown);
                 for (var i = 0; i < options.Count; i++)
                 {
                     var text = localize ? LocalizorManager.GetLocalization(options[i], null) : options[i];
-                    found.Add((at - new Vector2(0f, i + 1), new Entry { Dropdown = dropdown, Option = i, Kind = "option", Text = Clean(text), Path = PathOf(dropdown.transform) + $"/option[{i}]" }));
+                    found.Add((at, i + 1, new Entry { Dropdown = dropdown, Option = i, Kind = "option", Text = Clean(text), Context = caption, Path = PathOf(dropdown.transform) + $"/option[{i}]" }));
                 }
             }
             foreach (var slider in Object.FindObjectsOfType<Slider>())
             {
                 if (slider == null || !slider.IsActive() || !slider.IsInteractable() || !Visible(slider.transform, out var at)) continue;
-                found.Add((at, new Entry { Slider = slider, Kind = "slider", Text = ControlLabel(slider.transform), Path = PathOf(slider.transform) }));
+                found.Add((at, 0, new Entry { Slider = slider, Kind = "slider", Text = ControlLabel(slider.transform), Path = PathOf(slider.transform) }));
             }
             foreach (var toggle in Object.FindObjectsOfType<Toggle>())
             {
@@ -273,19 +280,57 @@ namespace FoodTrucks
                         Log.Info($"Test bridge: ui list leaves out toggle {PathOf(toggle.transform)} ({(toggle.IsInteractable() ? "not on screen" : "not interactable")}).");
                     continue;
                 }
-                found.Add((at, new Entry { Toggle = toggle, Kind = "toggle", Text = ControlLabel(toggle.transform), Path = PathOf(toggle.transform) }));
+                found.Add((at, 0, new Entry { Toggle = toggle, Kind = "toggle", Text = ControlLabel(toggle.transform), Path = PathOf(toggle.transform) }));
             }
             if (TmpInput != null)
                 foreach (var input in Object.FindObjectsOfType(TmpInput).OfType<Component>())
                 {
                     if (input == null || !(input is Behaviour b) || !b.isActiveAndEnabled || !(TmpInputInteractable?.GetValue(input) is bool on && on) ||
                         !Visible(input.transform, out var at)) continue;
-                    found.Add((at, new Entry { Input = input, Kind = "text field", Text = ControlLabel(input.transform), Path = PathOf(input.transform) }));
+                    found.Add((at, 0, new Entry { Input = input, Kind = "text field", Text = ControlLabel(input.transform), Path = PathOf(input.transform) }));
                 }
             // Top to bottom, then left to right, as a person reads the screen.
-            var list = found.OrderByDescending(f => Mathf.Round(f.At.y)).ThenBy(f => f.At.x).Select(f => f.Entry).ToList();
+            var list = found.OrderByDescending(f => Mathf.Round(f.At.y)).ThenBy(f => f.At.x).ThenBy(f => f.Sub).Select(f => f.Entry).ToList();
             for (var i = 0; i < list.Count; i++) list[i].Id = i + 1;
             return list;
+        }
+
+        // Which dropdown an option belongs to, for its line in the list: a stop card's "Opens" or "Closes" with the card's
+        // stop, else the dropdown's own label (its current choice), so two dropdowns' options never read alike.
+        private static string DropdownCaption(Dropdown dropdown)
+        {
+            var now = Label(dropdown.transform);
+            var times = dropdown.transform.parent;
+            if (times != null && times.name == "FoodTrucks.Times")
+            {
+                var column = LocalizorManager.GetLocalization(dropdown.transform.GetSiblingIndex() == 0 ? "foodtrucks:bizman_page_opens_label" : "foodtrucks:bizman_page_closes_label", null);
+                string? stop = null;
+                for (var p = times.parent; p != null && stop == null; p = p.parent)
+                    if (p.name == "FoodTrucks.Stop" && !string.IsNullOrEmpty(BizManVehiclePage.entryNamePath) && p.Find(BizManVehiclePage.entryNamePath) is { } name)
+                        stop = Label(name);
+                return $"{column}{(stop != null ? " of " + stop : "")}, now {now}";
+            }
+            return $"the dropdown showing {now}";
+        }
+
+        // The game's confirmation (HudConfirm) that a click opened, for the click's reply: a Remove whose Confirm appears
+        // only once Remove is clicked looked broken (playtest a14). Null when none opened.
+        private static JObject? OpenedConfirmation()
+        {
+            if (!HudConfirm.isOpen) return null;
+            string Key(HudConfirmUi ui, string field, string fallback)
+            {
+                try { return Traverse.Create(ui).Field(field).Property("Key").GetValue<string>() ?? fallback; }
+                catch (Exception) { return fallback; }
+            }
+            var shown = Object.FindObjectsOfType<HudConfirmUi>().FirstOrDefault(u => u != null && Traverse.Create(u).Field("container").GetValue<RectTransform>() is { } c && c.gameObject.activeInHierarchy);
+            var confirm = LocalizorManager.GetLocalization(shown == null ? "common_confirm" : Key(shown, "confirmLabel", "common_confirm"), null);
+            var cancel = LocalizorManager.GetLocalization(shown == null ? "common_cancel" : Key(shown, "cancelLabel", "common_cancel"), null);
+            return new JObject
+            {
+                ["confirm"] = Clean(confirm), ["cancel"] = Clean(cancel),
+                ["say"] = $"A confirmation opened: click \"{Clean(confirm)}\" to finish, or \"{Clean(cancel)}\" to leave it.",
+            };
         }
 
         private static JToken Click(JObject args)
@@ -318,6 +363,7 @@ namespace FoodTrucks
             }
             else throw new BridgeError("ui click needs \"id\" (from the last list) or \"text\".");
             if (SaveOrLoadControl(entry)) throw new BridgeError(SaveLoadText);
+            var confirmBefore = HudConfirm.isOpen;
 
             if (entry.Slider != null) throw new BridgeError($"\"{entry.Text}\" is a slider: ui set with its id and a value.");
             if (entry.Input != null) throw new BridgeError($"\"{entry.Text}\" is a text field: ui type with its id and the text.");
@@ -335,7 +381,10 @@ namespace FoodTrucks
             }
             else entry.Dropdown!.SelectOption(entry.Option);
             Log.Info($"Test bridge: clicked \"{entry.Text}\" ({entry.Path}).");
-            return new JObject { ["clicked"] = entry.Text };
+            var reply = new JObject { ["clicked"] = entry.Text };
+            if (entry.Kind == "option" && entry.Context.Length > 0) reply["of"] = entry.Context;
+            if (!confirmBefore && OpenedConfirmation() is { } opened) reply["confirmation"] = opened;
+            return reply;
         }
 
         // What is open, in the order the game's Esc handling closes things (CancelButtonHandler).

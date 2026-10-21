@@ -616,6 +616,31 @@ namespace FoodTrucks
             return CommissaryBays.InBay(points, position.x, position.z, rules.BayRadiusMetres, legal);
         }
 
+        // For the test bridge only, not the bay rule (a cart counts by its middle; Peter, 21 October 2026: carts beside
+        // the truck are the agent's parking, not the mod's): whether a cart's footprint (its hull, HireRoutes.CartHalfSize,
+        // where it stands and faces) is clear of the driving lanes, read round the cart itself (TrafficLanes, as the hatch
+        // check reads them). Null when the lanes couldn't be read (the traffic system not running, or the read failed);
+        // true when they were read and none is within reach (review round 1: "not read" and "none nearby" differ).
+        internal static bool? CartClearOfLanes(VehicleInstance vehicle)
+        {
+            var position = PositionOf(vehicle);
+            var lanes = TrafficLanes.Near(position, HatchCheck.LaneSearchMetres);
+            if (lanes.Unavailable) return null;
+            if (!lanes.Known) return true;
+            return LaneClearance.Clear(CartFootprint(vehicle, position), lanes.FlatSegments());
+        }
+
+        // A cart's hull on the ground where it stands, facing its way (its controller's, else its saved rotation).
+        internal static FlatBox CartFootprint(VehicleInstance vehicle, Vector3 position)
+        {
+            var controller = VehicleHelper.GetVehicleController(vehicle);
+            var forward = controller != null ? controller.transform.forward : (Quaternion)vehicle.rotation * Vector3.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
+            var half = HireRoutes.CartHalfSize;
+            return new FlatBox(position.x, position.z, forward.x, forward.z, half.x, half.z);
+        }
+
         internal static string Name(CommissarySite site) => LocalizorManager.GetLocalization(site.Name, null);
 
         private static string NameOf(string? id)

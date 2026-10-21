@@ -21,8 +21,8 @@ namespace FoodTrucks
     // 2. the drive itself by HART. Self Driving (mod id DrivenRides): its test rig's `ride kind=own`, sent through the
     //    rig's own command file and read back from its results file, both in the game's data folder on this PC. Nothing
     //    of that mod is called or read by reflection: only whether its assembly is loaded (logged Active or Not active);
-    // 3. into the bay (as `teleport` to bay:<site>), or into the free kerb space with the hatch to the pavement that a
-    //    crew would take at that stop (HireRoutes.FreeParking), by teleport.
+    // 3. into the bay's lane (as `teleport` to bay:<site>; by the kerb near it when the lane is full), or into the free
+    //    kerb space with the hatch to the pavement that a crew would take at that stop (HireRoutes.FreeParking), by teleport.
     // A ride takes real minutes, so `start` answers at once and `status` follows it. Test flag only, FT saves only.
     internal static partial class TestBridgeCommands
     {
@@ -577,14 +577,24 @@ namespace FoodTrucks
                 run.Park = new JObject { ["parked"] = false, ["why"] = $"the truck stopped {short_:F0} m from {run.Place}, too far to park there", ["metres_short"] = Math.Round(short_) };
                 return;
             }
+            string? bayFull = null;
             if (run.Site != null)
             {
-                var token = TeleportToBay(run.Id, run.Site, null, true);
-                var pose = token as JObject ?? new JObject();
-                pose["parked"] = true;
-                pose["where"] = "bay:" + run.Site;
-                run.Park = pose;
-                return;
+                try
+                {
+                    var token = TeleportToBay(run.Id, run.Site, null, true);
+                    var pose = token as JObject ?? new JObject();
+                    pose["parked"] = true;
+                    pose["where"] = "bay:" + run.Site;
+                    run.Park = pose;
+                    return;
+                }
+                catch (BridgeError ex)
+                {
+                    // No free place in the bay's lane: a free kerb space near it, as at any stop, and the reply says why.
+                    bayFull = ex.Message;
+                    Log.Info($"Test bridge: drive {run.Id}: {ex.Message} Parking by the kerb near it.");
+                }
             }
             var spot = HireRoutes.FreeParkingNear(run.Goal, KerbMetres, vehicle) ?? HireRoutes.FreeParkingNear(run.Goal, KerbWideMetres, vehicle)
                        ?? (run.Simulated ? HireRoutes.FreeParkingNear(run.Goal, KerbWideMetres * 3f, vehicle) : null);
@@ -599,6 +609,7 @@ namespace FoodTrucks
             reply["parked"] = true;
             reply["where"] = "kerb";
             reply["from_goal"] = Math.Round(Flat(controller.transform.position - run.Goal), 1);
+            if (bayFull != null) reply["bay_full"] = bayFull;
             run.Park = reply;
         }
 

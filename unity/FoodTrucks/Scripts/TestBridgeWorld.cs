@@ -323,9 +323,13 @@ namespace FoodTrucks
         {
             var toVehicle = controller.transform.worldToLocalMatrix;
             var parts = new List<(double[] Matrix, FoodTrucks.Core.Fleet.LocalBox Box)>();
-            foreach (var c in controller.GetComponentsInChildren<Collider>())
+            // Switched-off colliders too, used only when none is on: pushing a cart switches its collider off
+            // (HandTruck.EnterVehicle), and it measured as the 6 m default (review round 1).
+            var off = new List<(double[] Matrix, FoodTrucks.Core.Fleet.LocalBox Box)>();
+            foreach (var c in controller.GetComponentsInChildren<Collider>(true))
             {
-                if (c == null || c.isTrigger || !c.enabled) continue;
+                // A collider on a switched-off part of the vehicle isn't its hull; one switched off on an active part is.
+                if (c == null || c.isTrigger || !c.gameObject.activeInHierarchy) continue;
                 Vector3 centre, size;
                 switch (c)
                 {
@@ -350,18 +354,22 @@ namespace FoodTrucks
                         continue;
                 }
                 var m = toVehicle * c.transform.localToWorldMatrix;
-                parts.Add((new double[] { m.m00, m.m01, m.m02, m.m03, m.m10, m.m11, m.m12, m.m13, m.m20, m.m21, m.m22, m.m23 },
+                (c.enabled ? parts : off).Add((new double[] { m.m00, m.m01, m.m02, m.m03, m.m10, m.m11, m.m12, m.m13, m.m20, m.m21, m.m22, m.m23 },
                     new FoodTrucks.Core.Fleet.LocalBox((centre.x, centre.y, centre.z), (size.x, size.y, size.z))));
             }
-            var found = FoodTrucks.Core.Fleet.Footprint.Box(parts);
+            var found = FoodTrucks.Core.Fleet.Footprint.Box(parts, off);
+            // Without any collider, the kind's own hull (HireRoutes' boxes), else the old 6 m default.
+            var kind = FoodTrucksMod.KindOf(controller.vehicleInstance?.vehicleTypeName ?? "");
             var bounds = found == null
-                ? new Bounds(new Vector3(0f, 1.2f, 0f), new Vector3(2.2f, 2.4f, 6f))
+                ? kind == "cart" ? new Bounds(HireRoutes.CartCentre, HireRoutes.CartHalfSize * 2f)
+                : kind == "truck" ? new Bounds(HireRoutes.TruckCentre, HireRoutes.TruckHalfSize * 2f)
+                : new Bounds(new Vector3(0f, 1.2f, 0f), new Vector3(2.2f, 2.4f, 6f))
                 : new Bounds(new Vector3((float)(found.Value.Min.X + found.Value.Max.X) / 2f, (float)(found.Value.Min.Y + found.Value.Max.Y) / 2f, (float)(found.Value.Min.Z + found.Value.Max.Z) / 2f),
                     new Vector3((float)(found.Value.Max.X - found.Value.Min.X), (float)(found.Value.Max.Y - found.Value.Min.Y), (float)(found.Value.Max.Z - found.Value.Min.Z)));
             var type = controller.vehicleInstance?.vehicleTypeName ?? controller.name;
             if (footprintLogged.Add(type))
                 Log.Info($"Test bridge: footprint of {type}: {bounds.size.x:F2} m across, {bounds.size.z:F2} m long, {bounds.size.y:F2} m high, " +
-                         $"centre {bounds.center.x:F2}, {bounds.center.y:F2}, {bounds.center.z:F2} ({(found == null ? "no colliders; the default" : parts.Count + " colliders")}).");
+                         $"centre {bounds.center.x:F2}, {bounds.center.y:F2}, {bounds.center.z:F2} ({(found == null ? "no colliders; the default" : parts.Count > 0 ? parts.Count + " colliders" : off.Count + " switched-off colliders")}).");
             return bounds;
         }
 
@@ -430,17 +438,26 @@ namespace FoodTrucks
 
         // What stands in the vehicle's footprint, 0.3 m up to its roof, at a pose on the ground.
         // `vans`: the delivery-job vans, looked up once per command (Vans()); null looks them up here.
+        // `gapAlong`: room kept clear beyond its nose and its tail as well (a place in a bay's lane, nose to tail with the
+        // vehicles parked there and a small gap between), measured from the whole footprint: the 0.1 m the plain test
+        // shrinks a footprint by (so a vehicle may stand against another) isn't taken off it (review round 1).
         private static List<Blocker> InTheWay(VehicleController controller, Vector3 ground, Quaternion rotation,
-            IReadOnlyList<Vehicles.DeliveryDriverJob.DeliveryJobStartController>? vans = null)
+            IReadOnlyList<Vehicles.DeliveryDriverJob.DeliveryJobStartController>? vans = null, float gapAlong = 0f) =>
+            InTheWay(LocalBounds(controller), controller.transform, ground, rotation, vans, gapAlong);
+
+        // The same for a footprint in its own frame (`local`), with `self` (its own colliders, left out) or none: a vehicle
+        // about to be bought, sized by its kind's hull.
+        private static List<Blocker> InTheWay(Bounds local, Transform? self, Vector3 ground, Quaternion rotation,
+            IReadOnlyList<Vehicles.DeliveryDriverJob.DeliveryJobStartController>? vans = null, float gapAlong = 0f)
         {
-            var local = LocalBounds(controller);
             // 0.3 m above the ground the vehicle stands on, not above its hull: the truck's hull itself starts 0.30 m up.
             var bottom = Mathf.Min(local.min.y, 0f) + 0.3f;
             var top = Mathf.Max(local.max.y, bottom + 0.5f);
             var centre = new Vector3(local.center.x, (bottom + top) / 2f, local.center.z);
-            var half = new Vector3(Mathf.Max(0.05f, local.extents.x - 0.1f), (top - bottom) / 2f, Mathf.Max(0.05f, local.extents.z - 0.1f));
+            var halfLength = gapAlong > 0f ? local.extents.z + gapAlong : Mathf.Max(0.05f, local.extents.z - 0.1f);
+            var half = new Vector3(Mathf.Max(0.05f, local.extents.x - 0.1f), (top - bottom) / 2f, halfLength);
             var hits = Physics.OverlapBox(ground + rotation * centre, half, rotation, ~0, QueryTriggerInteraction.Collide);
-            var found = Describe(hits, controller.transform);
+            var found = Describe(hits, self);
             // The colliders alone missed a van in a perpendicular stall (live session 4, 13 October 2026, industry-city).
             // So the parked cars round the place are also tested by their footprints (each lane car's mesh bounds, as
             // the game sizes its stalls by), and so is the building's delivery-job van, which the game hides and shows
@@ -452,8 +469,10 @@ namespace FoodTrucks
             foreach (var (car, what, laneCar, hidden) in CarsNear(middle, 15f, vans ?? Vans()))
             {
                 if (found.Any(b => b.Thing == car) || !CarFootprint(car, out var theirs, out var theirSpan)) continue;
-                if (FoodTrucks.Core.Fleet.Footprint.Overlap(mine, mySpan, theirs, theirSpan, -0.05))
-                    found.Add(new Blocker { What = what, LaneCar = laneCar ? car : null, Thing = car, Hidden = hidden });
+                var overlaps = gapAlong > 0f
+                    ? mySpan.Item1 < theirSpan.Top && theirSpan.Bottom < mySpan.Item2 && !FoodTrucks.Core.Fleet.Footprint.KeepsGap(mine, theirs, gapAlong)
+                    : FoodTrucks.Core.Fleet.Footprint.Overlap(mine, mySpan, theirs, theirSpan, -0.05);
+                if (overlaps) found.Add(new Blocker { What = what, LaneCar = laneCar ? car : null, Thing = car, Hidden = hidden });
             }
             return found;
         }
@@ -543,15 +562,28 @@ namespace FoodTrucks
             throw new BridgeError($"Something stands at {where}: {names}.{hint}");
         }
 
-        // A truck to a commissary's bay: the bay's middle, else the free place on its paint nearest the middle, the vehicle
-        // lined up with the lane and its hatch to the pavement.
-        private static JToken TeleportToBay(string id, string siteId, float? heading, bool clear)
+        // Room kept between a vehicle placed in a bay's lane and the ones parked there, nose to tail.
+        internal const float BayGapMetres = 0.5f;
+        // Free places tried in turn when one doesn't count as in the bay where the game puts it.
+        private const int BayPlaceTries = 8;
+
+        // The free places for a vehicle in a commissary's bay, nearest the bay's middle first: the bay point, then every
+        // half metre along the paint's stretches of parking lane, each lined up with the lane (the hatch to the pavement),
+        // with nothing in its footprint and BayGapMetres kept clear beyond its nose and tail. So a vehicle goes behind or in
+        // front of those parked there, in the lane, never beside one (playtest a14: a cart pushed up beside the truck stood
+        // half in the driving lane). `taken`: what stands at the bay's middle, when nothing is free.
+        private static List<Vector3> FreeBayPlaces(VehicleController controller, string siteId, Quaternion rotation,
+            List<Vehicles.DeliveryDriverJob.DeliveryJobStartController> vans, out Vector3 middle, out List<Blocker> taken) =>
+            FreeBayPlaces(LocalBounds(controller), controller.transform, siteId, rotation, vans, out middle, out taken);
+
+        // The same for a footprint in its own frame and its own colliders (`self`, left out), or none: a vehicle about to
+        // be bought, sized by its kind's hull (KindBounds).
+        private static List<Vector3> FreeBayPlaces(Bounds local, Transform? self, string siteId, Quaternion rotation,
+            List<Vehicles.DeliveryDriverJob.DeliveryJobStartController> vans, out Vector3 middle, out List<Blocker> taken)
         {
-            var vehicle = FoodVehicle(id);
-            var controller = Spawned(vehicle);
             var bay = Bay(siteId);
-            var rotation = Quaternion.Euler(0f, heading ?? Heading(bay.Along), 0f);
-            var halfLength = LocalBounds(controller).extents.z;
+            middle = bay.Point;
+            var halfLength = local.extents.z;
             var places = new List<Vector3> { bay.Point };
             var zones = BayMarkers.ZonesOf(Site(siteId), (float)(DemandData.Rules?.Commissary?.BayRadiusMetres ?? 15));
             foreach (var zone in zones)
@@ -561,17 +593,157 @@ namespace FoodTrucks
                         var p = zone.Foot + zone.Along * t;
                         places.Add(Ground(p.x, p.z));
                     }
-            var ordered = places.Distinct().OrderBy(p => (p - bay.Point).sqrMagnitude).ToList();
-            var vans = Vans();
-            List<Blocker>? atMiddle = null;
-            foreach (var place in ordered)
+            var point = bay.Point;
+            var free = new List<Vector3>();
+            taken = new List<Blocker>();
+            foreach (var place in places.Distinct().OrderBy(p => (p - point).sqrMagnitude))
             {
-                var blockers = InTheWay(controller, place, rotation, vans);
-                atMiddle ??= blockers;
-                if (blockers.Count == 0) return TeleportVehicle(id, place, rotation.eulerAngles.y, clear, vans: vans);
+                if (place == bay.Point) taken = InTheWay(local, self, place, rotation, vans);
+                if (InTheWay(local, self, place, rotation, vans, BayGapMetres).Count == 0) free.Add(place);
             }
-            // Nothing free on the paint: the middle, if clear may send its parked cars away.
-            return TeleportVehicle(id, bay.Point, rotation.eulerAngles.y, clear, atMiddle, vans);
+            return free;
+        }
+
+        // A vehicle kind's hull in its own frame, as HireRoutes sizes it, for a vehicle not spawned yet.
+        private static Bounds KindBounds(string kind) =>
+            kind == "truck" ? new Bounds(HireRoutes.TruckCentre, HireRoutes.TruckHalfSize * 2f) : new Bounds(HireRoutes.CartCentre, HireRoutes.CartHalfSize * 2f);
+
+        // Whether a free place is still free for this vehicle, nose to tail with the gap kept.
+        private static bool StillFree(VehicleController controller, Vector3 place, Quaternion rotation) =>
+            InTheWay(controller, place, rotation, Vans(), BayGapMetres).Count == 0;
+
+        // The heading a vehicle takes in a commissary's bay: the one asked for, else the lane's with the hatch to the pavement.
+        private static Quaternion BayRotation(string siteId, float? heading) => Quaternion.Euler(0f, heading ?? Heading(Bay(siteId).Along), 0f);
+
+        // A truck or a cart to a commissary's bay: the free place in the bay's lane nearest its middle (FreeBayPlaces), and
+        // only a place where it then counts as parked there (ParkedInBay); the next free one otherwise. With nothing free,
+        // the middle only when what stands there is the lanes' parked cars and `clear` may send them away; else a refusal,
+        // and the vehicle stays where it was, never put in the road.
+        private static JToken TeleportToBay(string id, string siteId, float? heading, bool clear)
+        {
+            var vehicle = FoodVehicle(id);
+            var controller = Spawned(vehicle);
+            var site = Site(siteId);
+            var rotation = BayRotation(siteId, heading);
+            var vans = Vans();
+            var free = FreeBayPlaces(controller, siteId, rotation, vans, out var middle, out var atMiddle);
+            var kind = FoodTrucksMod.KindOf(vehicle.vehicleTypeName) ?? "vehicle";
+            if (free.Count == 0)
+            {
+                // The middle, with the gap kept, when only the lanes' parked cars stand there and `clear` may send them
+                // away; then placed as any free place is (PlaceInBay: in the bay, a cart clear of the lanes, rolled back
+                // otherwise). Review round 2: this path once skipped all of that, and a cart 0.3 m past the truck's nose
+                // didn't count against it.
+                var spaced = InTheWay(controller, middle, rotation, vans, BayGapMetres);
+                if (clear && spaced.Count > 0 && spaced.All(b => b.LaneCar != null))
+                {
+                    MakeRoom(spaced, true, $"the middle of the bay of {siteId}");
+                    return PlaceInBay(vehicle, site, new[] { middle }, rotation, clear, vans);
+                }
+                var blockers = spaced.Count > 0 ? spaced : atMiddle;
+                var what = blockers.Count > 0 ? string.Join(", ", blockers.Select(b => b.What)) : "too little room left on the paint";
+                throw new BridgeError($"No free place in the bay of {siteId} for the {kind} {id}: its lane is full ({what}). It stays where it is.");
+            }
+            return PlaceInBay(vehicle, site, free, rotation, clear, vans);
+        }
+
+        // Puts the vehicle at the first of `places` where ParkedInBay accepts it, trying at most BayPlaceTries. With none,
+        // or an error on the way (a later place refused, say), it goes back where it stood, without sending away any lane
+        // car there (clear false), and the refusal says where it really is (review round 1).
+        private static JObject PlaceInBay(VehicleInstance vehicle, CommissarySite site, IEnumerable<Vector3> places, Quaternion rotation, bool clear,
+            List<Vehicles.DeliveryDriverJob.DeliveryJobStartController> vans)
+        {
+            var controller = Spawned(vehicle);
+            var kind = FoodTrucksMod.KindOf(vehicle.vehicleTypeName) ?? "vehicle";
+            var fromPosition = controller.transform.position;
+            var fromHeading = controller.transform.eulerAngles.y;
+            var whyNot = "no place was tried";
+            try
+            {
+                foreach (var place in places.Take(BayPlaceTries))
+                {
+                    var reply = TeleportVehicle(vehicle.id, place, rotation.eulerAngles.y, clear, vans: vans) as JObject ?? new JObject();
+                    if (ParkedInBay(vehicle, site, out var why)) return (JObject)InBayReply(reply, vehicle, site);
+                    whyNot = why;
+                    Log.Info($"Test bridge: {kind} {vehicle.id} at x {place.x:F1}, z {place.z:F1} isn't parked in the bay of {site.Id} ({why}); trying the next place.");
+                }
+            }
+            catch (Exception ex) { whyNot = ex.Message; }
+            throw new BridgeError($"No place in the bay of {site.Id} put the {kind} {vehicle.id} in the bay ({whyNot}). {PutBack(vehicle, fromPosition, fromHeading, vans)}");
+        }
+
+        // The vehicle back at a pose, nothing sent away there; then where it really stands, in words.
+        private static string PutBack(VehicleInstance vehicle, Vector3 position, float heading,
+            List<Vehicles.DeliveryDriverJob.DeliveryJobStartController> vans)
+        {
+            try { TeleportVehicle(vehicle.id, position, heading, false, vans: vans); }
+            catch (Exception ex) { Log.Error($"Test bridge: {vehicle.vehicleTypeName} {vehicle.id} couldn't be put back at x {position.x:F1}, z {position.z:F1}: {ex.Message}"); }
+            var controller = VehicleHelper.GetVehicleController(vehicle);
+            var now = controller != null ? controller.transform.position : (Vector3)vehicle.position;
+            return Flat(now - position) < 0.5f
+                ? $"It is back where it stood (x {now.x:F1}, z {now.z:F1})."
+                : $"It couldn't be put back where it stood (x {position.x:F1}, z {position.z:F1}): it stands at x {now.x:F1}, z {now.z:F1}.";
+        }
+
+        private static JToken InBayReply(JToken reply, VehicleInstance vehicle, CommissarySite site)
+        {
+            if (reply is JObject pose)
+            {
+                var inBay = global::FoodTrucks.Commissary.InBayAnswer(vehicle, site, out var why);
+                pose["in_bay"] = inBay;
+                pose["bay_why"] = why;
+                if (FoodTrucksMod.KindOf(vehicle.vehicleTypeName) == "cart")
+                    pose["clear_of_lanes"] = global::FoodTrucks.Commissary.CartClearOfLanes(vehicle);
+            }
+            return reply;
+        }
+
+        // Where the bridge parks a vehicle in a bay: in the bay by the mod's rule (an answer not known yet, the street's
+        // side unread, is kept, as the mod keeps it) and, a cart, with its footprint known to be clear of the driving lanes
+        // (the rule counts a cart by its middle, so one beside the truck in the road counts; the bridge never parks one
+        // there, playtest a14). Lanes that couldn't be read aren't taken as clear (review round 1).
+        private static bool ParkedInBay(VehicleInstance vehicle, CommissarySite site, out string why)
+        {
+            var inBay = global::FoodTrucks.Commissary.InBayAnswer(vehicle, site, out why);
+            if (inBay == false) return false;
+            if (FoodTrucksMod.KindOf(vehicle.vehicleTypeName) != "cart") return true;
+            var clear = global::FoodTrucks.Commissary.CartClearOfLanes(vehicle);
+            if (clear == true) return true;
+            why += clear == false ? ", but part of it stands in a driving lane" : ", but the driving lanes couldn't be read to check it stands clear of them";
+            return false;
+        }
+
+        // How far beside a place in a bay's lane the player stands to park a cart there (the paint is 2.4 m wide).
+        private static readonly float[] StandMetres = { 2.2f, 3.0f };
+
+        // Where the player stands on the pavement beside a place in a bay's lane: each side of the lane probed for walkable
+        // ground that isn't road (HatchSide's reading, as the hatch check reads a side), the side further from the driving
+        // lanes when both are pavement; null when neither is, or the lanes can't be read (review round 1: the right of the
+        // bay's heading was assumed). The samples use the player's own NavMesh filter, as the walk does.
+        private static Vector3? PavementBeside(Vector3 place, Quaternion rotation)
+        {
+            var lanes = TrafficLanes.Near(place, HatchCheck.LaneSearchMetres);
+            // Without the driving lanes the road's NavMesh reads as pavement (review round 2): no side is known.
+            if (lanes.Unavailable) return null;
+            var right = rotation * Vector3.right;
+            right.y = 0f;
+            right.Normalize();
+            Vector3? best = null;
+            var bestRoad = float.MinValue;
+            foreach (var side in new[] { 1f, -1f })
+                foreach (var metres in StandMetres)
+                {
+                    var wanted = place + right * (side * metres);
+                    if (!NavMesh.SamplePosition(wanted + Vector3.up * 0.3f, out var hit, 0.6f, PlayerFilter(out _)) || Flat(hit.position - wanted) > 0.45f) continue;
+                    var road = lanes.Distance(hit.position);
+                    var ground = FoodTrucks.Core.Fleet.HatchSide.Classify(road, Legality.RoadBelow(hit.position), Legality.InParkingLane(hit.position),
+                        Legality.NearCrosswalk(hit.position, 0.5f), true);
+                    if (ground != FoodTrucks.Core.Fleet.Ground.Pavement) continue;
+                    var away = road ?? float.MaxValue;
+                    if (away > bestRoad) { bestRoad = away; best = hit.position; }
+                    break;
+                }
+            return best;
         }
 
         private static (Vector3, float?) Place(string place, string who, float? heading)
@@ -686,7 +858,29 @@ namespace FoodTrucks
                 throw new BridgeError("You're at a truck's hatch: step out first (vehicle ID exit).");
             var place = Str(args, "place");
             Vector3 target;
-            if (place != null) (target, _) = Place(place, "player", null);
+            // Pushing a cart to a commissary's bay: to the pavement beside the free place in the bay's lane nearest its
+            // middle (the side probed, PavementBeside), then the cart is parked in that very place, behind or in front of
+            // what is parked there, never beside it in the road (playtest a14). Refused before the walk when the lane has
+            // no free place or no pavement beside it.
+            string? baySite = null;
+            CommissarySite? bayOf = null;
+            var slot = Vector3.zero;
+            var slotRotation = Quaternion.identity;
+            var cart = holding == null ? null : game.VehicleInstances.FirstOrDefault(v => v != null && v.id == holding && FoodTrucksMod.KindOf(v.vehicleTypeName) == "cart");
+            if (place != null && cart != null && place.StartsWith("bay:", StringComparison.Ordinal))
+            {
+                baySite = place.Substring(4);
+                bayOf = Site(baySite);
+                slotRotation = BayRotation(baySite, null);
+                var free = FreeBayPlaces(Spawned(cart), baySite, slotRotation, Vans(), out _, out var taken);
+                if (free.Count == 0)
+                    throw new BridgeError($"No free place in the bay of {baySite} for the cart {cart.id}: its lane is full " +
+                                          $"({(taken.Count > 0 ? string.Join(", ", taken.Select(b => b.What)) : "too little room left on the paint")}). You didn't set off.");
+                slot = free[0];
+                target = PavementBeside(slot, slotRotation)
+                         ?? throw new BridgeError($"No pavement beside the free place in the bay of {baySite} at x {slot.x:F1}, z {slot.z:F1} to stand on while you park the cart. You didn't set off.");
+            }
+            else if (place != null) (target, _) = Place(place, "player", null);
             else
             {
                 var x = Num(args, "x") ?? throw new BridgeError("walk needs \"x\" and \"z\", or \"place\".");
@@ -742,10 +936,101 @@ namespace FoodTrucks
                 reply["route"] = stops != null ? "pavement" : "straight";
                 reply["crossings"] = crossings;
                 reply["waited_for_traffic_s"] = Math.Round(waitedSeconds);
+                if (baySite != null && !arrived) reply["parked"] = new JObject { ["parked"] = false, ["why"] = "the walk stopped short of the bay; the cart is still in your hands" };
                 return reply;
+            }
+            // Parking the cart once there, in stages: the place walked to checked again (taken meanwhile: on to the next free
+            // one near it, at most ParkRetargets times); the game's Park lets go of the cart; the cart settles (two physics
+            // steps, or still); it is put in that place; it settles again, and only then is it read back (review round 1).
+            var stage = ParkStage.Walking;
+            var stageUntil = 0f;
+            var settleFrom = 0f;
+            var retargets = 0;
+            JObject Parked(JObject parked)
+            {
+                var reply = Reply(true);
+                reply["parked"] = parked;
+                Log.Info($"Test bridge: walk with cart {cart!.id} to bay:{baySite}: {parked}.".Replace("\r", "").Replace("\n", " "));
+                return reply;
+            }
+            JObject Where(string why)
+            {
+                var controller = VehicleHelper.GetVehicleController(cart!);
+                var at = controller != null ? controller.transform.position : (Vector3)cart!.position;
+                return new JObject { ["parked"] = false, ["x"] = TestBridgeState.Round(at.x), ["z"] = TestBridgeState.Round(at.z), ["why"] = $"{why}; the cart stands at x {at.x:F1}, z {at.z:F1}" };
+            }
+            bool Settled()
+            {
+                var body = VehicleHelper.GetVehicleController(cart!)?.GetComponent<Rigidbody>();
+                var steps = UnityEngine.Time.fixedTime >= settleFrom + 2f * UnityEngine.Time.fixedDeltaTime;
+                var still = body == null || body.isKinematic || body.velocity.sqrMagnitude < 0.05f * 0.05f;
+                return (steps && still) || UnityEngine.Time.realtimeSinceStartup > stageUntil;
+            }
+            void Settle()
+            {
+                settleFrom = UnityEngine.Time.fixedTime;
+                stageUntil = UnityEngine.Time.realtimeSinceStartup + SettleSeconds;
+            }
+            // On to a free place near the one taken, with the pavement beside it; false when none is left.
+            bool Retarget()
+            {
+                if (++retargets > ParkRetargets) return false;
+                var free = FreeBayPlaces(Spawned(cart!), baySite!, slotRotation, Vans(), out _, out _).OrderBy(p => (p - slot).sqrMagnitude);
+                foreach (var next in free)
+                {
+                    if (!(PavementBeside(next, slotRotation) is { } stand) || !NavMesh.SamplePosition(stand, out var hit, 3f, filter)) continue;
+                    Log.Info($"Test bridge: the bay place at x {slot.x:F1}, z {slot.z:F1} was taken; walking on to x {next.x:F1}, z {next.z:F1}.");
+                    slot = next;
+                    goal = hit.position;
+                    stops = PavementRoute(player.transform.position, goal);
+                    stop = 0;
+                    waitingSince = null;
+                    lastTraffic = null;
+                    player.SetNewDestination(stops != null ? stops[0] : goal, showParticleEffect: false);
+                    stillSince = UnityEngine.Time.realtimeSinceStartup;
+                    return true;
+                }
+                return false;
+            }
+            JToken? AtBay()
+            {
+                if (!StillFree(Spawned(cart!), slot, slotRotation))
+                    return Retarget() ? null : Parked(new JObject { ["parked"] = false, ["why"] = $"the lane of the bay of {baySite} filled up while you walked; the cart is still in your hands" });
+                var panel = InstanceBehavior<UIs>.Instance?.playerHUD?.itemPanelUI;
+                if (panel == null) return Parked(new JObject { ["parked"] = false, ["why"] = "the vehicle panel isn't there; the cart is still in your hands" });
+                panel.ClickPark();
+                stage = ParkStage.Releasing;
+                stageUntil = UnityEngine.Time.realtimeSinceStartup + ParkSeconds;
+                return null;
             }
             return new Deferred(() =>
             {
+                switch (stage)
+                {
+                    case ParkStage.Releasing:
+                        if (game.ActiveVehicleId == cart!.id)
+                            return UnityEngine.Time.realtimeSinceStartup < stageUntil ? null
+                                : Parked(new JObject { ["parked"] = false, ["why"] = "the game's Park button didn't let go of the cart; it is still in your hands" });
+                        stage = ParkStage.Released;
+                        Settle();
+                        return null;
+                    case ParkStage.Released:
+                        if (!Settled()) return null;
+                        if (!StillFree(Spawned(cart!), slot, slotRotation)) return Parked(Where("the place you walked to was taken as you let go of the cart"));
+                        try { PlaceInBay(cart!, bayOf!, new[] { slot }, slotRotation, true, Vans()); }
+                        catch (Exception ex) { return Parked(Where(ex.Message)); }
+                        stage = ParkStage.Placed;
+                        Settle();
+                        return null;
+                    case ParkStage.Placed:
+                        if (!Settled()) return null;
+                        if (!ParkedInBay(cart!, bayOf!, out var why)) return Parked(Where($"it didn't stay parked in the bay ({why})"));
+                        var controller = Spawned(cart!);
+                        var parked = InBayReply(Pose(controller.transform.position, controller.transform.eulerAngles.y), cart!, bayOf!) as JObject ?? new JObject();
+                        parked["parked"] = true;
+                        parked["where"] = "bay:" + baySite;
+                        return Parked(parked);
+                }
                 // Walked into a way out: the game takes the player outside (the place moves with them).
                 if (insideBefore != null && InsideAddress() != insideBefore)
                 {
@@ -755,7 +1040,7 @@ namespace FoodTrucks
                     return outside;
                 }
                 var now = player.transform.position;
-                if (Flat(now, goal) <= ArrivedMetres) return Reply(true);
+                if (Flat(now, goal) <= ArrivedMetres) return baySite != null ? AtBay() : Reply(true);
                 // At a corner of the pavement route: on to the next, after the traffic has passed if it crosses a road.
                 if (stops != null && stop < stops.Count - 1 && Flat(now, stops[stop]) <= LegMetres)
                 {
@@ -796,6 +1081,20 @@ namespace FoodTrucks
                 if (UnityEngine.Time.realtimeSinceStartup > deadline) return Reply(false);
                 return null;
             });
+        }
+
+        // Parking a pushed cart in a bay: how long the game's Park may take to let go of it, how long the cart may take to
+        // settle at most, and how often the walk goes on to another place when the one walked to was taken.
+        private const float ParkSeconds = 5f;
+        private const float SettleSeconds = 3f;
+        private const int ParkRetargets = 3;
+
+        private enum ParkStage
+        {
+            Walking,
+            Releasing,
+            Released,
+            Placed,
         }
 
         private const float LegMetres = 0.8f;
@@ -1194,8 +1493,11 @@ namespace FoodTrucks
             if (!string.IsNullOrEmpty(game.ActiveVehicleId)) throw new BridgeError($"The player is in {game.ActiveVehicleId}: vehicle exit first (the vehicle spawns beside the player on foot).");
             if (game.Money * 100.0 < cents)
                 throw new BridgeError($"Not enough money for the {kind}: it costs {CartSelling.Money(cents)} and the player has {CartSelling.Money((long)Math.Floor(game.Money * 100.0))}.");
+            // At a commissary, a safe place for it first (its bay's lane or the kerb), before anything is spawned or paid.
+            var nearBay = BayToBuyInto(kind, out var kerbSpace);
             VehicleInstance? bought = null;
             var paid = false;
+            JObject? bay = null;
             return WithNotices(() =>
             {
                 bought = DebugActions.SpawnVehicle(typeName, announce: false);
@@ -1205,6 +1507,7 @@ namespace FoodTrucks
                 paid = Payments.TryPayOut(cents, info, showNotification: false);
                 if (!paid) Log.Error($"Test bridge: vehicle buy: {kind} {bought.id} spawned but the payment of {CartSelling.Money(cents)} was refused.");
                 else CartSelling.Say("foodtrucks:notification_vehicle_bought", kind, ("price", CartSelling.Money(cents)));
+                if (paid && nearBay != null) bay = IntoNearBay(bought, kind, nearBay, kerbSpace);
             }, notices =>
             {
                 Log.Info(bought == null
@@ -1214,10 +1517,84 @@ namespace FoodTrucks
                 return new JObject
                 {
                     ["done"] = bought != null && paid, ["id"] = bought?.id, ["kind"] = kind, ["price"] = cents / 100.0,
-                    ["money"] = Math.Round(game.Money, 2), ["notices"] = new JArray(notices),
+                    ["money"] = Math.Round(game.Money, 2), ["notices"] = new JArray(notices), ["bay"] = bay,
                     ["state"] = bought == null || state == null ? null : TestBridgeState.Vehicle(state, bought),
                 };
             });
+        }
+
+        // How far from a commissary's bay (beyond its radius) a vehicle bought there is put in its lane.
+        private const float BuyNearBayMetres = 25f;
+
+        // The commissary whose bay a vehicle bought here goes into (within BuyNearBayMetres beyond its radius), or null
+        // away from every resolved bay. A dealer delivers whatever the lane holds, so a full lane doesn't refuse the buy
+        // (review round 2): only no safe place at all does, neither a free place in the lane for the kind's hull (as
+        // HireRoutes sizes it) nor a free kerb space near the player, and then nothing is spawned or charged.
+        // `kerb`: the free kerb space found near the player, kept for the fallback (review round 4: searched again from the
+        // spawn, the only free space could lie beyond its reach).
+        private static CommissarySite? BayToBuyInto(string kind, out (Vector3 Position, Quaternion Rotation)? kerb)
+        {
+            kerb = null;
+            var site = global::FoodTrucks.Commissary.SiteNear(PlayerHelper.GetPosition(), BuyNearBayMetres);
+            if (site == null) return null;
+            var free = FreeBayPlaces(KindBounds(kind), null, site.Id, BayRotation(site.Id, null), Vans(), out _, out var taken);
+            if (HireRoutes.FreeParkingForNew(PlayerHelper.GetPosition(), KerbMetres) is { } space) kerb = (space.Item1, space.Item2);
+            // A cart takes a bay place only known clear of the driving lanes (ParkedInBay): with the lanes unreadable the
+            // bay can't take it, whatever room the lane has.
+            var unreadable = kind == "cart" && free.Count > 0 && TrafficLanes.Near(free[0], HatchCheck.LaneSearchMetres).Unavailable;
+            if ((free.Count > 0 && !unreadable) || kerb != null) return site;
+            var what = taken.Count > 0 ? string.Join(", ", taken.Select(b => b.What)) : "too little room left on the paint";
+            throw new BridgeError(unreadable
+                ? $"No safe place for a new {kind}: the bay of {site.Id} can't take it (the driving lanes can't be read to check a cart stands clear of them) and no kerb space is free within {KerbMetres:F0} m. Nothing was bought."
+                : $"No safe place for a new {kind}: the lane of the bay of {site.Id} is full ({what}) and no kerb space is free within {KerbMetres:F0} m. Nothing was bought.");
+        }
+
+        // A vehicle bought at a commissary goes into that bay's lane, as a dealer's delivery to it would (the debug spawn
+        // put a cart on the driving lane's centre line by the Murray Hill bay, playtest a14): the free place nearest the
+        // bay's middle (TeleportToBay). If that still fails, a free kerb space near it (as a crew parks at a stop), so it
+        // isn't left on the road; the reply says which, and where the vehicle stands.
+        private static JObject IntoNearBay(VehicleInstance vehicle, string kind, CommissarySite site, (Vector3 Position, Quaternion Rotation)? kerb)
+        {
+            try
+            {
+                var pose = TeleportToBay(vehicle.id, site.Id, null, true) as JObject ?? new JObject();
+                pose["site"] = site.Id;
+                pose["parked"] = true;
+                Log.Info($"Test bridge: vehicle buy {kind}: {vehicle.id} put in the bay of {site.Id}.");
+                return pose;
+            }
+            catch (Exception ex)
+            {
+                Log.Info($"Test bridge: vehicle buy {kind}: {vehicle.id} not put in the bay of {site.Id}: {ex.Message}");
+                var reply = new JObject { ["site"] = site.Id, ["parked"] = false, ["why"] = ex.Message };
+                // The kerb space the preflight found near the player, else one searched for now from where the spawn put
+                // it. Either search, like the game's private driver, doesn't count the lane's own parked cars, so the
+                // placement sends those away (clear), as the bay does; anything else standing there refuses it, and the
+                // next space is tried (review rounds 3 and 4).
+                reply["fallback"] = "none";
+                var spaces = new List<(Vector3 Position, Quaternion Rotation)>();
+                if (kerb != null) spaces.Add(kerb.Value);
+                try
+                {
+                    if (HireRoutes.FreeParkingNear(Spawned(vehicle).transform.position, KerbMetres, vehicle) is { } spot) spaces.Add((spot.Item1, spot.Item2));
+                }
+                catch (Exception search) { Log.Error($"Test bridge: vehicle buy {kind}: {vehicle.id}, the kerb search: {search.Message}"); }
+                foreach (var space in spaces)
+                {
+                    try
+                    {
+                        TeleportVehicle(vehicle.id, space.Position, space.Rotation.eulerAngles.y, true);
+                        reply["fallback"] = "kerb";
+                        break;
+                    }
+                    catch (Exception refused) { Log.Info($"Test bridge: vehicle buy {kind}: {vehicle.id} not put at the kerb at x {space.Position.x:F1}, z {space.Position.z:F1}: {refused.Message}"); }
+                }
+                var now = VehicleHelper.GetVehicleController(vehicle) is { } c ? c.transform.position : (Vector3)vehicle.position;
+                reply["x"] = TestBridgeState.Round(now.x);
+                reply["z"] = TestBridgeState.Round(now.z);
+                reply["why"] = $"{ex.Message} It stands at x {now.x:F1}, z {now.z:F1}" + ((string?)reply["fallback"] == "kerb" ? ", by the kerb nearby." : ", where the spawn put it.");
+                return reply;
+            }
         }
 
         // Whether the operation happened, read from the state it should have changed (a refusal leaves only its notice).
@@ -1325,11 +1702,13 @@ namespace FoodTrucks
 
         // { "op": "assign" | "unassign", "vehicle", "employee_id" }: the BizMan vehicle page's crew dropdown.
         // { "op": "auto_schedule", "vehicle" }: Core's auto schedule for the week (the Schedule tab's auto-fill).
-        // { "op": "schedule", "vehicle", "employee_id", "day", "start", "end", "station"? }: one shift on the Schedule tab's
-        // rows (start == end removes the crew member's shifts that day).
+        // { "op": "schedule", "vehicle", "employee_id", "day", "start", "end", "station"?, "replace"? }: one more shift for
+        // the crew member that day, on the Schedule tab's rows; their other shifts that day stay, and one it overlaps
+        // refuses it (Overlap). "replace": true puts it in place of their shifts that day. start == end removes them all.
+        // { "op": "unschedule", "vehicle", "employee_id", "day", "start" }: removes their one shift that day starting then.
         private static object Crew(JObject args)
         {
-            var op = Need(args, "op", "assign, unassign, schedule or auto_schedule");
+            var op = Need(args, "op", "assign, unassign, schedule, unschedule or auto_schedule");
             var id = Need(args, "vehicle", "the food vehicle's id");
             var vehicle = FoodVehicle(id);
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
@@ -1341,18 +1720,40 @@ namespace FoodTrucks
                     return new JObject { ["done"] = shifts > 0, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
                 });
             var employeeId = Need(args, "employee_id", "the employee's id (state.employees)");
-            if (op == "schedule")
+            // The crew member's shifts that day, for a refusal: "12-20, 21-23", or "none".
+            string Theirs(DayOfWeek d)
+            {
+                var list = FoodTrucks.Core.Fleet.WeekPlan.ShiftsOf(FoodTrucks.Core.Saves.StreetSales.Find(state, id)?.Schedule, employeeId, d);
+                return list.Count == 0 ? "none" : string.Join(", ", list.Select(x => $"{x.Start:D2}-{x.End:D2}"));
+            }
+            if (op == "schedule" || op == "unschedule")
             {
                 var dayText = Need(args, "day", "a weekday, monday to sunday");
-                if (!Enum.TryParse<DayOfWeek>(dayText, true, out var day)) throw new BridgeError($"Unknown day '{dayText}': monday to sunday.");
-                var start = (int)(TestBridgeCommands.Num(args, "start") ?? throw new BridgeError("Missing \"start\": the starting hour, 0 to 23."));
-                var end = (int)(TestBridgeCommands.Num(args, "end") ?? throw new BridgeError("Missing \"end\": the ending hour, 1 to 24 (the start removes)."));
+                if (!Enum.TryParse<DayOfWeek>(dayText, true, out var day) || int.TryParse(dayText, out _)) throw new BridgeError($"Unknown day '{dayText}': monday to sunday.");
+                // Whole hours only, refused rather than cut (review round 1).
+                int Hour(string key, string missing)
+                {
+                    var value = TestBridgeCommands.Num(args, key) ?? throw new BridgeError(missing);
+                    if (value != Math.Floor(value)) throw new BridgeError($"\"{key}\" is a whole hour; got {value}.");
+                    return (int)value;
+                }
+                var start = Hour("start", "Missing \"start\": the starting hour, 0 to 23.");
+                if (op == "unschedule")
+                    return WithNotices(() =>
+                    {
+                        if (!VehicleSchedule.RemoveForBridge(id, employeeId, day, start))
+                            throw new BridgeError($"No shift for {employeeId} on {id} starts at {start:D2}:00 on {day}; their shifts that day: {Theirs(day)}.");
+                    }, notices => new JObject { ["done"] = true, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) });
+                var end = Hour("end", "Missing \"end\": the ending hour, 1 to 24 (the start removes).");
                 var station = TestBridgeCommands.Str(args, "station");
                 if (station != null && station != "serving1" && station != "serving2")
                     throw new BridgeError($"Unknown station '{station}': serving1 or serving2.");
+                var replace = TestBridgeCommands.Bool(args, "replace") == true;
                 return WithNotices(() =>
                 {
-                    var problem = VehicleSchedule.SetForBridge(id, employeeId, day, start, end, station);
+                    var problem = VehicleSchedule.SetForBridge(id, employeeId, day, start, end, station, replace);
+                    if (problem == FoodTrucks.Core.Fleet.ShiftProblem.Overlap)
+                        throw new BridgeError($"Shift refused: Overlap: {employeeId} already works {Theirs(day)} on {day}. Add \"replace\": true to replace that day's shifts, or unschedule one first.");
                     if (problem != FoodTrucks.Core.Fleet.ShiftProblem.None) throw new BridgeError($"Shift refused: {problem}.");
                 }, notices => new JObject { ["done"] = true, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) });
             }
@@ -1376,7 +1777,7 @@ namespace FoodTrucks
                         BizManVehiclePage.ChooseCrew(id, slot, null);
                         break;
                     default:
-                        throw new BridgeError($"Unknown crew op '{op}': assign, unassign, schedule or auto_schedule.");
+                        throw new BridgeError($"Unknown crew op '{op}': assign, unassign, schedule, unschedule or auto_schedule.");
                 }
             }, notices =>
             {

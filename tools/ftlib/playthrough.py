@@ -685,8 +685,9 @@ class Run:
                 state = self.state()
                 v = next(x for x in state['vehicles'] if x['id'] == vid)
                 employee = (v['route'] or {}).get('shifts', [])[change['crew']]
+                # A shift change moves that day's shift: it replaces theirs that day (crew schedule adds by default).
                 self.done(self.call('crew', {'op': 'schedule', 'vehicle': vid, 'employee_id': employee['id'], 'day': change['weekday'],
-                                             'start': change['start'], 'end': change['end']}), change.get('why', 'a shift change'))
+                                             'start': change['start'], 'end': change['end'], 'replace': True}), change.get('why', 'a shift change'))
             else:
                 raise Violation('plan', f"unknown change op '{change['op']}'")
             self.meta.setdefault('changes_done', []).append({**change, 'vehicle_id': vid})

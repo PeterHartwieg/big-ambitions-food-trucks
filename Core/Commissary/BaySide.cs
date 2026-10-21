@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FoodTrucks.Core.Fleet;
 
 namespace FoodTrucks.Core.Commissary
 {
@@ -70,5 +71,78 @@ namespace FoodTrucks.Core.Commissary
         }
 
         private static double Cross(double ax, double az, double bx, double bz) => ax * bz - az * bx;
+    }
+
+    // A vehicle's footprint clear of the driving lanes: no part of it within half a lane's width (HatchSide's
+    // LaneHalfWidthMetres) of a driving lane's centre line. A cart counts in its bay by its middle (CommissaryBays), and a
+    // cart pushed up beside a truck already in the parking lane stands with its middle still within the bay's radius but
+    // half in the road (playtest a14, 21 October 2026: Murray Hill's lane middle is 3.1 m from the driving lane's centre,
+    // and a cart beside the truck at 1.8 m across read "in the bay"). The bay rule keeps counting it (Peter: that is the
+    // player's parking); the test bridge uses this to park carts behind one another and to say when one sticks out.
+    public static class LaneClearance
+    {
+        // The flat distance from the footprint to the nearest lane's centre line: 0 when a line crosses or touches it,
+        // null without lanes (nothing known).
+        public static double? Distance(FlatBox box, IEnumerable<((double X, double Z) A, (double X, double Z) B)> lanes)
+        {
+            if (lanes == null) throw new ArgumentNullException(nameof(lanes));
+            var corners = Corners(box);
+            double? best = null;
+            foreach (var (a, b) in lanes)
+            {
+                double d;
+                if (Inside(box, a.X, a.Z) || Inside(box, b.X, b.Z)) d = 0;
+                else
+                {
+                    d = double.MaxValue;
+                    for (var i = 0; i < 4; i++)
+                        d = Math.Min(d, SegmentDistance(corners[i], corners[(i + 1) % 4], a, b));
+                }
+                if (best == null || d < best) best = d;
+            }
+            return best;
+        }
+
+        // Clear when every part of the footprint is more than halfWidth from every lane's centre line. Null when no lane
+        // was read: the caller decides what an unknown means.
+        public static bool? Clear(FlatBox box, IEnumerable<((double X, double Z) A, (double X, double Z) B)> lanes,
+            double halfWidth = HatchSide.LaneHalfWidthMetres) =>
+            Distance(box, lanes) is { } d ? d > halfWidth : (bool?)null;
+
+        private static (double X, double Z)[] Corners(FlatBox box)
+        {
+            var f = box.Forward;
+            var r = box.Right;
+            (double, double) At(double along, double across) =>
+                (box.X + f.X * along * box.HalfLength + r.X * across * box.HalfWidth, box.Z + f.Z * along * box.HalfLength + r.Z * across * box.HalfWidth);
+            return new[] { At(1, 1), At(1, -1), At(-1, -1), At(-1, 1) };
+        }
+
+        private static bool Inside(FlatBox box, double x, double z)
+        {
+            var dx = x - box.X;
+            var dz = z - box.Z;
+            const double eps = 1e-9;
+            return Math.Abs(dx * box.Forward.X + dz * box.Forward.Z) <= box.HalfLength + eps &&
+                   Math.Abs(dx * box.Right.X + dz * box.Right.Z) <= box.HalfWidth + eps;
+        }
+
+        // The shortest distance between two segments (0 when they cross).
+        private static double SegmentDistance((double X, double Z) p, (double X, double Z) q, (double X, double Z) a, (double X, double Z) b)
+        {
+            if (BaySide.FirstCrossing(p.X, p.Z, q.X, q.Z, new[] { (a, b) }) != null) return 0;
+            return Math.Min(Math.Min(PointDistance(p, a, b), PointDistance(q, a, b)), Math.Min(PointDistance(a, p, q), PointDistance(b, p, q)));
+        }
+
+        private static double PointDistance((double X, double Z) p, (double X, double Z) a, (double X, double Z) b)
+        {
+            var abx = b.X - a.X;
+            var abz = b.Z - a.Z;
+            var length = abx * abx + abz * abz;
+            var t = length < 1e-12 ? 0 : Math.Max(0, Math.Min(1, ((p.X - a.X) * abx + (p.Z - a.Z) * abz) / length));
+            var dx = a.X + abx * t - p.X;
+            var dz = a.Z + abz * t - p.Z;
+            return Math.Sqrt(dx * dx + dz * dz);
+        }
     }
 }
