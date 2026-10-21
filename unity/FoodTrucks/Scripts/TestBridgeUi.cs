@@ -266,7 +266,13 @@ namespace FoodTrucks
             }
             foreach (var toggle in Object.FindObjectsOfType<Toggle>())
             {
-                if (toggle == null || !toggle.IsActive() || !toggle.IsInteractable() || !Visible(toggle.transform, out var at)) continue;
+                if (toggle == null || !toggle.IsActive()) continue;
+                if (!toggle.IsInteractable() || !ToggleVisible(toggle, out var at))
+                {
+                    if (toggle.gameObject.activeInHierarchy && Skipped.Add(PathOf(toggle.transform)))
+                        Log.Info($"Test bridge: ui list leaves out toggle {PathOf(toggle.transform)} ({(toggle.IsInteractable() ? "not on screen" : "not interactable")}).");
+                    continue;
+                }
                 found.Add((at, new Entry { Toggle = toggle, Kind = "toggle", Text = ControlLabel(toggle.transform), Path = PathOf(toggle.transform) }));
             }
             if (TmpInput != null)
@@ -291,7 +297,7 @@ namespace FoodTrucks
             {
                 entry = last.FirstOrDefault(e => e.Id == (int)id.Value) ?? throw new BridgeError($"No entry {id} in the last ui list; list again.");
                 var target = Target(entry);
-                if (target == null || !Visible(target.transform, out _)) throw new BridgeError($"Entry {id} ({entry.Text}) is no longer on screen; list again.");
+                if (target == null || !(target is Toggle t ? ToggleVisible(t, out _) : Visible(target.transform, out _))) throw new BridgeError($"Entry {id} ({entry.Text}) is no longer on screen; list again.");
                 var now = CurrentText(entry);
                 if (now != entry.Text) throw new BridgeError($"the control with id {entry.Id} now reads '{now}'; list again.");
             }
@@ -347,6 +353,19 @@ namespace FoodTrucks
             // Furniture being placed (a right click on it, or place's start): Esc cancels it.
             if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode) open.Add("placing furniture");
             return open;
+        }
+
+        // Toggles the list left out, each logged once.
+        private static readonly HashSet<string> Skipped = new HashSet<string>();
+
+        // A toggle whose own rect has no size (the game's "Temporarily closed" switch in BizMan and the building's panel)
+        // is still clicked through its checkbox graphic or its row, so those count as where it is on screen.
+        private static bool ToggleVisible(Toggle toggle, out Vector2 at)
+        {
+            if (Visible(toggle.transform, out at)) return true;
+            if (toggle.targetGraphic != null && Visible(toggle.targetGraphic.transform, out at)) return true;
+            if (toggle.graphic != null && Visible(toggle.graphic.transform, out at)) return true;
+            return toggle.transform.parent != null && Visible(toggle.transform.parent, out at);
         }
 
         private static Component? Target(Entry entry) => (Component?)entry.Button ?? (Component?)entry.Dropdown ?? (Component?)entry.Slider ?? (Component?)entry.Toggle ?? entry.Input;
