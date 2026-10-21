@@ -67,7 +67,7 @@ namespace FoodTrucks.Core.Saves
                     if (day == null || !string.Equals(day.VehicleId, vehicleId, StringComparison.Ordinal)) continue;
                     var sales = Sum(day.SalesCents, day.CateringCents);
                     var profit = sales - Sum(Sum(day.StockCents, day.WagesCents),
-                        Sum(Sum(day.ParkingCents, day.PermitCents), Sum(day.CommissaryRentCents, day.OvernightFineCents)));
+                        Sum(Sum(day.ParkingCents, day.PermitCents), Sum(day.CommissaryRentCents, Sum(day.OvernightFineCents, day.MarketingCents))));
                     money.WeekSalesCents = Sum(money.WeekSalesCents, sales);
                     money.WeekProfitCents += profit;
                     if (entry.Day != today) continue;
@@ -95,7 +95,7 @@ namespace FoodTrucks.Core.Saves
                     if (day == null || !string.Equals(day.VehicleId, vehicleId, StringComparison.Ordinal)) continue;
                     days.Add(entry.Day);
                     total += Sum(day.SalesCents, day.CateringCents) - Sum(Sum(day.StockCents, day.WagesCents),
-                        Sum(Sum(day.ParkingCents, day.PermitCents), Sum(day.CommissaryRentCents, day.OvernightFineCents)));
+                        Sum(Sum(day.ParkingCents, day.PermitCents), Sum(day.CommissaryRentCents, Sum(day.OvernightFineCents, day.MarketingCents))));
                 }
             }
             return days.Count == 0 ? 0 : (long)Math.Round(total / (double)days.Count, MidpointRounding.AwayFromZero);
@@ -104,7 +104,7 @@ namespace FoodTrucks.Core.Saves
         // The whole business's profit over the last seven days, for its line in BizMan's list, on the same terms as
         // Econoview's Street food total: the day's sales and stock from its totals (which also hold whatever was
         // recorded before the per-vehicle breakdown began, even on a day that has both), less the itemised crew
-        // wages, parking, permits, commissary rent and overnight fines, the licence, event places and delivery fees.
+        // wages, parking, permits, commissary rent, overnight fines and marketing, the licence, event places and delivery fees.
         public static long WeekProfitCents(SaveState? state, int today)
         {
             if (state?.DailySales == null) return 0;
@@ -139,7 +139,7 @@ namespace FoodTrucks.Core.Saves
             var total = entry.RevenueCents - entry.CostCents - entry.LicenceCents - entry.EventPlacesCents - entry.DeliveryFeesCents;
             foreach (var day in entry.ByVehicle ?? new List<VehicleDay>())
                 if (day != null) total -= Sum(Sum(day.WagesCents, day.ParkingCents),
-                    Sum(day.PermitCents, Sum(day.CommissaryRentCents, day.OvernightFineCents)));
+                    Sum(day.PermitCents, Sum(day.CommissaryRentCents, Sum(day.OvernightFineCents, day.MarketingCents))));
             return total;
         }
 

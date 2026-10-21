@@ -17,6 +17,12 @@ public class ShippedDataTests
         Assert.Equal(9, tables.CategoryNames.Count);
         Assert.Equal(0.3, tables.MarketFloor);
         Assert.Empty(tables.Zones);
+        // Raised from 16 on 21 October 2026, after an AI playtest showed carts and trucks earning too little.
+        Assert.Equal(20, tables.PassersPerHour);
+        // Marketing levels, cheapest first, each priced for both vehicle kinds.
+        var marketing = ShippedData.Rules.Marketing.Levels;
+        Assert.Equal(new[] { "none", "flyers", "local", "citywide" }, marketing.Select(l => l.Id));
+        Assert.All(marketing, l => Assert.Equal(new[] { "cart", "truck" }, l.CostPerDayCents.Keys.OrderBy(k => k, StringComparer.Ordinal)));
     }
 
     [Fact]

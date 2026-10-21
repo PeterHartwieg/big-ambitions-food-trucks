@@ -344,8 +344,10 @@ namespace FoodTrucks
 
         // `at`: the absolute game minute ((day - 1) × 1440 + minute) to ask about; null is now.
         // `pitch`: a premium spot's or a running event's areas and passers (CityPitches.BonusFor).
+        // `marketing`: the vehicle's paid marketing for that day (MarketingFees.Factor).
         public static DemandQuery Query(DemandTables tables, Spot spot, IReadOnlyCollection<string> menu,
-            double reputation = 1.0, IReadOnlyDictionary<string, double>? categoryShares = null, double? at = null, PitchBonus? pitch = null)
+            double reputation = 1.0, IReadOnlyDictionary<string, double>? categoryShares = null, double? at = null, PitchBonus? pitch = null,
+            double marketing = 1.0)
         {
             var absolute = (long)Math.Floor(at ?? HireCrew.NowExact());
             var gameDay = (int)(absolute / 1440) + 1;
@@ -380,6 +382,7 @@ namespace FoodTrucks
                 Raining = RainHelper.isRaining,
                 MarketDemand = market,
                 Promotion = promotion > 0 ? promotion : 1.0,
+                Marketing = marketing,
                 Reputation = reputation,
                 CategoryShares = categoryShares,
                 // The venues as read this hour, at the asked minute: a step in an earlier hour still sees this

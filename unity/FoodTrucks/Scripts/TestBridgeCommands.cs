@@ -43,6 +43,7 @@ namespace FoodTrucks
                 case "map": RequireCity(cmd); return MapCommand(args);
                 case "route": RequireFtCity(cmd); return RouteCommand(args);
                 case "price": RequireFtCity(cmd); return PriceCommand(args);
+                case "marketing": RequireFtCity(cmd); return MarketingCommand(args);
                 case "use": return Use(args);
                 case "taxi": RequireFtCity(cmd); return Taxi(args);
                 case "phone": RequireFtCity(cmd); return Phone(args);
@@ -64,7 +65,7 @@ namespace FoodTrucks
                 case "new_game": return NewGame(args);
                 case "quit": return Quit();
                 default:
-                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, drive, vehicle, commissary, crew, route, price, use, taxi, phone, call, eat, floorplan, place, drop, pickup, handtruck, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.");
+                    throw new BridgeError($"Unknown command '{cmd}'. Commands: state, console, debug, time, money, teleport, walk, drive, vehicle, commissary, crew, route, price, marketing, use, taxi, phone, call, eat, floorplan, place, drop, pickup, handtruck, fixture, logistics, parks, day_summary, places, map, ui, shoot, save, load, new_game, quit, op.");
             }
         }
 

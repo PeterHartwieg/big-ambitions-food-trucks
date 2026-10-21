@@ -97,6 +97,16 @@
     "foodBoxesPerWeek": { "default": 10, "items": {} }
   },
 
+  "_marketing": "Marketing the player buys for one cart or truck, like the game's promotion for shops: footfall multiplies that vehicle's passers. costPerDayCents is the fee per game day by vehicle kind, in whole cents. The first level must be none (footfall 1, no cost). A level runs on a day only once that day's fee is paid: when the day changes with a level on, the day's fee is charged; a level picked during the day is paid at once, a higher one for the difference; a lower one or none refunds nothing. A refused fee turns the level off. Priced from the balance calculator at 20 passers (21 October 2026): each +10% of passers adds about $35 to $55 a day to a cart the player serves at a typical pitch and $140 to $170 to a truck with a hire, so each step up costs more than the last. Citywide pays for a cart the player serves only at good pitches; every level pays for a truck the player works with a hire, even at a typical pitch. Crewed vehicles gain less than the fee: a truck its crew runs alone about $40 a step, a cart that sells out nothing (docs/balance/marketing.md). Not yet checked in game.",
+  "marketing": {
+    "levels": [
+      { "id": "none", "footfall": 1.0, "costPerDayCents": { "cart": 0, "truck": 0 } },
+      { "id": "flyers", "footfall": 1.10, "costPerDayCents": { "cart": 2000, "truck": 6000 } },
+      { "id": "local", "footfall": 1.20, "costPerDayCents": { "cart": 4500, "truck": 14000 } },
+      { "id": "citywide", "footfall": 1.30, "costPerDayCents": { "cart": 8000, "truck": 24000 } }
+    ]
+  },
+
   "_liveCrowds": "How much of its usual crowd a venue near a pitch brings this hour (design: Live crowds from game businesses). A closed nightclub, theatre or cinema brings closedWeight. Theatre audiences come out at letOuts (minutes after midnight; 1350 is 22:30), plus weekendLetOuts at weekends (the matinee at 17:00), cinema audiences every `every` minutes from `first` to `last` (1470 is 00:30 after midnight); each surge lasts surgeMinutes at `surge` times the crowd, times weekendSurge on Saturdays and Sundays. A nightclub's guests come out for clubClosing.minutes after it closes. Offices and factories bring their staff at work divided by workers.reference, between workers.min and workers.max. The player's own nightclubs, theatres and cinemas bring their guests in the last hour divided by guests.reference, between guests.min and guests.max, times any surge; AI venues have no counts and bring their usual crowd. kinds maps the game's business types to these venues; everything else is as the area tables say. Every number is a guess.",
   "liveCrowds": {
     "closedWeight": 0.0,

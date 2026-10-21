@@ -5,6 +5,7 @@ using System.Linq;
 using AI.Citizens;
 using BigAmbitions.Items;
 using FoodTrucks.Core.Demand;
+using FoodTrucks.Core.Marketing;
 using FoodTrucks.Core.Reputation;
 using FoodTrucks.Core.Rules;
 using FoodTrucks.Core.Saves;
@@ -113,8 +114,11 @@ namespace FoodTrucks
 
             var sellable = stock.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
             var (reputation, shares) = Reputation(tables, cart, spot, vehicle, sellable);
-            var pitch = CityPitches.BonusFor(FoodTrucksSession.CurrentState, vehicle, spot, (long)Math.Floor(at ?? HireCrew.NowExact()));
-            var estimate = new DemandModel(tables).Estimate(World.Query(tables, spot, sellable, reputation.Factor, shares, at, pitch));
+            var minute = (long)Math.Floor(at ?? HireCrew.NowExact());
+            var pitch = CityPitches.BonusFor(FoodTrucksSession.CurrentState, vehicle, spot, minute);
+            // Only a level paid for the day planned for raises the passers (MarketingFees.Active).
+            var marketing = DemandData.Rules == null ? 1.0 : MarketingFees.Factor(vehicle, DemandData.Rules.Marketing, (int)(minute / 1440) + 1);
+            var estimate = new DemandModel(tables).Estimate(World.Query(tables, spot, sellable, reputation.Factor, shares, at, pitch, marketing));
 
             // Accepted demand per category: share × the conversion of the item customers accept best in it,
             // so one overpriced item doesn't block a well-priced one in the same category.

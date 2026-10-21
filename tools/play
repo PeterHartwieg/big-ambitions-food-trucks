@@ -84,6 +84,11 @@ Commands (each also takes --help):
   price VEHICLE ITEM DOLLARS|auto
                                Set what a vehicle charges for a food (look shows the item names), or go back to the
                                automatic price.
+  marketing VEHICLE none|flyers|local|citywide
+                               Market one vehicle, paid each day it runs (cart / truck a day): flyers +10% passers
+                               ($20 / $60), local +20% ($45 / $140), citywide +30% ($80 / $240). Picked during the
+                               day it is paid at once; a higher level the same day pays the difference, a lower one or
+                               none refunds nothing. A day's fee you can't pay stops it.
   route add VEHICLE ADDRESS [--days monday,...] [--open HH:MM --close HH:MM]
   route paste VEHICLE FROM_DAY TO_DAY[,TO_DAY...]|all
                                A vehicle's weekly route: add a stop by a building, or copy one day onto others.
@@ -242,6 +247,8 @@ class Play:
                      f"{', in the bay at ' + com['bay_site'] if com.get('in_bay') else ''}; space at {com.get('site') or 'no commissary'}.")
             self.out(f"  equipment: {', '.join(x['item'] for x in v.get('pieces') or []) or 'none'}; "
                      f"stock: {', '.join(str(x['amount']) + ' ' + x['item'] + (f" (price ${x['set_price']:.2f})" if x.get('set_price') is not None else '') for x in v.get('stock') or []) or 'none'}; crew: {', '.join(v.get('crew') or []) or 'none'}.")
+            if v.get('marketing_level'):
+                self.out(f"  marketing: {v['marketing_level']}" + (f" (paid through day {v['marketing_paid_through_day']})" if v.get('marketing_paid_through_day') else '') + '.')
             route = v.get('route') or {}
             for d in route.get('week') or []:
                 if d['stops']:
@@ -737,6 +744,12 @@ class Play:
         self.out(f"{r['name']}: " + (f"${set_:.2f}" if set_ is not None else 'automatic price') + ('.' if r['done'] else ' (not changed).'))
         for n in r.get('notices') or []: self.out(f'  {n}')
 
+    def marketing(self, vehicle, level):
+        self.acting()
+        r = self.call('marketing', {'vehicle': vehicle, 'level': level})
+        self.out(f"Marketing of {r['vehicle']}: {r['level']}" + ('.' if r['done'] else ' (not changed).'))
+        for n in r.get('notices') or []: self.out(f'  {n}')
+
     def route(self, op, rest, days=None, open_=None, close=None):
         self.acting()
         if op == 'add' and len(rest) == 2:
@@ -802,6 +815,7 @@ def parser():
     n = sub.add_parser('order', help='order stock from a commissary'); n.add_argument('site'); n.add_argument('pairs', nargs='+')
     n = sub.add_parser('crew', help='crew and shifts'); n.add_argument('op', choices=('assign', 'schedule', 'auto')); n.add_argument('rest', nargs='+')
     n = sub.add_parser('price', help='what a vehicle charges for a food'); n.add_argument('vehicle'); n.add_argument('item'); n.add_argument('price')
+    n = sub.add_parser('marketing', help="a vehicle's marketing level"); n.add_argument('vehicle'); n.add_argument('level', choices=('none', 'flyers', 'local', 'citywide'))
     n = sub.add_parser('route', help='a vehicle\'s route'); n.add_argument('op', choices=('add', 'paste')); n.add_argument('rest', nargs='+')
     n.add_argument('--days'); n.add_argument('--open'); n.add_argument('--close')
     n = sub.add_parser('save', help='save the game'); n.add_argument('name')
@@ -859,6 +873,7 @@ def main(argv=None, bridge=None, out=print, stop_file=None, memory=None):
         elif c == 'order': play.order(args.site, args.pairs)
         elif c == 'crew': play.crew(args.op, args.rest)
         elif c == 'price': play.price(args.vehicle, args.item, args.price)
+        elif c == 'marketing': play.marketing(args.vehicle, args.level)
         elif c == 'route': play.route(args.op, args.rest, args.days, args.open, args.close)
         elif c == 'save': play.save(args.name)
         elif c == 'load': play.load(args.name)

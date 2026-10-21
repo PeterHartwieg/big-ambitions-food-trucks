@@ -164,7 +164,7 @@ Each game neighbourhood has a character that scales area footfall and shifts app
 
 ### Footfall
 
-People passing per hour = (street baseline + Σ area presence × area curve × area day factor) × neighbourhood factor (by daypart and day) × season × weather × promotion. A player-edited data file from before 0.3.1 has no street baseline, so spots without classified buildings get no passers until one is added. Dayparts:
+People passing per hour = (street baseline + Σ area presence × area curve × area day factor) × neighbourhood factor (by daypart and day) × season × weather × promotion × the vehicle's marketing (see Marketing). A player-edited data file from before 0.3.1 has no street baseline, so spots without classified buildings get no passers until one is added. Dayparts:
 
 | Daypart | Hours |
 |---|---|
@@ -300,6 +300,19 @@ Vehicles within one block of each other add about 10% to the total foot traffic 
 AI trucks are a later version. Until then, this rule only applies between the player's own vehicles.
 
 Decided while building the Core (8 October 2026): "one block" is 80 m; each open neighbour with something to sell adds 10% footfall, at most 30%. The split is by item, not category: hot dogs and burgers are both fast food, but the cart and the truck sell different things. A category's share is the average over the vehicle's items in it of 1 ÷ (1 + the neighbours selling that item). The split applies after the menu's ranking of its categories, so losing hot dog customers never makes the pizza oven count double.
+
+## Marketing
+
+Added 21 October 2026, not yet checked in game. The player picks a marketing level for one cart or truck on its BizMan page. Like the game's promotion for shops, it multiplies that vehicle's passers, and it costs a fee every game day it runs:
+
+| Level | Passers | Cart a day | Truck a day |
+|---|---|---|---|
+| None | ×1.00 | free | free |
+| Flyers | ×1.10 | $20 | $60 |
+| Local | ×1.20 | $45 | $140 |
+| Citywide | ×1.30 | $80 | $240 |
+
+A level raises the passers only on a day its fee is paid. When the day changes with a level on, that day's fee is charged once; days the game skipped in between are neither charged nor marketed. A level picked during the day is paid at once, a higher level the same day for the difference; a lower level or none refunds nothing. If the game refuses a day's fee, the level turns off and a notice says so. Fees are tax-deductible under their own label and show as a Marketing line in Econoview and on the fleet page. The levels and prices are in `data/rules.json` (`marketing`), priced from the balance calculator so that each step up costs more than the last ([marketing.md](balance/marketing.md)). Citywide pays for a cart the player serves only at good pitches. Every level pays for a truck the player works with a hire, even at a typical pitch. Crewed vehicles gain less than the fee: a truck its crew runs alone gains about $40 a step, and a cart that sells out gains nothing. None of it is checked in game.
 
 ## Commissary and new foods
 

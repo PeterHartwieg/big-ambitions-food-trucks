@@ -146,6 +146,17 @@ namespace FoodTrucks.Core.Saves
         // A window the crew opened whose stop a route edit took away (RouteEditor.Remap): the runner closes it on its next
         // step, rather than leaving it open as if the player had opened it.
         public bool CrewWindowLost { get; set; }
+        // The marketing level the player chose (MarketingRules); null is none. An ID this version doesn't know (a newer
+        // version's level) is kept as it is and runs as none: no passers, no fee (additive field: older saves read none).
+        public string? MarketingLevel { get; set; }
+        // The last game day whose marketing fee is paid, and what was paid for that day, so a level picked again or
+        // raised the same day pays only the difference (MarketingFees; additive fields: older saves read none).
+        public int? MarketingPaidThroughDay { get; set; }
+        public long MarketingPaidCents { get; set; }
+        // The paid day before that and the level that ran on it, so sales still catching up on that day after midnight
+        // keep its marketing even once the new day's fee is paid or refused (additive fields: older saves read none).
+        public int? MarketingPreviousDay { get; set; }
+        public string? MarketingPreviousLevel { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -217,6 +228,8 @@ namespace FoodTrucks.Core.Saves
         public long PermitCents { get; set; }
         public long CommissaryRentCents { get; set; }
         public long OvernightFineCents { get; set; }
+        // The vehicle's daily marketing fees (additive field: older saves read 0).
+        public long MarketingCents { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();

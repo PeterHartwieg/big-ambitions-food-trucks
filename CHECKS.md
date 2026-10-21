@@ -1,3 +1,17 @@
+# Vehicle marketing and more passers (21 October 2026, next build)
+
+**Pending in game.** Core tests and a local SDK build only; no game session yet. Base passers per hour rise from 16 to 20. No new Harmony patches; startup logs nothing new besides the loaded rules.
+
+| # | Do | Look for |
+|---|---|---|
+| MK1 | Open a cart's BizMan page; open the Marketing dropdown | None, then Flyers, Local ads and Citywide ads with "+10% passers, $20 a day" and the cart prices; a truck shows the truck prices ($60, $140, $240) |
+| MK2 | Pick Flyers with enough money | "Marketing for …" in the bank history ($20, tax-deductible as Street food marketing); the box shows "Today: Paid, +10% passers"; the cart's Marketing line in Econoview and on the fleet page after the day's summary |
+| MK3 | Raise it to Citywide the same day, then drop to None and back to Local | Citywide charges $60 (the difference); None and Local charge nothing more that day |
+| MK4 | Sleep or skip past midnight with a level on, then skip several days with it off and turn it on again | One charge on the new day, none for the skipped days; the box shows "Paid" only on paid days |
+| MK5 | Keep a level on with less money than its fee at midnight | The level turns off and the notice "…'s marketing stopped: the day's $… couldn't be paid." shows; nothing is charged |
+| MK6 | Pick a level with too little money | The game's "not enough money" notice; the dropdown goes back to the old level |
+| MK7 | Save and load with a level on | Level and paid day survive; no second charge for the same day after the load |
+
 # Working a serving window (18 October 2026, next build)
 
 **Pending in game.** Core and mock tests cover the selling clock and controls; the native UI, animation, layout and needs still require play. No mod build or game-PC session was run for this change. At startup, `PlayerActivityUI.SetUpSpeedOptions`, `PlayerActivityUI.OnPlayerActionPressed`, the serving `GameManager.RunMainGameTick`, `ItemPanelUI.UpdateButtonsVisibility`, `ItemPanelUI.SetupCargoSlots` and `VehicleController.DriveVehicle` patches must each log `Active`.

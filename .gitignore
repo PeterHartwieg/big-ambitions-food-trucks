@@ -25,6 +25,7 @@ art/**/renders/*
 art/truck/v1/
 art/truck/v2/
 art/**/__pycache__/
+tools/**/__pycache__/
 art/**/.*
 art/**/*.log
 
