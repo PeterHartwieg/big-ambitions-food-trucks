@@ -193,6 +193,8 @@ namespace FoodTrucks.Core.Saves
                     throw new JsonSerializationException("Sold must be one record per day, naming items with at least one unit.");
                 if (vehicle.HireStop < 0)
                     throw new JsonSerializationException("HireStop must not be negative.");
+                if (vehicle.MarketingPaidThroughDay < 0 || vehicle.MarketingPaidCents < 0 || vehicle.MarketingPreviousDay < 0)
+                    throw new JsonSerializationException("MarketingPaidThroughDay, MarketingPaidCents and MarketingPreviousDay must not be negative.");
             }
 
             if (state.Regulars == null)
@@ -239,7 +241,7 @@ namespace FoodTrucks.Core.Saves
                     throw new JsonSerializationException("DailySales LicenceCents must not be negative.");
                 if (sale.ByVehicle == null || sale.ByVehicle.Any(v => v == null || string.IsNullOrEmpty(v.VehicleId) ||
                         v.SalesCents < 0 || v.CateringCents < 0 || v.StockCents < 0 || v.WagesCents < 0 || v.ParkingCents < 0 || v.PermitCents < 0 ||
-                        v.CommissaryRentCents < 0 || v.OvernightFineCents < 0) ||
+                        v.CommissaryRentCents < 0 || v.OvernightFineCents < 0 || v.MarketingCents < 0) ||
                     sale.ByVehicle.Select(v => v.VehicleId).Distinct(StringComparer.Ordinal).Count() != sale.ByVehicle.Count)
                     throw new JsonSerializationException("DailySales ByVehicle must be one entry per named vehicle, amounts not negative.");
                 total = checked(total + sale.RevenueCents);

@@ -2,10 +2,10 @@
   "_notes": "Demand tables tuned by the accepted cart balance study (8 October 2026). Calculated proposals; not yet checked in game. Keys starting with an underscore are notes; the loader ignores them.",
   "schemaVersion": 1,
 
-  "_passersPerHour": "Passers per hour at footfall 1.0, before the menu's appetite. Calibration knob for the whole model.",
-  "passersPerHour": 16,
+  "_passersPerHour": "Passers per hour at footfall 1.0, before the menu's appetite. Calibration knob for the whole model. Raised from 16 to 20 on 21 October 2026 after an AI playtest and playtester feedback showed carts and trucks earning too little.",
+  "passersPerHour": 20,
 
-  "_streetBaseline": "Ordinary street traffic, added to independent area crowds. Lunch 1.0 keeps any pavement alive at midday. With passersPerHour 16, two offices at 20 and 40 m plus a nightclub at 30 m give about 65 passers/hour at a Midtown lunch (docs/balance/cart-economics.md, section 6). Night stays low. All neighbourhood, month, rain and promotion factors still apply. First values pending balance recalibration and an in-game check.",
+  "_streetBaseline": "Ordinary street traffic, added to independent area crowds. Lunch 1.0 keeps any pavement alive at midday. With passersPerHour 16 (before the 21 October 2026 raise to 20), two offices at 20 and 40 m plus a nightclub at 30 m gave about 65 passers/hour at a Midtown lunch (docs/balance/cart-economics.md, section 6). Night stays low. All neighbourhood, month, rain and promotion factors still apply. First values pending balance recalibration and an in-game check.",
   "streetBaseline": { "early": 0.3, "morning": 0.5, "lunch": 1.0, "afternoon": 0.5, "evening": 0.3, "late": 0.08, "night": 0.03 },
 
   "_dayparts": "Start time of each daypart. Late runs past midnight; night (02 to 05) is the dead hours the design leaves out.",

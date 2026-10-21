@@ -14,7 +14,8 @@ namespace FoodTrucks.Core.Saves
         Parking,
         Permit,
         CommissaryRent,
-        OvernightFine
+        OvernightFine,
+        Marketing
     }
 
     public static class SalesLedger
@@ -83,6 +84,7 @@ namespace FoodTrucks.Core.Saves
                 case LedgerLine.Permit: vehicle.PermitCents = Add(vehicle.PermitCents, cents); break;
                 case LedgerLine.CommissaryRent: vehicle.CommissaryRentCents = Add(vehicle.CommissaryRentCents, cents); break;
                 case LedgerLine.OvernightFine: vehicle.OvernightFineCents = Add(vehicle.OvernightFineCents, cents); break;
+                case LedgerLine.Marketing: vehicle.MarketingCents = Add(vehicle.MarketingCents, cents); break;
                 default: throw new ArgumentOutOfRangeException(nameof(line));
             }
         }
@@ -126,6 +128,10 @@ namespace FoodTrucks.Core.Saves
         public static void RecordOvernightFine(SaveState state, int day, string vehicleId, long cents) =>
             RecordLine(state, day, vehicleId, LedgerLine.OvernightFine, cents);
 
+        // Like rent: only after the game payment succeeds, on the day it was paid.
+        public static void RecordMarketing(SaveState state, int day, string vehicleId, long cents) =>
+            RecordLine(state, day, vehicleId, LedgerLine.Marketing, cents);
+
         // Fleet-wide, like event places: a payment adds its fee, a refund passes a negative amount.
         // The goods price is carried into cargo and recorded by RecordCost only when those goods sell.
         public static void RecordDeliveryFees(SaveState state, int day, long cents)
@@ -155,7 +161,7 @@ namespace FoodTrucks.Core.Saves
             state != null && state.DailySales.Any(d => d != null && d.Day == day && d.InSummary);
 
         // What the day summary adds for a day the mod knows of: sales and catering, less the stock sold, the
-        // permits, commissary rent, overnight fines, the licence, event places and delivery fees. Crew wages
+        // permits, commissary rent, overnight fines, marketing, the licence, event places and delivery fees. Crew wages
         // and parking aren't in it: the game's summary has them.
         public static long DayProfitCents(SaveState? state, int day)
         {
@@ -166,7 +172,7 @@ namespace FoodTrucks.Core.Saves
                 if (entry == null || entry.Day != day) continue;
                 profit = checked(profit + entry.RevenueCents - entry.CostCents - entry.LicenceCents - entry.EventPlacesCents - entry.DeliveryFeesCents);
                 foreach (var vehicle in entry.ByVehicle)
-                    if (vehicle != null) profit = checked(profit - vehicle.PermitCents - vehicle.CommissaryRentCents - vehicle.OvernightFineCents);
+                    if (vehicle != null) profit = checked(profit - vehicle.PermitCents - vehicle.CommissaryRentCents - vehicle.OvernightFineCents - vehicle.MarketingCents);
             }
             return profit;
         }

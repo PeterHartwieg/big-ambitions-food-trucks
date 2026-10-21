@@ -41,6 +41,7 @@ namespace FoodTrucks
                     ["sales"] = D(v.SalesCents), ["catering"] = D(v.CateringCents), ["stock_cost"] = D(v.StockCostCents),
                     ["wages"] = D(v.WagesCents), ["parking"] = D(v.ParkingCents), ["permit"] = D(v.PermitCents),
                     ["commissary_rent"] = D(v.CommissaryRentCents), ["overnight_fines"] = D(v.OvernightFineCents),
+                    ["marketing"] = D(v.MarketingCents),
                     ["profit"] = D(v.ProfitCents),
                     ["sold"] = v.Sold == null ? null : new JArray(v.Sold.Select(s => new JObject { ["item"] = s.Item, ["units"] = s.Units })),
                     ["stops_served"] = v.StopsServed, ["minutes_open"] = v.MinutesOpen,
@@ -244,6 +245,33 @@ namespace FoodTrucks
                     ["done"] = text.Length == 0 ? set == null : set != null,
                     ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, instance),
                 };
+            });
+        }
+
+        // A vehicle's marketing level, as the vehicle page's Marketing dropdown picks it (BizManVehiclePage.ChooseMarketing):
+        // paid at once, a higher level the same day for the difference. done is false when the game refused the payment.
+        private static object MarketingCommand(JObject args)
+        {
+            var id = Need(args, "vehicle", "the food vehicle's id");
+            var instance = FoodVehicle(id);
+            var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
+            if (!FoodTrucksSession.CanWrite) throw new BridgeError("The mod's save data is read-only.");
+            var rules = DemandData.Rules?.Marketing ?? throw new BridgeError("The mod's rules aren't loaded.");
+            var kind = FoodTrucksMod.KindOf(instance.vehicleTypeName) ?? "cart";
+            var ids = string.Join(", ", rules.Levels.Where(l => l.IsNone || l.CostPerDayCents.ContainsKey(kind)).Select(l => l.Id));
+            var wanted = Need(args, "level", "a marketing level: " + ids);
+            var level = rules.Level(wanted);
+            if (level == null || !(level.IsNone || level.CostPerDayCents.ContainsKey(kind)))
+                throw new BridgeError($"no marketing level '{wanted}' for a {kind}; levels: {ids}");
+            var done = false;
+            return WithNotices(() =>
+            {
+                done = BizManVehiclePage.ChooseMarketing(id, level.Id);
+                Log.Info($"Test bridge: marketing {id} {level.Id}: {(done ? "done" : "not done")}.");
+            }, notices => new JObject
+            {
+                ["vehicle"] = id, ["level"] = StreetSales.Find(state, id)?.MarketingLevel ?? FoodTrucks.Core.Marketing.MarketingRules.None,
+                ["done"] = done, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, instance),
             });
         }
 

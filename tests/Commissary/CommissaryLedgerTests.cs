@@ -149,6 +149,7 @@ public class CommissaryLedgerTests
     [Theory]
     [InlineData("commissaryRentCents")]
     [InlineData("overnightFineCents")]
+    [InlineData("marketingCents")]
     public void NegativeVehicleExpensesAreCorrupt(string field) =>
         Assert.Equal(LoadStatus.Corrupt, new SaveCodec().Load("{\"schemaVersion\":2,\"dailySales\":[{\"day\":1,\"byVehicle\":[{\"vehicleId\":\"v\",\"" + field + "\":-1}]}]}").Status);
 }
