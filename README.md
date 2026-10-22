@@ -120,4 +120,4 @@ pending. This integration does not run unless a compatible Big Copilot Link call
 
 Assign as many employees as needed to each vehicle using **Add employee** in its crew panel. Schedule different staff on different weekdays or consecutive shifts. Only simultaneous work is capped: one on a cart and two on a truck. Existing roster and shift data keep their save format.
 
-Verification: automated roster/schedule/save tests passed; in-game verification pending.
+Verification: **checked in the native Mac game** with 12 truck employees and three cart employees, consecutive shifts, weekday rotation, capacity refusals, save/reload and midnight payroll. Two review rounds and automated tests passed. Windows gameplay and visual scrolling at other resolutions remain unverified. See [release verification](docs/release/0.10.4/verification.md).

@@ -1,0 +1,761 @@
+{
+  "version": "0.10.4",
+  "source_commit": "1ea6cdd",
+  "rig": "agentmac",
+  "bridge_session": "5bbe017d",
+  "build": {
+    "source_commit": "1ea6cdd",
+    "version": "0.10.4",
+    "runtime_sha256": "fc1050ef755fff74b6c55813a907dbb6a830b3876d3e462e6a3d5755c50a2392",
+    "core_sha256": "9554fd137dde6b92844a3cd85b0fc337e8332a54f5b202521483f4748c860ce0",
+    "rig_runtime_sha256": "cccdc9edf2b14d1a7f89c659f267c6f184ecb006cec0e545a52ccd517844a760",
+    "package_manifest_sha256": "db252be247e3d6770c856da7b9f9f77ad1183a03cdcb44140523ed93cbe5950f"
+  },
+  "native_rosters": {
+    "truck": [
+      "Angeline Smith",
+      "Araceli Lopez",
+      "Chris Pittman",
+      "Christopher Sullivan",
+      "Cynthia Havens",
+      "Della Wagner",
+      "Ellen Anderson",
+      "James Harris",
+      "Jesse Tondreau",
+      "Joel Johnson",
+      "John Gutierrez",
+      "Josh Martinez"
+    ],
+    "cart": [
+      "Keith Hanna",
+      "Michael Button",
+      "Patrick Wheeler"
+    ]
+  },
+  "shifts_before_reload": {
+    "truck": [
+      {
+        "employee": "Angeline Smith",
+        "id": "KdbyHuq5s0CvvDqH1Dnexg==",
+        "week_hours": 2,
+        "wants_min": 10,
+        "wants_max": 30,
+        "shifts": [
+          {
+            "day": "monday",
+            "start": 11,
+            "end": 13,
+            "station": "serving1"
+          }
+        ]
+      },
+      {
+        "employee": "Araceli Lopez",
+        "id": "D3xrqtUXkEKGc3rh+hR7AQ==",
+        "week_hours": 14,
+        "wants_min": 30,
+        "wants_max": 50,
+        "shifts": [
+          {
+            "day": "monday",
+            "start": 11,
+            "end": 13,
+            "station": "serving2"
+          },
+          {
+            "day": "saturday",
+            "start": 11,
+            "end": 17,
+            "station": "serving2"
+          },
+          {
+            "day": "sunday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          }
+        ]
+      },
+      {
+        "employee": "Chris Pittman",
+        "id": "fmqFPR22jE24CaCUWkH6Dg==",
+        "week_hours": 2,
+        "wants_min": 10,
+        "wants_max": 30,
+        "shifts": [
+          {
+            "day": "monday",
+            "start": 13,
+            "end": 15,
+            "station": "serving1"
+          }
+        ]
+      },
+      {
+        "employee": "Christopher Sullivan",
+        "id": "fl9o1FbmTkiBqKffkiZIwg==",
+        "week_hours": 14,
+        "wants_min": 30,
+        "wants_max": 50,
+        "shifts": [
+          {
+            "day": "monday",
+            "start": 13,
+            "end": 15,
+            "station": "serving2"
+          },
+          {
+            "day": "tuesday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          },
+          {
+            "day": "sunday",
+            "start": 11,
+            "end": 17,
+            "station": "serving2"
+          }
+        ]
+      },
+      {
+        "employee": "Cynthia Havens",
+        "id": "88DWPKRVzU+86H7eIPKMlw==",
+        "week_hours": 14,
+        "wants_min": 30,
+        "wants_max": 50,
+        "shifts": [
+          {
+            "day": "monday",
+            "start": 15,
+            "end": 17,
+            "station": "serving1"
+          },
+          {
+            "day": "tuesday",
+            "start": 11,
+            "end": 17,
+            "station": "serving2"
+          },
+          {
+            "day": "wednesday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          }
+        ]
+      },
+      {
+        "employee": "Della Wagner",
+        "id": "S02KnFNWwEGUEKdDV0WMKw==",
+        "week_hours": 2,
+        "wants_min": 10,
+        "wants_max": 30,
+        "shifts": [
+          {
+            "day": "monday",
+            "start": 15,
+            "end": 17,
+            "station": "serving2"
+          }
+        ]
+      },
+      {
+        "employee": "Ellen Anderson",
+        "id": "IyjtlPN3WU2v9G9D95J33A==",
+        "week_hours": 0,
+        "wants_min": 10,
+        "wants_max": 30,
+        "shifts": []
+      },
+      {
+        "employee": "James Harris",
+        "id": "hwO0NbUh3Eqj8EzmktXIOg==",
+        "week_hours": 0,
+        "wants_min": 10,
+        "wants_max": 30,
+        "shifts": []
+      },
+      {
+        "employee": "Jesse Tondreau",
+        "id": "qsQBhiI8+ECQOZInwXOOWQ==",
+        "week_hours": 12,
+        "wants_min": 30,
+        "wants_max": 50,
+        "shifts": [
+          {
+            "day": "wednesday",
+            "start": 11,
+            "end": 17,
+            "station": "serving2"
+          },
+          {
+            "day": "thursday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          }
+        ]
+      },
+      {
+        "employee": "Joel Johnson",
+        "id": "65jdS6UqTk6nAIIfS8dJbg==",
+        "week_hours": 12,
+        "wants_min": 30,
+        "wants_max": 50,
+        "shifts": [
+          {
+            "day": "thursday",
+            "start": 11,
+            "end": 17,
+            "station": "serving2"
+          },
+          {
+            "day": "friday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          }
+        ]
+      },
+      {
+        "employee": "John Gutierrez",
+        "id": "QjS++Xsf2UWsnqcgei5YSQ==",
+        "week_hours": 12,
+        "wants_min": 30,
+        "wants_max": 50,
+        "shifts": [
+          {
+            "day": "friday",
+            "start": 11,
+            "end": 17,
+            "station": "serving2"
+          },
+          {
+            "day": "saturday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          }
+        ]
+      },
+      {
+        "employee": "Josh Martinez",
+        "id": "S0Ibnurr6ECHNwp58sFSA==",
+        "week_hours": 0,
+        "wants_min": 10,
+        "wants_max": 30,
+        "shifts": []
+      }
+    ],
+    "cart": [
+      {
+        "employee": "Keith Hanna",
+        "id": "QTQj+WCnc0Kuv0+ZtTEGtw==",
+        "week_hours": 20,
+        "wants_min": 30,
+        "wants_max": 50,
+        "shifts": [
+          {
+            "day": "monday",
+            "start": 11,
+            "end": 13,
+            "station": "serving1"
+          },
+          {
+            "day": "wednesday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          },
+          {
+            "day": "friday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          },
+          {
+            "day": "sunday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          }
+        ]
+      },
+      {
+        "employee": "Michael Button",
+        "id": "IyKEqpkBKUuLu0cYSiuDJA==",
+        "week_hours": 20,
+        "wants_min": 30,
+        "wants_max": 50,
+        "shifts": [
+          {
+            "day": "monday",
+            "start": 13,
+            "end": 15,
+            "station": "serving1"
+          },
+          {
+            "day": "tuesday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          },
+          {
+            "day": "thursday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          },
+          {
+            "day": "saturday",
+            "start": 11,
+            "end": 17,
+            "station": "serving1"
+          }
+        ]
+      },
+      {
+        "employee": "Patrick Wheeler",
+        "id": "f8vQZraK4Ua8orai9IJW3g==",
+        "week_hours": 2,
+        "wants_min": 10,
+        "wants_max": 30,
+        "shifts": [
+          {
+            "day": "monday",
+            "start": 15,
+            "end": 17,
+            "station": "serving1"
+          }
+        ]
+      }
+    ]
+  },
+  "reload_identical": true,
+  "service_samples": {
+    "native-before-shifts": {
+      "clock": {
+        "day": 1,
+        "weekday": "Monday",
+        "time": "10:55",
+        "paused": true,
+        "speed": 1.0,
+        "run_until": null,
+        "arrived_at": "day 1 10:55",
+        "keep_needs": false
+      },
+      "vehicles": [
+        {
+          "kind": "truck",
+          "open": false,
+          "serving": "nobody",
+          "crew": [
+            "Angeline Smith",
+            "Araceli Lopez",
+            "Chris Pittman",
+            "Christopher Sullivan",
+            "Cynthia Havens",
+            "Della Wagner",
+            "Ellen Anderson",
+            "James Harris",
+            "Jesse Tondreau",
+            "Joel Johnson",
+            "John Gutierrez",
+            "Josh Martinez"
+          ]
+        },
+        {
+          "kind": "cart",
+          "open": false,
+          "serving": "nobody",
+          "crew": [
+            "Keith Hanna",
+            "Michael Button",
+            "Patrick Wheeler"
+          ]
+        }
+      ]
+    },
+    "native-second-shift": {
+      "clock": {
+        "day": 1,
+        "weekday": "Monday",
+        "time": "13:05",
+        "paused": true,
+        "speed": 1.0,
+        "run_until": null,
+        "arrived_at": "day 1 13:05",
+        "keep_needs": false
+      },
+      "vehicles": [
+        {
+          "kind": "truck",
+          "open": true,
+          "serving": "crew",
+          "crew": [
+            "Angeline Smith",
+            "Araceli Lopez",
+            "Chris Pittman",
+            "Christopher Sullivan",
+            "Cynthia Havens",
+            "Della Wagner",
+            "Ellen Anderson",
+            "James Harris",
+            "Jesse Tondreau",
+            "Joel Johnson",
+            "John Gutierrez",
+            "Josh Martinez"
+          ]
+        },
+        {
+          "kind": "cart",
+          "open": true,
+          "serving": "crew",
+          "crew": [
+            "Keith Hanna",
+            "Michael Button",
+            "Patrick Wheeler"
+          ]
+        }
+      ]
+    },
+    "native-third-shift": {
+      "clock": {
+        "day": 1,
+        "weekday": "Monday",
+        "time": "15:05",
+        "paused": true,
+        "speed": 1.0,
+        "run_until": null,
+        "arrived_at": "day 1 15:05",
+        "keep_needs": false
+      },
+      "vehicles": [
+        {
+          "kind": "truck",
+          "open": true,
+          "serving": "crew",
+          "crew": [
+            "Angeline Smith",
+            "Araceli Lopez",
+            "Chris Pittman",
+            "Christopher Sullivan",
+            "Cynthia Havens",
+            "Della Wagner",
+            "Ellen Anderson",
+            "James Harris",
+            "Jesse Tondreau",
+            "Joel Johnson",
+            "John Gutierrez",
+            "Josh Martinez"
+          ]
+        },
+        {
+          "kind": "cart",
+          "open": true,
+          "serving": "crew",
+          "crew": [
+            "Keith Hanna",
+            "Michael Button",
+            "Patrick Wheeler"
+          ]
+        }
+      ]
+    },
+    "native-after-shifts": {
+      "clock": {
+        "day": 1,
+        "weekday": "Monday",
+        "time": "17:05",
+        "paused": true,
+        "speed": 1.0,
+        "run_until": null,
+        "arrived_at": "day 1 17:05",
+        "keep_needs": false
+      },
+      "vehicles": [
+        {
+          "kind": "truck",
+          "open": false,
+          "serving": "nobody",
+          "crew": [
+            "Angeline Smith",
+            "Araceli Lopez",
+            "Chris Pittman",
+            "Christopher Sullivan",
+            "Cynthia Havens",
+            "Della Wagner",
+            "Ellen Anderson",
+            "James Harris",
+            "Jesse Tondreau",
+            "Joel Johnson",
+            "Josh Martinez",
+            "John Gutierrez"
+          ]
+        },
+        {
+          "kind": "cart",
+          "open": true,
+          "serving": "nobody",
+          "crew": [
+            "Keith Hanna",
+            "Michael Button",
+            "Patrick Wheeler"
+          ]
+        }
+      ]
+    },
+    "native-tuesday": {
+      "clock": {
+        "day": 2,
+        "weekday": "Tuesday",
+        "time": "11:15",
+        "paused": true,
+        "speed": 1.0,
+        "run_until": null,
+        "arrived_at": "day 2 11:15",
+        "keep_needs": false
+      },
+      "vehicles": [
+        {
+          "kind": "truck",
+          "open": true,
+          "serving": "crew",
+          "crew": [
+            "Angeline Smith",
+            "Araceli Lopez",
+            "Chris Pittman",
+            "Christopher Sullivan",
+            "Cynthia Havens",
+            "Della Wagner",
+            "Ellen Anderson",
+            "James Harris",
+            "Jesse Tondreau",
+            "Joel Johnson",
+            "Josh Martinez",
+            "John Gutierrez"
+          ]
+        },
+        {
+          "kind": "cart",
+          "open": true,
+          "serving": "crew",
+          "crew": [
+            "Keith Hanna",
+            "Michael Button",
+            "Patrick Wheeler"
+          ]
+        }
+      ]
+    }
+  },
+  "payroll": {
+    "transactions": [
+      {
+        "label": "Angeline Smith (Unassigned Daily Wage)",
+        "type": "ba:transaction_unassignedwage",
+        "amount": -38.89,
+        "balance": 499961.0,
+        "day": 1,
+        "time": "00:00"
+      },
+      {
+        "label": "Chris Pittman (Unassigned Daily Wage)",
+        "type": "ba:transaction_unassignedwage",
+        "amount": -38.89,
+        "balance": 499922.0,
+        "day": 1,
+        "time": "00:00"
+      },
+      {
+        "label": "Della Wagner (Unassigned Daily Wage)",
+        "type": "ba:transaction_unassignedwage",
+        "amount": -38.89,
+        "balance": 499883.0,
+        "day": 1,
+        "time": "00:00"
+      },
+      {
+        "label": "Christopher Sullivan (Unassigned Daily Wage)",
+        "type": "ba:transaction_unassignedwage",
+        "amount": -38.89,
+        "balance": 499844.0,
+        "day": 1,
+        "time": "00:00"
+      },
+      {
+        "label": "Patrick Wheeler (Unassigned Daily Wage)",
+        "type": "ba:transaction_unassignedwage",
+        "amount": -38.89,
+        "balance": 499805.0,
+        "day": 1,
+        "time": "00:00"
+      },
+      {
+        "label": "Keith Hanna (Unassigned Daily Wage)",
+        "type": "ba:transaction_unassignedwage",
+        "amount": -38.89,
+        "balance": 499766.0,
+        "day": 1,
+        "time": "00:00"
+      },
+      {
+        "label": "Araceli Lopez (Unassigned Daily Wage)",
+        "type": "ba:transaction_unassignedwage",
+        "amount": -38.89,
+        "balance": 499727.0,
+        "day": 1,
+        "time": "00:00"
+      },
+      {
+        "label": "Cynthia Havens (Unassigned Daily Wage)",
+        "type": "ba:transaction_unassignedwage",
+        "amount": -38.89,
+        "balance": 499688.0,
+        "day": 1,
+        "time": "00:00"
+      },
+      {
+        "label": "Michael Button (Unassigned Daily Wage)",
+        "type": "ba:transaction_unassignedwage",
+        "amount": -38.89,
+        "balance": 499649.0,
+        "day": 1,
+        "time": "00:00"
+      }
+    ],
+    "day_summary": {
+      "day": 1,
+      "today": 2,
+      "in_summary": true,
+      "fleet": {
+        "revenue": 943.5,
+        "stock_cost": 354.5,
+        "licence": 0.0,
+        "event_places": 0.0,
+        "delivery_fees": 0.0,
+        "profit": 126.49
+      },
+      "fees_paid_at": [],
+      "vehicles": [
+        {
+          "id": "JfhtDU+SgkiulH6BzZPjAQ==",
+          "kind": "truck",
+          "sales": 606.0,
+          "catering": 0.0,
+          "stock_cost": 227.0,
+          "wages": 233.34,
+          "parking": 112.5,
+          "permit": 0.0,
+          "commissary_rent": 0.0,
+          "overnight_fines": 0.0,
+          "profit": 33.16,
+          "sold": [
+            {
+              "item": "foodtrucks:itemname_choppedcheese",
+              "units": 16
+            },
+            {
+              "item": "foodtrucks:itemname_tacos",
+              "units": 16
+            },
+            {
+              "item": "foodtrucks:itemname_grilledcorn",
+              "units": 14
+            },
+            {
+              "item": "foodtrucks:itemname_dumplings",
+              "units": 8
+            }
+          ],
+          "stops_served": 1,
+          "minutes_open": 351,
+          "stock_now": [
+            {
+              "key": "foodtrucks:itemname_storagecabinet",
+              "amount": 1
+            },
+            {
+              "key": "foodtrucks:itemname_dumplingsteamer",
+              "amount": 1
+            },
+            {
+              "key": "foodtrucks:itemname_griddle",
+              "amount": 1
+            },
+            {
+              "key": "foodtrucks:itemname_corngrill",
+              "amount": 1
+            },
+            {
+              "key": "foodtrucks:itemname_dumplings",
+              "amount": 72
+            },
+            {
+              "key": "foodtrucks:itemname_tacos",
+              "amount": 64
+            },
+            {
+              "key": "foodtrucks:itemname_choppedcheese",
+              "amount": 64
+            },
+            {
+              "key": "foodtrucks:itemname_grilledcorn",
+              "amount": 66
+            }
+          ]
+        },
+        {
+          "id": "cdmaO8rYv0K1NGhSQXTmPg==",
+          "kind": "cart",
+          "sales": 337.5,
+          "catering": 0.0,
+          "stock_cost": 127.5,
+          "wages": 116.67,
+          "parking": 0.0,
+          "permit": 0.0,
+          "commissary_rent": 0.0,
+          "overnight_fines": 0.0,
+          "profit": 93.33,
+          "sold": [
+            {
+              "item": "foodtrucks:itemname_dumplings",
+              "units": 25
+            }
+          ],
+          "stops_served": 1,
+          "minutes_open": 325,
+          "stock_now": [
+            {
+              "key": "foodtrucks:itemname_storagecabinet",
+              "amount": 1
+            },
+            {
+              "key": "foodtrucks:itemname_dumplingsteamer",
+              "amount": 1
+            },
+            {
+              "key": "foodtrucks:itemname_dumplings",
+              "amount": 55
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "reviews": {
+    "round1-opus": "**SHIP.** I found no blocking defects in the roster change.\n\nWhile I was reviewing, more changes appeared in the worktree beyond the roster diff: the 0.10.4 version bump, README/design/implementation-plan/CHECKS notes, and a mock-bridge fix. I reviewed them too.\n\n## What the change gets right\n- **No roster cap:** `HireCrew.Add` (`HireCrew.cs:97`) no longer checks a limit. Duplicate and cross-vehicle assignment are still refused there (`:98`), at load (`SaveCodec.cs:178`) and in both bridges.\n- **One cart / two truck at once still holds:** `CrewPay.Team` caps who serves, `HireCrew.cs:72`. Rows are capped on every path that writes shifts:\n  - the Schedule tab builds only `Stations(Limit)` (`VehicleSchedule.cs:142`);\n  - `SyncBack` goes through `Sanitize`;\n  - `AutoSchedule` uses `FreeStation(rows)`;\n  - `SetShift` now also refuses a named row outside capacity (`WeekPlan.cs:272`). That closes the bridge path where `serving2` on a cart let two people be on shift and paid at once.\n- **Crew panel:** `BizManWeekPlan.cs:231-243` shows every assigned employee plus an Add employee row. Each row offers all unassigned hires. Choosing Unassigned on the Add row does nothing (`index != selected`, `BizManVehiclePage.cs:613`).\n- **Mock vs native bridge:** they match. A cart with `serving2` gets Clash, a truck with `serving3` gets \"Unknown station\", and an unnamed station picks the first free row.\n- **Save format:** unchanged. The new Core test covers the roster and shifts round-tripping through save and load.\n- **Mock-bridge `isinstance(e, dict)` change:** this is not roster work. 0.10.3 added `equipment._cooler`, a string, to `economy.json`, and the mock crashes on import without this fix. Keep it, but say so in the commit message.\n\n## Findings (none blocking)\n\n1. **P3, existing defect, more exposed now: crew rows are picked by position, not by employee.** `ChooseCrew` (`BizManVehiclePage.cs:628`) works on `slot`, the row's position at the time the page was drawn (`BizManWeekPlan.cs:237`).\n   - **Repro:** open a vehicle page with a long roster. While it's open, an earlier employee quits or takes a building job (`HireCrew.Check` runs hourly). Now set a later row to Unassigned or another employee.\n   - **Impact:** the employee who actually sits at that position now is removed, along with their shifts. That may not be the person the row shows.\n   - **Fix (cheap):** pass the expected current ID into `ChooseCrew` and do nothing if it no longer matches.\n\n2. **P3, existing defect, newly reachable on carts: leftover `serving2` shifts on a cart can mean two paid workers.** At load, `SaveCodec.cs:124` calls `RepairShifts(vehicle)` with the default `KnownRows`, which accepts `serving1` and `serving2` for every vehicle kind. So a cart shift on `serving2` survives load. Such shifts could only have been written by the old bridge.\n   - Before this change a cart had one employee, so this couldn't cause two paid workers. Now a second cart employee can be scheduled on `serving1` while the first sits on `serving2`.\n   - **Impact:** `CountHour` pays both (`HireCrew.cs:283-287`), but `Team` lets only one serve.\n   - The Schedule tab repairs this when it opens (`VehicleSchedule.cs:148`). The Week plan auto-fill does not: `AutoSchedule` keeps shifts on days it doesn't redo with their station as is (`WeekPlan.cs:428-430`, called from `BizManWeekPlan.cs:752`).\n   - It only affects saves made with old bridge commands. It's worth a one-line fix: repair with the kind's rows before `AutoSchedule` and in `CountHour`, or at load once the kind is known.\n\n3. **P3, design consequence to watch in game: auto-fill spreads hours across the whole roster.** `Ranked` (`WeekPlan.cs:442-447`) picks whoever is furthest below their minimum hours first, so the hours go round-robin.\n   - With many employees, each gets few hours, often below their HoursWorkingPerWeek demand. Their satisfaction drops, and with it effective skill.\n   - Employees with no shifts get `assignedWeeklyHours = 0`.\n   - This is not a correctness bug, and players can schedule by hand. Watch it during CR3.\n\n4. **P4, housekeeping:** `tools/tests/__pycache__/*.pyc` and `tools/ftlib/__pycache__/` are untracked and not ignored. Don't commit them. A temp file `.T_Griddle_BC.png.*` also appeared briefly and is gone now.\n\n## Test coverage\n- **Core:** rotation across days and back-to-back shifts for 100 staff, overstaff refusal (implicit and explicit row), save/reload, auto schedule within rows.\n- **Harness:** runs the real `Add`, `Crew` and `ChooseCrew` methods with 100 employees, including replace, remove, duplicate and cross-vehicle refusal.\n- **Mock bridge:** parity test for the new refusals.\n- **Gaps:**\n  - No test drives a Week-plan auto-fill on a save that has a leftover `serving2` cart shift (finding 2).\n  - No test for a crew list that changed after the page was drawn (finding 1).\n  - Nothing checks the native Schedule tab with many employees. Only the game can.\n\n## Useful native checks (beyond CR1\u2013CR4)\n- **Schedule tab with 6\u201310 crew:** the employee list scrolls and every employee can be picked. Drag one employee's shift over another's on the same row and see what the game does. `SyncBack` drops the overlap with only a log line (`VehicleSchedule.cs:263`), so the shift may just vanish rather than show as refused.\n- **Payroll across a handover:** run past midnight with three or more rotating cart staff. Each person's \"Unassigned Daily Wage\" should equal only their own scheduled hours, with no two cart workers paid for the same hour.\n- **Stale page:** keep the vehicle page open while an employee quits, then edit a later row (finding 1).\n- **Satisfaction after a week:** with a large auto-filled roster, check the employees' satisfaction and their HoursWorkingPerWeek demand (finding 3).\n\nNothing here is verified in game.\n",
+    "round1-astra": "SHIP\n\nNo blocking findings in the roster changes. Code inspection supports uncapped assignment, retained duplicate/cross-vehicle protection, weekday and adjacent-shift rotation, one-cart/two-truck service limits, and roster/shift persistence.\n\nThe new tests cover the main logic well. The extraction harness does not verify actual Unity scrolling, dropdowns, native schedule synchronization, or payroll.\n\nUseful native checks before release:\n\n- Use a roster taller than the viewport; reach every employee and **Add employee**, then replace/remove later entries.\n- Schedule weekday/weekend rotations and adjacent shifts; verify overlap refusal and visible crew handovers.\n- Save/reload, reopen Schedule, and confirm all assignments and shifts remain.\n- Cross an hourly handover and midnight; confirm scheduled employees receive correct wages and off-shift roster members receive none.\n- Repeat with the player serving alongside crew.\n\n`git diff --check` passed. Tests were not rerun in this read-only review; no in-game verification was performed. No files changed or rigs operated by me.",
+    "round1-sol": "SHIP\n\nNo blocking findings in the roster changes. Duplicate/cross-vehicle protection remains; scheduling and service retain one cart/two truck capacity; save serialization retains the full roster and shifts.\n\nThe new tests cover admission, replacement/removal, rotation, capacity rejection and save round trips. The extraction harness stubs native UI and weekly-work updates, so useful native checks are:\n\n- Reach the last employee and **Add employee** with a large roster; replace/remove later entries.\n- Schedule distinct weekday/weekend staff and adjacent shifts; verify overlap refusal and handovers.\n- Save/reload, reopen Schedule, and confirm every employee and shift remains.\n- Cross midnight and verify each employee\u2019s scheduled wages once, correct vehicle attribution, and no off-shift service.\n\n`git diff --check` passed. Tests were not rerun during this read-only review; no files edited or rigs operated. In-game verification remains pending.",
+    "round2-opus": "**SHIP.** Both hardening fixes are correct, and I found nothing blocking. The other roster code is unchanged since round 1.\n\n## Fix 1: stale crew rows (`BizManWeekPlan.cs:233-243`, `BizManVehiclePage.cs:621-634`)\n- **Shifted rows:** each row now remembers the employee ID it showed. If the roster changed underneath it, the row refreshes the page and changes nothing, before anyone is removed. A stale row can no longer remove or replace a different employee.\n- **Add row:**\n  - If the roster shrank, the row still adds as intended, because the slot lookup is past the end.\n  - If the roster grew (a bridge assign while the page was open), the click is refused and the page refreshes. That is safe.\n- **Employee who has left the game but is still listed:** the row's saved ID still matches until `HireCrew.Check` runs, so replacing or removing that row acts on the right ID.\n- **Bridge callers:** `TestBridgeWorld.cs:1196` and `:1201` don't pass the new check, which is correct. They work out the slot fresh from the live roster.\n- **Test:** the regression in `test_crew_roster.py:74-84` covers a resignation while the page is open, the refusal of the stale row, and a refreshed row then removing the intended employee.\n\n## Fix 2: leftover cart `serving2` shifts (`WeekPlan.cs:200`, called from `SaveCodec.cs:124`)\n- **What load does now:** a cart's shift on `serving2` moves to `serving1` when that is free. Otherwise it is dropped with a note before the save is checked, so a load never fails over it.\n- **Why that closes the payroll risk:** after load, every path keeps a cart to one row:\n  - `SetShift` refuses unknown rows (`WeekPlan.cs:272`);\n  - `SyncBack` only sees the Schedule tab's rows;\n  - `AutoSchedule` and the `serving2` shifts it keeps on days it doesn't redo were the round-1 gap, and load now removes those shifts before `AutoSchedule` sees them.\n\n  So `CountHour` can no longer pay two cart workers for the same hour.\n- **Trucks:** unaffected; they still use `KnownRows`, which is `Stations(2)`.\n- **Test:** `LegacyCartSecondRowIsRepairedAtLoadBeforeAnyoneCanBePaid` covers both outcomes (one shift dropped, one moved) and checks who is on shift afterwards.\n\n## Remaining notes (not blocking)\n1. **P4: a cart saved with an empty vehicle type keeps `serving2` at load.** Line 200 matches only `\"cart\"`. Every path that assigns crew sets the type first (`BizManVehiclePage.cs:627` and others), so a cart with shifts and no type is not realistic. No action needed.\n2. **P4: which shift survives a cart collision is decided by row, not by person.** When two cart shifts overlap, the one already on `serving1` stays and the `serving2` one is dropped. That is deterministic, and the note in the load log names the dropped shift. Acceptable for data only the old bridge could write.\n3. **P4: a refused stale pick gives no message.** The page just redraws. That is fine, but a short notice would explain why the choice didn't stick. Optional.\n4. **P4: untracked files to sort out before committing.**\n   - `unity/FoodTrucks/Scripts/TestBridgeStopCatalogue.cs.meta` is new. Unity generated it for a script that was already tracked without one. It has nothing to do with the roster, so commit it separately on purpose or leave it out.\n   - The `__pycache__/` folders should not be committed.\n5. **Mock `_cooler` filter:** correct, and needed since 0.10.3 put an explanatory string under `equipment`. It's outside the roster change, so mention it in the commit message.\n\n## Native checks still pending\n- CR1\u2013CR4.\n- The stale-row case: keep the vehicle page open while an employee quits, then edit a later row.\n- If you have a save with leftover cart `serving2` shifts, load it and confirm the load log notes the dropped shift and only one cart worker is paid each hour.\n\nNothing is verified in game.\n",
+    "round2-astra": "SHIP\n\nNo blocking findings in round 2.\n\n- The captured employee ID is checked before roster removal, preventing stale rows from modifying another employee. The regression also verifies successful removal after redraw.\n- Cart shift repair runs during `SaveCodec.Load`, before runtime/payroll access. Free legacy shifts move to `serving1`; conflicting shifts are dropped with a note. Truck capacity remains unchanged.\n- The mock importer fix and 0.10.4 version declarations are consistent.\n\n`git diff --check` passed. I inspected the regressions but did not rerun tests; the full-suite results remain pending.\n\nNative verification should include stale-row interaction after resignation and loading a legacy cart schedule before its first payroll tick, alongside CR1\u2013CR4. No files changed or rigs operated; all in-game checks remain pending.",
+    "round2-sol": "SHIP\n\nNo blocking findings in round 2.\n\n- Stale crew rows now verify the captured employee ID before removing/replacing anyone; mismatch requests a refresh. The regression checks both refusal and successful removal after refresh.\n- Cart shift repair runs during `SaveCodec.Load`, before runtime/payroll uses the state. It moves a free legacy `serving2` shift to `serving1`, drops conflicts with a note, and preserves the roster.\n- The mock importer filter correctly skips the explanatory string. Versions consistently read **0.10.4**.\n\n`git diff --check` passed. I did not rerun tests, edit files or operate rigs. Full-suite results and native checks remain pending; include stale-dropdown interaction and legacy-cart loading alongside CR1\u2013CR4."
+  },
+  "automated": {
+    "core_passed": 2016,
+    "core_skipped": 1,
+    "roster_and_bridge_python_passed": 31,
+    "packaging_python_passed": 7
+  }
+}

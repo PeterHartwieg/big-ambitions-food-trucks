@@ -17,7 +17,7 @@ Version 0.10.3 removes water from both the cooler menu and the product table, so
 
 ## Unlimited employee rosters (22 October 2026)
 
-Implemented; **pending in game**. Crew assignment and the bridge no longer cap the number of employees assigned to a vehicle. The crew panel lists all assigned employees and keeps an **Add employee** row; its header distinguishes assigned headcount from simultaneous staffing capacity. The existing Schedule tab keeps one serving row on carts and two on trucks, and its employee list includes the whole roster. Core also rejects explicit shift rows outside the vehicle's capacity. Automatic scheduling, wages and service capacity retain their existing rules; no save schema change.
+Implemented; **checked in the native Mac game on 22 October 2026** ([evidence](release/0.10.4/verification.md)). Crew assignment and the bridge no longer cap the number of employees assigned to a vehicle. The crew panel lists all assigned employees and keeps an **Add employee** row; its header distinguishes assigned headcount from simultaneous staffing capacity. The existing Schedule tab keeps one serving row on carts and two on trucks, and its employee list includes the whole roster. Core also rejects explicit shift rows outside the vehicle's capacity. Automatic scheduling, wages and service capacity retain their existing rules; no save schema change.
 
 Regression coverage: actual assignment/UI methods exercised with 100 employees per vehicle, replacement/removal and duplicate/cross-vehicle rejection; Core weekday rotation, same-day handovers, overstaffing rejection, auto scheduling and save/reload. Native acceptance: CHECKS CR1–CR4.
 

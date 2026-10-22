@@ -1,0 +1,9 @@
+[b]0.10.4 — Flexible employee rosters[/b]
+
+[list]
+[*]Assign as many employees as you need to each food cart or truck. Use Add employee in the Week plan crew panel.
+[*]Schedule different staff on different weekdays, at weekends or on consecutive shifts. The simultaneous limit remains one worker on a cart and two on a truck.
+[*]The crew header now distinguishes assigned employees from the number who can work at once.
+[*]Existing rosters and schedules retain their save format. Invalid legacy cart shifts on a second serving row are repaired when loading.
+[*]Includes the fixes from 0.10.3.
+[/list]

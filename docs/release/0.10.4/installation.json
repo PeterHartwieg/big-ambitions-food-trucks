@@ -1,0 +1,14 @@
+{
+  "version": "0.10.4",
+  "gameplay_source_commit": "1ea6cdd",
+  "installed_on": "2026-10-22",
+  "target": "C:\\Users\\Peter\\AppData\\LocalLow\\Hovgaard Games\\Big Ambitions\\ModsLocal\\FoodTrucks",
+  "backup": "C:\\Users\\Peter\\AppData\\LocalLow\\Hovgaard Games\\Big Ambitions\\FoodTrucksPackageBackups\\FoodTrucks-20261022-183557",
+  "verified_files": 19,
+  "manifest_sha256": "ae82ee6ec9ae13c6192538beda7e4c25b49778c92af03f94e19c625779ff90f0",
+  "archive": "FoodTrucks-0.10.4-rc.zip",
+  "archive_sha256": "37dae5e0f1e37b3acf72e7ba8cc19f23df03304c02e09f0036f148e8805395d8",
+  "workshop_item_3822355169_enabled": false,
+  "normal_game_running": false,
+  "publication": "not published"
+}

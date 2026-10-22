@@ -1,6 +1,6 @@
 # Unlimited employee rosters (22 October 2026)
 
-**Pending in game.** Assignment/UI harness and Core regression tests cover large rosters; the native crew list and schedule still need a visual playtest with this build.
+**Native functional checks passed on 22 October 2026:** 12 truck employees, three cart employees, native add/replace/remove, one/two serving rows, automatic and manual rotation, overlap refusals, save/reload, off-shift service stopping and exact midnight payroll. [Evidence and limits](docs/release/0.10.4/verification.md). CR1 mouse scrolling/visual layout at other resolutions remains unverified: the background rig exposes native callbacks and layout trees but cannot capture its full UI.
 
 | Check | Do | Look for |
 | --- | --- | --- |
