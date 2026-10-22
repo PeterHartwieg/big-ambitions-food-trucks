@@ -1,0 +1,42 @@
+{
+  "standing_order_setup": "seeded in a disposable copy, then loaded and saved by native game",
+  "before": [
+    {
+      "id": 1,
+      "commissaryId": "hells-kitchen",
+      "repeat": "Daily",
+      "createdDay": 1,
+      "nextDay": 2,
+      "lines": [
+        {
+          "itemName": "foodtrucks:itemname_dumplings",
+          "boxes": 1,
+          "capped": true
+        }
+      ],
+      "noSpaceTold": false,
+      "notSoldTold": []
+    }
+  ],
+  "after": [
+    {
+      "id": 1,
+      "commissaryId": "hells-kitchen",
+      "repeat": "Daily",
+      "createdDay": 1,
+      "nextDay": 2,
+      "lines": [
+        {
+          "itemName": "foodtrucks:itemname_dumplings",
+          "boxes": 1,
+          "capped": true
+        }
+      ],
+      "noSpaceTold": false,
+      "notSoldTold": []
+    }
+  ],
+  "pending_orders_unchanged": true,
+  "shared_stock_unchanged": true,
+  "cart_removed_and_closed": true
+}

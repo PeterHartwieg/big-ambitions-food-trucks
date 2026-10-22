@@ -1,0 +1,100 @@
+{
+  "target": "C:\\Users\\Peter\\AppData\\LocalLow\\Hovgaard Games\\Big Ambitions\\ModsLocal\\FoodTrucks",
+  "root_files": [
+    "DraggableWindowData.json",
+    "eventcache",
+    "Player-prev.log",
+    "Player.log",
+    "PlayerSettings.json",
+    "steam_mod_manifest.txt",
+    "tracked_commands.json"
+  ],
+  "backup": "C:\\Users\\Peter\\AppData\\LocalLow\\Hovgaard Games\\Big Ambitions\\FoodTrucksPackageBackups\\FoodTrucks-20261022-185745",
+  "files": [
+    {
+      "sha256": "5701d4b6b31b2d964b81a452b2bae00e0e98b9760c2cb1e9143751deae54825d",
+      "path": "FoodTrucks.dll"
+    },
+    {
+      "sha256": "dfb53130398530b7569d6d2686991c0dba5f6e9785b4a83fa60fd51dc6ba1ba1",
+      "path": "LICENSE.txt"
+    },
+    {
+      "sha256": "ebad5ae1255658f10d614b114a3da0aa481b5aaa88dacd1f9283a88bc0afeac6",
+      "path": "README.md"
+    },
+    {
+      "sha256": "389bb8fd202756eafd13df4887534d14df9a26d51ccfc05d655737c26fab2361",
+      "path": "AssetBundles/Mac/foodtrucks.unity3d"
+    },
+    {
+      "sha256": "30125d12b45966aa9317ce34b78ca4015fd4f0c4d317f0e248162c6058eaeee5",
+      "path": "AssetBundles/Mac/foodtrucks.unity3d.manifest"
+    },
+    {
+      "sha256": "70886dd6558d3bb42b1df63dcf77903d50995f368e7a7530465efa15ee0fa1b4",
+      "path": "AssetBundles/Windows/foodtrucks.unity3d"
+    },
+    {
+      "sha256": "27c53ebfcffdd1d4c2917efd47ced79f6ce01fdd55e4ae8ceac7db44cfc48b87",
+      "path": "AssetBundles/Windows/foodtrucks.unity3d.manifest"
+    },
+    {
+      "sha256": "49f7342e5b19c16d541967f578a505c7063afb25a041cbfe90305387959b0f99",
+      "path": "data/commissaries.json"
+    },
+    {
+      "sha256": "586a6b0b1967edf14d418beea22298eca2c9f183058797f36cda85485b5447f1",
+      "path": "data/demand.json"
+    },
+    {
+      "sha256": "4129f60a735561d407b8e56fdb7af5002bf11dd471ec32d6aa252fa072a6583a",
+      "path": "data/economy.json"
+    },
+    {
+      "sha256": "9aff7f2fde4ceb79b338b1486869b58748a0bfc90e619238bd4d1429189f86e7",
+      "path": "data/pitches.json"
+    },
+    {
+      "sha256": "46750055b0abfed54ed9aed139c269d43edbfb2a11f0c1722947859d511d0868",
+      "path": "data/rules.json"
+    },
+    {
+      "sha256": "67ec82bc6535555ee81fee9bb5a3675c175ef21267d2183bafcfa2af85413063",
+      "path": "data/vehicle-diagrams.json"
+    },
+    {
+      "sha256": "340ea58a4c815347826142fb6e034bd49d4eddd9a27069c7691f87eea9c44334",
+      "path": "data/zones.json"
+    },
+    {
+      "sha256": "7b9e756306fa3d7620e02a857c8927a6ab04973f9bd8a77d3866700a6deac55c",
+      "path": "Dependencies/0Harmony.dll"
+    },
+    {
+      "sha256": "3ba30414c69b450838502975b72cb24bfff89a30e41c3ddbdab86be65160a742",
+      "path": "Dependencies/BridgeControl.dll"
+    },
+    {
+      "sha256": "88e9f0df79f57a1d61ba29edc64cff05c3430beccf8ad49f361b673a4488cf2c",
+      "path": "Dependencies/FoodTrucks.Core.dll"
+    },
+    {
+      "sha256": "407ddd98200c9f17f49942b5a7791e288a2bd553b59bf2f462db87dbb21c50bc",
+      "path": "Dependencies/Harmony-LICENSE.txt"
+    },
+    {
+      "sha256": "c87ab25d15cdcc8984fca5545b40217d5d05dad4a4c866062402f57b32f9d0c0",
+      "path": "Locales/en.json"
+    }
+  ],
+  "normal_processes": [],
+  "verified_files": 19,
+  "manifest_sha256": "523e6ae2a69b61e5c564e0f2c99ba7aa23c8aa78bcd2f3a1d4b3d7b97ea641bb",
+  "archive_sha256": "3f92fdd2c24be6d795651d5709e06f351b2d81deb5da394641a1f99a1bbc73be",
+  "version": "0.10.5",
+  "gameplay_source_commit": "7fd17fa",
+  "installed_on": "2026-10-22",
+  "workshop_item_3822355169_enabled": false,
+  "publication": "not published"
+}
