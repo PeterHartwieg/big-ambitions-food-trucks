@@ -94,7 +94,7 @@ namespace FoodTrucks
 
         public static bool Add(SaveState state, VehicleState vehicle, EmployeeInstance employee)
         {
-            if (vehicle.Crew.Count >= Limit(vehicle.VehicleType)) return false;
+            // The roster is uncapped. Serving rows and Team limit who can work at the same time.
             if (state.Vehicles.Any(v => v.Crew != null && v.Crew.Contains(employee.id))) return false;
             vehicle.Crew.Add(employee.id);
             SetWeeklyWork(vehicle);

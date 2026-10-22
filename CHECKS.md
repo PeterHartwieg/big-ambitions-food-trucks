@@ -1,3 +1,14 @@
+# Unlimited employee rosters (22 October 2026)
+
+**Pending in game.** Assignment/UI harness and Core regression tests cover large rosters; the native crew list and schedule still need a visual playtest with this build.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| CR1 | Add at least four employees to a truck and three to a cart; scroll the crew panel, replace and remove a later employee | Every employee remains accessible; Add employee remains available; header distinguishes assigned staff from the simultaneous limit |
+| CR2 | Schedule one truck pair on weekdays and another at weekends; rotate cart employees; assign successive shifts to one serving row | All roster employees are offered; truck has only two serving rows, cart one; overlapping work on a full row is refused |
+| CR3 | Auto-fill a week with more employees than serving positions; run through shift handovers | Staff rotate, gaps are reported normally, and no more than two truck workers or one cart worker serve at once |
+| CR4 | Save and reload the larger rosters and shifts, then remove an employee | Roster and shifts survive; removal clears only that employee's shifts; others retain their hours |
+
 # Water removal (21 October 2026, next build)
 
 **Pending in game.** Water is a factory ingredient and is no longer in the street-food product table. The cooler serves soda only; the commissary catalogue no longer offers water. Existing save data is retained.

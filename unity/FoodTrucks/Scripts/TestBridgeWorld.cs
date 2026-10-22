@@ -1193,8 +1193,6 @@ namespace FoodTrucks
                         if (crew.Contains(employeeId)) throw new BridgeError($"{employeeId} is on {id} already.");
                         if (!HireCrew.Available(state).Any(e => e.id == employeeId))
                             throw new BridgeError($"{employeeId} isn't an unassigned hire (see state.employees).");
-                        var kind = FoodTrucksMod.KindOf(vehicle.vehicleTypeName);
-                        if (crew.Count >= HireCrew.Limit(kind)) throw new BridgeError($"{id} has its full crew ({crew.Count}).");
                         BizManVehiclePage.ChooseCrew(id, crew.Count, employeeId);
                         break;
                     case "unassign":

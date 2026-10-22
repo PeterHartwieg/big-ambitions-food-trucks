@@ -15,7 +15,7 @@ namespace FoodTrucks.Core.Fleet
         TooLong,
         // The employee isn't on the vehicle's crew.
         NotCrew,
-        // The row, or the crew member, has another shift at those hours.
+        // The row is unavailable, or the row/crew member has another shift at those hours.
         Clash
     }
 
@@ -197,7 +197,7 @@ namespace FoodTrucks.Core.Fleet
         {
             var notes = new List<string>();
             var schedule = vehicle?.Schedule;
-            rows ??= KnownRows;
+            rows ??= vehicle?.VehicleType == "cart" ? Stations(1) : KnownRows;
             bool Known(CrewShift s) => s.Station != null && rows.Contains(s.Station);
             if (schedule?.CrewShifts == null || schedule.CrewShifts.All(s => s == null || Known(s))) return notes;
             var kept = schedule.CrewShifts.Where(s => s != null && Known(s)).ToList();
@@ -269,6 +269,7 @@ namespace FoodTrucks.Core.Fleet
             var schedule = vehicle.Schedule ??= new HireSchedule();
             schedule.CrewShifts ??= new List<CrewShift>();
             var rows = Stations(staff);
+            if (station != null && !rows.Contains(station)) return ShiftProblem.Clash;
             var others = schedule.CrewShifts.Where(s => s != null && !(s.Day == day && s.EmployeeId == employeeId)).ToList();
             var shift = new CrewShift
             {

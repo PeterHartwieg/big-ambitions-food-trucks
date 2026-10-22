@@ -618,7 +618,7 @@ namespace FoodTrucks
         // ---- Changes ----
 
         // The crew dropdown's choice for one slot (null: Unassigned). Also the test bridge's crew command.
-        internal static void ChooseCrew(string id, int slot, string? employeeId)
+        internal static void ChooseCrew(string id, int slot, string? employeeId, string? expectedCurrentId = null, bool checkCurrent = false)
         {
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite) return;
@@ -626,6 +626,12 @@ namespace FoodTrucks
             var kind = KindOf(id);
             if (string.IsNullOrEmpty(vehicle.VehicleType)) vehicle.VehicleType = kind;
             var currentId = slot < vehicle.Crew.Count ? vehicle.Crew[slot] : null;
+            // A resignation/reassignment may have moved the roster since this dropdown was drawn.
+            if (checkCurrent && currentId != expectedCurrentId)
+            {
+                RefreshLater();
+                return;
+            }
             if (currentId == employeeId) return;
             if (currentId != null)
             {

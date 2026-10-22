@@ -14,6 +14,13 @@ Version 0.10.3 removes water from both the cooler menu and the product table, so
 
 **Status, 9 October 2026:** Milestones 3 to 7 and both rounds of playtest fixes are built and merged into `main` (0.9.2). Milestone 8 is under way: 0.9.3 shows fitted equipment in the truck, and 0.9.4 adds the commissary and the new foods; both are merged into `main` and 0.9.4 is installed for the next session (10 October 2026). Only 0.9.0 has been played; the rest waits for that session (`CHECKS.md`). Workshop packaging and release wait until the mod is finished and polished (Peter). Milestone 0 is done and played (README evidence table; session report in `evidence/milestone-0-session-1.md`). Milestone 1 was played on 8 October (README; session report in `evidence/milestone-1-session-1.md`). Selling, saves, the truck fixes and the uninstall step work. Carried into Milestone 2: the cart's grip (move the handle to the vanilla grip height and reach), a unit limit for the cart's stock, whether street food belongs in the game's day summary, the drive-by question (a workstation at the window?), and the unchecked items: hover outline, delivery refusal on a save with a warehouse, and the forced tax payment without the mod. Remaining debug keys are listed in the README; gate or remove them before the Workshop release.
 
+
+## Unlimited employee rosters (22 October 2026)
+
+Implemented; **pending in game**. Crew assignment and the bridge no longer cap the number of employees assigned to a vehicle. The crew panel lists all assigned employees and keeps an **Add employee** row; its header distinguishes assigned headcount from simultaneous staffing capacity. The existing Schedule tab keeps one serving row on carts and two on trucks, and its employee list includes the whole roster. Core also rejects explicit shift rows outside the vehicle's capacity. Automatic scheduling, wages and service capacity retain their existing rules; no save schema change.
+
+Regression coverage: actual assignment/UI methods exercised with 100 employees per vehicle, replacement/removal and duplicate/cross-vehicle rejection; Core weekday rotation, same-day handovers, overstaffing rejection, auto scheduling and save/reload. Native acceptance: CHECKS CR1–CR4.
+
 ## Serving work controls (Peter, 18 October 2026)
 
 Implemented; **pending in game**. Supersedes the earlier hatch-only panel without time controls and cart proximity-only service. `ServingActivity` implements `IPlayerActivity` for both the existing `HatchActivity` and a `CartWorkActivity` held by `CartServing`. Stopping the stance stops player service; the cart's on-foot Work the window returns to it. Truck Step out / Back to the hatch stay in place. Work state is transient; no save schema change.

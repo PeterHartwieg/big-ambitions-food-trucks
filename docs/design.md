@@ -73,9 +73,11 @@ Decided while building the Core (8 October 2026; numbers in `data/rules.json`): 
 | How it moves | Pushed on foot, anywhere in the city (slow); bridges use the game's bridge skip with walking time | Driven |
 | Equipment slots | 2 | 4 |
 | Stock | 40 units per fitted piece, 80 with Extra Storage (a one-piece cart sells out in about 4 hours at a good pitch) | 80 units per fitted piece, 160 with Extra Storage |
-| Window staff | 1 | Up to 2 |
+| Window staff at once | 1 | Up to 2 |
 | Catering | No | Yes |
 | Pitch rules | Sidewalk spots | Curb spots |
+
+The employee roster has no size limit. Add employees on the crew panel and rotate them across weekdays or consecutive shifts in Schedule. Only simultaneous work is limited: one on a cart and two on a truck. Each employee still belongs to one vehicle at a time.
 
 Slots and stock are inventory counts in version 1. The tetris layout replaces the slot count later; the item list stays the same.
 

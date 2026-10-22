@@ -115,3 +115,9 @@ that day's stops. Other days, closed-day marks and crew hours are preserved; no
 automatic route or time fitting runs through this interface. Pure synthetic route
 tests pass; SDK compilation is checked separately. In-game smoke testing remains
 pending. This integration does not run unless a compatible Big Copilot Link calls it.
+
+## Employee rosters (0.10.4)
+
+Assign as many employees as needed to each vehicle using **Add employee** in its crew panel. Schedule different staff on different weekdays or consecutive shifts. Only simultaneous work is capped: one on a cart and two on a truck. Existing roster and shift data keep their save format.
+
+Verification: automated roster/schedule/save tests passed; in-game verification pending.
