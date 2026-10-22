@@ -41,6 +41,8 @@ namespace FoodTrucks
         // In the order they stand, just before Enter vehicle.
         private static readonly Spec[] Specs =
         {
+            new Spec("FoodTrucks.SellCart", "foodtrucks:overlay_sell_cart",
+                c => CartSale.CanOffer(c.vehicleInstance), CartSale.Ask),
             new Spec("FoodTrucks.OpenForBusiness", "foodtrucks:overlay_open",
                 c => CartSelling.CanOfferOpen(c.vehicleInstance), CartSelling.OpenHere),
             new Spec("FoodTrucks.WorkCart", "foodtrucks:overlay_work_cart",
@@ -62,6 +64,20 @@ namespace FoodTrucks
         private static VehicleController? shownFor;
         private static bool failed;
         private static readonly HashSet<string> logged = new HashSet<string>();
+
+        // Vanilla hand carts bypass VehicleOverlay and immediately start pushing. At a commissary expose the
+        // cart's actions instead. Held cargo and hand trucks retain their native loading interactions.
+        internal static void CommissaryCartCtaPostfix(EntityController entityController)
+        {
+            try
+            {
+                if (CtaManager.ctaKey != "click_to_drive" || PlayerHelper.IsUsingVehicle || PlayerHelper.ItemInstanceInHands != null ||
+                    !(entityController is VehicleController controller) || !CartSale.CanOffer(controller.vehicleInstance)) return;
+                CtaManager.ctaKey = "click_to_use";
+                CtaManager.ctaAction = null;
+            }
+            catch (Exception ex) { Log.Error("Commissary cart actions: " + ex); }
+        }
 
         // Postfix on VehicleOverlay.UpdateOverlay(EntityController).
         internal static void UpdateOverlayPostfix(VehicleOverlay __instance, EntityController entityController)

@@ -138,6 +138,10 @@ namespace FoodTrucks.Core.Saves
 
         internal static void ValidateState(SaveState state)
         {
+            if (state.CartSales == null || state.CartSales.Any(s => s == null || string.IsNullOrEmpty(s.VehicleId) ||
+                    s.Name == null || s.Cents < 0 || s.Day < 1 || s.Minute < 0) ||
+                state.CartSales.Select(s => s.VehicleId).Distinct(StringComparer.Ordinal).Count() != state.CartSales.Count)
+                throw new JsonSerializationException("Cart sales must have unique vehicle IDs, valid dates and non-negative proceeds.");
             if (state.Licence == null)
                 throw new JsonSerializationException("Licence must not be null.");
             if (state.SaveCount < 0)

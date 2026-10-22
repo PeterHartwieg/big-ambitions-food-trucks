@@ -1,5 +1,7 @@
 # Unlimited employee rosters (22 October 2026)
 
+Cart-sale release 0.10.5: commissary closure, resale, crew/payroll, routes, retained stock/deliveries and reload evidence are recorded in `docs/release/0.10.5/verification.md`. Venue/pitch native coverage and Windows gameplay remain unverified.
+
 **Native functional checks passed on 22 October 2026:** 12 truck employees, three cart employees, native add/replace/remove, one/two serving rows, automatic and manual rotation, overlap refusals, save/reload, off-shift service stopping and exact midnight payroll. [Evidence and limits](docs/release/0.10.4/verification.md). CR1 mouse scrolling/visual layout at other resolutions remains unverified: the background rig exposes native callbacks and layout trees but cannot capture its full UI.
 
 | Check | Do | Look for |

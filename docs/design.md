@@ -1,5 +1,7 @@
 # Food truck mod: design
 
+Cart-sale release 0.10.5: commissary closure, resale, crew/payroll, routes, retained stock/deliveries and reload evidence are recorded in `docs/release/0.10.5/verification.md`. Venue/pitch native coverage and Windows gameplay remain unverified.
+
 Working title "Food Trucks". A public Workshop mod for Big Ambitions that adds street food as an early-game business: a cart first, then a truck, driven to legal spots around the city and worked at the window.
 
 Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](research/nyc-food-trucks-2026-10-07.md). Nothing here has been built or tested in the game. Code facts come from the 1.0 build of 23 September 2026; see [Technical answers](#technical-answers).

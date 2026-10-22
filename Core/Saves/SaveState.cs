@@ -52,6 +52,9 @@ namespace FoodTrucks.Core.Saves
         // The historical CrewTakings field name is retained.
         public List<CrewTaking> CrewTakings { get; set; } = new List<CrewTaking>();
 
+        // Confirmed cart sales awaiting payment. Kept across reload if the native payment fails.
+        public List<FoodTrucks.Core.Fleet.CartSale> CartSales { get; set; } = new List<FoodTrucks.Core.Fleet.CartSale>();
+
         // Each food vehicle's number in its name ("Food cart 2"), kept so a vehicle bought later never renumbers the
         // others (FleetNames; additive field: older saves read none and number their vehicles in ID order once).
         public List<VehicleNumber> VehicleNumbers { get; set; } = new List<VehicleNumber>();

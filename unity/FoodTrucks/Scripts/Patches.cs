@@ -199,6 +199,9 @@ namespace FoodTrucks
             Patch(typeof(Player.HUD.ItemInfoOverlays.VehicleCtaBehavior), "GetCta", new[] { typeof(EntityController) },
                 typeof(OverlayButtons), postfix: nameof(OverlayButtons.CtaPostfix));
 
+            Patch(typeof(Player.HUD.ItemInfoOverlays.CtaManager), "UpdateCta", new[] { typeof(EntityController) },
+                typeof(OverlayButtons), postfix: nameof(OverlayButtons.CommissaryCartCtaPostfix));
+
             // Commissary orders: the game's phone order form (as Square Appliances shows it) in a commissary's conversation,
             // made the commissary's: its address and delivery time, boxes at wholesale, Core's fee and total. Only while
             // the form shows for a commissary contact; the order form is used only when all six are active.

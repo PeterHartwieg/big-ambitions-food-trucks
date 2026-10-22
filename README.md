@@ -2,13 +2,17 @@
 
 A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, fit equipment, stock up and serve the crowd yourself or send a crew along a scheduled route.
 
-**Version 0.10.3, 21 October 2026:** removes factory water from the cooler menu and commissary catalogue, and includes the 0.10.1 cart interaction and 0.10.2 quit/unload fixes. The cooler serves soda only. There are 19 food and drink options without another mod, plus five optional Bakery products. Existing water stock remains in saves but is not sold or automatically restocked. Core checks cover removal; in-game checks for this update remain pending in [CHECKS.md](CHECKS.md).
+**Version 0.10.5, 22 October 2026:** carts can be sold with their equipment and stock at a commissary. Confirmation closes that cart's business while preserving earned wages, financial history and shared commissary stock/orders. Includes unlimited employee rosters and the earlier cart interaction, quit/unload and water-removal fixes. [Verification and limits](docs/release/0.10.5/verification.md).
 
 Demand depends on the spot, time, nearby businesses, weather and season. Equipment determines both the menu and food capacity; crews use the game's employees and payroll. Street food has its own save data, income and expense breakdown, and income-tax integration. Balance is calculated and still subject to playtesting; the latest study is [docs/balance/balance-pass-2026-10-14.md](docs/balance/balance-pass-2026-10-14.md).
 
 ## Installing a development build
 
 The mod is published on [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3822355169). This source update must be packaged and installed before its changes take effect; a local installation does not publish a Workshop update. Build from this repository using [Building](#building), or use a complete package supplied for testing. With the game closed, place the entire `FoodTrucks` package folder in the game's `ModsLocal` folder, preserving its asset bundles, data, locales and dependencies. A source checkout or the DLL alone is not an installable package. Restart the game after installing or replacing it. To remove it from saves, follow [Removing the mod](#removing-the-mod) first.
+
+## Selling a cart
+
+Close the cart, let go of it and park it in any commissary bay. Click it and choose **Sell cart**. The confirmation quotes the cart plus all paid equipment and stock on board at the game's resale rate. Confirming closes that cart's business, releases its permit and rental, clears its routes and shifts, and leaves its crew employed but unassigned. Earned wages remain payable; outstanding sales are paid separately. Shared commissary stock, pending deliveries and standing orders stay with you.
 
 ## Getting started
 
@@ -116,8 +120,8 @@ automatic route or time fitting runs through this interface. Pure synthetic rout
 tests pass; SDK compilation is checked separately. In-game smoke testing remains
 pending. This integration does not run unless a compatible Big Copilot Link calls it.
 
-## Employee rosters (0.10.4)
+## Employee rosters (0.10.5)
 
 Assign as many employees as needed to each vehicle using **Add employee** in its crew panel. Schedule different staff on different weekdays or consecutive shifts. Only simultaneous work is capped: one on a cart and two on a truck. Existing roster and shift data keep their save format.
 
-Verification: **checked in the native Mac game** with 12 truck employees and three cart employees, consecutive shifts, weekday rotation, capacity refusals, save/reload and midnight payroll. Two review rounds and automated tests passed. Windows gameplay and visual scrolling at other resolutions remain unverified. See [release verification](docs/release/0.10.4/verification.md).
+Verification: **checked in the native Mac game** with 12 truck employees and three cart employees, consecutive shifts, weekday rotation, capacity refusals, save/reload and midnight payroll. Two review rounds and automated tests passed. Windows gameplay and visual scrolling at other resolutions remain unverified. See [release verification](docs/release/0.10.5/verification.md).

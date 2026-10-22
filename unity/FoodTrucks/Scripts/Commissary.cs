@@ -725,6 +725,7 @@ namespace FoodTrucks
         // rent charged, orders delivered and paid, and the 04:00 check.
         private void Step(SaveState state, CommissaryRules rules, CommissaryTables sites, long now)
         {
+            CartSale.Retry(state);
             var day = (int)(now / 1440) + 1;
             var minute = (int)(now % 1440);
             PayPending(state, rules, showNotification: false);
@@ -861,6 +862,13 @@ namespace FoodTrucks
         }
 
         // Rent for every day not charged yet, today's included; a refused payment waits as a charge.
+        internal static void SettleRentForSale()
+        {
+            if (FoodTrucksSession.CurrentState == null || Rules == null || !FoodTrucksSession.CanWrite)
+                throw new InvalidOperationException("Commissary rent is unavailable.");
+            ChargeRent(FoodTrucksSession.CurrentState, Rules);
+        }
+
         private static void ChargeRent(SaveState state, CommissaryRules rules)
         {
             var today = SaveGameManager.Current.Day;

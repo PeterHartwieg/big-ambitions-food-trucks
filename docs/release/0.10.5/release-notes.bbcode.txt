@@ -1,0 +1,6 @@
+[b]Sell a cart at a commissary[/b]
+Close your cart, let go of it and park it in any commissary bay. Click it and choose Sell cart to review its resale value, including the equipment and stock on board.
+
+Confirming closes that cart's business: its permit, route, shifts, venue partnership and rented space end. Employees remain hired and become unassigned, and their earned wages remain payable. Outstanding street-food sales are paid separately. Stock, deliveries and standing orders at the commissary stay with you.
+
+Includes the fixes and unlimited employee rosters from 0.10.4.

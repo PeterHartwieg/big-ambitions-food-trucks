@@ -152,6 +152,16 @@ namespace FoodTrucks
 
         private static bool SettleTakings()
         {
+            var state = FoodTrucksSession.CurrentState;
+            if (state != null && state.CartSales.Count > 0)
+            {
+                CartSale.Retry(state);
+                if (state.CartSales.Count > 0)
+                {
+                    CartSelling.Notify("foodtrucks:cart_sale_uninstall_pending");
+                    return false;
+                }
+            }
             try { if (CartSelling.PayAllTakingsNow()) return true; }
             catch (Exception ex) { Log.Error("Uninstall: window sales: " + ex); }
             var newer = FoodTrucksSession.CurrentState == null && FoodTrucksSession.LastLoadStatus == FoodTrucks.Core.Saves.LoadStatus.NewerVersion;
