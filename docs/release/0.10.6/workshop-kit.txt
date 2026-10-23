@@ -1,7 +1,7 @@
 Street Food 0.10.6 candidate — preparation only
 
 Do not upload this candidate. Steam Workshop publication is explicitly out of scope.
-Pending native acceptance and Windows smoke must be resolved before advancing main.
+Remaining cooler/logo acceptance and production crew-driving gates must be resolved before advancing main.
 
 release-notes.txt: plain-text change note.
 release-notes.bbcode.txt: Steam-formatted change note.

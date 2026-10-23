@@ -1,0 +1,50 @@
+{
+  "session": "e4c95280",
+  "mod_version": "0.10.6",
+  "rig": "agent1",
+  "archive_sha256": "dab16e6457dc51dbc1936da32fce17dcc903f33395437faf2b9a9077927956cd",
+  "checks": {
+    "cancel_kept_cart": true,
+    "cancel_kept_money": true,
+    "sale_removed_cart": true,
+    "sale_paid_600": true,
+    "reload_no_cart": true,
+    "reload_kept_truck": true,
+    "reload_money": true,
+    "one_sale_transaction": true,
+    "logo_name_persisted": true,
+    "notice_cache_cleared": true
+  },
+  "save": "FT Street Food 0.10.6 Windows checked 20261023",
+  "balance_after_reload": 34400.0,
+  "logo_text": "Windows Kitchen 106",
+  "runtime_source_commit": "5d44cbf",
+  "notes": [
+    "Three invalid test commands were safely refused: unknown saves command, generic Confirm label, and wrong text-input argument. Subsequent observed controls succeeded.",
+    "This is focused native closure and logo persistence smoke, not full cooler/crew acceptance."
+  ],
+  "restoration": {
+    "verified_files": 105,
+    "restored": true,
+    "foodtrucks_files": 19
+  },
+  "final_lock": {
+    "instance": "agent1",
+    "held": false,
+    "owner": null,
+    "purpose": null,
+    "acquired_utc": null,
+    "expires_automatically": false,
+    "pending": 0,
+    "legacy_blocked": false
+  },
+  "stopped": true,
+  "log_check": {
+    "inactive_patches": 0,
+    "mod_errors": 0,
+    "foodtrucks_exceptions": 0,
+    "version_specific_rules": false
+  },
+  "logo_generated_size": "1024x1024",
+  "logo_body_signs": 2
+}
