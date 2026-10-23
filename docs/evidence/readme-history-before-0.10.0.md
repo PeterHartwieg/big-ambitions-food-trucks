@@ -60,4 +60,3 @@ Open from the session:
 - The game's day summary shows $0 profit: it counts only businesses in rented buildings.
 - Driving past the open cart in a vehicle within 8 m counts as working it. A workstation the player stands at may be better.
 - F6 hid the UI while spawning the test truck. It was the Camera Tools mod's Hide UI hotkey, which can be F4, F6 to F10, Home, Insert, Delete, Page Up or Down or a number key and ignores Ctrl. The game's own F7 (hide the HUD) and F8 (free camera) also ignore Ctrl but work only when the game runs with `-console`. Since 0.9.6 the debug keys avoid all of these (pending: not yet seen in game).
-
