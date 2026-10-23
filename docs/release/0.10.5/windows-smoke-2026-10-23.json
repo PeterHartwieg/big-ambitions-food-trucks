@@ -1,0 +1,18 @@
+{
+  "session": "7515651e",
+  "mod_version": "0.10.5",
+  "rig": "agent1",
+  "native_menu": true,
+  "quote": 600,
+  "cancel_retained_cart_and_cash": true,
+  "confirmed_sale_paid_once": true,
+  "balance_after_reload": 49400.0,
+  "cart_absent_after_reload": true,
+  "save": "FT Street Food 0.10.5 smoke 20261023 sold",
+  "restoration": {
+    "verified_files": 105,
+    "restored": true,
+    "foodtrucks_files": 19
+  },
+  "archive_sha256": "6b02ffea3d6bedc69337f5ff5a87afc04fb4c7f989ece543818bff3a532e80c4"
+}
