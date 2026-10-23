@@ -1,3 +1,4 @@
+#if FOODTRUCKS_CREW_DRIVING_DEV
 #nullable enable
 using System;
 using System.Collections.Generic;
@@ -620,3 +621,5 @@ namespace FoodTrucks
         private static bool Finite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
     }
 }
+
+#endif

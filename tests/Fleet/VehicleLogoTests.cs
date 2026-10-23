@@ -21,6 +21,29 @@ public class VehicleLogoTests
         Assert.Null(codec.Load("{\"schemaVersion\":2,\"vehicles\":[{\"vehicleId\":\"old\"}]}").State!.Vehicles[0].Logo);
     }
 
+    [Fact]
+    public void TwoDesignsRemainIndependentAcrossRepeatedReloadRemovalAndMissingIcon()
+    {
+        var state = new SaveState();
+        StreetSales.GetOrAdd(state, "truck-a").Logo = new VehicleLogo("Alpha", "missing-custom-icon.png", "Rubik", "FFFFFFFF", "FF8800FF", "000000FF").Save();
+        StreetSales.GetOrAdd(state, "truck-b").Logo = new VehicleLogo("Beta", "burger", "Rubik", "000000FF", "FFFFFFFF", "FF8800FF").Save();
+        var expected = StreetSales.Find(state, "truck-b")!.Logo!.DeepClone();
+        var codec = new SaveCodec();
+        for (var i = 0; i < 50; i++)
+        {
+            state = codec.Load(codec.Serialize(state)).State!;
+            Assert.Equal(2, state.Vehicles.Count);
+            Assert.True(JToken.DeepEquals(expected, StreetSales.Find(state, "truck-b")!.Logo));
+            var first = StreetSales.Find(state, "truck-a")!;
+            Assert.Equal("missing-custom-icon.png", VehicleLogo.Read(first.Logo)!.Shape);
+            first.Logo = null;
+            var removed = codec.Load(codec.Serialize(state)).State!;
+            Assert.Null(StreetSales.Find(removed, "truck-a")!.Logo);
+            Assert.True(JToken.DeepEquals(expected, StreetSales.Find(removed, "truck-b")!.Logo));
+            first.Logo = new VehicleLogo("Alpha", "missing-custom-icon.png", "Rubik", "FFFFFFFF", "FF8800FF", "000000FF").Save();
+        }
+    }
+
     [Theory]
     [InlineData("{\"version\":999,\"future\":true}")]
     [InlineData("{\"version\":1,\"name\":42}")]

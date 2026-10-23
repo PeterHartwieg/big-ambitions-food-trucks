@@ -1,3 +1,4 @@
+#if FOODTRUCKS_CREW_DRIVING_DEV
 #nullable enable
 using System;
 using System.Collections.Generic;
@@ -367,3 +368,5 @@ namespace FoodTrucks
         private static void Error(JArray errors, string section, Exception ex) => errors.Add(new JObject { ["section"] = section, ["message"] = Short(ex.Message) });
     }
 }
+
+#endif

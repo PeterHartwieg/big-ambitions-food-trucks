@@ -1,0 +1,118 @@
+Street Food 0.10.6 final — 23 October 2026
+
+Peter chose to release 0.10.6 with physical crew driving held back. This supersedes
+the earlier candidate's release stop; its evidence remains historical, bound to
+its own archive hashes. No Workshop upload, SteamCMD or Mod Creator operation.
+
+Release gate
+- Physical probe components, native traffic/vehicle adapters, Harmony hooks and
+  bridge command compile only with FOODTRUCKS_CREW_DRIVING_DEV. Normal builds
+  contain an inert static seam: no start method, component, ownership or hooks.
+- The standard build runs tools/release/VerifyRelease.csproj against the actual
+  packaged DLL and fails if probe types, calls, command/help strings or a mutable
+  seam survive. It also checks version 0.10.6, retained timed HireRoutes and schema 2.
+- Compiled release-seam tests try an environment-variable opt-in and 50 lifecycle
+  calls: ownership stays false and no activation method exists. Locale/tuning
+  tests expose no physical-driving setting or text. Notes have no driving claims.
+- Both native release rigs rejected crew_drive_probe/start as an unknown command,
+  even with the private test bridge active and the correct lease token.
+- The production timed/offscreen crew backend and save schema 2 are unchanged.
+
+Automated results
+- Core Release suite: 2,127 passed, zero failed, one opt-in long-soak skip.
+  The earlier 200-seed x 365-day run passed on 781fe33; not rerun for this gate-only
+  runtime change. Core production code and economic tuning did not change here.
+- Full tools suite: 250 passed in-process. The additional release-copy/footer test
+  and final focused gate/traffic suites passed (251 total test cases now present).
+  Existing developer probe harnesses explicitly opt into the development symbol.
+- Unity official SDK Windows/Mac bundles built and validated; no compiler errors.
+  Existing SDK duplicate-type warnings remain. Package verification is separate.
+- New historical-cargo tests rotate multiple small/large/nested fridge layouts
+  for carts and trucks; they preserve menu validity, soda capacity and dedicated
+  versus general placement. These are reconstructed cargo layouts, not old saves.
+- New two-logo Core test performs 50 save/reload/remove cycles with a missing
+  custom-icon identifier and preserves the independent second design. Existing
+  tests retain malformed/future cosmetics without invalidating financial state.
+- Offline economics: cooler-economics.json/txt, 30 paired seeds for carts/trucks
+  with and without a cooler at synthetic quiet/busy/saturated office pitches.
+  Records food, soda add-ons/standalone sales, revenue, sold-stock cost, restocks
+  and full queues. Uses shipped rules and prices, hourly instantaneous top-ups,
+  identical food stock/service, no wages/rent/travel/profit claim or tuning change.
+  Saturated soda queues displace about 20 cart / 29 truck food orders per day;
+  total revenue rises in these particular scenarios. Native economics remains open.
+
+Native Mac — session e0080384
+- Acquired stopped/unleased agentmac; verified every original receipt hash before
+  install. Tested release source DLL c74f8040d5fb0529e731cadd1b655a4ad8a6906659020805269bb86a11b0315c
+  with only the established private bridge adaptation. Three native game adapters
+  matched the rig. Separate FT saves, normal profile untouched.
+- Loaded earlier cooler/branded fixture and immediately saved a disposable copy.
+  Initial truck: full general layout plus fridge, 318 soda cans with Extra Storage.
+- Ordered and delivered a small fridge using native commissary paths, returned the
+  corn grill to free a general place, fitted the second fridge, returned the large
+  fridge and refitted it after the small fridge. Every operation succeeded and
+  retained all 318 cans. Grouped cooler capacity changed 320 -> 160 -> 320 weighted
+  units (640 -> 320 -> 640 soda capacity with Extra Storage). Corn stock returned
+  separately to the commissary: 80 units. No invalid-menu closure or stock loss.
+- Spawned a second disposable truck; native editor saved its distinct design.
+  First truck retained Corner Kitchen 106. Removing the first design retained the
+  second truck's design; its final name was Second Kitchen 106. Native generator
+  made 1024x1024 textures and two signs for the second truck, also after reload.
+- Save/reload retained money, licence, ledger, commissary, all three vehicle IDs,
+  stock, equipment, open states and crew; reopened second editor retained its name.
+- Two camera attempts were obstructed (railing/building). They do NOT close visual
+  sign/cooler acceptance. No claim of native drive/hide-show/despawn coverage.
+- Graceful stop. Always-on log checker: zero inactive patches, mod errors or
+  FoodTrucks exceptions. Known unrelated missing-bundle messages are not a globally
+  clean-log claim. Original package/receipt restored: 263 recorded hashes and all
+  19 original mod files verified; lease released, rig stopped.
+
+Native Windows — session df2115ec
+- Initially busy: PID 6960, owner persistent-city-neighborhood-skip-20261023, pending
+  load. Waited while doing local work. Later stopped and unleased; acquired agent1.
+  No takeover, wake, unrelated process/session change or optional-mod replacement.
+- Installed the same release source with the established private bridge adaptation;
+  game adapter source/patched hashes matched the current rig receipt.
+- Loaded earlier FT Street Food 0.10.6 Windows checked 20261023 and immediately made
+  a new copy. Runtime 0.10.6/runtime 6, isolated agent1, Steam disconnected,
+  Workshop false, Steam-stat writes false. Physical start command rejected.
+- $34,400, one truck, sold cart absent; native Branding editor retained
+  Windows Kitchen 106. This is a final-build regression smoke, not the full cooler
+  acceptance or a new Windows rendering/physics campaign.
+- Graceful stop. Always-on checker: zero inactive patches, mod errors or FoodTrucks
+  exceptions. Restored original package/receipt: 105 recorded hashes plus all 19
+  original mod files verified. Stopped and lease released.
+- A few driver requests used wrong argument names/unknown save/UI operations and
+  were safely refused. Corrected calls passed; no product assertion failed.
+
+Acceptance coverage / remaining manual checks
+CSF1: Core full-kitchen/small/large/nested/order checks and prior native full-cart/
+      truck checks retained; new native two-fridge transfer/refitting passed.
+      Every stocked-fridge fitting permutation on both native vehicle kinds remains.
+CSF2: Earlier Blender clearances/native static views retained. Both cart queue sides,
+      pushing/driving, visibility, hatch extremes and repeated respawn require playtest.
+CSF3: Core diagrams/capacity and prior native 318/320 BizMan fill retained; exhaustive
+      empty/removed/hover/layer interactions remain manual.
+CSF4: Reconstructed historical multi-fridge cargo tests and current-build native
+      two-fridge save/reload passed. A genuine pre-feature multi-fridge native save
+      is still needed; do not label the new fixture historical.
+CSF5: Matched offline campaign complete with explicit limitations above; matched
+      multi-day native quiet/busy/saturated economics/restocking remains manual.
+LG1: Native text/save/reopen and earlier editor controls retained; imported PNG,
+     all font/colour combinations and unsaved-draft visual review remain manual.
+LG2: Static geometry and two-sign generation retained; unobstructed both-side views,
+     driving/hide-show/despawn and longer lifecycle acceptance remain manual.
+LG3: Native two-truck edit/removal isolation and reload tested. Ordinary-shop editor
+     regression remains manual; code reading is not counted as a native pass.
+LG4: Core old/future/malformed/missing-icon save tests pass. Removing a real custom
+     PNG and inspecting native fallback/recovery is still manual.
+Optional-mod job/licence/help native behavior remains outside this focused smoke.
+Physical-driving Gate A/later campaigns are deferred work, not 0.10.6 release gates.
+
+Evidence and artifacts
+- final-native.json: compact receipts and evidence hashes.
+- package-verification.json, package.sha256, archive.sha256: final archive inventory,
+  hashes and DLL verification. Original candidate archives remain in ignored build/.
+- Plain/bbcode change notes, full Workshop description (19 base products, exact
+  final Support footer, under 8000 characters), preview and workshop-kit.txt here.
+- Raw replies, logs, backups and scripts: ignored build/final-0.10.6/ in this worktree.

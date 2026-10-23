@@ -1,3 +1,4 @@
+#if FOODTRUCKS_CREW_DRIVING_DEV
 #nullable enable
 using System;
 using System.Linq;
@@ -97,3 +98,5 @@ namespace FoodTrucks
         }
     }
 }
+
+#endif

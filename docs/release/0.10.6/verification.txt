@@ -1,3 +1,10 @@
+FINAL STATUS (23 October): 0.10.6 with physical crew driving held back.
+See final-verification.txt and final-native.json for current results and manual
+checks; package-verification.json now describes the final ZIP. The candidate-only
+stop and hashes below are historical and superseded by Peter's final scope.
+
+--- Historical candidate evidence follows ---
+
 Street Food 0.10.6 (cooler/logos/crew driving) — candidate, NOT RELEASED
 
 Based on current main b0b5faf and WIP db85079 (981df6d, a09a814).

@@ -26,7 +26,7 @@ class CrewBodyTests(unittest.TestCase):
         includes = ''.join(f'<Compile Include="{escape(str(p))}" />' for p in files)
         (folder / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>
-<DefineConstants>CREW_PROBE_BODY_TESTS</DefineConstants><Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems><NuGetAudit>false</NuGetAudit></PropertyGroup>
+<DefineConstants>FOODTRUCKS_CREW_DRIVING_DEV;CREW_PROBE_BODY_TESTS</DefineConstants><Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems><NuGetAudit>false</NuGetAudit></PropertyGroup>
 <ItemGroup>{includes}</ItemGroup></Project>''')
         built = subprocess.run(['dotnet', 'build', str(folder / 'Harness.csproj'), '--nologo', '-v:q',
                                 '-m:1', '-nr:false', '-p:UseSharedCompilation=false'],

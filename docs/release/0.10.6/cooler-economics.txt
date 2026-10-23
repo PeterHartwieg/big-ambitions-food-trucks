@@ -1,0 +1,22 @@
+Offline matched cooler comparison — 0.10.6
+
+Offline synthetic matched office pitches; shipped demand/queue/service rules; 30 paired seeds; 10:00–18:00 dry May Wednesday, default prices and skill; quiet/busy/saturated use 0.15/1/6 demand multipliers. Hourly instantaneous top-ups; no travel, payroll, rent or profit claim. Same food equipment and capacity with/without one dedicated fridge. No tuning changes. Native visual/economic validation remains separate.
+
+Mean per 8-hour day over 30 paired seeds. Revenue and sold-stock cost in dollars.
+kind | pitch | cooler | food orders | soda add-ons | standalone soda | revenue | stock cost | restocks | queue-full exits
+cart | quiet | False | 8.97 | 0.00 | 0.00 | 104.46 | 39.90 | 3.80 | 0.00
+cart | quiet | True | 8.13 | 3.87 | 4.40 | 119.55 | 40.33 | 4.87 | 0.00
+cart | busy | False | 62.17 | 0.00 | 0.00 | 724.24 | 276.64 | 5.90 | 0.67
+cart | busy | True | 56.10 | 29.33 | 23.53 | 812.17 | 276.08 | 6.77 | 1.70
+cart | saturated | False | 106.40 | 0.00 | 0.00 | 1239.56 | 473.48 | 6.97 | 248.93
+cart | saturated | True | 86.23 | 54.30 | 64.37 | 1360.62 | 443.07 | 7.00 | 339.83
+truck | quiet | False | 8.97 | 0.00 | 0.00 | 104.46 | 39.90 | 3.80 | 0.00
+truck | quiet | True | 8.17 | 3.97 | 4.40 | 120.24 | 40.53 | 4.90 | 0.00
+truck | busy | False | 63.03 | 0.00 | 0.00 | 734.34 | 280.50 | 5.90 | 0.00
+truck | busy | True | 58.40 | 29.27 | 24.57 | 841.86 | 286.80 | 6.77 | 0.00
+truck | saturated | False | 182.17 | 0.00 | 0.00 | 2122.24 | 810.64 | 6.97 | 179.50
+truck | saturated | True | 153.13 | 90.30 | 86.00 | 2312.90 | 769.59 | 7.00 | 251.57
+
+Interpretation: mixed-menu soda orders can displace food at busy/saturated queues. The saturated cart loses about 20 food orders/day and the truck 29 while total revenue rises in these scenarios. This is conditional evidence, not a native traffic-calibrated profit estimate. No price, demand, wage or queue tuning was changed for this final release.
+Reproduce: dotnet run --project tools/cooler-acceptance -- .
+Input hashes are in cooler-economics.json.

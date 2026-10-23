@@ -1,3 +1,4 @@
+#if FOODTRUCKS_CREW_DRIVING_DEV
 #nullable enable
 using System;
 using System.Linq;
@@ -415,3 +416,20 @@ namespace FoodTrucks
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }
+
+#else
+#nullable enable
+namespace FoodTrucks
+{
+    // Release builds retain only harmless compatibility calls for the timed backend.
+    // No component, hooks, command handler, ownership or start method is compiled.
+    internal static class CrewDriveProbe
+    {
+        internal static bool Active => false;
+        internal static bool Owns(string? id) => false;
+        internal static bool Owns(VehicleController? vehicle) => false;
+        internal static bool StopAll(string reason) => true;
+        internal static void ResetSession() { }
+    }
+}
+#endif

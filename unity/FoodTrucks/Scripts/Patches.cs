@@ -288,7 +288,9 @@ namespace FoodTrucks
             else PatchBridge(nwhVehicle, "OnCollisionEnter", new[] { typeof(UnityEngine.Collision) }, "collisions",
                 postfix: nameof(TestBridgeCommands.VehicleCollisionPostfix));
             TestBridgeCommands.ReportLoadCheck();
+#if FOODTRUCKS_CREW_DRIVING_DEV
             CrewProbeHooks.Install(harmony!);
+#endif
         }
 
         // args null: the method's only overload, named without its parameters.

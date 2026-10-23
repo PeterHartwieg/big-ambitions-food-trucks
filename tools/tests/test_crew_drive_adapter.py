@@ -27,7 +27,7 @@ class CrewDriveAdapterTests(unittest.TestCase):
         includes = ''.join(
             f'<Compile Include="{escape(str(ROOT / "unity/FoodTrucks/Scripts" / name))}" />'
             for name in ('CrewDriveProbe.cs', 'CrewProbeHooks.cs'))
-        (folder / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>
+        (folder / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><DefineConstants>FOODTRUCKS_CREW_DRIVING_DEV</DefineConstants>
 <OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>
 <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><NuGetAudit>false</NuGetAudit>
 <EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup><ItemGroup>

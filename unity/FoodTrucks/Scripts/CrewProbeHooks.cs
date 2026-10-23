@@ -1,3 +1,4 @@
+#if FOODTRUCKS_CREW_DRIVING_DEV
 #nullable enable
 using System;
 using System.Linq;
@@ -79,3 +80,5 @@ namespace FoodTrucks
         private static bool Skip() => CrewDriveProbe.StopAll("Time-machine skip");
     }
 }
+
+#endif

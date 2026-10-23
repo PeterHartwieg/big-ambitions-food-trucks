@@ -24,7 +24,7 @@ class CrewShapeTests(unittest.TestCase):
                   ROOT / 'tools/tests/crew_probe_shape/Scenarios.cs']
         includes = ''.join(f'<Compile Include="{escape(str(p))}" />' for p in files)
         (folder / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk">
-<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>
+<PropertyGroup><DefineConstants>FOODTRUCKS_CREW_DRIVING_DEV</DefineConstants><OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>
 <Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems><NuGetAudit>false</NuGetAudit></PropertyGroup>
 <ItemGroup>{includes}<PackageReference Include="Newtonsoft.Json" Version="13.0.2" /></ItemGroup></Project>''')
         built = subprocess.run(['dotnet', 'build', str(folder / 'Harness.csproj'), '--nologo', '-v:q',

@@ -32,7 +32,9 @@ namespace FoodTrucks
                 case "teleport": RequireFtCity(cmd); return Teleport(args);
                 case "walk": RequireFtCity(cmd); return Walk(args);
                 case "drive": RequireCity(cmd); return Drive(args);
+#if FOODTRUCKS_CREW_DRIVING_DEV
                 case "crew_drive_probe": RequireFtCity(cmd); return CrewDrive(args);
+#endif
                 case "vehicle": RequireFtCity(cmd); return Vehicle(args);
                 case "commissary": RequireFtCity(cmd); return CommissaryCommand(args);
                 case "crew": RequireFtCity(cmd); return Crew(args);

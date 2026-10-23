@@ -956,7 +956,9 @@ namespace FoodTrucks
         private static JToken TeleportVehicle(string id, Vector3 target, float? heading, bool clear, List<Blocker>? blockers = null,
             List<Vehicles.DeliveryDriverJob.DeliveryJobStartController>? vans = null)
         {
+#if FOODTRUCKS_CREW_DRIVING_DEV
             if (CrewDriveProbe.Owns(id)) throw new BridgeError("Truck belongs to the crew driving probe; stop its generation before teleporting.");
+#endif
             vans ??= Vans();
             var vehicle = DrivenVehicle(id);
             var controller = Spawned(vehicle);
@@ -1073,7 +1075,9 @@ namespace FoodTrucks
             var op = Need(args, "op", "open, close, fast_forward, skip_work, stop_work, work_window, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy");
             if (op == "buy") return Buy(args);
             var id = Need(args, "id", "the food vehicle's id");
+#if FOODTRUCKS_CREW_DRIVING_DEV
             if (op != "enter" && CrewDriveProbe.Owns(id)) throw new BridgeError("Truck belongs to the crew driving probe; stop it first.");
+#endif
             if (id == DrivingVehicle) throw new BridgeError($"{id} is on a drive: wait for it (drive status).");
             // Getting into and out of any car or van works as for a truck (a job's hired van, a car of your own).
             var vehicle = (op == "enter" || op == "exit") && SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v != null && v.id == id) is { } any

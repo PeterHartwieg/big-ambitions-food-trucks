@@ -76,3 +76,6 @@ If cleanup reports a problem, keep the mod enabled and try again.
 [h2]Credits[/h2]
 
 A HART. mod by Peter Hartwieg. Uses the official Hovgaard Games modding SDK and Harmony by Andreas Pardeike. MIT licence and required notices are included.
+
+[h2]Support[/h2]
+The mod is free and stays free. If you'd like to say thanks, you can [url=https://www.paypal.com/donate/?hosted_button_id=Q8KVURCRBFLQN]support my Big Ambitions projects via PayPal[/url].

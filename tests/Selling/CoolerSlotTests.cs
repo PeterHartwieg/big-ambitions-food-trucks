@@ -34,6 +34,31 @@ public class CoolerSlotTests
         }
     }
 
+    [Theory]
+    [InlineData("cart", 2, 80)]
+    [InlineData("truck", 4, 160)]
+    public void HistoricalMultipleFridgesKeepCapacityAcrossEveryFittingOrder(string kind, int slots, int cans)
+    {
+        // Native saves own cargo separately; these are historical cargo layouts, not native save fixtures.
+        for (var count = 1; count <= slots; count++)
+        {
+            var old = Enumerable.Range(0, count).Select(i => Line(i % 2 == 0 ? Small : Large, nested: i % 2 == 1))
+                .Append(Line("ba:itemname_sodacan", count * cans - 3)).ToArray();
+            for (var rotation = 0; rotation < old.Length; rotation++)
+            {
+                var cargo = old.Skip(rotation).Concat(old.Take(rotation)).ToArray();
+                Assert.Equal(MenuProblem.None, Menu.FromCargo(Tables, kind, cargo).Problem);
+                Assert.Equal(3, Storage.Check(Tables, kind, cargo, "ba:itemname_sodacan", 9999, false).Allowed);
+                var pieces = Enumerable.Repeat("cooler", count).Append("hotdoggrill").ToArray();
+                var layout = EquipmentLayout.Place(pieces, slots, 1, p => p);
+                Assert.Equal(count + 1, layout.Count);
+                Assert.Single(layout, p => p.Slot == slots && p.Piece == "cooler");
+                Assert.Equal(count - 1, layout.Count(p => p.Slot < slots && p.Piece == "cooler"));
+                Assert.Equal(1, Storage.Check(Tables, kind, cargo, "ba:itemname_hotdoggrill", 1, false).Allowed);
+            }
+        }
+    }
+
     [Fact]
     public void ExtraFridgesStillUseGeneralSlotsIncludingAStack()
     {

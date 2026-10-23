@@ -2,7 +2,7 @@
 
 Start with a food cart and grow into a fleet of food trucks. Choose your equipment and menu, find customers around the city, work the serving window yourself or send a crew along a weekly route.
 
-**Version 0.10.6 release candidate; not released.** Bugs and balance changes are still possible. We recommend a new save or a backup of your existing save before enabling the mod. Read the removal instructions before unsubscribing.
+**Version 0.10.6.** Bugs and balance changes are still possible. We recommend a new save or a backup of your existing save before enabling the mod. Read the removal instructions before unsubscribing.
 
 ## Start small and grow
 
@@ -78,9 +78,9 @@ Created by Peter Hartwieg. Uses the official Hovgaard Games modding SDK and Harm
 
 **Released in 0.10.3:** water has been removed from the street-food menu and commissary catalogue. It is a factory ingredient; the cooler serves soda only. Existing saved stock is retained. Core checks cover the removal.
 
-The released baseline is 0.10.5 (`b0b5faf`). Peter accepted functionality and save safety following playtests on 18 October 2026. Release preparation focuses on packaging, presentation and community testing; the Workshop upload status is recorded in `docs/release/0.10.0/README.md` in the repository.
+The current package is 0.10.6; final validation and remaining manual checks are in [the release evidence](docs/release/0.10.6/final-verification.txt). Peter accepted functionality and save safety following playtests on 18 October 2026. Release preparation focuses on packaging, presentation and community testing; the Workshop upload status is recorded in `docs/release/0.10.0/README.md` in the repository.
 
-Build with the .NET SDK, Unity 2022.3.62f2 and the official Big Ambitions SDK: `dotnet test`, then `tools/build-mod.sh --generate`. Package with `python3 tools/package-release.py --output build/FoodTrucks-0.10.6-rc.zip`.
+Build with the .NET SDK, Unity 2022.3.62f2 and the official Big Ambitions SDK: `dotnet test`, then `tools/build-mod.sh --generate`. Package with `python3 tools/package-release.py --output build/FoodTrucks-0.10.6.zip`.
 
 A supplied local package installs as a complete `FoodTrucks` folder in `ModsLocal`, with the game closed. The DLL or source checkout alone is not installable. Open the folder through **Mods → Mod Creator → Browse mod folder**.
 
@@ -92,4 +92,4 @@ MIT, see `LICENSE.txt`. The truck uses the SDK example's physics setup and dirt 
 
 ## Previous release verification
 
-Unlimited rosters retain the [0.10.4 native checks](docs/release/0.10.4/verification.md). Cart closure retains the [0.10.5 checks](docs/release/0.10.5/verification.md), including pending deliveries, standing orders and earned payroll. Crew driving remains a test-only probe; production routes use timed offscreen travel.
+Unlimited rosters retain the [0.10.4 native checks](docs/release/0.10.4/verification.md). Cart closure retains the [0.10.5 checks](docs/release/0.10.5/verification.md), including pending deliveries, standing orders and earned payroll. Scheduled crews use timed offscreen travel.

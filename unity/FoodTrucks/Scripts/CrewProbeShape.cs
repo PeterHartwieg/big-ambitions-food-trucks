@@ -1,3 +1,4 @@
+#if FOODTRUCKS_CREW_DRIVING_DEV
 #nullable enable
 using UnityEngine;
 
@@ -53,3 +54,5 @@ namespace FoodTrucks
             float.IsInfinity(v.y) || float.IsNaN(v.z) || float.IsInfinity(v.z));
     }
 }
+
+#endif

@@ -24,7 +24,7 @@ class CrewTrafficTests(unittest.TestCase):
                      ROOT / 'tools/tests/crew_probe_traffic/Scenarios.cs']
             includes = ''.join(f'<Compile Include="{escape(str(p))}" />' for p in files)
             (folder / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk">
-<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>
+<PropertyGroup><DefineConstants>FOODTRUCKS_CREW_DRIVING_DEV</DefineConstants><OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>
 <Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems><NuGetAudit>false</NuGetAudit></PropertyGroup>
 <ItemGroup>{includes}<ProjectReference Include="Core/FoodTrucks.Core.csproj" /></ItemGroup></Project>''')
             built = subprocess.run(['dotnet', 'build', str(folder / 'Harness.csproj'), '--nologo', '-v:q',
@@ -48,7 +48,7 @@ class CrewTrafficTests(unittest.TestCase):
             includes = ''.join(f'<Compile Include="{escape(str(p))}" />' for p in files)
             (folder / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>
-<StartupObject>TrafficIntegrated</StartupObject><DefineConstants>TRAFFIC_INTEGRATION;CREW_PROBE_BODY_TESTS</DefineConstants>
+<StartupObject>TrafficIntegrated</StartupObject><DefineConstants>FOODTRUCKS_CREW_DRIVING_DEV;TRAFFIC_INTEGRATION;CREW_PROBE_BODY_TESTS</DefineConstants>
 <Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems><NuGetAudit>false</NuGetAudit></PropertyGroup>
 <ItemGroup>{includes}</ItemGroup></Project>''')
             built = subprocess.run(['dotnet', 'build', str(folder / 'Harness.csproj'), '--nologo', '-v:q',

@@ -18,7 +18,7 @@ class ObstacleEvidenceTests(unittest.TestCase):
             folder = Path(temporary)
             major = subprocess.check_output(['dotnet', '--version'], text=True).split('.')[0]
             (folder / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk">
-<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>
+<PropertyGroup><DefineConstants>FOODTRUCKS_CREW_DRIVING_DEV</DefineConstants><OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>
 <Nullable>enable</Nullable><NuGetAudit>false</NuGetAudit></PropertyGroup>
 <ItemGroup><PackageReference Include="Newtonsoft.Json" Version="13.0.2" /></ItemGroup>
 </Project>''')

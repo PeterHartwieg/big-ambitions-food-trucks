@@ -9,4 +9,4 @@ Soda-only carts attract more customers, and each fridge holds 80 cans on a cart 
 [b]Truck branding[/b]
 Give each truck its own branding through BizMan → Street food → truck → Branding. Use the game's shapes, imported PNGs, fonts and colours, with separate logo text. Designs appear on both sides. Custom PNG files stay in the game's CustomIcons folder and must be available on each computer using that save.
 
-Includes unlimited employee rosters, commissary cart closure, and the earlier cart interaction and unload fixes. Crews still travel between scheduled stops off screen. Physical crew driving remains a developer-only experiment and is not a player feature in this candidate.
+Includes unlimited employee rosters, commissary cart closure, and the earlier cart interaction and unload fixes.
