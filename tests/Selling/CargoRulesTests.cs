@@ -143,12 +143,12 @@ public class CargoRulesTests
 
     [Theory]
     [InlineData("cart", 0, 1, 1)]
-    [InlineData("cart", 0, 5, 2)]
-    [InlineData("cart", 1, 3, 1)]
-    [InlineData("cart", 2, 1, 0)]
+    [InlineData("cart", 0, 5, 3)]
+    [InlineData("cart", 1, 3, 2)]
+    [InlineData("cart", 2, 1, 1)]
     [InlineData("cart", 3, 1, 0)]
-    [InlineData("truck", 2, 3, 2)]
-    [InlineData("truck", 4, 1, 0)]
+    [InlineData("truck", 2, 3, 3)]
+    [InlineData("truck", 4, 1, 1)]
     [InlineData("unknown", 4, 3, 3)]
     [InlineData("cart", int.MaxValue, 1, 0)]
     public void EquipmentLoadsOnlyIntoFreeEquipmentSlots(string vehicle, int fitted, int incoming, int allowed)
@@ -159,11 +159,11 @@ public class CargoRulesTests
     }
 
     [Fact]
-    public void StockedEquipmentStillTakesAnEquipmentSlot()
+    public void StockedFridgeUsesItsDedicatedSlot()
     {
         var cargo = new[] { new CargoLine(Grill, 2, false) };
 
-        Assert.Equal(0, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, Fridge, 1, true));
+        Assert.Equal(1, CargoRules.AllowedUnits(ShippedData.Tables, "cart", cargo, Fridge, 1, true));
         Assert.Equal(1, CargoRules.AllowedUnits(ShippedData.Tables, "cart", new[] { new CargoLine(Grill, 1, false) }, Fridge, 1, true));
     }
 
@@ -208,13 +208,13 @@ public class CargoRulesTests
     [Fact]
     public void MenuFromCargoCountsDuplicatePiecesAgainstSlots()
     {
-        var cargo = new[] { new CargoLine(Grill, 2, false), new CargoLine(Fridge, 1, false) };
+        var cargo = new[] { new CargoLine(Grill, 3, false), new CargoLine(Fridge, 1, false) };
 
         var cart = Menu.FromCargo(ShippedData.Tables, "cart", cargo);
         var truck = Menu.FromCargo(ShippedData.Tables, "truck", cargo);
 
         Assert.Equal(MenuProblem.TooMuchEquipment, cart.Problem);
-        Assert.Equal("cooler", cart.Detail);
+        Assert.Equal("hotdoggrill", cart.Detail);
         Assert.Empty(cart.Menu.Items);
         Assert.Equal(MenuProblem.None, truck.Problem);
         Assert.Equal(new[] { HotDog, "ba:itemname_sodacan" }, truck.Menu.Items);

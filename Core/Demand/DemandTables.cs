@@ -409,9 +409,9 @@ namespace FoodTrucks.Core.Demand
             foreach (var entry in r.Entries(r.Object(root, "vehicles")))
             {
                 var obj = AsObject(r, entry);
-                r.OnlyKeys(obj, "equipmentSlots", "staff", "unitsPerPiece");
+                r.OnlyKeys(obj, "equipmentSlots", "staff", "unitsPerPiece", "coolerSlots");
                 vehicleTable.Add(entry.Name, new VehicleInfo(entry.Name, r.Integer(obj, "equipmentSlots", 1, 64), r.Integer(obj, "staff", 1, 64),
-                    r.Integer(obj, "unitsPerPiece", 1, 100000)));
+                    r.Integer(obj, "unitsPerPiece", 1, 100000), obj["coolerSlots"] == null ? 0 : r.Integer(obj, "coolerSlots", 0, 1)));
             }
 
             var curveObj = r.Object(root, "priceCurve");
@@ -761,16 +761,18 @@ namespace FoodTrucks.Core.Demand
 
     public sealed class VehicleInfo
     {
-        internal VehicleInfo(string type, int equipmentSlots, int staff, int unitsPerPiece)
+        internal VehicleInfo(string type, int equipmentSlots, int staff, int unitsPerPiece, int coolerSlots = 0)
         {
             UnitsPerPiece = unitsPerPiece;
             Type = type;
             EquipmentSlots = equipmentSlots;
+            CoolerSlots = coolerSlots;
             Staff = staff;
         }
 
         public string Type { get; }
         public int EquipmentSlots { get; }
+        public int CoolerSlots { get; }
         // Food each fitted piece of equipment holds, in weighted units, whatever the game's box slots allow
         // (one wholesale box can hold hundreds of units). A storage piece multiplies it (Storage).
         public int UnitsPerPiece { get; }

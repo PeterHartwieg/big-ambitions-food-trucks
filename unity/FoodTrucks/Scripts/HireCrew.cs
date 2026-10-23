@@ -94,7 +94,7 @@ namespace FoodTrucks
 
         public static bool Add(SaveState state, VehicleState vehicle, EmployeeInstance employee)
         {
-            if (vehicle.Crew.Count >= Limit(vehicle.VehicleType)) return false;
+            // The roster is uncapped. Serving rows and Team limit who can work at the same time.
             if (state.Vehicles.Any(v => v.Crew != null && v.Crew.Contains(employee.id))) return false;
             vehicle.Crew.Add(employee.id);
             SetWeeklyWork(vehicle);
@@ -340,7 +340,7 @@ namespace FoodTrucks
         // employment changed without the mod seeing it (SettleLeaving normally runs first) is paid on the spot instead.
         // Only one no longer employed can't be paid; their note waits until it is a day old. An hour the game counted
         // itself is never credited again (CrewPay.Unpaid).
-        private static void Settle(SaveState state, long beforeHour, int payrollDay)
+        private static void Settle(SaveState state, long beforeHour, int payrollDay, string? onlyVehicle = null)
         {
             CrewPay.CloseHours(state, beforeHour, (employeeId, vehicleId, hour) =>
             {
@@ -353,7 +353,7 @@ namespace FoodTrucks
                 // second payment beside the game's "Unassigned Daily Wage" (live session 9).
                 Log.Info($"Crew: {Name(employee)} worked {hour % 24:D2}:00 on day {CrewPay.DayOfHour(hour)} (open window, {vehicleId}); counted for the game's midnight wage.");
                 return true;
-            });
+            }, onlyVehicle);
             FoodTrucksSession.MarkChanged();
         }
 
@@ -419,6 +419,14 @@ namespace FoodTrucks
             if (state == null || !FoodTrucksSession.CanWrite) return;
             CartSelling.CatchUpTo(CatchUpLimit());
             Settle(state, long.MaxValue, TimeHelper.CurrentDay);
+        }
+
+        internal static void SettleVehicle(string vehicleId)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || !FoodTrucksSession.CanWrite) return;
+            CartSelling.CatchUpTo(CatchUpLimit());
+            Settle(state, long.MaxValue, TimeHelper.CurrentDay, vehicleId);
         }
 
         // One paid hour on the game's counters, so payrollDay's midnight payroll pays it, logged with its vehicle for

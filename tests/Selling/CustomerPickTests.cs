@@ -17,7 +17,7 @@ public class CustomerPickTests
     private const string Burger = "ba:itemname_burger";
     private const string Pizza = "ba:itemname_pizza";
     private const string Soda = "ba:itemname_sodacan";
-    private const string Water = "ba:itemname_water";
+    private const string OtherDrink = ShippedData.SecondColdDrink;
 
     [Theory]
     [InlineData(0, Coffee)]
@@ -163,16 +163,16 @@ public class CustomerPickTests
     }
 
     [Theory]
-    [InlineData(3, 5, Water)]
+    [InlineData(3, 5, OtherDrink)]
     [InlineData(5, 3, Soda)]
     [InlineData(5, 5, Soda)]
-    [InlineData(0, 1, Water)]
+    [InlineData(0, 1, OtherDrink)]
     [InlineData(-1, 0, null)]
-    public void AddOnItemChoosesTheMostPlentifulColdDrink(int soda, int water, string? expected)
+    public void AddOnItemChoosesTheMostPlentifulColdDrink(int soda, int otherDrink, string? expected)
     {
-        var stock = new Dictionary<string, int> { [Water] = water, [Soda] = soda, [Coffee] = 500, ["unknown"] = 1000 };
+        var stock = new Dictionary<string, int> { [OtherDrink] = otherDrink, [Soda] = soda, [Coffee] = 500, ["unknown"] = 1000 };
 
-        Assert.Equal(expected, CustomerPick.AddOnItem(ShippedData.Tables, stock));
+        Assert.Equal(expected, CustomerPick.AddOnItem(ShippedData.WithSecondColdDrink(), stock));
     }
 
     [Fact]
@@ -180,10 +180,10 @@ public class CustomerPickTests
     {
         var demand = JObject.Parse(ShippedData.Demand.Replace("\"colddrinks\"", "\"drinks\""));
         var economy = JObject.Parse(ShippedData.Economy);
-        foreach (var item in new[] { Soda, Water }) economy["products"]![item]!["category"] = "drinks";
+        economy["products"]![Soda]!["category"] = "drinks";
         var tables = DemandTables.Parse(demand.ToString(), economy.ToString(), ShippedData.Zones);
 
-        Assert.Equal(Water, CustomerPick.AddOnItem(tables, new Dictionary<string, int> { [Water] = 3, [Tea] = 50 }));
+        Assert.Equal(Soda, CustomerPick.AddOnItem(tables, new Dictionary<string, int> { [Soda] = 3, [Tea] = 50 }));
         Assert.Null(CustomerPick.AddOnItem(tables, new Dictionary<string, int>()));
     }
 

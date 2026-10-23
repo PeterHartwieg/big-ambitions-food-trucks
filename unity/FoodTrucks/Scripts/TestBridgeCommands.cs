@@ -32,6 +32,7 @@ namespace FoodTrucks
                 case "teleport": RequireFtCity(cmd); return Teleport(args);
                 case "walk": RequireFtCity(cmd); return Walk(args);
                 case "drive": RequireCity(cmd); return Drive(args);
+                case "crew_drive_probe": RequireFtCity(cmd); return CrewDrive(args);
                 case "vehicle": RequireFtCity(cmd); return Vehicle(args);
                 case "commissary": RequireFtCity(cmd); return CommissaryCommand(args);
                 case "crew": RequireFtCity(cmd); return Crew(args);
@@ -440,6 +441,8 @@ namespace FoodTrucks
             return Math.Round(multiplier / (normal > 0 ? normal : 1f), 2);
         }
 
+        internal static bool ProbeClockNormal => Speed() is double speed && Math.Abs(speed - 1) < .01;
+
         private static void SetSpeed(double speed)
         {
             var normal = PlayerPrefSettings.GameSpeed;
@@ -538,7 +541,7 @@ namespace FoodTrucks
         // Every frame, from the pump: follows a load, stops run_until at its time.
         private static bool quitting;
         internal static void RefreshOwnership() => BridgeControl.ControlGate.ObserveWork(
-            quitting || LoadStatus == "pending" || runUntil != null || Driving || TimeSkipRunning() == true ||
+            quitting || LoadStatus == "pending" || runUntil != null || Driving || CrewDriveProbe.Active || TimeSkipRunning() == true ||
             (Scene() == "city" && Paused() != true));
 
         internal static void EveryFrame()

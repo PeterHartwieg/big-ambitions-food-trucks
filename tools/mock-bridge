@@ -39,8 +39,8 @@ LOCALE = json.loads((ROOT / 'unity/FoodTrucks/Locales/en.json').read_text())
 
 CATALOG = {key: (LOCALE.get(key,key.split('itemname_')[-1].title()),500,1.5) for key in ECONOMY['products']}
 # What each food is held by (the equipment piece that serves it) and which game item is that piece, from economy.json.
-HOLDS = {product: name for name, e in ECONOMY['equipment'].items() for product in e['products']}
-PIECES = {key: name for name, e in ECONOMY['equipment'].items() for key in e['gameItems']}
+HOLDS = {product: name for name, e in ECONOMY['equipment'].items() if isinstance(e, dict) for product in e['products']}
+PIECES = {key: name for name, e in ECONOMY['equipment'].items() if isinstance(e, dict) for key in e['gameItems']}
 SLOTS = {kind: v['equipmentSlots'] for kind, v in ECONOMY['vehicles'].items()}
 STAFF = {kind: v['staff'] for kind, v in ECONOMY['vehicles'].items()}
 PER_PIECE = {kind: v['unitsPerPiece'] for kind, v in ECONOMY['vehicles'].items()}
@@ -50,7 +50,7 @@ PRICES = {kind: float(re.search(r'^\s*price: ([0-9.]+)', (ROOT / f'unity/FoodTru
 # The mock's windows sell one unit every ten minutes at this price; each unit cost CATALOG's wholesale price.
 SALE_CENTS = 1300
 WAGE_CENTS = 1000
-CATALOG.update({key:(LOCALE.get(key,key.split('itemname_')[-1].title()),1,750.) for e in ECONOMY['equipment'].values() for key in e['gameItems']})
+CATALOG.update({key:(LOCALE.get(key,key.split('itemname_')[-1].title()),1,750.) for e in ECONOMY['equipment'].values() if isinstance(e, dict) for key in e['gameItems']})
 
 # The player's life in the mock (docs/test-bridge.md, "The player's life"). The dialogs it opens, and those that are an
 # activity panel holding the clock. The game's own numbers where the 1.0 code has them: the taxi's $0.15 and 0.04 game
@@ -1529,7 +1529,11 @@ class Mock:
             return f"Commissary stock offers no {direction} of '{item}' here ({', '.join(s['key'] for s in source) or 'none'})"
         if direction=='take' and line['key'] in PIECES:
             # A piece of equipment goes on one at a time, into a free slot.
-            if len(v['pieces'])>=SLOTS[v['kind']]:
+            fitted = [p['item'] for p in v['pieces']]
+            reserved = ECONOMY['vehicles'][v['kind']].get('coolerSlots', 0)
+            general = len(fitted) - min(reserved, fitted.count('cooler'))
+            dedicated = PIECES[line['key']] == 'cooler' and fitted.count('cooler') < reserved
+            if general > SLOTS[v['kind']] or (general == SLOTS[v['kind']] and not dedicated):
                 self.event(f"The {v['kind']} has no free place for {line['item']}.",'notice'); return 'refused by the cargo: NoSlot'
             line['amount']-=1
             v['pieces'].append({'item':PIECES[line['key']],'units':0,'cap':PER_PIECE[v['kind']]})
@@ -2734,14 +2738,18 @@ class Mock:
                 start,end=args.get('start'),args.get('end')
                 if not isinstance(start,int): raise ValueError('Missing "start": the starting hour, 0 to 23.')
                 if not isinstance(end,int): raise ValueError('Missing "end": the ending hour, 1 to 24 (the start removes).')
-                station=args.get('station') or 'serving1'
-                if station not in ('serving1','serving2'): raise ValueError(f"Unknown station '{station}': serving1 or serving2.")
+                station=args.get('station')
+                if station is not None and station not in ('serving1','serving2'): raise ValueError(f"Unknown station '{station}': serving1 or serving2.")
                 employee=next((e for e in self.employees if e['id']==employee_id),None)
                 if employee is None or employee['name'] not in v['crew']: raise ValueError('Shift refused: NotCrew.')
                 if start!=end and (start<0 or end>24 or start>end): raise ValueError('Shift refused: BadHours.')
                 if end-start>12: raise ValueError('Shift refused: TooLong.')
                 taken=[x for e in (v['route'] or {}).get('shifts',[]) if e['id']!=employee_id for x in e['shifts']]
-                if start!=end and any(x['day']==day and x['station']==station and x['start']<end and start<x['end'] for x in taken):
+                rows=[f'serving{i+1}' for i in range(STAFF[v['kind']])]
+                def occupied(row):
+                    return any(x['day']==day and x['station']==row and x['start']<end and start<x['end'] for x in taken)
+                if station is None: station=next((row for row in rows if not occupied(row)), rows[0])
+                if start!=end and (station not in rows or occupied(station)):
                     raise ValueError('Shift refused: Clash.')
                 route=v['route'] or {'stops':0,'next':None,'week':[{'day':d,'closed':False,'stops':[],'route_day':None,'gaps':[]} for d in WEEK],'shifts':[],'problem':None}
                 v['route']=route
@@ -2759,7 +2767,6 @@ class Mock:
                 if name in v['crew']: raise ValueError(f'{employee_id} is on {identifier} already.')
                 if employee is None or any(name in other['crew'] for other in self.state['vehicles']):
                     raise ValueError(f"{employee_id} isn't an unassigned hire (see state.employees).")
-                if len(v['crew']) >= STAFF[v['kind']]: raise ValueError(f"{identifier} has its full crew ({len(v['crew'])}).")
                 v['crew'].append(name)
             elif op=='unassign':
                 if name not in v['crew']: raise ValueError(f"{employee_id} isn't on {identifier}.")

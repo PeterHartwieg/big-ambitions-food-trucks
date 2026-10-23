@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using FoodTrucks.Core.Demand;
 using FoodTrucks.Core.Rules;
+using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Tests.Demand;
 
@@ -17,6 +18,15 @@ internal static class ShippedData
     public static DemandTables Tables => tables.Value;
     public static string RulesJson => Read("rules.json");
     public static RuleTables Rules => rules.Value;
+
+    // A second drink for selection tests; the shipped cooler serves soda only.
+    public const string SecondColdDrink = "test:itemname_colddrink";
+    public static DemandTables WithSecondColdDrink()
+    {
+        var economy = JObject.Parse(Economy);
+        economy["products"]![SecondColdDrink] = economy["products"]!["ba:itemname_sodacan"]!.DeepClone();
+        return DemandTables.Parse(Demand, economy.ToString(), Zones);
+    }
 
     private static string Read(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "data", name));
 }

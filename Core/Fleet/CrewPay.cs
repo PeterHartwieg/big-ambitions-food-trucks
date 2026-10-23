@@ -102,12 +102,12 @@ namespace FoodTrucks.Core.Fleet
         // dropped, so an earned hour is never lost to a failed or skipped credit; a note that can't be credited stays
         // to be tried at the next decision, until it is a day old. Returns the hours credited.
         public static List<(string EmployeeId, string VehicleId, long Hour)> CloseHours(SaveState state, long beforeHour,
-            Func<string, string, long, bool> credit)
+            Func<string, string, long, bool> credit, string? vehicleId = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (credit == null) throw new ArgumentNullException(nameof(credit));
             foreach (var id in state.CrewServedHour.Where(p => p.Value == null).Select(p => p.Key).ToList()) state.CrewServedHour.Remove(id);
-            var due = state.CrewServedHour.Where(p => p.Value.Hour < beforeHour)
+            var due = state.CrewServedHour.Where(p => p.Value.Hour < beforeHour && (vehicleId == null || p.Value.VehicleId == vehicleId))
                 .OrderBy(p => p.Value.Hour).ThenBy(p => p.Key, StringComparer.Ordinal).ToList();
             var paid = new List<(string EmployeeId, string VehicleId, long Hour)>();
             foreach (var pair in due)

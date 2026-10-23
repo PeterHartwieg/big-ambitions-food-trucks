@@ -48,6 +48,7 @@ namespace FoodTrucks
         // not). A refusal shows its notice and logs why; null then. Standing at the bay unlocks its contact.
         private static AtBay? CheckAtBay(VehicleInstance? vehicle)
         {
+            if (CrewDriveProbe.Owns(vehicle?.id)) return null;
             var state = FoodTrucksSession.CurrentState;
             var tables = DemandData.Tables;
             var kind = FoodTrucksMod.KindOf(vehicle?.vehicleTypeName);

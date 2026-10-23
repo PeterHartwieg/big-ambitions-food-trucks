@@ -219,8 +219,8 @@ namespace FoodTrucks
 
         // ---- Crew ----
 
-        // One row per staff slot, and one for each member past it (the truck's staff went from 3 to 2 on 14 October 2026),
-        // so they can be taken off. While the crew is over the limit no row offers anyone new.
+        // All assigned employees, followed by an empty row for adding another. The serving limit applies to shifts,
+        // not to the roster: different employees can cover different days or successive shifts on the same row.
         private static void Crew(Transform column, SaveState state, VehicleState? vehicle, string id, string kind, bool canWrite)
         {
             var box = new BizManParts.Box(column, Text("foodtrucks:bizman_page_crew_title"));
@@ -228,16 +228,19 @@ namespace FoodTrucks
             var crew = vehicle?.Crew ?? new List<string>();
             box.Section(Format("foodtrucks:bizman_page_crew_header", ("count", crew.Count.ToString()), ("limit", limit.ToString())));
             var available = HireCrew.Available(state);
-            for (var slot = 0; slot < Math.Max(limit, crew.Count); slot++)
+            for (var slot = 0; slot <= crew.Count; slot++)
             {
-                var current = slot < crew.Count ? HireCrew.Find(crew[slot]) : null;
+                var currentId = slot < crew.Count ? crew[slot] : null;
+                var current = currentId == null ? null : HireCrew.Find(currentId);
                 var choices = new List<EmployeeInstance?> { null };
                 if (current != null) choices.Add(current);
-                if (crew.Count <= limit) choices.AddRange(available);
+                choices.AddRange(available);
                 var labels = choices.Select(e => e == null ? Text("foodtrucks:bizman_page_unassigned") : BizManVehiclePage.CrewOption(e)).ToList();
                 var index = slot;
-                BizManVehiclePage.AddRow(box, Format("foodtrucks:bizman_page_crew_slot", ("number", (slot + 1).ToString())), labels, current != null ? 1 : 0, canWrite,
-                    picked => BizManVehiclePage.ChooseCrew(id, index, choices[picked]?.id));
+                var label = slot == crew.Count ? Text("foodtrucks:bizman_page_crew_add")
+                    : Format("foodtrucks:bizman_page_crew_slot", ("number", (slot + 1).ToString()));
+                BizManVehiclePage.AddRow(box, label, labels, current != null ? 1 : 0, canWrite,
+                    picked => BizManVehiclePage.ChooseCrew(id, index, choices[picked]?.id, currentId, checkCurrent: true));
             }
         }
 

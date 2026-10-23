@@ -30,6 +30,25 @@ class ParityTests(unittest.TestCase):
             self.mock.call(cmd,args)
         self.assertEqual(str(exc.exception),text)
 
+    def test_large_crew_roster_has_only_the_vehicle_serving_positions(self):
+        for kind, staff in (('cart', 1), ('truck', 2)):
+            with self.subTest(kind=kind):
+                v = self.mock.spawn(kind)
+                ids = [f'{kind}-employee-{i}' for i in range(20)]
+                self.mock.employees.extend(dict(id=id_, name=id_, skill=60., satisfaction=100., wage=10., label=id_) for id_ in ids)
+                for id_ in ids:
+                    self.assertTrue(self.mock.call('crew', dict(op='assign', vehicle=v['id'], employee_id=id_))['done'])
+                self.assertEqual(len(v['crew']), 20)
+                def shift(id_, day, start=8, end=12, **args):
+                    return dict(op='schedule', vehicle=v['id'], employee_id=id_, day=day, start=start, end=end, **args)
+                for i in range(staff):
+                    self.mock.call('crew', shift(ids[i], 'monday'))
+                self.refused('crew', shift(ids[-1], 'monday'), 'Shift refused: Clash.')
+                self.refused('crew', shift(ids[-1], 'monday', station=f'serving{staff+1}'),
+                             'Shift refused: Clash.' if staff == 1 else "Unknown station 'serving3': serving1 or serving2.")
+                self.assertTrue(self.mock.call('crew', shift(ids[-1], 'tuesday'))['done'])
+                self.assertTrue(self.mock.call('crew', shift(ids[-2], 'monday', 12, 16))['done'])
+
     def test_player_and_crew_sales_share_saved_midnight_payment_for_each_vehicle_kind(self):
         for kind in ('cart', 'truck'):
             with self.subTest(kind=kind):

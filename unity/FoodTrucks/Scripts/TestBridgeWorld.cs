@@ -956,6 +956,7 @@ namespace FoodTrucks
         private static JToken TeleportVehicle(string id, Vector3 target, float? heading, bool clear, List<Blocker>? blockers = null,
             List<Vehicles.DeliveryDriverJob.DeliveryJobStartController>? vans = null)
         {
+            if (CrewDriveProbe.Owns(id)) throw new BridgeError("Truck belongs to the crew driving probe; stop its generation before teleporting.");
             vans ??= Vans();
             var vehicle = DrivenVehicle(id);
             var controller = Spawned(vehicle);
@@ -1072,6 +1073,7 @@ namespace FoodTrucks
             var op = Need(args, "op", "open, close, fast_forward, skip_work, stop_work, work_window, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy");
             if (op == "buy") return Buy(args);
             var id = Need(args, "id", "the food vehicle's id");
+            if (op != "enter" && CrewDriveProbe.Owns(id)) throw new BridgeError("Truck belongs to the crew driving probe; stop it first.");
             if (id == DrivingVehicle) throw new BridgeError($"{id} is on a drive: wait for it (drive status).");
             // Getting into and out of any car or van works as for a truck (a job's hired van, a car of your own).
             var vehicle = (op == "enter" || op == "exit") && SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v != null && v.id == id) is { } any
@@ -1366,8 +1368,6 @@ namespace FoodTrucks
                         if (crew.Contains(employeeId)) throw new BridgeError($"{employeeId} is on {id} already.");
                         if (!HireCrew.Available(state).Any(e => e.id == employeeId))
                             throw new BridgeError($"{employeeId} isn't an unassigned hire (see state.employees).");
-                        var kind = FoodTrucksMod.KindOf(vehicle.vehicleTypeName);
-                        if (crew.Count >= HireCrew.Limit(kind)) throw new BridgeError($"{id} has its full crew ({crew.Count}).");
                         BizManVehiclePage.ChooseCrew(id, crew.Count, employeeId);
                         break;
                     case "unassign":

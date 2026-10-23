@@ -27,6 +27,8 @@ from mathutils import Matrix, Vector
 args = sys.argv[sys.argv.index("--") + 1:]
 ART, PNG_DIR, JSON_OUT, ECONOMY = args[0], args[1], args[2], args[3]
 CHECK = args[4] if len(args) > 4 else None
+COOLER_ONLY = os.environ.get("FT_DIAGRAM_COOLER_ONLY") == "1"
+EXISTING = json.load(open(JSON_OUT)) if COOLER_ONLY else {}
 
 PIECE = 0.40              # a piece's footprint (m): the fallback icon size
 PIECE_HALF_HEIGHT = 0.25  # the place's hotspot above the counter (a typical piece is 0.40 to 0.60 m tall)
@@ -51,7 +53,8 @@ KINDS = [
         "frame": [Vector((-1.1, y, z)) for y in (0.06, 2.68) for z in (1.70, 3.18)],
         # VehicleDisplays' Truck layout: filled from the middle out.
         "places": [("EquipmentLine2", unity(-0.62, 1.75, -0.875)), ("EquipmentLine3", unity(-0.62, 1.75, -1.325)),
-                   ("EquipmentLine1", unity(-0.62, 1.75, -0.425)), ("EquipmentLine4", unity(-0.62, 1.75, -1.775))],
+                   ("EquipmentLine1", unity(-0.62, 1.75, -0.425)), ("EquipmentLine4", unity(-0.62, 1.75, -1.775)),
+                   ("EquipmentCooler", unity(0.875, 1.80, -1.80))],
     },
     {
         "kind": "cart", "label": "Cart", "size": (900, 700), "out": (2400, 800),
@@ -62,7 +65,8 @@ KINDS = [
         # Azimuth from the cart's right side (-X) towards its front (-Y).
         "aim": unity(0, 1.0, 0.1), "azimuth": -30, "elevation": 22, "lens": 50,
         "frame": [Vector((x, y, z)) for x in (-0.5, 0.5) for y in (-0.77, 0.77) for z in (0.0, 2.3)],
-        "places": [("EquipmentFront", unity(0, 0.963, 0.30)), ("EquipmentRear", unity(0, 0.963, -0.30))],
+        "places": [("EquipmentFront", unity(0, 0.963, 0.30)), ("EquipmentRear", unity(0, 0.963, -0.30)),
+                   ("EquipmentCooler", unity(0.443, 0.525, -0.32))],
     },
 ]
 
@@ -146,6 +150,8 @@ def displays():
         model = piece.get("display") if isinstance(piece, dict) else None
         if model and os.path.exists(os.path.join(ART, "equipment", model, model + ".fbx")):
             out.setdefault(model, []).extend(piece.get("gameItems", []))
+    for variant in ("CartDrinksCooler", "TruckDrinksCooler"):
+        out[variant] = list(out["DrinksCooler"])
     return out
 
 
@@ -262,7 +268,8 @@ def render_kind(spec, models):
         bpy.ops.render.render(write_still=True)
 
     background = "VehicleDiagram_%s.png" % spec["label"]
-    shoot(os.path.join(PNG_DIR, background))
+    if not COOLER_ONLY:
+        shoot(os.path.join(PNG_DIR, background))
     print("DIAGRAM", background)
 
     # Layers: the vehicle as a holdout, one piece shown.
@@ -270,12 +277,20 @@ def render_kind(spec, models):
         ob.is_holdout = True
     places = []
     for name, spot in spec["places"]:
-        hot = world_to_camera_view(scene, cam, spot + Vector((0, 0, PIECE_HALF_HEIGHT)))
+        hot = world_to_camera_view(scene, cam, spot + Vector((0, 0, .19 if name == "EquipmentCooler" and spec["kind"] == "cart" else PIECE_HALF_HEIGHT)))
         left = world_to_camera_view(scene, cam, spot + Vector((0, -PIECE / 2, PIECE_HALF_HEIGHT)))
         rightp = world_to_camera_view(scene, cam, spot + Vector((0, PIECE / 2, PIECE_HALF_HEIGHT)))
         size = abs(rightp.x - left.x) * w / h
         layers, files = {}, {}
         for model, obs in pieces.items():
+            if name == "EquipmentCooler":
+                if model != spec["label"] + "DrinksCooler":
+                    continue
+            elif model in ("CartDrinksCooler", "TruckDrinksCooler"):
+                continue
+            if COOLER_ONLY and name != "EquipmentCooler":
+                layers = next(p["layers"] for p in EXISTING[spec["kind"]]["places"] if p["place"] == name)
+                break
             for ob in obs:
                 place(ob, spot, -90)
                 ob.hide_render = False
@@ -329,8 +344,8 @@ def main():
 
 def check(result):
     """Each background with its places filled by a sample of models, composited, a dot on each hotspot."""
-    samples = {"truck": ["Griddle", "BurgerStation", "HotDogRoller", "CoffeeStation"],
-               "cart": ["HotDogRoller", "DrinksCooler"]}
+    samples = {"truck": ["Griddle", "BurgerStation", "HotDogRoller", "CoffeeStation", "TruckDrinksCooler"],
+               "cart": ["HotDogRoller", "StorageCabinet", "CartDrinksCooler"]}
     rows = []
     for kind, picks in samples.items():
         info = result[kind]
@@ -364,4 +379,5 @@ def check(result):
     print("CHECK", CHECK)
 
 
-main()
+if __name__ == "__main__":
+    main()

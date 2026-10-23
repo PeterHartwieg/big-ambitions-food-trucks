@@ -5,12 +5,13 @@
     "image": "VehicleDiagram_Truck.png",
     "width": 2400,
     "height": 800,
-    "iconSize": 0.1957,
+    "iconSize": 0.2301,
     "drawOrder": [
       "EquipmentLine4",
       "EquipmentLine3",
       "EquipmentLine2",
-      "EquipmentLine1"
+      "EquipmentLine1",
+      "EquipmentCooler"
     ],
     "places": [
       {
@@ -520,6 +521,28 @@
             "height": 228
           }
         }
+      },
+      {
+        "place": "EquipmentCooler",
+        "x": 0.4206,
+        "y": 0.705,
+        "size": 0.2301,
+        "layers": {
+          "ba:itemname_drinksfridge": {
+            "file": "VehicleLayer_Truck_EquipmentCooler_TruckDrinksCooler.png",
+            "x": 909,
+            "y": 419,
+            "width": 200,
+            "height": 269
+          },
+          "ba:itemname_largedrinksfridge": {
+            "file": "VehicleLayer_Truck_EquipmentCooler_TruckDrinksCooler.png",
+            "x": 909,
+            "y": 419,
+            "width": 200,
+            "height": 269
+          }
+        }
       }
     ]
   },
@@ -530,6 +553,7 @@
     "iconSize": 0.1251,
     "drawOrder": [
       "EquipmentRear",
+      "EquipmentCooler",
       "EquipmentFront"
     ],
     "places": [
@@ -784,6 +808,28 @@
             "y": 237,
             "width": 140,
             "height": 192
+          }
+        }
+      },
+      {
+        "place": "EquipmentCooler",
+        "x": 0.4443,
+        "y": 0.6387,
+        "size": 0.1132,
+        "layers": {
+          "ba:itemname_drinksfridge": {
+            "file": "VehicleLayer_Cart_EquipmentCooler_CartDrinksCooler.png",
+            "x": 1014,
+            "y": 447,
+            "width": 105,
+            "height": 128
+          },
+          "ba:itemname_largedrinksfridge": {
+            "file": "VehicleLayer_Cart_EquipmentCooler_CartDrinksCooler.png",
+            "x": 1014,
+            "y": 447,
+            "width": 105,
+            "height": 128
           }
         }
       }

@@ -312,6 +312,14 @@ namespace FoodTrucks
                 return;
             }
             Summary(first, state, vehicle, instance, name, withDriver, canWrite);
+            if (kind == "truck")
+            {
+                var branding = new BizManParts.Box(first, Text("foodtrucks:logo_header"));
+                var logo = FoodTrucks.Core.Fleet.VehicleLogo.Read(vehicle?.Logo);
+                branding.Paragraph(logo?.Name ?? Text("foodtrucks:logo_none"));
+                if (canWrite && TruckLogoEditor.Ready && TruckLogos.Ready && FoodTrucks.Core.Fleet.VehicleLogo.CanEdit(vehicle?.Logo))
+                    branding.Button(Text("foodtrucks:logo_customize"), () => TruckLogoEditor.Open(id));
+            }
             Menu(first, id, vehicle, instance, canWrite);
             Alerts(second, id);
             CommissarySpace(second, state, id, kind);
@@ -618,7 +626,7 @@ namespace FoodTrucks
         // ---- Changes ----
 
         // The crew dropdown's choice for one slot (null: Unassigned). Also the test bridge's crew command.
-        internal static void ChooseCrew(string id, int slot, string? employeeId)
+        internal static void ChooseCrew(string id, int slot, string? employeeId, string? expectedCurrentId = null, bool checkCurrent = false)
         {
             var state = FoodTrucksSession.CurrentState;
             if (state == null || !FoodTrucksSession.CanWrite) return;
@@ -626,6 +634,12 @@ namespace FoodTrucks
             var kind = KindOf(id);
             if (string.IsNullOrEmpty(vehicle.VehicleType)) vehicle.VehicleType = kind;
             var currentId = slot < vehicle.Crew.Count ? vehicle.Crew[slot] : null;
+            // A resignation/reassignment may have moved the roster since this dropdown was drawn.
+            if (checkCurrent && currentId != expectedCurrentId)
+            {
+                RefreshLater();
+                return;
+            }
             if (currentId == employeeId) return;
             if (currentId != null)
             {

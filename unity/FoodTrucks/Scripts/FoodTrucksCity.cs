@@ -161,6 +161,7 @@ namespace FoodTrucks
             runtimeObject.AddComponent<DebugActions>();
             runtimeObject.AddComponent<CartParts>();
             runtimeObject.AddComponent<VehicleDisplays>();
+            runtimeObject.AddComponent<TruckLogos>();
             runtimeObject.AddComponent<Commissary>();
             runtimeObject.AddComponent<VehicleTodos>();
             try { PrefabFixes.Apply(); }
@@ -203,6 +204,7 @@ namespace FoodTrucks
 
         public static void Detach()
         {
+            CrewDriveProbe.ResetSession();
             World.Reset();
             CityLicensing.Detach();
             Catering.Detach();

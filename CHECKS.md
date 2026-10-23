@@ -1,3 +1,76 @@
+# Unlimited employee rosters (22 October 2026)
+
+**Pending in game.** Assignment/UI harness and Core regression tests cover large rosters; the native crew list and schedule still need a visual playtest with this build.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| CR1 | Add at least four employees to a truck and three to a cart; scroll the crew panel, replace and remove a later employee | Every employee remains accessible; Add employee remains available; header distinguishes assigned staff from the simultaneous limit |
+| CR2 | Schedule one truck pair on weekdays and another at weekends; rotate cart employees; assign successive shifts to one serving row | All roster employees are offered; truck has only two serving rows, cart one; overlapping work on a full row is refused |
+| CR3 | Auto-fill a week with more employees than serving positions; run through shift handovers | Staff rotate, gaps are reported normally, and no more than two truck workers or one cart worker serve at once |
+| CR4 | Save and reload the larger rosters and shifts, then remove an employee | Roster and shifts survive; removal clears only that employee's shifts; others retain their hours |
+
+# Custom truck logos (22 October 2026)
+
+## Cart sale at a commissary — 22 October 2026
+
+| ID | Action | Expected |
+| --- | --- | --- |
+| SC1 | Close and park a stocked cart in a commissary bay, let go, click it on foot | Sell cart is offered; confirmation includes cart, equipment and nested stock at the game's resale multiplier. Cancel changes nothing |
+| SC2 | Confirm a cart with crew, a route, unpaid sales and a rental | Cart and cargo disappear; exactly one resale payout, separate outstanding sales; crew remain employed/unassigned with earned wages retained; route, permit, rental, partnership and vehicle warnings end |
+| SC3 | Inspect another vehicle and the shared commissary | Other vehicles, shared stock/orders, vendor licence, accounts and wages stay intact; no subsequent rent or operation for the sold cart |
+| SC4 | Save/reload after sale, then pass midnight | No vehicle revival or duplicate sale/takings payout; previous accounts and earned wages retained |
+| SC5 | Move/change the cart after opening confirmation, or use a read-only save | Sale refused; new quote required for changed contents; no destructive action in read-only state |
+
+Automated Core/adapter coverage includes cancellation, changed quote, repeated callback, failed deletion, failed payment/reload, nested/unpaid cargo and read-only saves. Native results: see `docs/evidence/2026-10-22-cart-sale.md`.
+
+**Implemented; native Mac control and body-display smoke checked, wider checks and release pending.** The native editor supports shapes/imported PNGs, text, fonts and colours. Save/restart/reload retained the design; removing it restored an unbranded truck. Native camera images verified both side panels, including the shaded driver side and open customer hatch. Core tests cover legacy saves and unknown cosmetic versions. See [evidence and visual scope](docs/evidence/2026-10-22-truck-logos.md). These rows describe the full acceptance scope, not a claim that every scenario has passed.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| LG1 | Open a truck's Branding page; choose built-in and imported PNG shapes, colours, fonts and text; save, leave, reopen | Native preview and body signs match; text is independent of fleet name; edits apply only after Save logo changes |
+| LG2 | View both sides with hatch open/closed; drive, hide/show, despawn and reload | Signs stay on their fixed body panels without clipping or duplicates; no physical collisions |
+| LG3 | Give two trucks different designs; save/restart, remove one design; open a normal shop editor | Independent designs persist, removal affects only its truck, ordinary shops retain their controls and artwork |
+| LG4 | Load old/newer-version cosmetic data; remove a custom PNG from its shared folder | Old trucks remain unbranded; unsupported logo data survives without financial corruption; missing files do not corrupt saves |
+
+# Dedicated customer-facing cooler (22 October 2026)
+
+**Implemented; native smoke checked, pending broader checks and release.** On the Mac rig, a cart accepted a small fridge alongside two general pieces and a truck accepted a large fridge alongside four. Both displayed the customer-facing fridge, opened and sold soda. With Extra Storage, capacities were 160/320 cans; a further truck general piece was refused. Current-build save/reload preserved equipment pools, stock and the sales ledger. Offline Core checks cover stacked/nested fridges, old tuning and placement; Blender checks cover both cart sides, counter/register clearance and hatch angles 0–80 degrees. No save schema change. See [evidence](docs/evidence/2026-10-22-dedicated-cooler.md). The rows below describe the full acceptance scope and are only partially covered by that smoke run; historical multi-fridge saves, native BizMan interactions, movement/visibility and matched economics remain pending.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| CSF1 | Fit two general pieces on a cart / four on a truck, then take a small or large drinks fridge from commissary stock | One fridge fits; another general piece is refused. The menu still opens, including soda. Repeat with the fridge fitted first and with a stocked fridge |
+| CSF2 | View both cart queue sides and the truck with hatch open/closed; push/drive, hide/show and respawn the vehicles | Fridge faces customers, leaves cooking equipment visible, clears wheel/handle/crew/register/hatch, follows visibility; no duplicate displays |
+| CSF3 | View BizMan with the cooler empty, fitted and removed; fill soda and fit Extra Storage | Dedicated place/tooltip, correct layer and fill bar; 80/160 cans, doubled with Extra Storage. General pieces never occupy the reserved place |
+| CSF4 | Load an older multi-fridge FT save; take/return equipment, save as a new FT save and reload | First fridge uses dedicated place, extras use general places; stock retained, correct capacity and no invalid-menu closure |
+| CSF5 | Compare matched food setups with/without cooler at quiet, busy and saturated pitches | Record food orders, soda add-ons/standalone sales, revenue, stock cost and restocks; verify whether busy-queue drink orders displace food. No new prices or demand buff |
+
+# Crew driving developer probe (21 October 2026)
+
+**Gate A remains open.** The body/wheel certificate, native wheel guard and bounded straight profile are implemented. Native testing identified excessive side clearance around a pavement mailbox and trash bag. With the corrected clearance and Persistent City's physical traffic active, the probe completed 30.97 m and stopped by physical braking. A separate cart obstruction test braked, held, resumed automatically after clearing, and completed 8.11 m. Both had zero contacts/damage, no forced hold and clean handback. All three reviewers approved controlled testing and all 47 probe tests pass. Earlier evidence includes raised-floor trigger coverage, save/reload preservation and a separate stationary Gley stop/resume observation. All 263 original rig file hashes were restored and its reservation released. Moving traffic, turns, signals, the teleport/restart cancellation, 20-drive/50-lifecycle and matched performance checks remain pending; timing outliers need attribution. Production crew travel is still timer-based. See the [native report](docs/evidence/2026-10-21-crew-clearance-native.md), [implementation and commands](docs/crew-driving-implementation.md) and [acceptance scope](docs/crew-driving-spike.md).
+
+| Check | Native evidence required |
+| --- | --- |
+| CD0 | Partly checked: 30 profiles, first-candidate common band, nearby raised-floor coverage and short/long endpoint braking. Exact mailbox/trash shapes identified; corrected clearance passed both. Native refusal branches remain pending |
+| CD1 | All required crew-probe hooks active; owned truck reaches stationary readiness without player entry |
+| CD2 | Start/stop and takeover restore input, engine, rigidbody and wheel settings; replacement controllers and save sessions stay isolated |
+| CD3 | Checked on short and 30.97 m low-speed straight drives: physical endpoint braking, zero contacts and no forced interruption hold; wider route campaign remains pending |
+| CD4 | Controlled solid-obstacle braking/hold/automatic resume checked with about 2.20 m physical front clearance. Blocker identity, layer, pose, query and gap captured. Prepared native turn, signal stop/resume and moving-Gley interactions remain pending; late stop flags are failed runs |
+| CD5 | Traffic detects the truck; junction ownership coexists with Driven Rides and clears after forward exit or complete reversal after takeover |
+| CD6 | Native tank and damage survive stop, save and reload; no refill, repair or extra payment |
+| CD7 | Pause, speed changes, skips, save, destruction and unload clean up synchronously; 50 native lifecycle cycles leave no unexplained records |
+| CD8 | 20 contact-free route completions, Persistent City enabled/absent, matched CPU/allocation/frame measurements at the scoped fleet sizes |
+| CD9 | Offline [route economics comparison](docs/balance/crew-route-economics-2026-10-21.md) calculated under explicit assumptions. Native calibration of journey/parking/clock/fuel inputs and profitability with adapted schedules remains pending; do not treat modeled profits as checked gameplay |
+
+# Water removal (21 October 2026, next build)
+
+**Pending in game.** Water is a factory ingredient and is no longer in the street-food product table. The cooler serves soda only; the commissary catalogue no longer offers water. Existing save data is retained.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| WR1 | Call a commissary and open Order stock; open a cart/truck Menu with a drinks fridge | Soda is offered; water is absent from both the order catalogue and selling menu |
+| WR2 | Load an older disposable save with water on a vehicle and in commissary stock; serve, Fill up, save and reload | Water is never sold or automatically loaded. Existing stock survives; soda sells normally |
+| WR3 | Let an existing water standing order reach its next booking | Water is reported unavailable, no new water order or delivery fee is created for a water-only booking; other available lines still book normally |
+
 # Working a serving window (18 October 2026, next build)
 
 **Pending in game.** Core and mock tests cover the selling clock and controls; the native UI, animation, layout and needs still require play. No mod build or game-PC session was run for this change. At startup, `PlayerActivityUI.SetUpSpeedOptions`, `PlayerActivityUI.OnPlayerActionPressed`, the serving `GameManager.RunMainGameTick`, `ItemPanelUI.UpdateButtonsVisibility`, `ItemPanelUI.SetupCargoSlots` and `VehicleController.DriveVehicle` patches must each log `Active`.

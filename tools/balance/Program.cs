@@ -14,6 +14,18 @@ Selling.Queue = opts.Queue ? new QueueThroughput(tables, rules) : null;
 var prices = GamePrices.Load(opts.Prices);
 if (opts.Patch != null && JObject.Parse(File.ReadAllText(opts.Patch))["game"] is JObject gamePatch) prices.Merge(gamePatch);
 var city = City.Load(opts.City);
+// Isolated reports: no changes to the existing report/planner behavior or JSON schema.
+if (opts.Wants("crew-economics") || opts.Wants("crew-economics-checks"))
+{
+    if (opts.Reports.Any(r => r != "crew-economics" && r != "crew-economics-checks"))
+        throw new ArgumentException("Crew economics reports cannot be combined with other reports (including playthrough JSON).");
+    var study = new CrewEconomics(opts, tables, rules, prices, city);
+    var result = study.Report(opts.Wants("crew-economics"), opts.Wants("crew-economics-checks"));
+    if (opts.Out != null) File.WriteAllText(opts.Out, result.Markdown);
+    if (opts.JsonOut != null) File.WriteAllText(opts.JsonOut, result.Json.ToString());
+    Console.Write(result.Markdown);
+    return;
+}
 var travel = new Travel { MetresPerMinute = opts.MetresPerSecond };
 // The player drives a truck: a real second is a game minute, so metres a second are metres a game minute. Buying and
 // carrying boxes for four pieces takes longer than for a cart.
@@ -1228,6 +1240,7 @@ sealed class Options
     // The playthrough report's plan and its JSON output (tools/playthrough).
     public string? Plan;
     public string? JsonOut;
+    public string CrewEconomicsConfig = "";
     // --service queue (default): the game's queue since 0.4.0. --service fluid: the old min(buyers, capacity).
     public bool Queue = true;
     public string[] Carts = { "hotdog+cooler", "coffee+bakery", "truck-like" };
@@ -1246,7 +1259,8 @@ sealed class Options
         {
             Data = Path.Combine(repo, "data"),
             City = Path.Combine(repo, "tools", "balance", "city.json"),
-            Prices = Path.Combine(repo, "tools", "balance", "game-prices.json")
+            Prices = Path.Combine(repo, "tools", "balance", "game-prices.json"),
+            CrewEconomicsConfig = Path.Combine(repo, "tools", "balance", "crew-economics.json")
         };
         for (var i = 0; i < args.Length; i++)
         {
@@ -1260,6 +1274,7 @@ sealed class Options
                 case "--out": o.Out = Next(); break;
                 case "--plan": o.Plan = Next(); break;
                 case "--json-out": o.JsonOut = Next(); break;
+                case "--crew-economics-config": o.CrewEconomicsConfig = Next(); break;
                 case "--pricing":
                     o.Pricing = Next() switch
                     {

@@ -17,6 +17,7 @@ namespace FoodTrucks
 
         public static void Set(VehicleController? controller, bool open)
         {
+            if (open && CrewDriveProbe.Owns(controller)) return;
             if (controller == null || controller.vehicleInstance?.vehicleTypeName != FoodTrucksMod.TruckTypeName) return;
             var key = controller.GetInstanceID();
             // A miss is remembered too (logged once), so a truck without a hatch isn't searched on every tick.

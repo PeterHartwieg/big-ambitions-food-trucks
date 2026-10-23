@@ -37,14 +37,14 @@ public class SalesSimulatorTests
     }
 
     // Runs minute by minute, applying the draws to the stock as the game side would.
-    private static List<SalesResult> Run(ServiceState state, SalesInput input, int minutes)
+    private static List<SalesResult> Run(ServiceState state, SalesInput input, int minutes, SalesSimulator? runner = null)
     {
         var stock = input.Stock.ToDictionary(p => p.Key, p => p.Value);
         var results = new List<SalesResult>();
         for (var i = 0; i < minutes; i++)
         {
             input.Stock = stock;
-            var result = simulator.Advance(state, input, 1);
+            var result = (runner ?? simulator).Advance(state, input, 1);
             foreach (var draw in result.Draws) stock[draw.Key] -= draw.Value;
             results.Add(result);
             if (result.SoldOut) break;
@@ -113,17 +113,40 @@ public class SalesSimulatorTests
     [Fact]
     public void FoodBuyersAddOnlyTheChosenDrink()
     {
-        const string Water = "ba:itemname_water";
-        var input = Input(30, units: 0, menu: new[] { HotDog, Soda, Water });
-        input.Stock = new Dictionary<string, int> { [HotDog] = 500, [Soda] = 5, [Water] = 500 };
+        var otherDrink = ShippedData.SecondColdDrink;
+        var input = Input(30, units: 0, menu: new[] { HotDog, Soda, otherDrink });
+        input.Stock = new Dictionary<string, int> { [HotDog] = 500, [Soda] = 5, [otherDrink] = 500 };
         input.CustomerShares = new Dictionary<string, double> { ["fastfood"] = 1.0 };
         input.AddOnsPerCustomer = 1.0;
         input.AddOnItem = Soda;
-        var sales = Merge(Run(SalesSimulator.Open(12), input, 240));
+        var sales = Merge(Run(SalesSimulator.Open(12), input, 240, new SalesSimulator(ShippedData.WithSecondColdDrink(), NoWalk)));
 
         Assert.Equal(5, sales.Count(s => s.AddOn));
         Assert.All(sales.Where(s => s.AddOn), s => Assert.Equal(Soda, s.Item));
-        Assert.DoesNotContain(sales, s => s.Item == Water);
+        Assert.DoesNotContain(sales, s => s.Item == otherDrink);
+    }
+
+    [Fact]
+    public void LeftoverWaterIsNeverSoldOrRestocked()
+    {
+        const string water = "ba:itemname_water";
+        var cargo = new[]
+        {
+            new CargoLine("ba:itemname_drinksfridge", 1, false),
+            new CargoLine(water, 500, false),
+            new CargoLine(Soda, 5, false)
+        };
+        var menu = Menu.FromCargo(ShippedData.Tables, "cart", cargo).Menu;
+        var input = Input(30, units: 0, menu: menu.Items.ToArray());
+        input.Stock = new Dictionary<string, int> { [Soda] = 5, [water] = 500 };
+
+        var results = Run(SalesSimulator.Open(12), input, 240);
+
+        Assert.Equal(5, Merge(results).Count);
+        Assert.All(Merge(results), sale => Assert.Equal(Soda, sale.Item));
+        Assert.All(results, result => Assert.False(result.Draws.ContainsKey(water)));
+        var restock = StockTransfer.FillUp(ShippedData.Tables, "cart", cargo, new Dictionary<string, int> { [water] = 500 });
+        Assert.Empty(restock.Load);
     }
 
     [Fact]

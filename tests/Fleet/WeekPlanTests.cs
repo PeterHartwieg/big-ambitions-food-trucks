@@ -34,6 +34,87 @@ public class WeekPlanTests
         return (s.Start, s.End);
     }
 
+    [Theory]
+    [InlineData("cart", 1)]
+    [InlineData("truck", 2)]
+    public void LargeRosterRotatesAcrossDaysAndShiftsButCannotOverstaff(string kind, int staff)
+    {
+        var vehicle = Truck();
+        vehicle.VehicleType = kind;
+        vehicle.Crew = Enumerable.Range(1, 100).Select(i => "e" + i).ToList();
+        var next = 0;
+        foreach (var day in WeekPlan.Days)
+            foreach (var start in new[] { 8, 12 })
+                for (var row = 0; row < staff; row++)
+                    Assert.Equal(ShiftProblem.None,
+                        WeekPlan.SetShift(rules, vehicle, vehicle.Crew[next++], day, start, start + 4, staff: staff));
+
+        var before = new SaveCodec().Serialize(new SaveState { Vehicles = new List<VehicleState> { vehicle } });
+        Assert.Equal(ShiftProblem.Clash,
+            WeekPlan.SetShift(rules, vehicle, "e100", DayOfWeek.Monday, 9, 11, staff: staff));
+        // Explicit row names must not create an extra workstation (including serving2 on a cart).
+        Assert.Equal(ShiftProblem.Clash,
+            WeekPlan.SetShift(rules, vehicle, "e100", DayOfWeek.Monday, 9, 11, WeekPlan.Serving(staff + 1), staff));
+        Assert.Equal(before, new SaveCodec().Serialize(new SaveState { Vehicles = new List<VehicleState> { vehicle } }));
+
+        var loaded = new SaveCodec().Load(before);
+        Assert.Equal(LoadStatus.Loaded, loaded.Status);
+        Assert.Empty(loaded.Notes);
+        var restored = Assert.Single(loaded.State!.Vehicles);
+        Assert.Equal(vehicle.Crew, restored.Crew);
+        Assert.Equal(7 * 2 * staff, restored.Schedule!.CrewShifts.Count);
+        foreach (var day in Enumerable.Range(1, 7))
+        {
+            var morning = CrewPay.OnShiftCrew(restored, HireSchedules.Absolute(day, 8 * 60));
+            var afternoon = CrewPay.OnShiftCrew(restored, HireSchedules.Absolute(day, 12 * 60));
+            Assert.Equal(staff, morning.Count);
+            Assert.Equal(staff, afternoon.Count);
+            Assert.Empty(morning.Intersect(afternoon));
+            Assert.Empty(CrewPay.OnShiftCrew(restored, HireSchedules.Absolute(day, 16 * 60)));
+        }
+    }
+
+    [Fact]
+    public void LegacyCartSecondRowIsRepairedAtLoadBeforeAnyoneCanBePaid()
+    {
+        var cart = Truck();
+        cart.VehicleType = "cart";
+        cart.Schedule!.CrewShifts = new List<CrewShift>
+        {
+            new() { EmployeeId = "e1", Day = DayOfWeek.Monday, Start = 8, End = 12, Station = "serving1" },
+            new() { EmployeeId = "e2", Day = DayOfWeek.Monday, Start = 8, End = 12, Station = "serving2" },
+            new() { EmployeeId = "e2", Day = DayOfWeek.Tuesday, Start = 8, End = 12, Station = "serving2" }
+        };
+        var codec = new SaveCodec();
+        var loaded = codec.Load(codec.Serialize(new SaveState { Vehicles = new List<VehicleState> { cart } }));
+        Assert.Equal(LoadStatus.Loaded, loaded.Status);
+        Assert.Single(loaded.Notes);
+        var restored = Assert.Single(loaded.State!.Vehicles);
+        Assert.Equal(cart.Crew, restored.Crew);
+        Assert.Equal(2, restored.Schedule!.CrewShifts.Count);
+        Assert.All(restored.Schedule.CrewShifts, s => Assert.Equal("serving1", s.Station));
+        Assert.Equal(new[] { "e1" }, CrewPay.OnShiftCrew(restored, HireSchedules.Absolute(1, 9 * 60)));
+        Assert.Equal(new[] { "e2" }, CrewPay.OnShiftCrew(restored, HireSchedules.Absolute(2, 9 * 60)));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void AutoScheduleRotatesALargerRosterWithinTheServingRows(int staff)
+    {
+        var truck = Truck(WeekPlan.Days.Select(day => Stop(day, "office", 0, 660, 840)).ToArray());
+        truck.Crew = Enumerable.Range(1, 12).Select(i => "e" + i).ToList();
+        var shifts = WeekPlan.AutoSchedule(rules, Days(truck), truck.Crew.Select(id => new CrewWish(id)).ToList(), staff);
+        truck.Schedule!.CrewShifts = shifts;
+        Assert.True(shifts.Select(s => s.EmployeeId).Distinct().Count() > staff);
+        Assert.True(WeekPlan.CheckShifts(shifts));
+        Assert.All(shifts, s => Assert.Contains(s.Station, WeekPlan.Stations(staff)));
+        Assert.False(WeekPlan.AnyGap(Days(truck), truck.Schedule, truck.Crew));
+        foreach (var day in WeekPlan.Days)
+            foreach (var hour in Enumerable.Range(0, 24))
+                Assert.InRange(shifts.Count(s => s.Day == day && s.Start <= hour && hour < s.End), 0, staff);
+    }
+
     [Fact]
     public void ARouteSavedBeforeTheWeekPlanBecomesTheSameStopsOnItsDays()
     {

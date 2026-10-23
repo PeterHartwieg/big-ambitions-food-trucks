@@ -51,13 +51,30 @@ namespace FoodTrucks
                 c => CartSelling.CanOfferClose(c.vehicleInstance), c => CartSelling.CloseByPlayer(c.vehicleInstance.id)),
             new Spec("FoodTrucks.Clean", "foodtrucks:overlay_clean",
                 c => CartSelling.CanOfferClean(c.vehicleInstance), c => CartSelling.CleanHere(c.vehicleInstance.id)),
+            new Spec("FoodTrucks.SellCart", "foodtrucks:overlay_sell_cart",
+                c => CartSale.CanOffer(c.vehicleInstance), CartSale.Ask),
         };
 
         private static readonly FieldInfo? EnterField = AccessTools.Field(typeof(VehicleOverlay), "enterVehicleButton");
+        private static readonly FieldInfo? StorageField = AccessTools.Field(typeof(VehicleOverlay), "manageStorageButton");
         // The vehicle the overlay showed when the buttons were last set up.
         private static VehicleController? shownFor;
         private static bool failed;
         private static readonly HashSet<string> logged = new HashSet<string>();
+
+        // Vanilla hand carts bypass VehicleOverlay and immediately start pushing. At a commissary expose the
+        // cart's actions instead. Held cargo and hand trucks retain their native loading interactions.
+        internal static void CommissaryCartCtaPostfix(EntityController entityController)
+        {
+            try
+            {
+                if (CtaManager.ctaKey != "click_to_drive" || PlayerHelper.IsUsingVehicle || PlayerHelper.ItemInstanceInHands != null ||
+                    !(entityController is VehicleController controller) || !CartSale.CanOffer(controller.vehicleInstance)) return;
+                CtaManager.ctaKey = "click_to_use";
+                CtaManager.ctaAction = null;
+            }
+            catch (Exception ex) { Log.Error("Commissary cart actions: " + ex); }
+        }
 
         // Postfix on VehicleOverlay.UpdateOverlay(EntityController).
         internal static void UpdateOverlayPostfix(VehicleOverlay __instance, EntityController entityController)
@@ -76,6 +93,16 @@ namespace FoodTrucks
                 var controller = entityController as VehicleController;
                 var food = controller != null && controller.vehicleInstance != null && FoodTrucksMod.KindOf(controller.vehicleInstance.vehicleTypeName) != null;
                 shownFor = food ? controller : null;
+                // The native overlay only initializes these for non-empty cargo. Empty retiring carts need a
+                // functioning Use cart action too, and must not inherit storage buttons from a previous vehicle.
+                if (food && CartSale.CanOffer(controller!.vehicleInstance) && !PlayerHelper.IsUsingVehicle && PlayerHelper.ItemInstanceInHands == null)
+                {
+                    enter.gameObject.SetActive(true);
+                    var label = enter.GetComponentInChildren<TextLocalizationComponent>(true);
+                    if (label != null) label.Key = "use_cart";
+                    if (StorageField?.GetValue(__instance) is Button storage)
+                        storage.gameObject.SetActive(controller.vehicleInstance.cargoInstances.Count > 0);
+                }
                 foreach (var spec in Specs)
                 {
                     var button = Find(enter, spec.Name) ?? Make(enter, spec);

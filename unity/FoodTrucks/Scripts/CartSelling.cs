@@ -188,6 +188,7 @@ namespace FoodTrucks
         // the player is on foot. The vehicle's own saved parking state and position decide, not the item panel.
         public static void OpenHere(VehicleController controller)
         {
+            if (CrewDriveProbe.Owns(controller)) return;
             try { instance?.Open(controller); }
             catch (Exception ex)
             {
@@ -200,6 +201,7 @@ namespace FoodTrucks
         // road with its crew, the player on foot. The checks themselves come with the click (Open).
         internal static bool CanOfferOpen(VehicleInstance? cart)
         {
+            if (CrewDriveProbe.Owns(cart?.id)) return false;
             if (cart == null || FoodTrucksMod.KindOf(cart.vehicleTypeName) == null) return false;
             if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) return false;
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, cart.id);
@@ -1155,7 +1157,7 @@ namespace FoodTrucks
         // All window takings paid in, one transaction per vehicle and day, into the day sold, as the game
         // pays its shops their day's revenue at midnight (BusinessHelper.ProcessDailyOrders). A day is paid once that
         // vehicle's sales have passed its end (SoldThroughOf). A payment the game refuses waits for the next tick.
-        private static void PayTakings(SaveState state, bool all)
+        private static void PayTakings(SaveState state, bool all, string? vehicleId = null)
         {
             var today = SaveGameManager.Current.Day;
             var self = instance;
@@ -1170,6 +1172,7 @@ namespace FoodTrucks
             var names = StreetFoodBooks.VehicleNames();
             foreach (var taking in due)
             {
+                if (vehicleId != null && taking.VehicleId != vehicleId) continue;
                 if (taking.Cents <= 0)
                 {
                     CrewTakings.Settled(state, taking);
@@ -1265,6 +1268,15 @@ namespace FoodTrucks
         }
 
         // VehicleHelper.Delete prefix: book visible customers while their cargo still exists.
+        internal static bool PayVehicleTakingsNow(VehicleInstance cart)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || !FoodTrucksSession.CanWrite) return false;
+            BeforeVehicleRemoved(cart);
+            PayTakings(state, all: true, vehicleId: cart.id);
+            return !state.CrewTakings.Any(t => t.VehicleId == cart.id);
+        }
+
         internal static void BeforeVehicleRemoved(VehicleInstance cart)
         {
             var state = FoodTrucksSession.CurrentState;
