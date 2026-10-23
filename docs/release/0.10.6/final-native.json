@@ -1,0 +1,115 @@
+{
+  "source_runtime_dll_sha256": "c74f8040d5fb0529e731cadd1b655a4ad8a6906659020805269bb86a11b0315c",
+  "mac": {
+    "session": "e0080384",
+    "adapted_dll_sha256": "57ce2f11428c559513078ae35ae51d74c604f904f5f77e4bb18a9571f4cadd55",
+    "assertions": {
+      "money": true,
+      "licence": true,
+      "ledger_today": true,
+      "commissary": true,
+      "Du8pfFxQakyjPYKz649OQA==id": true,
+      "Du8pfFxQakyjPYKz649OQA==pieces": true,
+      "Du8pfFxQakyjPYKz649OQA==stock": true,
+      "Du8pfFxQakyjPYKz649OQA==crew": true,
+      "Du8pfFxQakyjPYKz649OQA==open": true,
+      "UisU7k85T0O8+qC8DBMAkQ==id": true,
+      "UisU7k85T0O8+qC8DBMAkQ==pieces": true,
+      "UisU7k85T0O8+qC8DBMAkQ==stock": true,
+      "UisU7k85T0O8+qC8DBMAkQ==crew": true,
+      "UisU7k85T0O8+qC8DBMAkQ==open": true,
+      "ZUq0ENrip0uvIZWHU81jwA==id": true,
+      "ZUq0ENrip0uvIZWHU81jwA==pieces": true,
+      "ZUq0ENrip0uvIZWHU81jwA==stock": true,
+      "ZUq0ENrip0uvIZWHU81jwA==crew": true,
+      "ZUq0ENrip0uvIZWHU81jwA==open": true,
+      "second_logo": true
+    },
+    "release_start_refused": true,
+    "restoration": {
+      "restored": 263,
+      "original_mod_files": 19
+    },
+    "released": {
+      "instance": "agentmac",
+      "held": false,
+      "owner": null,
+      "purpose": null,
+      "acquired_utc": null,
+      "expires_automatically": false,
+      "pending": 0,
+      "legacy_blocked": false
+    },
+    "soda_cans_conserved": 318,
+    "weighted_cooler_capacities": [
+      320,
+      160,
+      320
+    ],
+    "native_visual_acceptance": "still manual: both camera attempts obstructed"
+  },
+  "windows": {
+    "session": "df2115ec",
+    "adapted_dll_sha256": "bc391ddb20dc3bcc27d1e65e9f4ab2eb6232b4cc9a71de5639e794eba801a11c",
+    "release_start_refused": true,
+    "money": 34400.0,
+    "truck_count": 1,
+    "logo_text": "Windows Kitchen 106",
+    "restoration": {
+      "verified_files": 105,
+      "restored": true,
+      "foodtrucks_files": 19
+    },
+    "released": {
+      "instance": "agent1",
+      "held": false,
+      "owner": null,
+      "purpose": null,
+      "acquired_utc": null,
+      "expires_automatically": false,
+      "pending": 0,
+      "legacy_blocked": false
+    }
+  },
+  "log_checks": {
+    "Mac": {
+      "inactive": 0,
+      "mod_errors": 0,
+      "foodtrucks_exceptions": 0
+    },
+    "Windows": {
+      "inactive": 0,
+      "mod_errors": 0,
+      "foodtrucks_exceptions": 0
+    },
+    "version_specific_rules": false
+  },
+  "base_menu_count": 19,
+  "optional_bakery_products": 5,
+  "raw_evidence_directory": "build/final-0.10.6",
+  "raw_sha256": {
+    "mac-assertions.json": "e9fc10ed383157d6330a4a0558e0231760207487c1b28688d028223b79ae530d",
+    "mac-fit-second-fridge.json": "b822ce3daa4e7113ff6b3ce32d46cfed8920941a673b4dca350a7222719cba4e",
+    "mac-return-large.json": "2649b251a32a4d09f0a07497c7e6db896ed4d34ac2c23fc4de7ddca104396d03",
+    "mac-refit-large.json": "0d0eb662f1d9b875c45a2d100588d77b23bcc91f21112bdfdaa109d86d199da1",
+    "mac-reload-logo-ui.json": "221fffa4411b277c3da747025aa8a6ad0ea0be42b3e46a2b1057d2c4129fc9fa",
+    "mac-gate.json": "08ec490f669c72bff1ef99b8c21da4c9405fb6605e4c34981f6f9d05a59c5ba1",
+    "win-gate.json": "36d6c60db913f3c706d8525665fbe215c0de34cffe11c5ead65b89d06df90834",
+    "win-state.json": "324986d08d19b321328e715317c43e706f160f2a3acd57eeb94cb9781cd10ba2",
+    "win-brand-ui.json": "150f5aee66d320603bf7787df3daee483b7dc47920bc4e0dbd170d379abfca0f",
+    "mac-restored.json": "77d7171cffc8b472bbdc88ad008854cba2e2a1e8417048f17c6505045c6b2abd",
+    "windows-restored.json": "ee037ef84f9002166f3cdb4f1171bf3a9684aefb68a3a9e122471e92aa88ff33",
+    "mac-released.json": "20f54016ef5d4ab563d7890044b57441710cf5c02fee8f34c8dc474d74f0d918",
+    "windows-released.json": "0f1acf50e8f07ee8712a5293c0bd21e1996ce0a9ee9ad785fdcce71746cfbbc9",
+    "Mac-Player-agent.log": "a47cba473362c9448b52575d34ef972db3e26fd08033eddfd3bf3294869e1958",
+    "Windows-Player-agent.log": "ef488af5144fc74b95e94c79e2819e96359021e65354159b6be148922548a212",
+    "core-tests.log": "b5f504646e7268f2a73443e36cf1217f2366defa2ae98f35842f1ac5ea0d39c6",
+    "tools-tests.log": "160b69dbf42b0c7fc5814e569f07602f5ab03a9326f1b7b8af0ddce3369cc149",
+    "gate-tests-final.log": "b68a58e46bd6289231b01fabc86577396958c0f5b86dd1063d995c3f50512ff1",
+    "traffic-tests-final.log": "c281550ad556bd568c0566ed91c73530347f16b73eb6b1ce87c968e0d06da221",
+    "dll-verification.txt": "ea617115ce04de953b1b25af68debf6d55c609a62cf99de84180d41ff402446c",
+    "logo-isolation-tests.log": "2f9a06da4d499587e5d327b40fdacc20d287f29263c08a9d25499366d753ccc1",
+    "negative-control.txt": "feb10e599cd0468a091ccd38269414c4c2fab56edae11b101c6d4459aa3b7de4"
+  },
+  "limits": "See final-verification.txt for the explicit CSF1-CSF5 and LG1-LG4 manual checks. No Workshop upload."
+}

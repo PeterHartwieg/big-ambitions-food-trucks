@@ -8,6 +8,8 @@ Release gate
 - Physical probe components, native traffic/vehicle adapters, Harmony hooks and
   bridge command compile only with FOODTRUCKS_CREW_DRIVING_DEV. Normal builds
   contain an inert static seam: no start method, component, ownership or hooks.
+- Negative control: the same DLL verifier rejected the previous rc2 DLL containing
+  the native physical probe (expected rejection, not a release-test failure).
 - The standard build runs tools/release/VerifyRelease.csproj against the actual
   packaged DLL and fails if probe types, calls, command/help strings or a mutable
   seam survive. It also checks version 0.10.6, retained timed HireRoutes and schema 2.
@@ -23,13 +25,17 @@ Automated results
   The earlier 200-seed x 365-day run passed on 781fe33; not rerun for this gate-only
   runtime change. Core production code and economic tuning did not change here.
 - Full tools suite: 250 passed in-process. The additional release-copy/footer test
-  and final focused gate/traffic suites passed (251 total test cases now present).
+  and final focused gate/traffic/logo suites passed (252 total test cases now present).
   Existing developer probe harnesses explicitly opt into the development symbol.
 - Unity official SDK Windows/Mac bundles built and validated; no compiler errors.
   Existing SDK duplicate-type warnings remain. Package verification is separate.
 - New historical-cargo tests rotate multiple small/large/nested fridge layouts
   for carts and trucks; they preserve menu validity, soda capacity and dedicated
   versus general placement. These are reconstructed cargo layouts, not old saves.
+- Compiled actual logo-editor prefixes passed 50 ordinary-shop/private-editor
+  lifecycle iterations without reading or mutating shop state. Actual generator
+  prefix kept two truck names separate and ordinary shop names unchanged. This
+  instrumented boundary test does not replace the native ordinary-shop check.
 - New two-logo Core test performs 50 save/reload/remove cycles with a missing
   custom-icon identifier and preserves the independent second design. Existing
   tests retain malformed/future cosmetics without invalidating financial state.
