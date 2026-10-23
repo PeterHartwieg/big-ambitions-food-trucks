@@ -1,10 +1,44 @@
 {
-  "archive": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/cooler-release/build/FoodTrucks-0.10.6-rc2.zip",
-  "sha256": "dab16e6457dc51dbc1936da32fce17dcc903f33395437faf2b9a9077927956cd",
+  "archive": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/cooler-release/build/FoodTrucks-0.10.6.zip",
+  "sha256": "fd34a325bd0aa7daf3aab066f66d14e603cde6cd4841c89c88b637fded906dd1",
   "entries": 19,
   "crc": "passed",
   "all_file_hashes": "passed",
   "dll_version_string": "0.10.6",
-  "native_dll_sha256": "f7eee9f32875fdd598ca40ef1ed0221f5e63b4f5ac82db12d95eafaba9ebbf8c",
-  "core_dll_sha256": "0e42e769e0d0b3931e1a939adde02214f8c40f6894ddb26295e7345bb8bad4ca"
+  "save_schema": 2,
+  "physical_driving_release_gate": "passed",
+  "native_tested_dll_exact_match": false,
+  "native_code_equivalence": "passed; build-equivalence.json",
+  "differences_from_native_tested_package": [
+    "Dependencies/BridgeControl.dll",
+    "Dependencies/FoodTrucks.Core.dll",
+    "FoodTrucks.dll",
+    "README.md"
+  ],
+  "native_dll_sha256": "48b78a68ac9f2744e0f49a7a13a94cb330ef8b5280945852b0b8c37cf04e97e7",
+  "core_dll_sha256": "50aabfe3f116a2d99964dea47d0b5d3243dbe51933716c6cc17bad53e1f6ad73",
+  "runtime_source_commit": "1d5083e15aba0ff767f612a251cff360130d8ff0",
+  "kit": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/cooler-release/build/workshop-0.10.6-final-20261023",
+  "kit_runtime_exact_match": true,
+  "file_sha256": {
+    "AssetBundles/Mac/foodtrucks.unity3d": "b2bff1e923dc0e8ab53a332b6f1a33737f70a310eff2249b3ea2aedac1d7c900",
+    "AssetBundles/Mac/foodtrucks.unity3d.manifest": "2422fe33d5333ff74fbdc46521f3e5efba38a40f4073b98ec6ec46e72f811d8d",
+    "AssetBundles/Windows/foodtrucks.unity3d": "a20e5dcf51a401afa928f0134ce4b5b31bb209b668d7aee400ab464d286d7e23",
+    "AssetBundles/Windows/foodtrucks.unity3d.manifest": "6417130b140bbb9af0487531b3ccdaf004f96dc4f0ed526643f9d25cca85a0db",
+    "Dependencies/0Harmony.dll": "7b9e756306fa3d7620e02a857c8927a6ab04973f9bd8a77d3866700a6deac55c",
+    "Dependencies/BridgeControl.dll": "b4d8a5e8c2d9a7952ca5fbd5a6fff455ac071da953257185297183c298829775",
+    "Dependencies/FoodTrucks.Core.dll": "50aabfe3f116a2d99964dea47d0b5d3243dbe51933716c6cc17bad53e1f6ad73",
+    "Dependencies/Harmony-LICENSE.txt": "407ddd98200c9f17f49942b5a7791e288a2bd553b59bf2f462db87dbb21c50bc",
+    "FoodTrucks.dll": "48b78a68ac9f2744e0f49a7a13a94cb330ef8b5280945852b0b8c37cf04e97e7",
+    "LICENSE.txt": "dfb53130398530b7569d6d2686991c0dba5f6e9785b4a83fa60fd51dc6ba1ba1",
+    "Locales/en.json": "c65d26049f56a37e11d6a2e62f144c18b829ba1f98a50dd4b8a9f7cba80533e1",
+    "README.md": "1c3b9bc15143d0e4e1b323a80be0cdf93c72a2492bec76ec6b105c07f63fcdbc",
+    "data/commissaries.json": "49f7342e5b19c16d541967f578a505c7063afb25a041cbfe90305387959b0f99",
+    "data/demand.json": "f5daffd50838e3281e3f709d3b5597035d7195099d07a9d19663c1606173b3b5",
+    "data/economy.json": "5c966de52b1cabc2df9734d0a0176f4da3070a52c42dda2323c671272439f302",
+    "data/pitches.json": "9aff7f2fde4ceb79b338b1486869b58748a0bfc90e619238bd4d1429189f86e7",
+    "data/rules.json": "46750055b0abfed54ed9aed139c269d43edbfb2a11f0c1722947859d511d0868",
+    "data/vehicle-diagrams.json": "6c0764b981044a6a9612fee708796e46fe5f0b7eb171ce1e7e56c2ebf88f28e9",
+    "data/zones.json": "340ea58a4c815347826142fb6e034bd49d4eddd9a27069c7691f87eea9c44334"
+  }
 }

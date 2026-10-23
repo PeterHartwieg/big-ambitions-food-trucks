@@ -1,0 +1,31 @@
+{
+  "checks": {
+    "FoodTrucks.dll": {
+      "native_tested_sha256": "c74f8040d5fb0529e731cadd1b655a4ad8a6906659020805269bb86a11b0315c",
+      "final_sha256": "48b78a68ac9f2744e0f49a7a13a94cb330ef8b5280945852b0b8c37cf04e97e7",
+      "type_field_method_metadata_and_il": "identical",
+      "informational_version_change": null,
+      "comparison_before_sha256": "402d365b2b450e075814619f2a0efe638edbcefde6da5ce77b7b59ffcf56d2c2",
+      "comparison_after_sha256": "402d365b2b450e075814619f2a0efe638edbcefde6da5ce77b7b59ffcf56d2c2"
+    },
+    "Dependencies/FoodTrucks.Core.dll": {
+      "native_tested_sha256": "4cf44232ff716e0758cc9d79a8eac3a472289c6c84f9487a5a19de27dcb2676f",
+      "final_sha256": "50aabfe3f116a2d99964dea47d0b5d3243dbe51933716c6cc17bad53e1f6ad73",
+      "type_field_method_metadata_and_il": "identical",
+      "informational_version_change": "1.0.0+781fe33 -> 1.0.0+4a7164a",
+      "comparison_before_sha256": "22d0279b0f30ab8d44c25bff1e4dd1f3aeec98c69ee64e67e0bd60b5c43fb89a",
+      "comparison_after_sha256": "ce6c9c6335f5d9e916516bf7fad0fb06325a58201cc95b27f0e7897c99e255ef"
+    },
+    "Dependencies/BridgeControl.dll": {
+      "native_tested_sha256": "3fedbbf9222f17ef581804f4a476a09932b03559b5eaf968339890f6e9552d9c",
+      "final_sha256": "b4d8a5e8c2d9a7952ca5fbd5a6fff455ac071da953257185297183c298829775",
+      "type_field_method_metadata_and_il": "identical",
+      "informational_version_change": "1.0.0+781fe33 -> 1.0.0+4a7164a",
+      "comparison_before_sha256": "78a29b9894849ebe55b057ff8fe4430435c1b75879025876761af801ae8e81a6",
+      "comparison_after_sha256": "5b9d53e0524c9b817c414d33ef0801ef117c0f69f0bd78236aa7f15706f899cf"
+    }
+  },
+  "method": "Mono.Cecil canonical comparison of assembly attributes/references, recursive types, fields, constants, custom attributes, methods/parameters/locals, executable IL and exception handlers. PE layout/module identity excluded. Only AssemblyInformationalVersionAttribute excluded for Core/BridgeControl; no source gameplay changes. Bundles and data are byte-identical to rig-tested files.",
+  "comparer_source_sha256": "0f851e749ae2a3e634f859d9bac0d21726eb7e23c93b37cee90c644ca18b4991",
+  "raw_evidence": "build/final-0.10.6/*-compare-*.txt, *-compare.diff and compare/Program.cs"
+}

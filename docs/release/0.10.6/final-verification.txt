@@ -115,6 +115,15 @@ LG4: Core old/future/malformed/missing-icon save tests pass. Removing a real cus
 Optional-mod job/licence/help native behavior remains outside this focused smoke.
 Physical-driving Gate A/later campaigns are deferred work, not 0.10.6 release gates.
 
+Final rebuild provenance
+The final SDK rebuild passed its release gate. Rebuilt assembly hashes differ from
+native-tested bytes: the mod DLL's compared type/field/method metadata and IL are
+identical; Core and BridgeControl additionally changed only their informational
+Git hash from 781fe33 to 4a7164a. Bundles/data/other dependencies match byte-for-byte.
+README carries final status. build-equivalence.json records both sets of hashes
+and the canonical comparison. Native evidence is bound to the earlier binary hashes; the final executable code
+is equivalent under that comparison.
+
 Evidence and artifacts
 - final-native.json: compact receipts and evidence hashes.
 - package-verification.json, package.sha256, archive.sha256: final archive inventory,
