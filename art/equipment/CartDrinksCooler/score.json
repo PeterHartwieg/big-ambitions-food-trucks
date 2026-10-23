@@ -1,0 +1,229 @@
+{
+  "spec": "spec.json",
+  "blend": {
+    "label": "blend",
+    "objects": [
+      "CartDrinksCooler_Body",
+      "CartDrinksCooler_Collision"
+    ],
+    "per_object": {
+      "CartDrinksCooler_Body": {
+        "triangles": 1404,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.196,
+          -0.0356,
+          0.0
+        ],
+        "bbox_max": [
+          0.196,
+          0.0348,
+          0.3836
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "CartDrinksCooler_Collision": {
+        "triangles": 12,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.196,
+          -0.0356,
+          0.0
+        ],
+        "bbox_max": [
+          0.196,
+          0.0348,
+          0.3836
+        ],
+        "rotation_deg": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 1404,
+    "visible_bbox_min": [
+      -0.196,
+      -0.0356,
+      0.0
+    ],
+    "visible_bbox_max": [
+      0.196,
+      0.0348,
+      0.3836
+    ],
+    "visible_dims": [
+      0.392,
+      0.0704,
+      0.3836
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "CartDrinksCooler_GameLook"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5647,
+      "overlap_fraction": 0.0
+    },
+    "textures": {
+      "T_CartDrinksCooler_BaseColor.png": [
+        512,
+        512
+      ]
+    },
+    "blend_size_mb": 0.13
+  },
+  "fbx": {
+    "label": "fbx",
+    "objects": [
+      "CartDrinksCooler_Body",
+      "CartDrinksCooler_Collision"
+    ],
+    "per_object": {
+      "CartDrinksCooler_Body": {
+        "triangles": 1404,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.196,
+          -0.0356,
+          -0.0
+        ],
+        "bbox_max": [
+          0.196,
+          0.0348,
+          0.3836
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0
+      },
+      "CartDrinksCooler_Collision": {
+        "triangles": 12,
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bbox_min": [
+          -0.196,
+          -0.0356,
+          -0.0
+        ],
+        "bbox_max": [
+          0.196,
+          0.0348,
+          0.3836
+        ],
+        "rotation_deg": [
+          90.0,
+          -0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "non_manifold_edges": 0,
+        "wire_edges": 0,
+        "loose_verts": 0,
+        "ngons": 0,
+        "inconsistent_normal_edges": 0,
+        "degenerate_faces": 0,
+        "closed_islands_inside_out": 0,
+        "max_vertex_outside_face_plane_m": 0.0
+      }
+    },
+    "visible_triangles": 1404,
+    "visible_bbox_min": [
+      -0.196,
+      -0.0356,
+      -0.0
+    ],
+    "visible_bbox_max": [
+      0.196,
+      0.0348,
+      0.3836
+    ],
+    "visible_dims": [
+      0.392,
+      0.0704,
+      0.3836
+    ],
+    "near_points": {
+      "stands on the floor at the origin": 0.0
+    },
+    "clear_boxes": {},
+    "materials": [
+      "CartDrinksCooler_GameLook"
+    ],
+    "uv0": {
+      "uv_coords_outside_0_1": 0,
+      "fill": 0.5647,
+      "overlap_fraction": 0.0
+    },
+    "fbx_size_mb": 0.1
+  },
+  "failures": [],
+  "passed": true
+}

@@ -341,20 +341,47 @@ public class DemandModelTests
     }
 
     [Fact]
-    public void ColdDrinksMostlyAddToTheTicket()
+    public void ColdDrinksComeHalfOnTheirOwnAndHalfOnTheTicket()
     {
         var food = model.Estimate(Query("office", 12, 0, HotDog));
         var withDrinks = model.Estimate(Query("office", 12, 0, HotDog, Soda));
         var drinksOnly = model.Estimate(Query("office", 12, 0, Soda));
 
-        var drinkPart = 0.5 * 0.15 * 0.25;
+        var drinkPart = 0.5 * 0.30 * 0.5;
         Assert.Equal(0.25 + drinkPart, withDrinks.Appetite, 9);
         // Drink-only customers get no add-on drink, so the add-on rate counts only the hot dog customers.
-        Assert.Equal(0.25 / (0.25 + drinkPart) * 0.15 * 0.75 * 2.0, withDrinks.AddOnsPerCustomer, 9);
+        Assert.Equal(0.25 / (0.25 + drinkPart) * 0.30 * 0.5 * 2.0, withDrinks.AddOnsPerCustomer, 9);
         Assert.Equal(drinkPart / (0.25 + drinkPart), withDrinks.CustomerShares["colddrinks"], 9);
         Assert.Equal(0, food.AddOnsPerCustomer);
-        Assert.Equal(0.15 * 0.25, drinksOnly.Appetite, 9);
+        Assert.Equal(0.30 * 0.5, drinksOnly.Appetite, 9);
         Assert.Equal(0, drinksOnly.AddOnsPerCustomer);
+    }
+
+    [Theory]
+    [InlineData(31, 0.7)]
+    [InlineData(70, 0.7)]
+    [InlineData(90, 0.9)]
+    public void ColdDrinksMarketDemandHasItsOwnFloor(double demand, double factor)
+    {
+        // Drinks keep market.floor's 0.3 for other categories, but count at least marketFloor 0.7 themselves.
+        var query = Query("office", 12, 0, Soda);
+        query.MarketDemand = new Dictionary<string, double> { [Soda] = demand };
+
+        var estimate = model.Estimate(query);
+
+        Assert.Equal(factor, estimate.Market, 9);
+        Assert.Equal(0.30 * 0.5 * factor, estimate.Appetite, 9);
+    }
+
+    [Fact]
+    public void CategoryMarketFloorCannotExceedTheConfiguredCeiling()
+    {
+        var demand = JObject.Parse(ShippedData.Demand);
+        demand["market"]!["ceiling"] = 0.5;
+        var capped = new DemandModel(DemandTables.Parse(demand.ToString(), ShippedData.Economy, ShippedData.Zones));
+        var query = Query("office", 12, 0, Soda);
+        query.MarketDemand = new Dictionary<string, double> { [Soda] = 10 };
+        Assert.Equal(0.5, capped.Estimate(query).Market, 9);
     }
 
     [Theory]

@@ -312,6 +312,14 @@ namespace FoodTrucks
                 return;
             }
             Summary(first, state, vehicle, instance, name, withDriver, canWrite);
+            if (kind == "truck")
+            {
+                var branding = new BizManParts.Box(first, Text("foodtrucks:logo_header"));
+                var logo = FoodTrucks.Core.Fleet.VehicleLogo.Read(vehicle?.Logo);
+                branding.Paragraph(logo?.Name ?? Text("foodtrucks:logo_none"));
+                if (canWrite && TruckLogoEditor.Ready && TruckLogos.Ready && FoodTrucks.Core.Fleet.VehicleLogo.CanEdit(vehicle?.Logo))
+                    branding.Button(Text("foodtrucks:logo_customize"), () => TruckLogoEditor.Open(id));
+            }
             Menu(first, id, vehicle, instance, canWrite);
             Alerts(second, id);
             CommissarySpace(second, state, id, kind);

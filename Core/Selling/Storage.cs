@@ -188,8 +188,14 @@ namespace FoodTrucks.Core.Selling
                 // A second storage piece is refused as such, before the slots, so the player hears the real reason.
                 if (piece.IsStorage && CargoRules.FittedEquipment(tables, lines).Any(id => tables.Equipment(id)!.IsStorage))
                     return new LoadCheck(0, LoadRefusal.SecondStorage);
-                // Equipment takes a slot whether or not it carries stock inside it (a stocked drinks fridge).
-                var allowed = StockLimit.CanLoad(EquipmentPieces(tables, lines), amount, vehicle.EquipmentSlots);
+                // A stocked fridge follows the same reservation as an empty one. Only the first is reserved.
+                // Count cargo quantities without expanding a stack into a list (old/corrupt saves can be huge).
+                var coolerCount = lines.Where(l => EquipmentLayout.IsCooler(tables.EquipmentForGameItem(l.ItemName)?.Id))
+                    .Sum(l => (long)Math.Max(0, l.Amount));
+                var used = EquipmentPieces(tables, lines) - (int)Math.Min(vehicle.CoolerSlots, coolerCount);
+                var reserved = EquipmentLayout.IsCooler(piece.Id)
+                    ? Math.Max(0, vehicle.CoolerSlots - (int)Math.Min(vehicle.CoolerSlots, coolerCount)) : 0;
+                var allowed = used > vehicle.EquipmentSlots ? 0 : Math.Min(amount, vehicle.EquipmentSlots - used + reserved);
                 if (allowed == 0) return new LoadCheck(0, LoadRefusal.EquipmentSlots);
                 if (piece.IsStorage && amount > 1) return new LoadCheck(1, LoadRefusal.SecondStorage);
                 return new LoadCheck(allowed, allowed < amount ? LoadRefusal.EquipmentSlots : LoadRefusal.None);

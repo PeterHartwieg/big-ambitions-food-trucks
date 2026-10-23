@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using FoodTrucks.Core.Selling;
 
 namespace FoodTrucks.Core.Fleet
 {
@@ -166,6 +167,16 @@ namespace FoodTrucks.Core.Fleet
             var value = (double)token;
             if (double.IsNaN(value) || value < 0 || value > 1) throw Bad(where + " must be between 0 and 1");
             return value;
+        }
+
+        public static IReadOnlyList<(DiagramPlace Place, T Piece)> Fill<T>(VehicleDiagram diagram, IEnumerable<T> pieces,
+            Func<T, string?> equipmentId, int coolerSlots = 1)
+        {
+            var general = diagram.Places.Where(p => p.Name != EquipmentLayout.CoolerPlace).ToList();
+            var cooler = diagram.Places.FirstOrDefault(p => p.Name == EquipmentLayout.CoolerPlace);
+            var places = general.Concat(cooler == null ? Array.Empty<DiagramPlace>() : new[] { cooler }).ToList();
+            return EquipmentLayout.Place(pieces, general.Count, cooler == null ? 0 : Math.Min(1, Math.Max(0, coolerSlots)), equipmentId)
+                .Select(p => (places[p.Slot], p.Piece)).ToList();
         }
 
         // The pieces in fitting order on the places in fill order; pieces past the last place aren't drawn.

@@ -11,7 +11,7 @@
     "ba:itemname_cupofcoffee": { "category": "coffee", "serviceMinutes": 1.0, "stockWeight": 0.25 },
     "ba:itemname_cupoftea": { "category": "coffee", "serviceMinutes": 1.0, "stockWeight": 0.25 },
     "ba:itemname_icecream": { "category": "icecream", "serviceMinutes": 3 },
-    "ba:itemname_sodacan": { "category": "colddrinks", "serviceMinutes": 1 },
+    "ba:itemname_sodacan": { "category": "colddrinks", "serviceMinutes": 1, "stockWeight": 0.5 },
     "ba:itemname_croissant": { "category": "bakery", "serviceMinutes": 2, "stockWeight": 0.5 },
     "ba:itemname_donut": { "category": "bakery", "serviceMinutes": 2, "stockWeight": 0.5 },
     "ba:itemname_cupcake": { "category": "bakery", "serviceMinutes": 2, "stockWeight": 0.5 },
@@ -45,16 +45,16 @@
     "coffeemachine": { "products": ["ba:itemname_cupofcoffee", "ba:itemname_cupoftea", "bakeryxx:itemname_latte", "bakeryxx:itemname_americano"], "gameItems": ["ba:itemname_industrialcoffeemachine", "bakeryxx:itemname_bistromachine"], "display": "CoffeeStation" },
     "icecreamcounter": { "products": ["ba:itemname_icecream"], "gameItems": ["ba:itemname_icecreamcounter"], "display": "IceCreamCabinet" },
     "pizzaoven": { "products": ["ba:itemname_pizza"], "gameItems": ["ba:itemname_pizzaoven"], "display": "PizzaOven" },
-    "_cooler": "Soda only. Water is a factory ingredient and is not sold as street food.",
+    "_cooler": "Soda only. The game's water is a factory ingredient, not a retail drink; removed from the street-food catalogue on 21 October 2026.",
     "cooler": { "products": ["ba:itemname_sodacan"], "gameItems": ["ba:itemname_drinksfridge", "ba:itemname_largedrinksfridge"], "display": "DrinksCooler" },
     "displaycase": { "products": ["ba:itemname_croissant", "ba:itemname_donut", "ba:itemname_cupcake", "bakeryxx:itemname_bread", "bakeryxx:itemname_bun", "bakeryxx:itemname_chocolatecookie"], "gameItems": ["ba:itemname_bakeryshowcase", "bakeryxx:itemname_breadcounter"], "display": "PastryCase" },
     "storage": { "products": [], "gameItems": ["foodtrucks:itemname_storagecabinet"], "display": "StorageCabinet", "storageFactor": 2 }
   },
 
-  "_vehicles": "unitsPerPiece is the weighted food each fitted piece holds, separate from the game's cargo slots, which count boxes. Cart 40, truck 80 per piece (Peter, 10 October 2026): a cart's hot dog grill holds 40 hot dogs, a coffee machine 160 coffees; with the Extra storage piece 80 and 320. Foods without a fitted piece can't be loaded.",
+  "_vehicles": "coolerSlots reserves one place for the first cooler, beyond the general equipmentSlots; extra coolers use general places. Storage and service are unchanged. unitsPerPiece is the weighted food each fitted piece holds, separate from the game's cargo slots, which count boxes. Cart 40, truck 80 per piece (Peter, 10 October 2026): a cart's hot dog grill holds 40 hot dogs, a coffee machine 160 coffees; with the Extra storage piece 80 and 320. Foods without a fitted piece can't be loaded.",
   "vehicles": {
-    "cart": { "equipmentSlots": 2, "staff": 1, "unitsPerPiece": 40 },
-    "truck": { "equipmentSlots": 4, "staff": 2, "unitsPerPiece": 80 }
+    "cart": { "equipmentSlots": 2, "coolerSlots": 1, "staff": 1, "unitsPerPiece": 40 },
+    "truck": { "equipmentSlots": 4, "coolerSlots": 1, "staff": 2, "unitsPerPiece": 80 }
   },
 
   "_priceCurve": "Share of customers who still buy at a price, as [price / reference price, share] points; straight lines between them, flat beyond the ends. Smoothed from the game's shop rule (read in the decompile, unverified in game): a customer buys up to max(class index, neighbourhood average index) times the reference price, with class indices 1.2, 1.4 and 1.7. assumedPriceIndex is the neighbourhood average the points are drawn for (a 50/35/15 class mix gives about 1.35); the adapter rescales other neighbourhoods onto it. The 0.8 point is the mod's own small bonus for undercutting.",

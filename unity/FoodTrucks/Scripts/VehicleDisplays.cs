@@ -46,10 +46,10 @@ namespace FoodTrucks
         }
 
         private static readonly Layout Cart = new Layout("cart", "Cart_Body", turns: true,
-            new[] { "EquipmentFront", "EquipmentRear" }, new[] { "front", "rear" });
+            new[] { "EquipmentFront", "EquipmentRear", EquipmentLayout.CoolerPlace }, new[] { "front", "rear", "customer cooler" });
         private static readonly Layout Truck = new Layout("truck", "CarHolder/Body/CheapSaloon", turns: false,
-            new[] { "EquipmentLine2", "EquipmentLine3", "EquipmentLine1", "EquipmentLine4" },
-            new[] { "line 2", "line 3", "line 1", "line 4" });
+            new[] { "EquipmentLine2", "EquipmentLine3", "EquipmentLine1", "EquipmentLine4", EquipmentLayout.CoolerPlace },
+            new[] { "line 2", "line 3", "line 1", "line 4", "customer cooler" });
 
         // By the controller's instance ID: a vehicle spawned again (out of range and back) has a new one.
         private readonly Dictionary<int, Shown> shown = new Dictionary<int, Shown>();
@@ -130,24 +130,19 @@ namespace FoodTrucks
                 var open = layout.Turns && StreetSales.Find(FoodTrucksSession.CurrentState, vehicle.id)?.IsOpen == true;
                 var side = !layout.Turns ? 0 : open ? CartQueueView.QueueSide(vehicle.id) ?? 1 : 1;
                 if (layout == Cart) Umbrella(entry, vehicle.id, open);
-                // A piece keeps the spot it took while it stays fitted; new pieces fill the empty spots in cargo order.
-                var remaining = fitted.ToList();
                 var wanted = new string?[entry.Spots.Length];
-                for (var i = 0; i < wanted.Length; i++)
-                    if (entry.Pieces[i] != null && remaining.Remove(entry.Pieces[i]!)) wanted[i] = entry.Pieces[i];
-                for (var i = 0; i < wanted.Length; i++)
-                {
-                    if (wanted[i] != null || remaining.Count == 0) continue;
-                    wanted[i] = remaining[0];
-                    remaining.RemoveAt(0);
-                }
+                var info = tables.Vehicle(layout.Kind)!;
+                foreach (var placement in EquipmentLayout.Place(fitted, layout.Spots.Length - 1, info.CoolerSlots,
+                    p => p, entry.Pieces)) wanted[placement.Slot] = placement.Piece;
                 for (var i = 0; i < wanted.Length; i++)
                 {
                     var piece = wanted[i];
-                    if (piece != entry.Pieces[i] || (piece != null && entry.Objects[i] == null && Display(tables, piece) != null))
+                    var display = i == layout.Spots.Length - 1 && piece != null
+                        ? (layout == Cart ? "CartDrinksCooler" : "TruckDrinksCooler") : piece == null ? null : Display(tables, piece);
+                    if (piece != entry.Pieces[i] || (piece != null && entry.Objects[i] == null && display != null))
                     {
                         if (entry.Objects[i] != null) Destroy(entry.Objects[i]);
-                        entry.Objects[i] = piece == null ? null : Place(vehicle.id, layout, i, piece, Display(tables, piece), entry.Spots[i]!);
+                        entry.Objects[i] = piece == null ? null : Place(vehicle.id, layout, i, piece, display, entry.Spots[i]!);
                         entry.Pieces[i] = piece;
                         entry.Side = int.MinValue;
                         entry.Layer = -1;
@@ -170,6 +165,10 @@ namespace FoodTrucks
                     var rotation = Quaternion.Euler(0f, side * 90f, 0f);
                     foreach (var go in entry.Objects)
                         if (go != null) go.transform.localRotation = rotation;
+                    // The cart's cabinet front follows the customer side as well as facing it.
+                    // General worktop pieces turn in place; the cooler stays below the counter.
+                    if (layout == Cart)
+                        entry.Spots[entry.Spots.Length - 1]!.localPosition = new Vector3(side * 0.443f, 0.525f, -0.32f);
                 }
             }
             // Vehicles despawned or sold: their pieces went with them; forget them.

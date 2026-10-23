@@ -1,0 +1,10 @@
+{
+  "archive": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/cooler-release/build/FoodTrucks-0.10.6-rc.zip",
+  "sha256": "6d10ca8a3ba4d38db5ca33480b16a65e3d9b69048f6d1da3890826abcee3baf5",
+  "entries": 19,
+  "crc": "passed",
+  "all_file_hashes": "passed",
+  "dll_version_string": "0.10.6",
+  "native_dll_sha256": "edce2df1db9f4289866a188d7383d91057d2dbfd46331fbb8217695efb833487",
+  "core_dll_sha256": "1fd38db5ea201daaec96d454bbd800e949a578a7aaed518f79afb6ec8b8f4827"
+}

@@ -188,6 +188,7 @@ namespace FoodTrucks
         // the player is on foot. The vehicle's own saved parking state and position decide, not the item panel.
         public static void OpenHere(VehicleController controller)
         {
+            if (CrewDriveProbe.Owns(controller)) return;
             try { instance?.Open(controller); }
             catch (Exception ex)
             {
@@ -200,6 +201,7 @@ namespace FoodTrucks
         // road with its crew, the player on foot. The checks themselves come with the click (Open).
         internal static bool CanOfferOpen(VehicleInstance? cart)
         {
+            if (CrewDriveProbe.Owns(cart?.id)) return false;
             if (cart == null || FoodTrucksMod.KindOf(cart.vehicleTypeName) == null) return false;
             if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) return false;
             var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, cart.id);

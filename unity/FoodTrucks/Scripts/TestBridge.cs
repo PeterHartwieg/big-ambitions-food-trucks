@@ -89,6 +89,7 @@ namespace FoodTrucks
         // so a start after a mod re-enable begins clean.
         internal static void Stop()
         {
+            CrewDriveProbe.StopAll("Test bridge stopped");
             var wasRunning = http != null;
             TestBridgePump.FailAll(StoppedText);
             try { http?.Stop(); }

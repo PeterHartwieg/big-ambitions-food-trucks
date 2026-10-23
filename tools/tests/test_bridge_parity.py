@@ -516,14 +516,14 @@ class ParityTests(unittest.TestCase):
         refusal('drive',{'id':T,'place':'stop:1'},f"{T} has 0 stops on today's route (Monday); no stop 1.",
                 """{vehicle.id} has {stops.Count} stop{(stops.Count == 1 ? "" : "s")} on today's route ({today}); no stop {number}.""")
         self.mock.self_driving=False
-        refusal('drive',{'id':T,'place':'bay:hells-kitchen'},"HART. Self Driving isn't loaded: the truck can't drive itself. Switch it on in the Mods menu.",
-                "HART. Self Driving isn't loaded: the truck can't drive itself. Switch it on in the Mods menu.")
         self.assertEqual(self.mock.call('drive',{'op':'check'})['problems'],["HART. Self Driving isn't loaded: switch it on in the Mods menu."])
         self.assertIn("HART. Self Driving isn't loaded: switch it on in the Mods menu.",source)
-        self.mock.self_driving=True
+        # The simulated journey does not require the optional physical-driving mod.
         started=self.mock.call('drive',{'id':T,'place':'bay:hells-kitchen'})
         self.assertTrue(started['running'])
-        keys={'running','phase','id','place','speed','goal','seconds','game_minutes','from','pull_out','attempts','ride_to','ride','park','error','truck','vehicle'}
+        self.assertTrue(started['simulated'])
+        self.assertIsNone(started['pull_out'])
+        keys={'simulated','running','phase','id','place','speed','goal','seconds','game_minutes','from','pull_out','attempts','ride_to','ride','park','error','truck','vehicle'}
         self.assertEqual(set(started),keys)
         for key in keys: self.assertIn(f'["{key}"]',source)
         check={'self_driving','rig_folder','rig_ready','truck_type','drivable_prefab','prefab','wheels','last_ride','problems'}

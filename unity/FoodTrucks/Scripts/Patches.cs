@@ -83,6 +83,12 @@ namespace FoodTrucks
             Patch(typeof(BizManList), "OnDisable", Type.EmptyTypes, typeof(BizManFleet), postfix: nameof(BizManFleet.ListClosedPostfix));
             BizManFleet.CheckReady();
 
+            Patch(typeof(LogoCustomizer), "Refresh", Type.EmptyTypes, typeof(TruckLogoEditor), prefix: nameof(TruckLogoEditor.RefreshPrefix));
+            Patch(typeof(LogoCustomizer), "UpdateSaveButton", Type.EmptyTypes, typeof(TruckLogoEditor), prefix: nameof(TruckLogoEditor.UpdateSavePrefix));
+            Patch(typeof(LogoCustomizer), "SaveLogo", Type.EmptyTypes, typeof(TruckLogoEditor), prefix: nameof(TruckLogoEditor.SavePrefix));
+            TruckLogoEditor.CheckReady();
+            Patch(typeof(BusinessLogoGenerator), "SetUpSettings", new[] { typeof(string), typeof(LogoSettings) }, typeof(TruckLogos), prefix: nameof(TruckLogos.GeneratorPrefix));
+
             // A vehicle's crew shifts on the game's own Schedule tab, on an in-memory stand-in registration (VehicleSchedule).
             // Every patch here does nothing unless that stand-in is on the business page.
             var schedule = typeof(UI.Smartphone.Apps.BizMan.Schedule.ScheduleHelper);
@@ -282,6 +288,7 @@ namespace FoodTrucks
             else PatchBridge(nwhVehicle, "OnCollisionEnter", new[] { typeof(UnityEngine.Collision) }, "collisions",
                 postfix: nameof(TestBridgeCommands.VehicleCollisionPostfix));
             TestBridgeCommands.ReportLoadCheck();
+            CrewProbeHooks.Install(harmony!);
         }
 
         // args null: the method's only overload, named without its parameters.

@@ -1,0 +1,9 @@
+Street Food 0.10.6 — candidate change note
+
+A dedicated drinks-fridge place on every cart and truck leaves the two cart or four truck cooking slots available. The first fridge uses the customer-facing position; additional fridges use general equipment slots. Existing equipment and stock remain saved.
+
+Soda-only carts attract more customers, and each fridge holds 80 cans on a cart or 160 on a truck before Extra Storage. Soda prices stay the same. There are still 19 food and drink options without Bakery; factory water stays off the menu and commissary catalogue.
+
+Give each truck its own branding through BizMan → Street food → truck → Branding. Use the game's shapes, imported PNGs, fonts and colours, with separate logo text. Designs appear on both sides. Custom PNG files stay in the game's CustomIcons folder and must be available on each computer using that save.
+
+Includes unlimited employee rosters, commissary cart closure, and the earlier cart interaction and unload fixes. Crews still travel between scheduled stops off screen. Physical crew driving remains a developer-only experiment and is not a player feature in this candidate.

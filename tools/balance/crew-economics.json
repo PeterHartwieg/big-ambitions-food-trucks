@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "assumptionStatus": "Illustrative sensitivity inputs, not representative native traffic or fuel calibration. No use of the 1 m/s, 31 m native probe.",
+  "units": "coordinates/straight distance: metres; physical speed: metres/real second; time: game minutes; 1 real second = 1 game minute; fuel: litres; currency: game dollars",
+  "roadFactor": 1.3,
+  "normalSpeedMetresPerSecond": 8,
+  "heavySpeedMetresPerSecond": 4,
+  "normalWaitGameMinutesPerLeg": 3,
+  "heavyWaitGameMinutesPerLeg": 10,
+  "tankLitres": 80,
+  "reserveLitres": 8,
+  "stressStartingLitres": 10,
+  "litresPerKilometre": 2,
+  "idleLitresPerGameMinute": 0.02,
+  "fuelDollarsPerLitre": 1.3,
+  "stationOneWayStraightMetres": 400,
+  "stationServiceGameMinutes": 15,
+  "loadingGameMinutes": 30,
+  "districts": [
+    "ba:neighborhood_garmentdistrict",
+    "ba:neighborhood_lowermanhattan"
+  ],
+  "demandQuantiles": [
+    0.25,
+    0.5,
+    0.9
+  ],
+  "speedSensitivityMetresPerSecond": [
+    1,
+    2,
+    4,
+    6,
+    8,
+    12,
+    16,
+    25
+  ],
+  "fuelSensitivityLitresPerKilometre": [
+    0.5,
+    2,
+    6
+  ],
+  "waitSensitivityGameMinutesPerLeg": [
+    0,
+    30,
+    90,
+    180
+  ],
+  "shortRouteTotalStraightMetresBand": [
+    0,
+    700
+  ],
+  "longRouteTotalStraightMetresBand": [
+    700,
+    1600
+  ]
+}

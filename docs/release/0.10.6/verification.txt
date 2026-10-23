@@ -1,0 +1,35 @@
+Street Food 0.10.6 (cooler/logos/crew driving) — candidate, NOT RELEASED
+
+Based on current main b0b5faf and WIP db85079 (981df6d, a09a814).
+Retains factory-water removal, unlimited employee rosters and commissary cart closure.
+Dedicated cooler places, truck logos and soda-only tuning are integrated. Physical
+crew driving remains the gated developer probe; production routes still use timed
+travel. Persistent City integration/save coordination is outside this repository.
+
+Integration repairs: retain native on-foot cart/empty-truck menu initialization;
+remove duplicate Sell cart action; retain closure order/standing-order assertions;
+cap category market floors at the configured global ceiling; align bridge mock,
+CLI help/tests and documentation with the WIP's simulated player trip. Simulated
+trip cancellation/reload can no longer park before arrival. Actual coroutine
+harness checks completion, cancellation, reload and already-completed cleanup.
+
+Cleanup: Python caches and generated promotional ZIP removed from the final tree;
+raw route-study JSON compacted without discarding numeric evidence. Required
+Blender/FBX/texture inputs retained. No changed file exceeds 1 MiB; targeted secret
+signature scan found none. Published WIP history is retained, never rewritten.
+
+Automated validation:
+- Core: 2,124 passed, one opt-in long-soak skip.
+- Tools: 247 passed, including actual native adapter harnesses and simulated-drive
+  coroutine boundaries. FT_TEST_TRANSPORT=inprocess.
+- Separate 200-seed x 365-day soak: running; result to be recorded.
+- Official Unity SDK: Windows and Mac bundles built and validated. No compiler
+  errors. Existing SDK duplicate-type/reference warnings remain in ignored logs.
+- Blender: cart both sides, truck cooler clearances and hatch-angle review passed;
+  both logo panels passed 10,201 surface samples each.
+- ZIP: 19 exact allowed runtime entries, CRC and every decompressed file SHA-256
+  verified. Runtime DLL contains 0.10.6; manifest/runtime source versions agree.
+  Full hash/path receipt is package-verification.json.
+
+Native validation and final disposition will be recorded after rig restoration.
+No Steam Workshop upload or normal-profile installation is authorized or performed.

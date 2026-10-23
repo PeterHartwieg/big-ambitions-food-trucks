@@ -1,0 +1,14 @@
+Street Food 0.10.6 candidate — preparation only
+
+Do not upload this candidate. Steam Workshop publication is explicitly out of scope.
+Pending native acceptance and Windows smoke must be resolved before advancing main.
+
+release-notes.txt: plain-text change note.
+release-notes.bbcode.txt: Steam-formatted change note.
+workshop-description.bbcode.txt: complete updated description (19 base products).
+preview.jpg: unchanged established 0.10.0 thumbnail, reused without new feature claims.
+verification.txt: validation evidence and remaining gates.
+The installable candidate and checksum are in this worktree's build/ directory.
+
+Version choice: 0.10.6 retains save schema 2 and the existing production crew-travel backend.
+A future release replacing that backend would justify 0.11.0 after its separate acceptance gates.

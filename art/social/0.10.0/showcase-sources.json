@@ -1,0 +1,71 @@
+{
+  "size": [
+    1600,
+    1600
+  ],
+  "files": [
+    "hart-street-food-02-new-foods-square.svg",
+    "hart-street-food-03-kitchen-square.svg",
+    "hart-street-food-04-treats-square.svg",
+    "hart-street-food-05-truck-square.svg"
+  ],
+  "source_assets": [
+    {
+      "path": "art/workshop/brand/hart-wordmark-on-light.svg",
+      "sha256": "b3d08ad3ca196261b23382d56fcf8a5528ea7de24ff07aa6cbe294366e9d2e63"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/ChoppedCheese.png",
+      "sha256": "a55f1f69cf1e3aee393a21473b6a1fc573e887aa9612121f24c64d0f482c22a3"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/CoffeeStation.png",
+      "sha256": "d735f9201a8fc6251e8af5be06b2ab5afcea218f97beba6ea58f8835f746b37a"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/CornCob.png",
+      "sha256": "13161cc05dc639f4d3c01df9484abf329c136fe8560058fff65004dfc76a45ed"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/CornGrill.png",
+      "sha256": "7714749442faeb750498ffb2f16714a3c6382e628a131fd5de7dbbd545e71034"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/DumplingSteamer.png",
+      "sha256": "21e865056961ee61005c1d55a170feeca7254dc32295dbe78ceef5154ba6b890"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/Dumplings.png",
+      "sha256": "007770034a732ec9b251ebfda65c9b8d98c93b60959d999838485247176ff114"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/Griddle.png",
+      "sha256": "ef4022e2b82a4d8fbc416033942cbd087b37eab3b102a98887d2d93b181e6050"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/PastryCase.png",
+      "sha256": "41da21ada3ebbc0ef86ef163c4b2814c26cedcc653c33dba52f3bcffc66f4cd8"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/PizzaOven.png",
+      "sha256": "cad471940f806d73470646019954dfdc3b20e4ac2e883e9b388f06d050557df7"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/PopcornMachine.png",
+      "sha256": "6d9b5ee43fceef112f272a25ec31957b12762800ff98a964864cbf1520f81374"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/SlushieMachine.png",
+      "sha256": "93181c2a14ea9f2b45a16821497e51e2ef28f4c7bf4faeb81e56404fd9940c6a"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/Tacos.png",
+      "sha256": "0345f7375ef95b8fa50282ad14868598c92e0bcabddcc03872df9a4530d162b6"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/truck-hatch.png",
+      "sha256": "656024baff5b1b9d58ad0efcbfbc427678042b38d3e4955b96c24833117ddf36"
+    }
+  ],
+  "note": "Exact mod-model renders and original HART. logo. Models and logo are not redrawn. Type is outlined from the HART brand fonts."
+}

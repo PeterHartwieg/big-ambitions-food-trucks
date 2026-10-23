@@ -74,7 +74,7 @@ namespace FoodTrucks
                 if (item == null) continue;
                 pieces.Add((item, StoragePanel.PieceName(instance, piece), view.Pools.FirstOrDefault(p => p.EquipmentId == id)));
             }
-            var filled = VehicleDiagrams.Fill(diagram, pieces).ToDictionary(f => f.Place.Name, f => f.Piece, StringComparer.Ordinal);
+            var filled = VehicleDiagrams.Fill(diagram, pieces, p => tables.EquipmentForGameItem(p.Item)?.Id, tables.Vehicle(kind)?.CoolerSlots ?? 0).ToDictionary(f => f.Place.Name, f => f.Piece, StringComparer.Ordinal);
             var bars = new List<(DiagramPlace Place, float Below, string Name, StoragePool? Pool)>();
             var missing = new List<string>();
             foreach (var name in diagram.DrawOrder)
@@ -91,7 +91,9 @@ namespace FoodTrucks
                     Anchor(slot, x - halfWidth, y - halfHeight, x + halfWidth, y + halfHeight);
                     var empty = slot.gameObject.AddComponent<Image>();
                     empty.color = new Color(1f, 1f, 1f, 0f);
-                    empty.raycastTarget = false;
+                    empty.raycastTarget = name == EquipmentLayout.CoolerPlace;
+                    if (empty.raycastTarget)
+                        empty.gameObject.AddComponent<BasicTooltip>().titleKey = "foodtrucks:bizman_cooler_slot";
                     var outline = slot.gameObject.AddComponent<Outline>();
                     outline.effectColor = new Color(0f, 0f, 0f, 0.25f);
                     outline.effectDistance = new Vector2(1.5f, -1.5f);
