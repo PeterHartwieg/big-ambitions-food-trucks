@@ -747,6 +747,16 @@ namespace FoodTrucks
             // not evidence of pavement: the player mesh and gaps between traffic lanes also cover carriageways.
             var lanes = TrafficLanes.Near(center, 30f);
 
+            // Check each cart side once, using exactly the crew's counter-side ground rule. Trucks keep
+            // their existing layout path. A safe cart pitch alone does not prove a usable serving position.
+            var sides = shape.Sides.Where(side =>
+            {
+                if (shape != WindowShape.For("cart") || CartGroundPlacement.Find(cart, side, 0.3f,
+                    CartStance.Server(side), filter, lanes, _ => true, out _, out _, out _)) return true;
+                rejected.Add("no pavement behind counter");
+                return false;
+            }).ToArray();
+
             var best = new List<Vector3>();
             var bestScore = int.MinValue;
             var bestSide = 1;
@@ -786,7 +796,7 @@ namespace FoodTrucks
                     bestOutward = straightOut;
                 }
             }
-            foreach (var side in shape.Sides)
+            foreach (var side in sides)
             {
                 // One distance out for the whole line, tried from Sideways to Reach: the one that places most people wins,
                 // the nearest on a tie. A place that isn't walkable pavement at that distance (or, strict, lands too close
@@ -796,7 +806,7 @@ namespace FoodTrucks
                         Try(side, direction, lineOut, straightOut: false);
             }
             if (shape.Outward)
-                foreach (var side in shape.Sides)
+                foreach (var side in sides)
                     Try(side, 1, shape.Sideways, straightOut: true);
             if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the window at {center}; nobody shown{rejected}", 0, lanes);
 

@@ -10,7 +10,6 @@ namespace FoodTrucks
     // exclusions are required even when the cart itself has a legal pitch or the player mesh covers the road.
     internal static class CartGroundPlacement
     {
-        private const float HalfLength = 0.77f; // body/handle extents, art/README.md; leave the server's radius beyond them
         private const float FallbackMetres = 3f;
         private const float SampleStep = 0.25f;
         internal static bool IsSafe(Vector3 p, TrafficLanes lanes) =>
@@ -58,23 +57,15 @@ namespace FoodTrucks
             var clearance = 0.50f + radius;
             var behind = CartStanceWorld.Point(cart, (-CartStance.Side(side) * Mathf.Max((float)Math.Abs(preferred.X), clearance), preferred.Z));
             behindCart = true;
-            if (Search(behind, p => Vector3.Dot(center - p, outward) >= clearance - 0.01f, out spot, out var usedFallback))
+            if (Search(behind, p => Vector3.Dot(center - p, outward) >= clearance - 0.01f &&
+                Vector3.Dot(center - p, outward) <= 1.5f &&
+                Mathf.Abs(Vector3.Dot(p - behind, forward)) <= (float)CartStance.AcrossMetres, out spot, out var usedFallback))
             {
                 placement = usedFallback ? "at a fallback behind the cart, opposite the queue" : "behind the cart at the register, opposite the queue";
                 return true;
             }
-            behindCart = false;
-            var endClearance = HalfLength + radius;
-            foreach (var direction in new[] { 1, -1 })
-            {
-                var end = center + forward * (direction * endClearance);
-                bool AtEnd(Vector3 p) => Vector3.Dot(p - center, forward) * direction >= endClearance - 0.01f &&
-                    Vector3.Dot(p - center, outward) >= -0.01f &&
-                    Vector3.Dot(p - center, outward) <= Mathf.Max((float)CartStance.BehindMetres, clearance);
-                if (!Search(end, AtEnd, out spot, out usedFallback)) continue;
-                placement = $"at the {(direction > 0 ? "front" : "rear")} end beside the window" + (usedFallback ? " (fallback)" : "");
-                return true;
-            }
+            // No end-of-cart service: an employee there cannot reach the counter controls. Queue layout
+            // tries both sides with this same rule, and shows no line if neither has safe counter-side ground.
             spot = center;
             placement = "left where they stand";
             return false;

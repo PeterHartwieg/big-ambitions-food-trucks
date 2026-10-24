@@ -221,7 +221,7 @@ class Harness {
             Check(agent.hasPath && p.hasOnGoalReachedAction && p.Resets==1,"new path and callback preserved");
         }
         {
-            var (s,p,c)=Setup(); var farther=new Vector3(-2.8f,0,1.1f); var closest=new Vector3(-1.1f,0,1.5f);
+            var (s,p,c)=Setup(); var farther=new Vector3(-2.8f,0,1.1f); var closest=new Vector3(-1.1f,0,.85f);
             var customer=new Vector3(.1f,0,0); var upperFloor=new Vector3(-.85f,.7f,0);
             var safeEnd=new Vector3(0,0,1.07f);
             NavMesh.Ground=(at,r)=>Sample(at,r,customer,upperFloor,farther,closest,safeEnd);
@@ -238,35 +238,28 @@ class Harness {
         foreach(var side in new[]{1,-1}) foreach(var yaw in new[]{0f,.4f,1.57f,3.14f}) {
             var (s,p,c)=Setup(side,yaw); var outward=c.transform.right*side;
             NavMesh.PedestrianGround=(at,r)=>Vector3.Dot(at-c.transform.position,outward)>=-.001f ? at : null;
-            s.Open(c); var expected=c.transform.position+c.transform.forward*1.07f;
-            Near(p.transform.position,expected,"kerbside cart uses safe front end");
-            Check(Quaternion.Angle(p.transform.rotation,Quaternion.LookRotation(CartQueueView.Window!.Value.Window!.Value-expected))<.001f,
-                  "end placement faces the actual queue");
-            Check(Log.Lines.Any(x=>x.Contains("front end beside the window")),"front end logged");
-            Check(TrafficLanes.Reads==1 && NavMesh.Paths.Count==1,"one lane read and path object across all candidates");
+            Stayed(s,p,c,"kerbside cart cannot serve from an end");
         }
         // Positive pedestrian membership does not replace any of the queue's additional road exclusions.
         foreach(var reason in new[]{"parking lane","Crosswalk trigger","Roads layer","traffic lane / roadside strip"}) {
             var (s,p,c)=Setup(); QueueLine.Street=at=>at.x<-.01f ? reason : null;
-            s.Open(c); Near(p.transform.position,new(0,0,1.07f),"street exclusion: "+reason);
+            Stayed(s,p,c,"street exclusion: "+reason);
             Check(!NavMesh.Destinations.Any(at=>at.x<-.01f),"excluded road is rejected before path calculation");
         }
         {
             var (s,p,c)=Setup(); QueueLine.Street=at=>at.x<-.01f || at.z>0 ? "parking lane" : null;
-            s.Open(c); Near(p.transform.position,new(0,0,-1.07f),"rear end when behind and front are unsafe");
-            Check(Log.Lines.Any(x=>x.Contains("rear end beside the window")),"rear end logged");
+            Stayed(s,p,c,"no rear-end fallback");
         }
         {
             var (s,p,c)=Setup(); var end=new Vector3(.35f,0,1.35f);
             NavMesh.Ground=(at,r)=>Sample(at,r,end);
-            s.Open(c); Near(p.transform.position,end,"fallback beside an end stays beyond the hull");
-            Check(Log.Lines.Any(x=>x.Contains("front end beside the window (fallback)")),"end fallback logged");
+            Stayed(s,p,c,"no front-end fallback");
         }
         // Exact and nearest fallback points can lie behind a fence. Reject partial/invalid paths and a failed
         // CalculatePath even if it leaves PathComplete in the reused path; take a farther reachable point.
         foreach(var bad in new[]{(true,NavMeshPathStatus.PathPartial),(true,NavMeshPathStatus.PathInvalid),(false,NavMeshPathStatus.PathComplete)}) {
             foreach(var exact in new[]{true,false}) {
-                var (s,p,c)=Setup(); var blocked=new Vector3(exact ? -.85f : -1.1f,0,Along); var reachable=new Vector3(-1.5f,0,1);
+                var (s,p,c)=Setup(); var blocked=new Vector3(exact ? -.85f : -1.1f,0,Along); var reachable=new Vector3(-1.5f,0,.9f);
                 NavMesh.Ground=(at,r)=>Sample(at,r,blocked,reachable);
                 NavMesh.Route=at=>Vector3.Distance(at,blocked)<.01f ? bad : (true,NavMeshPathStatus.PathComplete);
                 s.Open(c); Near(p.transform.position,reachable,"complete path required for exact and fallback points: "+bad);
@@ -326,14 +319,12 @@ class Harness {
             s.Open(c); Near(p.transform.position,fallback,"behind fallback");
             Check(Quaternion.Angle(p.transform.rotation,Quaternion.LookRotation(c.transform.right))<.001f,"behind fallback faces across the cart");
         }
-        // A behind-the-cart fallback far along the cart (an obstacle at the register) faces the first customer, not
+        // A behind-the-cart point far along the cart (an obstacle at the register) must be rejected, avoiding
         // straight out past the cart's end.
         foreach(var side in new[]{1,-1}) {
             var (s,p,c)=Setup(side,.9f); var far=c.transform.position-c.transform.right*(side*.85f)+c.transform.forward*2.5f;
             NavMesh.Ground=(at,r)=>Sample(at,r,far);
-            s.Open(c); Near(p.transform.position,far,"far behind fallback");
-            Check(Log.Lines.Any(x=>x.Contains("fallback behind the cart")),"far fallback logged");
-            Check(Quaternion.Angle(p.transform.rotation,Quaternion.LookRotation(Window(c,side)-far))<.001f,"far fallback faces the first customer");
+            Stayed(s,p,c,"cannot serve far along the cart away from the counter");
         }
         {
             var (s,p,c)=Setup(); p.Character.navmeshAgent.WarpWorks=false; s.Open(c);

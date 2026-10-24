@@ -186,7 +186,7 @@ class Harness {
         // would miss it. Serving and waiting crew must reject every native street exclusion on both sides.
         foreach(var side in new[]{1,-1}) foreach(var reason in new[]{"parking lane","Roads layer","traffic lane / roadside strip","Crosswalk trigger"}) {
             var c=Cart(MathF.PI/2); c.position=new(42,.01f,82);
-            var unsafeSpot=Behind(c,side); var safe=unsafeSpot-c.forward*.9f;
+            var unsafeSpot=Behind(c,side); var safe=unsafeSpot-c.forward*.25f;
             NavMesh.Ground=(p,r)=>new[]{unsafeSpot,safe}.Where(x=>Vector3.Distance(p,x)<=r)
                 .OrderBy(x=>(x-p).sqrMagnitude).Cast<Vector3?>().FirstOrDefault();
             QueueLine.Street=p=>Vector3.Distance(p,unsafeSpot)<.1f ? reason : null;
@@ -206,19 +206,17 @@ class Harness {
             Near(w.Position,unsafeSpot,"restore exact stance when safe again");
             Check(w.gameObject.active,"crew reappears when safe");
         }
-        // If the opposite side has no safe pavement, either end can be the employee's fallback.
+        // If the opposite side has no safe counter-side pavement, an employee cannot work from either end.
         foreach(var direction in new[]{1,-1}) {
             var c=Cart(.8f); var safe=c.position+c.forward*(direction*1.2f)+c.right*.2f;
             NavMesh.Ground=(p,r)=>Vector3.Distance(p,safe)<=r ? safe : null;
             var w=Show("cart",c,"cart",1,1,1);
-            Check(w.gameObject.active,"end fallback visible");Near(w.Position,safe,"safe end fallback");
-            var window=c.position+c.right*1.05f+c.forward*.615f;
-            Check(Quaternion.Angle(w.Rotation,Quaternion.LookRotation(window-safe))<.01f,"end fallback faces window");
+            Check(!w.gameObject.active,"end fallback must stay hidden");
         }
         // A waiting employee gets the same safety checks while the player is at the register.
         {
             var c=Cart(1.2f); CartSelling.Player=true; PlayerHelper.Position=Behind(c,1);
-            var unsafeWait=Behind(c,1)-c.forward*.9f; var safe=unsafeWait-c.forward*.9f;
+            var unsafeWait=Behind(c,1)-c.forward*.9f; var safe=unsafeWait-c.forward*.25f;
             NavMesh.Ground=(p,r)=>new[]{unsafeWait,safe}.Where(x=>Vector3.Distance(p,x)<=r)
                 .OrderBy(x=>(x-p).sqrMagnitude).Cast<Vector3?>().FirstOrDefault();
             QueueLine.Street=p=>Vector3.Distance(p,unsafeWait)<.1f ? "parking lane" : null;

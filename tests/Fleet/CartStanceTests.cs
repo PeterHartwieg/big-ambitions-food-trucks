@@ -10,6 +10,29 @@ namespace FoodTrucks.Core.Tests.Fleet;
 // at every heading and wherever the cart stands (bug of 24 October 2026: they stood diagonally off to one side).
 public class CartStanceTests
 {
+    [Fact]
+    public void EveryEquipmentSpecRecordsTheImportedFrontAndOperatorAxis()
+    {
+        var root = RepoRoot();
+        var specs = Directory.GetFiles(Path.Combine(root, "art/equipment"), "spec.json", SearchOption.AllDirectories);
+        Assert.Equal(18, specs.Length);
+        foreach (var spec in specs)
+        {
+            var json = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(spec));
+            var model = (string)json["name"]!;
+            Assert.Equal("+Z", (string?)json["unity_front_axis"]);
+            var axis = (string?)json["unity_operator_axis"];
+            Assert.Contains(axis, new[] { "+Z", "-Z" });
+            foreach (var side in new[] { 1, -1 })
+            for (var yaw = 0; yaw < 360; yaw++)
+            {
+                var facing = CartStance.Forward(yaw + CartStance.EquipmentYaw(side, model));
+                var sign = axis == "+Z" ? 1 : -1;
+                Near(Unity(yaw, (-side, 0)), (sign * facing.X, sign * facing.Z), model + " controls toward server");
+            }
+        }
+    }
+
     private const double Tolerance = 1e-9;
 
     public static TheoryData<double, int> Headings()

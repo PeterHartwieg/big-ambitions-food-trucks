@@ -16,9 +16,9 @@ namespace FoodTrucks
     // that has each piece face the cook and the hatch). A piece
     // keeps its spot while it stays fitted. economy.json's "display" names each piece's model in the bundle; a
     // piece without one leaves its spot empty. Every half second it compares each vehicle's fitted pieces with
-    // what it shows, so fitting, removing and loading need no hooks. While a cart is open the pieces face the side
+    // what it shows, so fitting, removing and loading need no hooks. While a cart is open the working sides face away from the side
     // its queue forms on (CartQueueView's choice), retaining that side while the open line is out of view.
-    // Closed carts face right. Queue layout notifies this view immediately. The cart's cash
+    // Closed carts keep the right-hand queue layout. Queue layout notifies this view immediately. The cart's cash
     // register moves with them to the counter's front corner on that side (Core CartStance), where the server stands
     // across from it. A truck's always face the hatch. The models have no colliders. They follow the vehicle's visible flag every
     // frame: the game hides a vehicle (EntityController.Hide, e.g. on another floor of a multi-floor building) by
@@ -181,11 +181,11 @@ namespace FoodTrucks
                 if (entry.Side != side)
                 {
                     entry.Side = side;
-                    // The models face +Z; +90 degrees turns them to the cart's right (+X), -90 to its left. A truck's
-                    // spots are turned already (side 0).
-                    var rotation = Quaternion.Euler(0f, side * 90f, 0f);
+                    // Cart controls/doors face the server; presentation and the register face customers.
+                    // Truck children retain identity rotation: their anchors already face the cook/hatch.
                     foreach (var go in entry.Objects)
-                        if (go != null) go.transform.localRotation = rotation;
+                        if (go != null) go.transform.localRotation = Quaternion.Euler(0f,
+                            layout == Cart ? (float)CartStance.EquipmentYaw(side, go.name.Substring("Display_".Length)) : 0f, 0f);
                     if (entry.Register != null)
                     {
                         var register = CartStance.Register(side);
@@ -194,10 +194,10 @@ namespace FoodTrucks
                         if (logged.Add($"register:{vehicle.id}:{CartStance.Side(side)}"))
                             Log.Info($"Cart register: cart {vehicle.id} register on the {(CartStance.Side(side) > 0 ? "right" : "left")} front corner, facing the customers.");
                     }
-                    // The cart's cabinet front follows the customer side as well as facing it.
+                    // The cart's fridge door moves to the worker side so it remains accessible.
                     // General worktop pieces turn in place; the cooler stays below the counter.
                     if (layout == Cart)
-                        entry.Spots[entry.Spots.Length - 1]!.localPosition = new Vector3(side * 0.443f, 0.525f, -0.32f);
+                        entry.Spots[entry.Spots.Length - 1]!.localPosition = new Vector3(-side * 0.443f, 0.525f, -0.32f);
                 }
             }
             // Vehicles despawned or sold: their pieces went with them; forget them.
