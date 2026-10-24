@@ -23,7 +23,7 @@ namespace FoodTrucks
             var tables = Tables;
             if (tables == null) return;
             var spots = tables.Spots.Count(s => World.EntrancesOf(s.Address) != null);
-            var places = tables.Places.Count(p => World.EntrancesOf(p.Address) != null);
+            var places = tables.Places.Count(p => EventLocations.ReadableAddress(p.Address) != null);
             Log.Info($"Pitches: {spots} of {tables.Spots.Count} premium spots and {places} of {tables.Places.Count} event places found in the city." +
                      (spots < tables.Spots.Count || places < tables.Places.Count
                          ? " Missing: " + string.Join(", ", tables.Spots.Where(s => World.EntrancesOf(s.Address) == null).Select(s => s.Address)
@@ -86,7 +86,7 @@ namespace FoodTrucks
             if (here != null && CityEvents.Claim(here.Value.Event, vehicle.VehicleId, minute))
             {
                 Log.Info($"Event {here.Value.Event.Id} ({here.Value.Kind.Id} at {here.Value.Place.Id}): place held by {vehicle.VehicleId}.");
-                message = ("foodtrucks:notification_event_place", new[] { ("event", Text(here.Value.Kind.Name)), ("place", Text(here.Value.Place.Name)), ("end", Clock(here.Value.Event.End)) });
+                message = ("foodtrucks:notification_event_place", new[] { ("event", Text(here.Value.Kind.Name)), ("place", EventLocations.Name(here.Value.Place.Address)), ("end", Clock(here.Value.Event.End)) });
             }
             FoodTrucksSession.MarkChanged();
             return message;
@@ -106,7 +106,7 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
             Log.Info($"Event {here.Value.Event.Id} ({here.Value.Kind.Id} at {here.Value.Place.Id}) started: place held by {vehicle.VehicleId}, open there.");
             CartSelling.Say("foodtrucks:notification_event_place", string.IsNullOrEmpty(vehicle.VehicleType) ? "cart" : vehicle.VehicleType,
-                ("event", Text(here.Value.Kind.Name)), ("place", Text(here.Value.Place.Name)), ("end", Clock(here.Value.Event.End)));
+                ("event", Text(here.Value.Kind.Name)), ("place", EventLocations.Name(here.Value.Place.Address)), ("end", Clock(here.Value.Event.End)));
             return true;
         }
 
@@ -132,6 +132,17 @@ namespace FoodTrucks
             if (tables == null || !FoodTrucksSession.CanWrite) return;
             // Nothing a window still has to sell through goes: a catch-up can be days behind after a long skip.
             var soldThrough = CartSelling.SoldThrough();
+            // Resolve cancellations before expiry so a missing location cannot swallow a paid booking.
+            if (!EventLocations.Ready) return;
+            DropUnknown(state, tables, HireCrew.Now());
+            EventLocations.RefreshMessages(CityLicensing.City(), state.Events.Events
+                .Where(e => HireCrew.Now() < CityEvents.EndsAt(e))
+                .Select(e => new Dictionary<string, string>
+                {
+                    { "day", e.Day.ToString() }, { "start", Clock(e.Start) },
+                    { "event", Text(tables.Kind(e.Kind)!.Name) },
+                    { "place", EventLocations.Name(tables.Place(e.PlaceId)!.Address) }
+                }));
             var dropped = CityEvents.Expire(state.Events, today, soldThrough);
             PremiumSpots.Prune(state, soldThrough);
             if (loading)
@@ -142,11 +153,10 @@ namespace FoodTrucks
                              .Where(h => h.Until == null && StreetSales.Find(state, h.VehicleId)?.IsOpen != true).ToList())
                     holder.Until = Math.Max(holder.From, now);
                 foreach (var vehicle in state.Vehicles.Where(v => !v.IsOpen && v.PremiumSpot != null)) vehicle.PremiumSpot = null;
-                DropUnknown(state, tables, now);
             }
             // Only places the city has; before its buildings are there, nothing is announced (the day is caught up later).
-            if (!tables.Places.Any(p => World.EntrancesOf(p.Address) != null)) return;
-            var added = new CityEvents(tables).Announce(state.Events, today, p => World.EntrancesOf(p.Address) != null);
+            if (!tables.Places.Any(p => EventLocations.ReadableAddress(p.Address) != null)) return;
+            var added = new CityEvents(tables).Announce(state.Events, today, p => EventLocations.ReadableAddress(p.Address) != null);
             // The city writes to vendors: players with a food cart or truck.
             var vendor = CityLicensing.FoodVehicles(state).Count > 0;
             foreach (var city in added)
@@ -158,7 +168,7 @@ namespace FoodTrucks
                 Notices.SendText(CityLicensing.City(), "foodtrucks:message_city_event", new Dictionary<string, string>
                 {
                     { "event", Text(kind.Name) },
-                    { "place", Text(place.Name) },
+                    { "place", EventLocations.Name(place.Address) },
                     { "weekday", Weekday(city.Day) },
                     { "day", city.Day.ToString() },
                     { "start", Clock(city.Start) },
@@ -176,7 +186,7 @@ namespace FoodTrucks
                 Notices.SendText(CityLicensing.City(), "foodtrucks:message_city_event_today", new Dictionary<string, string>
                 {
                     { "event", Text(kind.Name) },
-                    { "place", Text(place.Name) },
+                    { "place", EventLocations.Name(place.Address) },
                     { "start", Clock(city.Start) },
                     { "end", Clock(city.End) },
                     { "booked", city.Booked.ToString() }
@@ -186,15 +196,16 @@ namespace FoodTrucks
             if (added.Count > 0 || dropped > 0) Log.Info($"City events on day {today}: {added.Count} announced, {dropped} over; {state.Events.Events.Count} coming.");
         }
 
-        // Events whose place or kind the data file no longer has (an edited pitches.json) can't be held: they go, and
-        // places booked for one not over yet are paid back.
+        // Cancel missing/unreadable locations before expiry. Refund future bookings and unclaimed ended bookings.
         private static void DropUnknown(SaveState state, PitchTables tables, long now)
         {
-            foreach (var city in state.Events.Events.Where(e => tables.Place(e.PlaceId) == null || tables.Kind(e.Kind) == null).ToList())
+            foreach (var city in state.Events.Events.Where(e => tables.Place(e.PlaceId) == null || tables.Kind(e.Kind) == null ||
+                EventLocations.ReadableAddress(tables.Place(e.PlaceId)!.Address) == null).ToList())
             {
                 state.Events.Events.Remove(city);
-                var refund = now < CityEvents.EndsAt(city) ? city.Booked * city.FeeCents : 0;
-                Log.Info($"City event {city.Id} ({city.Kind} at {city.PlaceId}) dropped: not in pitches.json; {city.Booked} places booked, {CartSelling.Money(refund)} paid back.");
+                FoodTrucksSession.MarkChanged();
+                var refund = now < CityEvents.EndsAt(city) || city.Holds.Count == 0 ? city.Booked * city.FeeCents : 0;
+                Log.Info($"City event {city.Id} ({city.Kind} at {city.PlaceId}) dropped: location or kind unavailable; {city.Booked} places booked, {CartSelling.Money(refund)} paid back.");
                 if (refund <= 0) continue;
                 var info = new TransactionInfo("foodtrucks:transaction_event_refund", new Dictionary<string, string>());
                 // Under the fees' label for the record; the game's tax tracking ignores money coming in, so the fee's
@@ -213,7 +224,7 @@ namespace FoodTrucks
             var state = FoodTrucksSession.CurrentState;
             var tables = Tables;
             if (state == null || tables == null || !FoodTrucksSession.CanWrite) return;
-            var place = tables.Places.OrderBy(p => World.DistanceTo(p.Address, position.x, position.z)).FirstOrDefault();
+            var place = tables.Places.Where(p => EventLocations.ReadableAddress(p.Address) != null).OrderBy(p => World.DistanceTo(p.Address, position.x, position.z)).FirstOrDefault();
             if (place == null) return;
             var kind = tables.Kind(place.Kinds[0])!;
             var now = HireCrew.Now();
@@ -228,7 +239,7 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
             var distance = World.DistanceTo(place.Address, position.x, position.z);
             Log.Info($"Debug: event {city.Id} ({kind.Id}) at {place.Id} ({place.Address}, {distance:F0} m away) from {Clock(city.Start)} to {Clock(city.End)}, one place booked.");
-            CartSelling.Notify("foodtrucks:notification_debug_event", ("event", Text(kind.Name)), ("place", Text(place.Name)), ("distance", distance.ToString("F0")), ("end", Clock(city.End)));
+            CartSelling.Notify("foodtrucks:notification_debug_event", ("event", Text(kind.Name)), ("place", EventLocations.Name(place.Address)), ("distance", distance.ToString("F0")), ("end", Clock(city.End)));
         }
 
         internal static string Clock(int minute) => $"{minute / 60 % 24:D2}:{minute % 60:D2}";

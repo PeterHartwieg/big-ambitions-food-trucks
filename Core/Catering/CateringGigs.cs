@@ -36,6 +36,17 @@ namespace FoodTrucks.Core.Catering
 
     public static class CateringGigs
     {
+        // An impossible destination is a cancellation, never a no-show. Started work keeps its normal settlement.
+        public static IReadOnlyList<CateringGig> CancelUnlocatable(CateringState state, Func<string, bool> usable)
+        {
+            if (usable == null) throw new ArgumentNullException(nameof(usable));
+            CateringValidation.Validate(state);
+            state.Offers.RemoveAll(o => !usable(o.PlaceId));
+            var cancelled = state.Gigs.Where(g => g.Status == GigStatus.Booked && !usable(g.PlaceId)).ToList();
+            foreach (var gig in cancelled) state.Gigs.Remove(gig);
+            return cancelled;
+        }
+
         public static GigCheck Arrive(CateringRules rules, CateringState state, long gigId, string vehicleId, string vehicleType, int day, int minute,
             IReadOnlyCollection<string> menuItems, IReadOnlyDictionary<string, int> stockByItem, Func<string, string?> categoryOf)
         {

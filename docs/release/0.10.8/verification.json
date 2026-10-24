@@ -1,0 +1,151 @@
+{
+  "base": "f7aaf82",
+  "branch": "codex/street-event-address",
+  "version": "0.10.8",
+  "dotnet": {
+    "passed": 2254,
+    "existingOptInSkip": 1
+  },
+  "python": {
+    "passed": 256,
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "diffCheck": "pass",
+  "package": {
+    "zip": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/street-event-address/build/FoodTrucks-0.10.8-rc.zip",
+    "sha256": "236db24a936cc8bfec975f1b43eb6481dc08c49c9b2cb12cc8de7eb9a235587e",
+    "crc": "pass",
+    "exactFiles": 19,
+    "allDecompressedHashes": "pass",
+    "changesSinceNativeFirstRun": [
+      "FoodTrucks/FoodTrucks.dll",
+      "FoodTrucks/Locales/en.json"
+    ]
+  },
+  "native": {
+    "session": "e2d7eb6e",
+    "modVersion": "0.10.8",
+    "mode": "windowed",
+    "steamConnected": false,
+    "workshopEnabled": false,
+    "addresses": [
+      {
+        "id": "midtown-fourth-avenue",
+        "key": "ba:street_fourthavenue#34",
+        "resolved": true,
+        "name": "34 4th Avenue",
+        "cateringName": "34 4th Avenue",
+        "nativeName": "34 4th Avenue",
+        "sameNativeAddress": true,
+        "legacyStreetLookup": "ba:street_fourthavenue"
+      },
+      {
+        "id": "lower-sixth-avenue",
+        "key": "ba:street_sixthavenue#36",
+        "resolved": true,
+        "name": "36 6th Avenue",
+        "cateringName": "36 6th Avenue",
+        "nativeName": "36 6th Avenue",
+        "sameNativeAddress": true,
+        "legacyStreetLookup": "ba:street_sixthavenue"
+      },
+      {
+        "id": "murray-fifth-avenue-market",
+        "key": "ba:street_fifthavenue#62",
+        "resolved": true,
+        "name": "62 5th Avenue",
+        "cateringName": "62 5th Avenue",
+        "nativeName": "62 5th Avenue",
+        "sameNativeAddress": true,
+        "legacyStreetLookup": "ba:street_fifthavenue"
+      },
+      {
+        "id": "hells-third-avenue-cinema",
+        "key": "ba:street_thirdavenue#15",
+        "resolved": true,
+        "name": "15 3rd Avenue",
+        "cateringName": "15 3rd Avenue",
+        "nativeName": "15 3rd Avenue",
+        "sameNativeAddress": true,
+        "legacyStreetLookup": "ba:street_thirdavenue"
+      },
+      {
+        "id": "garment-first-street",
+        "key": "ba:street_firststreet#82",
+        "resolved": true,
+        "name": "82 1st Street",
+        "cateringName": "82 1st Street",
+        "nativeName": "82 1st Street",
+        "sameNativeAddress": true,
+        "legacyStreetLookup": "ba:street_firststreet"
+      },
+      {
+        "id": "industry-tenth-avenue",
+        "key": "ba:street_tenthavenue#22",
+        "resolved": true,
+        "name": "22 10th Avenue",
+        "cateringName": "22 10th Avenue",
+        "nativeName": "22 10th Avenue",
+        "sameNativeAddress": true,
+        "legacyStreetLookup": "ba:street_tenthavenue"
+      },
+      {
+        "id": "hamptons-harbor-street",
+        "key": "ba:street_harborstreet#1",
+        "resolved": true,
+        "name": "1 Harbor Street",
+        "cateringName": "1 Harbor Street",
+        "nativeName": "1 Harbor Street",
+        "sameNativeAddress": true,
+        "legacyStreetLookup": "ba:street_harborstreet"
+      }
+    ],
+    "gpsStreet": "ba:street_fourthavenue",
+    "gpsNumber": 34,
+    "invalidLocationRefund": {
+      "before": 34560.0,
+      "after": 34720.0,
+      "again": 34720.0,
+      "cancelled": true,
+      "utc": "2026-10-24T20:20:53.5970043Z"
+    },
+    "screenshots": [
+      {
+        "file": "01-event-readable-address-final.png",
+        "width": 1920,
+        "height": 1080,
+        "sha256": "9514946e8e88d3cee68be4363a6c66c9ad9a62bfdc1890b1bf6f71397feabf5b"
+      },
+      {
+        "file": "02-event-directions-final.png",
+        "width": 1920,
+        "height": 1080,
+        "sha256": "bbc6b8b95a0c06aedf19873fa89310fc3c0ecaca29ae2bb146cbb58116ebb34b"
+      },
+      {
+        "file": "03-event-map-location-final.png",
+        "width": 1920,
+        "height": 1080,
+        "sha256": "d1fd95bd2bce930a68dd970269137e094599e5bba3b434d4b8a8f706951cb036"
+      }
+    ],
+    "logCheck": {
+      "inactivePatches": 0,
+      "mapPoiCreationExceptions": 1,
+      "fullLogClean": false
+    },
+    "scope": "Controlled fully-booked event fixture in a disposable FT save; native addresses, phone, directions, map card, GPS, reload and invalid-location refund. No full event attendance/sales playthrough.",
+    "restore": {
+      "gameProcesses": 0,
+      "profileFiles": 4667,
+      "installManifestSha256Verified": true,
+      "installReferencesVerified": 107,
+      "profileSha256Verified": true,
+      "utc": "2026-10-24T20:22:01.9397770Z",
+      "preferencesSha256Verified": true
+    },
+    "finalLeaseHeld": false,
+    "finalPending": 0,
+    "finalGameProcesses": 0
+  }
+}

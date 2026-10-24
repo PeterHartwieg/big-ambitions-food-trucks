@@ -2,7 +2,7 @@
 
 Start with a food cart and grow into a fleet of food trucks. Choose your equipment and menu, find customers around the city, work the serving window yourself or send a crew along a weekly route.
 
-**Version 0.10.7, 24 October 2026.** Includes the 0.10.6 drinks-fridge and truck-branding update. Cart employees and the player stand behind the counter at the midpoint of the two fitted equipment spots, facing customers; with zero or one fitted item they use the counter centre. The first customer aligns with the worker, within 0.1 m after navigation placement. The register keeps its customer-side front corner. Controls and fridge doors face the worker on either queue side. Safe pavement is required for customers and server, with no end-of-cart service. Food trucks are unchanged. Latest checks and native evidence: [centred worker validation](docs/release/0.10.7/center-worker.md).
+**Version 0.10.8, 24 October 2026.** Event and catering addresses use the game's own building address and street names. City events include GPS directions by phone, including fully booked events. Existing map filters highlight the event/catering building. Unavailable catering locations cancel without a reputation penalty; unavailable city locations refund unused bookings. Automated checks and native acceptance: [event address fix](docs/release/0.10.8/event-address.md).
 
 Bugs and balance changes are still possible. We recommend a new save or a backup of your existing save before enabling the mod. Read the removal instructions before unsubscribing.
 
@@ -82,7 +82,7 @@ Created by Peter Hartwieg. Uses the official Hovgaard Games modding SDK and Harm
 
 The 0.10.6 baseline validation and remaining manual checks are in [the release evidence](docs/release/0.10.6/final-verification.txt). Peter accepted functionality and save safety following playtests on 18 October 2026. Release preparation focuses on packaging, presentation and community testing; the Workshop upload status is recorded in `docs/release/0.10.0/README.md` in the repository.
 
-Build with the .NET SDK, Unity 2022.3.62f2 and the official Big Ambitions SDK: `dotnet test`, then `tools/build-mod.sh` (add `--generate` when regenerating assets). Package the final release with `python3 tools/package-release.py --output build/FoodTrucks-0.10.7.zip`. The build runs the release verifier; repeat it with `dotnet run --project tools/release/VerifyRelease.csproj -c Release -- build/FoodTrucks unity/FoodTrucks/ModManifest.asset`. Plain-text and BBCode change notes are in `docs/release/0.10.7/`.
+Build with the .NET SDK, Unity 2022.3.62f2 and the official Big Ambitions SDK: `dotnet test`, then `tools/build-mod.sh` (add `--generate` when regenerating assets). Package the final release with `python3 tools/package-release.py --output build/FoodTrucks-0.10.8-rc.zip`. The build runs the release verifier; repeat it with `dotnet run --project tools/release/VerifyRelease.csproj -c Release -- build/FoodTrucks unity/FoodTrucks/ModManifest.asset`. The player-facing change note is in `workshop/CHANGENOTE-0.10.8.md`.
 
 A supplied local package installs as a complete `FoodTrucks` folder in `ModsLocal`, with the game closed. The DLL or source checkout alone is not installable. Open the folder through **Mods → Mod Creator → Browse mod folder**.
 

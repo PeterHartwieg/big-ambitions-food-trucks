@@ -234,7 +234,8 @@ namespace FoodTrucks
             foreach (var (controller, doors) in World.AllBuildings())
             {
                 var address = controller.building.Address;
-                if (address == null || doors.Length == 0) continue;
+                if (address == null || doors.Length == 0 ||
+                    EventLocations.ReadableAddress(World.AddressKey(address.streetName, address.streetNumber)) == null) continue;
                 registrations.TryGetValue((address.streetName, address.streetNumber), out var registration);
                 if (wanted.Contains("park") && ParkAreas.Near(doors[0], ParkGateMetres).Any(p => p.Type == ParkAreas.Park))
                     places.Add(new CateringPlace { PlaceId = World.AddressKey(address.streetName, address.streetNumber), Area = "park", X = doors[0].x, Z = doors[0].z });
@@ -267,6 +268,15 @@ namespace FoodTrucks
             if (tables == null) return;
             var vehicles = SaveGameManager.Current.VehicleInstances.Where(v => v != null).ToDictionary(v => v.id, v => v);
 
+            // Wait for native buildings before judging destinations or overdue arrivals.
+            if (!EventLocations.Ready) return;
+            EventLocations.RefreshMessages(Bookings(), state.Catering.Offers.Concat<CateringOffer>(state.Catering.Gigs)
+                .Where(o => EventLocations.ReadableAddress(o.PlaceId) != null).Select(Describe));
+            var offerCount = state.Catering.Offers.Count;
+            var cancelled = CateringGigs.CancelUnlocatable(state.Catering, p => EventLocations.ReadableAddress(p) != null);
+            if (cancelled.Count > 0 || offerCount != state.Catering.Offers.Count) FoodTrucksSession.MarkChanged();
+            foreach (var gig in cancelled)
+                Notices.SendText(Bookings(), "foodtrucks:message_bookings_location_cancelled");
             PayUnpaid(state);
             SettleEnded(state, rules, tables, vehicles, now);
 
@@ -619,8 +629,7 @@ namespace FoodTrucks
         // "12 Fifth Street": the place's number and street as the game names it.
         internal static string PlaceName(string placeId)
         {
-            var hash = placeId.LastIndexOf('#');
-            return hash < 0 ? placeId : $"{placeId.Substring(hash + 1)} {Text(placeId.Substring(0, hash))}";
+            return EventLocations.Name(placeId);
         }
 
         internal static string Category(string category) => Text("foodtrucks:category_" + category);

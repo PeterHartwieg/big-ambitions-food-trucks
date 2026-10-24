@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>FoodTrucks.Core</RootNamespace>
     <AssemblyName>FoodTrucks.Core</AssemblyName>
-    <Version>0.10.7</Version>
+    <Version>0.10.8</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
