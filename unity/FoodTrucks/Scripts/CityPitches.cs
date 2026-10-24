@@ -11,11 +11,29 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Premium spots and the city's events on the street (design: Pitches). Core's PremiumSpots and CityEvents
-    // decide; this finds the buildings, claims places as vehicles open, and sends the city's messages.
+    // Retry deferred city address work without depending on the next midnight or a catering tick.
+    internal sealed class CityPitchRetry : MonoBehaviour
+    {
+        private void Update()
+        {
+            try { CityPitches.RetryAddresses(); }
+            catch (Exception ex) { Log.Error("City address retry: " + ex); }
+        }
+    }
+
+    // Core decides premium spots and events; this resolves native places and sends the city's messages.
     internal static class CityPitches
     {
         private static PitchTables? Tables => DemandData.Pitches;
+        private static SaveState? pendingAddresses;
+        internal static void Reset() => pendingAddresses = null;
+        internal static void RetryAddresses()
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (pendingAddresses != null && ReferenceEquals(pendingAddresses, state) &&
+                FoodTrucksSession.CanWrite && SaveGameManager.Current != null && EventLocations.Ready)
+                NewDay(state, SaveGameManager.Current.Day, loading: false);
+        }
 
         // Once per city load: how many of the data file's addresses the city has.
         public static void LogFound()
@@ -27,7 +45,7 @@ namespace FoodTrucks
             Log.Info($"Pitches: {spots} of {tables.Spots.Count} premium spots and {places} of {tables.Places.Count} event places found in the city." +
                      (spots < tables.Spots.Count || places < tables.Places.Count
                          ? " Missing: " + string.Join(", ", tables.Spots.Where(s => World.EntrancesOf(s.Address) == null).Select(s => s.Address)
-                             .Concat(tables.Places.Where(p => World.EntrancesOf(p.Address) == null).Select(p => p.Address))) + "."
+                             .Concat(tables.Places.Where(p => EventLocations.ReadableAddress(p.Address) == null).Select(p => p.Address))) + "."
                          : ""));
         }
 
@@ -132,19 +150,27 @@ namespace FoodTrucks
             if (tables == null || !FoodTrucksSession.CanWrite) return;
             // Nothing a window still has to sell through goes: a catch-up can be days behind after a long skip.
             var soldThrough = CartSelling.SoldThrough();
-            // Resolve cancellations before expiry so a missing location cannot swallow a paid booking.
-            if (!EventLocations.Ready) return;
-            DropUnknown(state, tables, HireCrew.Now());
-            EventLocations.RefreshMessages(CityLicensing.City(), state.Events.Events
-                .Where(e => HireCrew.Now() < CityEvents.EndsAt(e))
-                .Select(e => new Dictionary<string, string>
-                {
-                    { "day", e.Day.ToString() }, { "start", Clock(e.Start) },
-                    { "event", Text(tables.Kind(e.Kind)!.Name) },
-                    { "place", EventLocations.Name(tables.Place(e.PlaceId)!.Address) }
-                }));
+            // Address work waits for native data; expiry, pruning and load-only release always run.
+            var addressesReady = EventLocations.Ready;
+            pendingAddresses = addressesReady ? null : state;
+            if (addressesReady)
+            {
+                DropUnknown(state, tables);
+                EventLocations.RefreshMessages(CityLicensing.City(), state.Events.Events
+                    .Where(e => HireCrew.Now() < CityEvents.EndsAt(e))
+                    .Select(e => new Dictionary<string, string>
+                    {
+                        { "bookingId", e.Id.ToString() }, { "locationId", tables.Place(e.PlaceId)!.Address },
+                        { "legacyPlace", Text(tables.Place(e.PlaceId)!.Name) },
+                        { "day", e.Day.ToString() }, { "start", Clock(e.Start) }, { "end", Clock(e.End) },
+                        { "fee", CartSelling.Money(e.FeeCents) },
+                        { "event", Text(tables.Kind(e.Kind)!.Name) },
+                        { "place", EventLocations.Name(tables.Place(e.PlaceId)!.Address) }
+                    }));
+            }
             var dropped = CityEvents.Expire(state.Events, today, soldThrough);
             PremiumSpots.Prune(state, soldThrough);
+            FoodTrucksSession.MarkChanged();
             if (loading)
             {
                 // Places held by vehicles that aren't open any more go back.
@@ -154,7 +180,8 @@ namespace FoodTrucks
                     holder.Until = Math.Max(holder.From, now);
                 foreach (var vehicle in state.Vehicles.Where(v => !v.IsOpen && v.PremiumSpot != null)) vehicle.PremiumSpot = null;
             }
-            // Only places the city has; before its buildings are there, nothing is announced (the day is caught up later).
+            // Announcements and reminders also require readable native places; retry after city data loads.
+            if (!addressesReady) return;
             if (!tables.Places.Any(p => EventLocations.ReadableAddress(p.Address) != null)) return;
             var added = new CityEvents(tables).Announce(state.Events, today, p => EventLocations.ReadableAddress(p.Address) != null);
             // The city writes to vendors: players with a food cart or truck.
@@ -167,6 +194,7 @@ namespace FoodTrucks
                 if (!vendor) continue;
                 Notices.SendText(CityLicensing.City(), "foodtrucks:message_city_event", new Dictionary<string, string>
                 {
+                    { "bookingId", city.Id.ToString() }, { "locationId", place.Address },
                     { "event", Text(kind.Name) },
                     { "place", EventLocations.Name(place.Address) },
                     { "weekday", Weekday(city.Day) },
@@ -185,10 +213,12 @@ namespace FoodTrucks
                 if (kind == null || place == null) continue;
                 Notices.SendText(CityLicensing.City(), "foodtrucks:message_city_event_today", new Dictionary<string, string>
                 {
+                    { "bookingId", city.Id.ToString() }, { "locationId", place.Address },
                     { "event", Text(kind.Name) },
                     { "place", EventLocations.Name(place.Address) },
                     { "start", Clock(city.Start) },
                     { "end", Clock(city.End) },
+                    { "day", city.Day.ToString() },
                     { "booked", city.Booked.ToString() }
                 });
             }
@@ -196,15 +226,15 @@ namespace FoodTrucks
             if (added.Count > 0 || dropped > 0) Log.Info($"City events on day {today}: {added.Count} announced, {dropped} over; {state.Events.Events.Count} coming.");
         }
 
-        // Cancel missing/unreadable locations before expiry. Refund future bookings and unclaimed ended bookings.
-        private static void DropUnknown(SaveState state, PitchTables tables, long now)
+        // Cancel missing/unreadable locations before expiry. Refund only places no distinct vehicle used.
+        private static void DropUnknown(SaveState state, PitchTables tables)
         {
             foreach (var city in state.Events.Events.Where(e => tables.Place(e.PlaceId) == null || tables.Kind(e.Kind) == null ||
                 EventLocations.ReadableAddress(tables.Place(e.PlaceId)!.Address) == null).ToList())
             {
                 state.Events.Events.Remove(city);
                 FoodTrucksSession.MarkChanged();
-                var refund = now < CityEvents.EndsAt(city) || city.Holds.Count == 0 ? city.Booked * city.FeeCents : 0;
+                var refund = CityEvents.UnusedPlaceRefund(city);
                 Log.Info($"City event {city.Id} ({city.Kind} at {city.PlaceId}) dropped: location or kind unavailable; {city.Booked} places booked, {CartSelling.Money(refund)} paid back.");
                 if (refund <= 0) continue;
                 var info = new TransactionInfo("foodtrucks:transaction_event_refund", new Dictionary<string, string>());

@@ -261,7 +261,7 @@
     "foodtrucks:category_snacks": "snacks",
     "foodtrucks:category_slushies": "slushies",
     "foodtrucks:message_bookings_offer": "{kind} at {place} wants a food truck: {guests} guests, {food}, {weekday} (day {day}) from {start} to {end}. The fee is {fee}, paid when it's done. Call us by the end of day {reply} if you want it. The truck serves outside this building. Once booked, find it on the city map: Street food > Catering bookings.",
-    "foodtrucks:message_bookings_booked": "Booked: {kind} at {place}, {weekday} (day {day}), {start} to {end}. Be there by {start} with {guests} portions of {food}, and stay to the end. Find the building on the city map: Street food > Catering bookings. Serve outside, within 60 metres of an entrance.",
+    "foodtrucks:message_bookings_booked": "Booked: {kind} at {place}, {weekday} (day {day}), {start} to {end}. Be there by {start} with {guests} portions of {food}, and stay to the end. Find the building on the city map: Street food > Catering bookings. Serve outside, within {metres} metres of an entrance.",
     "foodtrucks:message_bookings_missed": "The gig at {place} on day {day} didn't happen as booked. Clients talk; fewer will call for a while.",
     "foodtrucks:message_bookings_paid": "Thanks for the catering at {place}: {guests} guests fed. {fee} paid.",
     "foodtrucks:dialog_bookings_offer": "Street food bookings ({number} of {count}): {kind} at {place}, {weekday} (day {day}) from {start} to {end}. {guests} guests want {food}. The fee is {fee}. The truck serves outside this building. Once booked, find it on the city map: Street food > Catering bookings.",
@@ -630,5 +630,5 @@
     "foodtrucks:dialog_event_directions": "Directions / next event",
     "foodtrucks:dialog_event_location": "The event is outside {place}. Set a GPS destination, or find the building on the city map under Street food > Premium spots and events. Park nearby, within {metres} metres of an entrance.",
     "foodtrucks:dialog_event_set_destination": "Set destination",
-    "foodtrucks:message_bookings_location_cancelled": "A booking was cancelled because its address is no longer available. Your booking reputation has not been reduced."
+    "foodtrucks:message_bookings_location_cancelled": "Your {kind} booking on {weekday} (day {day}) at {start} was cancelled because its address is no longer available. Your booking reputation has not been reduced."
 }

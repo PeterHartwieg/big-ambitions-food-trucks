@@ -90,20 +90,37 @@ namespace FoodTrucks
 
         // Each building's entrances by its address, "street#number" (PitchTables addresses).
         private static Dictionary<string, Vector3[]>? byAddress;
+        private static Dictionary<string, CityBuildingController>? controllersByAddress;
 
         public static void Reset()
         {
             buildings = null;
             byAddress = null;
+            controllersByAddress = null;
             ParkAreas.Reset();
         }
 
         public static string AddressKey(string? street, int number) => $"{street}#{number}";
 
         // The city building at an address ("street#number"), or null.
-        public static CityBuildingController? BuildingAt(string address) =>
-            Buildings().Select(b => b.Controller).FirstOrDefault(c => c != null && c.building?.Address != null &&
-                AddressKey(c.building.Address.streetName, c.building.Address.streetNumber) == address);
+        public static CityBuildingController? BuildingAt(string address)
+        {
+            if (controllersByAddress == null)
+            {
+                var list = Buildings();
+                if (list.Count == 0) return null; // Retry once the city exists.
+                var map = new Dictionary<string, CityBuildingController>(StringComparer.Ordinal);
+                foreach (var (controller, _) in list)
+                {
+                    var a = controller.building?.Address;
+                    if (a == null) continue;
+                    var key = AddressKey(a.streetName, a.streetNumber);
+                    if (!map.ContainsKey(key)) map.Add(key, controller);
+                }
+                controllersByAddress = map;
+            }
+            return controllersByAddress.TryGetValue(address, out var found) && found != null ? found : null;
+        }
 
         // The entrances of the building at an address; null when the city has no such building.
         public static Vector3[]? EntrancesOf(string address)

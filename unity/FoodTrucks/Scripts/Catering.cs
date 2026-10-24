@@ -235,7 +235,7 @@ namespace FoodTrucks
             {
                 var address = controller.building.Address;
                 if (address == null || doors.Length == 0 ||
-                    EventLocations.ReadableAddress(World.AddressKey(address.streetName, address.streetNumber)) == null) continue;
+                    EventLocations.ReadableAddress(controller) == null) continue;
                 registrations.TryGetValue((address.streetName, address.streetNumber), out var registration);
                 if (wanted.Contains("park") && ParkAreas.Near(doors[0], ParkGateMetres).Any(p => p.Type == ParkAreas.Park))
                     places.Add(new CateringPlace { PlaceId = World.AddressKey(address.streetName, address.streetNumber), Area = "park", X = doors[0].x, Z = doors[0].z });
@@ -268,17 +268,12 @@ namespace FoodTrucks
             if (tables == null) return;
             var vehicles = SaveGameManager.Current.VehicleInstances.Where(v => v != null).ToDictionary(v => v.id, v => v);
 
+            PayUnpaid(state);
+            SettleEnded(state, rules, tables, vehicles, now);
             // Wait for native buildings before judging destinations or overdue arrivals.
             if (!EventLocations.Ready) return;
             EventLocations.RefreshMessages(Bookings(), state.Catering.Offers.Concat<CateringOffer>(state.Catering.Gigs)
                 .Where(o => EventLocations.ReadableAddress(o.PlaceId) != null).Select(Describe));
-            var offerCount = state.Catering.Offers.Count;
-            var cancelled = CateringGigs.CancelUnlocatable(state.Catering, p => EventLocations.ReadableAddress(p) != null);
-            if (cancelled.Count > 0 || offerCount != state.Catering.Offers.Count) FoodTrucksSession.MarkChanged();
-            foreach (var gig in cancelled)
-                Notices.SendText(Bookings(), "foodtrucks:message_bookings_location_cancelled");
-            PayUnpaid(state);
-            SettleEnded(state, rules, tables, vehicles, now);
 
             // Trucks standing at booked places: watched from a day before a gig's window, so one parked there before a
             // skip counts from then.
@@ -426,8 +421,20 @@ namespace FoodTrucks
         // Started gigs whose end passed or whose truck left are settled.
         private void SettleEnded(SaveState state, CateringRules rules, DemandTables tables, Dictionary<string, VehicleInstance> vehicles, long now)
         {
+            if (EventLocations.Ready)
+            {
+                var offerCount = state.Catering.Offers.Count;
+                var cancelled = CateringGigs.CancelUnlocatable(state.Catering, p => EventLocations.ReadableAddress(p) != null);
+                if (cancelled.Count > 0 || offerCount != state.Catering.Offers.Count) FoodTrucksSession.MarkChanged();
+                foreach (var gig in cancelled)
+                {
+                    lastSeenNear.Remove(gig.Id);
+                    Notices.SendText(Bookings(), "foodtrucks:message_bookings_location_cancelled", Describe(gig));
+                }
+            }
             foreach (var gig in state.Catering.Gigs.Where(g => g.Status == GigStatus.Started).ToList())
             {
+                if (!EventLocations.Ready) continue; // No departure judgement while native locations are still loading.
                 vehicles.TryGetValue(gig.VehicleId, out var truck);
                 var end = GigStart(gig) + gig.DurationMinutes;
                 var there = truck != null && Near(truck, gig.PlaceId);
@@ -614,6 +621,9 @@ namespace FoodTrucks
 
         internal static Dictionary<string, string> Describe(CateringOffer offer) => new Dictionary<string, string>
         {
+            { "bookingId", offer.Id.ToString() },
+            { "locationId", offer.PlaceId },
+            { "metres", PlaceMetres.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) },
             { "kind", Text("foodtrucks:catering_kind_" + offer.Kind) },
             { "guests", offer.Guests.ToString() },
             { "place", PlaceName(offer.PlaceId) },

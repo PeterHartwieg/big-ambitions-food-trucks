@@ -12,7 +12,7 @@
   },
   "diffCheck": "pass",
   "package": {
-    "zip": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/street-event-address/build/FoodTrucks-0.10.8-rc.zip",
+    "zip": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/street-event-address/build/FoodTrucks-0.10.8-before-review-38675ff.zip",
     "sha256": "236db24a936cc8bfec975f1b43eb6481dc08c49c9b2cb12cc8de7eb9a235587e",
     "crc": "pass",
     "exactFiles": 19,
@@ -147,5 +147,7 @@
     "finalLeaseHeld": false,
     "finalPending": 0,
     "finalGameProcesses": 0
-  }
+  },
+  "sourceHead": "38675ff475f4b915488ba2a7ce9324322c03586a",
+  "supersededBy": "review-fix-verification.json"
 }

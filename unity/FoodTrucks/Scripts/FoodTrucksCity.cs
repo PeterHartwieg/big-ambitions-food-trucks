@@ -158,6 +158,7 @@ namespace FoodTrucks
             runtimeObject.AddComponent<CartQueueView>();
             runtimeObject.AddComponent<HireRoutes>();
             runtimeObject.AddComponent<Catering>();
+            runtimeObject.AddComponent<CityPitchRetry>();
             runtimeObject.AddComponent<DebugActions>();
             runtimeObject.AddComponent<CartParts>();
             runtimeObject.AddComponent<VehicleDisplays>();

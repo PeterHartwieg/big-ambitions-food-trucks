@@ -44,15 +44,22 @@ public class CateringGigsTests
     }
 
     [Fact]
-    public void LocationCancellationPreservesUsableBookingsAndStartedWork()
+    public void LocationCancellationPreservesUsableBookingsAndCancelsUnlocatableStartedWork()
     {
         var state = Book();
         Assert.Empty(CateringGigs.CancelUnlocatable(state, _ => true));
         Assert.Single(state.Gigs);
         Assert.True(CateringGigs.Arrive(rules, state, 1, "truck-1", "truck", 3, 720, menu, stock, Category).Success);
-        Assert.Empty(CateringGigs.CancelUnlocatable(state, _ => false));
-        Assert.Equal(GigStatus.Started, Assert.Single(state.Gigs).Status);
-        Assert.True(CateringGigs.Finish(rules, state, 1, 3, 780).Success);
+        var gig = Assert.Single(CateringGigs.CancelUnlocatable(state, _ => false));
+        Assert.Equal(GigStatus.Started, gig.Status);
+        Assert.Null(gig.Failure);
+        Assert.Empty(state.Gigs);
+        Assert.Empty(state.History);
+        Assert.Equal(0, state.Failed);
+        Assert.Equal(0, state.Completed);
+        Assert.Equal(1, state.BookingReputation);
+        Assert.Empty(CateringGigs.MissOverdue(rules, state, 10, 0));
+        Assert.Equal(GigCheckStatus.UnknownGig, CateringGigs.Finish(rules, state, 1, 3, 780).Status);
     }
 
     [Fact]

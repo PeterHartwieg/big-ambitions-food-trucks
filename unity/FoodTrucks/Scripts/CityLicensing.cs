@@ -49,6 +49,7 @@ namespace FoodTrucks
 
         public static void Detach()
         {
+            CityPitches.Reset();
             if (!attached) return;
             GlobalEvents.onNewDay -= OnNewDay;
             attached = false;
@@ -242,17 +243,17 @@ namespace FoodTrucks
             onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
         };
 
-        // The events with places left, from the index-th on; wraps around for "next".
+        // Upcoming events, including fully booked ones; wraps around for "next".
         private static DialogEntry Event(int index)
         {
             var state = FoodTrucksSession.CurrentState;
             var tables = DemandData.Pitches;
             if (state == null || tables == null || !FoodTrucksSession.CanWrite) return Closing("foodtrucks:dialog_city_unavailable");
             if (!Core.Fleet.Licensing.IsValid(state.Licence, SaveGameManager.Current.Day)) return Closing("foodtrucks:dialog_city_event_no_licence");
-            var bookable = Upcoming(state).ToList();
-            if (bookable.Count == 0) return Start();
-            index %= bookable.Count;
-            var city = bookable[index];
+            var upcoming = Upcoming(state).ToList();
+            if (upcoming.Count == 0) return Start();
+            index %= upcoming.Count;
+            var city = upcoming[index];
             var kind = tables.Kind(city.Kind);
             var place = tables.Place(city.PlaceId);
             var fee = CartSelling.Money(city.FeeCents);
@@ -271,7 +272,7 @@ namespace FoodTrucks
                     booked = city.Booked.ToString(),
                     fee,
                     number = (index + 1).ToString(),
-                    count = bookable.Count.ToString()
+                    count = upcoming.Count.ToString()
                 }),
                 Template = DialogEntry.TemplateType.Text,
                 OnConfirm = city.Booked < city.Places ? Guard(() => BookEvent(id, index)) : null,
@@ -296,12 +297,13 @@ namespace FoodTrucks
             if (place == null || EventLocations.ReadableAddress(place.Address) == null) return Event(index);
             return new DialogEntry
             {
-                messageData = LocalizorManager.Localize("foodtrucks:dialog_event_location", new { place = EventLocations.Name(place.Address), metres = DemandData.Pitches!.EventRadiusMetres.ToString() }),
+                messageData = LocalizorManager.Localize("foodtrucks:dialog_event_location", new { place = EventLocations.Name(place.Address), metres = DemandData.Pitches!.EventRadiusMetres.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) }),
                 Template = DialogEntry.TemplateType.Text,
                 OnConfirm = Guard(() => { EventLocations.SetDestination(place.Address); return Event(index); }),
                 ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_event_set_destination", (object?)null),
-                OnSecondOption = Guard(() => Event(index + 1)),
-                SecondOptionTextOverride = "foodtrucks:dialog_city_event_next",
+                OnSecondOption = Guard(() => Upcoming(FoodTrucksSession.CurrentState!).Count() > 1 ? Event(index + 1) : Start()),
+                SecondOptionTextOverride = Upcoming(FoodTrucksSession.CurrentState!).Count() > 1
+                    ? "foodtrucks:dialog_city_event_next" : "foodtrucks:dialog_city_back",
                 OnCancel = PhoneCall.HangUpAction,
                 onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
             };
@@ -328,6 +330,8 @@ namespace FoodTrucks
             Log.Info($"City of New York: place {city.Booked} of {city.Places} booked at event {city.Id} ({city.Kind} at {city.PlaceId}, day {city.Day}) for {CartSelling.Money(city.FeeCents)}: {result}.");
             Notices.Send(Current.contact, new TextMessage("foodtrucks:message_city_event_booked", new Dictionary<string, string>
             {
+                { "bookingId", city.Id.ToString() }, { "locationId", place!.Address },
+                { "end", CityPitches.Clock(city.End) }, { "fee", CartSelling.Money(city.FeeCents) },
                 { "event", kind == null ? city.Kind : CityPitches.Text(kind.Name) },
                 { "place", place == null ? CityPitches.Text("foodtrucks:event_location_unavailable") : EventLocations.Name(place.Address) },
                 { "weekday", CityPitches.Weekday(city.Day) },
