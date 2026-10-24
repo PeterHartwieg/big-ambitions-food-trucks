@@ -1,0 +1,68 @@
+{
+  "version": "0.10.8",
+  "branch": "codex/street-event-address",
+  "reviewedHead": "8db44eef84cfb7e0ba956a49ba185e317c634a83",
+  "verifiedUtc": "2026-10-24T23:13:53.583649+00:00",
+  "dotnet": {
+    "command": "dotnet test",
+    "passed": 2259,
+    "failed": 0,
+    "existingOptInSkip": 1,
+    "log": "build/review-fix4-dotnet.log"
+  },
+  "python": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v",
+    "passed": 260,
+    "failed": 0,
+    "seconds": 194.676,
+    "log": "build/review-fix4-python.log"
+  },
+  "regression": {
+    "status": "pass",
+    "coverage": "Source assertion requires the uninstall return as the first OnNewDay statement, before both Bookings() and Offer(). It rejects reviewed HEAD 8db44ee and accepts the fixed source.",
+    "log": "build/review-fix4-regression.log"
+  },
+  "diffCheck": "pass (working tree; staged and committed checks recorded in the handoff)",
+  "build": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 tools/build-mod.sh",
+    "status": "pass",
+    "platformBundles": [
+      "Windows",
+      "Mac"
+    ],
+    "log": "build/review-fix4-build.log",
+    "unityLog": "build/review-fix4-unity.log",
+    "releaseVerifier": "pass during build and in a separate repeat: both assemblies 0.10.8.0, informational 0.10.8, schema 2, inert physical-driving seam",
+    "releaseVerifierLog": "build/review-fix4-release-verifier.log",
+    "diagnostics": [
+      "Known Burst metadata-hashing scan exception for the checksum-pinned Harmony DLL; batch build and release verifiers succeeded. No dependency changes."
+    ]
+  },
+  "package": {
+    "zip": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/street-event-address/build/FoodTrucks-0.10.8-rc.zip",
+    "sha256": "e691d7fc4ad6219e71af83c9e6d99eefe435e073b67e7a542630f2efd2460199",
+    "bytes": 57524816,
+    "crc": "pass",
+    "exactFiles": 19,
+    "allDecompressedHashes": "pass",
+    "matchesBuiltRuntime": true,
+    "buildManifestSha256": "88559281623890315087fdcfd825fca56c5306db6e6b0f03a6e843d9294d5576"
+  },
+  "changes": [
+    "The entire daily catering path returns immediately after uninstall, before contact restoration, offer generation or offer texts. Attach and Offer load behavior are unchanged.",
+    "EA5 and test-plan step 5 require a permitted catering truck with past sales and no returning contact or new offers across midnight."
+  ],
+  "optionalL1": {
+    "status": "deferred",
+    "reason": "Step removes unresolved offers and cancels unresolved booked/started gigs in the same ready minute through CancelUnlocatable. Keeping the address-migration flag alone cannot retry those removed records; a useful retry needs a separate location-cancellation decision."
+  },
+  "native": {
+    "status": "not-run",
+    "reason": "This small fix round requests automated tests and a rebuilt candidate; native acceptance remains pending.",
+    "remoteAccess": false,
+    "newScreenshots": [],
+    "plan": "docs/release/0.10.8/in-game-test-plan.md",
+    "checklist": "CHECKS.md EA1-EA5"
+  },
+  "publication": "Local release candidate only. Normal branch push requested; no main changes, merge, force-push, binary commit, rig install or Workshop upload."
+}

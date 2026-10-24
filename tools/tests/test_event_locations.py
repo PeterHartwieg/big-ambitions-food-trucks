@@ -53,6 +53,14 @@ class EventLocationTests(unittest.TestCase):
         self.assertEqual(catering.count('CateringGigs.CancelUnlocatable('), 1)
         self.assertLess(step.index('CateringGigs.CancelUnlocatable('), step.index('SettleEnded('))
 
+    def test_daily_offers_do_not_restore_uninstalled_contact(self):
+        catering = (ROOT / 'unity/FoodTrucks/Scripts/Catering.cs').read_text()
+        daily = catering[catering.index('        private static void OnNewDay()'):catering.index("        // Today's offers")]
+        guard = 'if (Commissary.Uninstalled) return;'
+        self.assertEqual(daily[daily.index('{') + 1:].lstrip().splitlines()[0], guard)
+        self.assertLess(daily.index(guard), daily.index('Bookings();'))
+        self.assertLess(daily.index(guard), daily.index('Offer();'))
+
     def test_catering_migration_does_not_restore_uninstalled_contact(self):
         with tempfile.TemporaryDirectory(prefix='ft-bookings-migration-') as directory:
             folder = Path(directory)

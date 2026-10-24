@@ -152,11 +152,12 @@ namespace FoodTrucks
 
         private static void OnNewDay()
         {
+            if (Commissary.Uninstalled) return;
             // A contact removed some other way (an older save, another mod) is back by the next morning, not only with
             // the next offer's text, which can be days away.
             try
             {
-                if (!Commissary.Uninstalled && SaveGameManager.Current?.Contacts.Any(c => c != null && c.id == ContactId) == false)
+                if (SaveGameManager.Current?.Contacts.Any(c => c != null && c.id == ContactId) == false)
                 {
                     Bookings();
                     Log.Info("Catering: the bookings contact was missing from the phone; added again.");

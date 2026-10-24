@@ -10,7 +10,7 @@ Short rig procedure: [0.10.8 in-game test plan](docs/release/0.10.8/in-game-test
 | EA2 | Fully book an event; use directions, Back/Next, save and reload | Fully booked event stays accessible; GPS points to the same address and survives reload |
 | EA3 | Cancel invalid paid events with unused/mixed holds; repeat after reload with addresses delayed | Only unused places refunded, exactly once; same-minute closed-vehicle hold agrees between immediate/deferred readiness |
 | EA4 | Load 0.10.7 city announcement/confirmation/reminder history for unended and ended events; old catering confirmation with no live gig | Only unended identifiable city messages repaired; ended city history retained; catering confirmation shows 60 metres; repeat load stable |
-| EA5 | Run uninstall (Ctrl+Shift+F11 twice), then wait at least five game minutes and cross midnight | Street Food Bookings stays absent; save, close game, disable mod and reload: no resurrected contact or raw foodtrucks: text |
+| EA5 | On a disposable save with a permitted catering truck and past sales, run uninstall (Ctrl+Shift+F11 twice), then wait at least five game minutes and cross midnight | Street Food Bookings stays absent and no new catering offers arrive; save, close game, disable mod and reload: no resurrected contact or raw foodtrucks: text |
 
 # Unlimited employee rosters (22 October 2026)
 
