@@ -32,6 +32,8 @@ namespace FoodTrucks
         private static Catering? instance;
         private static bool attached;
         private long lastMinute = -1;
+        private static bool migrateRadius;
+        private static bool migrateAddresses;
         // Where trucks stood and when, none of it saved: after a load it starts from then.
         // By gig and truck: the first minute the truck stood there ready for it (crew or player, licence, food,
         // portions), so a wait to confirm it is parked never stretches the deadline for a truck that got ready late.
@@ -57,6 +59,7 @@ namespace FoodTrucks
         public static void Attach()
         {
             Detach();
+            migrateRadius = migrateAddresses = true;
             CallDialogFactory.RegisterDialog(DialogType, () => new BookingsDialog());
             var contact = Contact.EnsurePermanentContact(ContactId, ContactCategoryName.General, ContactDescription);
             // Not saved by the game, so it is set again after every load.
@@ -252,12 +255,32 @@ namespace FoodTrucks
         {
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
-            if (state == null || rules == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
+            if (Commissary.Uninstalled || state == null || rules == null || !FoodTrucksSession.CanWrite || SaveGameManager.Current == null) return;
             var now = HireCrew.Now();
             if (now == lastMinute) return;
             lastMinute = now;
             try { Step(state, rules, now); }
             catch (Exception ex) { Log.Error("Catering: " + ex); }
+        }
+
+        // One migration per load; address repair waits until native buildings are ready.
+        // Looking up history must never create a contact, especially after the uninstall step.
+        private static void RefreshSavedMessages(SaveState state)
+        {
+            if (Commissary.Uninstalled || (!migrateRadius && !migrateAddresses)) return;
+            var contact = SaveGameManager.Current?.Contacts.Find(c => c != null && c.id == ContactId);
+            if (contact == null) return;
+            if (migrateRadius)
+            {
+                EventLocations.RefreshBookingRadius(contact);
+                migrateRadius = false;
+            }
+            if (migrateAddresses && EventLocations.Ready)
+            {
+                EventLocations.RefreshMessages(contact, state.Catering.Offers.Concat<CateringOffer>(state.Catering.Gigs)
+                    .Where(o => EventLocations.ReadableAddress(o.PlaceId) != null).Select(Describe));
+                migrateAddresses = false;
+            }
         }
 
         // Once a game minute (or once after a skip): gigs that ended or whose truck left are settled, trucks at a
@@ -268,7 +291,7 @@ namespace FoodTrucks
             if (tables == null) return;
             var vehicles = SaveGameManager.Current.VehicleInstances.Where(v => v != null).ToDictionary(v => v.id, v => v);
 
-            EventLocations.RefreshBookingRadius(Bookings());
+            RefreshSavedMessages(state);
             PayUnpaid(state);
             if (EventLocations.Ready)
             {
@@ -284,8 +307,6 @@ namespace FoodTrucks
             SettleEnded(state, rules, tables, vehicles, now);
             // Wait for native buildings before judging destinations or overdue arrivals.
             if (!EventLocations.Ready) return;
-            EventLocations.RefreshMessages(Bookings(), state.Catering.Offers.Concat<CateringOffer>(state.Catering.Gigs)
-                .Where(o => EventLocations.ReadableAddress(o.PlaceId) != null).Select(Describe));
 
             // Trucks standing at booked places: watched from a day before a gig's window, so one parked there before a
             // skip counts from then.

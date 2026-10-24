@@ -123,11 +123,11 @@ static class Program
         if (string.IsNullOrWhiteSpace(otherLabel)) throw new Exception("Missing real locale label");
         Equal("Fourth Avenue, Midtown", label);
         // Exact old reminder shape: event/place/start/end/booked; no day or stable IDs.
-        var legacy = new Dictionary<string, string> { ["event"] = "market", ["place"] = label,
+        var legacy = new Dictionary<string, string> { ["event"] = "weekend market", ["place"] = label,
             ["start"] = "10:00", ["end"] = "14:00", ["booked"] = "2" };
         var message = Message(legacy, "foodtrucks:message_city_event_today");
         var c = new Contact(); c.messagesQueue.Enqueue(message);
-        var candidate = new Dictionary<string, string> { ["event"] = "market", ["day"] = "4", ["place"] = "34 4th Avenue",
+        var candidate = new Dictionary<string, string> { ["event"] = "weekend market", ["day"] = "4", ["place"] = "34 4th Avenue",
             ["legacyPlace"] = label, ["start"] = "10:00", ["end"] = "14:00", ["fee"] = "$80" };
         message.timestamp!.Day = 3; Repair(c, candidate); Equal(label, message.messageData!["place"]);
         message.timestamp = null; Repair(c, candidate); Equal(label, message.messageData["place"]);
@@ -141,15 +141,28 @@ static class Program
         }
         Repair(c, candidate); Equal("34 4th Avenue", message.messageData["place"]);
         Equal(false, message.messageData.ContainsKey("day"));
+        foreach (var eventName in new[] { (string)locale["foodtrucks:event_market"]!, (string)locale["foodtrucks:event_festival"]! })
         foreach (var key in new[] { "foodtrucks:message_city_event", "foodtrucks:message_city_event_booked", "foodtrucks:message_city_event_today" })
         {
-            var data = new Dictionary<string, string>(legacy) { ["day"] = "4", ["fee"] = "$80" };
+            // Match the 0.10.7 payloads: booked has no end/fee; today has no day/fee.
+            var data = new Dictionary<string, string>(legacy) { ["event"] = eventName };
+            if (key != "foodtrucks:message_city_event_today")
+            {
+                data["day"] = "4"; data["weekday"] = "Thursday";
+            }
+            if (key == "foodtrucks:message_city_event")
+            {
+                data.Remove("booked"); data["places"] = "4"; data["fee"] = "$80";
+            }
+            if (key == "foodtrucks:message_city_event_booked") data.Remove("end");
             var own = Message(data, key); var readable = Message(new(data) { ["place"] = "34 4th Avenue" }, key);
             // Even stable IDs must not authorize overwriting another place's readable history.
             var different = Message(new(data) { ["place"] = otherLabel, ["bookingId"] = "1" }, key);
             var history = new Contact(); history.messagesQueue.Enqueue(own); history.messagesQueue.Enqueue(readable); history.messagesQueue.Enqueue(different);
-            var identified = new Dictionary<string, string>(candidate) { ["bookingId"] = "1" };
-            Repair(history, new Dictionary<string, string>(identified) { ["fee"] = "$120" }); Equal(label, own.messageData!["place"]);
+            var identified = new Dictionary<string, string>(candidate) { ["bookingId"] = "1", ["event"] = eventName };
+            var conflict = key == "foodtrucks:message_city_event" ? "fee" : "event";
+            Repair(history, new Dictionary<string, string>(identified) { [conflict] = conflict == "fee" ? "$120" : eventName == "weekend market" ? "street festival" : "weekend market" });
+            Equal(label, own.messageData!["place"]);
             Repair(history, identified, new(identified)); Equal(label, own.messageData["place"]);
             Repair(history, identified); Equal("34 4th Avenue", own.messageData["place"]);
             Equal(otherLabel, different.messageData!["place"]); Equal("34 4th Avenue", readable.messageData!["place"]);

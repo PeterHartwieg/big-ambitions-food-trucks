@@ -1,6 +1,16 @@
 # Event address review fixes (0.10.8)
 
-Second-round regressions are covered by Core and executable production-method harnesses; see [scope and evidence](docs/release/0.10.8/event-address.md). **Pending native acceptance of this candidate:** address/map/GPS and reload, mixed claimed/unclaimed invalid-location refunds, real legacy city label repair, saved catering confirmation radius with no live gig, and directions Back after full booking. The original `38675ff` screenshots do not validate these later fixes. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
+Third-round regressions are covered by Core and executable production-method harnesses; see [scope and evidence](docs/release/0.10.8/event-address.md). **Pending native acceptance of this candidate:** address/map/GPS and reload, mixed claimed/unclaimed invalid-location refunds, real legacy city label repair, saved catering confirmation radius with no live gig, and directions Back after full booking. The original `38675ff` screenshots do not validate these later fixes. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
+
+Short rig procedure: [0.10.8 in-game test plan](docs/release/0.10.8/in-game-test-plan.md). All rows below are **pending** for this candidate.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| EA1 | Compare city/catering messages, phone cards and map highlights with native building cards | Same building number and native street name; correct filter hint, no raw IDs |
+| EA2 | Fully book an event; use directions, Back/Next, save and reload | Fully booked event stays accessible; GPS points to the same address and survives reload |
+| EA3 | Cancel invalid paid events with unused/mixed holds; repeat after reload with addresses delayed | Only unused places refunded, exactly once; same-minute closed-vehicle hold agrees between immediate/deferred readiness |
+| EA4 | Load 0.10.7 city announcement/confirmation/reminder history for unended and ended events; old catering confirmation with no live gig | Only unended identifiable city messages repaired; ended city history retained; catering confirmation shows 60 metres; repeat load stable |
+| EA5 | Run uninstall (Ctrl+Shift+F11 twice), then wait at least five game minutes and cross midnight | Street Food Bookings stays absent; save, close game, disable mod and reload: no resurrected contact or raw foodtrucks: text |
 
 # Unlimited employee rosters (22 October 2026)
 

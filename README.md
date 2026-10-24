@@ -2,7 +2,7 @@
 
 Start with a food cart and grow into a fleet of food trucks. Choose your equipment and menu, find customers around the city, work the serving window yourself or send a crew along a weekly route.
 
-**Version 0.10.8, 24 October 2026.** Event and catering addresses use the game's own building address and street names. City events include GPS directions by phone, including fully booked events. Existing map filters highlight the event/catering building. Unavailable catering locations cancel without a reputation penalty; unavailable city locations refund unused bookings. Automated checks and native acceptance status: [event address fix](docs/release/0.10.8/event-address.md).
+**Version 0.10.8, 24 October 2026.** Event and catering addresses use the game's own building address and street names. City events include GPS directions by phone, including fully booked events. Existing map filters highlight the event/catering building. Older city messages are repaired only for events that have not ended yet. Unavailable catering locations cancel without a reputation penalty; unavailable city locations refund unused bookings. Automated checks and native acceptance status: [event address fix](docs/release/0.10.8/event-address.md).
 
 Bugs and balance changes are still possible. We recommend a new save or a backup of your existing save before enabling the mod. Read the removal instructions before unsubscribing.
 

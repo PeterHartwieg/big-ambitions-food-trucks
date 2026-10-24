@@ -47,7 +47,51 @@ static class Program
             foreach (var claimed in new[] { 0, 1 })
                 foreach (var failure in new[] { "missing-place", "unreadable-address", "missing-kind" })
                     RefundRetry(place, kind, day, claimed, failure);
+        foreach (var ready in new[] { false, true })
+        {
+            LoadReleaseDirty(place, kind, ready);
+            foreach (var open in new[] { false, true })
+                foreach (var heldMinutes in new[] { 0, 1 })
+                    RefundOpenHold(kind, ready, open, heldMinutes);
+        }
         Console.WriteLine("PASS: real city NewDay readiness, expiry, prune, load cleanup, retry, refund and reminder payload");
+    }
+    static void LoadReleaseDirty(EventPlace place, EventKind kind, bool ready)
+    {
+        HireCrew.Minute = 4500;
+        var state = new SaveState(); FoodTrucksSession.CurrentState = state; CityPitches.Reset();
+        state.Events.LastAnnouncedDay = 4;
+        var city = new CityEvent { Id = 20, Kind = kind.Id, PlaceId = place.Id, Day = 4, Start = 120, End = 960, Reminded = true };
+        var hold = new PlaceHold { VehicleId = "closed", From = HireCrew.Now() };
+        city.Holds.Add(hold); state.Events.Events.Add(city);
+        EventLocations.Ready = ready;
+        var changes = FoodTrucksSession.Changes;
+        CityPitches.NewDay(state, 4, loading: true);
+        Check(hold.Until == hold.From, "load releases same-minute closed-vehicle hold");
+        Check(FoodTrucksSession.Changes == changes + 1, "hold release alone must dirty the save, ready or deferred");
+        CityPitches.NewDay(state, 4, loading: true);
+        Check(FoodTrucksSession.Changes == changes + 1, "repeat load without release must stay clean");
+    }
+    static void RefundOpenHold(EventKind kind, bool ready, bool open, int heldMinutes)
+    {
+        HireCrew.Minute = 4500;
+        var state = new SaveState(); FoodTrucksSession.CurrentState = state; CityPitches.Reset();
+        state.Events.LastAnnouncedDay = 4;
+        state.Vehicles.Add(new VehicleState { VehicleId = "holder", IsOpen = open });
+        var city = new CityEvent { Id = 30, Kind = kind.Id, PlaceId = "missing", Day = 4,
+            Start = 120, End = 960, Booked = 2, FeeCents = 8000, Reminded = true };
+        city.Holds.Add(new PlaceHold { VehicleId = "holder", From = HireCrew.Now() - heldMinutes });
+        state.Events.Events.Add(city);
+        EventLocations.Ready = ready; GameManager.Paid = 0;
+        CityPitches.NewDay(state, 4, loading: true);
+        EventLocations.Ready = true;
+        HireCrew.Minute += 3; // Readiness can arrive later; a closed hold must retain its load-time end.
+        CityPitches.RetryAddresses();
+        var expected = !open && heldMinutes == 0 ? 16000 : 8000;
+        Check(!state.Events.Events.Contains(city) && GameManager.Paid == expected,
+            $"immediate/deferred refund agrees: ready={ready}, open={open}, heldMinutes={heldMinutes}");
+        CityPitches.NewDay(state, 4, loading: true); CityPitches.RetryAddresses();
+        Check(GameManager.Paid == expected, "open-hold cancellation refunds exactly once");
     }
     static void RefundRetry(EventPlace place, EventKind kind, int eventDay, int claimed, string failure)
     {

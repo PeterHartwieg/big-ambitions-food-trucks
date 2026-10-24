@@ -42,9 +42,43 @@ class EventLocationTests(unittest.TestCase):
         self.assertLess(pitches.index('DropUnknown(state, tables);'), pitches.index('CityEvents.Expire('))
         catering = (ROOT / 'unity/FoodTrucks/Scripts/Catering.cs').read_text()
         step = catering[catering.index('        private void Step('):catering.index('        // The minute the truck is free')]
-        self.assertLess(step.index('RefreshBookingRadius('), step.index('if (!EventLocations.Ready) return;'))
+        self.assertLess(step.index('RefreshSavedMessages(state);'), step.index('SettleEnded('))
+        migration = catering[catering.index('        private static void RefreshSavedMessages('):catering.index('        // Once a game minute')]
+        self.assertNotIn('Bookings()', migration)
+        self.assertNotIn('RefreshMessages(', step)
+        self.assertNotIn('RefreshBookingRadius(', step)
+        update = catering[catering.index('        private void Update()'):catering.index('        // One migration per load')]
+        self.assertIn('Commissary.Uninstalled', update)
+        self.assertIn('migrateRadius = migrateAddresses = true;', catering)
         self.assertEqual(catering.count('CateringGigs.CancelUnlocatable('), 1)
         self.assertLess(step.index('CateringGigs.CancelUnlocatable('), step.index('SettleEnded('))
+
+    def test_catering_migration_does_not_restore_uninstalled_contact(self):
+        with tempfile.TemporaryDirectory(prefix='ft-bookings-migration-') as directory:
+            folder = Path(directory)
+            source = (ROOT / 'unity/FoodTrucks/Scripts/Catering.cs').read_text()
+            method = source[source.index('        private static void RefreshSavedMessages('):source.index('        // Once a game minute')]
+            (folder / 'Catering.cs').write_text("""using System.Linq;
+using FoodTrucks.Core.Catering;
+using FoodTrucks.Core.Saves;
+namespace FoodTrucks { static class Catering {
+const string ContactId = "foodtrucks-bookings";
+static bool migrateRadius, migrateAddresses;
+internal static void Reset() => migrateRadius = migrateAddresses = true;
+internal static void Run(SaveState state) => RefreshSavedMessages(state);
+static System.Collections.Generic.Dictionary<string, string> Describe(CateringOffer offer) => new();
+""" + method + '} }')
+            (folder / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>
+<OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable>
+<ImplicitUsings>enable</ImplicitUsings><NuGetAudit>false</NuGetAudit></PropertyGroup><ItemGroup>
+<ProjectReference Include="{escape(str(ROOT / 'Core/FoodTrucks.Core.csproj'))}" />
+<PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
+<Compile Include="{escape(str(ROOT / 'tools/tests/event_locations/MigrationScenarios.cs'))}" />
+</ItemGroup></Project>''')
+            result = subprocess.run(['dotnet', 'run', '--project', str(folder / 'Harness.csproj'), '-v:q'],
+                                    capture_output=True, text=True, timeout=120)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('PASS: bookings migration lifecycle', result.stdout)
 
     def test_city_day_cleanup_and_retry_when_addresses_load_late(self):
         with tempfile.TemporaryDirectory(prefix='ft-city-day-') as directory:
