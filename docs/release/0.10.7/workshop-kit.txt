@@ -1,0 +1,11 @@
+HART. Street Food 0.10.7 — local Workshop kit, 24 October 2026
+Workshop item: 3822355169
+
+Peter performs the Workshop upload himself. No upload or post was performed.
+Final archive: build/FoodTrucks-0.10.7.zip, with its .zip.sha256 sidecar.
+FoodTrucks/ is the complete verified 19-file runtime folder for manual upload.
+release-notes.txt and release-notes.bbcode.txt are matching change notes.
+workshop-description.bbcode.txt includes the updated cart-facing/pavement guidance.
+preview.jpg is the unchanged established thumbnail.
+package-verification.json, build-equivalence.json and release-verification.txt record validation.
+Save schema 2 and timed/offscreen crew travel retained; physical driving excluded.

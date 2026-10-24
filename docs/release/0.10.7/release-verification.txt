@@ -1,0 +1,75 @@
+HART. Street Food 0.10.7 — final release preparation, 24 October 2026
+Workshop item: 3822355169. Peter uploads it himself; no upload or post performed.
+
+Integration
+- Fetched origin and tags. Remote main remained b40ec629227b7e5567a94a0355f7cf0adcecc277.
+- Fast-forwarded the outdated local main to that 0.10.6 baseline, then made the
+  normal two-parent merge 08cfc54f680280a916661bc20ae1303489fbfa64.
+  Parents: b40ec629227b7e5567a94a0355f7cf0adcecc277 and approved feature head
+  1832346fce75f53acf4873c17085f2c9d4783126. No conflicts or history rewrite.
+- No existing local or remote release tags; no new tag under that convention.
+
+Final artifact
+- build/FoodTrucks-0.10.7.zip
+- SHA-256: ba86e2cf32c5467aa042917a5ca75eb439a0d87ebd15600e8b277f6fb001204c
+- Matching .zip.sha256 sidecar; archive.sha256 and package.sha256 retained here.
+- Complete manual-upload kit: build/workshop-0.10.7-final-20261024/.
+  Includes the verified FoodTrucks runtime, matching plain/BBCode change notes,
+  updated Workshop description and the unchanged established preview image.
+
+Versions and release checks
+- Manifest and FoodTrucksMod.Version: 0.10.7.
+- Explicit AssemblyInfo uses the runtime constant: assembly/file 0.10.7.0,
+  informational 0.10.7. Core project/generated AssemblyInfo matches exactly.
+  BridgeControl and Harmony retain their independent dependency versions.
+- Startup IL contains the exact log line: Version 0.10.7 loading.
+- Final ZIP filename, runtime README and all release version fields have no
+  prerelease suffix. Historical candidate evidence is retained unchanged.
+- Updated repository verifier checks manifest/constant/log and mod/Core assembly,
+  file and informational versions, plus the existing physical-probe exclusion,
+  inert release seam, production routes/branding and unchanged save schema 2.
+- Negative controls: manifest 0.10.8 rejected for runtime mismatch; a prerelease
+  manifest rejected for lacking a final version. Both expected refusals passed.
+
+Validation on main
+- dotnet test FoodTrucks.sln: 2,251 passed, zero failed, one existing opt-in
+  200-seed x 365-day soak skipped.
+- dotnet test FoodTrucks.sln -c Release: 2,251 passed, zero failed, same one skip.
+- PYTHONDONTWRITEBYTECODE=1 FT_TEST_TRANSPORT=inprocess python3 -m unittest
+  discover -s tools/tests: 254 passed in 214.437 seconds, zero failures.
+- tools/build-mod.sh: official pinned Unity SDK build passed, Windows and Mac
+  bundles validated. Used the existing dedicated cached SDK via BA_SDK while
+  linking main's sources; original feature-worktree symlinks restored afterward.
+  No asset regeneration was needed: approved generated assets were retained.
+- python3 tools/package-release.py --output build/FoodTrucks-0.10.7.zip: passed.
+- Explicit tools/release/VerifyRelease.csproj run against final package: passed.
+- ZIP CRC, exact 19-entry inventory, unique safe paths, every file SHA-256 and
+  kit/runtime byte equality: passed. Both platform bundles and their manifests
+  are byte-identical to the approved feature-branch package.
+- git diff --check and git diff origin/main --check: passed. Removed only the
+  inherited trailing spaces in two new Unity .meta files.
+- Original tools/ftlib/__pycache__ contents and file modification times unchanged.
+  Python bytecode writes were disabled throughout release preparation.
+- Existing compiler warnings remain; zero build errors. No game installation,
+  remote PC connection, profile/save change, Workshop upload or post performed.
+
+Approved gameplay evidence and limits
+- center-worker.md retains the approved branch's Windows placement evidence;
+  grill-facing.md and kerb-safety.md retain earlier checks and their scope.
+- Final rebuild was not separately launched in game. Normalized compiled type,
+  field and method signatures, all method bodies (nested types included), locals
+  and exception handlers match the approved package for FoodTrucks, Core and
+  BridgeControl. Assembly metadata, reference assembly versions, build IDs and
+  source/debug paths are excluded from this comparison; see build-equivalence.json.
+- The final package differs from the approved package only in those three DLLs
+  and README. Gameplay source is unchanged; assembly versions and release copy
+  were finalized. No new broad overnight/foreign-mod compatibility claim.
+- All local logs and xUnit TRX files: build/release-0.10.7/.
+
+Release copy
+- workshop/CHANGENOTE-0.10.7.md already matches the approved behavior and remains
+  unchanged. release-notes.txt and release-notes.bbcode.txt match its full text.
+- README names the final ZIP and corrects the old customer-facing cart-fridge
+  statement. The new Workshop description explains worker-facing controls and
+  doors and safe pavement on both sides; no contradictory placement claim found.
+- The 0.10.6 drinks-fridge, soda and truck-branding features remain included.

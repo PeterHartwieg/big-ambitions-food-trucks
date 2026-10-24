@@ -1,0 +1,51 @@
+{
+  "workshop_item": "3822355169",
+  "archive": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks/build/FoodTrucks-0.10.7.zip",
+  "sha256": "ba86e2cf32c5467aa042917a5ca75eb439a0d87ebd15600e8b277f6fb001204c",
+  "bytes": 57520396,
+  "entries": 19,
+  "crc": "passed",
+  "exact_inventory": "passed",
+  "all_file_hashes": "passed",
+  "runtime_version": "0.10.7",
+  "mod_and_core_assembly_and_file_version": "0.10.7.0",
+  "mod_and_core_informational_version": "0.10.7",
+  "startup_log_line": "Version 0.10.7 loading.",
+  "save_schema": 2,
+  "release_verifier": "passed",
+  "negative_version_controls": {
+    "0.10.8": "Rejected as expected: Wrong version constant",
+    "0.10.7-rc": "Rejected as expected: Manifest must have a final release version"
+  },
+  "both_platform_bundles_equal_approved_candidate": true,
+  "differences_from_approved_candidate": [
+    "Dependencies/BridgeControl.dll",
+    "Dependencies/FoodTrucks.Core.dll",
+    "FoodTrucks.dll",
+    "README.md"
+  ],
+  "runtime_il_equivalence": "passed; build-equivalence.json (assembly metadata excluded)",
+  "native_testing": "Approved branch native evidence retained in center-worker.md; this final rebuild was not separately launched in game.",
+  "python_cache_content_and_mtime_unchanged": true,
+  "file_sha256": {
+    "AssetBundles/Mac/foodtrucks.unity3d": "2488d78e71ece109ed74c1dc1746fe99184feaf3c443866eea0fb23225392f7d",
+    "AssetBundles/Mac/foodtrucks.unity3d.manifest": "265c8c8089aa5c86b22a663715e3cf7d15dcaae79ae27eb0c227e6f8b6b9ec3f",
+    "AssetBundles/Windows/foodtrucks.unity3d": "14f854cb9f5ec54a385ed0fa64454ec8a357a6fda8ab7360b5bb22f150c56b01",
+    "AssetBundles/Windows/foodtrucks.unity3d.manifest": "de5503dbfb97c1a5ff8c600f2a8321e43d64849d85d6ebee59c0d04a9a99e3fd",
+    "Dependencies/0Harmony.dll": "7b9e756306fa3d7620e02a857c8927a6ab04973f9bd8a77d3866700a6deac55c",
+    "Dependencies/BridgeControl.dll": "0c2b3cf54ca9ff6b2b0e7e3afd88595a76ab75ef0f4a8b65366d3de505b31e84",
+    "Dependencies/FoodTrucks.Core.dll": "a8379fb1814e0e9baef7c3d72ac404ab1dac35d9741456f9a218f9059dfbb1a1",
+    "Dependencies/Harmony-LICENSE.txt": "407ddd98200c9f17f49942b5a7791e288a2bd553b59bf2f462db87dbb21c50bc",
+    "FoodTrucks.dll": "51afc6e2635da57de7aff56301a88a2af189a97ceec6200b365d9a294c7858c4",
+    "LICENSE.txt": "dfb53130398530b7569d6d2686991c0dba5f6e9785b4a83fa60fd51dc6ba1ba1",
+    "Locales/en.json": "c65d26049f56a37e11d6a2e62f144c18b829ba1f98a50dd4b8a9f7cba80533e1",
+    "README.md": "bd788ab7f5fd69d16939bc409d100288deeeb783ababc39fced8436c97f19fb0",
+    "data/commissaries.json": "49f7342e5b19c16d541967f578a505c7063afb25a041cbfe90305387959b0f99",
+    "data/demand.json": "f5daffd50838e3281e3f709d3b5597035d7195099d07a9d19663c1606173b3b5",
+    "data/economy.json": "5c966de52b1cabc2df9734d0a0176f4da3070a52c42dda2323c671272439f302",
+    "data/pitches.json": "9aff7f2fde4ceb79b338b1486869b58748a0bfc90e619238bd4d1429189f86e7",
+    "data/rules.json": "46750055b0abfed54ed9aed139c269d43edbfb2a11f0c1722947859d511d0868",
+    "data/vehicle-diagrams.json": "6c0764b981044a6a9612fee708796e46fe5f0b7eb171ce1e7e56c2ebf88f28e9",
+    "data/zones.json": "340ea58a4c815347826142fb6e034bd49d4eddd9a27069c7691f87eea9c44334"
+  }
+}

@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <RootNamespace>FoodTrucks.Core</RootNamespace>
     <AssemblyName>FoodTrucks.Core</AssemblyName>
+    <Version>0.10.7</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.2" IncludeAssets="compile" PrivateAssets="all" />

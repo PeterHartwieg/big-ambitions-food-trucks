@@ -1,0 +1,23 @@
+[
+  {
+    "file": "FoodTrucks.dll",
+    "all_type_field_method_signatures_and_bodies_equal": true,
+    "before_assembly_version": "0.0.0.0",
+    "after_assembly_version": "0.10.7.0",
+    "scope": "Assembly attributes, build IDs, reference assembly versions and source/debug paths excluded; all nested types, field constants, method bodies, locals and exception handlers compared."
+  },
+  {
+    "file": "Dependencies/FoodTrucks.Core.dll",
+    "all_type_field_method_signatures_and_bodies_equal": true,
+    "before_assembly_version": "1.0.0.0",
+    "after_assembly_version": "0.10.7.0",
+    "scope": "Assembly attributes, build IDs, reference assembly versions and source/debug paths excluded; all nested types, field constants, method bodies, locals and exception handlers compared."
+  },
+  {
+    "file": "Dependencies/BridgeControl.dll",
+    "all_type_field_method_signatures_and_bodies_equal": true,
+    "before_assembly_version": "1.0.0.0",
+    "after_assembly_version": "1.0.0.0",
+    "scope": "Assembly attributes, build IDs, reference assembly versions and source/debug paths excluded; all nested types, field constants, method bodies, locals and exception handlers compared."
+  }
+]
