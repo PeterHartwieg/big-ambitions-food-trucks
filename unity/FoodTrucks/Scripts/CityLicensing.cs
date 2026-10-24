@@ -301,8 +301,8 @@ namespace FoodTrucks
                 Template = DialogEntry.TemplateType.Text,
                 OnConfirm = Guard(() => { EventLocations.SetDestination(place.Address); return Event(index); }),
                 ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_event_set_destination", (object?)null),
-                OnSecondOption = Guard(() => Upcoming(FoodTrucksSession.CurrentState!).Count() > 1 ? Event(index + 1) : Start()),
-                SecondOptionTextOverride = Upcoming(FoodTrucksSession.CurrentState!).Count() > 1
+                OnSecondOption = Guard(() => FoodTrucksSession.CurrentState is { } current && Upcoming(current).Skip(1).Any() ? Event(index + 1) : Start()),
+                SecondOptionTextOverride = FoodTrucksSession.CurrentState is { } snapshot && Upcoming(snapshot).Skip(1).Any()
                     ? "foodtrucks:dialog_city_event_next" : "foodtrucks:dialog_city_back",
                 OnCancel = PhoneCall.HangUpAction,
                 onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
@@ -326,14 +326,13 @@ namespace FoodTrucks
             var result = CityEvents.Book(state.Events, eventId, now);
             FoodTrucksSession.MarkChanged();
             var kind = tables.Kind(city.Kind);
-            var place = tables.Place(city.PlaceId);
             Log.Info($"City of New York: place {city.Booked} of {city.Places} booked at event {city.Id} ({city.Kind} at {city.PlaceId}, day {city.Day}) for {CartSelling.Money(city.FeeCents)}: {result}.");
             Notices.Send(Current.contact, new TextMessage("foodtrucks:message_city_event_booked", new Dictionary<string, string>
             {
-                { "bookingId", city.Id.ToString() }, { "locationId", place!.Address },
+                { "bookingId", city.Id.ToString() }, { "locationId", location.Address },
                 { "end", CityPitches.Clock(city.End) }, { "fee", CartSelling.Money(city.FeeCents) },
                 { "event", kind == null ? city.Kind : CityPitches.Text(kind.Name) },
-                { "place", place == null ? CityPitches.Text("foodtrucks:event_location_unavailable") : EventLocations.Name(place.Address) },
+                { "place", EventLocations.Name(location.Address) },
                 { "weekday", CityPitches.Weekday(city.Day) },
                 { "day", city.Day.ToString() },
                 { "start", CityPitches.Clock(city.Start) },

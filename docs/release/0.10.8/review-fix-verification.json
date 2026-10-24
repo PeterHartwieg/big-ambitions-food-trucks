@@ -59,5 +59,11 @@
     "Production building controller cache handles repeated hits/misses without rescan, retries after an empty world and clears on Reset.",
     "Started catering work at an unusable place is removed without Finish/Fail, reputation change, completed/failure counters or a later overdue penalty."
   ],
-  "nativeApiCheck": "Native GuidersManager.SetGuiderTarget(Address, Destination) writes customDestination before SetTarget; adapter retains that path without duplicate assignment."
+  "nativeApiCheck": "Native GuidersManager.SetGuiderTarget(Address, Destination) writes customDestination before SetTarget; adapter retains that path without duplicate assignment.",
+  "supersededBy": "review-fix2-verification.json",
+  "secondReviewCorrections": [
+    "The legacy city reminder fixture at 19d265a used a synthetic raw localization key, not the shipped localized label; it did not prove real legacy city repair.",
+    "Time-labelled Core refund cases exercised a time-independent helper, not timed cancellation.",
+    "The original readiness fixture explicitly expected ungated expiry and did not combine paid ended invalid events with delayed address readiness."
+  ]
 }

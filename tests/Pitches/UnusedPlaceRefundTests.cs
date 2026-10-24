@@ -6,20 +6,31 @@ namespace FoodTrucks.Core.Tests.Pitches;
 public class UnusedPlaceRefundTests
 {
     [Theory]
-    [InlineData(5, 0, 16000)] // Future: neither place used.
-    [InlineData(3, 1, 8000)]  // Running: one vehicle already claimed.
-    [InlineData(1, 0, 16000)] // Ended and unclaimed.
-    [InlineData(1, 1, 8000)]  // Ended with one unused place.
-    [InlineData(1, 2, 0)]
-    [InlineData(1, 3, 0)]    // More distinct historical holders than bookings.
-    public void RefundsOnlyUnusedBookings(int eventDay, int distinctVehicles, long expected)
+    [InlineData(0, 16000)]
+    [InlineData(1, 8000)]
+    [InlineData(2, 0)]
+    [InlineData(3, 0)] // More distinct historical holders than bookings.
+    public void RefundsOnlyUnusedBookings(int distinctVehicles, long expected)
     {
-        var city = new CityEvent { Day = eventDay, Start = 600, End = 960, Booked = 2, FeeCents = 8000 };
+        var city = new CityEvent { Booked = 2, FeeCents = 8000 };
         for (var i = 0; i < distinctVehicles; i++)
         {
             city.Holds.Add(new PlaceHold { VehicleId = "truck-" + i, From = 600, Until = 650 });
             city.Holds.Add(new PlaceHold { VehicleId = "truck-" + i, From = 660 });
         }
         Assert.Equal(expected, CityEvents.UnusedPlaceRefund(city));
+    }
+
+    [Fact]
+    public void SameMinuteHoldsUseNoBookingAndSequentialDistinctVehiclesEachUseOne()
+    {
+        var city = new CityEvent { Booked = 2, FeeCents = 8000 };
+        city.Holds.Add(new PlaceHold { VehicleId = "zero", From = 600, Until = 600 });
+        Assert.Equal(16000, CityEvents.UnusedPlaceRefund(city));
+        city.Holds.Add(new PlaceHold { VehicleId = "first", From = 600, Until = 650 });
+        Assert.Equal(8000, CityEvents.UnusedPlaceRefund(city));
+        // Conservative lifetime use: two different vehicles consume two bookings even without overlap.
+        city.Holds.Add(new PlaceHold { VehicleId = "second", From = 650, Until = 700 });
+        Assert.Equal(0, CityEvents.UnusedPlaceRefund(city));
     }
 }

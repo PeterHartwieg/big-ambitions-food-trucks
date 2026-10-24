@@ -15,7 +15,8 @@ class EventLocationTests(unittest.TestCase):
             source = (ROOT / 'unity/FoodTrucks/Scripts/Catering.cs').read_text()
             start = source.index('        internal static string PlaceName(')
             end = source.index('\n        }', start) + len('\n        }')
-            (folder / 'Catering.cs').write_text('namespace FoodTrucks { static class Catering {' + source[start:end] + '} }')
+            radius = next(line for line in source.splitlines() if 'public const float PlaceMetres =' in line)
+            (folder / 'Catering.cs').write_text('namespace FoodTrucks { static class Catering {' + radius + source[start:end] + '} }')
             (folder / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>
 <OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable>
 <ImplicitUsings>enable</ImplicitUsings><NuGetAudit>false</NuGetAudit></PropertyGroup><ItemGroup>
@@ -24,7 +25,7 @@ class EventLocationTests(unittest.TestCase):
 <Compile Include="{escape(str(ROOT / 'unity/FoodTrucks/Scripts/EventLocations.cs'))}" />
 <Compile Include="{escape(str(ROOT / 'tools/tests/event_locations/Scenarios.cs'))}" />
 </ItemGroup></Project>''')
-            result = subprocess.run(['dotnet', 'run', '--project', str(folder / 'Harness.csproj'), '-v:q'],
+            result = subprocess.run(['dotnet', 'run', '--project', str(folder / 'Harness.csproj'), '-v:q', '--', str(ROOT)],
                                     capture_output=True, text=True, timeout=120)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn('PASS: native event addresses', result.stdout)
@@ -39,6 +40,11 @@ class EventLocationTests(unittest.TestCase):
         self.assertIn('Upcoming(state).ToList()', phone)
         self.assertIn('EventLocations.ReadableAddress(p.Address) != null', pitches)
         self.assertLess(pitches.index('DropUnknown(state, tables);'), pitches.index('CityEvents.Expire('))
+        catering = (ROOT / 'unity/FoodTrucks/Scripts/Catering.cs').read_text()
+        step = catering[catering.index('        private void Step('):catering.index('        // The minute the truck is free')]
+        self.assertLess(step.index('RefreshBookingRadius('), step.index('if (!EventLocations.Ready) return;'))
+        self.assertEqual(catering.count('CateringGigs.CancelUnlocatable('), 1)
+        self.assertLess(step.index('CateringGigs.CancelUnlocatable('), step.index('SettleEnded('))
 
     def test_city_day_cleanup_and_retry_when_addresses_load_late(self):
         with tempfile.TemporaryDirectory(prefix='ft-city-day-') as directory:

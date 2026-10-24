@@ -2,6 +2,6 @@ Fixed unreadable and incomplete street-event and catering addresses. Messages no
 
 Call the city for GPS directions to an event, even after all its places are booked. Messages also explain which city-map filter highlights the building. Serve outside, near an entrance.
 
-If a booked location is no longer available, city-event refunds cover paid places no vehicle has claimed, including unused places in a partly attended or running event. Returning with the same vehicle counts as one claim. Catering bookings, including work already started, are cancelled without a failure or a change to booking reputation.
+If a booked location is no longer available, city-event refunds cover paid places no vehicle has claimed, including unused places in a partly attended or running event. Returning with the same vehicle counts as one claim; a hold that ends in its starting minute uses no place. Refunds wait for locations to finish loading before old events expire. Catering bookings, including work already started, are cancelled without a failure or a change to booking reputation.
 
-Existing readable phone addresses stay as they are. Broken addresses are corrected only when the booking can be identified safely, including older same-day city reminders.
+Existing full phone addresses stay as they are. Broken addresses and older city pitch labels are corrected only when the booking can be identified safely, including same-day city reminders. Saved catering confirmations retain their distance instruction even after the booking has ended.

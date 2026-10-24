@@ -74,12 +74,13 @@ namespace FoodTrucks.Core.Pitches
             return state.Events.Sum(e => Holds.Release(e.Holds, vehicleId, minute));
         }
 
-        // Every distinct vehicle that ever held a place used one booking, including a running event.
+        // Every distinct vehicle that held a place for a nonzero interval used one booking, including an open hold.
         // Releasing and reclaiming the same place must not consume another refundable booking.
         public static long UnusedPlaceRefund(CityEvent city)
         {
             if (city == null) throw new ArgumentNullException(nameof(city));
-            var claimed = city.Holds.Select(h => h.VehicleId).Distinct(StringComparer.Ordinal).Count();
+            var claimed = city.Holds.Where(h => h.Until == null || h.Until > h.From)
+                .Select(h => h.VehicleId).Distinct(StringComparer.Ordinal).Count();
             return checked(Math.Max(0, city.Booked - claimed) * city.FeeCents);
         }
 

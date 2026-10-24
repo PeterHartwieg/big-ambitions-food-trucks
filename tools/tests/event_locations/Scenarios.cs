@@ -5,7 +5,7 @@ using FoodTrucks.Core.Catering;
 static class Program
 {
     static void Equal(object? a, object? b) { if (!Equals(a, b)) throw new Exception($"Expected {a}, got {b}"); }
-    static void Main()
+    static void Main(string[] args)
     {
         var address = new Address { streetName = "ba:street_fourthavenue", streetNumber = 34 };
         World.Found = new CityBuildingController { building = new Building { Address = address } };
@@ -30,7 +30,8 @@ static class Program
         Equal(null, EventLocations.ReadableAddress("ba:street_fourthavenue#34"));
         World.Found = new CityBuildingController { building = new Building { Address = address } };
         RepairHistory();
-        LegacyReminders();
+        LegacyReminders(args[0]);
+        SavedBookingRadius();
         Console.WriteLine("PASS: native event addresses, missing data, catering and GPS");
     }
     static Dictionary<string, string> Description(string number = "34", string id = "1") => new()
@@ -114,23 +115,69 @@ static class Program
         unknown.messageData["place"] = "4th Avenue"; Repair(contact, a);
         Equal("4th Avenue", unknown.messageData["place"]);
     }
-    static void LegacyReminders()
+    static void LegacyReminders(string root)
     {
-        // Exact legacy shape: event/place/start/end/booked; no day or stable IDs.
-        var legacy = new Dictionary<string, string> { ["event"] = "market", ["place"] = "#foodtrucks:pitch_midtown-fourth-avenue",
+        var locale = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(root, "unity/FoodTrucks/Locales/en.json")));
+        var label = (string)locale["foodtrucks:pitch_midtown-fourth-avenue"]!;
+        var otherLabel = (string)locale["foodtrucks:pitch_lower-sixth-avenue"]!;
+        if (string.IsNullOrWhiteSpace(otherLabel)) throw new Exception("Missing real locale label");
+        Equal("Fourth Avenue, Midtown", label);
+        // Exact old reminder shape: event/place/start/end/booked; no day or stable IDs.
+        var legacy = new Dictionary<string, string> { ["event"] = "market", ["place"] = label,
             ["start"] = "10:00", ["end"] = "14:00", ["booked"] = "2" };
         var message = Message(legacy, "foodtrucks:message_city_event_today");
         var c = new Contact(); c.messagesQueue.Enqueue(message);
         var candidate = new Dictionary<string, string> { ["event"] = "market", ["day"] = "4", ["place"] = "34 4th Avenue",
-            ["legacyPlace"] = legacy["place"], ["start"] = "10:00", ["end"] = "14:00", ["fee"] = "$80" };
-        message.timestamp!.Day = 3; Repair(c, candidate); Equal(legacy["place"], message.messageData!["place"]);
+            ["legacyPlace"] = label, ["start"] = "10:00", ["end"] = "14:00", ["fee"] = "$80" };
+        message.timestamp!.Day = 3; Repair(c, candidate); Equal(label, message.messageData!["place"]);
+        message.timestamp = null; Repair(c, candidate); Equal(label, message.messageData["place"]);
+        message.timestamp = new() { Day = 0 }; Repair(c, candidate); Equal(label, message.messageData["place"]);
         message.timestamp.Day = 4;
         Repair(c, candidate, new(candidate) { ["place"] = "35 4th Avenue" });
-        Equal(legacy["place"], message.messageData["place"]);
+        Equal(label, message.messageData["place"]);
+        foreach (var field in new[] { "day", "start", "event", "end" })
+        {
+            Repair(c, new Dictionary<string, string>(candidate) { [field] = "different" }); Equal(label, message.messageData["place"]);
+        }
         Repair(c, candidate); Equal("34 4th Avenue", message.messageData["place"]);
         Equal(false, message.messageData.ContainsKey("day"));
-        message.messageData["place"] = legacy["place"]; message.timestamp = null;
-        Repair(c, candidate); Equal(legacy["place"], message.messageData["place"]);
+        foreach (var key in new[] { "foodtrucks:message_city_event", "foodtrucks:message_city_event_booked", "foodtrucks:message_city_event_today" })
+        {
+            var data = new Dictionary<string, string>(legacy) { ["day"] = "4", ["fee"] = "$80" };
+            var own = Message(data, key); var readable = Message(new(data) { ["place"] = "34 4th Avenue" }, key);
+            // Even stable IDs must not authorize overwriting another place's readable history.
+            var different = Message(new(data) { ["place"] = otherLabel, ["bookingId"] = "1" }, key);
+            var history = new Contact(); history.messagesQueue.Enqueue(own); history.messagesQueue.Enqueue(readable); history.messagesQueue.Enqueue(different);
+            var identified = new Dictionary<string, string>(candidate) { ["bookingId"] = "1" };
+            Repair(history, new Dictionary<string, string>(identified) { ["fee"] = "$120" }); Equal(label, own.messageData!["place"]);
+            Repair(history, identified, new(identified)); Equal(label, own.messageData["place"]);
+            Repair(history, identified); Equal("34 4th Avenue", own.messageData["place"]);
+            Equal(otherLabel, different.messageData!["place"]); Equal("34 4th Avenue", readable.messageData!["place"]);
+            var changes = FoodTrucksSession.Changes; Repair(history, identified); Equal(changes, FoodTrucksSession.Changes);
+        }
+        // Other keys retain the unreadable-place gate even if a matching legacy label is supplied.
+        var catering = Message(new(Description()) { ["place"] = label }); c.messagesQueue.Enqueue(catering);
+        Repair(c, new Dictionary<string, string>(Description()) { ["legacyPlace"] = label }); Equal(label, catering.messageData!["place"]);
+    }
+    static void SavedBookingRadius()
+    {
+        // No live gig or native address data is needed, even for a readable or absent address.
+        World.Found = null; Equal(false, EventLocations.Ready);
+        foreach (var place in new[] { "34 4th Avenue", "34 ba:street_fourthavenue", "Location unavailable", "" })
+        {
+            var contact = new Contact();
+            var saved = Message(new() { ["place"] = place }, "foodtrucks:message_bookings_booked");
+            contact.messagesQueue.Enqueue(saved);
+            var existing = Message(new() { ["metres"] = "75", ["place"] = place }, "foodtrucks:message_bookings_booked");
+            contact.messagesQueue.Enqueue(existing);
+            var offer = Message(new() { ["place"] = place }); contact.messagesQueue.Enqueue(offer);
+            var changes = FoodTrucksSession.Changes;
+            EventLocations.RefreshBookingRadius(contact);
+            Equal("60", saved.messageData!["metres"]); Equal(place, saved.messageData["place"]);
+            Equal("75", existing.messageData!["metres"]); Equal(false, offer.messageData!.ContainsKey("metres"));
+            Equal(changes + 1, FoodTrucksSession.Changes);
+            EventLocations.RefreshBookingRadius(contact); Equal(changes + 1, FoodTrucksSession.Changes);
+        }
     }
 
 }

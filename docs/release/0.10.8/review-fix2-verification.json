@@ -1,0 +1,79 @@
+{
+  "version": "0.10.8",
+  "branch": "codex/street-event-address",
+  "reviewedHead": "19d265ae056004802933ff8d9ed44d466325a418",
+  "verifiedUtc": "2026-10-24T21:52:10.841011+00:00",
+  "dotnet": {
+    "command": "dotnet test",
+    "passed": 2259,
+    "failed": 0,
+    "existingOptInSkip": 1,
+    "log": "build/review-fix2-dotnet.log",
+    "notes": "Removed two duplicate time-labelled arithmetic cases; added a same-minute/sequential-holder test. Existing nullable and xUnit assertion-order warnings remain."
+  },
+  "python": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v",
+    "passed": 258,
+    "failed": 0,
+    "seconds": 291.663,
+    "log": "build/review-fix2-python.log"
+  },
+  "diffCheck": "pass",
+  "build": {
+    "command": "tools/build-mod.sh",
+    "status": "pass",
+    "platformBundles": [
+      "Windows",
+      "Mac"
+    ],
+    "log": "build/review-fix2-build.log",
+    "unityLog": "build/review-fix2-unity.log",
+    "releaseVerifier": "pass: both assemblies 0.10.8.0, informational 0.10.8, schema 2, inert physical-driving seam",
+    "diagnostics": [
+      "Unity Burst entry-point scanning logged a metadata hashing exception for the pinned Harmony DLL. The official batch build completed successfully; bundle validation and release verification passed. Harmony SHA-256 remains 7b9e756306fa3d7620e02a857c8927a6ab04973f9bd8a77d3866700a6deac55c."
+    ]
+  },
+  "package": {
+    "zip": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/street-event-address/build/FoodTrucks-0.10.8-rc.zip",
+    "sha256": "105593bd5b4b4da396e26acc734ac8aa9b47be239750e9afc948a9662832c150",
+    "bytes": 57524580,
+    "crc": "pass",
+    "exactFiles": 19,
+    "allDecompressedHashes": "pass",
+    "matchesBuiltRuntime": true,
+    "buildManifestSha256": "c0733845f6cce00dcf98954f6f504d5bb0dfebccb4748be6c5bdcadde817f8a1"
+  },
+  "native": {
+    "status": "not-run",
+    "reason": "Windows homepc SSH timed out on both checks (exit 255); rig availability could not be established. No wake attempted.",
+    "lastConnectivityCheckUtc": "2026-10-24T21:48:35.556938+00:00",
+    "wakeAttempted": false,
+    "leaseAcquired": false,
+    "remoteChanges": false,
+    "normalGameOrProfileAccessed": false,
+    "newScreenshots": [],
+    "rawAvailabilityRecord": "build/review-fix2-rig-availability.json",
+    "pending": [
+      "address/map/GPS and save/reload",
+      "mixed claimed/unclaimed invalid-location refunds",
+      "real legacy city-label repair",
+      "saved catering radius with no surviving gig",
+      "directions Back"
+    ]
+  },
+  "nativeSourceEvidence": {
+    "file": "BigAmbitionsMCP/lib/decompiled-1.0-build-2026-09-23/BigAmbitions/UI.Guiders/GuidersManager.cs",
+    "lines": "84-100",
+    "finding": "Destination branch assigns SaveGameManager.Current.customDestination at line 97 before guider.SetTarget at line 99; no additional mod assignment needed."
+  },
+  "regressions": [
+    "Production NewDay: 18 delayed-readiness refund combinations cover future, running and ended events, unclaimed/partial use, missing place/kind and unreadable address; repeated retry/NewDay pays exactly once. Valid ended events expire only after validation.",
+    "Premium pruning and load-only closed-vehicle hold/marker cleanup run while unready; unchanged deferred and ready NewDay calls do not mark state dirty.",
+    "All three city keys repair their candidate’s exact shipped English legacy label. Wrong/missing/zero reminder timestamps, detail mismatches, ambiguous matches, different readable labels (even with stable ID), full addresses and non-city readable labels remain unchanged.",
+    "Saved catering confirmations lacking metres backfill without native addresses or live gigs, including already-readable places. Existing metres survive and repeat migration does not dirty state.",
+    "Core refund arithmetic counts repeated holds once, zero-duration holds zero, sequential distinct vehicles separately, and clamps excess holders.",
+    "Source-surface checks require radius migration before readiness and one CancelUnlocatable call before settlement; SDK compiles the complete adapters."
+  ],
+  "unchangedNit": "Unaccepted catering offers at unavailable locations are still pruned silently; booked/started gigs receive identifying cancellation text.",
+  "publication": "Local release candidate only; no merge, force-push, normal-profile install or Workshop/artifact upload."
+}

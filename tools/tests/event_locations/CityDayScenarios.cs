@@ -15,7 +15,7 @@ static class Program
         var state = new SaveState(); FoodTrucksSession.CurrentState = state;
         state.Events.LastAnnouncedDay = 4;
         state.Vehicles.Add(new VehicleState { VehicleId = "closed", IsOpen = false, PremiumSpot = "pitch" });
-        state.Events.Events.Add(new CityEvent { Id = 1, Day = 1, End = 960 }); // Expired even before addresses load.
+        state.Events.Events.Add(new CityEvent { Id = 1, Kind = kind.Id, PlaceId = place.Id, Day = 1, End = 960 }); // Expiry waits for validation.
         var live = new CityEvent { Id = 2, Kind = kind.Id, PlaceId = place.Id, Day = 4, Start = 600, End = 960, Booked = 1 };
         live.Holds.Add(new PlaceHold { VehicleId = "closed", From = 4000 }); state.Events.Events.Add(live);
         var invalid = new CityEvent { Id = 3, Kind = kind.Id, PlaceId = "missing", Day = 5, Start = 600, End = 960, Booked = 2, FeeCents = 8000 };
@@ -23,7 +23,7 @@ static class Program
         state.PremiumHolds["expired"] = new() { new PlaceHold { VehicleId = "closed", From = 1, Until = 2 } };
         state.PremiumHolds["pitch"] = new() { new PlaceHold { VehicleId = "closed", From = 4000 } };
         CityPitches.NewDay(state, 4, loading: true);
-        Check(!state.Events.Events.Any(e => e.Id == 1), "expiry must run before ready");
+        Check(state.Events.Events.Any(e => e.Id == 1), "expiry must wait for address validation");
         Check(!state.PremiumHolds.ContainsKey("expired"), "premium prune must run before ready");
         Check(live.Holds[0].Until == HireCrew.Now(), "load-only event hold release must run before ready");
         Check(state.PremiumHolds["pitch"][0].Until == HireCrew.Now(), "load-only premium release must run before ready");
@@ -34,6 +34,7 @@ static class Program
         CityPitches.RetryAddresses();
         Check(!state.Events.Events.Contains(invalid) && GameManager.Paid == 16000, "deferred cancellation refunds once ready");
         Check(EventLocations.Refreshes == 1, "repair retried once ready");
+        Check(!state.Events.Events.Any(e => e.Id == 1), "valid ended event expires after validation");
         var reminder = Notices.Messages.Single(m => m.Key == "foodtrucks:message_city_event_today");
         Check(reminder.Data["day"] == "4", "new reminders must carry day");
         Check(reminder.Data["bookingId"] == "2" && reminder.Data["locationId"] == place.Address, "stable identity on reminders");
@@ -42,8 +43,40 @@ static class Program
         EventLocations.Ready = false; CityPitches.NewDay(state, 4, loading: false); CityPitches.Reset();
         EventLocations.Ready = true; CityPitches.RetryAddresses();
         Check(EventLocations.Refreshes == 1, "reset clears pending work");
+        foreach (var day in new[] { 1, 4, 5 })
+            foreach (var claimed in new[] { 0, 1 })
+                foreach (var failure in new[] { "missing-place", "unreadable-address", "missing-kind" })
+                    RefundRetry(place, kind, day, claimed, failure);
         Console.WriteLine("PASS: real city NewDay readiness, expiry, prune, load cleanup, retry, refund and reminder payload");
     }
+    static void RefundRetry(EventPlace place, EventKind kind, int eventDay, int claimed, string failure)
+    {
+        // Now really varies: ended, running and future invalid bookings all follow the cancellation path.
+        HireCrew.Minute = eventDay == 4 ? 5000 : 4500;
+        var state = new SaveState(); FoodTrucksSession.CurrentState = state; CityPitches.Reset();
+        state.Events.LastAnnouncedDay = 4;
+        var invalid = new CityEvent { Id = 10, Kind = failure == "missing-kind" ? "missing" : kind.Id,
+            PlaceId = failure == "missing-place" ? "missing" : place.Id,
+            Day = eventDay, Start = 600, End = 960, Booked = 2, FeeCents = 8000, Reminded = true };
+        if (claimed > 0) invalid.Holds.Add(new PlaceHold { VehicleId = "used", From = CityEvents.StartsAt(invalid), Until = CityEvents.StartsAt(invalid) + 1 });
+        state.Events.Events.Add(invalid);
+        EventLocations.Unreadable = failure == "unreadable-address" ? place.Address : null;
+        EventLocations.Ready = false; GameManager.Paid = 0;
+        var changes = FoodTrucksSession.Changes;
+        CityPitches.NewDay(state, 4, loading: true);
+        CityPitches.NewDay(state, 4, loading: false);
+        Check(state.Events.Events.Contains(invalid) && GameManager.Paid == 0, "paid booking retained before validation: " + failure);
+        Check(FoodTrucksSession.Changes == changes, "unchanged deferred load/retry must not dirty the save");
+        EventLocations.Ready = true; CityPitches.RetryAddresses();
+        Check(!state.Events.Events.Contains(invalid) && GameManager.Paid == (2 - claimed) * 8000, "refund after readiness: " + failure);
+        changes = FoodTrucksSession.Changes;
+        CityPitches.RetryAddresses();
+        CityPitches.NewDay(state, 4, loading: true);
+        Check(GameManager.Paid == (2 - claimed) * 8000, "refund exactly once on repeat retry/day");
+        Check(FoodTrucksSession.Changes == changes, "unchanged ready load must not dirty the save");
+        EventLocations.Unreadable = null;
+    }
+
 }
 namespace FoodTrucks
 {
@@ -55,13 +88,13 @@ namespace FoodTrucks
     }
     static class EventLocations
     {
-        internal static bool Ready; internal static int Refreshes;
-        internal static string? ReadableAddress(string key) => key == "missing" ? null : "34 4th Avenue";
+        internal static bool Ready; internal static int Refreshes; internal static string? Unreadable;
+        internal static string? ReadableAddress(string key) => key == "missing" || key == Unreadable ? null : "34 4th Avenue";
         internal static string Name(string key) => ReadableAddress(key)!;
         internal static void RefreshMessages(object contact, IEnumerable<Dictionary<string, string>> d) { _ = d.ToList(); Refreshes++; }
     }
     static class CartSelling { internal static long SoldThrough() => HireCrew.Now(); internal static string Money(long cents) => cents.ToString(); }
-    static class HireCrew { internal static long Now() => 4500; }
+    static class HireCrew { internal static long Minute = 4500; internal static long Now() => Minute; }
     static class CityLicensing { internal static object City() => new(); internal static List<object> FoodVehicles(SaveState s) => new() { new() }; }
     static class StreetSales { internal static VehicleState? Find(SaveState s, string id) => s.Vehicles.Find(v => v.VehicleId == id); }
     static class Notices

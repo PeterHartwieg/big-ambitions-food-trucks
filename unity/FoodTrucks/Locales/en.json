@@ -271,6 +271,7 @@
     "foodtrucks:dialog_bookings_too_many": "Your trucks are all booked at that time already.",
     "foodtrucks:dialog_bookings_gone": "Sorry, that one's gone.",
     "foodtrucks:dialog_bookings_unavailable": "Bookings can't be handled right now.",
+    "foodtrucks:transaction_catering_unlocated": "Catering",
     "foodtrucks:transaction_catering": "Catering at {place}",
     "foodtrucks:notification_catering_started": "Catering: the {vehicle} serves the guests until {end}. {units} {food} are kept for them.",
     "foodtrucks:notification_catering_not_ready": "The guests want {units} portions of {food}, and the {vehicle} doesn't have them.",

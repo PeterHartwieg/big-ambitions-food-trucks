@@ -268,7 +268,19 @@ namespace FoodTrucks
             if (tables == null) return;
             var vehicles = SaveGameManager.Current.VehicleInstances.Where(v => v != null).ToDictionary(v => v.id, v => v);
 
+            EventLocations.RefreshBookingRadius(Bookings());
             PayUnpaid(state);
+            if (EventLocations.Ready)
+            {
+                var offerCount = state.Catering.Offers.Count;
+                var cancelled = CateringGigs.CancelUnlocatable(state.Catering, p => EventLocations.ReadableAddress(p) != null);
+                if (cancelled.Count > 0 || offerCount != state.Catering.Offers.Count) FoodTrucksSession.MarkChanged();
+                foreach (var gig in cancelled)
+                {
+                    lastSeenNear.Remove(gig.Id);
+                    Notices.SendText(Bookings(), "foodtrucks:message_bookings_location_cancelled", Describe(gig));
+                }
+            }
             SettleEnded(state, rules, tables, vehicles, now);
             // Wait for native buildings before judging destinations or overdue arrivals.
             if (!EventLocations.Ready) return;
@@ -421,17 +433,6 @@ namespace FoodTrucks
         // Started gigs whose end passed or whose truck left are settled.
         private void SettleEnded(SaveState state, CateringRules rules, DemandTables tables, Dictionary<string, VehicleInstance> vehicles, long now)
         {
-            if (EventLocations.Ready)
-            {
-                var offerCount = state.Catering.Offers.Count;
-                var cancelled = CateringGigs.CancelUnlocatable(state.Catering, p => EventLocations.ReadableAddress(p) != null);
-                if (cancelled.Count > 0 || offerCount != state.Catering.Offers.Count) FoodTrucksSession.MarkChanged();
-                foreach (var gig in cancelled)
-                {
-                    lastSeenNear.Remove(gig.Id);
-                    Notices.SendText(Bookings(), "foodtrucks:message_bookings_location_cancelled", Describe(gig));
-                }
-            }
             foreach (var gig in state.Catering.Gigs.Where(g => g.Status == GigStatus.Started).ToList())
             {
                 if (!EventLocations.Ready) continue; // No departure judgement while native locations are still loading.
@@ -461,7 +462,12 @@ namespace FoodTrucks
                 var day = SaveGameManager.Current.Day;
                 var units = Math.Max(1, unpaid.Units);
                 if (!StreetSales.CanRecordTotal(state, unpaid.VehicleId, day, unpaid.FeeCents, units)) continue;
-                if (!Payments.PayIn(unpaid.FeeCents, new TransactionInfo("foodtrucks:transaction_catering", new Dictionary<string, string> { { "place", PlaceName(unpaid.PlaceId) } }))) continue;
+                // Earned fees must pay even before native addresses exist. Keep that bank line useful.
+                var place = EventLocations.Ready ? EventLocations.ReadableAddress(unpaid.PlaceId) : null;
+                var info = place == null
+                    ? new TransactionInfo("foodtrucks:transaction_catering_unlocated", new Dictionary<string, string>())
+                    : new TransactionInfo("foodtrucks:transaction_catering", new Dictionary<string, string> { { "place", place } });
+                if (!Payments.PayIn(unpaid.FeeCents, info)) continue;
                 StreetSales.RecordTotal(state, unpaid.VehicleId, day, unpaid.FeeCents, units);
                 state.Catering.Unpaid.Remove(unpaid);
                 FoodTrucksSession.MarkChanged();

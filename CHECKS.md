@@ -1,3 +1,7 @@
+# Event address review fixes (0.10.8)
+
+Second-round regressions are covered by Core and executable production-method harnesses; see [scope and evidence](docs/release/0.10.8/event-address.md). **Pending native acceptance of this candidate:** address/map/GPS and reload, mixed claimed/unclaimed invalid-location refunds, real legacy city label repair, saved catering confirmation radius with no live gig, and directions Back after full booking. The original `38675ff` screenshots do not validate these later fixes. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
+
 # Unlimited employee rosters (22 October 2026)
 
 Cart-sale release 0.10.5: commissary closure, resale, crew/payroll, routes, retained stock/deliveries and reload evidence are recorded in `docs/release/0.10.5/verification.md`. Venue/pitch native coverage and Windows gameplay remain unverified.

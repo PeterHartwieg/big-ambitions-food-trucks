@@ -150,12 +150,14 @@ namespace FoodTrucks
             if (tables == null || !FoodTrucksSession.CanWrite) return;
             // Nothing a window still has to sell through goes: a catch-up can be days behind after a long skip.
             var soldThrough = CartSelling.SoldThrough();
-            // Address work waits for native data; expiry, pruning and load-only release always run.
+            // Validate/refund before expiry; pruning and load-only release do not need native addresses.
             var addressesReady = EventLocations.Ready;
+            var dropped = 0;
             pendingAddresses = addressesReady ? null : state;
             if (addressesReady)
             {
                 DropUnknown(state, tables);
+                dropped = CityEvents.Expire(state.Events, today, soldThrough);
                 EventLocations.RefreshMessages(CityLicensing.City(), state.Events.Events
                     .Where(e => HireCrew.Now() < CityEvents.EndsAt(e))
                     .Select(e => new Dictionary<string, string>
@@ -168,22 +170,30 @@ namespace FoodTrucks
                         { "place", EventLocations.Name(tables.Place(e.PlaceId)!.Address) }
                     }));
             }
-            var dropped = CityEvents.Expire(state.Events, today, soldThrough);
-            PremiumSpots.Prune(state, soldThrough);
-            FoodTrucksSession.MarkChanged();
+            var changed = PremiumSpots.Prune(state, soldThrough) > 0 || dropped > 0;
             if (loading)
             {
                 // Places held by vehicles that aren't open any more go back.
                 var now = HireCrew.Now();
                 foreach (var holder in state.Events.Events.SelectMany(e => e.Holds).Concat(state.PremiumHolds.Values.SelectMany(h => h))
                              .Where(h => h.Until == null && StreetSales.Find(state, h.VehicleId)?.IsOpen != true).ToList())
+                {
                     holder.Until = Math.Max(holder.From, now);
-                foreach (var vehicle in state.Vehicles.Where(v => !v.IsOpen && v.PremiumSpot != null)) vehicle.PremiumSpot = null;
+                    changed = true;
+                }
+                foreach (var vehicle in state.Vehicles.Where(v => !v.IsOpen && v.PremiumSpot != null))
+                {
+                    vehicle.PremiumSpot = null;
+                    changed = true;
+                }
             }
+            if (changed) FoodTrucksSession.MarkChanged();
             // Announcements and reminders also require readable native places; retry after city data loads.
             if (!addressesReady) return;
             if (!tables.Places.Any(p => EventLocations.ReadableAddress(p.Address) != null)) return;
+            var lastAnnouncedDay = state.Events.LastAnnouncedDay;
             var added = new CityEvents(tables).Announce(state.Events, today, p => EventLocations.ReadableAddress(p.Address) != null);
+            changed = state.Events.LastAnnouncedDay != lastAnnouncedDay || added.Count > 0;
             // The city writes to vendors: players with a food cart or truck.
             var vendor = CityLicensing.FoodVehicles(state).Count > 0;
             foreach (var city in added)
@@ -208,6 +218,7 @@ namespace FoodTrucks
             foreach (var city in state.Events.Events.Where(e => e.Day == today && e.Booked > 0 && !e.Reminded))
             {
                 city.Reminded = true;
+                changed = true;
                 var kind = tables.Kind(city.Kind);
                 var place = tables.Place(city.PlaceId);
                 if (kind == null || place == null) continue;
@@ -222,7 +233,7 @@ namespace FoodTrucks
                     { "booked", city.Booked.ToString() }
                 });
             }
-            if (added.Count > 0 || dropped > 0 || !loading) FoodTrucksSession.MarkChanged();
+            if (changed) FoodTrucksSession.MarkChanged();
             if (added.Count > 0 || dropped > 0) Log.Info($"City events on day {today}: {added.Count} announced, {dropped} over; {state.Events.Events.Count} coming.");
         }
 
