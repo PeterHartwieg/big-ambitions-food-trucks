@@ -33,7 +33,7 @@ class CartWindowAlignmentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='ft-cart-alignment-') as folder:
             root = Path(folder)
             major = subprocess.check_output(['dotnet', '--version'], text=True).split('.')[0]
-            sources = ['unity/FoodTrucks/Scripts/VehicleDisplays.cs', 'Core/Fleet/CartStance.cs']
+            sources = ['unity/FoodTrucks/Scripts/VehicleDisplays.cs', 'Core/Fleet/CartStance.cs', 'unity/FoodTrucks/Scripts/CartStanceWorld.cs']
             items = ''.join(f'<Compile Include="{escape(str(ROOT / s))}" Link="{Path(s).name}" />' for s in sources)
             (root / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><NuGetAudit>false</NuGetAudit></PropertyGroup>
@@ -79,7 +79,7 @@ namespace UnityEngine {
         public Dictionary<string,Transform> Children=new();
         public Transform(GameObject go)=>gameObject=go;
         public Vector3 forward=>new(0,0,1); public Vector3 right=>new(1,0,0);
-        public Transform Find(string name)=>Children[name];
+        public Transform? Find(string name)=>Children.GetValueOrDefault(name);
         public IEnumerator<Transform> GetEnumerator()=>Children.Values.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator()=>GetEnumerator();
     }
@@ -91,6 +91,7 @@ namespace UnityEngine {
         public static Vector3 operator -(Vector3 a,Vector3 b)=>new(a.x-b.x,a.y-b.y,a.z-b.z);
         public static Vector3 operator *(Vector3 a,float b)=>new(a.x*b,a.y*b,a.z*b);
         public static Vector3 operator *(float b,Vector3 a)=>a*b;
+        public static Vector3 operator /(Vector3 a,float b)=>new(a.x/b,a.y/b,a.z/b);
         public static float Dot(Vector3 a,Vector3 b)=>a.x*b.x+a.y*b.y+a.z*b.z;
     }
     public struct Quaternion { public float Yaw; public static Quaternion Euler(float x,float y,float z)=>new(){Yaw=y}; }
@@ -154,7 +155,7 @@ namespace FoodTrucks {
         static bool CrossesRoad(Vector3 a,Vector3 b,TrafficLanes l,out string s){s="";return false;}
         static Vector3? WayIn(Vector3 p,Vector3 w,NavMeshQueryFilter f,TrafficLanes l,NavMeshPath path,Rejections r)=>p;
         static string Geometry(List<Vector3> p,Transform t,Vector3 v,WindowShape s)=>"checked";
-        public static (int Count,int Side) LayoutCase(Transform t,string kind) {var r=Layout(t,4,WindowShape.For(kind));return(r.Places.Count,r.Side);}
+        public static (int Count,int Side,double Along) LayoutCase(Transform t,string kind) {var r=Layout(t,4,WindowShape.For(kind));return(r.Places.Count,r.Side,r.Places.Count>0 ? r.Places[0].z : double.NaN);}
         public int Side; public object Service=new(); public Action? OnSpawned; public Action<long>? Paid;
         public bool MovedFrom(Transform t)=>false;
         public static int NextSide=-1;
@@ -224,12 +225,25 @@ class Harness {
         Check(UnityEngine.Object.Made.Last().transform.localRotation.Yaw==0,"truck child yaw unchanged");
         Invoke(truck,"OnDisable");Invoke(display,"OnDisable");
         foreach(var d in new[]{.0f,.09f,.11f,.4f,.46f}) {
-            var wanted=new Vector3(1.05f,0,.615f);NavMesh.Snap=new(1.05f,0,.615f+d);
+            var wanted=new Vector3(1.05f,0,0);NavMesh.Snap=new(1.05f,0,d);
             Check(QueueLine.Accept(wanted,true,"cart")== (d<=.1f),"first cart customer anchor "+d);
             Check(QueueLine.Accept(wanted,false,"cart")== (d<=.45f),"other cart places retain tolerance "+d);
             Check(QueueLine.Accept(wanted,true,"truck")== (d<=.2f),"truck unchanged "+d);
         }
         NavMesh.Follow=true;
+        var front=c.transform.Find("EquipmentFront")!;var rear=c.transform.Find("EquipmentRear")!;
+        front.localPosition=new(0,.963f,.6f);rear.localPosition=new(0,.963f,-.2f);
+        foreach(var count in new[]{0,1,2}) {
+            front.Children.Clear();rear.Children.Clear();
+            if(count>0)front.Children["fitted"]=new GameObject("Display_HotDogRoller").transform;
+            if(count>1)rear.Children["fitted"]=new GameObject("Display_BurgerStation").transform;
+            foreach(var side in new[]{1,-1}) {
+                CartGroundPlacement.AllowedSide=side;
+                var r=QueueLine.LayoutCase(c.transform,"cart");
+                Check(Math.Abs(r.Along-(count==2 ? .2 : 0))<1e-6,"first customer follows fitted midpoint or fallback");
+            }
+        }
+
         foreach(var allowedSide in new[]{1,-1,0}) {
             CartGroundPlacement.AllowedSide=allowedSide;
             var result=QueueLine.LayoutCase(c.transform,"cart");

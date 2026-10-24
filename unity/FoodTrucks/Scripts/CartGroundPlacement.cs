@@ -61,7 +61,7 @@ namespace FoodTrucks
                 Vector3.Dot(center - p, outward) <= 1.5f &&
                 Mathf.Abs(Vector3.Dot(p - behind, forward)) <= (float)CartStance.AcrossMetres, out spot, out var usedFallback))
             {
-                placement = usedFallback ? "at a fallback behind the cart, opposite the queue" : "behind the cart at the register, opposite the queue";
+                placement = usedFallback ? "at a fallback behind the cart, opposite the queue" : "behind the cart at the equipment centre, opposite the queue";
                 return true;
             }
             // No end-of-cart service: an employee there cannot reach the counter controls. Queue layout

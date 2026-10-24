@@ -15,7 +15,7 @@ namespace FoodTrucks
     // walkable ground: keep the live player agent/collider and let the game's next navigation command release
     // the stance. Never use ThirdPersonCharacter.ForceToPosition for the player: it leaves physics kinematic
     // and the agent's updatePosition/updateRotation off (1.0). No attachment or navigation blocker is needed.
-    // The place is Core's CartStance: behind the cart straight across from the cash register, facing the customers,
+    // The place is Core's CartStance: behind the cart at the fitted equipment midpoint, facing the customers,
     // worked out in the cart's frame and carried into the world by its live transform, as WindowCrew does for the crew.
     internal sealed class CartServing
     {
@@ -26,6 +26,7 @@ namespace FoodTrucks
         private Quaternion rotation;
         private Vector3 cartPosition;
         private Quaternion cartRotation;
+        private double workAlong;
 
         internal string? VehicleId => vehicleId;
 
@@ -63,14 +64,14 @@ namespace FoodTrucks
             if (!ServingPoint(controller.transform, side, agent.radius, who.transform.position,
                 filter, lanes, out var spot, out var placement, out var behindCart))
             {
-                Log.Info($"Cart serving: {id}: no safe reachable serving point behind the cart or at either end; player left where they stand.");
+                Log.Info($"Cart serving: {id}: no safe reachable serving point behind the counter; player left where they stand.");
                 return;
             }
-            // Behind the cart level with the register: straight across the counter at the customers. Further along
-            // (a fallback past an obstacle) or at an end: towards the first customer.
-            var look = behindCart && CartStance.FacesAcross(CartStanceWorld.Along(controller.transform, spot))
+            // Face across the working centre towards the customers.
+            var centre = CartStanceWorld.WorkAlong(controller.transform);
+            var look = behindCart && CartStance.FacesAcross(CartStanceWorld.Along(controller.transform, spot), centre)
                 ? spot + CartStanceWorld.Facing(controller.transform, side)
-                : window?.Window ?? CartStanceWorld.Point(controller.transform, CartStance.Window(side, CartStance.WindowOut));
+                : window?.Window ?? CartStanceWorld.Point(controller.transform, CartStance.Window(side, CartStance.WindowOut, centre));
             var facing = look - spot;
             facing.y = 0f;
             var turn = Quaternion.LookRotation(facing);
@@ -94,6 +95,7 @@ namespace FoodTrucks
             rotation = turn;
             cartPosition = controller.transform.position;
             cartRotation = controller.transform.rotation;
+            workAlong = centre;
             who.Character.velocity = Vector3.zero;
             agent.velocity = Vector3.zero;
             who.PlayerChangedNavigation.AddListener(OnNavigation);
@@ -101,7 +103,7 @@ namespace FoodTrucks
             Log.Info($"Cart serving: {id}: player placed {placement} at {spot}, queue on the {(side > 0 ? "right" : "left")}, facing the window at {look}; pedestrian ground, off street, complete player path (agent {filter.agentTypeID}); idle stance held until walking or closing.");
         }
 
-        // Prefer the opposite side across from the register, then the front and rear ends beside the window. A
+        // Stand opposite the customers at the working centre. A
         // kerbside cart's opposite side can be the road: player-mesh membership alone is not evidence of pavement.
         // Every result must also be on the NPC mesh, pass the queue's street exclusions and have a complete path
         // from the live player. behindCart: the spot is on the side opposite the customers.
@@ -109,7 +111,7 @@ namespace FoodTrucks
             NavMeshQueryFilter filter, TrafficLanes lanes, out Vector3 spot, out string placement, out bool behindCart)
         {
             var path = new NavMeshPath();
-            return CartGroundPlacement.Find(cart, side, radius, CartStance.Server(side), filter, lanes,
+            return CartGroundPlacement.Find(cart, side, radius, CartStance.Server(side, along: CartStanceWorld.WorkAlong(cart)), filter, lanes,
                 p => NavMesh.CalculatePath(start, p, filter, path) && path.status == NavMeshPathStatus.PathComplete,
                 out spot, out placement, out behindCart);
         }
@@ -153,6 +155,7 @@ namespace FoodTrucks
                     !string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId) || BuildingManager.IsInsideBuilding ||
                     UndergroundParkingManager.IsInsideParking || agent == null || !agent.isActiveAndEnabled || !agent.isOnNavMesh ||
                     Vector3.Distance(controller.transform.position, cartPosition) > 0.1f || Quaternion.Angle(controller.transform.rotation, cartRotation) > 1f ||
+                    Math.Abs(CartStanceWorld.WorkAlong(controller.transform) - workAlong) > 0.01 ||
                     Vector3.Distance(who.transform.position, position) > 0.5f)
                 {
                     Release("window, player or cart moved/changed");

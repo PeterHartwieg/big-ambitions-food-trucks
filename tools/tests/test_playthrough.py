@@ -310,9 +310,9 @@ class BridgeOpsParityTests(unittest.TestCase):
                 player.update(x=20., z=29., heading=heading)
                 self.assertTrue(self.mock.operate(v, 'open')['done'])
                 angle = math.radians(heading)
-                # Behind the cart level with its register: 0.85 m to the cart's left, 0.615 m forward.
-                self.assertAlmostEqual(player['x'], v['x']-.85*math.cos(angle)+.615*math.sin(angle))
-                self.assertAlmostEqual(player['z'], v['z']+.85*math.sin(angle)+.615*math.cos(angle))
+                # Behind the cart at its counter centre: 0.85 m to the cart's left.
+                self.assertAlmostEqual(player['x'], v['x']-.85*math.cos(angle))
+                self.assertAlmostEqual(player['z'], v['z']+.85*math.sin(angle))
                 self.assertAlmostEqual(player['heading'], (heading+90)%360)
                 self.assertIsNone(player['in_vehicle'])
                 self.assertIsNone(player['at_hatch'])
@@ -323,7 +323,7 @@ class BridgeOpsParityTests(unittest.TestCase):
                 self.mock.operate(v, 'close')
                 self.assertEqual((player['x'], player['z']), (40., 30.))
 
-    def test_kerbside_cart_tries_safe_ends_then_leaves_the_player_where_they_stand(self):
+    def test_kerbside_cart_refuses_end_service_and_leaves_player_where_they_stand(self):
         v = self.mock.spawn('cart')
         v.update(x=20., z=30., pieces=[{'item': 'hotdoggrill', 'units': 40, 'cap': 40}],
                  stock=[{'item': 'Hotdog', 'key': HOTDOG, 'amount': 40}])
@@ -351,22 +351,9 @@ class BridgeOpsParityTests(unittest.TestCase):
                         player.update(x=20., y=v['y'], z=29., heading=15.)
                         before = {k: player[k] for k in ('x', 'y', 'z', 'heading')}
                         self.assertTrue(self.mock.operate(v, 'open')['done'])
-                        self.assertEqual(len(tested), 2 if available == 'front' else 3)
-                        if available == 'none':
-                            self.assertEqual({k: player[k] for k in before}, before)
-                            expected_log = 'player left where they stand'
-                        else:
-                            direction = 1 if available == 'front' else -1
-                            self.assertAlmostEqual(player['x'], v['x']+direction*1.07*forward[0])
-                            self.assertAlmostEqual(player['z'], v['z']+direction*1.07*forward[1])
-                            dx, dz = player['x']-v['x'], player['z']-v['z']
-                            self.assertGreaterEqual(dx*outward[0]+dz*outward[1], -.001)
-                            # The first customer stands across from the register, 0.615 m forward of the middle.
-                            look_x = v['x']+outward[0]*1.05+forward[0]*.615
-                            look_z = v['z']+outward[1]*1.05+forward[1]*.615
-                            self.assertAlmostEqual(player['heading'], math.degrees(math.atan2(look_x-player['x'], look_z-player['z'])) % 360)
-                            expected_log = f'at the {available} end beside the window'
-                        self.assertTrue(any(expected_log in e['text'] for e in self.mock.events(0)['events']))
+                        self.assertEqual(len(tested), 1)
+                        self.assertEqual({k: player[k] for k in before}, before)
+                        self.assertTrue(any('player left where they stand' in e['text'] for e in self.mock.events(0)['events']))
                         self.mock.operate(v, 'close')
 
     def test_vehicle_buy_charges_the_dealers_price_as_the_games_purchase(self):

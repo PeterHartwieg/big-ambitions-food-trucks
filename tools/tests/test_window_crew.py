@@ -11,7 +11,7 @@ SOURCES = ['unity/FoodTrucks/Scripts/WindowCrew.cs', 'unity/FoodTrucks/Scripts/C
 
 
 class WindowCrewTests(unittest.TestCase):
-    def test_cart_crew_behind_the_register_and_truck_crew_unchanged(self):
+    def test_cart_crew_at_the_equipment_midpoint_and_truck_crew_unchanged(self):
         with tempfile.TemporaryDirectory(prefix='ft-window-crew-') as folder:
             root = Path(folder)
             major = subprocess.check_output(['dotnet', '--version'], text=True).split('.')[0]
@@ -28,7 +28,7 @@ class WindowCrewTests(unittest.TestCase):
             ran = subprocess.run(['dotnet', str(root / f'bin/Debug/net{major}.0/Harness.dll')],
                                  capture_output=True, text=True, timeout=30)
             self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
-            self.assertIn('PASS: window crew at the cart register and the truck hatch', ran.stdout)
+            self.assertIn('PASS: window crew at the cart equipment midpoint and the truck hatch', ran.stdout)
 
 
 # Stand-ins only. Transform follows Unity's convention for a vehicle turned about the vertical (yaw in radians):
@@ -46,7 +46,12 @@ namespace UnityEngine {
         public Transform transform = new(); public bool active; public GameObject(string name) {}
         public void SetActive(bool value) => active = value;
     }
-    public class Transform {
+    public class Transform : System.Collections.Generic.IEnumerable<Transform> {
+        public string name=""; public Vector3 localPosition;
+        public Dictionary<string,Transform> Children=new();
+        public Transform? Find(string n)=>Children.GetValueOrDefault(n);
+        public IEnumerator<Transform> GetEnumerator()=>Children.Values.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()=>GetEnumerator();
         public Vector3 position; public Quaternion rotation;
         public Vector3 right => new(MathF.Cos(rotation.Yaw), 0, -MathF.Sin(rotation.Yaw));
         public Vector3 forward => new(MathF.Sin(rotation.Yaw), 0, MathF.Cos(rotation.Yaw));
@@ -132,8 +137,8 @@ class Harness {
     static void Check(bool good,string message) { if(!good) throw new Exception(message); }
     static void Near(Vector3 a,Vector3 b,string why) => Check(Vector3.Distance(a,b)<.001f,$"{why}: expected {b}, got {a}");
     static Transform Cart(float yaw) => new() { position=new(4.5f,0.2f,-11f), rotation=new() { Yaw=yaw } };
-    // Behind the cart (the side away from the queue) and level with the register, 0.615 m forward of the middle.
-    static Vector3 Behind(Transform c,int side) => c.position-c.right*(side*.85f)+c.forward*.615f;
+    // Behind the cart (the side away from the queue) and at the counter centre.
+    static Vector3 Behind(Transform c,int side) => c.position-c.right*(side*.85f);
     static Vector3 Register(Transform c,int side) => c.position+c.right*(side*.29f)+c.forward*.615f;
     static ThirdPersonCharacter Show(string id,Transform t,string kind,int side,int crew,int serving) {
         WindowCrew.Reset(); PrefabHelper.Made.Clear();
@@ -147,17 +152,31 @@ class Harness {
         foreach(var side in new[]{1,-1}) foreach(var yaw in headings) {
             CartSelling.Player=false; TruckWindow.Player=false;
             var c=Cart(yaw); var worker=Show("cart",c,"cart",side,1,1);
-            Near(worker.Position,Behind(c,side),$"cart worker behind the register, side {side}, yaw {yaw}");
+            Near(worker.Position,Behind(c,side),$"cart worker at the equipment midpoint, side {side}, yaw {yaw}");
             Check(Quaternion.Angle(worker.Rotation,Quaternion.LookRotation(c.right*side))<.01f,"cart worker faces the customers");
-            // Straight ahead of the worker: the register, then the customers' side.
+            // The register is off centre; the worker faces across the counter.
             var ahead=Register(c,side)-worker.Position; var facing=c.right*side;
-            Check(MathF.Abs(ahead.x*facing.z-ahead.z*facing.x)<.001f && Vector3.Dot(ahead,facing)>0,"register straight ahead");
-            Check(MathF.Abs(Vector3.Dot(worker.Position-c.position,c.forward)-.615f)<.001f,"level with the register, not the middle");
+            Check(MathF.Abs(ahead.x*facing.z-ahead.z*facing.x)>.6f && Vector3.Dot(ahead,facing)>0,"corner register stays off centre");
+            Check(MathF.Abs(Vector3.Dot(worker.Position-c.position,c.forward))<.001f,"at the counter centre");
             // The same crew after the cart is pushed and turned: placed from the live transform.
             c.position=new(-30,0.2f,8); c.rotation=new() { Yaw=yaw+1.1f };
             WindowCrew.Sync("cart",c,"cart",side,new[]{ new EmployeeInstance { id="e0" } },null);
             Near(worker.Position,Behind(c,side),"follows the moved cart");
             Check(Quaternion.Angle(worker.Rotation,Quaternion.LookRotation(c.right*side))<.01f,"faces the customers after the move");
+        }
+        foreach(var side in new[]{1,-1}) foreach(var yaw in headings) foreach(var count in new[]{0,1,2}) {
+            var c=Cart(yaw);
+            var front=new Transform {localPosition=new(0,.963f,.6f)};
+            var rear=new Transform {localPosition=new(0,.963f,-.2f)};
+            c.Children["EquipmentFront"]=front;c.Children["EquipmentRear"]=rear;
+            if(count>0)front.Children["fitted"]=new Transform {name="Display_HotDogRoller"};
+            if(count>1)rear.Children["fitted"]=new Transform {name="Display_BurgerStation"};
+            var centre=count==2 ? .2f : 0f;
+            var w=Show("cart",c,"cart",side,1,1);
+            Near(w.Position,Behind(c,side)+c.forward*centre,"actual fitted midpoint, zero/one fallback");
+            Check(Quaternion.Angle(w.Rotation,Quaternion.LookRotation(c.right*side))<.01f,"centred crew faces customers");
+            if(count==2) {rear.Children.Clear();WindowCrew.Sync("cart",c,"cart",side,new[]{new EmployeeInstance{id="e0"}},null);
+                Near(w.Position,Behind(c,side),"equipment removed invalidates cached placement");}
         }
         // No line laid out (side 0): the right-hand window side, as the register faces while closed.
         { var c=Cart(.3f); var w=Show("cart",c,"cart",0,1,1); Near(w.Position,Behind(c,1),"side 0 counts as the right"); }
@@ -242,7 +261,7 @@ class Harness {
             Check(!w.gameObject.active && w.Placements==0,"reject "+mode+" ground");
         }
         NavMesh.Ground=(p,r)=>p;
-        Console.WriteLine("PASS: window crew at the cart register and the truck hatch");
+        Console.WriteLine("PASS: window crew at the cart equipment midpoint and the truck hatch");
     }
 }
 '''

@@ -17,6 +17,18 @@ namespace FoodTrucks
             return new Vector3((float)x, p.y, (float)z);
         }
 
+        // Read the actual fitted display spots, excluding the below-counter fridge.
+        public static double WorkAlong(Transform cart) => CartStance.WorkAlong(
+            FittedAlong(cart.Find("EquipmentFront")), FittedAlong(cart.Find("EquipmentRear")));
+
+        private static double? FittedAlong(Transform? spot)
+        {
+            if (spot != null)
+                foreach (Transform child in spot)
+                    if (child.name.StartsWith("Display_", System.StringComparison.Ordinal)) return spot.localPosition.z;
+            return null;
+        }
+
         // The way the server faces: across the cart towards the customers' side.
         public static Vector3 Facing(Transform cart, int side)
         {

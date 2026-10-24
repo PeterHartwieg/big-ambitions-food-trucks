@@ -6,7 +6,7 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Fleet;
 
-// The worker or player at a cart stands behind it straight across from the cash register, facing the customers,
+// The worker or player at a cart stands behind it at the equipment midpoint, facing the customers,
 // at every heading and wherever the cart stands (bug of 24 October 2026: they stood diagonally off to one side).
 public class CartStanceTests
 {
@@ -74,8 +74,8 @@ public class CartStanceTests
     public void UnturnedCartWithTheQueueOnTheRight()
     {
         Assert.Equal((0.29, 0.95, 0.615, 90.0), CartStance.Register(1));
-        Assert.Equal((-0.85, 0.615), CartStance.Server(1));
-        Assert.Equal((1.05, 0.615), CartStance.Window(1, 1.05));
+        Assert.Equal((-0.85, 0.0), CartStance.Server(1));
+        Assert.Equal((1.05, 0.0), CartStance.Window(1, 1.05));
         Near((1, 0), CartStance.Facing((0, 1), 1), "faces +X");
     }
 
@@ -83,7 +83,7 @@ public class CartStanceTests
     public void QueueOnTheLeftMirrorsRegisterAndServer()
     {
         Assert.Equal((-0.29, 0.95, 0.615, -90.0), CartStance.Register(-1));
-        Assert.Equal((0.85, 0.615), CartStance.Server(-1));
+        Assert.Equal((0.85, 0.0), CartStance.Server(-1));
         Near((-1, 0), CartStance.Facing((0, 1), -1), "faces -X");
     }
 
@@ -99,12 +99,13 @@ public class CartStanceTests
     }
 
     [Fact]
-    public void ServerIsLevelWithTheRegisterNotTheBodysMiddle()
+    public void ServerIsCentredAndIndependentOfTheCornerRegister()
     {
-        // The old stance stood at the body's middle (z 0), 0.615 m back along the cart from the register.
+        // The register stays on the front corner; service belongs at the working centre.
         foreach (var side in new[] { 1, -1 })
         {
-            Assert.Equal(CartStance.Register(side).Z, CartStance.Server(side).Z, 9);
+            Assert.Equal(0, CartStance.Server(side).Z, 9);
+            Assert.NotEqual(CartStance.Register(side).Z, CartStance.Server(side).Z);
             Assert.True(Math.Sign(CartStance.Server(side).X) == -side, "server on the side away from the customers");
             Assert.True(Math.Sign(CartStance.Register(side).X) == side, "register on the customers' side of the counter");
         }
@@ -124,7 +125,7 @@ public class CartStanceTests
 
     [Theory]
     [MemberData(nameof(Headings))]
-    public void DirectlyBehindTheRegisterFacingTheCustomers(double yaw, int side)
+    public void AtTheWorkingCentreFacingTheCustomers(double yaw, int side)
     {
         var cart = (-3.0, 7.0);
         var forward = CartStance.Forward(yaw);
@@ -135,17 +136,17 @@ public class CartStanceTests
         var facing = CartStance.Facing(forward, side);
         var right = CartStance.DirectionToWorld(forward, (1, 0));
 
-        // On the ray the server faces: the register, then the first customer, with nothing sideways.
+        // The first customer is straight ahead; the register remains to one side.
         var toRegister = Minus(register, server);
         var toWindow = Minus(window, server);
-        Assert.True(Math.Abs(toRegister.X * facing.Z - toRegister.Z * facing.X) < Tolerance, "register straight ahead");
+        Assert.True(Math.Abs(toRegister.X * facing.Z - toRegister.Z * facing.X) > 0.6, "register remains off centre");
         Assert.True(Math.Abs(toWindow.X * facing.Z - toWindow.Z * facing.X) < Tolerance, "first customer straight ahead");
         Assert.Equal(CartStance.BehindMetres + CartStance.RegisterAcross, Dot(toRegister, facing), 9);
         Assert.True(Dot(toWindow, facing) > Dot(toRegister, facing), "the register stands between server and customer");
 
         // Behind the cart: on the side away from the queue, clear of the 0.50 m body and wheels.
         Assert.Equal(-side * CartStance.BehindMetres, Dot(Minus(server, cart), right), 9);
-        Assert.Equal(CartStance.RegisterAlong, Dot(Minus(server, cart), forward), 9);
+        Assert.Equal(0, Dot(Minus(server, cart), forward), 9);
 
         // The register faces the customers: its model faces +Z, turned by its yaw on top of the cart's.
         Near(facing, CartStance.Forward(yaw + reg.Yaw), "register faces the customers");
@@ -168,8 +169,8 @@ public class CartStanceTests
         // the same places relative to itself, not those of where it stood before.
         var before = CartStance.ToWorld((0, 0), CartStance.Forward(0), CartStance.Server(1));
         var after = CartStance.ToWorld((20, 5), CartStance.Forward(90), CartStance.Server(1));
-        Near((-0.85, 0.615), before, "before");
-        Near((20 + 0.615, 5 + 0.85), after, "after");
+        Near((-0.85, 0.0), before, "before");
+        Near((20.0, 5 + 0.85), after, "after");
         Near(CartStance.Server(1), CartStance.ToLocal((20, 5), CartStance.Forward(90), after), "same place on the cart");
     }
 
@@ -180,7 +181,7 @@ public class CartStanceTests
         Near(unit, CartStance.ToWorld((1, 2), (0.3, 0.4), CartStance.Server(-1)), "half-length forward (a tilted cart)");
         Near(unit, CartStance.ToWorld((1, 2), (6, 8), CartStance.Server(-1)), "long forward");
         Assert.Equal(CartStance.Yaw((0.6, 0.8)), CartStance.Yaw((0.3, 0.4)), 9);
-        Near((1 + 0.85 * 0.8 + 0.615 * 0.6, 2 - 0.85 * 0.6 + 0.615 * 0.8), unit, "worked example");
+        Near((1 + 0.85 * 0.8, 2 - 0.85 * 0.6), unit, "worked example");
     }
 
     [Fact]
@@ -221,22 +222,51 @@ public class CartStanceTests
     }
 
     [Theory]
-    [InlineData(0.615, true)]
+    [InlineData(0.615, false)]
     [InlineData(0.30, true)]
-    [InlineData(0.95, true)]
-    [InlineData(0.0, false)]
+    [InlineData(-0.30, true)]
+    [InlineData(0.0, true)]
     [InlineData(2.5, false)]
     [InlineData(-1.07, false)]
-    public void OnlyAServerLevelWithTheRegisterFacesStraightAcross(double along, bool across)
+    public void OnlyAServerNearTheWorkingCentreFacesStraightAcross(double along, bool across)
     {
         Assert.Equal(across, CartStance.FacesAcross(along));
     }
 
     [Fact]
-    public void ServerKeepsAWiderBodyClearAtTheRegister()
+    public void ServerKeepsAWiderBodyClearAtTheCentre()
     {
-        Assert.Equal((-1.2, 0.615), CartStance.Server(1, 1.2));
-        Assert.Equal((1.2, 0.615), CartStance.Server(-1, 1.2));
+        Assert.Equal((-1.2, 0.0), CartStance.Server(1, 1.2));
+        Assert.Equal((1.2, 0.0), CartStance.Server(-1, 1.2));
+    }
+
+    [Theory]
+    [InlineData(0.3, -0.3, 0)]
+    [InlineData(0.6, -0.2, 0.2)]
+    [InlineData(0.6, null, 0)]
+    [InlineData(null, -0.2, 0)]
+    [InlineData(null, null, 0)]
+    public void FittedSpotsChooseMidpointOrCounterCentre(double? front, double? rear, double expected)
+    {
+        var along = CartStance.WorkAlong(front, rear);
+        Assert.Equal(expected, along, 9);
+        foreach (var side in new[] {1, -1})
+        {
+            Assert.Equal(along, CartStance.Server(side, along: along).Z);
+            Assert.Equal(along, CartStance.Window(side, 1.05, along).Z);
+            Assert.True(CartStance.FacesAcross(along, along));
+            Assert.Equal(along - 0.9, CartStance.Waiting(side, 0, null, along: along).Z);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Headings))]
+    public void AsymmetricFittedMidpointAlignsServerAndCustomerAtEveryHeading(double yaw, int side)
+    {
+        var along = CartStance.WorkAlong(0.6, -0.2);
+        var server = CartStance.ToWorld((3, 7), CartStance.Forward(yaw), CartStance.Server(side, along: along));
+        var customer = CartStance.ToWorld((3, 7), CartStance.Forward(yaw), CartStance.Window(side, 1.05, along));
+        Near(Unity(yaw, (side * 1.9, 0)), Minus(customer, server), "customer across from midpoint server");
     }
 
     // CartAssets builds the register; the build editor can't reference Core, so read its numbers from the source.

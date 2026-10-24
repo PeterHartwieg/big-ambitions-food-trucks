@@ -43,7 +43,12 @@ using FoodTrucks;
 namespace UnityEngine {
     public class Object { public static int Destroyed; public static void Destroy(Object value) => Destroyed++; }
     public class GameObject : Object { public Transform transform = new(); public GameObject(string name) {} }
-    public class Transform {
+    public class Transform : System.Collections.Generic.IEnumerable<Transform> {
+        public string name=""; public Vector3 localPosition;
+        public Dictionary<string,Transform> Children=new();
+        public Transform? Find(string n)=>Children.GetValueOrDefault(n);
+        public IEnumerator<Transform> GetEnumerator()=>Children.Values.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()=>GetEnumerator();
         public Vector3 position; public Quaternion rotation;
         public Vector3 right => new(MathF.Cos(rotation.Yaw), 0, -MathF.Sin(rotation.Yaw));
         public Vector3 forward => new(MathF.Sin(rotation.Yaw), 0, MathF.Cos(rotation.Yaw));
@@ -182,8 +187,8 @@ class Harness {
         CartQueueView.Window=(side,Window(cart,side));
         return (new(),PlayerHelper.PlayerController,cart);
     }
-    // The register's place along the cart (Core CartStance): the server, register and first customer line up there.
-    const float Along=.615f;
+    // The server and first customer share the counter centre, independent of the corner register.
+    const float Along=0f;
     static Vector3 Window(VehicleController c,int side)=>c.transform.position+c.transform.right*(side*1.05f)+c.transform.forward*Along;
     static Vector3 Behind(VehicleController c,int side)=>c.transform.position-c.transform.right*(side*.85f)+c.transform.forward*Along;
     static Vector3? Sample(Vector3 at,float radius,params Vector3[] points)=>points
@@ -204,9 +209,9 @@ class Harness {
             CartQueueView.Window=(side,Window(c,side));
             p.hasOnGoalReachedAction=true; agent.hasPath=true;
             stance.Open(c); var expected=Behind(c,side);
-            Near(p.transform.position,expected,"behind the cart across from the register at every heading");
-            Check(MathF.Abs(Vector3.Dot(p.transform.position-c.transform.position,c.transform.forward)-Along)<.001f,"level with the register, not the body's middle");
-            Check(Log.Lines.Any(x=>x.Contains("behind the cart at the register")),"register placement logged");
+            Near(p.transform.position,expected,"behind the cart at the equipment midpoint at every heading");
+            Check(MathF.Abs(Vector3.Dot(p.transform.position-c.transform.position,c.transform.forward)-Along)<.001f,"at the counter centre");
+            Check(Log.Lines.Any(x=>x.Contains("behind the cart at the equipment centre")),"register placement logged");
             Check(TrafficLanes.Reads==1,"lanes read once for placement");
             Near(TrafficLanes.Center,c.transform.position,"lanes read round cart");
             Check(NavMesh.Paths.Count==1 && NavMesh.Destinations.Count==1,"exact point has a complete player path");
@@ -220,8 +225,27 @@ class Harness {
             Near(p.transform.position,new(10,0,10),"click walking is free");
             Check(agent.hasPath && p.hasOnGoalReachedAction && p.Resets==1,"new path and callback preserved");
         }
+        // Two fitted general spots use their actual midpoint; one/none and a dedicated fridge use counter centre.
+        foreach(var side in new[]{1,-1}) foreach(var yaw in new[]{0f,.65f,1.5707964f,3.1415927f})
+        foreach(var count in new[]{0,1,2}) {
+            var (s,p,c)=Setup(side,yaw);
+            var front=new Transform { localPosition=new(0,.963f,.6f) };
+            var rear=new Transform { localPosition=new(0,.963f,-.2f) };
+            c.transform.Children["EquipmentFront"]=front; c.transform.Children["EquipmentRear"]=rear;
+            c.transform.Children["EquipmentCooler"]=new Transform {localPosition=new(0,.5f,-.32f)};
+            c.transform.Children["EquipmentCooler"].Children["fitted"]=new Transform {name="Display_CartDrinksCooler"};
+            if(count>0)front.Children["fitted"]=new Transform {name="Display_HotDogRoller"};
+            if(count>1)rear.Children["fitted"]=new Transform {name="Display_BurgerStation"};
+            var centre=count==2 ? .2f : 0f;
+            CartQueueView.Window=(side,c.transform.position+c.transform.right*(side*1.05f)+c.transform.forward*centre);
+            s.Open(c);
+            Near(p.transform.position,c.transform.position-c.transform.right*(side*.85f)+c.transform.forward*centre,"fitted midpoint or counter fallback");
+            Check(Quaternion.Angle(p.transform.rotation,Quaternion.LookRotation(c.transform.right*side))<.01f,"face customers at fitted midpoint");
+            if(count==2) { rear.Children.Clear();s.LateUpdate();Check(!s.PlayerAt("cart"),"equipment-centre change releases stale stance"); }
+            s.Release("done");
+        }
         {
-            var (s,p,c)=Setup(); var farther=new Vector3(-2.8f,0,1.1f); var closest=new Vector3(-1.1f,0,.85f);
+            var (s,p,c)=Setup(); var farther=new Vector3(-2.8f,0,1.1f); var closest=new Vector3(-1.1f,0,.235f);
             var customer=new Vector3(.1f,0,0); var upperFloor=new Vector3(-.85f,.7f,0);
             var safeEnd=new Vector3(0,0,1.07f);
             NavMesh.Ground=(at,r)=>Sample(at,r,customer,upperFloor,farther,closest,safeEnd);
@@ -259,7 +283,7 @@ class Harness {
         // CalculatePath even if it leaves PathComplete in the reused path; take a farther reachable point.
         foreach(var bad in new[]{(true,NavMeshPathStatus.PathPartial),(true,NavMeshPathStatus.PathInvalid),(false,NavMeshPathStatus.PathComplete)}) {
             foreach(var exact in new[]{true,false}) {
-                var (s,p,c)=Setup(); var blocked=new Vector3(exact ? -.85f : -1.1f,0,Along); var reachable=new Vector3(-1.5f,0,.9f);
+                var (s,p,c)=Setup(); var blocked=new Vector3(exact ? -.85f : -1.1f,0,Along); var reachable=new Vector3(-1.5f,0,.285f);
                 NavMesh.Ground=(at,r)=>Sample(at,r,blocked,reachable);
                 NavMesh.Route=at=>Vector3.Distance(at,blocked)<.01f ? bad : (true,NavMeshPathStatus.PathComplete);
                 s.Open(c); Near(p.transform.position,reachable,"complete path required for exact and fallback points: "+bad);

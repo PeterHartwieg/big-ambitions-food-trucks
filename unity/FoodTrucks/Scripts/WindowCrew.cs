@@ -188,8 +188,9 @@ namespace FoodTrucks
             // In the cart's own frame from its live transform, so a turned, moved or reloaded cart is never read through
             // a stale world-space queue place. One not serving (the player took the place) waits further along the
             // same side, away from the player.
+            var workAlong = CartStanceWorld.WorkAlong(vehicle);
             var playerAlong = playerPlace.HasValue ? CartStanceWorld.Along(vehicle, playerPlace.Value) : (double?)null;
-            var local = serves || idleIndex < 0 ? CartStance.Server(side) : CartStance.Waiting(side, idleIndex, playerAlong);
+            var local = serves || idleIndex < 0 ? CartStance.Server(side, along: workAlong) : CartStance.Waiting(side, idleIndex, playerAlong, along: workAlong);
             var wanted = CartStanceWorld.Point(vehicle, local);
             var radius = worker.Character.navmeshAgent.radius;
             bool Clear(Vector3 p) => occupied.All(other => Vector3.Distance(p, other) >= radius + 0.3f);
@@ -215,9 +216,9 @@ namespace FoodTrucks
             worker.CartRotation = vehicle.rotation;
             worker.Character.gameObject.SetActive(true);
             occupied.Add(position);
-            var facing = behind && CartStance.FacesAcross(CartStanceWorld.Along(vehicle, position))
+            var facing = behind && CartStance.FacesAcross(CartStanceWorld.Along(vehicle, position), workAlong)
                 ? CartStanceWorld.Facing(vehicle, side)
-                : CartStanceWorld.Point(vehicle, CartStance.Window(side, CartStance.WindowOut)) - position;
+                : CartStanceWorld.Point(vehicle, CartStance.Window(side, CartStance.WindowOut, workAlong)) - position;
             facing.y = 0f;
             worker.Character.ForceToPosition(position);
             worker.Character.ForceToRotation(Quaternion.LookRotation(facing));

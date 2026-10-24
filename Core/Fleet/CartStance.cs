@@ -7,12 +7,8 @@ namespace FoodTrucks.Core.Fleet
     // the world by the cart's live position and heading, so the answer is the same at any heading and follows the
     // cart wherever it is pushed, parked or loaded.
     //
-    // The cash register stands on the counter's front corner on the customers' side, facing them (CartAssets puts it
-    // at x 0.29, z 0.615 turned to +X, the right; on the left side it is mirrored). Whoever serves, an employee or the
-    // player, stands behind the cart straight across the counter from it, facing the customers, and the first
-    // customer stands at the same point along the cart on the other side. Before 0.10.7 the server stood at the
-    // body's middle (z 0) and the crew's side came from the world-space direction to the first customer's NavMesh
-    // place, so they stood 0.6 m back from the register and turned off the cart's axis by the place's snap.
+    // The server and first customer line up with the midpoint of the two fitted worktop spots. With fewer
+    // than two fitted pieces they use the counter centre. The register keeps its clear front-corner mount.
     public static class CartStance
     {
         // The register's place on the counter for a queue on the right, as CartAssets builds it (art/README.md).
@@ -20,14 +16,14 @@ namespace FoodTrucks.Core.Fleet
         public const double RegisterHeight = 0.95;
         public const double RegisterAlong = 0.615;
 
-        // The server's centre from the cart's centre line. Level with the register the root's box collider and
+        // The server's centre from the cart's centre line. The root's box collider and
         // NavMesh obstacle reach x 0.48 (the wheels, at z 0, reach 0.50), so a 0.3 m body radius is 0.07 m clear.
         public const double BehindMetres = 0.85;
 
         // The first customer's distance out from the cart's centre line (CartQueueView's cart window).
         public const double WindowOut = 1.05;
 
-        // A server found this close to the register's place along the cart faces straight across it; one further
+        // A server found this close to the working centre along the cart faces straight across it; one further
         // along (a fallback past an obstacle) faces the first customer instead, so they never face past the cart.
         public const double AcrossMetres = 0.35;
 
@@ -52,26 +48,32 @@ namespace FoodTrucks.Core.Fleet
         public static int DisplaySide(bool open, int? queueSide, int previous) =>
             open ? Side(queueSide ?? previous) : 1;
 
+        public const double CounterAlong = 0.0;
+
+        // Only the two general worktop spots count; the dedicated fridge is below the counter.
+        public static double WorkAlong(double? fittedFront, double? fittedRear) =>
+            fittedFront.HasValue && fittedRear.HasValue ? (fittedFront.Value + fittedRear.Value) / 2.0 : CounterAlong;
+
         // The server's place in the cart's frame, `behind` metres out on the side away from the customers.
-        public static (double X, double Z) Server(int side, double behind = BehindMetres)
+        public static (double X, double Z) Server(int side, double behind = BehindMetres, double along = CounterAlong)
         {
             if (double.IsNaN(behind) || behind <= 0) throw new ArgumentOutOfRangeException(nameof(behind));
-            return (-Side(side) * behind, RegisterAlong);
+            return (-Side(side) * behind, along);
         }
 
         // The first customer's place in the cart's frame, `outMetres` out on the customers' side.
-        public static (double X, double Z) Window(int side, double outMetres) => (Side(side) * outMetres, RegisterAlong);
+        public static (double X, double Z) Window(int side, double outMetres, double along = CounterAlong) => (Side(side) * outMetres, along);
 
         // Whether a server standing at `along` (z in the cart's frame) faces straight across the cart.
-        public static bool FacesAcross(double along) => Math.Abs(along - RegisterAlong) <= AcrossMetres;
+        public static bool FacesAcross(double along, double centre = CounterAlong) => Math.Abs(along - centre) <= AcrossMetres;
 
         // A crew member who waits while the player serves: on the server's side of the cart, `index` + 1 steps along
         // from the server's place, towards the rear unless the player stands further back than the server (at a
         // fallback by the rear end), then towards the front. playerAlong is the player's z in the cart's frame.
-        public static (double X, double Z) Waiting(int side, int index, double? playerAlong, double behind = BehindMetres)
+        public static (double X, double Z) Waiting(int side, int index, double? playerAlong, double behind = BehindMetres, double along = CounterAlong)
         {
             if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
-            var server = Server(side, behind);
+            var server = Server(side, behind, along);
             var direction = playerAlong.HasValue && playerAlong.Value < server.Z - 0.01 ? 1 : -1;
             return (server.X, server.Z + direction * WaitSpacing * (index + 1));
         }

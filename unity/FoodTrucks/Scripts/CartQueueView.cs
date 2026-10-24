@@ -346,7 +346,7 @@ namespace FoodTrucks
         // the middle) is 2 m from the end of the body rather than 3.8 m, so most of it stands along open pavement. Each
         // place is checked where the NavMesh put it (within 0.2 m of the wanted point, still 2.0 m out at least, 0.9 m
         // or more from the one before), so the clearance and spacing hold as built.
-        private static readonly WindowShape Cart = new WindowShape((float)CartStance.WindowOut, (float)CartStance.WindowOut, (float)CartStance.RegisterAlong, new[] { 1, -1 }, spacing: 0.8f, preferBack: false,
+        private static readonly WindowShape Cart = new WindowShape((float)CartStance.WindowOut, (float)CartStance.WindowOut, (float)CartStance.CounterAlong, new[] { 1, -1 }, spacing: 0.8f, preferBack: false,
             tolerance: 0.45f, strict: false, outward: true);
         private static readonly WindowShape Truck = new WindowShape(2.00f, 3.40f, -1.10f, new[] { 1 }, spacing: 1.0f, preferBack: true,
             tolerance: 0.2f, strict: true, outward: false);
@@ -447,18 +447,20 @@ namespace FoodTrucks
             Log.Info($"Queue view: line at {KindOf(vehicleId)} {vehicleId}: {detail}.");
             return new QueueLine(vehicleId, root, places, look, ends, service, lanes)
             {
-                Side = side, laidAt = cart.position, laidRotation = cart.rotation, checksMoves = shape == WindowShape.For("cart"),
+                Side = side, laidAt = cart.position, laidRotation = cart.rotation, checksMoves = shape == WindowShape.For("cart"), laidAlong = shape == WindowShape.For("cart") ? CartStanceWorld.WorkAlong(cart) : 0,
             };
         }
 
         // Only a cart's line: a truck only moves by being driven, which retires its line already, and its body may
         // settle on its suspension after parking.
         public bool MovedFrom(Transform cart) => checksMoves &&
-            (Vector3.Distance(cart.position, laidAt) > MovedMetres || Quaternion.Angle(cart.rotation, laidRotation) > TurnedDegrees);
+            (Vector3.Distance(cart.position, laidAt) > MovedMetres || Quaternion.Angle(cart.rotation, laidRotation) > TurnedDegrees ||
+             Math.Abs(CartStanceWorld.WorkAlong(cart) - laidAlong) > 0.01);
 
         private Vector3 laidAt;
         private Quaternion laidRotation;
         private bool checksMoves;
+        private double laidAlong;
 
         private void ReleaseServed()
         {
@@ -740,7 +742,8 @@ namespace FoodTrucks
         {
             var forward = Direction(cart.forward);
             var right = Direction(cart.right);
-            var center = cart.position + forward * shape.Along;
+            var workAlong = shape == WindowShape.For("cart") ? CartStanceWorld.WorkAlong(cart) : shape.Along;
+            var center = cart.position + forward * (float)workAlong;
             var filter = QueuePerson.PedestrianFilter;
             var rejected = new Rejections();
             // The NPC mesh is the positive pedestrian-ground test. Lane/parking/bridge checks remain extra exclusions,
@@ -752,7 +755,7 @@ namespace FoodTrucks
             var sides = shape.Sides.Where(side =>
             {
                 if (shape != WindowShape.For("cart") || CartGroundPlacement.Find(cart, side, 0.3f,
-                    CartStance.Server(side), filter, lanes, _ => true, out _, out _, out _)) return true;
+                    CartStance.Server(side, along: workAlong), filter, lanes, _ => true, out _, out _, out _)) return true;
                 rejected.Add("no pavement behind counter");
                 return false;
             }).ToArray();
