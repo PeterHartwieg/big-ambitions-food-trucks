@@ -6,6 +6,20 @@ A mod that adds street food to Big Ambitions: push a cart or drive a truck to a 
 
 Demand depends on the spot, time, nearby businesses, weather and season. Equipment determines both the menu and food capacity; crews use the game's employees and payroll. Street food has its own save data, income and expense breakdown, and income-tax integration. Balance is calculated and still subject to playtesting; the latest study is [docs/balance/balance-pass-2026-10-14.md](docs/balance/balance-pass-2026-10-14.md).
 
+## Big Copilot integration
+
+The optional `FoodTrucks.BigCopilotSnapshot` API supplies `CaptureV1(GameInstance)`
+and `IsCrewV1(GameInstance, string)` to Big Copilot Link by reflection. Both run on
+the main thread and require this session's readable, writable save state.
+Capture serializes current mod records without firing save events, paying held
+takings, changing the game's mod-data dictionary or incrementing the save counter.
+An unavailable session returns no snapshot; crew queries then fail closed in the link.
+This is read-only and does not change the Street Food save schema.
+
+Validation: compiled in the official Unity SDK. The companion link has a synthetic
+snapshot/crew test harness. In-game refresh and reassignment checks are **pending**;
+this integration has not been published.
+
 ## Installing a development build
 
 There is no published Workshop release yet. Build from this repository using [Building](#building), or use a complete development package supplied for testing. With the game closed, place the entire `FoodTrucks` package folder in the game's `ModsLocal` folder, preserving its asset bundles, data, locales and dependencies. A source checkout or the DLL alone is not an installable package. Restart the game after installing or replacing it. To remove it from saves, follow [Removing the mod](#removing-the-mod) first.
