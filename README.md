@@ -2,7 +2,7 @@
 
 Start with a food cart and grow into a fleet of food trucks. Choose your equipment and menu, find customers around the city, work the serving window yourself or send a crew along a weekly route.
 
-**Version 0.10.7, 24 October 2026.** Includes the 0.10.6 drinks-fridge and truck-branding update. Cart workers stand behind the counter at the cash register. Equipment controls and fridge doors face the worker on either queue side; the register faces customers. Safe pavement behind the counter is required for service and queue layout: no end-of-cart fallback. First-customer navigation snap stays within 0.1 m of the register line. Food trucks are unchanged. Earlier kerb/CW1/CW2 evidence predates this equipment-facing correction; the new native verification is pending. See [the orientation rule](docs/release/0.10.7/grill-facing.md).
+**Version 0.10.7, 24 October 2026.** Includes the 0.10.6 drinks-fridge and truck-branding update. Cart workers stand behind the counter at the cash register. Equipment controls and fridge doors face the worker on either queue side; the register faces customers. Safe pavement behind the counter is required for service and queue layout: no end-of-cart fallback. First-customer navigation snap stays within 0.1 m of the register line. Food trucks are unchanged. Windows checks passed at the perpendicular kerb edge (no unsafe queue/service), CW1 right/180° and CW2 left/37°, with native worker/customer close-ups confirming the controls. See [the orientation rule](docs/release/0.10.7/grill-facing.md).
 
 Bugs and balance changes are still possible. We recommend a new save or a backup of your existing save before enabling the mod. Read the removal instructions before unsubscribing.
 
