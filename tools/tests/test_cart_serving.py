@@ -14,12 +14,13 @@ class CartServingTests(unittest.TestCase):
             root = Path(folder)
             major = subprocess.check_output(['dotnet', '--version'], text=True).split('.')[0]
             source = escape(str(ROOT / 'unity/FoodTrucks/Scripts/CartServing.cs'))
+            ground = escape(str(ROOT / 'unity/FoodTrucks/Scripts/CartGroundPlacement.cs'))
             stance = escape(str(ROOT / 'Core/Fleet/CartStance.cs'))
             world = escape(str(ROOT / 'unity/FoodTrucks/Scripts/CartStanceWorld.cs'))
             (root / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>
 <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><NuGetAudit>false</NuGetAudit></PropertyGroup>
-<ItemGroup><Compile Include="{source}" Link="CartServing.cs" /><Compile Include="{stance}" Link="CartStance.cs" /><Compile Include="{world}" Link="CartStanceWorld.cs" /></ItemGroup></Project>''')
+<ItemGroup><Compile Include="{source}" Link="CartServing.cs" /><Compile Include="{ground}" Link="CartGroundPlacement.cs" /><Compile Include="{stance}" Link="CartStance.cs" /><Compile Include="{world}" Link="CartStanceWorld.cs" /></ItemGroup></Project>''')
             (root / 'Program.cs').write_text(HARNESS)
             built = subprocess.run(['dotnet', 'build', str(root / 'Harness.csproj'), '--nologo', '-v:q',
                                     '-m:1', '-nr:false', '-p:UseSharedCompilation=false'],

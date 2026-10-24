@@ -2,7 +2,7 @@
 
 Start with a food cart and grow into a fleet of food trucks. Choose your equipment and menu, find customers around the city, work the serving window yourself or send a crew along a weekly route.
 
-**Version 0.10.7, 24 October 2026.** Includes the 0.10.6 drinks-fridge and truck-branding update. Cart workers now stand behind the cart at the cash register, with the register and first customer aligned on either queue side. Checked by Core and adapter tests; pending in game (`CHECKS.md`, CW1–CW6).
+**Version 0.10.7, 24 October 2026.** Includes the 0.10.6 drinks-fridge and truck-branding update. Cart workers now stand behind the cart at the cash register, with the register and first customer aligned on either queue side. CW1–CW6 were checked on the Windows rig before this follow-up. Cart employees now share the player’s pedestrian-ground and street-exclusion checks, use a safe fallback beside the cart, or stay unseen when none exists. Queue-side display changes apply immediately and the first customer’s NavMesh snap stays within 0.1 m of the register line. The follow-up kerb/CW1/CW2 native checks are pending; see `CHECKS.md`.
 
 Bugs and balance changes are still possible. We recommend a new save or a backup of your existing save before enabling the mod. Read the removal instructions before unsubscribing.
 

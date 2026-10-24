@@ -74,6 +74,10 @@ namespace FoodTrucks
             public string EmployeeId { get; }
             public GameObject Owner { get; }
             public ThirdPersonCharacter Character { get; }
+            public Vector3? CartPlace;
+            public Vector3 CartWanted;
+            public Vector3 CartOrigin;
+            public Quaternion CartRotation;
         }
 
         private static readonly Dictionary<string, List<Worker>> workers = new Dictionary<string, List<Worker>>();
@@ -106,6 +110,9 @@ namespace FoodTrucks
                 var atWindow = order.Count(Serves);
                 var places = TruckPlaces(atWindow, TruckWindow.PlayerAt(vehicleId));
                 var playerAtCart = kind != "truck" && CartSelling.PlayerAtServingSpot(vehicleId);
+                var occupied = new List<Vector3>();
+                if (playerAtCart) occupied.Add(PlayerHelper.GetPosition());
+                var lanes = kind == "truck" ? null : TrafficLanes.Near(vehicle.position, 30f);
                 var idle = 0;
                 for (var i = 0; i < order.Count; i++)
                 {
@@ -113,7 +120,8 @@ namespace FoodTrucks
                     // A more skilled cart worker can still serve while the player is here (Core's team rule),
                     // but must stand beside them rather than share the player's middle place.
                     Stand(order[i], vehicle, kind, side, place, playerAtCart ? i : place.HasValue ? -1 : idle++,
-                        i < atWindow && !playerAtCart, playerAtCart ? PlayerHelper.GetPosition() : (Vector3?)null);
+                        i < atWindow && !playerAtCart, playerAtCart ? PlayerHelper.GetPosition() : (Vector3?)null,
+                        lanes, occupied);
                 }
                 if (shown.Count == 0) workers.Remove(vehicleId);
             }
@@ -168,7 +176,7 @@ namespace FoodTrucks
 
         // along: the place at the hatch; null with idleIndex for one waiting inside the truck.
         private static void Stand(Worker worker, Transform vehicle, string kind, int side, double? along, int idleIndex, bool serves,
-            Vector3? playerPlace)
+            Vector3? playerPlace, TrafficLanes? lanes, List<Vector3> occupied)
         {
             if (kind == "truck")
             {
@@ -182,8 +190,37 @@ namespace FoodTrucks
             // same side, away from the player.
             var playerAlong = playerPlace.HasValue ? CartStanceWorld.Along(vehicle, playerPlace.Value) : (double?)null;
             var local = serves || idleIndex < 0 ? CartStance.Server(side) : CartStance.Waiting(side, idleIndex, playerAlong);
-            worker.Character.ForceToPosition(CartStanceWorld.Point(vehicle, local));
-            worker.Character.ForceToRotation(Quaternion.LookRotation(CartStanceWorld.Facing(vehicle, side)));
+            var wanted = CartStanceWorld.Point(vehicle, local);
+            var radius = worker.Character.navmeshAgent.radius;
+            bool Clear(Vector3 p) => occupied.All(other => Vector3.Distance(p, other) >= radius + 0.3f);
+            // Reuse a safe fallback while parked instead of running the bounded grid search four times a second.
+            // Recheck ground/street and occupied places even when the cart and desired place have not changed.
+            var cached = worker.CartPlace.HasValue &&
+                (worker.CartWanted - wanted).sqrMagnitude < 0.0001f &&
+                (worker.CartOrigin - vehicle.position).sqrMagnitude < 0.0001f &&
+                Quaternion.Angle(worker.CartRotation, vehicle.rotation) < 0.01f &&
+                Clear(worker.CartPlace.Value) && CartGroundPlacement.IsSafe(worker.CartPlace.Value, lanes!);
+            var position = worker.CartPlace ?? wanted;
+            var behind = Vector3.Dot(vehicle.position - position, CartStanceWorld.Facing(vehicle, side)) >= 0.5f + radius - 0.01f;
+            if (!cached && !CartGroundPlacement.Find(vehicle, side, radius, local,
+                Extensions.NavMeshHelper.NpcNavMeshFilter, lanes!, Clear, out position, out _, out behind))
+            {
+                worker.CartPlace = null;
+                worker.Character.gameObject.SetActive(false);
+                return; // Never show a crew member at an unchecked point when no safe fallback exists.
+            }
+            worker.CartPlace = position;
+            worker.CartWanted = wanted;
+            worker.CartOrigin = vehicle.position;
+            worker.CartRotation = vehicle.rotation;
+            worker.Character.gameObject.SetActive(true);
+            occupied.Add(position);
+            var facing = behind && CartStance.FacesAcross(CartStanceWorld.Along(vehicle, position))
+                ? CartStanceWorld.Facing(vehicle, side)
+                : CartStanceWorld.Point(vehicle, CartStance.Window(side, CartStance.WindowOut)) - position;
+            facing.y = 0f;
+            worker.Character.ForceToPosition(position);
+            worker.Character.ForceToRotation(Quaternion.LookRotation(facing));
         }
 
         private static int Seed(string id)

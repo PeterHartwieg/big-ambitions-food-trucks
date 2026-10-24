@@ -43,6 +43,10 @@ namespace FoodTrucks.Core.Fleet
         public static (double X, double Y, double Z, double Yaw) Register(int side) =>
             (Side(side) * RegisterAcross, RegisterHeight, RegisterAlong, Side(side) * 90.0);
 
+        // An open cart retains its chosen customer side while its queue is temporarily out of view.
+        public static int DisplaySide(bool open, int? queueSide, int previous) =>
+            open ? Side(queueSide ?? previous) : 1;
+
         // The server's place in the cart's frame, `behind` metres out on the side away from the customers.
         public static (double X, double Z) Server(int side, double behind = BehindMetres)
         {

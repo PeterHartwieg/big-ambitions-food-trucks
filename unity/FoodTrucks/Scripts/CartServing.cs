@@ -19,9 +19,6 @@ namespace FoodTrucks
     // worked out in the cart's frame and carried into the world by its live transform, as WindowCrew does for the crew.
     internal sealed class CartServing
     {
-        private const float HalfLength = 0.77f; // body/handle extents, art/README.md; leave the player's radius beyond them
-        private const float FallbackMetres = 3f;
-        private const float SampleStep = 0.25f;
         private PlayerController? player;
         private VehicleController? cart;
         private string? vehicleId;
@@ -111,69 +108,10 @@ namespace FoodTrucks
         internal static bool ServingPoint(Transform cart, int side, float radius, Vector3 start,
             NavMeshQueryFilter filter, TrafficLanes lanes, out Vector3 spot, out string placement, out bool behindCart)
         {
-            var center = cart.position;
-            var outward = CartStanceWorld.Facing(cart, side);
-            var forward = CartStanceWorld.Forward(cart);
-            var path = new NavMeshPath(); // reused for exact samples and every fallback, on all three sides
-            bool Safe(Vector3 p) =>
-                // The two meshes are separate bakes whose heights rarely agree to the centimetre, so the queue's own
-                // PlaceAt tolerances apply: no more than 0.1 m sideways (no snapping from road to nearby pavement).
-                NavMesh.SamplePosition(p, out var pedestrian, 0.5f, Extensions.NavMeshHelper.NpcNavMeshFilter) &&
-                (p.x - pedestrian.position.x) * (p.x - pedestrian.position.x) + (p.z - pedestrian.position.z) * (p.z - pedestrian.position.z) <= 0.01f &&
-                Mathf.Abs(p.y - pedestrian.position.y) <= 0.3f &&
-                QueueLine.OnStreet(p, lanes) == null &&
-                NavMesh.CalculatePath(start, p, filter, path) && path.status == NavMeshPathStatus.PathComplete;
-
-            bool Search(Vector3 wanted, Func<Vector3, bool> geometry, out Vector3 found, out bool fallback)
-            {
-                bool Valid(Vector3 p) => geometry(p) && Mathf.Abs(p.y - center.y) <= 0.5f &&
-                    Vector3.Distance(p, wanted) <= FallbackMetres && Safe(p);
-                if (NavMesh.SamplePosition(wanted, out var exact, 0.1f, filter) && Valid(exact.position))
-                {
-                    found = exact.position;
-                    fallback = false;
-                    return true;
-                }
-                Vector3? best = null;
-                if (NavMesh.SamplePosition(wanted, out var nearest, FallbackMetres, filter) && Valid(nearest.position)) best = nearest.position;
-                for (var across = -FallbackMetres; across <= FallbackMetres; across += SampleStep)
-                for (var along = -FallbackMetres; along <= FallbackMetres; along += SampleStep)
-                {
-                    var probe = wanted + outward * across + forward * along;
-                    if (!NavMesh.SamplePosition(probe, out var hit, SampleStep, filter)) continue;
-                    // CalculatePath is synchronous: only prove candidates that could improve the nearest safe result.
-                    if (best.HasValue && (hit.position - wanted).sqrMagnitude >= (best.Value - wanted).sqrMagnitude) continue;
-                    if (Valid(hit.position)) best = hit.position;
-                }
-                found = best ?? wanted;
-                fallback = true;
-                return best.HasValue;
-            }
-
-            // The body/wheels extend 0.50 m sideways. Keep the player's radius clear of the hull on each side.
-            var clearance = 0.50f + radius;
-            var behind = CartStanceWorld.Point(cart, CartStance.Server(side, Mathf.Max((float)CartStance.BehindMetres, clearance)));
-            behindCart = true;
-            if (Search(behind, p => Vector3.Dot(center - p, outward) >= clearance - 0.01f, out spot, out var usedFallback))
-            {
-                placement = usedFallback ? "at a fallback behind the cart, opposite the queue" : "behind the cart at the register, opposite the queue";
-                return true;
-            }
-            behindCart = false;
-            var endClearance = HalfLength + radius;
-            foreach (var direction in new[] { 1, -1 })
-            {
-                var end = center + forward * (direction * endClearance);
-                bool AtEnd(Vector3 p) => Vector3.Dot(p - center, forward) * direction >= endClearance - 0.01f &&
-                    Vector3.Dot(p - center, outward) >= -0.01f &&
-                    Vector3.Dot(p - center, outward) <= Mathf.Max((float)CartStance.BehindMetres, clearance);
-                if (!Search(end, AtEnd, out spot, out usedFallback)) continue;
-                placement = $"at the {(direction > 0 ? "front" : "rear")} end beside the window" + (usedFallback ? " (fallback)" : "");
-                return true;
-            }
-            spot = start;
-            placement = "left where they stand";
-            return false;
+            var path = new NavMeshPath();
+            return CartGroundPlacement.Find(cart, side, radius, CartStance.Server(side), filter, lanes,
+                p => NavMesh.CalculatePath(start, p, filter, path) && path.status == NavMeshPathStatus.PathComplete,
+                out spot, out placement, out behindCart);
         }
 
         // PlayerController emits this for both click/SetGoal navigation and WASD starting. Release without

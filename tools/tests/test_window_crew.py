@@ -7,7 +7,7 @@ from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCES = ['unity/FoodTrucks/Scripts/WindowCrew.cs', 'unity/FoodTrucks/Scripts/CartStanceWorld.cs',
-           'Core/Fleet/CartStance.cs', 'Core/Fleet/WindowPlaces.cs']
+           'Core/Fleet/CartStance.cs', 'Core/Fleet/WindowPlaces.cs', 'unity/FoodTrucks/Scripts/CartGroundPlacement.cs']
 
 
 class WindowCrewTests(unittest.TestCase):
@@ -35,6 +35,7 @@ class WindowCrewTests(unittest.TestCase):
 # right (cos, 0, -sin), forward (sin, 0, cos), TransformPoint = position + right*x + up*y + forward*z.
 HARNESS = r'''
 using UnityEngine;
+using UnityEngine.AI;
 using Entities;
 using Helpers;
 using FoodTrucks;
@@ -66,12 +67,29 @@ namespace UnityEngine {
         public static float Distance(Vector3 a,Vector3 b) => MathF.Sqrt((a-b).sqrMagnitude);
         public override string ToString() => $"({x:F3}, {y:F3}, {z:F3})";
     }
+    public static class Mathf { public static float Max(float a,float b)=>MathF.Max(a,b); public static float Abs(float v)=>MathF.Abs(v); }
     public struct Quaternion {
         public float Yaw;
         public static Quaternion LookRotation(Vector3 facing) => new() { Yaw=MathF.Atan2(facing.x,facing.z) };
         public static float Angle(Quaternion a,Quaternion b) => MathF.Abs(MathF.IEEERemainder(a.Yaw-b.Yaw,2*MathF.PI))*180/MathF.PI;
     }
 }
+namespace UnityEngine.AI {
+    public struct NavMeshQueryFilter { public int agentTypeID, areaMask; }
+    public struct NavMeshHit { public Vector3 position; }
+    public class NavMeshAgent { public float radius=.3f; }
+    public static class NavMesh {
+        public static Func<Vector3,float,Vector3?> Ground=(p,r)=>p;
+        public static int Samples;
+        public static bool SamplePosition(Vector3 p,out NavMeshHit hit,float radius,NavMeshQueryFilter filter) {
+            if(filter.agentTypeID!=0 || filter.areaMask!=-1) throw new Exception("crew must use NPC mesh");
+            Samples++; var result=Ground(p,radius); hit=new() { position=result??default }; return result.HasValue;
+        }
+    }
+}
+namespace Extensions { public static class NavMeshHelper {
+    public static NavMeshQueryFilter NpcNavMeshFilter=>new() { agentTypeID=0,areaMask=-1 };
+} }
 namespace Entities {
     public class CharacterData { public List<object>? elements; public int gender; public int ageInDays; }
     public class EmployeeInstance { public string id=""; public CharacterData? characterData; }
@@ -82,8 +100,9 @@ public class AppearanceSetter {
 }
 public class ThirdPersonCharacter {
     public GameObject gameObject=new("character"); public bool isPlayer=true; public AppearanceSetter appearanceSetter=new();
-    public Vector3 Position; public Quaternion Rotation;
-    public void ForceToPosition(Vector3 p) => Position=p;
+    public NavMeshAgent navmeshAgent=new();
+    public Vector3 Position; public Quaternion Rotation; public int Placements;
+    public void ForceToPosition(Vector3 p) { Position=p; Placements++; }
     public void ForceToRotation(Quaternion q) => Rotation=q;
 }
 namespace Helpers {
@@ -96,6 +115,11 @@ namespace Helpers {
     public static class PlayerHelper { public static Vector3 Position; public static Vector3 GetPosition() => Position; }
 }
 namespace FoodTrucks {
+    public class TrafficLanes { public static TrafficLanes Near(Vector3 p,float radius)=>new(); }
+    public static class QueueLine {
+        public static Func<Vector3,string?> Street=p=>null;
+        public static string? OnStreet(Vector3 p,TrafficLanes lanes)=>Street(p);
+    }
     public static class HireCrew { public static string Name(EmployeeInstance e) => e.id; }
     public static class TruckWindow { public static bool Player; public static bool PlayerAt(string id) => Player; }
     public static class CartSelling { public static bool Player; public static bool PlayerAtServingSpot(string id) => Player; }
@@ -158,6 +182,68 @@ class Harness {
             Check(Quaternion.Angle(w.Rotation,Quaternion.LookRotation(t.right))<.01f,"truck crew face the hatch");
         }
         CartSelling.Player=false;
+        // Kerb-perpendicular reproduction: NPC mesh extends into the parking lane; RoadBelow alone
+        // would miss it. Serving and waiting crew must reject every native street exclusion on both sides.
+        foreach(var side in new[]{1,-1}) foreach(var reason in new[]{"parking lane","Roads layer","traffic lane / roadside strip","Crosswalk trigger"}) {
+            var c=Cart(MathF.PI/2); c.position=new(42,.01f,82);
+            var unsafeSpot=Behind(c,side); var safe=unsafeSpot-c.forward*.9f;
+            NavMesh.Ground=(p,r)=>new[]{unsafeSpot,safe}.Where(x=>Vector3.Distance(p,x)<=r)
+                .OrderBy(x=>(x-p).sqrMagnitude).Cast<Vector3?>().FirstOrDefault();
+            QueueLine.Street=p=>Vector3.Distance(p,unsafeSpot)<.1f ? reason : null;
+            var w=Show("cart",c,"cart",side,1,1);
+            Near(w.Position,safe,"crew takes checked fallback off "+reason);
+            Check(w.gameObject.active,"safe fallback shown");
+            // A parked fallback is reused, but its safety is rechecked before every forced placement.
+            NavMesh.Samples=0;
+            WindowCrew.Sync("cart",c,"cart",side,new[]{new EmployeeInstance { id="e0" }});
+            Check(NavMesh.Samples==1,"cached fallback only rechecks pedestrian ground");
+            QueueLine.Street=p=>reason;
+            var placements=w.Placements;
+            WindowCrew.Sync("cart",c,"cart",side,new[]{new EmployeeInstance { id="e0" }});
+            Check(!w.gameObject.active && w.Placements==placements,"hide if no safe ground, never force onto street");
+            QueueLine.Street=p=>null; NavMesh.Ground=(p,r)=>p;
+            WindowCrew.Sync("cart",c,"cart",side,new[]{new EmployeeInstance { id="e0" }});
+            Near(w.Position,unsafeSpot,"restore exact stance when safe again");
+            Check(w.gameObject.active,"crew reappears when safe");
+        }
+        // If the opposite side has no safe pavement, either end can be the employee's fallback.
+        foreach(var direction in new[]{1,-1}) {
+            var c=Cart(.8f); var safe=c.position+c.forward*(direction*1.2f)+c.right*.2f;
+            NavMesh.Ground=(p,r)=>Vector3.Distance(p,safe)<=r ? safe : null;
+            var w=Show("cart",c,"cart",1,1,1);
+            Check(w.gameObject.active,"end fallback visible");Near(w.Position,safe,"safe end fallback");
+            var window=c.position+c.right*1.05f+c.forward*.615f;
+            Check(Quaternion.Angle(w.Rotation,Quaternion.LookRotation(window-safe))<.01f,"end fallback faces window");
+        }
+        // A waiting employee gets the same safety checks while the player is at the register.
+        {
+            var c=Cart(1.2f); CartSelling.Player=true; PlayerHelper.Position=Behind(c,1);
+            var unsafeWait=Behind(c,1)-c.forward*.9f; var safe=unsafeWait-c.forward*.9f;
+            NavMesh.Ground=(p,r)=>new[]{unsafeWait,safe}.Where(x=>Vector3.Distance(p,x)<=r)
+                .OrderBy(x=>(x-p).sqrMagnitude).Cast<Vector3?>().FirstOrDefault();
+            QueueLine.Street=p=>Vector3.Distance(p,unsafeWait)<.1f ? "parking lane" : null;
+            var w=Show("cart",c,"cart",1,1,1);Near(w.Position,safe,"waiting crew stays off parking lane");
+            CartSelling.Player=false;QueueLine.Street=p=>null;NavMesh.Ground=(p,r)=>p;
+        }
+        // A single safe fallback cannot be shared with the player or another visible worker.
+        {
+            var c=Cart(.4f); var safe=Behind(c,1); var people=new[]{new EmployeeInstance { id="e0" },new EmployeeInstance { id="e1" }};
+            NavMesh.Ground=(p,r)=>Vector3.Distance(p,safe)<=r ? safe : null;
+            WindowCrew.Reset(); PrefabHelper.Made.Clear();
+            WindowCrew.Sync("cart",c,"cart",1,people);
+            Check(PrefabHelper.Made[0].gameObject.active && !PrefabHelper.Made[1].gameObject.active,"no two workers in one fallback");
+            CartSelling.Player=true; PlayerHelper.Position=safe;
+            WindowCrew.Sync("cart",c,"cart",1,people);
+            Check(PrefabHelper.Made.All(w=>!w.gameObject.active),"no crew on the player's only safe point");
+            CartSelling.Player=false; NavMesh.Ground=(p,r)=>p;
+        }
+        // No positive pedestrian ground, a snap from road to pavement, or a different floor: no visible crew.
+        foreach(var mode in new[]{"missing","sideways","floor"}) {
+            NavMesh.Ground=(p,r)=>mode=="missing" ? null : p+(mode=="sideways" ? new Vector3(.2f,0,0) : new Vector3(0,1,0));
+            var w=Show("cart",Cart(0),"cart",1,1,1);
+            Check(!w.gameObject.active && w.Placements==0,"reject "+mode+" ground");
+        }
+        NavMesh.Ground=(p,r)=>p;
         Console.WriteLine("PASS: window crew at the cart register and the truck hatch");
     }
 }

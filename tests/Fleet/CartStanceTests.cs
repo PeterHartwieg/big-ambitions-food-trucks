@@ -37,6 +37,16 @@ public class CartStanceTests
     private static double Dot((double X, double Z) a, (double X, double Z) b) => a.X * b.X + a.Z * b.Z;
     private static (double X, double Z) Minus((double X, double Z) a, (double X, double Z) b) => (a.X - b.X, a.Z - b.Z);
 
+    [Theory]
+    [InlineData(true, -1, 1, -1)]
+    [InlineData(true, 1, -1, 1)]
+    [InlineData(true, null, -1, -1)]
+    [InlineData(true, null, 1, 1)]
+    [InlineData(false, -1, -1, 1)]
+    [InlineData(false, null, -1, 1)]
+    public void DisplaysFollowQueueAndRetainSideWhileOpenWithoutLine(bool open, int? queue, int previous, int expected) =>
+        Assert.Equal(expected, CartStance.DisplaySide(open, queue, previous));
+
     [Fact]
     public void UnturnedCartWithTheQueueOnTheRight()
     {

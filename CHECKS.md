@@ -121,6 +121,7 @@ Pending in game. Peter's report of 24 October 2026: the employee or player worki
 | CW4 | Close, open on foot yourself with the employee off shift; then with the employee on shift | You are placed behind the cart at the register (log `behind the cart at the register`), facing the customers. With crew on shift they wait further along the same side, not overlapping you |
 | CW5 | While open, save, quit to the menu, load the save, walk back to the cart | The employee is back at the register, facing the customers; no stale queue (log may show `moved or turned since its line was laid out` once if the cart settled) |
 | CW6 | Open and work a food truck with crew | The crew and player stand inside behind the hatch exactly as before |
+| CW7 | Park a legal cart perpendicular to the kerb at x=42, z=82, heading 90°, with an employee on shift; compare player service, then repeat 0.9 m inland | Every visible employee and the player stand on pedestrian ground, outside parking lanes and road/roadside exclusions. At the edge they use safe fallbacks; no safe point means the employee stays unseen. Clear inland placement remains straight across from the register |
 
 # Cart serving stance (next build)
 
