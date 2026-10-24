@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
 using Helpers;
 using Parking.UndergroundParking;
@@ -14,12 +15,10 @@ namespace FoodTrucks
     // walkable ground: keep the live player agent/collider and let the game's next navigation command release
     // the stance. Never use ThirdPersonCharacter.ForceToPosition for the player: it leaves physics kinematic
     // and the agent's updatePosition/updateRotation off (1.0). No attachment or navigation blocker is needed.
+    // The place is Core's CartStance: behind the cart at the fitted equipment midpoint, facing the customers,
+    // worked out in the cart's frame and carried into the world by its live transform, as WindowCrew does for the crew.
     internal sealed class CartServing
     {
-        private const float BehindMetres = 0.85f; // same side/clearance as the cart's WindowCrew
-        private const float HalfLength = 0.77f; // body/handle extents, art/README.md; leave the player's radius beyond them
-        private const float FallbackMetres = 3f;
-        private const float SampleStep = 0.25f;
         private PlayerController? player;
         private VehicleController? cart;
         private string? vehicleId;
@@ -27,6 +26,7 @@ namespace FoodTrucks
         private Quaternion rotation;
         private Vector3 cartPosition;
         private Quaternion cartRotation;
+        private double workAlong;
 
         internal string? VehicleId => vehicleId;
 
@@ -57,23 +57,21 @@ namespace FoodTrucks
                 return;
             }
             var window = CartQueueView.PrepareServing(controller);
-            var side = window?.Side ?? 1;
+            var side = CartStance.Side(window?.Side ?? 1);
             if (window == null) Log.Info($"Cart serving: {id}: no visible queue side; using the cart's right window side.");
-            var outward = controller.transform.right * side;
-            outward.y = 0f;
-            outward.Normalize();
-            var forward = controller.transform.forward;
-            forward.y = 0f;
-            forward.Normalize();
             var filter = new NavMeshQueryFilter { agentTypeID = agent.agentTypeID, areaMask = agent.areaMask };
             var lanes = TrafficLanes.Near(controller.transform.position, 30f);
-            if (!ServingPoint(controller.transform.position, outward, forward, agent.radius, who.transform.position,
-                filter, lanes, out var spot, out var placement))
+            if (!ServingPoint(controller.transform, side, agent.radius, who.transform.position,
+                filter, lanes, out var spot, out var placement, out var behindCart))
             {
-                Log.Info($"Cart serving: {id}: no safe reachable serving point behind the cart or at either end; player left where they stand.");
+                Log.Info($"Cart serving: {id}: no safe reachable serving point behind the counter; player left where they stand.");
                 return;
             }
-            var look = window?.Window ?? controller.transform.position + outward;
+            // Face across the working centre towards the customers.
+            var centre = CartStanceWorld.WorkAlong(controller.transform);
+            var look = behindCart && CartStance.FacesAcross(CartStanceWorld.Along(controller.transform, spot), centre)
+                ? spot + CartStanceWorld.Facing(controller.transform, side)
+                : window?.Window ?? CartStanceWorld.Point(controller.transform, CartStance.Window(side, CartStance.WindowOut, centre));
             var facing = look - spot;
             facing.y = 0f;
             var turn = Quaternion.LookRotation(facing);
@@ -97,6 +95,7 @@ namespace FoodTrucks
             rotation = turn;
             cartPosition = controller.transform.position;
             cartRotation = controller.transform.rotation;
+            workAlong = centre;
             who.Character.velocity = Vector3.zero;
             agent.velocity = Vector3.zero;
             who.PlayerChangedNavigation.AddListener(OnNavigation);
@@ -104,70 +103,17 @@ namespace FoodTrucks
             Log.Info($"Cart serving: {id}: player placed {placement} at {spot}, queue on the {(side > 0 ? "right" : "left")}, facing the window at {look}; pedestrian ground, off street, complete player path (agent {filter.agentTypeID}); idle stance held until walking or closing.");
         }
 
-        // Prefer the opposite side, then the front and rear ends beside the window. A kerbside cart's opposite
-        // side can be the road: player-mesh membership alone is not evidence of pavement. Every result must also
-        // be on the NPC mesh, pass the queue's street exclusions and have a complete path from the live player.
-        internal static bool ServingPoint(Vector3 center, Vector3 outward, Vector3 forward, float radius, Vector3 start,
-            NavMeshQueryFilter filter, TrafficLanes lanes, out Vector3 spot, out string placement)
+        // Stand opposite the customers at the working centre. A
+        // kerbside cart's opposite side can be the road: player-mesh membership alone is not evidence of pavement.
+        // Every result must also be on the NPC mesh, pass the queue's street exclusions and have a complete path
+        // from the live player. behindCart: the spot is on the side opposite the customers.
+        internal static bool ServingPoint(Transform cart, int side, float radius, Vector3 start,
+            NavMeshQueryFilter filter, TrafficLanes lanes, out Vector3 spot, out string placement, out bool behindCart)
         {
-            var path = new NavMeshPath(); // reused for exact samples and every fallback, on all three sides
-            bool Safe(Vector3 p) =>
-                // The two meshes are separate bakes whose heights rarely agree to the centimetre, so the queue's own
-                // PlaceAt tolerances apply: no more than 0.1 m sideways (no snapping from road to nearby pavement).
-                NavMesh.SamplePosition(p, out var pedestrian, 0.5f, Extensions.NavMeshHelper.NpcNavMeshFilter) &&
-                (p.x - pedestrian.position.x) * (p.x - pedestrian.position.x) + (p.z - pedestrian.position.z) * (p.z - pedestrian.position.z) <= 0.01f &&
-                Mathf.Abs(p.y - pedestrian.position.y) <= 0.3f &&
-                QueueLine.OnStreet(p, lanes) == null &&
-                NavMesh.CalculatePath(start, p, filter, path) && path.status == NavMeshPathStatus.PathComplete;
-
-            bool Search(Vector3 wanted, Func<Vector3, bool> geometry, out Vector3 found, out bool fallback)
-            {
-                bool Valid(Vector3 p) => geometry(p) && Mathf.Abs(p.y - center.y) <= 0.5f &&
-                    Vector3.Distance(p, wanted) <= FallbackMetres && Safe(p);
-                if (NavMesh.SamplePosition(wanted, out var exact, 0.1f, filter) && Valid(exact.position))
-                {
-                    found = exact.position;
-                    fallback = false;
-                    return true;
-                }
-                Vector3? best = null;
-                if (NavMesh.SamplePosition(wanted, out var nearest, FallbackMetres, filter) && Valid(nearest.position)) best = nearest.position;
-                for (var across = -FallbackMetres; across <= FallbackMetres; across += SampleStep)
-                for (var along = -FallbackMetres; along <= FallbackMetres; along += SampleStep)
-                {
-                    var probe = wanted + outward * across + forward * along;
-                    if (!NavMesh.SamplePosition(probe, out var hit, SampleStep, filter)) continue;
-                    // CalculatePath is synchronous: only prove candidates that could improve the nearest safe result.
-                    if (best.HasValue && (hit.position - wanted).sqrMagnitude >= (best.Value - wanted).sqrMagnitude) continue;
-                    if (Valid(hit.position)) best = hit.position;
-                }
-                found = best ?? wanted;
-                fallback = true;
-                return best.HasValue;
-            }
-
-            // The body/wheels extend 0.50 m sideways. Keep the player's radius clear of the hull on each side.
-            var clearance = 0.50f + radius;
-            var behind = center - outward * Mathf.Max(BehindMetres, clearance);
-            if (Search(behind, p => Vector3.Dot(center - p, outward) >= clearance - 0.01f, out spot, out var usedFallback))
-            {
-                placement = usedFallback ? "at a fallback behind the cart, opposite the queue" : "behind the cart, opposite the queue";
-                return true;
-            }
-            var endClearance = HalfLength + radius;
-            foreach (var direction in new[] { 1, -1 })
-            {
-                var end = center + forward * (direction * endClearance);
-                bool AtEnd(Vector3 p) => Vector3.Dot(p - center, forward) * direction >= endClearance - 0.01f &&
-                    Vector3.Dot(p - center, outward) >= -0.01f &&
-                    Vector3.Dot(p - center, outward) <= Mathf.Max(BehindMetres, clearance);
-                if (!Search(end, AtEnd, out spot, out usedFallback)) continue;
-                placement = $"at the {(direction > 0 ? "front" : "rear")} end beside the window" + (usedFallback ? " (fallback)" : "");
-                return true;
-            }
-            spot = start;
-            placement = "left where they stand";
-            return false;
+            var path = new NavMeshPath();
+            return CartGroundPlacement.Find(cart, side, radius, CartStance.Server(side, along: CartStanceWorld.WorkAlong(cart)), filter, lanes,
+                p => NavMesh.CalculatePath(start, p, filter, path) && path.status == NavMeshPathStatus.PathComplete,
+                out spot, out placement, out behindCart);
         }
 
         // PlayerController emits this for both click/SetGoal navigation and WASD starting. Release without
@@ -209,6 +155,7 @@ namespace FoodTrucks
                     !string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId) || BuildingManager.IsInsideBuilding ||
                     UndergroundParkingManager.IsInsideParking || agent == null || !agent.isActiveAndEnabled || !agent.isOnNavMesh ||
                     Vector3.Distance(controller.transform.position, cartPosition) > 0.1f || Quaternion.Angle(controller.transform.rotation, cartRotation) > 1f ||
+                    Math.Abs(CartStanceWorld.WorkAlong(controller.transform) - workAlong) > 0.01 ||
                     Vector3.Distance(who.transform.position, position) > 0.5f)
                 {
                     Release("window, player or cart moved/changed");

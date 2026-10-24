@@ -1366,19 +1366,19 @@ class Mock:
         angle = math.radians(v['heading'])
         side = -1 if v['hatch_side'] == 'left' else 1
         outward = (side*math.cos(angle), -side*math.sin(angle))
-        forward = (math.sin(angle), math.cos(angle))
-        candidates = [('behind the cart, opposite the queue', -outward[0]*.85, -outward[1]*.85),
-                      ('at the front end beside the window', forward[0]*1.07, forward[1]*1.07),
-                      ('at the rear end beside the window', -forward[0]*1.07, -forward[1]*1.07)]
+        # Core CartStance: the symmetric equipment spots share the counter centre.
+        centre = (0.0, 0.0)
+        candidates = [('behind the cart at the equipment centre, opposite the queue', centre[0]-outward[0]*.85, centre[1]-outward[1]*.85)]
         for placement, dx, dz in candidates:
             point = (v['x']+dx, v['y'], v['z']+dz)
             if not self.cart_serving_safe(v, point): continue
-            facing = (math.degrees(math.atan2(outward[0]*1.05-dx, outward[1]*1.05-dz)) + 360) % 360
+            window = (centre[0]+outward[0]*1.05, centre[1]+outward[1]*1.05)
+            facing = (math.degrees(math.atan2(window[0]-dx, window[1]-dz)) + 360) % 360
             self.state['player'].update(x=point[0], y=point[1], z=point[2], heading=facing)
             self.start_work(v)
             self.event(f"Cart serving: {v['id']}: player placed {placement} at {point}; pedestrian ground, off street, complete player path (mock).")
             return
-        self.event(f"Cart serving: {v['id']}: no safe reachable serving point behind the cart or at either end; player left where they stand.")
+        self.event(f"Cart serving: {v['id']}: no safe reachable serving point behind the counter; player left where they stand.")
 
     def start_work(self, v):
         self.finish_work()

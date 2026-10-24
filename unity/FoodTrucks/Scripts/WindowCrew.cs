@@ -17,9 +17,7 @@ namespace FoodTrucks
     internal static class WindowCrew
     {
         private const string CharacterPrefab = "Characters/HumanDefinitionLow";
-        // A cart's worker stands behind it, opposite the window place.
-        private const float CartBehind = 0.85f;
-        private const float CartBeside = 0.9f;
+        // A cart's worker stands behind it straight across from the register, facing the customers (Core CartStance).
         // Inside the truck, behind the hatch: in the aisle, just inside the serving counter (x 0.78) with the
         // cooking line behind them (its counter's front edge at x -0.40), on the compartment's floor (y 0.94,
         // measured on Truck_Body), spread along the window when there are several. The window (y 1.80 to 2.82)
@@ -76,15 +74,19 @@ namespace FoodTrucks
             public string EmployeeId { get; }
             public GameObject Owner { get; }
             public ThirdPersonCharacter Character { get; }
+            public Vector3? CartPlace;
+            public Vector3 CartWanted;
+            public Vector3 CartOrigin;
+            public Quaternion CartRotation;
         }
 
         private static readonly Dictionary<string, List<Worker>> workers = new Dictionary<string, List<Worker>>();
         private static bool failed;
 
-        // Shows exactly these employees at the vehicle's window. windowPlace is where the first customer stands.
-        // serving: those of them who serve (CrewPay.Team); they take the places at the window and the rest wait
-        // (inside the truck, beside the cart). Null when all of them do.
-        public static void Sync(string vehicleId, Transform vehicle, string kind, Vector3? windowPlace, IReadOnlyList<EmployeeInstance> crew,
+        // Shows exactly these employees at the vehicle's window. side: the side of a cart its queue forms on (1 right,
+        // -1 left). serving: those of them who serve (CrewPay.Team); they take the places at the window and the rest
+        // wait (inside the truck, beside the cart). Null when all of them do.
+        public static void Sync(string vehicleId, Transform vehicle, string kind, int side, IReadOnlyList<EmployeeInstance> crew,
             IReadOnlyCollection<EmployeeInstance>? serving = null)
         {
             if (failed) return;
@@ -108,14 +110,18 @@ namespace FoodTrucks
                 var atWindow = order.Count(Serves);
                 var places = TruckPlaces(atWindow, TruckWindow.PlayerAt(vehicleId));
                 var playerAtCart = kind != "truck" && CartSelling.PlayerAtServingSpot(vehicleId);
+                var occupied = new List<Vector3>();
+                if (playerAtCart) occupied.Add(PlayerHelper.GetPosition());
+                var lanes = kind == "truck" ? null : TrafficLanes.Near(vehicle.position, 30f);
                 var idle = 0;
                 for (var i = 0; i < order.Count; i++)
                 {
                     var place = i < atWindow ? places[i] : null;
                     // A more skilled cart worker can still serve while the player is here (Core's team rule),
                     // but must stand beside them rather than share the player's middle place.
-                    Stand(order[i], vehicle, kind, windowPlace, place, playerAtCart ? i : place.HasValue ? -1 : idle++,
-                        i < atWindow && !playerAtCart, playerAtCart ? PlayerHelper.GetPosition() : (Vector3?)null);
+                    Stand(order[i], vehicle, kind, side, place, playerAtCart ? i : place.HasValue ? -1 : idle++,
+                        i < atWindow && !playerAtCart, playerAtCart ? PlayerHelper.GetPosition() : (Vector3?)null,
+                        lanes, occupied);
                 }
                 if (shown.Count == 0) workers.Remove(vehicleId);
             }
@@ -169,8 +175,8 @@ namespace FoodTrucks
         }
 
         // along: the place at the hatch; null with idleIndex for one waiting inside the truck.
-        private static void Stand(Worker worker, Transform vehicle, string kind, Vector3? windowPlace, double? along, int idleIndex, bool serves,
-            Vector3? playerPlace)
+        private static void Stand(Worker worker, Transform vehicle, string kind, int side, double? along, int idleIndex, bool serves,
+            Vector3? playerPlace, TrafficLanes? lanes, List<Vector3> occupied)
         {
             if (kind == "truck")
             {
@@ -179,16 +185,43 @@ namespace FoodTrucks
                 worker.Character.ForceToRotation(spot.Rotation);
                 return;
             }
-            var outward = windowPlace.HasValue ? windowPlace.Value - vehicle.position : vehicle.right;
-            outward.y = 0f;
-            outward = outward.sqrMagnitude > 1e-4f ? outward.normalized : vehicle.right;
-            // One not serving (the player took the place) waits beside the cart.
-            var sideways = Vector3.Cross(Vector3.up, outward);
-            // A fallback serving spot may be along this side too: put the worker on the other end.
-            if (playerPlace.HasValue && Vector3.Dot(playerPlace.Value - vehicle.position, sideways) > 0f) sideways = -sideways;
-            var beside = serves ? Vector3.zero : sideways * (CartBeside * (idleIndex + 1));
-            worker.Character.ForceToPosition(vehicle.position - outward * CartBehind + beside);
-            worker.Character.ForceToRotation(Quaternion.LookRotation(outward));
+            // In the cart's own frame from its live transform, so a turned, moved or reloaded cart is never read through
+            // a stale world-space queue place. One not serving (the player took the place) waits further along the
+            // same side, away from the player.
+            var workAlong = CartStanceWorld.WorkAlong(vehicle);
+            var playerAlong = playerPlace.HasValue ? CartStanceWorld.Along(vehicle, playerPlace.Value) : (double?)null;
+            var local = serves || idleIndex < 0 ? CartStance.Server(side, along: workAlong) : CartStance.Waiting(side, idleIndex, playerAlong, along: workAlong);
+            var wanted = CartStanceWorld.Point(vehicle, local);
+            var radius = worker.Character.navmeshAgent.radius;
+            bool Clear(Vector3 p) => occupied.All(other => Vector3.Distance(p, other) >= radius + 0.3f);
+            // Reuse a safe fallback while parked instead of running the bounded grid search four times a second.
+            // Recheck ground/street and occupied places even when the cart and desired place have not changed.
+            var cached = worker.CartPlace.HasValue &&
+                (worker.CartWanted - wanted).sqrMagnitude < 0.0001f &&
+                (worker.CartOrigin - vehicle.position).sqrMagnitude < 0.0001f &&
+                Quaternion.Angle(worker.CartRotation, vehicle.rotation) < 0.01f &&
+                Clear(worker.CartPlace.Value) && CartGroundPlacement.IsSafe(worker.CartPlace.Value, lanes!);
+            var position = worker.CartPlace ?? wanted;
+            var behind = Vector3.Dot(vehicle.position - position, CartStanceWorld.Facing(vehicle, side)) >= 0.5f + radius - 0.01f;
+            if (!cached && !CartGroundPlacement.Find(vehicle, side, radius, local,
+                Extensions.NavMeshHelper.NpcNavMeshFilter, lanes!, Clear, out position, out _, out behind))
+            {
+                worker.CartPlace = null;
+                worker.Character.gameObject.SetActive(false);
+                return; // Never show a crew member at an unchecked point when no safe fallback exists.
+            }
+            worker.CartPlace = position;
+            worker.CartWanted = wanted;
+            worker.CartOrigin = vehicle.position;
+            worker.CartRotation = vehicle.rotation;
+            worker.Character.gameObject.SetActive(true);
+            occupied.Add(position);
+            var facing = behind && CartStance.FacesAcross(CartStanceWorld.Along(vehicle, position), workAlong)
+                ? CartStanceWorld.Facing(vehicle, side)
+                : CartStanceWorld.Point(vehicle, CartStance.Window(side, CartStance.WindowOut, workAlong)) - position;
+            facing.y = 0f;
+            worker.Character.ForceToPosition(position);
+            worker.Character.ForceToRotation(Quaternion.LookRotation(facing));
         }
 
         private static int Seed(string id)

@@ -55,5 +55,7 @@
       ],
       "max_dist": 0.01
     }
-  ]
+  ],
+  "unity_front_axis": "+Z",
+  "unity_operator_axis": "-Z"
 }

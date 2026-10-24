@@ -178,8 +178,8 @@ namespace FoodTrucks.BuildEditor
             // VehicleDisplays puts the fitted pieces here.
             Point(root.transform, "EquipmentFront", new Vector3(0f, SpotHeight, SpotZ));
             Point(root.transform, "EquipmentRear", new Vector3(0f, SpotHeight, -SpotZ));
-            // Cabinet front above the wheel, below the rear counter; mirrored to the queue side at runtime.
-            Point(root.transform, "EquipmentCooler", new Vector3(0.443f, 0.525f, -0.32f));
+            // Cabinet door above the wheel, below the rear counter; mirrored to the worker side at runtime.
+            Point(root.transform, "EquipmentCooler", new Vector3(-0.443f, 0.525f, -0.32f));
 
             var leftHand = Point(root.transform, "LeftHandIK", new Vector3(-GripHalfWidth, GripHeight, HandleZ));
             var rightHand = Point(root.transform, "RightHandIK", new Vector3(GripHalfWidth, GripHeight, HandleZ));

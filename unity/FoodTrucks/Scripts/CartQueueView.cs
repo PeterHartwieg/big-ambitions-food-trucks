@@ -41,6 +41,7 @@ namespace FoodTrucks
 
         private static CartQueueView? instance;
         private readonly Dictionary<string, QueueLine> lines = new Dictionary<string, QueueLine>();
+        private readonly Dictionary<string, (ServiceState Service, int Side)> lastSides = new Dictionary<string, (ServiceState, int)>();
         // Lines of carts that closed, while their people walk off; a cart reopened meanwhile gets a new line.
         private readonly List<QueueLine> departing = new List<QueueLine>();
         private float nextCheck;
@@ -93,10 +94,17 @@ namespace FoodTrucks
         public static bool Showing(string vehicleId) =>
             instance != null && instance.enabled && instance.lines.TryGetValue(vehicleId, out var line) && line.HasPlaces;
 
-        // The side of the vehicle its open line forms on (1 right, -1 left), or null while no line is laid out
-        // (the vehicle is closed, far from the player, or has no walkable place beside it).
-        public static int? QueueSide(string vehicleId) =>
-            instance != null && instance.lines.TryGetValue(vehicleId, out var line) && line.Side != 0 ? line.Side : (int?)null;
+        // Retain this opening's chosen side while no visible line is available. The service identity prevents
+        // an earlier opening/save's side from leaking into a new one.
+        public static int? QueueSide(string vehicleId)
+        {
+            var self = instance;
+            if (self == null) return null;
+            if (self.lines.TryGetValue(vehicleId, out var line) && line.Side != 0) return line.Side;
+            var vehicle = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
+            return vehicle?.IsOpen == true && self.lastSides.TryGetValue(vehicleId, out var last) &&
+                ReferenceEquals(last.Service, vehicle.Service) ? last.Side : (int?)null;
+        }
 
         // Lay out this opening's line before placing its server. Waiting for CheckLines would let the player
         // take the right-hand serving place before the queue chose the left. No customers are spawned here.
@@ -107,7 +115,8 @@ namespace FoodTrucks
             if (self == null || !self.enabled || Suspended || vehicle?.IsOpen != true || vehicle.Service == null ||
                 DemandData.Rules == null) return null;
             var line = self.EnsureLine(vehicle, controller);
-            return line.Side == 0 ? null : (line.Side, line.WindowPlace);
+            var side = QueueSide(vehicle.VehicleId);
+            return side.HasValue ? (side.Value, line.WindowPlace) : ((int, Vector3?)?)null;
         }
 
         // Where the open line's people stand, the window first, or null while no line is laid out (for the test bridge).
@@ -128,11 +137,22 @@ namespace FoodTrucks
 
         private void Retire(string vehicleId)
         {
+            lastSides.Remove(vehicleId);
             WindowCrew.Remove(vehicleId);
             if (!lines.TryGetValue(vehicleId, out var line)) return;
             lines.Remove(vehicleId);
             line.Close();
             departing.Add(line);
+        }
+
+        // A moved cart's line goes at once rather than walking off: its customers are still in Core's queue, and
+        // the new line shows them again at its own places, so a walking-off copy would show each of them twice.
+        private void Relay(QueueLine line)
+        {
+            Log.Info($"Queue view: cart {line.VehicleId} moved or turned since its line was laid out; laying it out again.");
+            line.Destroy("cart moved");
+            WindowCrew.Remove(line.VehicleId);
+            lines.Remove(line.VehicleId);
         }
 
         private void RemoveAll(string reason)
@@ -204,6 +224,12 @@ namespace FoodTrucks
                 {
                     Retire(line.VehicleId);
                 }
+                // A cart that stands somewhere else than where its line was laid out gets a new line below, on its
+                // live position and heading, so its register, server and first customer agree again. Not under the
+                // player's serving stance, which ends by itself once the cart moves (CartServing) and must not see
+                // the queue change sides beneath it.
+                else if (line.MovedFrom(controller.transform) && !CartSelling.PlayerAtServingSpot(line.VehicleId))
+                    Relay(line);
             }
             foreach (var line in departing.ToList())
             {
@@ -232,7 +258,7 @@ namespace FoodTrucks
                 var controller = ControllerOf(game, line.VehicleId);
                 if (vehicle == null || controller == null) continue;
                 var kind = FoodTrucksMod.KindOf(controller.vehicleInstance?.vehicleTypeName) ?? "cart";
-                WindowCrew.Sync(line.VehicleId, controller.transform, kind, line.WindowPlace, HireCrew.OnShift(vehicle, now), CartSelling.ServingNow(vehicle, kind));
+                WindowCrew.Sync(line.VehicleId, controller.transform, kind, QueueSide(line.VehicleId) ?? 1, HireCrew.OnShift(vehicle, now), CartSelling.ServingNow(vehicle, kind));
             }
         }
 
@@ -240,8 +266,13 @@ namespace FoodTrucks
         {
             if (lines.TryGetValue(vehicle.VehicleId, out var existing))
             {
-                if (ReferenceEquals(existing.Service, vehicle.Service)) return existing;
-                Retire(vehicle.VehicleId);
+                if (ReferenceEquals(existing.Service, vehicle.Service))
+                {
+                    // The stance guard is defensive: CartServing.Open releases the stance before it asks for the line.
+                    if (!existing.MovedFrom(controller.transform) || CartSelling.PlayerAtServingSpot(vehicle.VehicleId)) return existing;
+                    Relay(existing);
+                }
+                else Retire(vehicle.VehicleId);
             }
             var rules = DemandData.Rules!;
             var kind = FoodTrucksMod.KindOf(controller.vehicleInstance?.vehicleTypeName) ?? "cart";
@@ -251,6 +282,8 @@ namespace FoodTrucks
             var id = vehicle.VehicleId;
             line.Paid = customer => CartSelling.Paid(id, customer);
             lines[id] = line;
+            if (line.Side != 0) lastSides[id] = (vehicle.Service!, line.Side);
+            VehicleDisplays.QueueChanged();
             return line;
         }
 
@@ -262,8 +295,9 @@ namespace FoodTrucks
     }
 
     // Where a vehicle's window is, relative to its middle: Sideways metres to the window place, Along metres
-    // forward of the middle, on which sides. A cart serves from either side; the truck's hatch is on its right
-    // (art/README.md: opening at x 1.10, centre z -1.10), so its line is always on the right.
+    // forward of the middle, on which sides. A cart serves from either side, level with its cash register on the
+    // counter's front corner (Core CartStance, z 0.615); the truck's hatch is on its right (art/README.md: opening
+    // at x 1.10, centre z -1.10), so its line is always on the right.
     internal sealed class WindowShape
     {
         private WindowShape(float sideways, float reach, float along, int[] sides, float spacing, bool preferBack,
@@ -312,7 +346,7 @@ namespace FoodTrucks
         // the middle) is 2 m from the end of the body rather than 3.8 m, so most of it stands along open pavement. Each
         // place is checked where the NavMesh put it (within 0.2 m of the wanted point, still 2.0 m out at least, 0.9 m
         // or more from the one before), so the clearance and spacing hold as built.
-        private static readonly WindowShape Cart = new WindowShape(1.05f, 1.05f, 0f, new[] { 1, -1 }, spacing: 0.8f, preferBack: false,
+        private static readonly WindowShape Cart = new WindowShape((float)CartStance.WindowOut, (float)CartStance.WindowOut, (float)CartStance.CounterAlong, new[] { 1, -1 }, spacing: 0.8f, preferBack: false,
             tolerance: 0.45f, strict: false, outward: true);
         private static readonly WindowShape Truck = new WindowShape(2.00f, 3.40f, -1.10f, new[] { 1 }, spacing: 1.0f, preferBack: true,
             tolerance: 0.2f, strict: true, outward: false);
@@ -365,6 +399,11 @@ namespace FoodTrucks
         // After repeated spawn failures, nobody is spawned until then, a new line's first batch included.
         private float blockedUntil;
 
+        // How far a cart may stand from where its line was laid out before the line is laid out again: the same
+        // limits that end the player's serving stance (CartServing).
+        private const float MovedMetres = 0.1f;
+        private const float TurnedDegrees = 1f;
+
         private QueueLine(string vehicleId, GameObject root, List<Vector3> places, Vector3 windowLook, List<Vector3> ends, ServiceState service, TrafficLanes? lanes)
         {
             VehicleId = vehicleId;
@@ -406,8 +445,22 @@ namespace FoodTrucks
             var root = new GameObject("FoodTrucks.Queue." + vehicleId);
             root.AddComponent<QueueLineRoot>();
             Log.Info($"Queue view: line at {KindOf(vehicleId)} {vehicleId}: {detail}.");
-            return new QueueLine(vehicleId, root, places, look, ends, service, lanes) { Side = side };
+            return new QueueLine(vehicleId, root, places, look, ends, service, lanes)
+            {
+                Side = side, laidAt = cart.position, laidRotation = cart.rotation, checksMoves = shape == WindowShape.For("cart"), laidAlong = shape == WindowShape.For("cart") ? CartStanceWorld.WorkAlong(cart) : 0,
+            };
         }
+
+        // Only a cart's line: a truck only moves by being driven, which retires its line already, and its body may
+        // settle on its suspension after parking.
+        public bool MovedFrom(Transform cart) => checksMoves &&
+            (Vector3.Distance(cart.position, laidAt) > MovedMetres || Quaternion.Angle(cart.rotation, laidRotation) > TurnedDegrees ||
+             Math.Abs(CartStanceWorld.WorkAlong(cart) - laidAlong) > 0.01);
+
+        private Vector3 laidAt;
+        private Quaternion laidRotation;
+        private bool checksMoves;
+        private double laidAlong;
 
         private void ReleaseServed()
         {
@@ -689,12 +742,23 @@ namespace FoodTrucks
         {
             var forward = Direction(cart.forward);
             var right = Direction(cart.right);
-            var center = cart.position + forward * shape.Along;
+            var workAlong = shape == WindowShape.For("cart") ? CartStanceWorld.WorkAlong(cart) : shape.Along;
+            var center = cart.position + forward * (float)workAlong;
             var filter = QueuePerson.PedestrianFilter;
             var rejected = new Rejections();
             // The NPC mesh is the positive pedestrian-ground test. Lane/parking/bridge checks remain extra exclusions,
             // not evidence of pavement: the player mesh and gaps between traffic lanes also cover carriageways.
             var lanes = TrafficLanes.Near(center, 30f);
+
+            // Check each cart side once, using exactly the crew's counter-side ground rule. Trucks keep
+            // their existing layout path. A safe cart pitch alone does not prove a usable serving position.
+            var sides = shape.Sides.Where(side =>
+            {
+                if (shape != WindowShape.For("cart") || CartGroundPlacement.Find(cart, side, 0.3f,
+                    CartStance.Server(side, along: workAlong), filter, lanes, _ => true, out _, out _, out _)) return true;
+                rejected.Add("no pavement behind counter");
+                return false;
+            }).ToArray();
 
             var best = new List<Vector3>();
             var bestScore = int.MinValue;
@@ -711,7 +775,7 @@ namespace FoodTrucks
                     var wanted = straightOut
                         ? center + outward * (lineOut + k * shape.Spacing)
                         : center + outward * lineOut + forward * (direction * k * shape.Spacing);
-                    var place = PlaceAt(wanted, shape, filter, lanes, rejected);
+                    var place = PlaceAt(wanted, shape, filter, lanes, rejected, window: k == 0);
                     if (place == null) break;
                     if (shape.Strict)
                     {
@@ -735,7 +799,7 @@ namespace FoodTrucks
                     bestOutward = straightOut;
                 }
             }
-            foreach (var side in shape.Sides)
+            foreach (var side in sides)
             {
                 // One distance out for the whole line, tried from Sideways to Reach: the one that places most people wins,
                 // the nearest on a tie. A place that isn't walkable pavement at that distance (or, strict, lands too close
@@ -745,7 +809,7 @@ namespace FoodTrucks
                         Try(side, direction, lineOut, straightOut: false);
             }
             if (shape.Outward)
-                foreach (var side in shape.Sides)
+                foreach (var side in sides)
                     Try(side, 1, shape.Sideways, straightOut: true);
             if (best.Count == 0) return (best, center, new List<Vector3>(), $"no walkable place beside the window at {center}; nobody shown{rejected}", 0, lanes);
 
@@ -798,11 +862,13 @@ namespace FoodTrucks
                 "; candidates rejected by " + string.Join(", ", counts.Select(p => $"{p.Key}: {p.Value}"));
         }
 
-        private static Vector3? PlaceAt(Vector3 wanted, WindowShape shape, NavMeshQueryFilter filter, TrafficLanes lanes, Rejections rejected)
+        private static Vector3? PlaceAt(Vector3 wanted, WindowShape shape, NavMeshQueryFilter filter, TrafficLanes lanes, Rejections rejected, bool window)
         {
             if (!NavMesh.SamplePosition(wanted, out var hit, 0.6f, filter))
             { rejected.Add("NPC NavMesh (agent 0)"); return null; }
-            if (FlatDistance(hit.position, wanted) > shape.Tolerance)
+            // The cart's first customer must stay level with the register after a NavMesh snap. Other places
+            // keep their existing obstacle tolerance; the truck retains its wider, fixed hatch-side layout.
+            if (FlatDistance(hit.position, wanted) > (window && !shape.Strict ? 0.1f : shape.Tolerance))
             { rejected.Add("placement tolerance on NPC NavMesh"); return null; }
             if (OnStreet(hit.position, lanes) is { } test)
             { rejected.Add(test); return null; }

@@ -1,0 +1,5 @@
+# Street Food 0.10.7
+
+Cart employees and the player now stand behind the counter, centred between the two fitted equipment items along the cart’s length and facing customers. With one item or no equipment fitted, they use the counter centre. The first customer lines up with the worker. The register stays on the customer-side front corner, and cooking controls and fridge doors face the worker on either queue side. Both the server and customers need safe pavement; workers no longer serve from the cart’s ends. The positions follow the cart when it moves, turns or loads, and equipment and register changes follow a new queue side immediately. Food trucks are unchanged.
+
+Includes the 0.10.6 update: a dedicated drinks-fridge place on carts and trucks, increased soda capacity and demand, and custom truck branding.

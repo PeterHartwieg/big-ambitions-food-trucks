@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
 using Helpers;
@@ -15,9 +16,11 @@ namespace FoodTrucks
     // that has each piece face the cook and the hatch). A piece
     // keeps its spot while it stays fitted. economy.json's "display" names each piece's model in the bundle; a
     // piece without one leaves its spot empty. Every half second it compares each vehicle's fitted pieces with
-    // what it shows, so fitting, removing and loading need no hooks. While a cart is open the pieces face the side
-    // its queue forms on (CartQueueView's choice); closed, or with no line laid out, they face right. A truck's
-    // always face the hatch. The models have no colliders. They follow the vehicle's visible flag every
+    // what it shows, so fitting, removing and loading need no hooks. While a cart is open the working sides face away from the side
+    // its queue forms on (CartQueueView's choice), retaining that side while the open line is out of view.
+    // Closed carts keep the right-hand queue layout. Queue layout notifies this view immediately. The cart's cash
+    // register moves with them to the counter's front corner on that side (Core CartStance), where the server stands
+    // across from it. A truck's always face the hatch. The models have no colliders. They follow the vehicle's visible flag every
     // frame: the game hides a vehicle (EntityController.Hide, e.g. on another floor of a multi-floor building) by
     // disabling only the renderers in its own list, which the pieces aren't in.
     internal sealed class VehicleDisplays : MonoBehaviour
@@ -57,6 +60,18 @@ namespace FoodTrucks
         // Vehicle, spot and piece already logged, so each fitted piece is logged once per session.
         private readonly HashSet<string> logged = new HashSet<string>();
         private float nextCheck;
+        private static VehicleDisplays? instance;
+
+        private void OnEnable() => instance = this;
+
+        // Called after a line is laid out, including PrepareServing before the player is placed. The register
+        // and cooler must follow that side in the same frame, independently of the equipment polling interval.
+        internal static void QueueChanged()
+        {
+            if (instance == null) return;
+            try { instance.Check(); }
+            catch (Exception ex) { Log.Error("Vehicle displays: " + ex); }
+        }
 
         private sealed class Shown
         {
@@ -67,15 +82,19 @@ namespace FoodTrucks
             public bool Visible = true;
             public Layout Layout = Cart;
             public Transform?[] Spots = Array.Empty<Transform?>();
+            // The cart's Cash_Register (CartAssets), mirrored to the queue's side.
+            public Transform? Register;
             public string?[] Pieces = Array.Empty<string?>();
             public GameObject?[] Objects = Array.Empty<GameObject?>();
             public int Side;
+            public int WindowSide = 1;
             // The cart's umbrella: 1 open, 0 furled, -1 not set yet, -2 the model has no canopies.
             public int Umbrella = -1;
         }
 
         private void OnDisable()
         {
+            if (instance == this) instance = null;
             foreach (var entry in shown.Values)
                 foreach (var go in entry.Objects)
                     if (go != null) Destroy(go);
@@ -111,6 +130,7 @@ namespace FoodTrucks
                     entry = new Shown
                     {
                         Controller = controller, Body = controller.transform.Find(layout.Body), Layout = layout,
+                        Register = layout == Cart ? controller.transform.Find("Cash_Register") : null,
                         Spots = layout.Spots.Select(name => controller.transform.Find(name)).ToArray(),
                         Pieces = new string?[count], Objects = new GameObject?[count],
                     };
@@ -128,7 +148,8 @@ namespace FoodTrucks
 
                 var fitted = CargoRules.FittedEquipment(tables, CargoLimit.Lines(vehicle));
                 var open = layout.Turns && StreetSales.Find(FoodTrucksSession.CurrentState, vehicle.id)?.IsOpen == true;
-                var side = !layout.Turns ? 0 : open ? CartQueueView.QueueSide(vehicle.id) ?? 1 : 1;
+                entry.WindowSide = CartStance.DisplaySide(open, CartQueueView.QueueSide(vehicle.id), entry.WindowSide);
+                var side = layout.Turns ? entry.WindowSide : 0;
                 if (layout == Cart) Umbrella(entry, vehicle.id, open);
                 var wanted = new string?[entry.Spots.Length];
                 var info = tables.Vehicle(layout.Kind)!;
@@ -160,15 +181,23 @@ namespace FoodTrucks
                 if (entry.Side != side)
                 {
                     entry.Side = side;
-                    // The models face +Z; +90 degrees turns them to the cart's right (+X), -90 to its left. A truck's
-                    // spots are turned already (side 0).
-                    var rotation = Quaternion.Euler(0f, side * 90f, 0f);
+                    // Cart controls/doors face the server; presentation and the register face customers.
+                    // Truck children retain identity rotation: their anchors already face the cook/hatch.
                     foreach (var go in entry.Objects)
-                        if (go != null) go.transform.localRotation = rotation;
-                    // The cart's cabinet front follows the customer side as well as facing it.
+                        if (go != null) go.transform.localRotation = Quaternion.Euler(0f,
+                            layout == Cart ? (float)CartStance.EquipmentYaw(side, go.name.Substring("Display_".Length)) : 0f, 0f);
+                    if (entry.Register != null)
+                    {
+                        var register = CartStance.Register(side);
+                        entry.Register.localPosition = new Vector3((float)register.X, (float)register.Y, (float)register.Z);
+                        entry.Register.localRotation = Quaternion.Euler(0f, (float)register.Yaw, 0f);
+                        if (logged.Add($"register:{vehicle.id}:{CartStance.Side(side)}"))
+                            Log.Info($"Cart register: cart {vehicle.id} register on the {(CartStance.Side(side) > 0 ? "right" : "left")} front corner, facing the customers.");
+                    }
+                    // The cart's fridge door moves to the worker side so it remains accessible.
                     // General worktop pieces turn in place; the cooler stays below the counter.
                     if (layout == Cart)
-                        entry.Spots[entry.Spots.Length - 1]!.localPosition = new Vector3(side * 0.443f, 0.525f, -0.32f);
+                        entry.Spots[entry.Spots.Length - 1]!.localPosition = new Vector3(-side * 0.443f, 0.525f, -0.32f);
                 }
             }
             // Vehicles despawned or sold: their pieces went with them; forget them.
