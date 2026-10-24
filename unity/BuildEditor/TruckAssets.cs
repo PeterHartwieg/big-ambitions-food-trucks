@@ -87,6 +87,8 @@ namespace FoodTrucks.BuildEditor
             ("EquipmentLine3", new Vector3(LineX, CounterTop, -1.325f)),
             ("EquipmentLine1", new Vector3(LineX, CounterTop, -0.425f)),
             ("EquipmentLine4", new Vector3(LineX, CounterTop, -1.775f)),
+            // Shallow customer-facing fridge at the rear of the serving counter, clear of crew and register.
+            ("EquipmentCooler", new Vector3(0.875f, 1.80f, -1.80f)),
         };
 
         public static void GenerateTruck(string vehiclesFolder, string typeName)

@@ -31,6 +31,9 @@ namespace FoodTrucks
         private const int UseMaxEntries = 40;
         // How long a click's walk over to the thing may take (real seconds) before the reply says where the player is.
         private const float UseSeconds = 120f;
+        // A walk to the clicked thing that hasn't moved for this long has stalled; a car this close is got into directly.
+        private const float UseStallSeconds = 5f;
+        internal const float CarReachMetres = 3.5f;
 
         // The things of the last use list, for a click by id.
         private static List<EntityController> lastUse = new List<EntityController>();
@@ -251,6 +254,9 @@ namespace FoodTrucks
             Log.Info($"Test bridge: clicked {entity.GetType().Name} \"{name}\" ({(handled ? "handled" : "not handled")}{(placingCancelled ? ", placing cancelled" : "")}).");
             var started = UnityEngine.Time.realtimeSinceStartup;
             var deadline = started + UseSeconds;
+            var lastPosition = PlayerHelper.GetPosition();
+            var stillSince = started;
+            var stalled = false;
             return new Deferred(() =>
             {
                 var now = UnityEngine.Time.realtimeSinceStartup;
@@ -258,6 +264,25 @@ namespace FoodTrucks
                 // building's door has finished loading.
                 if (now - started < 0.5f) return null;
                 var walking = player.hasOnGoalReachedAction;
+                if (walking)
+                {
+                    var here = PlayerHelper.GetPosition();
+                    if (Vector3.Distance(here, lastPosition) > 0.1f) { lastPosition = here; stillSince = now; }
+                    else if (now - stillSince > UseStallSeconds)
+                    {
+                        // The walk to a car's driver's door can stall short of it (the door's point unreachable). Up
+                        // close, the game itself gets in without walking (VehicleController.DriveVehicle within 2.5 m).
+                        if (entity is VehicleController car && Vector3.Distance(here, car.transform.position) <= CarReachMetres)
+                        {
+                            player.ResetNavigation();
+                            car.EnterVehicle();
+                            Log.Info($"Test bridge: the walk to {name} stalled {Vector3.Distance(here, car.transform.position):F1} m from it; got in from there.");
+                            return null;
+                        }
+                        stalled = true;
+                    }
+                }
+                if (stalled) walking = false;
                 var entering = InstanceBehavior<BuildingManager>.Instance != null && InstanceBehavior<BuildingManager>.Instance.enteringBuilding;
                 if ((walking || entering || TaxiSystem.IsTraveling) && now < deadline) return null;
                 capture.Dispose();
@@ -266,6 +291,7 @@ namespace FoodTrucks
                 var open = TestBridgeUi.Open();
                 var resultWhy = why;
                 if (walking) resultWhy = "Still walking; inspect look before repeating the click.";
+                else if (stalled) resultWhy = "The walk there stopped short and went no further; move closer or round it, then click again.";
                 else if (entering) resultWhy = "The building is still loading; wait and inspect look before repeating the click.";
                 else if (entity is CityBuildingController && inside == insideBefore && open.Count == 0)
                     resultWhy = capture.LastError ?? resultWhy ?? "The building interaction ended without entering or opening a screen; inspect look before repeating.";
@@ -502,6 +528,7 @@ namespace FoodTrucks
             if (!BuildingManager.CanBuildOnCurrentBuilding) throw new BridgeError(keepContainer
                 ? "The game allows putting items down only inside a building you can edit; outside, load a hand truck instead."
                 : "You can place furniture only inside a building you rent.");
+            if (!keepContainer && Str(args, "on") != null) return PlaceOn(args);
             var plan = CurrentFloorPlan();
             var square = Str(args, "square");
             if (square != null && (args["x"] != null || args["z"] != null)) throw new BridgeError("place takes a square or x and z, not both.");
@@ -552,8 +579,10 @@ namespace FoodTrucks
                 item = keepContainer ? hands!.ItemCached : cargo!.ItemCached;
                 itemName = keepContainer ? hands!.itemName : cargo!.itemName;
             }
-            if (item.wallMounted || item.stackType != 0 || item.snapToCeiling)
-                throw new BridgeError("That goes on a wall, ceiling or other furniture; place covers only furniture that stands on the floor.");
+            if (item.stackType != 0 && !item.wallMounted && !item.snapToCeiling)
+                throw new BridgeError("That goes on other furniture (a cabinet, a counter): place --on NAME sets it on the piece of furniture with that name.");
+            if (item.wallMounted || item.snapToCeiling)
+                throw new BridgeError("That goes on a wall or the ceiling; place covers furniture on the floor or on other furniture.");
             var name = LocalizorManager.GetLocalization(itemName, null);
             var step = item.degreesPerRotation > 0 ? item.degreesPerRotation : 45f;
             var yRotation = (float)(Math.Round(rotation / step) * step % 360 + 360) % 360;
@@ -670,6 +699,85 @@ namespace FoodTrucks
                     : !started ? "the game didn't start placing it" : !inside ? "that point isn't the floor of this building"
                     : blocked ? "that part of the floor can't take furniture" : "no room there (a wall or another thing is in the way)",
                 ["x"] = TestBridgeState.Round(at.x), ["y"] = TestBridgeState.Round(at.y), ["z"] = TestBridgeState.Round(at.z), ["rotation"] = yRotation,
+                ["notices"] = new JArray(caught),
+            };
+        }
+
+        private static readonly System.Reflection.MethodInfo? StackPositionMethod =
+            HarmonyLib.AccessTools.Method(typeof(BigAmbitions.PlacementSystem.PlacementSystem), "UpdateStackItemPosition");
+
+        // { "on": NAME, "check"? }: furniture that sits on other furniture (a cash register on a cabinet, a coffee machine on
+        // a counter), set on the nearest piece in this building whose name contains NAME, at one of its attachment points
+        // that takes it, as the mouse puts it there (PlacementSystem.UpdateStackItemPosition: a ray onto the attachment
+        // point), then confirmed when the game finds it valid, as a click does; it is saved attached to that piece.
+        private static object PlaceOn(JObject args)
+        {
+            var onName = Str(args, "on")!;
+            var check = Bool(args, "check") ?? false;
+            if (StackPositionMethod == null || PlacementValidField == null) throw new BridgeError("The game's placement step wasn't found (game update?).");
+            if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode) throw new BridgeError("Something is being placed already.");
+            var hands = PlayerHelper.ItemInstanceInHands;
+            var cargo = hands?.cargoInstances?.FirstOrDefault();
+            if (hands == null || hands.itemName != "ba:itemname_closedcardboardbox" || cargo?.ItemCached == null || !cargo.ItemCached.isFurniture)
+                throw new BridgeError("You aren't holding a box of furniture (shops pack what you buy in a box).");
+            if (!cargo.paid) throw new BridgeError("You haven't paid for it.");
+            var item = cargo.ItemCached;
+            var name = LocalizorManager.GetLocalization(cargo.itemName, null);
+            if (item.stackType == 0) throw new BridgeError($"{name} stands on the floor: place it on a square instead.");
+            var plan = CurrentFloorPlan();
+            var me = PlayerHelper.GetPosition();
+            var spots = InstanceBehavior<BuildingManager>.Instance.allItemControllers
+                .Where(c => c != null && c.ItemInstance?.ItemCached != null && OnPlayerFloor(plan, c) &&
+                            (c.itemName.IndexOf(onName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             LocalizorManager.GetLocalization(c.itemName, null).IndexOf(onName, StringComparison.OrdinalIgnoreCase) >= 0))
+                .SelectMany(c => c.GetComponentsInChildren<BigAmbitions.Items.AttachmentPoint>(true)
+                    .Where(a => a != null && (a.AttachmentPointType & item.stackType) != 0).Select(a => (Piece: c, Point: a)))
+                .OrderBy(t => Vector3.Distance(t.Point.transform.position, me)).ToList();
+            if (spots.Count == 0) throw new BridgeError($"Nothing called '{onName}' in this building has a place that takes {name}.");
+            var caught = Notices.BeginCapture();
+            bool placed = false, valid = false, started = false;
+            string? on = null;
+            try
+            {
+                var panel = InstanceBehavior<UIs>.Instance.playerHUD.itemPanelUI;
+                panel.SetItemInstance(hands, spawnIntoPlayerHands: false);
+                panel.ClickPlace();
+                var placing = BigAmbitions.PlacementSystem.PlacementSystem.CurrentPlaceableItemBeingPlaced as ItemController;
+                started = placing != null;
+                if (placing != null)
+                {
+                    foreach (var (piece, point) in spots)
+                    {
+                        Physics.SyncTransforms();
+                        var ray = new Ray(point.transform.position + Vector3.up * 1.5f, Vector3.down);
+                        StackPositionMethod.Invoke(null, new object[] { ray });
+                        valid = PlacementValidField.GetValue(null) is bool b && b && BigAmbitions.PlacementSystem.PlacementSystem.lastParentItem != null;
+                        if (!valid) continue;
+                        on = LocalizorManager.GetLocalization(piece.itemName, null);
+                        break;
+                    }
+                    if (valid && !check)
+                    {
+                        placing.ItemInstance.position = placing.transform.position;
+                        placing.OnItemPositionUpdated();
+                        BigAmbitions.PlacementSystem.PlacementSystem.SaveCurrentItemBeingMovedPosition();
+                        Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementMode();
+                        placed = true;
+                    }
+                    else Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
+                }
+            }
+            finally
+            {
+                if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode)
+                    Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
+                Notices.EndCapture(caught);
+            }
+            Log.Info($"Test bridge: place {cargo.itemName} on '{onName}': {(placed ? "placed on " + on : check && valid ? "fits on " + on + " (check)" : started ? "no free place on it" : "not started")}.");
+            return new JObject
+            {
+                ["item"] = name, ["placed"] = placed, ["checked"] = check, ["fits"] = valid, ["on"] = on,
+                ["why"] = placed || (check && valid) ? null : !started ? "the game didn't start placing it" : $"no free place on '{onName}' takes it",
                 ["notices"] = new JArray(caught),
             };
         }

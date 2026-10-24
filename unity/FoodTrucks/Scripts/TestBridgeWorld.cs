@@ -18,6 +18,20 @@ namespace FoodTrucks
     {
         // ---- Places ----
 
+        // The vehicle a drive moves: a food truck, or any car or van the player sits in (a job's hired van, a car of
+        // their own), which the self-driving ride takes to an address like a truck.
+        internal static VehicleInstance DrivenVehicle(string id)
+        {
+            var game = SaveGameManager.Current;
+            var vehicle = game.VehicleInstances.FirstOrDefault(v => v != null && v.id == id);
+            if (vehicle != null && (FoodTrucksMod.KindOf(vehicle.vehicleTypeName) != null || game.ActiveVehicleId == id)) return vehicle;
+            if (vehicle != null) throw new BridgeError($"You're not in {id}: get in first (use it, \"Click to drive\").");
+            // A job's hired van can be driven without being in the save's list of vehicles: the one the player drives.
+            var driven = InstanceBehavior<GameManager>.Instance?.selectedVehicle?.vehicleInstance;
+            if (driven != null && driven.id == id) return driven;
+            return FoodVehicle(id);
+        }
+
         // The food vehicle with this id, or a refusal naming the ones there are.
         internal static VehicleInstance FoodVehicle(string id)
         {
@@ -582,6 +596,14 @@ namespace FoodTrucks
                 case "vehicle":
                 {
                     if (who != "player") throw new BridgeError("vehicle: places the player beside a vehicle.");
+                    // A car of the player's own: beside its driver's side, on the pavement if there is one within reach.
+                    var any = SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v != null && v.id == id);
+                    if (any != null && FoodTrucksMod.KindOf(any.vehicleTypeName) == null)
+                    {
+                        var car = Spawned(any);
+                        var side = car.transform.position - car.transform.right * 2f;
+                        return (NavMesh.SamplePosition(side, out var beside, 3f, PlayerFilter(out _)) ? beside.position : side, null);
+                    }
                     var vehicle = FoodVehicle(id);
                     var controller = Spawned(vehicle);
                     var (hatch, outward, _) = HatchOf(vehicle, controller.transform);
@@ -686,12 +708,22 @@ namespace FoodTrucks
             for (var i = 1; i < path.corners.Length; i++) metres += Vector3.Distance(path.corners[i - 1], path.corners[i]);
             var complete = path.status == NavMeshPathStatus.PathComplete;
             var goal = to.position;
-            player.SetNewDestination(goal, showParticleEffect: true);
+            // As a person walks it: along the pavements and over the crossings the city's pedestrians use, waiting
+            // for a gap in the traffic before stepping into the road. The player's own NavMesh also covers the roads,
+            // and its shortest path crosses anywhere, into traffic that Real Life Overhaul lets hit the player.
+            var stops = PavementRoute(from.position, goal);
+            var stop = 0;
+            var waitedSeconds = 0f;
+            var crossings = 0;
+            float? waitingSince = null;
+            string? lastTraffic = null;
+            player.SetNewDestination(stops != null ? stops[0] : goal, showParticleEffect: true);
             if (!agent.hasPath && !agent.pathPending && Flat(player.transform.position, goal) > ArrivedMetres)
                 throw new BridgeError("The game didn't start the walk (a menu or the map may be open, or navigation is blocked here)" +
                                       $"{Blockers(player)}.");
             Log.Info($"Test bridge: walking to x {goal.x:F1}, z {goal.z:F1} ({metres:F0} m{(complete ? "" : ", part of the way")}" +
-                     $"{(holding != null ? ", pushing " + holding : "")}).");
+                     $"{(holding != null ? ", pushing " + holding : "")}" +
+                     $"{(stops != null ? $", on the pavement: {stops.Count} legs" : ", straight: no pavement route")}).");
             var deadline = UnityEngine.Time.realtimeSinceStartup + WalkSeconds;
             var insideBefore = InsideAddress();
             var last = player.transform.position;
@@ -707,6 +739,9 @@ namespace FoodTrucks
                 reply["metres"] = Math.Round(metres);
                 reply["holding"] = holding;
                 reply["inside"] = InsideAddress();
+                reply["route"] = stops != null ? "pavement" : "straight";
+                reply["crossings"] = crossings;
+                reply["waited_for_traffic_s"] = Math.Round(waitedSeconds);
                 return reply;
             }
             return new Deferred(() =>
@@ -721,16 +756,149 @@ namespace FoodTrucks
                 }
                 var now = player.transform.position;
                 if (Flat(now, goal) <= ArrivedMetres) return Reply(true);
+                // At a corner of the pavement route: on to the next, after the traffic has passed if it crosses a road.
+                if (stops != null && stop < stops.Count - 1 && Flat(now, stops[stop]) <= LegMetres)
+                {
+                    var crossing = CrossesRoadway(stops[stop], stops[stop + 1]);
+                    var clock = UnityEngine.Time.realtimeSinceStartup;
+                    if (crossing && waitingSince == null) waitingSince = clock;
+                    if (crossing && MustWait(stops[stop], stops[stop + 1], clock - waitingSince!.Value, out var nearest) && clock - waitingSince < MaxTrafficWaitSeconds)
+                    {
+                        lastTraffic = nearest;
+                        stillSince = clock;   // standing at the kerb is waiting, not stopped
+                        return null;
+                    }
+                    if (waitingSince != null)
+                    {
+                        var waited = clock - waitingSince.Value;
+                        waitedSeconds += waited; crossings++; waitingSince = null;
+                        Log.Info($"Test bridge: walk crosses from x {stops[stop].x:F1}, z {stops[stop].z:F1} to x {stops[stop + 1].x:F1}, z {stops[stop + 1].z:F1}" +
+                                 $" after waiting {waited:F0} s{(waited >= MaxTrafficWaitSeconds ? " (gave up waiting)" : "")}{(lastTraffic != null ? "; last car seen: " + lastTraffic : "")}.");
+                        lastTraffic = null;
+                    }
+                    stop++;
+                    player.SetNewDestination(stops[stop], showParticleEffect: false);
+                    stillSince = clock;
+                }
                 if (Vector3.Distance(now, last) > 0.05f)
                 {
                     last = now;
                     stillSince = UnityEngine.Time.realtimeSinceStartup;
                 }
                 // Stopped short (blocked, a partial route's end, the walk taken over by a click or a key): where it is.
-                if (UnityEngine.Time.realtimeSinceStartup - stillSince > StoppedSeconds && !agent.pathPending) return Reply(false);
+                if (UnityEngine.Time.realtimeSinceStartup - stillSince > StoppedSeconds && !agent.pathPending)
+                {
+                    Log.Info($"Test bridge: walk stopped at x {now.x:F1}, z {now.z:F1}, {Flat(now, goal):F0} m short" +
+                             (stops != null ? $", on leg {stop + 1} of {stops.Count} towards x {stops[stop].x:F1}, z {stops[stop].z:F1}" +
+                                              $" ({Flat(now, stops[stop]):F1} m off; the player's own path there: {agent.pathStatus})" : "") + ".");
+                    return Reply(false);
+                }
                 if (UnityEngine.Time.realtimeSinceStartup > deadline) return Reply(false);
                 return null;
             });
+        }
+
+        private const float LegMetres = 0.8f;
+        // A moving car this close to the crossing (either kerb or its middle) keeps the player at the kerb, and so does
+        // one within TrafficMetres that is getting closer: cars turn into crossings from side streets (attempt 5 was hit
+        // on day 12), but any car at all within 25 m held the player up to an hour on a busy street (attempt 6, day 1).
+        private const float TrafficNearMetres = 8f;
+        private const float TrafficMetres = 25f;
+        // Traffic that never thins (a jam across the crossing) is waited out this long, then crossed.
+        private const float MaxTrafficWaitSeconds = 60f;
+
+        // The corners of the pedestrians' route (the NPC NavMesh: pavements and crossings) from here to the goal, the goal
+        // last; null when they have no route there or it ends more than a few metres short (the walk then goes straight).
+        private static List<Vector3>? PavementRoute(Vector3 from, Vector3 goal)
+        {
+            var filter = Extensions.NavMeshHelper.NpcNavMeshFilter;
+            if (!NavMesh.SamplePosition(from, out var start, 3f, filter) || !NavMesh.SamplePosition(goal, out var end, 3f, filter)) return null;
+            var path = new NavMeshPath();
+            if (!NavMesh.CalculatePath(start.position, end.position, filter, path) || path.status == NavMeshPathStatus.PathInvalid || path.corners.Length == 0)
+                return null;
+            if (Flat(path.corners[path.corners.Length - 1], goal) > 3f) return null;
+            var stops = path.corners.Skip(1).ToList();
+            stops.Add(goal);
+            return stops;
+        }
+
+        // A leg that steps onto the road: a crosswalk or the roads layer under any half metre of it.
+        private static bool CrossesRoadway(Vector3 a, Vector3 b)
+        {
+            var steps = Mathf.Max(1, Mathf.CeilToInt((float)Flat(a, b) / 0.5f));
+            for (var i = 0; i <= steps; i++)
+            {
+                var point = Vector3.Lerp(a, b, i / (float)steps);
+                if (Legality.RoadBelow(point) || Legality.NearCrosswalk(point, 0.3f)) return true;
+            }
+            return false;
+        }
+
+        // A moving traffic car (the AiVehicles layer, which Real Life Overhaul's knock-down senses) close to the crossing
+        // or heading for it within a few seconds.
+        // At a crossing with traffic lights the player waits as the city's pedestrians do
+        // (PedestrianMovementHandler.CanCrossCrosswalk): until the crossing's red light for the cars is on. A car still
+        // moving within a few metres also waits. A crossing without lights waits for a gap in the traffic.
+        private const float LightWaitSeconds = 30f;
+
+        private static bool MustWait(Vector3 a, Vector3 b, float waitedSoFar, out string? why)
+        {
+            var light = CrossingLight(a, b);
+            if (light != null)
+            {
+                // A light that hasn't turned in LightWaitSeconds is one the game isn't cycling here (attempt 7: four waits
+                // of an hour with the cars' light never red); then a gap in the moving traffic is enough.
+                if (!light.activeSelf && waitedSoFar < LightWaitSeconds) { why = "the lights are green for the cars"; return true; }
+                return TrafficComing(a, b, out why, nearOnly: true);
+            }
+            return TrafficComing(a, b, out why, nearOnly: false);
+        }
+
+        // The cars' red light linked to a crosswalk on this leg (CrosswalkToTrafficLightLink), or null for a crossing without lights.
+        private static GameObject? CrossingLight(Vector3 a, Vector3 b)
+        {
+            var steps = Mathf.Max(1, Mathf.CeilToInt((float)Flat(a, b) / 1f));
+            for (var i = 0; i <= steps; i++)
+            {
+                var point = Vector3.Lerp(a, b, i / (float)steps);
+                foreach (var hit in Physics.OverlapSphere(point + Vector3.up * 0.5f, 1f, ~0, QueryTriggerInteraction.Collide))
+                {
+                    if (hit == null || !hit.CompareTag("Crosswalk")) continue;
+                    var link = hit.GetComponent<CrosswalkToTrafficLightLink>();
+                    if (link != null && link.redTrafficLight != null) return link.redTrafficLight;
+                }
+            }
+            return null;
+        }
+
+        private static bool TrafficComing(Vector3 a, Vector3 b, out string? nearest, bool nearOnly)
+        {
+            nearest = null;
+            var mask = LayerMask.GetMask("AiVehicles");
+            if (mask == 0) return false;
+            var middle = Vector3.Lerp(a, b, 0.5f);
+            var reach = TrafficMetres + Flat(a, b) / 2f;
+            var found = false;
+            var closest = float.MaxValue;
+            foreach (var hit in Physics.OverlapSphere(middle, (float)reach, mask, QueryTriggerInteraction.Ignore))
+            {
+                var body = hit != null ? hit.attachedRigidbody : null;
+                if (body == null || body.isKinematic) continue;
+                var at = body.worldCenterOfMass;
+                var distance = Mathf.Min((float)Flat(at, a), Mathf.Min((float)Flat(at, b), (float)Flat(at, middle)));
+                var velocity = new Vector3(body.velocity.x, 0f, body.velocity.z);
+                var speed = velocity.magnitude;
+                var towards = middle - at; towards.y = 0f;
+                var closing = towards.sqrMagnitude > 0.01f && Vector3.Dot(velocity, towards.normalized) > 0.5f;
+                // Moving close by, or within 25 m and getting closer. A car standing still (parked, queuing at the
+                // lights) is no danger: it held the player up to an hour on attempt 7.
+                if (speed >= 1f && (distance <= TrafficNearMetres || (!nearOnly && distance <= TrafficMetres && closing)))
+                {
+                    found = true;
+                    if (distance < closest) { closest = distance; nearest = $"{distance:F0} m away at {speed * 3.6f:F0} km/h"; }
+                }
+            }
+            return found;
         }
 
         private static object TeleportPlayer(Vector3 target, float? heading, bool clear)
@@ -788,8 +956,11 @@ namespace FoodTrucks
         private static JToken TeleportVehicle(string id, Vector3 target, float? heading, bool clear, List<Blocker>? blockers = null,
             List<Vehicles.DeliveryDriverJob.DeliveryJobStartController>? vans = null)
         {
+#if FOODTRUCKS_CREW_DRIVING_DEV
+            if (CrewDriveProbe.Owns(id)) throw new BridgeError("Truck belongs to the crew driving probe; stop its generation before teleporting.");
+#endif
             vans ??= Vans();
-            var vehicle = FoodVehicle(id);
+            var vehicle = DrivenVehicle(id);
             var controller = Spawned(vehicle);
             var record = FoodTrucks.Core.Saves.StreetSales.Find(FoodTrucksSession.CurrentState, id);
             if (record?.IsOpen == true) throw new BridgeError($"Vehicle {id} is open for business: close it first (vehicle close).");
@@ -904,8 +1075,13 @@ namespace FoodTrucks
             var op = Need(args, "op", "open, close, fast_forward, skip_work, stop_work, work_window, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy");
             if (op == "buy") return Buy(args);
             var id = Need(args, "id", "the food vehicle's id");
+#if FOODTRUCKS_CREW_DRIVING_DEV
+            if (op != "enter" && CrewDriveProbe.Owns(id)) throw new BridgeError("Truck belongs to the crew driving probe; stop it first.");
+#endif
             if (id == DrivingVehicle) throw new BridgeError($"{id} is on a drive: wait for it (drive status).");
-            var vehicle = FoodVehicle(id);
+            // Getting into and out of any car or van works as for a truck (a job's hired van, a car of your own).
+            var vehicle = (op == "enter" || op == "exit") && SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v != null && v.id == id) is { } any
+                ? any : op == "exit" ? DrivenVehicle(id) : FoodVehicle(id);
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
             var game = SaveGameManager.Current;
             var panel = InstanceBehavior<UIs>.Instance?.playerHUD?.itemPanelUI;
@@ -969,7 +1145,10 @@ namespace FoodTrucks
                         if (game.ActiveVehicleId == id) throw new BridgeError($"The player is in {id} already.");
                         if (!string.IsNullOrEmpty(game.ActiveVehicleId)) throw new BridgeError($"The player is in another vehicle ({game.ActiveVehicleId}): vehicle exit first.");
                         // The vehicle overlay's Enter vehicle button: walks there first when further than the game's reach.
-                        Spawned(vehicle).DriveVehicle();
+                        // Up close it gets in at once: the walk to a car's driver's door can stall short of it.
+                        var car = Spawned(vehicle);
+                        if (Vector3.Distance(PlayerHelper.GetPosition(), car.transform.position) <= TestBridgeCommands.CarReachMetres) car.EnterVehicle();
+                        else car.DriveVehicle();
                         break;
                     case "exit":
                         InIt("Park");

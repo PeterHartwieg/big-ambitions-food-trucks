@@ -2,11 +2,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using UI.Notification;
 
 namespace FoodTrucks
 {
@@ -162,6 +164,7 @@ namespace FoodTrucks
             hooked = true;
             Log.Listener = Add;
             UnityEngine.Application.logMessageReceivedThreaded += OnUnityLog;
+            Notifications.onShow += OnGameNotice;
         }
 
         internal static void Unhook()
@@ -170,6 +173,49 @@ namespace FoodTrucks
             hooked = false;
             Log.Listener = null;
             UnityEngine.Application.logMessageReceivedThreaded -= OnUnityLog;
+            Notifications.onShow -= OnGameNotice;
+        }
+
+        // The game's and other mods' notices (a fine, a theft, a pay slip), as the screen shows them: a player reads
+        // them as they pop up, so they are events too, and the last ones are kept by game minute for the bank lines.
+        private const int GameNoticeCount = 200;
+        private static readonly Queue<(int? Day, string? Time, string Text)> gameNotices = new Queue<(int?, string?, string)>();
+        private static object? noticeGame, noticeState;
+
+        // Day/time repeat after loads. A notice belongs only to the game and mod-state objects
+        // that observed it, even when the same character or save name is loaded again.
+        private static void NoticeSession()
+        {
+            var game = SaveGameManager.Current;
+            var state = FoodTrucksSession.CurrentState;
+            if (ReferenceEquals(game, noticeGame) && ReferenceEquals(state, noticeState)) return;
+            gameNotices.Clear();
+            noticeGame = game; noticeState = state;
+        }
+
+        private static void OnGameNotice(NotificationType type, string key, Dictionary<string, string> data, float seconds,
+            string duplicateIdentifier, Action onClick, bool sound, bool track)
+        {
+            if (Notices.Showing) return;   // the mod's own, already in as "notice"
+            var text = Notices.Text(key, data);
+            Add("notice", "Notice: " + text);
+            var (day, time) = TestBridge.ClockNow();
+            lock (gate)
+            {
+                NoticeSession();
+                gameNotices.Enqueue((day, time, text));
+                while (gameNotices.Count > GameNoticeCount) gameNotices.Dequeue();
+            }
+        }
+
+        // The game's notices shown at that game minute, oldest first.
+        internal static List<string> GameNoticesAt(int day, string time)
+        {
+            lock (gate)
+            {
+                NoticeSession();
+                return gameNotices.Where(n => n.Day == day && n.Time == time).Select(n => n.Text).ToList();
+            }
         }
 
         private static void OnUnityLog(string condition, string stackTrace, UnityEngine.LogType type)
@@ -186,6 +232,8 @@ namespace FoodTrucks
             lock (gate)
             {
                 events.Clear();
+                gameNotices.Clear();
+                noticeGame = noticeState = null;
                 next = 1;
             }
         }

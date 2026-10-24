@@ -1,0 +1,64 @@
+{
+  "title": "HART. Street Food",
+  "version": "0.10.0",
+  "source_commit": "4a68189086831aac34d201920964877315f05af2",
+  "published": true,
+  "workshop_item_id": "3822355169",
+  "workshop_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3822355169",
+  "description": "workshop-description.bbcode.txt",
+  "change_notes": "release-notes.bbcode.txt",
+  "thumbnail": "../../../art/workshop/0.10.0/00-thumbnail.jpg",
+  "gallery": [
+    "art/workshop/0.10.0/01-progression.jpg",
+    "art/workshop/0.10.0/02-menu.jpg",
+    "art/workshop/0.10.0/03-new-foods.jpg",
+    "art/workshop/0.10.0/04-working-day.jpg",
+    "art/workshop/0.10.0/05-fleet.jpg"
+  ],
+  "feedback_destination": "Steam Workshop item Discussions",
+  "supported_game": "Big Ambitions 1.0",
+  "platform_bundles": [
+    "Windows",
+    "Mac"
+  ],
+  "language": "English",
+  "required_gameplay_mods": [],
+  "optional_integration": [
+    "Bakery"
+  ],
+  "source_acceptance": "Peter accepted functionality and save safety after playtests; no new gameplay gate introduced by this release preparation.",
+  "archive_bytes": 54420062,
+  "archive_sha256": "a920d652f84cb3b28acd6a00656e95570d61f136ecebc0861a19dad2544371f9",
+  "upload_blocker": null,
+  "branding": {
+    "name": "HART.",
+    "credit": "A HART. mod by Peter Hartwieg.",
+    "wordmark": "art/workshop/brand/hart-wordmark-on-light.svg",
+    "wordmark_sha256": "b3d08ad3ca196261b23382d56fcf8a5528ea7de24ff07aa6cbe294366e9d2e63",
+    "placements": [
+      "thumbnail",
+      "all five gallery cards",
+      "Workshop description"
+    ]
+  },
+  "thumbnail_bytes": 170095,
+  "thumbnail_sha256": "aad27c3fff33bb534d87925a3b2f89ec356873810117c19723b56f2713b6eecf",
+  "upload_operator": "Peter",
+  "pc_handoff": {
+    "desktop_folder": "C:\\Users\\Peter\\OneDrive\\Desktop\\Food Trucks 0.10.0 Pre-release",
+    "files_verified": 40,
+    "installed_thumbnail": "C:\\Users\\Peter\\AppData\\LocalLow\\Hovgaard Games\\Big Ambitions\\ModsLocal\\FoodTrucks\\thumbnail.jpg",
+    "thumbnail_bytes": 170095,
+    "thumbnail_sha256": "aad27c3fff33bb534d87925a3b2f89ec356873810117c19723b56f2713b6eecf",
+    "thumbnail_backup": null,
+    "installed_dll_sha256": "04b67a4e6d2b851b51e795ace4407d1c44290569b76b63b9a29c712415af9646",
+    "published": false
+  },
+  "listing_updated_utc": "2026-10-18T16:40:35.199Z",
+  "description_published": true,
+  "gallery_published": true,
+  "change_notes_published": true,
+  "listing_screenshot": "build/workshop-0.10.0/workshop-live.png",
+  "description_sha256": "e22fd4dfd5ca193177d5d64e7a07e1e20425c6f8131fc2e202ccf6bbc9f08d40",
+  "uninstall_instructions_screenshot": "build/workshop-0.10.0/workshop-uninstall-simplified.jpg"
+}

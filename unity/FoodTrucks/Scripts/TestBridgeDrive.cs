@@ -15,15 +15,9 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // `drive` (docs/test-bridge.md, "Driving a truck"): the player's own truck driven to a commissary's bay, a building or
-    // a stop of today's route, as a player who drives there would. Three steps:
-    // 1. out of the parking space onto the nearest driving lane, facing with traffic (a teleport, Peter's call);
-    // 2. the drive itself by HART. Self Driving (mod id DrivenRides): its test rig's `ride kind=own`, sent through the
-    //    rig's own command file and read back from its results file, both in the game's data folder on this PC. Nothing
-    //    of that mod is called or read by reflection: only whether its assembly is loaded (logged Active or Not active);
-    // 3. into the bay (as `teleport` to bay:<site>), or into the free kerb space with the hatch to the pavement that a
-    //    crew would take at that stop (HireRoutes.FreeParking), by teleport.
-    // A ride takes real minutes, so `start` answers at once and `status` follows it. Test flag only, FT saves only.
+    // Test-only player travel: advance the game clock for a distance-based journey, then park natively.
+    // This is not physical crew driving. Legacy Self Driving diagnostics remain available through op=check.
+    // No other mod is required for start; interruptions must not grant an early arrival.
     internal static partial class TestBridgeCommands
     {
         // The rig's ride: a speed of 1 to 3 times real time (its own clamp).
@@ -73,7 +67,16 @@ namespace FoodTrucks
             public double? EndedGame;
             public Coroutine? Routine;
             public bool Done => EndedReal != null;
+            public bool Simulated;
         }
+
+        // Driving is played for the player, as the minigames are: the self-driving ride ran people over and drove on
+        // (attempt 6, days 8 and 12), and the driver is the player, so every bump and hit-and-run was theirs to pay. A
+        // drive now lets the clock run for the trip at a city pace and then parks the vehicle at the place, as the
+        // ride would have; nothing on the way is hit. 8 m a game minute is the truck in town (tools/balance
+        // --drive-speed), and streets add about a third to the straight line.
+        private const float SimMetresPerMinute = 8f;
+        private const float SimDetour = 1.35f;
 
         private static DriveRun? drive;
 
@@ -204,8 +207,11 @@ namespace FoodTrucks
                 throw new BridgeError($"speed is a whole number from {DriveMinSpeed} to {DriveMaxSpeed} (times real time).");
             var speed = (int)(speedArg ?? DriveMaxSpeed);
             if (Driving) throw new BridgeError($"A drive is under way ({drive!.Id} to {drive.Place}): wait for it (drive status).");
-            var vehicle = FoodVehicle(id);
-            if (FoodTrucksMod.KindOf(vehicle.vehicleTypeName) != "truck") throw new BridgeError($"{id} is a cart: a cart is pushed (walk), not driven.");
+            var vehicle = DrivenVehicle(id);
+            var food = FoodTrucksMod.KindOf(vehicle.vehicleTypeName);
+            if (food == "cart") throw new BridgeError($"{id} is a cart: a cart is pushed (walk), not driven.");
+            if (food == null && !place.StartsWith("address:", StringComparison.Ordinal))
+                throw new BridgeError($"{id} isn't a food truck: it drives to an address (address:ba:street_<name>#<number>), not a bay or a route stop.");
             var game = SaveGameManager.Current;
             if (game.ActiveVehicleId != id) throw new BridgeError($"You're not in {id}: get in first (vehicle {id} enter).");
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
@@ -215,8 +221,6 @@ namespace FoodTrucks
             if (runUntil != null) throw new BridgeError("run_until is running, and a time skip would end the ride: wait for it to stop.");
             var machine = InstanceBehavior<UIs>.Instance?.timeMachine;
             if (machine != null && machine.isRunning) throw new BridgeError("A time skip (sleep, a paid activity) is running; wait for it to end.");
-            if (SelfDriving() == null) throw new BridgeError("HART. Self Driving isn't loaded: the truck can't drive itself. Switch it on in the Mods menu.");
-            if (!Directory.Exists(RigFolder)) throw new BridgeError("Self Driving's test rig is off: start the game with -foodtrucks-test.");
             var controller = Spawned(vehicle);
 
             var run = new DriveRun { Id = id, Place = place, Speed = speed, Phase = "pulling out" };
@@ -227,10 +231,10 @@ namespace FoodTrucks
             run.StartedGame = NowMinutes(game);
             var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's pump isn't running.");
 
+            run.Simulated = true;
             if (Flat(controller.transform.position - run.Goal) > NoRideMetres)
             {
-                // Out of the space now, so a refusal answers this call and leaves the truck where it stood.
-                run.PullOut = PullOut(vehicle, controller, run.TriedWaypoints);
+                run.PullOut = null;
                 run.Phase = "riding";
             }
             else
@@ -402,7 +406,24 @@ namespace FoodTrucks
 
         private static IEnumerator DriveSteps(DriveRun run)
         {
-            if (run.Phase == "riding")
+            if (run.Phase == "riding" && run.Simulated)
+            {
+                var metres = Flat(run.FromPosition - run.Goal) * SimDetour;
+                var minutes = Math.Max(2.0, metres / SimMetresPerMinute);
+                var game = SaveGameManager.Current;
+                var end = Math.Ceiling(game.Day * 1440.0 + game.Hour * 60 + game.Minute + minutes);
+                bool started;
+                try { TestBridgeCommands.RunClockUntil((int)(end / 1440), (int)(end % 1440), forDrive: true); started = true; }
+                catch (Exception ex) { Fail(run, "the trip's clock: " + ex.Message); yield break; }
+                if (!started) yield break;
+                while (TestBridgeCommands.RunningUntil) { if (run.Done) yield break; yield return null; }
+                if (run.Done) yield break;
+                if (!ReferenceEquals(game, SaveGameManager.Current) || NowMinutes(game) < end)
+                { Fail(run, "the trip's clock was cancelled before arrival"); yield break; }
+                run.Ride = new JObject { ["end"] = "Complete: arrived", ["game_minutes"] = Math.Round(minutes), ["metres"] = Math.Round(metres) };
+                Log.Info($"Test bridge: drive {run.Id} to {run.Place} simulated: {metres:F0} m, {minutes:F0} game minutes.");
+            }
+            else if (run.Phase == "riding")
             {
                 var ride = Rides(run);
                 while (true)
@@ -504,7 +525,7 @@ namespace FoodTrucks
                 }
                 try
                 {
-                    var vehicle = FoodVehicle(run.Id);
+                    var vehicle = DrivenVehicle(run.Id);
                     run.PullOut = PullOut(vehicle, Spawned(vehicle), run.TriedWaypoints);
                 }
                 catch (BridgeError ex)
@@ -545,10 +566,10 @@ namespace FoodTrucks
 
         private static void Park(DriveRun run)
         {
-            var vehicle = FoodVehicle(run.Id);
+            var vehicle = DrivenVehicle(run.Id);
             var controller = Spawned(vehicle);
             var short_ = Flat(controller.transform.position - run.Goal);
-            if (short_ > ParkReachMetres)
+            if (short_ > ParkReachMetres && !run.Simulated)
             {
                 run.Park = new JObject { ["parked"] = false, ["why"] = $"the truck stopped {short_:F0} m from {run.Place}, too far to park there", ["metres_short"] = Math.Round(short_) };
                 return;
@@ -562,9 +583,11 @@ namespace FoodTrucks
                 run.Park = pose;
                 return;
             }
-            var spot = HireRoutes.FreeParkingNear(run.Goal, KerbMetres, vehicle) ?? HireRoutes.FreeParkingNear(run.Goal, KerbWideMetres, vehicle);
+            var spot = HireRoutes.FreeParkingNear(run.Goal, KerbMetres, vehicle) ?? HireRoutes.FreeParkingNear(run.Goal, KerbWideMetres, vehicle)
+                       ?? (run.Simulated ? HireRoutes.FreeParkingNear(run.Goal, KerbWideMetres * 3f, vehicle) : null);
             if (spot == null)
             {
+                if (run.Simulated) throw new BridgeError($"no free parking space within {KerbWideMetres * 3f:F0} m of {run.Place}; the vehicle stays where it was");
                 run.Park = new JObject { ["parked"] = false, ["why"] = $"no free parking space within {KerbWideMetres:F0} m of {run.Place}; the truck stands in the lane" };
                 return;
             }
@@ -616,6 +639,7 @@ namespace FoodTrucks
             return new JObject
             {
                 ["running"] = !run.Done,
+                ["simulated"] = run.Simulated,
                 ["phase"] = run.Phase,
                 ["id"] = run.Id,
                 ["place"] = run.Place,

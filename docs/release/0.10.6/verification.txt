@@ -1,0 +1,107 @@
+FINAL STATUS (23 October): 0.10.6 with physical crew driving held back.
+See final-verification.txt and final-native.json for current results and manual
+checks; package-verification.json now describes the final ZIP. The candidate-only
+stop and hashes below are historical and superseded by Peter's final scope.
+
+--- Historical candidate evidence follows ---
+
+Street Food 0.10.6 (cooler/logos/crew driving) — candidate, NOT RELEASED
+
+Based on current main b0b5faf and WIP db85079 (981df6d, a09a814).
+Retains factory-water removal, unlimited employee rosters and commissary cart closure.
+Dedicated cooler places, truck logos and soda-only tuning are integrated. Physical
+crew driving remains the gated developer probe; production routes still use timed
+travel. Persistent City integration/save coordination is outside this repository.
+
+Integration repairs: retain native on-foot cart/empty-truck menu initialization;
+remove duplicate Sell cart action; retain closure order/standing-order assertions;
+cap category market floors at the configured global ceiling; align bridge mock,
+CLI help/tests and documentation with the WIP's simulated player trip. Simulated
+trip cancellation/reload can no longer park before arrival. Actual coroutine
+harness checks completion, cancellation, reload and already-completed cleanup.
+
+Cleanup: Python caches and generated promotional ZIP removed from the final tree;
+raw route-study JSON compacted without discarding numeric evidence. Required
+Blender/FBX/texture inputs retained. No changed file exceeds 1 MiB; targeted secret
+signature scan found none. Published WIP history is retained, never rewritten.
+
+Automated validation:
+- Core: 2,124 passed, one opt-in long-soak skip.
+- Tools: 248 passed, including actual native adapter harnesses and simulated-drive
+  coroutine boundaries and save-scoped notice caching. Both in-process and
+  normal socket transports passed all 248 tests.
+- Separate 200-seed x 365-day soak: passed (28 min 44 sec), zero failures.
+- Official Unity SDK: Windows and Mac bundles built and validated. No compiler
+  errors. Existing SDK duplicate-type/reference warnings remain in ignored logs.
+- Blender: cart both sides, truck cooler clearances and hatch-angle review passed;
+  both logo panels passed 10,201 surface samples each.
+- ZIP: 19 exact allowed runtime entries, CRC and every decompressed file SHA-256
+  verified. Runtime DLL contains 0.10.6; manifest/runtime source versions agree.
+  Full hash/path receipt is package-verification.json.
+
+Native Mac smoke (session 5c7cdf23):
+- First candidate package (archive hash in the Mac receipt), with only the established private bridge/runtime
+  adaptation. Three native game adapters matched the installed rig hashes.
+- Loaded the earlier FT Dedicated Cooler fixture; immediately saved a separate
+  FT Street Food 0.10.6 copy. Personal/normal-profile saves untouched.
+- BizMan showed Branding and 318/320 soda capacity with Extra Storage.
+- Native editor saved Corner Kitchen 106; generator produced a 1024x1024 image
+  and two body signs. Camera image showed the customer-side sign; its view was
+  partly occluded by street furniture, so it is limited visual evidence.
+- Returning the large fridge returned all 318 cans to shared commissary stock.
+  Refitting it and taking those same 318 cans succeeded without loss.
+- Save/reload retained both vehicle identities, equipment/stock, money, licence,
+  shared commissary state, sales ledger and logo text. Native logo removal worked.
+- Graceful shutdown. Always-on log checker: zero inactive patches, mod errors or
+  FoodTrucks exceptions. No version-specific 0.10.6 log rules. Other mods emit
+  known missing-bundle errors; this is not a globally clean-log claim.
+- Original rig package/receipt restored: all 263 file hashes verified. Rig stopped
+  and lease released. Compact receipt: mac-smoke-2026-10-23.json. Raw replies,
+  screenshot, logs, backups and scripts: ignored build/cooler-release/.
+- The later rc2 package adds the bridge notice-cache fix and a fresh build. The
+  prior Mac evidence remains bound to its original archive hash. The Mac rig was
+  subsequently acquired by mods-release-session2-20261023; it was left untouched.
+
+Native Windows / Home PC smoke (session e4c95280):
+- The rig was initially busy. Its owner later released it; acquired the idle agent1
+  lease at 12:08 UTC and installed the exact rc2 archive, with only the established
+  private bridge/runtime adaptation. Three game adapters matched the current rig.
+- Runtime reported 0.10.6, runtime 6, isolated agent1 profile, Steam disconnected,
+  Workshop off and no Steam statistics writes. No wake or normal-profile changes.
+- Loaded the earlier 0.10.5 FT smoke save and immediately made a disposable copy.
+- Bought a cart for $1,200; native Sell cart menu and $600 closure quote appeared.
+  Cancel retained the cart and $48,800. Confirmed through the observed Sell cart
+  button; the cart disappeared and the balance became $49,400, one sale entry.
+- Bought a truck for $15,000. The native editor saved Windows Kitchen 106;
+  runtime generated a 1024x1024 logo and two body signs. No Windows screenshot
+  claim. Save/reload preserved the logo text, truck, $34,400 balance, absent cart,
+  and single $600 sale transaction. Cached pre-load notices were cleared.
+- Three test-driver requests were safely refused (unknown saves command, generic
+  Confirm label, wrong text argument); observed native controls then succeeded.
+- Graceful stop; always-on checker found zero inactive patches, mod errors and
+  FoodTrucks exceptions. No version-specific 0.10.6 rules exist.
+- Restored the original FoodTrucks package and receipt, verifying all 105 original recorded
+  rig hashes and 19 original mod files. Rig stopped, ownership released. Optional
+  mods untouched. Receipt: windows-smoke-2026-10-23.json. Raw logs/replies and
+  reversible scripts: ignored build/cooler-release/windows/.
+
+BLOCKED RELEASE / SAFE STOP:
+Main is deliberately NOT advanced. Candidate is on codex/cooler-release only.
+Production physical crew driving is not finished: Gate A moving-traffic/signals,
+turns, 20-drive/50-lifecycle and performance campaign remain open; later shared
+traffic and coordinated-save gates require Persistent City work outside the
+user's permitted repository scope. No cross-repository edits were made.
+
+Remaining acceptance: CHECKS CSF1-CSF5
+historical multi-fridge/native fitting order, movement/visibility and matched
+quiet/busy/saturated economics; LG1-LG4 two-truck isolation, ordinary-shop editor,
+missing custom PNG and broader lifecycle checks. Series-playtest job/licence/help
+extensions compile, but their optional-mod native behaviors were not tested here.
+The test-bridge notice cache now resets on replacement of either the native game
+or attached mod state and on event Clear. An extracted native-class harness checks
+same-day/time cross-load isolation, the 200-notice bound and hook lifecycle.
+Do not treat this integration candidate as release-ready.
+
+The Workshop kit is prepared for later review, not publication. Preview reuses
+the established thumbnail. Base food/drink count verified from data: 19.
+No Steam Workshop upload or normal-profile installation was performed.

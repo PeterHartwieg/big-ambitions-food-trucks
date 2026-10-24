@@ -80,7 +80,7 @@ namespace FoodTrucks.Core.Selling
             FromEquipment(tables, vehicleType, CargoRules.FittedEquipment(tables, cargo));
 
         // The products the fitted equipment unlocks, in fitting order. Equipment is inventory: each
-        // piece takes one of the vehicle's slots, and a second piece of the same kind adds no items.
+        // piece uses a general slot except the first cooler, which has its own place. Duplicates add no items.
         public static MenuBuild FromEquipment(DemandTables tables, string? vehicleType, IEnumerable<string?> fittedEquipment)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
@@ -90,11 +90,14 @@ namespace FoodTrucks.Core.Selling
 
             var products = new List<string>();
             var pieces = 0;
+            var reservedCoolers = vehicle.CoolerSlots;
             foreach (var id in fittedEquipment)
             {
                 var equipment = tables.Equipment(id);
                 if (equipment == null) return new MenuBuild(Empty, MenuProblem.UnknownEquipment, id);
-                if (++pieces > vehicle.EquipmentSlots) return new MenuBuild(Empty, MenuProblem.TooMuchEquipment, id);
+                if (EquipmentLayout.IsCooler(id) && reservedCoolers > 0) reservedCoolers--;
+                else pieces++;
+                if (pieces > vehicle.EquipmentSlots) return new MenuBuild(Empty, MenuProblem.TooMuchEquipment, id);
                 products.AddRange(equipment.Products);
             }
             return new MenuBuild(new Menu(products), MenuProblem.None, null);

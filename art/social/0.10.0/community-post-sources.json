@@ -1,0 +1,23 @@
+{
+  "title": "HART. Street Food \u2014 community beta is live",
+  "size": [
+    1600,
+    1600
+  ],
+  "workshop_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3822355169",
+  "source_assets": [
+    {
+      "path": "art/workshop/brand/hart-wordmark-on-light.svg",
+      "sha256": "b3d08ad3ca196261b23382d56fcf8a5528ea7de24ff07aa6cbe294366e9d2e63"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/cart.png",
+      "sha256": "d86716c5fd99143e7fe5d9d8b51353aed494a62be82b5b04efc3f9d9c86923eb"
+    },
+    {
+      "path": "build/workshop-0.10.0/models/truck.png",
+      "sha256": "acc6912b147c3e7d0d7de1cc5df00e51abd31d32c6d17f038ca4b47d820f8043"
+    }
+  ],
+  "note": "Exact mod-model renders and original HART. logo. Models and logo are not redrawn. Type is outlined from the HART brand fonts."
+}

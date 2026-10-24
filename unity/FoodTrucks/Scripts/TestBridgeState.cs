@@ -52,6 +52,7 @@ namespace FoodTrucks
             result["view_blocked"] = TestBridgeUncover.ViewBlocked();
             result["money"] = Math.Round(game.Money, 2);
             result["player"] = Player(game);
+            result["job"] = TestBridgeJob.State();
             result["transactions_today"] = Transactions(game);
             var state = FoodTrucksSession.CurrentState;
             if (state == null) return result;
@@ -69,6 +70,23 @@ namespace FoodTrucks
                 catch (Exception ex) { vehicles.Add(new JObject { ["id"] = instance.id, ["error"] = ex.Message }); }
             }
             result["vehicles"] = vehicles;
+            // The player's other cars and vans (a car of their own, a job's hired van): id, type and where it stands.
+            var others = new JArray();
+            foreach (var instance in game.VehicleInstances.Where(v => v != null && FoodTrucksMod.KindOf(v.vehicleTypeName) == null))
+            {
+                VehicleController? controller = null;
+                try { controller = VehicleHelper.GetVehicleController(instance); } catch (Exception) { }
+                string type = instance.vehicleTypeName;
+                try { type = LocalizorManager.GetLocalization(instance.vehicleTypeName, null); } catch (Exception) { }
+                var entry = new JObject { ["id"] = instance.id, ["type"] = type };
+                if (controller != null)
+                {
+                    entry["x"] = Math.Round(controller.transform.position.x, 1);
+                    entry["z"] = Math.Round(controller.transform.position.z, 1);
+                }
+                others.Add(entry);
+            }
+            result["other_vehicles"] = others;
             result["commissary"] = Commissary(state);
             result["employees"] = new JArray(HireCrew.Available(state).Select(e => new JObject
             {
@@ -318,15 +336,19 @@ namespace FoodTrucks
             foreach (var t in game.Transactions)
             {
                 if (t == null || t.timestamp.Day < game.Day - 1) continue;
+                var time = $"{t.timestamp.Hour:D2}:{(int)t.timestamp.Minute:D2}";
+                // A notice shown in the same game minute says what a bare label ("Fine") was for.
+                var notices = TestBridgeEvents.GameNoticesAt(t.timestamp.Day, time);
                 list.Add(new JObject
                 {
+                    ["notices"] = new JArray(notices),
                     ["label"] = Notices.Text(t.transactionType ?? "", t.transactionData),
                     ["type"] = t.transactionType,
                     ["amount"] = Math.Round(t.amount, 2),
                     // The game's balance after it (floored to whole dollars), which tells two equal transactions apart.
                     ["balance"] = Math.Round(t.balance, 2),
                     ["day"] = t.timestamp.Day,
-                    ["time"] = $"{t.timestamp.Hour:D2}:{(int)t.timestamp.Minute:D2}",
+                    ["time"] = time,
                 });
             }
             return list;

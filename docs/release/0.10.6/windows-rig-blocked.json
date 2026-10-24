@@ -1,0 +1,12 @@
+{
+  "instance": "agent1",
+  "held": true,
+  "owner": "persistent-city-neighborhood-finance-20261023",
+  "purpose": "Persistent City resident finances and local market comparisons",
+  "acquired_utc": "2026-10-23T11:09:53.2722018Z",
+  "expires_automatically": false,
+  "pending": 1,
+  "legacy_blocked": false,
+  "checked_utc": "2026-10-23T12:00:34Z",
+  "disposition": "Busy; no lifecycle or package change attempted"
+}

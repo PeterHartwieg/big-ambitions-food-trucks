@@ -582,7 +582,7 @@ class BlindPlayTests(unittest.TestCase):
             PLAY(['--help'])
         for command in ('look', 'places', 'go ADDRESS', 'walk X Z', 'map filters', 'buy truck|cart', 'order SITE', 'crew assign', 'route add', 'time until',
                         'use [--radius M]', 'eat [ITEM]', 'place X Z', 'phone APP', 'call list', 'ui set ID VALUE', 'How the city works',
-                        'drive TRUCK PLACE', 'bay:SITE', 'stop:N'):
+                        'drive VEHICLE PLACE', 'bay:SITE', 'stop:N'):
             self.assertIn(command, text.getvalue())
         # Hints, not numbers: no price, fee or duration in the manual's city section.
         hints = text.getvalue().split('How the city works', 1)[1].split('If the referee', 1)[0]
@@ -590,7 +590,7 @@ class BlindPlayTests(unittest.TestCase):
         import argparse
         names = set(runpy.run_path(str(TOOLS / 'play'), run_name='play_test')['parser']()._subparsers._group_actions[0].choices)
         self.assertEqual(names, {'look', 'notices', 'places', 'go', 'walk', 'map', 'screen', 'ui', 'time', 'buy', 'vehicle', 'order',
-                                 'crew', 'price', 'route', 'save', 'load', 'use', 'eat', 'place', 'floorplan', 'drop', 'pickup', 'handtruck', 'phone', 'call', 'drive'})
+                                 'crew', 'price', 'route', 'save', 'load', 'use', 'eat', 'place', 'floorplan', 'drop', 'pickup', 'handtruck', 'phone', 'call', 'drive', 'work', 'licence'})
         # No shortcuts: no money, teleport, spawn, fixture or debug op is reachable, and the old licence and hire are gone.
         for argv in (['money', 'set', '1000000'], ['licence'], ['hire'], ['teleport', 'x'], ['debug', 'hire']):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
@@ -664,8 +664,8 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.play('drive', truck, 'bay:hells-kitchen', '--speed', '4'), 2, self.lines)
         # To the bay: out of the space, the ride, into the bay; the clock is put back as it was (paused).
         self.assertEqual(self.play('drive', truck, 'bay:hells-kitchen'), 0, self.lines)
-        self.assertIn('pulled', self.lines[0])
-        self.assertTrue(any(line.startswith('The drive: Complete: arrived') for line in self.lines), self.lines)
+        self.assertFalse(any('pulled' in line for line in self.lines))
+        self.assertTrue(any(line.startswith('Simulated trip: Complete: arrived') for line in self.lines), self.lines)
         self.assertIn('Parked in the bay.', self.lines)
         self.assertTrue(any('parked legally, in the bay at hells-kitchen' in line for line in self.lines), self.lines)
         self.assertTrue(self.session.mock.state['clock']['paused'])
@@ -686,18 +686,13 @@ class BlindPlayTests(unittest.TestCase):
         self.session.mock.plans[truck].append({'day': 'monday', 'address': 'bay', 'x': 595., 'z': 220., 'open': 1200, 'close': 1260})
         self.assertEqual(self.play('drive', truck, 'stop:2'), 0, self.lines)
         self.assertIn('Parked in the bay.', self.lines)
-        # Self Driving refuses: the truck goes back where it stood, and the tool says so.
-        before = dict(self.session.mock.state['vehicles'][0])
+        # Physical-driving availability/refusals do not affect the simulated trip.
         self.session.mock.ride_refusal = 'no route to the destination'
-        self.assertEqual(self.play('drive', truck, 'address:' + address), 0, self.lines)
-        self.assertTrue(any('The drive failed: Self Driving refused the ride from 3 places on the lane: no route to the destination; the truck is back where it stood' in line
-                            for line in self.lines), self.lines)
-        after = self.session.mock.state['vehicles'][0]
-        self.assertEqual((after['x'], after['z']), (before['x'], before['z']))
-        # Without the self-driving mod there is no drive.
         self.session.mock.self_driving = False
-        self.assertEqual(self.play('drive', truck, 'bay:hells-kitchen'), 1, self.lines)
-        self.assertIn("HART. Self Driving isn't loaded", self.lines[0])
+        self.assertEqual(self.play('drive', truck, 'address:' + address), 0, self.lines)
+        self.assertIn('Parked by the kerb.', self.lines)
+        self.assertEqual(self.play('drive', truck, 'bay:hells-kitchen'), 0, self.lines)
+        self.assertIn('Parked in the bay.', self.lines)
 
     def test_a_walk_from_a_stopped_clock_puts_back_its_speed(self):
         self.session.bridge.call('save', {'name': 'FT playtest'})

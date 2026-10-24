@@ -128,6 +128,7 @@ namespace FoodTrucks
         // Places the player at the truck's hatch once they are out of any seat and on the NavMesh.
         public static void Enter(string truckId)
         {
+            if (CrewDriveProbe.Owns(truckId)) return;
             var self = instance;
             if (self == null)
             {

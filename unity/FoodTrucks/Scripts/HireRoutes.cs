@@ -267,6 +267,7 @@ namespace FoodTrucks
         // over a whole stop still opens, sells and closes it.
         private void Run(VehicleState vehicle, long now)
         {
+            if (CrewDriveProbe.Owns(vehicle.VehicleId)) return;
             var instance = Instance(vehicle.VehicleId);
             if (instance == null)
             {
@@ -540,6 +541,7 @@ namespace FoodTrucks
 
         private static void Depart(VehicleState vehicle, VehicleInstance instance, HireAction action, long t, string kind)
         {
+            if (CrewDriveProbe.Owns(vehicle.VehicleId)) return;
             var controller = VehicleHelper.GetVehicleController(instance);
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
             var heading = controller != null ? controller.transform.eulerAngles.y : ((Quaternion)instance.rotation).eulerAngles.y;
@@ -565,6 +567,7 @@ namespace FoodTrucks
         // for a truck into a free space near there. Tried every tick until there is room.
         private static void Recover(VehicleState vehicle)
         {
+            if (CrewDriveProbe.Owns(vehicle.VehicleId)) return;
             var transit = vehicle.Transit;
             var instance = Instance(vehicle.VehicleId);
             if (transit == null || instance == null) return;
@@ -645,6 +648,7 @@ namespace FoodTrucks
         // As the game's own vehicle sale does, traffic forgets the colliders before the vehicle goes.
         private static void TakeOffMap(VehicleController controller)
         {
+            if (CrewDriveProbe.Owns(controller)) return;
             try
             {
                 if (controller.vehicleCollider != null) GleyTrafficSystem.Manager.TriggerColliderRemovedEvent(controller.vehicleCollider);

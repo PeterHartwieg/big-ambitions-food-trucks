@@ -95,6 +95,9 @@ namespace FoodTrucks.Core.Saves
     public class VehicleState
     {
         public string VehicleId { get; set; } = string.Empty;
+        // Optional version-1 logo, interpreted by VehicleLogo; old saves have no branding.
+        // Preserve unreadable/newer cosmetics verbatim without rejecting the vehicle's financial state.
+        public JToken? Logo { get; set; }
         public bool IsOpen { get; set; }
         public double SaleProgress { get; set; }
         public int LifetimeSales { get; set; }

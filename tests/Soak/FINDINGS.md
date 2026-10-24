@@ -94,3 +94,13 @@ stop that is still open, with a short Travel or Restock leg first. `HireRunner.S
 through that leg by design, and the sales were within the stop's hours, but `RouteSaleAllowed` measured yesterday's
 plans from the replanned opening instead of the stop's opening time. It now uses the stop's hours on the plan's own
 day. Test: `RouteReplanTests.ALateStopReplannedAfterMidnightKeepsServingWithinItsHours`.
+
+## Full matrix rerun — 23 October 2026
+
+The 0.10.6 cooler integration candidate passed all 200 seeds × 365 days using
+`FT_SOAK_LONG=1 dotnet test tests/FoodTrucks.Core.Tests.csproj --no-build --filter Category=SoakLong --nologo`.
+VSTest reported one passed matrix test, zero failures, no skips, in 28 min 44 sec.
+The normal suite also passed all 2,124 tests with only this opt-in test skipped.
+This supersedes the earlier pending full-matrix status, not the native-game
+coverage exclusions. Release evidence: `docs/release/0.10.6/verification.txt`;
+raw log: ignored `build/cooler-release/soak-long.log` in the release worktree.

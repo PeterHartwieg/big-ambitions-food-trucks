@@ -34,7 +34,7 @@ public class MenuTests
     [Fact]
     public void ACartHasTwoSlots()
     {
-        var build = Menu.FromEquipment(ShippedData.Tables, "cart", new[] { "hotdoggrill", "cooler", "coffeemachine" });
+        var build = Menu.FromEquipment(ShippedData.Tables, "cart", new[] { "hotdoggrill", "displaycase", "coffeemachine" });
 
         Assert.Equal(MenuProblem.TooMuchEquipment, build.Problem);
         Assert.Equal("coffeemachine", build.Detail);
@@ -60,7 +60,7 @@ public class MenuTests
         Assert.Equal(MenuProblem.None, build.Problem);
         Assert.Equal(new[] { "ba:itemname_hotdog" }, build.Menu.Items);
         Assert.Equal(MenuProblem.TooMuchEquipment,
-            Menu.FromEquipment(ShippedData.Tables, "cart", new[] { "hotdoggrill", "hotdoggrill", "cooler" }).Problem);
+            Menu.FromEquipment(ShippedData.Tables, "cart", new[] { "hotdoggrill", "hotdoggrill", "coffeemachine" }).Problem);
     }
 
     [Theory]

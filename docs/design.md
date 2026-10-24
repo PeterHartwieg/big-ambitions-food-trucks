@@ -8,6 +8,8 @@ Written 7 October 2026. Background research: [nyc-food-trucks-2026-10-07.md](res
 
 ## Decisions so far
 
+**Truck branding (22 October 2026):** each truck may have its own logo, edited from its BizMan page using the normal shop logo controls (built-in/custom PNG shape, font, shape/text/background colours). Logo text is independent of the fleet's numbered vehicle name. Two 55 cm square signs sit on fixed body panels: below the customer serving window and above the driver-side generator hatch. Opening the serving hatch leaves them visible. Existing trucks start unbranded; removing a logo restores the plain body. Designs are optional versioned cosmetic save data; imported PNGs use the game's shared CustomIcons folder. Carts and business economics are unchanged.
+
 | Topic | Decision |
 |---|---|
 | Audience | Public Workshop mod. Neutral names, works without other mods. |
@@ -73,19 +75,25 @@ Decided while building the Core (8 October 2026; numbers in `data/rules.json`): 
 | | Cart | Truck |
 |---|---|---|
 | How it moves | Pushed on foot, anywhere in the city (slow); bridges use the game's bridge skip with walking time | Driven |
-| Equipment slots | 2 | 4 |
+| Equipment slots | 2 general + 1 dedicated cooler | 4 general + 1 dedicated cooler |
 | Stock | 40 units per fitted piece, 80 with Extra Storage (a one-piece cart sells out in about 4 hours at a good pitch) | 80 units per fitted piece, 160 with Extra Storage |
 | Window staff at once | 1 | Up to 2 |
 | Catering | No | Yes |
 | Pitch rules | Sidewalk spots | Curb spots |
 
-The employee roster has no size limit. Add employees on the crew panel and rotate them across weekdays or consecutive shifts in Schedule. Only simultaneous work is limited: one on a cart and two on a truck. Each employee still belongs to one vehicle at a time.
+Decided 22 October 2026 (Peter): the employee roster has no size limit. **Add employee** on the vehicle's crew panel adds another employee; the Schedule tab rotates them across weekdays and consecutive shifts. Only simultaneous work is limited: one serving position on a cart and two on a truck. Each employee still belongs to one vehicle at a time. Existing crew and shifts retain their save format.
 
 Slots and stock are inventory counts in version 1. The tetris layout replaces the slot count later; the item list stays the same.
 
 Decided 9 October 2026 (Peter): the cart shows its fitted equipment on the counter, one piece per slot, using the game's own item model where it suits a cart and a small model of our own where it doesn't. Planned for Milestone 8; see the implementation plan.
 
+## Retiring a cart (22 October 2026)
+
+A closed cart can be sold with all its onboard equipment and stock at any commissary bay. On foot, select the cart and choose **Sell cart**. The confirmation shows the total using the game's normal resale setting. Selling closes that cart business: its permit, crew assignments, route, venue partnership and rented space end. Crew remain employed and unassigned, and earned wages remain due. Unpaid window sales are paid separately. Past accounts, the vendor licence, shared commissary stock and orders remain. Sale proceeds that fail to pay are retained for retry across saves.
+
 ## Equipment and menu
+
+Decided 22 October 2026: the first cooler uses a dedicated customer-facing place, leaving the two/four general places free. Additional coolers consume general places so existing multiple-fridge setups stay valid. Coffee and slushie machines use general places. The optional fridge must still be bought and stocked; it holds 80 sodas on a cart or 160 on a truck, doubled by Extra Storage. Its existing add-on and standalone sales, prices and market-demand rules are unchanged. The cart shows a cabinet-front insert below the rear worktop on the customer side; the truck shows a shallow fridge at the rear of its serving counter, clear of the register, crew and closed hatch. No save schema change.
 
 Each piece of equipment unlocks products. The menu is whatever the fitted equipment allows, so slots force a trade-off between a wide menu and a fast one.
 

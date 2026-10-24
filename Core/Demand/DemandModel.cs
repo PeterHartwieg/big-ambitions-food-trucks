@@ -124,7 +124,7 @@ namespace FoodTrucks.Core.Demand
                     * tables.SeasonAppetite(season, category.Name)
                     * (query.Raining ? tables.RainAppetite(category.Name) : 1.0);
                 appetite = Math.Min(1.0, appetite);
-                var market = Market(group.Value, query.MarketDemand);
+                var market = Market(group.Value, query.MarketDemand, category.MarketFloor);
                 var addOns = category.AddOnFactor > 0
                     ? Math.Min(1.0, appetite * market * (1 - category.NewCustomerWeight) * category.AddOnFactor)
                         * CategoryShare(query.CategoryShares, category.Name)
@@ -195,7 +195,7 @@ namespace FoodTrucks.Core.Demand
         }
 
         // The game's demand / 100 for the category's items on the menu, averaged, kept between floor and ceiling.
-        private double Market(IReadOnlyList<string> items, IReadOnlyDictionary<string, double>? demand)
+        private double Market(IReadOnlyList<string> items, IReadOnlyDictionary<string, double>? demand, double categoryFloor)
         {
             var sum = 0.0;
             foreach (var item in items)
@@ -203,7 +203,7 @@ namespace FoodTrucks.Core.Demand
                 var value = 1.0;
                 if (demand != null && demand.TryGetValue(item, out var raw) && !double.IsNaN(raw) && !double.IsInfinity(raw))
                     value = raw / 100.0;
-                sum += Math.Max(tables.MarketFloor, Math.Min(tables.MarketCeiling, value));
+                sum += Math.Min(tables.MarketCeiling, Math.Max(Math.Max(tables.MarketFloor, categoryFloor), value));
             }
             return sum / items.Count;
         }

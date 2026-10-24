@@ -154,6 +154,8 @@ cp "$REPO"/data/*.json "$OUT/data/"
 # The game loads a prefab by file name from any bundle and may take another GameObject asset with the same name
 # instead (a vehicle's model rather than its prefab), so no model or other prefab may share a prefab's name.
 python3 "$REPO/tools/validate-bundles.py" "$OUT"
+# Fail closed if a developer build symbol leaks physical driving into the release DLL.
+dotnet run --project "$REPO/tools/release/VerifyRelease.csproj" -c Release -- "$OUT" "$MOD_DIR/ModManifest.asset"
 ( cd "$OUT" && find . -type f | sort | xargs shasum -a 256 ) > "$REPO/build/FoodTrucks.sha256"
 echo "Built $OUT"
 cat "$REPO/build/FoodTrucks.sha256"

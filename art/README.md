@@ -315,3 +315,16 @@ Props have their origin at the bottom centre and the front at Unity +z. `tools/b
 | In the SDK project / prefab | pending (Milestone 8) | pending (Milestone 8) |
 | In game | pending | pending |
 | Look review (Peter) | pending | pending |
+
+## Dedicated customer cooler (22 October 2026)
+
+The first fitted cooler has its own `EquipmentCooler` anchor. Ordinary `DrinksCooler` remains the portable model for additional fridges in general slots. `art/tools/build_customer_coolers.py` derives two display-only Blender models from it, preserving its door, stock artwork and UVs; `apply_look.sh` rebakes their maps and validates their specs. They are not new purchasable items. The cart variant is the shallow front insert of a cabinet within the cart body, not a countertop appliance.
+
+| Vehicle | Unity anchor | Display | Orientation |
+| --- | --- | --- | --- |
+| Cart | `(±0.443, 0.525, -0.32)` | `CartDrinksCooler`, 0.392 m wide × 0.0704 m deep × 0.3836 m tall | Position and ±90° Y facing follow the queue side; right when closed |
+| Truck | `(0.875, 1.80, -1.80)` | `TruckDrinksCooler`, 0.392 m wide × 0.1584 m deep × 0.548 m tall | +90° Y, toward customers |
+
+Run `blender -b --factory-startup --python art/tools/build_customer_coolers.py`, then `art/tools/apply_look.sh art/equipment/CartDrinksCooler art/equipment/TruckDrinksCooler`. `art/tools/review_customer_coolers.py` checks actual imported meshes and renders both cart sides and the truck with its register. Cart mounting lips may meet the cabinet skin, but the visible liner/drinks must remain clear. The cart stays inside its existing collider width, above the wheel/fender and below the worktop. The truck stands fully on its serving counter, clears the crew aisle and register, and clears the hatch at 0–80° in 10° steps. Results are under `build/cooler-slot/`; these are Blender checks, not native gameplay evidence.
+
+`art/tools/render_diagrams.sh` builds all layers, including the dedicated models. For unchanged base artwork/cameras, `FT_DIAGRAM_COOLER_ONLY=1` on the Python renderer reuses the existing backgrounds/general layers and renders just the two new layers. Both paths give identical place mappings. The dedicated-place tooltip identifies its restriction in BizMan.

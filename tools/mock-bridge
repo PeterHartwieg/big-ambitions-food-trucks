@@ -1532,7 +1532,11 @@ class Mock:
             return f"Commissary stock offers no {direction} of '{item}' here ({', '.join(s['key'] for s in source) or 'none'})"
         if direction=='take' and line['key'] in PIECES:
             # A piece of equipment goes on one at a time, into a free slot.
-            if len(v['pieces'])>=SLOTS[v['kind']]:
+            fitted = [p['item'] for p in v['pieces']]
+            reserved = ECONOMY['vehicles'][v['kind']].get('coolerSlots', 0)
+            general = len(fitted) - min(reserved, fitted.count('cooler'))
+            dedicated = PIECES[line['key']] == 'cooler' and fitted.count('cooler') < reserved
+            if general > SLOTS[v['kind']] or (general == SLOTS[v['kind']] and not dedicated):
                 self.event(f"The {v['kind']} has no free place for {line['item']}.",'notice'); return 'refused by the cargo: NoSlot'
             line['amount']-=1
             v['pieces'].append({'item':PIECES[line['key']],'units':0,'cap':PER_PIECE[v['kind']]})
@@ -2367,7 +2371,6 @@ class Mock:
         if c['paused']: raise ValueError('The game is paused: driving takes real time. Set a speed first.')
         if self.until is not None: raise ValueError('run_until is running, and a time skip would end the ride: wait for it to stop.')
         if self.time_skip: raise ValueError('A time skip (sleep, a paid activity) is running; wait for it to end.')
-        if not self.self_driving: raise ValueError("HART. Self Driving isn't loaded: the truck can't drive itself. Switch it on in the Mods menu.")
         kind,_,what=place.partition(':')
         site=None
         if kind=='bay':
@@ -2396,11 +2399,8 @@ class Mock:
         rides=distance>40
         start=(v['x'],v['z'],v['heading'])
         pull=None
-        if rides:
-            pull={'x':round(v['x']+3.5,2),'y':0.,'z':round(v['z'],2),'heading':0.,'in_the_way_after':[],'waypoint':1200,'metres':3.5}
-            v.update(x=v['x']+3.5,legal=False,commissary=None)
         self.drive_run={'running':True,'phase':'riding' if rides else 'parking','id':identifier,'place':place,'speed':speed,'goal':{'x':round(goal[0],2),'z':round(goal[1],2)},
-                        'seconds':0.,'game_minutes':0.,'from':{'x':round(start[0],2),'y':0.,'z':round(start[1],2),'heading':round(start[2],2)},'pull_out':pull,
+                        'simulated':True,'seconds':0.,'game_minutes':0.,'from':{'x':round(start[0],2),'y':0.,'z':round(start[1],2),'heading':round(start[2],2)},'pull_out':pull,
                         'attempts':[],'ride_to':f'{place} building' if rides else None,'ride':None,
                         'park':None,'error':None,'truck':None,'vehicle':None,'_site':site,'_distance':distance,'_start':start}
         self.event(f"Test bridge: drive {identifier} to {place} (x {goal[0]:.1f}, z {goal[1]:.1f}) at {speed}x: {self.drive_run['phase']}.")
@@ -2420,15 +2420,9 @@ class Mock:
         v=self.vehicle(run['id'])
         goal=(run['goal']['x'],run['goal']['z'])
         if run['phase']=='riding':
-            if self.ride_refusal:
-                # Refused before it drove, from each of three places on the lane; then back into the space.
-                run['ride']={'kind':'own','refused':self.ride_refusal}
-                run['attempts']=[{'pull_out':run['pull_out'],'refused':self.ride_refusal} for _ in range(3)]
-                x,z,h=run['_start']; v.update(x=x,z=z,heading=h,legal=True)
-                return self.end_drive(run,f"Self Driving refused the ride from 3 places on the lane: {self.ride_refusal}; the truck is back where it stood")
-            run['ride']={'kind':'own','end':'Complete: arrived','seconds':round(run['_distance']/8,1),'contacts':0,'contactsCaused':0,'arrivedMetres':9.5,'carMetres':12.0,'inCar':True}
-            run['seconds']=run['ride']['seconds']; run['game_minutes']=round(run['_distance']*0.04,1)
-            v.update(x=goal[0],z=goal[1]+12.)
+            minutes=max(2,run['_distance']*1.35/8)
+            run['ride']={'end':'Complete: arrived','game_minutes':round(minutes),'metres':round(run['_distance']*1.35)}
+            run['game_minutes']=round(minutes,1)
         run['phase']='parking'
         space=next((s['site'] for s in self.state['commissary']['spaces'] if s['vehicle']==v['id']),None)
         if run['_site']:

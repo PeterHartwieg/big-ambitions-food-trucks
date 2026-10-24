@@ -298,7 +298,7 @@ public class StorageTests
         var truck = new[] { L(HotDogGrill, 1), L(Grill, 1), L("foodtrucks:itemname_griddle", 1), L("ba:itemname_drinksfridge", 1) };
         var units = Core.Selling.Storage.CategoryCapacity(Tables, "truck", truck);
         Assert.Equal(240, units["fastfood"]);
-        Assert.Equal(80, units["colddrinks"]);
+        Assert.Equal(160, units["colddrinks"]);
         Assert.Equal(80, units["streetmeal"]);
         Assert.Equal(480, Core.Selling.Storage.CategoryCapacity(Tables, "truck", truck.Append(L(Storage, 1)))["fastfood"]);
 

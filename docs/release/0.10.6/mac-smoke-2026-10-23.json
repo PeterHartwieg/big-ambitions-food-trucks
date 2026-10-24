@@ -1,0 +1,64 @@
+{
+  "session": "5c7cdf23",
+  "mod_version": "0.10.6",
+  "instance": "agentmac",
+  "gameplay_source_commit": "32f67bf",
+  "archive_sha256": "6d10ca8a3ba4d38db5ca33480b16a65e3d9b69048f6d1da3890826abcee3baf5",
+  "bridge_adapted_dll_sha256": "1115b55731e93e059c0ac82309c28e8e3e90f74b8d9ba37c62fcddcc85473382",
+  "save": "FT Street Food 0.10.6 branded 20261023",
+  "checks": {
+    "money": true,
+    "licence": true,
+    "ledger_today": true,
+    "commissary": true,
+    "cart_id": true,
+    "cart_pieces": true,
+    "cart_stock": true,
+    "cart_open": true,
+    "cart_crew": true,
+    "truck_id": true,
+    "truck_pieces": true,
+    "truck_stock": true,
+    "truck_open": true,
+    "truck_crew": true,
+    "logo_name_after_reload": true
+  },
+  "fridge_return_soda": 318,
+  "fridge_refit": true,
+  "soda_reload": 318,
+  "bizman_soda_fill": "318 / 320",
+  "logo_saved_text": "Corner Kitchen 106",
+  "native_body_image_observed": true,
+  "logo_removal": true,
+  "log_check": {
+    "version_rules_available": false,
+    "inactive_patches": 0,
+    "mod_errors": 0,
+    "foodtrucks_exceptions": 0
+  },
+  "restoration": {
+    "restored": 263,
+    "foodtrucks_files": 19
+  },
+  "final_rig_state": {
+    "installed": true,
+    "running": false,
+    "process": null,
+    "lock": {
+      "instance": "agentmac",
+      "held": false,
+      "owner": null,
+      "purpose": null,
+      "acquired_utc": null,
+      "expires_automatically": false,
+      "pending": 0,
+      "legacy_blocked": false
+    }
+  },
+  "limits": [
+    "Not Windows smoke",
+    "No native powered crew-probe campaign",
+    "No full cooler/logo lifecycle or ordinary-shop regression",
+    "Other installed mods emit known missing-bundle errors"
+  ]
+}

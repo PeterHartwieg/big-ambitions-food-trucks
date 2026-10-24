@@ -32,6 +32,9 @@ namespace FoodTrucks
                 case "teleport": RequireFtCity(cmd); return Teleport(args);
                 case "walk": RequireFtCity(cmd); return Walk(args);
                 case "drive": RequireCity(cmd); return Drive(args);
+#if FOODTRUCKS_CREW_DRIVING_DEV
+                case "crew_drive_probe": RequireFtCity(cmd); return CrewDrive(args);
+#endif
                 case "vehicle": RequireFtCity(cmd); return Vehicle(args);
                 case "commissary": RequireFtCity(cmd); return CommissaryCommand(args);
                 case "crew": RequireFtCity(cmd); return Crew(args);
@@ -55,6 +58,9 @@ namespace FoodTrucks
                 case "handtruck": return HandTruckCommand(args);
                 case "nav_probe": RequireFtCity(cmd); return NavProbe(args);
                 case "ui": return TestBridgeUi.Run(args);
+                case "job": RequireFtCity(cmd); return TestBridgeJob.Run(args);
+                case "licence": RequireFtCity(cmd); return TestBridgeLicence.Run(args);
+                case "help": RequireCity(cmd); return TestBridgeHelp.Run(args);
                 case "shoot": RequireCity(cmd); return TestBridgeShoot.Shoot(args);
                 case "save": RequireFtCity(cmd); return Save(args);
                 case "load": return Load(args);
@@ -273,6 +279,7 @@ namespace FoodTrucks
         // through the game's own needs API when either falls below NeedsTopUp.Below, so a long run never ends in a
         // collapse (the hospital sets the clock to 08:00 the next day and bills $2,000; live session 4).
         private static bool keepNeeds;
+        internal static bool RunningUntil => runUntil != null;
         private static readonly System.Reflection.PropertyInfo? EnergySettingsProperty = AccessTools.Property(typeof(Helpers.EnergyHelper), "Settings");
 
         private static Helpers.EnergySettings? NeedSettings()
@@ -436,6 +443,8 @@ namespace FoodTrucks
             return Math.Round(multiplier / (normal > 0 ? normal : 1f), 2);
         }
 
+        internal static bool ProbeClockNormal => Speed() is double speed && Math.Abs(speed - 1) < .01;
+
         private static void SetSpeed(double speed)
         {
             var normal = PlayerPrefSettings.GameSpeed;
@@ -446,6 +455,25 @@ namespace FoodTrucks
 
         // The minute the game shows (its clock drops the fraction).
         private static double ShownMinutes(GameInstance game) => game.Day * 1440.0 + game.Hour * 60.0 + (int)game.Minute;
+
+        // Runs the clock at the highest speed until a moment, with the needs left to fall (a simulated driving shift).
+        internal static void RunClockUntil(int day, int minuteOfDay, bool forDrive = false)
+        {
+            clockForDrive = forDrive;
+            try { RunClock(day, minuteOfDay); }
+            finally { clockForDrive = false; }
+        }
+
+        [ThreadStatic] private static bool clockForDrive;
+
+        private static void RunClock(int day, int minuteOfDay)
+        {
+            Time(new JObject
+            {
+                ["run_until"] = new JObject { ["day"] = day.ToString(), ["time"] = $"{minuteOfDay / 60:D2}:{minuteOfDay % 60:D2}" },
+                ["speed"] = MaxSpeed, ["keep_needs"] = false,
+            });
+        }
 
         private static JToken Time(JObject args)
         {
@@ -466,7 +494,7 @@ namespace FoodTrucks
                 throw new BridgeError("A screen holds the clock (the phone, the map, a call, an activity or a menu): close it first (ui escape).");
 
             // A time skip ends a Self Driving ride (drive).
-            if (until != null && Driving) throw new BridgeError($"A drive is under way ({DrivingVehicle}), and run_until would end its ride: wait for it (drive status).");
+            if (until != null && Driving && !clockForDrive) throw new BridgeError($"A drive is under way ({DrivingVehicle}), and run_until would end its ride: wait for it (drive status).");
             var game = SaveGameManager.Current;
             // The whole request is checked before anything changes: a refused call leaves the clock, run_until and
             // keep_needs as they were (review round 6: a refused run_until used to leave the needs top-ups on).
@@ -515,7 +543,7 @@ namespace FoodTrucks
         // Every frame, from the pump: follows a load, stops run_until at its time.
         private static bool quitting;
         internal static void RefreshOwnership() => BridgeControl.ControlGate.ObserveWork(
-            quitting || LoadStatus == "pending" || runUntil != null || Driving || TimeSkipRunning() == true ||
+            quitting || LoadStatus == "pending" || runUntil != null || Driving || CrewDriveProbe.Active || TimeSkipRunning() == true ||
             (Scene() == "city" && Paused() != true));
 
         internal static void EveryFrame()
@@ -987,6 +1015,8 @@ namespace FoodTrucks
         private static bool newGame;
         // Where a new game is ("main menu", "character creator", "city", "saving", "saved"), for state.load.new_game.
         private static string? newGameStep;
+        // The custom preset a new game started from, for its log line; null for the Normal values.
+        private static string? newGamePreset;
         private static readonly FieldInfo? NameField = AccessTools.Field(typeof(Character.Customization.NamePicker), "nameField");
 
         // From the main menu: the menu's Start new game as a custom game with the Normal preset's values (the custom
@@ -1008,18 +1038,36 @@ namespace FoodTrucks
             if (SaveGamePathHelper.GetAllSaveGamesFromVersion().Any(s => s != null && s.name == name))
                 throw new BridgeError($"A save named '{name}' exists already; new_game never writes over a save: pick another FT name.");
             var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's runner is gone.");
-            var (variables, preset) = NewGameVariables();
+            var (variables, preset) = NewGameVariables(Str(args, "preset"));
             BeginLoad(name);
             newGame = true;
+            newGamePreset = Str(args, "preset");
             newGameStep = "main menu";
             loadDeadline = UnityEngine.Time.realtimeSinceStartup + NewGameSeconds;
             pump.StartCoroutine(NewGameFlow(name, variables));
             return new JObject { ["loading"] = true, ["name"] = name, ["character"] = NewGameCharacter, ["preset"] = preset };
         }
 
-        // The Normal preset's values as the custom game panel takes them: difficulty custom, tutorial off.
-        private static (GameVariables Variables, string Preset) NewGameVariables()
+        // The Normal preset's values as the custom game panel takes them: difficulty custom, tutorial off. With a
+        // preset name, that saved custom preset instead (a file in the profile's CustomGamePresets folder, read the
+        // way the custom game panel reads it) [code, 1.0: CustomGamePresetsHandler.FetchPresets, CustomGamePanel].
+        private static (GameVariables Variables, string Preset) NewGameVariables(string? presetName)
         {
+            if (presetName != null)
+            {
+                UI.MainMenu.CustomGamePresetsHandler.FetchPresets();
+                var names = UI.MainMenu.CustomGamePresetsHandler.PresetNames ?? new List<string>();
+                var index = names.IndexOf(presetName);
+                if (index < 0)
+                    throw new BridgeError($"No custom preset named '{presetName}'; the saved presets are: {(names.Count == 0 ? "none" : string.Join(", ", names))}.");
+                // A copy through the panel's own text form, so the cached preset stays as saved.
+                var custom = UI.MainMenu.CustomGamePresetsParser.GetStringAsData<GameVariables>(
+                    UI.MainMenu.CustomGamePresetsParser.GetDataAsString(UI.MainMenu.CustomGamePresetsHandler.Presets[index]))
+                    ?? throw new BridgeError($"The custom preset '{presetName}' has no values the game can read.");
+                custom.difficulty = default;
+                custom.tutorialEnabled = false;
+                return (custom, presetName);
+            }
             var settings = InstanceBehavior<GlobalReferences>.Instance?.difficultySettings;
             if (settings == null || settings.Length == 0) throw new BridgeError("The game's difficulty presets aren't there.");
             var setting = settings.FirstOrDefault(s => s != null && s.key != null && s.key.IndexOf("normal", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -1053,7 +1101,7 @@ namespace FoodTrucks
                 EndLoad("failed", $"the game started another load first; {Where()}");
                 yield break;
             }
-            Log.Info($"Test bridge: new game '{name}' (custom, Normal values, tutorial off), to the character creator.");
+            Log.Info($"Test bridge: new game '{name}' (custom, {(newGamePreset == null ? "Normal values" : "preset '" + newGamePreset + "'")}, tutorial off), to the character creator.");
             newGameStep = "character creator";
             InstanceBehavior<MainMenuController>.Instance.StartNewGame(variables);
 

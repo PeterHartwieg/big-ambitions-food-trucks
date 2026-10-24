@@ -1,0 +1,59 @@
+{
+  "name": "TruckDrinksCooler",
+  "fbx": "TruckDrinksCooler.fbx",
+  "visible_budget": 1500,
+  "position_tolerance_m": 0.005,
+  "uv_layers": 1,
+  "uv_min_fill": 0.4,
+  "textures": [
+    {
+      "file": "T_TruckDrinksCooler_BaseColor.png",
+      "size": 512
+    }
+  ],
+  "objects": {
+    "TruckDrinksCooler_Body": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "max_tris": 1500
+    },
+    "TruckDrinksCooler_Collision": {
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "collision": true,
+      "max_tris": 60
+    }
+  },
+  "envelope": {
+    "x": [
+      -0.2,
+      0.2
+    ],
+    "y": [
+      -0.081,
+      0.081
+    ],
+    "z": [
+      0.0,
+      0.55
+    ]
+  },
+  "near_points": [
+    {
+      "label": "stands on the floor at the origin",
+      "object": "TruckDrinksCooler_Body",
+      "point": [
+        0,
+        0,
+        0
+      ],
+      "max_dist": 0.01
+    }
+  ]
+}

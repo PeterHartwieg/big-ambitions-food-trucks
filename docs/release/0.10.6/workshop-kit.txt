@@ -1,0 +1,16 @@
+Street Food 0.10.6 final — local release kit, no Workshop upload performed
+
+Runtime: build/FoodTrucks-0.10.6.zip and .sha256 in this worktree.
+Kit: build/workshop-0.10.6-final-20261023/ (complete FoodTrucks runtime and checksums).
+
+release-notes.txt: plain change note.
+release-notes.bbcode.txt: Steam change note, no crew-driving claims.
+workshop-description.bbcode.txt: complete description, 19 base menu options,
+under 8000 characters, ending with the required Support section.
+preview.jpg: unchanged established thumbnail.
+final-verification.txt and final-native.json: results and remaining manual checks.
+package-verification.json: exact inventory, archive hash and DLL version receipt.
+
+Version 0.10.6; save schema 2 and timed/offscreen crew travel retained.
+Physical crew driving is absent from the release runtime's activation surface.
+This kit contains no upload script. Publishing to Steam Workshop is not authorized.

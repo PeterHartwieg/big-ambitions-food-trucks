@@ -64,7 +64,7 @@
     }
   },
 
-  "_categories": "Base appetite: the share of passers who want the category in that daypart. newCustomerWeight scales how much of that share comes as customers of its own; addOnFactor turns the rest into items added to other customers' orders.",
+  "_categories": "Base appetite: the share of passers who want the category in that daypart. newCustomerWeight scales how much of that share comes as customers of its own; addOnFactor turns the rest into items added to other customers' orders. marketFloor (optional) is the lowest the game's market demand counts for the category's items.",
   "categories": {
     "coffee": {
       "appetite": { "early": 0.6, "morning": 0.5, "lunch": 0.12, "afternoon": 0.4, "evening": 0.05, "late": 0.02, "night": 0.02 }
@@ -81,10 +81,12 @@
     "icecream": {
       "appetite": { "early": 0.0, "morning": 0.02, "lunch": 0.08, "afternoon": 0.20, "evening": 0.12, "late": 0.03, "night": 0.0 }
     },
+    "_colddrinks": "Drinks pass of 19 October 2026: a cart with only a drinks fridge must sell (an AI playtest's soda cart served nobody in 3.5 hours). Half the appetite comes as customers of their own, the afternoon peaks, and marketFloor 0.7 keeps nearby shops' soda from halving a cart's trade. Calculator, weekday in May: a cooler-only cart $76/$130/$227/$353 a day at poor/typical/good/best pitches where the game's market is 31; hot dog + cooler best route $2,062 (was $2,058).",
     "colddrinks": {
-      "appetite": { "early": 0.05, "morning": 0.05, "lunch": 0.15, "afternoon": 0.15, "evening": 0.10, "late": 0.08, "night": 0.05 },
-      "newCustomerWeight": 0.25,
-      "addOnFactor": 2.0
+      "appetite": { "early": 0.05, "morning": 0.10, "lunch": 0.30, "afternoon": 0.35, "evening": 0.20, "late": 0.10, "night": 0.05 },
+      "newCustomerWeight": 0.5,
+      "addOnFactor": 2.0,
+      "marketFloor": 0.7
     },
     "_streetmeal": "Kabobs and dumplings: a plated street meal. Lunch-led like fast food, below it, with a steady evening and late trade (halal night carts). Offices x1.2. docs/balance/new-foods.md.",
     "streetmeal": {
