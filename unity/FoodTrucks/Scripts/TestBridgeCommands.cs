@@ -21,6 +21,7 @@ namespace FoodTrucks
     {
         internal static object? Run(string cmd, JObject args)
         {
+            BridgeControl.ControlGate.BeforeRun(cmd, args);
             switch (cmd)
             {
                 case "state": return TestBridgeState.Read();
@@ -512,8 +513,14 @@ namespace FoodTrucks
         }
 
         // Every frame, from the pump: follows a load, stops run_until at its time.
+        private static bool quitting;
+        internal static void RefreshOwnership() => BridgeControl.ControlGate.ObserveWork(
+            quitting || LoadStatus == "pending" || runUntil != null || Driving || TimeSkipRunning() == true ||
+            (Scene() == "city" && Paused() != true));
+
         internal static void EveryFrame()
         {
+            RefreshOwnership();
             WatchLoadingScreens();
             FollowLoad();
             WatchCollapse();
@@ -1172,6 +1179,7 @@ namespace FoodTrucks
         {
             var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's runner is gone.");
             Log.Info("Test bridge: quitting the game.");
+            quitting = true;
             pump.StartCoroutine(QuitSoon());
             return new JObject();
         }

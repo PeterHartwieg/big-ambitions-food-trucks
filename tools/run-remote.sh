@@ -8,8 +8,8 @@
 #   wait         wait until the bridge answers /health (up to BA_BRIDGE_WAIT seconds, default 180)
 #   stop         ask the bridge to quit the game and wait up to 120 s for it to close; never kills
 #   stop --force the same, then kill the game if it is still running, but only a game started with -foodtrucks-test
-#   lock [minutes] [what]   take the game PC's lock (tools/game-lock.sh); unlock   release it
-# start and stop refuse while another session holds the lock.
+#   lock [minutes] [what]   acquire normal-game ownership (minutes retained for compatibility; no expiry)
+# start and stop require the owner token (set BA_LOCK_OWNER and acquire first).
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 ACTION="${1:?status, start, tunnel, tunnel-stop, wait, stop, lock or unlock}"
@@ -29,7 +29,7 @@ mkdir -p "$REPO/build"
 
 remote() {
   scp -q "$REPO/tools/Game-Windows.ps1" "$HOST:Game-FoodTrucks.ps1" < /dev/null
-  ssh "$HOST" "powershell -NoProfile -ExecutionPolicy Bypass -File Game-FoodTrucks.ps1 -Action $1" < /dev/null
+  BA_GAME_HOST="$HOST" python3 "$REPO/tools/bridge-lock" exec --script Game-FoodTrucks.ps1 --parameters "{\"Action\":\"$1\"}"
 }
 
 tunnel_up() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
@@ -87,7 +87,7 @@ case "$ACTION" in
       echo "The running game was started without -foodtrucks-test (not a test session). Not stopped." >&2; exit 1
     else
       # A lost reply doesn't mean the quit failed: the game may be finishing a save. Watch the process either way.
-      curl -sS --max-time 10 -X POST -H 'Content-Type: application/json' -d '{"cmd":"quit","args":{}}' "$URL/call" >/dev/null 2>&1 \
+      BA_GAME_HOST="$HOST" BA_BRIDGE_URL="$URL" python3 "$REPO/tools/ft" call quit >/dev/null 2>&1 \
         && echo "Asked the game to quit." || echo "No reply to quit (no tunnel, or the game is busy); watching the process."
       closed=false
       for _ in $(seq 24); do

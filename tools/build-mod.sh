@@ -54,6 +54,8 @@ echo "$HARMONY_DLL_SHA256  $DEPS/0Harmony.dll" | shasum -a 256 -c - >/dev/null |
 # Core, compiled for netstandard2.1 and shipped next to the mod DLL.
 dotnet build "$REPO/Core/FoodTrucks.Core.csproj" -c Release -nologo -v quiet
 cp "$REPO/Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll" "$DEPS/FoodTrucks.Core.dll"
+dotnet build "$REPO/tools/bridge-locks/BridgeControl.csproj" -c Release -nologo -v quiet
+cp "$REPO/tools/bridge-locks/bin/Release/netstandard2.0/BridgeControl.dll" "$DEPS/BridgeControl.dll"
 
 # The truck's final model and textures from art/, copied in so the generator can build the prefab.
 # Only their .meta files are committed (stable GUIDs for the prefab); the binaries stay in art/.

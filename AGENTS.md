@@ -11,6 +11,10 @@ A Workshop mod that adds food carts and trucks as an early-game business. Read `
 - `tools/`: build, install and package scripts.
 - `CHECKS.md`: the in-game checklist for the current milestone.
 
+## Local fallback testing
+
+When the Windows PC is unavailable, the sibling Driven Rides checkout provides a manually launched Mac rig: read `../big-ambitions-driven-rides/tools/agent-tests/MAC.md`. Set `BA_BRIDGE_URL=http://127.0.0.1:28330` for bridge clients, acquire the separate `agentmac` lock with its local launcher, and stop/release after testing. No tunnel or schedule is needed. Confirm its installed mod snapshot includes the code under test.
+
 ## Rules
 
 - Never commit game DLLs, decompiled game code, Harmony binaries or save files. Build scripts fetch Harmony from NuGet with a pinned checksum.

@@ -27,7 +27,33 @@ The pieces:
 
 ### Sharing the game PC
 
-Several sessions test on homepc. `C:\Users\Peter\game-lock.txt` says who has the game: no file means free; the holder writes `owner:`, `since:`, `until:`, `game:` (what runs) and `rules:` lines and deletes the file when done. While another session holds it: no install, start, stop, quit or save load, and no bridge calls that change the game (`health`, `state` and `/events` are fine). `tools/run-remote.sh lock [minutes] [what]` and `unlock` take and release it under `BA_LOCK_OWNER` (default `Food Trucks session`); `start`, `stop` and `tools/install-remote.sh` refuse while someone else holds it, and `status` shows it.
+The normal game (`8330`, instance `normal`), Windows test rig (`18330`, instance `agent1`) and local Mac fallback (`28330`, instance `agentmac`) use the same commands and **separate ownership locks**. The server enforces ownership on every changing command, including UI clicks, console/debug commands, load, save, quit and screenshots. Health, events, state, operation status, parks, places, map, day summaries and UI list/tree remain readable without ownership.
+
+The Mac fallback is manually launched when the PC is unavailable. It needs no tunnel: see [the Mac agent workflow](../../big-ambitions-driven-rides/tools/agent-tests/MAC.md) for local start/stop/ownership commands. The Windows commands below do not manage it.
+
+Choose a unique owner for each agent/session. From this repository:
+
+```sh
+export BA_GAME_HOST=homepc
+export BA_LOCK_OWNER="my-project-my-session"
+python3 tools/bridge-lock setup
+python3 tools/bridge-lock acquire --instance normal --purpose "My disposable test"
+tools/run-remote.sh start
+# Commands and scenarios automatically use this owner's token.
+tools/ft call time pause=true
+python3 tools/bridge-lock release --instance normal
+```
+
+For the agent rig, use `--instance agent1`, set `BA_BRIDGE_URL=http://127.0.0.1:18330`, and open its tunnel. The rig's `agent lock acquire|status|release` is equivalent. Do not use the normal-game launcher to start the rig. MCP has `ft_lock` (`op: status|acquire|release`, `owner`, optional `purpose`); `ft_call` with `cmd: lock` also works. Online CLI acquisition: `tools/ft call lock op=acquire owner=my-session`. Set `BA_LOCK_OWNER` consistently between independent CLI invocations. Each persistent MCP client retains its chosen owner.
+
+Ownership uses random per-instance tokens, stored locally with mode 0600 under `~/.big-ambitions-bridge/client-tokens/`; `BA_LOCK_TOKEN` can supply a token directly. The Windows lock stores its SHA-256 hash, owner, purpose and pending work under `%USERPROFILE%\.big-ambitions-bridge\<instance>`. A matching owner label alone cannot take over. These are coordination locks between trusted local tools, not an OS security boundary.
+
+There is **no automatic expiry**. Release explicitly when work is finished; pause the city first. Queued/deferred calls retain reservations through actual completion, even after HTTP timeout. Loads, accelerated time, drives, quitting and a simulation the owner left running also retain ownership. A crashed process's pending work is pruned using PID plus creation time, but its ownership remains recoverable with the original token. Do not delete lock files to recover an unknown owner; coordinate an explicit handoff. An owner can use the verified launcher's forced stop to terminate its own wedged test process; this cancels work and may lose unsaved test progress.
+
+Launch, stop, install and park/restore tools share this store and reject unauthorized lifecycle changes even while a bridge is offline. Normal-game and agent operations do not block each other. Older `game-lock.txt` reservations block normal-game takeover until their holder or Peter explicitly releases them. The old owner-prefix and `DR_IGNORE_LOCK` bypasses are removed. `run-remote.sh lock [minutes] [purpose]` remains a compatibility entry point, but minutes no longer expire ownership.
+
+Raw HTTP clients must send `lock_token` at the **top level** of `/call`, plus `expect_session` from `/health` for changing commands. Never put a token in `args`. Manage ownership with `{"cmd":"lock","args":{"op":"acquire","owner":"my-session","purpose":"test"},"lock_token":"<random-token-at-least-32-characters>"}`. Status and release use `op: status` and `op: release`; release requires the same token. `/health` advertises `lock_protocol: 1`, `control_process_pid`, and a public `control_lock` status without token/hash disclosure.
+
 
 ## Local macOS testing
 
@@ -51,6 +77,8 @@ After the normal build, `python3 tools/package-release.py` validates the existin
 The archive contains one `FoodTrucks/` folder with the runtime mod/Core/Harmony assemblies, Windows and Mac bundles, tuning data, locales, README and both project and Harmony license notices. An explicit runtime allowlist refuses game assemblies, save files, source code and any other unexpected input even if listed in the checksum manifest. Integrity checks require the exact manifested file set and reject duplicate/unsafe paths and symlinks. File bytes are checked while streaming into the ZIP; the source is checked again before retaining the archive.
 
 Entries have sorted paths, fixed timestamps and permissions. Identical package bytes produce identical archives with the same Python/zlib runtime regardless of source timestamps or permissions. The output is created atomically without replacing an existing candidate and without duplicating the temporary ZIP's disk allocation. No real release archive was generated during the low-disk session; temporary-fixture packaging tests passed. Packaging does not establish gameplay QA or publication approval.
+
+Ownership validation (17 October 2026): **checked in game** on both bridges. The normal Steam game launched while the offline rig stayed running; missing/wrong tokens were refused, the normal owner could quit, and releasing its lock left the rig's ownership intact. The rig also rejected release during simulation and during a screenshot that outlived its HTTP timeout. Restart retained ownership. Both locks were released after testing. Evidence is retained locally in `build/normal-lock-validation.json` and the agent rig's `build/agent-tests/lock-validation.json`. Shared lock tests, client/session/operation tests, packaging tests and both runtime builds passed. This does not establish broader headless gameplay parity.
 
 ## Transport
 
