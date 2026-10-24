@@ -2,7 +2,9 @@
 
 A mod that adds street food to Big Ambitions: push a cart or drive a truck to a legal spot, fit equipment, stock up and serve the crowd yourself or send a crew along a scheduled route.
 
-**Version 0.10.5, 22 October 2026:** carts can be sold with their equipment and stock at a commissary. Confirmation closes that cart's business while preserving earned wages, financial history and shared commissary stock/orders. Includes unlimited employee rosters and the earlier cart interaction, quit/unload and water-removal fixes. [Verification and limits](docs/release/0.10.5/verification.md).
+**Version 0.10.7, 24 October 2026:** whoever works a cart, an employee or the player, stands behind it straight across from the cash register and faces the customers, at any heading, on either queue side and after the cart is moved or a save is loaded. The register moves to the queue's side and the first customer stands level with it. Built on 0.10.5; the 0.10.6 drinks-fridge release on the Workshop is not in this branch. Checked by Core and adapter tests only; pending in game (`CHECKS.md`, "Cart worker at the register").
+
+**0.10.5, 22 October 2026:** carts can be sold with their equipment and stock at a commissary. Confirmation closes that cart's business while preserving earned wages, financial history and shared commissary stock/orders. Includes unlimited employee rosters and the earlier cart interaction, quit/unload and water-removal fixes. [Verification and limits](docs/release/0.10.5/verification.md).
 
 Demand depends on the spot, time, nearby businesses, weather and season. Equipment determines both the menu and food capacity; crews use the game's employees and payroll. Street food has its own save data, income and expense breakdown, and income-tax integration. Balance is calculated and still subject to playtesting; the latest study is [docs/balance/balance-pass-2026-10-14.md](docs/balance/balance-pass-2026-10-14.md).
 

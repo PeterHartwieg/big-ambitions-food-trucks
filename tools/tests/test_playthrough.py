@@ -310,8 +310,9 @@ class BridgeOpsParityTests(unittest.TestCase):
                 player.update(x=20., z=29., heading=heading)
                 self.assertTrue(self.mock.operate(v, 'open')['done'])
                 angle = math.radians(heading)
-                self.assertAlmostEqual(player['x'], v['x']-.85*math.cos(angle))
-                self.assertAlmostEqual(player['z'], v['z']+.85*math.sin(angle))
+                # Behind the cart level with its register: 0.85 m to the cart's left, 0.615 m forward.
+                self.assertAlmostEqual(player['x'], v['x']-.85*math.cos(angle)+.615*math.sin(angle))
+                self.assertAlmostEqual(player['z'], v['z']+.85*math.sin(angle)+.615*math.cos(angle))
                 self.assertAlmostEqual(player['heading'], (heading+90)%360)
                 self.assertIsNone(player['in_vehicle'])
                 self.assertIsNone(player['at_hatch'])
@@ -360,7 +361,9 @@ class BridgeOpsParityTests(unittest.TestCase):
                             self.assertAlmostEqual(player['z'], v['z']+direction*1.07*forward[1])
                             dx, dz = player['x']-v['x'], player['z']-v['z']
                             self.assertGreaterEqual(dx*outward[0]+dz*outward[1], -.001)
-                            look_x, look_z = v['x']+outward[0]*1.05, v['z']+outward[1]*1.05
+                            # The first customer stands across from the register, 0.615 m forward of the middle.
+                            look_x = v['x']+outward[0]*1.05+forward[0]*.615
+                            look_z = v['z']+outward[1]*1.05+forward[1]*.615
                             self.assertAlmostEqual(player['heading'], math.degrees(math.atan2(look_x-player['x'], look_z-player['z'])) % 360)
                             expected_log = f'at the {available} end beside the window'
                         self.assertTrue(any(expected_log in e['text'] for e in self.mock.events(0)['events']))

@@ -14,10 +14,12 @@ class CartServingTests(unittest.TestCase):
             root = Path(folder)
             major = subprocess.check_output(['dotnet', '--version'], text=True).split('.')[0]
             source = escape(str(ROOT / 'unity/FoodTrucks/Scripts/CartServing.cs'))
+            stance = escape(str(ROOT / 'Core/Fleet/CartStance.cs'))
+            world = escape(str(ROOT / 'unity/FoodTrucks/Scripts/CartStanceWorld.cs'))
             (root / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework>
 <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><NuGetAudit>false</NuGetAudit></PropertyGroup>
-<ItemGroup><Compile Include="{source}" Link="CartServing.cs" /></ItemGroup></Project>''')
+<ItemGroup><Compile Include="{source}" Link="CartServing.cs" /><Compile Include="{stance}" Link="CartStance.cs" /><Compile Include="{world}" Link="CartStanceWorld.cs" /></ItemGroup></Project>''')
             (root / 'Program.cs').write_text(HARNESS)
             built = subprocess.run(['dotnet', 'build', str(root / 'Harness.csproj'), '--nologo', '-v:q',
                                     '-m:1', '-nr:false', '-p:UseSharedCompilation=false'],
@@ -176,9 +178,13 @@ class Harness {
         QueueLine.Street=p=>null; TrafficLanes.Reads=0; TrafficLanes.Current=new(); Log.Lines.Clear();
         PlayerHelper.PlayerController.transform.position=new(2,0,-2); NavMesh.Start=PlayerHelper.PlayerController.transform.position;
         var cart=new VehicleController(); cart.transform.rotation=new() { Yaw=yaw };
-        CartQueueView.Window=(side,cart.transform.right*side*1.05f);
+        CartQueueView.Window=(side,Window(cart,side));
         return (new(),PlayerHelper.PlayerController,cart);
     }
+    // The register's place along the cart (Core CartStance): the server, register and first customer line up there.
+    const float Along=.615f;
+    static Vector3 Window(VehicleController c,int side)=>c.transform.position+c.transform.right*(side*1.05f)+c.transform.forward*Along;
+    static Vector3 Behind(VehicleController c,int side)=>c.transform.position-c.transform.right*(side*.85f)+c.transform.forward*Along;
     static Vector3? Sample(Vector3 at,float radius,params Vector3[] points)=>points
         .Where(x=>Vector3.Distance(at,x)<=radius).OrderBy(x=>(x-at).sqrMagnitude).Cast<Vector3?>().FirstOrDefault();
     static void Stayed(CartServing s,PlayerController p,VehicleController c,string why) {
@@ -191,11 +197,15 @@ class Harness {
         Check(Log.Lines.Any(x=>x.Contains("player left where they stand")),"unavailable spot logged: "+why);
     }
     static void Main() {
-        foreach(var side in new[]{1,-1}) foreach(var yaw in new[]{0f,.4f,1.57f,3.14f}) {
+        foreach(var side in new[]{1,-1}) foreach(var yaw in new[]{0f,.4f,1.5707964f,3.1415927f,4.712389f,-2.2f}) {
             var (stance,p,c)=Setup(side,yaw); var agent=p.Character.navmeshAgent;
+            c.transform.position=new(3.5f,0,-7.25f); NavMesh.Start=p.transform.position;
+            CartQueueView.Window=(side,Window(c,side));
             p.hasOnGoalReachedAction=true; agent.hasPath=true;
-            stance.Open(c); var expected=c.transform.position-c.transform.right*(side*.85f);
-            Near(p.transform.position,expected,"opposite customer side at every heading");
+            stance.Open(c); var expected=Behind(c,side);
+            Near(p.transform.position,expected,"behind the cart across from the register at every heading");
+            Check(MathF.Abs(Vector3.Dot(p.transform.position-c.transform.position,c.transform.forward)-Along)<.001f,"level with the register, not the body's middle");
+            Check(Log.Lines.Any(x=>x.Contains("behind the cart at the register")),"register placement logged");
             Check(TrafficLanes.Reads==1,"lanes read once for placement");
             Near(TrafficLanes.Center,c.transform.position,"lanes read round cart");
             Check(NavMesh.Paths.Count==1 && NavMesh.Destinations.Count==1,"exact point has a complete player path");
@@ -255,7 +265,7 @@ class Harness {
         // CalculatePath even if it leaves PathComplete in the reused path; take a farther reachable point.
         foreach(var bad in new[]{(true,NavMeshPathStatus.PathPartial),(true,NavMeshPathStatus.PathInvalid),(false,NavMeshPathStatus.PathComplete)}) {
             foreach(var exact in new[]{true,false}) {
-                var (s,p,c)=Setup(); var blocked=new Vector3(exact ? -.85f : -1.1f,0,0); var reachable=new Vector3(-1.5f,0,1);
+                var (s,p,c)=Setup(); var blocked=new Vector3(exact ? -.85f : -1.1f,0,Along); var reachable=new Vector3(-1.5f,0,1);
                 NavMesh.Ground=(at,r)=>Sample(at,r,blocked,reachable);
                 NavMesh.Route=at=>Vector3.Distance(at,blocked)<.01f ? bad : (true,NavMeshPathStatus.PathComplete);
                 s.Open(c); Near(p.transform.position,reachable,"complete path required for exact and fallback points: "+bad);
@@ -297,6 +307,32 @@ class Harness {
             p.transform.position+=new Vector3(.1f,0,0); var here=p.transform.position; s.LateUpdate();
             Near(p.transform.position,here,"release survives later frame: "+reason);
             Check(Log.Lines.Any(x=>x.Contains("stance released")),"release reason logged: "+reason);
+        }
+        // A cart moved and turned after a stance (pushed elsewhere, re-placed, or a save loaded with it elsewhere): the
+        // old stance ends, and opening again places from the cart's live transform, never the old place.
+        foreach(var side in new[]{1,-1}) {
+            var (s,p,c)=Setup(side,0); s.Open(c); Near(p.transform.position,Behind(c,side),"first placement");
+            c.transform.position=new(-12,0,30); c.transform.rotation=new() { Yaw=2.0f }; s.LateUpdate();
+            Check(!s.PlayerAt("cart"),"moving the cart ends the stance");
+            NavMesh.Start=p.transform.position; CartQueueView.Window=(side,Window(c,side)); s.Open(c);
+            Near(p.transform.position,Behind(c,side),"placed again from the moved and turned cart");
+            Check(Quaternion.Angle(p.transform.rotation,Quaternion.LookRotation(c.transform.right*side))<.001f,"faces the customers after the move");
+        }
+        // A behind-the-cart fallback still faces straight across the cart, not at a snapped queue place.
+        {
+            var (s,p,c)=Setup(); var fallback=new Vector3(-1.2f,0,.3f);
+            NavMesh.Ground=(at,r)=>Sample(at,r,fallback); CartQueueView.Window=(1,new Vector3(1.3f,0,-.2f));
+            s.Open(c); Near(p.transform.position,fallback,"behind fallback");
+            Check(Quaternion.Angle(p.transform.rotation,Quaternion.LookRotation(c.transform.right))<.001f,"behind fallback faces across the cart");
+        }
+        // A behind-the-cart fallback far along the cart (an obstacle at the register) faces the first customer, not
+        // straight out past the cart's end.
+        foreach(var side in new[]{1,-1}) {
+            var (s,p,c)=Setup(side,.9f); var far=c.transform.position-c.transform.right*(side*.85f)+c.transform.forward*2.5f;
+            NavMesh.Ground=(at,r)=>Sample(at,r,far);
+            s.Open(c); Near(p.transform.position,far,"far behind fallback");
+            Check(Log.Lines.Any(x=>x.Contains("fallback behind the cart")),"far fallback logged");
+            Check(Quaternion.Angle(p.transform.rotation,Quaternion.LookRotation(Window(c,side)-far))<.001f,"far fallback faces the first customer");
         }
         {
             var (s,p,c)=Setup(); p.Character.navmeshAgent.WarpWorks=false; s.Open(c);

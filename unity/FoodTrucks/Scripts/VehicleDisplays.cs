@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
 using Helpers;
@@ -16,8 +17,9 @@ namespace FoodTrucks
     // keeps its spot while it stays fitted. economy.json's "display" names each piece's model in the bundle; a
     // piece without one leaves its spot empty. Every half second it compares each vehicle's fitted pieces with
     // what it shows, so fitting, removing and loading need no hooks. While a cart is open the pieces face the side
-    // its queue forms on (CartQueueView's choice); closed, or with no line laid out, they face right. A truck's
-    // always face the hatch. The models have no colliders. They follow the vehicle's visible flag every
+    // its queue forms on (CartQueueView's choice); closed, or with no line laid out, they face right. The cart's cash
+    // register moves with them to the counter's front corner on that side (Core CartStance), where the server stands
+    // across from it. A truck's always face the hatch. The models have no colliders. They follow the vehicle's visible flag every
     // frame: the game hides a vehicle (EntityController.Hide, e.g. on another floor of a multi-floor building) by
     // disabling only the renderers in its own list, which the pieces aren't in.
     internal sealed class VehicleDisplays : MonoBehaviour
@@ -67,6 +69,8 @@ namespace FoodTrucks
             public bool Visible = true;
             public Layout Layout = Cart;
             public Transform?[] Spots = Array.Empty<Transform?>();
+            // The cart's Cash_Register (CartAssets), mirrored to the queue's side.
+            public Transform? Register;
             public string?[] Pieces = Array.Empty<string?>();
             public GameObject?[] Objects = Array.Empty<GameObject?>();
             public int Side;
@@ -111,6 +115,7 @@ namespace FoodTrucks
                     entry = new Shown
                     {
                         Controller = controller, Body = controller.transform.Find(layout.Body), Layout = layout,
+                        Register = layout == Cart ? controller.transform.Find("Cash_Register") : null,
                         Spots = layout.Spots.Select(name => controller.transform.Find(name)).ToArray(),
                         Pieces = new string?[count], Objects = new GameObject?[count],
                     };
@@ -170,6 +175,14 @@ namespace FoodTrucks
                     var rotation = Quaternion.Euler(0f, side * 90f, 0f);
                     foreach (var go in entry.Objects)
                         if (go != null) go.transform.localRotation = rotation;
+                    if (entry.Register != null)
+                    {
+                        var register = CartStance.Register(side);
+                        entry.Register.localPosition = new Vector3((float)register.X, (float)register.Y, (float)register.Z);
+                        entry.Register.localRotation = Quaternion.Euler(0f, (float)register.Yaw, 0f);
+                        if (logged.Add($"register:{vehicle.id}:{CartStance.Side(side)}"))
+                            Log.Info($"Cart register: cart {vehicle.id} register on the {(CartStance.Side(side) > 0 ? "right" : "left")} front corner, facing the customers.");
+                    }
                 }
             }
             // Vehicles despawned or sold: their pieces went with them; forget them.

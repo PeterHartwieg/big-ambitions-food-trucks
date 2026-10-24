@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
 using Helpers;
 using Parking.UndergroundParking;
@@ -14,9 +15,10 @@ namespace FoodTrucks
     // walkable ground: keep the live player agent/collider and let the game's next navigation command release
     // the stance. Never use ThirdPersonCharacter.ForceToPosition for the player: it leaves physics kinematic
     // and the agent's updatePosition/updateRotation off (1.0). No attachment or navigation blocker is needed.
+    // The place is Core's CartStance: behind the cart straight across from the cash register, facing the customers,
+    // worked out in the cart's frame and carried into the world by its live transform, as WindowCrew does for the crew.
     internal sealed class CartServing
     {
-        private const float BehindMetres = 0.85f; // same side/clearance as the cart's WindowCrew
         private const float HalfLength = 0.77f; // body/handle extents, art/README.md; leave the player's radius beyond them
         private const float FallbackMetres = 3f;
         private const float SampleStep = 0.25f;
@@ -57,23 +59,21 @@ namespace FoodTrucks
                 return;
             }
             var window = CartQueueView.PrepareServing(controller);
-            var side = window?.Side ?? 1;
+            var side = CartStance.Side(window?.Side ?? 1);
             if (window == null) Log.Info($"Cart serving: {id}: no visible queue side; using the cart's right window side.");
-            var outward = controller.transform.right * side;
-            outward.y = 0f;
-            outward.Normalize();
-            var forward = controller.transform.forward;
-            forward.y = 0f;
-            forward.Normalize();
             var filter = new NavMeshQueryFilter { agentTypeID = agent.agentTypeID, areaMask = agent.areaMask };
             var lanes = TrafficLanes.Near(controller.transform.position, 30f);
-            if (!ServingPoint(controller.transform.position, outward, forward, agent.radius, who.transform.position,
-                filter, lanes, out var spot, out var placement))
+            if (!ServingPoint(controller.transform, side, agent.radius, who.transform.position,
+                filter, lanes, out var spot, out var placement, out var behindCart))
             {
                 Log.Info($"Cart serving: {id}: no safe reachable serving point behind the cart or at either end; player left where they stand.");
                 return;
             }
-            var look = window?.Window ?? controller.transform.position + outward;
+            // Behind the cart level with the register: straight across the counter at the customers. Further along
+            // (a fallback past an obstacle) or at an end: towards the first customer.
+            var look = behindCart && CartStance.FacesAcross(CartStanceWorld.Along(controller.transform, spot))
+                ? spot + CartStanceWorld.Facing(controller.transform, side)
+                : window?.Window ?? CartStanceWorld.Point(controller.transform, CartStance.Window(side, CartStance.WindowOut));
             var facing = look - spot;
             facing.y = 0f;
             var turn = Quaternion.LookRotation(facing);
@@ -104,12 +104,16 @@ namespace FoodTrucks
             Log.Info($"Cart serving: {id}: player placed {placement} at {spot}, queue on the {(side > 0 ? "right" : "left")}, facing the window at {look}; pedestrian ground, off street, complete player path (agent {filter.agentTypeID}); idle stance held until walking or closing.");
         }
 
-        // Prefer the opposite side, then the front and rear ends beside the window. A kerbside cart's opposite
-        // side can be the road: player-mesh membership alone is not evidence of pavement. Every result must also
-        // be on the NPC mesh, pass the queue's street exclusions and have a complete path from the live player.
-        internal static bool ServingPoint(Vector3 center, Vector3 outward, Vector3 forward, float radius, Vector3 start,
-            NavMeshQueryFilter filter, TrafficLanes lanes, out Vector3 spot, out string placement)
+        // Prefer the opposite side across from the register, then the front and rear ends beside the window. A
+        // kerbside cart's opposite side can be the road: player-mesh membership alone is not evidence of pavement.
+        // Every result must also be on the NPC mesh, pass the queue's street exclusions and have a complete path
+        // from the live player. behindCart: the spot is on the side opposite the customers.
+        internal static bool ServingPoint(Transform cart, int side, float radius, Vector3 start,
+            NavMeshQueryFilter filter, TrafficLanes lanes, out Vector3 spot, out string placement, out bool behindCart)
         {
+            var center = cart.position;
+            var outward = CartStanceWorld.Facing(cart, side);
+            var forward = CartStanceWorld.Forward(cart);
             var path = new NavMeshPath(); // reused for exact samples and every fallback, on all three sides
             bool Safe(Vector3 p) =>
                 // The two meshes are separate bakes whose heights rarely agree to the centimetre, so the queue's own
@@ -148,19 +152,21 @@ namespace FoodTrucks
 
             // The body/wheels extend 0.50 m sideways. Keep the player's radius clear of the hull on each side.
             var clearance = 0.50f + radius;
-            var behind = center - outward * Mathf.Max(BehindMetres, clearance);
+            var behind = CartStanceWorld.Point(cart, CartStance.Server(side, Mathf.Max((float)CartStance.BehindMetres, clearance)));
+            behindCart = true;
             if (Search(behind, p => Vector3.Dot(center - p, outward) >= clearance - 0.01f, out spot, out var usedFallback))
             {
-                placement = usedFallback ? "at a fallback behind the cart, opposite the queue" : "behind the cart, opposite the queue";
+                placement = usedFallback ? "at a fallback behind the cart, opposite the queue" : "behind the cart at the register, opposite the queue";
                 return true;
             }
+            behindCart = false;
             var endClearance = HalfLength + radius;
             foreach (var direction in new[] { 1, -1 })
             {
                 var end = center + forward * (direction * endClearance);
                 bool AtEnd(Vector3 p) => Vector3.Dot(p - center, forward) * direction >= endClearance - 0.01f &&
                     Vector3.Dot(p - center, outward) >= -0.01f &&
-                    Vector3.Dot(p - center, outward) <= Mathf.Max(BehindMetres, clearance);
+                    Vector3.Dot(p - center, outward) <= Mathf.Max((float)CartStance.BehindMetres, clearance);
                 if (!Search(end, AtEnd, out spot, out usedFallback)) continue;
                 placement = $"at the {(direction > 0 ? "front" : "rear")} end beside the window" + (usedFallback ? " (fallback)" : "");
                 return true;

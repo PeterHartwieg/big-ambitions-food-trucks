@@ -57,6 +57,19 @@ Peter's decision, 17 October 2026. **Pending in game.** Save schema 2; a schema 
 | MS4 | Before midnight sell a truck with takings, then pass midnight; separately leave it with the private driver | Sold truck: its unpaid sales are paid back on the next sales tick, once; the sold day's books remain. Private driver: no early payout; it is still owned and waits for midnight |
 | MS5 | With unpaid cart/truck sales run the confirmed uninstall step, save and load without the mod; repeat the step before removal too | All unpaid sales, today's included, paid once in addition to vehicle/stock refunds. No takings left. If a sales payment fails, cleanup stops with a retry notice, retaining the unpaid data |
 
+# Cart worker at the register (0.10.7)
+
+Pending in game. Peter's report of 24 October 2026: the employee or player working a cart stood diagonally off to one side, nowhere near the cash register. Cause: the cart's stance (`CartServing`) and crew spot (`WindowCrew`) were taken from the body's middle (z 0), 0.615 m back along the cart from the register on the front corner, and the crew's side came from the world-space direction to the first customer's NavMesh-snapped place, laid out once and never refreshed. Now Core `CartStance` gives every place in the cart's own frame from its live transform: the server at (∓0.85, 0.615) facing across the cart, the register mirrored to the queue's side, the first customer at (±1.05, 0.615); a cart's queue line is laid out again at once when the cart has moved 0.1 m or turned 1° since, except while the player holds the serving stance there (the stance ends by itself when the cart moves). A behind-the-cart fallback more than 0.35 m along from the register faces the first customer. Truck hatch places are unchanged. No save schema change. Use a disposable save; disable the Workshop copy.
+
+| # | Do | Look for |
+|---|---|---|
+| CW1 | Open a cart with one employee on shift, its queue on the right; walk round it | The employee stands behind the cart (the side away from the customers), straight across the counter from the register on the front corner, facing the customers; the first customer stands at the register on the other side |
+| CW2 | Repeat with the queue on the left (a cart whose right side faces a wall or the road) | The register has moved to the left front corner and faces the customers; the employee stands across from it on the right. Log: `Cart register: cart … register on the left front corner` |
+| CW3 | Push the cart to new spots at roughly 0°, 90°, 180°, 270° and an odd angle to the street; open each time | The same place relative to the cart every time, never diagonal; facing the customers |
+| CW4 | Close, open on foot yourself with the employee off shift; then with the employee on shift | You are placed behind the cart at the register (log `behind the cart at the register`), facing the customers. With crew on shift they wait further along the same side, not overlapping you |
+| CW5 | While open, save, quit to the menu, load the save, walk back to the cart | The employee is back at the register, facing the customers; no stale queue (log may show `moved or turned since its line was laid out` once if the cart settled) |
+| CW6 | Open and work a food truck with crew | The crew and player stand inside behind the hatch exactly as before |
+
 # Cart serving stance (next build)
 
 Pending in game. Opening on foot now uses the queue's chosen side, `PlayerController.ResetNavigation` and `PlayerHelper.Teleport` (the player's NavMesh warp). The idle stance releases on the game's next navigation command; cart proximity selling and the truck's hatch hold keep their existing rules. No save schema change.
