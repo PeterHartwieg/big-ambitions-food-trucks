@@ -18,7 +18,8 @@ namespace FoodTrucks
 
         internal static string? ReadableAddress(string addressKey)
         {
-            return ReadableAddress(World.BuildingAt(addressKey));
+            try { return ReadableAddress(World.BuildingAt(addressKey)); }
+            catch (Exception) { return null; }
         }
 
         internal static string? ReadableAddress(CityBuildingController? controller)
@@ -36,6 +37,17 @@ namespace FoodTrucks
 
         internal static string Name(string addressKey) => ReadableAddress(addressKey)
             ?? CityPitches.Text("foodtrucks:event_location_unavailable");
+
+        // A present building with a name still loading is unknown, not a cancelled destination.
+        internal static bool CanJudgeLocation(string addressKey)
+        {
+            try
+            {
+                var controller = World.BuildingAt(addressKey);
+                return controller == null || !InvalidStreet(controller.building?.Address?.GetStreetNameLocalized());
+            }
+            catch (Exception) { return false; }
+        }
 
         // History can outlive both a gig and its building. StreetData IDs use AddressHelper's
         // streetLocalization lookup, not Localizor's translation-key lookup.
@@ -63,6 +75,14 @@ namespace FoodTrucks
 
         private static bool InvalidStreet(string? street) => string.IsNullOrWhiteSpace(street) ||
             street!.IndexOfAny(new[] { ':', '#', '{', '}', '<', '>' }) >= 0;
+
+        // Native names can arrive after buildings/StreetData. Include that change even when gigs do not change.
+        internal static string ResolutionState(IEnumerable<string> locations) => Ready + ":" + string.Join(",",
+            locations.Distinct().OrderBy(p => p, StringComparer.Ordinal).Select(p =>
+            {
+                var address = HistoricalAddress(p, out var fallback);
+                return p + "=" + (fallback ? "?" : address);
+            }));
 
         private static string? FallbackStreet(string key)
         {
@@ -103,12 +123,9 @@ namespace FoodTrucks
             IEnumerable<Dictionary<string, string>>? acceptedGigs = null, IEnumerable<Dictionary<string, string>>? openOffers = null,
             int day = 0, bool repairAddresses = true)
         {
-            var active = activeGigs.ToList();
-            var accepted = (acceptedGigs ?? active).Concat(contact.messagesQueue
-                .Where(m => m?.messageKey == "foodtrucks:message_bookings_booked" && m.messageData != null)
-                .Select(m => m.messageData)).ToList();
-            var open = (openOffers ?? Enumerable.Empty<Dictionary<string, string>>()).ToList();
+            if (!FoodTrucksSession.CanWrite) return;
             var changed = false;
+            List<Dictionary<string, string>>? active = null, accepted = null, open = null;
             try
             {
                 foreach (var message in contact.messagesQueue)
@@ -119,6 +136,11 @@ namespace FoodTrucks
                         var data = message?.messageData;
                         if (data == null || (message!.messageKey != "foodtrucks:message_bookings_offer" &&
                             message.messageKey != "foodtrucks:message_bookings_booked")) continue;
+                        // Enumerate descriptions inside the record boundary too. A native failure must not
+                        // prevent independent address/radius repairs on other records.
+                        active ??= activeGigs.ToList();
+                        accepted ??= (acceptedGigs ?? active).Concat(SavedConfirmations(contact)).ToList();
+                        open ??= (openOffers ?? Enumerable.Empty<Dictionary<string, string>>()).ToList();
                         data.TryGetValue("place", out var old);
                         var original = data.TryGetValue("legacyHistoryPlace", out var saved) ? saved : old;
                         if (repairAddresses && (UnreadablePlace(old) ||
@@ -146,11 +168,14 @@ namespace FoodTrucks
                         var booked = message.messageKey == "foodtrucks:message_bookings_booked";
                         if (booked && (!data.TryGetValue("metres", out var metres) || string.IsNullOrWhiteSpace(metres)))
                         { data["metres"] = Catering.PlaceMetres.ToString("F0", CultureInfo.InvariantCulture); changed = true; }
+                        var matches = active.Select(d => BookingMatch(data, original, d)).ToList();
                         var key = booked
-                            ? (active.Any(d => SameBooking(data, original, d)) ? "foodtrucks:booking_map_hint" : "foodtrucks:booking_inactive")
-                            : (day > 0 && data.TryGetValue("reply", out var reply) && int.TryParse(reply, out var replyDay) && replyDay > 0 && day > replyDay &&
-                                !open.Any(d => SameBooking(data, original, d)) && !accepted.Any(d => SameBooking(data, original, d))
+                            ? (matches.Contains(true) ? "foodtrucks:booking_map_hint" :
+                                !matches.Contains(null) && ResolvableIdentity(data, original) ? "foodtrucks:booking_inactive" : null)
+                            : (ResolvableIdentity(data, original) && day > 0 && data.TryGetValue("reply", out var reply) && int.TryParse(reply, out var replyDay) && replyDay > 0 && day > replyDay &&
+                                open.All(d => BookingMatch(data, original, d) == false) && accepted.All(d => BookingMatch(data, original, d) == false)
                                 ? "foodtrucks:offer_inactive" : "foodtrucks:offer_map_hint");
+                        if (key == null) continue; // Unknown identity is never proof that a booking ended.
                         var guidance = CityPitches.Text(key);
                         if (!data.TryGetValue("guidance", out var existing) || existing != guidance)
                         { data["guidance"] = guidance; changed = true; }
@@ -158,19 +183,61 @@ namespace FoodTrucks
                     catch (Exception) { /* A corrupt history record must not stop payments or other records. */ }
                 }
             }
-            finally { if (changed) FoodTrucksSession.MarkChanged(); }
+            finally { if (changed && FoodTrucksSession.CanWrite) FoodTrucksSession.MarkChanged(); }
+        }
+
+        private static IEnumerable<Dictionary<string, string>> SavedConfirmations(Contact contact)
+        {
+            foreach (var message in contact.messagesQueue)
+            {
+                Dictionary<string, string>? data = null;
+                try { if (message?.messageKey == "foodtrucks:message_bookings_booked") data = message.messageData; }
+                catch (Exception) { data = new Dictionary<string, string> { { "identityUnknown", "true" } }; }
+                if (data != null) yield return data;
+            }
+        }
+
+        private static bool ResolvableIdentity(Dictionary<string, string> data, string? original) =>
+            new[] { "day", "start", "kind" }.All(k => data.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v)) &&
+            (data.TryGetValue("bookingId", out var id) && long.TryParse(id, out var number) && number > 0 ||
+             data.TryGetValue("locationId", out var location) && HistoricalAddress(location) != null ||
+             HistoricalAddress(original) != null || data.TryGetValue("place", out var place) && !UnreadablePlace(place) &&
+                Regex.IsMatch(place, @"\A[1-9][0-9]*\s+\S"));
+
+        // true: same identity; false: positively different; null: insufficient resolution/evidence.
+        private static bool? BookingMatch(Dictionary<string, string> data, string? original, Dictionary<string, string> candidate)
+        {
+            if (candidate.ContainsKey("identityUnknown"))
+            {
+                if (new[] { "day", "bookingId" }.Any(k => data.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v) &&
+                    candidate.TryGetValue(k, out var other) && !string.IsNullOrWhiteSpace(other) && v != other)) return false;
+                return null;
+            }
+            if (SameBooking(data, original, candidate)) return true;
+            if (!new[] { "day", "start", "kind" }.All(k => data.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v) &&
+                candidate.TryGetValue(k, out var other) && !string.IsNullOrWhiteSpace(other))) return null;
+            if (!new[] { "day", "start", "kind" }.All(k => data[k] == candidate[k]) || !SameDetails(data, candidate)) return false;
+            if (candidate.TryGetValue("locationId", out var location))
+            {
+                var address = HistoricalAddress(location, out var fallback);
+                if (address != null && (address == original || data.TryGetValue("place", out var place) && place == address)) return true;
+                if (address != null && !fallback && ResolvableIdentity(data, original)) return false;
+            }
+            return candidate.TryGetValue("place", out var rendered) && !UnreadablePlace(rendered) && ResolvableIdentity(data, original)
+                ? false : (bool?)null;
         }
 
         private static bool SameBooking(Dictionary<string, string> data, string? original, Dictionary<string, string> candidate) =>
             new[] { "day", "start", "kind" }.All(k => data.TryGetValue(k, out var v) && !string.IsNullOrEmpty(v) && candidate.TryGetValue(k, out var other) && v == other) &&
             SameDetails(data, candidate) && (SameLocation(data, original, candidate) ||
                 !string.IsNullOrWhiteSpace(original) && (candidate.TryGetValue("legacyHistoryPlace", out var legacy) && original == legacy ||
-                    candidate.TryGetValue("place", out var originalCandidate) && original == originalCandidate) ||
+                    candidate.TryGetValue("place", out var originalCandidate) && !UnreadablePlace(originalCandidate) && original == originalCandidate) ||
                 data.TryGetValue("place", out var place) && !UnreadablePlace(place) && candidate.TryGetValue("place", out var otherPlace) && place == otherPlace);
 
         // Backfill saved confirmations independently of address readiness and surviving gigs.
         internal static void RefreshBookingRadius(Contact contact)
         {
+            if (!FoodTrucksSession.CanWrite) return;
             var changed = false;
             foreach (var message in contact.messagesQueue)
             {
@@ -186,6 +253,7 @@ namespace FoodTrucks
         // its known old rendering; a sole surviving live offer is not proof of a historical message's identity.
         internal static void RefreshMessages(Contact contact, IEnumerable<Dictionary<string, string>> descriptions)
         {
+            if (!FoodTrucksSession.CanWrite) return;
             var live = descriptions.ToList();
             var changed = false;
             foreach (var message in contact.messagesQueue)
@@ -238,7 +306,8 @@ namespace FoodTrucks
             var street = addressKey.Substring(0, hash);
             var number = addressKey.Substring(hash + 1);
             // Localizor versions returned either the raw street ID or that ID prefixed by '#'.
-            return old == addressKey || old == number + " " + street || old == number + " #" + street;
+            return old == addressKey || old == number + " " + street || old == number + " #" + street ||
+                !string.IsNullOrWhiteSpace(old) && old == HistoricalAddress(addressKey);
         }
 
         internal static void SetDestination(string addressKey)

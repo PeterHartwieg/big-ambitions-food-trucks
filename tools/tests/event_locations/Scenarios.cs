@@ -275,7 +275,7 @@ namespace FoodTrucks
         internal static List<CityBuildingController> AllBuildings() => Found == null ? new() : new() { Found };
         internal static CityBuildingController? BuildingAt(string key) => key == "ba:street_fourthavenue#34" ? Found : null;
     }
-    static class FoodTrucksSession { internal static int Changes; internal static void MarkChanged() => Changes++; }
+    static class FoodTrucksSession { internal static bool CanWrite=true; internal static int Changes; internal static void MarkChanged() => Changes++; }
     static class Notices
     {
         internal static void Show(UI.Notification.NotificationType type, string key, Dictionary<string, string> data, float seconds) { }

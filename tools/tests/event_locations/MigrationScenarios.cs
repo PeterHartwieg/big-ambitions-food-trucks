@@ -16,7 +16,7 @@ static class Program
         ["guests"]="40", ["food"]="food", ["fee"]="$40000", ["place"]="34 #ba:street_fourthavenue", ["reply"]="2" };
     static void Main()
     {
-        var state = new SaveState(); state.Catering.NextOfferId=20;
+        var state = new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=20;
         Catering.Reset();
         for (var minute=0; minute<5; minute++) Catering.Run(state);
         Check(SaveGameManager.Current.Contacts.Count==0, "must not create contact");
@@ -28,11 +28,13 @@ static class Program
         Check(legacy.messageData!["place"]=="34 4th Avenue", "history fallback must run before readiness");
         Check(legacy.messageData["guidance"]=="active" && legacy.messageData["metres"]=="60", "legacy active fields before readiness");
         Check(Streets.AddressHelper.LastKey=="ba:street_fourthavenue", "lookup must receive genuine legacy street key");
-        var writes=FoodTrucksSession.Changes; var lookups=Streets.AddressHelper.Calls;
-        Catering.Run(state); Check(writes==FoodTrucksSession.Changes && lookups==Streets.AddressHelper.Calls,"unchanged minute must not scan/write");
+        var writes=FoodTrucksSession.Changes; var lookups=World.AddressCalls;
+        Catering.Run(state); Check(writes==FoodTrucksSession.Changes && lookups==World.AddressCalls,"unchanged minute must not render history/write");
         World.Found=new() { building=new() { Address=new() { streetName= gig.PlaceId.Split('#')[0], streetNumber=34 } } };
         Streets.AddressHelper.Street="4th Avenue";
-        CateringGigs.CancelUnlocatable(state.Catering,_=>false); Catering.Run(state);
+        World.Unavailable=true; Catering.RunStep(state,0);
+        Check(state.Catering.Gigs.Count==0,"first-ready Step actually removed the same gig identity");
+        World.Unavailable=false;
         Check(legacy.messageData["guidance"]=="inactive", "cancel flips guidance via caller");
         foreach (var transition in new[]{"complete","left","miss","midnight"})
         {
@@ -66,6 +68,9 @@ static class Program
         Check(writes==FoodTrucksSession.Changes,"save/reload idempotent");
         OfferLifecycle(c);
         StepLifecycle(c);
+        ReadableReadiness(c);
+        ExceptionsDoNotBlockSimulation(c);
+        ReadOnlyDaily(c);
         writes=FoodTrucksSession.Changes;
         Commissary.Uninstalled=true; Catering.Reset(); Catering.Run(state); Check(writes==FoodTrucksSession.Changes,"uninstall guard");
         Console.WriteLine("PASS: bookings migration lifecycle");
@@ -73,7 +78,7 @@ static class Program
     static void OfferLifecycle(Contact c)
     {
         Commissary.Uninstalled=false; c.messagesQueue.Clear();
-        var state=new SaveState(); state.Catering.NextOfferId=20;
+        var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=20;
         var offer=Gig(3); state.Catering.Offers.Add(offer);
         var open=Confirmation(offer); open.messageKey="foodtrucks:message_bookings_offer"; c.messagesQueue.Enqueue(open);
         SaveGameManager.Current.Day=2; Catering.Reset(); Catering.Run(state);
@@ -92,7 +97,7 @@ static class Program
     {
         foreach(var transition in new[]{"cancel","complete","left","miss","midnight","arrival"})
         {
-            var state=new SaveState(); state.Catering.NextOfferId=10;
+            var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
             SaveGameManager.Current.Day=4;
             var gig=Gig(); state.Catering.Gigs.Add(gig);
             var msg=Confirmation(gig); c.messagesQueue.Clear(); c.messagesQueue.Enqueue(msg);
@@ -105,16 +110,89 @@ static class Program
             Check(msg.messageData!["guidance"]=="active", "not ready must preserve booked gig");
             World.Found=new(){building=new(){Address=new(){streetName="ba:street_fourthavenue",streetNumber=34}}};
             SaveGameManager.Current.VehicleInstances.Clear();
-            if(transition=="cancel") gig.PlaceId="ba:street_missing#9";
+            World.Unavailable=transition=="cancel";
             if(transition=="complete" || transition=="left") { gig.Status=GigStatus.Started; gig.VehicleId="truck"; }
             if(transition=="complete" || transition=="left" || transition=="arrival") SaveGameManager.Current.VehicleInstances.Add(new(){id="truck",Near=transition!="left"});
             long now=transition=="midnight"?5760:transition=="complete"?4980:transition=="miss"?5020:4910;
             if(transition=="midnight") SaveGameManager.Current.Day=5;
             Catering.RunStep(state,now);
+            if(transition=="cancel") Check(state.Catering.Gigs.Count==0,"real cancellation removed gig without changing its identity");
+            World.Unavailable=false;
             if(transition=="arrival") { Catering.RunStep(state,4912); Check(gig.Status==GigStatus.Started,"real Step arrival still runs"); Catering.RunStep(state,4980); }
             Check(msg.messageData["guidance"]=="inactive",transition+" must flip during actual Step");
             Check(Payments.Paid==paid+12345,"fee must not pay twice");
         }
+    }
+
+    static void ReadableReadiness(Contact c)
+    {
+        var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
+        var gig=Gig(); state.Catering.Gigs.Add(gig);
+        SaveGameManager.Current.Day=2; SaveGameManager.Current.VehicleInstances.Clear();
+        var msg=Confirmation(gig); msg.messageData!["place"]="34 4th Avenue"; msg.messageData["guidance"]="active";
+        c.messagesQueue.Clear(); c.messagesQueue.Enqueue(msg);
+        World.Found=null; Streets.AddressHelper.Street="THROW"; Catering.Reset();
+        Catering.RunStep(state,1440);
+        Check(msg.messageData["guidance"]=="active", "readable ID-less confirmation must never become inactive before readiness");
+        World.Found=new(){building=new(){Address=new(){streetName="ba:street_fourthavenue",streetNumber=34}}};
+        Streets.AddressHelper.Street="4th Avenue";
+        Catering.RunStep(state,1440);
+        Check(state.Catering.Gigs.Single()==gig && msg.messageData["guidance"]=="active", "readiness-only change reconciles active gig");
+        var saved=JsonConvert.SerializeObject(c.messagesQueue); var writes=FoodTrucksSession.Changes;
+        c.messagesQueue=JsonConvert.DeserializeObject<Queue<TextMessage>>(saved)!;
+        Catering.Reset(); Catering.RunStep(state,1440); Catering.RunStep(state,1440);
+        Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"readable legacy queue reload is byte-stable without dirty mark");
+
+        // Names can become available after buildings, without changing Ready or any booking/queue input.
+        msg=c.messagesQueue.Single(); msg.messageData!["place"]="34 Fourth Avenue"; msg.messageData["guidance"]="keep wording";
+        Streets.AddressHelper.Street="THROW"; Catering.Reset(); Catering.RunStep(state,1440);
+        Check(msg.messageData["guidance"]=="keep wording" && state.Catering.Gigs.Count==1,"unknown native name preserves wording and gig");
+        var scans=World.AddressCalls;
+        Streets.AddressHelper.Street="Fourth Avenue"; Catering.Run(state);
+        Check(msg.messageData["guidance"]=="active" && World.AddressCalls>scans,"native-name-only transition forces reconciliation");
+        scans=World.AddressCalls; writes=FoodTrucksSession.Changes; Catering.Run(state);
+        Check(scans==World.AddressCalls && writes==FoodTrucksSession.Changes,"one recheck after name readiness, then no scan/write");
+        Streets.AddressHelper.Street="4th Avenue";
+    }
+
+    static void ExceptionsDoNotBlockSimulation(Contact c)
+    {
+        foreach(var simulationThrows in new[]{false,true})
+        {
+            var state=new SaveState(); state.Catering.NextOfferId=20; FoodTrucksSession.CurrentState=state;
+            var gig=Gig(); gig.Status=GigStatus.Started; gig.VehicleId="truck"; state.Catering.Gigs.Add(gig);
+            var badGig=Gig(2); badGig.Kind="throw"; badGig.GigDay=5; state.Catering.Gigs.Add(badGig);
+            c.messagesQueue.Clear(); var first=Confirmation(gig); var last=Confirmation(gig);
+            c.messagesQueue.Enqueue(first); c.messagesQueue.Enqueue(new(){messageKey="foodtrucks:message_bookings_booked",ThrowOnRead=true});
+            c.messagesQueue.Enqueue(last);
+            SaveGameManager.Current.Day=4; SaveGameManager.Current.VehicleInstances.Clear(); SaveGameManager.Current.VehicleInstances.Add(new(){id="truck"});
+            state.Catering.Unpaid.Add(new(){GigId=9,VehicleId="truck",PlaceId=gig.PlaceId,FeeCents=12345,Units=1});
+            Catering.Reset(); var paid=Payments.Paid; var errors=Log.AfterSimulationErrors;
+            Catering.FailHistoryAfterSettle=true;
+            var original=new Exception("injected settlement boundary failure"); Catering.SettlementFailure=simulationThrows?original:null;
+            Exception? caught=null;
+            try { Catering.RunStep(state,4980); } catch(Exception ex) { caught=ex; }
+            Catering.FailHistoryAfterSettle=false; Catering.SettlementFailure=null;
+            Check(simulationThrows?ReferenceEquals(caught,original):caught==null,"finally reconciliation must not mask simulation exception");
+            Check(first.messageData!["place"]=="34 4th Avenue" && last.messageData!["place"]=="34 4th Avenue","bad record/description must not block other records");
+            Check(state.Catering.History.Any(g=>g.Id==1) && state.Catering.Gigs.All(g=>g.Id!=1),"settlement still archives gig");
+            Check(state.Catering.Unpaid.Count==0 && Payments.Paid==paid+12345,"history exceptions cannot block real PayUnpaid");
+            Check(Log.AfterSimulationErrors==errors+1 && !FoodTrucksSession.ThrowNextMark,"finally MarkChange exception was injected and logged");
+        }
+    }
+
+    static void ReadOnlyDaily(Contact c)
+    {
+        var state=new SaveState {WrittenByModVersion="99.0.0"}; FoodTrucksSession.CurrentState=state; FoodTrucksSession.CanWrite=false;
+        c.messagesQueue.Clear(); c.messagesQueue.Enqueue(Confirmation(Gig()));
+        var before=JsonConvert.SerializeObject(c.messagesQueue); var writes=FoodTrucksSession.Changes;
+        Catering.Reset(); Catering.RunDay(); Catering.RunStep(state,1440); Catering.Run(state);
+        EventLocations.RefreshBookingRadius(c);
+        EventLocations.RefreshCateringHistory(c,Array.Empty<Dictionary<string,string>>());
+        Check(before==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"newer writer daily/history/radius/Step must be read-only");
+        FoodTrucksSession.CanWrite=true;
+        Catering.Run(new SaveState());
+        Check(before==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"detached state cannot rewrite current native contact");
     }
 
 }
@@ -126,10 +204,11 @@ namespace FoodTrucks
     static class World
     {
         internal static CityBuildingController? Found;
+        internal static bool Unavailable; internal static int AddressCalls;
         internal static List<CityBuildingController> AllBuildings() => Found == null ? new() : new() { Found };
-        internal static CityBuildingController? BuildingAt(string key) => key == "ba:street_fourthavenue#34" ? Found : null;
+        internal static CityBuildingController? BuildingAt(string key) { AddressCalls++; return !Unavailable && key == "ba:street_fourthavenue#34" ? Found : null; }
     }
-    static class FoodTrucksSession { internal static int Changes; internal static void MarkChanged() => Changes++; }
+    static class FoodTrucksSession { internal static SaveState? CurrentState; internal static bool CanWrite=true, ThrowNextMark; internal static int Changes; internal static void MarkChanged() { Changes++; if(ThrowNextMark) { ThrowNextMark=false; throw new Exception("injected native dirty failure"); } } }
     static class Notices
     {
         internal static void SendText(Contact c,string key,Dictionary<string,string> d) { }
@@ -142,6 +221,7 @@ namespace FoodTrucks
         "foodtrucks:category_food" => "food",
         "foodtrucks:offer_map_hint" => "offer active",
         "foodtrucks:offer_inactive" => "offer dead",
+        "foodtrucks:catering_kind_throw" => throw new Exception("injected description failure"),
         _ => "Location unavailable" }; }
 }
 namespace Streets
@@ -150,7 +230,7 @@ namespace Streets
     {
         internal static string Street = "4th Avenue";
         internal static IEnumerable<string> StreetDataNames => new[] { "ba:street_fourthavenue" };
-        internal static string GetStreetNameLocalized(this Address a) => Street;
+        internal static string GetStreetNameLocalized(this Address a) => Street == "THROW" ? throw new Exception("missing native name") : Street;
         internal static string LastKey=""; internal static int Calls;
         internal static string GetStreetNameLocalized(this string key) { LastKey=key; Calls++; return Street == "THROW" ? throw new Exception("missing street data") : Street; }
         internal static string ToFormattedString(this Address a) => $"{a.streetNumber} {a.GetStreetNameLocalized()}";
@@ -171,7 +251,7 @@ namespace UI.Notification { enum NotificationType { Success } }
 namespace Entities
 {
     class Timestamp { public int Day; }
-    class TextMessage { public string? messageKey; public Dictionary<string,string>? messageData; public Timestamp? timestamp; }
+    class TextMessage { public string? messageKey; private Dictionary<string,string>? data; public Dictionary<string,string>? messageData { get => ThrowOnRead ? throw new Exception("injected record failure") : data; set => data=value; } [JsonIgnore] public bool ThrowOnRead; public Timestamp? timestamp; }
     class Contact { public string id=""; public Queue<TextMessage> messagesQueue = new(); }
 }
 
@@ -191,5 +271,5 @@ static class DemandData { internal static DemandTables Tables=new(); }
 class TransactionInfo { internal TransactionInfo(string key,Dictionary<string,string> d) {} }
 static class StreetSales { internal static bool CanRecordTotal(SaveState s,string v,int day,long fee,int units)=>true; internal static void RecordTotal(SaveState s,string v,int day,long fee,int units) {} }
 static class Payments { internal static long Paid; internal static bool PayIn(long fee,TransactionInfo t) { Paid+=fee; return true; } }
-static class Log { internal static void Info(string s) {} }
+static class Log { internal static int AfterSimulationErrors; internal static void Info(string s) {} internal static void Error(string s) { if(s.StartsWith("Catering history after simulation:")) AfterSimulationErrors++; } }
 }

@@ -60,6 +60,7 @@ namespace FoodTrucks
         public static void Attach()
         {
             Detach();
+            if (Commissary.Uninstalled || !FoodTrucksSession.CanWrite || FoodTrucksSession.CurrentState == null) return;
             migrateRadius = migrateAddresses = true;
             historyState = null;
             CallDialogFactory.RegisterDialog(DialogType, () => new BookingsDialog());
@@ -154,7 +155,7 @@ namespace FoodTrucks
 
         private static void OnNewDay()
         {
-            if (Commissary.Uninstalled) return;
+            if (Commissary.Uninstalled || !FoodTrucksSession.CanWrite || FoodTrucksSession.CurrentState == null) return;
             // A contact removed some other way (an older save, another mod) is back by the next morning, not only with
             // the next offer's text, which can be days away.
             try
@@ -270,38 +271,62 @@ namespace FoodTrucks
         // Looking up history must never create a contact, especially after the uninstall step.
         internal static void RefreshSavedMessages(SaveState state)
         {
-            if (Commissary.Uninstalled) return;
+            if (Commissary.Uninstalled || !FoodTrucksSession.CanWrite || !ReferenceEquals(state, FoodTrucksSession.CurrentState)) return;
             var contact = SaveGameManager.Current?.Contacts.Find(c => c != null && c.id == ContactId);
             if (contact == null) return;
             var catering = state.Catering;
             var signature = SaveGameManager.Current!.Day + ":" + contact.messagesQueue.Count + ":" +
                 string.Join(",", catering.Gigs.Concat(catering.History).Select(g => g.Id + "/" + g.Status)) + ":" +
-                string.Join(",", catering.Offers.Select(o => o.Id));
+                string.Join(",", catering.Offers.Select(o => o.Id)) + ":" +
+                EventLocations.ResolutionState(catering.Gigs.Concat(catering.History).Cast<CateringOffer>().Concat(catering.Offers).Select(g => g.PlaceId));
             if (!migrateAddresses && !migrateRadius && historyState == signature) return;
-            // Materialize before touching records. Native address failures are contained by the adapter.
-            var active = catering.Gigs.Where(g => g.Status == GigStatus.Booked || g.Status == GigStatus.Started).Select(Describe).ToList();
-            EventLocations.RefreshCateringHistory(contact, active, catering.Gigs.Concat(catering.History).Select(Describe),
-                catering.Offers.Select(Describe), SaveGameManager.Current.Day, migrateAddresses);
+            var active = HistoryDescriptions(catering.Gigs.Where(g => g.Status == GigStatus.Booked || g.Status == GigStatus.Started));
+            EventLocations.RefreshCateringHistory(contact, active, HistoryDescriptions(catering.Gigs.Concat(catering.History)),
+                HistoryDescriptions(catering.Offers), SaveGameManager.Current.Day, migrateAddresses);
             migrateRadius = migrateAddresses = false;
             historyState = signature;
+        }
+
+        private static IEnumerable<Dictionary<string, string>> HistoryDescriptions(IEnumerable<CateringOffer> offers)
+        {
+            foreach (var offer in offers)
+            {
+                Dictionary<string, string> description;
+                try { description = Describe(offer); }
+                catch (Exception ex)
+                {
+                    Log.Error("Catering history description: " + ex);
+                    // Retain uncertainty rather than treating an unrenderable candidate as absent.
+                    description = new Dictionary<string, string>
+                    {
+                        { "identityUnknown", "true" },
+                        { "day", offer.GigDay.ToString() },
+                        { "bookingId", offer.Id.ToString() }
+                    };
+                }
+                yield return description;
+            }
         }
 
         // Once a game minute (or once after a skip): gigs that ended or whose truck left are settled, trucks at a
         // booked place start their gig, earliest booking first, and gigs nobody came to are missed.
         private void Step(SaveState state, CateringRules rules, long now)
         {
+            if (Commissary.Uninstalled || !FoodTrucksSession.CanWrite || !ReferenceEquals(state, FoodTrucksSession.CurrentState)) return;
             var tables = DemandData.Tables;
             if (tables == null) return;
             var vehicles = SaveGameManager.Current.VehicleInstances.Where(v => v != null).ToDictionary(v => v.id, v => v);
 
-            RefreshSavedMessages(state);
+            try { RefreshSavedMessages(state); }
+            catch (Exception ex) { Log.Error("Catering history before simulation: " + ex); }
             try
             {
                 PayUnpaid(state);
                 if (EventLocations.Ready)
                 {
                     var offerCount = state.Catering.Offers.Count;
-                    var cancelled = CateringGigs.CancelUnlocatable(state.Catering, p => EventLocations.ReadableAddress(p) != null);
+                    var cancelled = CateringGigs.CancelUnlocatable(state.Catering,
+                        p => !EventLocations.CanJudgeLocation(p) || EventLocations.ReadableAddress(p) != null);
                     if (cancelled.Count > 0 || offerCount != state.Catering.Offers.Count) FoodTrucksSession.MarkChanged();
                     foreach (var gig in cancelled)
                     {
@@ -391,7 +416,11 @@ namespace FoodTrucks
                     Notices.SendText(Bookings(), "foodtrucks:message_bookings_missed", Describe(missed));
                 }
             }
-            finally { RefreshSavedMessages(state); }
+            finally
+            {
+                try { RefreshSavedMessages(state); }
+                catch (Exception ex) { Log.Error("Catering history after simulation: " + ex); }
+            }
         }
 
         // The minute the truck is free of its gigs: the end of one it has started or just finished, else 0.
@@ -823,7 +852,8 @@ namespace FoodTrucks
 
         private static DialogEntry Closing(string key, object? data)
         {
-            Notices.Send(Current.contact, new TextMessage(key, data == null ? null : ToDictionary(data), read: true, isNewInteraction: true));
+            if (!Commissary.Uninstalled && FoodTrucksSession.CanWrite && FoodTrucksSession.CurrentState != null)
+                Notices.Send(Current.contact, new TextMessage(key, data == null ? null : ToDictionary(data), read: true, isNewInteraction: true));
             return new DialogEntry
             {
                 messageData = LocalizorManager.Localize(key, data),

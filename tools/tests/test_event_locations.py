@@ -56,7 +56,7 @@ class EventLocationTests(unittest.TestCase):
     def test_daily_offers_do_not_restore_uninstalled_contact(self):
         catering = (ROOT / 'unity/FoodTrucks/Scripts/Catering.cs').read_text()
         daily = catering[catering.index('        private static void OnNewDay()'):catering.index("        // Today's offers")]
-        guard = 'if (Commissary.Uninstalled) return;'
+        guard = 'if (Commissary.Uninstalled || !FoodTrucksSession.CanWrite || FoodTrucksSession.CurrentState == null) return;'
         self.assertEqual(daily[daily.index('{') + 1:].lstrip().splitlines()[0], guard)
         self.assertLess(daily.index(guard), daily.index('Bookings();'))
         self.assertLess(daily.index(guard), daily.index('Offer();'))
@@ -69,6 +69,7 @@ class EventLocationTests(unittest.TestCase):
             step = source[source.index('        private void Step('):source.index('        // The minute the truck is free')]
             settle = source[source.index('        private void SettleEnded('):source.index('        // Whether the truck could start')]
             describe = source[source.index('        internal static Dictionary<string, string> Describe('):source.index('        // "12 Fifth Street"')]
+            daily = source[source.index('        private static void OnNewDay()'):source.index("        // Today's offers")]
             (folder / 'Catering.cs').write_text("""using System;
 using System.Linq;
 using System.Collections.Generic;
@@ -82,12 +83,16 @@ static bool migrateRadius, migrateAddresses;
 static string? historyState;
 internal static void Reset() { migrateRadius = migrateAddresses = true; historyState = null; }
 internal static void Run(SaveState state) => RefreshSavedMessages(state);
+internal static void RunDay() => OnNewDay();
+static void Offer() { }
 static string Text(string s) => CityPitches.Text(s);
 static string PlaceName(string s) => EventLocations.Name(s);
 static string Clock(int m) => m.ToString();
 static string Category(string s) => s;
-""" + method + describe + step + settle + """
+""" + method + describe + step + settle + daily + """
 static Catering runner = new();
+internal static bool FailHistoryAfterSettle;
+internal static Exception? SettlementFailure;
 internal static void RunStep(SaveState state, long now) => runner.Step(state, new(), now);
 readonly Dictionary<(long Gig,string Vehicle),long> readySince=new();
 readonly Dictionary<(string Place,string Vehicle),(long Since,Vector3 At)> nearSince=new();
@@ -101,7 +106,11 @@ static bool Ready(SaveState s,CateringRules r,DemandTables t,CateringGig g,Vehic
 static List<(VehicleInstance Vehicle,VehicleState State,string Kind)> Caterers(SaveState s,CateringRules r) => SaveGameManager.Current.VehicleInstances.Select(v=>(v,new VehicleState(),"truck")).ToList();
 static Contact Bookings() => SaveGameManager.Current.Contacts[0];
 bool Arrive(SaveState s,CateringRules r,DemandTables t,CateringGig g,VehicleInstance v,VehicleState saved,string kind,long m) => CateringGigs.Arrive(r,s.Catering,g.Id,v.id,kind,(int)(m/1440)+1,(int)(m%1440),new[]{"hotdog"},new Dictionary<string,int>{{"hotdog",100}},_=>"food").Success;
-void Settle(SaveState s,CateringRules r,DemandTables t,CateringGig g,VehicleInstance? truck,long m) => CateringGigs.Finish(r,s.Catering,g.Id,(int)(m/1440)+1,(int)(m%1440));
+void Settle(SaveState s,CateringRules r,DemandTables t,CateringGig g,VehicleInstance? truck,long m) {
+ CateringGigs.Finish(r,s.Catering,g.Id,(int)(m/1440)+1,(int)(m%1440));
+ if(FailHistoryAfterSettle) FoodTrucksSession.ThrowNextMark=true;
+ if(SettlementFailure!=null) throw SettlementFailure;
+}
 } }""")
             (folder / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>
 <OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable>
