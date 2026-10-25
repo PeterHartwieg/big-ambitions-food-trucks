@@ -8,4 +8,4 @@ Existing full phone addresses stay as they are. Broken addresses are corrected o
 
 Old catering offers and confirmations now recover their address from their own saved street and building number even after the gig is gone. Inactive confirmations say “This booking is no longer active.” instead of directing you to a map marker, and keep the 60-metre serving radius.
 
-Booking confirmations now update in the same session when a gig ends, is missed or is cancelled. Old messages recover readable addresses even while locations are still loading, and damaged history cannot interrupt catering payments. Expired offers without an open or accepted booking say ?This offer is no longer available?; open offers keep their map advice.
+Booking confirmations now update in the same session when a gig ends, is missed or is cancelled. Old messages recover readable addresses even while locations are still loading, and damaged history cannot interrupt catering payments. Expired offers without an open or accepted booking say "This offer is no longer available"; open offers keep their map advice.
