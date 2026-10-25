@@ -245,8 +245,11 @@ static class Program
         Check(Match("34 ba:street_fourthavenue","34 4th Avenue","ba:street_fourthavenue#34")==true,"raw street identity stays true");
         // Whole native names may establish aliases; spaces/hyphens never manufacture them.
         Streets.AddressHelper.Catalog["ba:street_otherbroadway"]="Broad Way";
-        Streets.AddressHelper.Catalog["ba:street_otherbroadwaystreet"]="Broadway Street";
+        Streets.AddressHelper.Catalog["ba:street_broadwaystreet"]="Broadway Street";
         Check(Match("34 Broadway","34 Broad Way")==false && Match("34 Broadway","34 Broadway Street")==false,"distinct catalog IDs are proven mismatches");
+        Streets.AddressHelper.Catalog.Remove("ba:street_broadway");
+        Check(Match("34 Broadway","35 Broadway Street")==null,"shortened display fallback must not manufacture a Broadway alias");
+        Streets.AddressHelper.Catalog["ba:street_broadway"]="Broadway";
         Streets.AddressHelper.Catalog["ba:street_fourthavenue"]="Broadway";
         Check(Match("34 Broadway","35 Broadway")==null,"colliding aliases resolve to unknown");
         Streets.AddressHelper.Catalog=null;

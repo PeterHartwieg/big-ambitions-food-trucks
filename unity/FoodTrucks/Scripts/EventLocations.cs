@@ -266,6 +266,11 @@ namespace FoodTrucks
                 string? native = null;
                 try { native = AddressHelper.GetStreetNameLocalized(id); } catch (Exception) { }
                 var fallback = FallbackStreet(id.Substring("ba:street_".Length));
+                // Display recovery deliberately shortens broadwaystreet to Broadway.
+                // A differing non-ordinal fallback is not an identity alias when the
+                // game supplies another whole name (also protects spaced native names).
+                if (!InvalidStreet(native) && native != fallback &&
+                    !Regex.IsMatch(fallback ?? "", @"\A(?:West |East |North |South )?[1-9][0-9]*(?:st|nd|rd|th) (?:Avenue|Street|Road|Drive|Lane)\z")) fallback = null;
                 foreach (var name in new[] { native, fallback })
                 {
                     Add(id, name);
