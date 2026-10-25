@@ -229,6 +229,25 @@ static class Program
             Equal("9 Unknown Street", EventLocations.HistoricalAddress("ba:street_unknownstreet#9"));
             Equal(null, EventLocations.HistoricalAddress("unidentifiable"));
         }
+        Streets.AddressHelper.Street = "THROW";
+        foreach (var example in new[] { ("thirteenthstreet", "13th Street"), ("twentyfirstavenue", "21st Avenue"),
+            ("42ndstreet", "42nd Street"), ("west42ndstreet", "West 42nd Street"), ("westbroadway", "West Broadway") })
+            Equal("9 " + example.Item2, EventLocations.HistoricalAddress("ba:street_" + example.Item1 + "#9"));
+        foreach (var malformed in new[] { "ba:street_odd-key#9", "ba:street_fifthavenue#0", "ba:street_42oops#3" })
+        {
+            var bad = Message(new(Description()) { ["place"] = malformed, ["locationId"] = "" });
+            var history = new Contact(); history.messagesQueue.Enqueue(bad);
+            EventLocations.RefreshCateringHistory(history, Array.Empty<Dictionary<string,string>>());
+            Equal("Location unavailable", bad.messageData!["place"]);
+        }
+        // Safe upgrade only for text that this migration explicitly marked as fallback.
+        var fallback = Message(new(Description()) { ["place"] = "34 ba:street_fourthavenue" });
+        var upgrades = new Contact(); upgrades.messagesQueue.Enqueue(fallback);
+        EventLocations.RefreshCateringHistory(upgrades, Array.Empty<Dictionary<string,string>>());
+        Equal("34 4th Avenue", fallback.messageData!["place"]);
+        Streets.AddressHelper.Street = "Fourth Avenue";
+        EventLocations.RefreshCateringHistory(upgrades, Array.Empty<Dictionary<string,string>>());
+        Equal("34 Fourth Avenue", fallback.messageData["place"]); Equal(false, fallback.messageData.ContainsKey("addressFallback"));
         Streets.AddressHelper.Street = "4th Avenue";
         var c = new Contact();
         var live = Message(Description(), "foodtrucks:message_bookings_booked"); c.messagesQueue.Enqueue(live);

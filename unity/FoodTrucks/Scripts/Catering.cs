@@ -34,6 +34,7 @@ namespace FoodTrucks
         private long lastMinute = -1;
         private static bool migrateRadius;
         private static bool migrateAddresses;
+        private static string? historyState;
         // Where trucks stood and when, none of it saved: after a load it starts from then.
         // By gig and truck: the first minute the truck stood there ready for it (crew or player, licence, food,
         // portions), so a wait to confirm it is parked never stretches the deadline for a truck that got ready late.
@@ -60,6 +61,7 @@ namespace FoodTrucks
         {
             Detach();
             migrateRadius = migrateAddresses = true;
+            historyState = null;
             CallDialogFactory.RegisterDialog(DialogType, () => new BookingsDialog());
             var contact = Contact.EnsurePermanentContact(ContactId, ContactCategoryName.General, ContactDescription);
             // Not saved by the game, so it is set again after every load.
@@ -164,7 +166,7 @@ namespace FoodTrucks
                 }
             }
             catch (Exception ex) { Log.Error("Catering, bookings contact: " + ex); }
-            try { Offer(); }
+            try { Offer(); if (FoodTrucksSession.CurrentState is SaveState state) RefreshSavedMessages(state); }
             catch (Exception ex) { Log.Error("Catering offers: " + ex); }
         }
 
@@ -264,26 +266,24 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Catering: " + ex); }
         }
 
-        // One migration per load; address repair waits until native buildings are ready.
+        // Address recovery is once per load and never waits for live buildings. Guidance follows state changes.
         // Looking up history must never create a contact, especially after the uninstall step.
-        private static void RefreshSavedMessages(SaveState state)
+        internal static void RefreshSavedMessages(SaveState state)
         {
-            if (Commissary.Uninstalled || (!migrateRadius && !migrateAddresses)) return;
+            if (Commissary.Uninstalled) return;
             var contact = SaveGameManager.Current?.Contacts.Find(c => c != null && c.id == ContactId);
             if (contact == null) return;
-            if (migrateRadius)
-            {
-                EventLocations.RefreshBookingRadius(contact);
-                migrateRadius = false;
-            }
-            if (migrateAddresses && EventLocations.Ready)
-            {
-                EventLocations.RefreshMessages(contact, state.Catering.Offers.Concat<CateringOffer>(state.Catering.Gigs)
-                    .Where(o => EventLocations.ReadableAddress(o.PlaceId) != null).Select(Describe));
-                EventLocations.RefreshCateringHistory(contact, state.Catering.Gigs
-                    .Where(g => g.Status == GigStatus.Booked || g.Status == GigStatus.Started).Select(Describe));
-                migrateAddresses = false;
-            }
+            var catering = state.Catering;
+            var signature = SaveGameManager.Current!.Day + ":" + contact.messagesQueue.Count + ":" +
+                string.Join(",", catering.Gigs.Concat(catering.History).Select(g => g.Id + "/" + g.Status)) + ":" +
+                string.Join(",", catering.Offers.Select(o => o.Id));
+            if (!migrateAddresses && !migrateRadius && historyState == signature) return;
+            // Materialize before touching records. Native address failures are contained by the adapter.
+            var active = catering.Gigs.Where(g => g.Status == GigStatus.Booked || g.Status == GigStatus.Started).Select(Describe).ToList();
+            EventLocations.RefreshCateringHistory(contact, active, catering.Gigs.Concat(catering.History).Select(Describe),
+                catering.Offers.Select(Describe), SaveGameManager.Current.Day, migrateAddresses);
+            migrateRadius = migrateAddresses = false;
+            historyState = signature;
         }
 
         // Once a game minute (or once after a skip): gigs that ended or whose truck left are settled, trucks at a
@@ -295,99 +295,103 @@ namespace FoodTrucks
             var vehicles = SaveGameManager.Current.VehicleInstances.Where(v => v != null).ToDictionary(v => v.id, v => v);
 
             RefreshSavedMessages(state);
-            PayUnpaid(state);
-            if (EventLocations.Ready)
+            try
             {
-                var offerCount = state.Catering.Offers.Count;
-                var cancelled = CateringGigs.CancelUnlocatable(state.Catering, p => EventLocations.ReadableAddress(p) != null);
-                if (cancelled.Count > 0 || offerCount != state.Catering.Offers.Count) FoodTrucksSession.MarkChanged();
-                foreach (var gig in cancelled)
+                PayUnpaid(state);
+                if (EventLocations.Ready)
                 {
-                    lastSeenNear.Remove(gig.Id);
-                    Notices.SendText(Bookings(), "foodtrucks:message_bookings_location_cancelled", Describe(gig));
-                }
-            }
-            SettleEnded(state, rules, tables, vehicles, now);
-            // Wait for native buildings before judging destinations or overdue arrivals.
-            if (!EventLocations.Ready) return;
-
-            // Trucks standing at booked places: watched from a day before a gig's window, so one parked there before a
-            // skip counts from then.
-            var caterers = Caterers(state, rules);
-            var watched = new HashSet<(string, string)>();
-            foreach (var place in state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked && now >= GigStart(g) - rules.ArrivalWindowMinutes - 1440)
-                         .Select(g => g.PlaceId).Distinct())
-                foreach (var (vehicle, saved, _) in caterers)
-                {
-                    if (saved.Transit != null || !Near(vehicle, place)) continue;
-                    var key = (place, vehicle.id);
-                    // It must stand still: moved more than a few metres since it was first seen, it starts again.
-                    var position = PositionOf(vehicle);
-                    if (!nearSince.TryGetValue(key, out var seen) || Vector3.Distance(seen.At, position) > 3f)
+                    var offerCount = state.Catering.Offers.Count;
+                    var cancelled = CateringGigs.CancelUnlocatable(state.Catering, p => EventLocations.ReadableAddress(p) != null);
+                    if (cancelled.Count > 0 || offerCount != state.Catering.Offers.Count) FoodTrucksSession.MarkChanged();
+                    foreach (var gig in cancelled)
                     {
-                        nearSince[key] = (now, position);
-                        foreach (var gigAt in state.Catering.Gigs.Where(g => g.PlaceId == place)) readySince.Remove((gigAt.Id, vehicle.id));
-                    }
-                    watched.Add(key);
-                    // Ready for each booking here, from when it first was; not ready, the count starts again.
-                    foreach (var gigAt in state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked && g.PlaceId == place))
-                    {
-                        if (Ready(state, rules, tables, gigAt, vehicle, saved, now)) { if (!readySince.ContainsKey((gigAt.Id, vehicle.id))) readySince[(gigAt.Id, vehicle.id)] = now; }
-                        else readySince.Remove((gigAt.Id, vehicle.id));
+                        lastSeenNear.Remove(gig.Id);
+                        Notices.SendText(Bookings(), "foodtrucks:message_bookings_location_cancelled", Describe(gig));
                     }
                 }
-            foreach (var key in nearSince.Keys.Where(k => !watched.Contains(k)).ToList()) nearSince.Remove(key);
-            foreach (var key in readySince.Keys.Where(k => !watched.Contains((state.Catering.Gigs.FirstOrDefault(g => g.Id == k.Gig)?.PlaceId ?? "", k.Vehicle))).ToList())
-                readySince.Remove(key);
+                SettleEnded(state, rules, tables, vehicles, now);
+                // Wait for native buildings before judging destinations or overdue arrivals.
+                if (!EventLocations.Ready) return;
 
-            // Bookings earliest first; a gig a skip carried past its end is settled before the truck's next booking.
-            var pending = new List<long>();
-            foreach (var gig in state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked).OrderBy(GigStart).ThenBy(g => g.Id).ToList())
-            {
-                var start = GigStart(gig);
-                if (now < start - rules.ArrivalWindowMinutes) continue;
-                foreach (var (vehicle, saved, kind) in caterers)
+                // Trucks standing at booked places: watched from a day before a gig's window, so one parked there before a
+                // skip counts from then.
+                var caterers = Caterers(state, rules);
+                var watched = new HashSet<(string, string)>();
+                foreach (var place in state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked && now >= GigStart(g) - rules.ArrivalWindowMinutes - 1440)
+                             .Select(g => g.PlaceId).Distinct())
+                    foreach (var (vehicle, saved, _) in caterers)
+                    {
+                        if (saved.Transit != null || !Near(vehicle, place)) continue;
+                        var key = (place, vehicle.id);
+                        // It must stand still: moved more than a few metres since it was first seen, it starts again.
+                        var position = PositionOf(vehicle);
+                        if (!nearSince.TryGetValue(key, out var seen) || Vector3.Distance(seen.At, position) > 3f)
+                        {
+                            nearSince[key] = (now, position);
+                            foreach (var gigAt in state.Catering.Gigs.Where(g => g.PlaceId == place)) readySince.Remove((gigAt.Id, vehicle.id));
+                        }
+                        watched.Add(key);
+                        // Ready for each booking here, from when it first was; not ready, the count starts again.
+                        foreach (var gigAt in state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked && g.PlaceId == place))
+                        {
+                            if (Ready(state, rules, tables, gigAt, vehicle, saved, now)) { if (!readySince.ContainsKey((gigAt.Id, vehicle.id))) readySince[(gigAt.Id, vehicle.id)] = now; }
+                            else readySince.Remove((gigAt.Id, vehicle.id));
+                        }
+                    }
+                foreach (var key in nearSince.Keys.Where(k => !watched.Contains(k)).ToList()) nearSince.Remove(key);
+                foreach (var key in readySince.Keys.Where(k => !watched.Contains((state.Catering.Gigs.FirstOrDefault(g => g.Id == k.Gig)?.PlaceId ?? "", k.Vehicle))).ToList())
+                    readySince.Remove(key);
+
+                // Bookings earliest first; a gig a skip carried past its end is settled before the truck's next booking.
+                var pending = new List<long>();
+                foreach (var gig in state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked).OrderBy(GigStart).ThenBy(g => g.Id).ToList())
                 {
-                    if (!nearSince.TryGetValue((gig.PlaceId, vehicle.id), out var seen)) continue;
-                    var stand = SaveGameManager.Current.ActiveVehicleId == vehicle.id ? StandMinutesDriving : StandMinutes;
-                    if (!readySince.TryGetValue((gig.Id, vehicle.id), out var ready))
+                    var start = GigStart(gig);
+                    if (now < start - rules.ArrivalWindowMinutes) continue;
+                    foreach (var (vehicle, saved, kind) in caterers)
                     {
-                        // There in time but not ready: Arrive says why, once. Too late, the misses catch it.
-                        var came = Math.Max(seen.Since, start - rules.ArrivalWindowMinutes);
-                        if (now >= seen.Since + stand && came <= start + rules.GraceMinutes) Arrive(state, rules, tables, gig, vehicle, saved, kind, came);
-                        continue;
+                        if (!nearSince.TryGetValue((gig.PlaceId, vehicle.id), out var seen)) continue;
+                        var stand = SaveGameManager.Current.ActiveVehicleId == vehicle.id ? StandMinutesDriving : StandMinutes;
+                        if (!readySince.TryGetValue((gig.Id, vehicle.id), out var ready))
+                        {
+                            // There in time but not ready: Arrive says why, once. Too late, the misses catch it.
+                            var came = Math.Max(seen.Since, start - rules.ArrivalWindowMinutes);
+                            if (now >= seen.Since + stand && came <= start + rules.GraceMinutes) Arrive(state, rules, tables, gig, vehicle, saved, kind, came);
+                            continue;
+                        }
+                        // It came ready, or became free of an earlier gig, at the latest of these.
+                        var arrived = Math.Max(Math.Max(Math.Max(seen.Since, ready), start - rules.ArrivalWindowMinutes), BusyUntil(vehicle.id));
+                        if (arrived > now) continue;
+                        // Too late for this one: another truck may still make it; nobody does, the misses catch it.
+                        if (arrived > start + rules.GraceMinutes) continue;
+                        // Still being confirmed as parked: the gig waits, and isn't missed meanwhile, as it was ready in time.
+                        if (now < seen.Since + stand)
+                        {
+                            pending.Add(gig.Id);
+                            continue;
+                        }
+                        if (!Arrive(state, rules, tables, gig, vehicle, saved, kind, arrived)) continue;
+                        if (gig.Status == GigStatus.Started && GigStart(gig) + gig.DurationMinutes <= now) SettleEnded(state, rules, tables, vehicles, now);
+                        break;
                     }
-                    // It came ready, or became free of an earlier gig, at the latest of these.
-                    var arrived = Math.Max(Math.Max(Math.Max(seen.Since, ready), start - rules.ArrivalWindowMinutes), BusyUntil(vehicle.id));
-                    if (arrived > now) continue;
-                    // Too late for this one: another truck may still make it; nobody does, the misses catch it.
-                    if (arrived > start + rules.GraceMinutes) continue;
-                    // Still being confirmed as parked: the gig waits, and isn't missed meanwhile, as it was ready in time.
-                    if (now < seen.Since + stand)
-                    {
-                        pending.Add(gig.Id);
-                        continue;
-                    }
-                    if (!Arrive(state, rules, tables, gig, vehicle, saved, kind, arrived)) continue;
-                    if (gig.Status == GigStatus.Started && GigStart(gig) + gig.DurationMinutes <= now) SettleEnded(state, rules, tables, vehicles, now);
-                    break;
+                }
+
+                // A gig started for a truck that stood there through a skip may be over already: settled before the misses.
+                SettleEnded(state, rules, tables, vehicles, now);
+
+                // A gig whose truck is still being confirmed in time isn't missed yet: misses are judged up to its deadline.
+                var judged = now;
+                foreach (var gig in state.Catering.Gigs.Where(g => pending.Contains(g.Id)))
+                    judged = Math.Min(judged, GigStart(gig) + rules.GraceMinutes);
+                var day = (int)(judged / 1440) + 1;
+                foreach (var missed in CateringGigs.MissOverdue(rules, state.Catering, day, (int)(judged % 1440)))
+                {
+                    FoodTrucksSession.MarkChanged();
+                    Log.Info($"Catering gig {missed.Id} at {missed.PlaceId} failed: {missed.Failure}; booking reputation {state.Catering.BookingReputation:F2}.");
+                    Notices.SendText(Bookings(), "foodtrucks:message_bookings_missed", Describe(missed));
                 }
             }
-
-            // A gig started for a truck that stood there through a skip may be over already: settled before the misses.
-            SettleEnded(state, rules, tables, vehicles, now);
-
-            // A gig whose truck is still being confirmed in time isn't missed yet: misses are judged up to its deadline.
-            var judged = now;
-            foreach (var gig in state.Catering.Gigs.Where(g => pending.Contains(g.Id)))
-                judged = Math.Min(judged, GigStart(gig) + rules.GraceMinutes);
-            var day = (int)(judged / 1440) + 1;
-            foreach (var missed in CateringGigs.MissOverdue(rules, state.Catering, day, (int)(judged % 1440)))
-            {
-                FoodTrucksSession.MarkChanged();
-                Log.Info($"Catering gig {missed.Id} at {missed.PlaceId} failed: {missed.Failure}; booking reputation {state.Catering.BookingReputation:F2}.");
-                Notices.SendText(Bookings(), "foodtrucks:message_bookings_missed", Describe(missed));
-            }
+            finally { RefreshSavedMessages(state); }
         }
 
         // The minute the truck is free of its gigs: the end of one it has started or just finished, else 0.
@@ -654,7 +658,7 @@ namespace FoodTrucks
             { "bookingId", offer.Id.ToString() },
             { "locationId", offer.PlaceId },
             { "metres", PlaceMetres.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) },
-            { "guidance", Text("foodtrucks:booking_map_hint") },
+            { "guidance", Text(offer is CateringGig ? "foodtrucks:booking_map_hint" : "foodtrucks:offer_map_hint") },
             { "kind", Text("foodtrucks:catering_kind_" + offer.Kind) },
             { "guests", offer.Guests.ToString() },
             { "place", PlaceName(offer.PlaceId) },
@@ -800,6 +804,7 @@ namespace FoodTrucks
             }
             Log.Info($"Catering offer {offerId} taken: gig at {result.Gig!.PlaceId} on day {result.Gig.GigDay}.");
             Notices.Send(Current.contact, new TextMessage("foodtrucks:message_bookings_booked", Catering.Describe(result.Gig), read: true, isNewInteraction: true));
+            Catering.RefreshSavedMessages(state);
             return Start(index);
         }
 
@@ -812,6 +817,7 @@ namespace FoodTrucks
                 FoodTrucksSession.MarkChanged();
                 Log.Info($"Catering offer {offerId} turned down.");
             }
+            Catering.RefreshSavedMessages(state);
             return Start(index);
         }
 

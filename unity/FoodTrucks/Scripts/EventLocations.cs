@@ -25,10 +25,13 @@ namespace FoodTrucks
         {
             var address = controller?.building?.Address;
             if (address == null || address.streetNumber <= 0) return null;
-            var street = address.GetStreetNameLocalized();
-            if (string.IsNullOrWhiteSpace(street) || street.Contains(":") || street.Contains("#") ||
-                street.Contains("{") || street.Contains("}") || street.Contains("<")) return null;
-            return address.ToFormattedString();
+            try
+            {
+                var street = address.GetStreetNameLocalized();
+                if (InvalidStreet(street)) return null;
+                return address.ToFormattedString();
+            }
+            catch (Exception) { return null; }
         }
 
         internal static string Name(string addressKey) => ReadableAddress(addressKey)
@@ -36,65 +39,134 @@ namespace FoodTrucks
 
         // History can outlive both a gig and its building. StreetData IDs use AddressHelper's
         // streetLocalization lookup, not Localizor's translation-key lookup.
-        internal static string? HistoricalAddress(string value)
+        internal static string? HistoricalAddress(string? value) => HistoricalAddress(value, out _);
+
+        private static string? HistoricalAddress(string? value, out bool fallback)
         {
-            var match = Regex.Match(value, @"^(?:(ba:street_[a-z]+)#([0-9]+)|([0-9]+) #?(ba:street_[a-z]+))$", RegexOptions.CultureInvariant);
+            fallback = false;
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var match = Regex.Match(value.Trim(), @"\A(?:(ba:street_[a-z0-9]+)#([0-9]+)|([0-9]+)\s+#?(ba:street_[a-z0-9]+))\z", RegexOptions.CultureInvariant);
             if (!match.Success) return null;
             var streetKey = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[4].Value;
             var numberText = match.Groups[2].Success ? match.Groups[2].Value : match.Groups[3].Value;
             if (!int.TryParse(numberText, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number <= 0) return null;
             string? street = null;
             try { street = AddressHelper.GetStreetNameLocalized(streetKey); }
-            catch (Exception) { /* Missing StreetData must not expose a data ID in saved history. */ }
-            if (string.IsNullOrWhiteSpace(street) || street.IndexOfAny(new[] { ':', '#', '{', '}', '<', '>' }) >= 0)
+            catch (Exception) { /* Historical text needs no surviving StreetData or building. */ }
+            if (InvalidStreet(street))
+            {
+                fallback = true;
                 street = FallbackStreet(streetKey.Substring("ba:street_".Length));
-            return number.ToString(CultureInfo.InvariantCulture) + " " + street;
+            }
+            return street == null ? null : number.ToString(CultureInfo.InvariantCulture) + " " + street;
         }
 
-        private static string FallbackStreet(string key)
+        private static bool InvalidStreet(string? street) => string.IsNullOrWhiteSpace(street) ||
+            street!.IndexOfAny(new[] { ':', '#', '{', '}', '<', '>' }) >= 0;
+
+        private static string? FallbackStreet(string key)
         {
-            var ordinals = new[] { "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth" };
-            for (var i = 0; i < ordinals.Length; i++)
-                if (key == ordinals[i] + "avenue" || key == ordinals[i] + "street")
-                {
-                    var n = i + 1;
-                    var suffix = n == 1 ? "st" : n == 2 ? "nd" : n == 3 ? "rd" : "th";
-                    return n.ToString(CultureInfo.InvariantCulture) + suffix + (key.EndsWith("avenue", StringComparison.Ordinal) ? " Avenue" : " Street");
-                }
-            if (key == "broadwaystreet") return "Broadway";
+            var prefix = "";
+            foreach (var direction in new[] { "west", "east", "north", "south" })
+                if (key.StartsWith(direction, StringComparison.Ordinal))
+                { prefix = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(direction) + " "; key = key.Substring(direction.Length); break; }
+            if (key == "broadway" || key == "broadwaystreet") return prefix + "Broadway";
+            var ordinals = new[] { "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth",
+                "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth", "twentieth" };
             foreach (var ending in new[] { "avenue", "street", "road", "drive", "lane" })
-                if (key.EndsWith(ending, StringComparison.Ordinal) && key.Length > ending.Length)
-                    return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(key.Substring(0, key.Length - ending.Length)) + " " +
-                        CultureInfo.InvariantCulture.TextInfo.ToTitleCase(ending);
-            return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(key);
+            {
+                if (!key.EndsWith(ending, StringComparison.Ordinal) || key.Length <= ending.Length) continue;
+                var name = key.Substring(0, key.Length - ending.Length);
+                var n = Array.IndexOf(ordinals, name) + 1;
+                if (n == 0)
+                {
+                    var numeric = Regex.Match(name, @"\A([0-9]+)(?:st|nd|rd|th)\z");
+                    if (numeric.Success) int.TryParse(numeric.Groups[1].Value, out n);
+                    // Common written compound ordinals, e.g. twentyfirst / fortysecond.
+                    foreach (var tens in new[] { ("twenty", 20), ("thirty", 30), ("forty", 40), ("fifty", 50), ("sixty", 60), ("seventy", 70), ("eighty", 80), ("ninety", 90) })
+                        if (name.StartsWith(tens.Item1, StringComparison.Ordinal))
+                        { var unit = Array.IndexOf(ordinals, name.Substring(tens.Item1.Length)) + 1; if (unit > 0 && unit < 10) n = tens.Item2 + unit; }
+                }
+                if (n > 0)
+                {
+                    var suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : n % 10 == 1 ? "st" : n % 10 == 2 ? "nd" : n % 10 == 3 ? "rd" : "th";
+                    name = n.ToString(CultureInfo.InvariantCulture) + suffix;
+                }
+                else if (!Regex.IsMatch(name, @"\A[a-z]+\z")) return null;
+                else name = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(name);
+                return prefix + name + " " + CultureInfo.InvariantCulture.TextInfo.ToTitleCase(ending);
+            }
+            return null;
         }
 
-        internal static void RefreshCateringHistory(Contact contact, IEnumerable<Dictionary<string, string>> activeGigs)
+        internal static void RefreshCateringHistory(Contact contact, IEnumerable<Dictionary<string, string>> activeGigs,
+            IEnumerable<Dictionary<string, string>>? acceptedGigs = null, IEnumerable<Dictionary<string, string>>? openOffers = null,
+            int day = 0, bool repairAddresses = true)
         {
             var active = activeGigs.ToList();
+            var accepted = (acceptedGigs ?? active).Concat(contact.messagesQueue
+                .Where(m => m?.messageKey == "foodtrucks:message_bookings_booked" && m.messageData != null)
+                .Select(m => m.messageData)).ToList();
+            var open = (openOffers ?? Enumerable.Empty<Dictionary<string, string>>()).ToList();
             var changed = false;
-            foreach (var message in contact.messagesQueue)
+            try
             {
-                var data = message?.messageData;
-                if (data == null || (message!.messageKey != "foodtrucks:message_bookings_offer" &&
-                    message.messageKey != "foodtrucks:message_bookings_booked")) continue;
-                if (data.TryGetValue("place", out var old) && UnreadablePlace(old))
+                foreach (var message in contact.messagesQueue)
                 {
-                    var place = data.TryGetValue("locationId", out var id) ? HistoricalAddress(id) : null;
-                    place ??= HistoricalAddress(old);
-                    if (place != null && place != old) { data["place"] = place; changed = true; }
+                    // Native contact payloads are not validated by the Core save codec. Isolate each one.
+                    try
+                    {
+                        var data = message?.messageData;
+                        if (data == null || (message!.messageKey != "foodtrucks:message_bookings_offer" &&
+                            message.messageKey != "foodtrucks:message_bookings_booked")) continue;
+                        data.TryGetValue("place", out var old);
+                        var original = data.TryGetValue("legacyHistoryPlace", out var saved) ? saved : old;
+                        if (repairAddresses && (UnreadablePlace(old) ||
+                            data.TryGetValue("addressFallback", out var fallbackValue) && fallbackValue == old))
+                        {
+                            data.TryGetValue("locationId", out var id);
+                            var source = id;
+                            var place = HistoricalAddress(source, out var fallback);
+                            if (place == null) { source = original; place = HistoricalAddress(source, out fallback); }
+                            place ??= CityPitches.Text("foodtrucks:event_location_unavailable");
+                            if (place != old)
+                            {
+                                if (!data.ContainsKey("legacyHistoryPlace") && !string.IsNullOrWhiteSpace(old))
+                                { data["legacyHistoryPlace"] = old!; changed = true; }
+                                data["place"] = place; changed = true;
+                            }
+                            // Only our own fallback can be upgraded on a later load. Preserve readable saved text.
+                            if (fallback && place != CityPitches.Text("foodtrucks:event_location_unavailable"))
+                            {
+                                if (!data.TryGetValue("addressFallback", out var prior) || prior != place)
+                                { data["addressFallback"] = place; changed = true; }
+                            }
+                            else if (data.Remove("addressFallback")) changed = true;
+                        }
+                        var booked = message.messageKey == "foodtrucks:message_bookings_booked";
+                        if (booked && (!data.TryGetValue("metres", out var metres) || string.IsNullOrWhiteSpace(metres)))
+                        { data["metres"] = Catering.PlaceMetres.ToString("F0", CultureInfo.InvariantCulture); changed = true; }
+                        var key = booked
+                            ? (active.Any(d => SameBooking(data, original, d)) ? "foodtrucks:booking_map_hint" : "foodtrucks:booking_inactive")
+                            : (day > 0 && data.TryGetValue("reply", out var reply) && int.TryParse(reply, out var replyDay) && replyDay > 0 && day > replyDay &&
+                                !open.Any(d => SameBooking(data, original, d)) && !accepted.Any(d => SameBooking(data, original, d))
+                                ? "foodtrucks:offer_inactive" : "foodtrucks:offer_map_hint");
+                        var guidance = CityPitches.Text(key);
+                        if (!data.TryGetValue("guidance", out var existing) || existing != guidance)
+                        { data["guidance"] = guidance; changed = true; }
+                    }
+                    catch (Exception) { /* A corrupt history record must not stop payments or other records. */ }
                 }
-                if (message.messageKey != "foodtrucks:message_bookings_booked") continue;
-                var surviving = active.Any(d => new[] { "day", "start", "kind" }.All(k =>
-                    data.TryGetValue(k, out var v) && d.TryGetValue(k, out var other) && v == other) &&
-                    SameDetails(data, d) && data.TryGetValue("place", out var place) &&
-                    (SameLocation(data, place, d) || d.TryGetValue("place", out var candidate) && place == candidate));
-                var guidance = CityPitches.Text(surviving ? "foodtrucks:booking_map_hint" : "foodtrucks:booking_inactive");
-                if (!data.TryGetValue("guidance", out var existing) || existing != guidance)
-                { data["guidance"] = guidance; changed = true; }
             }
-            if (changed) FoodTrucksSession.MarkChanged();
+            finally { if (changed) FoodTrucksSession.MarkChanged(); }
         }
+
+        private static bool SameBooking(Dictionary<string, string> data, string? original, Dictionary<string, string> candidate) =>
+            new[] { "day", "start", "kind" }.All(k => data.TryGetValue(k, out var v) && !string.IsNullOrEmpty(v) && candidate.TryGetValue(k, out var other) && v == other) &&
+            SameDetails(data, candidate) && (SameLocation(data, original, candidate) ||
+                !string.IsNullOrWhiteSpace(original) && (candidate.TryGetValue("legacyHistoryPlace", out var legacy) && original == legacy ||
+                    candidate.TryGetValue("place", out var originalCandidate) && original == originalCandidate) ||
+                data.TryGetValue("place", out var place) && !UnreadablePlace(place) && candidate.TryGetValue("place", out var otherPlace) && place == otherPlace);
 
         // Backfill saved confirmations independently of address readiness and surviving gigs.
         internal static void RefreshBookingRadius(Contact contact)
@@ -149,18 +221,18 @@ namespace FoodTrucks
             key == "foodtrucks:message_city_event_booked" || key == "foodtrucks:message_city_event_today";
 
         private static readonly char[] UnreadableCharacters = { ':', '#', '{', '<' };
-        private static bool UnreadablePlace(string place) => place.IndexOfAny(UnreadableCharacters) >= 0 ||
+        private static bool UnreadablePlace(string? place) => string.IsNullOrWhiteSpace(place) || place!.IndexOfAny(UnreadableCharacters) >= 0 ||
             place == CityPitches.Text("foodtrucks:event_location_unavailable");
 
         private static bool SameDetails(Dictionary<string, string> stored, Dictionary<string, string> candidate) =>
             new[] { "bookingId", "locationId", "guests", "end", "fee", "food" }.All(key =>
-                !stored.TryGetValue(key, out var value) || candidate.TryGetValue(key, out var other) && value == other);
+                !stored.TryGetValue(key, out var value) || string.IsNullOrEmpty(value) || candidate.TryGetValue(key, out var other) && value == other);
 
-        private static bool SameLocation(Dictionary<string, string> stored, string old, Dictionary<string, string> candidate)
+        private static bool SameLocation(Dictionary<string, string> stored, string? old, Dictionary<string, string> candidate)
         {
-            if (stored.ContainsKey("bookingId") || stored.ContainsKey("locationId")) return true; // SameDetails matched it.
+            if (stored.TryGetValue("bookingId", out var booking) && !string.IsNullOrEmpty(booking) || stored.TryGetValue("locationId", out var location) && !string.IsNullOrEmpty(location)) return true; // SameDetails matched it.
             if (candidate.TryGetValue("legacyPlace", out var legacy) && old == legacy) return true;
-            if (!candidate.TryGetValue("locationId", out var addressKey)) return false;
+            if (!candidate.TryGetValue("locationId", out var addressKey) || string.IsNullOrEmpty(addressKey)) return false;
             var hash = addressKey.LastIndexOf('#');
             if (hash < 0) return false;
             var street = addressKey.Substring(0, hash);
