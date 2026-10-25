@@ -275,14 +275,15 @@ namespace FoodTrucks
             var contact = SaveGameManager.Current?.Contacts.Find(c => c != null && c.id == ContactId);
             if (contact == null) return;
             var catering = state.Catering;
+            var streets = EventLocations.CaptureStreets();
             var signature = SaveGameManager.Current!.Day + ":" + contact.messagesQueue.Count + ":" +
                 string.Join(",", catering.Gigs.Concat(catering.History).Select(g => g.Id + "/" + g.Status)) + ":" +
                 string.Join(",", catering.Offers.Select(o => o.Id)) + ":" +
-                EventLocations.ResolutionState(catering.Gigs.Concat(catering.History).Cast<CateringOffer>().Concat(catering.Offers).Select(g => g.PlaceId));
+                EventLocations.ResolutionState(catering.Gigs.Concat(catering.History).Cast<CateringOffer>().Concat(catering.Offers).Select(g => g.PlaceId), streets);
             if (!migrateAddresses && !migrateRadius && historyState == signature) return;
             var active = HistoryDescriptions(catering.Gigs.Where(g => g.Status == GigStatus.Booked || g.Status == GigStatus.Started));
             EventLocations.RefreshCateringHistory(contact, active, HistoryDescriptions(catering.Gigs.Concat(catering.History)),
-                HistoryDescriptions(catering.Offers), SaveGameManager.Current.Day, migrateAddresses);
+                HistoryDescriptions(catering.Offers), SaveGameManager.Current.Day, migrateAddresses, streets);
             migrateRadius = migrateAddresses = false;
             historyState = signature;
         }

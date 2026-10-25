@@ -71,7 +71,9 @@ static class Program
         ReadableReadiness(c);
         MissingGuidance(c, args[0]);
         ReadableSpelling(c);
-        UnknownCustomGuidance(c);
+        SpellingUnknownCustomGuidance(c);
+        CatalogTransitions(c);
+        UnregisteredHistory(c);
         AddressIdentityTable();
         ExceptionsDoNotBlockSimulation(c);
         ReadOnlyDaily(c);
@@ -192,7 +194,7 @@ static class Program
         Streets.AddressHelper.Street="4th Avenue";
     }
 
-    static void UnknownCustomGuidance(Contact c)
+    static void SpellingUnknownCustomGuidance(Contact c)
     {
         var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
         var gig=Gig(); state.Catering.Gigs.Add(gig); SaveGameManager.Current.Day=2;
@@ -203,13 +205,85 @@ static class Program
         World.Found=null; Streets.AddressHelper.Street="THROW"; Catering.Reset();
         var saved=JsonConvert.SerializeObject(c.messagesQueue); var writes=FoodTrucksSession.Changes;
         Catering.RunStep(state,1440);
-        Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"genuinely unknown initial Step preserves CUSTOM with no dirty mark");
+        Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"unavailable native spelling preserves CUSTOM with no dirty mark");
         World.Found=new(){building=new(){Address=new(){streetName=gig.PlaceId.Split('#')[0],streetNumber=34}}};
         Streets.AddressHelper.Street="4th Avenue"; Catering.RunStep(state,1440);
         Check(state.Catering.Gigs.Single()==gig && saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"recognized spelling-only evidence stays unknown, preserves CUSTOM and adds no dirty mark");
         c.messagesQueue=JsonConvert.DeserializeObject<Queue<TextMessage>>(saved)!;
         Catering.Reset(); Catering.RunStep(state,1440); Catering.RunStep(state,1440);
         Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"CUSTOM unknown serialize/reload adds no second dirty mark");
+    }
+
+    static void CatalogTransitions(Contact c)
+    {
+        foreach(var transition in new[]{"available", "added", "collision"})
+        {
+            var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
+            state.Catering.Gigs.Add(Gig()); SaveGameManager.Current.Day=2; SaveGameManager.Current.VehicleInstances.Clear();
+            World.Found=new(){building=new(){Address=new(){streetName=Gig().PlaceId.Split('#')[0],streetNumber=34}}};
+            Streets.AddressHelper.Street="4th Avenue";
+            Streets.AddressHelper.Catalog=new(){["ba:street_fourthavenue"]="4th Avenue"};
+            if(transition!="added") Streets.AddressHelper.Catalog["ba:street_westminster"]="";
+            if(transition=="collision") {
+                Streets.AddressHelper.Catalog["ba:street_westminster"]="Westminster";
+                Streets.AddressHelper.Catalog["ba:street_othername"]="Westminster";
+            }
+            var msg=Confirmation(Gig()); msg.messageData!["place"]="34 Westminster";
+            msg.messageData["guidance"]="CUSTOM"; msg.messageData["metres"]="60";
+            c.messagesQueue.Clear(); c.messagesQueue.Enqueue(msg); Catering.Reset();
+            var before=JsonConvert.SerializeObject(c.messagesQueue); var writes=FoodTrucksSession.Changes;
+            Catering.RunStep(state,1440); Catering.RunStep(state,1440);
+            Check(before==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,transition+" initially unknown, no write");
+            // Change only an orphan-only catalog entry; candidate, Ready, day, Core and queue stay fixed.
+            if(transition=="collision") Streets.AddressHelper.Catalog.Remove("ba:street_othername");
+            else Streets.AddressHelper.Catalog["ba:street_westminster"]="Westminster";
+            Catering.RunStep(state,1440);
+            Check(msg.messageData["guidance"]=="inactive" && FoodTrucksSession.Changes==writes+1,transition+" invalidates Step exactly once");
+            var saved=JsonConvert.SerializeObject(c.messagesQueue);
+            Catering.RunStep(state,1440); Catering.RunStep(state,1440);
+            Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && FoodTrucksSession.Changes==writes+1,transition+" unchanged Steps do not write");
+            if(transition=="collision") {
+                var scans=World.AddressCalls;
+                Streets.AddressHelper.Catalog["ba:street_othername"]="Westminster";
+                Catering.RunStep(state,1440);
+                Check(World.AddressCalls>scans && saved==JsonConvert.SerializeObject(c.messagesQueue) && FoodTrucksSession.Changes==writes+1,"appearing collision rechecks and preserves existing guidance without a write");
+                Streets.AddressHelper.Catalog.Remove("ba:street_othername"); Catering.RunStep(state,1440);
+                Check(FoodTrucksSession.Changes==writes+1,"disappearing collision does not repeat inactive write");
+            }
+            c.messagesQueue=JsonConvert.DeserializeObject<Queue<TextMessage>>(saved)!;
+            Catering.Reset(); Catering.RunStep(state,1440); Catering.RunStep(state,1440);
+            Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && FoodTrucksSession.Changes==writes+1,transition+" reload idempotent");
+        }
+        Streets.AddressHelper.Catalog=null;
+    }
+
+    static void UnregisteredHistory(Contact c)
+    {
+        foreach(var live in new[]{true,false}) foreach(var booked in new[]{true,false})
+        {
+            var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
+            if(live) state.Catering.Gigs.Add(Gig());
+            SaveGameManager.Current.Day=3; SaveGameManager.Current.VehicleInstances.Clear();
+            World.Found=new(){building=new(){Address=new(){streetName=Gig().PlaceId.Split('#')[0],streetNumber=34}}};
+            Streets.AddressHelper.Street="4th Avenue";
+            var msg=Confirmation(Gig()); if(!booked) msg.messageKey="foodtrucks:message_bookings_offer";
+            msg.messageData!["place"]="34 Unregistered Name"; msg.messageData["guidance"]="CUSTOM"; msg.messageData["metres"]="60";
+            c.messagesQueue.Clear(); c.messagesQueue.Enqueue(msg); Catering.Reset();
+            var before=JsonConvert.SerializeObject(c.messagesQueue); var writes=FoodTrucksSession.Changes;
+            if(live && booked) {
+                var candidate=CateringDescription(Gig()); candidate["place"]="34 4th Avenue";
+                var match=typeof(EventLocations).GetMethod("BookingMatch",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static)!;
+                Check(match.Invoke(null,new object?[]{msg.messageData,msg.messageData["place"],candidate})==null,"unregistered street with a live candidate is truly null");
+            }
+            Catering.RunStep(state,2880);
+            if(live) Check((!booked || before==JsonConvert.SerializeObject(c.messagesQueue)) &&
+                msg.messageData["guidance"]==(booked?"CUSTOM":"offer active") && FoodTrucksSession.Changes==writes+(booked?0:1),"unregistered street with live candidate remains unknown");
+            else Check(msg.messageData["guidance"]==(booked?"inactive":"offer dead") && FoodTrucksSession.Changes==writes+1,"empty candidate set proves inactive without resolving street");
+            var saved=JsonConvert.SerializeObject(c.messagesQueue); writes=FoodTrucksSession.Changes;
+            c.messagesQueue=JsonConvert.DeserializeObject<Queue<TextMessage>>(saved)!;
+            Catering.Reset(); Catering.RunStep(state,2880); Catering.RunStep(state,2880);
+            Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"unregistered history reload has no second dirty mark");
+        }
     }
 
     static void AddressIdentityTable()
@@ -246,9 +320,15 @@ static class Program
         // Whole native names may establish aliases; spaces/hyphens never manufacture them.
         Streets.AddressHelper.Catalog["ba:street_otherbroadway"]="Broad Way";
         Streets.AddressHelper.Catalog["ba:street_broadwaystreet"]="Broadway Street";
-        Check(Match("34 Broadway","34 Broad Way")==false && Match("34 Broadway","34 Broadway Street")==false,"distinct catalog IDs are proven mismatches");
+        Check(Match("34 Broadway","34 Broad Way")==null && Match("34 Broadway","34 Broadway Street")==null,"shared fallback makes Broadway ambiguous across catalog IDs");
+        Check(Match("34 Broadway Street","35 Broadway Street")==false,"registered same street with different numbers is a mismatch");
         Streets.AddressHelper.Catalog.Remove("ba:street_broadway");
-        Check(Match("34 Broadway","35 Broadway Street")==null,"shortened display fallback must not manufacture a Broadway alias");
+        Check(Match("34 Broadway","35 Broadway Street")==false,"native and fallback aliases retain different-number evidence");
+        Check(Match("34 Broadway","34 4th Avenue")==false,"fallback and native different street IDs are a mismatch");
+        foreach(var names in new[]{("oceancrestdrive","Ocean Crest Drive","Oceancrest Drive"), ("oldmerchantstreet","Old Merchant Street","Oldmerchant Street")}) {
+            Streets.AddressHelper.Catalog["ba:street_"+names.Item1]=names.Item2;
+            Check(Match("34 "+names.Item2,"35 "+names.Item3)==false,"non-ordinal native/fallback aliases coexist: "+names.Item1);
+        }
         Streets.AddressHelper.Catalog["ba:street_broadway"]="Broadway";
         Streets.AddressHelper.Catalog["ba:street_fourthavenue"]="Broadway";
         Check(Match("34 Broadway","35 Broadway")==null,"colliding aliases resolve to unknown");

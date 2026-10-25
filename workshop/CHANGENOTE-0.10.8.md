@@ -12,4 +12,6 @@ Booking confirmations now update in the same session when a gig ends, is missed 
 
 Readable older confirmations keep their booking advice while location information is loading, then recheck when buildings or street names become available. Saves written by a newer mod version keep their phone history untouched, including across midnight.
 
+Old confirmations also recheck when other streets finish loading or the street catalog changes. Native names and readable fallback names can identify different house numbers or streets; ambiguous names keep the saved advice while a possible booking remains. With no active gigs, old confirmations correctly become inactive even when their street is unknown. Expired offers with no open or accepted booking become unavailable.
+
 - Old catering confirmations preserve their saved advice when the same address uses a different street spelling, such as 4th Avenue / Fourth Avenue. Known different streets or house numbers rule out an active booking; unknown street names keep the saved wording. Unresolved old confirmations receive the original map sentence only when their saved message has no guidance field.

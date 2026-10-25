@@ -53,7 +53,7 @@ namespace FoodTrucks
         // streetLocalization lookup, not Localizor's translation-key lookup.
         internal static string? HistoricalAddress(string? value) => HistoricalAddress(value, out _);
 
-        private static string? HistoricalAddress(string? value, out bool fallback)
+        private static string? HistoricalAddress(string? value, out bool fallback, StreetSnapshot? streets = null)
         {
             fallback = false;
             if (string.IsNullOrWhiteSpace(value)) return null;
@@ -63,7 +63,7 @@ namespace FoodTrucks
             var numberText = match.Groups[2].Success ? match.Groups[2].Value : match.Groups[3].Value;
             if (!int.TryParse(numberText, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number <= 0) return null;
             string? street = null;
-            try { street = AddressHelper.GetStreetNameLocalized(streetKey); }
+            try { street = streets == null ? AddressHelper.GetStreetNameLocalized(streetKey) : streets.NativeName(streetKey); }
             catch (Exception) { /* Historical text needs no surviving StreetData or building. */ }
             if (InvalidStreet(street))
             {
@@ -77,10 +77,11 @@ namespace FoodTrucks
             street!.IndexOfAny(new[] { ':', '#', '{', '}', '<', '>' }) >= 0;
 
         // Native names can arrive after buildings/StreetData. Include that change even when gigs do not change.
-        internal static string ResolutionState(IEnumerable<string> locations) => Ready + ":" + string.Join(",",
+        internal static string ResolutionState(IEnumerable<string> locations, StreetSnapshot streets) =>
+            (streets.HasStreets && World.AllBuildings().Count > 0) + ":" + streets.Fingerprint + ":" + string.Join(",",
             locations.Distinct().OrderBy(p => p, StringComparer.Ordinal).Select(p =>
             {
-                var address = HistoricalAddress(p, out var fallback);
+                var address = HistoricalAddress(p, out var fallback, streets);
                 return p + "=" + (fallback ? "?" : address);
             }));
 
@@ -122,9 +123,10 @@ namespace FoodTrucks
 
         internal static void RefreshCateringHistory(Contact contact, IEnumerable<Dictionary<string, string>> activeGigs,
             IEnumerable<Dictionary<string, string>>? acceptedGigs = null, IEnumerable<Dictionary<string, string>>? openOffers = null,
-            int day = 0, bool repairAddresses = true)
+            int day = 0, bool repairAddresses = true, StreetSnapshot? streets = null)
         {
             if (!FoodTrucksSession.CanWrite) return;
+            streets ??= CaptureStreets();
             var changed = false;
             List<Dictionary<string, string>>? active = null, accepted = null, open = null;
             try
@@ -149,8 +151,8 @@ namespace FoodTrucks
                         {
                             data.TryGetValue("locationId", out var id);
                             var source = id;
-                            var place = HistoricalAddress(source, out var fallback);
-                            if (place == null) { source = original; place = HistoricalAddress(source, out fallback); }
+                            var place = HistoricalAddress(source, out var fallback, streets);
+                            if (place == null) { source = original; place = HistoricalAddress(source, out fallback, streets); }
                             place ??= CityPitches.Text("foodtrucks:event_location_unavailable");
                             if (place != old)
                             {
@@ -169,12 +171,12 @@ namespace FoodTrucks
                         var booked = message.messageKey == "foodtrucks:message_bookings_booked";
                         if (booked && (!data.TryGetValue("metres", out var metres) || string.IsNullOrWhiteSpace(metres)))
                         { data["metres"] = Catering.PlaceMetres.ToString("F0", CultureInfo.InvariantCulture); changed = true; }
-                        var matches = active.Select(d => BookingMatch(data, original, d)).ToList();
+                        var matches = active.Select(d => BookingMatchWithStreets(data, original, d, streets)).ToList();
                         var key = booked
                             ? (matches.Contains(true) ? "foodtrucks:booking_map_hint" :
-                                !matches.Contains(null) && ResolvableIdentity(data, original) ? "foodtrucks:booking_inactive" : null)
-                            : (ResolvableIdentity(data, original) && day > 0 && data.TryGetValue("reply", out var reply) && int.TryParse(reply, out var replyDay) && replyDay > 0 && day > replyDay &&
-                                open.All(d => BookingMatch(data, original, d) == false) && accepted.All(d => BookingMatch(data, original, d) == false)
+                                !matches.Contains(null) && HasBookingIdentity(data, original, streets) ? "foodtrucks:booking_inactive" : null)
+                            : (HasBookingIdentity(data, original, streets) && day > 0 && data.TryGetValue("reply", out var reply) && int.TryParse(reply, out var replyDay) && replyDay > 0 && day > replyDay &&
+                                open.All(d => BookingMatchWithStreets(data, original, d, streets) == false) && accepted.All(d => BookingMatchWithStreets(data, original, d, streets) == false)
                                 ? "foodtrucks:offer_inactive" : "foodtrucks:offer_map_hint");
                         // 0.10.7 kept this sentence inline in the template. Unknown identity preserves
                         // existing wording, but an absent argument must inherit that original sentence.
@@ -204,15 +206,21 @@ namespace FoodTrucks
             }
         }
 
-        private static bool ResolvableIdentity(Dictionary<string, string> data, string? original) =>
+        // Enough payload to identify a booking row; this does not require resolving its street.
+        // With no candidates, inactivity is proven even for an unregistered readable street.
+        private static bool HasBookingIdentity(Dictionary<string, string> data, string? original, StreetSnapshot streets) =>
             new[] { "day", "start", "kind" }.All(k => data.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v)) &&
             (data.TryGetValue("bookingId", out var id) && long.TryParse(id, out var number) && number > 0 ||
-             data.TryGetValue("locationId", out var location) && HistoricalAddress(location) != null ||
-             HistoricalAddress(original) != null || data.TryGetValue("place", out var place) && !UnreadablePlace(place) &&
+             data.TryGetValue("locationId", out var location) && HistoricalAddress(location, out _, streets) != null ||
+             HistoricalAddress(original, out _, streets) != null || data.TryGetValue("place", out var place) && !UnreadablePlace(place) &&
                 Regex.IsMatch(place, @"\A[1-9][0-9]*\s+\S"));
 
         // true: same identity; false: positively different; null: insufficient resolution/evidence.
         private static bool? BookingMatch(Dictionary<string, string> data, string? original, Dictionary<string, string> candidate)
+            => BookingMatchWithStreets(data, original, candidate, CaptureStreets());
+
+        private static bool? BookingMatchWithStreets(Dictionary<string, string> data, string? original,
+            Dictionary<string, string> candidate, StreetSnapshot streets)
         {
             if (candidate.ContainsKey("identityUnknown"))
             {
@@ -220,20 +228,20 @@ namespace FoodTrucks
                     candidate.TryGetValue(k, out var other) && !string.IsNullOrWhiteSpace(other) && v != other)) return false;
                 return null;
             }
-            if (SameBooking(data, original, candidate)) return true;
+            if (SameBooking(data, original, candidate, streets)) return true;
             if (!new[] { "day", "start", "kind" }.All(k => data.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v) &&
                 candidate.TryGetValue(k, out var other) && !string.IsNullOrWhiteSpace(other))) return null;
             if (!new[] { "day", "start", "kind" }.All(k => data[k] == candidate[k]) || !SameDetails(data, candidate)) return false;
             if (candidate.TryGetValue("locationId", out var location))
             {
-                var address = HistoricalAddress(location);
-                var match = ReadableLocationMatch(data, original, address);
+                var address = HistoricalAddress(location, out _, streets);
+                var match = ReadableLocationMatch(data, original, address, streets);
                 if (match.HasValue) return match;
             }
-            return candidate.TryGetValue("place", out var rendered) ? ReadableLocationMatch(data, original, rendered) : null;
+            return candidate.TryGetValue("place", out var rendered) ? ReadableLocationMatch(data, original, rendered, streets) : null;
         }
 
-        private static bool? ReadableLocationMatch(Dictionary<string, string> data, string? original, string? candidate)
+        private static bool? ReadableLocationMatch(Dictionary<string, string> data, string? original, string? candidate, StreetSnapshot streets)
         {
             var stored = !UnreadablePlace(original) ? original : data.TryGetValue("place", out var place) ? place : null;
             if (UnreadablePlace(stored) || UnreadablePlace(candidate)) return null;
@@ -241,7 +249,7 @@ namespace FoodTrucks
             var left = Regex.Match(stored!, @"\A([1-9][0-9]*)\s+(.+)\z");
             var right = Regex.Match(candidate!, @"\A([1-9][0-9]*)\s+(.+)\z");
             if (!left.Success || !right.Success) return null;
-            var aliases = StreetAliases();
+            var aliases = streets.Aliases;
             if (!aliases.TryGetValue(left.Groups[2].Value, out var leftId) || leftId == null ||
                 !aliases.TryGetValue(right.Groups[2].Value, out var rightId) || rightId == null) return null;
             if (leftId != rightId || left.Groups[1].Value != right.Groups[1].Value) return false;
@@ -251,8 +259,30 @@ namespace FoodTrucks
 
         // Exact whole names only. Conflicting aliases stay unknown; never erase spaces,
         // hyphens, directions or street types to manufacture an identity.
-        private static Dictionary<string, string?> StreetAliases()
+        internal sealed class StreetSnapshot
         {
+            private readonly Dictionary<string, string?> native;
+            internal readonly Dictionary<string, string?> Aliases;
+            internal readonly string Fingerprint;
+            internal bool HasStreets => native.Count > 0;
+            internal string? NativeName(string id) => native.TryGetValue(id, out var name) ? name : null;
+            internal StreetSnapshot(Dictionary<string, string?> native, Dictionary<string, string?> aliases)
+            {
+                this.native = native; Aliases = aliases;
+                // Length prefixes distinguish missing/invalid names and ambiguous aliases without
+                // delimiter collisions. Both input membership/names and resolved ambiguity count.
+                string Part(string? value) => value == null ? "-1:" : value.Length.ToString(CultureInfo.InvariantCulture) + ":" + value;
+                string Table(Dictionary<string, string?> table) => string.Concat(table.OrderBy(p => p.Key, StringComparer.Ordinal)
+                    .Select(p => Part(p.Key) + Part(p.Value)));
+                Fingerprint = Part(Table(native)) + Part(Table(aliases));
+            }
+        }
+
+        // A fresh catalog snapshot per reconciliation poll, shared by its signature and comparisons.
+        // No names or aliases survive into the next poll.
+        internal static StreetSnapshot CaptureStreets()
+        {
+            var nativeNames = new Dictionary<string, string?>(StringComparer.Ordinal);
             var aliases = new Dictionary<string, string?>(StringComparer.Ordinal);
             void Add(string id, string? name)
             {
@@ -260,17 +290,14 @@ namespace FoodTrucks
                 if (aliases.TryGetValue(name!, out var prior) && prior != id) aliases[name!] = null;
                 else if (!aliases.ContainsKey(name!)) aliases[name!] = id;
             }
-            foreach (var id in AddressHelper.StreetDataNames)
+            foreach (var id in AddressHelper.StreetDataNames.Distinct().OrderBy(id => id, StringComparer.Ordinal))
             {
                 if (!Regex.IsMatch(id, @"\Aba:street_[a-z0-9]+\z")) continue;
                 string? native = null;
                 try { native = AddressHelper.GetStreetNameLocalized(id); } catch (Exception) { }
+                nativeNames[id] = native;
                 var fallback = FallbackStreet(id.Substring("ba:street_".Length));
-                // Display recovery deliberately shortens broadwaystreet to Broadway.
-                // A differing non-ordinal fallback is not an identity alias when the
-                // game supplies another whole name (also protects spaced native names).
-                if (!InvalidStreet(native) && native != fallback &&
-                    !Regex.IsMatch(fallback ?? "", @"\A(?:West |East |North |South )?[1-9][0-9]*(?:st|nd|rd|th) (?:Avenue|Street|Road|Drive|Lane)\z")) fallback = null;
+                // Keep fallback alongside native; Add makes names shared by IDs ambiguous.
                 foreach (var name in new[] { native, fallback })
                 {
                     Add(id, name);
@@ -287,12 +314,12 @@ namespace FoodTrucks
                     Add(id, ordinal.Groups[1].Value + word.Replace('-', ' ') + ordinal.Groups[3].Value);
                 }
             }
-            return aliases;
+            return new StreetSnapshot(nativeNames, aliases);
         }
 
-        private static bool SameBooking(Dictionary<string, string> data, string? original, Dictionary<string, string> candidate) =>
+        private static bool SameBooking(Dictionary<string, string> data, string? original, Dictionary<string, string> candidate, StreetSnapshot streets) =>
             new[] { "day", "start", "kind" }.All(k => data.TryGetValue(k, out var v) && !string.IsNullOrEmpty(v) && candidate.TryGetValue(k, out var other) && v == other) &&
-            SameDetails(data, candidate) && (SameLocation(data, original, candidate) ||
+            SameDetails(data, candidate) && (SameLocation(data, original, candidate, streets) ||
                 !string.IsNullOrWhiteSpace(original) && (candidate.TryGetValue("legacyHistoryPlace", out var legacy) && original == legacy ||
                     candidate.TryGetValue("place", out var originalCandidate) && !UnreadablePlace(originalCandidate) && original == originalCandidate) ||
                 data.TryGetValue("place", out var place) && !UnreadablePlace(place) && candidate.TryGetValue("place", out var otherPlace) && place == otherPlace);
@@ -359,7 +386,7 @@ namespace FoodTrucks
             new[] { "bookingId", "locationId", "guests", "end", "fee", "food" }.All(key =>
                 !stored.TryGetValue(key, out var value) || string.IsNullOrEmpty(value) || candidate.TryGetValue(key, out var other) && value == other);
 
-        private static bool SameLocation(Dictionary<string, string> stored, string? old, Dictionary<string, string> candidate)
+        private static bool SameLocation(Dictionary<string, string> stored, string? old, Dictionary<string, string> candidate, StreetSnapshot? streets = null)
         {
             if (stored.TryGetValue("bookingId", out var booking) && !string.IsNullOrEmpty(booking) || stored.TryGetValue("locationId", out var location) && !string.IsNullOrEmpty(location)) return true; // SameDetails matched it.
             if (candidate.TryGetValue("legacyPlace", out var legacy) && old == legacy) return true;
@@ -370,7 +397,7 @@ namespace FoodTrucks
             var number = addressKey.Substring(hash + 1);
             // Localizor versions returned either the raw street ID or that ID prefixed by '#'.
             return old == addressKey || old == number + " " + street || old == number + " #" + street ||
-                !string.IsNullOrWhiteSpace(old) && old == HistoricalAddress(addressKey);
+                !string.IsNullOrWhiteSpace(old) && old == HistoricalAddress(addressKey, out _, streets);
         }
 
         internal static void SetDestination(string addressKey)
