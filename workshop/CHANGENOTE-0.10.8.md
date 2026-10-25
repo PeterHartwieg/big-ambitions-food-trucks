@@ -12,4 +12,4 @@ Booking confirmations now update in the same session when a gig ends, is missed 
 
 Readable older confirmations keep their booking advice while location information is loading, then recheck when buildings or street names become available. Saves written by a newer mod version keep their phone history untouched, including across midnight.
 
-- Old catering confirmations keep their map advice when the same address uses a different street spelling, such as 4th Avenue / Fourth Avenue. Unresolved old confirmations also retain the original map sentence when their saved message has no guidance field.
+- Old catering confirmations preserve their saved advice when the same address uses a different street spelling, such as 4th Avenue / Fourth Avenue. Known different streets or house numbers rule out an active booking; unknown street names keep the saved wording. Unresolved old confirmations receive the original map sentence only when their saved message has no guidance field.

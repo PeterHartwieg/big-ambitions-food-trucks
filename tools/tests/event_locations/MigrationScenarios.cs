@@ -71,6 +71,8 @@ static class Program
         ReadableReadiness(c);
         MissingGuidance(c, args[0]);
         ReadableSpelling(c);
+        UnknownCustomGuidance(c);
+        AddressIdentityTable();
         ExceptionsDoNotBlockSimulation(c);
         ReadOnlyDaily(c);
         writes=FoodTrucksSession.Changes;
@@ -190,6 +192,66 @@ static class Program
         Streets.AddressHelper.Street="4th Avenue";
     }
 
+    static void UnknownCustomGuidance(Contact c)
+    {
+        var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
+        var gig=Gig(); state.Catering.Gigs.Add(gig); SaveGameManager.Current.Day=2;
+        SaveGameManager.Current.VehicleInstances.Clear();
+        var msg=Confirmation(gig); msg.messageData!["place"]="34 Fourth Avenue";
+        msg.messageData["guidance"]="CUSTOM directions kept verbatim"; msg.messageData["metres"]="60";
+        c.messagesQueue.Clear(); c.messagesQueue.Enqueue(msg);
+        World.Found=null; Streets.AddressHelper.Street="THROW"; Catering.Reset();
+        var saved=JsonConvert.SerializeObject(c.messagesQueue); var writes=FoodTrucksSession.Changes;
+        Catering.RunStep(state,1440);
+        Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"genuinely unknown initial Step preserves CUSTOM with no dirty mark");
+        World.Found=new(){building=new(){Address=new(){streetName=gig.PlaceId.Split('#')[0],streetNumber=34}}};
+        Streets.AddressHelper.Street="4th Avenue"; Catering.RunStep(state,1440);
+        Check(state.Catering.Gigs.Single()==gig && saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"recognized spelling-only evidence stays unknown, preserves CUSTOM and adds no dirty mark");
+        c.messagesQueue=JsonConvert.DeserializeObject<Queue<TextMessage>>(saved)!;
+        Catering.Reset(); Catering.RunStep(state,1440); Catering.RunStep(state,1440);
+        Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"CUSTOM unknown serialize/reload adds no second dirty mark");
+    }
+
+    static void AddressIdentityTable()
+    {
+        Streets.AddressHelper.Catalog=new() {
+            ["ba:street_fourthavenue"]="4th Avenue", ["ba:street_fifthavenue"]="5th Avenue",
+            ["ba:street_fourthstreet"]="4th Street", ["ba:street_harborstreet"]="Harbor Street",
+            ["ba:street_westfortysecondstreet"]="West 42nd Street", ["ba:street_broadway"]="Broadway",
+            ["ba:street_easternavenue"]="Eastern Avenue", ["ba:street_westminster"]="Westminster"
+        };
+        var method=typeof(EventLocations).GetMethod("BookingMatch",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static)!;
+        bool? Match(string left,string right, string? id=null) {
+            var stored=CateringDescription(Gig()); stored["place"]=left;
+            var candidate=CateringDescription(Gig()); candidate["place"]=right;
+            if(id!=null) candidate["locationId"]=id;
+            return (bool?)method.Invoke(null,new object?[]{stored,left,candidate});
+        }
+        var cases=new (string Left,string Right,bool? Expected)[] {
+            ("34 4th Avenue","34 4th Avenue",true),
+            ("34 Fourth Avenue","34 4th Avenue",null), ("34 4th Avenue","34 Fourth Avenue",null),
+            ("34 Fifth Avenue","34 5th Avenue",null),
+            ("34 West Forty-Second Street","34 West 42nd Street",null),
+            ("34 West Forty Second Street","34 West 42nd Street",null),
+            ("34 Broadway","34 Broadway Street",null), ("34 Broadway","34 Broad Way",null),
+            ("34 Broadway Street","34 Broad Way",null), ("34 Broadway","35 Broad-Way",null),
+            ("34 Eastern Avenue","35 East Ern Avenue",null), ("34 Westminster","35 West Minster",null),
+            ("34 4th Avenue","34 4th Street",false), ("34 Fourth Avenue","100 Harbor Street",false),
+            ("34 Fourth Avenue","35 4th Avenue",false), ("34 4th Avenue","34 Fifth Avenue",false),
+            ("34 Unknown Avenue","35 Unknown Avenue",null), ("34 Unknown Avenue","34 4th Avenue",null),
+            ("34 Broadway Street","35 Broadway Street",null)
+        };
+        foreach(var row in cases) Check(Match(row.Left,row.Right)==row.Expected,$"tri-state {row.Left} / {row.Right}: expected {row.Expected?.ToString()??"unknown"}");
+        Check(Match("34 ba:street_fourthavenue","34 4th Avenue","ba:street_fourthavenue#34")==true,"raw street identity stays true");
+        // Whole native names may establish aliases; spaces/hyphens never manufacture them.
+        Streets.AddressHelper.Catalog["ba:street_otherbroadway"]="Broad Way";
+        Streets.AddressHelper.Catalog["ba:street_otherbroadwaystreet"]="Broadway Street";
+        Check(Match("34 Broadway","34 Broad Way")==false && Match("34 Broadway","34 Broadway Street")==false,"distinct catalog IDs are proven mismatches");
+        Streets.AddressHelper.Catalog["ba:street_fourthavenue"]="Broadway";
+        Check(Match("34 Broadway","35 Broadway")==null,"colliding aliases resolve to unknown");
+        Streets.AddressHelper.Catalog=null;
+    }
+
     static void MissingGuidance(Contact c, string root)
     {
         var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
@@ -289,10 +351,11 @@ namespace Streets
     static class AddressHelper
     {
         internal static string Street = "4th Avenue";
-        internal static IEnumerable<string> StreetDataNames => new[] { "ba:street_fourthavenue" };
+        internal static Dictionary<string,string>? Catalog;
+        internal static IEnumerable<string> StreetDataNames => Catalog?.Keys.AsEnumerable() ?? new[] { "ba:street_fourthavenue" };
         internal static string GetStreetNameLocalized(this Address a) => Street == "THROW" ? throw new Exception("missing native name") : Street;
         internal static string LastKey=""; internal static int Calls;
-        internal static string GetStreetNameLocalized(this string key) { LastKey=key; Calls++; return Street == "THROW" ? throw new Exception("missing street data") : Street; }
+        internal static string GetStreetNameLocalized(this string key) { LastKey=key; Calls++; return Catalog!=null ? Catalog[key] : Street == "THROW" ? throw new Exception("missing street data") : Street; }
         internal static string ToFormattedString(this Address a) => $"{a.streetNumber} {a.GetStreetNameLocalized()}";
     }
 }

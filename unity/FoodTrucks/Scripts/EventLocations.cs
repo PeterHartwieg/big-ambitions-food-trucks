@@ -88,7 +88,8 @@ namespace FoodTrucks
         {
             var prefix = "";
             foreach (var direction in new[] { "west", "east", "north", "south" })
-                if (key.StartsWith(direction, StringComparison.Ordinal))
+                if (key.StartsWith(direction, StringComparison.Ordinal) &&
+                    Regex.IsMatch(key.Substring(direction.Length), @"\A(?:broadway(?:street)?|(?:[0-9]+(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth))(?:avenue|street|road|drive|lane))\z"))
                 { prefix = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(direction) + " "; key = key.Substring(direction.Length); break; }
             if (key == "broadway" || key == "broadwaystreet") return prefix + "Broadway";
             var ordinals = new[] { "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth",
@@ -225,31 +226,63 @@ namespace FoodTrucks
             if (!new[] { "day", "start", "kind" }.All(k => data[k] == candidate[k]) || !SameDetails(data, candidate)) return false;
             if (candidate.TryGetValue("locationId", out var location))
             {
-                var address = HistoricalAddress(location, out var fallback);
-                var match = ReadableLocationMatch(data, original, address, !fallback);
+                var address = HistoricalAddress(location);
+                var match = ReadableLocationMatch(data, original, address);
                 if (match.HasValue) return match;
             }
             return candidate.TryGetValue("place", out var rendered) ? ReadableLocationMatch(data, original, rendered) : null;
         }
 
-        private static bool? ReadableLocationMatch(Dictionary<string, string> data, string? original, string? candidate, bool canonical = true)
+        private static bool? ReadableLocationMatch(Dictionary<string, string> data, string? original, string? candidate)
         {
             var stored = !UnreadablePlace(original) ? original : data.TryGetValue("place", out var place) ? place : null;
             if (UnreadablePlace(stored) || UnreadablePlace(candidate)) return null;
             if (stored == candidate) return true;
-            if (!canonical) return null; // A guessed name must not override existing unknown wording.
             var left = Regex.Match(stored!, @"\A([1-9][0-9]*)\s+(.+)\z");
             var right = Regex.Match(candidate!, @"\A([1-9][0-9]*)\s+(.+)\z");
             if (!left.Success || !right.Success) return null;
-            // Reuse the bounded ordinal rules (Fourth/4th, Forty Second/42nd, etc.). A
-            // different street rendering alone is not evidence of a different booking.
-            string Street(string value)
+            var aliases = StreetAliases();
+            if (!aliases.TryGetValue(left.Groups[2].Value, out var leftId) || leftId == null ||
+                !aliases.TryGetValue(right.Groups[2].Value, out var rightId) || rightId == null) return null;
+            if (leftId != rightId || left.Groups[1].Value != right.Groups[1].Value) return false;
+            // Aliases prove a mismatch, never a positive match from spelling alone.
+            return null;
+        }
+
+        // Exact whole names only. Conflicting aliases stay unknown; never erase spaces,
+        // hyphens, directions or street types to manufacture an identity.
+        private static Dictionary<string, string?> StreetAliases()
+        {
+            var aliases = new Dictionary<string, string?>(StringComparer.Ordinal);
+            void Add(string id, string? name)
             {
-                var compact = Regex.Replace(value.ToLowerInvariant(), @"[\s-]+", "");
-                return FallbackStreet(compact) ?? value.Trim();
+                if (InvalidStreet(name)) return;
+                if (aliases.TryGetValue(name!, out var prior) && prior != id) aliases[name!] = null;
+                else if (!aliases.ContainsKey(name!)) aliases[name!] = id;
             }
-            if (!string.Equals(Street(left.Groups[2].Value), Street(right.Groups[2].Value), StringComparison.OrdinalIgnoreCase)) return null;
-            return left.Groups[1].Value == right.Groups[1].Value;
+            foreach (var id in AddressHelper.StreetDataNames)
+            {
+                if (!Regex.IsMatch(id, @"\Aba:street_[a-z0-9]+\z")) continue;
+                string? native = null;
+                try { native = AddressHelper.GetStreetNameLocalized(id); } catch (Exception) { }
+                var fallback = FallbackStreet(id.Substring("ba:street_".Length));
+                foreach (var name in new[] { native, fallback })
+                {
+                    Add(id, name);
+                    if (name == null) continue;
+                    var ordinal = Regex.Match(name, @"\A((?:West |East |North |South )?)([1-9][0-9]?)(?:st|nd|rd|th)( Avenue| Street| Road| Drive| Lane)\z");
+                    if (!ordinal.Success) continue;
+                    var n = int.Parse(ordinal.Groups[2].Value, CultureInfo.InvariantCulture);
+                    var words = new[] { "", "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth", "Eleventh", "Twelfth",
+                        "Thirteenth", "Fourteenth", "Fifteenth", "Sixteenth", "Seventeenth", "Eighteenth", "Nineteenth" };
+                    var tens = new[] { "", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety" };
+                    var decades = new[] { "", "", "Twentieth", "Thirtieth", "Fortieth", "Fiftieth", "Sixtieth", "Seventieth", "Eightieth", "Ninetieth" };
+                    var word = n < 20 ? words[n] : n % 10 == 0 ? decades[n / 10] : tens[n / 10] + "-" + words[n % 10];
+                    Add(id, ordinal.Groups[1].Value + word + ordinal.Groups[3].Value);
+                    Add(id, ordinal.Groups[1].Value + word.Replace('-', ' ') + ordinal.Groups[3].Value);
+                }
+            }
+            return aliases;
         }
 
         private static bool SameBooking(Dictionary<string, string> data, string? original, Dictionary<string, string> candidate) =>
