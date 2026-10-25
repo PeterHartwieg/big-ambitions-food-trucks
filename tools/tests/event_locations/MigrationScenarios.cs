@@ -73,6 +73,7 @@ static class Program
         ReadableSpelling(c);
         SpellingUnknownCustomGuidance(c);
         CatalogTransitions(c);
+        HistoryCollisionTransitions(c);
         UnregisteredHistory(c);
         AddressIdentityTable();
         ExceptionsDoNotBlockSimulation(c);
@@ -242,17 +243,39 @@ static class Program
             var saved=JsonConvert.SerializeObject(c.messagesQueue);
             Catering.RunStep(state,1440); Catering.RunStep(state,1440);
             Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && FoodTrucksSession.Changes==writes+1,transition+" unchanged Steps do not write");
-            if(transition=="collision") {
-                var scans=World.AddressCalls;
-                Streets.AddressHelper.Catalog["ba:street_othername"]="Westminster";
-                Catering.RunStep(state,1440);
-                Check(World.AddressCalls>scans && saved==JsonConvert.SerializeObject(c.messagesQueue) && FoodTrucksSession.Changes==writes+1,"appearing collision rechecks and preserves existing guidance without a write");
-                Streets.AddressHelper.Catalog.Remove("ba:street_othername"); Catering.RunStep(state,1440);
-                Check(FoodTrucksSession.Changes==writes+1,"disappearing collision does not repeat inactive write");
-            }
             c.messagesQueue=JsonConvert.DeserializeObject<Queue<TextMessage>>(saved)!;
             Catering.Reset(); Catering.RunStep(state,1440); Catering.RunStep(state,1440);
             Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && FoodTrucksSession.Changes==writes+1,transition+" reload idempotent");
+        }
+        Streets.AddressHelper.Catalog=null;
+    }
+
+    static void HistoryCollisionTransitions(Contact c)
+    {
+        // Run reconciliation alone, with an expired offer whose candidate becomes unknown
+        // only when the orphan's street alias collides. No Step/cancellation lookups run.
+        var state=new SaveState(); FoodTrucksSession.CurrentState=state;
+        state.Catering.Gigs.Add(Gig()); SaveGameManager.Current.Day=3;
+        World.Found=new(){building=new(){Address=new(){streetName=Gig().PlaceId.Split('#')[0],streetNumber=34}}};
+        Streets.AddressHelper.Street="4th Avenue";
+        Streets.AddressHelper.Catalog=new(){["ba:street_fourthavenue"]="4th Avenue",["ba:street_westminster"]="Westminster"};
+        var msg=Confirmation(Gig()); msg.messageKey="foodtrucks:message_bookings_offer";
+        msg.messageData!["place"]="34 Westminster"; msg.messageData["guidance"]="offer dead";
+        c.messagesQueue.Clear(); c.messagesQueue.Enqueue(msg); Catering.Reset(); Catering.Run(state);
+        foreach(var appears in new[]{true,false}) {
+            var before=JsonConvert.SerializeObject(c.messagesQueue);
+            var expected=JsonConvert.DeserializeObject<Queue<TextMessage>>(before)!;
+            expected.Single().messageData!["guidance"]=appears?"offer active":"offer dead";
+            var renders=CityPitches.OfferGuidanceRenders; var writes=FoodTrucksSession.Changes;
+            if(appears) Streets.AddressHelper.Catalog["ba:street_othername"]="Westminster";
+            else Streets.AddressHelper.Catalog.Remove("ba:street_othername");
+            Catering.Run(state);
+            var saved=JsonConvert.SerializeObject(c.messagesQueue);
+            Check(saved==JsonConvert.SerializeObject(expected) && saved!=before && CityPitches.OfferGuidanceRenders==renders+1 && FoodTrucksSession.Changes==writes+1,
+                (appears?"appearing":"disappearing")+" collision renders guidance once and changes only guidance, with one dirty mark");
+            Catering.Run(state);
+            Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && CityPitches.OfferGuidanceRenders==renders+1 && FoodTrucksSession.Changes==writes+1,
+                "unchanged snapshot does not render history, change payload or mark dirty");
         }
         Streets.AddressHelper.Catalog=null;
     }
@@ -276,8 +299,19 @@ static class Program
                 Check(match.Invoke(null,new object?[]{msg.messageData,msg.messageData["place"],candidate})==null,"unregistered street with a live candidate is truly null");
             }
             Catering.RunStep(state,2880);
-            if(live) Check((!booked || before==JsonConvert.SerializeObject(c.messagesQueue)) &&
-                msg.messageData["guidance"]==(booked?"CUSTOM":"offer active") && FoodTrucksSession.Changes==writes+(booked?0:1),"unregistered street with live candidate remains unknown");
+            if(live && booked) Check(before==JsonConvert.SerializeObject(c.messagesQueue) && FoodTrucksSession.Changes==writes,
+                "booked row with unknown live candidate preserves CUSTOM and has no dirty mark");
+            else if(live) {
+                Check(SaveGameManager.Current.Day>Gig().ReplyByDay,"offer is past its positive reply deadline");
+                var expected=JsonConvert.DeserializeObject<Queue<TextMessage>>(before)!;
+                expected.Single().messageData!["guidance"]="offer active";
+                Check(JsonConvert.SerializeObject(expected)==JsonConvert.SerializeObject(c.messagesQueue) && FoodTrucksSession.Changes==writes+1,
+                    "expired offer with unknown live candidate is not dead: only CUSTOM guidance changes to active offer hint, one dirty mark");
+                var renders=CityPitches.OfferGuidanceRenders;
+                Catering.Run(state);
+                Check(JsonConvert.SerializeObject(expected)==JsonConvert.SerializeObject(c.messagesQueue) && FoodTrucksSession.Changes==writes+1 && CityPitches.OfferGuidanceRenders==renders,
+                    "unchanged live offer snapshot does not render or mark dirty again");
+            }
             else Check(msg.messageData["guidance"]==(booked?"inactive":"offer dead") && FoodTrucksSession.Changes==writes+1,"empty candidate set proves inactive without resolving street");
             var saved=JsonConvert.SerializeObject(c.messagesQueue); writes=FoodTrucksSession.Changes;
             c.messagesQueue=JsonConvert.DeserializeObject<Queue<TextMessage>>(saved)!;
@@ -288,6 +322,9 @@ static class Program
 
     static void AddressIdentityTable()
     {
+        var fallback=typeof(EventLocations).GetMethod("FallbackStreet",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static)!;
+        foreach(var id in new[]{"easthamptonsway","hamptonsturnpike","pier"})
+            Check(fallback.Invoke(null,new object[]{"ba:street_"+id})==null,"native-only street has no fallback display name: "+id);
         Streets.AddressHelper.Catalog=new() {
             ["ba:street_fourthavenue"]="4th Avenue", ["ba:street_fifthavenue"]="5th Avenue",
             ["ba:street_fourthstreet"]="4th Street", ["ba:street_harborstreet"]="Harbor Street",
@@ -419,7 +456,14 @@ namespace FoodTrucks
         internal static void SendText(Contact c,string key,Dictionary<string,string> d) { }
         internal static void Show(UI.Notification.NotificationType type, string key, Dictionary<string, string> data, float seconds) { }
     }
-    static class CityPitches { internal static string Weekday(int d) => d.ToString(); internal static string Text(string key) => key switch {
+    static class CityPitches {
+        internal static int OfferGuidanceRenders;
+        internal static string Weekday(int d) => d.ToString();
+        internal static string Text(string key) {
+            // The collision fixture has only booked candidates: their Describe calls use
+            // booking_map_hint, so only the historical offer can render either offer key.
+            if(key is "foodtrucks:offer_map_hint" or "foodtrucks:offer_inactive") OfferGuidanceRenders++;
+            return key switch {
         "foodtrucks:booking_inactive" => "inactive",
         "foodtrucks:booking_map_hint" => "active",
         "foodtrucks:catering_kind_party" => "party",
@@ -427,7 +471,7 @@ namespace FoodTrucks
         "foodtrucks:offer_map_hint" => "offer active",
         "foodtrucks:offer_inactive" => "offer dead",
         "foodtrucks:catering_kind_throw" => throw new Exception("injected description failure"),
-        _ => "Location unavailable" }; }
+        _ => "Location unavailable" }; } }
 }
 namespace Streets
 {
