@@ -324,7 +324,8 @@ static class Program
     {
         var fallback=typeof(EventLocations).GetMethod("FallbackStreet",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static)!;
         foreach(var id in new[]{"easthamptonsway","hamptonsturnpike","pier"})
-            Check(fallback.Invoke(null,new object[]{"ba:street_"+id})==null,"native-only street has no fallback display name: "+id);
+            Check(fallback.Invoke(null,new object[]{id})==null,"native-only street has no fallback display name: "+id);
+        Check((string?)fallback.Invoke(null,new object[]{"fourthavenue"})=="4th Avenue","known street retains its exact fallback display name");
         Streets.AddressHelper.Catalog=new() {
             ["ba:street_fourthavenue"]="4th Avenue", ["ba:street_fifthavenue"]="5th Avenue",
             ["ba:street_fourthstreet"]="4th Street", ["ba:street_harborstreet"]="Harbor Street",
