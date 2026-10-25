@@ -5,3 +5,5 @@ Call the city for GPS directions to an event, even after all its places are book
 If a booked location is no longer available, city-event refunds cover paid places no vehicle has claimed, including unused places in a partly attended or running event. Returning with the same vehicle counts as one claim; a hold that ends in its starting minute uses no place. Refunds wait for locations to finish loading before old events expire. Catering bookings, including work already started, are cancelled without a failure or a change to booking reputation.
 
 Existing full phone addresses stay as they are. Broken addresses are corrected only when the booking can be identified safely. Older city messages, including same-day reminders, are repaired only for events that have not ended yet. Saved catering confirmations retain their distance instruction even after the booking has ended.
+
+Old catering offers and confirmations now recover their address from their own saved street and building number even after the gig is gone. Inactive confirmations say “This booking is no longer active.” instead of directing you to a map marker, and keep the 60-metre serving radius.

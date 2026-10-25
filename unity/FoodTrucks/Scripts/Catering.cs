@@ -280,6 +280,8 @@ namespace FoodTrucks
             {
                 EventLocations.RefreshMessages(contact, state.Catering.Offers.Concat<CateringOffer>(state.Catering.Gigs)
                     .Where(o => EventLocations.ReadableAddress(o.PlaceId) != null).Select(Describe));
+                EventLocations.RefreshCateringHistory(contact, state.Catering.Gigs
+                    .Where(g => g.Status == GigStatus.Booked || g.Status == GigStatus.Started).Select(Describe));
                 migrateAddresses = false;
             }
         }
@@ -652,6 +654,7 @@ namespace FoodTrucks
             { "bookingId", offer.Id.ToString() },
             { "locationId", offer.PlaceId },
             { "metres", PlaceMetres.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) },
+            { "guidance", Text("foodtrucks:booking_map_hint") },
             { "kind", Text("foodtrucks:catering_kind_" + offer.Kind) },
             { "guests", offer.Guests.ToString() },
             { "place", PlaceName(offer.PlaceId) },

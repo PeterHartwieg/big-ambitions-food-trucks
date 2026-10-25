@@ -32,6 +32,7 @@ static class Program
         RepairHistory();
         LegacyReminders(args[0]);
         SavedBookingRadius();
+        OrphanHistory();
         Console.WriteLine("PASS: native event addresses, missing data, catering and GPS");
     }
     static Dictionary<string, string> Description(string number = "34", string id = "1") => new()
@@ -193,6 +194,56 @@ static class Program
         }
     }
 
+    static void OrphanHistory()
+    {
+        World.Found = null; // History's own location, never a surviving gig/building.
+        foreach (var raw in new[] { "ba:street_fifthavenue#19", "19 ba:street_fifthavenue", "19 #ba:street_fifthavenue" })
+        {
+            var contact = new Contact();
+            var offer = Message(new(Description()) { ["place"] = raw });
+            offer.messageData!.Remove("locationId"); offer.messageData.Remove("bookingId");
+            var booked = Message(new(offer.messageData), "foodtrucks:message_bookings_booked");
+            contact.messagesQueue.Enqueue(offer); contact.messagesQueue.Enqueue(booked);
+            Streets.AddressHelper.Street = "5th Avenue";
+            EventLocations.RefreshBookingRadius(contact);
+            EventLocations.RefreshCateringHistory(contact, Array.Empty<Dictionary<string,string>>());
+            Equal("19 5th Avenue", offer.messageData["place"]);
+            Equal("19 5th Avenue", booked.messageData!["place"]);
+            Equal("60", booked.messageData["metres"]);
+            Equal("This booking is no longer active.", booked.messageData["guidance"]);
+            Equal(2, contact.messagesQueue.Count);
+            var changes = FoodTrucksSession.Changes;
+            // Serializing/reloading the actual payload must require no second dirty write.
+            booked.messageData = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string,string>>(
+                Newtonsoft.Json.JsonConvert.SerializeObject(booked.messageData));
+            EventLocations.RefreshBookingRadius(contact);
+            EventLocations.RefreshCateringHistory(contact, Array.Empty<Dictionary<string,string>>());
+            Equal(changes, FoodTrucksSession.Changes);
+        }
+        foreach (var street in new[] { "ba:street_missing", "", "{street}", "<sprite=5>", "THROW" })
+        {
+            Streets.AddressHelper.Street = street;
+            Equal("11 10th Avenue", EventLocations.HistoricalAddress("11 ba:street_tenthavenue"));
+            Equal("19 5th Avenue", EventLocations.HistoricalAddress("ba:street_fifthavenue#19"));
+            Equal("10 Broadway", EventLocations.HistoricalAddress("ba:street_broadwaystreet#10"));
+            Equal("9 Unknown Street", EventLocations.HistoricalAddress("ba:street_unknownstreet#9"));
+            Equal(null, EventLocations.HistoricalAddress("unidentifiable"));
+        }
+        Streets.AddressHelper.Street = "4th Avenue";
+        var c = new Contact();
+        var live = Message(Description(), "foodtrucks:message_bookings_booked"); c.messagesQueue.Enqueue(live);
+        EventLocations.RefreshCateringHistory(c, new[] { Description() });
+        Equal("Find the building on the city map: Street food > Catering bookings.", live.messageData!["guidance"]);
+        EventLocations.RefreshCateringHistory(c, Array.Empty<Dictionary<string,string>>());
+        Equal("This booking is no longer active.", live.messageData["guidance"]);
+        var stable = Message(new(Description()) { ["place"] = "Location unavailable" }); c.messagesQueue.Enqueue(stable);
+        EventLocations.RefreshCateringHistory(c, Array.Empty<Dictionary<string,string>>());
+        Equal("34 4th Avenue", stable.messageData!["place"]); // Explicit locationId survives the gig.
+        var readable = Message(new(Description()) { ["place"] = "34 Fourth Avenue" }); c.messagesQueue.Enqueue(readable);
+        EventLocations.RefreshCateringHistory(c, Array.Empty<Dictionary<string,string>>());
+        Equal("34 Fourth Avenue", readable.messageData!["place"]);
+    }
+
 }
 class Address { public string streetName = ""; public int streetNumber; }
 class Building { public Address? Address; }
@@ -210,7 +261,10 @@ namespace FoodTrucks
     {
         internal static void Show(UI.Notification.NotificationType type, string key, Dictionary<string, string> data, float seconds) { }
     }
-    static class CityPitches { internal static string Text(string key) => "Location unavailable"; }
+    static class CityPitches { internal static string Text(string key) => key switch {
+        "foodtrucks:booking_inactive" => "This booking is no longer active.",
+        "foodtrucks:booking_map_hint" => "Find the building on the city map: Street food > Catering bookings.",
+        _ => "Location unavailable" }; }
 }
 namespace Streets
 {
@@ -219,6 +273,7 @@ namespace Streets
         internal static string Street = "4th Avenue";
         internal static IEnumerable<string> StreetDataNames => new[] { "ba:street_fourthavenue" };
         internal static string GetStreetNameLocalized(this Address a) => Street;
+        internal static string GetStreetNameLocalized(this string key) => Street == "THROW" ? throw new Exception("missing street data") : Street;
         internal static string ToFormattedString(this Address a) => $"{a.streetNumber} {a.GetStreetNameLocalized()}";
     }
 }

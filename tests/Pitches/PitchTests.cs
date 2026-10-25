@@ -34,7 +34,7 @@ public class PitchTablesTests
     [InlineData("\"kinds\": [\n          \"market\"\n        ]", "\"kinds\": [\n          \"parade\"\n        ]", "one of the event kinds")]
     public void BadEntriesFailWithTheirPath(string from, string to, string message)
     {
-        var json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "data", "pitches.json"));
+        var json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "data", "pitches.json")).Replace("\r\n", "\n");
         Assert.Contains(from, json);
         var broken = json.Replace(from, to);
         var error = Assert.Throws<DemandDataException>(() => PitchTables.Parse(broken, ShippedData.Tables));

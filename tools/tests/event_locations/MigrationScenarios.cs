@@ -44,6 +44,7 @@ namespace FoodTrucks
         internal static int Radii, Addresses;
         internal static string? ReadableAddress(string place) => "34 4th Avenue";
         internal static void RefreshBookingRadius(Contact contact) => Radii++;
+        internal static void RefreshCateringHistory(Contact contact, IEnumerable<Dictionary<string, string>> gigs) { _ = gigs.ToList(); }
         internal static void RefreshMessages(Contact contact, IEnumerable<Dictionary<string, string>> descriptions)
         { _ = descriptions.ToList(); Addresses++; }
     }
