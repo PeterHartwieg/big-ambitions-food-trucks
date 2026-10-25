@@ -11,3 +11,5 @@ Old catering offers and confirmations now recover their address from their own s
 Booking confirmations now update in the same session when a gig ends, is missed or is cancelled. Old messages recover readable addresses even while locations are still loading, and damaged history cannot interrupt catering payments. Expired offers without an open or accepted booking say "This offer is no longer available"; open offers keep their map advice.
 
 Readable older confirmations keep their booking advice while location information is loading, then recheck when buildings or street names become available. Saves written by a newer mod version keep their phone history untouched, including across midnight.
+
+- Old catering confirmations keep their map advice when the same address uses a different street spelling, such as 4th Avenue / Fourth Avenue. Unresolved old confirmations also retain the original map sentence when their saved message has no guidance field.

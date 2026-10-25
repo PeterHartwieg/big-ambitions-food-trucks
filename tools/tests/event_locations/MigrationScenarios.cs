@@ -11,10 +11,10 @@ static class Program
         ReplyByDay=2, GigDay=4, StartMinute=600, DurationMinutes=60, Guests=40, RequiredCategory="food", FeeCents=40000 };
     static TextMessage Confirmation(CateringOffer gig) => new() { messageKey="foodtrucks:message_bookings_booked",
         messageData = CateringDescription(gig) };
-    static Dictionary<string,string> CateringDescription(CateringOffer g) => new() { ["day"]=g.GigDay.ToString(),
+    static Dictionary<string,string> CateringDescription(CateringOffer g) => new() { ["day"]=g.GigDay.ToString(), ["weekday"]=g.GigDay.ToString(),
         ["start"]=g.StartMinute.ToString(), ["end"]=(g.StartMinute+g.DurationMinutes).ToString(), ["kind"]="party",
         ["guests"]="40", ["food"]="food", ["fee"]="$40000", ["place"]="34 #ba:street_fourthavenue", ["reply"]="2" };
-    static void Main()
+    static void Main(string[] args)
     {
         var state = new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=20;
         Catering.Reset();
@@ -69,6 +69,8 @@ static class Program
         OfferLifecycle(c);
         StepLifecycle(c);
         ReadableReadiness(c);
+        MissingGuidance(c, args[0]);
+        ReadableSpelling(c);
         ExceptionsDoNotBlockSimulation(c);
         ReadOnlyDaily(c);
         writes=FoodTrucksSession.Changes;
@@ -152,6 +154,64 @@ static class Program
         Check(msg.messageData["guidance"]=="active" && World.AddressCalls>scans,"native-name-only transition forces reconciliation");
         scans=World.AddressCalls; writes=FoodTrucksSession.Changes; Catering.Run(state);
         Check(scans==World.AddressCalls && writes==FoodTrucksSession.Changes,"one recheck after name readiness, then no scan/write");
+        Streets.AddressHelper.Street="4th Avenue";
+    }
+
+    static void ReadableSpelling(Contact c)
+    {
+        // Keep the original same-spelling readiness case above; vary only native rendering here.
+        foreach (var native in new[]{"Fourth Avenue", "Fourth Ave"})
+        {
+            var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
+            var gig=Gig(); state.Catering.Gigs.Add(gig);
+            SaveGameManager.Current.Day=2; SaveGameManager.Current.VehicleInstances.Clear();
+            var msg=Confirmation(gig); msg.messageData!["place"]="34 4th Avenue"; msg.messageData["guidance"]="active";
+            c.messagesQueue.Clear(); c.messagesQueue.Enqueue(msg);
+            World.Found=null; Streets.AddressHelper.Street="THROW"; Catering.Reset(); Catering.RunStep(state,1440);
+            Check(msg.messageData["guidance"]=="active", "spelling case stays active before readiness");
+            World.Found=new(){building=new(){Address=new(){streetName=gig.PlaceId.Split('#')[0],streetNumber=34}}};
+            Streets.AddressHelper.Street=native; Catering.RunStep(state,1440);
+            Check(state.Catering.Gigs.Single()==gig && msg.messageData["guidance"]=="active", "different native spelling must never imply inactive: "+native);
+            var saved=JsonConvert.SerializeObject(c.messagesQueue); var writes=FoodTrucksSession.Changes;
+            c.messagesQueue=JsonConvert.DeserializeObject<Queue<TextMessage>>(saved)!;
+            Catering.Reset(); Catering.RunStep(state,1440); Catering.RunStep(state,1440);
+            Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"spelling queue survives reload without dirty mark");
+        }
+        // Positive evidence still rules out another house or differing stable IDs/details.
+        foreach(var field in new[]{"place","bookingId","locationId","guests"})
+        {
+            var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
+            state.Catering.Gigs.Add(Gig()); var msg=Confirmation(Gig()); msg.messageData!["place"]="34 4th Avenue";
+            msg.messageData[field]=field=="place"?"35 4th Avenue":field=="locationId"?"ba:street_fourthavenue#35":"999";
+            c.messagesQueue.Clear(); c.messagesQueue.Enqueue(msg); Streets.AddressHelper.Street="Fourth Avenue";
+            Catering.Reset(); Catering.RunStep(state,1440);
+            Check(msg.messageData["guidance"]=="inactive","positive mismatch remains inactive: "+field);
+        }
+        Streets.AddressHelper.Street="4th Avenue";
+    }
+
+    static void MissingGuidance(Contact c, string root)
+    {
+        var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
+        var gig=Gig(); state.Catering.Gigs.Add(gig); SaveGameManager.Current.Day=2;
+        var msg=Confirmation(gig); msg.messageData!["place"]="34 Fourth Avenue";
+        Check(!msg.messageData.ContainsKey("guidance"),"genuine 0.10.7 shape has no guidance field");
+        c.messagesQueue.Clear(); c.messagesQueue.Enqueue(msg);
+        World.Found=new(){building=new(){Address=new(){streetName=gig.PlaceId.Split('#')[0],streetNumber=34}}};
+        Streets.AddressHelper.Street="THROW"; Catering.Reset();
+        var saved=JsonConvert.SerializeObject(c.messagesQueue); var writes=FoodTrucksSession.Changes;
+        FoodTrucksSession.CanWrite=false; Catering.RunStep(state,1440);
+        Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"missing guidance backfill respects CanWrite");
+        FoodTrucksSession.CanWrite=true; Catering.RunStep(state,1440);
+        Check(msg.messageData["guidance"]=="active" && state.Catering.Gigs.Single()==gig,"unknown legacy confirmation inherits original map sentence");
+        var locale=Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(System.IO.Path.Combine(root,"unity/FoodTrucks/Locales/en.json")));
+        var template=(string)locale["foodtrucks:message_bookings_booked"]!;
+        foreach(System.Text.RegularExpressions.Match placeholder in System.Text.RegularExpressions.Regex.Matches(template,@"\{([^{}]+)\}"))
+            Check(msg.messageData.ContainsKey(placeholder.Groups[1].Value),"missing actual booked template placeholder: "+placeholder.Value);
+        saved=JsonConvert.SerializeObject(c.messagesQueue); writes=FoodTrucksSession.Changes;
+        c.messagesQueue=JsonConvert.DeserializeObject<Queue<TextMessage>>(saved)!;
+        Catering.Reset(); Catering.RunStep(state,1440); Catering.RunStep(state,1440);
+        Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"unknown no-guidance queue reload has no second dirty mark");
         Streets.AddressHelper.Street="4th Avenue";
     }
 

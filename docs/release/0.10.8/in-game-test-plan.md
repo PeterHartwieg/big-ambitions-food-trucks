@@ -17,3 +17,15 @@ Round-2 focused native EA4/EA1 (including an in-session cancellation flip) and r
 7. **Uninstall last:** in a disposable copy with a permitted catering truck and past sales, run Ctrl+Shift+F11 twice. Confirm Street Food Bookings disappears; wait at least five game minutes and cross midnight, checking it stays gone and no new catering offers arrive. Save, close the game, disable the mod and reload that copy. Confirm no returning bookings contact or raw foodtrucks: text. Restore the rig’s original files and release the lease after testing.
 
 Do not mark these checks passed from automated tests or historical screenshots. This plan does not authorize Workshop upload.
+
+
+## Round-4 orphan regression (0.10.8 rig TEST)
+
+Run after the tested commit has been pushed to codex/street-event-address. Use the same exclusive agent1 lease, fresh verified backup, original Bakery/InternetCafe companions, verified source byte copies, no-normal-game guard and exact restore/hash verification. Evidence/report: orphan-fix4 and streetfood-0.10.8-fix-orphan4.md outside the repository.
+
+- Automated production Step: retain the old 34 4th Avenue readiness test; add native Fourth Avenue after Ready false -> true with no other identity/day/queue changes. The same future gig stays active. Unknown spelling retains existing guidance; differing house numbers on the same canonical street and stable ID/detail mismatches remain negative evidence. Serialize/reload must cause no extra dirty mark.
+- Automated legacy confirmation: omit guidance entirely, keep a building present and throw native name lookup. Step supplies the old map sentence and every placeholder parsed from the actual English booked template. Preserve existing guidance exactly; CanWrite=false prevents all writes; unchanged Step and serialized reload produce no second dirty mark.
+- EA4: verified original 0.10.7 source plus early-market copy. Check readable orphan addresses, inactive wording, dead-offer wording only with positive evidence, city migration, unchanged counts/keys/order/timestamps/cash, six minutes/save/reload idempotence and no double refund. Confirm every booked confirmation renders with no missing placeholder, comparing payload keys with the actual template as well as native UI text.
+- EA1: fresh native city/catering messages, accepted active map sentence and map filters. Cancel that fresh gig via the documented native destination-unavailable rig fixture and real Step; refresh/reopen phone and capture the SAME confirmation inactive in-session. Check no penalty and no stale highlight.
+- EA3 ready path: exactly $960 total, cleared invalid gigs, no penalty or duplicate refund after minutes/save/reload.
+- Retain unaltered screenshots as screenshots/EA4e-*.png and EA1e-*.png, mark one BEST, run ftlib.logcheck on the complete process log. Stop, restore exact hashes/preferences/receipt/root files and release lease. Do not treat automated harness checks as native evidence.

@@ -175,7 +175,13 @@ namespace FoodTrucks
                             : (ResolvableIdentity(data, original) && day > 0 && data.TryGetValue("reply", out var reply) && int.TryParse(reply, out var replyDay) && replyDay > 0 && day > replyDay &&
                                 open.All(d => BookingMatch(data, original, d) == false) && accepted.All(d => BookingMatch(data, original, d) == false)
                                 ? "foodtrucks:offer_inactive" : "foodtrucks:offer_map_hint");
-                        if (key == null) continue; // Unknown identity is never proof that a booking ended.
+                        // 0.10.7 kept this sentence inline in the template. Unknown identity preserves
+                        // existing wording, but an absent argument must inherit that original sentence.
+                        if (key == null)
+                        {
+                            if (data.ContainsKey("guidance")) continue;
+                            key = "foodtrucks:booking_map_hint";
+                        }
                         var guidance = CityPitches.Text(key);
                         if (!data.TryGetValue("guidance", out var existing) || existing != guidance)
                         { data["guidance"] = guidance; changed = true; }
@@ -220,11 +226,30 @@ namespace FoodTrucks
             if (candidate.TryGetValue("locationId", out var location))
             {
                 var address = HistoricalAddress(location, out var fallback);
-                if (address != null && (address == original || data.TryGetValue("place", out var place) && place == address)) return true;
-                if (address != null && !fallback && ResolvableIdentity(data, original)) return false;
+                var match = ReadableLocationMatch(data, original, address, !fallback);
+                if (match.HasValue) return match;
             }
-            return candidate.TryGetValue("place", out var rendered) && !UnreadablePlace(rendered) && ResolvableIdentity(data, original)
-                ? false : (bool?)null;
+            return candidate.TryGetValue("place", out var rendered) ? ReadableLocationMatch(data, original, rendered) : null;
+        }
+
+        private static bool? ReadableLocationMatch(Dictionary<string, string> data, string? original, string? candidate, bool canonical = true)
+        {
+            var stored = !UnreadablePlace(original) ? original : data.TryGetValue("place", out var place) ? place : null;
+            if (UnreadablePlace(stored) || UnreadablePlace(candidate)) return null;
+            if (stored == candidate) return true;
+            if (!canonical) return null; // A guessed name must not override existing unknown wording.
+            var left = Regex.Match(stored!, @"\A([1-9][0-9]*)\s+(.+)\z");
+            var right = Regex.Match(candidate!, @"\A([1-9][0-9]*)\s+(.+)\z");
+            if (!left.Success || !right.Success) return null;
+            // Reuse the bounded ordinal rules (Fourth/4th, Forty Second/42nd, etc.). A
+            // different street rendering alone is not evidence of a different booking.
+            string Street(string value)
+            {
+                var compact = Regex.Replace(value.ToLowerInvariant(), @"[\s-]+", "");
+                return FallbackStreet(compact) ?? value.Trim();
+            }
+            if (!string.Equals(Street(left.Groups[2].Value), Street(right.Groups[2].Value), StringComparison.OrdinalIgnoreCase)) return null;
+            return left.Groups[1].Value == right.Groups[1].Value;
         }
 
         private static bool SameBooking(Dictionary<string, string> data, string? original, Dictionary<string, string> candidate) =>

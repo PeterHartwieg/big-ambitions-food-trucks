@@ -120,7 +120,7 @@ void Settle(SaveState s,CateringRules r,DemandTables t,CateringGig g,VehicleInst
 <Compile Include="{escape(str(ROOT / 'tools/tests/event_locations/MigrationScenarios.cs'))}" />
 <Compile Include="{escape(str(ROOT / 'unity/FoodTrucks/Scripts/EventLocations.cs'))}" />
 </ItemGroup></Project>''')
-            result = subprocess.run(['dotnet', 'run', '--project', str(folder / 'Harness.csproj'), '-v:q'],
+            result = subprocess.run(['dotnet', 'run', '--project', str(folder / 'Harness.csproj'), '-v:q', '--', str(ROOT)],
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn('PASS: bookings migration lifecycle', result.stdout)
