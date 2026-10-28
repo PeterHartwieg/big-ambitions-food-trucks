@@ -249,7 +249,8 @@ namespace FoodTrucks
             if (!Showing || standIn == null || vehicleId == null) return;
             var state = FoodTrucksSession.CurrentState;
             var vehicle = state == null ? null : StreetSales.Find(state, vehicleId);
-            if (vehicle == null || !FoodTrucksSession.CanWrite) return;
+            var rules = DemandData.Rules;
+            if (vehicle == null || rules == null || !FoodTrucksSession.CanWrite) return;
             var read = new List<CrewShift>();
             foreach (var day in standIn.scheduleDays ?? new List<ScheduleDay>())
                 foreach (var shift in day.workShifts ?? new List<WorkShift>())
@@ -262,6 +263,12 @@ namespace FoodTrucks
             var shifts = WeekPlan.Sanitize(read, out var dropped);
             if (dropped > 0) Log.Error($"Schedule: {dropped} shifts of {vehicleId} from the Schedule tab overlap another and weren't kept.");
             var schedule = vehicle.Schedule ??= new HireSchedule();
+            var over = WeekPlan.OverMaxHours(rules.Fleet, schedule.CrewShifts, shifts);
+            if (over.Count > 0)
+            {
+                Refuse(vehicle, rules.Fleet, over);
+                return;
+            }
             string Key(IEnumerable<CrewShift> list) => string.Join(";", list.Select(s => $"{s.EmployeeId},{s.Day},{s.Start},{s.End},{s.Station}").OrderBy(x => x, StringComparer.Ordinal));
             if (Key(shifts) == Key(schedule.CrewShifts))
             {
@@ -275,6 +282,44 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
             Log.Info($"Schedule: {vehicleId} now has {shifts.Count} shifts: " +
                      string.Join(", ", shifts.Select(s => $"{s.EmployeeId} {s.Day} {s.Start:D2}-{s.End:D2} {s.Station}")) + ".");
+        }
+
+        // A Schedule-tab change that would give a crew member more than FleetRules.MaxShiftHours on a weekday, all their
+        // shifts that day together (issue #14), is refused: the save keeps its shifts, the stand-in's days are built from
+        // them again, and the tab is drawn again on the next frame, once the game's drag or paste is done with its own
+        // shift objects.
+        private static void Refuse(VehicleState vehicle, FleetRules rules, List<(string EmployeeId, DayOfWeek Day, int Hours)> over)
+        {
+            foreach (var day in standIn!.scheduleDays ?? new List<ScheduleDay>()) day.workShifts = Shifts(vehicle, vehicleId!, WeekdayOf(day.day));
+            HireCrew.SetWeeklyWork(vehicle);
+            Log.Info($"Schedule: {vehicleId}'s change refused, more than {rules.MaxShiftHours} hours in a day: " +
+                     string.Join(", ", over.Select(o => $"{o.EmployeeId} {o.Day} {o.Hours}h")) + ".");
+            CartSelling.Notify("foodtrucks:notification_schedule_shift_too_long", ("max", rules.MaxShiftHours.ToString()));
+            var shown = standIn;
+            HireRoutes.Later(() =>
+            {
+                if (!Here || standIn != shown) return;
+                try { Redraw(); }
+                catch (Exception ex) { Log.Error("Schedule: drawing the refused change back: " + ex); }
+            });
+        }
+
+        // The selected day again, as the game's own clear button does (ScheduleDaySelectionController.OnDaySelected with
+        // its selected index): the shift caches and rows are rebuilt from the stand-in's days. LoadScheduler would jump to
+        // today, so it is only the fallback.
+        private static void Redraw()
+        {
+            var schedule = InstanceBehavior<UIs>.Instance?.fullMenu?.bizMan?.business?.bizManSchedule;
+            if (schedule == null) return;
+            var controller = Traverse.Create(schedule).Field("daySelectionController").GetValue<ScheduleDaySelectionController>();
+            var selected = controller == null ? null : Traverse.Create(controller).Field("_selectedDayIndex");
+            var select = controller == null ? null : Traverse.Create(controller).Method("OnDaySelected", new[] { typeof(int) });
+            if (selected == null || select == null || !selected.FieldExists() || !select.MethodExists())
+            {
+                schedule.LoadScheduler();
+                return;
+            }
+            select.GetValue(selected.GetValue<int>());
         }
 
         // Core's auto schedule for the week or a day (the game's auto-fill button), written to the save and to the

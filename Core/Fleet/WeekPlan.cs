@@ -251,6 +251,24 @@ namespace FoodTrucks.Core.Fleet
             return kept;
         }
 
+        // The crew member/weekday groups whose hours `proposed` changes from `accepted` and that then pass
+        // FleetRules.MaxShiftHours, all that crew member's shifts that weekday together, on any row (issue #14). A shift
+        // ends at 24:00, so night work counts on each weekday it falls on, Sunday's and Monday's too; nothing spans
+        // midnight. A group left with the same hours (a row move, or another day's edit) isn't judged: a save's own
+        // over-limit day stays as it was.
+        public static List<(string EmployeeId, DayOfWeek Day, int Hours)> OverMaxHours(FleetRules rules, IEnumerable<CrewShift>? accepted,
+            IEnumerable<CrewShift> proposed)
+        {
+            if (rules == null) throw new ArgumentNullException(nameof(rules));
+            string Hours(IEnumerable<CrewShift> group) => string.Join(";", group.Select(s => $"{s.Start}-{s.End}").OrderBy(x => x, StringComparer.Ordinal));
+            var before = (accepted ?? Enumerable.Empty<CrewShift>()).Where(s => s != null).GroupBy(s => (s.EmployeeId, s.Day))
+                .ToDictionary(g => g.Key, g => Hours(g));
+            return (proposed ?? Enumerable.Empty<CrewShift>()).Where(s => s != null).GroupBy(s => (s.EmployeeId, s.Day))
+                .Where(g => !(before.TryGetValue(g.Key, out var hours) && hours == Hours(g)))
+                .Select(g => (g.Key.EmployeeId, g.Key.Day, Hours: g.Sum(s => s.End - s.Start)))
+                .Where(g => g.Hours > rules.MaxShiftHours).ToList();
+        }
+
         // The first of `stations` with no shift that day overlapping [start, end) (other than `except`'s), else null.
         public static string? FreeStation(IEnumerable<CrewShift> shifts, DayOfWeek day, int start, int end, IReadOnlyList<string> stations,
             string? except = null) =>
