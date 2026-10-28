@@ -96,7 +96,7 @@ function Get-Process { param($Name) }
         destination = self.mods.parent / 'source'
         self.source.rename(destination)
         self.source = destination
-        self.assert_rejected()
+        self.assert_rejected('must not overlap')
 
     @unittest.skipUnless(os.name == 'nt', 'Windows junction test')
     def test_destination_junction_is_rejected(self):
@@ -106,9 +106,11 @@ function Get-Process { param($Name) }
         self.assert_rejected()
         self.assertEqual((outside / 'old.txt').read_text(), 'previous')
 
-    def assert_rejected(self):
+    def assert_rejected(self, message=None):
         result = self.install()
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        if message is not None:
+            self.assertIn(message, result.stderr)
         self.assertEqual((self.target / 'old.txt').read_text(), 'previous')
         self.assertTrue(self.source.exists())
         self.assertTrue(self.manifest.exists())
