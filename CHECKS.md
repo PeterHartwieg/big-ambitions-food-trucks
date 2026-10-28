@@ -1,3 +1,15 @@
+# Commissary address and map access (next build)
+
+Display-only fix: commissary contacts and BizMan's rented-space panel show the commissary's address, with View on map and Set destination; see [scope and evidence](docs/release/0.10.9/commissary-address.md). Core and production-method harness checks pass. All rows below are **pending** in game. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| CA1 | On a save from before this change with Industry City unlocked and a space rented there, stand far away and open its contact; press View on map; then select another contact and come back | The header shows 2 21st Street in the game's own format (or its localized name) and View on map; the map opens on the Industry City building with its card selected; the call button works, also outside the host tenant's opening hours; switching contacts leaves no wrong address or map target; Player.log shows `Patch ContactsApp.SetUpHeader(Contact): Active.` |
+| CA2 | Open BizMan > Street food > the vehicle > Commissary space; press Set destination; drive there | Address row matches the contact, with the line that the bay is beside the building; the GPS leads to the building; the loading bay is next to it and the delivered stock loads |
+| CA3 | Repeat CA1 and CA2 for Lower Manhattan, Garment District, Hell's Kitchen and Murray Hill | Each shows its own building's address and focuses or routes to that building; nothing about rent, stock, orders or money changes |
+| CA4 | Save and reload; reopen the contacts and the BizMan panel; call one commissary, rent or move a space; visit a not yet unlocked commissary | Addresses and buttons still work after reload; the call's first line, the rent/move text and the new welcome text name the address; older texts in the conversation still read |
+| CA5 | Turn on Voogle Maps > Street food > Commissaries and pan to Industry City and Lower Manhattan | Both host buildings are highlighted with the commissary marker (the filter itself is unchanged; record a missing Industry City marker with the log's `Map filters` lines) |
+
 # Crew in the employee list (0.10.9)
 
 Display-only fix for vehicle crew in MyEmployees; see [scope and evidence](docs/release/0.10.9/crew-employee-screen.md). Core and production-method harness checks pass. All rows below are **pending** in game. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.

@@ -4,6 +4,8 @@ Start with a food cart and grow into a fleet of food trucks. Choose your equipme
 
 **Version 0.10.9, 28 October 2026.** Food cart and truck crew show their vehicle and the job "Street food crew" in the game's employee list, its assigned filter and the employee details, instead of "Unassigned" and "No task". Manage schedule for a crew member opens their vehicle's page. Training and sick-day labels and every other employee are unchanged. Display only: crew stay unassigned in the game's own rules. Automated checks and pending in-game checks: [crew employee screen](docs/release/0.10.9/crew-employee-screen.md).
 
+**Next build (unreleased).** A commissary's phone contact shows its building's address with View on map, and BizMan's Commissary space shows the address with Set destination; the welcome, rental and call texts name the address. Automated checks pass; in-game checks are pending: [commissary address](docs/release/0.10.9/commissary-address.md).
+
 **Included from 0.10.8:** Event and catering addresses use the game's own building address and street names. City events include GPS directions by phone, including fully booked events. Existing map filters highlight the event/catering building. Older city messages are repaired only for events that have not ended yet. Unavailable catering locations cancel without a reputation penalty; unavailable city locations refund unused bookings. Automated checks and native acceptance status: [event address fix](docs/release/0.10.8/event-address.md).
 
 Bugs and balance changes are still possible. We recommend a new save or a backup of your existing save before enabling the mod. Read the removal instructions before unsubscribing.
