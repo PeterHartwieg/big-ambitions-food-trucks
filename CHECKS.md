@@ -9,6 +9,19 @@ Display-only fix for vehicle crew in MyEmployees; see [scope and evidence](docs/
 | CS3 | Send a crew member to training, and wait for one to call in sick; press Manage schedule for a healthy crew member | Training and sick labels as for any employee; Manage schedule opens the vehicle's Street food page, whose Schedule button opens its shifts |
 | CS4 | Save and reload; then remove the employee from the crew | Same row after reload; after removal the row shows "Unassigned" and "No task" as in the game, and the no-task complaint and unassigned to-do behave as for any idle employee |
 
+# Daily shift limit on the vehicle Schedule tab (0.10.9)
+
+Issue #14; see [scope and evidence](docs/release/0.10.9/shift-cap-native-edits.md). Core and production-method harness checks pass. All rows below are **pending** in game. Existing saves with over-limit days are left as saved (out of scope). Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| SL1 | Vehicle Schedule tab, a weekday other than today: create a 0–12 shift, then drag its right handle to 13, and separately to 24 | Notice "at most 12 hours a day"; the bar snaps back to 0–12 with the same weekday still selected; bridge state and log (`change refused`) show 0–12; close and reopen the tab: still 0–12 |
+| SL2 | Same crew member and day: 0–8, then add 10–16 (on the same row, and on a truck's second row) | Refused with the notice; only 0–8 remains, on screen and in state; the weekly hours are unchanged |
+| SL3 | 0–6 plus 8–14 for one crew member; on a truck, two crew members at 0–12 each on their own rows | Accepted, no notice; all shifts shown and in state |
+| SL4 | Sunday 14–24 and Monday 0–4, then add Monday 6–15; then Monday 6–14 instead | Night split accepted; 6–15 refused (13 hours on Monday); 6–14 accepted. No limit across midnight |
+| SL5 | After a valid edit, save under a disposable FT name, reload, reopen the Schedule tab | Same shifts and weekly hours; a refused edit from before the save is absent |
+| SL6 | Open a real shop's Schedule tab, drag a shift past 12 hours | The game's own behaviour, no mod notice; Player.log has no Schedule refusal line |
+
 # Event address review fixes (0.10.8)
 
 Third-round regressions are covered by Core and executable production-method harnesses; see [scope and evidence](docs/release/0.10.8/event-address.md). **Pending native acceptance of this candidate:** address/map/GPS and reload, mixed claimed/unclaimed invalid-location refunds, real legacy city label repair, saved catering confirmation radius with no live gig, and directions Back after full booking. The original `38675ff` screenshots do not validate these later fixes. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
