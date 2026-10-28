@@ -12,18 +12,21 @@ import zipfile
 from ftlib.package import verify, validate_bundles
 
 REPO = Path(__file__).resolve().parents[1]
+# The build copies this same source inventory (tools/build-mod.sh). Do not
+# derive requirements from the candidate: it may already be missing a table.
+DATA_FILES = {f'data/{path.name}' for path in (REPO / 'data').glob('*.json')}
 REQUIRED = {
     'FoodTrucks.dll', 'README.md', 'LICENSE.txt', 'Locales/en.json',
     'Dependencies/FoodTrucks.Core.dll', 'Dependencies/BridgeControl.dll', 'Dependencies/0Harmony.dll', 'Dependencies/Harmony-LICENSE.txt',
-    # The build copies this same source inventory (tools/build-mod.sh). Do not
-    # derive requirements from the candidate: it may already be missing a table.
-    *(f'data/{path.name}' for path in (REPO / 'data').glob('*.json')),
+    *DATA_FILES,
     *(f'AssetBundles/{platform}/foodtrucks.unity3d{suffix}'
       for platform in ('Windows', 'Mac') for suffix in ('', '.manifest')),
 }
 
 
 def package(source, manifest, output):
+    if not DATA_FILES:
+        raise ValueError('Repository runtime data inventory is empty; restore data/*.json before packaging')
     source, output = Path(source), Path(output)
     entries = verify(source, manifest)
     validate_bundles(source)

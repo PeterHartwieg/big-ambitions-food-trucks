@@ -4,6 +4,7 @@ The build copies every top-level `data/*.json` into the runtime folder.
 `tools/package-release.py` derives its required data inventory from that same
 repository directory, not from the candidate folder or its checksum manifest.
 Add runtime tables there; all must be present and nonempty in release packages.
+Packaging refuses an empty repository data inventory, including a missing data directory.
 Other runtime files remain explicitly allowlisted, with additional locale JSON
 files permitted. Checksums do not authorize arbitrary DLLs, saves or sources.
 
@@ -17,7 +18,10 @@ including directory junctions, are rejected before traversal. The shared Python
 verifier applies the same portable manifest-name restrictions and rejects junctions.
 The installer remains a single script so `tools/install-remote.sh` can copy it alone.
 
-Staging and backup folders have unique names outside ModsLocal. Verification
+Relative installer inputs resolve against PowerShell's current location, including
+nonexistent destinations, before checking path components for reparse points.
+Staging and backup folders have unique names outside ModsLocal; backups retain a
+timestamp prefix for chronological sorting. Verification
 failure retains the source, manifest and existing installation. A failed swap
 restores the previous installation. The normal bridge lease and game-closed
 checks remain in the production entry point.

@@ -77,6 +77,17 @@ class ReleasePackageTests(unittest.TestCase):
                 self.package('incomplete.zip')
             path.write_bytes(table.read_bytes())
 
+    def test_empty_repository_data_inventory_refuses_archive(self):
+        # Simulate an incomplete checkout, not an incomplete candidate manifest.
+        with patch.object(Path, 'glob', return_value=iter(())):
+            incomplete = runpy.run_path(str(TOOLS / 'package-release.py'))
+        for table in (self.source / 'data').glob('*.json'):
+            table.unlink()
+        self.rehash()
+        with self.assertRaisesRegex(ValueError, 'data inventory is empty'):
+            incomplete['package'](self.source, self.manifest, self.root / 'incomplete.zip')
+        self.assertFalse((self.root / 'incomplete.zip').exists())
+
     def test_coherent_source_and_manifest_change_at_final_verification_refused(self):
         real_verify = PACKAGE['verify']
         calls = 0
