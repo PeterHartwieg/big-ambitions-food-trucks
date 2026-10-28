@@ -60,7 +60,7 @@ def harness():
     return HARNESS.replace('/* VEHICLE_SCHEDULE */', '\n'.join(members))
 
 
-def run(source, marker):
+def run(source, marker, *args):
     with tempfile.TemporaryDirectory(prefix='ft-schedule-cap-') as directory:
         folder = Path(directory)
         (folder / 'Program.cs').write_text(source)
@@ -69,7 +69,7 @@ def run(source, marker):
 <ImplicitUsings>enable</ImplicitUsings><NuGetAudit>false</NuGetAudit></PropertyGroup><ItemGroup>
 <ProjectReference Include="{ROOT / 'Core/FoodTrucks.Core.csproj'}" />
 <PackageReference Include="Newtonsoft.Json" Version="13.0.2" /></ItemGroup></Project>''')
-        result = subprocess.run(['dotnet', 'run', '--project', str(folder / 'Harness.csproj'), '-v:q'],
+        result = subprocess.run(['dotnet', 'run', '--project', str(folder / 'Harness.csproj'), '-v:q', '--', *args],
                                 capture_output=True, text=True)
         return result.returncode == 0 and marker in result.stdout, result.stdout + result.stderr
 
@@ -77,6 +77,11 @@ def run(source, marker):
 class VehicleScheduleShiftCapTests(unittest.TestCase):
     def test_native_edits_over_the_cap_are_refused_and_restored(self):
         ok, output = run(harness(), 'PASS: vehicle schedule shift cap')
+        self.assertTrue(ok, output)
+
+    def test_paste_over_the_cap_is_refused_once_and_restored(self):
+        # Paste and paste to all: the game replaces the destination days, then updates each crew member's weekly hours.
+        ok, output = run(harness(), 'PASS: vehicle schedule paste cap', 'paste')
         self.assertTrue(ok, output)
 
     def test_refusal_is_wired_and_redraws_the_selected_day(self):
@@ -157,6 +162,16 @@ static class Native {
         ScheduleHelper.GetScheduleDay(dayIndex).workShifts.Add(new WorkShift { startingHour = start, endingHour = end, employeeId = employeeId, itemInstanceId = row });
         Changed();
     }
+    // Paste (one day or to all): the destination days get copies of the source day's shifts, then the game's
+    // UpdateWeeklyHoursAndDays runs for each crew member, with the mod's postfix after each.
+    public static void Paste(int source, params int[] targets) {
+        var from = ScheduleHelper.GetScheduleDay(source).workShifts;
+        foreach (var target in targets)
+            ScheduleHelper.GetScheduleDay(target).workShifts = from.Select(s => new WorkShift { startingHour = s.startingHour,
+                endingHour = s.endingHour, employeeId = s.employeeId, itemInstanceId = s.itemInstanceId, type = s.type }).ToList();
+        WeeklyHours();
+    }
+    public static void WeeklyHours() { foreach (var e in HireCrew.Employees) e.UpdateWeeklyHoursAndDays(ScheduleHelper.ScheduleDays); }
 }
 
 // ---- Mod boundaries ----
@@ -260,7 +275,46 @@ class Program {
         Check(Core(again) == core, why + ": reload has the accepted shifts");
     }
 
-    static void Main() {
+    // A paste copies a whole day, so it can only go over the cap from a day saved over it before the cap was checked.
+    static void Paste() {
+        var M = DayOfWeek.Monday; var T = DayOfWeek.Tuesday;
+        foreach (var kind in new[] { "cart", "truck" }) {
+            // Tuesday 0-8 plus 10-16 (14 hours) onto Wednesday, and onto every other day (paste to all).
+            foreach (var targets in new[] { new[] { 3 }, new[] { 1, 3, 4, 5, 6, 7 } }) {
+                var why = $"{kind} paste of the over-limit Tuesday onto {targets.Length} days";
+                var (v, standIn) = Setup(kind, 12, ("e1", T, 0, 8, "serving1"), ("e1", T, 10, 16, "serving1"), ("e1", M, 0, 6, "serving1"));
+                var core = Core(v); var save = Saved();
+                Native.Paste(Index(T), targets);
+                Refused(v, standIn, core, save, 12, why);
+                // The weekly hours updates again (another paste callback): nothing more happens.
+                CartSelling.Notices.Clear();
+                Native.WeeklyHours();
+                HireRoutes.Frame();
+                Check(Core(v) == core && Tab(standIn) == core && CartSelling.Notices.Count == 0 && Native.Redraws == 1 && FoodTrucksSession.Changes == 0,
+                    why + ": later weekly hours updates change nothing");
+            }
+
+            // A valid day (0-6 plus 8-14, exactly 12) onto Wednesday and Friday: accepted and saved.
+            {
+                var (v, standIn) = Setup(kind, 12, ("e1", M, 0, 6, "serving1"), ("e1", M, 8, 14, "serving1"));
+                Native.Paste(Index(M), 3, 5);
+                Check(Core(v) == "e1@Monday:0-6/serving1 e1@Monday:8-14/serving1 e1@Wednesday:0-6/serving1 e1@Wednesday:8-14/serving1 " +
+                    "e1@Friday:0-6/serving1 e1@Friday:8-14/serving1", kind + " valid paste: accepted, got " + Core(v));
+                Check(Tab(standIn) == Core(v) && CartSelling.Notices.Count == 0 && FoodTrucksSession.Changes == 1, kind + " valid paste: no notice, marked changed once");
+                HireRoutes.Frame();
+                Check(Native.Redraws == 0, kind + " valid paste: no redraw");
+                var again = StreetSales.Find(new SaveCodec().Load(Saved()).State!, v.VehicleId)!;
+                Check(Core(again) == Core(v), kind + " valid paste: survives save and reload");
+            }
+        }
+    }
+
+    static void Main(string[] args) {
+        if (args.Contains("paste")) {
+            Paste();
+            Console.WriteLine("PASS: vehicle schedule paste cap");
+            return;
+        }
         var M = DayOfWeek.Monday; var T = DayOfWeek.Tuesday; var S = DayOfWeek.Sunday;
         foreach (var kind in new[] { "cart", "truck" }) {
             var truck = kind == "truck";

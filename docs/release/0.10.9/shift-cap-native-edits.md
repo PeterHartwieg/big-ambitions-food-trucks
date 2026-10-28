@@ -26,6 +26,8 @@ No new Harmony patch.
 
 Saves that already hold an over-limit day are **not** changed. On load they are not repaired, warned about or validated, and the over-limit hours keep being worked and paid as saved. That policy is pending a separate decision. Only edited groups are judged: an edit to another day or another crew member is accepted next to such a day, and moving its shifts to another row without changing their hours is accepted too. Changing that day's hours is judged like any edit. A result still over the limit is refused, and bringing it within the limit, or removing it, is accepted.
 
+The game's own length for a new shift is not changed either: an added shift runs from the clicked hour to the end of the route's opening slot, at most 12 hours, so an add inside a long slot can take the day over the limit and is refused. To add a short second shift, click outside the route hours or near the slot end and drag it to the hours wanted.
+
 ## Evidence
 
 - **Checked (automated):** `tests/Fleet/ShiftCapTests.cs` covers the cap from the rules (8, 12, 24), one shift over, several shifts adding up across rows, exactly the cap, per crew member rather than per vehicle, midnight splits including Sunday into Monday, and an untouched over-limit group that is not judged. It also characterises an over-limit save loading unchanged. `tools/tests/test_vehicle_schedule_shift_cap.py` compiles the unmodified production `SyncBack`, `Refuse`, `Shifts` and the employee callbacks against the real Core. Stand-ins replace only the game's drag, shift creation, employee update and redraw. It covers a cart and a truck:
@@ -34,7 +36,8 @@ Saves that already hold an over-limit day are **not** changed. On load they are 
   - a custom cap of 8;
   - a midnight split;
   - an over-limit save with an unrelated valid edit: accepted, with the old day untouched;
-  - closing the tab before the redraw.
+  - closing the tab before the redraw;
+  - paste and paste to all of an over-limit day from an old save, through the production weekly-hours postfix once per crew member: one notice, Core unchanged, every destination day restored and later callbacks doing nothing; a valid paste is accepted.
 
   Red on `d2e2b3e`, green on this branch. An optional test re-reads the redraw's private game members with ILSpy when `BA_GAME_DLLS` is set. Checked against the cached `BigAmbitions.dll`, SHA-256 `9427561B81AAAB2ADA09C22A3C98DD9A4017A65225B389513885BF336852E911`.
 - **Pending (in game):** the checks in `CHECKS.md` (SL1 to SL6). The adapter has not been compiled against the full game and Unity references or run in the game. In particular, the redraw timing after a drag and after a paste is unverified.
