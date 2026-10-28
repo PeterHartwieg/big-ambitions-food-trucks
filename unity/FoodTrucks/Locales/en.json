@@ -165,6 +165,7 @@
     "foodtrucks:notification_crew_gone": "{name} has left the company: {vehiclename} has one worker less.",
     "foodtrucks:notification_crew_reassigned": "{name} now works in a building and has left the crew of {vehiclename}.",
     "foodtrucks:crew_someone": "A worker",
+    "foodtrucks:myemployees_task_crew": "Street food crew",
     "foodtrucks:notification_hire_open": "{crew} opened the {vehicle}.",
     "foodtrucks:notification_hire_closed": "The crew closes the {vehicle}: {sales} sales, {revenue}.",
     "foodtrucks:notification_hire_departs": "{crew} sets off with the {vehicle}, arriving about {time}.",
