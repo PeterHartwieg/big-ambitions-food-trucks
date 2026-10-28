@@ -5,7 +5,7 @@ Display-only fix for vehicle crew in MyEmployees; see [scope and evidence](docs/
 | Check | Do | Look for |
 | --- | --- | --- |
 | CS1 | Add an employee to a truck's crew, give them seven 7-hour shifts, open MyEmployees | Their row shows 49 hours, the truck's name and "Street food crew" in white; a shop employee's row is unchanged |
-| CS2 | Use the Assigned/Unassigned/In training filters and search for the vehicle name; select the crew member | Crew are under Assigned, not Unassigned; search finds them; the detail dropdown shows the vehicle; Player.log shows `Patch EmployeeModel..ctor(EmployeeInstance): Active.` plus the ShowEmployee and ManageSchedule lines |
+| CS2 | Use the Assigned/Unassigned/In training filters and search for the vehicle name; select the crew member; then, with at least two businesses, pick the first business in the dropdown | Crew are under Assigned, not Unassigned; search finds them; the detail dropdown shows the vehicle; opening the panel leaves 49 hours and assigns or pays no one; picking the first business assigns exactly that business (the one named in the dropdown) and takes them off the crew; Player.log shows `Patch EmployeeModel..ctor(EmployeeInstance): Active.` plus the ShowEmployee and ManageSchedule lines |
 | CS3 | Send a crew member to training, and wait for one to call in sick; press Manage schedule for a healthy crew member | Training and sick labels as for any employee; Manage schedule opens the vehicle's Street food page, whose Schedule button opens its shifts |
 | CS4 | Save and reload; then remove the employee from the crew | Same row after reload; after removal the row shows "Unassigned" and "No task" as in the game, and the no-task complaint and unassigned to-do behave as for any idle employee |
 
