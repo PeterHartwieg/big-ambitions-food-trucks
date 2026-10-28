@@ -32,7 +32,9 @@ namespace FoodTrucks
         internal static string MessageKey(string key, string? address) => address == null ? key : key + "_address";
 
         // The contact's View on map, as the game's own does for a business contact (ContactsApp.ViewOnMapButtonOnClick):
-        // the phone closes and the city map opens on the host building with its card selected. Resolved again on click.
+        // the phone closes and the city map opens on the host building with its card selected. With the map already open
+        // the game only moves the camera; this uses the game's FocusOnBuilding, which also selects the card. Resolved again
+        // on click.
         internal static void ViewOnMap(string siteId)
         {
             var site = DemandData.Commissaries?.Site(siteId);

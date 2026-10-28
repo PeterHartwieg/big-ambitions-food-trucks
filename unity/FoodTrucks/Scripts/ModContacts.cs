@@ -75,6 +75,9 @@ namespace FoodTrucks
         // The listener this header put on the game's View on map button, taken off before the next contact's header.
         private static UnityEngine.Events.UnityAction? viewOnMap;
 
+        // Its own once-only log flag, so an earlier failure in the other postfixes doesn't hide the header's.
+        private static bool headerFailed;
+
         // Postfix on ContactsApp.SetUpHeader: a commissary contact has no address of its own (the game's address branch
         // would tie its call to the host tenant's opening hours), so the game hides Address and View on map. After the
         // game's header, this shows the host building's address and a View on map to it, resolved now; while it can't be
@@ -108,8 +111,8 @@ namespace FoodTrucks
             }
             catch (Exception ex)
             {
-                if (!failed) Log.Error("Contacts: commissary address: " + ex);
-                failed = true;
+                if (!headerFailed) Log.Error("Contacts: commissary address: " + ex);
+                headerFailed = true;
             }
         }
 

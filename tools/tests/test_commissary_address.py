@@ -143,7 +143,13 @@ class CommissaryAddressTests(unittest.TestCase):
         apply = method('Commissary.cs', 'internal static string? ApplySpace(')
         self.assertIn('key = CommissaryLocation.MessageKey(key, address);', apply)
         self.assertIn('data["address"] = address;', apply)
-        self.assertIn('choice.Op == "release"', apply)
+        # Rent and move say where; a release keeps its key (en.json has no released_address).
+        self.assertIn('var address = choice.Op == "release" || site == null ? null : CommissaryLocation.Address(site);', apply)
+        space_keys = set(re.findall(r'"(foodtrucks:message_commissary_space_\w+)"', apply))
+        self.assertEqual(space_keys, {f'foodtrucks:message_commissary_space_{op}' for op in ('rented', 'moved', 'released')})
+        for key in space_keys - {'foodtrucks:message_commissary_space_released'}:
+            self.assertIn(key + '_address', NEW_KEYS)
+        self.assertNotIn('foodtrucks:message_commissary_space_released_address', NEW_KEYS)
         start = method('Commissary.cs', 'private static DialogEntry Start()')
         for key in ('foodtrucks:dialog_commissary_start_spaces', 'foodtrucks:dialog_commissary_start_standing'):
             self.assertIn(f'CommissaryLocation.MessageKey("{key}", address)', start)
@@ -166,6 +172,7 @@ class CommissaryAddressTests(unittest.TestCase):
                 # Older messages keep their key and data (no address) and still render in full.
                 self.assertNotIn('{address}', table[base], f'{path.name}: {base}')
                 self.assertEqual(placeholders(table[key]), placeholders(table[base]) | {'address'}, f'{path.name}: {key}')
+            self.assertNotIn('foodtrucks:message_commissary_space_released_address', table, path.name)
             self.assertNotIn('GPS', table['foodtrucks:bizman_page_space_bay_hint'])
             self.assertIn('beside', table['foodtrucks:bizman_page_space_bay_hint'])
 

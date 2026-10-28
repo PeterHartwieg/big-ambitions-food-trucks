@@ -193,6 +193,30 @@ static class Program
         Equal(null, map.Focused, "stale click inert after uninstall");
         Equal(0, map.Toggles, "map not opened after uninstall");
         FoodTrucks.Commissary.Uninstalled = false;
+
+        // A game UI call that throws, in the header or in the map click: logged, the phone keeps working, and the next
+        // open or click works again.
+        Equal(0, Log.Errors.Count, "no errors before the failures");
+        Open(app, Commissary("industry-city"));
+        Localizor.LanguageChangeEvent.TextLocalizationComponent.Fail = true;
+        Open(app, Commissary("lower-manhattan"));
+        Localizor.LanguageChangeEvent.TextLocalizationComponent.Fail = false;
+        Equal(0, app.ViewOnMap.onClick.Count, "Industry City listener removed despite the failure");
+        app.Call.onClick.Invoke();
+        Equal("foodtrucks-commissary-lower-manhattan open", app.Calls.Last(), "call usable after a header failure");
+        Open(app, Commissary("lower-manhattan"));
+        Equal("address 5 12th Street; map shown x1; call shown x1; hours hidden", Shown(app), "header recovers on reopen");
+        CityMap.IsOpen = false; map.Focused = null; map.Toggles = 0;
+        menu.Fail = true;
+        app.ViewOnMap.onClick.Invoke();
+        menu.Fail = false;
+        Equal(null, map.Focused, "failed View on map focuses nothing");
+        app.ViewOnMap.onClick.Invoke();
+        Equal(World.BuildingAt("ba:street_twelfthstreet#5"), map.Focused, "View on map works on retry");
+        Equal(2, Log.Errors.Count, "both failures logged");
+        Equal(true, Log.Errors[0].StartsWith("Contacts: commissary address:"), "header failure logged");
+        Equal(true, Log.Errors[1].StartsWith("Contacts: commissary View on map:"), "map click failure logged");
+        Log.Errors.Clear();
     }
 
     static void BizMan()
@@ -278,7 +302,11 @@ namespace Helpers { static class InstanceBehavior<T> { public static T Instance 
 namespace UI
 {
     class UIs { public FullMenu fullMenu = new(); }
-    class FullMenu { public bool? Shown; public void Toggle(bool show) => Shown = show; }
+    class FullMenu
+    {
+        public bool? Shown; public bool Fail;
+        public void Toggle(bool show) { if (Fail) throw new InvalidOperationException("menu"); Shown = show; }
+    }
 }
 namespace UI.Notification { enum NotificationType { Success } }
 namespace UI.Guiders
@@ -341,8 +369,13 @@ namespace Localizor.LanguageChangeEvent
 {
     class TextLocalizationComponent
     {
+        public static bool Fail;
         public string? Key = "contacts_address"; public string Value = "";
-        public void SetValue(string text, bool clearKey = false) { Value = text; if (clearKey) Key = null; }
+        public void SetValue(string text, bool clearKey = false)
+        {
+            if (Fail) throw new InvalidOperationException("label");
+            Value = text; if (clearKey) Key = null;
+        }
     }
 }
 namespace Entities
