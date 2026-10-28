@@ -1,3 +1,14 @@
+# Crew in the employee list (0.10.9)
+
+Display-only fix for vehicle crew in MyEmployees; see [scope and evidence](docs/release/0.10.9/crew-employee-screen.md). Core and production-method harness checks pass. All rows below are **pending** in game. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| CS1 | Add an employee to a truck's crew, give them seven 7-hour shifts, open MyEmployees | Their row shows 49 hours, the truck's name and "Street food crew" in white; a shop employee's row is unchanged |
+| CS2 | Use the Assigned/Unassigned/In training filters and search for the vehicle name; select the crew member | Crew are under Assigned, not Unassigned; search finds them; the detail dropdown shows the vehicle; Player.log shows `Patch EmployeeModel..ctor(EmployeeInstance): Active.` plus the ShowEmployee and ManageSchedule lines |
+| CS3 | Send a crew member to training, and wait for one to call in sick; press Manage schedule for a healthy crew member | Training and sick labels as for any employee; Manage schedule opens the vehicle's Street food page, whose Schedule button opens its shifts |
+| CS4 | Save and reload; then remove the employee from the crew | Same row after reload; after removal the row shows "Unassigned" and "No task" as in the game, and the no-task complaint and unassigned to-do behave as for any idle employee |
+
 # Event address review fixes (0.10.8)
 
 Third-round regressions are covered by Core and executable production-method harnesses; see [scope and evidence](docs/release/0.10.8/event-address.md). **Pending native acceptance of this candidate:** address/map/GPS and reload, mixed claimed/unclaimed invalid-location refunds, real legacy city label repair, saved catering confirmation radius with no live gig, and directions Back after full booking. The original `38675ff` screenshots do not validate these later fixes. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
