@@ -1,7 +1,9 @@
 import hashlib
+import os
 from pathlib import Path
 import runpy
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -56,6 +58,36 @@ class ReleasePackageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Unlisted'): self.package()
         self.assertFalse((self.root / 'candidate.zip').exists())
 
+    def test_every_shipped_data_table_is_required_and_archived(self):
+        # Independent of REQUIRED: match the build's copy of repository data/*.json.
+        tables = list((TOOLS.parent / 'data').glob('*.json'))
+        self.assertTrue(tables)
+        for table in tables:
+            (self.source / 'data' / table.name).write_bytes(table.read_bytes())
+        self.rehash()
+        with zipfile.ZipFile(self.package()) as archive:
+            for table in tables:
+                self.assertEqual(archive.read('FoodTrucks/data/' + table.name), table.read_bytes())
+        # A freshly checksummed but incomplete build must also fail.
+        for table in tables:
+            path = self.source / 'data' / table.name
+            path.unlink()
+            self.rehash()
+            with self.subTest(table=table.name), self.assertRaisesRegex(ValueError, 'missing required'):
+                self.package('incomplete.zip')
+            path.write_bytes(table.read_bytes())
+
+    def test_empty_repository_data_inventory_refuses_archive(self):
+        # Simulate an incomplete checkout, not an incomplete candidate manifest.
+        with patch.object(Path, 'glob', return_value=iter(())):
+            incomplete = runpy.run_path(str(TOOLS / 'package-release.py'))
+        for table in (self.source / 'data').glob('*.json'):
+            table.unlink()
+        self.rehash()
+        with self.assertRaisesRegex(ValueError, 'data inventory is empty'):
+            incomplete['package'](self.source, self.manifest, self.root / 'incomplete.zip')
+        self.assertFalse((self.root / 'incomplete.zip').exists())
+
     def test_coherent_source_and_manifest_change_at_final_verification_refused(self):
         real_verify = PACKAGE['verify']
         calls = 0
@@ -87,14 +119,28 @@ class ReleasePackageTests(unittest.TestCase):
 
     def test_unsafe_paths_duplicates_and_symlinks_refused(self):
         original = self.manifest.read_text()
-        for name in ('../outside', '/outside', r'C:\outside', r'..\outside', './data/../outside', 'data//outside'):
+        for name in ('../outside', '/outside', r'C:\outside', r'..\outside', './data/../outside', 'data//outside',
+                     'data/file:stream', 'data/NUL.json', 'data/trailing.', 'data/trailing ', 'data/file*'):
             self.manifest.write_text(original + '0' * 64 + '  ' + name + '\n')
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'Unsafe'): self.package()
         self.manifest.write_text(original + original.splitlines()[0] + '\n')
         with self.assertRaisesRegex(ValueError, 'duplicate'): self.package()
+        self.manifest.write_text(original + '0' * 64 + '  foodtrucks.DLL\n')
+        with self.assertRaisesRegex(ValueError, 'duplicate'): self.package()
         self.manifest.write_text(original)
-        (self.source / 'linked-directory').symlink_to(self.root, target_is_directory=True)
-        with self.assertRaisesRegex(ValueError, 'symlink'): self.package()
+        link = self.source / 'linked-directory'
+        if os.name == 'nt':
+            # Junction creation needs no symlink privilege and exercises native reparse points.
+            subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+                            'New-Item -ItemType Junction -Path $env:TEST_LINK -Target $env:TEST_TARGET | Out-Null'],
+                           env={**os.environ, 'TEST_LINK': str(link), 'TEST_TARGET': str(self.root)}, check=True)
+        else:
+            link.symlink_to(self.root, target_is_directory=True)
+        try:
+            with self.assertRaisesRegex(ValueError, 'symlink'): self.package()
+        finally:
+            if os.name == 'nt': os.rmdir(link)
+            else: link.unlink()
 
     def test_missing_mac_bundle_or_license_refused_even_with_rehashed_manifest(self):
         for name in ('AssetBundles/Mac/foodtrucks.unity3d', 'Dependencies/Harmony-LICENSE.txt'):

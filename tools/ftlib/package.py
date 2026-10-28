@@ -1,8 +1,23 @@
 """Shared package integrity checks for local installation and release archives."""
 from collections import Counter
 import hashlib
+import os
 from pathlib import Path
 import re
+import stat
+
+
+def is_link(path):
+    return path.is_symlink() or bool(getattr(path.lstat(), 'st_file_attributes', 0)
+                                    & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def safe_manifest_name(name):
+    """Portable relative names, including Windows aliases and device names."""
+    return all(part not in ('', '.', '..')
+               and not re.search(r'[\x00-\x1f\\:<>"|?*]|[. ]$', part)
+               and not re.match(r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)', part, re.I)
+               for part in name.split('/'))
 
 
 def file_hash(path):
@@ -15,28 +30,32 @@ def file_hash(path):
 
 def verify(package, manifest):
     package = Path(package)
-    if package.is_symlink() or not package.is_dir():
+    if not package.is_dir() or is_link(package):
         raise ValueError("Package must be a real directory, not a symlink")
     entries = {}
+    folded_names = set()
     for line in Path(manifest).read_text().splitlines():
         match = re.fullmatch(r'([a-fA-F0-9]{64})\s+\*?(.+)', line)
         if not match:
             raise ValueError('Invalid SHA-256 manifest line')
         name = match[2].removeprefix('./')
-        relative = Path(name)
-        if (relative.is_absolute() or '..' in relative.parts or name in entries
-                or '\\' in name or ':' in name or relative.as_posix() != name):
+        if not safe_manifest_name(name) or name.casefold() in folded_names:
             raise ValueError(f'Unsafe or duplicate manifest path: {name}')
+        folded_names.add(name.casefold())
         entries[name] = match[1].lower()
     required = {'FoodTrucks.dll', 'AssetBundles/Mac/foodtrucks.unity3d',
                 'AssetBundles/Mac/foodtrucks.unity3d.manifest'}
     if not required <= entries.keys():
         raise ValueError('Manifest must list FoodTrucks.dll and the Mac bundle and manifest')
     actual = set()
-    for path in Path(package).rglob('*'):
-        if path.is_symlink():
-            raise ValueError(f'Package contains a symlink: {path}')
-        if path.is_file():
+    for directory, dirs, files in os.walk(package):
+        # Inspect directories before os.walk can descend into Windows junctions.
+        for name in dirs + files:
+            path = Path(directory) / name
+            if is_link(path):
+                raise ValueError(f'Package contains a symlink/reparse point: {path}')
+        for name in files:
+            path = Path(directory) / name
             name = path.relative_to(package).as_posix()
             actual.add(name)
             if name not in entries or file_hash(path) != entries[name]:
