@@ -66,11 +66,17 @@ class MacPackageTests(unittest.TestCase):
 
     def test_symlinked_package_file_and_manifest_traversal_refused(self):
         link = self.package / 'link'
-        link.symlink_to(self.target / 'old.dll')
-        with self.assertRaisesRegex(ValueError, 'symlink'): self.install()
-        link.unlink()
         self.manifest.write_text(self.manifest.read_text() + '0' * 64 + '  ../outside\n')
         with self.assertRaisesRegex(ValueError, 'Unsafe'): self.install()
+        self.rehash()
+        try:
+            link.symlink_to(self.target / 'old.dll')
+        except OSError as exc:
+            if getattr(exc, 'winerror', None) == 1314:
+                self.skipTest('Windows file symlinks require Developer Mode or elevated privileges; junctions tested separately')
+            raise
+        with self.assertRaisesRegex(ValueError, 'symlink'): self.install()
+        link.unlink()
 
     def test_failed_swap_restores_previous_install(self):
         original = Path.rename
