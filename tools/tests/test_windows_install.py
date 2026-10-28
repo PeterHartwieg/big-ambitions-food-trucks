@@ -50,12 +50,61 @@ function Get-Process { param($Name) }
             f'{hashlib.sha256(p.read_bytes()).hexdigest()}  ./{p.relative_to(self.source).as_posix()}\n'
             for p in sorted(self.source.rglob('*')) if p.is_file()))
 
-    def install(self):
+    def install(self, source=None, manifest=None, mods=None):
         return subprocess.run([SHELL, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
                                '-File', str(self.wrapper), str(TOOLS / 'Install-Windows.ps1'),
-                               str(self.source), str(self.manifest), str(self.mods)],
+                               str(source or self.source), str(manifest or self.manifest), str(mods or self.mods)],
+                              cwd=self.root,
                               env={**os.environ, 'USERPROFILE': str(self.root)},
                               capture_output=True, text=True)
+
+    def change_location(self, path):
+        self.wrapper.write_text(self.wrapper.read_text().replace('& $Installer',
+            "Set-Location -LiteralPath '" + str(path).replace("'", "''") + "'\n& $Installer"))
+
+    def junction(self, link, target):
+        result = subprocess.run([SHELL, '-NoProfile', '-NonInteractive', '-Command',
+                                 'New-Item -ItemType Junction -Path $env:TEST_LINK -Target $env:TEST_TARGET | Out-Null'],
+                                env={**os.environ, 'TEST_LINK': str(link), 'TEST_TARGET': str(target)},
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.addCleanup(os.rmdir, link)
+
+    def test_relative_inputs_follow_powershell_location(self):
+        location = self.root / 'location[1]'
+        location.mkdir()
+        self.change_location(location)
+        result = self.install('../source', '../package.sha256', './game/ModsLocal')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((location / 'game/ModsLocal/FoodTrucks/FoodTrucks.dll').is_file())
+        self.assertEqual((self.target / 'old.txt').read_text(), 'previous')
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows junction test')
+    def test_relative_manifest_junction_is_rejected(self):
+        location = self.root / 'location'
+        location.mkdir()
+        self.junction(location / 'manifests', self.root)
+        self.change_location(location)
+        result = self.install('../source', 'manifests/package.sha256')
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('link/reparse point', result.stderr)
+        self.assertEqual((self.target / 'old.txt').read_text(), 'previous')
+        self.assertTrue(self.source.exists())
+        self.assertTrue(self.manifest.exists())
+
+    def test_overlapping_source_is_rejected(self):
+        destination = self.mods.parent / 'source'
+        self.source.rename(destination)
+        self.source = destination
+        self.assert_rejected()
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows junction test')
+    def test_destination_junction_is_rejected(self):
+        outside = self.root / 'outside'
+        self.target.rename(outside)
+        self.junction(self.target, outside)
+        self.assert_rejected()
+        self.assertEqual((outside / 'old.txt').read_text(), 'previous')
 
     def assert_rejected(self):
         result = self.install()
@@ -78,6 +127,8 @@ function Get-Process { param($Name) }
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue((self.target / 'FoodTrucks.dll').is_file())
         self.assertEqual(len(list((self.mods.parent / 'FoodTrucksPackageBackups').rglob('old.txt'))), 1)
+        backup = next((self.mods.parent / 'FoodTrucksPackageBackups').iterdir())
+        self.assertRegex(backup.name, r'^FoodTrucks-\d{8}-\d{6}-[a-f0-9]{32}$')
         self.assertFalse(self.source.exists())
         self.assertFalse(self.manifest.exists())
 

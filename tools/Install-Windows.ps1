@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 
 # Check components before traversal/copy: a directory junction is a reparse point too.
 function Assert-PlainPath([string]$Path) {
-    $cursor = [IO.Path]::GetFullPath($Path)
+    $cursor = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
     while ($cursor) {
         if (Test-Path -LiteralPath $cursor) {
             $item = Get-Item -LiteralPath $cursor -Force
@@ -70,12 +70,14 @@ function Assert-Package([string]$Directory, [hashtable]$Entries) {
 $controlLease=[BridgeControl.LeaseStore]::ForInstance('normal')
 $controlPermit=$controlLease.Begin($env:BA_LOCK_TOKEN,'lifecycle')
 try {
+# Resolve against PowerShell's location, which can differ from the process cwd.
+# Preserve junction components until Assert-PlainPath has checked them.
+$Source = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Source).TrimEnd('\', '/')
+$Manifest = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Manifest)
+$ModsLocal = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ModsLocal).TrimEnd('\', '/')
 Assert-PlainPath $Source
 Assert-PlainPath $Manifest
 Assert-PlainPath $ModsLocal
-$Source = (Resolve-Path -LiteralPath $Source).Path.TrimEnd('\', '/')
-$Manifest = (Resolve-Path -LiteralPath $Manifest).Path
-$ModsLocal = [IO.Path]::GetFullPath($ModsLocal).TrimEnd('\', '/')
 if (!(Test-Path -LiteralPath $Source -PathType Container)) { throw 'Source must be a directory.' }
 if (Get-Process 'Big Ambitions' -ErrorAction SilentlyContinue) { throw 'Big Ambitions is running. Close the game before installing.' }
 
@@ -101,7 +103,7 @@ try {
         $backups = Join-Path $gameRoot 'FoodTrucksPackageBackups'
         Assert-PlainPath $backups
         New-Item -ItemType Directory -Force $backups | Out-Null
-        $backup = Join-Path $backups ('FoodTrucks-' + [Guid]::NewGuid().ToString('N'))
+        $backup = Join-Path $backups ('FoodTrucks-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N'))
         Move-Item -LiteralPath $target -Destination $backup
     }
     try {
