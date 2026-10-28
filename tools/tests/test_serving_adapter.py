@@ -74,6 +74,18 @@ class ServingAdapterTests(unittest.TestCase):
     def test_cart_update_failure_is_logged_and_closing_days_still_runs(self):
         self.run_case('update')
 
+    def test_quit_while_serving_skips_stock_panel_but_keeps_cleanup(self):
+        # Issue #19: the native Toggle(false) dereferences GameManager, which is gone or unreturned while quitting.
+        for kind in ('cart', 'truck'):
+            for manager in ('missing', 'missing-unloading', 'unloading'):
+                with self.subTest(kind=kind, manager=manager):
+                    self.run_case('quit', kind, manager)
+
+    def test_normal_endings_close_the_stock_panel_once(self):
+        for kind, how in (('cart', 'finish'), ('cart', 'walk'), ('cart', 'reset'), ('truck', 'finish'), ('truck', 'reset')):
+            with self.subTest(kind=kind, how=how):
+                self.run_case('normal', kind, how)
+
 
 HARNESS = r'''
 using FoodTrucks;
@@ -99,6 +111,8 @@ class Harness {
             case "entry": Entry(args[1],args[2]); break;
             case "entered": Entered(); break;
             case "update": UpdateFailure(); break;
+            case "quit": Quit(args[1],args[2]); break;
+            case "normal": Normal(args[1],args[2]); break;
             default: throw new Exception("unknown scenario");
         }
         Console.WriteLine("PASS: "+string.Join(" ",args));
@@ -123,6 +137,54 @@ class Harness {
             var next=Open(id); Check(ServingWork.VehicleId==id && Helpers.EnergyHelper.Work!=null,"next session can start "+id);
             next.Finish(); Released();
         }
+    }
+    // CartSelling.OnDisable -> ServingWork.Reset during a city unload or application quit, with the HUD panel still alive.
+    static void Quit(string id,string manager) {
+        var activity=Open(id); var ui=InstanceBehavior<UI.UIs>.Instance;
+        var panel=ui.playerHUD.itemPanelUI; var vehicle=SaveGameManager.Current.VehicleInstances.First(v=>v.id==id);
+        ServingWork.Arm(activity); ServingWork.SkipStarted(); ui.timeMachine.isRunning=true; ui.gameSpeed.isFastForwarding=true;
+        Check(panel.Visible && vehicle.Updated!=null && Helpers.EnergyHelper.Work!=null,"work started with a visible stock panel");
+        bool paid=false; CartSelling.OnPay=()=>paid=true;
+        if(manager.StartsWith("missing")) InstanceBehavior<GameManager>.Instance=null!;
+        GameManager.isCitySceneBeingUnloaded=manager.EndsWith("unloading");
+        ServingWork.Reset();
+        Check(panel.Toggles==0,"no stock-panel toggle while the manager is gone or the city unloads");
+        Check(!Log.Errors.Any(e=>e.Contains("stock panel")),"no stock-panel error: "+string.Join("; ",Log.Errors));
+        Check(Log.Errors.Count==0,"quit teardown logs no errors: "+string.Join("; ",Log.Errors));
+        Check(paid,"held orders are still booked");
+        Check(vehicle.Updated==null,"cargo listener removed");
+        Check(Helpers.EnergyHelper.Work==null,"work energy removed");
+        Check(!ui.gameSpeed.isFastForwarding && ui.gameSpeed.Resets==1,"speed still reset");
+        Check(ui.timeMachine.Cancelled==1,"time machine still cancelled");
+        Check(activity.GetState()==PlayerActivityState.Finished,"activity finished");
+        foreach(var field in typeof(ServingWork).GetFields(System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static)) {
+            var value=field.GetValue(null);
+            Check(field.FieldType==typeof(bool) ? Equals(value,false) : value==null,"reset clears "+field.Name);
+        }
+        // A new city session (fresh manager) still starts and closes its panel normally.
+        InstanceBehavior<GameManager>.Instance=new(); GameManager.isCitySceneBeingUnloaded=false; PlayerActivityUI.IsPanelOpen=false;
+        foreach(var next in new[]{"cart","truck"}) {
+            var work=Open(next); Check(ServingWork.VehicleId==next && panel.Visible,"next session can start "+next);
+            var toggles=panel.Toggles; work.Finish(); Released();
+            Check(panel.Toggles==toggles+1 && !panel.Visible,"next session closes its stock panel "+next);
+            PlayerActivityUI.IsPanelOpen=false;
+        }
+        Check(Log.Errors.Count==0,"next sessions log no errors");
+    }
+    // stop_work, walking away, stepping out of the hatch and closing (OnDisable while playing), with a live manager and city.
+    static void Normal(string id,string how) {
+        var activity=Open(id); var panel=InstanceBehavior<UI.UIs>.Instance.playerHUD.itemPanelUI;
+        var game=InstanceBehavior<GameManager>.Instance; game.selectedVehicle=new VehicleController();
+        Check(panel.Visible && panel.Toggles==0,"work started with a visible stock panel");
+        if(how=="finish") activity.Finish();
+        else if(how=="walk") ServingWork.UpdateCart(new CartServing());
+        else ServingWork.Reset();
+        Released();
+        Check(activity.GetState()==PlayerActivityState.Finished,"activity finished by "+how);
+        Check(panel.Toggles==1 && panel.Hides==1 && !panel.Visible,"stock panel closed exactly once by "+how);
+        Check(game.selectedVehicle==null,"native Toggle(false) ran to its end");
+        Check(Log.Errors.Count==0,"normal endings log no errors: "+string.Join("; ",Log.Errors));
+        ServingWork.Reset(); Check(panel.Toggles==1,"a later reset does not toggle again");
     }
     static void Failures() {
         var activity=Open(); var ui=InstanceBehavior<UI.UIs>.Instance;
@@ -248,6 +310,8 @@ class Harness {
     }
 }
 public class InstanceBehavior<T> where T:new() { public static T Instance=new(); }
+// The game's singleton lookup returns null once the application is quitting or the manager is destroyed.
+public class GameManager : UnityEngine.Object { public static bool isCitySceneBeingUnloaded; public VehicleController? selectedVehicle; }
 public enum EnergyConsumption { None,High }
 public enum PlayerAction { Cancel=4 }
 public class EmployeeStationController { public EnergyConsumption workEnergyConsumption=EnergyConsumption.High; }
@@ -336,7 +400,13 @@ namespace UI.ItemPanel {
             Refreshes++; cargoContainer.Buttons=new[]{new Button(),new Button()};
             ServingWork.ReadOnlyCargo(this);
         }
-        public void Toggle(bool on) { RequireAlive(); if(ThrowOnToggle) throw new Exception("panel toggle failed"); Visible=on; if(!on) Hides++; }
+        public int Toggles;
+        // Like the native method, Toggle(false) clears GameManager.selectedVehicle without checking the singleton.
+        public void Toggle(bool on) {
+            Toggles++; RequireAlive(); if(ThrowOnToggle) throw new Exception("panel toggle failed");
+            if(!on) InstanceBehavior<GameManager>.Instance.selectedVehicle=null;
+            Visible=on; if(!on) Hides++;
+        }
     }
 }
 namespace PlayerActivity {
