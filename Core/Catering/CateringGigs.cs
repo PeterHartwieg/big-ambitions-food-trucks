@@ -36,6 +36,17 @@ namespace FoodTrucks.Core.Catering
 
     public static class CateringGigs
     {
+        // An impossible destination cancels booked or started work without stock, fee or reputation changes.
+        public static IReadOnlyList<CateringGig> CancelUnlocatable(CateringState state, Func<string, bool> usable)
+        {
+            if (usable == null) throw new ArgumentNullException(nameof(usable));
+            CateringValidation.Validate(state);
+            state.Offers.RemoveAll(o => !usable(o.PlaceId));
+            var cancelled = state.Gigs.Where(g => (g.Status == GigStatus.Booked || g.Status == GigStatus.Started) && !usable(g.PlaceId)).ToList();
+            foreach (var gig in cancelled) state.Gigs.Remove(gig);
+            return cancelled;
+        }
+
         public static GigCheck Arrive(CateringRules rules, CateringState state, long gigId, string vehicleId, string vehicleType, int day, int minute,
             IReadOnlyCollection<string> menuItems, IReadOnlyDictionary<string, int> stockByItem, Func<string, string?> categoryOf)
         {

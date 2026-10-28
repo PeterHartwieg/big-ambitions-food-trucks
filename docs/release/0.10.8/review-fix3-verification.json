@@ -1,0 +1,67 @@
+{
+  "version": "0.10.8",
+  "branch": "codex/street-event-address",
+  "reviewedHead": "1b911ea7ec4d01775ce975463dfbff49438ffc10",
+  "verifiedUtc": "2026-10-24T22:33:16.158720+00:00",
+  "dotnet": {
+    "command": "dotnet test",
+    "passed": 2259,
+    "failed": 0,
+    "existingOptInSkip": 1,
+    "log": "build/review-fix3-dotnet.log"
+  },
+  "python": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v",
+    "passed": 259,
+    "failed": 0,
+    "seconds": 153.898,
+    "log": "build/review-fix3-python.log"
+  },
+  "focused": {
+    "passed": 5,
+    "failed": 0,
+    "log": "build/review-fix3-focused.log"
+  },
+  "diffCheck": "pass (working and staged)",
+  "build": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 tools/build-mod.sh",
+    "status": "pass",
+    "platformBundles": [
+      "Windows",
+      "Mac"
+    ],
+    "log": "build/review-fix3-build.log",
+    "unityLog": "build/review-fix3-unity.log",
+    "releaseVerifier": "pass: both assemblies 0.10.8.0, informational 0.10.8, schema 2, inert physical-driving seam",
+    "diagnostics": [
+      "Known Burst scan metadata-hashing exception for checksum-pinned Harmony; batch build and verifiers succeeded. No dependency changes."
+    ]
+  },
+  "package": {
+    "zip": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/street-event-address/build/FoodTrucks-0.10.8-rc.zip",
+    "sha256": "1791e624337e24a8eee364a69057ca8e6c26ee5ac0e4cfdba6f5a6d148692a08",
+    "bytes": 57524820,
+    "crc": "pass",
+    "exactFiles": 19,
+    "allDecompressedHashes": "pass",
+    "matchesBuiltRuntime": true,
+    "buildManifestSha256": "0f3eb01faecdbf04bd9a46404111818884182a1e0a22f543dfb420d299765a81"
+  },
+  "native": {
+    "status": "not-run",
+    "reason": "This fix round supplies a rig plan; native acceptance remains pending.",
+    "remoteAccess": false,
+    "newScreenshots": [],
+    "plan": "docs/release/0.10.8/in-game-test-plan.md",
+    "checklist": "CHECKS.md EA1-EA5"
+  },
+  "regressions": [
+    "Production catering migration only looks up the existing contact, skips after uninstall, migrates radius once without addresses, repairs addresses once when ready and resets on load. Source assertion guards the Update uninstall gate.",
+    "City load-only hold release precedes both immediate and deferred DropUnknown/expiry. Eight running-event cases vary readiness, vehicle open state and same-minute/positive duration; refunds agree and remain exactly once.",
+    "Two isolated ready/unready load cases prove a hold release dirties the save and a repeat load does not.",
+    "All three legacy city payload shapes match 0.10.7: announcements include day/end/fee; booked has no end/fee; today has no day/fee. Both real localized event kinds are covered.",
+    "Change note, README and release docs explicitly limit older city-message repair to events that have not ended yet.",
+    "Existing 18-case future/running/ended deferred-refund matrix and message identity/idempotence/radius checks remain passing."
+  ],
+  "publication": "Local ZIP only. Normal branch push requested; no main changes, force-push, binary commit, rig install or upload."
+}

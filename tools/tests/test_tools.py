@@ -318,7 +318,7 @@ class MCPTests(unittest.TestCase):
     def test_stdio_initialize_list_and_calls(self):
         env=dict(os.environ,BA_BRIDGE_URL=self.session.url)
         env.pop('BA_GAME_HOST',None)
-        process=subprocess.Popen(entry_command('ft-mcp'),cwd='/private/tmp',env=env,
+        process=subprocess.Popen(entry_command('ft-mcp'),cwd=tempfile.gettempdir(),env=env,
                                  stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
         def request(method,params=None,identifier=1):
             process.stdin.write(json.dumps({'jsonrpc':'2.0','id':identifier,'method':method,'params':params or {}})+'\n')
@@ -382,7 +382,7 @@ class CLIAndShotsTests(unittest.TestCase):
         with MockSession() as session:
             env=dict(os.environ,BA_BRIDGE_URL=session.url)
             def run(*args):
-                return subprocess.run(entry_command('ft', *args),cwd='/private/tmp',env=env,capture_output=True,text=True,timeout=10)
+                return subprocess.run(entry_command('ft', *args),cwd=tempfile.gettempdir(),env=env,capture_output=True,text=True,timeout=10)
             reply=run('--json','call','money','set=123.5')
             self.assertEqual(reply.returncode,0,reply.stderr)
             self.assertEqual(json.loads(reply.stdout)['result']['money'],123.5)

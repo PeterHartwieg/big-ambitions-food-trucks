@@ -1,0 +1,69 @@
+{
+  "version": "0.10.8",
+  "branch": "codex/street-event-address",
+  "reviewedHead": "38675ff475f4b915488ba2a7ce9324322c03586a",
+  "verifiedUtc": "2026-10-24T21:23:02.202945+00:00",
+  "dotnet": {
+    "command": "dotnet test",
+    "passed": 2260,
+    "failed": 0,
+    "existingOptInSkip": 1,
+    "log": "build/review-fix-dotnet.log"
+  },
+  "python": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v",
+    "passed": 258,
+    "failed": 0,
+    "log": "build/review-fix-python-final.log",
+    "strengthenedIdentityRegressionRerun": "pass (build/review-fix-identity-final.log)"
+  },
+  "diffCheck": "pass",
+  "build": {
+    "command": "tools/build-mod.sh",
+    "status": "pass",
+    "platformBundles": [
+      "Windows",
+      "Mac"
+    ],
+    "log": "build/review-fix-build.log",
+    "releaseVerifier": "pass: both assemblies 0.10.8.0, informational 0.10.8, schema 2, inert physical-driving seam"
+  },
+  "package": {
+    "zip": "/Users/peterhartwieg/Coding_Projects/big-ambitions/big-ambitions-food-trucks-worktrees/street-event-address/build/FoodTrucks-0.10.8-rc.zip",
+    "sha256": "04fc6e8b93f8a312297e0b2b08de196e3e5d3a948bb94df5e3d5d30e6a217831",
+    "bytes": 57524193,
+    "crc": "pass",
+    "exactFiles": 19,
+    "allDecompressedHashes": "pass",
+    "matchesBuiltRuntime": true,
+    "buildManifestSha256": "cf3cb2657cecd9bf7c5a2588222f9796f10e0b2379b9f391b7a3a49c9180119e"
+  },
+  "native": {
+    "status": "not-run",
+    "reason": "Windows homepc SSH timed out on both connectivity checks; rig availability could not be established. No overnight wake attempted.",
+    "lastConnectivityCheckUtc": "2026-10-24T21:10:31.961238+00:00",
+    "wakeAttempted": false,
+    "leaseAcquired": false,
+    "remoteChanges": false,
+    "normalGameOrProfileAccessed": false,
+    "newScreenshots": [],
+    "rawAvailabilityRecord": "build/review-fix-rig-availability.json",
+    "historicalEvidence": "verification.json (pre-review build only)"
+  },
+  "regressions": [
+    "Two same-time/kind offers at distinct addresses: real decline, missed gig with survivor started, and location cancellation; history retains its own location.",
+    "Readable stored location remains verbatim despite a matching live identity and different native spelling; terminal notices and ambiguous identities remain unchanged.",
+    "Real legacy city reminder payload (event/place/start/end/booked, no day) uses its own timestamp; missing/wrong timestamp and ambiguous candidates remain unchanged.",
+    "Future, running, ended-unclaimed, ended-partial, duplicate holds and excess distinct holders use the Core unused-place refund rule.",
+    "Production NewDay with native addresses unavailable still expires events, prunes premium holds, releases load-only closed holders and marks the state; address work retries once ready, clears on reset, and new reminders include day and stable identity.",
+    "Production building controller cache handles repeated hits/misses without rescan, retries after an empty world and clears on Reset.",
+    "Started catering work at an unusable place is removed without Finish/Fail, reputation change, completed/failure counters or a later overdue penalty."
+  ],
+  "nativeApiCheck": "Native GuidersManager.SetGuiderTarget(Address, Destination) writes customDestination before SetTarget; adapter retains that path without duplicate assignment.",
+  "supersededBy": "review-fix2-verification.json",
+  "secondReviewCorrections": [
+    "The legacy city reminder fixture at 19d265a used a synthetic raw localization key, not the shipped localized label; it did not prove real legacy city repair.",
+    "Time-labelled Core refund cases exercised a time-independent helper, not timed cancellation.",
+    "The original readiness fixture explicitly expected ungated expiry and did not combine paid ended invalid events with delayed address readiness."
+  ]
+}

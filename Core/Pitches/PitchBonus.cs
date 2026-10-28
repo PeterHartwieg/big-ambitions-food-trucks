@@ -106,14 +106,16 @@ namespace FoodTrucks.Core.Pitches
         }
 
         // Holds that ended before that minute are dropped, and spots nobody holds.
-        public static void Prune(SaveState state, long before)
+        public static int Prune(SaveState state, long before)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
+            var removed = 0;
             foreach (var pair in state.PremiumHolds.ToList())
             {
-                Holds.Prune(pair.Value, before);
-                if (pair.Value.Count == 0) state.PremiumHolds.Remove(pair.Key);
+                removed += Holds.Prune(pair.Value, before);
+                if (pair.Value.Count == 0 && state.PremiumHolds.Remove(pair.Key)) removed++;
             }
+            return removed;
         }
     }
 }

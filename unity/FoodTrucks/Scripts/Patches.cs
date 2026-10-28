@@ -151,6 +151,13 @@ namespace FoodTrucks
             Patch(AccessTools.TypeByName("AI.Employees.NoTaskAssignedComplaint"), "ConditionToComplainMet", new[] { typeof(EmployeeInstance) }, nameof(CrewHasTask));
             Patch(AccessTools.TypeByName("AI.Employees.NoTaskAssignedComplaint"), "ComplaintHandled", new[] { typeof(EmployeeInstance) }, nameof(CrewTaskHandled));
             Patch(AccessTools.TypeByName("UI.Tasks.TasksUI"), "CreateTodoTask", null, nameof(SkipCrewUnassignedTask), prefix: true);
+            // The employee list: a crew member's row, status filter and detail panel name their vehicle and the crew's job,
+            // and Manage schedule opens the vehicle's page. Display only; the game still sees them unassigned (CrewEmployeeScreen).
+            var myEmployees = typeof(UI.Smartphone.Apps.MyEmployees.MyEmployees);
+            Patch(typeof(UI.Smartphone.Apps.MyEmployees.EmployeeModel), ".ctor", new[] { typeof(EmployeeInstance) }, typeof(CrewEmployeeScreen),
+                postfix: nameof(CrewEmployeeScreen.ModelPostfix));
+            Patch(myEmployees, "ShowEmployee", new[] { typeof(EmployeeInstance) }, typeof(CrewEmployeeScreen), postfix: nameof(CrewEmployeeScreen.ShowEmployeePostfix));
+            Patch(myEmployees, "ManageSchedule", new[] { typeof(EmployeeInstance) }, typeof(CrewEmployeeScreen), prefix: nameof(CrewEmployeeScreen.ManageSchedulePrefix));
 
             // Vehicle warnings as the game's to-dos (VehicleTodos): text, click and destination for our to-do types, the game's
             // completion check kept off them (it throws on a type it doesn't know), and none of ours in a save file. Made only
@@ -383,7 +390,8 @@ namespace FoodTrucks
             }
             try
             {
-                var original = AccessTools.Method(type, method, args);
+                // ".ctor": the constructor with these arguments.
+                MethodBase? original = method == ".ctor" ? AccessTools.Constructor(type, args) : AccessTools.Method(type, method, args);
                 if (original == null)
                 {
                     Log.Error($"Patch {name}: Not active, method not found.");

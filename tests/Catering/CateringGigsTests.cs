@@ -25,6 +25,57 @@ public class CateringGigsTests
         return state;
     }
 
+    [Fact]
+    public void UnlocatableBookedGigIsCancelledBeforeNoShowWithoutReputationLoss()
+    {
+        var state = Book(reputation: 0.6);
+        var cancelled = CateringGigs.CancelUnlocatable(state, _ => false);
+        Assert.Single(cancelled);
+        Assert.Empty(state.Gigs);
+        Assert.Empty(state.Offers);
+        Assert.Empty(state.History);
+        Assert.Empty(CateringGigs.MissOverdue(rules, state, 10, 0));
+        Assert.Equal(0.6, state.BookingReputation);
+        Assert.Equal(0, state.Failed);
+        Assert.Empty(CateringGigs.CancelUnlocatable(state, _ => false));
+        var reloaded = JsonConvert.DeserializeObject<CateringState>(JsonConvert.SerializeObject(state))!;
+        Assert.Empty(reloaded.Gigs);
+        Assert.Equal(0.6, reloaded.BookingReputation);
+    }
+
+    [Fact]
+    public void LocationCancellationPreservesUsableBookingsAndCancelsUnlocatableStartedWork()
+    {
+        var state = Book();
+        Assert.Empty(CateringGigs.CancelUnlocatable(state, _ => true));
+        Assert.Single(state.Gigs);
+        Assert.True(CateringGigs.Arrive(rules, state, 1, "truck-1", "truck", 3, 720, menu, stock, Category).Success);
+        var gig = Assert.Single(CateringGigs.CancelUnlocatable(state, _ => false));
+        Assert.Equal(GigStatus.Started, gig.Status);
+        Assert.Null(gig.Failure);
+        Assert.Empty(state.Gigs);
+        Assert.Empty(state.History);
+        Assert.Equal(0, state.Failed);
+        Assert.Equal(0, state.Completed);
+        Assert.Equal(1, state.BookingReputation);
+        Assert.Empty(CateringGigs.MissOverdue(rules, state, 10, 0));
+        Assert.Equal(GigCheckStatus.UnknownGig, CateringGigs.Finish(rules, state, 1, 3, 780).Status);
+    }
+
+    [Fact]
+    public void UnlocatableOffersAreRemovedButUsableOffersRemain()
+    {
+        var state = Book();
+        var offer = CateringOffersTests.Offer();
+        offer.Id = 2;
+        offer.PlaceId = "unavailable";
+        state.NextOfferId = 3;
+        state.Offers.Add(offer);
+        Assert.Empty(CateringGigs.CancelUnlocatable(state, p => p != "unavailable"));
+        Assert.Empty(state.Offers);
+        Assert.Single(state.Gigs);
+    }
+
     [Theory]
     [InlineData(3, 660)]
     [InlineData(3, 720)]
