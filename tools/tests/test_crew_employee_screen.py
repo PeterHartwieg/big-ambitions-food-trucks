@@ -1,5 +1,7 @@
 """The game's employee list for vehicle crew: the production adapter methods against controlled employee/UI boundaries."""
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -41,12 +43,34 @@ def run(harness, marker):
 def adapter():
     screen = '\n'.join(method('CrewEmployeeScreen.cs', s) for s in (
         'public static void ModelPostfix(', 'public static void ShowEmployeePostfix(', 'public static bool ManageSchedulePrefix('))
+    screen += '\n' + method('CrewEmployeeScreen.cs', 'private static List<string> BuildingNames(')
     screen += '\n' + expression('CrewEmployeeScreen.cs', 'private static VehicleState? VehicleOf(')
     screen += '\n' + expression('CrewEmployeeScreen.cs', 'private static string VehicleName(')
     patches = '\n'.join(method('Patches.cs', s) for s in (
         'private static void CrewHasTask(', 'private static void CrewTaskHandled(', 'private static bool SkipCrewUnassignedTask('))
     return (HARNESS.replace('/* SCREEN */', screen).replace('/* COMPLAINTS */', patches)
             .replace('/* ISCREW */', method('HireCrew.cs', 'public static bool IsCrew(')))
+
+
+# The patched game members as ILSpy shows them in BigAmbitions.dll (SHA-256 9427561B...E911, checked 28 October 2026):
+# the patch target, its declaration, and the handler's parameters Harmony binds by name (__instance, the original's
+# parameter names, ___ plus a private field's name).
+NATIVE = (
+    ('ModelPostfix', 'UI.Smartphone.Apps.MyEmployees.EmployeeModel', 'public EmployeeModel(EmployeeInstance instance)',
+     ['EmployeeModel __instance', 'EmployeeInstance instance']),
+    ('ShowEmployeePostfix', 'UI.Smartphone.Apps.MyEmployees.MyEmployees', 'public void ShowEmployee(EmployeeInstance employeeInstance)',
+     ['EmployeeInstance employeeInstance', 'UI.Elements.Dropdown ___assignedAddressDropdown',
+      'List<BuildingRegistration> ____businessRegistrations']),
+    ('ManageSchedulePrefix', 'UI.Smartphone.Apps.MyEmployees.MyEmployees', 'public static void ManageSchedule(EmployeeInstance employeeInstance)',
+     ['EmployeeInstance employeeInstance']),
+)
+NATIVE_FIELDS = ('private Dropdown assignedAddressDropdown;', 'private List<BuildingRegistration> _businessRegistrations;')
+
+
+def parameters(filename, name):
+    source = (ROOT / 'unity/FoodTrucks/Scripts' / filename).read_text()
+    start = source.index('(', source.index(' ' + name + '(')) + 1
+    return [' '.join(p.split()) for p in source[start:source.index(')', start)].split(',')]
 
 
 class CrewEmployeeScreenTests(unittest.TestCase):
@@ -60,12 +84,16 @@ class CrewEmployeeScreenTests(unittest.TestCase):
 
     def test_registered_on_the_game_members_checked_in_the_assembly(self):
         source = (ROOT / 'unity/FoodTrucks/Scripts/Patches.cs').read_text()
+        flat = ' '.join(source.split())
+        # Whole registrations, handler included: the harness calls the handlers itself and cannot see a lost binding.
         for line in (
-            'Patch(typeof(UI.Smartphone.Apps.MyEmployees.EmployeeModel), ".ctor", new[] { typeof(EmployeeInstance) }, typeof(CrewEmployeeScreen)',
+            'var myEmployees = typeof(UI.Smartphone.Apps.MyEmployees.MyEmployees);',
+            'Patch(typeof(UI.Smartphone.Apps.MyEmployees.EmployeeModel), ".ctor", new[] { typeof(EmployeeInstance) }, typeof(CrewEmployeeScreen), postfix: nameof(CrewEmployeeScreen.ModelPostfix));',
             'Patch(myEmployees, "ShowEmployee", new[] { typeof(EmployeeInstance) }, typeof(CrewEmployeeScreen), postfix: nameof(CrewEmployeeScreen.ShowEmployeePostfix));',
             'Patch(myEmployees, "ManageSchedule", new[] { typeof(EmployeeInstance) }, typeof(CrewEmployeeScreen), prefix: nameof(CrewEmployeeScreen.ManageSchedulePrefix));',
         ):
-            self.assertIn(line, source)
+            self.assertIn(line, flat)
+        self.assertEqual(flat.count('typeof(CrewEmployeeScreen)'), 3)
         self.assertIn('method == ".ctor" ? AccessTools.Constructor(type, args)', source)
         # Display only: no patch on the predicates the crew's work and pay depend on.
         for predicate in ('"IsAssignedToAnyBusiness"', '"GetCurrentTask"', '"IsAssignedToAnyWorkShift"'):
@@ -74,18 +102,54 @@ class CrewEmployeeScreenTests(unittest.TestCase):
         self.assertNotIn('assignedAddress =', screen)
         self.assertNotIn('assignedWeeklyHours', screen)
 
+    def test_handler_parameters_are_the_game_names_harmony_binds(self):
+        for handler, _, declaration, expected in NATIVE:
+            self.assertEqual(parameters('CrewEmployeeScreen.cs', handler), expected, handler)
+            for parameter in expected:
+                kind, name = parameter.rsplit(' ', 1)
+                if name == '__instance':
+                    self.assertNotIn(' static ', declaration, handler)
+                elif name.startswith('___'):
+                    field = name[3:]
+                    self.assertTrue(any(f.endswith(' ' + field + ';') and kind.endswith(f.split()[1]) for f in NATIVE_FIELDS), parameter)
+                else:
+                    self.assertIn(parameter, declaration, handler)
+
+    def test_native_names_in_the_game_assembly(self):
+        # Optional: re-reads the names above from a local copy of the game's assembly (never shipped or committed).
+        folder = os.environ.get('BA_GAME_DLLS')
+        ilspy = shutil.which('ilspycmd')
+        if not folder or not (Path(folder) / 'BigAmbitions.dll').is_file() or not ilspy:
+            self.skipTest('BA_GAME_DLLS with BigAmbitions.dll and ilspycmd needed')
+        views = {}
+        for kind in {target for _, target, _, _ in NATIVE}:
+            result = subprocess.run([ilspy, '--disable-updatecheck', '-t', kind, str(Path(folder) / 'BigAmbitions.dll')],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            views[kind] = result.stdout
+        for handler, kind, declaration, _ in NATIVE:
+            self.assertIn(declaration, views[kind], handler)
+        self.assertIn('public sealed class EmployeeModel', views['UI.Smartphone.Apps.MyEmployees.EmployeeModel'])
+        for field in NATIVE_FIELDS:
+            self.assertIn(field, views['UI.Smartphone.Apps.MyEmployees.MyEmployees'])
+        self.assertIn('Address address = ((index >= 1) ? _businessRegistrations[index - 1].Address : null);',
+                      views['UI.Smartphone.Apps.MyEmployees.MyEmployees'])
+
 
 HARNESS = r'''
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Fleet;
 
 namespace UI.Elements {
+    // Setting or resetting options does not call the pick handler (onOptionSelected); only the player's pick does.
     public class Dropdown {
         public List<string> Options = new();
         public bool Localized = true;
         public int Selected = -1;
+        public Action<int>? OnOptionSelected;
         public void SetOptions(List<string> newOptions, bool localize = true) { Options = newOptions; Localized = localize; }
         public void ResetSelectedOption(int defaultOption = -1) => Selected = defaultOption;
+        public void Pick(int option) { Selected = option; OnOptionSelected?.Invoke(option); }
     }
 }
 
@@ -107,7 +171,8 @@ public class EmployeeInstance {
 }
 public class BuildingRegistration {
     public string BusinessName = "";
-    public string GetDisplayName() => BusinessName + " (address)";
+    public bool Throws;
+    public string GetDisplayName() => Throws ? throw new InvalidOperationException("no display name") : BusinessName + " (address)";
 }
 // The game's EmployeeModel constructor, then the mod's postfix as Harmony runs it.
 public class EmployeeModel {
@@ -132,7 +197,8 @@ static class Game {
     public static List<EmployeeInstance> Employees = new();
     public static List<BuildingRegistration> Buildings = new();
     public static string? Error;
-    public static bool NamesThrow;
+    public static int Errors, Assignments;
+    public static bool NamesThrow, LookupThrows;
 
     // EmployeeCellView.SetData: the task key (no task when null), the business (Unassigned when empty) and the hours.
     public static (string Task, string Business, string Hours) Cell(EmployeeModel model) =>
@@ -145,13 +211,20 @@ static class Game {
             .Any(t => t != null && t.Contains(text, StringComparison.OrdinalIgnoreCase))).Select(m => m.employeeName).ToList();
     // MyEmployees.ShowEmployee's dropdown, then the postfix.
     public static UI.Elements.Dropdown Show(EmployeeInstance employee) {
-        var dropdown = new UI.Elements.Dropdown();
+        var dropdown = new UI.Elements.Dropdown { OnOptionSelected = option => AssignSelectedEmployeeToBusiness(employee, option) };
         var options = new List<string> { "Unassigned" };
         options.AddRange(Buildings.Select(b => b.GetDisplayName()));
         dropdown.SetOptions(options, false);
         dropdown.ResetSelectedOption(employee.IsAssignedToAnyBusiness() ? Buildings.IndexOf(employee.building!) + 1 : 0);
         CrewEmployeeScreen.ShowEmployeePostfix(employee, dropdown, Buildings);
         return dropdown;
+    }
+    // MyEmployees.AssignSelectedEmployeeToBusiness, the dropdown's pick handler: option i is building i - 1, option 0 none.
+    public static void AssignSelectedEmployeeToBusiness(EmployeeInstance employee, int index) {
+        var building = index >= 1 ? Buildings[index - 1] : null;
+        if (employee.building == building) return;
+        employee.building = building;
+        Assignments++;
     }
     // MyEmployees.ManageSchedule: the prefix first, then the game's refusal of an employee without a building.
     public static string ManageSchedule(EmployeeInstance employee) {
@@ -161,8 +234,14 @@ static class Game {
     }
 }
 
-static class FoodTrucksSession { public static SaveState? CurrentState; }
-static class Log { public static void Error(Exception ex) => Game.Error = ex.Message; }
+static class FoodTrucksSession {
+    static SaveState? state;
+    public static SaveState? CurrentState {
+        get => Game.LookupThrows ? throw new InvalidOperationException("session unavailable") : state;
+        set => state = value;
+    }
+}
+static class Log { public static void Error(Exception ex) { Game.Error = ex.Message; Game.Errors++; } }
 static class LocalizorManager { public static string GetLocalization(string key, object? args) => key == "foodtrucks:noun_truck" ? "food truck" : key; }
 static class StreetFoodBooks {
     public static Dictionary<string, string> VehicleNames() {
@@ -189,7 +268,8 @@ class Program {
     static void Check(bool value, string why) { if (!value) throw new Exception("FAIL: " + why); }
     static void Main() {
         var shop = new BuildingRegistration { BusinessName = "Corner Shop" };
-        Game.Buildings.Add(shop);
+        var depot = new BuildingRegistration { BusinessName = "Harbour Depot" };
+        Game.Buildings.AddRange(new[] { shop, depot });
         var schedule = new HireSchedule();
         foreach (DayOfWeek day in Enum.GetValues(typeof(DayOfWeek)))
             schedule.CrewShifts.Add(new CrewShift { EmployeeId = "crew", Day = day, Start = 10, End = 17 });
@@ -232,9 +312,28 @@ SCREEN_MAIN = r'''
         Check(Game.Search("Food Truck").SequenceEqual(new[] { "crew", "trainee", "sick" }), "search finds crew by vehicle");
         // Detail panel: the vehicle is the selected first option; the buildings follow as the game lists them.
         var panel = Game.Show(crew);
-        Check(panel.Options.SequenceEqual(new[] { "Food Truck 1", "Corner Shop (address)" }) && panel.Selected == 0 && !panel.Localized, "crew detail panel");
+        Check(panel.Options.SequenceEqual(new[] { "Food Truck 1", "Corner Shop (address)", "Harbour Depot (address)" }) && panel.Selected == 0 && !panel.Localized, "crew detail panel");
+        // Showing, resetting or picking the vehicle option assigns nobody: the crew keeps the vehicle and the 49 hours.
+        panel.ResetSelectedOption(0);
+        panel.Pick(0);
+        Check(Game.Assignments == 0 && crew.building == null && truck.Crew.Contains("crew") && crew.assignedWeeklyHours == 49, "vehicle option assigns nobody");
+        // Picking a building goes through the game's mapping (option i is building i - 1): the label picked is the building assigned.
+        foreach (var (option, expected) in new[] { (1, shop), (2, depot) }) {
+            var picking = Game.Show(crew);
+            picking.Pick(option);
+            Check(crew.building == expected && picking.Options[option] == expected.GetDisplayName(), "option " + option + " assigns " + expected.BusinessName);
+            crew.building = null;
+        }
+        Check(Game.Assignments == 2, "one assignment per building pick");
         var shopPanel = Game.Show(worker);
-        Check(shopPanel.Options.SequenceEqual(new[] { "Unassigned", "Corner Shop (address)" }) && shopPanel.Selected == 1, "shop detail panel unchanged");
+        Check(shopPanel.Options.SequenceEqual(new[] { "Unassigned", "Corner Shop (address)", "Harbour Depot (address)" }) && shopPanel.Selected == 1, "shop detail panel unchanged");
+        // A building without a name (missing, or its name fails) shows blank in its place and is logged once; the vehicle
+        // option and the later buildings keep their places.
+        var odd = new UI.Elements.Dropdown();
+        var broken = new BuildingRegistration { BusinessName = "Broken", Throws = true };
+        Game.Errors = 0;
+        CrewEmployeeScreen.ShowEmployeePostfix(crew, odd, new List<BuildingRegistration> { shop, broken, null!, broken, depot });
+        Check(odd.Options.SequenceEqual(new[] { "Food Truck 1", "Corner Shop (address)", "", "", "", "Harbour Depot (address)" }) && odd.Selected == 0 && Game.Errors == 1, "a failing building name keeps the options aligned");
         var idlePanel = Game.Show(idle);
         Check(idlePanel.Options[0] == "Unassigned" && idlePanel.Selected == 0, "idle detail panel unchanged");
         // Manage schedule: the vehicle's page for crew; the game's own behaviour for everyone else.
@@ -264,10 +363,27 @@ SCREEN_MAIN = r'''
         FoodTrucksSession.CurrentState = null;
         Check(Game.Cell(new EmployeeModel(trainee)) == ("myemployees_task_training", "Unassigned", "14"), "no session");
         FoodTrucksSession.CurrentState = state;
-        // A failure in the adapter leaves the game's row and is logged.
+        // A failure in the adapter leaves the game's row and detail panel and is logged; Manage schedule needs no name.
         Game.NamesThrow = true;
         Check(Game.Cell(new EmployeeModel(trainee)) == ("myemployees_task_training", "Unassigned", "14") && Game.Error == "names unavailable", "failure logged, row left");
+        Game.Error = null;
+        var namesPanel = Game.Show(trainee);
+        Check(namesPanel.Options.SequenceEqual(new[] { "Unassigned", "Corner Shop (address)", "Harbour Depot (address)" }) && namesPanel.Selected == 0 && Game.Error == "names unavailable", "name failure: the game's detail panel");
+        Check(Game.ManageSchedule(trainee) == "vehicle page truck-1", "name failure: manage schedule opens the vehicle page");
         Game.NamesThrow = false;
+        // The roster lookup fails: every handler leaves the game's behaviour, and the prefix lets the original run.
+        Game.LookupThrows = true;
+        Game.Error = null;
+        Check(Game.Cell(new EmployeeModel(trainee)) == ("myemployees_task_training", "Unassigned", "14")
+            && new EmployeeModel(trainee).statuses.SequenceEqual(new[] { "common_unassigned", "common_in_training" }) && Game.Error == "session unavailable", "lookup failure: the game's row");
+        Game.Error = null;
+        var lookupPanel = Game.Show(trainee);
+        Check(lookupPanel.Options.SequenceEqual(new[] { "Unassigned", "Corner Shop (address)", "Harbour Depot (address)" }) && lookupPanel.Selected == 0 && Game.Error == "session unavailable", "lookup failure: the game's detail panel");
+        Game.Error = null;
+        BizManVehiclePage.Opened = null;
+        Check(CrewEmployeeScreen.ManageSchedulePrefix(trainee) && BizManVehiclePage.Opened == null && Game.Error == "session unavailable", "lookup failure: the prefix runs the original");
+        Check(Game.ManageSchedule(trainee) == "myemployees_no_business_assigned_notification", "lookup failure: the game's manage schedule");
+        Game.LookupThrows = false;
         Console.WriteLine("PASS: crew employee screen");
 '''
 

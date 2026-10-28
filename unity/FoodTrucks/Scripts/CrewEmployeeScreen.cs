@@ -1,7 +1,6 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Entities;
 using FoodTrucks.Core.Fleet;
 using FoodTrucks.Core.Saves;
@@ -43,7 +42,7 @@ namespace FoodTrucks
                 if (vehicle == null) return;
                 // The same options as the game's after the first, so its pick handler finds the same building.
                 var options = new List<string> { VehicleName(vehicle) };
-                options.AddRange((____businessRegistrations ?? new List<BuildingRegistration>()).Select(r => r.GetDisplayName()));
+                options.AddRange(BuildingNames(____businessRegistrations));
                 ___assignedAddressDropdown.SetOptions(options, localize: false);
                 ___assignedAddressDropdown.ResetSelectedOption(0);
             }
@@ -66,6 +65,25 @@ namespace FoodTrucks
                 Log.Error(ex);
                 return true;
             }
+        }
+
+        // One label per building, in the game's order: its pick handler maps option i to building i - 1. A building whose name
+        // fails is shown blank (logged once) rather than dropping the vehicle option or shifting the buildings after it.
+        private static List<string> BuildingNames(List<BuildingRegistration>? registrations)
+        {
+            var names = new List<string>();
+            var logged = false;
+            foreach (var registration in registrations ?? new List<BuildingRegistration>())
+            {
+                try { names.Add(registration?.GetDisplayName() ?? ""); }
+                catch (Exception ex)
+                {
+                    names.Add("");
+                    if (!logged) Log.Error(ex);
+                    logged = true;
+                }
+            }
+            return names;
         }
 
         private static VehicleState? VehicleOf(EmployeeInstance? employee) =>
