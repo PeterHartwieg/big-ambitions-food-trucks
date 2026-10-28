@@ -627,6 +627,7 @@
     "foodtrucks:bizman_week_schedule": "Schedule",
     "foodtrucks:schedule_row_serving": "Serving {number}",
     "foodtrucks:notification_schedule_hours_route": "The opening hours follow the vehicle's route.",
+    "foodtrucks:notification_schedule_shift_too_long": "A crew member can work at most {max} hours a day. The change was not saved.",
     "foodtrucks:bizman_week_day_today": "{day} (today)",
     "foodtrucks:bizman_week_copy_route": "Copy route",
     "foodtrucks:bizman_week_paste_route": "Paste {day}'s route",
