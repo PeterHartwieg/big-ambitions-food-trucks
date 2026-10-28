@@ -15,4 +15,4 @@ Game members were checked with ILSpy against the cached `BigAmbitions.dll` (SHA-
 ## Evidence
 
 - **Checked (automated):** `tools/tests/test_serving_adapter.py` compiles the production `ServingWork.cs`. Its `ItemPanelUI.Toggle` stand-in now dereferences the `GameManager` singleton on `Toggle(false)` as the game does. New cases: with a live panel and the manager missing (unload flag on and off) or present with the flag on, `Reset` for a cart and a truck makes no Toggle call and logs no error, while held orders, listener, energy, speed and time machine are still cleaned up and all fields are cleared; a following session starts and closes its panel. With a live manager, stop work, walking away, step-out and `Reset` call `Toggle(false)` exactly once. The quit cases fail against the 0.10.9 source before this fix and pass with it.
-- **Pending (in game):** the checks in `CHECKS.md` (SP1 to SP3). Not compiled against the full game and Unity references or run in the game.
+- **Pending (in game):** the checks in `CHECKS.md` (QS1 to QS3). Not compiled against the full game and Unity references or run in the game.

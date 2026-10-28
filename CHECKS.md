@@ -4,9 +4,9 @@ Issue #19 fix: the work stock panel is not hidden while the city unloads or the 
 
 | Check | Do | Look for |
 | --- | --- | --- |
-| SP1 | Serve at a cart's window with the stock panel showing and a queue forming; send bridge `quit` without stopping work first | Player.log has no `Serving work, stock panel:` line and no End -> Toggle exception; it shows the stance release (and queue removal if a queue existed); `tools/check-log` reports no errors or exceptions |
-| SP2 | Repeat while serving with the native pause menu: Main menu, Quit to desktop, and Save and exit to desktop (one run each) | Same clean log for each; Main menu reaches the menu and the save reloads; Save and exit completes the save and the process exits |
-| SP3 | With a cart: work at the window, then stop work; work again and walk away; open again and close the business. With a truck: work at the hatch, then step out | The stock panel closes each time; driving afterwards still shows the native cargo HUD |
+| QS1 | Serve at a cart's window with the stock panel showing and a queue forming; send bridge `quit` without stopping work first; repeat at a truck's hatch | Player.log has no `Serving work, stock panel:` line and no End -> Toggle exception; it shows the stance release (and queue removal if a queue existed); `tools/check-log` reports no errors or exceptions |
+| QS2 | Repeat while serving with the native pause menu: Main menu, Quit to desktop, and Save and exit to desktop (one run each) | Same clean log for each; Main menu reaches the menu and the save reloads; Save and exit completes the save and the process exits |
+| QS3 | With a cart: work at the window, then stop work; work again and walk away; open again and close the business. With a truck: work at the hatch, then step out | The stock panel closes each time; driving afterwards still shows the native cargo HUD |
 
 # Crew in the employee list (0.10.9)
 

@@ -148,8 +148,8 @@ class Harness {
         if(manager.StartsWith("missing")) InstanceBehavior<GameManager>.Instance=null!;
         GameManager.isCitySceneBeingUnloaded=manager.EndsWith("unloading");
         ServingWork.Reset();
-        Check(panel.Toggles==0,"no stock-panel toggle while the manager is gone or the city unloads");
         Check(!Log.Errors.Any(e=>e.Contains("stock panel")),"no stock-panel error: "+string.Join("; ",Log.Errors));
+        Check(panel.Toggles==0,"no stock-panel toggle while the manager is gone or the city unloads");
         Check(Log.Errors.Count==0,"quit teardown logs no errors: "+string.Join("; ",Log.Errors));
         Check(paid,"held orders are still booked");
         Check(vehicle.Updated==null,"cargo listener removed");
