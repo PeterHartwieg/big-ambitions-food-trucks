@@ -30,7 +30,10 @@ namespace BridgeControl
         public static bool IsReadOnly(string cmd, JObject args)
         {
             if (new[] { "state", "op", "parks", "places", "map", "day_summary" }.Contains(cmd)) return true;
-            return cmd == "ui" && ((string)args["op"] == "list" || (string)args["op"] == "tree");
+            var op = args["op"]?.Type == JTokenType.String ? (string)args["op"] : null;
+            // The rig virtual mouse's status/trace and UI geometry read only (tools/rig-input).
+            if (cmd == "mouse") return op == "status";
+            return cmd == "ui" && (op == "list" || op == "tree" || op == "geometry");
         }
 
         // Only the outer request can supply authorization; reserved fields inside args cannot impersonate it.
