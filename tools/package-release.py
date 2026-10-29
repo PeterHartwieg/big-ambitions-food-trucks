@@ -28,6 +28,8 @@ def package(source, manifest, output):
     if not REQUIRED <= entries.keys():
         raise ValueError('Runtime package is missing required files or license notices')
     for name in entries:
+        if 'agentriginput' in name.lower():
+            raise ValueError(f'The rig-only input assembly never ships (tools/rig-input): {name}')
         if name not in REQUIRED and not re.fullmatch(r'Locales/[A-Za-z0-9_-]+\.json', name):
             raise ValueError(f'Unexpected runtime package file: {name}')
     if any(not (source / name).stat().st_size for name in REQUIRED):
