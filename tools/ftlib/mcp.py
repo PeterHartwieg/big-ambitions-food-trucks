@@ -7,6 +7,7 @@ import sys
 
 from .bridge import Bridge, BridgeError
 from .logcheck import check_log, format_report
+from . import mouse
 from .paths import lookup
 from .shots import ROOT, fetch_shot
 
@@ -46,6 +47,39 @@ TOOLS = [
           'game_view': {'type': 'boolean', 'description': "Also the game's own frame as the player sees it (game_path, fetched as local_game_path)."}}, ('name',)),
     tool('ft_check_log', 'Check a local Player.log. Row rules count only when rows are selected.',
          {'path': STRING, 'version': STRING, 'rows': STRING}, ('path',)),
+]
+
+# The rig virtual mouse (agent test player only; docs/test-bridge.md, "Rig virtual mouse"). Points are Unity screen
+# pixels with a bottom-left origin, or a target from ft_ui_geometry with an optional local uv (0..1, bottom-left).
+POINT = {'type': 'object', 'description': '{"x","y"} Unity screen pixels, bottom-left origin; or {"target": from ft_ui_geometry, "uv": {"x","y"} 0..1 (default centre)}.'}
+def whole(key, text):
+    low, high = mouse.INTEGERS[key]
+    return {'type': 'integer', 'minimum': low, 'maximum': high, 'description': text}
+def finite(key, text):
+    low, high = mouse.NUMBERS[key]
+    return {'type': 'number', 'minimum': low, 'maximum': high, 'description': text}
+BUTTON = whole('button', '0 left (default), 1 right, 2 middle.')
+SETTLE = whole('settle_frames', 'Release-only frames before completion; default 2.')
+MOUSE_NOTE = ' Rig only: agent test player with the rig input addon; check ft_mouse_status backends first. Mutations need the lock and a loaded FT city with its own character. Replies carry interaction, frame, position, buttons, phase, active and trace_id; a reply means input was delivered, not that the game accepted the change.'
+TOOLS += [
+    tool('ft_mouse_status', 'Read the rig virtual mouse: availability, backends (legacy, event_system, input_system), input module, position, buttons, active interaction, legacy call-site coverage. With trace_id, also that gesture’s per-frame trace (samples, pointer press/drag, read counters, Schedule resize steps and native release). Reads only.',
+         {'trace_id': STRING}),
+    tool('ft_mouse_move', 'Hover the virtual pointer to a point over frames (default 1). Starts a hover interaction if none is active: end it with ft_mouse_release.' + MOUSE_NOTE,
+         {'to': POINT, 'frames': whole('frames', 'Interpolated frames; default 1.'), 'timeout_s': {'type': 'number'}}, ('to',)),
+    tool('ft_mouse_down', 'Press a button; completes after a full down frame. "at" is required when no interaction is active. The button stays down across calls (30 s idle watchdog) until ft_mouse_up or ft_mouse_release.' + MOUSE_NOTE,
+         {'button': BUTTON, 'at': POINT, 'timeout_s': {'type': 'number'}}),
+    tool('ft_mouse_up', 'Release a held button: exposes the release frame, then settle frames, then restores real input when no button is held. native_release_observed is set for Schedule handles, null for generic targets.' + MOUSE_NOTE,
+         {'button': BUTTON, 'settle_frames': SETTLE, 'timeout_s': {'type': 'number'}}),
+    tool('ft_mouse_scroll', 'One-frame wheel pulse at a point (x, y in wheel steps; at least one nonzero).' + MOUSE_NOTE,
+         {'x': finite('x', 'Horizontal wheel steps.'), 'y': finite('y', 'Vertical wheel steps; positive is up.'), 'at': POINT, 'timeout_s': {'type': 'number'}}),
+    tool('ft_mouse_drag', 'Self-contained drag: hover, down at from, steps interpolated moves over duration_s, one held endpoint frame, up, settle_frames, then input restored (active false). A target from must be topmost at its point. after_release {"op":"ui_escape","phase":"after_native_release"} runs the guarded ui escape in the same frame the Schedule handle’s native OnSlideEnd returns (use settle_frames 0 for the immediate-close case).' + MOUSE_NOTE,
+         {'from': POINT, 'to': POINT, 'button': BUTTON, 'steps': whole('steps', 'Moves; default 12.'),
+          'duration_s': finite('duration_s', 'Unscaled seconds for the moves; default 0.4. 0 still uses one frame per sample.'),
+          'settle_frames': SETTLE, 'after_release': {'type': 'object', 'description': 'Only {"op":"ui_escape","phase":"after_native_release"}.'},
+          'timeout_s': {'type': 'number'}}, ('from', 'to')),
+    tool('ft_mouse_release', "End this owner's virtual mouse interaction: cancels a running gesture, exposes a release frame, restores real input. Idempotent; works after the target or scene is gone. Release before ft_lock release." + MOUSE_NOTE),
+    tool('ft_ui_geometry', 'Reads only. UI elements of a component type (e.g. WorkShiftSliderHandle), optionally filtered by hierarchy path suffix: opaque target, indexed path, parent, corners and centre in Unity screen pixels (bottom-left origin), canvas, visibility, topmost raycast. Schedule handles add a read-only descriptor: handle side, employee, workstation, day, start/end hours, bar and track geometry and pixels_per_hour. Targets expire with the session, screen size, scene or if the element moves; re-query after redraws.',
+         {'component': STRING, 'path_suffix': STRING, 'max': whole('max', 'Elements listed; default 20.'), 'target': STRING}),
 ]
 
 
@@ -116,6 +150,12 @@ def call_tool(name, args, bridge):
             if result['result'].get(key):
                 result['local_' + key] = str(fetch_shot(result['result'][key], ROOT / 'build/shots'))
         image = {'type': 'image', 'mimeType': 'image/png', 'data': base64.b64encode(local.read_bytes()).decode()}
+    elif name.startswith('ft_mouse_'):
+        op = name.removeprefix('ft_mouse_')
+        checked = mouse.mouse_args(op, {k: v for k, v in args.items() if k != 'timeout_s'})
+        result = bridge.call('mouse', checked, args.get('timeout_s', mouse.timeout_for(op, checked)))
+    elif name == 'ft_ui_geometry':
+        result = bridge.call('ui', mouse.geometry_args(args))
     elif name == 'ft_check_log':
         report = check_log(args['path'], args.get('version'), args.get('rows'))
         return {'content': [{'type': 'text', 'text': format_report(report)}],

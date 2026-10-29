@@ -5,6 +5,7 @@ import sys
 import time
 
 from .bridge import Bridge, BridgeError
+from .mouse import Mouse, parse_point
 from .paths import lookup, parse_args
 from .shots import fetch_shot
 
@@ -91,6 +92,59 @@ def shoot_args(args):
     return call
 
 
+def mouse_command(mouse, args):
+    """`ft mouse OP ...`: the rig virtual mouse, with the same checks as the MCP tools."""
+    op = args.mouse_op
+    if op == 'status': return mouse.status(args.trace_id)
+    if op == 'move': return mouse.move(parse_point(args.to), args.frames)
+    if op == 'down': return mouse.down(parse_point(args.at) if args.at else None, args.button)
+    if op == 'up': return mouse.up(args.button, args.settle_frames)
+    if op == 'scroll': return mouse.scroll(args.x, args.y, parse_point(args.at) if args.at else None)
+    if op == 'drag':
+        return mouse.drag(parse_point(args.start), parse_point(args.end), args.button, args.steps, args.duration,
+                          args.settle_frames, args.escape_after_release)
+    return mouse.release()
+
+
+def add_mouse(sub):
+    p = sub.add_parser('mouse', help='The rig virtual mouse (agent test player only). Points: X,Y Unity screen pixels '
+                                     '(bottom-left origin) or a ui-geometry target (ui3.4, ui3.4@U,V)')
+    ops = p.add_subparsers(dest='mouse_op', required=True)
+    q = ops.add_parser('status', help='Backends, position and buttons; --trace reads a gesture trace')
+    q.add_argument('--trace', dest='trace_id')
+    q = ops.add_parser('move', help='Hover to a point (starts an interaction; end it with mouse release)')
+    q.add_argument('to')
+    q.add_argument('--frames', type=int)
+    q = ops.add_parser('down', help='Press a button (at a point when no interaction is active)')
+    q.add_argument('at', nargs='?')
+    q.add_argument('--button', type=int)
+    q = ops.add_parser('up', help='Release a held button')
+    q.add_argument('--button', type=int)
+    q.add_argument('--settle-frames', dest='settle_frames', type=int)
+    q = ops.add_parser('scroll', help='One-frame wheel pulse')
+    q.add_argument('--x', type=float)
+    q.add_argument('--y', type=float)
+    q.add_argument('--at')
+    q = ops.add_parser('drag', help='Self-contained press, move, release and cleanup')
+    q.add_argument('start')
+    q.add_argument('end')
+    q.add_argument('--button', type=int)
+    q.add_argument('--steps', type=int)
+    q.add_argument('--duration', type=float, help='duration_s, 0 to 10 (default 0.4)')
+    q.add_argument('--settle-frames', dest='settle_frames', type=int)
+    q.add_argument('--escape-after-release', action='store_true',
+                   help="Run ui escape in the frame the Schedule handle's native release returns")
+    ops.add_parser('release', help="End this owner's interaction (idempotent)")
+    for q in ops.choices.values():
+        q.add_argument('--json', action='store_true', dest='raw', default=argparse.SUPPRESS)
+    p = sub.add_parser('ui-geometry', help='Screen geometry (bottom-left pixels) and targets of UI components')
+    p.add_argument('component', nargs='?')
+    p.add_argument('--path-suffix', dest='path_suffix')
+    p.add_argument('--max', type=int)
+    p.add_argument('--target')
+    p.add_argument('--json', action='store_true', dest='raw', default=argparse.SUPPRESS)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Read and drive the Food Trucks test bridge')
     parser.add_argument('--json', action='store_true', dest='raw')
@@ -141,6 +195,7 @@ def main():
     p = sub.add_parser('click')
     p.add_argument('text')
     p.add_argument('--json', action='store_true', dest='raw', default=argparse.SUPPRESS)
+    add_mouse(sub)
     args = parser.parse_args(call_flags(sys.argv[1:]))
     bridge = Bridge()
     try:
@@ -162,6 +217,10 @@ def main():
         elif args.command == 'wait-event':
             cursor = bridge.events()['next']
             reply = bridge.wait_event(args.regex, args.timeout, cursor)
+        elif args.command == 'mouse':
+            reply = mouse_command(Mouse(bridge), args)
+        elif args.command == 'ui-geometry':
+            reply = Mouse(bridge).geometry(args.component, args.path_suffix, args.max, args.target)
         elif args.command in ('ui', 'click'):
             reply = bridge.call('ui', {'op': 'list'} if args.command == 'ui' else {'op': 'click', 'text': args.text})
         elif args.command == 'shoot':
