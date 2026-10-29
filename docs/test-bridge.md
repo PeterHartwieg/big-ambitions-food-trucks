@@ -27,7 +27,7 @@ The pieces:
 
 ### Sharing the game PC
 
-The normal game (`8330`, instance `normal`), Windows test rig (`18330`, instance `agent1`) and local Mac fallback (`28330`, instance `agentmac`) use the same commands and **separate ownership locks**. The server enforces ownership on every changing command, including UI clicks, console/debug commands, load, save, quit and screenshots. Health, events, state, operation status, parks, places, map, day summaries and UI list/tree remain readable without ownership.
+The normal game (`8330`, instance `normal`), Windows test rig (`18330`, instance `agent1`) and local Mac fallback (`28330`, instance `agentmac`) use the same commands and **separate ownership locks**. The server enforces ownership on every changing command, including UI clicks, console/debug commands, load, save, quit and screenshots. Health, events, state, operation status, parks, places, map, day summaries, UI list/tree/geometry and the rig's `mouse status` remain readable without ownership.
 
 The Mac fallback is manually launched when the PC is unavailable. It needs no tunnel: see [the Mac agent workflow](../../big-ambitions-driven-rides/tools/agent-tests/MAC.md) for local start/stop/ownership commands. The Windows commands below do not manage it.
 
@@ -224,6 +224,145 @@ Validation: 170 Python tests passed with `FT_TEST_TRANSPORT=inprocess python3 -m
 
 Pending in-game checks: a home with model-floor tiles and a business, grid visual alignment at positive/negative coordinates, every footprint/rotation against the visible furniture, concave boundaries and holes, a rare second floor, actual movement to every usable target, immediate versus settled NavMesh results, and check/refusal/exception cancellation preserving held cargo, furniture IDs/parents/stock and navigation flags. Repeat after re-enter/reload. No mod package build, installation or game-PC connection was performed for this change.
 
+## Rig virtual mouse
+
+**Status: built and offline-tested; unverified in game.** Nothing below has been seen working in a live rig run yet. The first run must record the evidence listed under "What a live run must show".
+
+The isolated agent test player can drive mouse-only UI (resize handles, drags, drop targets) without OS input or window focus. The input engine is a separate rig-only assembly, `AgentRigInput.dll`, built from `tools/rig-input/` and loaded by the agent test runtime (`hart-self-driving` `tools/agent-tests`). It is not in the Food Trucks mod, its SDK build or any package, and `tools/release/VerifyRelease.cs` and `tools/package-release.py` refuse it. A normal game never loads it, even with `-foodtrucks-test`.
+
+It has three backends, all fed from one per-frame virtual sample:
+
+- **legacy:** Harmony call-site transpilers in a fixed list of game assemblies (`BigAmbitions`, `BigAmbitions.InteriorDesigner`, `BigAmbitions.PlacementSystem`, `BigAmbitions.InputSystem`) reroute calls to `Input.GetMouseButton/Down/Up`, `Input.mousePosition`, `mouseScrollDelta` and `mousePresent` to identical shims. Unity's own methods are untouched (the button reads are InternalCall and cannot be prefixed). The shims call Unity whenever no interaction is active. Iterator and other compiler-generated methods are included, among them the Schedule resize handle's `DraggingCoroutine` and `WorkShiftHelper`'s edge auto-scroll. Other assemblies, other mods among them, are not covered; status lists the coverage.
+- **event_system:** while an interaction is active, the EventSystem's input modules are disabled and a rig module takes over. It is Unity's own `StandaloneInputModule` mouse processing (real raycasts, enter/exit, press, drag threshold, begin/drag/end, drop, click) reading the virtual sample, without the focus gate. The original modules and their enabled state come back afterwards.
+- **input_system:** a software `Mouse` for the Input System, fed before its update. While active, this process's hardware mice are disabled, focus is ignored, action maps limited to devices also admit the virtual mouse, and `Mouse.WarpCursorPosition` moves only the virtual pointer, never the desktop cursor. All of it is restored afterwards. Status reports this backend as `experimental` until a live run checks `Mouse.current` and the game's action helpers (furniture placement, cargo drop).
+
+### Gating
+
+The assembly starts only when all of these hold: the agent test runtime is ready (its own isolation checks passed); the command line has `-agent-tests` and `-foodtrucks-test`; the port is 18330 (agent1) or 28330 (agentmac); `Application.productName` is the isolated product; the Food Trucks bridge is running on that port; every bridge member it uses has the expected signature. Otherwise it installs nothing and health says why. The runtime also refuses to load a copy whose SHA-256 is not in the rig's install receipt.
+
+Every patch logs one `[AgentRigInput] Patch <method>: Active.` or `Not active (<reason>).` line, and the player-loop hooks log one line. A mismatch disables the matching capability instead of guessing.
+
+### Capability
+
+`GET /health` on the rig has `rig_mouse`: `{ "protocol": 1, "available", "status", "reason", "active", "backends": { "legacy", "event_system", "input_system" } }`, from a snapshot the main thread makes. A bridge without the addon has no `rig_mouse`, and `mouse` is an unknown command there. `agent_instance.rig_input` gives the loaded file's SHA-256 and start status.
+
+Backends read `ready`, `experimental`, `partial: <why>` or `unavailable: <why>`. `legacy` is `partial` if the resize coroutine was not rerouted; `event_system` is `unavailable` with no EventSystem in the scene.
+
+### Coordinates
+
+Unity screen pixels, **origin bottom-left**, everywhere: arguments, geometry and replies, with `screen: { width, height, origin }`. Not the OS window, desktop or DPI. Background mode renders 960×540 and windowed mode 1920×1080; never assume either, read `screen`. `shoot` images are not UI coordinates. To convert a pixel row from a top-left screenshot of the game's own frame: `unity_y = screen.height - 1 - image_y` for pixel centres.
+
+A point is `{ "x", "y" }`, or `{ "target": "<from ui geometry>", "uv": { "x", "y" } }` where `uv` is the element's local rect, 0..1, bottom-left (default its centre). Points must be inside the screen.
+
+### `ui geometry`
+
+Reads only (no lock needed once the bridge's lock library is this revision or later; with an older `BridgeControl.dll` in the mod package it needs the lock like other commands). Works in any scene.
+
+`{ "op": "geometry", "component": "WorkShiftSliderHandle", "path_suffix"?: "…", "max"?: 1..50 (default 20) }`, or `{ "op": "geometry", "target": "<target>" }` to re-measure one element.
+
+Reply: `{ "screen", "frame", "layout_generation", "count", "truncated", "elements": [ … ] }`. Each element: `target` (opaque), `instance_id`, `path` (with sibling indices, `Canvas[0]/…/Handle[1]`), `name_path`, `components`, `active`, `visible`, `corners` (bottom-left, top-left, top-right, bottom-right), `center`, `size` (local units), `canvas` (`name`, `render_mode`, `scale_factor`, `sorting_order`), `raycast_top` and `raycast_matches` (is the element, or a child, topmost at its centre), `parent` (`instance_id`, `path`, `components`).
+
+Corners are each projected through the element's own transform and its root canvas camera, so canvas scalers, nested scales and rotations are already included; do not scale again.
+
+A Schedule handle (`WorkShiftSliderHandle`) adds a read-only `schedule` descriptor: `handle` (`left`/`right`), `start`, `end` (the displayed shift's hours), `employee_id`, `workstation`, `shift_type`, `day` (the Schedule's current day), `bar` and `track` (projected like elements), `range_canvas`, `hour_width_canvas` and `pixels_per_hour` (`{ x, y }` screen pixels for one hour along the track). Two handles of one bar share `parent`.
+
+A target is valid in this bridge session and layout generation only (a new screen size or scene starts a new one), and only while the element's centre stays within 1 px of where it was measured. Otherwise mouse commands refuse with `stale_ui_target`; query again after redraws, day/tab changes or business switches. A press on a target also requires it (or a child) to be topmost at the press point.
+
+### `mouse`
+
+Mutations need the lock, `expect_session`, the city and a loaded FT save with its own character (the same checks as `ui click`), except `release`. Press points pass the same protected-control check as `ui click`: the game's save, load, delete and character screens, the pause menu and its confirmations refuse with `mouse_protected`.
+
+| op | Arguments | Completes |
+|---|---|---|
+| `status` | `trace_id`? | Immediately; reads only. With `trace_id`, adds `trace`, `trace_truncated` and `end_reason` for that interaction |
+| `move` | `to`, `frames`? 1..240 (default 1) | After the last sample's frame. Starts a hover interaction if none is active (which starts at the point); end it with `release` |
+| `down` | `button`? 0..2 (default 0), `at`? (required with no interaction) | After a full down frame. The button stays down across calls |
+| `up` | `button`?, `settle_frames`? 0..120 (default 2) | After the release frame and settle frames; real input comes back once no button is held |
+| `scroll` | `x`?, `y`? (wheel steps, −100..100, one nonzero), `at`? | After a one-frame pulse and one settle frame |
+| `drag` | `from`, `to`, `button`?, `steps`? 1..240 (12), `duration_s`? 0..10 (0.4), `settle_frames`? 0..120 (2), `after_release`? | Self-contained: ends with `active: false` and all buttons up |
+| `release` | none | Idempotent: ends this owner's interaction (cancelling a running gesture), with a release frame. Works after the target or scene is gone |
+
+Unsupported fields, booleans or fractions for whole numbers, non-finite numbers and out-of-range values refuse with `mouse_invalid`. Operations do not queue: a second command while one runs, an unrelated drag while a button is held, or any command against another owner's interaction refuses with `mouse_busy`, and the refusal does not touch that interaction.
+
+Replies have `interaction`, `completed`, `active`, `frame`, `phase`, `position`, `buttons`, `frames_applied`, `completed_frame`, `screen` and `trace_id`, and when they apply `down_frame`, `last_move_frame`, `up_frame`, `native_release_frame` and `native_release_observed`. `drag` adds `start`, `end`, `press_target` and `after_release`.
+
+`native_release_observed` is `true`/`false` only when a native release observer covers the press target (today: Schedule handles, through a postfix on `WorkShiftSliderHandle.OnSlideEnd` that records and changes nothing). It is `null` for generic targets: no success is invented. A completed command means input was delivered, not that the game accepted the change; check the game's state.
+
+```json
+{"cmd":"mouse","args":{"op":"drag","from":{"target":"ui7.3"},"to":{"x":940,"y":500},"steps":12,"duration_s":0.4,"settle_frames":2},"expect_session":"SESSION","lock_token":"TOKEN"}
+```
+
+```json
+{"ok":true,"session":"SESSION","op":43,"result":{"interaction":"drag-3","completed":true,"active":false,"frame":146,"phase":"settle","position":{"x":940,"y":500},"buttons":[false,false,false],"frames_applied":19,"completed_frame":146,"screen":{"width":960,"height":540,"origin":"bottom-left"},"trace_id":"drag-3","down_frame":130,"last_move_frame":143,"up_frame":144,"native_release_frame":144,"native_release_observed":true,"start":{"x":900,"y":500},"end":{"x":940,"y":500},"after_release":null,"press_target":"…/RightHandle[1]"}}
+```
+
+(Illustrative values; take coordinates from `ui geometry`.)
+
+**Timing.** Each Unity frame gets exactly one stable sample, applied at the start of `EarlyUpdate`, before the Input System's update, `EventSystem.Update` and coroutines read it. Down and up edges last that one whole frame; every reader sees the same held state within a frame. Several HTTP calls never collapse into one frame. A drag is: (one `prepare` frame for a new interaction), `hover` at `from`, `down` at the same point, `steps` interpolated `move` samples spread over `duration_s`, one `hold` frame at the endpoint, `up`, then `settle_frames` release-only frames. `duration_s` is unscaled real time, so a paused game does not stop gestures; `duration_s: 0` still uses one frame per sample. Replies come back on the frame after completion.
+
+Keep the grab offset: start at the handle's own point and move by the intended screen displacement (`pixels_per_hour` × hours). The handle's native code converts screen displacement to canvas units itself. Avoid the track edges unless edge auto-scroll is under test.
+
+**After release.** `"after_release": { "op": "ui_escape", "phase": "after_native_release" }` (the only accepted form) runs the existing guarded `ui escape` in the frame the handle's native `OnSlideEnd` returns, after Update and coroutines and before `LateUpdate` and the next frame. It needs a left-button drag that starts on a Schedule handle. The reply's `after_release` has `frame`, `same_frame` and the escape's `result`. If the native release was not observed, the command fails with `mouse_no_native_release` and nothing is escaped; if the escape refuses, `mouse_after_release_failed`. Use `settle_frames: 0` for the immediate-close case: a separate request after the default settle frames does not test that race.
+
+**Ownership and cleanup.** The first command of an interaction takes an extra lock reservation that lasts until the interaction ends, so `lock release` refuses while a button is down, even after `down` replied. Release the mouse first. One cleanup path ends every interaction: completion, `release`, bridge stop or session change, pump shutdown, scene change, a different save loaded, destruction of the pressed object, lease owner change (checked each second), the frame hooks stopping, an internal error, quit, and two watchdogs on unscaled time: 30 s idle with an interaction open (a held button, a hover) and a per-gesture deadline (`duration_s` plus frames plus 15 s). Cleanup cancels the timeline, exposes a release frame and drains (forced after 2 s, or at once for stop, quit and errors, by sending pointer up/end drag to the captured UI), restores modules, devices and settings, and ends the reservation exactly once. A running command then fails with `mouse_cancelled` or `mouse_timeout`; a timeout is never a completed drag. HTTP timeouts are separate: the command goes on and is recovered with `op` as usual, never repeated. If the pressed object is destroyed, its native release cannot run; that is recorded as a cancellation, never as a resize.
+
+**Trace.** `mouse status` with `trace_id` (the last 16 interactions of this session, 600 frames each) lists one entry per frame from the first sample to the end: `frame`, `phase`, `x`, `y`, `buttons`, `pointer` (`over`, `press`, `drag`, `dragging`, `over_ui`), `reads` (legacy `button`/`position`/`scroll` shim reads that frame), `schedule` (`resize_steps` of the handle coroutine, `slide_start`, `slide_end`) and `input_system_events`. A resize that reached the native path shows `resize_steps` on the held frames and `slide_end: true` on the up frame. Traces never hold tokens. A trace from an earlier session refuses with `mouse_unknown_trace`.
+
+**Errors** keep the normal `{ok: false, session, op?, error}` envelope; the message starts with a stable code: `rig_mouse_unavailable`, `mouse_busy`, `mouse_invalid`, `mouse_protected`, `stale_ui_target`, `mouse_timeout`, `mouse_cancelled`, `mouse_no_native_release`, `mouse_after_release_failed`, `mouse_unknown_trace`.
+
+### Clients
+
+```sh
+export BA_BRIDGE_URL=http://127.0.0.1:18330
+tools/ft mouse status --json
+tools/ft ui-geometry WorkShiftSliderHandle --path-suffix 'RightHandle' --json
+tools/ft mouse drag ui7.3 940,500 --steps 12 --duration 0.4
+tools/ft mouse drag ui7.3 940,500 --settle-frames 0 --escape-after-release
+tools/ft mouse down 100,200 && tools/ft mouse move 160,200 --frames 6 && tools/ft mouse up
+tools/ft mouse release
+tools/ft mouse status --trace drag-3 --json
+```
+
+CLI points are `X,Y` or a target (`ui7.3`, `ui7.3@U,V`). `tools/ft call mouse --args '{"op":"status"}'` still works. MCP: `ft_mouse_status`, `ft_mouse_move`, `ft_mouse_down`, `ft_mouse_up`, `ft_mouse_scroll`, `ft_mouse_drag`, `ft_mouse_release`, `ft_ui_geometry`, with strict schemas; `ft_call` remains. Python: `ftlib.mouse.Mouse(bridge)` (`status`, `move`, `down`, `up`, `scroll`, `drag`, `release`, `geometry`). All three share `ftlib/mouse.py`'s checks, which `tools/tests/test_rig_mouse.py` compares with the rig source. Restart a persistent `ft-mcp` server after updating the tools; reconnecting alone does not reload Python modules.
+
+Other Big Ambitions mods using the shared bridge reach the same mouse: point `BA_BRIDGE_TOOLS` at this repository's `tools` (the rig runtime builds the addon from `$BA_BRIDGE_TOOLS/rig-input`, as it builds `bridge-locks`), and use the client above. The commands are answered inside the Food Trucks bridge on the rig, whatever mod is under test; legacy coverage is limited to the game assemblies listed above.
+
+`tools/mock-bridge --rig-mouse ready` models the protocol and frame timeline (`unavailable`: the addon gated off; default: absent, as on a normal bridge). Its fake Schedule handles "release" in the up frame for timing tests; it never edits a schedule, and its replies say `mock: true`.
+
+### Installing on the rig
+
+Only the rig maintainer does this, holding the `agent1` lease, with the agent stopped. It replaces the runtime and adds the addon through the existing hashed update; candidate mod packages are not rebuilt.
+
+1. Check out `hart-self-driving` and this repository on branch `codex/rig-virtual-mouse` (or later), side by side, or set `BA_BRIDGE_TOOLS` to this repository's `tools`.
+2. `export BA_LOCK_OWNER=<unique>; python3 tools/agent-tests/agent lock acquire --purpose "Install rig virtual mouse"`, then `python3 tools/agent-tests/agent stop` and wait until `agent status` shows `running: false`.
+3. In `hart-self-driving`: `bash tools/agent-tests/build.sh --reuse-inputs` (without the flag to refresh inputs from the game PC). Besides the patched overlay it now builds `AgentRigInput.dll` with `tools/rig-input/build.py` against `build/agent-tests/input` (references only) and puts it and `rig-input-manifest.json` into `build/agent-tests/output`.
+4. Record `shasum -a 256 build/agent-tests/output/AgentRigInput.dll build/agent-tests/output/AgentTestRuntime.dll`; the first must equal `sha256` in `rig-input-manifest.json`.
+5. `python3 tools/agent-tests/install.py --update`. `Agent-Windows.ps1 update` keeps the previous revision under `C:\BigAmbitions-AgentTests\revisions\<UTC time>`, copies `AgentTestRuntime.dll` and `AgentRigInput.dll` into `Big Ambitions Agent Tests_Data\Managed`, and records both hashes in `agent-install.json`. Start refuses a changed or missing file from then on.
+6. Check on the PC: `agent-install.json` lists `...\Managed\AgentRigInput.dll` with the hash from step 4, and `Get-FileHash` of the installed file matches.
+7. `python3 tools/agent-tests/agent start`, then `agent health`: `agent_instance.runtime_version` 7, `agent_instance.rig_input.status` `ready`, `agent_instance.rig_input.sha256` as in step 4, `rig_mouse.available` true. `agent log` shows the `[AgentRigInput]` patch lines and `Rig virtual mouse: ready`.
+8. `tools/ft mouse status --json` (with `BA_BRIDGE_URL=http://127.0.0.1:18330` and the tunnel): record `backends`, `input_module` and `legacy_coverage` (`schedule_resize` must be true).
+9. Finish with `tools/ft mouse release`, pause the city, and release the lease.
+
+To go back, update again with the previous overlay or restore the retained revision's files the same way. `tools/rig-input/build.ps1 -GameManaged <Managed> -Output <folder>` (Windows) or `build.py` only compiles and hashes the addon for review; it installs nothing, refuses outputs inside a game install or ModsLocal, and its output is not what the receipt records unless it came through step 3.
+
+### Schedule resize cases (issue #14)
+
+Do these on the rig with the matched RED and GREEN packages and their disposable FT fixture, each case from its own known accepted state, with the lease held. Record the trace, Schedule bars and labels, Core/day arrays and weekly hours, notices, native PNGs, close/reopen and save/reload results. A completed drag is only input delivery.
+
+1. Check `mouse status`: `available`, `legacy` `ready`, `legacy_coverage.schedule_resize` true, `schedule_observer.available` true. Open the business's Schedule with real UI (`phone`, `ui click`).
+2. `ui geometry` for `WorkShiftSliderHandle`, pick the element whose `schedule` has `handle: right` and the intended `employee_id`/`workstation`/`day`, and note `center` and `pixels_per_hour.x`.
+3. **13 h single bar** (cart and truck): from an accepted 00–12 bar, `drag` from the right handle's target to `center.x + 1 × pixels_per_hour.x` at the same `y`. RED keeps 13 h; GREEN shows one cap notice, leaves Core unchanged, restores the same bar and label on the next frame and keeps 12 h after reopening. The trace must show `resize_steps` while held and `slide_end` on the up frame; `native_release_observed: true`.
+4. **24 h single bar:** reset to 00–12, drag the right handle by 12 × `pixels_per_hour.x` (stop at the track end; `schedule.track` gives it). RED accepts 24 h; GREEN refuses once and restores 12 h. Keep an exactly-12 and a shorter valid control.
+5. **Second bar resize:** with accepted 00–08 and 10–14 for one employee and day, query geometry again, drag the second bar's right handle by +1 h (13 h total), then separately from the restored state by +2 h (14 h). Cover cart, truck same row and truck second row. RED keeps the longer bar; GREEN restores the original and the totals after one notice.
+6. **Ordinary shop over 12 h:** reach an ordinary shop's Schedule through real UI, query geometry, stretch one bar past 12 h in both packages and record the game's own behaviour (it may warn rather than refuse). Report this control pending if the fixture has no reachable shop.
+7. **Close right after the resize:** the over-limit drag with `"settle_frames": 0, "after_release": {"op":"ui_escape","phase":"after_native_release"}`. Require `after_release.same_frame: true` and `after_release.frame == native_release_frame`, the Schedule closed, then reopen: GREEN keeps the accepted Core and native arrays and hours with no stale handle, exception, stuck tooltip/cursor/scroll or late duplicate sync.
+
+After each case: `mouse status` shows `active: false`; check that real input works again in windowed mode with a person's click only if needed (the automatic test never generates OS input).
+
+### What a live run must show
+
+Pending: the first rig run must record, before marking anything checked, the `[AgentRigInput]` startup lines, `input_module` (`StandaloneInputModule` or `InputSystemUIInputModule`), legacy coverage, one short resize with `resize_steps` and `slide_end` in its trace, a body drag (`WorkShiftDrag`), the immediate-close case, `active: false` after each cleanup trigger, and one Input System case (furniture placement or cargo drop) before `input_system` is called anything but experimental. Background (unfocused) rendering is the target; headless is no visual proof. The Mac rig needs its own compile and smoke run.
+
 ## State
 
 ```json
@@ -285,7 +424,7 @@ Built 12 October 2026 in `unity/FoodTrucks/Scripts/` (`Notices.cs`, `TestBridge*
 
 **Notice log.** Every notice the mod shows is a `Notice: <text>` line and every text it sends a `Phone: <contact>: <text>` line, with the text resolved as the game shows it (`LocalizorManager.Localize(key, data)`). A key the game has no text for is logged as `<key> {name=value, …}`. The player's own line in a call (the commissary order read-back) is `Phone: <contact>: [player] <text>`. What the player sees is unchanged.
 
-**FT guard.** `console`, `debug`, `time`, `money`, `teleport`, `walk`, `vehicle`, `commissary`, `crew`, `route`, `fixture`, `floorplan`, `place`, `logistics run`, `save`, `ui click` and `ui escape` need the city and a loaded save whose name starts with `FT`. For `ui click` and `ui escape` the refusal reads `ui works only in a loaded FT city; use load from the main menu.` They also refuse when the save's character folder holds a save whose name doesn't start with FT (the game's own `Recover #N` and `Recover Midnight` aside): `This save's character also has saves not starting with FT (<first name>); make FT saves with a character of their own.` `load` checks the same for the save it loads (and, from the city, for the city it leaves). So make FT saves from a new character of their own, never by saving a series city under a new name. `state`, `day_summary`, `places`, `map`, `ui list`, `shoot`, `logistics status`, `op` and `quit` work with any save. `load` from the city needs an FT city. `save`, `load` and `new_game` take only names that start with `FT`.
+**FT guard.** `console`, `debug`, `time`, `money`, `teleport`, `walk`, `vehicle`, `commissary`, `crew`, `route`, `fixture`, `floorplan`, `place`, `logistics run`, `save`, `ui click`, `ui escape` and the rig's `mouse` gestures (not `mouse status` or `release`) need the city and a loaded save whose name starts with `FT`. For `ui click` and `ui escape` the refusal reads `ui works only in a loaded FT city; use load from the main menu.` They also refuse when the save's character folder holds a save whose name doesn't start with FT (the game's own `Recover #N` and `Recover Midnight` aside): `This save's character also has saves not starting with FT (<first name>); make FT saves with a character of their own.` `load` checks the same for the save it loads (and, from the city, for the city it leaves). So make FT saves from a new character of their own, never by saving a series city under a new name. `state`, `day_summary`, `places`, `map`, `ui list`, `ui geometry`, `shoot`, `logistics status`, `op` and `quit` work with any save. `load` from the city needs an FT city. `save`, `load` and `new_game` take only names that start with `FT`.
 
 **Scene.** `menu` covers the main menu and the character creator; `loading` covers the loading screen and the step between a save and the city; `city` is the city with a save loaded.
 
@@ -364,7 +503,7 @@ Both ways wait until no loading screen is left before the menu's load starts, an
 
 A load that dies anyway is cleared only when the bridge can show it died. With the bridge on, a postfix on `LoadingScreen.StartLoading` (logged `Patch LoadingScreen.StartLoading, test bridge load: Active.`) notes when the bridge's own pending load starts a loading screen that isn't the game's registered one, which the game then removes: `Test bridge: the bridge's load started a loading screen while another was still up; the game removes the new one, so this load can't run.` Once no loading screen is left, the main menu is loaded and no city is being unloaded, the bridge clears the game's loading flag: `ERROR: Test bridge: the bridge's load died with its loading screen (another was still up); cleared the game's loading flag, so loads work again. the game is at the menu (…).`, and the pending load fails with `the game's load never ran (…): load again`. A loading flag on with no screen for any other reason (the screen's prefab still loading, the pause menu's quit, a load the player started) is never cleared: `load` refuses with `The game's loading flag is on with no loading screen; the bridge can't tell whether a load is still starting, so it leaves the flag alone: wait, or restart the game. the game is at …`, and a pending load times out after 300 s with the same description. Every failed load's error ends with where the game is: `the game is at the <menu|loading|city> (its loading flag on|off, a loading screen is up|no loading screen)`. The bridge's runner lives across scenes (`DontDestroyOnLoad`), so its load coroutine carries on through the change to the menu.
 
-**Limits** (from `docs/test-bridge-mac-review.md`, kept as they are). A list picker takes two clicks, the option and then the game's confirm button, whose label only a live `ui list` shows. Map picks, drags and placing items in the world can't be done through `ui`. `ui list` checks canvases, fading and the screen's edges, not scroll masks or windows on top, so a clipped or covered control can still be listed; list again after any change before clicking by id.
+**Limits** (from `docs/test-bridge-mac-review.md`, kept as they are). A list picker takes two clicks, the option and then the game's confirm button, whose label only a live `ui list` shows. Map picks, drags and placing items in the world can't be done through `ui`; on the agent rig, `mouse` (see "Rig virtual mouse") drives drags and handles. `ui list` checks canvases, fading and the screen's edges, not scroll masks or windows on top, so a clipped or covered control can still be listed; list again after any change before clicking by id.
 
 **`new_game`.** From the main menu only (not the character creator, not the city), with the test flag like every command. Refused for a name not starting with FT, a name the game would change to make a file name, a save of that name already there (it never writes over a save), or a load under way. It runs the game's own steps, not clicks: `MainMenuController.StartNewGame` with the Normal preset's values as the custom game panel takes them (`CustomGameOptionsHandler.SetPreset`: difficulty custom, tutorial off), then in the character creator the name field set to `FT Playtest` (the creator has one name field) and `IntroCharacterCustomizer.StartGame`, with the random look the creator picked on waking. The creator names the save after the character; the bridge renames it to the given name before the city loads. With the tutorial off the intro goes straight to the city (`IntroToGameTransition.OnEnable`); if no load has started 3 seconds later the bridge calls its `Continue`. Once the city is up with the mod attached and the loading screen gone, the clock is paused and the city saved under the name as `save` does (up to 10 tries 3 s apart while the game refuses); `load` is `done` only after that save. `state.load.new_game` names the step (`main menu`, `character creator`, `city`, `saving`, `saved`; null for a plain load). It fails after 600 seconds. Each new game is a character of its own, so its saves pass the FT character check. Log lines `Test bridge: new game '<name>' (custom, Normal values, tutorial off), to the character creator.`, `Test bridge: new game character 'FT Playtest' made; to the city as '<name>'.`, `Test bridge: new game saved as '<name>' (N bytes); paused.`
 
@@ -521,7 +660,7 @@ Values in `key=value` are JSON when possible, otherwise strings. Dots build nest
 
 `exit`, `restock` and `transfer` require driving the truck or pushing the cart; `rent_bay` only needs the vehicle in a commissary's bay. Teleport the player beside it, unpause with `time pause=false`, call `vehicle enter`, and wait for `state.player.in_vehicle` to match its id. Keep time unpaused through entry and hatch walks and their completion waits. Unpause before `exit`. `open` needs the player on foot and the vehicle parked: teleport the player beside it and call `vehicle open`; teleport the player first so a truck's player is placed at the hatch without a walk. Check each vehicle reply's `done`. After `open` or `back_to_hatch`, wait for `player.activity: "at_hatch"` and the matching `player.at_hatch` for a truck. Enter replies can report done when the walk starts; wait for activity driving/pushing and the matching in_vehicle. Player teleport cancels pending navigation, including entry and hatch-return walks. Close an open vehicle before teleporting it. Refusals for `restock`, `transfer` and `rent_bay` return `ok: true, done: false` with any notices and `why` for a missing/refused choice (`why` is null otherwise). Calling a panel operation while not driving/pushing remains a failed call.
 
-Speed is above 0 and at most 60. The bridge handles `run_until.day: "+N"`, then pauses and restores speed 1. It stops exactly on the target minute, including hour events for an HH:00 target. `clock.run_until` shows the pending target and `arrived_at` records completion until the next time call. Screens and activities can hold the clock; inspect `player.clock_held_by` before unpausing. UI click and escape work only in a loaded FT city with its own character. Only UI list works outside an FT city. Clicks on the game's save/load/delete/character controls and pause-menu confirmations refuse; use the bridge's save and load commands. A changed label makes an id click refuse and asks for a fresh list. Escape closes the top screen or list picker; it refuses when nothing is open. List-picker options need their confirm button too. Duplicate text needs an id from the latest `ui list`.
+Speed is above 0 and at most 60. The bridge handles `run_until.day: "+N"`, then pauses and restores speed 1. It stops exactly on the target minute, including hour events for an HH:00 target. `clock.run_until` shows the pending target and `arrived_at` records completion until the next time call. Screens and activities can hold the clock; inspect `player.clock_held_by` before unpausing. UI click and escape work only in a loaded FT city with its own character. Only UI list, tree and geometry work outside an FT city. Clicks on the game's save/load/delete/character controls and pause-menu confirmations refuse; use the bridge's save and load commands. A changed label makes an id click refuse and asks for a fresh list. Escape closes the top screen or list picker; it refuses when nothing is open. List-picker options need their confirm button too. Duplicate text needs an id from the latest `ui list`.
 
 ```sh
 tools/scenario list

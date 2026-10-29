@@ -90,6 +90,8 @@ A supplied local package installs as a complete `FoodTrucks` folder in `ModsLoca
 
 Developer actions and the test bridge require `-foodtrucks-test`; normal players do not need it. Safe uninstall remains available without that option. The full development key/command reference is in `docs/test-bridge.md`.
 
+The agent test rig can drive mouse-only UI (Schedule resize handles, drags) through a separate rig-only assembly in `tools/rig-input/`, which never ships with the mod. Status: **unverified** (built and offline-tested, not yet run in game); see "Rig virtual mouse" in `docs/test-bridge.md`.
+
 Historical build-specific checked, pending and unverified observations are preserved in `docs/evidence/readme-history-before-0.10.0.md`. They are not the current release acceptance checklist. The technical design and development history remain in `docs/design.md` and `docs/implementation-plan.md`.
 
 MIT, see `LICENSE.txt`. The truck uses the SDK example's physics setup and dirt textures. Harmony's notice is included in `Dependencies/Harmony-LICENSE.txt`.
