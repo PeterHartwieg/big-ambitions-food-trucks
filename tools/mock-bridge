@@ -22,6 +22,7 @@ import zlib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ftlib.logcheck import read_rules
 from ftlib.shots import ROOT
+from ftlib import mouse
 
 SITES = [s['id'] for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']]
 # Commissaries with a measured bay in data, and the city's buildings (the balance tool's list), for bay_candidates.
@@ -140,6 +141,268 @@ NEW_GAME_CHARACTER = 'FT Playtest'
 NEW_GAME_MONEY = 10000.
 
 
+class MockMouse:
+    """The rig virtual mouse's protocol and frame timeline (big-ambitions-agent-rig rig-input/), for client tests. It models one sample per
+    frame, one interaction at a time, targets and cleanup; it never edits a schedule or claims the game accepted a change."""
+    WIDTH, HEIGHT = 1920, 1080
+
+    def __init__(self, mock):
+        self.mock = mock
+        self.frame = 1000
+        self.layout = 1
+        self.serial = 0
+        self.targets = {}
+        self.traces = {}
+        self.counter = 0
+        self.reset()
+        # The fake Schedule bar: one 00-12 shift whose right handle sits at 900,500; 20 px per hour.
+        self.schedule = [dict(handle='left', x=660, y=500), dict(handle='right', x=900, y=500)]
+        # Tests set this to stand for another window over the handles.
+        self.covered = False
+
+    def reset(self):
+        self.x = self.y = 0.
+        self.held = 0
+        self.interaction = None
+
+    def cancel(self, reason):
+        if self.interaction:
+            self.traces[self.interaction['trace_id']]['end_reason'] = reason
+        self.reset()
+        self.targets.clear()
+
+    def relayout(self):
+        self.layout += 1
+        self.targets.clear()
+
+    def snapshot(self):
+        available = self.mock.rig_mouse == 'ready'
+        return {'protocol': mouse.PROTOCOL, 'available': available, 'status': 'ready' if available else 'unavailable',
+                'reason': None if available else 'not started with -agent-tests', 'active': self.interaction is not None,
+                'backends': {'legacy': 'ready', 'event_system': 'ready', 'input_system': 'experimental'} if available else
+                            {'legacy': 'unavailable', 'event_system': 'unavailable', 'input_system': 'unavailable'}}
+
+    def screen(self):
+        return {'width': self.WIDTH, 'height': self.HEIGHT, 'origin': 'bottom-left'}
+
+    @staticmethod
+    def error(code, text):
+        return ValueError(f'{code}: {text}')
+
+    def resolve(self, value, press=False):
+        if 'target' not in value:
+            if not (0 <= value['x'] < self.WIDTH and 0 <= value['y'] < self.HEIGHT):
+                raise self.error('mouse_invalid', f"({value['x']},{value['y']}) is outside the screen {self.WIDTH}x{self.HEIGHT} (bottom-left origin)")
+            return value['x'], value['y'], None
+        target = self.targets.get(value['target'])
+        if target is None or target['layout'] != self.layout or target['session'] != self.mock.session:
+            raise self.error('stale_ui_target', f"unknown target '{value['target']}': query ui geometry again")
+        if press and self.covered:
+            raise self.error('stale_ui_target', f"target '{value['target']}' is covered at {target['x']:.1f},{target['y']:.1f} by Mock[0]/Dialog[0]")
+        uv = value.get('uv', {'x': .5, 'y': .5})
+        return target['x'] + (uv['x'] - .5) * 8, target['y'] + (uv['y'] - .5) * 20, target
+
+    def protect(self):
+        if self.mock.pause_menu_open:
+            raise self.error('mouse_protected', "the pointer would press the game's own MiniMenu control; use the save and load commands")
+
+    def geometry(self, args):
+        try:
+            args = mouse.geometry_args(args)
+        except mouse.MouseArgsError as exc:
+            raise ValueError(str(exc)) from None
+        if args.get('target'):
+            known = self.targets.get(args['target'])
+            if not known or known['layout'] != self.layout:
+                raise self.error('stale_ui_target', f"unknown target '{args['target']}': query ui geometry again")
+            found = [known['source']]
+        elif args['component'] == 'WorkShiftSliderHandle':
+            found = [h for h in self.schedule if 'path_suffix' not in args or f"{h['handle'].title()}Handle".endswith(args['path_suffix'])]
+        elif args['component'] in ('Button', 'Image'):
+            found = []
+        else:
+            raise self.error('mouse_invalid', f"no loaded component type named '{args['component']}'")
+        limit = args.get('max', mouse.DEFAULTS['max'])
+        elements = []
+        for i, h in enumerate(found[:limit]):
+            self.serial += 1
+            target = f'ui{self.layout}.{self.serial}'
+            self.targets[target] = dict(x=h['x'], y=h['y'], layout=self.layout, session=self.mock.session, source=h)
+            side = h['handle'].title() + 'Handle'
+            elements.append({
+                'target': target, 'instance_id': 5000 + i, 'path': f"Mock[0]/Schedule[0]/Bar[0]/{side}[{0 if h['handle'] == 'left' else 1}]",
+                'center': {'x': h['x'], 'y': h['y']},
+                'corners': [{'x': h['x'] - 4, 'y': h['y'] - 10}, {'x': h['x'] - 4, 'y': h['y'] + 10},
+                            {'x': h['x'] + 4, 'y': h['y'] + 10}, {'x': h['x'] + 4, 'y': h['y'] - 10}],
+                'active': True, 'visible': True, 'raycast_matches': not self.covered,
+                'parent': {'instance_id': 4000, 'path': 'Mock[0]/Schedule[0]/Bar[0]'},
+                'schedule': {'handle': h['handle'], 'employee_id': 'mock-employee', 'workstation': 'mock-workstation', 'day': 'Monday',
+                             'start': 0, 'end': 12, 'pixels_per_hour': {'x': 20.0, 'y': 0.0}},
+            })
+        return {'screen': self.screen(), 'frame': self.frame, 'layout_generation': self.layout, 'count': len(found),
+                'truncated': len(found) > limit, 'elements': elements}
+
+    def status(self, args):
+        result = {**self.snapshot(), 'rig_only': True,
+                  'interaction': None if not self.interaction else {k: self.interaction[k] for k in ('id', 'kind')},
+                  'position': {'x': self.x, 'y': self.y}, 'buttons': self.buttons(), 'frame': self.frame, 'screen': self.screen(),
+                  'input_module': 'AgentRigInput.RigPointerInputModule' if self.interaction else 'UnityEngine.EventSystems.StandaloneInputModule',
+                  'last_error': None, 'mock': True}
+        if 'trace_id' in args:
+            trace = self.traces.get(args['trace_id'])
+            if trace is None or trace['session'] != self.mock.session:
+                raise self.error('mouse_unknown_trace', f"no trace '{args['trace_id']}' (the rig keeps the last 16 of this session)")
+            result.update(trace_id=args['trace_id'], end_reason=trace['end_reason'], trace_truncated=False, trace=list(trace['entries']))
+        return result
+
+    def buttons(self):
+        return [bool(self.held & (1 << b)) for b in range(3)]
+
+    def begin(self, kind):
+        if self.interaction is not None:
+            return False
+        self.counter += 1
+        ident = f'{kind}-{self.counter}'
+        self.interaction = {'id': ident, 'kind': kind, 'trace_id': ident}
+        self.traces[ident] = {'session': self.mock.session, 'end_reason': None, 'entries': []}
+        while len(self.traces) > 16:
+            self.traces.pop(next(iter(self.traces)))
+        return True
+
+    # One frame: one stable sample, edges from the previous frame's held buttons.
+    def sample(self, x, y, held, phase, scroll=(0, 0)):
+        self.frame += 1
+        down, up = held & ~self.held, self.held & ~held
+        self.x, self.y, self.held = float(x), float(y), held
+        self.traces[self.interaction['trace_id']]['entries'].append(
+            {'frame': self.frame, 'phase': phase, 'x': self.x, 'y': self.y, 'buttons': self.buttons(),
+             'down': down, 'up': up, 'scroll': list(scroll)})
+        return self.frame
+
+    def finish(self, reason):
+        self.traces[self.interaction['trace_id']]['end_reason'] = reason
+        self.interaction = None
+        self.held = 0
+
+    def reply(self, ident, phase, extra=None):
+        return {'interaction': ident, 'completed': True, 'active': self.interaction is not None, 'frame': self.frame, 'phase': phase,
+                'position': {'x': self.x, 'y': self.y}, 'buttons': self.buttons(), 'screen': self.screen(), 'trace_id': ident,
+                'mock': True, **(extra or {})}
+
+    def call(self, args):
+        op = args.get('op')
+        if not isinstance(op, str):
+            raise self.error('mouse_invalid', 'mouse needs "op": ' + ', '.join(mouse.OPS))
+        try:
+            args = mouse.mouse_args(op, {k: v for k, v in args.items() if k != 'timeout_s'})
+        except mouse.MouseArgsError as exc:
+            raise ValueError(str(exc)) from None
+        if op == 'status':
+            return self.status(args)
+        if self.mock.rig_mouse != 'ready':
+            raise self.error('rig_mouse_unavailable', 'not started with -agent-tests')
+        if op == 'release':
+            if not self.interaction:
+                return {'released': False, 'interaction': None, 'active': False, 'buttons': [False] * 3, 'frame': self.frame, 'trace_id': None}
+            ident = self.interaction['id']
+            for phase in ('release', 'settle', 'settle'):
+                self.sample(self.x, self.y, 0, phase)
+            self.finish('released by its owner')
+            return {'released': True, 'interaction': ident, 'active': False, 'buttons': [False] * 3, 'frame': self.frame, 'trace_id': ident}
+        self.mock.require_ft('mouse ' + op)
+        if self.interaction and op == 'drag' and self.held:
+            raise self.error('mouse_busy', 'a button is held: release it before a self-contained drag')
+        button = int(args.get('button', 0))
+        bit = 1 << button
+        if op == 'move':
+            x, y, _ = self.resolve(args['to'])
+            if self.begin('hover'):
+                self.sample(x, y, 0, 'prepare')
+                self.sample(x, y, 0, 'hover')
+            else:
+                x0, y0, frames = self.x, self.y, int(args.get('frames', 1))
+                for i in range(1, frames + 1):
+                    self.sample(x0 + (x - x0) * i / frames, y0 + (y - y0) * i / frames, self.held, 'move')
+            return self.reply(self.interaction['id'], 'move')
+        if op == 'down':
+            if self.interaction and self.held & bit:
+                raise self.error('mouse_invalid', f'button {button} is already down')
+            if 'at' not in args and not self.interaction:
+                raise self.error('mouse_invalid', 'down needs "at" when no interaction is active')
+            x, y, _ = self.resolve(args['at'], press=True) if 'at' in args else (self.x, self.y, None)
+            self.protect()
+            fresh = self.begin('press')
+            if fresh:
+                self.sample(x, y, 0, 'prepare')
+            if fresh or 'at' in args:
+                self.sample(x, y, self.held, 'hover')
+            frame = self.sample(x, y, self.held | bit, 'down')
+            return self.reply(self.interaction['id'], 'down', {'down_frame': frame})
+        if op == 'up':
+            if not self.interaction or not self.held & bit:
+                raise self.error('mouse_invalid', f'button {button} is not down')
+            ident = self.interaction['id']
+            frame = self.sample(self.x, self.y, self.held & ~bit, 'up')
+            for _ in range(int(args.get('settle_frames', 2))):
+                self.sample(self.x, self.y, self.held, 'settle')
+            if not self.held:
+                self.finish('up completed')
+            return self.reply(ident, 'up', {'up_frame': frame, 'native_release_frame': None, 'native_release_observed': None})
+        if op == 'scroll':
+            if 'at' not in args and not self.interaction:
+                raise self.error('mouse_invalid', 'scroll needs "at" when no interaction is active')
+            x, y, _ = self.resolve(args['at']) if 'at' in args else (self.x, self.y, None)
+            self.protect()
+            fresh = self.begin('hover')
+            if fresh:
+                self.sample(x, y, 0, 'prepare')
+                self.sample(x, y, 0, 'hover')
+            self.sample(x, y, self.held, 'scroll', (args.get('x', 0), args.get('y', 0)))
+            self.sample(x, y, self.held, 'settle')
+            ident = self.interaction['id']
+            if fresh:
+                self.finish('scroll completed')
+            return self.reply(ident, 'settle')
+        # drag: self-contained, exactly as the rig sequences it.
+        x0, y0, source = self.resolve(args['from'], press=True)
+        x1, y1, _ = self.resolve(args['to'])
+        self.protect()
+        observed = source is not None and button == 0
+        after = args.get('after_release') is not None
+        if after and not observed:
+            raise self.error('mouse_invalid', 'after_release needs a left-button drag that starts on a Schedule resize handle (the native release it waits for)')
+        steps, settle = int(args.get('steps', 12)), int(args.get('settle_frames', 2))
+        fresh = self.begin('drag')
+        ident = self.interaction['id']
+        if fresh:
+            self.sample(x0, y0, 0, 'prepare')
+        self.sample(x0, y0, 0, 'hover')
+        down = self.sample(x0, y0, bit, 'down')
+        for i in range(1, steps + 1):
+            self.sample(x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps, bit, 'move')
+        last = self.sample(x1, y1, bit, 'hold')
+        up = self.sample(x1, y1, 0, 'up')
+        # The fake handle "releases" in the up frame: protocol timing only, no schedule is edited.
+        native = up if observed else None
+        closed = None
+        if after:
+            try:
+                closed = self.mock.call('ui', {'op': 'escape'})
+            except ValueError as exc:
+                self.finish('after-release escape failed')
+                raise self.error('mouse_after_release_failed', str(exc)) from None
+        for _ in range(settle):
+            self.sample(x1, y1, 0, 'settle')
+        applied = len(self.traces[ident]['entries'])
+        self.finish('drag completed')
+        return self.reply(ident, 'settle' if settle else 'up', {
+            'down_frame': down, 'last_move_frame': last, 'up_frame': up, 'native_release_frame': native,
+            'native_release_observed': True if observed else None, 'completed_frame': self.frame, 'frames_applied': applied,
+            'start': {'x': x0, 'y': y0}, 'end': {'x': x1, 'y': y1},
+            'after_release': None if not after else {'op': 'ui_escape', 'phase': 'after_native_release', 'frame': native, 'same_frame': True, 'result': closed},
+            'press_target': None if source is None else 'Mock[0]/Schedule[0]/Bar[0]/' + source['source']['handle'].title() + 'Handle'})
+
+
 class Mock:
     def __init__(self, shots, clock_rate=1):
         self.clock_rate = clock_rate
@@ -186,6 +449,9 @@ class Mock:
         # Tests set this to stand for the player inside a building, where the fixture refuses as the game's does.
         self.inside_building = False
         self.character = 'FT test character'
+        # The rig virtual mouse: None as on a normal bridge (no addon: unknown command), 'unavailable' or 'ready'.
+        self.rig_mouse = None
+        self.mouse = MockMouse(self)
         self.reset('FT mock')
         self.store('FT mock')
         self.prepare_saves()
@@ -288,6 +554,7 @@ class Mock:
         finally: self.save_in_progress=False
 
     def restore(self, name, emit=True):
+        if hasattr(self, 'mouse'): self.mouse.cancel('the scene changed')
         self.finish_work()
         if name not in self.saves:
             raise ValueError('No such mock save: use FT mock or save the current city first')
@@ -887,6 +1154,8 @@ class Mock:
             return {'ok':op['status']=='done','session':session,'op':identifier, **({'result':copy.deepcopy(op['result'])} if op['status']=='done' else {'error':op['error']})}
 
     def unload(self):
+        self.mouse.cancel('the bridge stopped')
+        self.mouse.traces.clear()
         with self.lock:
             with self.ops_lock:
                 self.stopped=True
@@ -966,9 +1235,11 @@ class Mock:
         c = self.state['clock'] if self.state['scene'] == 'city' else {}
         if self.stopped:
             return dict(ok=True,session=self.session,mod_version='0.9.10',bridge_version=1,scene='menu',save=None,day=None,time=None,paused=None,time_skip=None,frame=0,load=None)
-        return dict(ok=True, session=self.session, mod_version='0.9.10', bridge_version=1, scene=self.state['scene'],
+        reply = dict(ok=True, session=self.session, mod_version='0.9.10', bridge_version=1, scene=self.state['scene'],
                     save=self.state['save'], day=c.get('day'), time=c.get('time'), paused=c.get('paused'), time_skip=self.time_skip if self.state['scene']=='city' else None,
                     frame=self.frame, load=None if self.load is None else {k:self.load[k] for k in ('name','status')})
+        if self.rig_mouse: reply['rig_mouse'] = self.mouse.snapshot()
+        return reply
 
     def events(self, since):
         since = max(since, 1)
@@ -2765,6 +3036,10 @@ class Mock:
             notice=LOCALE['foodtrucks:notification_crew_added' if op=='assign' else 'foodtrucks:notification_crew_letgo'].format(name=name,vehicle=v['kind'])
             self.event(notice,'notice')
             return {'done':True,'notices':[notice],'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==identifier)}
+        if cmd=='mouse' and self.rig_mouse:
+            return self.mouse.call(args)
+        if cmd=='ui' and self.rig_mouse and args.get('op')=='geometry':
+            return self.mouse.geometry(args)
         if cmd=='ui':
             op=need(args,'op','list, click, escape or tree')
             if op=='list':
@@ -2950,10 +3225,12 @@ def main():
     parser = argparse.ArgumentParser(description='Local fake Food Trucks bridge')
     parser.add_argument('--port',type=int,default=8330)
     parser.add_argument('--clock-rate',type=float,default=1,help='Normal game minutes per real second, like Options game speed')
+    parser.add_argument('--rig-mouse',choices=('ready','unavailable'),help='Model the rig virtual mouse addon (default: absent, as on a normal bridge)')
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='foodtrucks-mock-') as shots:
         server = ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
         server.mock = Mock(shots, args.clock_rate)
+        server.mock.rig_mouse = args.rig_mouse
         thread = threading.Thread(target=server.mock.run_clock,daemon=True)
         thread.start()
         print(f'Mock bridge at http://127.0.0.1:{server.server_port}',flush=True)

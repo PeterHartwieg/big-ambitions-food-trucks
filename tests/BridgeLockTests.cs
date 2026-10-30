@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using BridgeControl;
 using Newtonsoft.Json.Linq;
@@ -97,5 +98,36 @@ public sealed class BridgeLockTests : IDisposable
     {
         Store().Acquire("owner","",A);File.WriteAllText(Path.Combine(root,"normal","lease.json"),"{}");
         Assert.Throws<InvalidOperationException>(()=>Store().Acquire("owner","",B));
+    }
+    [Fact] public void MouseStatusAndUiGeometryReadOnlyButMouseGesturesNeedTheOwner()
+    {
+        Assert.True(ControlGate.IsReadOnly("mouse", new JObject { ["op"] = "status" }));
+        Assert.True(ControlGate.IsReadOnly("ui", new JObject { ["op"] = "geometry" }));
+        foreach (var op in new[] { "move", "down", "up", "scroll", "drag", "release" })
+            Assert.False(ControlGate.IsReadOnly("mouse", new JObject { ["op"] = op }));
+        Assert.False(ControlGate.IsReadOnly("mouse", new JObject()));
+        Assert.False(ControlGate.IsReadOnly("mouse", new JObject { ["op"] = true }));
+        Assert.False(ControlGate.IsReadOnly("ui", new JObject { ["op"] = "click" }));
+        var s = Store(); s.Acquire("owner", "", A); ControlGate.ConfigureStore(s);
+        Assert.Throws<InvalidOperationException>(() => ControlGate.BeforeRun("mouse", new JObject { ["op"] = "drag", ["__bridge_lock_token"] = B }));
+        ControlGate.BeforeRun("mouse", new JObject { ["op"] = "status" });
+        s.Release(A);
+    }
+    // The rig mouse holds an extra command reservation for a whole interaction through the public lock API
+    // (big-ambitions-agent-rig rig-input/Runtime/Bridge.cs Reserve): lease release is refused until the interaction ends.
+    [Fact] public void InteractionReservationOutlivesItsCommandAndRefusesOtherOwners()
+    {
+        var s = Store(); s.Acquire("owner", "", A); ControlGate.ConfigureStore(s);
+        var reservation = new JObject { ["__bridge_lock_token"] = A };
+        Assert.Null(ControlGate.Intercept("mouse", reservation));
+        var interaction = new TaskCompletionSource<JToken>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ControlGate.Track(interaction.Task, reservation);
+        ControlGate.EndUnqueued(reservation);
+        ControlGate.ObserveWork(false);
+        Assert.Throws<InvalidOperationException>(() => s.Release(A));
+        Assert.Throws<InvalidOperationException>(() => ControlGate.Intercept("mouse", new JObject { ["__bridge_lock_token"] = B }));
+        interaction.SetResult(null!);
+        SpinWait.SpinUntil(() => { try { s.Release(A); return true; } catch (InvalidOperationException) { return false; } }, 2000);
+        Assert.False((bool)s.Status()["held"]!);
     }
 }

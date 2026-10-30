@@ -56,6 +56,17 @@ class ReleasePackageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Unlisted'): self.package()
         self.assertFalse((self.root / 'candidate.zip').exists())
 
+    def test_rig_input_assembly_refused_even_with_regenerated_hashes(self):
+        for name in ('Dependencies/AgentRigInput.dll', 'AgentRigInput.dll', 'Dependencies/agentriginput.dll'):
+            with self.subTest(name=name):
+                (self.source / name).write_bytes(b'rig only')
+                self.rehash()
+                with self.assertRaisesRegex(ValueError, 'rig-only input assembly never ships'):
+                    self.package()
+                (self.source / name).unlink()
+                self.rehash()
+        self.assertFalse((self.root / 'candidate.zip').exists())
+
     def test_coherent_source_and_manifest_change_at_final_verification_refused(self):
         real_verify = PACKAGE['verify']
         calls = 0

@@ -4,6 +4,8 @@ var root = Path.GetFullPath(args[0]);
 var manifest = File.ReadAllText(args[1]);
 var version = System.Text.RegularExpressions.Regex.Match(manifest, @"(?m)^  Version: (\S+)$").Groups[1].Value;
 if (!System.Text.RegularExpressions.Regex.IsMatch(version, @"^\d+\.\d+\.\d+$")) throw new Exception("Manifest must have a final release version");
+RigInputGuard.Check(root);
+Console.WriteLine("PASS: no rig-only input file, reference, type or resource.");
 using var dll = AssemblyDefinition.ReadAssembly(Path.Combine(root, "FoodTrucks.dll"));
 var types = dll.MainModule.Types.ToArray();
 void Check(bool ok, string message) { if (!ok) throw new Exception(message); }
