@@ -31,7 +31,7 @@ namespace BridgeControl
         {
             if (new[] { "state", "op", "parks", "places", "map", "day_summary" }.Contains(cmd)) return true;
             var op = args["op"]?.Type == JTokenType.String ? (string)args["op"] : null;
-            // The rig virtual mouse's status/trace and UI geometry read only (tools/rig-input).
+            // The rig virtual mouse's status/trace and UI geometry read only (big-ambitions-agent-rig rig-input/).
             if (cmd == "mouse") return op == "status";
             return cmd == "ui" && (op == "list" || op == "tree" || op == "geometry");
         }

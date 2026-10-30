@@ -1,5 +1,6 @@
 """The rig virtual mouse (docs/test-bridge.md, "Rig virtual mouse"): argument rules shared by ft, ft-mcp and the mock
-bridge, and a small client. The rules match tools/rig-input/Shared/MouseArgs.cs; the parity tests compare them."""
+bridge, and a small client. The rules match big-ambitions-agent-rig rig-input/Shared/MouseArgs.cs; the parity tests compare them
+(tools/tests/test_rig_mouse.py, with BA_AGENT_RIG or the sibling checkout)."""
 import math
 
 PROTOCOL = 1

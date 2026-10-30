@@ -114,7 +114,7 @@ public sealed class BridgeLockTests : IDisposable
         s.Release(A);
     }
     // The rig mouse holds an extra command reservation for a whole interaction through the public lock API
-    // (tools/rig-input/Runtime/Bridge.cs Reserve): lease release is refused until the interaction ends.
+    // (big-ambitions-agent-rig rig-input/Runtime/Bridge.cs Reserve): lease release is refused until the interaction ends.
     [Fact] public void InteractionReservationOutlivesItsCommandAndRefusesOtherOwners()
     {
         var s = Store(); s.Acquire("owner", "", A); ControlGate.ConfigureStore(s);

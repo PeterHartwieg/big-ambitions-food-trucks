@@ -1,6 +1,10 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using Mono.Cecil;
 
-// The rig-only virtual mouse (tools/rig-input) must never ship: no file, assembly reference, embedded type or
+// The rig-only virtual mouse (big-ambitions-agent-rig rig-input/, AgentRigInput.dll) must never ship: no file, assembly reference, embedded type or
 // resource of it may appear anywhere in a runtime package, whatever the file allowlist or regenerated hashes say.
 public static class RigInputGuard
 {

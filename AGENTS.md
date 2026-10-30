@@ -13,7 +13,7 @@ A Workshop mod that adds food carts and trucks as an early-game business. Read `
 
 ## Local fallback testing
 
-When the Windows PC is unavailable, the sibling Driven Rides checkout provides a manually launched Mac rig: read `../big-ambitions-driven-rides/tools/agent-tests/MAC.md`. Set `BA_BRIDGE_URL=http://127.0.0.1:28330` for bridge clients, acquire the separate `agentmac` lock with its local launcher, and stop/release after testing. No tunnel or schedule is needed. Confirm its installed mod snapshot includes the code under test.
+When the Windows PC is unavailable, the sibling `big-ambitions-agent-rig` checkout provides a manually launched Mac rig: read `../big-ambitions-agent-rig/docs/MAC.md`. Set `BA_BRIDGE_URL=http://127.0.0.1:28330` for bridge clients, acquire the separate `agentmac` lock with its local launcher, and stop/release after testing. No tunnel or schedule is needed. Confirm its installed mod snapshot includes the code under test.
 
 ## Rules
 

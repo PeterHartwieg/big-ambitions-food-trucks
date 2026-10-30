@@ -142,7 +142,7 @@ NEW_GAME_MONEY = 10000.
 
 
 class MockMouse:
-    """The rig virtual mouse's protocol and frame timeline (tools/rig-input), for client tests. It models one sample per
+    """The rig virtual mouse's protocol and frame timeline (big-ambitions-agent-rig rig-input/), for client tests. It models one sample per
     frame, one interaction at a time, targets and cleanup; it never edits a schedule or claims the game accepted a change."""
     WIDTH, HEIGHT = 1920, 1080
 

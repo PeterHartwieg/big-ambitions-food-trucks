@@ -17,13 +17,24 @@ from ftlib.bridge import Bridge, BridgeError
 from ftlib import cli
 
 NS = runpy.run_path(str(TOOLS / 'mock-bridge'), run_name='mock_rig_mouse_test')
-RIG = TOOLS / 'rig-input'
+# The rig assembly lives in big-ambitions-agent-rig; the parity tests read it from BA_AGENT_RIG or the sibling checkout
+# and are skipped without one (the mod never needs the rig to build or ship).
+RIG = Path(os.environ.get('BA_AGENT_RIG') or TOOLS.parents[1] / 'big-ambitions-agent-rig') / 'rig-input'
+HAVE_RIG = (RIG / 'Shared/MouseArgs.cs').is_file()
+NO_RIG = f'needs the big-ambitions-agent-rig checkout ({RIG}); set BA_AGENT_RIG'
+
+
+def _rig(name):
+    return (RIG / name).read_text(encoding='utf-8') if HAVE_RIG else ''
+
+
 SOURCE = '\n'.join(p.read_text(encoding='utf-8') for p in sorted((RIG / 'Shared').glob('*.cs')) + sorted((RIG / 'Runtime').glob('*.cs')))
-ARGS_CS = (RIG / 'Shared/MouseArgs.cs').read_text(encoding='utf-8')
-SERVICE_CS = (RIG / 'Runtime/Service.cs').read_text(encoding='utf-8')
+ARGS_CS = _rig('Shared/MouseArgs.cs')
+SERVICE_CS = _rig('Runtime/Service.cs')
 ESCAPE = {'op': 'ui_escape', 'phase': 'after_native_release'}
 
 
+@unittest.skipUnless(HAVE_RIG, NO_RIG)
 class SourceParityTests(unittest.TestCase):
     """ftlib.mouse (used by ft, ft-mcp and the mock) states the same protocol as the rig assembly."""
 
@@ -59,9 +70,24 @@ class SourceParityTests(unittest.TestCase):
         self.assertIn(f'"{ESCAPE["op"]}"', ARGS_CS)
         self.assertIn(f'"{ESCAPE["phase"]}"', ARGS_CS)
 
-    def test_every_error_code_is_documented_and_used(self):
+    def test_every_error_code_is_used(self):
         used = set(re.findall(r'"((?:rig_)?mouse_[a-z_]+|stale_ui_target)"', SOURCE))
         self.assertEqual(used, set(mouse.ERROR_CODES))
+
+    def test_rig_assembly_gates_on_the_isolated_player(self):
+        # Gating: the service refuses to start without both flags, an agent port and the isolated product.
+        util = _rig('Runtime/Util.cs')
+        for needle in ('"-agent-tests"', '"-foodtrucks-test"', 'Agent1 = 18330', 'AgentMac = 28330', '"Big Ambitions Agent Tests"', 'IsReady'):
+            self.assertIn(needle, util)
+        for project in RIG.glob('*.csproj'):
+            text = project.read_text()
+            self.assertNotIn('FoodTrucks', re.sub(r'<!--.*?-->', '', text, flags=re.S).replace('FoodTrucks.Core', ''))
+
+
+class ModSideTests(unittest.TestCase):
+    """What stays in Food Trucks: the lock gate, the docs and the rule that the rig assembly never enters the mod."""
+
+    def test_every_error_code_is_documented(self):
         docs = (TOOLS.parent / 'docs/test-bridge.md').read_text(encoding='utf-8')
         for code in mouse.ERROR_CODES:
             self.assertIn(f'`{code}`', docs)
@@ -77,13 +103,10 @@ class SourceParityTests(unittest.TestCase):
             if path.suffix in ('.cs', '.asmdef', '.json', '.csproj'):
                 self.assertNotIn('AgentRigInput', path.read_text(encoding='utf-8', errors='ignore'), path)
         self.assertNotIn('rig-input', (TOOLS / 'build-mod.sh').read_text())
-        for project in RIG.glob('*.csproj'):
-            text = project.read_text()
-            self.assertNotIn('FoodTrucks', re.sub(r'<!--.*?-->', '', text, flags=re.S).replace('FoodTrucks.Core', ''))
-        # Gating: the service refuses to start without both flags, an agent port and the isolated product.
-        util = (RIG / 'Runtime/Util.cs').read_text()
-        for needle in ('"-agent-tests"', '"-foodtrucks-test"', 'Agent1 = 18330', 'AgentMac = 28330', '"Big Ambitions Agent Tests"', 'IsReady'):
-            self.assertIn(needle, util)
+        self.assertNotIn('AgentRigInput', (TOOLS / 'build-mod.sh').read_text())
+        # Its source lives in big-ambitions-agent-rig (old ignored bin/obj leftovers do not count).
+        left = [p for p in (TOOLS / 'rig-input').rglob('*') if p.suffix in ('.cs', '.csproj', '.py') and not {'bin', 'obj'} & set(p.parts)]
+        self.assertEqual(left, [])
 
 
 class SchemaTests(unittest.TestCase):

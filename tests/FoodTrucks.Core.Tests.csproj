@@ -10,8 +10,12 @@
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" PrivateAssets="all" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
+    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
     <ProjectReference Include="../Core/FoodTrucks.Core.csproj" />
     <ProjectReference Include="../tools/bridge-locks/BridgeControl.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../tools/release/RigInputGuard.cs" Link="Release/RigInputGuard.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../data/*.json" Link="data/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

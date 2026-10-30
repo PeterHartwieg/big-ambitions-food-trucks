@@ -87,7 +87,7 @@ class Bridge:
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
             if body is not None:
                 raise BridgeError(f'Lost call reply at {self.url}: its outcome is unknown; check the game log before repeating a changing command (no operation id received)') from exc
-            hint = ('start the local Mac fallback with tools/agent-tests/mac-agent start in the Driven Rides checkout; no tunnel is needed'
+            hint = ('start the local Mac fallback with scripts/mac-agent start in the big-ambitions-agent-rig checkout; no tunnel is needed'
                     if locks.instance_for_url(self.url) == 'agentmac'
                     else 'start the game with tools/run-remote.sh start, then tools/run-remote.sh tunnel')
             raise BridgeError(f'No bridge at {self.url}: {hint}') from exc
