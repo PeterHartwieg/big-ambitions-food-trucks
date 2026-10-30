@@ -1,0 +1,37 @@
+﻿# Street Food (food-trucks mod) - READ-ONLY DIAGNOSIS: rented commissary has no address / no map listing
+
+You are running a DIAGNOSE session in a fresh detached worktree of origin/main (d2e2b3e, live Workshop version 0.10.9):
+C:\Users\Peter\Coding_Projects\big-ambitions\food-trucks-worktrees\diagnose-commissary-address
+
+## Hard rules
+- READ-ONLY diagnosis. Do NOT edit, commit, push, branch, or open PRs. Do not modify any file in this worktree (you may create throwaway scratch files only under C:\Users\Peter\Coding_Projects\.agent-logs\scratch-streetfood-commissary-address\ and must delete nothing else).
+- Do NOT touch the main checkout C:\Users\Peter\Coding_Projects\big-ambitions\big-ambitions-food-trucks (the rig uses it), food-trucks-build, the game install, ModsLocal, Steam, or any save. Do not launch the game or the rig.
+- No game DLLs, decompiled code or saves may be copied into the repo. You MAY read the installed game's managed assemblies read-only (e.g. with a decompiler/ilspycmd or reflection) to confirm how vanilla buildings get addresses and map listings, if that is needed to prove the root cause.
+- The ONLY file you write is the report: C:\Users\Peter\Coding_Projects\.agent-logs\streetfood-commissary-address-diagnose.md
+
+## Player report (Steam Workshop 3822355169, skyking2011, 26 Oct 2026 14:51 JST, verbatim)
+> where is industry city commisary? I rented a spot for my food cart there and had things delivered but i have no idea where this is located. its a contact on the phone but no address and no listing on the map.
+
+Context: earlier, on a different report, the mod author replied: "In Voogle Maps, look under Street food -> Commissaries; one is at 5 12th Street, and visiting its loading bay unlocks its phone contact." So at least one (Manhattan) commissary apparently has an address and a map filter; the Industry City one apparently does not (or the player could not find it). Also note: a Big Copilot route-map export found no usable checked positions in Industry City / Hamptons, which may or may not be related.
+No GitHub issue, PR or branch covers this yet.
+
+## What to find out
+1. How commissaries are defined and placed: data/commissaries.json, unity/FoodTrucks/Scripts/LogisticsCommissary.cs (and related Commissary code), Core models.
+2. How a commissary gets (or should get) an address string, a building/map listing and a phone contact:
+   - ContactsHelper.GetPermanentIds / ContactScrollerController.LoadContact patches (the phone contact and what text/address it shows; how the contact gets unlocked, including when the player rents a bay remotely without visiting).
+   - CityMapFilters (ApplyFilters, InitializeFilters, CreateFilter, CreateLine, IsFilterSelected) and BuildingResume.SetButtons map patches (Voogle Maps "Street food -> Commissaries" filter, map pins/lines).
+   - BizMan (BizManBusiness.SetAddress, Street food page, commissary/bay rows) - whether the rented bay shows an address there.
+   - Any GPS / "set destination" feature (0.10.8 added GPS-by-phone for events - does it cover commissaries?).
+3. Specifically for the Industry City commissary: does its data entry have an address/building reference/coordinates that resolve correctly in the game? Does the map filter include it? Is it gated on a visit/unlock flag that a remote rental bypasses? Is the address resolved per-city and failing outside Manhattan?
+4. Decide: (a) clear bug, (b) missing feature, or (c) intended design (player expected to discover it some other way). Justify with evidence.
+
+## Required report contents (C:\Users\Peter\Coding_Projects\.agent-logs\streetfood-commissary-address-diagnose.md)
+- Verdict line at top: `VERDICT: BUG | MISSING FEATURE | DESIGN QUESTION` with one-sentence summary.
+- The report text above.
+- Root cause with exact file:line references (at d2e2b3e), and the code path for: contact display, map listing, BizMan address - for both Manhattan and Industry City commissaries.
+- Confidence level and what you could not verify statically.
+- A proposed MINIMAL fix (describe it, files/functions to change; do not implement it), plus any risks (save compatibility, other cities, Mod Pack/C-Suite Atlas interplay).
+- Rig proof plan for the later rig_test session, red -> green: exact in-game steps on the isolated PC rig (agent1 profile), what screenshot/log/test-bridge read shows the missing address/map listing before the fix and its presence after; plus any Core unit test (`dotnet test`) that can fail before / pass after.
+- If it is a design question: the options with pros/cons and a recommendation.
+
+Finish by printing the verdict line and the report path.
