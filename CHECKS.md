@@ -1,4 +1,4 @@
-# Uninstall with vehicles at the private driver (0.10.9)
+# Uninstall with vehicles at the private driver (0.10.10)
 
 Fix for issue #13; see [scope and evidence](docs/release/0.10.9/uninstall-stored-trucks.md). The production-linked harness passes. All rows below are **pending** in game. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed, on a disposable save. Note first whether the private driver accepts the truck; if not, say so and use a labelled stored-state fixture.
 
@@ -9,7 +9,7 @@ Fix for issue #13; see [scope and evidence](docs/release/0.10.9/uninstall-stored
 | UN3 | Run the uninstall twice more, then save, reload and run it again | No further vehicle refund or money change; each run reports the save clean |
 | UN4 | Save the cleaned UN1/UN2 save, close the game, disable only Street Food, start and load it; save, reload, cross midnight | Loads with normal world interaction; the private driver list shows only vanilla vehicles; no unknown vehicle type errors in Player.log |
 
-# Stock panel at quit (0.10.9)
+# Stock panel at quit (0.10.10)
 
 Issue #19 fix: the work stock panel is not hidden while the city unloads or the game quits; see [scope and evidence](docs/release/0.10.9/quit-stock-panel.md). Production-method harness checks pass. All rows below are **pending** in game. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
 
@@ -19,7 +19,7 @@ Issue #19 fix: the work stock panel is not hidden while the city unloads or the 
 | QS2 | Repeat while serving with the native pause menu: Main menu, Quit to desktop, and Save and exit to desktop (one run each) | Same clean log for each; Main menu reaches the menu and the save reloads; Save and exit completes the save and the process exits |
 | QS3 | With a cart: work at the window, then stop work; work again and walk away; open again and close the business. With a truck: work at the hatch, then step out | The stock panel closes each time; driving afterwards still shows the native cargo HUD |
 
-# Schedule paste keeps the route's hours (0.10.9)
+# Schedule paste keeps the route's hours (0.10.10)
 
 Issue #15; see [scope and evidence](docs/release/0.10.9/schedule-paste-hours.md). The production-method harness passes. All rows below are **pending** in game. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed; a truck and a cart whose Monday, Tuesday and Wednesday routes have different hours, Thursday closed.
 
@@ -30,7 +30,7 @@ Issue #15; see [scope and evidence](docs/release/0.10.9/schedule-paste-hours.md)
 | SP3 | Copy Monday, paste to all, confirm; select each day | Every open day keeps its own route hours with Monday's shifts; Thursday stays closed with its shifts; the Week plan route is unchanged |
 | SP4 | Copy a day with no shifts and paste it on a day with shifts; then the same on a vehicle with no crew | Shifts cleared; the empty rows' + buttons sit at the destination's own opening hour, not the source's; with no crew the hours stay the route's |
 | SP5 | Open a real shop's Schedule tab, paste a day onto one with different hours | The shop's hours and shifts are copied as in the game |
-# Commissary address and map access (next build)
+# Commissary address and map access (0.10.10)
 
 Display-only fix: commissary contacts and BizMan's rented-space panel show the commissary's address, with View on map and Set destination; see [scope and evidence](docs/release/0.10.9/commissary-address.md). Core and production-method harness checks pass. **Checked in the Windows agent1 rig on 28 October 2026 (CA1-CA5):** address/map/GPS, all five sites, reload/texts and both markers passed; [native evidence and limits](docs/evidence/commissary-address/README.md). Physical driving and occupied-host opening-hour permutations remain unverified. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
 
