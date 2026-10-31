@@ -16,7 +16,7 @@ namespace FoodTrucks
     [ModEntryOnInitializationLoad]
     public sealed class FoodTrucksMod : IModBigAmbitions
     {
-        public const string Version = "0.10.9";
+        public const string Version = "0.10.10";
         internal const string BundleKey = "AssetBundles/foodtrucks.unity3d";
         internal const string TruckTypeName = "foodtrucks:vehicletype_foodtruck";
         internal const string CartTypeName = "foodtrucks:vehicletype_foodcart";
