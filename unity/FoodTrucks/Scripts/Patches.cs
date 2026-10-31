@@ -105,6 +105,8 @@ namespace FoodTrucks
                 prefix: nameof(VehicleSchedule.EmployeeChangedPrefix));
             Patch(typeof(EmployeeInstance), "UpdateWeeklyHoursAndDays", new[] { typeof(List<ScheduleDay>) }, typeof(VehicleSchedule),
                 postfix: nameof(VehicleSchedule.WeeklyHoursPostfix));
+            // A pasted day brings the source day's opening hours: the route's come back before the game reads them.
+            Patch(schedule, "CalculateOpeningHoursState", Type.EmptyTypes, typeof(VehicleSchedule), prefix: nameof(VehicleSchedule.OpeningStatePrefix));
             // A dropdown with a selected option past its list shows the placeholder instead of throwing (the quit's localization reload).
             Patch(typeof(UI.Elements.Dropdown), "UpdateSelectedOptionText", Type.EmptyTypes, nameof(StaleDropdownPrefix), prefix: true);
             Patch(typeof(ScheduleAutoFillerHelper), "AutoFillSchedule", null, typeof(VehicleSchedule), prefix: nameof(VehicleSchedule.AutoFillPrefix));

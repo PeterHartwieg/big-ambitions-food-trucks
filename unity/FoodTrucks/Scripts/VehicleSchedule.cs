@@ -77,6 +77,7 @@ namespace FoodTrucks
             (typeof(ScheduleHourToggle), "OnPointerDown", new[] { typeof(UnityEngine.EventSystems.PointerEventData) }, false),
             (typeof(ScheduleDayButton), "OnOpenToggleChange", new[] { typeof(bool) }, false),
             (typeof(ScheduleScrollerController), "LoadStation", new[] { typeof(ItemInstance) }, true),
+            (typeof(ScheduleHelper), "CalculateOpeningHoursState", Type.EmptyTypes, false),
         };
 
         internal static void CheckReady()
@@ -556,6 +557,21 @@ namespace FoodTrucks
                 HireRoutes.GameSpeed(), HireRoutes.HomePoint(home), home?.BayStops));
             foreach (var day in standIn.scheduleDays)
                 day.openingHourSlots = WeekPlan.OpeningSlots(hours, WeekdayOf(day.day)).Select(s => new OpeningHourSlot(s.Start, s.End)).ToList();
+        }
+
+        // ScheduleHelper.CalculateOpeningHoursState: a pasted day (ScheduleDayButton.OnPasteScheduleClick, once per day on
+        // paste to all) takes the source day's opening hours along with its shifts. The hours follow the route, so all
+        // seven days get the route's hours back before the game reads them for the header, the rows and the add buttons.
+        // The pasted shifts, the days and their open state stay as the game left them.
+        public static void OpeningStatePrefix()
+        {
+            if (!Here) return;
+            try
+            {
+                var vehicle = vehicleId == null ? null : StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
+                if (vehicle != null && DemandData.Rules != null) OpeningHours(vehicle);
+            }
+            catch (Exception ex) { Log.Error("Schedule: opening hours: " + ex); }
         }
 
         // ScheduleScrollerController.LoadStation: a vehicle's row brings no customers and has nothing attached.

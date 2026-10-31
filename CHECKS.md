@@ -19,6 +19,18 @@ Issue #19 fix: the work stock panel is not hidden while the city unloads or the 
 | QS2 | Repeat while serving with the native pause menu: Main menu, Quit to desktop, and Save and exit to desktop (one run each) | Same clean log for each; Main menu reaches the menu and the save reloads; Save and exit completes the save and the process exits |
 | QS3 | With a cart: work at the window, then stop work; work again and walk away; open again and close the business. With a truck: work at the hatch, then step out | The stock panel closes each time; driving afterwards still shows the native cargo HUD |
 
+# Schedule paste keeps the route's hours (0.10.9)
+
+Issue #15; see [scope and evidence](docs/release/0.10.9/schedule-paste-hours.md). The production-method harness passes. All rows below are **pending** in game. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed; a truck and a cart whose Monday, Tuesday and Wednesday routes have different hours, Thursday closed.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| SP1 | Start the game; read the log | `Patch ScheduleHelper.CalculateOpeningHoursState: Active.` with the other Schedule patches, then `Schedule: on (…)` |
+| SP2 | Vehicle Schedule tab: copy Monday, paste on Tuesday | Tuesday's header and rows keep Tuesday's route hours; Monday's shifts are on Tuesday; log `Schedule: … now has N shifts`; Back and reopen: same hours and shifts. Repeat with the truck and the cart |
+| SP3 | Copy Monday, paste to all, confirm; select each day | Every open day keeps its own route hours with Monday's shifts; Thursday stays closed with its shifts; the Week plan route is unchanged |
+| SP4 | Copy a day with no shifts and paste it on a day with shifts; then the same on a vehicle with no crew | Shifts cleared; the empty rows' + buttons sit at the destination's own opening hour, not the source's; with no crew the hours stay the route's |
+| SP5 | Open a real shop's Schedule tab, paste a day onto one with different hours | The shop's hours and shifts are copied as in the game |
+
 # Crew in the employee list (0.10.9)
 
 Display-only fix for vehicle crew in MyEmployees; see [scope and evidence](docs/release/0.10.9/crew-employee-screen.md). Core and production-method harness checks pass. All rows below are **pending** in game. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
