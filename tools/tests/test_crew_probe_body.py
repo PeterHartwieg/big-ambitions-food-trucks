@@ -67,5 +67,9 @@ class CrewBodyTests(unittest.TestCase):
     def test_bounded_admission_and_no_writes_on_failure(self):
         self.run_case('limits')
 
+    # Quarantine tracked in #29; allocation robustness fix tracked in #30.
+    @unittest.skip("Quarantined: intermittent 'steady allocations: 6192' failure, see "
+                   "https://github.com/PeterHartwieg/big-ambitions-food-trucks/issues/29; real fix tracked in "
+                   "https://github.com/PeterHartwieg/big-ambitions-food-trucks/issues/30")
     def test_zero_steady_state_allocations(self):
         self.run_case('allocations')

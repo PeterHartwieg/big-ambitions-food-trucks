@@ -104,7 +104,11 @@ namespace FoodTrucks
                 catch (Exception ex) { Log.Error("Serving work, cargo listener: " + ex); }
                 try
                 {
-                    if (panel != null && string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) panel.Toggle(false);
+                    // Toggle(false) clears GameManager.selectedVehicle without a null check. While the city unloads or
+                    // the game quits, the manager is gone or no longer returned, and the scene removes the panel anyway
+                    // (NullReferenceException in Toggle after a bridge quit while serving, issue #19).
+                    var game = GameManager.isCitySceneBeingUnloaded ? null : InstanceBehavior<GameManager>.Instance;
+                    if (panel != null && game != null && string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) panel.Toggle(false);
                 }
                 catch (Exception ex) { Log.Error("Serving work, stock panel: " + ex); }
                 try { EnergyHelper.RemoveEnergySpender("work"); }
