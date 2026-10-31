@@ -1,3 +1,14 @@
+# Uninstall with vehicles at the private driver (0.10.9)
+
+Fix for issue #13; see [scope and evidence](docs/release/0.10.9/uninstall-stored-trucks.md). The production-linked harness passes. All rows below are **pending** in game. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed, on a disposable save. Note first whether the private driver accepts the truck; if not, say so and use a labelled stored-state fixture.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| UN1 | Leave the only food truck (with paid stock) with the private driver; save, reload; press Ctrl+Shift+F11 twice | The confirmation counts 1 vehicle; then the done notice and one refund of purchase price plus paid stock; the reopened private driver list no longer shows the truck |
+| UN2 | Mixed: one cart on the street, one truck and one ordinary car with the private driver; uninstall | Confirmation counts 2; both removed and refunded once each; the ordinary car stays with the driver; done notice only after both are gone |
+| UN3 | Run the uninstall twice more, then save, reload and run it again | No further vehicle refund or money change; each run reports the save clean |
+| UN4 | Save the cleaned UN1/UN2 save, close the game, disable only Street Food, start and load it; save, reload, cross midnight | Loads with normal world interaction; the private driver list shows only vanilla vehicles; no unknown vehicle type errors in Player.log |
+
 # Stock panel at quit (0.10.9)
 
 Issue #19 fix: the work stock panel is not hidden while the city unloads or the game quits; see [scope and evidence](docs/release/0.10.9/quit-stock-panel.md). Production-method harness checks pass. All rows below are **pending** in game. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.
