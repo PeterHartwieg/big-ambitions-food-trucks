@@ -643,13 +643,17 @@ namespace FoodTrucks
             try { Contact.ShowAddedContactNotifications(); }
             catch (Exception ex) { Log.Error("Commissary, new contact notice: " + ex); }
             var rules = Rules!;
-            // A new key for the new text (renting by phone): the phone words sent messages again from their key.
-            Notices.SendText(contact, "foodtrucks:message_commissary_welcome_phone", new Dictionary<string, string>
+            // A new key for the new text (renting by phone): the phone words sent messages again from their key. With the
+            // building's address resolved, the key that says where it is (older messages keep theirs, without one).
+            var address = CommissaryLocation.Address(site);
+            var welcome = new Dictionary<string, string>
             {
                 { "commissary", Name(site) },
                 { "cart", CartSelling.Money(rules.RentPerMonthCents.TryGetValue("cart", out var cart) ? cart : 0) },
                 { "truck", CartSelling.Money(rules.RentPerMonthCents.TryGetValue("truck", out var truck) ? truck : 0) }
-            });
+            };
+            if (address != null) welcome["address"] = address;
+            Notices.SendText(contact, CommissaryLocation.MessageKey("foodtrucks:message_commissary_welcome_phone", address), welcome);
             Log.Info($"Commissary {site.Id}: unlocked on day {SaveGameManager.Current.Day} ({how}); its contact added.");
             return true;
         }
@@ -1266,6 +1270,14 @@ namespace FoodTrucks
                 "move" => ("foodtrucks:message_commissary_space_moved", new Dictionary<string, string> { { "vehicle", name }, { "from", NameOf(from) }, { "rent", rent } }),
                 _ => ("foodtrucks:message_commissary_space_released", new Dictionary<string, string> { { "vehicle", name } })
             };
+            // A space rented or moved here says where here is, when the building's address resolves.
+            var site = Sites?.Site(siteId);
+            var address = choice.Op == "release" || site == null ? null : CommissaryLocation.Address(site);
+            if (address != null)
+            {
+                key = CommissaryLocation.MessageKey(key, address);
+                data["address"] = address;
+            }
             var contact = ContactFor(siteId);
             if (inCall) Notices.Send(contact, new TextMessage(key, data, read: true));
             else Notices.SendText(contact, key, data);
@@ -2261,6 +2273,8 @@ namespace FoodTrucks
             var refusal = Refusal(site, forOrders: false);
             if (refusal != null) return refusal;
             var commissary = FoodTrucksSession.CurrentState!.Commissary;
+            // The call opens saying where the commissary is, when its building's address resolves.
+            var address = CommissaryLocation.Address(site!);
             if (!CommissaryOrdering.CanOrder(commissary, site!.Id))
             {
                 // No space here: the call opens on Spaces and Standing orders, with the rent for a space.
@@ -2268,24 +2282,28 @@ namespace FoodTrucks
                 var nospace = new
                 {
                     commissary = Commissary.Name(site),
+                    address = address ?? "",
                     standing = CommissaryStandingOrders.At(commissary, site.Id).Count.ToString(),
                     cart = CartSelling.Money(rules.RentPerMonthCents.TryGetValue("cart", out var cart) ? cart : 0),
                     truck = CartSelling.Money(rules.RentPerMonthCents.TryGetValue("truck", out var truck) ? truck : 0)
                 };
-                Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_start_spaces", ToDictionary(nospace), read: true, isNewInteraction: true));
-                return Menu(site.Id, LocalizorManager.Localize("foodtrucks:dialog_commissary_start_spaces", nospace));
+                var spacesKey = CommissaryLocation.MessageKey("foodtrucks:dialog_commissary_start_spaces", address);
+                Notices.Send(Current.contact, new TextMessage(spacesKey, ToDictionary(nospace), read: true, isNewInteraction: true));
+                return Menu(site.Id, LocalizorManager.Localize(spacesKey, nospace));
             }
             var data = new
             {
                 commissary = Commissary.Name(site!),
+                address = address ?? "",
                 spaces = Notices.Counted(commissary.Spaces.Count(s => s.CommissaryId == site!.Id), "foodtrucks:count_spaces"),
                 stock = Notices.Counted(commissary.Stock.TryGetValue(site!.Id, out var lines) ? lines.Sum(l => (long)l.Units) : 0, "foodtrucks:count_items"),
                 orders = Notices.Counted(commissary.Orders.Count(o => o.CommissaryId == site.Id), "foodtrucks:count_orders"),
                 standing = Notices.Counted(CommissaryStandingOrders.At(commissary, site.Id).Count, "foodtrucks:count_standing")
             };
             // A new key for the text with standing orders: the phone words old messages again from their key and data.
-            Notices.Send(Current.contact, new TextMessage("foodtrucks:dialog_commissary_start_standing", ToDictionary(data), read: true, isNewInteraction: true));
-            return Menu(site.Id, LocalizorManager.Localize("foodtrucks:dialog_commissary_start_standing", data));
+            var key = CommissaryLocation.MessageKey("foodtrucks:dialog_commissary_start_standing", address);
+            Notices.Send(Current.contact, new TextMessage(key, ToDictionary(data), read: true, isNewInteraction: true));
+            return Menu(site.Id, LocalizorManager.Localize(key, data));
         }
 
         // The call's menu: Order stock and "Spaces and standing orders" with a space here; without one, the second

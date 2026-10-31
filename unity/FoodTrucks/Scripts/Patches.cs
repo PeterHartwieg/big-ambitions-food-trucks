@@ -255,6 +255,9 @@ namespace FoodTrucks
             Patch(typeof(UI.Smartphone.Apps.Contacts.ContactScrollerController), "LoadContact", null, typeof(ModContacts),
                 postfix: nameof(ModContacts.LoadContactPostfix));
             Patch(typeof(ContactsHelper), "GetPermanentIds", Type.EmptyTypes, typeof(ModContacts), postfix: nameof(ModContacts.PermanentIdsPostfix));
+            // A commissary contact's header shows its building's address and View on map (the call button stays the game's).
+            Patch(typeof(UI.Smartphone.Apps.Contacts.ContactsApp), "SetUpHeader", new[] { typeof(Contact) }, typeof(ModContacts),
+                postfix: nameof(ModContacts.HeaderPostfix));
 
             // Storage per piece in the vehicle's cargo slots: each piece's "62/80" and a tooltip with its foods.
             Patch(typeof(UI.PlayerHUD.CargoItemUi), "SetUp", new[] { typeof(CargoItem), typeof(ICargoHolder), typeof(bool) },

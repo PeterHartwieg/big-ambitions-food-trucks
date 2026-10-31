@@ -545,11 +545,16 @@ namespace FoodTrucks
             if (space != null && site != null)
             {
                 box.Row(Text("foodtrucks:bizman_page_space_at"), Commissary.Name(site));
+                // Where it is: the host building's address, resolved as the page opens, and GPS to that building.
+                var address = CommissaryLocation.Address(site);
+                box.Row(Text("foodtrucks:bizman_page_space_address"), address ?? CommissaryLocation.AddressText(site));
                 // Per day, as Commissary charges it (CommissaryRules.DailyRentCents: the month's rent over a year's days).
                 if (rules != null && rules.RentPerMonthCents.ContainsKey(kind))
                     box.Row(Text("foodtrucks:bizman_page_space_rent"), Format("foodtrucks:bizman_page_space_rent_value", ("rent", CartSelling.Money(rules.DailyRentCents(kind)))));
                 box.Row(Text("foodtrucks:bizman_page_space_since"), Format("foodtrucks:bizman_page_space_since_value", ("day", space.SinceDay.ToString())));
                 var siteId = site.Id;
+                if (address != null) box.Paragraph(Text("foodtrucks:bizman_page_space_bay_hint"));
+                box.Button(Text("foodtrucks:bizman_page_space_destination"), () => CommissaryLocation.SetDestination(siteId), interactable: address != null);
                 box.Button(Text("foodtrucks:bizman_page_space_call"), () => Call(siteId));
                 return;
             }

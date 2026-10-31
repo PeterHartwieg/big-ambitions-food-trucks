@@ -72,6 +72,50 @@ namespace FoodTrucks
             }
         }
 
+        // The listener this header put on the game's View on map button, taken off before the next contact's header.
+        private static UnityEngine.Events.UnityAction? viewOnMap;
+
+        // Its own once-only log flag, so an earlier failure in the other postfixes doesn't hide the header's.
+        private static bool headerFailed;
+
+        // Postfix on ContactsApp.SetUpHeader: a commissary contact has no address of its own (the game's address branch
+        // would tie its call to the host tenant's opening hours), so the game hides Address and View on map. After the
+        // game's header, this shows the host building's address and a View on map to it, resolved now; while it can't be
+        // resolved, "Address unavailable" and no map button. The call button is the game's, left as it set it.
+        internal static void HeaderPostfix(Contact contact, UnityEngine.UI.Button ___viewOnMapButton, UnityEngine.GameObject ___addressGameObject,
+            Localizor.LanguageChangeEvent.TextLocalizationComponent ___addressLabel)
+        {
+            try
+            {
+                if (viewOnMap != null && ___viewOnMapButton != null) ___viewOnMapButton.onClick.RemoveListener(viewOnMap);
+                viewOnMap = null;
+                var site = CommissaryLocation.SiteOfContact(contact?.id);
+                if (site == null || ___viewOnMapButton == null || ___addressGameObject == null || ___addressLabel == null) return;
+                var address = CommissaryLocation.Address(site);
+                ___addressLabel.SetValue(address ?? CommissaryLocation.AddressText(site), clearKey: true);
+                ___addressGameObject.SetActive(true);
+                ___viewOnMapButton.onClick.RemoveAllListeners();
+                if (address == null)
+                {
+                    ___viewOnMapButton.gameObject.SetActive(false);
+                    return;
+                }
+                var siteId = site.Id;
+                viewOnMap = () =>
+                {
+                    try { CommissaryLocation.ViewOnMap(siteId); }
+                    catch (Exception ex) { Log.Error("Contacts: commissary View on map: " + ex); }
+                };
+                ___viewOnMapButton.onClick.AddListener(viewOnMap);
+                ___viewOnMapButton.gameObject.SetActive(true);
+            }
+            catch (Exception ex)
+            {
+                if (!headerFailed) Log.Error("Contacts: commissary address: " + ex);
+                headerFailed = true;
+            }
+        }
+
         // Postfix on ContactsHelper.GetPermanentIds: "Delete all" keeps them too.
         internal static void PermanentIdsPostfix(ref System.Collections.Generic.List<string> __result)
         {
