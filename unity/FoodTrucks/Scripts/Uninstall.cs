@@ -23,7 +23,8 @@ namespace FoodTrucks
         {
             var game = SaveGameManager.Current;
             if (game == null) return;
-            var vehicles = game.VehicleInstances.Where(v => FoodTrucksMod.IsModVehicle(v.vehicleTypeName)).ToList();
+            // Vehicles left with the private driver count too (issue #13): the game's Delete never takes them out of storage.
+            var vehicles = ModVehicles(game);
             var deliveries = PendingDeliveries(game);
             if (vehicles.Count == 0 && deliveries == 0)
             {
@@ -46,8 +47,13 @@ namespace FoodTrucks
                 var campaignsLeft = EndFleetCampaigns();
                 try { VehicleTodos.RemoveAll("uninstall"); }
                 catch (Exception ex) { Log.Error("Uninstall: to-dos: " + ex); }
-                // Not "safe to remove" while a fleet campaign is left (its own notice says to run the step again).
-                if (campaignsLeft == 0) CartSelling.Notify("foodtrucks:notification_uninstall_none");
+                // Not "safe to remove" while a fleet campaign is left (its own notice says to run the step again),
+                // nor while a fresh look still finds a vehicle or a delivery.
+                if (campaignsLeft != 0) return;
+                var stillOwned = ModVehicles(game).Count;
+                if (stillOwned == 0 && PendingDeliveries(game) == 0) CartSelling.Notify("foodtrucks:notification_uninstall_none");
+                else CartSelling.Notify("foodtrucks:notification_uninstall_partial",
+                    ("count", "0"), ("left", stillOwned.ToString()), ("refund", CartSelling.Money(0)), ("unpaid", CartSelling.Money(0)));
                 return;
             }
             if (vehicles.Any(v => v.id == game.ActiveVehicleId))
@@ -67,8 +73,8 @@ namespace FoodTrucks
             Run(game, vehicles);
         }
 
-        // Removes first and refunds only a vehicle that is really gone, so a retry after a failure
-        // can never refund the same vehicle twice.
+        // Removes first and refunds only a vehicle that is really gone, from the street and the private driver's
+        // garage alike, so a retry after a failure can never refund the same vehicle twice.
         private static void Run(GameInstance game, List<VehicleInstance> vehicles)
         {
             // Out of the truck's hatch before the truck goes.
@@ -99,24 +105,7 @@ namespace FoodTrucks
                 var modCents = ModItemCents(vehicle);
                 // A vanilla label, so the history still reads well after the mod is removed.
                 var name = vehicle.VehicleType != null ? LocalizorManager.GetLocalization(vehicle.vehicleTypeName, null) : vehicle.vehicleTypeName;
-                try
-                {
-                    var controller = VehicleHelper.GetVehicleController(vehicle);
-                    // As the game's own vehicle sale does, so traffic forgets the collider.
-                    if (controller != null)
-                    {
-                        try
-                        {
-                            if (controller.vehicleCollider != null) GleyTrafficSystem.Manager.TriggerColliderRemovedEvent(controller.vehicleCollider);
-                            if (controller.additionalCollider != null) GleyTrafficSystem.Manager.TriggerColliderRemovedEvent(controller.additionalCollider);
-                        }
-                        catch (Exception ex) { Log.Error($"Uninstall: collider event for {vehicle.id}: {ex}"); }
-                    }
-                    vehicle.Delete(controller);
-                }
-                catch (Exception ex) { Log.Error($"Uninstall: removing {vehicle.id} threw: {ex}"); }
-
-                if (game.VehicleInstances.Contains(vehicle))
+                if (!RemoveEverywhere(game, vehicle.id))
                 {
                     Log.Error($"Uninstall: {vehicle.vehicleTypeName} {vehicle.id} is still in the save; not refunded.");
                     continue;
@@ -144,10 +133,64 @@ namespace FoodTrucks
             if (modItemCents > 0)
                 Log.Info($"Uninstall: {CartSelling.Money(Commissary.ReverseDeduction(modItemCents))} of this tax year's commissary deduction taken back for the mod's items refunded with the vehicles.");
             FoodTrucksSession.MarkChanged();
-            var left = vehicles.Count - removed;
+            // Counted afresh in both lists, with the deliveries, rather than trusted from the loop.
+            var left = ModVehicles(game).Count;
+            var deliveriesLeft = PendingDeliveries(game);
+            if (deliveriesLeft > 0) Log.Error($"Uninstall: {deliveriesLeft} vehicle deliveries are still pending.");
             Log.Info($"Uninstall: {removed} removed, {left} left, refunded {CartSelling.Money(refundCents)}, unpaid {CartSelling.Money(unpaidCents)}.");
-            CartSelling.Notify(left == 0 && unpaidCents == 0 && campaignsLeft == 0 ? "foodtrucks:notification_uninstall_done" : "foodtrucks:notification_uninstall_partial",
+            CartSelling.Notify(left == 0 && deliveriesLeft == 0 && unpaidCents == 0 && campaignsLeft == 0 ? "foodtrucks:notification_uninstall_done" : "foodtrucks:notification_uninstall_partial",
                 ("count", removed.ToString()), ("left", left.ToString()), ("refund", CartSelling.Money(refundCents)), ("unpaid", CartSelling.Money(unpaidCents)));
+        }
+
+        // Every Food Trucks vehicle in the save, on the street or with the private driver, once per vehicle ID.
+        // A vehicle without an ID is kept as its own entry, so it is never taken for gone.
+        private static List<VehicleInstance> ModVehicles(GameInstance game) =>
+            Owned(game).Where(v => FoodTrucksMod.IsModVehicle(v.vehicleTypeName))
+                .GroupBy(v => string.IsNullOrEmpty(v.id) ? null : v.id, StringComparer.Ordinal)
+                .SelectMany(g => g.Key == null ? g : g.Take(1))
+                .ToList();
+
+        private static IEnumerable<VehicleInstance> Owned(GameInstance game) =>
+            (game.VehicleInstances ?? Enumerable.Empty<VehicleInstance>())
+                .Concat(game.privateDriverVehicleInstances ?? Enumerable.Empty<VehicleInstance>())
+                .Where(v => v != null);
+
+        // The game's own deletion for each copy of the vehicle on the street, then its entries in the private driver's
+        // garage, which that deletion leaves alone. True only when no vehicle with this ID is left in either list.
+        private static bool RemoveEverywhere(GameInstance game, string? id)
+        {
+            if (string.IsNullOrEmpty(id)) return false;
+            bool Ours(VehicleInstance? v) => v != null && v.id == id && FoodTrucksMod.IsModVehicle(v.vehicleTypeName);
+            foreach (var vehicle in (game.VehicleInstances ?? new List<VehicleInstance>()).Where(Ours).ToList())
+            {
+                // Already gone with an earlier copy's deletion (or its listeners).
+                if (!game.VehicleInstances!.Contains(vehicle)) continue;
+                try
+                {
+                    var controller = VehicleHelper.GetVehicleController(vehicle);
+                    // As the game's own vehicle sale does, so traffic forgets the collider.
+                    if (controller != null)
+                    {
+                        try
+                        {
+                            if (controller.vehicleCollider != null) GleyTrafficSystem.Manager.TriggerColliderRemovedEvent(controller.vehicleCollider);
+                            if (controller.additionalCollider != null) GleyTrafficSystem.Manager.TriggerColliderRemovedEvent(controller.additionalCollider);
+                        }
+                        catch (Exception ex) { Log.Error($"Uninstall: collider event for {id}: {ex}"); }
+                    }
+                    vehicle.Delete(controller);
+                }
+                catch (Exception ex) { Log.Error($"Uninstall: removing {id} threw: {ex}"); }
+            }
+            // A vehicle the game couldn't delete stays whole, garage entry included, for a retry.
+            if (game.VehicleInstances != null && game.VehicleInstances.Any(v => v != null && v.id == id)) return false;
+            try
+            {
+                var stored = game.privateDriverVehicleInstances?.RemoveAll(Ours) ?? 0;
+                if (stored > 0) Log.Info($"Uninstall: took {id} out of the private driver's garage.");
+            }
+            catch (Exception ex) { Log.Error($"Uninstall: removing {id} from the private driver's garage threw: {ex}"); }
+            return !Owned(game).Any(v => v.id == id);
         }
 
         private static bool SettleTakings()
