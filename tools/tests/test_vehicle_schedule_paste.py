@@ -222,6 +222,9 @@ static class VehicleSchedule {
         standIn = registration; vehicleId = vehicle.VehicleId; Showing = true;
     }
     internal static void End() { Showing = false; standIn = null; vehicleId = null; }
+    // This harness pastes only valid days; the shift-cap harness exercises the production refusal path.
+    private static void Refuse(VehicleState vehicle, FleetRules rules, List<(string EmployeeId, DayOfWeek Day, int Hours)> over) =>
+        throw new Exception("Unexpected shift-cap refusal during valid paste");
     internal static List<ScheduleDay> DaysFor(VehicleState vehicle) => Days(vehicle, vehicle.VehicleId);
 /* VEHICLE_SCHEDULE */
 }
