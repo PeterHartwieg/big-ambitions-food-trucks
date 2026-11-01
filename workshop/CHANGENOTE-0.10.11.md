@@ -1,0 +1,2 @@
+Version 0.10.11
+- A crew member can no longer be scheduled for more than the daily shift limit (12 hours) on a vehicle's Schedule tab. If dragging a shift longer, adding a shift or pasting a day would give someone more than 12 hours that day, the change isn't saved, the shifts go back to how they were and a notice tells you. Night work that ends at midnight and carries on the next morning counts toward each day separately.
