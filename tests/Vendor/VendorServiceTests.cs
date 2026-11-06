@@ -621,6 +621,30 @@ public class VendorServiceTests
         Assert.Equal("not the owner of this opening", reason);
         Assert.Empty(host.Save.CrewTakings);
         Assert.Empty(host.Sales);
+
+        // Noticed at 12:01, handed back at the lease's end: a lagging catch-up gets Street Food customers from 12:00.
+        var vehicle = host.Vehicle(Cart);
+        Assert.Equal(At(3, 12, 0), VendorBook.Entry(host.Save, Cart)!.HandedBackAt);
+        Assert.Equal(SeededRandom.SeedFor(Cart, At(3, 12, 0)), vehicle.Service!.RandomState);
+        Assert.False(VendorBook.OwnCustomers(host.Save, vehicle, At(3, 11, 59)));
+        Assert.True(VendorBook.OwnCustomers(host.Save, vehicle, At(3, 12, 0)));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AReleaseNoticedAfterTheLeaseRanOutHandsBackAtTheLeasesEnd(bool all)
+    {
+        // The lease ends at 12:00; the owner releases at 12:20, before any tick expired it.
+        var (host, service, _) = Granted(At(3, 10, 5), At(3, 11, 0));
+        var vehicle = host.Vehicle(Cart);
+        host.Now = At(3, 12, 20);
+        Assert.Equal(VendorApiStatus.Ready, all ? service.ReleaseAll(Owner) : service.RequestOwner(Owner, Cart, false, out _));
+
+        Assert.Equal(At(3, 12, 0), VendorBook.Entry(host.Save, Cart)!.HandedBackAt);
+        Assert.False(VendorBook.OwnCustomers(host.Save, vehicle, At(3, 11, 55)));
+        for (var minute = At(3, 12, 0); minute < At(3, 12, 20); minute++)
+            Assert.True(VendorBook.OwnCustomers(host.Save, vehicle, minute));
     }
 
     [Fact]

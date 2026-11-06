@@ -200,11 +200,14 @@ namespace FoodTrucks.Core.Vendor
             return null;
         }
 
-        // Street Food takes an opening back at `minute`: its own customers start from then, with a fresh queue.
+        // Street Food takes an opening back at `minute`: its own customers start from then, with a fresh queue. A grant
+        // whose lease had already run out when this is noticed goes back at the lease's end (not before the opening):
+        // the owner held no minute after it.
         internal static bool HandBack(SaveState state, VendorVehicle entry, long minute, string why, ICollection<string>? notes)
         {
             if (entry.Owner.Length == 0) return false;
             var owner = entry.Owner;
+            if (Lease(state, owner) is { } lease && lease.Until <= minute) minute = Math.Max(entry.OpenedAt, lease.Until);
             entry.Owner = string.Empty;
             entry.HandedBackAt = minute;
             var vehicle = StreetSales.Find(state, entry.VehicleId);
