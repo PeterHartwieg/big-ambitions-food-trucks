@@ -432,6 +432,25 @@ public class DemandModelTests
     }
 
     [Fact]
+    public void MarketingMultipliesPassersAlongsidePromotionAndPitch()
+    {
+        var plain = model.Estimate(Query("office", 12));
+        var query = Query("office", 12);
+        query.Promotion = 1.2;
+        query.PitchFootfall = 1.5;
+        query.Marketing = 1.3;
+
+        var marketed = model.Estimate(query);
+
+        Assert.Equal(plain.Footfall * 1.2 * 1.5 * 1.3, marketed.Footfall, 9);
+        Assert.Equal(plain.CustomersPerHour * 1.2 * 1.5 * 1.3, marketed.CustomersPerHour, 9);
+        Assert.Equal(1.0, new DemandQuery().Marketing);
+        var bad = Query("office", 12);
+        bad.Marketing = double.NaN;
+        Assert.Throws<ArgumentOutOfRangeException>(() => model.Estimate(bad));
+    }
+
+    [Fact]
     public void CustomersAreFootfallTimesAppetite()
     {
         var estimate = model.Estimate(Query("office", 12));
