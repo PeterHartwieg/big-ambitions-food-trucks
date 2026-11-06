@@ -14,6 +14,7 @@ using FoodTrucks.Core.Reputation;
 using FoodTrucks.Core.Rules;
 using FoodTrucks.Core.Saves;
 using FoodTrucks.Core.Selling;
+using FoodTrucks.Core.Vendor;
 using Helpers;
 using Localizor;
 using Parking.UndergroundParking;
@@ -391,6 +392,12 @@ namespace FoodTrucks
             spots[cart.id] = spot;
             // The premium spot and a running event's place go to the first vehicle there.
             var pitch = CityPitches.Opened(state, vehicle, position, (long)Math.Floor(openedAt ?? HireCrew.NowExact()));
+            // The opening's ID, and its owner when another mod asked for this vehicle through the vendor API (VendorBook).
+            if (state.Vendor != null)
+            {
+                VendorBook.Opened(state, cart.id, (long)Math.Floor(openedAt ?? HireCrew.NowExact()), byCrew: hireStop != null, VendorNotes);
+                LogVendorNotes();
+            }
             TruckHatch.Set(controller, true);
             Inspect(vehicle, kind, (long)Math.Floor(openedAt ?? HireCrew.NowExact()));
             // The pitch is fixed for this opening, so its minutes stay together.
@@ -706,6 +713,7 @@ namespace FoodTrucks
             PayHeld(vehicle, null);
             LogCrewHour(vehicle.VehicleId, SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicle.VehicleId));
             heldFailed.Remove(vehicle.VehicleId);
+            if (state?.Vendor != null) VendorBook.Closed(state, vehicle.VehicleId);
             vehicle.IsOpen = false;
             vehicle.HireStop = null;
             vehicle.SaleProgress = 0;
@@ -775,6 +783,7 @@ namespace FoodTrucks
             instance?.PayAllHeld();
             foreach (var vehicle in state.Vehicles.Where(v => v.IsOpen))
             {
+                if (state.Vendor != null) VendorBook.Closed(state, vehicle.VehicleId);
                 vehicle.IsOpen = false;
                 vehicle.HireStop = null;
                 vehicle.SaleProgress = 0;
@@ -817,7 +826,13 @@ namespace FoodTrucks
                 catch (Exception payEx) { Log.Error("Paying held sales: " + payEx); }
                 enabled = false;
                 Notify("foodtrucks:notification_tick_failed");
+                return;
             }
+            // The vendor API: leases that ran out hand back, and the snapshot follows the game while another mod reads it.
+            // Nothing runs here without such a mod (no vendor block in the save, no call this session).
+            if (state.Vendor == null && VendorRuntime.Current?.Active != true) return;
+            try { VendorRuntime.Current?.Tick(); }
+            catch (Exception ex) { Log.Error("Vendor API tick: " + ex); }
         }
 
         private void Tick(SaveState state, VehicleState vehicle, double until)
@@ -920,6 +935,20 @@ namespace FoodTrucks
             // The crew serving a window the player opened, noted as the sales reach this minute: a minute of an hour's
             // first half earns that hour, decided when it is over (HireCrew.CountHour, BeforePayroll).
             HireCrew.Served(state, vehicle, window.Crew, (long)Math.Floor(from));
+
+            // An opening another mod holds through the vendor API gets none of Street Food's own customers: it sells only
+            // through VendorApi.Sell. A lease that ran out (or an event taking the vehicle) hands it back here first, with
+            // a fresh queue from this minute (VendorBook.OwnCustomers).
+            if (state.Vendor != null)
+            {
+                var own = VendorBook.OwnCustomers(state, vehicle, (long)Math.Floor(from), VendorNotes);
+                LogVendorNotes();
+                if (!own)
+                {
+                    FoodTrucksSession.MarkChanged();
+                    return;
+                }
+            }
 
             // A cart opened before 0.4.0 has no queue yet; it starts one now.
             vehicle.Service ??= SalesSimulator.Open(Seed(cart.id));
@@ -1371,6 +1400,91 @@ namespace FoodTrucks
             }
             catch (Exception ex) { Log.Error("Cargo update listeners: " + ex); }
             if (inPerson) Log.Info($"Sale: {itemName} for {Money(cents)} on day {day}, {cart.GetAmountByItemName(itemName)} of it left.");
+            return cents;
+        }
+
+        // The vendor API's lines from VendorBook, written to the log as they come.
+        private static readonly List<string> VendorNotes = new List<string>();
+
+        private static void LogVendorNotes()
+        {
+            foreach (var line in VendorNotes) Log.Info(line);
+            VendorNotes.Clear();
+        }
+
+        // The sales tick runs (it switches itself off after an error).
+        internal static bool Running => instance != null && instance.enabled;
+
+        // The vendor API's view of one food vehicle (VendorService adds the opening, its owner and its times): the
+        // window's customer side and queue, the serving rate, and the menu with this vehicle's prices and sellable units.
+        internal static VendorFacts VendorFactsOf(VehicleInstance cart, VehicleState? vehicle, DemandTables tables, RuleTables rules)
+        {
+            var kind = CartDemand.KindOf(cart);
+            var menu = CartDemand.MenuOf(tables, cart);
+            var items = menu.Problem == MenuProblem.None ? menu.Menu.Items.OrderBy(i => i, StringComparer.Ordinal).ToList() : new List<string>();
+            var stock = CartDemand.StockOf(cart, menu.Menu);
+            var held = instance?.Reserved(cart.id);
+            var gig = Catering.Reserved(cart.id, stock);
+            var spot = SpotOf(cart.id);
+            var prices = new long[items.Count];
+            var units = new int[items.Count];
+            for (var i = 0; i < items.Count; i++)
+            {
+                prices[i] = Math.Max(0, CartPricing.PriceCents(vehicle, items[i], spot?.Neighbourhood));
+                stock.TryGetValue(items[i], out var have);
+                var taken = 0;
+                if (held != null && held.TryGetValue(items[i], out var h)) taken += h;
+                if (gig.TryGetValue(items[i], out var g)) taken += g;
+                units[i] = Math.Max(0, have - taken);
+            }
+            var meals = 0;
+            if (vehicle != null && vehicle.IsOpen)
+            {
+                var window = Service(rules, kind, vehicle, !Skipping && PlayerIsAtCart(cart));
+                var onSale = items.Where((_, i) => units[i] > 0).ToList();
+                meals = VendorGeometry.MealsPerHour(ServiceRate.OrderMinutes(tables, onSale, null), window.Speed, window.Servers);
+            }
+            // Where it stands: the live vehicle, else the crew's stop, else its saved position.
+            var controller = VehicleHelper.GetVehicleController(cart);
+            Vector3 at;
+            float heading = 0f;
+            if (controller != null)
+            {
+                at = controller.transform.position;
+                heading = controller.transform.eulerAngles.y;
+            }
+            else if (vehicle?.HireStop is int stop && vehicle.Schedule?.Stops is { } stops && stop < stops.Count)
+            {
+                at = new Vector3((float)stops[stop].X, (float)stops[stop].Y, (float)stops[stop].Z);
+                heading = (float)stops[stop].Heading;
+            }
+            else at = (Vector3)cart.position;
+            var side = kind == "truck" ? 1 : CartQueueView.QueueSide(cart.id) ?? 1;
+            var place = VendorGeometry.Window(kind, side, at.x, at.z, heading);
+            return new VendorFacts
+            {
+                VehicleId = cart.id, Kind = kind, X = (float)place.X, Y = at.y, Z = (float)place.Z,
+                QueueX = (float)place.QueueX, QueueY = at.y, QueueZ = (float)place.QueueZ, QueueHeading = (float)place.QueueHeading,
+                MealsPerHour = meals, Items = items, PriceCents = prices, Units = units
+            };
+        }
+
+        // VendorApi.Sell's sale, after VendorService checked it: Street Food's own one-item sale at that game minute, as a
+        // crew sale (booked for midnight, cargo updated once, the hour's log line). The cents, or -1 when it refused
+        // before any effect.
+        internal static long VendorSellOne(string vehicleId, string item, long minute)
+        {
+            var self = instance;
+            var state = FoodTrucksSession.CurrentState;
+            var vehicle = StreetSales.Find(state, vehicleId);
+            var cart = SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v.id == vehicleId);
+            if (self == null || !self.enabled || state == null || !FoodTrucksSession.CanWrite || vehicle == null || cart == null) return -1;
+            var cents = self.SellItem(state, vehicle, cart, item, inPerson: false, at: minute);
+            if (cents < 0) return -1;
+            self.crewBatch.TryGetValue(vehicleId, out var batch);
+            self.crewBatch[vehicleId] = (batch.Customers + 1, batch.Items + 1, batch.Cents + cents);
+            self.FlushCrewSales(vehicle, cart, minute);
+            FoodTrucksSession.MarkChanged();
             return cents;
         }
 

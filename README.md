@@ -92,6 +92,8 @@ Build with the .NET SDK, Unity 2022.3.62f2 and the official Big Ambitions SDK: `
 
 A supplied local package installs as a complete `FoodTrucks` folder in `ModsLocal`, with the game closed. The DLL or source checkout alone is not installable. Open the folder through **Mods → Mod Creator → Browse mod folder**.
 
+**Not released yet:** a versioned vendor API lets another mod bring its own customers to crew-run carts and trucks; Street Food keeps selling, booking and paying. It is inert without such a mod: saves and customers stay as before. Core checks pass; the Unity build and in-game checks are pending ([contract and status](docs/vendor-api.md)).
+
 Developer actions and the test bridge require `-foodtrucks-test`; normal players do not need it. Safe uninstall remains available without that option. The full development key/command reference is in `docs/test-bridge.md`.
 
 Historical build-specific checked, pending and unverified observations are preserved in `docs/evidence/readme-history-before-0.10.0.md`. They are not the current release acceptance checklist. The technical design and development history remain in `docs/design.md` and `docs/implementation-plan.md`.

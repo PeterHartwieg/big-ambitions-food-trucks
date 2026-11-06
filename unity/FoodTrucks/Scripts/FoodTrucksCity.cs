@@ -165,6 +165,8 @@ namespace FoodTrucks
             runtimeObject.AddComponent<TruckLogos>();
             runtimeObject.AddComponent<Commissary>();
             runtimeObject.AddComponent<VehicleTodos>();
+            // The vendor API for another mod (docs/vendor-api.md): inert until that mod calls it.
+            FoodTrucks.Core.Vendor.VendorRuntime.Attach(new StreetFoodVendorHost());
             try { PrefabFixes.Apply(); }
             catch (Exception ex) { Log.Error("Prefab fixes: " + ex); }
             try { CartParts.LogLanes(); }
@@ -205,6 +207,7 @@ namespace FoodTrucks
 
         public static void Detach()
         {
+            FoodTrucks.Core.Vendor.VendorRuntime.Detach();
             CrewDriveProbe.ResetSession();
             World.Reset();
             CityLicensing.Detach();
