@@ -334,7 +334,7 @@ public class VendorServiceTests
 
         host.Now = At(4, 0, 0);
         Assert.Equal(VendorApiStatus.Refused, Sell(service, opening, At(3, 23, 59), out _, out _, out var reason));
-        Assert.Equal("minute of a past day", reason);
+        Assert.Equal("not the current minute", reason);
         Assert.Equal(VendorApiStatus.Ready, Sell(service, opening, At(4, 0, 0), out var early, out _, out _));
         Assert.Equal(4, early!.BookedDay);
 
@@ -367,8 +367,8 @@ public class VendorServiceTests
         Assert.Equal("item not on the menu", reason);
         Refused("future", Sell(service, opening, now + 1, out _, out _, out reason));
         Assert.Equal("minute not reached yet", reason);
-        Refused("before", Sell(service, opening, At(3, 10, 59), out _, out _, out reason));
-        Assert.Equal("minute before the opening", reason);
+        Refused("earlier", Sell(service, opening, now - 1, out _, out _, out reason));
+        Assert.Equal("not the current minute", reason);
 
         host.Vehicles[Cart].MealsPerHour = 0;
         Refused("serving", Sell(service, opening, now, out _, out _, out reason));
@@ -591,6 +591,111 @@ public class VendorServiceTests
         Assert.Equal(LoadStatus.Loaded, loaded.Status);
         Assert.Null(loaded.State!.Vendor);
         Assert.Contains(loaded.Notes, n => n.Contains("unreadable"));
+    }
+
+    // --- Review fixes ---
+
+    [Fact]
+    public void AnEarlierMinuteOfTheSameDayIsRefused()
+    {
+        var (host, service, opening) = Granted(At(3, 10, 5), At(3, 11, 0));
+        host.Now = At(3, 11, 30);
+
+        Assert.Equal(VendorApiStatus.Refused, Sell(service, opening, At(3, 11, 20), out var sale, out _, out var reason));
+        Assert.Equal("not the current minute", reason);
+        Assert.Null(sale);
+        Assert.Empty(host.Save.CrewTakings);
+        Assert.Empty(host.Sales);
+    }
+
+    [Fact]
+    public void ABackdatedSaleAfterTheLeaseRanOutIsRefusedBeforeTheTickExpiresIt()
+    {
+        // The lease ends at 12:00; the clock is at 12:01 and no tick has expired the lease yet.
+        var (host, service, opening) = Granted(At(3, 10, 5), At(3, 11, 0));
+        host.Now = At(3, 12, 1);
+
+        Assert.Equal(VendorApiStatus.Refused, Sell(service, opening, At(3, 11, 59), out _, out _, out var reason));
+        Assert.Equal("not the current minute", reason);
+        Assert.Equal(VendorApiStatus.Refused, Sell(service, opening, At(3, 12, 1), out _, out _, out reason));
+        Assert.Equal("not the owner of this opening", reason);
+        Assert.Empty(host.Save.CrewTakings);
+        Assert.Empty(host.Sales);
+    }
+
+    [Fact]
+    public void ACatchUpBehindAnExplicitReleaseGetsNoStreetFoodCustomersBeforeIt()
+    {
+        var (host, service, _) = Granted(At(3, 10, 5), At(3, 11, 0));
+        var vehicle = host.Vehicle(Cart);
+        // The route's sales cursor is at 11:35 when the owner releases at 11:40.
+        host.Now = At(3, 11, 40);
+        Assert.Equal(VendorApiStatus.Ready, service.RequestOwner(Owner, Cart, false, out _));
+
+        for (var minute = At(3, 11, 35); minute < At(3, 11, 40); minute++)
+            Assert.False(VendorBook.OwnCustomers(host.Save, vehicle, minute));
+        Assert.True(VendorBook.OwnCustomers(host.Save, vehicle, At(3, 11, 40)));
+        Assert.Equal(At(3, 11, 40), VendorBook.Entry(host.Save, Cart)!.HandedBackAt);
+    }
+
+    [Fact]
+    public void ACatchUpBehindALeaseExpiryGetsNoStreetFoodCustomersBeforeIt()
+    {
+        var (host, service, _) = Granted(At(3, 10, 5), At(3, 11, 0));
+        var vehicle = host.Vehicle(Cart);
+        // The tick expires the lease (until 12:00) at 12:10, while the crew window has sold only up to 11:55.
+        host.Now = At(3, 12, 10);
+        service.Tick();
+
+        Assert.False(VendorBook.OwnCustomers(host.Save, vehicle, At(3, 11, 55)));
+        Assert.False(VendorBook.OwnCustomers(host.Save, vehicle, At(3, 11, 59)));
+        Assert.True(VendorBook.OwnCustomers(host.Save, vehicle, At(3, 12, 0)));
+
+        // The boundary survives a save and belongs to that opening only.
+        var loaded = new SaveCodec().Load(new SaveCodec().Serialize(host.Save)).State!;
+        Assert.False(VendorBook.OwnCustomers(loaded, StreetSales.Find(loaded, Cart)!, At(3, 11, 59)));
+        host.Close(Cart);
+        host.Open(Cart, At(3, 12, 30), byCrew: false);
+        Assert.Null(VendorBook.Entry(host.Save, Cart)!.HandedBackAt);
+        Assert.True(VendorBook.OwnCustomers(host.Save, vehicle, At(3, 12, 30)));
+    }
+
+    [Fact]
+    public void AtTheRequestCapVanishedVehiclesMakeRoom()
+    {
+        var host = new VendorTestHost { Now = At(3, 10, 0) };
+        for (var i = 0; i < VendorBook.MaxVehicles; i++) host.AddVehicle($"v{i:D2}");
+        host.AddVehicle("new");
+        var service = new VendorService(host);
+        for (var i = 0; i < VendorBook.MaxVehicles; i++)
+            Assert.Equal(VendorApiStatus.Ready, service.RequestOwner(Owner, $"v{i:D2}", true, out _));
+        Assert.Equal(VendorApiStatus.Refused, service.RequestOwner(Owner, "new", true, out var reason));
+        Assert.Equal("too many requests", reason);
+
+        // One requested vehicle is sold: its request goes, and the new vehicle's request fits.
+        host.Vehicles.Remove("v07");
+        Assert.Equal(VendorApiStatus.Ready, service.RequestOwner(Owner, "new", true, out _));
+        Assert.Null(VendorBook.Request(host.Save, "v07"));
+        Assert.Equal(VendorBook.MaxVehicles, host.Save.Vendor!.Requests.Count);
+    }
+
+    [Fact]
+    public void ASaleRebuildsOnlyTheSoldVehiclesCopy()
+    {
+        var (host, service, opening) = Granted(At(3, 10, 5), At(3, 11, 0));
+        host.AddVehicle("cart-b");
+        host.Now = At(3, 11, 10);
+        var other = ReadOne(service, "cart-b");
+        var revision = service.Revision;
+        var calls = host.FactsCalls;
+
+        Assert.Equal(VendorApiStatus.Ready, Sell(service, opening, At(3, 11, 10), out _, out _, out _));
+        Assert.Equal(calls, host.FactsCalls);
+        Assert.NotEqual(revision, service.Revision);
+        var into = new VendorApiVehicle[64];
+        Assert.Equal(VendorApiStatus.Ready, service.Read(into, out var count));
+        Assert.Equal(19, into.Take(count).Single(v => v.VehicleId == Cart).Units[0]);
+        Assert.Same(other, into.Take(count).Single(v => v.VehicleId == "cart-b"));
     }
 
     // --- Geometry and rate ---

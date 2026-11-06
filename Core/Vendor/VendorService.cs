@@ -86,6 +86,24 @@ namespace FoodTrucks.Core.Vendor
             if (Active) Refresh();
         }
 
+        // One vehicle's copy rebuilt from the game side. False when the snapshot has no copy of it to replace (not built
+        // yet, overflowed, or the vehicle gone): then the whole snapshot needs a Refresh.
+        public bool RefreshOne(string vehicleId)
+        {
+            var state = host.State;
+            if (!built || overflow || host.Status != VendorApiStatus.Ready || state == null) return false;
+            var index = Array.FindIndex(cache, v => v.VehicleId == vehicleId);
+            var facts = host.FactsOf(vehicleId);
+            if (index < 0 || facts == null) return false;
+            var copy = Build(state, facts);
+            if (Same(copy, cache[index])) return true;
+            var next = (VendorApiVehicle[])cache.Clone();
+            next[index] = copy;
+            cache = next;
+            Revision = NextRevision();
+            return true;
+        }
+
         // The vehicle copies are rebuilt from the game side; a change gives a new revision.
         public void Refresh()
         {
@@ -149,6 +167,12 @@ namespace FoodTrucks.Core.Vendor
             try
             {
                 if (want && host.FactsOf(vehicleId) == null) return Refuse("no such food vehicle", out reason);
+                // At the cap, requests for vehicles the player no longer owns (sold, deleted) make room first.
+                if (want && state!.Vendor != null && state.Vendor.Requests.Count(r => r.Owner == owner) >= VendorBook.MaxVehicles)
+                {
+                    var owned = new HashSet<string>(host.Facts().Select(f => f.VehicleId), StringComparer.Ordinal);
+                    VendorBook.Forget(state, owner, id => !owned.Contains(id));
+                }
                 var ok = VendorBook.Ask(state!, owner, vehicleId, want, host.Now, out var why, notes);
                 Changed();
                 return ok ? VendorApiStatus.Ready : Refuse(why, out reason);
@@ -245,13 +269,13 @@ namespace FoodTrucks.Core.Vendor
                 if (uncertain) Bump(vehicleId);
                 host.Log($"Vendor API: sale of {item} at {vehicleId} failed {(uncertain ? "after" : "before")} the ledger record: {ex}");
                 reason = uncertain ? "failed after the ledger record; do not retry" : "failed before the sale";
-                Changed();
+                Changed(vehicleId);
                 return VendorApiStatus.Failed;
             }
             if (cents < 0)
             {
                 uncertain = vehicle.LifetimeSales != lifetime || Pot(state!, vehicleId, day) != pot;
-                Changed();
+                Changed(vehicleId);
                 if (!uncertain) return Refuse("sale refused", out reason);
                 reason = "refused after the ledger record; do not retry";
                 return VendorApiStatus.Failed;
@@ -266,7 +290,7 @@ namespace FoodTrucks.Core.Vendor
             }
             sale = new VendorApiSale(day, cents, before, after, sequence);
             reason = string.Empty;
-            Changed();
+            Changed(vehicleId);
             return VendorApiStatus.Ready;
         }
 
@@ -285,8 +309,9 @@ namespace FoodTrucks.Core.Vendor
             if (!ValidTime(nativeDay, nativeMinute)) return "invalid time";
             minute = VendorBook.Absolute(nativeDay, nativeMinute);
             var now = host.Now;
+            // Only the current native minute: never a past one (live stock and prices, a lapsed lease) or a future one.
             if (minute > now) return "minute not reached yet";
-            if (VendorBook.DayOf(minute) != VendorBook.DayOf(now)) return "minute of a past day";
+            if (minute < now) return "not the current minute";
             vehicle = StreetSales.Find(state, vehicleId);
             if (vehicle == null || !vehicle.IsOpen) return "vehicle closed";
             var entry = VendorBook.Entry(state, vehicleId);
@@ -401,14 +426,15 @@ namespace FoodTrucks.Core.Vendor
             return VendorApiStatus.Refused;
         }
 
-        // Never throws: it runs after a sale, which must be reported as made.
-        private void Changed()
+        // Never throws: it runs after a sale, which must be reported as made. With `vehicleId` (a sale), only that
+        // vehicle's copy is rebuilt; the tick catches up the rest.
+        private void Changed(string? vehicleId = null)
         {
             try
             {
                 host.Changed();
                 Flush();
-                Refresh();
+                if (vehicleId == null || !RefreshOne(vehicleId)) Refresh();
             }
             catch (Exception ex)
             {

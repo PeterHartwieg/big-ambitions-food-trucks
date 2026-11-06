@@ -87,6 +87,10 @@ namespace FoodTrucks.Core.Vendor
             return true;
         }
 
+        // Drops the owner's requests for vehicles that are `gone`. Returns how many.
+        public static int Forget(SaveState state, string owner, Func<string, bool> gone) =>
+            state.Vendor?.Requests.RemoveAll(r => r.Owner == owner && gone(r.VehicleId)) ?? 0;
+
         // Extends the owner's lease to LeaseMinutes after `minute`. A lease that ran out first hands its openings back.
         public static long Renew(SaveState state, string owner, long minute, long now, out string reason, ICollection<string>? notes = null)
         {
@@ -146,6 +150,7 @@ namespace FoodTrucks.Core.Vendor
             entry.LastOpeningId = entry.OpeningId;
             entry.OpenedAt = minute;
             entry.Owner = string.Empty;
+            entry.HandedBackAt = null;
             var request = Request(state, vehicleId);
             if (request == null) return string.Empty;
             string? refusal = null;
@@ -171,8 +176,14 @@ namespace FoodTrucks.Core.Vendor
 
         // Whether Street Food's own customers come to this open window at `minute`. False only while an owner holds the
         // opening; a lease that ran out, or a city event or catering gig taking the vehicle, hands it back here first.
-        public static bool OwnCustomers(SaveState state, VehicleState vehicle, long minute, ICollection<string>? notes = null) =>
-            OwnerAt(state, vehicle, minute, notes) == null;
+        // A step before the minute the opening was handed back (a crew route's sales catching up behind the clock) was
+        // still the owner's: no Street Food customers there either.
+        public static bool OwnCustomers(SaveState state, VehicleState vehicle, long minute, ICollection<string>? notes = null)
+        {
+            if (OwnerAt(state, vehicle, minute, notes) != null) return false;
+            var entry = Entry(state, vehicle.VehicleId);
+            return !(vehicle.IsOpen && entry?.HandedBackAt is { } back && minute < back && minute >= entry.OpenedAt);
+        }
 
         // The owner holding this open window at `minute`, or null for Street Food.
         public static string? OwnerAt(SaveState state, VehicleState vehicle, long minute, ICollection<string>? notes = null)
@@ -195,6 +206,7 @@ namespace FoodTrucks.Core.Vendor
             if (entry.Owner.Length == 0) return false;
             var owner = entry.Owner;
             entry.Owner = string.Empty;
+            entry.HandedBackAt = minute;
             var vehicle = StreetSales.Find(state, entry.VehicleId);
             if (vehicle != null && vehicle.IsOpen) vehicle.Service = SalesSimulator.Open(SeededRandom.SeedFor(entry.VehicleId, minute));
             notes?.Add($"Vendor API: {entry.VehicleId} opening {entry.OpeningId} handed back from {owner} to Street Food at {Describe(minute)} ({why}).");
@@ -280,7 +292,7 @@ namespace FoodTrucks.Core.Vendor
                 vendor.Requests.Select(r => r.VehicleId).Distinct(StringComparer.Ordinal).Count() != vendor.Requests.Count)
                 throw new JsonSerializationException("Vendor requests must be one per vehicle, each naming its owner.");
             if (vendor.Vehicles.Any(v => v == null || !ValidVehicleId(v.VehicleId) || v.LastOpeningId < 0 || v.OpeningId < 0 ||
-                    v.OpeningId > v.LastOpeningId || v.OpenedAt < 0 || v.Sequence < 0 || v.Owner == null ||
+                    v.OpeningId > v.LastOpeningId || v.OpenedAt < 0 || v.Sequence < 0 || v.HandedBackAt < 0 || v.Owner == null ||
                     v.Owner.Length > 0 && !ValidOwner(v.Owner)) ||
                 vendor.Vehicles.Select(v => v.VehicleId).Distinct(StringComparer.Ordinal).Count() != vendor.Vehicles.Count)
                 throw new JsonSerializationException("Vendor vehicles must be one per vehicle with counters not negative.");

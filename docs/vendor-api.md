@@ -58,13 +58,13 @@ The save may hold vendor data written by a newer Street Food (block `version` ab
 
 ## Owners
 
-An owner name is 1-64 characters from `a-z`, `0-9`, `.`, `_` and `-`, for example `persistentcity`. At most 8 owners hold leases, and each owner can request at most 64 vehicles. A vehicle has at most one requesting owner.
+An owner name is 1-64 characters from `a-z`, `0-9`, `.`, `_` and `-`, for example `persistentcity`. At most 8 owners hold leases, and each owner can request at most 64 vehicles. A vehicle has at most one requesting owner. When an owner is at 64 requests, Street Food first drops its requests for vehicles the player no longer owns. The owner should still call `RequestOwner(owner, id, false)` for a vehicle that disappears from `Read`.
 
 ## Read and Revision
 
 - `Revision` changes when any field of any vehicle could have changed. Compare it for equality only. A newly loaded save always starts at a new value. While nothing is attached, `Revision` is 0. Reading `Revision` marks the API as in use, so Street Food keeps the snapshot fresh from then on.
 - `Read` copies the vehicles into `into` and sets `count`. It does not allocate. While `Revision` is unchanged it returns the same `VendorApiVehicle` instances, so treat their arrays as read-only. More than 64 vehicles, or an array shorter than the vehicle count, returns `Refused` with count 0, never a truncated list.
-- Street Food refreshes the copy on each sales tick (every 0.25 s real time) while the API is in use, and immediately after each owner call and each sale. Between ticks a `Read` can be up to one tick old. `Sell` checks live state.
+- Street Food refreshes the copy on each sales tick (every 0.25 s real time) while the API is in use, and immediately after each owner call. After a sale it rebuilds only that vehicle's copy. Between ticks a `Read` can be up to one tick old. `Sell` checks live state.
 - The list contains every food vehicle the player owns, including closed ones, in ordinal ID order.
 
 Field notes, where version 1 says more than the plan:
@@ -101,6 +101,7 @@ The rules:
    - `ReleaseAll(owner)` is called.
    - The lease runs out.
    - A city event or catering gig takes the vehicle.
+   Street Food saves the hand-back minute with the opening. A crew route's sales that are still catching up to the clock get no Street Food customers for the minutes before it, because the owner still held those minutes.
 5. Closing ends the ownership. The next opening is decided again under rule 2.
 
 ## Lease
@@ -114,7 +115,7 @@ The rules:
 `Sell` runs these checks in order and refuses at the first one that fails, before anything is touched. `reason` takes the value in brackets.
 
 1. Valid owner, vehicle ID, item, a positive price and a valid time (`invalid ...`).
-2. The minute is not after Street Food's clock (`minute not reached yet`) and falls on the current native day (`minute of a past day`).
+2. The minute is Street Food's current native minute: not after it (`minute not reached yet`) and not before it (`not the current minute`). A sale is never booked for a past minute, so ownership, lease, stock and price are all checked at the minute now.
 3. The vehicle is open (`vehicle closed`) and its current opening is `openingId` (`opening changed`).
 4. The owner holds this opening at that minute, with the lease holding (`not the owner of this opening`). A hand-back that is due happens first.
 5. The minute is not before the opening started (`minute before the opening`), and not at or after the planned close (`minute after the planned close`).
@@ -144,7 +145,7 @@ The block is `vendor` in Street Food's mod data (`foodtrucks:state`). It has its
 
 - the leases: owner and end minute;
 - the requests: owner, vehicle and hour;
-- per vehicle: last and current opening ID, the opening minute, the opening's owner and the API sale counter.
+- per vehicle: last and current opening ID, the opening minute, the opening's owner, the minute it was handed back (if it was) and the API sale counter.
 
 Loading rules:
 
@@ -175,5 +176,7 @@ These need the Mac Unity build and a rig session. Code reading is not a check.
 - An API sale appears in the day summary and the midnight payment.
 - The window and queue positions match the visible line.
 - A save with and without the vendor block loads in game.
+- A crew window whose sales lag the clock gets no Street Food customers before a hand-back. This is checked in Core only; `CartSelling.Tick` asks `VendorBook.OwnCustomers` for each step's minute.
+- Performance, from the E6a row: the Street Food tick with 0, 8 and 64 open vehicles, owned and with Street Food's own customers; the cost and allocations of `Read`, of the snapshot refresh while the API is in use, and of `Sell`.
 
 E6 plan section 7 lists the batched checks (contract present, missing and old; ownership at an opening; exact money; hand-back; lease without PC; player-opened windows; uncertain sale). They also need a consumer build, or a test double on the bridge.

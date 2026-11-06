@@ -57,6 +57,9 @@ namespace FoodTrucks.Core.Vendor
         public long OpenedAt { get; set; }
         // Who holds that opening: "" for Street Food.
         public string Owner { get; set; } = string.Empty;
+        // The minute Street Food took this opening back from an owner; null when it never did. A sales catch-up still
+        // behind it gets no Street Food customers before it (VendorBook.OwnCustomers).
+        public long? HandedBackAt { get; set; }
         // Sales made through VendorApi.Sell for this vehicle.
         public long Sequence { get; set; }
 
