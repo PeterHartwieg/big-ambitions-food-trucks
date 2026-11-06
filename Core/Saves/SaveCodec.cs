@@ -112,6 +112,8 @@ namespace FoodTrucks.Core.Saves
 
                 // Vehicle numbers only name vehicles: read apart, entry by entry, so a bad one never makes the save Corrupt.
                 var numbers = FoodTrucks.Core.Fleet.FleetNames.TakeOut(document, JsonSerializer.Create(settings));
+                // The vendor API's block too: a bad one is dropped, a newer one kept as it is.
+                var vendor = FoodTrucks.Core.Vendor.VendorBook.TakeOut(document);
                 var state = document.ToObject<SaveState>(JsonSerializer.Create(settings))
                     ?? throw new JsonSerializationException("Save state must be a JSON object.");
                 // Routes saved before the week plan become the same stops on each of their days; shifts saved before the
@@ -126,6 +128,7 @@ namespace FoodTrucks.Core.Saves
                 // Vehicle numbers only name vehicles: a bad entry is dropped, never a reason to reject the save.
                 state.VehicleNumbers = FoodTrucks.Core.Fleet.FleetNames.Repaired(numbers);
                 ValidateState(state);
+                FoodTrucks.Core.Vendor.VendorBook.PutBack(state, vendor, JsonSerializer.Create(settings), notes);
                 var result = new LoadResult(status, state);
                 result.Notes.AddRange(notes);
                 return result;

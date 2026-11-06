@@ -59,6 +59,10 @@ namespace FoodTrucks.Core.Saves
         // others (FleetNames; additive field: older saves read none and number their vehicles in ID order once).
         public List<VehicleNumber> VehicleNumbers { get; set; } = new List<VehicleNumber>();
 
+        // Another mod's lease and the owners of crew openings through the vendor API (VendorBook; additive field). Null,
+        // and so not written at all, until such a mod first asks for a vehicle or renews a lease.
+        public FoodTrucks.Core.Vendor.VendorState? Vendor { get; set; }
+
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
 
