@@ -5,6 +5,7 @@ using FoodTrucks.Core.Catering;
 using FoodTrucks.Core.Commissary;
 using FoodTrucks.Core.Demand;
 using FoodTrucks.Core.Fleet;
+using FoodTrucks.Core.Marketing;
 using FoodTrucks.Core.Reputation;
 using Newtonsoft.Json.Linq;
 
@@ -18,7 +19,7 @@ namespace FoodTrucks.Core.Rules
 
         private RuleTables(DataReader r, JObject root)
         {
-            r.OnlyKeys(root, "schemaVersion", "queue", "service", "health", "regulars", "competition", "fleet", "catering", "liveCrowds", "commissary");
+            r.OnlyKeys(root, "schemaVersion", "queue", "service", "health", "regulars", "competition", "fleet", "catering", "liveCrowds", "commissary", "marketing");
             r.SchemaVersion(root, SchemaVersion);
             Queue = QueueRules.Read(r, r.Object(root, "queue"));
             Service = ServiceRules.Read(r, r.Object(root, "service"));
@@ -29,6 +30,7 @@ namespace FoodTrucks.Core.Rules
             Catering = CateringRules.Read(r, r.Object(root, "catering"));
             Commissary = CommissaryRules.Read(r, r.Object(root, "commissary"));
             LiveCrowds = LiveCrowds.Read(r, r.Object(root, "liveCrowds"));
+            Marketing = MarketingRules.Read(r, r.Object(root, "marketing"));
         }
 
         public QueueRules Queue { get; }
@@ -40,6 +42,7 @@ namespace FoodTrucks.Core.Rules
         public CateringRules Catering { get; }
         public CommissaryRules Commissary { get; }
         public LiveCrowds LiveCrowds { get; }
+        public MarketingRules Marketing { get; }
 
         public static RuleTables Parse(string? json)
         {

@@ -18,6 +18,7 @@ namespace FoodTrucks.Core.Saves
         public long PermitCents { get; set; }
         public long CommissaryRentCents { get; set; }
         public long OvernightFineCents { get; set; }
+        public long MarketingCents { get; set; }
         // Sales and catering less every cost line above (FleetReport's profit).
         public long ProfitCents { get; set; }
         // Null when the day is no longer kept: SoldCounts keeps today and yesterday only.
@@ -86,9 +87,10 @@ namespace FoodTrucks.Core.Saves
                     summary.PermitCents = Sum(summary.PermitCents, line.PermitCents);
                     summary.CommissaryRentCents = Sum(summary.CommissaryRentCents, line.CommissaryRentCents);
                     summary.OvernightFineCents = Sum(summary.OvernightFineCents, line.OvernightFineCents);
+                    summary.MarketingCents = Sum(summary.MarketingCents, line.MarketingCents);
                 }
                 summary.ProfitCents = summary.SalesCents + summary.CateringCents - summary.StockCostCents - summary.WagesCents -
-                                      summary.ParkingCents - summary.PermitCents - summary.CommissaryRentCents - summary.OvernightFineCents;
+                                      summary.ParkingCents - summary.PermitCents - summary.CommissaryRentCents - summary.OvernightFineCents - summary.MarketingCents;
                 if (detailed)
                 {
                     summary.Sold = SoldCounts.On(vehicle, day);

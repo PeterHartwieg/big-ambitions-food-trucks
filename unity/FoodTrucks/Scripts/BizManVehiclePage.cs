@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Entities;
 using FoodTrucks.Core.Fleet;
+using FoodTrucks.Core.Marketing;
 using FoodTrucks.Core.Pitches;
 using FoodTrucks.Core.Reputation;
 using FoodTrucks.Core.Rules;
@@ -324,6 +325,7 @@ namespace FoodTrucks
             Alerts(second, id);
             CommissarySpace(second, state, id, kind);
             Partner(third, state, id, instance, canWrite);
+            Marketing(third, vehicle, kind, id, canWrite);
             foreach (var column in new[] { first, second, third })
                 LayoutRebuilder.MarkLayoutForRebuild((RectTransform)column);
         }
@@ -607,6 +609,36 @@ namespace FoodTrucks
                 chosen => ChoosePartner(id, venues[chosen]));
         }
 
+        // Marketing: None and each level priced for this kind of vehicle, with its extra passers and daily fee; the pick is
+        // booked from tomorrow. Below, the level today paid for (a level runs only on a paid day, VehicleMarketing) and what
+        // runs from tomorrow.
+        private static void Marketing(Transform column, VehicleState? vehicle, string kind, string id, bool canWrite)
+        {
+            var rules = DemandData.Rules?.Marketing;
+            if (rules == null) return;
+            var box = new BizManParts.Box(column, Text("foodtrucks:bizman_page_marketing_header"));
+            var levels = rules.Levels.Where(l => l.IsNone || l.CostPerDayCents.ContainsKey(kind)).ToList();
+            var labels = levels.Select(l => l.IsNone ? Text("foodtrucks:bizman_page_marketing_none")
+                : Format("foodtrucks:bizman_page_marketing_option", ("level", Text("foodtrucks:marketing_level_" + l.Id)),
+                    ("percent", MarketingPercent(l)), ("cost", CartSelling.Money(l.CostPerDayCents[kind])))).ToList();
+            // An unknown level (a newer version's) shows as None until the player picks another.
+            var selected = Math.Max(0, levels.FindIndex(l => l.Id == vehicle?.MarketingLevel));
+            AddRow(box, Text("foodtrucks:bizman_page_marketing"), labels, selected, canWrite,
+                chosen => ChooseMarketing(id, levels[chosen].Id));
+            var active = VehicleMarketing.Active(vehicle);
+            if (active != null)
+                box.Row(Text("foodtrucks:bizman_page_marketing_today"), Format("foodtrucks:bizman_page_marketing_paid", ("percent", MarketingPercent(active))));
+            var booked = VehicleMarketing.Booked(vehicle);
+            if (booked != null)
+                box.Row(Text("foodtrucks:bizman_page_marketing_tomorrow"), Format("foodtrucks:bizman_page_marketing_booked",
+                    ("percent", MarketingPercent(booked)), ("cost", CartSelling.Money(booked.CostPerDayCents[kind]))));
+            else if (active != null)
+                box.Row(Text("foodtrucks:bizman_page_marketing_tomorrow"), Text("foodtrucks:bizman_page_marketing_none"));
+        }
+
+        internal static string MarketingPercent(MarketingLevel level) =>
+            Math.Round((level.Footfall - 1) * 100).ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
+
         // ---- Parts ----
 
         // A box row with a copy of the game's dropdown as its value.
@@ -690,6 +722,18 @@ namespace FoodTrucks
             if (Partners.VenueOf(id) is string current && current != venue) Partners.End(state, vehicle, kind);
             if (venue != null && Partners.VenueOf(id) == null) Partners.Sign(state, vehicle, venue, kind);
             RefreshLater();
+        }
+
+        // The marketing dropdown's choice, a level ID, booked from tomorrow. False when nothing changed: read-only data.
+        internal static bool ChooseMarketing(string id, string level)
+        {
+            var state = FoodTrucksSession.CurrentState;
+            if (state == null || !FoodTrucksSession.CanWrite) return false;
+            var vehicle = StreetSales.GetOrAdd(state, id);
+            if (string.IsNullOrEmpty(vehicle.VehicleType)) vehicle.VehicleType = KindOf(id);
+            VehicleMarketing.Choose(vehicle, level);
+            RefreshLater();
+            return true;
         }
 
         // ---- Helpers ----

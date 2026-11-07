@@ -34,6 +34,7 @@ namespace FoodTrucks
             { LedgerLine.Permit, "foodtrucks:econoview_line_permit" },
             { LedgerLine.CommissaryRent, "foodtrucks:econoview_line_commissary" },
             { LedgerLine.OvernightFine, "foodtrucks:econoview_line_overnight_fines" },
+            { LedgerLine.Marketing, "foodtrucks:econoview_line_marketing" },
         };
 
         private static MethodInfo? createRow;

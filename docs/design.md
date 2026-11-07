@@ -238,6 +238,7 @@ The game tracks demand per product per neighbourhood: 100 minus the number of sh
 - **Season.** April to October 1.0, March and November 0.8, December to February 0.6. Ice cream 0.2 in winter, 1.3 in summer. Hamptons footfall 0.3 in winter. The game has no climate seasons, so the mod keeps its own calendar from the in-game day count; the season length is a setting. If the Alcware Seasons mod is installed, the mod follows its season instead.
 - **Weather.** Rain is the only weather the game has: footfall 0.5 while it rains, coffee appetite 1.3, ice cream 0.3. Heat and cold come from the season instead: winter raises coffee appetite by 1.3, summer raises cold drinks by 1.4 (ice cream by the 1.3 above).
 - **Reputation.** Health grade, regulars bonus and same-food competition, as described below.
+- **Marketing.** The player can buy marketing for one cart or truck on its BizMan page. It multiplies that vehicle's passers alongside the game's promotion and a pitch's bonus. See [Marketing](#marketing).
 
 ### Live crowds from game businesses
 
@@ -269,6 +270,18 @@ The player works out which food fits which crowd, which keeps discovery in the g
 The base footfall is scaled so that a truck at a good spot and daypart matches the money target in [Economy calibration](#economy-calibration). The mod multiplies it by the game's customer promotion variable relative to its default, so the difficulty slider still affects trucks.
 
 The footfall and appetite numbers are mine, shaped by the NYC lunch peak (about 3x) and the research note. They are a starting point for playtesting.
+
+## Marketing
+
+Each cart or truck has a Marketing dropdown on its BizMan page: None, Flyers, Local ads or Citywide ads. Levels and prices live in `data/rules.json` under `marketing`; the reasoning behind the prices is in [docs/balance/marketing.md](balance/marketing.md).
+
+| Level | Passers | Cart a day | Truck a day |
+|---|---|---|---|
+| Flyers | +10% | $20 | $60 |
+| Local ads | +20% | $45 | $140 |
+| Citywide ads | +30% | $80 | $240 |
+
+A pick books the level from the next day. Picking charges nothing, and today keeps the level today paid for. Picking again the same day replaces the booking with no charge or refund. At each day change with a level booked, the mod charges that day's whole fee once through the game's bank, as "Marketing for {vehicle}" under the tax-deductible label "Street food marketing". Days the game skipped are neither charged nor marketed. If the player can't pay, the booking turns off and a notice says so. A level runs on a day only once that day's fee is paid, and sales still catching up on yesterday after midnight keep yesterday's level. The fee shows per vehicle in the day summary, the fleet report and Econoview's Marketing line. A save keeps an unknown level from a newer version as it is, and it runs as none.
 
 ## Service, stock and queues
 

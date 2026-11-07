@@ -91,7 +91,7 @@ namespace FoodTrucks.Core.Saves
                 {
                     if (!vehicles.TryGetValue(day.VehicleId, out var vehicle))
                         vehicles[day.VehicleId] = vehicle = new StatementVehicle(day.VehicleId, columns);
-                    itemised = checked(itemised + day.SalesCents + day.CateringCents - day.StockCents - day.PermitCents - day.CommissaryRentCents - day.OvernightFineCents);
+                    itemised = checked(itemised + day.SalesCents + day.CateringCents - day.StockCents - day.PermitCents - day.CommissaryRentCents - day.OvernightFineCents - day.MarketingCents);
                     Put(vehicle, LedgerLine.Sales, c, day.SalesCents);
                     Put(vehicle, LedgerLine.Catering, c, day.CateringCents);
                     Put(vehicle, LedgerLine.Stock, c, -day.StockCents);
@@ -100,6 +100,7 @@ namespace FoodTrucks.Core.Saves
                     Put(vehicle, LedgerLine.Permit, c, -day.PermitCents);
                     Put(vehicle, LedgerLine.CommissaryRent, c, -day.CommissaryRentCents);
                     Put(vehicle, LedgerLine.OvernightFine, c, -day.OvernightFineCents);
+                    Put(vehicle, LedgerLine.Marketing, c, -day.MarketingCents);
                 }
 
                 statement.Licence[c] = -entry.LicenceCents;

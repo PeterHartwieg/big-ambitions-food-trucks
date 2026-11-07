@@ -1,3 +1,17 @@
+# Vehicle marketing (next build)
+
+Per-vehicle marketing on the BizMan vehicle page; see [design: Marketing](docs/design.md#marketing) and [prices](docs/balance/marketing.md). Core tests only. All rows below are **pending** in game. No new Harmony patches. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed, on a disposable save.
+
+| Check | Do | Look for |
+| --- | --- | --- |
+| MK1 | Open a cart's BizMan page; open the Marketing dropdown | None, then Flyers, Local ads and Citywide ads with "+10% passers, $20 a day" and the cart prices; a truck shows the truck prices ($60, $140, $240) |
+| MK2 | Pick Flyers | Nothing in the bank history; the box shows "From tomorrow: +10% passers, $20 charged at midnight" and no Today row |
+| MK3 | Sleep or skip past midnight | "Marketing for ..." in the bank history once ($20, tax-deductible as Street food marketing); the box shows "Today: Paid, +10% passers" and the From tomorrow row; the cart's Marketing line in Econoview and on the fleet page after the day's summary |
+| MK4 | Pick Citywide, then None, then Local the same day | Nothing charged; Today stays "Paid, +10% passers"; From tomorrow follows each pick, "None" after None. At midnight one $45 charge |
+| MK5 | Keep a level on with less money than its fee at midnight | The level turns off and the notice "...'s marketing stopped: the day's $... couldn't be paid." shows; nothing is charged |
+| MK6 | Skip several days with marketing off, then pick a level | Nothing charged for the skipped days or on picking; one charge at the next midnight |
+| MK7 | Save and load after picking a level, the same day; then load a save from before marketing | No charge after the load; the booking survives. The save from before marketing has no level and loads without error |
+
 # Daily shift limit on the vehicle Schedule tab (0.10.11)
 
 Issue #14; see [scope and evidence](docs/release/0.10.11/shift-cap-native-edits.md). Core and production-method harness checks pass. All rows below are **pending** in game. Use only the isolated rig with its exclusive lease, fresh backup and normal game closed.

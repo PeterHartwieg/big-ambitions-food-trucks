@@ -156,6 +156,22 @@ namespace FoodTrucks.Core.Saves
         // A window the crew opened whose stop a route edit took away (RouteEditor.Remap): the runner closes it on its next
         // step, rather than leaving it open as if the player had opened it.
         public bool CrewWindowLost { get; set; }
+        // The marketing level the player booked (MarketingRules), renewed at every day change; null is none. An ID this
+        // version doesn't know (a newer version's level) is kept as it is and runs as none: no passers, no fee (additive
+        // field: older saves read none).
+        public string? MarketingLevel { get; set; }
+        // The first game day the booked level may be charged: the day after it was picked. Null once a day is paid: the
+        // level then renews at every day change (MarketingFees; additive field).
+        public int? MarketingStartsDay { get; set; }
+        // The last game day whose marketing fee is paid, the level it ran with and what was paid for it, all written
+        // whenever a day is paid (MarketingFees; additive fields: older saves read none, nothing paid).
+        public int? MarketingPaidThroughDay { get; set; }
+        public string? MarketingPaidLevel { get; set; }
+        public long MarketingPaidCents { get; set; }
+        // The paid day before that and the level that ran on it, so sales still catching up on that day after midnight
+        // keep its marketing even once the new day's fee is paid or refused (additive fields: older saves read none).
+        public int? MarketingPreviousDay { get; set; }
+        public string? MarketingPreviousLevel { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
@@ -227,6 +243,8 @@ namespace FoodTrucks.Core.Saves
         public long PermitCents { get; set; }
         public long CommissaryRentCents { get; set; }
         public long OvernightFineCents { get; set; }
+        // The vehicle's daily marketing fees (additive field: older saves read 0).
+        public long MarketingCents { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
