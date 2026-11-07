@@ -1,0 +1,2 @@
+Version 0.10.12
+- Each food cart and truck can now run its own marketing, picked on the vehicle's BizMan page: Flyers, Local ads or Citywide ads bring 10%, 20% or 30% more passers for $20, $45 or $80 a day on a cart and $60, $140 or $240 a day on a truck. A new level starts the next day; nothing is charged when you pick it, and the day's fee is charged at midnight (tax-deductible as Street food marketing). If the fee can't be paid, that vehicle's marketing turns off and a notice tells you.

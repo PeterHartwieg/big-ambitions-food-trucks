@@ -2,7 +2,9 @@
 
 Start with a food cart and grow into a fleet of food trucks. Choose your equipment and menu, find customers around the city, work the serving window yourself or send a crew along a weekly route.
 
-**Version 0.10.11, 1 November 2026.** A crew member can't be given more than the daily shift limit on a vehicle's Schedule tab. A change over the limit isn't saved, and a notice says so. Automated checks pass; in-game checks are pending ([scope and checks](docs/release/0.10.11/shift-cap-native-edits.md)).
+**Version 0.10.12, 7 November 2026.** Each cart and truck can run its own marketing, picked on the vehicle's BizMan page: Flyers, Local ads or Citywide ads bring 10%, 20% or 30% more passers for $20, $45 or $80 a day on a cart and $60, $140 or $240 on a truck. A level starts the next day and its fee is charged at midnight; if the fee can't be paid, the marketing turns off and a notice says so. Automated checks pass; in-game checks MK1–MK7 passed on the test rig ([scope and checks](docs/release/0.10.12/scope.md)).
+
+**Included from 0.10.11:** A crew member can't be given more than the daily shift limit on a vehicle's Schedule tab. A change over the limit isn't saved, and a notice says so. Automated checks pass; in-game checks are pending ([scope and checks](docs/release/0.10.11/shift-cap-native-edits.md)).
 
 **Included from 0.10.10:** Commissary contacts and BizMan show the building's address with View on map and Set destination; welcome, rental and call texts name the street too. Safe uninstall also finds and refunds trucks and carts left with the private driver. Pasting a Schedule day keeps each day's route opening hours. Quitting while serving at a cart or truck window no longer logs a stock-panel error. Automated checks pass; the combined package was not smoke-tested in game.
 
@@ -88,7 +90,7 @@ Created by Peter Hartwieg. Uses the official Hovgaard Games modding SDK and Harm
 
 The 0.10.6 baseline validation and remaining manual checks are in [the release evidence](docs/release/0.10.6/final-verification.txt). Peter accepted functionality and save safety following playtests on 18 October 2026. Release preparation focuses on packaging, presentation and community testing; the Workshop upload status is recorded in `docs/release/0.10.0/README.md` in the repository.
 
-Build with the .NET SDK, Unity 2022.3.62f2 and the official Big Ambitions SDK: `dotnet test`, then `tools/build-mod.sh` (add `--generate` when regenerating assets). Package the release candidate with `python3 tools/package-release.py --output build/FoodTrucks-0.10.11-rc.zip`. The build runs the release verifier; repeat it with `dotnet run --project tools/release/VerifyRelease.csproj -c Release -- build/FoodTrucks unity/FoodTrucks/ModManifest.asset`. The player-facing change note is in `workshop/CHANGENOTE-0.10.11.md`; checks and native-test status are recorded in `docs/release/0.10.11/shift-cap-native-edits.md`. Rename the candidate archive before a final Workshop release.
+Build with the .NET SDK, Unity 2022.3.62f2 and the official Big Ambitions SDK: `dotnet test`, then `tools/build-mod.sh` (add `--generate` when regenerating assets). Package the release candidate with `python3 tools/package-release.py --output build/FoodTrucks-0.10.12-rc.zip`. The build runs the release verifier; repeat it with `dotnet run --project tools/release/VerifyRelease.csproj -c Release -- build/FoodTrucks unity/FoodTrucks/ModManifest.asset`. The player-facing change note is in `workshop/CHANGENOTE-0.10.12.md`; checks and native-test status are recorded in `docs/release/0.10.12/scope.md`. Rename the candidate archive before a final Workshop release.
 
 A supplied local package installs as a complete `FoodTrucks` folder in `ModsLocal`, with the game closed. The DLL or source checkout alone is not installable. Open the folder through **Mods → Mod Creator → Browse mod folder**.
 
