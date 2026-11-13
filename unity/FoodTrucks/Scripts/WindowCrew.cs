@@ -10,6 +10,10 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
+    // The crew at the window, shown while the queue view shows the vehicle's line: a standing game character
+    // per worker, dressed as that employee, the way the game puts a worker behind a station
+    // (EmployeeStationController: the same prefab, ForceToPosition, SetAppearance). They stand still and face
+    // the customers; the game has no serving animation outside a building. [code, unverified in game]
     internal static class WindowCrew
     {
         private const string CharacterPrefab = "Characters/HumanDefinitionLow";

@@ -45,7 +45,7 @@ namespace FoodTrucks
                 listener?.Stop();
                 listener?.Close();
             }
-            catch (Exception) {  }
+            catch (Exception) { }
             thread?.Join(1000);
             listener = null;
             thread = null;

@@ -3,16 +3,17 @@
 
 Usage: python3 tools/comment_ban.py [--repo DIR]
 
-Scans every git-tracked source file whose type is listed in LANGUAGES and is
+Scans every git-tracked or untracked, not ignored, source file whose type is listed in LANGUAGES and is
 not under EXCLUDED_PREFIXES. Each comment found is either:
 
   * a directive (see is_directive): shebang, Python coding line, tool pragmas
     such as "# noqa", "# type:", "# shellcheck", "// eslint-", "#requires";
     C# and shader preprocessor lines ("#if", "#pragma", ...) are code, not
-    comments, so the tokenizer never reports them;
-  * allowed, if the line it starts on is listed in docs/comment-excuses.md as
-    a "- `path:line` category" bullet. A run of consecutive full-line comments
-    counts as one comment that starts on its first line;
+    comments, so the tokenizer never reports them, but a comment after one is;
+  * allowed, if its exact lines are listed in docs/comment-excuses.md as a
+    "- `path:line` category" bullet (one line) or "- `path:first-last`
+    category" bullet (several). A run of consecutive full-line comments counts
+    as one comment, so adding a line to a listed run makes it a violation;
   * a violation. The script prints violations and exits 1.
 """
 
@@ -26,7 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 EXCUSES_FILE = "docs/comment-excuses.md"
-EXCUSE_LINE = re.compile(r"^- `([^`:]+):(\d+)`\s+\S")
+EXCUSE_LINE = re.compile(r"^- `([^`:]+):(\d+)(?:-(\d+))?`\s+\S")
+TEXT_DIRECTIVES = ("region", "endregion", "warning", "error")
 
 EXCLUDED_PREFIXES = (
     "unity/FoodTrucks/Dependencies/",
@@ -118,7 +120,8 @@ def c_spans(text, js=False):
     Handles "..." and '...' with backslash escapes, C# verbatim @"..." with ""
     escapes, C# interpolated $"..." / $@"..." with {code} holes, JS template
     literals with ${code} holes, JS regex literals, and preprocessor lines
-    (a '#' as the first non-blank character), which are skipped whole.
+    (a '#' as the first non-blank character), which are skipped up to a
+    trailing comment, or whole for directives whose rest is text.
     """
     spans = []
     n = len(text)
@@ -157,6 +160,20 @@ def c_spans(text, js=False):
             i += 1
         return i, False
 
+    def skip_directive(i):
+        m = re.match(r"#\s*(\w*)", text[i:])
+        text_only = m.group(1) in TEXT_DIRECTIVES
+        i += m.end()
+        while i < n and text[i] != "\n":
+            if text[i] == '"':
+                j = text.find('"', i + 1)
+                i = n if j < 0 else j + 1
+                continue
+            if not text_only and text.startswith(("//", "/*"), i):
+                return i
+            i += 1
+        return i
+
     def resume(i, frame):
         verbatim, interp, quote = frame
         i, opened = skip_string(i, verbatim, interp, quote)
@@ -168,8 +185,7 @@ def c_spans(text, js=False):
         ch = text[i]
         nxt = text[i + 1] if i + 1 < n else ""
         if ch == "#" and not js and at_line_start(i):
-            while i < n and text[i] != "\n":
-                i += 1
+            i = skip_directive(i)
             continue
         if ch == "/" and nxt == "/":
             j = text.find("\n", i)
@@ -402,7 +418,10 @@ def comments_in(path, text):
 
 def tracked_files(repo):
     out = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=repo, check=True, capture_output=True
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
     ).stdout.decode()
     return [p for p in out.split("\0") if p and not is_excluded(p)]
 
@@ -414,7 +433,8 @@ def load_excuses(repo):
         for line in path.read_text(encoding="utf-8").splitlines():
             m = EXCUSE_LINE.match(line)
             if m:
-                allowed.add((m.group(1), int(m.group(2))))
+                first = int(m.group(2))
+                allowed.add((m.group(1), first, int(m.group(3) or first)))
     return allowed
 
 
@@ -433,7 +453,7 @@ def scan(repo, files=None):
             continue
         for c in comments_in(rel, text):
             found.append(c)
-            if not is_directive(c) and (rel, c.line) not in allowed:
+            if not is_directive(c) and (rel, c.line, c.end_line) not in allowed:
                 violations.append(c)
     return found, violations
 

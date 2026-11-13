@@ -418,7 +418,7 @@ namespace FoodTrucks
             var rear = controller.vehicleLoadingPosition != null ? Sample(controller.vehicleLoadingPosition.position) : null;
             Vector3? door = null;
             try { door = Sample(controller.GetNavMeshTargetPosition()); }
-            catch (Exception) {  }
+            catch (Exception) { }
             var first = driverFirst ? door ?? rear : rear ?? door;
             return first ?? Sample(controller.transform.position + controller.transform.right * 2.5f) ?? fallbackExit;
         }

@@ -160,7 +160,7 @@ namespace FoodTrucks
         private static void Tell(string kind, string message)
         {
             try { Listener?.Invoke(kind, message); }
-            catch (Exception) {  }
+            catch (Exception) { }
         }
 
         public static void Error(Exception exception)

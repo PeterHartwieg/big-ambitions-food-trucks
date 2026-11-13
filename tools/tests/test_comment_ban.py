@@ -16,8 +16,8 @@ class CommentBanTests(unittest.TestCase):
 
     def test_every_listed_excuse_is_still_a_comment(self):
         found, _ = comment_ban.scan(TOOLS.parent)
-        starts = {(c.path, c.line) for c in found}
-        stale = sorted(f'{p}:{n}' for p, n in comment_ban.load_excuses(TOOLS.parent) - starts)
+        starts = {(c.path, c.line, c.end_line) for c in found}
+        stale = sorted(f'{p}:{a}-{b}' for p, a, b in comment_ban.load_excuses(TOOLS.parent) - starts)
         self.assertEqual(stale, [])
 
     def scan_fixture(self, files, excuses=''):
@@ -39,8 +39,24 @@ class CommentBanTests(unittest.TestCase):
 
     def test_listed_excuse_passes(self):
         files = {'A.cs': 'class A {\n    // workaround: the game drops this\n    // until it is fixed.\n    int x;\n}\n'}
-        self.assertEqual(self.scan_fixture(files, '- `A.cs:2` workaround\n'), [])
+        self.assertEqual(self.scan_fixture(files, '- `A.cs:2-3` workaround\n'), [])
         self.assertEqual(self.scan_fixture(files, '- `A.cs:3` workaround\n'), [('A.cs', 2)])
+        self.assertEqual(self.scan_fixture({'A.cs': '// workaround: x\nclass A {}\n'}, '- `A.cs:1` workaround\n'), [])
+
+    def test_line_added_to_listed_excuse_fails(self):
+        files = {'A.cs': 'class A {\n    // workaround: the game drops this\n    // until it is fixed.\n'
+                         '    // a new explanation\n    int x;\n}\n'}
+        self.assertEqual(self.scan_fixture(files, '- `A.cs:2-3` workaround\n'), [('A.cs', 2)])
+        files = {'A.cs': 'class A {\n    // a new explanation\n    // workaround: the game drops this\n    int x;\n}\n'}
+        self.assertEqual(self.scan_fixture(files, '- `A.cs:3` workaround\n'), [('A.cs', 2)])
+
+    def test_comment_after_preprocessor_line(self):
+        files = {'A.cs': '#pragma warning disable CS0414 // workaround: not fixed yet\n'
+                         '#if DEBUG // new explanation\n#endif\n#region a // b\n#endregion\n'
+                         '#line 1 "x//y"\nclass A {}\n'}
+        self.assertEqual(self.scan_fixture(files), [('A.cs', 1), ('A.cs', 2)])
+        self.assertEqual(self.scan_fixture(files, '- `A.cs:1` workaround\n'), [('A.cs', 2)])
+        self.assertEqual(self.scan_fixture({'a.shader': '#define X 1 /* explains */\n'}), [('a.shader', 1)])
 
     def test_directives_pass(self):
         files = {
@@ -71,6 +87,22 @@ class CommentBanTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 1)
             self.assertIn('A.cs:1', result.stdout)
+
+    def test_cli_scans_untracked_files(self):
+        with tempfile.TemporaryDirectory(prefix='ft-comment-ban-') as folder:
+            root = Path(folder)
+            subprocess.run(['git', 'init', '-q'], cwd=root, check=True)
+            (root / '.gitignore').write_text('ignored/\n')
+            (root / 'A.cs').write_text('class A {}\n')
+            (root / 'B.cs').write_text('// new\nclass B {}\n')
+            (root / 'ignored').mkdir()
+            (root / 'ignored/C.cs').write_text('// ignored\nclass C {}\n')
+            subprocess.run(['git', 'add', 'A.cs', '.gitignore'], cwd=root, check=True)
+            result = subprocess.run([sys.executable, str(TOOLS / 'comment_ban.py'), '--repo', str(root)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('B.cs:1', result.stdout)
+            self.assertNotIn('C.cs', result.stdout)
 
 
 if __name__ == '__main__':

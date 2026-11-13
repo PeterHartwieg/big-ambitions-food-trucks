@@ -60,7 +60,7 @@ namespace FoodTrucks
             if (!int.TryParse(numberText, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number <= 0) return null;
             string? street = null;
             try { street = streets == null ? AddressHelper.GetStreetNameLocalized(streetKey) : streets.NativeName(streetKey); }
-            catch (Exception) {  }
+            catch (Exception) { }
             if (InvalidStreet(street))
             {
                 fallback = true;
@@ -177,7 +177,7 @@ namespace FoodTrucks
                         if (!data.TryGetValue("guidance", out var existing) || existing != guidance)
                         { data["guidance"] = guidance; changed = true; }
                     }
-                    catch (Exception) {  }
+                    catch (Exception) { }
                 }
             }
             finally { if (changed && FoodTrucksSession.CanWrite) FoodTrucksSession.MarkChanged(); }
