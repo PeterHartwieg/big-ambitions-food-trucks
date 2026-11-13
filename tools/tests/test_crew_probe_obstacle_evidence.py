@@ -10,8 +10,6 @@ ROOT = Path(__file__).resolve().parents[2]
 class ObstacleEvidenceTests(unittest.TestCase):
     def test_incomplete_preserves_identity_and_emits_exception(self):
         source = (ROOT / 'unity/FoodTrucks/Scripts/CrewProbeTrafficEvidence.cs').read_text()
-        # Compile the actual helper and its Text dependency, unchanged. The rest of
-        # the adapter needs Unity; this JSON-only regression needs no native fakes.
         helper = source[source.index('        private static void Incomplete('):
                         source.index('        private static JArray Vec(')]
         with tempfile.TemporaryDirectory(prefix='ft-obstacle-evidence-') as temporary:

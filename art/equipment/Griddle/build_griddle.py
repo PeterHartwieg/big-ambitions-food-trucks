@@ -16,7 +16,6 @@ for ob in list(bpy.data.objects):
     if ob.name.startswith(('Griddle_', '_G_')):
         bpy.data.objects.remove(ob, do_unlink=True)
 
-# Deliberately flat, neutral part colours. No lettering or decorative marks.
 PALETTE = {
     'steel': (0.57, 0.64, 0.66, 1),
     'edge': (0.72, 0.77, 0.78, 1),
@@ -88,12 +87,9 @@ def cylinder(label, center, radius, depth, color, axis='Z', n=12, top_radius=Non
     fs += [(i,(i+1)%n,(i+1)%n+n,i+n) for i in range(n)]
     return mesh_part(label,vs,fs,color)
 
-# 39 x 34 cm: a compact commercial countertop unit, about a person's torso width.
-# The solid underside includes the placement pivot and lies exactly on Z=0.
 box('chassis',(0,0,0.039),(0.386,0.324,0.078),'steel',0.002)
 box('cooking_plate',(0,0.009,0.088),(0.390,0.306,0.020),'plate',0.0015)
 box('back_guard',(0,0.165,0.138),(0.390,0.010,0.106),'steel',0.001)
-# Side guards taper down at the front for a clear view of the cooking surface.
 for s in (-1,1):
     x=s*0.190
     extrusion('side_guard',[(x,-0.135,0.098),(x,0.170,0.098),
@@ -101,17 +97,14 @@ for s in (-1,1):
                             (x,-0.135,0.122)],(s*0.005,0,0),'steel')
 
 if STAGE>=2:
-    # Open, full-width grease gutter in front of the plate.
     box('gutter_bottom',(0,-0.154,0.076),(0.380,0.029,0.005),'trough')
     box('gutter_lip',(0,-0.171,0.084),(0.390,0.008,0.018),'edge',0.001)
     for x in (-0.190,0.190):
         box('gutter_end',(x,-0.154,0.084),(0.008,0.030,0.018),'edge')
-    # Knobs face the customer at -Y. Mount rings and white raised pointer bars.
     for x in (-0.105,0.105):
         cylinder('knob_ring',(x,-0.164,0.041),0.026,0.006,'trough','Y',16)
         cylinder('knob',(x,-0.171,0.041),0.021,0.012,'black','Y',12,0.022)
         box('knob_pointer',(x,-0.178,0.049),(0.0035,0.002,0.014),'edge')
-    # A generous heap of chopped beef. Polygonal chunks, not surface noise.
     chunks=[(0.047,-0.021,0.015,0.009),(0.067,-0.040,0.019,0.011),
             (0.092,-0.044,0.017,0.013),(0.117,-0.030,0.018,0.010),
             (0.138,-0.010,0.016,0.009),(0.143,0.011,0.015,0.012),
@@ -126,8 +119,6 @@ if STAGE>=2:
     for i,(x,y,a) in enumerate([(0.068,-0.019,.35),(0.105,-0.024,-.45),
                                (0.109,.012,.7),(0.075,.017,-.2)]):
         box('cheese',(x,y,0.118),(0.034,0.014,0.003),'cheese',rotation=a)
-    # Two folded tortillas: solid semicircular panels with their straight folds
-    # down on the plate and a shallow opening between the warm golden sides.
     for taco,cx,cy,a in [(0,-0.078,-0.055,-0.15),(1,-0.079,0.040,0.18)]:
         rot=Matrix.Rotation(a,3,'Z')
         for side in (-1,1):
@@ -140,7 +131,6 @@ if STAGE>=2:
                 outline.append(tuple(Vector((cx,cy,.099))+rot@Vector((x,y,z))))
             extrusion('folded_tortilla',outline,tuple(rot@Vector((0,side*.003,0))),'tortilla')
         box('tortilla_fold',(cx,cy,.101),(.080,.008,.005),'tortilla_edge',rotation=a)
-    # Resting offset spatula at the back, polished trapezoidal blade, dark grip.
     a=-.24
     rot=Matrix.Rotation(a,3,'Z')
     origin=Vector((.034,.078,.103))
@@ -169,8 +159,6 @@ if STAGE>=3:
     me=body.data
     me.calc_loop_triangles()
     uv=me.uv_layers.active.data
-    # Rasterise each island with its flat part colour and a two-pixel bleed.
-    # UVs are unique for every surface, including hidden faces.
     res=512
     pixels=np.zeros((res,res,4),dtype=np.float32)
     pixels[:]=(.18,.22,.23,1)
@@ -223,8 +211,6 @@ if STAGE>=3:
     for poly in me.polygons: poly.material_index=0
 
 if STAGE>=4:
-    # A low-sided enclosing hull derived from the envelope corners. bmesh
-    # convex_hull guarantees a convex, closed collision surface (12 triangles).
     bm=bmesh.new()
     for x in (-.197,.197):
         for y in (-.180,.172):
@@ -244,7 +230,6 @@ if STAGE>=4:
     collision.display_type='WIRE'
     collision.hide_set(True)
 
-# Review presentation: camera from customer-facing -Y, 30 degrees above plate.
 scene=bpy.context.scene
 scene.render.engine='CYCLES'
 scene.cycles.device='CPU'

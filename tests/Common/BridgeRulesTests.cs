@@ -7,7 +7,6 @@ namespace FoodTrucks.Core.Tests.Common;
 
 public class BridgeRulesTests
 {
-    // Live session 4: x -1490, z -1150 has the elevated highway at 5.06 over the street at 0.05.
     private static readonly List<(double Y, bool Walkable)> UnderHighway = new() { (5.06, false), (0.05, true) };
 
     [Fact]
@@ -46,7 +45,6 @@ public class BridgeRulesTests
     [Fact]
     public void Explicit_y_without_walkable_ground_near_it_is_refused_for_the_player()
     {
-        // Live session 5, row 40: y 5.06 over a street at 0.20 put the player on the street.
         var street = new List<(double Y, bool Walkable)> { (0.20, true) };
         var (index, why) = GroundPick.Choose(street, referenceY: 0.1, explicitY: 5.06, walkableOnly: true);
         Assert.Equal(-1, index);
@@ -83,7 +81,6 @@ public class BridgeRulesTests
     [Fact]
     public void Shot_pulls_in_before_a_facade()
     {
-        // Live session 4, garment-district: a 4 m pavement put the 6 m camera inside the facade.
         Assert.Equal(3.6, ShotClearance.Fit(6, 4.0, 2)!.Value, 6);
     }
 
@@ -96,7 +93,6 @@ public class BridgeRulesTests
     [Fact]
     public void Footprints_across_stalls_overlap()
     {
-        // Live session 4: a truck along the lane (heading 0) over a van in a perpendicular stall beside it.
         var truck = new FlatBox(0, 0, 0, 1, 1.1, 2.9);
         var van = new FlatBox(0.5, 1.5, 1, 0, 1.0, 2.5);
         Assert.True(Footprint.Overlap(truck, van));
@@ -114,7 +110,6 @@ public class BridgeRulesTests
     [Fact]
     public void Footprints_turned_45_degrees_use_their_real_corners()
     {
-        // Two 2 x 2 squares 2.3 m apart along x: apart as squares, touching once one is turned 45 degrees.
         var a = new FlatBox(0, 0, 0, 1, 1, 1);
         Assert.False(Footprint.Overlap(a, new FlatBox(2.3, 0, 0, 1, 1, 1)));
         Assert.True(Footprint.Overlap(a, new FlatBox(2.3, 0, 1, 1, 1, 1)));
@@ -123,7 +118,6 @@ public class BridgeRulesTests
     [Fact]
     public void Footprints_on_separate_levels_do_not_overlap()
     {
-        // Same x and z, but the truck stands on a deck 3 m above the van's level.
         var truck = new FlatBox(0, 0, 0, 1, 1.1, 2.9);
         var van = new FlatBox(0.5, 1.5, 1, 0, 1.0, 2.5);
         Assert.False(Footprint.Overlap(truck, (3.3, 6.0), van, (0.0, 2.2)));
@@ -134,14 +128,12 @@ public class BridgeRulesTests
     [Fact]
     public void A_player_is_refused_when_no_surface_is_walkable()
     {
-        // Review round 10: a sole disconnected deck, and every surface failing the walk check.
         var deck = new List<(double Y, bool Walkable)> { (5.06, false) };
         var (index, why) = GroundPick.Choose(deck, referenceY: 0.1, explicitY: null, walkableOnly: true);
         Assert.Equal(-1, index);
         Assert.Contains("no walkable surface of 1: 5.06 not walkable", why);
         var road = new List<(double Y, bool Walkable)> { (5.06, false), (0.05, false) };
         Assert.Equal(-1, GroundPick.Choose(road, 0.1, null, walkableOnly: true).Index);
-        // A vehicle keeps the fallback.
         Assert.Equal(0, GroundPick.Choose(deck, 0.1, null, walkableOnly: false).Index);
         Assert.Equal(1, GroundPick.Choose(road, 0.1, null, walkableOnly: false).Index);
     }

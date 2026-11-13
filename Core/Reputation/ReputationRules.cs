@@ -62,7 +62,6 @@ namespace FoodTrucks.Core.Reputation
         public int MemoryDays { get; }
         public int UncleanedDayPoints { get; }
         public int StaleStockPoints { get; }
-        // Food on board this many days or more is stale. The game's food never spoils, so this is the mod's rule.
         public int StaleAfterDays { get; }
         public IReadOnlyList<GradeBand> Grades { get; }
         public int FirstInspectionWeeks { get; }

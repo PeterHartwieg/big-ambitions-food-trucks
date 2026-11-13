@@ -22,12 +22,10 @@ def block(source, marker):
 class CartWindowAlignmentTests(unittest.TestCase):
     def test_immediate_mirroring_retained_side_and_snapped_window_anchor(self):
         source = (ROOT / 'unity/FoodTrucks/Scripts/CartQueueView.cs').read_text()
-        # Keep the production placement method intact while replacing unrelated spawning/path/game adapters.
         shape = block(source, 'internal sealed class WindowShape')
         place = block(source, 'private static Vector3? PlaceAt(')
         reject = block(source, 'private sealed class Rejections')
         layout = block(source, 'private static (List<Vector3> Places,')
-        # Exercise the production notification in EnsureLine: its inputs are faked, as are its surrounding game calls.
         ensure = block(source, 'private QueueLine EnsureLine(')
         side = block(source, 'public static int? QueueSide(')
         with tempfile.TemporaryDirectory(prefix='ft-cart-alignment-') as folder:

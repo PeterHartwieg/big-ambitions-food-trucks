@@ -9,17 +9,10 @@ using UnityEngine.Rendering;
 
 namespace FoodTrucks.BuildEditor
 {
-    // Entry point for `Unity -batchmode -executeMethod FoodTrucks.BuildEditor.BatchBuild.Build -modId <id>`.
-    // Runs the SDK's own validator and packager, then exits with 0 on success and 1 on failure.
     public static class BatchBuild
     {
         private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(20);
         private static bool finished;
-        // The SDK's HDRP assets support deferred lit shaders only (supportedLitShaderMode 2), so the build strips
-        // every opaque Forward variant and our copy of the game's SH_Vehicle has no Forward pass at all. The
-        // game's hover outline (a DrawRenderers custom pass on the outlined layers) only draws objects whose shader
-        // has a Forward pass, so the truck got none. Both modes (3) for the build, as the game's own shaders keep
-        // Forward. The values go back before Unity exits; tools/build-mod.sh then restores the files Unity rewrote.
         private const string LitShaderMode = "m_RenderPipelineSettings.supportedLitShaderMode";
         private const int BothLitShaderModes = 3;
         private static readonly List<(UnityEngine.Object Asset, int Mode)> changedPipelines = new List<(UnityEngine.Object, int)>();
@@ -96,7 +89,6 @@ namespace FoodTrucks.BuildEditor
                 serialized.FindProperty(LitShaderMode).intValue = mode;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
             }
-            // Not saved: the change was never written, and saving would reserialize the SDK's settings files.
             changedPipelines.Clear();
         }
 

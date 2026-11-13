@@ -5,7 +5,6 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Demand
 {
-    // Independent area presences in [0, 1]. Crowds add; presences need not sum to 1.
     public sealed class AreaMix
     {
         private readonly IReadOnlyDictionary<string, double> presences;
@@ -16,7 +15,6 @@ namespace FoodTrucks.Core.Demand
         public IReadOnlyDictionary<string, double> Presences => presences;
         public double PresenceOf(string area) => presences.TryGetValue(area, out var presence) ? presence : 0;
 
-        // Legacy names retained for the game adapter; these now mean presence, not normalized share.
         public IReadOnlyDictionary<string, double> Shares => Presences;
         public double ShareOf(string area) => PresenceOf(area);
 
@@ -28,8 +26,6 @@ namespace FoodTrucks.Core.Demand
 
         public static AreaMix FromWeights(IEnumerable<KeyValuePair<string, double>> weights) => FromPresences(weights);
 
-        // Direct presences, without normalization. Repeated areas keep their highest presence.
-        // Empty or all-zero input is valid: the street baseline still supplies traffic.
         public static AreaMix FromPresences(IEnumerable<KeyValuePair<string, double>> weights)
         {
             if (weights == null) throw new ArgumentNullException(nameof(weights));

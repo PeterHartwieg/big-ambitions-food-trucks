@@ -122,7 +122,6 @@ def render(name, factory, direction, size):
     width=max(v.x for v in proj)-min(v.x for v in proj)
     height=max(v.y for v in proj)-min(v.y for v in proj)
     cam.data.ortho_scale=max(width,height*size[0]/size[1])*1.10
-    # Centre the projected bounds, including the open hatch/canopy.
     offset=Vector(((max(v.x for v in proj)+min(v.x for v in proj))/2,(max(v.y for v in proj)+min(v.y for v in proj))/2,0))
     cam.location += cam.rotation_euler.to_matrix() @ offset
     world=bpy.data.worlds.new('Studio world'); world.use_nodes=True

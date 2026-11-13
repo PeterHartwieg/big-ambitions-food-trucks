@@ -11,7 +11,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Retry deferred city address work without depending on the next midnight or a catering tick.
     internal sealed class CityPitchRetry : MonoBehaviour
     {
         private void Update()
@@ -21,7 +20,6 @@ namespace FoodTrucks
         }
     }
 
-    // Core decides premium spots and events; this resolves native places and sends the city's messages.
     internal static class CityPitches
     {
         private static PitchTables? Tables => DemandData.Pitches;
@@ -35,7 +33,6 @@ namespace FoodTrucks
                 NewDay(state, SaveGameManager.Current.Day, loading: false);
         }
 
-        // Once per city load: how many of the data file's addresses the city has.
         public static void LogFound()
         {
             var tables = Tables;
@@ -56,7 +53,6 @@ namespace FoodTrucks
             return PremiumSpots.At(tables, s => World.EntrancesOf(s.Address)?.Select(d => ((double)d.x, (double)d.z)), position.x, position.z);
         }
 
-        // The event running at that minute within reach of the position, nearest place first.
         public static (CityEvent Event, EventPlace Place, EventKind Kind)? EventAt(SaveState state, float x, float z, long minute)
         {
             var tables = Tables;
@@ -72,8 +68,6 @@ namespace FoodTrucks
             return null;
         }
 
-        // Before a window opens at a running event: null when it may, else the message saying why not. Only
-        // vehicles with a booked place sell there while it runs.
         public static string? EventProblem(SaveState state, string vehicleId, Vector3 position, long minute)
         {
             var here = EventAt(state, position.x, position.z, minute);
@@ -84,8 +78,6 @@ namespace FoodTrucks
             return city.Booked == 0 ? "foodtrucks:notification_event_not_booked" : "foodtrucks:notification_event_places_taken";
         }
 
-        // The window has opened: the premium spot and a running event's place go to it if they are free. Returns
-        // what the player is told, or null.
         public static (string Key, (string Key, string Value)[] Data)? Opened(SaveState state, VehicleState vehicle, Vector3 position, long minute)
         {
             (string, (string, string)[])? message = null;
@@ -110,8 +102,6 @@ namespace FoodTrucks
             return message;
         }
 
-        // Each sales step of an open window: an event starting while a vehicle is already open there gives it a booked
-        // place if one is free. False when it has none: it must close, as it couldn't have opened there.
         public static bool Tick(SaveState state, VehicleState vehicle, Spot spot, long minute)
         {
             var here = EventAt(state, spot.X, spot.Z, minute);
@@ -128,8 +118,6 @@ namespace FoodTrucks
             return true;
         }
 
-        // What the pitch adds at that minute: the premium spot the window holds, and a running event it has a
-        // place at.
         public static PitchBonus BonusFor(SaveState? state, VehicleState? vehicle, Spot spot, long minute)
         {
             var tables = Tables;
@@ -142,22 +130,17 @@ namespace FoodTrucks
             return bonus;
         }
 
-        // A new day: the city announces what is coming, drops what is over and reminds the player of today's
-        // bookings. Also once after a load, which only catches up.
         public static void NewDay(SaveState state, int today, bool loading)
         {
             var tables = Tables;
             if (tables == null || !FoodTrucksSession.CanWrite) return;
-            // Nothing a window still has to sell through goes: a catch-up can be days behind after a long skip.
             var soldThrough = CartSelling.SoldThrough();
-            // Validate/refund before expiry; pruning and load-only release do not need native addresses.
             var addressesReady = EventLocations.Ready;
             var dropped = 0;
             pendingAddresses = addressesReady ? null : state;
             var cleaned = PremiumSpots.Prune(state, soldThrough) > 0;
             if (loading)
             {
-                // Places held by vehicles that aren't open any more go back.
                 var now = HireCrew.Now();
                 foreach (var holder in state.Events.Events.SelectMany(e => e.Holds).Concat(state.PremiumHolds.Values.SelectMany(h => h))
                              .Where(h => h.Until == null && StreetSales.Find(state, h.VehicleId)?.IsOpen != true).ToList())
@@ -171,7 +154,6 @@ namespace FoodTrucks
                     cleaned = true;
                 }
             }
-            // Normalize load-only holds before either immediate or deferred refund judgement.
             if (addressesReady)
             {
                 DropUnknown(state, tables);
@@ -189,13 +171,11 @@ namespace FoodTrucks
                     }));
             }
             if (cleaned || dropped > 0) FoodTrucksSession.MarkChanged();
-            // Announcements and reminders also require readable native places; retry after city data loads.
             if (!addressesReady) return;
             if (!tables.Places.Any(p => EventLocations.ReadableAddress(p.Address) != null)) return;
             var lastAnnouncedDay = state.Events.LastAnnouncedDay;
             var added = new CityEvents(tables).Announce(state.Events, today, p => EventLocations.ReadableAddress(p.Address) != null);
             var announced = state.Events.LastAnnouncedDay != lastAnnouncedDay || added.Count > 0;
-            // The city writes to vendors: players with a food cart or truck.
             var vendor = CityLicensing.FoodVehicles(state).Count > 0;
             foreach (var city in added)
             {
@@ -238,7 +218,6 @@ namespace FoodTrucks
             if (added.Count > 0 || dropped > 0) Log.Info($"City events on day {today}: {added.Count} announced, {dropped} over; {state.Events.Events.Count} coming.");
         }
 
-        // Cancel missing/unreadable locations before expiry. Refund only places no distinct vehicle used.
         private static void DropUnknown(SaveState state, PitchTables tables)
         {
             foreach (var city in state.Events.Events.Where(e => tables.Place(e.PlaceId) == null || tables.Kind(e.Kind) == null ||
@@ -250,8 +229,6 @@ namespace FoodTrucks
                 Log.Info($"City event {city.Id} ({city.Kind} at {city.PlaceId}) dropped: location or kind unavailable; {city.Booked} places booked, {CartSelling.Money(refund)} paid back.");
                 if (refund <= 0) continue;
                 var info = new TransactionInfo("foodtrucks:transaction_event_refund", new Dictionary<string, string>());
-                // Under the fees' label for the record; the game's tax tracking ignores money coming in, so the fee's
-                // deduction stands (documented in the plan).
                 info.SetTaxDeductibleName("foodtrucks:transaction_cityfees_label");
                 GameManager.ChangeMoneySafe(refund / 100f, info, null, null, force: true, showNotification: true);
                 SalesLedger.RecordEventPlaces(state, SaveGameManager.Current.Day, -refund);
@@ -259,8 +236,6 @@ namespace FoodTrucks
             }
         }
 
-        // Debug key for throwaway saves: an event at the nearest event place, running from now for three hours,
-        // with one place booked free.
         public static void EventHereForTesting(Vector3 position)
         {
             var state = FoodTrucksSession.CurrentState;

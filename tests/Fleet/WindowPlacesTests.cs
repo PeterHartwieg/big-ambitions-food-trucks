@@ -7,7 +7,6 @@ namespace FoodTrucks.Core.Tests.Fleet;
 
 public class WindowPlacesTests
 {
-    // The truck's hatch: opening z -2.00 to -0.20 (art/README.md), less a quarter metre for a body at each end.
     private const double HalfWidth = 0.65;
 
     private static double?[] Rounded(double?[] places) => places.Select(p => p.HasValue ? Math.Round(p.Value, 6) : (double?)null).ToArray();
@@ -32,7 +31,6 @@ public class WindowPlacesTests
     [Fact]
     public void CrewWhoDontFitTheOpeningWaitInside()
     {
-        // With the player in the middle, a third crew member would stand at +0.90, past the opening.
         Assert.Equal(new double?[] { 0.45, -0.45, null }, Rounded(WindowPlaces.Offsets(3, true, 0.45, HalfWidth).Crew));
         Assert.Equal(new double?[] { -0.6, 0.0, 0.6, null }, Rounded(WindowPlaces.Offsets(4, false, 0.6, HalfWidth).Crew));
     }

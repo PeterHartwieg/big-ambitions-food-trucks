@@ -8,12 +8,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // The cart model's moving parts and its place in the parking lanes:
-    // - the wheels turn with the distance the pushed cart rolls;
-    // - the body collider at CarHolder/Colliders/BodyCollider (a trigger the lanes read, see CartAssets) is on
-    //   only while the cart stands, like the root collider the game switches off while pushing. The game's
-    //   onExitVehicle comes before VehicleController.ExitVehicle regenerates the lanes, so they see it on;
-    // - parked cars the lanes generate on a cart are cleared (DestroyBlockingPrefix).
     internal sealed class CartParts : MonoBehaviour
     {
         private const string BodyColliderPath = "CarHolder/Colliders/BodyCollider";
@@ -37,7 +31,6 @@ namespace FoodTrucks
             GlobalEvents.onExitVehicle -= OnExitVehicle;
         }
 
-        // A save made while pushing loads with the cart in hand, possibly before this component existed.
         private void Start()
         {
             try
@@ -79,11 +72,9 @@ namespace FoodTrucks
             var position = pushed.transform.position;
             var moved = position - lastPosition;
             lastPosition = position;
-            // A jump (the grab moving the player, a teleport) isn't rolling.
             if (moved.sqrMagnitude > 4f) return;
             var distance = Vector3.Dot(moved, pushed.transform.forward);
             if (Mathf.Abs(distance) < 0.0001f) return;
-            // Rolling forward (+z) turns the top of the wheel forward: positive about local X.
             wheelDegrees = Mathf.Repeat(wheelDegrees + distance / WheelRadius * Mathf.Rad2Deg, 360f);
             var rotation = Quaternion.Euler(wheelDegrees, 0f, 0f);
             foreach (var wheel in wheels)
@@ -102,7 +93,6 @@ namespace FoodTrucks
             if (body != null) body.enabled = on;
         }
 
-        // One line per cart at load: whether the parking lanes will keep its spot free.
         public static void LogLanes()
         {
             var carts = SaveGameManager.Current?.VehicleInstances?.Where(v => v != null && v.vehicleTypeName == FoodTrucksMod.CartTypeName).ToList()
@@ -125,15 +115,10 @@ namespace FoodTrucks
             if (carts.Count == 0) Log.Info("Parking lanes: no carts in this save.");
         }
 
-        // VehicleHelper.DestroyBlockingVehicles, which clears parked and traffic cars from where a player vehicle
-        // stands, reads a hand vehicle's root BoxCollider.bounds (world space) and then places the check box with
-        // TransformPoint as if it were local, so for a cart the box lands far away [code, 1.0]. For the mod's carts
-        // this runs the same check with the collider's local box and skips the game's.
         public static bool DestroyBlockingPrefix(GameObject prefab, Vehicles.VehicleTypes.VehicleType vehicleType, Transform placedTransform, bool onlyParkedVehicles)
         {
             try
             {
-                // A crew's placement (HireRoutes.Place) checked the place free itself: nothing of the game's is deleted.
                 if (HireRoutes.SpawnNoCleanup) return false;
                 if (vehicleType == null || vehicleType.vehicleTypeName != FoodTrucksMod.CartTypeName || prefab == null || placedTransform == null) return true;
                 var box = prefab.GetComponent<BoxCollider>();

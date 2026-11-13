@@ -15,11 +15,6 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // A "Street food" line in the city map's filters (design: Player view): offices, factories and
-    // warehouses, nightlife, theatres and cinemas, premium spots and the city's coming events, commissaries, and the player's carts (trucks already have the game's own
-    // vehicle marker). The building filters follow the demand model's rules (Core StreetFoodMap). Their
-    // CityMapFilterData is empty, so the game's own pass matches nothing for them; a postfix on its
-    // per-building pass highlights the matches.
     internal static class MapFilters
     {
         private const string LineKey = "foodtrucks:mapfilter_line";
@@ -32,7 +27,6 @@ namespace FoodTrucks
         internal static readonly Color CommissaryColour = new Color(0.60f, 0.35f, 0.85f);
         private static string KeyOf(string filter) => "foodtrucks:mapfilter_" + filter;
 
-        // Each building filter's icon and colour: a business type the filter stands for.
         private static readonly Dictionary<string, string> IconBusiness = new Dictionary<string, string>
         {
             { StreetFoodMap.Offices, "ba:businesstype_lawfirm" },
@@ -48,19 +42,12 @@ namespace FoodTrucks
         private static MethodInfo? isSelected;
         private static AreaClassifier? classifier;
         private static bool loggedFailure;
-        // The Street food building filters switched on, read once per filter pass (ApplyPostfix runs before
-        // the per-building pass the game spreads over the next frames).
         private static List<string> selected = new List<string>();
-        // The game's own "hide closed" filter, read with the selection: closed venues stay dark.
         private static bool hideClosed;
-        // With the pitches or catering filter on: the buildings premium spots, coming events and booked gigs are
-        // outside, by address, with their colour.
         private static Dictionary<string, Color> pitchAddresses = new Dictionary<string, Color>(StringComparer.Ordinal);
         private static AccessTools.FieldRef<CityMapFilters, bool>? hideClosedField;
 
-        // The player's food vehicles' markers, by vehicle ID. Hidden unless the filter is on.
         private static readonly Dictionary<string, PointOfInterest> markers = new Dictionary<string, PointOfInterest>();
-        // Carts whose game-owned marker the mod turned green.
         private static readonly HashSet<string> greened = new HashSet<string>();
 
         public static void InitializePostfix(CityMapFilters __instance)
@@ -88,7 +75,6 @@ namespace FoodTrucks
 
         private static void AddFilter(CityMapFilters filters, object line, string key, Sprite? icon)
         {
-            // The parameters after the category are optional in C# but not to reflection.
             createFilter!.Invoke(filters, new object?[] { key, icon, new CityMapFilterData(), line, default(LanguageChangeEventDataHolder), null, null });
         }
 
@@ -98,7 +84,6 @@ namespace FoodTrucks
             return isSelected != null && (bool)isSelected.Invoke(filters, new object[] { key });
         }
 
-        // After the game decided one building: highlight it if a Street food filter matches.
         public static void BuildingPostfix(CityMapFilters __instance, CityBuildingController controller)
         {
             try
@@ -122,8 +107,6 @@ namespace FoodTrucks
                 var business = controller.buildingRegistration.businessTypeName;
                 var match = selected.FirstOrDefault(f => StreetFoodMap.Highlights(classifier, f, controller.building.BuildingType, business));
                 if (match == null) return;
-                // As the game does for its own filters: homes and buildings for rent have no hours. (The game
-                // also keeps buildings for sale lit; the venues these filters pick are rarely for sale.)
                 if (hideClosed && !controller.buildingRegistration.AvailableForRent &&
                     controller.building.BuildingType != "ba:buildingtype_residential" &&
                     !BusinessHelper.IsBusinessOpen(controller.buildingRegistration)) return;
@@ -149,15 +132,12 @@ namespace FoodTrucks
             }
             catch (Exception ex)
             {
-                // Once: this runs for every building on the map.
                 if (loggedFailure) return;
                 loggedFailure = true;
                 Log.Error("Map filters, building pass: " + ex);
             }
         }
 
-        // After the game applied the filters: note the building filters for the pass that follows, and show
-        // or hide the vehicle markers.
         public static void ApplyPostfix(CityMapFilters __instance)
         {
             try
@@ -180,7 +160,6 @@ namespace FoodTrucks
                 foreach (var vehicle in game.VehicleInstances)
                 {
                     var kind = FoodTrucksMod.KindOf(vehicle?.vehicleTypeName);
-                    // A truck already has the game's own vehicle marker; a cart (spawned with the player) has none.
                     if (vehicle == null || kind != "cart") continue;
                     var controller = VehicleHelper.GetVehicleController(vehicle);
                     if (controller == null) continue;
@@ -188,9 +167,6 @@ namespace FoodTrucks
                     var open = StreetSales.Find(state, vehicle.id)?.IsOpen == true;
                     var references = InstanceBehavior<GlobalReferences>.Instance;
                     var background = open && show ? OpenColour : references.vehiclePOIBackgroundColor;
-                    // A cart spawned this session got the game's own marker (one loaded from the save has none):
-                    // it stays the game's, always shown, and only turns green while open with the filter on. Only a
-                    // marker the mod turned green is changed back, to the colour the game would give it.
                     if (controller.poi != null && !markers.ContainsKey(vehicle.id))
                     {
                         if (open && show)
@@ -211,7 +187,6 @@ namespace FoodTrucks
                         marker = map.AddPoi(controller.transform, references.vehiclePOIIcon, references.vehiclePOIBackgroundColor);
                         markers[vehicle.id] = marker;
                     }
-                    // A cart spawned again (out of range and back) has a new transform.
                     marker.target = controller.transform;
                     marker.SetBackground(background);
                     marker.SetText(Text(open ? "foodtrucks:mapfilter_open" : "foodtrucks:noun_" + kind));
@@ -222,7 +197,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Map filters, vehicles: " + ex); }
         }
 
-        // Every premium spot, and the places of events today or later.
         internal static HashSet<string> PitchAddresses()
         {
             var set = new HashSet<string>(StringComparer.Ordinal);
@@ -244,7 +218,6 @@ namespace FoodTrucks
             markers.Remove(id);
         }
 
-        // On leaving the city: the markers belong to its map. Destroying one takes it off the map's list.
         public static void Clear()
         {
             foreach (var id in markers.Keys.ToList()) Remove(id);

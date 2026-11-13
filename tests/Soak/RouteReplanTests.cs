@@ -11,12 +11,9 @@ public class RouteReplanTests
     [Trait("Category", "Soak")]
     public void AnOpenWindowKeepsServingDuringAReplanApproachWithinItsHours()
     {
-        // Seed 78, day 43: the truck opened within the stop radius without an Arrival
-        // placement. Editing a different stop at 08:00 replans from its real position.
         var runner = new HireRunner(ShippedData.Rules.Fleet);
         var schedules = new HireSchedules(ShippedData.Rules.Fleet);
         var at = HireSchedules.Absolute(43, 480);
-        // Day 43 is a Monday.
         var truck = new VehicleState
         {
             VehicleId = "v2", VehicleType = "truck", Crew = new() { "e" },
@@ -37,7 +34,6 @@ public class RouteReplanTests
         Assert.True(SoakWorld.RouteSaleAllowed(truck, at));
         Assert.False(SoakWorld.RouteSaleAllowed(truck, HireSchedules.Absolute(43, 510)));
 
-        // The exception cannot permit actual transit, or approach before the stop opens.
         truck.Transit = new TransitState();
         Assert.False(SoakWorld.RouteSaleAllowed(truck, at));
         truck.Transit = null;
@@ -52,8 +48,6 @@ public class RouteReplanTests
     [Trait("Category", "Soak")]
     public void ALateStopReplannedAfterMidnightKeepsServingWithinItsHours()
     {
-        // Seed 35, day 24: a bay stop open 23:30 to 02:30 since Monday 23:31; the shifts scheduled again at midnight
-        // replan the rest of Monday from the bay, with a restock leg first.
         var runner = new HireRunner(ShippedData.Rules.Fleet);
         var truck = new VehicleState
         {

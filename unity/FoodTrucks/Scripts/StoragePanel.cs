@@ -14,9 +14,6 @@ using UnityEngine.UI;
 
 namespace FoodTrucks
 {
-    // Storage per piece in the game's own cargo slots (the vehicle's item panel): an equipment slot's amount reads
-    // "62/80" and its tooltip "Hot Dog Grill: 62/80 units" with the foods in it; the Extra Storage slot says it
-    // doubles every piece; a food slot says which piece holds it, or that none does. Core's Storage decides the numbers.
     internal static class StoragePanel
     {
         public static StorageView? Of(VehicleInstance? vehicle)
@@ -26,7 +23,6 @@ namespace FoodTrucks
             return tables == null || kind == null ? null : Storage.Of(tables, kind, CargoLimit.Lines(vehicle!));
         }
 
-        // The piece by the name of the game item fitted for it ("Hot Dog Grill", "Industrial Grill"), or its first game item.
         public static string PieceName(VehicleInstance? vehicle, EquipmentInfo piece)
         {
             var item = vehicle?.cargoInstances?.FirstOrDefault(c => c != null && piece.GameItems.Contains(c.itemName))?.itemName
@@ -34,19 +30,15 @@ namespace FoodTrucks
             return item == null ? piece.Id : LocalizorManager.GetLocalization(item, null);
         }
 
-        // The foods a piece cooks and holds, "Burger, Chicken Kabob Skewer": those the game has now (a Bakery food only with
-        // the Bakery mod). Empty for Extra Storage.
         public static string Foods(EquipmentInfo piece) =>
             string.Join(", ", piece.Products.Where(VehicleTodos.ItemExists).Select(p => LocalizorManager.GetLocalization(p, null)));
 
-        // The name of the piece that cooks and holds a food, or null when no piece does.
         public static string? PieceFor(DemandTables tables, string food)
         {
             var piece = tables.EquipmentForProduct(food);
             return piece == null ? null : PieceName(null, piece);
         }
 
-        // "Hot Dog Grill: 62/80 units", then one line per food in it.
         public static List<string> PoolLines(VehicleInstance vehicle, DemandTables tables, StoragePool pool)
         {
             var lines = new List<string>
@@ -66,7 +58,6 @@ namespace FoodTrucks
             return lines;
         }
 
-        // One line per piece, for the BizMan fleet card and the log.
         public static string Summary(VehicleInstance vehicle, StorageView view) =>
             string.Join("; ", view.Pools.Select(p => $"{p.EquipmentId} {p.LoadUnits}/{p.Capacity}")) +
             (view.StoragePieces > 0 ? $"; storage x{view.Factor:0.#}" : "") +
@@ -77,8 +68,6 @@ namespace FoodTrucks
         private static readonly FieldInfo? TooltipField = AccessTools.Field(typeof(CargoItemUi), "bundleItemsTooltip");
         private static readonly FieldInfo? PriceField = AccessTools.Field(typeof(CargoItemUi), "priceLabel");
 
-        // The cargo slot's info button, moved from the bottom left to the bottom right on our slots. Its place in the
-        // slot is mirrored (same inset from the right edge as it had from the left), so it keeps its size and height.
         private static class InfoButton
         {
             private static bool logged;
@@ -86,14 +75,10 @@ namespace FoodTrucks
             public static void MoveRight(LocalizedListTooltip tooltip)
             {
                 if (!(tooltip.transform is UnityEngine.RectTransform rect) || !(rect.parent is UnityEngine.RectTransform parent)) return;
-                // A moved button carries the game's placement on itself, so it is never moved twice and goes with its slot.
                 var saved = rect.GetComponent<MovedInfoButton>();
                 if (saved != null && saved.Moved) return;
                 if (saved == null) saved = rect.gameObject.AddComponent<MovedInfoButton>();
                 saved.Save(rect);
-                // Its left edge's inset in the parent, kept as the right edge's inset.
-                // Anchored to the left edge (as on the game's slot), that is its anchored x less its pivot's share, whatever
-                // size the slot's layout gives it later; otherwise read from where it stands now.
                 var left = rect.anchorMin.x == 0f && rect.anchorMax.x == 0f
                     ? rect.anchoredPosition.x - rect.pivot.x * rect.rect.width
                     : rect.localPosition.x + rect.rect.xMin - parent.rect.xMin;
@@ -115,7 +100,6 @@ namespace FoodTrucks
             }
         }
 
-        // Postfix on CargoItemUi.SetUp: the vehicle's cargo slot for a piece or a food gets the piece's storage.
         internal static void CargoSlotPostfix(CargoItemUi __instance, CargoItem cargoItem)
         {
             try
@@ -128,7 +112,6 @@ namespace FoodTrucks
                 }
                 var amountLabel = AmountField.GetValue(__instance) as Graphic;
                 var tooltip = TooltipField.GetValue(__instance) as LocalizedListTooltip;
-                // A slot reused for something else gets its info button back where the game put it.
                 if (tooltip != null) InfoButton.Restore(tooltip);
                 if (!(HolderField.GetValue(__instance) is VehicleInstance vehicle) || cargoItem == null || amountLabel == null || tooltip == null) return;
                 var tables = DemandData.Tables;
@@ -161,10 +144,6 @@ namespace FoodTrucks
                         : new List<string> { Format("foodtrucks:storage_unheld", ("food", LocalizorManager.GetLocalization(cargoItem.itemName, null))) };
                 }
                 else return;
-                // The game shows this info button only on a bundle's slot, where the amount and the "x2" count are
-                // hidden, so it sits over them at the slot's bottom left; on our slots both show ("x1", "80/80"). It
-                // moves to the bottom right, which a paid slot leaves empty; an unpaid slot shows its price there and
-                // gets no button (the tooltip comes back once it is paid).
                 if (PriceField?.GetValue(__instance) is UnityEngine.Component price && price.gameObject.activeSelf) return;
                 tooltip.list = lines;
                 InfoButton.MoveRight(tooltip);
@@ -180,8 +159,6 @@ namespace FoodTrucks
             }
         }
 
-        // OnSellClick builds its question from the amount label ("Sell (62/80) Hotdog Grill?"). For that moment the label
-        // shows what the game would (the slot's item count, shown only above 1); the finalizer puts "62/80" back.
         internal static void SellPrefix(CargoItemUi __instance, CargoItem cargoItem, out (string Text, bool Active)? __state)
         {
             __state = null;
@@ -233,7 +210,6 @@ namespace FoodTrucks
         }
     }
 
-    // On a cargo slot's info button that StoragePanel moved: the game's placement, put back when the slot is reused.
     internal sealed class MovedInfoButton : UnityEngine.MonoBehaviour
     {
         private UnityEngine.Vector2 anchorMin, anchorMax, pivot, position;

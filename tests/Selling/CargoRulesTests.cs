@@ -34,7 +34,6 @@ public class CargoRulesTests
     [Fact]
     public void MixedFoodSharesWeightedCapacityAndKeepsFractionalRoom()
     {
-        // Each piece keeps its own room: hot dogs fill only the grill, coffee and tea share the machine.
         var cargo = new[]
         {
             new CargoLine(Grill, 1, false), new CargoLine(CoffeeMachine, 1, false), new CargoLine(Storage, 1, false),
@@ -130,7 +129,6 @@ public class CargoRulesTests
     [InlineData(null, 80, 500, 500)]
     public void FoodLoadsOnlyWhatFitsItsPiece(string? vehicle, int stock, int incoming, int allowed)
     {
-        // Soda belongs to the cooler (80 a cart at stock weight 0.5); hot dogs in the grill and nested stock don't take its room.
         var cargo = new[]
         {
             new CargoLine("ba:itemname_sodacan", stock, false), new CargoLine(Fridge, 1, false), new CargoLine(HotDog, 30, false),

@@ -30,16 +30,12 @@ namespace FoodTrucks
         private const string BodyKey = "foodtrucks:course_choice_body";
 
         private static DiplomaData? data;
-        // Set while the door's own course runs through the patched method, so the prefix lets it pass.
         private static bool passThrough;
         private static bool warnedNoConfirm;
-        // The door whose question is up, and the frame in which the question last closed by its cancel path.
         private static EducationDoorController? askingDoor;
         private static int cancelledFrame = -1;
         private static AccessTools.FieldRef<HudConfirmUi, Button>? cancelButtonField;
 
-        // Adds the course data unless the list has it. The game refills the list when its diplomas load, so
-        // this runs again at every save load and before the door asks. Returns false without rules data.
         public static bool Register()
         {
             var existing = EducationHelper.GetDiplomaData(Course);
@@ -61,7 +57,6 @@ namespace FoodTrucks
             return true;
         }
 
-        // At mod unload: take the course out again. The save keeps the player's progress in PlayerDiplomas.
         public static void Unregister()
         {
             if (data == null) return;
@@ -70,8 +65,6 @@ namespace FoodTrucks
             data = null;
         }
 
-        // Prefix on EducationDoorController.StartLearning. Returning false skips the original; it runs
-        // later from the player's answer.
         internal static bool StartLearningPrefix(EducationDoorController __instance)
         {
             try
@@ -79,8 +72,6 @@ namespace FoodTrucks
                 if (passThrough || __instance == null || __instance.StudyDiploma == null) return true;
                 if (__instance.StudyDiploma.diplomaName != HostDoor) return true;
                 if (!Register() || EducationHelper.HasCompletedDiploma(Course)) return true;
-                // The game's refusals (school closed, hands full, in a vehicle) and an open panel or question:
-                // the original shows its own message or does nothing.
                 if (!CanStudy() || HudConfirm.isOpen || PlayerActivityUI.IsPanelOpen) return true;
                 if (HudConfirm.onShow == null)
                 {
@@ -89,10 +80,6 @@ namespace FoodTrucks
                     return true;
                 }
                 var door = __instance;
-                // The game closes a question through its cancel action not only from the cancel button but also
-                // on Escape, when the phone opens and a few other times (HudConfirm.onClose). So the cancel
-                // action only notes the frame, and the door's own course starts from a listener on the cancel
-                // button itself. Enter picks the confirm button, as everywhere in the game.
                 if (!ListenToCancelButtons())
                 {
                     Log.Error("Food Safety course: the question box's cancel button wasn't found; the door teaches only its own course.");
@@ -114,9 +101,6 @@ namespace FoodTrucks
             }
         }
 
-        // Adds OnCancelButton to the cancel button of every question box (the game has one for the HUD and one
-        // for the phone menu). The button's own ClickCancel is a listener set in the prefab, and Unity runs
-        // those before listeners added in code, so OnCancelButton runs right after the cancel action.
         private static bool ListenToCancelButtons()
         {
             cancelButtonField ??= AccessTools.FieldRefAccess<HudConfirmUi, Button>("cancelButton");
@@ -132,7 +116,6 @@ namespace FoodTrucks
             return found;
         }
 
-        // A real press of the "Market Demands" button: the cancel action ran in this same frame.
         private static void OnCancelButton()
         {
             var door = askingDoor;
@@ -150,7 +133,6 @@ namespace FoodTrucks
                 cancelButtonField(box)?.onClick.RemoveListener(OnCancelButton);
         }
 
-        // The same checks as the start of EducationDoorController.StartLearning [code, 1.0].
         private static bool CanStudy()
         {
             var building = InstanceBehavior<BuildingManager>.Instance;
@@ -171,8 +153,6 @@ namespace FoodTrucks
             finally { passThrough = false; }
         }
 
-        // Opens the game's study panel for the course at the door's own chair and computer. A new
-        // StudyDiploma, so the door's serialized one stays as it is.
         private static void StudyFoodSafety(EducationDoorController door)
         {
             try
@@ -180,7 +160,6 @@ namespace FoodTrucks
                 if (door == null) return;
                 if (!CanStudy())
                 {
-                    // Something changed while the question was open; the original shows the game's message.
                     StudyOwnCourse(door);
                     return;
                 }

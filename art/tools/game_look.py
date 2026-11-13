@@ -41,13 +41,11 @@ VEHICLE = os.path.exists(os.path.join(FOLDER, f"T_{NAME}_D.png"))
 KIND = LOOK.get("kind", "vehicle" if VEHICLE else "food" if "/products/" in FOLDER else "prop")
 SMOOTH_ANGLE = math.radians(60.5)
 
-# Smoothness (HDRP mask alpha) and metallic per surface class. Measured on the game's 1.0 props
-# (art/README.md, "Surface look"): brushed steel 0.31-0.50 metallic 1, plastics and paint 0.30-0.65.
 CLASSES = {
     "steel":  dict(metal=1.0, smooth=0.42),
-    "dark":   dict(metal=0.0, smooth=0.30),   # black plastic, rubber, knobs
-    "white":  dict(metal=0.0, smooth=0.45),   # enamel, white plastic
-    "paint":  dict(metal=0.0, smooth=0.40),   # coloured paint and plastic
+    "dark":   dict(metal=0.0, smooth=0.30),
+    "white":  dict(metal=0.0, smooth=0.45),
+    "paint":  dict(metal=0.0, smooth=0.40),
     "food":   dict(metal=0.0, smooth=0.35),
     "glass":  dict(metal=0.0, smooth=0.80),
     "fabric": dict(metal=0.0, smooth=0.20),
@@ -67,8 +65,6 @@ def visible_objects():
     return obs
 
 
-# ---------------------------------------------------------------- normals
-
 def set_normals(ob):
     me = ob.data
     if me.has_custom_normals:
@@ -83,8 +79,6 @@ def set_normals(ob):
     with bpy.context.temp_override(object=ob, active_object=ob, selected_objects=[ob]):
         bpy.ops.object.modifier_apply(modifier=mod.name)
 
-
-# ---------------------------------------------------------------- baking
 
 def uv_texel_size(obs, res):
     """Metres per texel: surface area over the UV area it gets."""
@@ -205,11 +199,9 @@ def blur(a, r=1):
     return out
 
 
-# ---------------------------------------------------------------- textures
-
 def load_px(path):
     img = bpy.data.images.load(path, check_existing=False)
-    img.colorspace_settings.name = "Non-Color"   # raw values, no conversion
+    img.colorspace_settings.name = "Non-Color"
     px = np.array(img.pixels[:], dtype=np.float32).reshape(img.size[1], img.size[0], 4)
     size = tuple(img.size)
     bpy.data.images.remove(img)
@@ -243,7 +235,7 @@ def classify(src):
     cls = np.full(rgb.shape[:2], names.index("food" if KIND == "food" else "paint"))
     cls[(s < 0.14) & (v > 0.92)] = names.index("white")
     cls[(s < 0.16) & (v >= 0.40) & (v <= 0.92)] = names.index("steel")
-    if KIND == "food":   # greys in food are paper, foil or skewers; only clean light greys are metal
+    if KIND == "food":
         cls[(s < 0.16) & (v >= 0.40) & (v <= 0.92) & (s > 0.08)] = names.index("food")
     cls[v < 0.22] = names.index("dark")
     for o in LOOK.get("classes", []):
@@ -260,26 +252,20 @@ def compose(src, ao, edge, fine, coarse, cls, src_mask=None):
         metal[cls == i] = CLASSES[n]["metal"]
         smooth[cls == i] = CLASSES[n]["smooth"]
     if src_mask is not None:
-        # The truck's own per-part mask: keep metallic and paint gloss, take chrome down to brushed steel.
         metal = (src_mask[..., 0] > 0.5).astype(np.float32)
         smooth = np.where(metal > 0, np.minimum(src_mask[..., 3], 0.50), np.minimum(src_mask[..., 3], 0.72))
-        smooth = np.where(src_mask[..., 3] > 0.85, src_mask[..., 3], smooth)   # glass stays glossy
+        smooth = np.where(src_mask[..., 3] > 0.85, src_mask[..., 3], smooth)
     rgb = src[..., :3].copy()
     s, v = hsv(rgb)
     grey = rgb.mean(-1, keepdims=True)
     is_metal = metal[..., None] > 0.5
-    # Value and saturation into the game's range: paint a little darker and less saturated,
-    # steel neutral (its colour is the reflection tint).
     sat_k = np.where(is_metal, 0.35, 0.80)
     rgb = grey + (rgb - grey) * sat_k
-    # Steel: the game's steel albedo sits at 0.70-0.85 (sRGB) with metallic 1.
     rgb = np.where(is_metal, 0.52 + 0.40 * rgb, 0.03 + rgb * 0.86)
-    # Grime and variation: occlusion darkens crevices, object-space noise breaks up flat fills.
     aon = np.clip(ao, 0, 1)[..., None]
     rgb *= 1.0 - 0.30 * (1.0 - aon)
     var = 1.0 + 0.07 * (coarse[..., None] - 0.5) + 0.05 * (fine[..., None] - 0.5)
     rgb *= var
-    # Edges catch light and wear a little lighter.
     e = edge[..., None]
     rgb = rgb + e * 0.22 * (np.minimum(rgb * 1.25 + 0.04, 1.0) - rgb)
     bc = np.concatenate([np.clip(rgb, 0, 1), src[..., 3:4]], -1)
@@ -287,8 +273,6 @@ def compose(src, ao, edge, fine, coarse, cls, src_mask=None):
     mask = np.stack([metal, np.clip(0.12 + 0.88 * ao, 0, 1), np.zeros_like(metal), np.clip(sm, 0.05, 0.95)], -1)
     return bc, mask
 
-
-# ---------------------------------------------------------------- preview material and export
 
 def preview_material(bc_path, m_path, n_path):
     ma = bpy.data.materials.get(f"{NAME}_GameLook") or bpy.data.materials.new(f"{NAME}_GameLook")
@@ -305,11 +289,9 @@ def preview_material(bc_path, m_path, n_path):
         n.image.colorspace_settings.name = "sRGB" if colour else "Non-Color"
         n.image.alpha_mode = "CHANNEL_PACKED"
         return n
-    # The mask decoded as sRGB, as Unity samples it (only G changes: R is 0 or 1, alpha is never decoded).
     bc, m, nm = tex(bc_path, True), tex(m_path, True), tex(n_path, False)
     sep = nt.nodes.new("ShaderNodeSeparateColor")
     nt.links.new(m.outputs["Color"], sep.inputs[0])
-    # HDRP uses AO for indirect light only; a half-strength multiply stands in for it here.
     ao_mix = nt.nodes.new("ShaderNodeMix")
     ao_mix.data_type = "RGBA"
     ao_mix.blend_type = "MULTIPLY"
@@ -349,14 +331,12 @@ def export(obs):
     bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)
 
 
-# ---------------------------------------------------------------- main
-
 def main():
     sc = bpy.context.scene
     if bpy.context.object and bpy.context.object.mode != "OBJECT":
         bpy.ops.object.mode_set(mode="OBJECT")
     obs = visible_objects()
-    for ob in sc.objects:   # only the model itself occludes and is baked
+    for ob in sc.objects:
         if ob not in obs:
             ob.hide_render = True
     for ob in obs:
@@ -386,7 +366,6 @@ def main():
     bpy.data.images.remove(img)
     ao = blur(ao, 1)
     edge, fine, coarse = blur(en[..., 0], 1), en[..., 1], en[..., 2]
-    # Noise from Blender's Perlin sits around 0.5 with a narrow spread; stretch it to 0..1.
     fine = np.clip((fine - fine.mean()) * 4 + 0.5, 0, 1)
     coarse = np.clip((coarse - coarse.mean()) * 4 + 0.5, 0, 1)
 
@@ -401,8 +380,6 @@ def main():
         vsrc = load_px(os.path.join(FOLDER, f"T_{NAME}_{v}_BaseColor.png"))[0]
         vbc, vmask = compose(vsrc, ao, edge, fine, coarse, classify(vsrc), src_mask)
         save_px(vbc, os.path.join(FOLDER, f"T_{NAME}_{v}_BC.png"), True)
-        # Its own mask too: the mask's smoothness follows the base colour's classes, so the default plate's lettering
-        # (Hell's Kitchen) showed through another commissary's name in its gloss (live session 6, Lower Manhattan).
         save_px(vmask, os.path.join(FOLDER, f"T_{NAME}_{v}_M.png"), False)
         log(f"{NAME}: variant {v}: wrote T_{NAME}_{v}_BC.png and T_{NAME}_{v}_M.png")
     counts = {n: round(float((cls == i).mean()), 3) for i, n in enumerate(CLASSES) if (cls == i).any()}

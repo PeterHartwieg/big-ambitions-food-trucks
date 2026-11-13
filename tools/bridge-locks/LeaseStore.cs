@@ -10,9 +10,6 @@ using Newtonsoft.Json.Linq;
 
 namespace BridgeControl
 {
-    // A coordination lock for trusted local tools, not an OS security boundary. Ownership does not expire.
-    // Every state transition uses the same cross-process file gate. A crashed process releases the gate;
-    // its work reservations are pruned by PID + creation time, but its ownership token remains required.
     public sealed class LeaseStore
     {
         private readonly string directory, instance, legacy;
@@ -31,7 +28,6 @@ namespace BridgeControl
         private static readonly bool Unix = Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX;
         private FileStream OpenGate()
         {
-            // Mono and .NET implement FileShare differently on Unix. Use the same kernel flock in both.
             var file = new FileStream(Path.Combine(directory, "gate"), FileMode.OpenOrCreate, FileAccess.ReadWrite,
                 Unix ? FileShare.ReadWrite : FileShare.None);
             if (Unix && flock(file.SafeFileHandle.DangerousGetHandle().ToInt32(), 2 | 4) != 0)
@@ -78,7 +74,7 @@ namespace BridgeControl
             try { using (var p = Process.GetProcessById(pid)) return p.StartTime.ToUniversalTime().Ticks == ticks; }
             catch (ArgumentException) { return false; }
             catch (InvalidOperationException) { return false; }
-            catch { return true; } // Cannot prove it ended: preserve the reservation.
+            catch { return true; }
         }
 
         private void CheckLegacy()
@@ -122,7 +118,7 @@ namespace BridgeControl
             {
                 Require(state, token);
                 if ((string)state["owner"] != owner) throw new InvalidOperationException("The lock owner name does not match this token");
-                return Public(state); // Idempotent retry after an unknown reply.
+                return Public(state);
             }
             state["owner"] = owner; state["purpose"] = purpose; state["token_sha256"] = hash;
             state["acquired_utc"] = DateTime.UtcNow.ToString("o");

@@ -6,7 +6,6 @@ using FoodTrucks.ModApi;
 
 namespace FoodTrucks.Core.Vendor
 {
-    // What the game side reads for one food vehicle; VendorService adds the opening, owner and times from the save.
     public sealed class VendorFacts
     {
         public string VehicleId { get; set; } = string.Empty;
@@ -19,36 +18,25 @@ namespace FoodTrucks.Core.Vendor
         public float QueueZ { get; set; }
         public float QueueHeading { get; set; }
         public int MealsPerHour { get; set; }
-        // The equipment menu with each item's price (0 when it has none) and sellable units.
         public IReadOnlyList<string> Items { get; set; } = Array.Empty<string>();
         public IReadOnlyList<long> PriceCents { get; set; } = Array.Empty<long>();
         public IReadOnlyList<int> Units { get; set; } = Array.Empty<int>();
     }
 
-    // The game side of the vendor API (CartSelling in the mod). Main thread only.
     public interface IVendorHost
     {
-        // Ready, NotYet (no save loaded, data not read yet) or Off (read-only mod data, uninstalled).
         VendorApiStatus Status { get; }
-        // The writable state when Status is Ready.
         SaveState? State { get; }
-        // The game minute now, (day - 1) × 1440 + minute of the day.
         long Now { get; }
-        // Every food vehicle the player owns, in ordinal ID order.
         IReadOnlyList<VendorFacts> Facts();
         VendorFacts? FactsOf(string vehicleId);
-        // Street Food's own one-item sale (CartSelling.SellItem with the crew batch flushed) at that game minute:
-        // the cents taken, or -1 when it refused before any effect. May throw.
         long SellOne(string vehicleId, string item, long minute);
-        // Mod data changed (SaveGameManager.MarkChange), and log lines to write.
         void Changed();
         void Log(string line);
     }
 
-    // The API's behaviour (FoodTrucks.ModApi.VendorApi forwards here). Everything is checked before anything is written.
     public sealed class VendorService
     {
-        // One counter for the whole process: a new session never repeats an earlier revision.
         private static long revisionCounter = 1;
         private static long NextRevision() => ++revisionCounter;
 
@@ -66,18 +54,14 @@ namespace FoodTrucks.Core.Vendor
 
         public long Revision { get; private set; }
 
-        // VendorApi.Revision: the consumer is polling, so the game side keeps the snapshot fresh from now on.
         public long Poll()
         {
             Active = true;
             return Revision;
         }
 
-        // A consumer has used the API (Revision, Read or an owner call) since this service started: the game side then
-        // keeps the snapshot fresh (Tick). Never set for a game without such a mod.
         public bool Active { get; private set; }
 
-        // The game side's tick: leases that ran out hand back, and the snapshot follows the game while a consumer uses it.
         public void Tick()
         {
             if (host.Status != VendorApiStatus.Ready || !(host.State is { } state)) return;
@@ -86,8 +70,6 @@ namespace FoodTrucks.Core.Vendor
             if (Active) Refresh();
         }
 
-        // One vehicle's copy rebuilt from the game side. False when the snapshot has no copy of it to replace (not built
-        // yet, overflowed, or the vehicle gone): then the whole snapshot needs a Refresh.
         public bool RefreshOne(string vehicleId)
         {
             var state = host.State;
@@ -104,7 +86,6 @@ namespace FoodTrucks.Core.Vendor
             return true;
         }
 
-        // The vehicle copies are rebuilt from the game side; a change gives a new revision.
         public void Refresh()
         {
             built = true;
@@ -167,7 +148,6 @@ namespace FoodTrucks.Core.Vendor
             try
             {
                 if (want && host.FactsOf(vehicleId) == null) return Refuse("no such food vehicle", out reason);
-                // At the cap, requests for vehicles the player no longer owns (sold, deleted) make room first.
                 if (want && state!.Vendor != null && state.Vendor.Requests.Count(r => r.Owner == owner) >= VendorBook.MaxVehicles)
                 {
                     var owned = new HashSet<string>(host.Facts().Select(f => f.VehicleId), StringComparer.Ordinal);
@@ -195,7 +175,6 @@ namespace FoodTrucks.Core.Vendor
             if (!VendorBook.ValidOwner(owner) || !ValidTime(nativeDay, nativeMinute)) return VendorApiStatus.Refused;
             var minute = VendorBook.Absolute(nativeDay, nativeMinute);
             var now = host.Now;
-            // Renewed for the minute now, or one a catch-up still lags in; never ahead of the clock.
             if (minute > now || minute <= now - VendorBook.LeaseMinutes) return VendorApiStatus.Refused;
             try
             {
@@ -264,7 +243,6 @@ namespace FoodTrucks.Core.Vendor
             try { cents = host.SellOne(vehicleId, item, minute); }
             catch (Exception ex)
             {
-                // A sale whose ledger record was made counts as made, whatever failed after it.
                 uncertain = vehicle.LifetimeSales != lifetime || Pot(state!, vehicleId, day) != pot;
                 if (uncertain) Bump(vehicleId);
                 host.Log($"Vendor API: sale of {item} at {vehicleId} failed {(uncertain ? "after" : "before")} the ledger record: {ex}");
@@ -294,7 +272,6 @@ namespace FoodTrucks.Core.Vendor
             return VendorApiStatus.Ready;
         }
 
-        // Null when the sale may go ahead; otherwise why not. Reads only.
         private string? CheckSale(SaveState state, string owner, string vehicleId, long openingId, string item, long priceCents,
             int nativeDay, int nativeMinute, out long minute, out VehicleState? vehicle, out int index, out int units)
         {
@@ -309,14 +286,12 @@ namespace FoodTrucks.Core.Vendor
             if (!ValidTime(nativeDay, nativeMinute)) return "invalid time";
             minute = VendorBook.Absolute(nativeDay, nativeMinute);
             var now = host.Now;
-            // Only the current native minute: never a past one (live stock and prices, a lapsed lease) or a future one.
             if (minute > now) return "minute not reached yet";
             if (minute < now) return "not the current minute";
             vehicle = StreetSales.Find(state, vehicleId);
             if (vehicle == null || !vehicle.IsOpen) return "vehicle closed";
             var entry = VendorBook.Entry(state, vehicleId);
             if (entry == null || entry.OpeningId == 0 || entry.OpeningId != openingId) return "opening changed";
-            // Hand-backs due by this minute happen first, so a lapsed lease is never sold through.
             if (VendorBook.OwnerAt(state, vehicle, minute, notes) != owner)
             {
                 Changed();
@@ -426,8 +401,6 @@ namespace FoodTrucks.Core.Vendor
             return VendorApiStatus.Refused;
         }
 
-        // Never throws: it runs after a sale, which must be reported as made. With `vehicleId` (a sale), only that
-        // vehicle's copy is rebuilt; the tick catches up the rest.
         private void Changed(string? vehicleId = null)
         {
             try
@@ -450,7 +423,6 @@ namespace FoodTrucks.Core.Vendor
         }
     }
 
-    // The one service the public API forwards to; the game side attaches it with each loaded save.
     public static class VendorRuntime
     {
         public static VendorService? Current { get; private set; }
@@ -459,7 +431,6 @@ namespace FoodTrucks.Core.Vendor
 
         public static void Detach() => Current = null;
 
-        // A fixed value while nothing is attached; a new service always starts at a new one.
         public static long Revision() => Current?.Poll() ?? 0;
     }
 }

@@ -21,9 +21,6 @@ public class CommissaryTablesTests
         Assert.InRange(tables.Sites.Count, 4, 6);
         Assert.Equal(tables.Sites.Count, tables.Sites.Select(s => s.Address).Distinct().Count());
         Assert.All(tables.Sites, s => Assert.StartsWith("foodtrucks:commissary_", s.Name));
-        // Measured bays: the Garment District's and Murray Hill's doors have no NavMesh route to the street (live session
-        // 4, 13 October 2026). Hell's Kitchen's went (Peter, 13 October 2026): it was across the road from the door.
-        // Industry City's is nose-in in the lot beside Twenty-first Street 2 (Peter, 13 October 2026).
         Assert.Equal(new[] { "industry-city", "garment-district", "murray-hill" }, tables.Sites.Where(s => s.Bay != null).Select(s => s.Id).ToArray());
         var bay = tables.Site("murray-hill")!.Bay!.Value;
         Assert.Equal(43.8, bay.X, 6);
@@ -33,13 +30,11 @@ public class CommissaryTablesTests
         Assert.True(tables.Site("industry-city")!.InLot);
     }
 
-    // Saves keep a space, an order and stock by commissary ID only, so an address can move but an ID must stay.
     [Fact]
     public void ShippedIdsStayTheOnesSavesUse()
     {
         Assert.Equal(new[] { "industry-city", "garment-district", "hells-kitchen", "lower-manhattan", "murray-hill" },
             Shipped.Sites.Select(s => s.Id));
-        // Both moved on 13 October 2026 (Peter): a bay on the door's side of the street.
         Assert.Equal("ba:street_secondavenue#8", Shipped.Site("hells-kitchen")!.Address);
         Assert.Equal("ba:street_twentyfirststreet#2", Shipped.Site("industry-city")!.Address);
     }

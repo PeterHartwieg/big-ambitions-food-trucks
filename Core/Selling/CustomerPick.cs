@@ -7,8 +7,6 @@ namespace FoodTrucks.Core.Selling
 {
     public static class CustomerPick
     {
-        // Choose a stocked category by demand, then its most plentiful item. Fixed ordinal order
-        // makes the same roll choose the same item regardless of dictionary insertion order.
         public static string? MainItem(DemandTables tables, IReadOnlyDictionary<string, double> categoryShares,
             IReadOnlyDictionary<string, int> stockByItem, double roll)
         {
@@ -29,11 +27,8 @@ namespace FoodTrucks.Core.Selling
                 }).ToList();
             if (groups.Count == 0) return null;
             var largestShare = groups.Max(group => group.Share);
-            // With no demand, keep selling from the category with the most units. Category ties
-            // keep ordinal category order, and item ties keep ordinal item order.
             if (largestShare == 0) return groups.OrderByDescending(group => group.Units).First().Item;
 
-            // Scale before summing so even very large finite shares cannot overflow the total.
             var target = roll * groups.Sum(group => group.Share / largestShare);
             string? last = null;
             foreach (var group in groups)
@@ -47,7 +42,6 @@ namespace FoodTrucks.Core.Selling
             return last;
         }
 
-        // demand.json marks add-on categories with addOnFactor; the shipped one is cold drinks.
         public static string? AddOnItem(DemandTables tables, IReadOnlyDictionary<string, int> stockByItem)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
@@ -57,7 +51,6 @@ namespace FoodTrucks.Core.Selling
             return null;
         }
 
-        // Carry a fractional drink count between customers, using SalesTick's progress rules.
         public static (int AddOns, double Progress) AdvanceAddOns(double progress, double addOnsPerCustomer)
         {
             if (double.IsNaN(progress) || double.IsInfinity(progress) || progress < 0 || progress >= 1) progress = 0;

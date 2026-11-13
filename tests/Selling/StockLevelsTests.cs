@@ -6,7 +6,6 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Selling;
 
-// The Stock box on a vehicle's BizMan page: each food of each fitted piece, low at or under a quarter, the game's rule.
 public class StockLevelsTests
 {
     private const string HotDog = "ba:itemname_hotdog";

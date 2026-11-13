@@ -75,7 +75,6 @@ public class CateringOffersTests
             Assert.Equal(day, optimized.LastOfferDay);
             Assert.Equal(42, optimized.RandomState);
         }
-        // A fleet that qualifies later must receive the same seeded offers after the skipped days.
         rules = new CateringRules(offersPerDayAtMaturity: 60);
         Assert.True(CateringOffers.CanGenerateOffers(rules, 1, 500));
         var expected = CateringOffers.ForDay(rules, original, Context(4));
@@ -249,9 +248,6 @@ public class CateringOffersTests
         Assert.Throws<ArgumentOutOfRangeException>(() => CateringOffers.ForDay(rules, CateringState.New(42), context));
     }
 
-    // A truck with three fast-food pieces and a cooler holds 240 fast food but only 80 cold drinks. Cold drinks are
-    // only wanted at events (100 guests and up), so that truck never gets a cold-drinks gig; with 150 it gets ones
-    // capped at 150 while fast-food events still go up to 200.
     [Theory]
     [InlineData(80)]
     [InlineData(150)]

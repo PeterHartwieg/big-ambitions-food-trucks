@@ -41,7 +41,6 @@ namespace FoodTrucks
             loggedVanilla = true;
         }
 
-        // For a vehicle spawned after Apply ran but from a stale instance (e.g. the player's held cart).
         public static void ApplyTo(VehicleController? controller) =>
             ApplyTo(controller,
                 PrefabHelper.LoadPrefabAssetByName(VanillaHandTruck)?.GetComponent<HandTruck>(),
@@ -62,8 +61,6 @@ namespace FoodTrucks
             CopyGripRotation(vanilla, vanilla.RHandIKAttachmentPoint, cart, cart.RHandIKAttachmentPoint);
         }
 
-        // The game copies the IK point's rotation onto the hand bone, so the rotation relative to the
-        // vehicle must match the rig. Positions stay the cart's own: its handle is in a different place.
         private static void CopyGripRotation(Component vanillaRoot, Transform? vanillaPoint, Component cartRoot, Transform? cartPoint)
         {
             if (vanillaPoint == null || cartPoint == null) return;
@@ -74,7 +71,6 @@ namespace FoodTrucks
         private static void FixTruck(VehicleController? truck, VehicleController? vanilla)
         {
             if (truck == null || vanilla == null) return;
-            // The field holds a serializable wrapper around a config asset; sharing it is read-only use.
             truck.sleepEnvironment = vanilla.sleepEnvironment;
         }
 

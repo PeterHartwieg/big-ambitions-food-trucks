@@ -12,7 +12,6 @@ public class CrewScreenTests
     private const string Absent = "myemployees_task_absent";
     private const string InTraining = "common_in_training";
 
-    // Seven 7-hour shifts: 49 hours a week, as in the player's report.
     private static (SaveState State, VehicleState Vehicle) FortyNineHours()
     {
         var schedule = new HireSchedule();
@@ -63,7 +62,6 @@ public class CrewScreenTests
         var (state, _) = FortyNineHours();
         Assert.Null(CrewScreen.VehicleOf(state, "shop-worker", inBuilding: true));
         Assert.Null(CrewScreen.VehicleOf(state, "idle", inBuilding: false));
-        // Put in a building: the game's job shows until HireCrew.Check takes them off the crew.
         Assert.Null(CrewScreen.VehicleOf(state, "crew", inBuilding: true));
         Assert.Null(CrewScreen.VehicleOf(null, "crew", inBuilding: false));
         Assert.Null(CrewScreen.VehicleOf(state, null, inBuilding: false));

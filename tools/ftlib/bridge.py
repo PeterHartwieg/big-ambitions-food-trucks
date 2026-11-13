@@ -153,7 +153,6 @@ class Bridge:
             arguments['owner'] = owner
             if owner: self.lock_owner = owner
         credential = locks.token(instance, create=cmd == 'lock' and arguments.get('op') == 'acquire', owner=owner)
-        # Old mock/read-only callers retain their transport behavior. A real owner pins health first.
         if credential and self.session is None: self.health()
         body = {'cmd':cmd, 'args':arguments}
         if credential: body['lock_token'] = credential

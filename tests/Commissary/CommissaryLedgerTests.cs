@@ -44,7 +44,7 @@ public class CommissaryLedgerTests
         var rules = new CommissaryRules();
         var order = Commissaries.Order(state.Commissary, rules, "a", "taco", 10, 100, (1, 100));
         Assert.Empty(state.DailySales);
-        SalesLedger.RecordDeliveryFees(state, 1, rules.DeliveryFeeCents); // as the adapter does when it is paid
+        SalesLedger.RecordDeliveryFees(state, 1, rules.DeliveryFeeCents);
         Assert.Empty(state.DailySales.Single().ByVehicle);
         Assert.Equal(0, state.DailySales.Single().CostCents);
         Assert.Equal(-25_000, SalesLedger.DayProfitCents(state, 1));
@@ -79,7 +79,7 @@ public class CommissaryLedgerTests
         var state = new SaveState { Commissary = CommissariesTests.Rented() };
         var rules = new CommissaryRules();
         Commissaries.Order(state.Commissary, rules, "a", "taco", 10, 100, (1, 100));
-        Assert.Empty(state.DailySales); // booking takes no money
+        Assert.Empty(state.DailySales);
         var delivered = Commissaries.Deliver(state.Commissary, rules, 2, 480, CommissariesTests.Paid).Delivered.Single();
         SalesLedger.RecordDeliveryFees(state, 2, delivered.FeeCents);
         Assert.Equal(25_000, delivered.FeeCents);

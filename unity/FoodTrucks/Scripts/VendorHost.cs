@@ -8,9 +8,6 @@ using FoodTrucks.ModApi;
 
 namespace FoodTrucks
 {
-    // The game side of FoodTrucks.ModApi.VendorApi (docs/vendor-api.md): the loaded save, the clock, each food vehicle
-    // as the window sees it, and Street Food's own one-item sale. Core's VendorService decides; this only reads and
-    // calls. Attached with each save (FoodTrucksSession.Attach); unused until another mod calls the API.
     internal sealed class StreetFoodVendorHost : IVendorHost
     {
         public VendorApiStatus Status
@@ -54,7 +51,6 @@ namespace FoodTrucks
 
         public void Log(string line) => global::FoodTrucks.Log.Info(line);
 
-        // The player's food vehicles, with the private driver's too, once each, in ordinal ID order.
         private static IEnumerable<VehicleInstance> FoodVehicles()
         {
             var game = SaveGameManager.Current;

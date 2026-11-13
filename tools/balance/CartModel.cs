@@ -14,10 +14,7 @@ public sealed class GamePrices
     public Dictionary<string, ItemPrice> Items { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, double> PriceIndex { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, double> Equipment { get; } = new(StringComparer.Ordinal);
-    // The game's market demand (0 to 100) per item and neighbourhood where it differs from the run's --market.
     public Dictionary<string, Dictionary<string, double>> Market { get; } = new(StringComparer.Ordinal);
-    // Items whose market demand the game keeps only in these neighbourhoods. Elsewhere the adapter leaves them out
-    // of the market read (World.cs) and Core treats them as unsaturated: 100, whatever --market says.
     public Dictionary<string, HashSet<string>> MarketLimits { get; } = new(StringComparer.Ordinal);
 
     public double MarketFor(string item, string hood, double fallback)
@@ -41,7 +38,6 @@ public sealed class GamePrices
         return g;
     }
 
-    // A "market" section, from game-prices.json or a patch: item -> neighbourhood -> demand.
     public void MergeMarket(JObject json)
     {
         if (json["market"] is JObject market)
@@ -52,8 +48,6 @@ public sealed class GamePrices
             }
     }
 
-    // A patch's "game" section: Item fields of items the mod would add (defaultMarketPrice, wholesalePrice,
-    // boxSize) and equipment purchase prices by the mod's equipment key. Keys starting with "_" are notes.
     public void Merge(JObject game)
     {
         if (game["items"] is JObject items)
@@ -71,18 +65,9 @@ public sealed class GamePrices
 
 public enum Pricing
 {
-    // CartDemand.PriceOf today: the item's default market price.
     Default,
-    // The ceiling: the most every social class accepts, reference × min over classes of
-    // max(class index, neighbourhood average index) = reference × the neighbourhood's index
-    // (ItemHelper.CalculateMaxAcceptablePriceByNeighborhood; no monopoly bonus, the cart is no provider).
-    // What a player sets by hand, and what a full-skill pricing manager suggests. Conditions.PriceFactor scales it.
     NeighbourhoodIndex,
-    // A pricing manager below full skill: reference + (ceiling - reference) × capture
-    // (PricingManagerHelper.ComputeSuggestion). Conditions.PriceFactor is the capture.
     Manager,
-    // The most the upper class accepts: reference × max(1.7, the neighbourhood's index)
-    // (CitizenHelper.MaxAcceptableRelativePrice). Working and middle class may walk away.
     UpperClass
 }
 
@@ -91,12 +76,9 @@ public sealed class Conditions
     public DayOfWeek Day { get; init; } = DayOfWeek.Wednesday;
     public bool Rain { get; init; }
     public int Month { get; init; } = 5;
-    // The game's demand for the item in the neighbourhood, 0 to 100. 100: nobody else sells it there.
     public double MarketDemand { get; init; } = 100;
     public Pricing Pricing { get; init; } = Pricing.Default;
-    // Multiplies the NeighbourhoodIndex price: 0.9 is a custom price 10% under the manager's.
     public double PriceFactor { get; init; } = 1.0;
-    // A premium spot's or an event's bonus (Core PitchBonus), applied from PitchFrom to PitchTo (minutes of the day).
     public FoodTrucks.Core.Pitches.PitchBonus Pitch { get; init; } = FoodTrucks.Core.Pitches.PitchBonus.None;
     public int PitchFrom { get; init; }
     public int PitchTo { get; init; } = 2880;
@@ -125,7 +107,6 @@ public sealed class HourPlan
     public static readonly HourPlan None = new() { Daypart = Daypart.Night };
     public Daypart Daypart { get; init; }
     public double Passers { get; init; }
-    // The model's customers per hour, before price and the window.
     public double Demand { get; init; }
     public double Conversion { get; init; }
     public double Capacity { get; init; }
@@ -136,9 +117,6 @@ public sealed class HourPlan
     public string? AddOnItem { get; init; }
 }
 
-// One cart with a fixed menu. Plan() is CartDemand.Plan from unity/FoodTrucks/Scripts/CartDemand.cs with
-// the game reads replaced by inputs: the Core calls (DemandModel, PriceCurve, ServiceRate, SalesRate) are the
-// mod's own, unchanged.
 public sealed class Cart
 {
     public const string Kind = "cart";
@@ -146,10 +124,6 @@ public sealed class Cart
     private readonly DemandModel model;
     private readonly GamePrices prices;
 
-    // Storage per piece (Core's Storage): each menu item is held by the one piece that serves it, each piece holds
-    // the vehicle's unitsPerPiece, and with the Extra Storage piece (storage) every piece holds its factor more.
-    // `servers`: who stands at the window (the player alone at a truck is 1, though the truck's staff is 2), default the
-    // vehicle's staff. `speed`: their team speed (Core ServiceRules.Team; 1.0 at customer service 50, the player's start).
     public Cart(DemandTables tables, GamePrices prices, IReadOnlyList<string> menu, string name, bool storage = false,
         int? staff = null, string kind = Kind, int? servers = null, double speed = 1.0)
     {
@@ -172,34 +146,22 @@ public sealed class Cart
     }
 
     public bool Storage { get; }
-    // The same vehicle with another number at the window (the crew on shift that hour).
     public Cart WithServers(int servers) => new Cart(tables, prices, Menu, Name, Storage, Staff, VehicleKind, servers, Speed);
-    // Weighted units each piece holds.
     public int PerPiece { get; }
-    // The piece that holds each menu item.
     public IReadOnlyDictionary<string, string> PieceOf { get; }
 
     public string Name { get; }
-    // "cart" or "truck" in rules.json's queue limits.
     public string VehicleKind { get; }
-    // Use the same per-product load as Core's CargoRules.
     public double WeightOf(string item) => tables.Product(item)?.StockWeight ?? 1.0;
-    // Stock measured against the unit limit.
     public double Load(IReadOnlyDictionary<string, double> stock) => stock.Sum(p => p.Value * WeightOf(p.Key));
-    // Each piece's weighted load, every piece on the menu listed.
     public Dictionary<string, double> PieceLoads(IReadOnlyDictionary<string, double> stock) =>
         PieceOf.GroupBy(p => p.Value).ToDictionary(g => g.Key, g => g.Sum(p => stock.GetValueOrDefault(p.Key) * WeightOf(p.Key)), StringComparer.Ordinal);
-    // A piece holding more than one menu item.
     public bool HasSharedPiece => PieceOf.GroupBy(p => p.Value).Any(g => g.Count() > 1);
     public IReadOnlyList<string> Menu { get; }
-    // The vehicle's staff from economy.json: CartDemand.Plan's capacity counts them all (CartPlan.Capacity).
     public int Staff { get; }
-    // Who serves and how fast: CartSelling sells at CapacityPerServer × speed × servers (ExpectedSales, SalesInput).
     public int Servers { get; }
     public double Speed { get; }
-    // What the window serves in an hour with this crew, from the plan's capacity.
     public double WindowCapacity(HourPlan plan) => Staff > 0 ? plan.Capacity / Staff * Servers * Speed : 0;
-    // All the pieces' storage together.
     public int StockUnits { get; }
     public DemandTables Tables => tables;
     public GamePrices Prices => prices;
@@ -214,7 +176,6 @@ public sealed class Cart
 
     public double IndexOf(string hood) => prices.PriceIndex.TryGetValue(hood, out var i) ? i : tables.PriceCurve.AssumedPriceIndex;
 
-    // CartDemand.ConversionOf: the reference price is the item's default price (no cheaper shop nearby).
     public double ConversionOf(string item, string hood, Conditions c)
     {
         var curve = tables.PriceCurve;
@@ -239,7 +200,7 @@ public sealed class Cart
             Month = c.Month,
             Raining = c.Rain,
             MarketDemand = sellable.ToDictionary(i => i, i => prices.MarketFor(i, spot.Hood, c.MarketDemand)),
-            Promotion = 1.0 // baseCustomerPromotionMultiplier 0.5 / 0.5 at the default difficulty
+            Promotion = 1.0
         });
 
         var menuStock = stock.Where(s => sellable.Contains(s.Key)).ToDictionary(s => s.Key, s => s.Value);
@@ -255,7 +216,6 @@ public sealed class Cart
         }
         var conversion = accepted.Values.Sum();
         var buyerShares = conversion > 0 ? accepted.ToDictionary(p => p.Key, p => p.Value / conversion) : new Dictionary<string, double>();
-        // Service time from the items actually on sale, as CartDemand.Plan does.
         var onSale = saleItems.Values.Distinct().OrderBy(k => k, StringComparer.Ordinal).ToList();
         var capacity = ServiceRate.CustomersPerHour(Staff, ServiceRate.OrderMinutes(tables, onSale, buyerShares));
         var served = SalesRate.PerHour(estimate.CustomersPerHour, conversion, capacity);
@@ -271,7 +231,6 @@ public sealed class Cart
         };
     }
 
-    // CartDemand.BestItem: highest price conversion, then more stock, then ordinal item name.
     private (string? Item, double Conversion) BestItem(IReadOnlyDictionary<string, double> stock, string category,
         string hood, Conditions c)
     {
@@ -292,7 +251,6 @@ public sealed class Cart
         return (best, bestConversion);
     }
 
-    // CartDemand.BestAddOn: best conversion across add-on categories; equal conversions keep the first category.
     private (string? Item, double Conversion) BestAddOn(IReadOnlyDictionary<string, double> stock, string hood, Conditions c)
     {
         (string? Item, double Conversion) best = (null, 0);
@@ -330,7 +288,6 @@ public sealed class StopResult
     public double Cost;
     public double Customers;
     public int? SoldOutAt;
-    // When the first menu item ran out (its piece empty), even if others still sell.
     public int? FirstOutAt;
     public double Profit => Revenue - Cost;
     public double Units => Sold.Values.Sum();
@@ -352,15 +309,8 @@ public static class Selling
 {
     public const int StepMinutes = 5;
 
-    // The game's queue (Milestone 3): set by --service queue (the default). Null sells the fluid rate,
-    // min(customers who buy, window capacity), as the game did before 0.4.0.
     public static QueueThroughput? Queue { get; set; }
 
-    // Sells from `stock` at the spot from minute `from` to `to` (minutes since 00:00 of the day, past 1440 is
-    // after midnight). Each served customer takes the plan's best-accepted item for their category by the
-    // buyer shares, and the plan's add-on drink at its rate, as CartSelling.ServeCustomer does. Stops when nothing on
-    // the menu is left, or with untilOneOut when the first item that had stock runs out (storage per piece: one
-    // piece empties while the others still sell, and the player goes to restock then).
     public static StopResult Run(Cart cart, Spot spot, int from, int to, Conditions c, Dictionary<string, double> stock,
         bool untilOneOut = false)
     {
@@ -380,7 +330,6 @@ public static class Selling
             d.Minutes += step;
             d.Passers += plan.Passers * step / 60;
             d.Demand += plan.Demand * step / 60;
-            // The plan's capacity counts the vehicle's whole staff; the window sells with who is there (CartSelling.Service).
             var capacity = cart.WindowCapacity(plan);
             d.Capacity += capacity * step / 60;
             var served = SalesRate.PerHour(plan.Demand, plan.Conversion, capacity) * step / 60;
@@ -419,9 +368,6 @@ public static class Selling
         d.Units += units; d.Revenue += revenue; d.Cost += cost;
     }
 
-    // Fills each piece's storage (storage per piece). A piece serving several menu items is split by what the stop
-    // would sell with unlimited stock, each item counting at its stock weight; the player picks the boxes, so this is
-    // the best split, where the commissary's Restock splits evenly.
     public static Dictionary<string, double> Load(Cart cart, Spot spot, int from, int to, Conditions c)
     {
         var unlimited = cart.Menu.ToDictionary(i => i, _ => 1e9, StringComparer.Ordinal);
@@ -439,9 +385,6 @@ public static class Selling
         return load;
     }
 
-    // A restock with stock on board, as Core's Restock: nothing is taken off, and each piece's free room is filled
-    // towards the spot's best split (Load). Each item gets its shortfall against that split, scaled down so the
-    // piece's room is filled exactly; an item already above its share gets nothing.
     public static Dictionary<string, double> TopUp(Cart cart, Spot spot, int from, int to, Conditions c, IReadOnlyDictionary<string, double> stock)
     {
         var ideal = Load(cart, spot, from, to, c);
@@ -463,12 +406,6 @@ public static class Selling
     public static Dictionary<string, double> Unlimited(Cart cart) => cart.Menu.ToDictionary(i => i, _ => 1e9, StringComparer.Ordinal);
 }
 
-// The share of the fluid rate the game's queue serves. In the game, Core's SalesSimulator draws arrivals at
-// random (Poisson), holds them in a queue up to the vehicle's limit and lets them give up after their patience,
-// so a window near its capacity loses some customers to bunching. This runs that same simulator once per
-// order time, staff and weather over a grid of loads (customers who buy ÷ window capacity), on a hot dog
-// whose service time is scaled to the order time, and interpolates. Above the grid the queue is always full
-// and the window always busy, so the factor is 1.
 public sealed class QueueThroughput
 {
     private const string StandIn = "ba:itemname_hotdog";
@@ -500,7 +437,6 @@ public sealed class QueueThroughput
         return table[i] + (table[i + 1] - table[i]) * (x - i);
     }
 
-    // Served ÷ what the fluid rate would serve, at each load on the grid.
     private double[] Measure(double orderMinutes, int staff, bool rain, int limit)
     {
         var points = (int)Math.Round(GridMax / GridStep) + 1;
@@ -531,7 +467,6 @@ public sealed class QueueThroughput
                 joined += r.Joined.Count;
                 walkedOn += r.Count(CustomerExit.QueueFull);
             }
-            // Against the customers who really came, so the arrivals' own randomness doesn't count as a loss.
             var fluid = Math.Min(joined + walkedOn, capacity * Hours);
             table[i] = fluid > 0 ? Math.Min(1.0, served / fluid) : 1.0;
         });

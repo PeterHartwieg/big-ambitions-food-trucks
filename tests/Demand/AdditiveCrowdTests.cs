@@ -83,7 +83,6 @@ public class AdditiveCrowdTests
     [Fact]
     public void AppetiteFollowsTheOfficeCrowdAtLunchAndNightlifeCrowdAtNight()
     {
-        // Distinct crowd preferences, with equal base category appetite, isolate the area weighting.
         var demand = JObject.Parse(ShippedData.Demand);
         demand["areas"]!["office"]!["appetite"] = new JObject { ["coffee"] = 2, ["pizza"] = 0.5 };
         demand["areas"]!["nightlife"]!["appetite"] = new JObject { ["coffee"] = 0.5, ["pizza"] = 2 };
@@ -124,7 +123,6 @@ public class AdditiveCrowdTests
         query.Promotion = 1.2;
         query.Reputation = 0.75;
         var scaled = model.Estimate(query);
-        // Friday night; Midtown's late factor, winter month and rain affect every crowd.
         var factor = 1.3 * 0.6 * 0.6 * 0.5 * 1.2;
         Assert.Equal(plain.Footfall * factor, scaled.Footfall, 9);
         Assert.Equal(plain.Baseline * factor, scaled.Baseline, 9);

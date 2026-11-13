@@ -3,7 +3,6 @@ using System.Collections.Generic;
 
 namespace FoodTrucks.Core.CrewDriving
 {
-    /// <summary>A short, fixed native chain prepared for ProbePath; never a router or corner repairer.</summary>
     public sealed class ProbeRoadPath
     {
         public const double CorridorMetres = .5;
@@ -15,14 +14,9 @@ namespace FoodTrucks.Core.CrewDriving
         private readonly int[] markers;
         private readonly double[] parameters;
         public ProbePath Path { get; }
-        /// <summary>Detached copies. Path and the result cannot be mutated through these arrays.</summary>
         public ProbePoint[] Points => (ProbePoint[])points.Clone();
         public int[] SourcePointIndices => (int[])markers.Clone();
-        /// <summary>For each sample: original segment index + cubic parameter in [0,1].
-        /// Original marker i has parameter exactly i. Interpolate native Y between floor(p) and ceil(p);
-        /// this is NOT distance along the prepared path. The final marker has parameter source.Length-1.</summary>
         public double[] SourceParameters => (double[])parameters.Clone();
-        /// <summary>Certified upper bound over the continuous cubics, not just sampled headings.</summary>
         public double CurvatureBound { get; }
 
         private ProbeRoadPath(ProbePoint[] points, int[] markers, double[] parameters, ProbeGeometry geometry, double curvature)
@@ -33,11 +27,6 @@ namespace FoodTrucks.Core.CrewDriving
             CurvatureBound = curvature;
         }
 
-        /// <summary>Interpolates every source marker exactly using chord-length cubic Hermite tangents.
-        /// Refuses sharp native turns, ambiguous topology, excess corridor/steering, or exhausted bounds.
-        /// All continuous cubics and returned chords stay inside the 0.5 m capsule of their OWN native
-        /// segment and advance strictly along it. Clearance of the actual truck still requires native sweeps.
-        /// Native signal planes must retain their original position/tangent separately from this curve.</summary>
         public static ProbeRoadPath Prepare(ProbePoint[] source, ProbeGeometry geometry)
         {
             if (geometry == null) throw new ArgumentNullException(nameof(geometry));
@@ -73,7 +62,6 @@ namespace FoodTrucks.Core.CrewDriving
                 tangents[i] = Unit(Add(Scale(directions[i - 1], lengths[i]), Scale(directions[i], lengths[i - 1])));
             if (lengths.Length > 1)
             {
-                // One-sided derivative extrapolation avoids an artificial zero-curvature endpoint tangent.
                 tangents[0] = Unit(Add(directions[0], Scale(Sub(directions[0], directions[1]),
                     lengths[0] / (lengths[0] + lengths[1]))));
                 var last = lengths.Length - 1;
@@ -84,7 +72,7 @@ namespace FoodTrucks.Core.CrewDriving
             var output = new List<ProbePoint> { source[0] };
             var parameters = new List<double> { 0 };
             var markers = new int[source.Length];
-            var budget = 131072; // bounded validation work, across the entire preparation
+            var budget = 131072;
             var curvature = 0.0;
             for (var i = 0; i < lengths.Length; i++)
             {
@@ -92,8 +80,6 @@ namespace FoodTrucks.Core.CrewDriving
                     Sub(source[i + 1], Scale(tangents[i + 1], lengths[i] / 3)), source[i + 1]);
                 var bound = Certify(curve, source[i], source[i + 1], directions[i], geometry.MaxCurvature * .65, 0, ref budget);
                 curvature = Math.Max(curvature, bound);
-                // The derivative's quadratic control hull bounds speed everywhere. Refine for heading
-                // as well as distance; do not leave a short fragment when an original marker is reached.
                 var steps = (int)Math.Ceiling(curve.SpeedBound * Math.Max(1 / .95, bound / .08));
                 steps = Math.Max(1, steps);
                 if (steps > ProbePath.MaxPoints - output.Count) throw Bad("Prepared path exceeds 2048 samples.");
@@ -117,15 +103,11 @@ namespace FoodTrucks.Core.CrewDriving
             if (--budget < 0) throw Bad("Curve validation budget exhausted.");
             var v0 = Scale(Sub(c.B, c.A), 3); var v1 = Scale(Sub(c.C, c.B), 3); var v2 = Scale(Sub(c.D, c.C), 3);
             var w0 = Scale(Sub(v1, v0), 2); var w1 = Scale(Sub(v2, v1), 2);
-            // v(t) is in the convex hull of v0..v2; w(t) is in the hull of w0,w1.
-            // Positive directed projection lower-bounds |v| and proves no cusp/backtracking.
             var speed = Math.Min(Dot(v0, direction), Math.Min(Dot(v1, direction), Dot(v2, direction)));
             var numerator = Math.Max(Math.Max(Math.Abs(Cross(v0, w0)), Math.Abs(Cross(v0, w1))),
                 Math.Max(Math.Max(Math.Abs(Cross(v1, w0)), Math.Abs(Cross(v1, w1))),
                     Math.Max(Math.Abs(Cross(v2, w0)), Math.Abs(Cross(v2, w1)))));
             var bound = speed > 0 ? numerator / (speed * speed * speed) : double.PositiveInfinity;
-            // A capsule is convex. Its containing all four controls certifies the WHOLE curve,
-            // including between samples; the same capsule also contains each returned chord.
             var corridor = DistanceToSegment(c.A, start, end) <= CorridorMetres &&
                 DistanceToSegment(c.B, start, end) <= CorridorMetres &&
                 DistanceToSegment(c.C, start, end) <= CorridorMetres &&

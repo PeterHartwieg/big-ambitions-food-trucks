@@ -56,7 +56,6 @@ def harness():
         member('VehicleSchedule.cs', 'public static void WeeklyHoursPostfix('),
         member('VehicleSchedule.cs', 'private static void OpeningHours('),
     ]
-    # Before the fix there is no prefix: the native calculation then runs unpatched (the red run).
     has_prefix = PREFIX in source
     if has_prefix:
         members.append(member('VehicleSchedule.cs', PREFIX))
@@ -88,21 +87,17 @@ class VehicleSchedulePasteTests(unittest.TestCase):
         patches = re.sub(r'\s+', ' ', (SCRIPTS / 'Patches.cs').read_text())
         self.assertIn('Patch(schedule, "CalculateOpeningHoursState", Type.EmptyTypes, typeof(VehicleSchedule), '
                       'prefix: nameof(VehicleSchedule.OpeningStatePrefix));', patches)
-        # Registered before CheckReady, with the other Schedule patches.
         self.assertLess(patches.index('"CalculateOpeningHoursState"'), patches.index('VehicleSchedule.CheckReady();'))
         self.assertGreater(patches.index('"CalculateOpeningHoursState"'), patches.index('var schedule = typeof('))
         schedule = (SCRIPTS / 'VehicleSchedule.cs').read_text()
         guards = schedule[schedule.index('Guards ='):schedule.index('internal static void CheckReady()')]
         self.assertIn('(typeof(ScheduleHelper), "CalculateOpeningHoursState", Type.EmptyTypes, false),', guards)
-        # Inert for every real business: the stand-in boundary is the prefix's first line.
         body = member('VehicleSchedule.cs', PREFIX)
         self.assertIn('if (!Here) return;', body.split('{', 1)[1].split(';', 1)[0] + ';')
-        # Restores hours only: no shift, open-state or day replacement.
         for forbidden in ('workShifts', 'isOpen', 'scheduleDays =', 'SyncBack'):
             self.assertNotIn(forbidden, body)
 
     def test_native_name_in_the_game_assembly(self):
-        # Optional: re-reads the patched method from a local copy of the game's assembly (never shipped or committed).
         folder = os.environ.get('BA_GAME_DLLS')
         ilspy = shutil.which('ilspycmd')
         if not folder or not (Path(folder) / 'BigAmbitions.dll').is_file() or not ilspy:

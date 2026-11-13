@@ -11,8 +11,6 @@ namespace FoodTrucks
     internal sealed class CrewProbeTrigger
     {
         internal const float UprightTolerance = .00001f;
-        // Only derived matrix lengths receive this allowance. Every authored scale and
-        // parent link, including the model's world ancestors, remains an exact invariant.
         private const float DerivedTolerance = .00001f;
         private readonly Transform root;
         private readonly Transform[] links, rootLinks;
@@ -48,16 +46,12 @@ namespace FoodTrucks
             for (var i = 0; i < links.Length; i++) { heights[i] = links[i].localPosition.y; scales[i] = links[i].localScale; }
             var error = ReadLocal(out var lo, out var hi, out dimensions);
             if (error != null) throw new InvalidOperationException(error);
-            // Root tilt is at most twice the upright tolerance: nominal trigger up and world
-            // trigger up are both bounded. Erode for its full root-relative lever arm.
             var lever = 0f;
             for (var i = 0; i < 8; i++)
             {
                 var p = Local(Corner(box, i));
                 lever = Math.Max(lever, Vector3.Scale(p, rootScale).magnitude);
             }
-            // The extra derived-length allowance bounds rounding of the captured root scale.
-            // Live coverage still uses the current TRS chain and the exact inner slab.
             var margin = lever * (2 * UprightTolerance + DerivedTolerance) + .00001f;
             Min = lo + margin; Max = hi - margin;
             if (Min >= Max) throw new InvalidOperationException("trigger_profile_empty");
@@ -80,7 +74,6 @@ namespace FoodTrucks
                 var t = links[i];
                 if (t == null || t.parent != (i + 1 < links.Length ? links[i + 1] : root)) return "trigger_reparented";
                 if (t.localPosition.y != heights[i] || !Exact(t.localScale, scales[i])) return "trigger_vertical_scale_changed";
-                // Horizontal translation and native steering yaw remain supported.
                 var up = t.localRotation * new Vector3(0, 1, 0);
                 if (!Upright(up)) return "trigger_local_tilt";
             }
@@ -112,7 +105,6 @@ namespace FoodTrucks
             var z = Vector3.Scale(LocalVector(new Vector3(0, 0, 1)), rootScale);
             if (!Orthogonal(x, y, z) || !Upright(y.normalized)) return "trigger_shear_or_local_tilt";
             dims = new Vector3(x.magnitude * size.x, y.magnitude * size.y, z.magnitude * size.z);
-            // Highest lower face and lowest upper face, never enclosing bounds.
             lo = float.MinValue; hi = float.MaxValue;
             for (var i = 0; i < 8; i++)
             {
@@ -142,8 +134,6 @@ namespace FoodTrucks
         {
             if (!(c is BoxCollider box)) return true;
             var center = box.transform.TransformPoint(box.center);
-            // The circumsphere of an orthogonal box covers horizontal offsets as well as
-            // the box center. Invalid transforms must reach the evaluator and fail closed.
             var size = Vector3.Scale(box.size, box.transform.lossyScale);
             if (!Finite(center) || !Positive(size)) return true;
             var radius = size.magnitude * .5f + 100f;

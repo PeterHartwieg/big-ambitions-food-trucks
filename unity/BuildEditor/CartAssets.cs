@@ -10,18 +10,11 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks.BuildEditor
 {
-    // The push cart with the final model from art/cart (art/README.md, "Food cart"); tools/build-mod.sh copies
-    // the FBX and texture into Vehicles/CartArt first. Its ground-level origin is at the body centre / wheel axle.
-    // HandTruck.EnterVehicle parents the cart at the player root, then a negative playerOffsetWhenActive
-    // moves that root forward while keeping the player model in place. The cart turns around its centre,
-    // with the pusher's feet PusherDistance behind it and the body facing +z.
     internal static class CartAssets
     {
         private const string HandVehicleTag = "ba:vehicletag_ishandvehicle";
-        private const int CargoSlots = 6; // The game's cargo slots; food units and equipment are limited by the mod.
+        private const int CargoSlots = 6;
         private const float CartPrice = 1200f; // Placeholder until the economy milestone.
-        // Grip measured from the vanilla hand truck (logged at city load, Milestone 1 session): hands
-        // 1.16 m high, 0.30 m either side, 0.65 m ahead of the player. The handle sits at the body's rear edge.
         private const float GripHeight = 1.16f;
         private const float GripHalfWidth = 0.30f;
         private const float GripReach = 0.65f;
@@ -31,26 +24,19 @@ namespace FoodTrucks.BuildEditor
         private const float SpotHeight = 0.963f;
         private const float SpotZ = 0.30f;
 
-        // The root collider and nav obstacle, widened to the wheels; the umbrella stays outside it.
         private static readonly Vector3 BodyCenter = new Vector3(0f, 0.6f, 0f);
         private static readonly Vector3 BodySize = new Vector3(0.96f, 1.2f, 1.5f);
 
-        // The FBX nodes the prefab shows, with the positions art/README.md gives (checked against the file).
         private static readonly (string Name, Vector3 Position)[] Parts =
         {
             ("Cart_Body", Vector3.zero),
             ("Cart_Wheel_L", new Vector3(-0.455f, 0.25f, 0f)),
             ("Cart_Wheel_R", new Vector3(0.455f, 0.25f, 0f)),
             ("Cart_Lid", new Vector3(0f, 0.95f, 0.025f)),
-            // The umbrella's canopy, open while the cart sells and furled round the pole otherwise (CartParts).
             ("Cart_Canopy", Vector3.zero),
             ("Cart_Canopy_Furled", Vector3.zero),
         };
 
-        // The cash register (art/props/CashRegister) on the counter's front right corner, beside the umbrella
-        // pole and facing the cart's right (+X), the side its door is on. Its 0.13 x 0.15 m footprint covers
-        // x 0.22 to 0.36, z 0.54 to 0.69: 0.33 m from the front equipment spot (a piece reaches 0.27 m), 0.19 m
-        // from the pole, and far from the push bar and the hands at z -0.75 (art/README.md, "Food cart").
         private static readonly Vector3 RegisterPosition = new Vector3(0.29f, 0.95f, 0.615f);
         private static readonly Quaternion RegisterRotation = Quaternion.Euler(0f, 90f, 0f);
 
@@ -118,7 +104,6 @@ namespace FoodTrucks.BuildEditor
             root.tag = "Vehicle";
             root.layer = LayerMask.NameToLayer("Vehicles");
 
-            // Clickable collider on the root: the mouse raycast looks for the controller on the hit object itself.
             var collider = root.AddComponent<BoxCollider>();
             collider.center = BodyCenter;
             collider.size = BodySize;
@@ -147,7 +132,6 @@ namespace FoodTrucks.BuildEditor
                 renderer.sharedMaterial = material;
                 renderers.Add(renderer);
             }
-            // Closed by default; CartParts opens the canopy while the cart is open for business.
             root.transform.Find("Cart_Canopy").gameObject.SetActive(false);
             renderers.Add(PropAssets.AddRegister(root.transform, RegisterPosition, RegisterRotation, root.layer));
 
@@ -167,24 +151,14 @@ namespace FoodTrucks.BuildEditor
             bodyCollider.center = BodyCenter;
             bodyCollider.size = BodySize;
 
-            // No cargo boxes on the cart: stock is inside the cabinet (plan, "Cart counter layout"). HandTruck only
-            // switches the placeholder's children on and off by the cargo count, so an empty placeholder inside the
-            // body keeps the game's cargo logic and shows nothing.
             var boxes = Point(root.transform, "BoxPlaceholder", new Vector3(0f, 0.5f, 0f));
 
-            // The two equipment spots, centred across the counter, each for a 0.40 x 0.36 m piece that may turn
-            // to either side (radius 0.27 m): the front one behind the umbrella pole (z 0.60), the rear one in front
-            // of the push bar (z -0.75). Just above the counter and the closed steam-well lid (top 0.962).
-            // VehicleDisplays puts the fitted pieces here.
             Point(root.transform, "EquipmentFront", new Vector3(0f, SpotHeight, SpotZ));
             Point(root.transform, "EquipmentRear", new Vector3(0f, SpotHeight, -SpotZ));
-            // Cabinet door above the wheel, below the rear counter; mirrored to the worker side at runtime.
             Point(root.transform, "EquipmentCooler", new Vector3(-0.443f, 0.525f, -0.32f));
 
             var leftHand = Point(root.transform, "LeftHandIK", new Vector3(-GripHalfWidth, GripHeight, HandleZ));
             var rightHand = Point(root.transform, "RightHandIK", new Vector3(GripHalfWidth, GripHeight, HandleZ));
-            // The mod copies vanilla hand truck IK rotations at runtime.
-            // Where the player walks to grab the cart and to load it: just behind the handle.
             var loading = Point(root.transform, "LoadingPosition", new Vector3(0f, 0f, -PusherDistance));
             var navTarget = Point(root.transform, "NavMeshTarget", new Vector3(0f, 0f, -PusherDistance));
 
@@ -200,7 +174,6 @@ namespace FoodTrucks.BuildEditor
             truck.showCargoInItemPanel = true;
 
             var serialized = new SerializedObject(truck);
-            // Vanilla vehicle overlays: hover outline and click popup.
             SetInt(serialized, "simpleOverlayType", 5);
             SetInt(serialized, "detailedOverlayType", 16);
             SetObject(serialized, "rollingAudioSource", audio);
@@ -213,8 +186,6 @@ namespace FoodTrucks.BuildEditor
 
         private static string ProjectRoot => Path.GetDirectoryName(Application.dataPath)!;
 
-        // Meshes and node positions from the FBX; a node away from art/README.md's table fails the build,
-        // since every attachment point above was placed against that table.
         private static Dictionary<string, (Mesh Mesh, Vector3 Position)> Meshes(string artFolder)
         {
             var fbxPath = artFolder + "/FoodCart_Model.fbx";
@@ -244,7 +215,6 @@ namespace FoodTrucks.BuildEditor
             return meshes;
         }
 
-        // One HDRP/Lit material with the model's surface maps for every visible mesh (art/README.md, "Surface look").
         private static Material ArtMaterial(string artFolder) =>
             SurfaceLook.LitMaterial(artFolder + "/M_FoodCart.mat", artFolder, "FoodCart");
 

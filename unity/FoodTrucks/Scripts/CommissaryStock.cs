@@ -16,15 +16,8 @@ using UI.InteriorDesigner;
 
 namespace FoodTrucks
 {
-    // Commissary stock, the vehicle panel's button in any commissary's bay (plan, "UI flow: the vehicle panel holds only
-    // cargo"; Peter, 15 October 2026). It replaces Restock with a two-way transfer the player chooses in the game's list
-    // picker: "Fill up" loads food as Restock did, "Take …" loads one item from the commissary's stock (a piece of
-    // equipment is fitted by loading it), "Return …" gives food or a fitted piece back, and a piece that leaves takes the
-    // food that no longer fits without it. Food asks how many with the game's text prompt. Core's StockTransfer decides;
-    // this moves the cargo and the stock, says what happened and logs every refusal.
     internal sealed partial class Commissary
     {
-        // A vehicle standing in a commissary's bay, checked, with what a transfer needs.
         private sealed class AtBay
         {
             public AtBay(SaveState state, DemandTables tables, VehicleInstance vehicle, string kind, CommissarySite site)
@@ -44,8 +37,6 @@ namespace FoodTrucks
             public string Who => $"{Kind} {World.Short(Vehicle.id)}";
         }
 
-        // The checks before any transfer: data writable and the vehicle in a commissary's bay (any commissary, space or
-        // not). A refusal shows its notice and logs why; null then. Standing at the bay unlocks its contact.
         private static AtBay? CheckAtBay(VehicleInstance? vehicle)
         {
             if (CrewDriveProbe.Owns(vehicle?.id)) return null;
@@ -74,7 +65,6 @@ namespace FoodTrucks
             return new AtBay(state, tables, vehicle, kind, site);
         }
 
-        // One line of the list: "fill" or "nostock", or a take or return of one item.
         private sealed class StockOption
         {
             public StockOption(string op, string label, TransferChoice? choice = null)
@@ -89,7 +79,6 @@ namespace FoodTrucks
             public TransferChoice? Choice { get; }
         }
 
-        // Fill up first, then the takes (foods, then pieces) and the returns (foods, then pieces), each group by name.
         private static List<StockOption> StockOptions(AtBay at)
         {
             var stock = InStock(at.State, at.Site.Id);
@@ -107,19 +96,16 @@ namespace FoodTrucks
                 {
                     var key = choice.Kind == TransferKind.Take ? "foodtrucks:commissary_stock_take" : "foodtrucks:commissary_stock_return";
                     var label = Format(key, Count(choice.Units), Text(choice.Item));
-                    // Two items the game names alike: the item key tells them apart.
                     if (!labels.Add(label)) labels.Add(label = $"{label} ({choice.Item})");
                     options.Add(new StockOption(choice.Kind == TransferKind.Take ? "take" : "return", label, choice));
                 }
             return options;
         }
 
-        // The panel's Commissary stock button.
         public static void ShowStock()
         {
             var at = CheckAtBay(VehicleHelper.GetCurrentVehicle());
             if (at == null) return;
-            // The game's list picker belongs to the interior designer and registers itself when that UI starts.
             if (DropdownSelector.onShow == null)
             {
                 Log.Error("Commissary stock: the game's list picker isn't available in this scene.");
@@ -145,8 +131,6 @@ namespace FoodTrucks
         private static VehicleInstance? VehicleById(string vehicleId) =>
             SaveGameManager.Current?.VehicleInstances.FirstOrDefault(v => v != null && v.id == vehicleId);
 
-        // A line chosen. Food asks how many first; a piece moves one at a time. Every step checks the bay again, since
-        // the list and the prompt can stay open while the game runs.
         private static void Choose(string vehicleId, StockOption option)
         {
             var choice = option.Choice;
@@ -164,7 +148,6 @@ namespace FoodTrucks
             }
             if (choice == null) return;
             var take = choice.Kind == TransferKind.Take;
-            // A piece, or a food none of which fits: no question, the transfer itself says why.
             if (choice.IsPiece || (take && choice.Most <= 0))
             {
                 if (take) Take(VehicleById(vehicleId), choice.Item, choice.IsPiece ? 1 : choice.Units);
@@ -198,20 +181,16 @@ namespace FoodTrucks
                 }, initialText: most.ToString(CultureInfo.InvariantCulture), allowEmpty: true, characterLimit: 7);
         }
 
-        // Empty means all (`most`); otherwise a whole number above 0.
         private static int? ParseUnits(string? text, int most)
         {
             if (string.IsNullOrWhiteSpace(text)) return most;
             return int.TryParse(text!.Trim(), NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var units) && units > 0 ? units : (int?)null;
         }
 
-        // "1,200": counts in the list read as in the plan's examples.
         private static string Count(long units) => units.ToString("#,0", CultureInfo.InvariantCulture);
 
         private static string Text(string key) => LocalizorManager.GetLocalization(key, null);
 
-        // What can go back from the vehicle, by item: paid stacks, not sealed, as selling takes them. Food goes back from
-        // loose stacks only; a fitted piece also when it holds stock, which goes back with it (Unload).
         private static Dictionary<string, int> Returnable(VehicleInstance vehicle)
         {
             var units = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -228,10 +207,6 @@ namespace FoodTrucks
                                                      (!Nested(c) || tables?.EquipmentForGameItem(c.itemName) != null)).ToList();
         }
 
-        // ---- Fill up ----
-
-        // Food from this commissary's stock into the vehicle, as Restock loaded it (LoadFromStock). Null when it ran (its
-        // notice says what loaded), otherwise why not, for the test bridge.
         private static string? FillUp(VehicleInstance? vehicle)
         {
             var at = CheckAtBay(vehicle);
@@ -257,8 +232,6 @@ namespace FoodTrucks
                      $"{left} units left in stock; storage {(view == null ? "?" : StoragePanel.Summary(vehicle, view))}.");
             var foodText = string.Join(", ", FoodParts(tables, vehicle, view, loaded, rest));
             var notHeld = string.Join(", ", result.NotHeld.Select(Text));
-            // Foods that stayed here because their piece is full, "Tacos: the Griddle is full (160/160)": each full piece
-            // none of whose foods went in this time (a piece that took some says so in the loaded list).
             var fullParts = view == null ? new List<string>()
                 : view.Pools.Where(p => Capped(tables, p, rest) && !p.Piece.Products.Any(loaded.ContainsKey)).Select(p => PieceFull(vehicle, p, rest)).ToList();
             var full = fullParts.Count == 0 ? "" : " " + string.Join("; ", fullParts) + ".";
@@ -276,11 +249,6 @@ namespace FoodTrucks
             return null;
         }
 
-        // ---- Take and give back ----
-
-        // Loads up to `units` of one item from this commissary's stock: no more than is here, and no more than fits
-        // (Core StockTransfer.Take, the cargo's own rule). Nothing fitting is refused with the cargo's own notice. Null
-        // when something loaded, otherwise why not.
         private static string? Take(VehicleInstance? vehicle, string item, int units)
         {
             var at = CheckAtBay(vehicle);
@@ -324,9 +292,6 @@ namespace FoodTrucks
             return null;
         }
 
-        // Gives `units` of a food back to this commissary's stock, or one fitted piece and with it the food that no longer
-        // fits without it (Core StockTransfer.FoodLeavingWith). Each batch goes back at what the vehicle paid for it.
-        // Null when something went back, otherwise why not.
         private static string? GiveBack(VehicleInstance? vehicle, string item, int units)
         {
             var at = CheckAtBay(vehicle);
@@ -341,10 +306,8 @@ namespace FoodTrucks
                 CartSelling.Say("foodtrucks:notification_commissary_stock_none_on_board", at.Kind, ("item", Text(item)));
                 return "none on board";
             }
-            // A piece goes one at a time, unless the only ones left hold stock in one stack, which goes back whole (Unload).
             var first = piece ? ReturnableStacks(vehicle, item).OrderBy(c => Nested(c) ? 1 : 0).ThenBy(c => c.amount).First() : null;
             var count = piece ? (Nested(first!) ? first!.amount : 1) : Math.Min(Math.Max(1, units), onBoard);
-            // Decided before the piece leaves, from the cargo as it stands.
             var food = piece ? StockTransfer.FoodLeavingWith(at.Tables, at.Kind, CargoLimit.Lines(vehicle), item, count) : new Dictionary<string, int>();
             var day = Math.Max(1, SaveGameManager.Current.Day);
             var moved = Unload(at, item, count, day);
@@ -379,13 +342,6 @@ namespace FoodTrucks
             return null;
         }
 
-        // Takes up to `units` of an item off the vehicle, loose stacks first and smallest first, and adds each stack's share
-        // to this commissary's stock as a new batch at the stack's price per unit (Core Commissaries.ReturnFromVehicle,
-        // which keeps the share that came from commissary orders apart, for the tax label, and the day the food first came
-        // on board). A fitted piece holding stock (a stocked drinks fridge) goes back whole, its stack and what it holds:
-        // the contents become stock of their own, so no unit or value is lost (review round 1 of the UI flow, Astra). The
-        // stock is booked before the cargo changes: emptying a stack runs the game's cargo listeners, and one that throws
-        // must not lose the units. Food leaves the health grade's record oldest first, as a sale does. Returns the units moved.
         private static int Unload(AtBay at, string item, int units, int day)
         {
             var vehicle = at.Vehicle;
@@ -411,13 +367,9 @@ namespace FoodTrucks
 
         private static bool Nested(CargoInstance entry) => entry.nestedCargoInstances != null && entry.nestedCargoInstances.Count > 0;
 
-        // What a stack holds, with units (the game nests one level: NestedCargoInstance).
         private static IEnumerable<NestedCargoInstance> Contents(CargoInstance stack) =>
             (stack.nestedCargoInstances ?? new List<NestedCargoInstance>()).Where(n => n != null && n.amount > 0 && !string.IsNullOrEmpty(n.itemName));
 
-        // One stack's share into this commissary's stock. The price goes through decimal, so the game's float price per
-        // unit comes back as the cents it was loaded at (review round 1 of the UI flow, Opus). The fleet's units of the
-        // item are counted before this vehicle's leave, as Core's ordered pool is cut to them.
         private static void Book(AtBay at, string item, int units, float pricePerUnit, int day)
         {
             var food = at.Tables.Product(item) != null;
@@ -432,7 +384,6 @@ namespace FoodTrucks
                      (loadedDay == null ? "." : $", on board since day {loadedDay}."));
         }
 
-        // An item's units in a vehicle's cargo, inside other stacks too, as the health grade counts food on board.
         internal static int UnitsOnBoard(VehicleInstance vehicle, string item)
         {
             long units = 0;
@@ -446,15 +397,9 @@ namespace FoodTrucks
             return (int)Math.Min(int.MaxValue, units);
         }
 
-        // ---- The test bridge (docs/test-bridge.md) ----
-
-        // The vehicle op restock: Commissary stock's Fill up, with its checks and notices. Null when it ran (or said
-        // there is no food here); otherwise why not.
         internal static string? FillUpForTesting(VehicleInstance vehicle) =>
             FillUp(vehicle) == null ? null : "the Commissary stock button refused (see the notice)";
 
-        // The vehicle op transfer: Commissary stock's take or return of one item, by key or by name; `units` for food
-        // (null: as many as fit, or all on board), a piece moves one. Null when something moved; otherwise why not.
         internal static string? TransferForTesting(VehicleInstance vehicle, string direction, string item, int? units)
         {
             var at = CheckAtBay(vehicle);

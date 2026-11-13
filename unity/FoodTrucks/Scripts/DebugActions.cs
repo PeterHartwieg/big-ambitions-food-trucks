@@ -17,14 +17,8 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks
 {
-    // Debug and maintenance actions, on the keys in the Keys table below, and console commands when the game runs
-    // with -console. The keys hold Ctrl and use letters the game doesn't bind (its bindings ignore modifiers, so
-    // Ctrl+M would open the map as well) and that sit in the same place on QWERTY and QWERTZ. No F4 or F6 to F10:
-    // the Camera Tools mod offers those for its Hide UI, and the game itself takes F7 (hide the HUD) and F8 (free
-    // camera) when it runs with -console. F1, F2, F5 and F12 are the game's help, bug report, quick save and menu.
     internal sealed class DebugActions : MonoBehaviour
     {
-        // Opt-in for every developer shortcut and console command. Uninstall remains a player action.
         private static readonly bool Testing = Environment.GetCommandLineArgs().Any(a =>
             string.Equals(a, TestBridge.Flag, StringComparison.OrdinalIgnoreCase));
 
@@ -38,24 +32,15 @@ namespace FoodTrucks
         private static readonly Action TaxStatementAction = IssueTaxStatement;
         private static readonly Action StatusAction = ShowStatus;
         private static readonly Action DemandAction = ShowDemand;
-        // The console calls this directly, so it carries its own guard.
         private static readonly Action HireAction = () => Run("hire", HireTestWorker);
         private static readonly Action UninstallAction = Uninstall.Request;
         private static readonly Action EventAction = () => CityPitches.EventHereForTesting(PlayerHelper.GetPosition());
         private static readonly Action GigAction = () => Catering.GigHereForTesting(PlayerHelper.GetPosition());
-        // The console calls this directly, so it carries its own guard.
         private static readonly Action NewItemsAction = () => Run("new items", LoadNewItems);
         private static readonly Action CommissaryWhereAction = () => Run("commissary bays", Commissary.WhereForTesting);
         private static readonly Action CommissaryDeliverAction = () => Run("commissary deliveries", Commissary.DeliverForTesting);
         private static readonly Action CommissaryNightAction = () => Run("overnight check", Commissary.NightForTesting);
-        // (The three above carry their own guard, as the console calls them directly.)
 
-        // Each key: Ctrl, Ctrl+Alt or Ctrl+Shift, matched exactly. Letters go with Ctrl and Ctrl+Alt only: other
-        // mods take Ctrl+Shift letters (a free camera's Ctrl+Shift+G, an objectives panel's Ctrl+Shift+J and K).
-        // The commissary's three are on F3, and the uninstall step on Ctrl+Shift+F11, out of the way; it still
-        // needs a second press. Twice: the actions that write into the save something a real game wouldn't (a tax
-        // statement, ledger money, an event or a gig) run only on a second press within ConfirmSeconds, so a cut or
-        // paste reflex (Ctrl+X, Ctrl+V) does nothing to a save on its own.
         private static readonly (Key Key, bool Shift, bool Alt, string Name, string Label, bool Twice, Action Action)[] Keys =
         {
             (Key.K, false, false, "spawn truck", "food truck", false, SpawnTruckAction),
@@ -78,7 +63,6 @@ namespace FoodTrucks
             (Key.F11, true, false, "uninstall", "uninstall step", false, UninstallAction)
         };
 
-        // As the uninstall step's: a second press of the same key within this many seconds runs a Twice action.
         private const float ConfirmSeconds = 10f;
         private static string? armedName;
         private static float armedUntil = -1f;
@@ -170,8 +154,6 @@ namespace FoodTrucks
             }
         }
 
-        // The test bridge's `debug`: one action by its Name, without the second press a Twice action asks for.
-        // False without the test flag, or when no action has that name.
         internal static bool RunByName(string name)
         {
             if (!Testing) return false;
@@ -197,8 +179,6 @@ namespace FoodTrucks
             }
         }
 
-        // A hired, unassigned customer service worker, the way the game's own candidate command makes one,
-        // so a test session needn't run a recruitment campaign.
         private static void HireTestWorker()
         {
             var candidate = RecruitmentHelper.GenerateCandidate(HireCrew.CustomerServiceSkill, 60f, null);
@@ -212,10 +192,6 @@ namespace FoodTrucks
             Notify($"Hired {HireCrew.Name(candidate)}, customer service {HireCrew.Skill(candidate):F0}.");
         }
 
-        // One box of each of the mod's new foods and one of each new machine into the food vehicle the player drives,
-        // pushes or stands next to, until the commissary sells them. Machines first, so they take the equipment slots.
-        // Each counts as bought at the item's own price (wholesale for food, the purchase price for a machine), so the
-        // uninstall refund and the game's refund for removed mod items can be checked. The cargo limits apply.
         private static void LoadNewItems()
         {
             var vehicle = FoodVehicleHere();
@@ -265,9 +241,6 @@ namespace FoodTrucks
                 .FirstOrDefault(v => Vector3.Distance(v.transform.position, player) <= 10f)?.vehicleInstance;
         }
 
-        // A free player-owned vehicle in front of the player, where buying one at the dealer would take too long.
-        // The spawned vehicle, or null when it wasn't spawned (a notice says why). The test bridge's vehicle buy uses it too,
-        // with its own purchase notice instead of "Spawned" (blind run 2, I10).
         internal static VehicleInstance? SpawnVehicle(string typeName, bool announce = true)
         {
             if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking)
@@ -283,7 +256,6 @@ namespace FoodTrucks
             }
             var player = PlayerHelper.PlayerController.transform;
             var instance = new VehicleInstance(typeName) { fuel = type.maxFuel * 0.97f };
-            // Both origins are vehicle centres; the car is longer.
             var distance = type.spawnInPlayerObject ? 2f : 6f;
             var free = FreeSpawnPlace(player, distance, type.spawnInPlayerObject, out var blocked);
             if (free == null)
@@ -299,25 +271,14 @@ namespace FoodTrucks
             return instance;
         }
 
-        // In front of the player, else beside that place, else further on, where the new vehicle's box is free and the
-        // player can see it from where they stand. Free: nothing solid in the box but the ground, the road and the
-        // parking lanes (vehicles, buildings, props, people; live session 4: two spawns stood one inside the other).
-        // Seen: no wall between the player's chest and the place's middle, at waist height (live session 5: facing a
-        // facade, a truck spawned 4.5 m inside the building, whose mesh collider a box wholly inside doesn't touch).
-        // Null when all nine places are taken (review round 4, Astra); `why` then says what held the first.
         private static Vector3? FreeSpawnPlace(Transform player, float distance, bool handVehicle, out string why)
         {
             var half = handVehicle ? new Vector3(0.6f, 0.8f, 1.0f) : new Vector3(1.3f, 1.4f, 3.2f);
             var step = handVehicle ? 1.6f : 3.2f;
             var start = player.position + player.forward * distance;
-            // The box: everything solid but the ground, road and parking lanes, people included (review round 7, Sol);
-            // only the player is exempt, by its own colliders (review round 7, Astra: the root is GameManager's items
-            // container after a scooter dismount, so a root test exempted every owned vehicle).
             var open = LayerHelper.groundLayerMask | (1 << LayerHelper.RoadsLayerIndex) | LayerHelper.parkingAreaLayerMask;
             bool IsPlayer(Collider c) => c.gameObject.layer == LayerHelper.PlayerLayerIndex || c.transform.IsChildOf(player);
             bool InBox(Collider c) => c != null && ((1 << c.gameObject.layer) & (int)open) == 0 && !IsPlayer(c);
-            // The sight line: walls only. People, vehicles and thin things (posts, trees, hydrants under 0.8 m across)
-            // don't hide the place (review round 7, Opus).
             bool Wall(Collider c) => InBox(c) && ((1 << c.gameObject.layer) & (int)LayerHelper.humanLayerMask) == 0 &&
                                      c.gameObject.layer != LayerHelper.ParkedVehiclesLayerIndex && c.gameObject.layer != LayerHelper.AiVehiclesLayerIndex &&
                                      c.GetComponentInParent<ThirdPersonCharacter>() == null && c.GetComponentInParent<VehicleController>() == null &&
@@ -339,8 +300,6 @@ namespace FoodTrucks
             return null;
         }
 
-        // A large ledger-only entry for today, so the next tax statement has street food income
-        // above the cart's deduction and creates a bill. No money moves.
         private const long TaxFixtureCents = 200_000_00;
 
         private static void TaxFixture()
@@ -363,9 +322,6 @@ namespace FoodTrucks
             Notify($"Tax fixture: $200,000 of street food recorded for today. No money moved.");
         }
 
-        // Grip measurement: while pushing any hand vehicle, logs the grip points and the hand bones relative
-        // to the player root. Pushing the vanilla hand truck and then the cart gives the numbers to copy:
-        // the vanilla truck's animator tilts it while pushed, so its prefab's rest pose isn't what the hands follow.
         private static void LogGrip()
         {
             var controller = PlayerHelper.PlayerController;
@@ -394,7 +350,6 @@ namespace FoodTrucks
             Notify("Grip logged. Press it once standing and once while walking.");
         }
 
-        // For drawing park and waterfront zones: walk a park's outline and press this at each corner.
         private static int zonePoints;
 
         private static void MarkZonePoint()
@@ -417,7 +372,6 @@ namespace FoodTrucks
             }
             var game = SaveGameManager.Current;
             var year = game.gameVariables.daysPerYear;
-            // Same period and figures as Econoview's projected tax row (EconoViewTaxes.SetupProjectedTaxRow).
             var start = game.Day / year * year + 1;
             var lastFinished = game.Day - 1;
             var finishedDays = Math.Max(0, lastFinished - start + 1);
@@ -449,8 +403,6 @@ namespace FoodTrucks
 
         private static string Short(string id) => id.Length > 6 ? id.Substring(0, 6) : id;
 
-        // For the balance check: what the model sees at the cart you push or stand next to (within 10 m),
-        // as if it opened now: the spot, whether it's legal, and the sales rate with its fitted menu.
         private static void ShowDemand()
         {
             var tables = DemandData.Tables;
@@ -489,11 +441,8 @@ namespace FoodTrucks
 
         private static string Money(float value) => TaxCalculationHelper.ToCurrencyFormat(TaxCalculationHelper.RoundCurrency(value));
 
-        // The game's own year-end tax event, now. It bills the save and starts a new tax year,
-        // so it is for throwaway saves only. The statement arrives as a text message from the IRS.
         private static void IssueTaxStatement()
         {
-            // A second statement on top of an unpaid one would stack bills the test can't separate.
             if (TaxHelper.HasAnyTaxesToPay())
             {
                 Notify("A tax bill is still unpaid; no new statement issued.");

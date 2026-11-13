@@ -14,7 +14,6 @@ namespace FoodTrucks.Core.Reputation
         public Grade Grade { get; set; }
         public int? LastInspectionDay { get; set; }
         public int FirstSeenDay { get; set; } = 1;
-        // The last day the inspector's chance was drawn, so a vehicle opened twice in a day draws once.
         public int? LastDrawDay { get; set; }
         public long RandomState { get; set; }
         public List<HealthMark> Marks { get; set; } = new List<HealthMark>();

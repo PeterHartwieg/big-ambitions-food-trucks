@@ -156,7 +156,6 @@ def save_showcase(name, pieces, used_models):
 
 def quartet(name, title, subtitle, entries):
     pieces = showcase_base(title, subtitle)
-    # No panel borders: the models and their names carry the composition.
     for i, (model, label) in enumerate(entries):
         x, y = 116 + (i%2)*736, 481 + (i//2)*465
         pieces.append(model_fit(model, x, y, 632, 354))

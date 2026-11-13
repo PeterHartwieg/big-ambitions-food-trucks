@@ -4,17 +4,8 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Demand
 {
-    // The mod's own price-to-conversion curve: the share of would-be customers who still buy at a price,
-    // given as the ratio of the vehicle's price to the game's reference price for the item.
-    // Straight lines between the points from economy.json, flat beyond the first and last point.
-    // Calibration: a game shop customer buys up to max(class index, neighbourhood average index) times
-    // the reference price, with class indices 1.2, 1.4 and 1.7 and the average weighted by the
-    // neighbourhood's class mix (CitizenHelper.MaxAcceptableRelativePrice; read in the decompile,
-    // unverified in game). The curve smooths that staircase for a neighbourhood whose average index is
-    // AssumedPriceIndex; NeighbourhoodRatio moves other neighbourhoods onto it.
     public sealed class PriceCurve
     {
-        // The working-class index, the lowest a neighbourhood's average can be.
         public const double LowestPriceIndex = 1.2;
 
         private readonly double[] ratios;
@@ -46,8 +37,6 @@ namespace FoodTrucks.Core.Demand
 
         public double AssumedPriceIndex { get; }
 
-        // The share of customers who buy at price / reference price. A bad ratio (no reference price,
-        // NaN) is treated as the reference price itself.
         public double Conversion(double priceRatio)
         {
             if (!IsFinite(priceRatio) || priceRatio < 0) priceRatio = 1.0;
@@ -60,18 +49,12 @@ namespace FoodTrucks.Core.Demand
             return shares[i - 1] + t * (shares[i] - shares[i - 1]);
         }
 
-        // Price over reference, or 1.0 when either is missing.
         public static double Ratio(double price, double referencePrice)
         {
             if (!IsFinite(price) || !IsFinite(referencePrice) || price <= 0 || referencePrice <= 0) return 1.0;
             return price / referencePrice;
         }
 
-        // Price over reference, moved onto the curve for a neighbourhood whose average price index differs
-        // from AssumedPriceIndex. At or below the reference price nothing changes, so the undercut bonus
-        // stays where it is. From the reference to the neighbourhood's index (where every game customer
-        // still buys) maps onto 1 to AssumedPriceIndex; from there to the curve's last point maps onto
-        // AssumedPriceIndex to that point, so nobody buys beyond it anywhere. A missing index leaves the plain ratio.
         public double NeighbourhoodRatio(double price, double referencePrice, double neighbourhoodPriceIndex)
         {
             var ratio = Ratio(price, referencePrice);

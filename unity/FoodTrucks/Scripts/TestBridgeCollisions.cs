@@ -12,11 +12,9 @@ namespace FoodTrucks
     // needs its crash component active and 80 ms since its last clip; the log doesn't check those.
     internal static partial class TestBridgeCommands
     {
-        // Last line per vehicle and object hit, so one truck's scrape never hides another contact.
         private static readonly Dictionary<(int Vehicle, int Hit), float> lastCollisionLog = new Dictionary<(int, int), float>();
         private static int groundLayer = -2, groundUnplacableLayer, roadsLayer;
 
-        // Postfix on NWH.VehiclePhysics2.VehicleController.OnCollisionEnter(Collision).
         public static void VehicleCollisionPostfix(Component __instance, Collision other)
         {
             try
@@ -33,10 +31,7 @@ namespace FoodTrucks
                 }
                 var layer = other.gameObject.layer;
                 if (layer == groundLayer || layer == groundUnplacableLayer || layer == roadsLayer) return;
-                // NWH plays nothing for a collision without contact points.
                 if (other.contactCount == 0) return;
-                // The crash clip waits 80 ms between plays; a quarter second per vehicle and object keeps a scrape to a
-                // few lines.
                 var key = (__instance.GetInstanceID(), other.collider != null ? other.collider.GetInstanceID() : 0);
                 var now = UnityEngine.Time.time;
                 if (lastCollisionLog.TryGetValue(key, out var last) && now - last < 0.25f) return;

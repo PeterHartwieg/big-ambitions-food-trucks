@@ -5,8 +5,6 @@ using FoodTrucks.Core.Saves;
 
 namespace FoodTrucks.Core.Fleet
 {
-    // A weekday's route and shifts, copied to paste on another day (the day tile's copy and paste, as the game's schedule
-    // screen copies a whole day).
     public sealed class DayCopy
     {
         internal DayCopy(DayOfWeek from, bool closed, IReadOnlyList<ScheduleStop> stops, IReadOnlyList<CrewShift> shifts)
@@ -23,12 +21,8 @@ namespace FoodTrucks.Core.Fleet
         public IReadOnlyList<CrewShift> Shifts { get; }
     }
 
-    // Changes to a vehicle's week plan from the BizMan page. Every change keeps the stops in their order (WeekPlan.Ordered)
-    // and validates the result; a refused change leaves everything as it was. Plans kept from yesterday, the open window's
-    // stop, an arrival, a stop given up on and a trip on its way follow each stop to its new index.
     public static class RouteEditor
     {
-        // Adds a stop to its weekday (stop.Day) in time order.
         public static ScheduleProblem AddStop(HireSchedules schedules, VehicleState vehicle, ScheduleStop stop)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -41,7 +35,6 @@ namespace FoodTrucks.Core.Fleet
             return problem;
         }
 
-        // Adds a stop in time order to its weekday. The route is unchanged when the result is invalid.
         public static ScheduleProblem AddStop(HireSchedules schedules, HireSchedule schedule, ScheduleStop stop)
         {
             if (schedules == null) throw new ArgumentNullException(nameof(schedules));
@@ -54,8 +47,6 @@ namespace FoodTrucks.Core.Fleet
             return problem;
         }
 
-        // Removes a stop. A window the crew opened there must be closed first; legs for it are dropped. The week plan
-        // stays while it has shifts or closed days.
         public static void RemoveStop(VehicleState vehicle, int index)
         {
             if (vehicle?.Schedule?.Stops == null || index < 0 || index >= vehicle.Schedule.Stops.Count) return;
@@ -65,8 +56,6 @@ namespace FoodTrucks.Core.Fleet
             DropIfEmpty(vehicle);
         }
 
-        // The day tile's tick box: a closed day keeps its stops but doesn't run. Opening a day can be refused (its night
-        // would run into the next day's morning, or the day before's into its own).
         public static ScheduleProblem SetClosed(HireSchedules schedules, VehicleState vehicle, DayOfWeek day, bool closed)
         {
             if (schedules == null) throw new ArgumentNullException(nameof(schedules));
@@ -87,8 +76,6 @@ namespace FoodTrucks.Core.Fleet
             return ScheduleProblem.None;
         }
 
-        // New opening hours for one stop (the BizMan page's time pickers). The day's stops stay in time order, so the
-        // stop can move in the list. The route is unchanged when the result is invalid.
         public static ScheduleProblem SetTimes(HireSchedules schedules, VehicleState vehicle, int index, int open, int close)
         {
             if (schedules == null) throw new ArgumentNullException(nameof(schedules));
@@ -113,9 +100,6 @@ namespace FoodTrucks.Core.Fleet
             return problem;
         }
 
-        // Drag to reorder on the BizMan page, within one weekday: the places change order and the opening hours stay in
-        // their slots, so the day's stops stay in time order. A stop is its place: the open window's stop, plans and a
-        // trip on its way follow the place to its new slot, and the next replan sorts out what runs when.
         public static ScheduleProblem MovePlace(HireSchedules schedules, VehicleState vehicle, int from, int to)
         {
             if (schedules == null) throw new ArgumentNullException(nameof(schedules));
@@ -149,10 +133,6 @@ namespace FoodTrucks.Core.Fleet
             return problem;
         }
 
-        // Opening times on `day`, every `step` minutes, at which a stop of at least `step` minutes fits between that day's
-        // other stops (all but `except`) and the neighbouring days' nights and mornings: what the time pickers offer. With
-        // `travelFrom` (minutes from another stop to this one) a time must also leave the drive from the day's stop that
-        // would come before it: no earlier than that stop's close plus the drive.
         public static List<int> OpenTimes(HireSchedule? schedule, DayOfWeek day, int step, int latestClose, int? except = null,
             Func<ScheduleStop, int>? travelFrom = null)
         {
@@ -170,13 +150,11 @@ namespace FoodTrucks.Core.Fleet
             return times;
         }
 
-        // Closing times on `day`, every `step` minutes after `open`, up to the next stop's opening or the latest close.
         public static List<int> CloseTimes(HireSchedule? schedule, DayOfWeek day, int open, int step, int latestClose, int? except = null)
         {
             if (step <= 0) throw new ArgumentOutOfRangeException(nameof(step));
             var busy = Busy(schedule, day, except);
             var times = new List<int>();
-            // At most a day long, so it never runs into its own opening the next day.
             for (var close = open + step; close <= latestClose && close <= open + 1440; close += step)
             {
                 if (!Free(busy, open, close)) break;
@@ -185,8 +163,6 @@ namespace FoodTrucks.Core.Fleet
             return times;
         }
 
-        // A new opening time for a stop keeps its length where it can: the closing moves with it, cut short at the
-        // next stop or the latest close, and never less than `step` after opening. Null when nothing fits.
         public static int? CloseFor(HireSchedule? schedule, int index, int newOpen, int step, int latestClose)
         {
             var stop = schedule?.Stops?.ElementAtOrDefault(index);
@@ -198,7 +174,6 @@ namespace FoodTrucks.Core.Fleet
             return closes.Where(c => c <= wanted).DefaultIfEmpty(closes[0]).Max();
         }
 
-        // Minutes of the drive (or push) between two stops, as the crew's plan counts it.
         public static int TravelMinutes(FleetRules rules, ScheduleStop from, ScheduleStop to, TravelMode mode, double gameSpeed = 1.0) =>
             Travel.Between(rules, from.X, from.Z, to.X, to.Z, mode, gameSpeed);
 
@@ -245,20 +220,14 @@ namespace FoodTrucks.Core.Fleet
             return new TravelFit(moved, null, ScheduleProblem.None);
         }
 
-        // ---- Copy and paste of a day's route (the Week plan tab's route box) and clear ----
-
         public static DayCopy CopyDay(HireSchedule? schedule, DayOfWeek day) => new DayCopy(day, WeekPlan.IsClosed(schedule, day),
             WeekPlan.StopsOf(schedule, day).Select(i => WeekPlan.CopyStop(schedule!.Stops[i], day)).ToList(),
             (schedule?.CrewShifts ?? new List<CrewShift>()).Where(s => s != null && s.Day == day)
                 .Select(s => new CrewShift { EmployeeId = s.EmployeeId, Day = day, Start = s.Start, End = s.End, Station = s.Station }).ToList());
 
-        // The copied day's stops replace `day`'s stops; its shifts and open or closed mark stay (they are set on the game's
-        // Schedule tab: Peter, 16 October 2026). Refused, with nothing changed, when the week wouldn't validate (a night
-        // running into the next morning).
         public static ScheduleProblem PasteRoute(HireSchedules schedules, VehicleState vehicle, DayCopy copy, DayOfWeek day) =>
             PasteDays(schedules, vehicle, copy, new[] { day });
 
-        // The copied day's stops on every other weekday ("Paste to all days").
         public static ScheduleProblem PasteRouteToAllDays(HireSchedules schedules, VehicleState vehicle, DayCopy copy) =>
             PasteDays(schedules, vehicle, copy, WeekPlan.Days.Where(d => d != copy.From).ToList());
 
@@ -284,9 +253,6 @@ namespace FoodTrucks.Core.Fleet
             return ScheduleProblem.None;
         }
 
-        // The day's stops and shifts go; the day is then simply without a route.
-        // Whether pasting or clearing these days takes away the stop the crew has its window open at: the game side closes
-        // that window first, as for a removed stop.
         public static bool TakesOpenStop(VehicleState? vehicle, IEnumerable<DayOfWeek> days)
         {
             var stop = vehicle?.HireStop == null ? null : vehicle.Schedule?.Stops?.ElementAtOrDefault(vehicle.HireStop.Value);
@@ -304,8 +270,6 @@ namespace FoodTrucks.Core.Fleet
             Remap(vehicle!, before, schedule.Stops);
             DropIfEmpty(vehicle!);
         }
-
-        // ---- Helpers ----
 
         private static HireSchedule Like(HireSchedule schedule, List<ScheduleStop> stops) => new HireSchedule
         {
@@ -326,8 +290,6 @@ namespace FoodTrucks.Core.Fleet
         private static List<ScheduleStop> Others(HireSchedule? schedule, DayOfWeek day, int? except) =>
             (schedule?.Stops ?? new List<ScheduleStop>()).Where((s, i) => s != null && s.Day == day && i != except).ToList();
 
-        // The minutes (from `day`'s midnight) taken by the day's other stops, by the day before's stops running past
-        // midnight when that day runs, and by the next day's stops when it runs.
         private static List<(int Open, int Close)> Busy(HireSchedule? schedule, DayOfWeek day, int? except)
         {
             var busy = Others(schedule, day, except).Select(s => (s.OpenAt, s.CloseAt)).ToList();
@@ -340,18 +302,14 @@ namespace FoodTrucks.Core.Fleet
             return busy;
         }
 
-        // Touching ends are fine, as Validate has it.
         private static bool Free(List<(int Open, int Close)> busy, int open, int close) =>
             busy.All(b => close <= b.Open || open >= b.Close);
 
-        // Each stop of `before` is now at its index in `after` (or gone): plans, the open window, an arrival, a stop given
-        // up on and a trip on its way follow.
         private static void Remap(VehicleState vehicle, List<ScheduleStop> before, List<ScheduleStop> after)
         {
             int Map(int i) => i >= 0 && i < before.Count ? after.IndexOf(before[i]) : -1;
             foreach (var plan in vehicle.Shifts ?? new List<ShiftPlan>())
             {
-                // The drive back to the bay belongs to no stop and stays.
                 plan.Legs.RemoveAll(l => l.StopIndex != HireSchedules.HomeIndex && Map(l.StopIndex) < 0);
                 foreach (var leg in plan.Legs)
                     if (leg.StopIndex != HireSchedules.HomeIndex) leg.StopIndex = Map(leg.StopIndex);
@@ -359,7 +317,6 @@ namespace FoodTrucks.Core.Fleet
             if (vehicle.HireStop != null)
             {
                 var moved = Map(vehicle.HireStop.Value);
-                // A crew window whose stop went: never left open as if the player had opened it (the runner closes it).
                 if (moved < 0 && vehicle.IsOpen) vehicle.CrewWindowLost = true;
                 vehicle.HireStop = moved < 0 ? (int?)null : moved;
             }
@@ -373,7 +330,6 @@ namespace FoodTrucks.Core.Fleet
                 var moved = Map(vehicle.Skipped.StopIndex.Value);
                 vehicle.Skipped.StopIndex = moved < 0 ? (int?)null : moved;
             }
-            // A removed destination falls back to finding the stop by its spot.
             if (vehicle.Transit?.ToStopIndex != null)
             {
                 var moved = Map(vehicle.Transit.ToStopIndex.Value);

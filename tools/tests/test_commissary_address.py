@@ -74,15 +74,12 @@ def run_harness(root=ROOT):
         return result
 
 
-# ContactsApp as ILSpy shows it in BigAmbitions.dll (SHA-256 9427561B...E911, checked 28 October 2026): the patched
-# method, and the private fields the postfix binds by name.
 NATIVE_TYPE = 'UI.Smartphone.Apps.Contacts.ContactsApp'
 NATIVE_METHOD = 'private void SetUpHeader(Contact contact)'
 NATIVE_FIELDS = ('private Button viewOnMapButton;', 'private GameObject addressGameObject;',
                  'private TextLocalizationComponent addressLabel;')
 HANDLER_PARAMETERS = ['Contact contact', 'UnityEngine.UI.Button ___viewOnMapButton', 'UnityEngine.GameObject ___addressGameObject',
                       'Localizor.LanguageChangeEvent.TextLocalizationComponent ___addressLabel']
-# The game's map focus the View on map button reproduces (ContactsApp.ViewOnMapButtonOnClick) and the CityMap members used.
 NATIVE_MAP = ('public CityBuildingController buildingToFocus;', 'public static bool IsOpen', 'public void Toggle()',
               'public void FocusOnBuilding(CityBuildingController buildingController)')
 
@@ -112,7 +109,6 @@ class CommissaryAddressTests(unittest.TestCase):
     def test_header_postfix_registered_with_the_standard_helper(self):
         self.assertEqual(header_postfixes(), ['HeaderPostfix'])
         patches = (SCRIPTS / 'Patches.cs').read_text(encoding='utf-8')
-        # The standard helper logs Active / Not active per patch.
         self.assertIn('Log.Error($"Patch {name}: Not active, method not found.");', patches)
 
     def test_handler_parameters_are_the_game_names_harmony_binds(self):
@@ -131,7 +127,6 @@ class CommissaryAddressTests(unittest.TestCase):
         for source in (location, contacts, commissary):
             for field in ('streetName =', 'streetNumber =', '.Address =', 'BusinessName ='):
                 self.assertNotIn(field, source)
-        # The postfix leaves the game's call button (callDialogTypeOverride) alone.
         self.assertNotIn('callButton', method('ModContacts.cs', 'internal static void HeaderPostfix('))
         self.assertNotIn('MarkChanged', location)
 
@@ -143,7 +138,6 @@ class CommissaryAddressTests(unittest.TestCase):
         apply = method('Commissary.cs', 'internal static string? ApplySpace(')
         self.assertIn('key = CommissaryLocation.MessageKey(key, address);', apply)
         self.assertIn('data["address"] = address;', apply)
-        # Rent and move say where; a release keeps its key (en.json has no released_address).
         self.assertIn('var address = choice.Op == "release" || site == null ? null : CommissaryLocation.Address(site);', apply)
         space_keys = set(re.findall(r'"(foodtrucks:message_commissary_space_\w+)"', apply))
         self.assertEqual(space_keys, {f'foodtrucks:message_commissary_space_{op}' for op in ('rented', 'moved', 'released')})
@@ -169,7 +163,6 @@ class CommissaryAddressTests(unittest.TestCase):
                 self.assertTrue(table[key].strip(), f'{path.name}: {key}')
                 if base is None:
                     continue
-                # Older messages keep their key and data (no address) and still render in full.
                 self.assertNotIn('{address}', table[base], f'{path.name}: {base}')
                 self.assertEqual(placeholders(table[key]), placeholders(table[base]) | {'address'}, f'{path.name}: {key}')
             self.assertNotIn('foodtrucks:message_commissary_space_released_address', table, path.name)
@@ -177,7 +170,6 @@ class CommissaryAddressTests(unittest.TestCase):
             self.assertIn('beside', table['foodtrucks:bizman_page_space_bay_hint'])
 
     def test_native_names_in_the_game_assembly(self):
-        # Optional: re-reads the names above from a local copy of the game's assembly (never shipped or committed).
         folder = os.environ.get('BA_GAME_DLLS')
         ilspy = shutil.which('ilspycmd')
         if not folder or not (Path(folder) / 'BigAmbitions.dll').is_file() or not ilspy:
@@ -192,7 +184,6 @@ class CommissaryAddressTests(unittest.TestCase):
         self.assertIn(NATIVE_METHOD, contacts)
         for field in NATIVE_FIELDS:
             self.assertIn(field, contacts)
-        # The address-undefined branch the postfix follows: address and View on map hidden, the call by override.
         self.assertIn('if (contact.Address.IsUndefined())', contacts)
         self.assertIn('contact.callDialogTypeOverride != CallDialogType.NotImplemented', contacts)
         self.assertIn('addressLabel.SetValue(contact.Address.ToFormattedString(), clearKey: true);', contacts)

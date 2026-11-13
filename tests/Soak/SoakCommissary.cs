@@ -18,15 +18,12 @@ internal sealed partial class SoakWorld
     private readonly List<Entry> book = new();
     private readonly HashSet<(string, string)> paid = new();
     private readonly Dictionary<long, (string Site, string Item, int Units, long Price, long Goods)> orders = new();
-    // Deliveries (commissary, delivery day) whose flat fee was paid: exactly one fee each.
     private readonly HashSet<(string, int)> feesPaid = new();
     private readonly HashSet<long> decided = new(), delivered = new(), refused = new();
     private readonly HashSet<(string, int)> nights = new(), rents = new();
     private readonly Dictionary<string, long> initial = new(), received = new(), sold = new(), refunded = new();
     private long initialValue, receivedValue, refundedValue;
 
-    // The book records each accepted game payment. Refusal touches neither balance nor book.
-    // Forced wages can overdraw; delivery, rent and fine payments require enough cash.
     private bool Move(long cents, string kind, int day, string key, bool tryOnly = false, bool refuse = false)
     {
         var balance = money; var entries = book.Count;
@@ -69,7 +66,6 @@ internal sealed partial class SoakWorld
         var machine = ShippedData.Tables.EquipmentForGameItem(item) != null;
         var price = machine ? random.Next(20000, 100000) : random.Next(80, 201);
         var quote = CommissaryOrdering.Quote(commissaryRules, new[] { new CommissaryOrderRequest(item, machine ? 1 : 40, price, random.Next(1, 4), !machine) });
-        // The order form refuses a food over its weekly limit; Place must refuse it too.
         if (!CommissarySupply.Check(state.Commissary, commissaryRules, quote, CommissaryRepeat.Once, Day).Fits)
         {
             Require(Throws(() => CommissaryOrdering.Place(state.Commissary, commissaryRules, site, quote, (Day, Minute))), "order over the weekly limit placed");
@@ -77,14 +73,12 @@ internal sealed partial class SoakWorld
             return;
         }
         var before = money;
-        // Now and then the order repeats instead (a standing order; its deliveries book themselves in CommissaryTick).
         if (random.Next(6) == 0)
         {
             var repeat = random.Next(2) == 0 ? CommissaryRepeat.Daily : CommissaryRepeat.Weekly;
             if (!CommissarySupply.Check(state.Commissary, commissaryRules, quote, repeat, Day).Fits) return;
             var standing = CommissaryStandingOrders.Create(state.Commissary, commissaryRules, site, quote, repeat, (Day, Minute));
             Note($"standing order {standing.Id}: {repeat} {item} at {site} from day {standing.NextDay}");
-            // Cancelled again after a while, so standing orders don't pile up.
             foreach (var old in state.Commissary.StandingOrders.Where(s => s.CreatedDay < Day - 10).ToList())
                 CommissaryStandingOrders.Cancel(state.Commissary, old.Id);
             return;
@@ -105,7 +99,6 @@ internal sealed partial class SoakWorld
 
     private void CommissaryTick()
     {
-        // Commissary.Update: retry debts, rent due, deliveries, then the overnight check.
         foreach (var c in state.Commissary.Charges.ToList())
             if (Move(-c.Cents, "rent", Day, $"{c.VehicleId}:{c.Day}", tryOnly: true))
             { SalesLedger.RecordCommissaryRent(state, Day, c.VehicleId, c.Cents); state.Commissary.Charges.Remove(c); }
@@ -113,7 +106,6 @@ internal sealed partial class SoakWorld
             if (Move(-f.Cents, "fine", Day, $"{f.VehicleId}:{f.Day}", tryOnly: true))
             { SalesLedger.RecordOvernightFine(state, Day, f.VehicleId, f.Cents); state.Commissary.Fines.Remove(f); }
         ChargeRent();
-        // Standing orders book their day's delivery first, at a fixed soak price per unit.
         foreach (var run in CommissaryStandingOrders.Book(state.Commissary, commissaryRules, Day, Minute,
                      item => ShippedData.Tables.EquipmentForGameItem(item) != null ? new CommissaryPrice(1, 60_000) : new CommissaryPrice(40, 150)))
             foreach (var o in run.Orders)
@@ -122,7 +114,6 @@ internal sealed partial class SoakWorld
                 Note($"standing order {run.Standing.Id} booked order {o.Id}: {o.Units} {o.ItemName}");
                 standingBooked++;
             }
-        // Each food's weekly limit holds for what was delivered.
         foreach (var w in state.Commissary.WeekBoxes)
             Require(w.Boxes <= commissaryRules.FoodBoxLimit(w.ItemName), "weekly food limit exceeded");
         var before = Inventory();
@@ -133,7 +124,6 @@ internal sealed partial class SoakWorld
             Require(!decided.Contains(o.Id), "cancelled/delivered order attempted again");
             attempted.Add(o.Id);
             Require(orders[o.Id] == (o.CommissaryId, o.ItemName, o.Units, o.UnitPriceCents, o.GoodsCents), "order changed before delivery");
-            // One flat fee per commissary and delivery day, carried by the first order paid there.
             Require(o.FeeCents == (feesPaid.Contains((o.CommissaryId, o.DeliverDay)) ? 0 : commissaryRules.DeliveryFeeCents), "delivery fee wrong for this delivery");
             var accepted = Move(-o.TotalCents, "order payment", Day, o.Id.ToString(), tryOnly: true, refuse: random.Next(5) == 0);
             if (accepted)
@@ -163,7 +153,6 @@ internal sealed partial class SoakWorld
         EqualUnits(before, Inventory(), "delivered stock differs from ordered and paid units");
         Require(state.Commissary.Orders.All(o => !decided.Contains(o.Id)), "decided order remains open");
 
-        // Flags are game facts at the check; Core owns exemptions and the per-night cursor.
         var flags = state.Vehicles.Select(v => new CommissaryVehicle { VehicleId = v.VehicleId,
             AtOwnCommissaryBay = vans[v.VehicleId].Bay == state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == v.VehicleId)?.CommissaryId
                 && vans[v.VehicleId].Bay != null,
@@ -208,7 +197,6 @@ internal sealed partial class SoakWorld
         {
             var permitted = Storage.Check(ShippedData.Tables, v.VehicleType, Lines(v), l.ItemName, l.Units, false).Allowed;
             Require(permitted == l.Units, "restock planner exceeds loader capacity");
-            // The game can reject cargo for its own slot reasons: return leftovers with the FIFO batch.
             var accepted = random.Next(8) == 0 ? random.Next(l.Units + 1) : l.Units;
             if (accepted > 0) vans[v.VehicleId].Cargo.Add(new Lot(l.ItemName, accepted, l.UnitPriceCents));
             if (accepted < l.Units)
@@ -249,8 +237,6 @@ internal sealed partial class SoakWorld
 
     private void CheckExpenses()
     {
-        // The game books retries on payment day, wages on their payroll day, and order goods
-        // as stock costs only on sale. Compare ledger expenses against accepted payments.
         var entries = book.Where(e => e.Cents < 0).ToList();
         Require(state.DailySales.Sum(d => d.DeliveryFeesCents) == entries.Where(e => e.Kind == "order payment")
             .Sum(e => -e.Cents - orders[long.Parse(e.Key)].Goods), "delivery fee ledger differs from payments");
@@ -277,8 +263,6 @@ internal sealed partial class SoakWorld
         Require(Commissaries.Refund(state.Commissary).Total == 0, "refund paid twice");
         Require(Commissaries.Deliver(state.Commissary, commissaryRules, Day + 1, 480, _ => throw new InvalidOperationException("cancelled order delivered")).Delivered.Count == 0,
             "cancelled order delivered after uninstall");
-        // Vehicle purchase-price/cargo removal refund is Unity-owned Uninstall.RefundCents,
-        // not a Core API: cargo remains in the stand-in for inventory conservation checks.
         foreach (var v in state.Vehicles) Close(v);
         CheckWorld();
         SaveLoad();

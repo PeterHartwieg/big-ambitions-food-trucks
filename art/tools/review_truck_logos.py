@@ -17,7 +17,7 @@ for side in [-1,1]:
   for j in range(101):
    y=.575+.55*i/100; z=(2.375 if side == 1 else 1.045)+.55*j/100
    loc,n,face,d=tree.ray_cast(Vector((side*2,y,z)), Vector((-side,0,0)), 3)
-   mount = 1.104 # Blender X is the opposite of Unity X
+   mount = 1.104
    assert loc is not None and .003 <= mount-abs(loc.x) <= .005, (side,y,z,loc)
    hits.append(list(loc))
  print('PASS logo side',side,len(hits),'samples; surface X range',min(abs(h[0]) for h in hits),max(abs(h[0]) for h in hits))

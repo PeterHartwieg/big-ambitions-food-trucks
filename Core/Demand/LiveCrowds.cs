@@ -7,24 +7,16 @@ namespace FoodTrucks.Core.Demand
 {
     public enum VenueKind { Other, Nightclub, Theatre, Cinema, Office, Factory }
 
-    // What the game shows of one venue near a pitch this hour (design: Live crowds from game businesses).
     public sealed class VenueNow
     {
         public VenueKind Kind { get; set; }
         public bool Open { get; set; }
-        // Minutes since it closed, when it was open at some point in the last hour; null otherwise.
         public int? ClosedMinutesAgo { get; set; }
-        // Staff at work now (offices and factories); null when the game doesn't say.
         public int? Workers { get; set; }
-        // Guests in the last hour (the player's own nightclubs, theatres and cinemas); null when the game doesn't say.
         public int? Guests { get; set; }
-        // The venue is the vehicle's partner (Pitches.Partnerships): the game side counts its crowd in full.
         public bool Partner { get; set; }
     }
 
-    // How much of its usual crowd a venue brings now. A closed venue brings nobody; theatres and cinemas
-    // let their audiences out at fixed times, a club's guests come out when it closes, and an office or
-    // factory brings as many people as it has at work. 1.0 is the crowd the area tables assume.
     public sealed class LiveCrowds
     {
         public LiveCrowds(double closedWeight = 0, int surgeMinutes = 45, double theatreSurge = 2.5, IReadOnlyList<int>? theatreLetOuts = null,
@@ -62,7 +54,6 @@ namespace FoodTrucks.Core.Demand
         public double CinemaSurge { get; }
         public int CinemaFirst { get; }
         public int CinemaEvery { get; }
-        // Minutes after the day's midnight; past 1440 means after midnight.
         public int CinemaLast { get; }
         public double WeekendSurge { get; }
         public int ClubClosingMinutes { get; }
@@ -70,8 +61,6 @@ namespace FoodTrucks.Core.Demand
         public int ReferenceWorkers { get; }
         public double MinWorkerWeight { get; }
         public double MaxWorkerWeight { get; }
-        // A player's venue brings its guests in the last hour divided by ReferenceGuests, between the two bounds,
-        // times any surge.
         public int ReferenceGuests { get; }
         public double MinGuestWeight { get; }
         public double MaxGuestWeight { get; }
@@ -79,14 +68,11 @@ namespace FoodTrucks.Core.Demand
         private double GuestFactor(VenueNow venue) => venue.Guests is { } guests
             ? Math.Max(MinGuestWeight, Math.Min(MaxGuestWeight, guests / (double)ReferenceGuests))
             : 1.0;
-        // Business type to venue kind; anything else is static.
         public IReadOnlyDictionary<string, VenueKind> Kinds { get; }
 
         public VenueKind KindOf(string? businessType) =>
             businessType != null && Kinds.TryGetValue(businessType, out var kind) ? kind : VenueKind.Other;
 
-        // surgeBoost scales a surge's part above the usual crowd (a partner venue's, Pitches.Partnerships); guest and
-        // worker counts are not surges.
         public double Weight(VenueNow venue, int minuteOfDay, DayOfWeek day, double surgeBoost = 1.0)
         {
             double Boost(double surge) => surge > 1.0 ? 1.0 + (surge - 1.0) * surgeBoost : surge;
@@ -102,7 +88,6 @@ namespace FoodTrucks.Core.Demand
                 {
                     var letOuts = weekend ? TheatreLetOuts.Concat(TheatreWeekendLetOuts) : TheatreLetOuts;
                     var surge = Boost(InSurge(letOuts, minuteOfDay) ? TheatreSurge * (weekend ? WeekendSurge : 1.0) : 1.0);
-                    // The audience comes out as the doors close, so a show ending at closing time still counts.
                     return venue.Open || (surge > 1.0 && venue.ClosedMinutesAgo is { } ago && ago < SurgeMinutes) ? surge * GuestFactor(venue) : ClosedWeight;
                 }
                 case VenueKind.Cinema:
@@ -120,13 +105,11 @@ namespace FoodTrucks.Core.Demand
             }
         }
 
-        // Cinema shows end every CinemaEvery minutes from CinemaFirst to CinemaLast.
         private IEnumerable<int> CinemaShows()
         {
             for (var minute = CinemaFirst; minute <= CinemaLast; minute += CinemaEvery) yield return minute % 1440;
         }
 
-        // Within SurgeMinutes after a let-out time, across midnight too.
         private bool InSurge(IEnumerable<int> letOuts, int minuteOfDay) =>
             letOuts.Any(time => ((minuteOfDay - time) % 1440 + 1440) % 1440 < SurgeMinutes);
 

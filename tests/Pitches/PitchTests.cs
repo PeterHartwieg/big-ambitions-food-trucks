@@ -63,7 +63,6 @@ public class CityEventsTests
             Assert.Equal(city.AnnouncedDay + kind.LeadDays, city.Day);
             Assert.Contains(city.Kind, tables.Place(city.PlaceId)!.Kinds);
         }
-        // About chance × weekdays a week each: 0.6 × 2 markets and 0.4 × 2 festivals.
         Assert.InRange(all.Count / 20.0, 1.2, 2.8);
         Assert.Equal(all.Count, all.Select(e => e.Id).Distinct().Count());
     }
@@ -77,7 +76,6 @@ public class CityEventsTests
         events.Announce(skipped, 10);
         events.Announce(skipped, 30);
 
-        // Days 11 to 30 are announced at once; events whose day is before 30 are not announced late.
         var expected = daily.Events.Where(e => e.Day >= 30).Select(e => (e.Kind, e.PlaceId, e.Day)).ToList();
         var got = skipped.Events.Where(e => e.AnnouncedDay > 10).Select(e => (e.Kind, e.PlaceId, e.Day)).ToList();
         Assert.Equal(expected, got);
@@ -141,13 +139,10 @@ public class CityEventsTests
         var city = new CityEvent { Id = 1, Booked = 1, Places = 2, Day = 5, Start = 600, End = 960 };
         state.Events.Add(city);
         var ten = 4 * 1440L + 600;
-        // A cart is caught up first: open from 10:00, closed at 12:00.
         Assert.True(CityEvents.Claim(city, "cart", ten));
         Assert.Equal(1, CityEvents.Release(state, "cart", ten + 120));
-        // Then a truck opened at 11:30 in the same skip: the cart still held the place then.
         Assert.False(CityEvents.CanClaim(city, "truck", ten + 90));
         Assert.False(CityEvents.Claim(city, "truck", ten + 90));
-        // From 12:00 the place is free.
         Assert.True(CityEvents.Claim(city, "truck", ten + 120));
     }
 
@@ -156,16 +151,12 @@ public class CityEventsTests
     {
         var city = new CityEvent { Id = 1, Booked = 2, Places = 2, Day = 5, Start = 600, End = 960 };
         var ten = 4 * 1440L + 600;
-        // A cart caught up first: there 10:00 to 11:00 and again 12:00 to 13:00.
         Assert.True(CityEvents.Claim(city, "cart", ten));
         Holds.Release(city.Holds, "cart", ten + 60);
         Assert.True(CityEvents.Claim(city, "cart", ten + 120));
         Holds.Release(city.Holds, "cart", ten + 180);
-        // A truck from 10:30: the cart never holds more than one of the two places.
         Assert.True(CityEvents.Claim(city, "truck", ten + 30));
-        // A third vehicle at 12:30 finds both taken.
         Assert.False(CityEvents.Claim(city, "van", ten + 150));
-        // At 11:30 only the truck is there, but the truck runs on and the cart comes back at 12:00: still full.
         Assert.False(CityEvents.Claim(city, "van", ten + 90));
     }
 
@@ -184,9 +175,7 @@ public class CityEventsTests
     {
         var city = new CityEvent { Id = 1, Booked = 1, Places = 2, Day = 5, Start = 600, End = 960 };
         var ten = 4 * 1440L + 600;
-        // The truck that opened at 11:30 is caught up first and still holds the place.
         Assert.True(CityEvents.Claim(city, "truck", ten + 90));
-        // The cart that opened at 10:00 would overlap it from 11:30: it goes without.
         Assert.False(CityEvents.Claim(city, "cart", ten));
     }
 
@@ -201,7 +190,6 @@ public class CityEventsTests
         Assert.True(CityEvents.Running(city, start));
         Assert.Same(city, CityEvents.RunningAt(state, "p", start + 359));
         Assert.Null(CityEvents.RunningAt(state, "p", start + 360));
-        // An event stays while a window still has to sell through it, days later after a long skip.
         Assert.Equal(0, CityEvents.Expire(state, 9, start + 359));
         Assert.Equal(0, CityEvents.Expire(state, 5, start + 400));
         Assert.Equal(1, CityEvents.Expire(state, 6, start + 360));
@@ -240,7 +228,6 @@ public class PremiumSpotsTests
         cart.IsOpen = false;
         PremiumSpots.Release(state, cart, 720);
         Assert.Null(cart.PremiumSpot);
-        // A catch-up that reaches the truck after the cart: at 11:30 the cart still held it.
         Assert.Equal((PremiumClaim.Taken, "cart"), PremiumSpots.Claim(state, truck, "spot", 690));
         Assert.Equal((PremiumClaim.Held, "truck"), PremiumSpots.Claim(state, truck, "spot", 720));
         PremiumSpots.Prune(state, 720);
@@ -331,24 +318,20 @@ public class PartnershipsTests
         Partnerships.Worked(partnership, rules, 6, 20);
         Assert.Equal(6, partnership.LastWorkedDay);
 
-        // Only on a score the game worked out from paying customers that day.
         Assert.False(Partnerships.BonusDue(partnership, 7));
         partnership.ScoredDay = 7;
         Assert.True(Partnerships.BonusDue(partnership, 7));
-        // Once per worked day.
         Partnerships.BonusGiven(partnership);
         Assert.False(Partnerships.BonusDue(partnership, 7));
         partnership.ScoredDay = 8;
         Assert.False(Partnerships.BonusDue(partnership, 8));
 
-        // Working the next day too: its bonus waits for the next morning's score, never two on one score.
         partnership.ScoredDay = 7;
         partnership.LastWorkedDay = 7;
         Assert.False(Partnerships.BonusDue(partnership, 7));
         partnership.ScoredDay = 8;
         Assert.True(Partnerships.BonusDue(partnership, 8));
 
-        // Too old for the score of day 9, which counts the orders of days 8 and 9.
         var old = new PartnershipState { VehicleId = "cart", Venue = "v#1", LastWorkedDay = 6, ScoredDay = 9 };
         Assert.False(Partnerships.BonusDue(old, 9));
     }
@@ -358,9 +341,7 @@ public class PartnershipsTests
     {
         var live = ShippedData.Rules.LiveCrowds;
         var club = new VenueNow { Kind = VenueKind.Nightclub, Open = true, Guests = 40 };
-        // A busy club's guests are not a surge: the partner's boost leaves them alone.
         Assert.Equal(live.Weight(club, 23 * 60, DayOfWeek.Friday), live.Weight(club, 23 * 60, DayOfWeek.Friday, rules.Surge));
-        // A quiet club's closing: the surge part grows, then the guests scale it.
         var closing = new VenueNow { Kind = VenueKind.Nightclub, Open = false, ClosedMinutesAgo = 5, Guests = 6 };
         Assert.Equal((1 + (live.ClubClosingSurge - 1) * rules.Surge) * 0.3, live.Weight(closing, 3 * 60 + 5, DayOfWeek.Saturday, rules.Surge), 9);
         Assert.Equal((100, 85), Partnerships.WithBonus(80, 80, 80, 98, rules));
@@ -377,7 +358,6 @@ public class GuestCountTests
         Assert.Equal(1.0, live.Weight(new VenueNow { Kind = VenueKind.Nightclub, Open = true }, 23 * 60, DayOfWeek.Friday));
         Assert.Equal(1.5, live.Weight(new VenueNow { Kind = VenueKind.Nightclub, Open = true, Guests = 30 }, 23 * 60, DayOfWeek.Friday), 9);
         Assert.Equal(live.MinGuestWeight, live.Weight(new VenueNow { Kind = VenueKind.Nightclub, Open = true, Guests = 0 }, 23 * 60, DayOfWeek.Friday), 9);
-        // A show letting out on a weekday: surge times the guests.
         Assert.Equal(live.TheatreSurge * 0.5, live.Weight(new VenueNow { Kind = VenueKind.Theatre, Open = true, Guests = 10 }, 22 * 60 + 40, DayOfWeek.Tuesday), 9);
         Assert.Equal(live.ClosedWeight, live.Weight(new VenueNow { Kind = VenueKind.Theatre, Open = false, Guests = 40 }, 12 * 60, DayOfWeek.Tuesday));
     }

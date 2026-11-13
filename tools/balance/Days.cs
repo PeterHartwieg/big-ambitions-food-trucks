@@ -2,13 +2,8 @@ namespace FoodTrucks.Balance;
 
 public enum RestockMode
 {
-    // Push the cart to the nearest wholesaler, buy, load, push back (the design's restock).
     Wholesaler,
-    // Stand at the cart with the rest of a box in hand and reload it on the spot: no travel. The current
-    // loading rule allows this if the player may hold a box while the cart sells.
     BoxInHand,
-    // No restock during the day: a crew loads in the commissary's bay before it leaves and sells until everything is
-    // out (Core CrewRestock: only in the bay of the commissary where the vehicle rents its space).
     None
 }
 
@@ -18,10 +13,8 @@ public sealed class Stay
     public int From, To;
     public int Restocks;
     public int RestockMinutes;
-    // Each restock trip, from leaving to selling again (minutes of the day): the window is shut meanwhile.
     public List<(int From, int To)> Trips = new();
     public StopResult Result = new();
-    // Stock left when the stay ends.
     public Dictionary<string, double> Left = new();
 }
 
@@ -43,7 +36,6 @@ public sealed class Planner
     private readonly City city;
     private readonly Travel travel;
     public RestockMode Mode { get; init; } = RestockMode.Wholesaler;
-    // Where a Wholesaler-mode trip goes: the city's wholesalers when null, or the commissaries.
     public IReadOnlyList<Building>? Depots { get; init; }
 
     public Planner(Cart cart, City city, Travel travel)
@@ -51,11 +43,8 @@ public sealed class Planner
         this.cart = cart; this.city = city; this.travel = travel;
     }
 
-    // Sell at one spot from `from` to `to`, restocking whenever an item sells out (its piece is empty) and there is
-    // time to come back and sell for at least half an hour.
     private readonly Dictionary<(Spot, int, int, Conditions), Stay> cache = new();
 
-    // SellAt with a full cart, remembered: route searches ask for the same pitch and arrival time often.
     public Stay SellFull(Spot spot, int from, int to, Conditions c)
     {
         if (!cache.TryGetValue((spot, from, to, c), out var stay)) cache[(spot, from, to, c)] = stay = SellAt(spot, from, to, c);
@@ -81,7 +70,6 @@ public sealed class Planner
             var trip = Mode == RestockMode.BoxInHand ? 2 : travel.Restock(city, spot, spot, Depots).Minutes;
             if (trip == int.MaxValue || r.SoldOutAt.Value + trip + 30 > to)
             {
-                // No time for a trip: the other pieces keep selling what they hold until closing.
                 stay.Result.Add(Selling.Run(cart, spot, r.SoldOutAt.Value, to, c, stock));
                 break;
             }
@@ -89,7 +77,6 @@ public sealed class Planner
             stay.RestockMinutes += trip;
             stay.Trips.Add((r.SoldOutAt.Value, r.SoldOutAt.Value + trip));
             t = r.SoldOutAt.Value + trip;
-            // As Core's Restock: what is on board stays, each piece takes only what fits in its room.
             stock = Selling.TopUp(cart, spot, t, to, c, stock);
         }
         stay.Left = new Dictionary<string, double>(stock);
@@ -105,10 +92,6 @@ public sealed class Planner
         return day;
     }
 
-    // Pitches in order, each with a window. The cart arrives full at the first. Between pitches it keeps
-    // its stock and goes straight on when every piece still holds at least half its room; otherwise it goes
-    // through the nearest wholesaler and tops every piece up (for pieces with one food that is a full load).
-    // Staying at the same pitch costs no walk. A walk that runs into the next window starts that pitch late.
     public DayResult? Route(IReadOnlyList<Spot> spots, IReadOnlyList<(int From, int To)> windows, Conditions c)
     {
         var day = new DayResult();
@@ -136,18 +119,15 @@ public sealed class Planner
                 day.MoveMinutes += move;
                 t += move;
             }
-            // Arrival rounded up to the 5-minute selling step.
             var from = Math.Max((t + 4) / 5 * 5, windows[i].From);
             if (from >= windows[i].To - 30) return null;
             Stay stay;
-            // A refill tops up what is left; only a shared piece's split can differ from a full load.
             if (full && i > 0 && cart.HasSharedPiece)
                 stay = SellAt(spots[i], from, windows[i].To, c, Selling.TopUp(cart, spots[i], from, windows[i].To, c, stock!));
             else if (full)
                 stay = SellFull(spots[i], from, windows[i].To, c);
             else
                 stay = SellAt(spots[i], from, windows[i].To, c, new Dictionary<string, double>(stock!));
-            // What the stay ended with, after any restock inside it: the next pitch judges this, never the stock it began with.
             stock = new Dictionary<string, double>(stay.Left);
             day.Stays.Add(stay);
             day.Total.Add(stay.Result);
@@ -156,8 +136,6 @@ public sealed class Planner
         return day;
     }
 
-    // The best route over the given windows: each window's best `top` spots on their own, then every
-    // combination within one map region. A pitch may repeat (staying put and restocking in between).
     public DayResult? BestRoute(IReadOnlyList<Spot> candidates, IReadOnlyList<(int From, int To)> windows, Conditions c, int top = 20,
         IReadOnlyList<Spot>? alwaysTry = null)
     {
@@ -187,6 +165,4 @@ public sealed class Planner
     }
 }
 
-// One day of a setup at a pitch in the pass report: gross (sales less goods at wholesale), the goods, hire-hours the
-// game pays, units sold, when the first piece ran out, the share of unlimited-stock sales, and a note.
 public sealed record DayEval(double Gross, double Goods, int HireHours, Dictionary<string, double> Sold, int? FirstOut, double OfDemand, string Note, double Fine = 0);

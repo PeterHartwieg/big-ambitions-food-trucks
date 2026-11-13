@@ -1,15 +1,4 @@
 #!/usr/bin/env bash
-# Runs Big Ambitions on the Windows game PC for an agent-driven test session (docs/test-bridge.md).
-# Usage: tools/run-remote.sh <action> [ssh host]   (or set BA_GAME_HOST)
-#   status       is the game running, which local mods are in, is Food Trucks installed or parked
-#   start        start the game on the desktop with -console -foodtrucks-test, open the tunnel, wait for the bridge
-#   tunnel       open the ssh tunnel to the bridge (127.0.0.1:8330 on both ends), in the background
-#   tunnel-stop  close it
-#   wait         wait until the bridge answers /health (up to BA_BRIDGE_WAIT seconds, default 180)
-#   stop         ask the bridge to quit the game and wait up to 120 s for it to close; never kills
-#   stop --force the same, then kill the game if it is still running, but only a game started with -foodtrucks-test
-#   lock [minutes] [what]   acquire normal-game ownership (minutes retained for compatibility; no expiry)
-# start and stop require the owner token (set BA_LOCK_OWNER and acquire first).
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 ACTION="${1:?status, start, tunnel, tunnel-stop, wait, stop, lock or unlock}"
@@ -17,7 +6,6 @@ FORCE=false
 if [ "${2:-}" = "--force" ]; then FORCE=true; shift; fi
 LOCK_ARGS=()
 if [ "$ACTION" = lock ]; then
-  # lock [minutes] [what] [ssh host]: the host comes last here, so it can still be left to BA_GAME_HOST.
   [ -n "${2:-}" ] && LOCK_ARGS+=("$2"); [ -n "${3:-}" ] && LOCK_ARGS+=("$3"); set -- "$1" "${4:-}"
 fi
 HOST="${2:-${BA_GAME_HOST:?Pass the ssh host of the Windows game PC, or set BA_GAME_HOST}}"
@@ -86,7 +74,6 @@ case "$ACTION" in
     elif ! grep -q 'with -foodtrucks-test' <<<"$status"; then
       echo "The running game was started without -foodtrucks-test (not a test session). Not stopped." >&2; exit 1
     else
-      # A lost reply doesn't mean the quit failed: the game may be finishing a save. Watch the process either way.
       BA_GAME_HOST="$HOST" BA_BRIDGE_URL="$URL" python3 "$REPO/tools/ft" call quit >/dev/null 2>&1 \
         && echo "Asked the game to quit." || echo "No reply to quit (no tunnel, or the game is busy); watching the process."
       closed=false

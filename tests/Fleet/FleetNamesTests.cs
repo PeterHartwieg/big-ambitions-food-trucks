@@ -15,7 +15,6 @@ public class FleetNamesTests
         Assert.Equal(1, FleetNames.NumberOf(numbers, "m", "cart"));
         Assert.Equal(2, FleetNames.NumberOf(numbers, "x", "cart"));
 
-        // "c" sorts first by ID but comes last, so it takes the next number.
         Assert.True(FleetNames.Assign(numbers, new[] { ("m", "cart"), ("x", "cart"), ("c", "cart") }));
         Assert.Equal(1, FleetNames.NumberOf(numbers, "m", "cart"));
         Assert.Equal(2, FleetNames.NumberOf(numbers, "x", "cart"));
@@ -28,7 +27,6 @@ public class FleetNamesTests
     {
         var numbers = new List<VehicleNumber>();
         FleetNames.Assign(numbers, new[] { ("a", "cart"), ("b", "cart") });
-        // "a" is gone (or not listed yet): a new cart doesn't take its number.
         FleetNames.Assign(numbers, new[] { ("b", "cart"), ("t", "truck"), ("z", "cart") });
         Assert.Equal(2, FleetNames.NumberOf(numbers, "b", "cart"));
         Assert.Equal(3, FleetNames.NumberOf(numbers, "z", "cart"));

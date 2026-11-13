@@ -12,7 +12,6 @@ namespace FoodTrucks.Core.Catering
 
     public class CateringState
     {
-        // Zero is a valid seed; the adapter may call New on first use.
         public long RandomState { get; set; }
         public int LastOfferDay { get; set; } = int.MinValue;
         public long NextOfferId { get; set; } = 1;
@@ -20,7 +19,6 @@ namespace FoodTrucks.Core.Catering
         public List<CateringOffer> Offers { get; set; } = new List<CateringOffer>();
         public List<CateringGig> Gigs { get; set; } = new List<CateringGig>();
         public List<CateringGig> History { get; set; } = new List<CateringGig>();
-        // Fees of completed gigs the game didn't credit yet (a payment that failed); the adapter retries them.
         public List<UnpaidFee> Unpaid { get; set; } = new List<UnpaidFee>();
         public int Completed { get; set; }
         public int Failed { get; set; }
@@ -73,7 +71,6 @@ namespace FoodTrucks.Core.Catering
         [JsonConverter(typeof(StringEnumConverter))]
         public GigFailure? Failure { get; set; }
         public string VehicleId { get; set; } = string.Empty;
-        // The adapter excludes these units from street SalesInput.Stock until Finish draws them.
         public int ReservedUnits { get; set; }
         public int? ArrivedDay { get; set; }
         public int? ArrivedMinute { get; set; }

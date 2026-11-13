@@ -58,7 +58,6 @@ def box(center, dims, color='steel', bevel=0):
         bmesh.ops.bevel(bm, geom=list(bm.edges), offset=bevel,
                         segments=1, affect='EDGES', profile=0.5, clamp_overlap=True)
     bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
-    # Split only caps that exceed four sides; the final export triangulates all.
     bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
     append_bm(bm, color)
 
@@ -137,7 +136,6 @@ def setup_presentation():
     scene.world.use_nodes = True
     scene.world.node_tree.nodes.get('Background').inputs[0].default_value = (0.19, 0.22, 0.26, 1)
     scene.world.node_tree.nodes.get('Background').inputs[1].default_value = 0.65
-    # Presentation contains no extra mesh; the reference remains untouched.
     cam_data = bpy.data.cameras.new('BurgerStation_ReviewCamera')
     cam = bpy.data.objects.new('BurgerStation_ReviewCamera', cam_data)
     scene.collection.objects.link(cam)
@@ -159,7 +157,6 @@ def setup_presentation():
         ld.energy = power
         ld.shape = 'DISK'
         ld.size = size
-    # A framed customer view in the interactive scene too.
     for screen in bpy.data.screens:
         for area in screen.areas:
             if area.type == 'VIEW_3D':
@@ -179,54 +176,43 @@ def render_stage(filename):
 def blockout():
     global verts, faces, colors
     verts, faces, colors = [], [], []
-    # Only remove previously generated content when regenerating.
     for ob in list(bpy.data.objects):
         if ob.name.startswith('BurgerStation_'):
             bpy.data.objects.remove(ob, do_unlink=True)
-    # Flat full-width underside includes the placement origin.
     box((0, 0, 0.009), (0.386, 0.330, 0.018), 'black')
     box((0, 0.006, 0.065), (0.396, 0.332, 0.110), 'steel', 0.004)
-    # Grill zone: x -0.057 .. +0.19 (customer's left two thirds).
     box((0.066,-0.006,0.122), (0.246,0.270,0.013), 'charcoal')
     box((0.067,-0.150,0.129), (0.257,0.028,0.025), 'edge', 0.003)
     box((0.187,0.0,0.158), (0.018,0.309,0.078), 'side')
     box((-0.062,0.0,0.147), (0.016,0.309,0.056), 'edge')
     box((0.065,0.156,0.173), (0.255,0.024,0.108), 'side', 0.003)
-    # Fryer is an open steel well with an amber oil surface below the lip.
     box((-0.134,-0.037,0.119), (0.109,0.223,0.018), 'oil')
     box((-0.189,-0.024,0.139), (0.014,0.270,0.039), 'edge')
     box((-0.133,-0.152,0.138), (0.122,0.020,0.038), 'edge', 0.002)
     box((-0.132,0.106,0.14), (0.120,0.020,0.043), 'edge')
-    # Fryer control head at the back, analogous to the larger game fryer.
     box((-0.132,0.143,0.189), (0.122,0.052,0.138), 'steel', 0.003)
     sync_body()
     setup_presentation()
 
 
 def detail():
-    # Strong ribbed silhouette: 19 cast-iron grill bars, each closed.
     for x in np.linspace(-0.045,0.173,19):
         box((float(x),-0.007,0.134), (0.0062,0.264,0.011), 'grate')
-    # Rolled steel top edges and back lip.
     box((0.188,-0.003,0.199), (0.019,0.301,0.006), 'edge')
     box((0.065,0.151,0.227), (0.255,0.025,0.006), 'edge')
-    # Three red rings with black octagonal knobs and pale indicator blades.
     for x in (0.153,0.067,-0.019):
         cylinder((x,-0.164,0.068), 0.016, 0.004, 'red')
         cylinder((x,-0.169,0.068), 0.012, 0.011, 'black')
         box((x,-0.1755,0.069), (0.0025,0.002,0.018), 'edge')
         box((x+0.026,-0.161,0.069), (0.007,0.002,0.004), 'red')
-    # Front seam and the dark fryer controller with a tiny green display.
     box((0,-0.1605,0.024), (0.378,0.0015,0.0025), 'side')
     box((-0.132,-0.162,0.077), (0.076,0.004,0.026), 'black')
     box((-0.125,-0.1645,0.080), (0.030,0.002,0.008), 'green')
     box((-0.157,-0.1645,0.079), (0.005,0.002,0.005), 'red')
-    # Small panel on the rear head faces the customer, with no text/logos.
     box((-0.132,0.1145,0.224), (0.092,0.002,0.035), 'black')
     cylinder((-0.151,0.109,0.223), 0.010,0.010,'black',sides=8)
     box((-0.151,0.1035,0.224), (0.002,0.002,0.012),'edge')
     box((-0.113,0.1125,0.225), (0.027,0.002,0.009),'green')
-    # One raised wire basket suspended over the well. Real open mesh sides.
     x0,x1 = -0.173,-0.091
     y0,y1 = -0.104,0.043
     z0,z1 = 0.150,0.198
@@ -244,7 +230,6 @@ def detail():
         for x in (x0,x1):
             beam((x,y,z0),(x,y,z1),w)
         beam((x0,y,z0),(x1,y,z0),w)
-    # Two metal arms hook the basket onto the head; grip stays in footprint.
     for x in (-0.151,-0.113):
         beam((x,0.043,0.198),(x,0.093,0.272),0.004)
         beam((x,0.093,0.272),(x,0.151,0.272),0.004)
@@ -258,9 +243,6 @@ def uv_texture():
     ob = bpy.data.objects['BurgerStation_Body']
     select_only(ob)
     me = ob.data
-    # Flat colour needs no surface detail. Give narrow wires the same useful
-    # texel footprint as other faces, avoiding subpixel islands and colour bleed.
-    # Pair triangles of the same colour along a shared UV diagonal. No overlaps.
     groups = []
     for key_index in range(len(KEYS)):
         tris = []
@@ -330,15 +312,12 @@ def uv_texture():
 def finalize():
     ob = bpy.data.objects['BurgerStation_Body']
     select_only(ob)
-    # Freeze triangulation so .blend and FBX have identical topology/counts.
     bm = bmesh.new()
     bm.from_mesh(ob.data)
     bmesh.ops.triangulate(bm, faces=list(bm.faces))
     bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
     bm.to_mesh(ob.data)
     bm.free()
-    # Conservative stepped envelope: hull encloses all visible vertices.
-    # Simplified extremal points avoid excessive collider facets on wires.
     bm = bmesh.new()
     for z,x0,x1,y0,y1 in [(0,-.198,.198,-.178,.172),
                           (.233,-.198,.198,-.178,.172),
@@ -373,13 +352,11 @@ def finalize():
         mesh_smooth_type='OFF', use_triangles=True, use_tspace=True, bake_anim=False,
         add_leaf_bones=False, path_mode='RELATIVE', embed_textures=False)
     col.hide_set(True)
-    # Save with the collider hidden in the interactive viewport as well.
     bpy.ops.wm.save_as_mainfile(filepath=OUT + '/BurgerStation.blend')
     return {o.name:len(o.data.polygons) for o in (ob,col)}
 
 
 def finish_scene():
-    # Saved asset contains only the two meshes and untouched scale reference.
     for item in list(bpy.data.objects):
         if item.name.startswith('BurgerStation_') and item.type != 'MESH':
             bpy.data.objects.remove(item, do_unlink=True)

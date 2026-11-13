@@ -8,8 +8,6 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Fleet;
 
-// A crew member's hours on one weekday, all their shifts together, stay within FleetRules.MaxShiftHours when the
-// Schedule tab changes them (issue #14); groups the edit leaves alone aren't judged.
 public class ShiftCapTests
 {
     private static readonly FleetRules shipped = ShippedData.Rules.Fleet;
@@ -55,12 +53,10 @@ public class ShiftCapTests
     public void SeveralShiftsAddUpAcrossRows()
     {
         var accepted = L(S("e1", DayOfWeek.Monday, 0, 8));
-        // 8 + 6 on one row, and on two rows.
         Assert.Equal(new[] { ("e1", DayOfWeek.Monday, 14) },
             WeekPlan.OverMaxHours(shipped, accepted, L(S("e1", DayOfWeek.Monday, 0, 8), S("e1", DayOfWeek.Monday, 10, 16))));
         Assert.Equal(new[] { ("e1", DayOfWeek.Monday, 14) },
             WeekPlan.OverMaxHours(shipped, accepted, L(S("e1", DayOfWeek.Monday, 0, 8), S("e1", DayOfWeek.Monday, 10, 16, "serving2"))));
-        // Three short shifts.
         Assert.Single(WeekPlan.OverMaxHours(shipped, L(),
             L(S("e1", DayOfWeek.Friday, 0, 5), S("e1", DayOfWeek.Friday, 6, 11), S("e1", DayOfWeek.Friday, 12, 15))));
     }
@@ -77,7 +73,6 @@ public class ShiftCapTests
     [Fact]
     public void TheCapIsPerCrewMemberNotPerVehicle()
     {
-        // Two crew members, 12 hours each on their own rows: 24 vehicle hours, both within the cap.
         Assert.Empty(WeekPlan.OverMaxHours(shipped, L(),
             L(S("e1", DayOfWeek.Monday, 0, 12), S("e2", DayOfWeek.Monday, 0, 12, "serving2"))));
     }
@@ -85,15 +80,11 @@ public class ShiftCapTests
     [Fact]
     public void MidnightSplitCountsOnEachWeekday()
     {
-        // Monday 18-24 and Tuesday 0-6: twelve hours across midnight, six on each day. No rolling-24-hour rule.
         Assert.Empty(WeekPlan.OverMaxHours(shipped, L(), L(S("e1", DayOfWeek.Monday, 18, 24), S("e1", DayOfWeek.Tuesday, 0, 6))));
-        // A full Sunday 12-24 then Monday 0-12: each day exactly at the cap.
         Assert.Empty(WeekPlan.OverMaxHours(shipped, L(), L(S("e1", DayOfWeek.Sunday, 12, 24), S("e1", DayOfWeek.Monday, 0, 12))));
-        // Tuesday's after-midnight part counts with Tuesday's other shift: 6 + 7.
         var night = L(S("e1", DayOfWeek.Monday, 18, 24), S("e1", DayOfWeek.Tuesday, 0, 6));
         Assert.Equal(new[] { ("e1", DayOfWeek.Tuesday, 13) },
             WeekPlan.OverMaxHours(shipped, night, night.Append(S("e1", DayOfWeek.Tuesday, 8, 15))));
-        // The week's wrap: Sunday 14-24 into Monday 0-4, then Monday 6-15 is 13 hours on Monday; Sunday stays at 10.
         var wrap = L(S("e1", DayOfWeek.Sunday, 14, 24), S("e1", DayOfWeek.Monday, 0, 4));
         Assert.Equal(new[] { ("e1", DayOfWeek.Monday, 13) },
             WeekPlan.OverMaxHours(shipped, wrap, wrap.Append(S("e1", DayOfWeek.Monday, 6, 15))));

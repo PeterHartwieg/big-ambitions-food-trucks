@@ -6,8 +6,6 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Fleet;
 
-// The worker or player at a cart stands behind it at the equipment midpoint, facing the customers,
-// at every heading and wherever the cart stands (bug of 24 October 2026: they stood diagonally off to one side).
 public class CartStanceTests
 {
     [Fact]
@@ -44,7 +42,6 @@ public class CartStanceTests
         return data;
     }
 
-    // Unity's Quaternion.Euler(0, yaw, 0) * local, written out independently of CartStance.
     private static (double X, double Z) Unity(double yaw, (double X, double Z) local)
     {
         var r = yaw * Math.PI / 180.0;
@@ -101,7 +98,6 @@ public class CartStanceTests
     [Fact]
     public void ServerIsCentredAndIndependentOfTheCornerRegister()
     {
-        // The register stays on the front corner; service belongs at the working centre.
         foreach (var side in new[] { 1, -1 })
         {
             Assert.Equal(0, CartStance.Server(side).Z, 9);
@@ -136,7 +132,6 @@ public class CartStanceTests
         var facing = CartStance.Facing(forward, side);
         var right = CartStance.DirectionToWorld(forward, (1, 0));
 
-        // The first customer is straight ahead; the register remains to one side.
         var toRegister = Minus(register, server);
         var toWindow = Minus(window, server);
         Assert.True(Math.Abs(toRegister.X * facing.Z - toRegister.Z * facing.X) > 0.6, "register remains off centre");
@@ -144,11 +139,9 @@ public class CartStanceTests
         Assert.Equal(CartStance.BehindMetres + CartStance.RegisterAcross, Dot(toRegister, facing), 9);
         Assert.True(Dot(toWindow, facing) > Dot(toRegister, facing), "the register stands between server and customer");
 
-        // Behind the cart: on the side away from the queue, clear of the 0.50 m body and wheels.
         Assert.Equal(-side * CartStance.BehindMetres, Dot(Minus(server, cart), right), 9);
         Assert.Equal(0, Dot(Minus(server, cart), forward), 9);
 
-        // The register faces the customers: its model faces +Z, turned by its yaw on top of the cart's.
         Near(facing, CartStance.Forward(yaw + reg.Yaw), "register faces the customers");
     }
 
@@ -165,8 +158,6 @@ public class CartStanceTests
     [Fact]
     public void PlacesFollowTheCartWhenItIsMovedOrTurned()
     {
-        // The places come from the live position and heading only: a cart moved 20 m and turned 90 degrees has
-        // the same places relative to itself, not those of where it stood before.
         var before = CartStance.ToWorld((0, 0), CartStance.Forward(0), CartStance.Server(1));
         var after = CartStance.ToWorld((20, 5), CartStance.Forward(90), CartStance.Server(1));
         Near((-0.85, 0.0), before, "before");
@@ -208,12 +199,9 @@ public class CartStanceTests
         foreach (var side in new[] { 1, -1 })
         {
             var server = CartStance.Server(side);
-            // The player at the server's place: crew wait towards the rear, a step apart.
             Assert.Equal((server.X, server.Z - 0.9), CartStance.Waiting(side, 0, server.Z));
             Assert.Equal((server.X, server.Z - 1.8), CartStance.Waiting(side, 1, server.Z));
-            // The player at the rear end: crew wait towards the front instead.
             Assert.Equal((server.X, server.Z + 0.9), CartStance.Waiting(side, 0, -1.07));
-            // No player place known: towards the rear.
             Assert.Equal((server.X, server.Z - 0.9), CartStance.Waiting(side, 0, null));
         }
         Assert.Throws<ArgumentOutOfRangeException>(() => CartStance.Waiting(1, -1, null));

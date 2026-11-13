@@ -4,7 +4,6 @@ using FoodTrucks;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 
-// Reuse the visibility harness's instrumented Unity surface without compiling the bridge command.
 namespace FoodTrucks
 {
     internal static partial class TestBridgeCommands
@@ -45,7 +44,6 @@ internal static class Scenarios
                 box.transform.localPosition = new Vector3(3, 0, 4);
                 box.transform.yaw = MathF.PI / 2; box.transform.scale = new Vector3(2, 1, 1);
                 Bounds(box, root, new Vector3(0, -2, 0), new Vector3(6, 2, 4));
-                // The target root need not be an ancestor of the collider.
                 var other = new GameObject("OtherRoot").transform;
                 other.position = new Vector3(10, 0, 0); other.yaw = MathF.PI / 2;
                 var standalone = new GameObject("Standalone").Add<BoxCollider>();
@@ -69,7 +67,6 @@ internal static class Scenarios
                 }
                 capsule.height = 1; // Native capsule cannot be shorter than its diameter.
                 Bounds(capsule, root, new Vector3(-2, -2, -2), new Vector3(2, 2, 2));
-                // Shape enclosure follows transformed corners, including reflected/nonuniform scales.
                 sphere.transform.scale = new Vector3(-2, 3, .5f);
                 Bounds(sphere, root, new Vector3(-6, 0, .5f), new Vector3(2, 12, 2.5f));
                 break;
@@ -109,7 +106,6 @@ internal static class Scenarios
                 root.scale = Vector3.one; box.transform.yaw = float.NaN; Invalid(box, root);
                 break;
             case "allocations":
-                // Warm the JIT before measuring only repeated helper calls.
                 for (var i = 0; i < 1000; i++) Check(CrewProbeShape.TryBounds(box, root, out _, out _), "Warmup");
                 var before = GC.GetAllocatedBytesForCurrentThread();
                 for (var i = 0; i < 10000; i++) Check(CrewProbeShape.TryBounds(box, root, out _, out _), "Repeat");

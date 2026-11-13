@@ -11,8 +11,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Dev-only Gate A, never a route backend. Start is reachable only through the FT test bridge.
-    // One native body here; the pure ownership/control seam deliberately supports independent controllers.
     internal sealed class CrewDriveProbe : MonoBehaviour
     {
         private sealed class ReadyMarker { }
@@ -106,8 +104,6 @@ namespace FoodTrucks
             ReferenceEquals(game, SaveGameManager.Current) && car != null && car.GetInstanceID() == token.ControllerInstance &&
             ReferenceEquals(VehicleHelper.GetVehicleController(car.vehicleInstance), car);
 
-        // A replacement registered under the same vehicle ID does not authorize touching the replacement.
-        // The captured old native body still needs a hold while this exact token owns it.
         private bool MayCleanCapturedBody => !released && ReferenceEquals(active, this) && owners.Owns(token) &&
             ReferenceEquals(game, SaveGameManager.Current) && car != null && car.GetInstanceID() == token.ControllerInstance;
 
@@ -140,7 +136,6 @@ namespace FoodTrucks
                 }
                 native = new CrewProbeVehicle(car);
                 var speed = Mathf.Min(requestedSpeed, native.TopMs);
-                // A minimum across the permitted speed range; no optimistic full-lock turn plan at high speed.
                 var steering = Mathf.Min(4f, native.MaxSteer);
                 for (var i = 0; i <= 32; i++) steering = Mathf.Min(steering, native.LockAt(speed * i / 32));
                 var geometry = new ProbeGeometry(native.Wheelbase, native.FrontAhead, native.RearBehind, native.Width, steering, speed);
@@ -159,7 +154,6 @@ namespace FoodTrucks
                         return prepared;
                     }, native.Contract)) throw new InvalidOperationException(error);
                 controller = new ProbeController(owners, token, path!, geometry, .2, .05);
-                // Validate current placement before enabling native physics.
                 var rear = native.RearAxle;
                 command = controller.Step(token, Observation(rear, null, null));
                 if (command.RequiresStationaryHold || !command.MayApply || command.State == ProbeState.Cancelled)
@@ -208,8 +202,6 @@ namespace FoodTrucks
             }
         }
 
-        // NWH computes Ackermann angles after our control tick. Guard the actual native step,
-        // then unwind from Update/FixedUpdate after the powertrain's wheel iteration has returned.
         internal static bool BeforeWheelStep(NWH.WheelController3D.WheelController wheel)
         {
             var probe = active;
@@ -220,7 +212,7 @@ namespace FoodTrucks
             {
                 probe.commandsRevoked = true;
                 probe.wheelFault = "Native wheel guard lost captured-body authority";
-                return true; // Another save/owner's native physics is outside this token's authority.
+                return true;
             }
             var began = System.Diagnostics.Stopwatch.GetTimestamp();
             try
@@ -241,10 +233,9 @@ namespace FoodTrucks
             catch (Exception ex)
             {
                 Log.Error("Crew probe wheel-guard hold: " + ex.Message);
-                // A failed input adapter must not let the original wheel step execute.
                 native.Body.isKinematic = true;
             }
-            return false; // Later captured wheels in this same native update are skipped as well.
+            return false;
             }
             finally
             {
@@ -287,7 +278,6 @@ namespace FoodTrucks
             var failed = false;
             try
             {
-                // Stop accepting commands before touching native state. No later physics frame is required.
                 if (beganNative && native != null && car != null && mayRestore)
                 {
                     forcedHold |= interrupt && beganNative;
@@ -309,7 +299,6 @@ namespace FoodTrucks
                 if (failed)
                 {
                     phase = ProbeState.Holding; reason = "Cleanup failed: " + why;
-                    // Retain ownership and refuse a new probe until a retry safely completes.
                     try { if (beganNative && mayRestore) native?.StationaryHold(); } catch (Exception ex) { Log.Error(ex); }
                     last = Snapshot();
                     return false;
@@ -321,14 +310,13 @@ namespace FoodTrucks
                 last = Snapshot();
                 lastTraffic = traffic;
                 Log.Info($"Crew probe {token.NativeVehicleId} generation {token.Generation}: {phase}, {why}; forced hold={forcedHold}, contacts={contacts}.");
-                Destroy(this); // Only our component. The owned physical truck remains where it stopped.
+                Destroy(this);
                 return true;
             }
             finally { ending = false; }
         }
 
         internal static bool StopAll(string reason) => active == null || active.End(reason, true);
-        // An active probe without an observation must not expose an older probe's blocker.
         internal static CrewProbeTraffic? ObstacleTraffic => active != null ? active.traffic : lastTraffic;
         internal static bool StopVehicle(VehicleController? vehicle, string reason) => !Owns(vehicle) || active!.End(reason, true);
         internal static JObject Status()
@@ -343,8 +331,6 @@ namespace FoodTrucks
             return last;
         }
 
-        // DamageHandler and this component receive separate Unity collision callbacks in unspecified order.
-        // The damage postfix flushes the actual result even when our earlier callback already ended the probe.
         internal static void FlushObservedDamage(CarController? car)
         {
             try
@@ -421,8 +407,6 @@ namespace FoodTrucks
 #nullable enable
 namespace FoodTrucks
 {
-    // Release builds retain only harmless compatibility calls for the timed backend.
-    // No component, hooks, command handler, ownership or start method is compiled.
     internal static class CrewDriveProbe
     {
         internal static bool Active => false;

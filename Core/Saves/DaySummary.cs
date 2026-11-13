@@ -4,8 +4,6 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Saves
 {
-    // One vehicle's day in the mod's books, for the test bridge's day_summary: the same per-vehicle ledger lines
-    // Econoview and BizMan's fleet page read (VehicleDay), the units sold (SoldCounts) and the spots worked (DayRecord).
     public sealed class VehicleDaySummary
     {
         public string VehicleId { get; set; } = string.Empty;
@@ -19,12 +17,8 @@ namespace FoodTrucks.Core.Saves
         public long CommissaryRentCents { get; set; }
         public long OvernightFineCents { get; set; }
         public long MarketingCents { get; set; }
-        // Sales and catering less every cost line above (FleetReport's profit).
         public long ProfitCents { get; set; }
-        // Null when the day is no longer kept: SoldCounts keeps today and yesterday only.
         public IReadOnlyList<(string Item, int Units)>? Sold { get; set; }
-        // Spots the vehicle was open at and its minutes open there, null when the day's record is gone (counted for
-        // reputation once the next working day is over, ReputationBook.CloseDaysBefore).
         public int? StopsServed { get; set; }
         public int? MinutesOpen { get; set; }
     }
@@ -38,16 +32,13 @@ namespace FoodTrucks.Core.Saves
         public long LicenceCents { get; set; }
         public long EventPlacesCents { get; set; }
         public long DeliveryFeesCents { get; set; }
-        // The whole street food business's profit that day, on FleetReport.WeekProfitCents's terms.
         public long ProfitCents { get; set; }
-        // Commissaries whose morning delivery fee was paid that day (CommissaryState.FeesPaid, kept for today and yesterday).
         public IReadOnlyList<string> FeesPaidAt { get; set; } = Array.Empty<string>();
         public List<VehicleDaySummary> Vehicles { get; } = new List<VehicleDaySummary>();
     }
 
     public static class DaySummary
     {
-        // `today` is the game's day now: it says which of the short-lived records still hold `day`.
         public static DaySummaryReport For(SaveState? state, int day, int today)
         {
             var report = new DaySummaryReport { Day = day };
@@ -99,7 +90,6 @@ namespace FoodTrucks.Core.Saves
                     summary.StopsServed = visits.Count;
                     summary.MinutesOpen = visits.Aggregate(0, (sum, v) => sum > int.MaxValue - v.Minutes ? int.MaxValue : sum + v.Minutes);
                 }
-                // A vehicle with nothing that day and no record of it isn't listed.
                 if (vehicle == null && summary.ProfitCents == 0 && summary.SalesCents == 0) continue;
                 report.Vehicles.Add(summary);
             }

@@ -28,32 +28,20 @@ namespace FoodTrucks.Core.Fleet
             CoursePricePerHour = coursePricePerHour;
         }
 
-        // How long a vendor licence lasts. The game's Food Safety diploma itself never expires [code, unverified in game].
         public int LicenceDays { get; }
-        // A licence can be renewed once this few days are left, so nobody banks years of licence.
         public int RenewWindowDays { get; }
         // What the city charges for a licence period and for one vehicle's permit. Placeholders until the
         // balance pass near the end of development.
         public long LicenceFeeCents { get; }
         public long PermitFeeCents { get; }
-        // TaxiSystem.MinutePerMeter: game minutes per straight-line metre at game speed 1 [code, unverified in game].
         public double DriveMinutesPerMetre { get; }
-        // GlobalReferences.walkingSpeedWalk: a cart moves at walking pace [code, unverified in game].
         public double PushMetresPerSecond { get; }
-        // Straight-line distance times this; 1.0 matches the game's taxi, which ignores roads.
         public double RoadFactor { get; }
         public int MaxStops { get; }
-        // Minutes after the schedule day's midnight; 27 × 60 lets a late stop close at 03:00.
         public int LatestCloseMinute { get; }
-        // A vehicle this close to a stop is at it; further away, the hire moves it there first.
         public double StopRadiusMetres { get; }
-        // A route day starts this long before the vehicle leaves its commissary bay: the morning restock, which needs
-        // someone on shift (Peter, 16 October 2026).
         public int RestockMinutes { get; }
-        // The longest shift a crew member may have in a day, the game's ScheduleHelper.ShiftLengthCap.
         public int MaxShiftHours { get; }
-        // The Food Safety course the business school's Market Demands door offers: its length and its
-        // price per hour in whole dollars, as the game's DiplomaData stores them.
         public int CourseMinutes { get; }
         public int CoursePricePerHour { get; }
 

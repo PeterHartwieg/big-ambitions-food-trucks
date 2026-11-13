@@ -26,14 +26,9 @@ namespace FoodTrucks.BuildEditor
         public static void Generate()
         {
             ModAssets.EnsureFolder(Folder);
-            // No street dirt on any bay piece (review round 1 of 0.9.10): the paint material refuses decals, the lettering
-            // prefab leaves the decal layer like every bay piece (Display), and BayMarkers sets the outline it draws with
-            // this material to the same rendering layer at run time.
             var paint = Lit($"{Folder}/M_BayPaint.mat", $"{Folder}/T_BayPaint_BaseColor.png", smoothness: 0.2f);
             Display("BayLettering", new Dictionary<string, Material> { ["M_BayPaint"] = paint }, collider: false, look: false);
 
-            // The sign: pole and plate share one atlas. One plate material per commissary, named on it (the same UVs,
-            // its own T_BaySign_<id>_BC); BayProps swaps it onto the plate by the commissary's id.
             var sign = SurfaceLook.LitMaterial($"{Folder}/M_BaySign.mat", Folder, "BaySign");
             Display("BaySign", new Dictionary<string, Material> { ["BaySign_GameLook"] = sign }, collider: false, look: true);
             foreach (var texture in Directory.GetFiles(Path.Combine(ProjectRoot, Folder), "T_BaySign_*_BC.png"))
@@ -49,9 +44,6 @@ namespace FoodTrucks.BuildEditor
             }
         }
 
-        // <name>_Display.prefab from <name>_Model.fbx: every mesh of the model with the FBX's materials remapped to ours
-        // (by the Blender material names: game_look.py's <Name>_GameLook), at the model's own transforms. look: the
-        // FBX's own normals and Mikk tangents, which the normal map was baked against.
         private static void Display(string name, Dictionary<string, Material> remap, bool collider, bool look)
         {
             var fbx = $"{Folder}/{name}_Model.fbx";
@@ -117,7 +109,6 @@ namespace FoodTrucks.BuildEditor
             }
         }
 
-        // The road paint's HDRP/Lit material: the texture as its base colour map (sRGB), opaque, flat smoothness.
         private static Material Lit(string path, string texturePath, float smoothness, float metallic = 0f, bool decals = false)
         {
             var importer = (TextureImporter)AssetImporter.GetAtPath(texturePath)

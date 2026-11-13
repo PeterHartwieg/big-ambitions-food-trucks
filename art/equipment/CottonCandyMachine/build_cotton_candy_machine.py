@@ -62,7 +62,6 @@ def box(name, centre, dims, role, bevel=0):
     return finish_part(ob,role)
 
 def lathe(name, centre, profile, role, n=24):
-    # Closed profile revolves about Z. Each profile point is (radius,z).
     vs=[]; fs=[]
     for r,z in profile:
         for i in range(n):
@@ -84,7 +83,6 @@ def cylinder(name, centre, radius, depth, role, n=12, axis='Z'):
     return finish_part(ob,role)
 
 def candy(name,x,y,bottom,top,role,phase):
-    # Soft, slightly irregular spun-sugar silhouette; no surface noise or extra lobes.
     n=10; vs=[(x,y,bottom)]; fs=[]
     for j,(t,r) in enumerate(((.17,.022),(.40,.035),(.67,.036),(.86,.027))):
         for i in range(n):
@@ -147,7 +145,6 @@ def checkpoint(name):
 
 def build_blockout():
     if bpy.context.object and bpy.context.object.mode!='OBJECT': bpy.ops.object.mode_set(mode='OBJECT')
-    # On regeneration, remove only the asset and its review rig.
     for ob in list(bpy.data.objects):
         if not ob.name.startswith('HumanRef'): bpy.data.objects.remove(ob,do_unlink=True)
     box('Flat rubber plinth',(0,0,.008),(.250,.250,.016),'dark')
@@ -175,7 +172,6 @@ def build_detail():
     box('Red rocker switch',(.034,-.150,.095),(.017,.006,.022),'red')
     for i,y in enumerate((-.073,.009,.091)):
         cylinder('Rack stick socket '+str(i),(.153,y,.255),.008,.009,'dark',8)
-    # Three broad slots read as vents without expensive cutouts.
     for z in (.058,.072,.086): box('Side cooling vent',(-.133,.033,z),(.002,.100,.004),'dark')
     ob=join_body(); checkpoint('02-detail')
     return sum(len(f.vertices)-2 for f in ob.data.polygons)
@@ -184,8 +180,6 @@ def build_atlas():
     ob=bpy.data.objects['CottonCandyMachine_Body']; me=ob.data
     colors=[tuple(me.materials[p.material_index].diffuse_color) for p in me.polygons]
     count=len(me.polygons); grid=math.ceil(math.sqrt(count)); size=512
-    # A unique tile for every polygon, padded >1 texel. Quads use the entire tile.
-    # Triangle islands consume half a tile. Disconnected islands cannot overlap.
     for old in list(me.uv_layers): me.uv_layers.remove(old)
     uv=me.uv_layers.new(name='UVMap')
     pixels=np.zeros((size,size,4),dtype=np.float32); pixels[:]=(.045,.060,.080,1)
@@ -200,13 +194,11 @@ def build_atlas():
     image=bpy.data.images.new('T_CottonCandyMachine_BaseColor',width=size,height=size,alpha=True)
     image.pixels.foreach_set(pixels.ravel()); image.filepath_raw=os.path.join(OUT,'T_CottonCandyMachine_BaseColor.png'); image.file_format='PNG'; image.save()
     image=bpy.data.images.load(os.path.join(OUT,'T_CottonCandyMachine_BaseColor.png'),check_existing=False)
-    # Keep the absolute path until the first scene save relocates the blend.
     image.filepath=os.path.join(OUT,'T_CottonCandyMachine_BaseColor.png')
     m=bpy.data.materials.new('M_CottonCandyMachine'); m.use_nodes=True; m.surface_render_method='DITHERED'
     nt=m.node_tree; p=nt.nodes.get('Principled BSDF'); tex=nt.nodes.new('ShaderNodeTexImage'); tex.image=image; tex.interpolation='Closest'
     nt.links.new(tex.outputs['Color'],p.inputs['Base Color']); nt.links.new(tex.outputs['Alpha'],p.inputs['Alpha'])
     p.inputs['Roughness'].default_value=.43
-    # Steel pixels have almost equal R/G; painted candy and cabinet do not.
     sep=nt.nodes.new('ShaderNodeSeparateColor'); nt.links.new(tex.outputs['Color'],sep.inputs['Color'])
     diff=nt.nodes.new('ShaderNodeMath'); diff.operation='SUBTRACT'; nt.links.new(sep.outputs['Green'],diff.inputs[0]); nt.links.new(sep.outputs['Red'],diff.inputs[1])
     absolute=nt.nodes.new('ShaderNodeMath'); absolute.operation='ABSOLUTE'; nt.links.new(diff.outputs[0],absolute.inputs[0])
@@ -221,8 +213,6 @@ def finish():
     body=bpy.data.objects['CottonCandyMachine_Body']
     old=bpy.data.objects.get('CottonCandyMachine_Collision')
     if old: bpy.data.objects.remove(old,do_unlink=True)
-    # A small conservative hull encloses bowl, guard, rack and all three candies.
-    # Hull vertices come from tiered envelope boxes; the result is strictly convex.
     points=[]
     for z,x0,x1,y in [(0,-.135,.173,.160),(.26,-.189,.194,.163),(.345,-.189,.194,.163),(.497,.110,.194,.136)]:
         points.extend((x,sy*y,z) for x in (x0,x1) for sy in (-1,1))

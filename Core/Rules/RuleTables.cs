@@ -11,8 +11,6 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Rules
 {
-    // The validated contents of data/rules.json. Parse throws DemandDataException naming the field
-    // of the first problem, like DemandTables.
     public sealed class RuleTables
     {
         public const int SchemaVersion = 1;
@@ -73,7 +71,6 @@ namespace FoodTrucks.Core.Rules
         public double PleasedFromSkill { get; }
         public IReadOnlyDictionary<string, int> QueueLimits { get; }
 
-        // Order time is divided by this speed; BaseSkill keeps the item's base service time.
         public double Speed(double skill)
         {
             skill = ClampSkill(skill, BaseSkill);
@@ -85,12 +82,9 @@ namespace FoodTrucks.Core.Rules
                 : 1.0 + (FastestSpeed - 1.0) * (skill - BaseSkill) / (100.0 - BaseSkill);
         }
 
-        // The game's worker measure. The player uses their skill alone.
         public static double EffectiveSkill(double skill, double satisfaction) =>
             ClampSkill(skill, 0) * ClampSkill(satisfaction, 0) / 100.0;
 
-        // Several workers at one window: the simulator takes one speed, so each serves at the team's mean
-        // speed, and customers react to the team's mean effective skill. An empty team serves at base speed.
         public (double Speed, ServiceMood Mood, double Skill) Team(IEnumerable<double> effectiveSkills)
         {
             var skills = (effectiveSkills ?? Array.Empty<double>()).Select(s => ClampSkill(s, BaseSkill)).ToList();
@@ -99,7 +93,6 @@ namespace FoodTrucks.Core.Rules
             return (skills.Average(Speed), Mood(skill), skill);
         }
 
-        // A hook for customer reactions; it does not change sales yet.
         public ServiceMood Mood(double skill) => skill < ComplainBelowSkill ? ServiceMood.Complaining
             : skill >= PleasedFromSkill ? ServiceMood.Pleased : ServiceMood.Neutral;
 
@@ -142,13 +135,9 @@ namespace FoodTrucks.Core.Rules
         }
 
         public double PatienceMinutes { get; }
-        // Each customer's patience is PatienceMinutes times a factor drawn from 1 ± PatienceSpread.
         public double PatienceSpread { get; }
-        // Multiplies everyone's patience while it rains, so the queue thins as soon as rain starts.
         public double RainPatience { get; }
         public int MaxQueue { get; }
-        // Whole minutes an arriving customer walks before joining the queue, drawn evenly from this range.
-        // 0 to 0 joins at once, as the queue did before the walk-in.
         public int WalkInMinMinutes { get; }
         public int WalkInMaxMinutes { get; }
 

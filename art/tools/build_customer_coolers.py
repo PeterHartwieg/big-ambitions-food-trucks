@@ -23,14 +23,12 @@ for name, depth, height in [('CartDrinksCooler', .20, .70), ('TruckDrinksCooler'
             continue
         ob.name = ob.name.replace('DrinksCooler', name)
         ob.data.name = ob.name + '_Mesh'
-        # Bake dimensions into vertices, preserving metre units and identity transforms.
         for v in ob.data.vertices:
             v.co.y *= depth
             v.co.z *= height
         ob.data.update()
     for suffix in ('BaseColor', 'BC', 'M', 'N'):
         shutil.copy2(SOURCE / f'T_DrinksCooler_{suffix}.png', folder / f'T_{name}_{suffix}.png')
-    # This is the same purchasable item; the build pipeline requires an icon for display variants too.
     shutil.copy2(SOURCE / 'Icon_DrinksCooler.png', folder / f'Icon_{name}.png')
     for img in bpy.data.images:
         if img.source == 'FILE' and 'T_DrinksCooler_' in img.filepath:

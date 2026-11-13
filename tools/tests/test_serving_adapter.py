@@ -21,8 +21,6 @@ class ServingAdapterTests(unittest.TestCase):
 <OutputType>Exe</OutputType><TargetFramework>net{major}.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings>
 <Nullable>enable</Nullable><NuGetAudit>false</NuGetAudit></PropertyGroup><ItemGroup>{includes}</ItemGroup></Project>''')
         source = HARNESS
-        # Compile the real caller and Harmony handlers too: failures here must not skip CloseDays,
-        # and the entry regression depends on SetVehicle's prefix running before its nested patches.
         for marker, filename, signature in (
                 ('/* LATE_UPDATE */', 'CartSelling.cs', 'private void LateUpdate()'),
                 ('/* PANEL_PREFIX */', 'Patches.cs', 'private static void PanelVehiclePrefix('),
@@ -75,7 +73,6 @@ class ServingAdapterTests(unittest.TestCase):
         self.run_case('update')
 
     def test_quit_while_serving_skips_stock_panel_but_keeps_cleanup(self):
-        # Issue #19: the native Toggle(false) dereferences GameManager, which is gone or unreturned while quitting.
         for kind in ('cart', 'truck'):
             for manager in ('missing', 'missing-unloading', 'unloading'):
                 with self.subTest(kind=kind, manager=manager):

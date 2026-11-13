@@ -12,28 +12,14 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // The bridge's `shoot`: one picture from a camera of the bridge's own, written as a PNG under
-    // persistentDataPath/FoodTrucksTest/shots/. The game's camera and UI are left alone: the bridge's camera copies the
-    // game camera's settings (and HDRP's per-camera data), renders into a texture of its own for a few frames so HDRP's
-    // exposure and history settle, and is destroyed after the read-back. Screen-space UI isn't drawn by a camera that
-    // renders into a texture, so the picture has none.
-    //
-    // What the game changes on buildings for its own camera is undone round each frame of the bridge's camera and put
-    // back before the game's camera renders (TestBridgeUncover: the view-blocking fade and the hover outline). That fade
-    // was the ghost facade of live sessions 3 to 6. The shader globals of the game's BuildingHider (GlobalPlayerPos,
-    // _PO_Height, _PO_Height_Offset) are also moved out of reach for the frame and put back, as since 407e9a4: they
-    // weren't the ghost's cause, but nothing shows they never cut anything, and the override is undone in the same frame.
     internal static class TestBridgeShoot
     {
         private const int Frames = 8;
-        // The as-is frames of `compare`, rendered after the uncovered ones.
         private const int CompareFrames = 4;
         private static readonly int PlayerPosition = Shader.PropertyToID("GlobalPlayerPos");
         private static readonly int CutHeight = Shader.PropertyToID("_PO_Height");
         private static readonly int CutHeightOffset = Shader.PropertyToID("_PO_Height_Offset");
 
-        // One frame of the bridge's camera: with `uncover`, without the game's fades and outlines for its own camera.
-        // The scope's lists say what was (or, as-is, would have been) undone.
         private static TestBridgeUncover RenderFrame(Camera camera, bool uncover)
         {
             var savedPlayer = Shader.GetGlobalVector(PlayerPosition);
@@ -59,7 +45,6 @@ namespace FoodTrucks
             }
         }
         private const float EyeHeight = 1.65f;
-        // HDRP isn't among the mod's compile references; its per-camera data is added and copied by reflection.
         private static readonly Type? HdCameraData =
             Type.GetType("UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData, Unity.RenderPipelines.HighDefinition.Runtime");
         private static readonly MethodInfo? CopyTo = HdCameraData?.GetMethod("CopyTo", new[] { HdCameraData });
@@ -74,11 +59,6 @@ namespace FoodTrucks
             var (position, rotation, fov, note) = Pose(args);
             foreach (var flag in new[] { "compare", "game_view" })
                 if (args[flag] != null && TestBridgeCommands.Bool(args, flag) == null) throw new BridgeError($"{flag} must be true or false.");
-            // compare: also the as-is picture (<name>-asis.png), rendered after the uncovered one with nothing undone.
-            // game_view: also the game's own frame (<name>-game.png), as the player sees it.
-            // frames: how many frames the camera renders before the picture is read (8 to 240, default 8), for HDRP's
-            // per-camera history (exposure, reflections, the sky's ambient light) to settle.
-            // A whole number only (review round 13: 240.5 was cut to 240).
             var askedFrames = TestBridgeCommands.Num(args, "frames") ?? Frames;
             if (double.IsNaN(askedFrames) || askedFrames != Math.Floor(askedFrames) || askedFrames < 8 || askedFrames > 240)
                 throw new BridgeError("frames must be a whole number from 8 to 240.");
@@ -103,7 +83,6 @@ namespace FoodTrucks
             var texture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             texture.Create();
             camera.targetTexture = texture;
-            // Rendered by hand, once a frame (RenderFrame), never by itself.
             camera.enabled = false;
 
             var folder = Path.Combine(Application.persistentDataPath, "FoodTrucksTest", "shots");
@@ -146,7 +125,6 @@ namespace FoodTrucks
                 }
                 finally
                 {
-                    // Whatever failed: the active render texture back, the read-back image gone (review round 10, Sol).
                     RenderTexture.active = previous;
                     if (image != null) Object.Destroy(image);
                 }
@@ -158,8 +136,6 @@ namespace FoodTrucks
                 {
                     try
                     {
-                        // The camera renders once a frame; the picture is read after a few, so HDRP's exposure and
-                        // history settle. With compare, the as-is frames follow the uncovered ones.
                         var uncover = frames < shotFrames;
                         var scope = RenderFrame(camera, uncover);
                         frames++;
@@ -180,8 +156,6 @@ namespace FoodTrucks
                     }
                     catch
                     {
-                        // A failed frame (the uncover step, the render, the write) leaves no camera or texture behind
-                        // (review round 10).
                         Release();
                         throw;
                     }
@@ -221,7 +195,6 @@ namespace FoodTrucks
             }, Release);
         }
 
-        // The game's own frame, as the player sees it (its camera, its UI), captured at the end of this frame.
         private static System.Collections.IEnumerator CaptureGameView(string to, Action<string?> done)
         {
             yield return new WaitForEndOfFrame();
@@ -237,8 +210,6 @@ namespace FoodTrucks
             finally { if (image != null) Object.Destroy(image); }
         }
 
-        // The camera's place: an explicit pose (x, y, z with yaw and pitch, or look_at) or a named pose round a target,
-        // with a note when the named pose had to move to stand clear (null otherwise).
         private static (Vector3 Position, Quaternion Rotation, float Fov, string? Note) Pose(JObject args)
         {
             var fov = (float)(TestBridgeCommands.Num(args, "fov") ?? 60);
@@ -274,8 +245,6 @@ namespace FoodTrucks
             return (from, direction.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(direction) : Quaternion.identity, fov, note);
         }
 
-        // One way to take a named pose: where the camera stands, the point it looks at, the nearest it may come to that
-        // point along the line between them and still show the subject, and a few words for the note.
         private readonly struct Way
         {
             public Way(Vector3 from, Vector3 at, float minimum, string label)
@@ -292,7 +261,6 @@ namespace FoodTrucks
             public string Label { get; }
         }
 
-        // The ways to take a named pose, the pose's own first, and the subject's transform (its colliders never block).
         private static (List<Way> Ways, Transform? Subject, bool Weigh) Ways(string pose, string target)
         {
             var ways = new List<Way>();
@@ -301,8 +269,6 @@ namespace FoodTrucks
                 var siteId = target.Substring(4);
                 var (point, along, side) = TestBridgeCommands.Bay(siteId);
                 var pavement = Quaternion.Euler(0f, 90f * side, 0f) * along;
-                // A nose-in bay in a lot: no pavement or lane beside it, so both poses look along the stall from the aisle
-                // behind the truck's rear (review round 2, Opus L1); bay-road stands further back and higher.
                 if (TestBridgeCommands.Site(siteId).InLot)
                 {
                     switch (pose)
@@ -331,7 +297,6 @@ namespace FoodTrucks
                         break;
                     case "bay-road":
                     {
-                        // From the driving lane next to the bay, 12 m back along it, looking at the bay's middle.
                         var lane = TrafficLanes.Near(point, 25f).Nearest(point);
                         var from = lane != null ? lane.Value.Point - lane.Value.Direction * 12f : point + along * 12f - pavement * 5f;
                         var other = lane != null ? lane.Value.Point + lane.Value.Direction * 12f : point - along * 12f - pavement * 5f;
@@ -348,9 +313,6 @@ namespace FoodTrucks
             if (target.StartsWith("commissary:", StringComparison.Ordinal))
             {
                 if (pose != "door") throw new BridgeError($"A commissary takes the pose door, not {pose}.");
-                // From the street side: 6 m along the walk from the door to the street, looking back at the entrance; then
-                // other ways out of the building (towards the lane, straight out, turned up to 60 degrees either way), at
-                // eye height and higher, for a door whose walk is cut off (live session 4, garment-district).
                 var site = target.Substring(11);
                 var (door, outward, view) = TestBridgeCommands.DoorView(site, 6f);
                 var at = Up(door, 1.4f);
@@ -385,7 +347,6 @@ namespace FoodTrucks
                     ways.Add(new Way(Up(hatchLevel + outward2 * 1.5f, EyeHeight), Up(hatchLevel, 1.9f), 0.8f, "from the pavement"));
                     break;
                 case "vehicle-side":
-                    // Live session 4: on pavements narrower than 6 m the camera stood inside the facade.
                     ways.Add(new Way(Up(middle + outward2 * 6f, 1.8f), Up(middle, 1.2f), 3f, "from the hatch side"));
                     ways.Add(new Way(Up(middle + outward2 * 4f, 4.5f), Up(middle, 1.2f), 3f, "from above the hatch side"));
                     ways.Add(new Way(Up(middle - outward2 * 6f, 1.8f), Up(middle, 1.2f), 3f, "from the other side"));
@@ -396,7 +357,6 @@ namespace FoodTrucks
                     ways.Add(new Way(Up(middle - forward * 1f, 14f), Up(middle, 0f), 5f, "from straight above"));
                     break;
                 case "queue":
-                    // From 8 m along the pavement ahead of the hatch's front end, looking back along the line.
                     ways.Add(new Way(Up(hatchLevel + outward2 * 2.5f + forward * 9f, 1.8f), Up(hatchLevel + outward2 * 2.5f - forward * 3f, 1f), 4f, "along the pavement"));
                     ways.Add(new Way(Up(hatchLevel + outward2 * 2.5f + forward * 9f, 4.5f), Up(hatchLevel + outward2 * 2.5f - forward * 3f, 1f), 4f, "along the pavement, from above"));
                     break;
@@ -409,10 +369,6 @@ namespace FoodTrucks
             return (ways, transform, false);
         }
 
-        // The first way whose line from the subject out to the camera is clear far enough (Core ShotClearance): the
-        // camera at the pose's distance, or pulled in to stand in front of the first solid thing on that line, and never
-        // inside anything. With `weigh` (the door), the way with the most room. The note says what moved; null when the
-        // pose's own first way stood clear at its full distance.
         private static (Vector3 From, Vector3 At, string? Note) Clear(List<Way> ways, Transform? subject, bool weigh)
         {
             var fits = new List<(int Index, Vector3 From, double Distance, string? Blocker)>();
@@ -442,9 +398,6 @@ namespace FoodTrucks
 
         private const float SweepRadius = 0.25f;
 
-        // Whether a collider counts as something a camera can't stand in or see through for a pose: buildings, walls,
-        // roofs, large props. Not the subject, people, vehicles (they move, and a car in front isn't a wall), triggers,
-        // or thin things (poles, signs) a line passes beside.
         private static bool Solid(Collider c, Transform? subject, bool thinCounts, bool vehiclesCount = false)
         {
             if (c == null || c.isTrigger) return false;
@@ -463,8 +416,6 @@ namespace FoodTrucks
             return true;
         }
 
-        // The distance to the first solid thing along a line from the subject's point, and its name; null when clear. A
-        // collider the sweep starts in (distance 0: the subject's own building at its door) doesn't count.
         private static (double? Distance, string? What) FirstSolid(Vector3 from, Vector3 direction, float length, Transform? subject)
         {
             double? nearest = null;
@@ -479,15 +430,12 @@ namespace FoodTrucks
             return (nearest, what);
         }
 
-        // A free camera is placed where it is asked to be; the reply says when that is inside something.
         private static string? InsideNote(Vector3 point) =>
             Inside(point, null) ? "the camera stands inside something solid (a building, a prop or a vehicle); the picture may be dark" : null;
 
-        // Whether the camera's place is inside something solid, thin things and vehicles included.
         private static bool Inside(Vector3 point, Transform? subject) =>
             Physics.OverlapSphere(point, 0.15f, ~0, QueryTriggerInteraction.Ignore).Any(c => Solid(c, subject, thinCounts: true, vehiclesCount: true));
 
-        // A point `metres` above the ground under it (the vehicle's own height where there is no ground below).
         private static Vector3 Up(Vector3 point, float metres)
         {
             var ground = point.y;

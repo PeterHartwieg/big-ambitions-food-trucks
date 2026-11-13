@@ -1,7 +1,3 @@
-/* Lay out Workshop artwork from renders of the shipped models.
- * NODE_PATH=<directory containing sharp> node tools/release/compose-gallery.cjs REPO
- * Source meshes/textures are never edited. Final cards are composed as SVG.
- */
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
@@ -22,14 +18,12 @@ function img(name,x,y,w,h){
  const data=fs.readFileSync(path.join(models,name+'.png')).toString('base64');
  return `<image href="data:image/png;base64,${data}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet"/>`;
 }
-// The outlined master includes the brand's clear space; preserve its colours and proportions.
 function hart(x,y,w){return `<image href="data:image/svg+xml;base64,${brand}" x="${x}" y="${y}" width="${w}" height="${w*200/545.62591}" preserveAspectRatio="xMidYMid meet"/>`;}
 function base(w=1920,h=1080){return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><defs><filter id="blur"><feGaussianBlur stdDeviation="14"/></filter></defs>${rect(0,0,w,h,C.paper)}`;}
 function head(n,title,sub){return label(72,62,'FOOD TRUCKS / BIG AMBITIONS')+hart(1570,14,220)+text(1848,62,n,24,C.muted,600)+line(72,90,1848,90)+text(72,180,title,68,C.ink,700)+text(72,232,sub,29,C.muted);}
 function foot(n){return line(72,1005,1848,1005)+text(72,1048,'0.10.0 · PRE-RELEASE',22,C.orange,700)+text(630,1048,'The mod’s actual models, rendered for this gallery',22,C.muted)+text(1690,1048,n,22,C.muted);}
 async function save(name,body,w=1920,h=1080){
  const svg=base(w,h)+body+'</svg>';
- // SVG is retained outside the release art folder because it embeds large source renders.
  fs.writeFileSync(path.join(root,'build/workshop-0.10.0',name+'.svg'),svg);
  await sharp(Buffer.from(svg)).jpeg({quality:94,chromaSubsampling:'4:4:4'}).toFile(path.join(out,name+'.jpg'));
  console.log('GALLERY',name);

@@ -33,7 +33,6 @@ namespace BridgeControl
             return cmd == "ui" && ((string)args["op"] == "list" || (string)args["op"] == "tree");
         }
 
-        // Only the outer request can supply authorization; reserved fields inside args cannot impersonate it.
         public static JObject PrepareBody(JObject body)
         {
             var args = body["args"] as JObject;
@@ -46,7 +45,6 @@ namespace BridgeControl
             return body;
         }
 
-        // Non-null replies bypass the game queue (lock management only). Mutations reserve ownership before queueing.
         public static JObject Intercept(string cmd, JObject args)
         {
             var token = (string)args[TokenKey];
@@ -74,8 +72,6 @@ namespace BridgeControl
                 lastToken = (string)args[TokenKey];
             }
         }
-        // Called on the game thread before a command completes, then every frame. Acknowledged
-        // coroutines (load, drive, run_until, quit) and an unpaused city keep ownership reserved.
         public static void ObserveWork(bool busy)
         {
             if (busy && backgroundPermit == null && lastToken != null)
@@ -91,7 +87,6 @@ namespace BridgeControl
             var id = (string)args[PermitKey];
             if (id != null)
             {
-                // Arguments are already queued on another thread: keep the JObject immutable here.
                 tracked.Add(args, new object());
                 task.ContinueWith(_ => Store.End(id), CancellationToken.None,
                     TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);

@@ -8,9 +8,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Where a cart may open: NYC's siting rules, cut down to what the game has data for
-    // (design: Pitches). The game has no hydrants, driveways or no-stopping zones, and nothing
-    // marks the pavement, so those rules are left out.
     internal static class Legality
     {
         private const float CrosswalkMetres = 3f;
@@ -26,10 +23,8 @@ namespace FoodTrucks
                 RoadBelow = roadBelow;
             }
 
-            // Null when the spot is legal; otherwise the locale key naming the rule.
             public string? RuleKey { get; }
             public string Detail { get; }
-            // Unverified signal, logged only: the game's Roads layer is confirmed on bridges alone.
             public bool RoadBelow { get; }
             public bool Legal => RuleKey == null;
         }
@@ -38,7 +33,6 @@ namespace FoodTrucks
         {
             var road = RoadBelow(position);
 
-            // A parking lane is the road side of the kerb.
             if (InParkingLane(position, 0.4f))
                 return new Result("foodtrucks:legality_parking_lane", "inside a parking lane", road);
 
@@ -74,19 +68,11 @@ namespace FoodTrucks
             return hits.Any(h => h != null && h.GetComponentInParent<ParkingLaneGenerator>() != null);
         }
 
-        // ---- The game's parking test (CarController.UpdateParkingZone, 1.0) ----
-        // For each wheel: OverlapBox at the wheel's position less 0.1 m along its up, half extents (0.1, 2 x radius,
-        // 0.1), turned with the wheel, on the parking-area layer; legal when the first collider found belongs to a
-        // ParkingLaneGenerator that isn't a disabled bay. Every wheel has to pass.
         public const float WheelBoxHalfWidth = 0.1f;
-        // The food truck's wheel radius (unity/BuildEditor/TruckAssets.cs, WheelController radius 0.38).
         public const float TruckWheelRadius = 0.38f;
-        // TruckAssets puts each WheelController 0.164 m above its hub.
         private const float TruckWheelControllerUp = 0.38f + 0.164f;
         private static readonly Collider[] probeHits = new Collider[16];
 
-        // The game's test for one wheel box. `halfHeight` is the game's 2 x wheel radius for a real wheel; a search
-        // probe uses the lane's own height and a taller box instead (ParkingProbe).
         public static bool LegalWheelAt(Vector3 point, Quaternion rotation, float halfHeight)
         {
             var count = Physics.OverlapBoxNonAlloc(point, new Vector3(WheelBoxHalfWidth, halfHeight, WheelBoxHalfWidth), probeHits, rotation,
@@ -96,11 +82,6 @@ namespace FoodTrucks
             return lane != null && !lane.isHandicapParking;
         }
 
-        // The game's own reading for a vehicle standing here (CarController.UpdateParkingZone), with the neighbourhood of
-        // the parking lane under its wheels as the game records it (the last wheel's; empty when none was read). For a
-        // vehicle the player isn't driving, whose panel the game doesn't update (the test bridge's teleport). The game's
-        // own reading skips the wheels while the player is indoors, because then its vehicle is indoors too; this one is
-        // for a vehicle out in the street wherever the player is, so it always reads the wheels.
         public static bool GameParkingReading(Transform vehicle, out string neighbourhood)
         {
             neighbourhood = string.Empty;
@@ -118,7 +99,6 @@ namespace FoodTrucks
             return true;
         }
 
-        // Legal parking for a wheel standing at this point, the box turned with a vehicle facing `along` (flat).
         public static bool LegalParkingAt(Vector3 point, Vector3 along)
         {
             along.y = 0f;
@@ -126,7 +106,6 @@ namespace FoodTrucks
             return LegalWheelAt(point, rotation, 1.0f);
         }
 
-        // Any parking collider within `radius` of the point (any height within 50 m): the city's parking lanes are there.
         public static bool ParkingNear(Vector3 point, float radius)
         {
             var count = Physics.OverlapBoxNonAlloc(point, new Vector3(radius, 50f, radius), probeHits, Quaternion.identity,
@@ -136,16 +115,11 @@ namespace FoodTrucks
             return false;
         }
 
-        // The wheels of a food truck as the game tests them: its WheelController transforms (named "<wheel>_WheelController"
-        // by TruckAssets). Empty for a vehicle without them.
         public static Transform[] WheelsOf(Transform vehicle) =>
             vehicle.GetComponentsInChildren<Transform>(true).Where(t => t.name.EndsWith("_WheelController", StringComparison.Ordinal)).ToArray();
 
-        // The city's parking lanes (they belong to the city scene): whether any is there and active. Looked up again while
-        // none is, every LaneCache.RefreshSeconds (review round 5).
         private static readonly LaneCache<ParkingLaneGenerator> laneCache = new LaneCache<ParkingLaneGenerator>();
 
-        // The answer is kept for ReadyCacheSeconds (review round 6: each call scanned every lane in the city).
         private const float ReadyCacheSeconds = 1f;
         private static float readyUntil = float.MinValue;
         private static bool readyAnswer;
@@ -166,9 +140,6 @@ namespace FoodTrucks
             readyUntil = float.MinValue;
         }
 
-        // The truck's wheel controllers relative to its middle, read once from its prefab's WheelController transforms,
-        // else TruckAssets' numbers (±0.87 m across, ±1.80 m along, 0.544 m up: the hub at 0.38 plus the controller's 0.164). BaySnap's footprint and the saved-pose test
-        // both use them.
         private static Vector3[]? truckWheels;
         private static WheelFootprint? truckFootprint;
 
@@ -195,11 +166,6 @@ namespace FoodTrucks
         public static WheelFootprint TruckFootprint() =>
             truckFootprint ??= new WheelFootprint(TruckWheels().Select(w => ((double)w.z, (double)w.x)));
 
-        // Whether the vehicle stands legally parked by the game's own test, and how that was decided. With the city's
-        // parking lanes there, a truck runs the wheel test on its live wheels, and no parking under a wheel is illegal
-        // (review round 5: 0.9.9 took "no lane within 6 m" for unloaded scenery and used the stale saved state); a
-        // vehicle not in the world is tested at its saved position, by its middle. Only while the lanes aren't loaded
-        // does it take the parking state the game last saved for it.
         public static bool VehicleLegallyParked(VehicleInstance vehicle, out string how)
         {
             if (!ParkingSceneReady())
@@ -210,9 +176,6 @@ namespace FoodTrucks
             var controller = VehicleHelper.GetVehicleController(vehicle);
             if (controller == null)
             {
-                // Not in the world: the game's wheel test at the saved pose, each wheel where the live truck would have
-                // it: position + rotation * hub, less 0.1 m along the truck's up, with the full saved rotation (Core
-                // PoseMath.WheelProbe; review round 6: 0.9.9 tested the middle only; round 7: pitch and roll count too).
                 how = "the game's wheel test at its saved pose (not in the world)";
                 var position = (Vector3)vehicle.position;
                 var rotation = (Quaternion)vehicle.rotation;
@@ -236,9 +199,6 @@ namespace FoodTrucks
             return LegalParkingAt(controller.transform.position, controller.transform.forward);
         }
 
-        // The search's view of the parking lanes round one point: the parking colliders within reach, read once, so
-        // each probe first checks them cheaply and then runs the game's wheel test at the lane's own height (a raised
-        // door or a sloping street doesn't put the probe above or below the lane).
         internal sealed class ParkingProbe
         {
             private static readonly Collider[] found = new Collider[512];
@@ -260,7 +220,6 @@ namespace FoodTrucks
             public int Count => lanes.Count;
             public bool Truncated { get; }
 
-            // The parking collider under (x, z), with the height to probe it at, or null.
             private (Collider Collider, float Y, float HalfHeight)? Under(double x, double z)
             {
                 foreach (var (c, b) in lanes)
@@ -283,7 +242,6 @@ namespace FoodTrucks
                 return LegalWheelAt(new Vector3((float)x, under.Value.Y, (float)z), rotation, under.Value.HalfHeight);
             }
 
-            // The lane's axes at (x, z): its collider's forward and right. None off parking.
             public IEnumerable<(double X, double Z)> Axes(double x, double z)
             {
                 var under = Under(x, z);

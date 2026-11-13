@@ -36,7 +36,6 @@ namespace FoodTrucks.Core.Catering
 
     public static class CateringGigs
     {
-        // An impossible destination cancels booked or started work without stock, fee or reputation changes.
         public static IReadOnlyList<CateringGig> CancelUnlocatable(CateringState state, Func<string, bool> usable)
         {
             if (usable == null) throw new ArgumentNullException(nameof(usable));
@@ -81,10 +80,6 @@ namespace FoodTrucks.Core.Catering
             return new GigCheck(GigCheckStatus.Started, gig);
         }
 
-        // day and minute are when the vehicle left the place, or the gig's end if it stayed that long,
-        // not the time the adapter happens to report it: a truck that stayed through a sleep is paid on
-        // waking. Leaving before the end fails. Unfinished (MissOverdue) only frees a truck whose Finish
-        // never came.
         public static GigCompletion Finish(CateringRules rules, CateringState state, long gigId, int day, int minute)
         {
             if (rules == null) throw new ArgumentNullException(nameof(rules));
@@ -98,7 +93,6 @@ namespace FoodTrucks.Core.Catering
                 Fail(rules, state, gig, GigFailure.LeftEarly);
                 return new GigCompletion(GigCheckStatus.Failed, gig);
             }
-            // Older started gigs have no reservation; their stock draw still uses the rules.
             var units = gig.ReservedUnits > 0 ? gig.ReservedUnits : Units(rules, gig);
             gig.Status = GigStatus.Completed;
             state.BookingReputation = Math.Min(1, state.BookingReputation + rules.ReputationSuccess);

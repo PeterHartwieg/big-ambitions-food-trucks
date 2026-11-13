@@ -19,10 +19,7 @@ namespace FoodTrucks.Core.Catering
         public IReadOnlyList<CateringPlace> Places { get; set; } = Array.Empty<CateringPlace>();
         public int EligibleVehicles { get; set; }
         public long LifetimeServed { get; set; }
-        // Whole food items of each category the best-stocked eligible vehicle can hold (the most any single one holds,
-        // not a fleet total). Null means no limit; a category missing from a non-null map holds nothing.
         public IReadOnlyDictionary<string, int>? CategoryUnits { get; set; }
-        // Only categories an eligible vehicle can sell belong here.
         public IReadOnlyDictionary<string, long> ReferencePriceCents { get; set; } = new Dictionary<string, long>();
     }
 
@@ -39,8 +36,6 @@ namespace FoodTrucks.Core.Catering
 
     public static class CateringOffers
     {
-        // The adapter can avoid finding locations when the daily rules cannot issue an offer.
-        // ForDay must still run to record the day without consuming random numbers.
         public static bool CanGenerateOffers(CateringRules rules, int eligibleVehicles, long lifetimeServed)
         {
             if (rules == null) throw new ArgumentNullException(nameof(rules));
@@ -67,7 +62,6 @@ namespace FoodTrucks.Core.Catering
                 var units = context.CategoryUnits.TryGetValue(category, out var u) ? u : 0;
                 return (int)Math.Min(1000, Math.Floor(units / rules.UnitsPerGuest));
             }
-            // A category fits a kind when a vehicle sells it and one vehicle holds enough of it for the smallest gig.
             bool Fits(CateringKind k, string category) => context.ReferencePriceCents.ContainsKey(category) && MaxGuests(category) >= k.Guests.Min;
             var random = new SeededRandom(state.RandomState);
             var mean = rules.OffersPerDayAtMaturity * Math.Min(1, context.LifetimeServed / (double)rules.MaturityServed) * state.BookingReputation;
@@ -87,7 +81,6 @@ namespace FoodTrucks.Core.Catering
                 var place = places[Integer(random, (0, places.Count - 1))];
                 var start = (int)Math.Min(1425, RoundQuarter(Integer(random, kind.Start)));
                 var duration = (int)Math.Min(2147483640L, Math.Max(15, RoundQuarter(Integer(random, kind.DurationMinutes))));
-                // The category first, then the guests that one vehicle can feed from it.
                 var categories = kind.Categories.Where(c => Fits(kind, c.Key)).OrderBy(c => c.Key, StringComparer.Ordinal).ToList();
                 var category = Pick(categories, c => c.Value, random).Key;
                 var guests = Integer(random, (kind.Guests.Min, Math.Min(kind.Guests.Max, MaxGuests(category))));
@@ -160,7 +153,6 @@ namespace FoodTrucks.Core.Catering
                 changes.Add((Math.Min(end, otherEnd), -1));
             }
             var active = 0;
-            // An ending gig frees its truck before another gig starts at the same minute.
             foreach (var change in changes.OrderBy(c => c.Minute).ThenBy(c => c.Change))
             {
                 active += change.Change;
@@ -176,7 +168,6 @@ namespace FoodTrucks.Core.Catering
 
         private static T Pick<T>(IReadOnlyList<T> list, Func<T, double> weight, SeededRandom random)
         {
-            // Scale first so even very large valid weights cannot overflow their sum.
             var scale = list.Max(weight);
             var draw = random.NextDouble() * list.Sum(v => weight(v) / scale);
             foreach (var value in list)
@@ -190,7 +181,6 @@ namespace FoodTrucks.Core.Catering
         private static int Poisson(SeededRandom random, double mean, int cap)
         {
             var count = 0;
-            // Independent Poisson draws add, keeping each draw inside SeededRandom's supported range.
             while (mean > 0 && count < cap)
             {
                 var part = Math.Min(60, mean);

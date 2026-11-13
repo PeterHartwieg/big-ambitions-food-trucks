@@ -6,7 +6,6 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Tests.Demand;
 
-// The data files shipped in data/, copied next to the test assembly.
 internal static class ShippedData
 {
     private static readonly Lazy<RuleTables> rules = new(() => RuleTables.Parse(RulesJson));
@@ -19,7 +18,6 @@ internal static class ShippedData
     public static string RulesJson => Read("rules.json");
     public static RuleTables Rules => rules.Value;
 
-    // A second drink for selection tests; the shipped cooler serves soda only.
     public const string SecondColdDrink = "test:itemname_colddrink";
     public static DemandTables WithSecondColdDrink()
     {

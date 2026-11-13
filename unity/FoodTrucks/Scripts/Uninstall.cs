@@ -9,11 +9,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // The safe uninstall step: removes every Food Trucks vehicle from the save and refunds it.
-    // A save that still holds a mod vehicle breaks once the mod is gone (it loads somewhere else
-    // without world interaction if the cart was held, and the game's forced tax payment throws on
-    // the unknown vehicle type). The game can't sell hand vehicles, so the mod refunds them itself.
-    // Runs only when asked twice within ConfirmSeconds.
     internal static class Uninstall
     {
         private const float ConfirmSeconds = 10f;
@@ -23,13 +18,10 @@ namespace FoodTrucks
         {
             var game = SaveGameManager.Current;
             if (game == null) return;
-            // Vehicles left with the private driver count too (issue #13): the game's Delete never takes them out of storage.
             var vehicles = ModVehicles(game);
             var deliveries = PendingDeliveries(game);
             if (vehicles.Count == 0 && deliveries == 0)
             {
-                // No vehicles, but the bookings contact and its gigs, the commissaries with their stock and the new foods'
-                // market entries still go: asked twice, as with vehicles, since it pays back stock and clears state.
                 if (Time.unscaledTime > armedUntil)
                 {
                     armedUntil = Time.unscaledTime + ConfirmSeconds;
@@ -37,18 +29,14 @@ namespace FoodTrucks
                     return;
                 }
                 armedUntil = -1f;
-                // All sales still waiting for midnight, even of vehicles since sold, must be paid before cleanup.
                 if (!SettleTakings()) return;
                 Catering.RemoveContact();
                 RemoveMarketEntries(game);
                 try { Commissary.RemoveForUninstall(); }
                 catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
-                // A fleet campaign can outlive the last vehicle (review round 1).
                 var campaignsLeft = EndFleetCampaigns();
                 try { VehicleTodos.RemoveAll("uninstall"); }
                 catch (Exception ex) { Log.Error("Uninstall: to-dos: " + ex); }
-                // Not "safe to remove" while a fleet campaign is left (its own notice says to run the step again),
-                // nor while a fresh look still finds a vehicle or a delivery.
                 if (campaignsLeft != 0) return;
                 var stillOwned = ModVehicles(game).Count;
                 if (stillOwned == 0 && PendingDeliveries(game) == 0) CartSelling.Notify("foodtrucks:notification_uninstall_none");
@@ -73,26 +61,19 @@ namespace FoodTrucks
             Run(game, vehicles);
         }
 
-        // Removes first and refunds only a vehicle that is really gone, from the street and the private driver's
-        // garage alike, so a retry after a failure can never refund the same vehicle twice.
         private static void Run(GameInstance game, List<VehicleInstance> vehicles)
         {
-            // Out of the truck's hatch before the truck goes.
             TruckWindow.StepOutNow("uninstall");
-            // Hours the crew earned at windows the player opened go on the game's counters before anything closes.
             try { HireCrew.SettleAll(); }
             catch (Exception ex) { Log.Error("Uninstall: settling crew hours: " + ex); }
             CartSelling.CloseAllQuietly();
-            // Today's player and crew sales too. A refused payment keeps vehicles and unpaid takings for a retry.
             if (!SettleTakings()) return;
             HireCrew.ReleaseAll();
             RemoveMarketEntries(game);
             Catering.RemoveContact();
             try { Commissary.RemoveForUninstall(); }
             catch (Exception ex) { Log.Error("Uninstall: commissary: " + ex); }
-            // The fleet's recruitment campaigns: the game can't list one without the mod.
             var campaignsLeft = EndFleetCampaigns();
-            // The vehicles' and the licence's to-dos; none come back once the commissary is uninstalled.
             try { VehicleTodos.RemoveAll("uninstall"); }
             catch (Exception ex) { Log.Error("Uninstall: to-dos: " + ex); }
             long refundCents = 0;
@@ -103,7 +84,6 @@ namespace FoodTrucks
             {
                 var cents = RefundCents(vehicle);
                 var modCents = ModItemCents(vehicle);
-                // A vanilla label, so the history still reads well after the mod is removed.
                 var name = vehicle.VehicleType != null ? LocalizorManager.GetLocalization(vehicle.vehicleTypeName, null) : vehicle.vehicleTypeName;
                 if (!RemoveEverywhere(game, vehicle.id))
                 {
@@ -133,7 +113,6 @@ namespace FoodTrucks
             if (modItemCents > 0)
                 Log.Info($"Uninstall: {CartSelling.Money(Commissary.ReverseDeduction(modItemCents))} of this tax year's commissary deduction taken back for the mod's items refunded with the vehicles.");
             FoodTrucksSession.MarkChanged();
-            // Counted afresh in both lists, with the deliveries, rather than trusted from the loop.
             var left = ModVehicles(game).Count;
             var deliveriesLeft = PendingDeliveries(game);
             if (deliveriesLeft > 0) Log.Error($"Uninstall: {deliveriesLeft} vehicle deliveries are still pending.");
@@ -142,8 +121,6 @@ namespace FoodTrucks
                 ("count", removed.ToString()), ("left", left.ToString()), ("refund", CartSelling.Money(refundCents)), ("unpaid", CartSelling.Money(unpaidCents)));
         }
 
-        // Every Food Trucks vehicle in the save, on the street or with the private driver, once per vehicle ID.
-        // A vehicle without an ID is kept as its own entry, so it is never taken for gone.
         private static List<VehicleInstance> ModVehicles(GameInstance game) =>
             Owned(game).Where(v => FoodTrucksMod.IsModVehicle(v.vehicleTypeName))
                 .GroupBy(v => string.IsNullOrEmpty(v.id) ? null : v.id, StringComparer.Ordinal)
@@ -155,20 +132,16 @@ namespace FoodTrucks
                 .Concat(game.privateDriverVehicleInstances ?? Enumerable.Empty<VehicleInstance>())
                 .Where(v => v != null);
 
-        // The game's own deletion for each copy of the vehicle on the street, then its entries in the private driver's
-        // garage, which that deletion leaves alone. True only when no vehicle with this ID is left in either list.
         private static bool RemoveEverywhere(GameInstance game, string? id)
         {
             if (string.IsNullOrEmpty(id)) return false;
             bool Ours(VehicleInstance? v) => v != null && v.id == id && FoodTrucksMod.IsModVehicle(v.vehicleTypeName);
             foreach (var vehicle in (game.VehicleInstances ?? new List<VehicleInstance>()).Where(Ours).ToList())
             {
-                // Already gone with an earlier copy's deletion (or its listeners).
                 if (!game.VehicleInstances!.Contains(vehicle)) continue;
                 try
                 {
                     var controller = VehicleHelper.GetVehicleController(vehicle);
-                    // As the game's own vehicle sale does, so traffic forgets the collider.
                     if (controller != null)
                     {
                         try
@@ -182,7 +155,6 @@ namespace FoodTrucks
                 }
                 catch (Exception ex) { Log.Error($"Uninstall: removing {id} threw: {ex}"); }
             }
-            // A vehicle the game couldn't delete stays whole, garage entry included, for a retry.
             if (game.VehicleInstances != null && game.VehicleInstances.Any(v => v != null && v.id == id)) return false;
             try
             {
@@ -215,7 +187,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // The fleet's recruitment campaigns, which the game can't list without the mod; how many are left (one that threw counts).
         private static int EndFleetCampaigns()
         {
             try { return FleetRecruiting.EndForUninstall().Left; }
@@ -227,7 +198,6 @@ namespace FoodTrucks
             }
         }
 
-        // What was paid for the mod's own items in the vehicle's cargo (nested cargo included).
         private static long ModItemCents(VehicleInstance vehicle)
         {
             double total = 0;
@@ -244,8 +214,6 @@ namespace FoodTrucks
 
         private static bool IsModItem(string? itemName) => itemName != null && itemName.StartsWith(ModItems.Prefix, StringComparison.Ordinal);
 
-        // The purchase price, plus what was paid for the stock still in it, including goods packed
-        // inside a carried item (nested cargo).
         private static long RefundCents(VehicleInstance vehicle)
         {
             double total = vehicle.VehicleType?.price ?? 0f;
@@ -262,8 +230,6 @@ namespace FoodTrucks
             return (long)Math.Round(total * 100);
         }
 
-        // The new foods' market rows and events, should the game have made any (a hype event, a pre-1.0 upgrade): once
-        // the mod is gone, the game's daily market update would look their items up and throw.
         private static void RemoveMarketEntries(GameInstance game)
         {
             try
@@ -273,7 +239,6 @@ namespace FoodTrucks
                 var events = 0;
                 if (game.marketEvents != null)
                 {
-                    // An event about our items only goes; one that also names the game's items just loses ours.
                     var emptied = new HashSet<MarketEvent>();
                     foreach (var marketEvent in game.marketEvents.Where(e => e?.itemNames != null))
                         if (marketEvent.itemNames.RemoveAll(Ours) > 0 && marketEvent.itemNames.Count == 0) emptied.Add(marketEvent);
@@ -288,8 +253,6 @@ namespace FoodTrucks
         private static int PendingDeliveries(GameInstance game) =>
             game.vehicleDeliveryContracts?.Count(c => c != null && FoodTrucksMod.IsModVehicle(c.vehicleTypeName)) ?? 0;
 
-        // Orders made before delivery was refused would bring a vehicle back after the cleanup.
-        // Delivery is paid on arrival, so a cancelled order owes nothing.
         private static int CancelDeliveries(GameInstance game)
         {
             var cancelled = game.vehicleDeliveryContracts?.RemoveAll(c => c != null && FoodTrucksMod.IsModVehicle(c.vehicleTypeName)) ?? 0;

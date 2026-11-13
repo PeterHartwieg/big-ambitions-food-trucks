@@ -100,14 +100,12 @@ def chicken(b,params,detail):
     d=ring(dx/2-.003,dy/2-.003,.003,top)
     b.bridge(a,c,'chicken'); b.bridge(c,d,'chicken_bevel')
     b.face(list(reversed(a)),'chicken_bottom'); b.face(d,'chicken_top')
-    # Three dark, closed rectangular char bands lie on the flat top, inside bevel.
     for px in [-.0065,0,.0065]:
         offset=rot@Vector((px,0,0))
         box(b,(x+offset.x,y+offset.y,top+.00025),(.0019,.018,.0005),'char',ang-.18)
 
 def vegetable(b,x,width,kind,angle,detail):
     center=Vector((x,0,.033))
-    # Curved angular cross sections read as pepper panels / thick onion petals.
     profile=[(-.017,-.010),(-.019,.004),(-.013,.014),(.001,.017),
              (.015,.008),(.017,-.005),(.009,-.012),(-.005,-.014)]
     if kind=='onion':
@@ -171,7 +169,6 @@ def setup_render():
             data=bpy.data.lights.new(name,'AREA'); light=bpy.data.objects.new(name,data); scene.collection.objects.link(light)
         light.location=loc; light.rotation_euler=(-light.location).to_track_quat('-Z','Y').to_euler()
         light.data.energy=energy; light.data.shape='DISK'; light.data.size=size
-    # Mirror customer angle into the interactive viewport without touching HumanRef.
     for area in bpy.context.screen.areas:
         if area.type=='VIEW_3D':
             space=area.spaces.active; space.region_3d.view_location=(0,0,.022)
@@ -184,8 +181,6 @@ def texture_uv():
     color_ids=[p.material_index for p in me.polygons]
     grid=math.ceil(math.sqrt(len(me.polygons)))
     uv=me.uv_layers.new(name='UVMap')
-    # Flat-color facets need no stretching-sensitive texel density. Independent
-    # face charts reserve unique atlas area; no stacked islands or shared UVs.
     image=bpy.data.images.new('T_Kabob_BaseColor',width=256,height=256,alpha=False)
     image.colorspace_settings.name='sRGB'
     pixels=[]
@@ -197,7 +192,6 @@ def texture_uv():
             pixels.extend((*color,1))
     image.pixels.foreach_set(pixels)
     image.filepath_raw=os.path.join(OUT,'T_Kabob_BaseColor.png'); image.file_format='PNG'; image.save()
-    # One-pixel gutter on both sides, while retaining over 40% UV coverage.
     margin=1/256
     for i,p in enumerate(me.polygons):
         col,row=i%grid,i//grid
@@ -219,7 +213,6 @@ def texture_uv():
     return {'atlas_grid':grid,'face_charts':len(color_ids),'triangles':len(me.polygons),'texture':[256,256]}
 
 def collision():
-    # Enclosing box, calculated from body extrema, constructed via convex_hull.
     body=bpy.data.objects['Kabob_Body']
     lo=Vector(tuple(min(v.co[i] for v in body.data.vertices) for i in range(3)))
     hi=Vector(tuple(max(v.co[i] for v in body.data.vertices) for i in range(3)))
@@ -239,7 +232,6 @@ def render_stage(name):
     bpy.ops.render.render(write_still=True)
 
 def save_export():
-    # The saved asset contains only its two meshes and the unchanged scale reference.
     for name in ['Kabob_RenderCamera','Kabob_Key','Kabob_Fill']:
         ob=bpy.data.objects.get(name)
         if ob: bpy.data.objects.remove(ob,do_unlink=True)

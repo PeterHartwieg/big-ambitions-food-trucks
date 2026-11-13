@@ -15,14 +15,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // The order form inside a commissary's text conversation. It is the game's own phone order form, the one Square
-    // Appliances and the other furniture stores show in their conversation (InputTemplate FurnitureDeliverySettings,
-    // run by FurnitureDeliveryContractSettings): a delivery address, a delivery time, rows of items with amounts picked
-    // from the game's item list beside the phone, the delivery fee and the total. The game lets a contact sell its own
-    // list of items (ContractItemsForSaleService.SetItemsForContact). The rest of the form is the store's, so while it
-    // shows for a commissary contact, patches make it the commissary's: the address is the commissary, the time is
-    // tomorrow at the delivery hour, an amount is a number of boxes (at most Core's MaxBoxesPerOrder), prices are box
-    // prices at wholesale, and the fee and total are Core's. Nothing changes for the game's own stores.
     internal static class CommissaryOrderForm
     {
         internal sealed class Line
@@ -42,7 +34,6 @@ namespace FoodTrucks
             public long BoxCents => checked(Box * UnitCents);
         }
 
-        // The form now open for a commissary: its contact, its commissary and what it sells (foods first, then machines).
         private sealed class Open
         {
             public Open(string contactId, string siteId, IReadOnlyList<Line> lines)
@@ -55,11 +46,7 @@ namespace FoodTrucks
             public string ContactId { get; }
             public string SiteId { get; }
             public IReadOnlyList<Line> Lines { get; }
-            // The form instance this order belongs to: the first commissary form the patches see after Begin. A form
-            // from an earlier step of the call (its picker callbacks, say) is someone else's and is left alone.
             public DeliveryContractSettingsBase? Form { get; set; }
-            // The entries this form put in the item list beside the phone, kept here rather than read from the form:
-            // closing the phone destroys the conversation, the form with it, while the list and its entries stay.
             public List<ItemsListEntry> Entries { get; set; } = new List<ItemsListEntry>();
         }
 
@@ -68,13 +55,10 @@ namespace FoodTrucks
         private static readonly HashSet<string> failed = new HashSet<string>(StringComparer.Ordinal);
 
         private static AccessTools.FieldRef<DeliveryContractSettingsBase, UI.Elements.Dropdown>? addressField, slotField;
-        // TextMesh Pro labels, read as plain components so this assembly needn't reference TextMesh Pro.
         private static System.Reflection.FieldInfo? feeTextField, totalTextField;
         private static AccessTools.FieldRef<DeliveryContractSettingsBase, Dictionary<string, DeliveryItemEntry>>? entriesField;
-        // The item list's own entries (ItemsList._entriesList), emptied at once by Clear; null if the field is gone.
         private static AccessTools.FieldRef<ItemsList, List<ItemsListEntry>>? listEntriesField;
 
-        // The patches that make the store's form the commissary's, by method; the form is used only when all are active.
         internal static readonly (Type Type, string Method)[] Needed =
         {
             (typeof(DeliveryContractSettingsBase), "Start"),
@@ -87,7 +71,6 @@ namespace FoodTrucks
 
         internal static bool Ready => ready;
 
-        // Called once after patching: the fields the patches read, and every patch in place.
         internal static void CheckReady()
         {
             try
@@ -123,7 +106,6 @@ namespace FoodTrucks
             return info != null && info.Prefixes.Concat(info.Postfixes).Any(p => p.PatchMethod.DeclaringType == typeof(CommissaryOrderForm));
         }
 
-        // Before the conversation shows the form: what it sells, for the game's form to list.
         internal static void Begin(string contactId, string siteId, IReadOnlyList<Line> lines)
         {
             End("a new order form");
@@ -131,10 +113,6 @@ namespace FoodTrucks
             ContractItemsForSaleService.SetItemsForContact(contactId, lines.Select(l => l.Item));
         }
 
-        // Leaving the form (read back, hung up, the call closed, a new form): the item list beside the phone is the
-        // form's, so it is closed and emptied, and its entries' callbacks go with them. The game's own furniture
-        // order leaves it open until Esc; for the commissary it would keep changing a form whose order is already
-        // read back, and after the call ends adding a row reaches DialogController.current, which is null by then.
         internal static void End(string why)
         {
             var current = open;
@@ -158,11 +136,6 @@ namespace FoodTrucks
             catch (Exception ex) { Fail("closing the item list", ex); }
         }
 
-        // Whether the item list still holds entries this form put there: those kept when the game last filled it for
-        // this form and, while the form is still there, the form's own current ones. Another screen that refilled the
-        // list since has cleared them: ItemsList.Clear empties its own entry list at once, while the Destroy it calls
-        // only takes effect at the frame's end, so the list's entry list is what counts, not whether ours compare null
-        // yet. Works after the form itself is gone.
         private static bool OwnsList(Open current, ItemsList list)
         {
             var mine = new List<ItemsListEntry>(current.Entries);
@@ -217,9 +190,6 @@ namespace FoodTrucks
             return Mathf.Abs((corners[2].x - corners[0].x) * (corners[2].y - corners[0].y));
         }
 
-        // Every frame (Commissary.Update and LateUpdate): a form whose call has gone (the phone closed, another call) is
-        // left; the game's ContactsApp hangs up on closing without calling the entry's OnCancel, so this is the only
-        // notice. While the commissary's list is open, its backdrop lets clicks through to the phone.
         internal static void Watch()
         {
             var current = open;
@@ -244,7 +214,6 @@ namespace FoodTrucks
             catch (Exception ex) { Fail("item list backdrop", ex); }
         }
 
-        // After the uninstall step the contacts are gone; so is what they sold.
         internal static void Forget(IEnumerable<string> contactIds)
         {
             End("uninstall step");
@@ -254,7 +223,6 @@ namespace FoodTrucks
         internal static Line? Find(string item) => open?.Lines.FirstOrDefault(l => l.Item == item);
 
 
-        // The form's rows as Core's order requests: an amount is a number of boxes.
         internal static List<CommissaryOrderRequest> Requests(DeliveryContractSettingsBase form)
         {
             var list = new List<CommissaryOrderRequest>();
@@ -262,15 +230,12 @@ namespace FoodTrucks
             {
                 var line = Find(row.itemName);
                 if (line == null) throw new InvalidOperationException($"{row.itemName} isn't on the commissary's list.");
-                // Food counts towards its weekly limit at the commissary; equipment doesn't.
                 list.Add(new CommissaryOrderRequest(line.Item, line.Box, line.UnitCents, Math.Max(0, row.amount),
                     DemandData.Tables?.EquipmentForGameItem(line.Item) == null));
             }
             return list;
         }
 
-        // The commissary's form now open: a furniture form in the commissary's call, and the instance the order is
-        // bound to (the first one seen after Begin; the base Start runs SetUpInventoryList before Start's postfix).
         private static bool IsOurs(DeliveryContractSettingsBase form)
         {
             var current = open;
@@ -284,12 +249,6 @@ namespace FoodTrucks
             if (failed.Add(where)) Log.Error($"Commissary order form, {where}: {ex}");
         }
 
-        // The rows' item, box size and stock, as the item list shows them; the price beside it is the box price.
-        // Equipment reads plainly, by the piece, with the foods it cooks ("Industrial Grill · 1 here · cooks Burger,
-        // Chicken Kabob Skewer"), since the first blind playtest bought an Industrial Grill for hot dogs. Food says how
-        // many boxes of it are left under its weekly limit in the delivery's week, one limit for all commissaries
-        // together (Core CommissarySupply). Kept short (Peter, blind run 2: the names ran under the pictures), and
-        // FitName cuts what still doesn't fit.
         private static LanguageChangeEventDataHolder Label(Line line, string siteId)
         {
             var tables = DemandData.Tables;
@@ -312,9 +271,6 @@ namespace FoodTrucks
             });
         }
 
-        // ---- Patches (each logs Active or Not active at startup through Patches.Patch) ----
-
-        // The address is the commissary and the time tomorrow's delivery, each the only choice; the fee and total are Core's.
         internal static void StartPostfix(DeliveryContractSettingsBase __instance)
         {
             try
@@ -337,7 +293,6 @@ namespace FoodTrucks
             catch (Exception ex) { Fail("start", ex); }
         }
 
-        // The item list beside the phone: each item with its box size and stock here, at its box price, foods first.
         internal static void InventoryPostfix(DeliveryContractSettingsBase __instance)
         {
             try
@@ -345,10 +300,8 @@ namespace FoodTrucks
                 var current = open;
                 if (current == null || !IsOurs(__instance)) return;
                 var entries = entriesField!(__instance);
-                // The game has just filled the list for this form: these entries are the ones to clear on leaving.
                 current.Entries = entries.Values.Where(e => e != null && e.ItemsListEntry != null).Select(e => e.ItemsListEntry).ToList();
                 var shown = current.Lines.Where(l => entries.TryGetValue(l.Item, out var e) && e != null).Select(l => (Line: l, Entry: entries[l.Item])).ToList();
-                // The game lists them by item key; they take the same places in the list, in the catalogue's order.
                 var first = shown.Count == 0 ? 0 : shown.Min(s => s.Entry.ItemsListEntry.transform.GetSiblingIndex());
                 for (var i = 0; i < shown.Count; i++)
                 {
@@ -361,9 +314,6 @@ namespace FoodTrucks
             catch (Exception ex) { Fail("item list", ex); }
         }
 
-        // The game's own rows hold one short name; ours wrap within the name's box, shrink a little, and end with an
-        // ellipsis rather than run out of it under the picture. The entries are this form's own (the list destroys them
-        // when it is refilled), so nothing is put back.
         private static FieldInfo? nameLabelField;
 
         private static void FitName(ItemsListEntry entry)
@@ -373,7 +323,6 @@ namespace FoodTrucks
             var graphic = label == null ? null : label.GetComponent<UnityEngine.UI.Graphic>();
             if (graphic == null)
             {
-                // The names show as the game sets them, which may run long; the rest of the list is unaffected.
                 if (failed.Add("fit names")) Log.Error("Commissary order form: no name text found on the item list's rows; long names aren't fitted.");
                 return;
             }
@@ -395,10 +344,6 @@ namespace FoodTrucks
             }
         }
 
-        // An equipment item shows the compact model a vehicle actually carries (economy.json's `display`), rendered by the
-        // art pipeline as Vehicles/EquipmentArt/Icons/Icon_<display>.png in the mod's bundle, not the game's icon of the
-        // full-size counter (Peter, 11 October 2026). Only this list: the game's own shops keep their icons. Without the
-        // sprite (art not merged yet) the game's icon shows, logged once per piece.
         private const string IconFolder = "Assets/Mods/FoodTrucks/Vehicles/EquipmentArt/Icons/";
         private static readonly Dictionary<string, Sprite?> icons = new Dictionary<string, Sprite?>(StringComparer.Ordinal);
 
@@ -415,7 +360,6 @@ namespace FoodTrucks
             return sprite != null ? sprite : ItemHelper.GetIconWithFallback(item);
         }
 
-        // A new row: its price is the box price.
         internal static void AddItemPostfix(DeliveryContractSettingsBase __instance, string itemName)
         {
             try
@@ -441,7 +385,6 @@ namespace FoodTrucks
             catch (Exception ex) { Fail("total", ex); }
         }
 
-        // An amount is a number of boxes; one order takes at most Core's maximum, all items together.
         internal static void MaxAmountPostfix(DeliveryContractSettingsBase __instance, ref int __result)
         {
             try
@@ -465,8 +408,6 @@ namespace FoodTrucks
             catch (Exception ex) { Fail("list title", ex); }
         }
 
-        // The delivery fee and total as Core prices the rows: one order per item, one flat fee for the delivery, none
-        // when another order already arrives at this commissary tomorrow morning (Commissary.QuoteFor).
         private static void ShowTotals(DeliveryContractSettingsBase form)
         {
             var current = open;
@@ -476,7 +417,6 @@ namespace FoodTrucks
             SetText(totalTextField!.GetValue(form) as Component, CartSelling.Money(quote.TotalCents));
         }
 
-        // The form's labels are TextMesh Pro texts, set through their text property.
         private static void SetText(Component? label, string text)
         {
             if (label == null) return;

@@ -5,14 +5,10 @@ using FoodTrucks.Core.Commissary;
 
 namespace FoodTrucks.Core.Fleet
 {
-    // Which way round a truck stands on a kerbside place.
     public enum HeadingChoice
     {
-        // Neither way round has the hatch to the pavement: the place is no good for a stop.
         None,
-        // Facing the way the parking lane's axis points.
         Along,
-        // Turned round.
         Reverse
     }
 
@@ -30,30 +26,18 @@ namespace FoodTrucks.Core.Fleet
 
         public double X { get; }
         public double Z { get; }
-        // The parking lane's axis at the place.
         public double AlongX { get; }
         public double AlongZ { get; }
-        // Degrees, as Unity's yaw: the way the vehicle faces at the stop.
         public double Heading { get; }
-        // From the search's start (the building's entrance).
         public double Distance { get; }
     }
 
-    // Where a stop picked on the city map goes (Peter, 11 October 2026): the player picks a building and the stop
-    // snaps to the nearest kerbside place within MaxMetres of its entrance where a truck parks legally by the game's
-    // wheel test (BaySnap's grid, centring and footprint) and can stand with its hatch to the pavement (HatchSide).
-    // A cart goes on the pavement just past the kerb beside such a place. The game side probes; this decides.
     public static class StopSnap
     {
         public const double MaxMetres = 40;
-        // A place the caller turned down rules out its neighbours this close, as BaySnap's reach does.
         public const double RejectedMetres = BaySnap.RejectedMetres;
-        // A cart stands this far past the first pavement row the hatch probe found, and tries a little further in.
         public static readonly double[] CartPastKerbMetres = { 0.75, 1.25, 1.75 };
 
-        // The truck's hatch is on its right. Pavement by the hatch is best, the lane's own way round first; a place
-        // that reads unclear either way (no traffic data, parked cars) opens anyway, as HatchSide.Opens has it, so it
-        // is the next best; road by the hatch both ways round rules the place out.
         public static HeadingChoice ChooseHeading(HatchVerdict along, HatchVerdict reverse)
         {
             if (along == HatchVerdict.Pavement) return HeadingChoice.Along;
@@ -63,7 +47,6 @@ namespace FoodTrucks.Core.Fleet
             return HeadingChoice.None;
         }
 
-        // Unity's yaw in degrees (0 to 360) for a vehicle facing (x, z) on the ground: forward is (sin h, cos h).
         public static double HeadingDegrees(double x, double z)
         {
             if (Math.Abs(x) < 1e-12 && Math.Abs(z) < 1e-12) throw new ArgumentException("A direction needs a length.");
@@ -71,10 +54,6 @@ namespace FoodTrucks.Core.Fleet
             return degrees < 0 ? degrees + 360 : degrees;
         }
 
-        // The nearest place within maxMetres of (x, z) where the vehicle's footprint passes the game's wheel test,
-        // lined up with the parking lane, and `heading` accepts it. legal and axes are BaySnap's; heading(x, z,
-        // alongX, alongZ) gives the yaw to stand there at, or null to turn the place down (the hatch would face the
-        // road either way round, say), which rules out its neighbours within RejectedMetres too.
         public static StopSnapResult? Nearest(double x, double z, Func<double, double, double, double, bool> legal,
             Func<double, double, IEnumerable<(double X, double Z)>> axes, WheelFootprint footprint,
             Func<double, double, double, double, double?> heading, double maxMetres = MaxMetres)
@@ -116,9 +95,6 @@ namespace FoodTrucks.Core.Fleet
             return null;
         }
 
-        // The side of a kerbside place the pavement is on, from the hatch probe's two readings: 1 for the truck's
-        // right (the hatch side), -1 for its left, 0 when neither side reads pavement before road. With pavement on
-        // both sides (a median strip, a plaza), the nearer one.
         public static int PavementSide(SideReading right, SideReading left)
         {
             if (right == null) throw new ArgumentNullException(nameof(right));
@@ -129,8 +105,6 @@ namespace FoodTrucks.Core.Fleet
             return 0;
         }
 
-        // How far out from the place's middle, across to the pavement side, a cart may stand: just past the first
-        // pavement row the probe found, then a little further in, so it stands on the pavement by the kerb.
         public static IEnumerable<double> CartOffsets(double pavementMetres) => CartPastKerbMetres.Select(m => pavementMetres + m);
     }
 }

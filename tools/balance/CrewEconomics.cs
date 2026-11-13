@@ -9,7 +9,6 @@ using TimerTravel = FoodTrucks.Core.Fleet.Travel;
 
 namespace FoodTrucks.Balance;
 
-// Offline proposed dispatch policy. It neither calls the native rig nor changes the runtime.
 internal sealed record CrewAssumptions
 {
     public int SchemaVersion { get; init; }
@@ -40,7 +39,6 @@ internal sealed record CrewAssumptions
     public static CrewAssumptions Load(string path)
     {
         var json = JObject.Parse(File.ReadAllText(path));
-        // Require every field, reject misspellings, and reject fractional integer durations.
         var expected = JObject.FromObject(new CrewAssumptions()).Properties().Select(p => p.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (json.Properties().Any(p => !expected.Contains(p.Name)) || expected.Any(k => json.GetValue(k, StringComparison.OrdinalIgnoreCase) == null))
             throw new ArgumentException("crew-economics config must contain exactly the versioned fields in crew-economics.json.");
@@ -184,12 +182,11 @@ internal sealed class CrewEconomics
         cart = new Cart(tables, prices, Menu, "crew truck: hot dog/coffee/croissant/soda", kind: "truck", servers: 2, speed: speed);
         if (cart.Staff < 2 || cart.Servers != 2 || cart.PieceOf.Values.Distinct().Count() != 4)
             throw new ArgumentException("Crew economics requires a two-server truck and four separate serving pieces.");
-        // One item per piece: fixed full-piece target, never forecast loading by scenario or pitch.
         target = Menu.ToDictionary(i => i, i => cart.PerPiece / cart.WeightOf(i), StringComparer.Ordinal);
         wage = 16 * (1 + Math.Pow(opts.CrewSkill, 1.05) / 100);
         rent = rules.Commissary.DailyRentCents("truck") / 100.0;
         fee = rules.Commissary.DeliveryFeeCents / 100.0 * opts.DeliveriesPerWeek / 7 / opts.FeeSharing;
-        spots = city.Spots(tables); // Only actual city building anchors; never archetypes.
+        spots = city.Spots(tables);
     }
     private Conditions On(DayOfWeek day) => new() { Day = day, Month = 5, Rain = false, MarketDemand = opts.Market, Pricing = opts.Pricing, PriceFactor = opts.PriceFactor };
     private CrewScenario Legacy => new("legacy", true, 0, 0, 0, 0, FuelEnabled: false);
@@ -204,7 +201,6 @@ internal sealed class CrewEconomics
         if (s.Legacy) return new(straight, straight * rules.Fleet.RoadFactor,
             TimerTravel.Minutes(rules.Fleet, straight, TravelMode.Drive), 0, 0);
         var road = straight * config.RoadFactor;
-        // 1 real second == 1 game minute, so NO multiplication/division by 60.
         return new(straight, road, checked((int)Math.Ceiling(road / s.SpeedMetresPerSecond - 1e-9)) + s.WaitGameMinutesPerLeg,
             s.WaitGameMinutesPerLeg, UsesFuel(s) ? road / 1000 * s.LitresPerKilometre + s.WaitGameMinutesPerLeg * config.IdleLitresPerGameMinute : 0);
     }
@@ -212,7 +208,6 @@ internal sealed class CrewEconomics
     private static int Overlap(int a, int b, int x, int y) => Math.Max(0, Math.Min(b, y) - Math.Max(a, x));
     private double Demand(Spot pitch, int from, int to, Conditions c)
     {
-        // Full menu reference demand: opportunity lost to closure, not a promise of stock/capacity-constrained sales.
         var stock = Selling.Unlimited(cart);
         double demand = 0;
         for (var t = from; t < to; t += 5) demand += cart.Plan(pitch, t, c, stock).Demand * Math.Min(5, to - t) / 60;
@@ -230,8 +225,6 @@ internal sealed class CrewEconomics
             var depotEntry = commissaries.FirstOrDefault(c => city.Buildings.Any(b => b.Key == (string?)c["address"] && b.Hood == hood))
                 ?? throw new ArgumentException($"No commissary in {hood}.");
             var b = city.Buildings.Single(b => b.Key == (string)depotEntry["address"]!);
-            // city.json uses scaled regional map frames (make_city.py), NOT native world coordinates.
-            // Never mix its anchors with commissaries.json's measured native bay x/z.
             var depot = new Spot(b.Address + " commissary", AreaMix.Single("industrial"), b.Hood, b.Region, b.X, b.Z);
             var source = "city.json regional map building anchor; native bay coordinates excluded (different frame), bay offset unknown";
             var contribution = ranked.Select(p => p.Spot).SelectMany(p => new[] { (From: 690, To: 870), (From: 870, To: 1080) }
@@ -244,8 +237,6 @@ internal sealed class CrewEconomics
                 {
                     var band = length == "local" ? config.ShortRouteTotalStraightMetresBand : config.LongRouteTotalStraightMetresBand;
                     var pool = ranked.Select(p => p.Spot).Where(s => s.Region == anchor.Spot.Region && s != anchor.Spot).ToList();
-                    // Purposeful bounded heuristic: baseline nominal-window contribution per pitch, scored with
-                    // a common fresh target. Actual route simulation still carries finite stock across all stops.
                     var candidates = (from second in pool from third in pool where third != second
                         let distance = depot.Distance(anchor.Spot) + anchor.Spot.Distance(second) + second.Distance(third) + third.Distance(depot)
                         where distance >= band[0] && distance < band[1]
@@ -277,7 +268,7 @@ internal sealed class CrewEconomics
     {
         var w = new CrewWeek { Route = route.Id, Scenario = scenario.Id, Alternative = alternative, SinglePitch = single,
             TargetStock = new(target), StartingFuelLitres = scenario.StartingLitres };
-        var stock = Menu.ToDictionary(i => i, _ => 0.0, StringComparer.Ordinal); // Empty on Monday, no daily reset.
+        var stock = Menu.ToDictionary(i => i, _ => 0.0, StringComparer.Ordinal);
         var fuel = scenario.StartingLitres;
         var position = route.Depot;
         foreach (var weekday in Weekdays)
@@ -301,7 +292,6 @@ internal sealed class CrewEconomics
                 position = to;
                 return true;
             }
-            // No recovery teleport: a failure to return on an earlier day prevents bay loading/departure.
             if (position.Distance(route.Depot) > 1e-6) Fail("InfeasibleNotAtDepot");
             if (!failed)
             {
@@ -319,7 +309,6 @@ internal sealed class CrewEconomics
                     forecastPosition = stop.Pitch;
                 }
                 d.ForecastDayFuelLitres += Leg(forecastPosition, route.Depot, scenario).FuelLitres;
-                // At most one declared station loop per morning. Engines off while loading, selling and filling.
                 if (UsesFuel(scenario) && fuel + 1e-8 < d.ForecastDayFuelLitres + config.ReserveLitres)
                 {
                     var stationLeg = Leg(config.StationOneWayStraightMetres, scenario);
@@ -330,7 +319,6 @@ internal sealed class CrewEconomics
                         Fail("InfeasibleStationShift");
                     else
                     {
-                        // Synthetic station displaced exactly the declared straight distance; no real access claim.
                         var station = new Spot("synthetic station loop", route.Depot.Areas, route.Depot.Hood, route.Depot.Region,
                             route.Depot.X + config.StationOneWayStraightMetres, route.Depot.Z);
                         var loopStart = time;
@@ -371,7 +359,7 @@ internal sealed class CrewEconomics
                     visit.Sales = Selling.Run(cart, stop.Pitch, serviceFrom, serviceTo, c, stock);
                     d.SalesMinutes += (int)visit.Sales.ByDaypart.Values.Sum(p => p.Minutes);
                     d.Revenue += visit.Sales.Revenue; d.StockCogs += visit.Sales.Cost;
-                    time = serviceTo; // Stay to fixed close even if sold out; explicit policy, no opportunistic replan.
+                    time = serviceTo;
                 }
                 visit.StockAfter = new(stock);
                 var open = visit.ServiceFrom ?? stop.Close;
@@ -391,7 +379,6 @@ internal sealed class CrewEconomics
             d.SoldOutItems = FindSoldOutItems(d);
             d.FuelConsumedCost = d.FuelConsumedLitres * config.FuelDollarsPerLitre;
             d.FuelPurchasedCash = d.FuelPurchasedLitres * config.FuelDollarsPerLitre;
-            // Opening fuel is inventory valued at the same reference price; purchase cash is not charged twice.
             d.RealizedOperatingBalance = d.Revenue - d.StockCogs - d.Wages - d.Rent - d.DeliveryAllocation - d.FuelConsumedCost;
             if (!failed && d.CompletedHomeReturn) d.OperatingProfit = d.RealizedOperatingBalance;
         }
@@ -589,7 +576,6 @@ internal sealed class CrewEconomics
                 var s = weeks.Single(w => w.Route == m.Route && w.Scenario == m.Scenario && w.Alternative == "single");
                 o.AppendLine($"| {m.Route} | {m.Scenario} | {Money(m.OperatingProfit)} | {Money(s.OperatingProfit)} | {Money(m.OperatingProfit - s.OperatingProfit)} | {Comparison(m, s)} |");
             }
-            // Two long routes nearest the median rank: bounded, declared subset, full discrete grid (no monotonic search).
             var subset = routes.Where(r => r.LengthClass == "long").GroupBy(r => r.District)
                 .Select(g => g.OrderBy(r => Math.Abs(r.DemandQuantile - .5)).ThenBy(r => r.Id, StringComparer.Ordinal).First()).ToArray();
             o.AppendLine(); o.AppendLine("## Discrete speed × fuel sensitivity"); o.AppendLine();
@@ -677,7 +663,6 @@ internal sealed class CrewEconomics
     private JObject Hashes()
     {
         string? repo = null;
-        // Resolve repository independently of a custom --data directory or launch working directory.
         foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
         {
             for (var d = new DirectoryInfo(start); d != null; d = d.Parent)
@@ -806,7 +791,6 @@ internal sealed class CrewEconomics
         var stranded = Simulate(r, Normal with { Id = "empty-tank-check", StartingLitres = 0 }, "moving");
         Check(stranded.OperatingProfit == null && stranded.Days.All(d => d.Outcome == "InfeasibleStationUnreachable" && d.Revenue == 0 && d.FuelPurchasedLitres == 0 && d.Trips.Count == 0) && stranded.FinalFuelLitres == 0,
             "Unreachable station at zero fuel is explicit infeasible; no free recovery, fill, sales or ordinary profit.");
-        // A very slow fuel-free physical fixture isolates shift/window dispatch from finite-tank rejection.
         var slow = Simulate(r, Normal with { Id = "extreme-delay-check", SpeedMetresPerSecond = .0001, LitresPerKilometre = 0, WaitGameMinutesPerLeg = 0 }, "moving");
         Check(slow.OperatingProfit == null && slow.Days.All(d => d.SkippedStops == r.Stops.Count && d.OpenMinutes == 0 && d.Revenue == 0 &&
             d.Stops.All(v => v.Outcome == "SkippedWindowOrReturnShift" && !v.ServiceFrom.HasValue)) && slow.FinalFuelLitres == slow.StartingFuelLitres,
@@ -821,7 +805,6 @@ internal sealed class CrewEconomics
             d.Stops.Where(v => v.ServiceTo.HasValue).All(v => v.ServiceTo + Leg(r.Stops.Single(s => s.Pitch.Name == v.Pitch).Pitch, r.Depot,
                 w.Scenario == "legacy" ? Legacy : w.Scenario == "heavy" ? Heavy : Normal).Minutes <= ShiftClose))),
             "Homeward travel is reserved before serving; ordinary operating results complete home within paid shift.");
-        // Real input demand must vary with the clock; a delayed interval must be priced at its actual time.
         var timing = spots.Select(s => (Spot: s, Difference: Math.Abs(Demand(s, 660, 690, On(DayOfWeek.Wednesday)) - Demand(s, 870, 900, On(DayOfWeek.Wednesday)))))
             .OrderByDescending(p => p.Difference).ThenBy(p => p.Spot.Name, StringComparer.Ordinal).First();
         var initial = new Dictionary<string, double>(target);
@@ -831,8 +814,6 @@ internal sealed class CrewEconomics
         Check(timing.Difference > 1e-5 && !Near(early.Revenue, late.Revenue) &&
             !Near(cart.Plan(timing.Spot, 660, On(DayOfWeek.Wednesday), target).Demand, cart.Plan(timing.Spot, 870, On(DayOfWeek.Wednesday), target).Demand),
             "Real city demand/sales differ at 11:00 versus 14:30; Selling evaluates delayed demand at actual clock time.");
-        // Controlled delayed arrival at a real pitch, crossing morning into lunch, while home still fits.
-        // The synthetic depot is a check fixture only and is never part of study route definitions.
         var clockPitch = spots.OrderByDescending(s => Math.Abs(Demand(s, 480, 510, On(DayOfWeek.Wednesday)) - Demand(s, 690, 720, On(DayOfWeek.Wednesday))))
             .ThenBy(s => s.Name, StringComparer.Ordinal).First();
         var offsetDepot = new Spot("check-only offset depot", clockPitch.Areas, clockPitch.Hood, clockPitch.Region, clockPitch.X + 100, clockPitch.Z);
@@ -840,12 +821,11 @@ internal sealed class CrewEconomics
         var clockScenario = Normal with { Id = "clock-check", SpeedMetresPerSecond = 100 * config.RoadFactor / (690 - ShiftOpen - config.LoadingGameMinutes),
             WaitGameMinutesPerLeg = 0, LitresPerKilometre = 0 };
         var clockWeek = Simulate(clockRoute, clockScenario, "moving");
-        var clockVisit = clockWeek.Days[2].Stops[0]; // Actual Wednesday, no weekday approximation.
+        var clockVisit = clockWeek.Days[2].Stops[0];
         var expectedClock = Selling.Run(cart, clockPitch, 690, clockVisit.ServiceTo ?? 690, On(DayOfWeek.Wednesday), new(target));
         var backdatedClock = Selling.Run(cart, clockPitch, 480, 480 + (clockVisit.ServiceTo ?? 690) - 690, On(DayOfWeek.Wednesday), new(target));
         Check(clockVisit.ServiceFrom == 690 && Near(clockVisit.Sales.Revenue, expectedClock.Revenue) && !Near(expectedClock.Revenue, backdatedClock.Revenue),
             "A controlled arrival delayed from 08:00 to 11:30 sells at actual lunch demand and differs from backdated morning sales.");
-        // Verify an actually trimmed study visit against Selling at actual time, and detect a backdated alternative.
         var trimmed = samples.SelectMany(w => w.Days.SelectMany(d => d.Stops.Where(v => v.ServiceFrom > v.WindowOpen).Select(v => (Day: d, Visit: v))))
             .Select(p =>
             {

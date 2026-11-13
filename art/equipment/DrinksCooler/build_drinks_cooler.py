@@ -44,7 +44,6 @@ class Geometry:
                   (3,0,4,7),(4,5,6,7)], color)
 
     def profile(self, x, y, z, rings, n, colors):
-        # Watertight faceted cans/bottles. Each ring is (height, radius).
         verts = [(x+r*math.cos(2*math.pi*i/n+math.pi/n),
                   y+r*math.sin(2*math.pi*i/n+math.pi/n), z+h)
                  for h,r in rings for i in range(n)]
@@ -83,39 +82,31 @@ def build(stage=2):
         ob=bpy.data.objects.get(name)
         if ob: bpy.data.objects.remove(ob,do_unlink=True)
     g=Geometry()
-    # Full, flat underside through the placement point. Width 392 mm.
     g.box((-.196,-.151,0),(.196,.174,.043),'case')
     g.box((-.196,-.151,.043),(-.171,.174,.512),'case')
     g.box((.171,-.151,.043),(.196,.174,.512),'case')
     g.box((-.171,.112,.043),(.171,.174,.512),'case')
     g.chamfer_slab((-.196,-.151,.506),(.196,.174,.548),.006,'case')
-    # Opaque blue-grey interior backdrop and liner.
     g.box((-.171,.102,.043),(.171,.112,.506),'inside')
-    # Visible three stock shelves, recessed behind the front door frame.
     for z in (.066,.204,.342):
         g.box((-.168,-.131,z-.010),(.168,.102,z),'shelf')
         g.box((-.166,-.138,z-.013),(.166,-.129,z-.002),'frame')
-    # Gasket then light-coloured door rails: front is explicitly -Y.
     for x in (-.179,.155):
         g.box((x,-.158,.044),(x+.024,-.148,.508),'trim')
     for x in (-.176,.154):
         g.box((x,-.166,.051),(x+.022,-.158,.502),'frame')
     g.box((-.176,-.166,.043),(.176,-.148,.064),'frame')
     g.box((-.176,-.166,.481),(.176,-.148,.507),'frame')
-    # Blank, pale top light strip, no lettering.
     g.box((-.155,-.154,.512),(.155,-.149,.536),'light')
     if stage >= 2:
-        # Vertical handle on customer's right, within the 360 mm footprint.
         for z in (.175,.350):
             g.box((-.169,-.178,z),(-.151,-.160,z+.016),'trim')
         g.box((-.169,-.178,.173),(-.151,-.170,.369),'case')
-        # Two hinges and a small lower ventilation grille.
         for z in (.115,.428):
             g.box((.171,-.169,z),(.184,-.156,z+.025),'trim')
         for i in range(5):
             z=.012+i*.005
             g.box((-.110,-.153,z),(.110,-.151,z+.002),'trim')
-        # Fifteen drinks: five clearly separated silhouettes per shelf.
         hues=['red','orange','blue','green','violet']
         for row,z in enumerate((.066,.204,.342)):
             for i,x in enumerate((-.122,-.061,0,.061,.122)):
@@ -130,7 +121,6 @@ def build(stage=2):
                     g.profile(x,-.105,z,
                         [(0,.018),(.003,.022),(.084,.022),(.087,.018)],8,
                         ['metal',color,'metal'])
-        # Narrow solid glass glints in clear edge areas, avoid masking drinks.
         g.box((.139,-.150,.379),(.144,-.148,.462),'reflection')
         g.box((-.145,-.150,.088),(-.141,-.148,.157),'reflection')
     me=bpy.data.meshes.new('DrinksCooler_Mesh')
@@ -140,7 +130,6 @@ def build(stage=2):
     bm.to_mesh(me); bm.free()
     ob=bpy.data.objects.new('DrinksCooler_Body',me)
     bpy.context.collection.objects.link(ob)
-    # Face colours are retained as a mesh attribute for deterministic atlas bake.
     attr=me.attributes.new('palette_index','INT','FACE')
     names=list(PALETTE)
     for name in names:
@@ -169,7 +158,6 @@ def configure_view(ob):
                 s.region_3d.view_rotation=(Vector((.75,-1.6,.90))-Vector((0,0,.27))).to_track_quat('Z','Y')
 
 def review(filename, texture_mode=False):
-    # Temporary render camera is removed immediately after the review image.
     scene=bpy.context.scene
     camdata=bpy.data.cameras.new('ReviewCamera')
     cam=bpy.data.objects.new('ReviewCamera',camdata)
@@ -207,7 +195,6 @@ def texture():
     uv=me.uv_layers.new(name='UVMap')
     pixels=np.ones((512,512,4),dtype=np.float32)
     pixels[:,:,:3]=(.075,.095,.115)
-    # Every original quad/triangle has its own padded non-overlapping atlas cell.
     for p in me.polygons:
         x=p.index%cols; y=p.index//cols
         x0=round(x*512/cols); x1=round((x+1)*512/cols)
@@ -238,13 +225,11 @@ def texture():
     links.new(bs.outputs['BSDF'],out.inputs['Surface'])
     me.materials.clear(); me.materials.append(mat)
     for p in me.polygons: p.material_index=0
-    # Keep absolute until the scene has been saved into the output folder.
     return {'atlas_faces':count,'grid':[cols,rows],'texture':list(img.size),'materials':len(me.materials)}
 
 def finish():
     body=bpy.data.objects['DrinksCooler_Body']
     bm=bmesh.new()
-    # A convex outer envelope covers cabinet and the projecting handle.
     for x in (-.196,.196):
         for y in (-.178,.174):
             for z in (0,.548): bm.verts.new((x,y,z))
@@ -258,7 +243,6 @@ def finish():
     collision['purpose']='Unity convex collision hull'
     select_only(body); collision.select_set(True)
     bpy.ops.object.transform_apply(location=False,rotation=True,scale=True)
-    # Remove unneeded temporary material datablocks.
     for mat in list(bpy.data.materials):
         if mat.name.startswith('Preview_') and not mat.users: bpy.data.materials.remove(mat)
     bpy.context.preferences.filepaths.save_version=0

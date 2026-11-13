@@ -28,7 +28,6 @@ namespace FoodTrucks.Core.Reputation
             return new HealthState { FirstSeenDay = today, RandomState = seed };
         }
 
-        // Only open days are recorded. Replacing a mark keeps a repeated callback harmless.
         public void RecordDay(HealthState state, int day, bool cleaned, bool soldStaleStock)
         {
             Check(state);
@@ -50,7 +49,6 @@ namespace FoodTrucks.Core.Reputation
             long points = 0;
             foreach (var mark in state.Marks)
                 points += mark.Points;
-            // Corrupt or hand-edited saves cannot overflow the grade calculation.
             return (int)Math.Min(int.MaxValue, points);
         }
 
@@ -62,9 +60,6 @@ namespace FoodTrucks.Core.Reputation
             if (state.LastDrawDay.HasValue && today <= state.LastDrawDay.Value) return null;
             var weeks = state.Grade == Grade.Ungraded ? rules.FirstInspectionWeeks : rules.Grades[(int)state.Grade - 1].InspectionWeeks;
             var daily = 1.0 / Math.Max(1, weeks * rules.DaysPerWeek - rules.MinimumGapDays);
-            // The inspector may have come by on any day since the last draw; a closed vehicle is only
-            // found on the next open day. So the intervals average the grade's calendar weeks, however
-            // often the vehicle opens.
             var firstChanceDay = (long)previous + rules.MinimumGapDays;
             var from = Math.Max(firstChanceDay, state.LastDrawDay.HasValue ? state.LastDrawDay.Value + 1L : firstChanceDay);
             var days = Math.Max(1, today - from + 1);

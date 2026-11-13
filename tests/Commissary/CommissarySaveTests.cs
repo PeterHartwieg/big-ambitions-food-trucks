@@ -118,7 +118,6 @@ public class CommissarySaveTests
     public void ReleasedVehicleRentCursorSurvivesSavingAndDoesNotChargeTwiceOrChargeTheGap(int rentAgainDay)
     {
         var state = new SaveState { Commissary = CommissariesTests.Rented(5) };
-        // Even if payment fails, its debt already exists and must not be generated twice.
         state.Commissary.Charges.Add(Assert.Single(Commissaries.RentDue(state.Commissary, Rules, 5)));
         Assert.True(Commissaries.Release(state.Commissary, "cart"));
         var loaded = Codec.Load(Codec.Serialize(state));
@@ -134,7 +133,6 @@ public class CommissarySaveTests
         Assert.Single(c.Charges);
         Assert.Equal(rentAgainDay + 1, Assert.Single(Commissaries.RentDue(c, Rules, rentAgainDay + 1)).Day);
 
-        // A different vehicle rented after the fleet run still owes its first day.
         Commissaries.Rent(c, Rules, "new-cart", "cart", "b", rentAgainDay + 1);
         Assert.Equal("new-cart", Assert.Single(Commissaries.RentDue(c, Rules, rentAgainDay + 1)).VehicleId);
     }
@@ -213,7 +211,7 @@ public class CommissarySaveTests
         Assert.Equal(9, (int)saved["_discardedOrders"]![0]!["futureOrphan"]!);
         Assert.Equal(10, (int)saved["_discardedStock"]![0]!["futureBadLine"]!);
         Assert.Equal(LoadStatus.Loaded, Codec.Load(Codec.Serialize(loaded.State)).Status);
-        Assert.Empty(Commissaries.RentDue(c, Rules, 5)); // future kind retained, no invented rent
+        Assert.Empty(Commissaries.RentDue(c, Rules, 5));
     }
 
     [Fact]

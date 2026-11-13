@@ -27,11 +27,9 @@ namespace FoodTrucks
     // loaded with. The guard makes sure of it before every save file is written, and says so loudly.
     internal static class SaveGuard
     {
-        // The game instance the late-attach notice and the unattached-save notice were last shown for.
         private static GameInstance? lateNoticeFor;
         private static GameInstance? saveNoticeFor;
 
-        // SaveGameManager.InitializeLoadedSave: the block the save file came with.
         public static void LoadedPostfix()
         {
             try
@@ -46,10 +44,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Save data on load: " + ex); }
         }
 
-        // SaveGameSerializationHelper.SerializeJsonData and SerializeBinaryData, before the game writes the save: the
-        // game's own instance holds the mod's block, the one written this save or else the last one read or written.
-        // A copy the game writes on another thread (an old save's move to its character folder) is a copy of a loaded
-        // save as read, so it is left alone.
         public static void SerializePrefix(GameInstance instance)
         {
             try
@@ -79,8 +73,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Save data before saving: " + ex); }
         }
 
-        // GlobalEvents.InvokeOnGameLoaded, after the game's loaded callbacks (the city part's attach among them): a city up
-        // with a game the mod isn't attached to gets the session now.
         public static void GameLoadedPostfix()
         {
             try
@@ -106,9 +98,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Late attach: " + ex); }
         }
 
-        // ModDiscoveryRegistry.DiscoverAllModsAsync: the game's mod discovery empties its list of mod entries until it
-        // ends; a loading screen that reads the list meanwhile skips the mods. Logged with its end, so a log can tell
-        // whether it overlapped a load.
         public static void DiscoveryPrefix()
         {
             try { Log.Info($"Game mod discovery: running again (its mod list is empty until it ends); loading {(LoadScene.isLoading ? "on" : "off")}."); }
@@ -125,8 +114,6 @@ namespace FoodTrucks
             current != null && !LoadScene.isLoading && !GameManager.isCitySceneBeingUnloaded &&
             SceneManager.GetSceneByName("MainScene").isLoaded;
 
-        // The game's mod loader for the log: whether its city scope counts as loaded, with this mod in it, and how many
-        // city entries its discovery holds.
         private static string LoaderState()
         {
             try

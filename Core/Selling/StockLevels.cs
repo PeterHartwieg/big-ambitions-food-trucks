@@ -8,8 +8,6 @@ namespace FoodTrucks.Core.Selling
 {
     public enum StockLevel { Ok, Low, Empty }
 
-    // One food in one fitted piece, for the Stock box on a vehicle's BizMan page: how many are on board and how many
-    // the piece would hold if it held only this food.
     public sealed class FoodStock
     {
         public FoodStock(string equipmentId, string item, int units, int capacity, StockLevel level)
@@ -28,8 +26,6 @@ namespace FoodTrucks.Core.Selling
         public StockLevel Level { get; }
     }
 
-    // Low stock the game's way: a shelf at or under a quarter of its capacity makes a "low stock" to-do, an empty one
-    // "empty stock" (ItemHelper, TodoTaskType). A food's capacity is its piece's room in that food's own units.
     public static class StockLevels
     {
         public const double LowShare = 0.25;
@@ -40,7 +36,6 @@ namespace FoodTrucks.Core.Selling
             return capacity > 0 && units <= capacity * LowShare ? StockLevel.Low : StockLevel.Ok;
         }
 
-        // Whole items of a food a pool would hold on its own (a coffee machine's 40 units hold 160 cups).
         public static int CapacityFor(DemandTables tables, StoragePool pool, string item)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
@@ -50,7 +45,6 @@ namespace FoodTrucks.Core.Selling
             return (int)Math.Min(int.MaxValue, Math.Floor(pool.Capacity / weight + 1e-9));
         }
 
-        // Every food of every fitted piece, in fitting order then the piece's own order, foods with none on board included.
         public static IReadOnlyList<FoodStock> Of(DemandTables tables, StorageView view)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
@@ -66,11 +60,6 @@ namespace FoodTrucks.Core.Selling
             return list;
         }
 
-        // The foods the vehicle actually stocks, for its warnings and its Stock box: a food that exists in the game now
-        // (`exists`, from the adapter; null: all do; a Bakery food without the Bakery mod doesn't) and that is on board
-        // now or in the vehicle's sales record (VehicleState.Sold, the last two days it sold on, kept until it sells
-        // again). So a food sold out stays flagged until it sells again elsewhere for two days, and a piece's other foods
-        // the player never carries (a coffee machine's tea) are left out.
         public static IReadOnlyList<FoodStock> Stocked(DemandTables tables, StorageView view, VehicleState? vehicle, Func<string, bool>? exists = null)
         {
             var sold = new HashSet<string>(StringComparer.Ordinal);

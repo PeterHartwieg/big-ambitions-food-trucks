@@ -14,11 +14,8 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // The two drawings on a vehicle's BizMan page (Peter, 16 October 2026): the vehicle with its fitted equipment at the
-    // top of the Menu box, and the route's simplified map in the Crew and route box.
     internal static class VehiclePageDrawings
     {
-        // The drawings' PNGs, in the mod's bundle (every asset under the mod folder is packed by the SDK's builder).
         private const string ImageFolder = "Assets/Mods/FoodTrucks/UI/";
         private const float DiagramMaxHeight = 600f;
         private static readonly Dictionary<string, Texture2D?> textures = new Dictionary<string, Texture2D?>(StringComparer.Ordinal);
@@ -30,15 +27,6 @@ namespace FoodTrucks
             logged = false;
         }
 
-        // ---- The vehicle and its equipment ----
-
-        // The vehicle's drawing (data/vehicle-diagrams.json, schema 2): the background (the vehicle with empty places), then
-        // in its draw order (back to front) each fitted piece's own layer at its crop rectangle, scaled with the image, so
-        // it looks like the vehicle with its equipment. Pieces take the places in fitting order. A piece with no layer (the
-        // cotton candy machine, say) shows its icon at the place's hotspot; a place with nothing fitted a faint outline.
-        // At each fitted place's hotspot, under the piece, a small fill bar (what it holds of what it can, red when low
-        // or empty); the piece's name and load as its tooltip. False when there is no drawing for this vehicle (the Menu
-        // box then lists the equipment as text).
         internal static bool Equipment(BizManParts.Box box, VehicleInstance instance, StorageView view, DemandTables tables)
         {
             var kind = FoodTrucksMod.KindOf(instance.vehicleTypeName);
@@ -48,10 +36,7 @@ namespace FoodTrucks
 
             var root = Rect("FoodTrucks.Diagram", box.Root);
             box.Add(root);
-            // The places and crops are in the json's pixels; the image is drawn at its aspect, whatever its file's size.
             var aspect = diagram.Height > 0 ? diagram.Width / (float)diagram.Height : 2f;
-            // The box's full inner width, the height following at the drawing's aspect up to DiagramMaxHeight; capped, the
-            // drawing is centred (the frame fits inside at its aspect). Layers, bars and tooltips are anchored to the frame.
             var size = root.gameObject.AddComponent<AspectHeight>();
             size.Aspect = aspect;
             size.MaxHeight = DiagramMaxHeight;
@@ -86,7 +71,6 @@ namespace FoodTrucks
                 var halfWidth = halfHeight / aspect;
                 if (!filled.TryGetValue(name, out var piece))
                 {
-                    // Nothing fitted here: a faint outline at the hotspot.
                     var slot = Rect("FoodTrucks.EmptyPlace", frame);
                     Anchor(slot, x - halfWidth, y - halfHeight, x + halfWidth, y + halfHeight);
                     var empty = slot.gameObject.AddComponent<Image>();
@@ -106,7 +90,6 @@ namespace FoodTrucks
                 float bottom;
                 if (layer != null && layerTexture != null)
                 {
-                    // The piece's own picture at its crop rectangle (pixels of the full image, y down).
                     var cell = Rect("FoodTrucks.Layer", frame);
                     var left = layer.X / (float)diagram.Width;
                     var right = (layer.X + layer.Width) / (float)diagram.Width;
@@ -120,7 +103,6 @@ namespace FoodTrucks
                 else
                 {
                     if (layer != null) missing.Add(layer.File);
-                    // No layer for this piece: its icon at the hotspot.
                     var slot = Rect("FoodTrucks.Icon", frame);
                     Anchor(slot, x - halfWidth, y - halfHeight, x + halfWidth, y + halfHeight);
                     var icon = slot.gameObject.AddComponent<Image>();
@@ -137,7 +119,6 @@ namespace FoodTrucks
                 };
                 bars.Add((place, bottom, piece.Name, piece.Pool));
             }
-            // The fill bars over everything, each just under its piece, as wide as the place's icon.
             foreach (var (place, below, _, pool) in bars)
             {
                 if (pool == null || pool.Capacity <= 0) continue;
@@ -169,7 +150,6 @@ namespace FoodTrucks
             rect.offsetMin = rect.offsetMax = Vector2.zero;
         }
 
-        // A drawing's PNG from the mod's bundle, loaded the first time it is drawn and kept per file for the scene.
         private static Texture2D? Texture(string file, bool required)
         {
             if (textures.TryGetValue(file, out var cached)) return cached;
@@ -182,15 +162,6 @@ namespace FoodTrucks
             return texture;
         }
 
-        // ---- The route ----
-
-        // One weekday's route on a light panel, north up as the game's city map opens (that map is the 3D city under a
-        // camera, CityMap/CityMapCam, with no picture to crop). Under it the streets: the traffic system's lanes, light
-        // grey. Round numbered pins at the day's stops in order with their hours beside them, the commissary as a square
-        // "C" at both ends of the line, lines joining them (without a commissary, back to the first when the next day
-        // runs too, as the crew starts each day where it ended), and the vehicle where it stands. Sizes follow the box's
-        // own text: the canvas is in game units (a business row is 100 high), so fixed pixel sizes came out as dots
-        // without text (16 October 2026).
         internal static void Route(BizManParts.Box box, HireSchedule schedule, DayOfWeek day, VehicleInstance instance, VehicleState? vehicle)
         {
             var indices = WeekPlan.StopsOf(schedule, day);
@@ -217,7 +188,6 @@ namespace FoodTrucks
                 var position = controller != null ? controller.transform.position : (Vector3)instance.position;
                 where = (position.x, position.z);
             }
-            // The bay where it rents its space starts and ends the day: on the map as its own pin, the line from it and back.
             var home = vehicle == null ? null : HireRoutes.HomeOf(vehicle);
             var endsThere = home != null && home.Value.BayStops.Contains(indices[indices.Count - 1]);
             var map = RouteMap.Layout(dayStops.Select(s => (s.X, s.Z)).ToList(), where, home == null && WeekPlan.RunsOn(schedule, WeekPlan.Next(day)), aspect,
@@ -242,7 +212,6 @@ namespace FoodTrucks
             if (map.Home is { } at0)
             {
                 var pin = Pin(root, at0, unit * 1.3f, "FoodTrucks.Commissary");
-                // A square, so it reads apart from the round stops.
                 var dot = pin.gameObject.AddComponent<Image>();
                 dot.color = colors.green;
                 dot.raycastTarget = false;
@@ -297,19 +266,15 @@ namespace FoodTrucks
         private static bool logged;
         private static List<(double Ax, double Az, double Bx, double Bz)>? streets;
 
-        // Every lane segment of the traffic system once per city load, both directions as one, at ground level only by
-        // x and z. Empty (and tried again next time) while the traffic system isn't running.
         private static List<(double Ax, double Az, double Bx, double Bz)> Streets()
         {
             if (streets != null) return streets;
             var found = new List<(double, double, double, double)>();
             try
             {
-                // Instance makes a new manager when there is none, so HasInstance first (as HatchCheck).
                 if (!GleyTrafficSystem.TrafficManager.HasInstance || !GleyTrafficSystem.TrafficManager.IsInitialized) return found;
                 var manager = GleyTrafficSystem.TrafficManager.Instance;
                 var all = new List<GleyTrafficSystem.Waypoint>();
-                // The game's search calls the filter for every waypoint within the radius: the whole city.
                 manager.GetClosestWaypoint(Vector3.zero, 100000f, w =>
                 {
                     if (w != null) all.Add(w);
@@ -341,7 +306,6 @@ namespace FoodTrucks
 
         private static Sprite? circle;
 
-        // A round marker, drawn once: the game has no plain circle sprite to borrow.
         internal static Sprite Circle()
         {
             if (circle != null) return circle;

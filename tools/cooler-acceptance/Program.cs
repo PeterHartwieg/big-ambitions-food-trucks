@@ -28,7 +28,6 @@ foreach (var cooler in new[] { false, true }) {
   var drawn = menu.ToDictionary(i => i, _ => 0);
   var loaded = new Dictionary<string, int>(stock);
   for (var minute = 600; minute < 1080; minute++) {
-   // Explicit hourly instantaneous top-up policy, identical in every pair. No travel or wage claim.
    if (minute > 600 && minute % 60 == 0 && stock.Any(p => p.Value < capacity[p.Key])) {
     restocks++;
     foreach (var i in menu) { loaded[i] += capacity[i] - stock[i]; stock[i] = capacity[i]; }

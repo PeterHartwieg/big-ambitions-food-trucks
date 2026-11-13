@@ -72,7 +72,6 @@ namespace FoodTrucks
             AccessTools.Method(state, "Standing")?.Invoke(null, new[] { kind, day })?.ToString()
             ?? throw new BridgeError("RLO's LicenceState.Standing isn't there.");
 
-        // The lesson or test under way, if any.
         private static object? Practical()
         {
             var director = AccessTools.Property(Type("LicenceDirector"), "Instance")?.GetValue(null);
@@ -80,14 +79,12 @@ namespace FoodTrucks
             return practical != null && AccessTools.Property(practical.GetType(), "Active")?.GetValue(practical) is true ? practical : null;
         }
 
-        // What calling it off gives back: its fee, unless it was free (from the settings' test button).
         private static int Refund(object? practical)
         {
             if (practical == null || AccessTools.Field(practical.GetType(), "_free")?.GetValue(practical) is true) return 0;
             return AccessTools.Field(practical.GetType(), "_feePaid")?.GetValue(practical) is int fee ? fee : 0;
         }
 
-        // A lesson or test under way is given up, its fee returned, as the school does when one is called off.
         private static void StopPractical(object? practical)
         {
             if (practical != null)

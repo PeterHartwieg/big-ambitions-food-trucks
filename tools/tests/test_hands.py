@@ -150,9 +150,9 @@ class HandsTests(unittest.TestCase):
         self.mock.dialog = 'closed'
         self.call('time', pause=True)
         self.mock.life['homes'] = []
-        self.mock.last_use[ident - 1]['for_rent'] = False  # A residential rented by someone else.
+        self.mock.last_use[ident - 1]['for_rent'] = False
         result = self.call_unpaused('use', op='click', id=ident)
-        self.assertTrue(result['handled'])  # Handled doesn't mean the game entered the building.
+        self.assertTrue(result['handled'])
         self.assertIsNone(result['inside'])
         self.assertIn('Private property.', result['why'])
         self.assertEqual(result['notices'], [result['why']])

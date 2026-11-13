@@ -57,7 +57,6 @@ public class SalesRateTests
             progress = tick.Progress;
         }
 
-        // Midtown office lunch brings more than a one-person cart can serve, so service sets the pace.
         Assert.True(estimate.CustomersPerHour > capacity);
         Assert.Equal(capacity, rate, 9);
         Assert.InRange(sales, (int)Math.Floor(capacity) - 1, (int)Math.Ceiling(capacity));

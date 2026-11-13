@@ -11,14 +11,11 @@ build/
 [Oo]utput/
 CLAUDE.local.md
 
-# Game and Harmony DLLs must never be committed.
 *.dll
 
-# Fetched or built at build time; the folder itself is recreated by tools/build-mod.sh.
 unity/FoodTrucks/Dependencies/
 unity/FoodTrucks/Dependencies.meta
 
-# Art: only the finals and the review sheets are kept in git (Peter, 8 October 2026).
 art/**/renders/*
 !art/**/renders/review-sheet.png
 !art/**/renders/look-*.png
@@ -28,24 +25,20 @@ art/**/__pycache__/
 art/**/.*
 art/**/*.log
 
-# The truck art copied in by tools/build-mod.sh; the originals are in art/truck.
 unity/FoodTrucks/Vehicles/TruckArt/*.fbx
 unity/FoodTrucks/Vehicles/TruckArt/*.png
 
-# The cart and equipment art, likewise; the originals are in art/cart and art/equipment.
 unity/FoodTrucks/Vehicles/CartArt/*.fbx
 unity/FoodTrucks/Vehicles/CartArt/*.png
 unity/FoodTrucks/Vehicles/EquipmentArt/*.fbx
 unity/FoodTrucks/Vehicles/EquipmentArt/*.png
 
-# The commissary bay's art, likewise; the originals are in art/commissary.
 unity/FoodTrucks/Commissary/BayArt/*.fbx
 unity/FoodTrucks/Commissary/BayArt/*.png
 unity/FoodTrucks/Vehicles/EquipmentArt/Icons/*.png
 unity/FoodTrucks/Vehicles/PropArt/*.fbx
 unity/FoodTrucks/Vehicles/PropArt/*.png
 
-# --- repo cleanup 2026-10-23 ---
 .DS_Store
 node_modules/
 .wrangler/
@@ -68,6 +61,5 @@ UserSettings/
 *.pdb
 *.exe
 
-# Python test/client caches are local build output.
 __pycache__/
 *.py[cod]

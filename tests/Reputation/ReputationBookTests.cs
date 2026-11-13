@@ -41,7 +41,6 @@ public class ReputationBookTests
         Assert.Equal(0, book.Points(cart));
     }
 
-    // Review round 1 of the UI flow (Astra, Opus): food given back and taken again keeps its age.
     [Fact]
     public void FoodGivenBackAndTakenAgainKeepsTheDayItFirstCameOnBoard()
     {
@@ -52,10 +51,8 @@ public class ReputationBookTests
         Assert.Equal(2, ReputationBook.TakeOutOldest(cart, "hotdog", 25));
         Assert.Equal(new[] { (2, 5), (5, 20) }, cart.StockBatches!["hotdog"].Select(b => (b.Day, b.Units)));
 
-        // Taken again on day 6: the cargo now holds 50; the 25 come back as day 2's, not as fresh food.
         ReputationBook.Restored(cart, "hotdog", 25, 2, 50, 6);
         Assert.Equal(new[] { (2, 30), (5, 20) }, cart.StockBatches!["hotdog"].Select(b => (b.Day, b.Units)));
-        // TrackStock finds the count matching and changes nothing.
         Assert.False(ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 50 }, 6));
         Assert.Null(ReputationBook.TakeOutOldest(new VehicleState { VehicleId = "c2" }, "hotdog", 5));
     }
@@ -127,13 +124,11 @@ public class ReputationBookTests
     {
         var cart = new VehicleState { VehicleId = "c1" };
         ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 10 }, 3);
-        // Topped up on day 5: ten old, twenty new.
         ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 30 }, 5);
 
         Assert.True(book.Sold(cart, "hotdog", 6, 6));
         Assert.True(cart.Days.Single(d => d.Day == 6).SoldStale);
 
-        // The old ten sold (one above, nine more): what is left came on day 5.
         ReputationBook.Consume(cart, "hotdog", 9);
         ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 20 }, 6);
         Assert.False(book.IsStale(cart, "hotdog", 7));
@@ -149,7 +144,6 @@ public class ReputationBookTests
         var cart = new VehicleState { VehicleId = "c1" };
         ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 1 }, 1);
 
-        // The last old unit sells, then a fresh box comes on before the next look at the cargo.
         book.Sold(cart, "hotdog", 2, 2);
         ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 50 }, 5);
 
@@ -162,7 +156,6 @@ public class ReputationBookTests
         var cart = new VehicleState { VehicleId = "c1" };
         book.Opened(cart, 5, 1);
 
-        // Cleaned on day 6, the morning after.
         ReputationBook.Cleaned(cart, 6, closedThrough: 4);
 
         Assert.True(cart.Days.Single(d => d.Day == 5).Cleaned);
@@ -175,7 +168,6 @@ public class ReputationBookTests
     {
         var cart = new VehicleState { VehicleId = "c1" };
         book.Opened(cart, 5, 1);
-        // Still open at 05:00: day 6 begins, the window doesn't reopen.
         book.Opened(cart, 6, 1, opening: false);
 
         ReputationBook.Cleaned(cart, 6, closedThrough: 4);
@@ -190,7 +182,6 @@ public class ReputationBookTests
         var cart = new VehicleState { VehicleId = "c1" };
         ReputationBook.TrackStock(cart, new Dictionary<string, int> { ["hotdog"] = 10 }, 3);
 
-        // Day 6 at 01:00: three calendar days old, sold on day 5's night.
         Assert.True(book.Sold(cart, "hotdog", 6, 5));
 
         Assert.True(cart.Days.Single(d => d.Day == 5).SoldStale);
@@ -200,7 +191,6 @@ public class ReputationBookTests
     public void ALateNightCountsForTheEveningBefore()
     {
         var cart = new VehicleState { VehicleId = "c1" };
-        // Day 3, 22:00 to day 4, 02:00, with the night ending at 05:00.
         ReputationBook.AddOpenMinutes(cart, (3 - 1) * 1440 + 22 * 60, (4 - 1) * 1440 + 2 * 60, "bars", 5 * 60, 0);
 
         Assert.Equal(240, cart.Days.Single(d => d.Day == 3).Visits.Single().Minutes);
@@ -229,7 +219,6 @@ public class ReputationBookTests
         var weekday = 10;
         Assert.True(book.RegularsFactor(state, "a", weekday) > 1.0);
 
-        // Three weeks without opening anywhere.
         book.CloseDaysBefore(state, 25);
 
         Assert.Equal(24, state.Regulars.LastUpdatedDay);

@@ -46,9 +46,8 @@ for kind, side in [('cart', 1), ('cart', -1), ('truck', 1)]:
         bpy.context.view_layer.update()
         b = bounds(cooler)
         assert b[0][0] >= -.48 and b[0][1] <= .48, b
-        assert b[2][0] >= .52 and b[2][1] < .922, b # above fender, below worktop underside
-        assert b[1][0] > -.7 and b[1][1] < .69, b # clear of push bar/handle brackets
-        # The rear mounting lip may intersect the cart panel; the visible liner, shelves and drinks must not.
+        assert b[2][0] >= .52 and b[2][1] < .922, b
+        assert b[1][0] > -.7 and b[1][1] < .69, b
         hits = tree(body).overlap(tree(cooler))
         visible_hits = []
         for _, face in hits:
@@ -66,8 +65,8 @@ for kind, side in [('cart', 1), ('cart', -1), ('truck', 1)]:
                      for m, y in zip(['HotDogRoller', 'Griddle', 'BurgerStation', 'CoffeeStation'], [.425,.875,1.325,1.775])]
         bpy.context.view_layer.update()
         b = bounds(cooler)
-        assert b[0][0] > -1.02 and b[0][1] < -.78, b # fully supported by the serving counter; clear of aisle
-        assert b[1][0] > 1.55 and b[1][1] < 2.0, b # rear of window, clear of central server/register
+        assert b[0][0] > -1.02 and b[0][1] < -.78, b
+        assert b[1][0] > 1.55 and b[1][1] < 2.0, b
         assert not tree(cooler).overlap(tree(register))
         cooler.location.z += .002 # ignore intentional counter contact only
         bpy.context.view_layer.update()

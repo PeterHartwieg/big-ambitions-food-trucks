@@ -397,11 +397,9 @@ class CLIAndShotsTests(unittest.TestCase):
             reply=run('call','teleport','who=player','--json','x=1','z=2')
             self.assertEqual(reply.returncode,0,reply.stderr)
             self.assertTrue(json.loads(reply.stdout)['ok'])
-            # Both key=value arguments reach the bridge (the mock has no truck, so the reply is its refusal, as JSON).
             reply=run('call','vehicle','id=truck-1','--json','op=enter','--timeout','5')
             self.assertNotIn('unrecognized arguments',reply.stderr)
             self.assertIn("No food cart or truck with id 'truck-1'",json.loads(reply.stdout)['error'])
-            # `call` as an argument of another subcommand is left alone.
             reply=run('wait-event','call','--timeout','0.2','--json')
             self.assertNotIn('unrecognized arguments',reply.stderr)
             reply=run('state','money','--json')
@@ -412,7 +410,6 @@ class CLIAndShotsTests(unittest.TestCase):
             reply=run('call','time','run_until.day=2','run_until.time=08:05','speed=20','--raw')
             self.assertEqual(reply.returncode,0,reply.stderr)
             self.assertTrue(json.loads(reply.stdout)['ok'])
-            # A free camera from the command line (live session 4 had to send it as a raw call).
             reply=run('--json','shoot','free-cli','--at','1,1.7,2','--look-at','1,1.7,12','--fov','45','--width','16','--height','16','--timeout','15')
             self.assertEqual(reply.returncode,0,reply.stderr)
             camera=json.loads(reply.stdout)['result']['camera']
@@ -450,7 +447,7 @@ class CLIAndShotsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             def fake_scp(args,**kwargs):
                 self.assertEqual(args[:2],['scp','--'])
-                self.assertEqual(args[2],'homepc:C:/Users/Peter/shots/a b.png')  # Windows OpenSSH wants forward slashes
+                self.assertEqual(args[2],'homepc:C:/Users/Peter/shots/a b.png')
                 self.assertNotIn('shell',kwargs)
                 Path(args[-1]).write_bytes(b'\x89PNG\r\n\x1a\nmock')
                 return subprocess.CompletedProcess(args,0,'','')

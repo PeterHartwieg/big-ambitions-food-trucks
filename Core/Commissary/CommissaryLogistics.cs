@@ -5,7 +5,6 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Commissary
 {
-    // One item a logistics run brings: what is missing up to its target, priced per unit.
     public sealed class CommissaryLogisticsLine
     {
         internal CommissaryLogisticsLine(string itemName, int units, long unitPriceCents)
@@ -29,29 +28,18 @@ namespace FoodTrucks.Core.Commissary
             Unpriced = unpriced;
         }
 
-        // False when the commissary takes no deliveries (no space rented there): nothing is brought.
         public bool Accepted { get; }
         public IReadOnlyList<CommissaryLogisticsLine> Lines { get; }
-        // Items with a target but no price in the catalogue (a mod's item gone, say): left alone.
         public IReadOnlyList<string> Unpriced { get; }
     }
 
-    // A commissary as a destination of the game's logistics plans (Peter, 14 October 2026). At the game's 02:00 run the
-    // plan's warehouse fills the commissary up to each stock target; the goods become batches priced at what the warehouse
-    // paid for them (PaidCents), so stock costs and the uninstall refund follow the player's own purchase. No fee and no money: the game's logistics charge none.
-    // The game moves the goods; this decides how many.
     public static class CommissaryLogistics
     {
-        // OrderMetadata on a batch a logistics run brought: "source" is SourceValue, "day" the game day, "from" the warehouse.
         public const string SourceKey = "source";
         public const string SourceValue = "logistics";
 
-        // A plan delivers only where the player has a space, as ordering by phone needs one.
         public static bool Accepts(CommissaryState state, string commissaryId) => CommissaryOrdering.CanOrder(state, commissaryId);
 
-        // What to bring: each target less what the commissary holds of that item, in the targets' order. The game fills
-        // target by target and reads the stock again each time, so two targets for one item come to the larger one.
-        // Targets of 0 or less are skipped, as the game skips them; an item without a price is reported, not brought.
         public static CommissaryLogisticsPlan Plan(CommissaryState state, string commissaryId,
             IEnumerable<KeyValuePair<string, int>> targets, IReadOnlyDictionary<string, long> unitPriceCents)
         {
@@ -84,15 +72,11 @@ namespace FoodTrucks.Core.Commissary
             return new CommissaryLogisticsPlan(true, lines, unpriced);
         }
 
-        // The price per unit the goods taken out of the warehouse carry, to whole cents: the game's withdrawal keeps the
-        // mean price the player paid for them across the pallets it took from [code, 1.0: BuildingHelper.WithdrawFromCargo,
-        // CargoInstance.MergeAmount]. Not a number or below 0 reads as 0; the catalogue price is no stand-in.
         public static long PaidCents(double pricePerUnit) =>
             double.IsNaN(pricePerUnit) || pricePerUnit <= 0 ? 0
             : pricePerUnit * 100 >= long.MaxValue ? long.MaxValue
             : (long)Math.Round(pricePerUnit * 100, MidpointRounding.AwayFromZero);
 
-        // Units arrived from the warehouse: one new batch, last in the commissary's FIFO order.
         public static CommissaryStockLine Receive(CommissaryState state, string commissaryId, string itemName, int units,
             long unitPriceCents, int day, string from)
         {
@@ -118,8 +102,6 @@ namespace FoodTrucks.Core.Commissary
             return line;
         }
 
-        // The goods value of stock a logistics run brought, still in the commissaries. Its cost was never booked under the
-        // commissary's tax label, so the uninstall refund takes only the rest off that label's deduction.
         public static long GoodsCents(CommissaryState state)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -133,7 +115,6 @@ namespace FoodTrucks.Core.Commissary
             line?.OrderMetadata != null && line.OrderMetadata.TryGetValue(SourceKey, out var source) &&
             source.Type == JTokenType.String && (string?)source == SourceValue;
 
-        // What the commissary holds of an item, all batches.
         public static long Held(CommissaryState state, string commissaryId, string itemName)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -142,9 +123,6 @@ namespace FoodTrucks.Core.Commissary
                 : 0;
         }
 
-        // A commissary stands in a plan as a street number on a street that has no building registration, so every
-        // game check on it finds none (adapter: CommissaryLogistics). The number is fixed per commissary id, so a save
-        // keeps its destinations when data/commissaries.json is reordered: FNV-1a of the id, always negative.
         public static int AddressNumber(string commissaryId)
         {
             if (string.IsNullOrWhiteSpace(commissaryId)) throw new ArgumentException("ID must not be empty.", nameof(commissaryId));
@@ -160,7 +138,6 @@ namespace FoodTrucks.Core.Commissary
             }
         }
 
-        // The commissary a street number stands for, among these ids; null for none.
         public static string? IdFor(IEnumerable<string> commissaryIds, int number)
         {
             if (commissaryIds == null) throw new ArgumentNullException(nameof(commissaryIds));

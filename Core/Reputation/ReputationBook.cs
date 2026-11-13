@@ -7,9 +7,6 @@ using FoodTrucks.Core.Saves;
 
 namespace FoodTrucks.Core.Reputation
 {
-    // The day-to-day record behind health grades and regulars. The game side notes what happens while a
-    // vehicle is open (minutes at each spot, cleaning, stale stock); when a new day starts, every finished
-    // day goes into the vehicle's health marks and the fleet's regulars, in day order, and is dropped.
     public sealed class ReputationBook
     {
         private readonly HealthGrades health;
@@ -45,9 +42,6 @@ namespace FoodTrucks.Core.Reputation
             visit.Minutes = (int)Math.Min(int.MaxValue, (long)visit.Minutes + minutes);
         }
 
-        // The vehicle opens (or, with opening false, works on into a new working day): a new vehicle gets its
-        // health record, and the inspector may come by. Only a real opening moves LastOpenedDay, so cleaning
-        // after a shift that ran past 05:00 still reaches the day it opened on.
         public InspectionResult? Opened(VehicleState vehicle, int today, long seed, bool opening = true)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -57,8 +51,6 @@ namespace FoodTrucks.Core.Reputation
             return health.OnOpen(vehicle.Health, today);
         }
 
-        // Food on board by the day it came on. More units than recorded: a new batch today. Fewer: the oldest
-        // went first (sold, or taken out). An item gone from the vehicle is forgotten.
         public static bool TrackStock(VehicleState vehicle, IReadOnlyDictionary<string, int> unitsOnBoard, int today)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -99,13 +91,10 @@ namespace FoodTrucks.Core.Reputation
             return changed;
         }
 
-        // The unit sold next is the oldest on board.
         public bool IsStale(VehicleState vehicle, string item, int today) =>
             vehicle?.StockBatches != null && vehicle.StockBatches.TryGetValue(item, out var batches) && batches.Count > 0 &&
             today - batches[0].Day >= healthRules.StaleAfterDays;
 
-        // One unit sold: it was the oldest. Food ages by calendar day (`today`); a stale sale marks the working
-        // day it belongs to (`workDay`). True the first time that working day.
         public bool Sold(VehicleState vehicle, string item, int today, int workDay)
         {
             var stale = IsStale(vehicle, item, today);
@@ -117,7 +106,6 @@ namespace FoodTrucks.Core.Reputation
             return first;
         }
 
-        // Units gone from the vehicle, oldest first; TrackStock then finds the count already matching.
         public static void Consume(VehicleState vehicle, string item, int units)
         {
             if (vehicle?.StockBatches == null || !vehicle.StockBatches.TryGetValue(item, out var batches)) return;
@@ -131,8 +119,6 @@ namespace FoodTrucks.Core.Reputation
             if (batches.Count == 0) vehicle.StockBatches.Remove(item);
         }
 
-        // The night belongs to the evening before: minutes before nightEnds count for the previous day, so a
-        // stop running past midnight is one working day, as the demand model counts a night out.
         public static int ServiceDay(long absoluteMinute, int nightEnds)
         {
             var day = (int)(Math.Floor(absoluteMinute / 1440.0) + 1);
@@ -140,8 +126,6 @@ namespace FoodTrucks.Core.Reputation
             return minute < nightEnds ? day - 1 : day;
         }
 
-        // Open minutes from `from` to `to` (absolute game minutes) at a pitch, split by service day. Days
-        // already counted (up to closedThrough) take nothing more.
         public static void AddOpenMinutes(VehicleState vehicle, long from, long to, string spotKey, int nightEnds, int closedThrough)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -161,8 +145,6 @@ namespace FoodTrucks.Core.Reputation
         public double RegularsFactor(SaveState state, string spotKey, int day) =>
             state?.Regulars == null || string.IsNullOrEmpty(spotKey) || day < 1 ? 1.0 : regulars.DemandFactor(state.Regulars, spotKey, GameDays.Weekday(day));
 
-        // Cleaning counts for the working day it happens on and for the vehicle's last opening, so cleaning
-        // up after a late shift reaches the night's day. Days already counted take nothing.
         public static void Cleaned(VehicleState vehicle, int workDay, int closedThrough)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -170,8 +152,6 @@ namespace FoodTrucks.Core.Reputation
                 if (day >= 1 && day > closedThrough) Day(vehicle, day).Cleaned = true;
         }
 
-        // Units given back to a commissary, oldest first as a sale takes them: the day the oldest of them came on board,
-        // kept with the returned stock so taking it again keeps its age (Restored). Null when none were recorded.
         public static int? TakeOutOldest(VehicleState vehicle, string item, int units)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -181,10 +161,6 @@ namespace FoodTrucks.Core.Reputation
             return oldest;
         }
 
-        // Units loaded from a commissary batch that was on a vehicle before: they keep the day they first came on board,
-        // so giving stale food back and taking it again doesn't make it fresh (review round 1 of the UI flow). The item's
-        // record is first brought to `unitsOnBoard` as TrackStock would (new units as today's), then `units` of the
-        // newest are moved to `day`. A day not before today changes nothing.
         public static void Restored(VehicleState vehicle, string item, int units, int day, int unitsOnBoard, int today)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -206,7 +182,6 @@ namespace FoodTrucks.Core.Reputation
             else batches.Insert(at < 0 ? batches.Count : at, new StockBatch { Day = day, Units = move });
         }
 
-        // The on-board counts TrackStock needs to touch only this item: the others as recorded.
         private static Dictionary<string, int> OnlyItem(VehicleState vehicle, string item, int unitsOnBoard)
         {
             var counts = (vehicle.StockBatches ?? new Dictionary<string, List<StockBatch>>())
@@ -215,8 +190,6 @@ namespace FoodTrucks.Core.Reputation
             return counts;
         }
 
-        // Cleaned overnight in its commissary's bay (Commissaries.CleanedOvernight): that one service day only, not the
-        // vehicle's last opening, since the 04:00 check can run late after a load. A day already counted takes nothing.
         public static bool CleanedOn(VehicleState vehicle, int serviceDay, int closedThrough)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -227,9 +200,6 @@ namespace FoodTrucks.Core.Reputation
 
         public int Points(VehicleState vehicle) => vehicle?.Health == null ? 0 : health.Points(vehicle.Health);
 
-        // Every day before `today` that has a record goes into health and regulars, oldest first; then the
-        // regulars move on through yesterday, so days nobody worked count as missed.
-        // Returns the visits that came too late for an already counted day (they are dropped).
         public int CloseDaysBefore(SaveState state, int today)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -246,19 +216,16 @@ namespace FoodTrucks.Core.Reputation
                     foreach (var visit in record.Visits) visits.Add(new SpotVisit { SpotKey = visit.SpotKey, OpenMinutes = visit.Minutes });
                     vehicle.Days!.Remove(record);
                 }
-                // Two vehicles at one spot on one day count as one visit there.
                 var merged = visits.GroupBy(v => v.SpotKey, StringComparer.Ordinal)
                     .Select(g => new SpotVisit { SpotKey = g.Key, OpenMinutes = g.Max(v => v.OpenMinutes) });
                 if (day >= 1 && day > state.Regulars.LastUpdatedDay) regulars.EndOfDay(state.Regulars, day, merged);
                 else if (day >= 1) dropped += visits.Count;
             }
-            // Days nobody worked still count as missed for the regulars, through yesterday.
             if (today - 1 >= 1 && today - 1 > state.Regulars.LastUpdatedDay)
                 regulars.EndOfDay(state.Regulars, today - 1, Array.Empty<SpotVisit>());
             return dropped;
         }
 
-        // The last day already counted: nothing may be recorded for it or earlier.
         public static int ClosedThrough(SaveState state) =>
             state?.Regulars == null || state.Regulars.LastUpdatedDay == int.MinValue ? 0 : state.Regulars.LastUpdatedDay;
     }

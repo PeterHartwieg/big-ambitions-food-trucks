@@ -26,13 +26,11 @@ public class CommissaryOrderingTests
         Assert.Equal(9_600, dumplings.BoxPriceCents);
         Assert.Equal(19_200, dumplings.GoodsCents);
         Assert.Equal(19_200 + 45_005, quote.GoodsCents);
-        // One flat fee for the delivery, not one per line or per unit.
         Assert.Equal(25_000, quote.FeeCents);
         Assert.Equal(25_000, quote.FeePerDeliveryCents);
         Assert.False(quote.SharedDelivery);
         Assert.Equal(quote.GoodsCents + 25_000, quote.TotalCents);
 
-        // The same goods as the orders Core books from it; the fee waits for the delivery.
         var state = CommissariesTests.Rented();
         var orders = CommissaryOrdering.Place(state, Rules, "a", quote, (1, 600));
         Assert.Equal(quote.Lines.Select(l => (l.ItemName, l.Units, l.UnitPriceCents, l.GoodsCents)),
@@ -114,7 +112,6 @@ public class CommissaryOrderingTests
         Assert.False(CommissaryOrdering.SharesDelivery(state, "b", 2));
         var shared = CommissaryOrdering.Quote(Rules, new[] { Request("b", 80, 100, 1) }, sharedDelivery: true);
         Assert.Equal((0L, 25_000L, true, 8_000L), (shared.FeeCents, shared.FeePerDeliveryCents, shared.SharedDelivery, shared.TotalCents));
-        // A standing order that delivers that day shares it too.
         var standing = new CommissaryStandingOrder { Id = 1, CommissaryId = "b", Repeat = CommissaryRepeat.Weekly, CreatedDay = 1, NextDay = 4,
             Lines = { new CommissaryStandingLine { ItemName = "taco", Boxes = 1 } } };
         state.StandingOrders.Add(standing);

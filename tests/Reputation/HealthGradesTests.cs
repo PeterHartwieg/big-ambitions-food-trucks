@@ -198,7 +198,6 @@ public class HealthGradesTests
     [Fact]
     public void APartTimeVehicleIsInspectedAsOftenInCalendarDays()
     {
-        // Open two days a week (Mondays and Thursdays); an A should still average about 12 weeks.
         var gaps = new List<int>();
         for (var seed = 1; seed <= 300; seed++)
         {

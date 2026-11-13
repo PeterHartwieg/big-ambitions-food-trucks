@@ -58,7 +58,6 @@ def box(name, center, size, color='Steel', spin=0):
     return mesh_part(name, verts, faces, [color]*6)
 
 def oct_chunk(name, center, size, key, tilt=0, taper=0.92, sear=False):
-    # A squared octagonal cross-section, extruded along each skewer (Y).
     x,y,z = center; sx,sy,sz = size
     ring = [(-.28,-.5),(.28,-.5),(.5,-.28),(.5,.28),(.28,.5),(-.28,.5),(-.5,.28),(-.5,-.28)]
     vs = []
@@ -92,7 +91,6 @@ def blockout():
     for ob in list(bpy.data.objects):
         if ob.name.startswith(('KG_', 'KabobGrill_', 'Studio_')):
             bpy.data.objects.remove(ob, do_unlink=True)
-    # Thick folded trough: outer shell, lip, recessed inner shell, closed floor.
     rings = [(.358,.176,.062),(.384,.208,.158),(.364,.188,.158),(.338,.150,.078)]
     vs=[]
     for w,d,z in rings:
@@ -104,14 +102,12 @@ def blockout():
             colors.append(['Steel','SteelLight','Interior'][k])
     faces.extend([(3,2,1,0),(12,13,14,15)]); colors.extend(['SteelDark','Interior'])
     mesh_part('Trough',vs,faces,colors)
-    # Four feet, two runners and a bottom tie ensure a surface at the placement origin.
     for x in (-.155,.155):
         for y in (-.070,.070): box('Leg', (x,y,.033), (.022,.022,.066), 'SteelDark')
     for y in (-.070,.070): box('Runner',(0,y,.006),(.340,.025,.012),'SteelDark')
     box('FloorTie',(0,0,.005),(.022,.160,.010),'SteelDark')
     for y in (-.101,.101): box('LongLip',(0,y,.158),(.388,.010,.009),'SteelLight')
     for x in (-.189,.189): box('EndLip',(x,0,.158),(.010,.198,.009),'SteelLight')
-    # Low rear shield with clipped upper corners, facing the customer at -Y.
     outline=[(-.183,.154),(.183,.154),(.183,.240),(.168,.255),(-.168,.255),(-.183,.240)]
     vs=[(x,y,z) for y in (.100,.108) for x,z in outline]
     faces=[tuple(range(5,-1,-1)),tuple(range(6,12))]
@@ -126,7 +122,6 @@ def detail():
     global PARTS
     body=bpy.data.objects['KabobGrill_Body']; PARTS=[body]
     rng=random.Random(71)
-    # Three staggered rows: hot orange blocks below a dark, broken charcoal bed.
     for row,y in enumerate((-.055,-.003,.049)):
         for col in range(6):
             x=-.145+col*.058+(.005 if row%2 else 0)
@@ -197,7 +192,6 @@ def uv_texture():
     bpy.ops.object.mode_set(mode='OBJECT')
     mesh=body.data; mesh.uv_layers.active.name='UVMap'
     mesh.calc_loop_triangles(); uv=mesh.uv_layers.active.data
-    # Rasterise flat per-face palette into the atlas, with padding for filtered sampling.
     pix=np.zeros((512,512,4),dtype=np.float32); pix[:,:,:3]=(.20,.24,.26); pix[:,:,3]=1
     mask=np.zeros((512,512),bool)
     for tri in mesh.loop_triangles:
@@ -244,7 +238,6 @@ def uv_texture():
     mat.node_tree.links.new(shader.outputs['BSDF'],output.inputs['Surface'])
     mesh.materials.clear(); mesh.materials.append(mat)
     for face in mesh.polygons: face.material_index=0; face.use_smooth=False
-    # Remove now-unused temporary palette materials from the final scene.
     for m in list(bpy.data.materials):
         if m.name.startswith('Build_') and m.users==0: bpy.data.materials.remove(m)
     for screen in bpy.data.screens:
@@ -258,7 +251,6 @@ def collision_export():
     old=bpy.data.objects.get('KabobGrill_Collision')
     if old: bpy.data.objects.remove(old,do_unlink=True)
     bm=bmesh.new()
-    # A conservative 8-corner envelope around all visible mesh points.
     lo=[min(v.co[i] for v in body.data.vertices) for i in range(3)]
     hi=[max(v.co[i] for v in body.data.vertices) for i in range(3)]
     for x in (lo[0],hi[0]):

@@ -10,19 +10,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Fitted equipment on show. On a cart's counter: the first fitted piece on the front spot, the second on the
-    // rear (CartAssets' EquipmentFront and EquipmentRear). In a truck: all four on the back counter opposite the
-    // hatch, full size, the cooking line, filled from the middle out (TruckAssets' spots, which carry the turn
-    // that has each piece face the cook and the hatch). A piece
-    // keeps its spot while it stays fitted. economy.json's "display" names each piece's model in the bundle; a
-    // piece without one leaves its spot empty. Every half second it compares each vehicle's fitted pieces with
-    // what it shows, so fitting, removing and loading need no hooks. While a cart is open the working sides face away from the side
-    // its queue forms on (CartQueueView's choice), retaining that side while the open line is out of view.
-    // Closed carts keep the right-hand queue layout. Queue layout notifies this view immediately. The cart's cash
-    // register moves with them to the counter's front corner on that side (Core CartStance), where the server stands
-    // across from it. A truck's always face the hatch. The models have no colliders. They follow the vehicle's visible flag every
-    // frame: the game hides a vehicle (EntityController.Hide, e.g. on another floor of a multi-floor building) by
-    // disabling only the renderers in its own list, which the pieces aren't in.
     internal sealed class VehicleDisplays : MonoBehaviour
     {
         private const float CheckSeconds = 0.5f;
@@ -40,9 +27,7 @@ namespace FoodTrucks
             }
 
             public string Kind { get; }
-            // The renderer whose layer the pieces follow.
             public string Body { get; }
-            // Whether the pieces turn to the queue's side (the cart) or keep their spot's facing (the truck).
             public bool Turns { get; }
             public string[] Spots { get; }
             public string[] Labels { get; }
@@ -54,18 +39,14 @@ namespace FoodTrucks
             new[] { "EquipmentLine2", "EquipmentLine3", "EquipmentLine1", "EquipmentLine4", EquipmentLayout.CoolerPlace },
             new[] { "line 2", "line 3", "line 1", "line 4", "customer cooler" });
 
-        // By the controller's instance ID: a vehicle spawned again (out of range and back) has a new one.
         private readonly Dictionary<int, Shown> shown = new Dictionary<int, Shown>();
         private readonly Dictionary<string, GameObject?> models = new Dictionary<string, GameObject?>();
-        // Vehicle, spot and piece already logged, so each fitted piece is logged once per session.
         private readonly HashSet<string> logged = new HashSet<string>();
         private float nextCheck;
         private static VehicleDisplays? instance;
 
         private void OnEnable() => instance = this;
 
-        // Called after a line is laid out, including PrepareServing before the player is placed. The register
-        // and cooler must follow that side in the same frame, independently of the equipment polling interval.
         internal static void QueueChanged()
         {
             if (instance == null) return;
@@ -82,13 +63,11 @@ namespace FoodTrucks
             public bool Visible = true;
             public Layout Layout = Cart;
             public Transform?[] Spots = Array.Empty<Transform?>();
-            // The cart's Cash_Register (CartAssets), mirrored to the queue's side.
             public Transform? Register;
             public string?[] Pieces = Array.Empty<string?>();
             public GameObject?[] Objects = Array.Empty<GameObject?>();
             public int Side;
             public int WindowSide = 1;
-            // The cart's umbrella: 1 open, 0 furled, -1 not set yet, -2 the model has no canopies.
             public int Umbrella = -1;
         }
 
@@ -135,7 +114,6 @@ namespace FoodTrucks
                         Pieces = new string?[count], Objects = new GameObject?[count],
                     };
                     shown[key] = entry;
-                    // A vehicle that left the game's list and came back must not get a second set of pieces.
                     foreach (var spot in entry.Spots)
                     {
                         if (spot == null) continue;
@@ -170,7 +148,6 @@ namespace FoodTrucks
                         Collect(entry);
                     }
                 }
-                // The game moves a pushed cart's renderers to the player vehicles layer while it is pushed and back after.
                 var layer = entry.Body != null ? entry.Body.gameObject.layer : controller.gameObject.layer;
                 if (entry.Layer != layer)
                 {
@@ -181,8 +158,6 @@ namespace FoodTrucks
                 if (entry.Side != side)
                 {
                     entry.Side = side;
-                    // Cart controls/doors face the server; presentation and the register face customers.
-                    // Truck children retain identity rotation: their anchors already face the cook/hatch.
                     foreach (var go in entry.Objects)
                         if (go != null) go.transform.localRotation = Quaternion.Euler(0f,
                             layout == Cart ? (float)CartStance.EquipmentYaw(side, go.name.Substring("Display_".Length)) : 0f, 0f);
@@ -194,18 +169,13 @@ namespace FoodTrucks
                         if (logged.Add($"register:{vehicle.id}:{CartStance.Side(side)}"))
                             Log.Info($"Cart register: cart {vehicle.id} register on the {(CartStance.Side(side) > 0 ? "right" : "left")} front corner, facing the customers.");
                     }
-                    // The cart's fridge door moves to the worker side so it remains accessible.
-                    // General worktop pieces turn in place; the cooler stays below the counter.
                     if (layout == Cart)
                         entry.Spots[entry.Spots.Length - 1]!.localPosition = new Vector3(-side * 0.443f, 0.525f, -0.32f);
                 }
             }
-            // Vehicles despawned or sold: their pieces went with them; forget them.
             foreach (var key in shown.Keys.Where(k => !seen.Contains(k)).ToList()) shown.Remove(key);
         }
 
-        // The cart's umbrella is open only while it sells; closed, pushed, parked or loaded it is furled round the pole
-        // (CartAssets' Cart_Canopy and Cart_Canopy_Furled). One log line per cart and state per session.
         private void Umbrella(Shown entry, string vehicleId, bool open)
         {
             var state = open ? 1 : 0;
@@ -237,7 +207,6 @@ namespace FoodTrucks
             }
         }
 
-        // The pieces' renderers, set to the vehicle's current visibility (a new piece on a hidden one starts hidden).
         private static void Collect(Shown entry)
         {
             entry.Renderers = entry.Objects.Where(go => go != null).SelectMany(go => go!.GetComponentsInChildren<Renderer>(true)).ToArray();
@@ -262,7 +231,6 @@ namespace FoodTrucks
             var go = Instantiate(model, parent, false);
             go.name = "Display_" + display;
             go.transform.localPosition = Vector3.zero;
-            // Looks only: nothing that blocks, triggers or catches the mouse.
             foreach (var collider in go.GetComponentsInChildren<Collider>(true)) Destroy(collider);
             return go;
         }

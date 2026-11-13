@@ -9,14 +9,10 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Partner deals between a vehicle and one of the player's own venues (design: Partnerships with your own
-    // businesses). Core's Partnerships decides; this finds the venues, counts the minutes worked outside them and
-    // gives the venue its satisfaction bonus through the game's daily update.
     internal static class Partners
     {
         private static PartnershipRules? Rules => DemandData.Pitches?.Partnerships;
 
-        // The player's venues of a partner kind within reach of the position, nearest first.
         public static List<(string Address, BuildingRegistration Registration, VenueKind Kind, double Distance)> VenuesNear(Vector3 position)
         {
             var list = new List<(string, BuildingRegistration, VenueKind, double)>();
@@ -38,7 +34,6 @@ namespace FoodTrucks
 
         public static string? VenueOf(string vehicleId) => Partnerships.Of(FoodTrucksSession.CurrentState!, vehicleId)?.Venue;
 
-        // The venue's name as the game shows it, else its address.
         public static string Name(string address)
         {
             var registration = Registration(address);
@@ -54,8 +49,6 @@ namespace FoodTrucks
             return World.Registrations().TryGetValue((street, number), out var registration) ? registration : null;
         }
 
-        // Partnerships whose vehicle is gone, or whose venue is no longer the player's partner kind, end with a
-        // message. At load and at each new day.
         public static void Prune(SaveState state)
         {
             var rules = Rules;
@@ -102,7 +95,6 @@ namespace FoodTrucks
             CartSelling.Say("foodtrucks:notification_partner_ended_player", kind, ("venue", Name(venue)));
         }
 
-        // Minutes someone worked the window: those outside the partner venue count towards its day.
         public static void Worked(SaveState state, VehicleState vehicle, Spot spot, long from, int minutes)
         {
             var rules = Rules;
@@ -113,12 +105,10 @@ namespace FoodTrucks
             Partnerships.Worked(partnership, rules, (int)(from / 1440) + 1, minutes);
             if (partnership.LastWorkedDay == before) return;
             Log.Info($"Partnership: {vehicle.VehicleId} worked day {partnership.LastWorkedDay} outside {partnership.Venue}.");
-            // Yesterday's minutes sold only after midnight's update (a time skip): the bonus goes on today's score now.
             var registration = Registration(partnership.Venue);
             if (registration != null) TryBonus(registration, partnership, rules, SaveGameManager.Current.Day);
         }
 
-        // The bonus on the venue's score, when it is due.
         private static void TryBonus(BuildingRegistration registration, PartnershipState partnership, PartnershipRules rules, int today)
         {
             if (registration.satisfaction == null || !Partnerships.BonusDue(partnership, today)) return;
@@ -131,8 +121,6 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
         }
 
-        // Harmony, around BusinessHelper.UpdateSatisfaction: when the game wrote a new satisfaction for a partner
-        // venue whose vehicle worked outside it yesterday or today, its facility part gets the bonus.
         public static void SatisfactionPrefix(BuildingRegistration registration, out Satisfaction? __state) =>
             __state = registration?.satisfaction;
 
@@ -148,8 +136,6 @@ namespace FoodTrucks
                 var partnership = Partnerships.ForVenue(state, World.AddressKey(address.streetName, address.streetNumber));
                 var today = SaveGameManager.Current.Day;
                 if (partnership == null) return;
-                // Only a facility score the game worked out from paying customers: with none, it copies the old one,
-                // bonus included, and another bonus would stack on it.
                 if (registration.unprocessedCompletedOrders == null || !registration.unprocessedCompletedOrders.Exists(o =>
                         o != null && o.completed && o.timestamp != null && o.timestamp.Day >= today - 1 && o.entries.Exists(e => e.paid))) return;
                 partnership.ScoredDay = today;

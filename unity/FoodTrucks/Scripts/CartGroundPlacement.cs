@@ -6,8 +6,6 @@ using UnityEngine.AI;
 
 namespace FoodTrucks
 {
-    // Shared ground placement for the player and visible cart crew. NPC ground plus the native street
-    // exclusions are required even when the cart itself has a legal pitch or the player mesh covers the road.
     internal static class CartGroundPlacement
     {
         private const float FallbackMetres = 3f;
@@ -44,7 +42,6 @@ namespace FoodTrucks
                 {
                     var probe = wanted + outward * across + forward * along;
                     if (!NavMesh.SamplePosition(probe, out var hit, SampleStep, filter)) continue;
-                    // CalculatePath is synchronous: only prove candidates that could improve the nearest safe result.
                     if (best.HasValue && (hit.position - wanted).sqrMagnitude >= (best.Value - wanted).sqrMagnitude) continue;
                     if (Valid(hit.position)) best = hit.position;
                 }
@@ -53,7 +50,6 @@ namespace FoodTrucks
                 return best.HasValue;
             }
 
-            // The body/wheels extend 0.50 m sideways. Keep the server's radius clear of the hull on each side.
             var clearance = 0.50f + radius;
             var behind = CartStanceWorld.Point(cart, (-CartStance.Side(side) * Mathf.Max((float)Math.Abs(preferred.X), clearance), preferred.Z));
             behindCart = true;
@@ -64,8 +60,6 @@ namespace FoodTrucks
                 placement = usedFallback ? "at a fallback behind the cart, opposite the queue" : "behind the cart at the equipment centre, opposite the queue";
                 return true;
             }
-            // No end-of-cart service: an employee there cannot reach the counter controls. Queue layout
-            // tries both sides with this same rule, and shows no line if neither has safe counter-side ground.
             spot = center;
             placement = "left where they stand";
             return false;

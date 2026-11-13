@@ -38,7 +38,7 @@ internal static class Scenarios
         var disabled = Child(go.transform, "Inactive", 6);
         disabled.activeSelf = false;
         disabled.Add<SphereCollider>().radius = .5f;
-        disabled.Add<BoxCollider>().enabled = false; // Two components on one path must survive.
+        disabled.Add<BoxCollider>().enabled = false;
         var trigger = Child(go.transform, "Trigger", 9).Add<BoxCollider>();
         trigger.isTrigger = true;
         SaveGameManager.Current.VehicleInstances.Add(car.vehicleInstance!); VehicleHelper.Car = car;
@@ -93,9 +93,9 @@ internal static class Scenarios
             }
             case "rules":
             {
-                Model(); // Identical pooled models collapse into one group.
+                Model();
                 var other = Model(12, 10);
-                other.Masks(1 << 12, 1 << 12, 1 << 12); // own-layer beats building.
+                other.Masks(1 << 12, 1 << 12, 1 << 12);
                 Physics.Ignored.Add((8, 12));
                 var r = Inspect(car);
                 var groups = (JArray)r["gley"]!["groups"]!;
@@ -125,7 +125,6 @@ internal static class Scenarios
             }
             case "bounds":
             {
-                // Root world rotation must cancel, rather than inflate the reported local box.
                 car.transform.yaw = .7f; car.transform.position = new Vector3(100, 20, -30);
                 var box = Child(car.transform, "RotatedBox").Add<BoxCollider>();
                 box.size = new Vector3(2, 4, 6); box.transform.yaw = MathF.PI / 2;
@@ -162,7 +161,6 @@ internal static class Scenarios
                 trigger.attachedRigidbody.includeLayers = 1 << 6;
                 trigger.attachedRigidbody.excludeLayers = 1 << 7;
                 trigger.attachedRigidbody.detectCollisions = true; trigger.attachedRigidbody.isKinematic = true;
-                // Same configuration at a different position still groups, while every root position is retained.
                 var twin = Model(); twin.transform.position = new Vector3(120, 22, -50);
                 var twinTrigger = twin.frontTrigger!.GetComponents<Collider>().Single();
                 twinTrigger.includeLayers = trigger.includeLayers; twinTrigger.excludeLayers = trigger.excludeLayers;
@@ -197,7 +195,6 @@ internal static class Scenarios
                 Check((bool)t["rigidbody_state"]!["known"]! && (int)t["rigidbody_state"]!["include_layers"]! == 1 << 6 &&
                     (int)t["rigidbody_state"]!["exclude_layers"]! == 1 << 7 &&
                     (bool)t["rigidbody_state"]!["detect_collisions"]! && (bool)t["rigidbody_state"]!["is_kinematic"]!, "Attached trigger Rigidbody state");
-                // Different override or Rigidbody settings must not collapse into the same group.
                 twinTrigger.excludeLayers = 0;
                 Check(Inspect(car)["gley"]!["groups"]!.Count() == 2, "Override differences retain distinct groups");
                 twinTrigger.excludeLayers = trigger.excludeLayers;
@@ -275,7 +272,6 @@ internal static class Scenarios
                 TrafficManager.Instance.Pool.Models.Add(null);
                 var partial = Inspect(car);
                 Check((int)partial["gley"]!["failed_models"]! == 1 && partial["gley"]!["groups"]!.Count() == 1, "Bad model preserves valid groups");
-                // Depth budget stays bounded even for pathological hierarchies.
                 var parent = car.transform;
                 for (var i = 0; i < 70; i++) parent = Child(parent, "Deep").transform;
                 parent.gameObject.Add<BoxCollider>();

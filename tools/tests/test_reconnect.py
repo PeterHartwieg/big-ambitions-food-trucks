@@ -18,7 +18,6 @@ from ftlib.mcp import respond
 from offline_transport import OfflineSession
 
 
-# The control file restarts only the test double, never a real game.
 MCP_BOOT = '''
 import json, runpy, sys
 from pathlib import Path

@@ -58,7 +58,6 @@ def prism(outline, thickness, color, part, side_color=None, simple_caps=False):
     """Closed thin polygon, with triangulated top/bottom and quad walls."""
     n=len(outline); vs=list(outline)+[(x,y,z-thickness) for x,y,z in outline]
     fs=[]; cs=[]
-    # Fan from a centre supports concave outlines that are star-shaped.
     cx=sum(p[0] for p in outline)/n; cy=sum(p[1] for p in outline)/n; cz=sum(p[2] for p in outline)/n
     if not simple_caps: vs.extend([(cx,cy,cz),(cx,cy,cz-thickness)])
     for i in range(n):
@@ -96,7 +95,6 @@ def geometry():
     prism([(-.088,-.015,.054),(-.073,-.035,.056),(.073,-.035,.056),(.088,-.015,.054),
            (.088,.015,.054),(.073,.030,.055),(-.073,.030,.055),(-.088,.015,.054)],
           .016,'beef','chopped_beef_bed','beef_dark',simple_caps=True)
-    # Paper sleeve: flat octagonal underside contains (0,0,0).
     outline=[(-.102,-.024),(-.085,-.043),(.085,-.043),(.102,-.024),(.102,.024),(.085,.043),(-.085,.043),(-.102,.024)]
     vs=[(x*.96,y*.93,0) for x,y in outline]
     vs += [(x,y,.017) for x,y in outline]
@@ -106,7 +104,6 @@ def geometry():
     for row in range(2):
         for j in range(8):
             a=row*8+j; b=row*8+(j+1)%8; c=b+8; d=a+8
-            # The large customer-facing side is divided into broad diagonal folds.
             if row==1 and j in (0,1,2,6,7):
                 fs.extend([(a,b,c),(a,c,d)])
                 cs.extend(['paper_light','paper' if j==1 else 'paper_fold'])
@@ -117,7 +114,6 @@ def geometry():
     append_mesh(vs,fs,cs,'deli_paper')
     if STAGE < 2: return
     rng=random.Random(11)
-    # Nine large chopped beef pieces, varying shape and height; no micro-detail.
     for i in range(9):
         x=-.076+i*.019; y=-.035+rng.uniform(-.004,.003); z=.048+rng.uniform(-.003,.005)
         dx=rng.uniform(.006,.011); dy=rng.uniform(.007,.011); dz=rng.uniform(.005,.008)
@@ -129,20 +125,17 @@ def geometry():
                 vs.append((x+xx*math.cos(angle)-yy*math.sin(angle),y+xx*math.sin(angle)+yy*math.cos(angle),z+zz+rng.uniform(-.002,.002)))
         append_mesh(vs,[(0,3,2,1),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7),(4,5,6,7)],
                     ['beef_dark','beef','beef_light','beef','beef','beef_light' if i%3 else 'beef'], 'beef_chunks')
-    # Melted American cheese drapes over the chopped beef in three connected-looking sheets.
     ribbon([-.087,-.065,-.047,-.025], .020,[-.035,-.046,-.047,-.043],
            [.059,.061,.061,.060],[.004,.008,.014,.006],'cheese','melted_cheese')
     ribbon([-.028,-.009,.023,.040], .018,[-.044,-.047,-.049,-.043],
            [.060,.060,.061,.060],[.005,.012,.015,.004],'cheese','melted_cheese')
     ribbon([.037,.055,.073,.088], .018,[-.043,-.045,-.043,-.031],
            [.060,.059,.060,.059],[.006,.009,.013,.004],'cheese','melted_cheese')
-    # Frilled lettuce outline, thickened into a closed leaf for export.
     leaf=[(-.084,-.009,.064),(-.066,-.046,.065),(-.052,-.040,.066),
           (-.039,-.049,.063),(-.024,-.042,.066),(-.008,-.051,.063),(.007,-.042,.067),
           (.024,-.048,.064),(.040,-.039,.066),(.056,-.046,.063),(.073,-.036,.066),
           (.083,-.016,.064),(.057,.018,.065)]
     prism(leaf,.0025,'lettuce_light','lettuce_frill','lettuce')
-    # Three tomato slices lie diagonally in the split, visible on the customer side.
     for i,x in enumerate([-.054,.0,.055]):
         outline=[]
         for j in range(8):
@@ -150,7 +143,6 @@ def geometry():
             xx=.018*math.cos(a); yy=.019*math.sin(a)
             outline.append((x+xx,-.023+yy,.069+yy*.22))
         prism(outline,.004,'tomato_flesh','tomato_slices','tomato',simple_caps=True)
-    # Broad pale baked slashes, conforming to the faceted dome; six triangles each.
     for x in [-.045,0,.045]:
         outline=[(x-.005,-.016,.0970),(x+.002,-.016,.0970),(x+.010,.009,.1045),
                  (x+.009,.025,.0999),(x+.003,.025,.0999),(x-.004,.009,.1045)]
@@ -175,7 +167,6 @@ def make_body():
     me=bpy.data.meshes.new('ChoppedCheese_Mesh'); me.from_pydata(verts,[],faces); me.update()
     ob=bpy.data.objects.new('ChoppedCheese_Body',me); bpy.context.collection.objects.link(ob)
     normals(me)
-    # Review stages use temporary swatches; final uses precisely one texture material.
     for key,color in PALETTE.items():
         m=bpy.data.materials.new('Preview_'+key); m.diffuse_color=color; me.materials.append(m)
     keys=list(PALETTE)
@@ -188,8 +179,6 @@ def make_body():
 def atlas(ob):
     me=ob.data; uv=me.uv_layers.new(name='UVMap')
     count=len(me.polygons); cols=math.ceil(math.sqrt(count)); rows=math.ceil(count/cols)
-    # Each original quad is a rectangular island; triangles occupy half a cell.
-    # Texture cells have solid flat colours and full-cell bleed around UV gutters.
     pixels=np.ones((256,256,4),dtype=np.float32)
     pixels[:,:,:3]=(.9,.88,.8)
     for i,(poly,color) in enumerate(zip(me.polygons,colors)):
@@ -212,13 +201,10 @@ def atlas(ob):
     me.materials.clear(); me.materials.append(mat)
     for p in me.polygons: p.material_index=0
     bm=bmesh.new(); bm.from_mesh(me); bmesh.ops.triangulate(bm,faces=list(bm.faces),quad_method='FIXED'); bm.to_mesh(me); bm.free()
-    # Remove unused preview materials, keeping the saved scene small and unambiguous.
     for m in list(bpy.data.materials):
         if m.name.startswith('Preview_') and m.users==0: bpy.data.materials.remove(m)
 
 def collision(body):
-    # A 12-point beveled prism conservatively encloses every visible vertex.
-    # Convex hull is generated from points, not a hand-authored face shell.
     bm=bmesh.new()
     footprint=[(-.108,-.027),(-.089,-.055),(.089,-.055),(.108,-.027),(.108,.052),(-.108,.052)]
     for z in [0,.108]:
@@ -253,7 +239,6 @@ def review(path):
     scene.render.resolution_x=1000; scene.render.resolution_y=800; scene.render.resolution_percentage=100
     scene.render.image_settings.file_format='PNG'; scene.render.image_settings.color_mode='RGBA'
     scene.render.filepath=path; bpy.ops.render.render(write_still=True)
-    # Preserve only the requested mesh objects and the untouched reference.
     scene.camera=None; bpy.data.objects.remove(cam,do_unlink=True); bpy.data.cameras.remove(cam_data)
     for screen in bpy.data.screens:
         for area in screen.areas:

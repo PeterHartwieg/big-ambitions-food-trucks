@@ -19,7 +19,6 @@ public class CommissariesTests
     internal static CommissaryStockLine Line(string item, int units, long price) =>
         new() { ItemName = item, Units = units, UnitPriceCents = price };
     private static Dictionary<string, int> Want(string item, int units) => new() { [item] = units };
-    // The game takes every payment.
     internal static bool Paid(CommissaryOrder order) => true;
 
     [Fact]
@@ -35,7 +34,7 @@ public class CommissariesTests
         var moved = Commissaries.Rent(state, Rules, "v", "cart", "b", 4);
         Assert.Same(first, moved);
         Assert.Equal("b", state.Spaces.Single().CommissaryId);
-        Assert.Equal(3, moved.SinceDay); // uninterrupted rental, including unsettled days
+        Assert.Equal(3, moved.SinceDay);
         Assert.Equal(new[] { 3, 4 }, Commissaries.RentDue(state, Rules, 4).Select(c => c.Day));
         Assert.Throws<ArgumentException>(() => Commissaries.Rent(state, Rules, "x", "spaceship", "a", 4));
         Assert.True(Commissaries.Release(state, "v"));
@@ -113,7 +112,6 @@ public class CommissariesTests
     {
         var state = Rented(5);
         var order = Commissaries.Order(state, Rules, "a", "dumpling", 3, 5, (5, minute));
-        // The fee isn't on the order while it waits: it is set on delivery (one per commissary and morning).
         Assert.Equal((1L, 5, 6, 15L, 0L, 15L), (order.Id, order.OrderedDay, order.DeliverDay, order.GoodsCents, order.FeeCents, order.TotalCents));
         Assert.Empty(Commissaries.Deliver(state, Rules, 5, 1439, Paid).Delivered);
         Assert.Empty(Commissaries.Deliver(state, Rules, 6, 479, Paid).Delivered);
@@ -151,7 +149,7 @@ public class CommissariesTests
         var later = Commissaries.Order(state, Rules, "a", "taco", 1, 100, (2, 100));
         var asked = new List<long>();
         Assert.Empty(Commissaries.Deliver(state, Rules, 2, 479, o => { asked.Add(o.Id); return true; }).Delivered);
-        Assert.Empty(asked); // nothing is paid before it arrives
+        Assert.Empty(asked);
         Assert.Equal(new[] { first.Id, second.Id }, Commissaries.Due(state, Rules, 2, 480).Select(o => o.Id));
         var run = Commissaries.Deliver(state, Rules, 2, 480, o => { asked.Add(o.Id); return true; });
         Assert.Equal(new[] { first.Id, second.Id }, asked);
@@ -189,21 +187,17 @@ public class CommissariesTests
         var b1 = Commissaries.Order(state, Rules, "b", "taco", 1, 100, (1, 300));
         var offered = new List<(long Id, long Fee)>();
         var run = Commissaries.Deliver(state, Rules, 2, 480, o => { offered.Add((o.Id, o.FeeCents)); return o.Id != refused.Id; });
-        // The refused first order passes the fee on: a's next order carries it, a's last none; b has its own delivery.
         Assert.Equal(new[] { (refused.Id, 25_000L), (a1.Id, 25_000L), (a2.Id, 0L), (b1.Id, 25_000L) }, offered);
         Assert.Equal(refused.Id, Assert.Single(run.Refused).Id);
         Assert.Equal(50_000, run.Delivered.Sum(o => o.FeeCents));
-        // An order for the same morning delivered later (Ctrl+Alt+F3, a retry) pays no second fee; the next day's does.
         var late = Commissaries.Order(state, Rules, "a", "taco", 1, 100, (1, 900));
         late.DeliverDay = 2;
         Assert.Equal(0, Assert.Single(Commissaries.Deliver(state, Rules, 2, 900, Paid).Delivered).FeeCents);
         Commissaries.Order(state, Rules, "a", "taco", 1, 100, (2, 900));
         Assert.Equal(25_000, Assert.Single(Commissaries.Deliver(state, Rules, 3, 480, Paid).Delivered).FeeCents);
-        // A morning where every payment is refused pays no fee.
         Commissaries.Order(state, Rules, "a", "taco", 1, 100, (3, 900));
         Assert.Single(Commissaries.Deliver(state, Rules, 4, 480, _ => false).Refused);
         Assert.DoesNotContain(state.FeesPaid, f => f.Day == 4);
-        // Old days are dropped.
         Assert.DoesNotContain(state.FeesPaid, f => f.Day < 3);
     }
 
@@ -218,7 +212,7 @@ public class CommissariesTests
         Assert.Single(state.Stock["a"]);
         Assert.Equal(second.Id, Assert.Single(state.Orders).Id);
         var retried = Assert.Single(Commissaries.Deliver(state, Rules, 2, 481, Paid).Delivered);
-        Assert.Equal((second.Id, 0L), (retried.Id, retried.FeeCents)); // the first order paid this morning's fee
+        Assert.Equal((second.Id, 0L), (retried.Id, retried.FeeCents));
     }
 
     [Fact]
@@ -311,8 +305,6 @@ public class CommissariesTests
         Assert.Equal(8, state.NightCheckedThroughDay);
     }
 
-    // Peter (15 October 2026): a vehicle in the bay of its own commissary at 04:00 counts as cleaned for the service day
-    // that just ended, the evening before the check; a commissary without a bay spares the fine but cleans nothing.
     [Fact]
     public void TheNightCheckCleansAVehicleInItsOwnBayForTheEveningBefore()
     {
@@ -322,12 +314,10 @@ public class CommissariesTests
 
         Assert.Empty(Commissaries.CleanedOvernight(state, Rules, 8, 200, new[] { inBay }));
         Assert.Equal(new[] { ("cart", 7) }, Commissaries.CleanedOvernight(state, Rules, 8, 240, new[] { inBay }));
-        // Two nights skipped (a load after two days away): each night's evening, as each night is fined.
         Assert.Equal(new[] { ("cart", 7), ("cart", 8) }, Commissaries.CleanedOvernight(state, Rules, 9, 600, new[] { inBay }));
         Assert.Empty(Commissaries.CleanedOvernight(state, Rules, 8, 240, new[] { new CommissaryVehicle { VehicleId = "cart", AtOwnCommissaryBay = true, BayGrace = true } }));
         Assert.Empty(Commissaries.CleanedOvernight(state, Rules, 8, 240, new[] { new CommissaryVehicle { VehicleId = "cart", PlayerInside = true } }));
         Assert.Empty(Commissaries.CleanedOvernight(state, Rules, 8, 240, new[] { new CommissaryVehicle { VehicleId = "other", AtOwnCommissaryBay = true } }));
-        // Not before the check has started, nor while it waits on an unknown street side.
         Assert.Empty(Commissaries.CleanedOvernight(new CommissaryState(), Rules, 8, 240, new[] { inBay }));
         Commissaries.Rent(state, Rules, "cart2", "cart", "a", 7);
         Assert.Empty(Commissaries.CleanedOvernight(state, Rules, 8, 240, new[] { inBay, new CommissaryVehicle { VehicleId = "cart2", BaySideUnknown = true } }));
@@ -346,23 +336,19 @@ public class CommissariesTests
         Assert.False(Commissaries.Deducted(line));
         Assert.False(Commissaries.FromVehicle(state.Stock["a"][0]));
         Assert.Equal(900, Commissaries.ReturnedGoodsCents(state));
-        // First in, first out: what was here before goes first.
         Assert.Equal(10, Commissaries.Restock(state, "a", new Dictionary<string, int> { ["hotdog"] = 15 }).First().Units);
         Assert.Throws<ArgumentOutOfRangeException>(() => Commissaries.ReturnFromVehicle(state, "a", "hotdog", 0, 45, 6, "truck1", 20));
     }
 
-    // Review round 1 of the UI flow (Astra, Sol, Opus): phone-ordered stock taken onto a vehicle and given back keeps its
-    // commissary origin, so the uninstall takes its refund off the deduction; wholesaler goods given back with it don't.
     [Fact]
     public void OrderedStockKeepsItsTaxOriginThroughATakeAndAReturn()
     {
         var state = Rented();
-        Commissaries.ReturnToStock(state, "a", new[] { Line("hotdog", 100, 50) }); // a phone order's delivery
+        Commissaries.ReturnToStock(state, "a", new[] { Line("hotdog", 100, 50) });
         foreach (var taken in Commissaries.Restock(state, "a", new Dictionary<string, int> { ["hotdog"] = 30 }))
             Commissaries.TookOnVehicle(state, taken, taken.Units);
         Assert.Equal(30, state.OrderedOnVehicles["hotdog"]);
 
-        // The truck also carries 20 hot dogs from a wholesaler at 40 cents; all 50 come back (stack prices differ).
         var ordered = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 30, 50, 6, "truck1", fleetOnBoard: 50, loadedDay: 4);
         var other = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 20, 40, 6, "truck1", fleetOnBoard: 20);
 
@@ -371,7 +357,6 @@ public class CommissariesTests
         Assert.False(Commissaries.Deducted(Assert.Single(other)));
         Assert.False(state.OrderedOnVehicles.ContainsKey("hotdog"));
         Assert.Equal(800, Commissaries.ReturnedGoodsCents(state));
-        // The uninstall pays back all of it and reverses the deduction for all but the wholesaler's 20.
         var refund = Commissaries.Refund(state);
         Assert.Equal(70 * 50 + 30 * 50 + 20 * 40, refund.Total);
         Assert.Empty(state.OrderedOnVehicles);
@@ -384,22 +369,17 @@ public class CommissariesTests
         Commissaries.ReturnToStock(state, "a", new[] { Line("hotdog", 100, 50) });
         foreach (var taken in Commissaries.Restock(state, "a", new Dictionary<string, int> { ["hotdog"] = 40 }))
             Commissaries.TookOnVehicle(state, taken, taken.Units);
-        // 35 sold, then 10 bought at a wholesaler: the truck holds 5 ordered and 10 others, 15 in all.
         Commissaries.LeftVehicle(state, "hotdog", 35);
         Assert.Equal(5, state.OrderedOnVehicles["hotdog"]);
         var back = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 15, 50, 6, "truck1", fleetOnBoard: 15);
 
         Assert.Equal(new[] { (5, true), (10, false) }, back.Select(l => (l.Units, Commissaries.Deducted(l))));
         Assert.False(state.OrderedOnVehicles.ContainsKey("hotdog"));
-        // Logistics stock taken and given back was never deducted.
         var logistics = CommissaryLogistics.Receive(state, "a", "cola", 10, 30, 6, "wh");
         Commissaries.TookOnVehicle(state, logistics, 10);
         Assert.False(state.OrderedOnVehicles.ContainsKey("cola"));
     }
 
-    // Review round 3 of the UI flow (Astra): the game merges stacks at an averaged price, so the cargo's price isn't
-    // what was deducted. 40 ordered at $0.50 and 40 from a wholesaler at $1.00 come back as 80 at $0.75; the uninstall
-    // reverses the $20 deducted, not $30.
     [Fact]
     public void AMergedStackReversesOnlyTheDeductedCost()
     {
@@ -417,12 +397,10 @@ public class CommissariesTests
         var refund = Commissaries.Refund(Clone(state));
         Assert.Equal(6000, refund.Total);
         Assert.Equal(2000, refund.Total - Commissaries.ReturnedGoodsCents(state));
-        // Taking the ordered batch again carries its deducted cost back into the pool, not its averaged price.
         foreach (var taken in Commissaries.Restock(state, "a", new Dictionary<string, int> { ["hotdog"] = 40 }))
             Commissaries.TookOnVehicle(state, taken, taken.Units);
         Assert.Equal(40, state.OrderedOnVehicles["hotdog"]);
         Assert.Equal(2000, state.OrderedOnVehiclesCents["hotdog"]);
-        // Sales take the average cost out with the units; the last unit takes the rest.
         Commissaries.LeftVehicle(state, "hotdog", 10);
         Assert.Equal(1500, state.OrderedOnVehiclesCents["hotdog"]);
         Commissaries.LeftVehicle(state, "hotdog", 50);
@@ -432,7 +410,6 @@ public class CommissariesTests
     private static CommissaryState Clone(CommissaryState state) =>
         Newtonsoft.Json.JsonConvert.DeserializeObject<CommissaryState>(Newtonsoft.Json.JsonConvert.SerializeObject(state))!;
 
-    // Sold out entirely, restocked at a wholesaler, given back: nothing is ordered any more.
     [Fact]
     public void ASellOutThenAWholesalerRestockReturnsNothingAsOrdered()
     {
@@ -441,7 +418,7 @@ public class CommissariesTests
         foreach (var taken in Commissaries.Restock(state, "a", new Dictionary<string, int> { ["hotdog"] = 40 }))
             Commissaries.TookOnVehicle(state, taken, taken.Units);
         Commissaries.LeftVehicle(state, "hotdog", 40);
-        Commissaries.LeftVehicle(state, "hotdog", 5); // more than the pool: clamped at none
+        Commissaries.LeftVehicle(state, "hotdog", 5);
 
         var back = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 30, 42, 7, "truck1", fleetOnBoard: 30);
 
@@ -449,7 +426,6 @@ public class CommissariesTests
         Assert.Equal(30 * 42, Commissaries.ReturnedGoodsCents(state));
     }
 
-    // Ordered stock at two prices, taken by one vehicle and given back by another: the pool is the fleet's, per item.
     [Fact]
     public void OrderedUnitsAtMixedPricesCanComeBackFromAnotherVehicle()
     {
@@ -460,14 +436,11 @@ public class CommissariesTests
         Assert.Equal(40, state.OrderedOnVehicles["hotdog"]);
         Commissaries.LeftVehicle(state, "hotdog", 10);
 
-        // 30 ordered units remain. Truck 2 holds 20, truck 1 holds 15 (5 from a wholesaler): 35 in the fleet.
         var second = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 20, 60, 6, "truck2", fleetOnBoard: 35);
         var first = Commissaries.ReturnFromVehicle(state, "a", "hotdog", 15, 50, 6, "truck1", fleetOnBoard: 15);
 
         Assert.Equal(new[] { (20, true) }, second.Select(l => (l.Units, Commissaries.Deducted(l))));
         Assert.Equal(new[] { (10, true), (5, false) }, first.Select(l => (l.Units, Commissaries.Deducted(l))));
-        // The pool's average cost is 55 cents (20 at 50, 20 at 60): the 30 ordered units back carry 1,650 deducted; the
-        // returns are worth 20 × 60 + 15 × 50, so 300 of their value stays off the reversal.
         Assert.Equal(55, Commissaries.DeductedPerUnit(second[0]));
         Assert.Equal(20 * 60 + 15 * 50 - 30 * 55, Commissaries.ReturnedGoodsCents(state));
     }
@@ -487,7 +460,6 @@ public class CommissariesTests
 
         Assert.Equal(new[] { 7 }, Commissaries.ResolvePendingCleaning(state, "cart", inOwnBay: true));
         Assert.Empty(state.PendingCleaning);
-        // Out of the bay when the side is read: dropped.
         state.PendingCleaning["cart"] = new List<int> { 8 };
         Assert.Empty(Commissaries.ResolvePendingCleaning(state, "cart", inOwnBay: false));
         Assert.Empty(state.PendingCleaning);
@@ -504,7 +476,6 @@ public class CommissariesTests
         Assert.Equal(new[] { "cart" }, Commissaries.Undecided(state, new[] { unknown }));
         Assert.Empty(Commissaries.NightCheck(state, Rules, 8, 240, new[] { unknown }));
         Assert.Equal(7, state.NightCheckedThroughDay);
-        // Read later in the morning: in its bay, no fine, the night checked.
         Assert.Empty(Commissaries.NightCheck(state, Rules, 8, 250, new[] { new CommissaryVehicle { VehicleId = "cart", AtOwnCommissaryBay = true } }));
         Assert.Equal(8, state.NightCheckedThroughDay);
     }
@@ -529,7 +500,6 @@ public class CommissariesTests
         Assert.Empty(Commissaries.Undecided(state, new[] { inside }));
         Assert.Empty(Commissaries.NightCheck(state, Rules, 8, 240, new[] { inside }));
         Assert.Equal(8, state.NightCheckedThroughDay);
-        // Without a space the bay never exempts it, so the side doesn't matter either.
         var none = new CommissaryState { NightCheckedThroughDay = 7 };
         Assert.Empty(Commissaries.Undecided(none, new[] { new CommissaryVehicle { VehicleId = "cart", BaySideUnknown = true } }));
     }
@@ -618,13 +588,13 @@ public class CommissariesTests
         state.Fines.Add(new CommissaryFine { VehicleId = "cart", Day = 1, Cents = 25000 });
         var refund = Commissaries.Refund(state);
         Assert.Equal(70, refund.GoodsCents);
-        Assert.Equal(70, refund.Total); // the open order was never paid: nothing back for it
+        Assert.Equal(70, refund.Total);
         Assert.Equal(1, refund.CancelledOrders);
         Assert.Empty(state.Stock);
         Assert.Empty(state.Orders);
         Assert.Empty(state.Spaces);
         Assert.Single(state.Unlocked);
-        Assert.Single(state.Fines); // debt must still be settled
+        Assert.Single(state.Fines);
         Assert.Equal(0, Commissaries.Refund(state).Total);
     }
 
@@ -642,7 +612,7 @@ public class CommissariesTests
         state.Fines.Add(fine);
 
         var refund = Commissaries.Refund(state);
-        Assert.Equal(30 + delivered.GoodsCents, refund.GoodsCents); // delivered goods, not their delivery fee
+        Assert.Equal(30 + delivered.GoodsCents, refund.GoodsCents);
         Assert.Equal(1, refund.CancelledOrders);
         Assert.Same(rent, Assert.Single(state.Charges));
         Assert.Same(fine, Assert.Single(state.Fines));

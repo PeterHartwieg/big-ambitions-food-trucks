@@ -41,13 +41,13 @@ class EventLocationTests(unittest.TestCase):
         self.assertIn('EventLocations.ReadableAddress(p.Address) != null', pitches)
         self.assertLess(pitches.index('DropUnknown(state, tables);'), pitches.index('CityEvents.Expire('))
         catering = (ROOT / 'unity/FoodTrucks/Scripts/Catering.cs').read_text()
-        step = catering[catering.index('        private void Step('):catering.index('        // The minute the truck is free')]
+        step = catering[catering.index('        private void Step('):catering.index('        private static long BusyUntil(')]
         self.assertLess(step.index('RefreshSavedMessages(state);'), step.index('SettleEnded('))
-        migration = catering[catering.index('        internal static void RefreshSavedMessages('):catering.index('        // Once a game minute')]
+        migration = catering[catering.index('        internal static void RefreshSavedMessages('):catering.index('        private void Step(')]
         self.assertNotIn('Bookings()', migration)
         self.assertNotIn('RefreshMessages(', step)
         self.assertNotIn('RefreshBookingRadius(', step)
-        update = catering[catering.index('        private void Update()'):catering.index('        // Address recovery is once per load')]
+        update = catering[catering.index('        private void Update()'):catering.index('        internal static void RefreshSavedMessages(')]
         self.assertIn('Commissary.Uninstalled', update)
         self.assertIn('migrateRadius = migrateAddresses = true;', catering)
         self.assertEqual(catering.count('CateringGigs.CancelUnlocatable('), 1)
@@ -55,7 +55,7 @@ class EventLocationTests(unittest.TestCase):
 
     def test_daily_offers_do_not_restore_uninstalled_contact(self):
         catering = (ROOT / 'unity/FoodTrucks/Scripts/Catering.cs').read_text()
-        daily = catering[catering.index('        private static void OnNewDay()'):catering.index("        // Today's offers")]
+        daily = catering[catering.index('        private static void OnNewDay()'):catering.index('        private static void Offer(')]
         guard = 'if (Commissary.Uninstalled || !FoodTrucksSession.CanWrite || FoodTrucksSession.CurrentState == null) return;'
         self.assertEqual(daily[daily.index('{') + 1:].lstrip().splitlines()[0], guard)
         self.assertLess(daily.index(guard), daily.index('Bookings();'))
@@ -65,11 +65,11 @@ class EventLocationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='ft-bookings-migration-') as directory:
             folder = Path(directory)
             source = (ROOT / 'unity/FoodTrucks/Scripts/Catering.cs').read_text()
-            method = source[source.index('        internal static void RefreshSavedMessages('):source.index('        // Once a game minute')]
-            step = source[source.index('        private void Step('):source.index('        // The minute the truck is free')]
-            settle = source[source.index('        private void SettleEnded('):source.index('        // Whether the truck could start')]
-            describe = source[source.index('        internal static Dictionary<string, string> Describe('):source.index('        // "12 Fifth Street"')]
-            daily = source[source.index('        private static void OnNewDay()'):source.index("        // Today's offers")]
+            method = source[source.index('        internal static void RefreshSavedMessages('):source.index('        private void Step(')]
+            step = source[source.index('        private void Step('):source.index('        private static long BusyUntil(')]
+            settle = source[source.index('        private void SettleEnded('):source.index('        private static bool Ready(')]
+            describe = source[source.index('        internal static Dictionary<string, string> Describe('):source.index('        internal static string PlaceName(')]
+            daily = source[source.index('        private static void OnNewDay()'):source.index('        private static void Offer(')]
             (folder / 'Catering.cs').write_text("""using System;
 using System.Linq;
 using System.Collections.Generic;
@@ -129,8 +129,8 @@ void Settle(SaveState s,CateringRules r,DemandTables t,CateringGig g,VehicleInst
         with tempfile.TemporaryDirectory(prefix='ft-city-day-') as directory:
             folder = Path(directory)
             source = (ROOT / 'unity/FoodTrucks/Scripts/CityPitches.cs').read_text()
-            pending = source[source.index('        private static SaveState? pendingAddresses;'):source.index('        // Once per city load:')]
-            methods = source[source.index('        public static void NewDay('):source.index('        // Debug key for throwaway saves:')]
+            pending = source[source.index('        private static SaveState? pendingAddresses;'):source.index('        public static void LogFound(')]
+            methods = source[source.index('        public static void NewDay('):source.index('        public static void EventHereForTesting(')]
             (folder / 'CityPitches.cs').write_text('''using System;
 using System.Linq;
 using System.Collections.Generic;
@@ -158,7 +158,7 @@ internal static string Weekday(int d) => d.ToString();
         with tempfile.TemporaryDirectory(prefix='ft-world-cache-') as directory:
             folder = Path(directory)
             source = (ROOT / 'unity/FoodTrucks/Scripts/World.cs').read_text()
-            methods = source[source.index('        private static List<(CityBuildingController Controller, Vector3[] Doors)>? buildings;'):source.index('        // The entrances of the building at an address;')]
+            methods = source[source.index('        private static List<(CityBuildingController Controller, Vector3[] Doors)>? buildings;'):source.index('        public static Vector3[]? EntrancesOf(')]
             (folder / 'World.cs').write_text('using System; using System.Collections.Generic; using UnityEngine; namespace FoodTrucks { static partial class World {' + methods + '} }')
             (folder / 'Harness.csproj').write_text(f'''<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>
 <OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable>

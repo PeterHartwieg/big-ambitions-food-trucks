@@ -11,7 +11,6 @@ using System.Text.RegularExpressions;
 
 namespace FoodTrucks
 {
-    // Street IDs are data IDs, not translation keys. Use the same building and formatter as CityMapFilters.
     internal static class EventLocations
     {
         internal static bool Ready => AddressHelper.StreetDataNames.Any() && World.AllBuildings().Count > 0;
@@ -38,7 +37,6 @@ namespace FoodTrucks
         internal static string Name(string addressKey) => ReadableAddress(addressKey)
             ?? CityPitches.Text("foodtrucks:event_location_unavailable");
 
-        // A present building with a name still loading is unknown, not a cancelled destination.
         internal static bool CanJudgeLocation(string addressKey)
         {
             try
@@ -49,8 +47,6 @@ namespace FoodTrucks
             catch (Exception) { return false; }
         }
 
-        // History can outlive both a gig and its building. StreetData IDs use AddressHelper's
-        // streetLocalization lookup, not Localizor's translation-key lookup.
         internal static string? HistoricalAddress(string? value) => HistoricalAddress(value, out _);
 
         private static string? HistoricalAddress(string? value, out bool fallback, StreetSnapshot? streets = null)
@@ -64,7 +60,7 @@ namespace FoodTrucks
             if (!int.TryParse(numberText, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number <= 0) return null;
             string? street = null;
             try { street = streets == null ? AddressHelper.GetStreetNameLocalized(streetKey) : streets.NativeName(streetKey); }
-            catch (Exception) { /* Historical text needs no surviving StreetData or building. */ }
+            catch (Exception) {  }
             if (InvalidStreet(street))
             {
                 fallback = true;
@@ -76,7 +72,6 @@ namespace FoodTrucks
         private static bool InvalidStreet(string? street) => string.IsNullOrWhiteSpace(street) ||
             street!.IndexOfAny(new[] { ':', '#', '{', '}', '<', '>' }) >= 0;
 
-        // Native names can arrive after buildings/StreetData. Include that change even when gigs do not change.
         internal static string ResolutionState(IEnumerable<string> locations, StreetSnapshot streets) =>
             (streets.HasStreets && World.AllBuildings().Count > 0) + ":" + streets.Fingerprint + ":" + string.Join(",",
             locations.Distinct().OrderBy(p => p, StringComparer.Ordinal).Select(p =>
@@ -104,7 +99,6 @@ namespace FoodTrucks
                 {
                     var numeric = Regex.Match(name, @"\A([0-9]+)(?:st|nd|rd|th)\z");
                     if (numeric.Success) int.TryParse(numeric.Groups[1].Value, out n);
-                    // Common written compound ordinals, e.g. twentyfirst / fortysecond.
                     foreach (var tens in new[] { ("twenty", 20), ("thirty", 30), ("forty", 40), ("fifty", 50), ("sixty", 60), ("seventy", 70), ("eighty", 80), ("ninety", 90) })
                         if (name.StartsWith(tens.Item1, StringComparison.Ordinal))
                         { var unit = Array.IndexOf(ordinals, name.Substring(tens.Item1.Length)) + 1; if (unit > 0 && unit < 10) n = tens.Item2 + unit; }
@@ -133,14 +127,11 @@ namespace FoodTrucks
             {
                 foreach (var message in contact.messagesQueue)
                 {
-                    // Native contact payloads are not validated by the Core save codec. Isolate each one.
                     try
                     {
                         var data = message?.messageData;
                         if (data == null || (message!.messageKey != "foodtrucks:message_bookings_offer" &&
                             message.messageKey != "foodtrucks:message_bookings_booked")) continue;
-                        // Enumerate descriptions inside the record boundary too. A native failure must not
-                        // prevent independent address/radius repairs on other records.
                         active ??= activeGigs.ToList();
                         accepted ??= (acceptedGigs ?? active).Concat(SavedConfirmations(contact)).ToList();
                         open ??= (openOffers ?? Enumerable.Empty<Dictionary<string, string>>()).ToList();
@@ -160,7 +151,6 @@ namespace FoodTrucks
                                 { data["legacyHistoryPlace"] = old!; changed = true; }
                                 data["place"] = place; changed = true;
                             }
-                            // Only our own fallback can be upgraded on a later load. Preserve readable saved text.
                             if (fallback && place != CityPitches.Text("foodtrucks:event_location_unavailable"))
                             {
                                 if (!data.TryGetValue("addressFallback", out var prior) || prior != place)
@@ -178,8 +168,6 @@ namespace FoodTrucks
                             : (HasBookingIdentity(data, original, streets) && day > 0 && data.TryGetValue("reply", out var reply) && int.TryParse(reply, out var replyDay) && replyDay > 0 && day > replyDay &&
                                 open.All(d => BookingMatchWithStreets(data, original, d, streets) == false) && accepted.All(d => BookingMatchWithStreets(data, original, d, streets) == false)
                                 ? "foodtrucks:offer_inactive" : "foodtrucks:offer_map_hint");
-                        // 0.10.7 kept this sentence inline in the template. Unknown identity preserves
-                        // existing wording, but an absent argument must inherit that original sentence.
                         if (key == null)
                         {
                             if (data.ContainsKey("guidance")) continue;
@@ -189,7 +177,7 @@ namespace FoodTrucks
                         if (!data.TryGetValue("guidance", out var existing) || existing != guidance)
                         { data["guidance"] = guidance; changed = true; }
                     }
-                    catch (Exception) { /* A corrupt history record must not stop payments or other records. */ }
+                    catch (Exception) {  }
                 }
             }
             finally { if (changed && FoodTrucksSession.CanWrite) FoodTrucksSession.MarkChanged(); }
@@ -206,8 +194,6 @@ namespace FoodTrucks
             }
         }
 
-        // Enough payload to identify a booking row; this does not require resolving its street.
-        // With no candidates, inactivity is proven even for an unregistered readable street.
         private static bool HasBookingIdentity(Dictionary<string, string> data, string? original, StreetSnapshot streets) =>
             new[] { "day", "start", "kind" }.All(k => data.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v)) &&
             (data.TryGetValue("bookingId", out var id) && long.TryParse(id, out var number) && number > 0 ||
@@ -215,7 +201,6 @@ namespace FoodTrucks
              HistoricalAddress(original, out _, streets) != null || data.TryGetValue("place", out var place) && !UnreadablePlace(place) &&
                 Regex.IsMatch(place, @"\A[1-9][0-9]*\s+\S"));
 
-        // true: same identity; false: positively different; null: insufficient resolution/evidence.
         private static bool? BookingMatch(Dictionary<string, string> data, string? original, Dictionary<string, string> candidate)
             => BookingMatchWithStreets(data, original, candidate, CaptureStreets());
 
@@ -253,12 +238,9 @@ namespace FoodTrucks
             if (!aliases.TryGetValue(left.Groups[2].Value, out var leftId) || leftId == null ||
                 !aliases.TryGetValue(right.Groups[2].Value, out var rightId) || rightId == null) return null;
             if (leftId != rightId || left.Groups[1].Value != right.Groups[1].Value) return false;
-            // Aliases prove a mismatch, never a positive match from spelling alone.
             return null;
         }
 
-        // Exact whole names only. Conflicting aliases stay unknown; never erase spaces,
-        // hyphens, directions or street types to manufacture an identity.
         internal sealed class StreetSnapshot
         {
             private readonly Dictionary<string, string?> native;
@@ -269,8 +251,6 @@ namespace FoodTrucks
             internal StreetSnapshot(Dictionary<string, string?> native, Dictionary<string, string?> aliases)
             {
                 this.native = native; Aliases = aliases;
-                // Length prefixes distinguish missing/invalid names and ambiguous aliases without
-                // delimiter collisions. Both input membership/names and resolved ambiguity count.
                 string Part(string? value) => value == null ? "-1:" : value.Length.ToString(CultureInfo.InvariantCulture) + ":" + value;
                 string Table(Dictionary<string, string?> table) => string.Concat(table.OrderBy(p => p.Key, StringComparer.Ordinal)
                     .Select(p => Part(p.Key) + Part(p.Value)));
@@ -278,8 +258,6 @@ namespace FoodTrucks
             }
         }
 
-        // A fresh catalog snapshot per reconciliation poll, shared by its signature and comparisons.
-        // No names or aliases survive into the next poll.
         internal static StreetSnapshot CaptureStreets()
         {
             var nativeNames = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -297,7 +275,6 @@ namespace FoodTrucks
                 try { native = AddressHelper.GetStreetNameLocalized(id); } catch (Exception) { }
                 nativeNames[id] = native;
                 var fallback = FallbackStreet(id.Substring("ba:street_".Length));
-                // Keep fallback alongside native; Add makes names shared by IDs ambiguous.
                 foreach (var name in new[] { native, fallback })
                 {
                     Add(id, name);
@@ -324,7 +301,6 @@ namespace FoodTrucks
                     candidate.TryGetValue("place", out var originalCandidate) && !UnreadablePlace(originalCandidate) && original == originalCandidate) ||
                 data.TryGetValue("place", out var place) && !UnreadablePlace(place) && candidate.TryGetValue("place", out var otherPlace) && place == otherPlace);
 
-        // Backfill saved confirmations independently of address readiness and surviving gigs.
         internal static void RefreshBookingRadius(Contact contact)
         {
             if (!FoodTrucksSession.CanWrite) return;
@@ -339,8 +315,6 @@ namespace FoodTrucks
             if (changed) FoodTrucksSession.MarkChanged();
         }
 
-        // Repair broken locations and exact legacy city labels. Legacy messages must prove their location from
-        // its known old rendering; a sole surviving live offer is not proof of a historical message's identity.
         internal static void RefreshMessages(Contact contact, IEnumerable<Dictionary<string, string>> descriptions)
         {
             if (!FoodTrucksSession.CanWrite) return;
@@ -388,14 +362,13 @@ namespace FoodTrucks
 
         private static bool SameLocation(Dictionary<string, string> stored, string? old, Dictionary<string, string> candidate, StreetSnapshot? streets = null)
         {
-            if (stored.TryGetValue("bookingId", out var booking) && !string.IsNullOrEmpty(booking) || stored.TryGetValue("locationId", out var location) && !string.IsNullOrEmpty(location)) return true; // SameDetails matched it.
+            if (stored.TryGetValue("bookingId", out var booking) && !string.IsNullOrEmpty(booking) || stored.TryGetValue("locationId", out var location) && !string.IsNullOrEmpty(location)) return true;
             if (candidate.TryGetValue("legacyPlace", out var legacy) && old == legacy) return true;
             if (!candidate.TryGetValue("locationId", out var addressKey) || string.IsNullOrEmpty(addressKey)) return false;
             var hash = addressKey.LastIndexOf('#');
             if (hash < 0) return false;
             var street = addressKey.Substring(0, hash);
             var number = addressKey.Substring(hash + 1);
-            // Localizor versions returned either the raw street ID or that ID prefixed by '#'.
             return old == addressKey || old == number + " " + street || old == number + " #" + street ||
                 !string.IsNullOrWhiteSpace(old) && old == HistoricalAddress(addressKey, out _, streets);
         }
@@ -404,7 +377,6 @@ namespace FoodTrucks
         {
             if (ReadableAddress(addressKey) == null) return;
             var address = World.BuildingAt(addressKey)!.building.Address;
-            // Native Destination guider persists customDestination before setting its target.
             GuidersManager.SetGuiderTarget(address, DirectionGuiderType.Destination);
             Notices.Show(NotificationType.Success, "notification_destination_set",
                 new Dictionary<string, string> { { "address", address.ToFormattedString() } }, 4f);

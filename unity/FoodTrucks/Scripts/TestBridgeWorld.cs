@@ -12,27 +12,19 @@ using UnityEngine.AI;
 
 namespace FoodTrucks
 {
-    // The bridge's teleport and vehicle commands, and the places both they and shoot resolve: a commissary's bay and
-    // door, a vehicle's hatch side.
     internal static partial class TestBridgeCommands
     {
-        // ---- Places ----
-
-        // The vehicle a drive moves: a food truck, or any car or van the player sits in (a job's hired van, a car of
-        // their own), which the self-driving ride takes to an address like a truck.
         internal static VehicleInstance DrivenVehicle(string id)
         {
             var game = SaveGameManager.Current;
             var vehicle = game.VehicleInstances.FirstOrDefault(v => v != null && v.id == id);
             if (vehicle != null && (FoodTrucksMod.KindOf(vehicle.vehicleTypeName) != null || game.ActiveVehicleId == id)) return vehicle;
             if (vehicle != null) throw new BridgeError($"You're not in {id}: get in first (use it, \"Click to drive\").");
-            // A job's hired van can be driven without being in the save's list of vehicles: the one the player drives.
             var driven = InstanceBehavior<GameManager>.Instance?.selectedVehicle?.vehicleInstance;
             if (driven != null && driven.id == id) return driven;
             return FoodVehicle(id);
         }
 
-        // The food vehicle with this id, or a refusal naming the ones there are.
         internal static VehicleInstance FoodVehicle(string id)
         {
             var game = SaveGameManager.Current;
@@ -56,7 +48,6 @@ namespace FoodTrucks
             return sites.Site(id) ?? throw new BridgeError($"No commissary '{id}'. Commissaries: {string.Join(", ", sites.Sites.Select(s => s.Id))}.");
         }
 
-        // The ground (the game's Ground layer) under a point, from high above.
         internal static Vector3 Ground(float x, float z)
         {
             if (Physics.Raycast(new Vector3(x, 500f, z), Vector3.down, out var hit, 1000f, LayerHelper.groundLayerMask, QueryTriggerInteraction.Ignore))
@@ -64,10 +55,6 @@ namespace FoodTrucks
             throw new BridgeError($"No ground found at x {x:F1}, z {z:F1}.");
         }
 
-        // A commissary's bay: its first resolved point on the ground, the paint's direction, and the side its pavement is on
-        // (1 right of that direction, -1 left). The direction is the one a truck faces with its hatch (right) to the pavement,
-        // by the mod's own hatch check; the paint's own direction when neither reads as pavement. A nose-in bay in a lot
-        // (CommissarySite.InLot) faces its measured heading as stored, never turned for the hatch (review round 2, Astra).
         internal static (Vector3 Point, Vector3 Along, int PavementSide) Bay(string siteId)
         {
             var site = Site(siteId);
@@ -85,7 +72,6 @@ namespace FoodTrucks
             return (point, along, 1);
         }
 
-        // The building's entrance nearest a point (the bay), or null when the building isn't in this city.
         internal static Vector3? EntranceNear(CommissarySite site, float x, float z)
         {
             var doors = World.EntrancesOf(site.Address);
@@ -93,11 +79,6 @@ namespace FoodTrucks
             return doors.OrderBy(d => (d.x - x) * (d.x - x) + (d.z - z) * (d.z - z)).First();
         }
 
-        // A commissary's door and the way out of the building from it: the entrance nearest its resolved bay (the one
-        // state.commissary.bays names), else the building's first entrance.
-        // The way out from the door is the walk to the street (the NavMesh path to the nearest driving lane, else to the
-        // bay); `View` is the point `viewMetres` along that walk, where a person coming from the street sees the door.
-        // Without a path, straight towards the lane or bay; without either, away from the building's middle.
         internal static (Vector3 Door, Vector3 Out) Door(string siteId)
         {
             var (door, outward, _) = DoorView(siteId, 1.5f);
@@ -137,7 +118,6 @@ namespace FoodTrucks
             return (door, outward, door + outward * viewMetres);
         }
 
-        // The point `metres` along a path's corners (its end if shorter).
         private static Vector3 Along(Vector3[] corners, float metres)
         {
             for (var i = 1; i < corners.Length; i++)
@@ -149,7 +129,6 @@ namespace FoodTrucks
             return corners[corners.Length - 1];
         }
 
-        // A vehicle's hatch (a truck's serving window, a cart's window side) and the outward direction there.
         internal static (Vector3 Hatch, Vector3 Out, Vector3 Forward) HatchOf(VehicleInstance vehicle, Transform transform)
         {
             var forward = transform.forward;
@@ -157,7 +136,6 @@ namespace FoodTrucks
             forward.Normalize();
             if (FoodTrucksMod.KindOf(vehicle.vehicleTypeName) == "truck")
             {
-                // The hatch is on the truck's right (art/README.md); the player's place behind it is its middle.
                 var right = transform.right;
                 right.y = 0f;
                 return (WindowCrew.PlayerSpot(transform).Position, right.normalized, forward);
@@ -169,8 +147,6 @@ namespace FoodTrucks
         }
 
         private static float Heading(Vector3 direction) => Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
-
-        // ---- teleport ----
 
         private const float TeleportSeconds = 30f;
 
@@ -199,7 +175,6 @@ namespace FoodTrucks
             }
             var reply = who == "player" ? TeleportPlayer(target, heading, clear) : TeleportVehicle(who, target, heading, clear);
             if (surface == null) return reply;
-            // The surface the point was put on, in the reply (a Deferred's reply once the move is done).
             if (reply is JObject pose)
             {
                 pose["surface"] = surface;
@@ -215,16 +190,6 @@ namespace FoodTrucks
             return reply;
         }
 
-        // The ground surfaces stacked above a point (a street under an elevated road), top down, and the one a teleport
-        // lands on (Core GroundPick): with an explicit y the one nearest it (walkable, for the player), else a walkable
-        // one nearest the mover's own height. Each ray starts just under the last surface; a ray never hits a box it
-        // starts in or a mesh's underside, so it goes on to the next surface down. Live session 4 (13 October 2026): the
-        // highest surface put the player on the elevated highway at y 5.06.
-        //
-        // Walkable, for the player: NavMesh of the player's own agent type and areas within the 3 m the landing allows
-        // and within 1 m of the surface's height, and, while the player stands on the NavMesh within 100 m, a complete
-        // walking route from there. Live session 6: the highway deck has NavMesh near it, so a y of 5.06 put the player up there; no
-        // footpath leads to it. A vehicle's surfaces are read with any NavMesh, as before.
         internal static (Vector3 Point, string Why) GroundPicked(float x, float z, float referenceY, float? explicitY, bool walkableOnly = false)
         {
             var points = new List<Vector3>();
@@ -245,9 +210,6 @@ namespace FoodTrucks
             if (walkableOnly)
             {
                 var filter = PlayerFilter(out var start);
-                // Only near the player: the city's NavMesh routes over long distances come back partial (live session 8:
-                // every move from Lower Manhattan to Hell's Kitchen read as unwalkable), and the deck this guards
-                // against is a short jump from the street under it.
                 if (start != null && new Vector2(start.Value.x - x, start.Value.z - z).magnitude > RouteMetres)
                 {
                     route = $"; walking routes not checked (more than {RouteMetres:F0} m from the player)";
@@ -271,8 +233,6 @@ namespace FoodTrucks
 
         private const float RouteMetres = 100f;
 
-        // The player agent's own NavMesh filter (agent type and areas), and the player's place on the NavMesh, or null
-        // when they aren't on it (in a vehicle, inside a building, off the mesh).
         internal static NavMeshQueryFilter PlayerFilter(out Vector3? start)
         {
             start = null;
@@ -299,24 +259,15 @@ namespace FoodTrucks
             return NavMesh.CalculatePath(start.Value, near.position, filter, path) && path.status == NavMeshPathStatus.PathComplete;
         }
 
-        // ---- What stands where something is moved to ----
-
-        // Something in the way: its description, and the lane's parked car it belongs to (the only kind `clear` removes).
         private sealed class Blocker
         {
             public string What = "";
             public GameObject? LaneCar;
-            // The thing itself, so two cars of one model (pooled cars share model names) stay two (review round 6).
             public UnityEngine.Object? Thing;
-            // A delivery-job van the game has hidden for now.
             public bool Hidden;
-            // A traffic car (the AI vehicles' layer), which the game's own clean-up for a placed vehicle removes.
             public bool Traffic;
         }
 
-        // The vehicle's own size in its own frame: each solid collider's own box (a box's centre and size, a sphere's or
-        // capsule's enclosing box, a mesh's local bounds), carried into the vehicle's frame with its scale (Core Footprint),
-        // so the size doesn't grow with the way the vehicle faces. Logged once per vehicle type, to check in game.
         private static readonly HashSet<string> footprintLogged = new HashSet<string>(StringComparer.Ordinal);
 
         private static Bounds LocalBounds(VehicleController controller)
@@ -365,9 +316,6 @@ namespace FoodTrucks
             return bounds;
         }
 
-        // The ground and road surfaces, parking areas and triggers aren't in the way; a kerb isn't either (the test starts
-        // 0.3 m up). A trigger on the parked-car or traffic layers still is: the game's own check for cars under a placed
-        // vehicle (VehicleHelper.DestroyBlockingVehicles) queries those layers with triggers included.
         private static bool Ignored(Collider c)
         {
             var layer = c.gameObject.layer;
@@ -428,23 +376,16 @@ namespace FoodTrucks
             return found.Values.ToList();
         }
 
-        // What stands in the vehicle's footprint, 0.3 m up to its roof, at a pose on the ground.
-        // `vans`: the delivery-job vans, looked up once per command (Vans()); null looks them up here.
         private static List<Blocker> InTheWay(VehicleController controller, Vector3 ground, Quaternion rotation,
             IReadOnlyList<Vehicles.DeliveryDriverJob.DeliveryJobStartController>? vans = null)
         {
             var local = LocalBounds(controller);
-            // 0.3 m above the ground the vehicle stands on, not above its hull: the truck's hull itself starts 0.30 m up.
             var bottom = Mathf.Min(local.min.y, 0f) + 0.3f;
             var top = Mathf.Max(local.max.y, bottom + 0.5f);
             var centre = new Vector3(local.center.x, (bottom + top) / 2f, local.center.z);
             var half = new Vector3(Mathf.Max(0.05f, local.extents.x - 0.1f), (top - bottom) / 2f, Mathf.Max(0.05f, local.extents.z - 0.1f));
             var hits = Physics.OverlapBox(ground + rotation * centre, half, rotation, ~0, QueryTriggerInteraction.Collide);
             var found = Describe(hits, controller.transform);
-            // The colliders alone missed a van in a perpendicular stall (live session 4, 13 October 2026, industry-city).
-            // So the parked cars round the place are also tested by their footprints (each lane car's mesh bounds, as
-            // the game sizes its stalls by), and so is the building's delivery-job van, which the game hides and shows
-            // again in its stall whatever stands there; a hidden one has no collider to hit.
             var middle = ground + rotation * new Vector3(local.center.x, 0f, local.center.z);
             var forward = rotation * Vector3.forward;
             var mine = new FoodTrucks.Core.Fleet.FlatBox(middle.x, middle.z, forward.x, forward.z, local.extents.x, local.extents.z);
@@ -458,13 +399,10 @@ namespace FoodTrucks
             return found;
         }
 
-        // Every delivery-job van in the scene, hidden ones too: a scene-wide search, so once per command.
         private static List<Vehicles.DeliveryDriverJob.DeliveryJobStartController> Vans() =>
             UnityEngine.Object.FindObjectsByType<Vehicles.DeliveryDriverJob.DeliveryJobStartController>(FindObjectsInactive.Include, FindObjectsSortMode.None)
                 .Where(v => v != null).ToList();
 
-        // The lanes' parked cars within `radius` of a point (active children of the parking lanes there) and the
-        // delivery-job vans, shown or hidden, with how each is named in a refusal and whether `clear` may send it away.
         private static IEnumerable<(GameObject Car, string What, bool LaneCar, bool Hidden)> CarsNear(Vector3 point, float radius,
             IReadOnlyList<Vehicles.DeliveryDriverJob.DeliveryJobStartController> vans)
         {
@@ -487,8 +425,6 @@ namespace FoodTrucks
 
         private static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
 
-        // A parked car's footprint and height span: its mesh collider's bounds (each lane car has one on its root), else
-        // its renderers'.
         private static bool CarFootprint(GameObject car, out FoodTrucks.Core.Fleet.FlatBox box, out (double Bottom, double Top) span)
         {
             box = default;
@@ -509,7 +445,6 @@ namespace FoodTrucks
             }
             var renderers = car.GetComponentsInChildren<Renderer>(true);
             if (renderers.Length == 0) return false;
-            // Renderers' world bounds: as wide one way as the other, whatever the car's turn.
             var all = renderers[0].bounds;
             foreach (var r in renderers) all.Encapsulate(r.bounds);
             var reach = Mathf.Max(all.extents.x, all.extents.z);
@@ -518,15 +453,12 @@ namespace FoodTrucks
             return true;
         }
 
-        // What stands where the player would: a standing person's capsule.
         private static List<Blocker> InTheWay(PlayerController player, Vector3 ground)
         {
             var hits = Physics.OverlapCapsule(ground + Vector3.up * 0.6f, ground + Vector3.up * 1.6f, 0.2f, ~0, QueryTriggerInteraction.Ignore);
             return Describe(hits, player.transform, sceneryCounts: false);
         }
 
-        // Nothing in the way, or (with clear) only the lanes' parked cars, which go back to their pool as BayParking sends
-        // them. Otherwise a refusal naming what stands there.
         private static void MakeRoom(List<Blocker> blockers, bool clear, string where)
         {
             if (blockers.Count == 0) return;
@@ -543,8 +475,6 @@ namespace FoodTrucks
             throw new BridgeError($"Something stands at {where}: {names}.{hint}");
         }
 
-        // A truck to a commissary's bay: the bay's middle, else the free place on its paint nearest the middle, the vehicle
-        // lined up with the lane and its hatch to the pavement.
         private static JToken TeleportToBay(string id, string siteId, float? heading, bool clear)
         {
             var vehicle = FoodVehicle(id);
@@ -570,7 +500,6 @@ namespace FoodTrucks
                 atMiddle ??= blockers;
                 if (blockers.Count == 0) return TeleportVehicle(id, place, rotation.eulerAngles.y, clear, vans: vans);
             }
-            // Nothing free on the paint: the middle, if clear may send its parked cars away.
             return TeleportVehicle(id, bay.Point, rotation.eulerAngles.y, clear, atMiddle, vans);
         }
 
@@ -590,13 +519,11 @@ namespace FoodTrucks
                 {
                     if (who != "player") throw new BridgeError("commissary: places the player at the door; a vehicle goes to bay:<site>.");
                     var (door, outward) = Door(id);
-                    // A step out from the door, facing it.
                     return (door + outward * 1.5f, heading ?? Heading(-outward));
                 }
                 case "vehicle":
                 {
                     if (who != "player") throw new BridgeError("vehicle: places the player beside a vehicle.");
-                    // A car of the player's own: beside its driver's side, on the pavement if there is one within reach.
                     var any = SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v != null && v.id == id);
                     if (any != null && FoodTrucksMod.KindOf(any.vehicleTypeName) == null)
                     {
@@ -609,14 +536,12 @@ namespace FoodTrucks
                     var (hatch, outward, _) = HatchOf(vehicle, controller.transform);
                     var flat = controller.transform.position;
                     var along = hatch - flat;
-                    // On the pavement beside the hatch: the hatch's place along the vehicle, 2 m out from its side.
                     var halfWidth = FoodTrucksMod.KindOf(vehicle.vehicleTypeName) == "truck" ? 1.1f : 0.6f;
                     var point = flat + Vector3.Project(along, controller.transform.forward) + outward * (halfWidth + 1.5f);
                     return (point, heading ?? Heading(-outward));
                 }
                 case "address":
                 {
-                    // Like a taxi to a building: 1.5 m out from its first entrance, away from the building, facing it.
                     if (who != "player") throw new BridgeError("address: places the player at a building's entrance.");
                     if (!AddressForm.IsMatch(id))
                         throw new BridgeError($"address: takes a building's address as the game writes it, ba:street_<name>#<number>; got '{id}'.");
@@ -629,8 +554,6 @@ namespace FoodTrucks
                 }
                 case "exit":
                 {
-                    // Out of the building the player is in: the way out a person walks to (the game's exit zone, whose
-                    // trigger takes the player out, ExitZoneDespawner). The nearest one that isn't a parking exit.
                     if (who != "player") throw new BridgeError("exit: walks the player out of a building.");
                     if (!BuildingManager.IsInsideBuilding) throw new BridgeError("You're not inside a building.");
                     var from = PlayerHelper.GetPosition();
@@ -646,10 +569,6 @@ namespace FoodTrucks
             }
         }
 
-        // ---- walk ----
-
-        // The game's navigation blockers set on the player (PlayerController._activeNavigationBlockers), for the walk's
-        // refusal: blind run 2 (I31) had every walk refused after the map was closed from a vehicle, with nothing open.
         private static string Blockers(PlayerController player)
         {
             try
@@ -661,18 +580,10 @@ namespace FoodTrucks
             catch (Exception ex) { return $"; blockers unreadable ({ex.Message})"; }
         }
 
-        // How long a walk may take in real seconds before the bridge gives up and says where the player is.
         private const float WalkSeconds = 600f;
-        // Within this of the goal (flat) the walk has arrived; standing still this long short of it, it has stopped.
         private const float ArrivedMetres = 1.5f;
         private const float StoppedSeconds = 3f;
 
-        // { "x", "z" } or { "place": bay:<site> | commissary:<site> | vehicle:<id> | address:<address> }: the game's
-        // click-to-move (PlayerController.SetNewDestination, the same call as a click on the ground), so the character
-        // walks there on its own navigation at its own pace, pushing the cart or hand truck it holds. Never a teleport.
-        // Refused in a car or truck (a vehicle is driven, not walked), indoors to a place outside, while paused (walking
-        // takes real time) and when no walking route reaches the place. The reply comes once the player arrives or stops:
-        // { arrived, x, z, from_goal, path, metres, holding }.
         private static object Walk(JObject args)
         {
             var player = PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.");
@@ -698,7 +609,6 @@ namespace FoodTrucks
             var filter = PlayerFilter(out _);
             if (!NavMesh.SamplePosition(player.transform.position, out var from, 2f, filter))
                 throw new BridgeError("You aren't standing on walkable ground.");
-            // The place's walkable ground: within 3 m, as a click on the ground takes it, nearest the place's height.
             if (!NavMesh.SamplePosition(target, out var to, 3f, filter) && !NavMesh.SamplePosition(new Vector3(target.x, from.position.y, target.z), out to, 3f, filter))
                 throw new BridgeError($"No walkable ground within 3 m of x {target.x:F1}, z {target.z:F1}.");
             var path = new NavMeshPath();
@@ -708,9 +618,6 @@ namespace FoodTrucks
             for (var i = 1; i < path.corners.Length; i++) metres += Vector3.Distance(path.corners[i - 1], path.corners[i]);
             var complete = path.status == NavMeshPathStatus.PathComplete;
             var goal = to.position;
-            // As a person walks it: along the pavements and over the crossings the city's pedestrians use, waiting
-            // for a gap in the traffic before stepping into the road. The player's own NavMesh also covers the roads,
-            // and its shortest path crosses anywhere, into traffic that Real Life Overhaul lets hit the player.
             var stops = PavementRoute(from.position, goal);
             var stop = 0;
             var waitedSeconds = 0f;
@@ -746,7 +653,6 @@ namespace FoodTrucks
             }
             return new Deferred(() =>
             {
-                // Walked into a way out: the game takes the player outside (the place moves with them).
                 if (insideBefore != null && InsideAddress() != insideBefore)
                 {
                     if (InstanceBehavior<BuildingManager>.Instance != null && InstanceBehavior<BuildingManager>.Instance.enteringBuilding) return null;
@@ -756,7 +662,6 @@ namespace FoodTrucks
                 }
                 var now = player.transform.position;
                 if (Flat(now, goal) <= ArrivedMetres) return Reply(true);
-                // At a corner of the pavement route: on to the next, after the traffic has passed if it crosses a road.
                 if (stops != null && stop < stops.Count - 1 && Flat(now, stops[stop]) <= LegMetres)
                 {
                     var crossing = CrossesRoadway(stops[stop], stops[stop + 1]);
@@ -765,7 +670,7 @@ namespace FoodTrucks
                     if (crossing && MustWait(stops[stop], stops[stop + 1], clock - waitingSince!.Value, out var nearest) && clock - waitingSince < MaxTrafficWaitSeconds)
                     {
                         lastTraffic = nearest;
-                        stillSince = clock;   // standing at the kerb is waiting, not stopped
+                        stillSince = clock;
                         return null;
                     }
                     if (waitingSince != null)
@@ -785,7 +690,6 @@ namespace FoodTrucks
                     last = now;
                     stillSince = UnityEngine.Time.realtimeSinceStartup;
                 }
-                // Stopped short (blocked, a partial route's end, the walk taken over by a click or a key): where it is.
                 if (UnityEngine.Time.realtimeSinceStartup - stillSince > StoppedSeconds && !agent.pathPending)
                 {
                     Log.Info($"Test bridge: walk stopped at x {now.x:F1}, z {now.z:F1}, {Flat(now, goal):F0} m short" +
@@ -799,16 +703,10 @@ namespace FoodTrucks
         }
 
         private const float LegMetres = 0.8f;
-        // A moving car this close to the crossing (either kerb or its middle) keeps the player at the kerb, and so does
-        // one within TrafficMetres that is getting closer: cars turn into crossings from side streets (attempt 5 was hit
-        // on day 12), but any car at all within 25 m held the player up to an hour on a busy street (attempt 6, day 1).
         private const float TrafficNearMetres = 8f;
         private const float TrafficMetres = 25f;
-        // Traffic that never thins (a jam across the crossing) is waited out this long, then crossed.
         private const float MaxTrafficWaitSeconds = 60f;
 
-        // The corners of the pedestrians' route (the NPC NavMesh: pavements and crossings) from here to the goal, the goal
-        // last; null when they have no route there or it ends more than a few metres short (the walk then goes straight).
         private static List<Vector3>? PavementRoute(Vector3 from, Vector3 goal)
         {
             var filter = Extensions.NavMeshHelper.NpcNavMeshFilter;
@@ -822,7 +720,6 @@ namespace FoodTrucks
             return stops;
         }
 
-        // A leg that steps onto the road: a crosswalk or the roads layer under any half metre of it.
         private static bool CrossesRoadway(Vector3 a, Vector3 b)
         {
             var steps = Mathf.Max(1, Mathf.CeilToInt((float)Flat(a, b) / 0.5f));
@@ -834,11 +731,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // A moving traffic car (the AiVehicles layer, which Real Life Overhaul's knock-down senses) close to the crossing
-        // or heading for it within a few seconds.
-        // At a crossing with traffic lights the player waits as the city's pedestrians do
-        // (PedestrianMovementHandler.CanCrossCrosswalk): until the crossing's red light for the cars is on. A car still
-        // moving within a few metres also waits. A crossing without lights waits for a gap in the traffic.
         private const float LightWaitSeconds = 30f;
 
         private static bool MustWait(Vector3 a, Vector3 b, float waitedSoFar, out string? why)
@@ -854,7 +746,6 @@ namespace FoodTrucks
             return TrafficComing(a, b, out why, nearOnly: false);
         }
 
-        // The cars' red light linked to a crosswalk on this leg (CrosswalkToTrafficLightLink), or null for a crossing without lights.
         private static GameObject? CrossingLight(Vector3 a, Vector3 b)
         {
             var steps = Mathf.Max(1, Mathf.CeilToInt((float)Flat(a, b) / 1f));
@@ -890,8 +781,6 @@ namespace FoodTrucks
                 var speed = velocity.magnitude;
                 var towards = middle - at; towards.y = 0f;
                 var closing = towards.sqrMagnitude > 0.01f && Vector3.Dot(velocity, towards.normalized) > 0.5f;
-                // Moving close by, or within 25 m and getting closer. A car standing still (parked, queuing at the
-                // lights) is no danger: it held the player up to an hour on attempt 7.
                 if (speed >= 1f && (distance <= TrafficNearMetres || (!nearOnly && distance <= TrafficMetres && closing)))
                 {
                     found = true;
@@ -906,14 +795,12 @@ namespace FoodTrucks
             var player = PlayerHelper.PlayerController ?? throw new BridgeError("The player isn't there.");
             if (!NavMesh.SamplePosition(target, out var hit, 3f, PlayerFilter(out _)))
                 throw new BridgeError($"No walkable ground within 3 m of x {target.x:F1}, z {target.z:F1}.");
-            // The NavMesh found must be on the chosen surface, not a level above or below it.
             if (Mathf.Abs(hit.position.y - target.y) > 1f)
                 throw new BridgeError($"No walkable ground within 3 m of x {target.x:F1}, y {target.y:F2}, z {target.z:F1} (the nearest is at y {hit.position.y:F2}).");
             var point = hit.position;
             MakeRoom(InTheWay(player, point), clear, $"x {point.x:F1}, z {point.z:F1}");
             var pump = TestBridgePump.Instance ?? throw new BridgeError("The bridge's runner is gone.");
             var game = SaveGameManager.Current;
-            // A walk the game is running (enter, Back to the hatch) would carry on from the new place: dropped first.
             player.ResetNavigation();
             foreach (var v in game.VehicleInstances)
                 if (v != null && TruckWindow.PlayerAt(v.id)) TruckWindow.StepOutNow("moved by the test bridge");
@@ -926,7 +813,6 @@ namespace FoodTrucks
             var done = false;
             IEnumerator Move()
             {
-                // The game warps the player out of a car a frame after the seat is left (CarController.ExitVehicle).
                 if (exited)
                 {
                     yield return null;
@@ -982,7 +868,6 @@ namespace FoodTrucks
             }
             catch
             {
-                // The move failed: the body's own mode back at once (review round 8).
                 if (body != null) RestoreInterpolation(body);
                 throw;
             }
@@ -992,9 +877,6 @@ namespace FoodTrucks
                 if (pump != null) pump.StartCoroutine(InterpolateAfterStep(body));
                 else RestoreInterpolation(body);
             }
-            // The parking reading for the new place: the game reads it again when a car it drives stands still
-            // (CarController.isCheckedForParkingZone), and at once here if the player drives this one, as the panel's
-            // live reading that Open checks. A vehicle nobody drives keeps the state the game would store on leaving it.
             var game = SaveGameManager.Current;
             if (controller is CarController car)
             {
@@ -1002,8 +884,6 @@ namespace FoodTrucks
                 if (game.ActiveVehicleId == id) car.UpdateParkingZone();
                 else
                 {
-                    // As the game stores both on leaving a vehicle (VehicleController.SetParkingData): the state and the
-                    // neighbourhood the hourly parking charge is priced by.
                     var legal = Legality.GameParkingReading(controller.transform, out var neighbourhood);
                     vehicle.parkingState = legal ? ParkingState.Legal : ParkingState.Illegal;
                     vehicle.parkingNeighbourhood = neighbourhood;
@@ -1028,8 +908,6 @@ namespace FoodTrucks
             return reply;
         }
 
-        // Bodies whose interpolation the bridge turned off, with the mode each had first: a second teleport before the
-        // first is restored keeps the first original, not the None the bridge set (review round 8).
         private static readonly Dictionary<Rigidbody, RigidbodyInterpolation> interpolationOff = new Dictionary<Rigidbody, RigidbodyInterpolation>();
 
         private static void InterpolationOff(Rigidbody body)
@@ -1045,7 +923,6 @@ namespace FoodTrucks
             if (body != null) body.interpolation = mode;
         }
 
-        // Every body still waiting gets its mode back: the bridge stops (Reset), before its pump and coroutines go.
         internal static void RestoreAllInterpolation()
         {
             foreach (var pair in interpolationOff.ToList())
@@ -1053,8 +930,6 @@ namespace FoodTrucks
             interpolationOff.Clear();
         }
 
-        // Puts a body's interpolation back once a physics step has run from its new pose (WaitForFixedUpdate waits
-        // through a pause).
         private static IEnumerator InterpolateAfterStep(Rigidbody body)
         {
             yield return new WaitForFixedUpdate();
@@ -1068,8 +943,6 @@ namespace FoodTrucks
             ["heading"] = TestBridgeState.Round(heading),
         };
 
-        // ---- vehicle ----
-
         private static object Vehicle(JObject args)
         {
             var op = Need(args, "op", "open, close, fast_forward, skip_work, stop_work, work_window, step_out, back_to_hatch, enter, exit, restock, transfer, rent_bay or buy");
@@ -1079,7 +952,6 @@ namespace FoodTrucks
             if (op != "enter" && CrewDriveProbe.Owns(id)) throw new BridgeError("Truck belongs to the crew driving probe; stop it first.");
 #endif
             if (id == DrivingVehicle) throw new BridgeError($"{id} is on a drive: wait for it (drive status).");
-            // Getting into and out of any car or van works as for a truck (a job's hired van, a car of your own).
             var vehicle = (op == "enter" || op == "exit") && SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v != null && v.id == id) is { } any
                 ? any : op == "exit" ? DrivenVehicle(id) : FoodVehicle(id);
             var state = FoodTrucksSession.CurrentState ?? throw new BridgeError("The mod's save data isn't loaded.");
@@ -1089,7 +961,6 @@ namespace FoodTrucks
             int Cargo() => vehicle.cargoInstances.Where(c => c != null).Sum(c => c.amount);
             string? Space() => state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == id)?.CommissaryId;
             var cargoBefore = Cargo();
-            // Why Commissary stock or the commissary's Spaces refused, when it says so without a notice.
             string? why = null;
             var workAccepted = false;
             var spaceBefore = Space();
@@ -1102,7 +973,6 @@ namespace FoodTrucks
                 switch (op)
                 {
                     case "open":
-                        // The on-foot menu's Open for business: the vehicle stands parked, the player is out of every vehicle.
                         if (!string.IsNullOrEmpty(game.ActiveVehicleId))
                             throw new BridgeError($"Open for business is in the parked vehicle's on-foot menu: vehicle exit first (the player is in {game.ActiveVehicleId}).");
                         if (FoodTrucks.Core.Saves.StreetSales.Find(state, id)?.IsOpen == true) throw new BridgeError($"Vehicle {id} is open already.");
@@ -1144,8 +1014,6 @@ namespace FoodTrucks
                     case "enter":
                         if (game.ActiveVehicleId == id) throw new BridgeError($"The player is in {id} already.");
                         if (!string.IsNullOrEmpty(game.ActiveVehicleId)) throw new BridgeError($"The player is in another vehicle ({game.ActiveVehicleId}): vehicle exit first.");
-                        // The vehicle overlay's Enter vehicle button: walks there first when further than the game's reach.
-                        // Up close it gets in at once: the walk to a car's driver's door can stall short of it.
                         var car = Spawned(vehicle);
                         if (Vector3.Distance(PlayerHelper.GetPosition(), car.transform.position) <= TestBridgeCommands.CarReachMetres) car.EnterVehicle();
                         else car.DriveVehicle();
@@ -1158,13 +1026,11 @@ namespace FoodTrucks
                             throw new BridgeError("The game's Park button refused: paused, no parking here, or the panel isn't showing.");
                         break;
                     case "restock":
-                        // Commissary stock's Fill up (food only), or its "nothing in stock" notice.
                         InIt("Commissary stock");
                         why = global::FoodTrucks.Commissary.FillUpForTesting(vehicle);
                         break;
                     case "transfer":
                     {
-                        // Commissary stock's take or return of one item: { "direction": "take" | "return", "item", "units"? }.
                         InIt("Commissary stock");
                         var direction = Need(args, "direction", "take or return");
                         var item = Need(args, "item", "an item key or name");
@@ -1175,8 +1041,6 @@ namespace FoodTrucks
                         break;
                     }
                     case "rent_bay":
-                        // The commissary's Spaces, by phone: rent or move for the commissary whose bay the vehicle stands
-                        // in. Paperwork, so the player needn't be in the vehicle.
                         why = global::FoodTrucks.Commissary.RentBayForTesting(vehicle);
                         break;
                     default:
@@ -1185,10 +1049,6 @@ namespace FoodTrucks
             }, notices => VehicleReply(op, id, vehicle, state, notices, why, IsOpen, Cargo, Space, cargoBefore, spaceBefore, workAccepted));
         }
 
-        // { "op": "buy", "kind": "truck" | "cart" }: the debug spawn beside the player, paid at the dealer's price (the vehicle
-        // type's price) as the dealer's own purchase books it (ShowcaseVehicleController.Purchase: ba:transaction_vehiclebought
-        // with the type's name, tax-deductible as tax_vehicle when the type is), so the game's books and day totals see it.
-        // Refused, with nothing spawned, when the money is short. A spawn that finds no room charges nothing (done false).
         private static object Buy(JObject args)
         {
             var kind = Need(args, "kind", "truck or cart");
@@ -1226,7 +1086,6 @@ namespace FoodTrucks
             });
         }
 
-        // Whether the operation happened, read from the state it should have changed (a refusal leaves only its notice).
         private static JObject VehicleReply(string op, string id, VehicleInstance vehicle, FoodTrucks.Core.Saves.SaveState state, List<string> notices,
             string? why, Func<bool> IsOpen, Func<int> Cargo, Func<string?> Space, int cargoBefore, string? spaceBefore, bool workAccepted = false)
         {
@@ -1241,9 +1100,7 @@ namespace FoodTrucks
                 case "open": done = IsOpen(); break;
                 case "close": done = !IsOpen(); break;
                 case "step_out": done = !TruckWindow.PlayerAt(id); break;
-                // The walk to the rear door has started, or the player is placed again.
                 case "back_to_hatch": done = !TruckWindow.CanGoBack(vehicle); break;
-                // In it, or walking to it.
                 case "enter": done = game.ActiveVehicleId == id || (PlayerHelper.PlayerController?.hasOnGoalReachedAction ?? false); break;
                 case "exit": done = game.ActiveVehicleId != id; break;
                 case "restock":
@@ -1255,9 +1112,6 @@ namespace FoodTrucks
             return new JObject { ["done"] = done, ["why"] = done ? null : why, ["notices"] = new JArray(notices), ["state"] = TestBridgeState.Vehicle(state, vehicle) };
         }
 
-        // ---- commissary, crew ----
-
-        // { "op": "order", "site", "items": [ { "item", "boxes" } ] }: the phone form's confirm without the call.
         private static JToken CommissaryCommand(JObject args)
         {
             var op = Need(args, "op", "order or bay_candidates");
@@ -1268,9 +1122,6 @@ namespace FoodTrucks
             var items = rows.OfType<JObject>().Select(r => (Item: Need(r, "item", "an item key or name"), Boxes: (int)(Num(r, "boxes") ?? throw new BridgeError("Each item needs \"boxes\".")))).ToList();
             var (orders, refusal, feeCents) = global::FoodTrucks.Commissary.OrderForTesting(site, items);
             if (refusal != null) throw new BridgeError(refusal);
-            // The delivery fee is set when the orders arrive, once per commissary and morning, on the first order paid.
-            // Here the first order shows the fee this quote adds (0 when another order already arrives there that
-            // morning), so fee and total are what each order is expected to pay on delivery.
             return new JObject
             {
                 ["orders"] = new JArray(orders.Select((o, i) => new JObject
@@ -1282,8 +1133,6 @@ namespace FoodTrucks
             };
         }
 
-        // { "op": "bay_candidates", "site" | "address", "radius"? }: legal truck spots round a commissary's search origins,
-        // or round any building's entrances (scouting a new garage), each with its walk and side of the street. Reads only.
         private const double CandidateRadiusDefault = 60;
         private const double CandidateRadiusMax = 80;
         private static readonly System.Text.RegularExpressions.Regex AddressForm = new System.Text.RegularExpressions.Regex(@"^ba:street_[a-z0-9]+#[0-9]+$");
@@ -1296,7 +1145,6 @@ namespace FoodTrucks
                 throw new BridgeError("bay_candidates needs \"site\" (a commissary's id) or \"address\" (any building, as ba:street_…#N), not both.");
             if (address != null && !AddressForm.IsMatch(address))
                 throw new BridgeError($"\"address\" is a building's address as the game writes it, ba:street_<name>#<number>; got '{address}'.");
-            // Whole metres: BaySnap caches one grid per radius for the session (review round 1, Opus).
             var radius = Math.Round(Num(args, "radius") ?? CandidateRadiusDefault);
             if (radius < 5 || radius > CandidateRadiusMax) throw new BridgeError($"radius is 5 to {CandidateRadiusMax:F0} metres.");
             (string? Status, List<global::FoodTrucks.Commissary.BayCandidateOrigin> Origins) found;
@@ -1329,10 +1177,6 @@ namespace FoodTrucks
             };
         }
 
-        // { "op": "assign" | "unassign", "vehicle", "employee_id" }: the BizMan vehicle page's crew dropdown.
-        // { "op": "auto_schedule", "vehicle" }: Core's auto schedule for the week (the Schedule tab's auto-fill).
-        // { "op": "schedule", "vehicle", "employee_id", "day", "start", "end", "station"? }: one shift on the Schedule tab's
-        // rows (start == end removes the crew member's shifts that day).
         private static object Crew(JObject args)
         {
             var op = Need(args, "op", "assign, unassign, schedule or auto_schedule");

@@ -89,10 +89,6 @@ class Tests {
   Check(Start(out t,out why),why);cert.GroundKnown=false;t!.Observe(-1,0,out _,out gap,out failure);Check(failure!=null&&gap==0,"unknown native wheel support fails closed");t.Dispose();
  }
  static void RoadsideClearance(){
-  // diagnostic-long/obstacle-037.json and tuned-long/obstacle-046.json,
-  // each translated from its recorded truck root to a straight route at the origin.
-  // The integrated body harness has no overlap simulation; use this harness's
-  // deterministic box overlap with the recorded certified physical dimensions.
   var (car,scene,_)=World();
   foreach(var waypoint in scene.allWaypoints)waypoint.position.z-=1.8f;
   var min=new Vector3(-1.23101687f,-.417f,-3.15f);var max=new Vector3(1.26f,3.1f,2.65f);
@@ -105,10 +101,8 @@ class Tests {
   mailbox.size=new Vector3(.547821045f,1.07479572f,.592723846f);Physics.Obstacle=mailbox;
   t!.Observe(0,0,out var stop,out var gap,out var failure);
   Check(failure==null&&stop==null&&gap==null&&t.BlockerId==null,"recorded roadside mailbox clears combined sweep footprint");
-  // Inspect the actual overlap input, then move the same obstacle across its edge.
   var edge=Physics.LastCenter.x+Physics.LastHalf.x;
   var residual=mailbox.bounds.min.x-edge;
-  // Use the rotated trash bag's conservative world AABB; native rerun checks its actual box.
   var trash=new GameObject("roadside trash bag").AddComponent<BoxCollider>();
   trash.center=new Vector3(227.754044f-225.325912f,.3597825f,26.18614f-21.89031f);
   trash.size=new Vector3(.8304138f,.9014699f,.7389641f);Physics.Obstacle=trash;

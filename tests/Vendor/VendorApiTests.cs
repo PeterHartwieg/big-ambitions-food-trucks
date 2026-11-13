@@ -7,7 +7,6 @@ using static FoodTrucks.Core.Tests.Vendor.VendorTestHost;
 
 namespace FoodTrucks.Core.Tests.Vendor;
 
-// The public static API is one runtime for the process: these tests share it, so they never run in parallel.
 [CollectionDefinition("VendorApi", DisableParallelization = true)]
 public class VendorApiCollection
 {
@@ -55,7 +54,6 @@ public class VendorApiTests
         finally { VendorRuntime.Detach(); }
     }
 
-    // The members another mod binds by name (Persistent City plan E6, section 3.2): names, types and order of parameters.
     [Fact]
     public void TheContractMembersHaveTheirVersionOneShape()
     {

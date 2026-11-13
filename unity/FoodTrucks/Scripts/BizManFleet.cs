@@ -22,13 +22,6 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // The Street food page in BizMan (Peter, 15 October 2026: it must look like the game's own BizMan). The business
-    // list's "Street food" line opens it. The page is a copy of the list's own layout (`Layout 50-25-25`) with the game's
-    // logic taken out: the overview is a copy of the business table (`BaTable (Businesses)`, its headers and
-    // `BusinessCellView` rows), one row per food vehicle; a vehicle's page fills the three columns with copies of the
-    // warehouse list's `WhiteBox (Template)` (BizManParts, BizManVehiclePage). While it shows, the list's own parts are
-    // hidden; Back and leaving BizMan bring them back. The business-list entry has no building registration; its patches
-    // keep the game's address-based business flow away from it.
     internal static class BizManFleet
     {
         private const string EntryId = "foodtrucks:streetfood";
@@ -38,14 +31,11 @@ namespace FoodTrucks
 
         private static bool ready, broken;
         private static readonly HashSet<string> logged = new HashSet<string>(StringComparer.Ordinal);
-        // Cells whose destination button the Street food line hid; a recycled cell gets it back.
         private static readonly HashSet<int> hiddenButtons = new HashSet<int>();
         private static readonly List<GameObject> hiddenListParts = new List<GameObject>();
 
-        // The page: the layout copy, its rows and headers, the table, the vehicle page's columns and the Back button.
         private static Transform? section, holder, table, tableRows, column1;
         private static Transform? row1, row2, row3, header1, header2, header3;
-        // The first row's own rectangle and layout sizes, kept while the Week plan tab widens it (Widen).
         private static (Vector2 Min, Vector2 Max, Vector2 OffsetMin, Vector2 OffsetMax)? row1Rect;
         private static (float Preferred, float Flexible)? row1Element;
         private static Transform? content1, content2, content3;
@@ -54,7 +44,6 @@ namespace FoodTrucks
         private static float cellHeight;
         private static BizManList? builtFor, openList;
 
-        // Called once after patching: the line shows only when every patch that keeps it safe is in place.
         internal static void CheckReady()
         {
             ready = Has(typeof(BusinessScrollerController), "PopulateAllModels") && Has(typeof(BizManFilterToggle), "PassesFilter") &&
@@ -74,7 +63,6 @@ namespace FoodTrucks
 
         private static bool IsOurs(BusinessCellView.BusinessModel? model) => model != null && model.Id == EntryId;
 
-        // Logs a failure once and takes the line out of the list for the rest of the session.
         private static void Fail(string where, Exception ex, BusinessScrollerController? list = null)
         {
             broken = true;
@@ -86,8 +74,6 @@ namespace FoodTrucks
             }
             catch (Exception again) { Log.Error(again); }
         }
-
-        // ---- The list line ----
 
         public static void PopulatePostfix(BusinessScrollerController __instance, List<BusinessCellView.BusinessModel> allModels)
         {
@@ -104,20 +90,17 @@ namespace FoodTrucks
                 model.BusinessName = Text("foodtrucks:econoview_row");
                 model.BusinessType = "foodtrucks:bizman_type";
                 model.AvgDailyIncome = FleetReport.AvgDailyProfitCents(state, today) / 100f;
-                // The vehicles' to-dos and the licence's, as a business line counts its own.
                 model.Alerts = vehicles.Sum(v => VehicleTodos.CountFor(v.Instance.id)) + VehicleTodos.FleetCount();
                 model.Satisfaction = 0;
                 model.OpenStatus = (LanguageChangeEventDataHolder.Create("foodtrucks:bizman_open_count",
                         new Dictionary<string, string> { ["open"] = open.ToString(), ["total"] = vehicles.Count.ToString() }),
                     (Color)(open > 0 ? colors.green : colors.lightRed));
-                // Sorts like the game's own: open businesses before closed ones.
                 model.Status = open > 0 ? -1 : -2;
                 allModels.Add(model);
             }
             catch (Exception ex) { Fail("list", ex); }
         }
 
-        // A business model without a building: the constructor isn't run, so the list its field initializer would make is set here.
         private static BusinessCellView.BusinessModel NewModel(string id)
         {
             var model = (BusinessCellView.BusinessModel)FormatterServices.GetUninitializedObject(typeof(BusinessCellView.BusinessModel));
@@ -129,8 +112,6 @@ namespace FoodTrucks
             return model;
         }
 
-        // The line has no building: a building type, business type or neighbourhood filter leaves it out, and the
-        // "Businesses" status filter keeps it. Returning false skips the game's check, which would look the address up.
         public static bool FilterPrefix(BizManFilterToggle __instance, BusinessCellView.BusinessModel item, ref bool __result)
         {
             if (!IsOurs(item)) return true;
@@ -141,15 +122,12 @@ namespace FoodTrucks
             }
             catch (Exception ex)
             {
-                // Left out this time; the list is mid-filter, so it is only dropped from the next load on.
                 __result = false;
                 Fail("filter", ex);
             }
             return false;
         }
 
-        // The game's cell has drawn the line from the model; its destination button would ask for an address and
-        // its satisfaction column reads 0%, so both are put right here. Other cells get their button back.
         public static void CellPostfix(BusinessCellView __instance, BusinessCellView.BusinessModel data)
         {
             try
@@ -168,14 +146,10 @@ namespace FoodTrucks
             }
             catch (Exception ex)
             {
-                // The cell is being drawn; the line is dropped from the next load on.
                 Fail("cell", ex);
             }
         }
 
-        // A click on the line opens the Street food page instead of a business page, and a second click closes it.
-        // Returning false skips the game's handler, which would open BizMan's business page for an address the line
-        // doesn't have.
         public static bool OpenPrefix(BizManList __instance, BusinessCellView.BusinessModel businessModel)
         {
             if (!IsOurs(businessModel)) return true;
@@ -188,7 +162,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // Leaving the list closes the page, a vehicle's page with it.
         public static void ListClosedPostfix()
         {
             try { CloseSection(); }
@@ -244,13 +217,8 @@ namespace FoodTrucks
             BizManParts.Reset();
         }
 
-        // ---- Opening ----
-
-        // The page's inactive holder for templates (the vehicle page keeps its dropdown and stop list there); null if
-        // the page can't be built.
         internal static Transform? EnsurePage(BizManList list) => ready && !broken && Ensure(list) ? holder : null;
 
-        // Opens the page on the overview, filled afresh (the vehicle page's Back, and opening a page from elsewhere).
         internal static void ShowSection(BizManList list)
         {
             try { Open(list); }
@@ -261,14 +229,12 @@ namespace FoodTrucks
         {
             if (!Ensure(list) || section == null)
             {
-                // The page couldn't be built (the log names the missing part): the line goes, as on any other failure.
                 Traverse.Create(list).Field("businessScrollerController").GetValue<BusinessScrollerController>()?.RemoveModels(IsOurs);
                 CartSelling.Notify("foodtrucks:notification_page_unavailable");
                 return;
             }
             openList = list;
             BizManVehiclePage.Forget();
-            // Shown before it is filled: the game's cells set their texts through components that wake when active.
             ShowSectionView();
             ShowOverview();
         }
@@ -286,9 +252,6 @@ namespace FoodTrucks
             Fill();
         }
 
-        // The vehicle page's three columns, emptied, with the vehicle's name over the first and Back to the overview.
-        // Null when the page isn't built. A layout without a third column puts the third's boxes in the second.
-        // `wide` (the Week plan tab): only the first column shows, across the page's whole width, for the shift grid.
         internal static (Transform First, Transform Second, Transform Third)? ShowVehicleColumns(string title, bool wide = false)
         {
             if (section == null || table == null || content1 == null || content2 == null || column1 == null) return null;
@@ -313,16 +276,11 @@ namespace FoodTrucks
                     child.gameObject.SetActive(false);
                     Object.Destroy(child.gameObject);
                 }
-                // Boxes the column's full width, BoxGap apart (BizManParts.Layout). The content's own padding stays: it
-                // keeps the boxes' drop shadows inside the scroll view's mask.
                 if (content.GetComponent<HorizontalOrVerticalLayoutGroup>() is { } stack)
                 {
                     stack.spacing = BizManParts.Layout.BoxGap;
                     stack.childControlWidth = stack.childForceExpandWidth = true;
                 }
-                // The content grows downwards from the top: with the copied pivot it grew both ways as boxes went in, and a
-                // column taller than the screen opened partway down, its first box's title out of sight (seen in game
-                // 15 October 2026). Back to the top once the boxes are laid out.
                 if (content is RectTransform rect)
                 {
                     rect.anchorMin = new Vector2(rect.anchorMin.x, 1f);
@@ -340,8 +298,6 @@ namespace FoodTrucks
             return (content1, content2, content3 ?? content2);
         }
 
-        // The first row across the page (the Week plan tab) or back to its own width. Under a layout group the row's layout
-        // element takes the three rows' width; placed by anchors, its right edge goes to the last row's.
         private static void Widen(bool wide)
         {
             if (!(row1 is RectTransform rect)) return;
@@ -396,10 +352,6 @@ namespace FoodTrucks
             Fit(back);
         }
 
-        // ---- Building ----
-
-        // Copies BizMan's list layout once per list (the list is rebuilt with each city scene). On a missing part it logs
-        // one line naming it and the line is taken out for the session.
         private static bool Ensure(BizManList list)
         {
             if (section != null && builtFor == list) return true;
@@ -455,7 +407,6 @@ namespace FoodTrucks
             }
             var filter = Traverse.Create(list).Field("bizManFilterPanel").GetValue<Component>();
 
-            // Copied under an inactive holder, so none of the copy's components wake before the game's logic is taken out.
             var copy = Object.Instantiate(layout.gameObject, temp).transform;
             copy.name = "FoodTrucks.StreetFoodPage";
             var removed = StripLogic(copy);
@@ -468,7 +419,6 @@ namespace FoodTrucks
             var r2 = copy.Find(Path(rowTwo, layout))!;
             var hScroll = hqScroll == null || rowThree == null ? null : copy.Find(Path(hqScroll.transform, layout));
             var r3 = rowThree == null ? null : copy.Find(Path(rowThree, layout));
-            // Every other part of the layout (a fourth row, the private residences) goes.
             foreach (Transform part in copy.Cast<Transform>().ToList())
                 if (part != row1 && part != r2 && part != r3) Object.DestroyImmediate(part.gameObject);
 
@@ -477,7 +427,6 @@ namespace FoodTrucks
             header3 = r3 != null && hScroll != null ? KeepOnly(r3, hScroll) : null;
             if (header1 == null) missing.Add("the business table's title");
 
-            // The table: its headers stay, its scroller's rows go, and our rows are laid out in its scroll view.
             var tableScroll = tableCopy.GetComponentInChildren<ScrollRect>(true);
             if (tableScroll == null || tableScroll.content == null) { missing.Add("the business table's scroll view"); return false; }
             tableRows = Empty(tableScroll.content);
@@ -499,8 +448,6 @@ namespace FoodTrucks
             if (cellHeight <= 1f) cellHeight = ((RectTransform)cellPrefab.transform).rect.height;
             copied.Add($"BaTable (Businesses) with BusinessCellView rows {cellHeight:F0} high");
 
-            // The columns: the warehouse column's scroll view, emptied; a copy of it stands where the table is for the
-            // vehicle page's first column.
             content2 = Empty(Content(wScroll));
             content3 = hScroll == null ? null : Empty(Content(hScroll));
             var first = Object.Instantiate(wScroll.gameObject, tableCopy.parent).transform;
@@ -511,7 +458,6 @@ namespace FoodTrucks
             column1 = first;
             copied.Add($"{warehouseScroll.name} as the vehicle page's columns" + (content3 == null ? " (two)" : $" and {hqScroll!.name}"));
 
-            // The templates' holder, inactive, inside the page.
             var holderGo = new GameObject("FoodTrucks.Templates", typeof(RectTransform));
             holderGo.SetActive(false);
             holderGo.transform.SetParent(copy, false);
@@ -521,7 +467,6 @@ namespace FoodTrucks
             if (!BizManParts.Ready) return false;
             copied.Add("WhiteBox (Template) from the warehouse list");
 
-            // Back: a copy of the box's Manage drivers button, at the right of the table's title.
             back = BizManParts.LooseButton(header1 ?? row1, Text("foodtrucks:bizman_fleet_back"), CloseSection);
             if (back == null) missing.Add("the WhiteBox's Manage drivers button (no Back button)");
             else
@@ -531,13 +476,10 @@ namespace FoodTrucks
                 element.ignoreLayout = true;
                 var corner = header1 == null ? new Vector2(1f, 1f) : new Vector2(1f, 0.5f);
                 rect.anchorMin = rect.anchorMax = rect.pivot = corner;
-                // The header runs to the screen's edge on a one-column page (a vehicle's Week plan); the button keeps the
-                // boxes' right edge: the column's scrollbar strip plus the column's own padding (Peter's playtest).
                 rect.anchoredPosition = new Vector2(-BackInset, 0f);
                 var source = BizManPartsButtonHeight(warehouseBox);
                 var height = header1 is RectTransform h && h.rect.height > 1f ? Mathf.Min(source > 1f ? source : h.rect.height, h.rect.height) : source;
                 var tall = height > 1f ? height : Mathf.Max(rect.sizeDelta.y, 1f);
-                // A stretched button has no width of its own once anchored to a point; Fit sizes it to its caption.
                 rect.sizeDelta = new Vector2(rect.sizeDelta.x > 1f ? rect.sizeDelta.x : tall * 4f, tall);
                 copied.Add("Manage drivers button as Back");
             }
@@ -555,8 +497,6 @@ namespace FoodTrucks
         private static float BizManPartsButtonHeight(Transform box) =>
             box.Find("ManageDrivers/ManageDriversButton") is RectTransform rect ? rect.rect.height : 0f;
 
-        // Takes the game's list logic out of a copy: the table's scroller and its cells, the list loaders and filters. What
-        // stays is layout, images, text and buttons. Returns the type names taken out.
         internal static SortedSet<string> StripLogic(Transform root)
         {
             var removed = new SortedSet<string>(StringComparer.Ordinal);
@@ -577,8 +517,6 @@ namespace FoodTrucks
             return removed;
         }
 
-        // Keeps `keep` and the row's title and takes every other part of the row out, at each level from the row down to
-        // `keep`. The title is the first part at a level that has text and nothing to click or scroll.
         private static Transform? KeepOnly(Transform row, Transform keep)
         {
             Transform? header = null;
@@ -623,7 +561,6 @@ namespace FoodTrucks
             return parent;
         }
 
-        // A scroll view's content grows with what is in it, from the top.
         private static void Fit(RectTransform content)
         {
             var fitter = content.GetComponent<ContentSizeFitter>() ?? content.gameObject.AddComponent<ContentSizeFitter>();
@@ -634,7 +571,6 @@ namespace FoodTrucks
             content.anchoredPosition = Vector2.zero;
         }
 
-        // The column takes the table's place: its rectangle and, under a layout group, its layout element.
         private static void Place(RectTransform column, RectTransform like)
         {
             column.anchorMin = like.anchorMin;
@@ -656,7 +592,6 @@ namespace FoodTrucks
             element.flexibleHeight = model.flexibleHeight;
         }
 
-        // The Back button as wide as its caption plus a margin of its own height.
         private static void Fit(Button button)
         {
             var rect = (RectTransform)button.transform;
@@ -693,10 +628,6 @@ namespace FoodTrucks
             return null;
         }
 
-        // ---- The overview ----
-
-        // The overview's rows again while it shows (alerts, status, income), kept where the player scrolled: VehicleTodos
-        // calls this after each minute's reconcile.
         internal static void RefreshOverview()
         {
             if (broken || table == null || tableRows == null || !table.gameObject.activeInHierarchy) return;
@@ -735,7 +666,6 @@ namespace FoodTrucks
             var element = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
             element.minHeight = element.preferredHeight = cellHeight;
             element.flexibleWidth = 1f;
-            // As the game's table does for a selectable row: the row is a button.
             var button = go.GetComponent<Button>() ?? go.AddComponent<Button>();
             button.onClick = new Button.ButtonClickedEvent();
             button.onClick.AddListener(() => Guard(click));
@@ -760,13 +690,9 @@ namespace FoodTrucks
             model.Satisfaction = 100;
             model.OpenStatus = (LanguageChangeEventDataHolder.Create("foodtrucks:bizman_value",
                 new Dictionary<string, string> { ["value"] = Where(instance, vehicle, withDriver) }), StatusColour(vehicle, withDriver, colors));
-            // The game's own formatting: the name, the type, the income in the short currency format (light red below 0),
-            // "N alerts" in light red or a white 0, the status in its colour.
             cell.SetData(model);
-            // The status kept inside its column (BizManParts.FitInCell).
             if (cell.status != null)
                 BizManParts.FitInCell(cell.status.transform);
-            // The satisfaction column holds the health grade: C in light red, as satisfaction under 50%.
             var grade = vehicle?.Health?.Grade ?? Grade.Ungraded;
             if (Traverse.Create(cell).Field("satisfaction").GetValue() is Component satisfaction)
             {
@@ -783,7 +709,6 @@ namespace FoodTrucks
             }
         }
 
-        // The vendor licence's to-do (renewal, or run out) as a line of its own; a click opens the City's conversation.
         private static void LicenceRow(int alerts)
         {
             var cell = NewRow(LicenceRowId, () => ModContacts.OpenConversation(CityLicensing.City()));
@@ -811,9 +736,6 @@ namespace FoodTrucks
         internal static Color StatusColour(VehicleState? vehicle, bool withDriver, Colors colors) =>
             vehicle?.Transit != null || withDriver ? (Color)colors.white : vehicle?.IsOpen == true ? (Color)colors.green : (Color)colors.lightRed;
 
-        // The GPS to the vehicle. In 1.0 a vehicle's street address names the building or garage it is in and is
-        // empty outdoors, so an indoor vehicle gets the game's own address destination (as a business's button
-        // does) and an outdoor one a point: where it stands, or where the save has it when it isn't spawned.
         internal static void GoTo(VehicleInstance instance, string name)
         {
             if (!string.IsNullOrEmpty(instance.streetName))
@@ -845,10 +767,6 @@ namespace FoodTrucks
             return Format(vehicle?.IsOpen == true ? "foodtrucks:bizman_fleet_where_open" : "foodtrucks:bizman_fleet_where_closed", ("place", place));
         }
 
-        // Where a vehicle on the street stands, as the player knows the place: the route stop it is at (the one it is
-        // open at, else one within the stop radius), a commissary's bay, else the nearest building's neighbourhood. The
-        // game sets a vehicle's parkingNeighbourhood only for its own parking, so a cart read "an unknown spot" in the
-        // bay and at its stops (the first blind playtest, 17 October 2026). Null when none is known.
         private static string? OutdoorPlace(VehicleInstance instance, VehicleState? vehicle)
         {
             try
@@ -887,7 +805,6 @@ namespace FoodTrucks
         private static double Distance(Vector3 position, FoodTrucks.Core.Saves.ScheduleStop stop) =>
             Math.Sqrt((position.x - stop.X) * (position.x - stop.X) + (position.z - stop.Z) * (position.z - stop.Z));
 
-        // The player's food vehicles, those left with the private driver included.
         internal static List<(VehicleInstance Instance, bool WithDriver)> Vehicles()
         {
             var game = SaveGameManager.Current;

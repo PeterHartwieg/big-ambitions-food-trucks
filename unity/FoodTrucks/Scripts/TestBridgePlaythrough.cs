@@ -11,14 +11,8 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks
 {
-    // The bridge's commands for the AI playthrough (docs/ai-playtest-plan.md, tools/playthrough): the mod's day totals
-    // as data, and routes set by address in place of the map pick.
     internal static partial class TestBridgeCommands
     {
-        // ---- day_summary ----
-
-        // { "day"?: N }: Core's DaySummary for that day (default today), the same per-vehicle ledger Econoview and the
-        // fleet page read, with each vehicle's cargo now. Amounts in dollars. Reads only.
         private static JToken DaySummaryCommand(JObject args)
         {
             var game = SaveGameManager.Current;
@@ -63,11 +57,6 @@ namespace FoodTrucks
             };
         }
 
-        // ---- places ----
-
-        // { "radius"?: 150 }: the buildings round the player as the map shows them: address, street, building type,
-        // the business there (name and type, whether it is the player's) and the mod's commissaries. No demand
-        // figures. Nearest first, at most 40. Reads only.
         private static JToken PlacesCommand(JObject args)
         {
             var radius = Math.Max(20, Math.Min(500, Num(args, "radius") ?? 150));
@@ -103,18 +92,6 @@ namespace FoodTrucks
             };
         }
 
-        // ---- map ----
-
-        // The city map's highlights as data, filtered the way a player filters the map (docs/ai-playtest-plan.md, "The map
-        // for the tester"). { "op": "filters" }: the filters there are, each with how many buildings it lights now.
-        // { "filter", "limit"?: N (default 30, at most 100) }: the buildings that filter lights, nearest the player first.
-        // Filters, as the game's map and the mod's Street food line have them:
-        //   for_rent, for_rent:<building type>  buildings on the market (AvailableForRent), all or of one type
-        //   business:<business type>             active businesses of one type (ba:businesstype_…)
-        //   for_sale, yours                      buildings for sale; buildings you rent or own
-        //   offices, factories, nightlife, shows Street food's building filters (Core StreetFoodMap)
-        //   pitches, commissaries                Street food's premium spots and coming events; the commissaries
-        // Reads only. The game's own map isn't opened or changed.
         private static JToken MapCommand(JObject args)
         {
             var game = SaveGameManager.Current;
@@ -130,7 +107,6 @@ namespace FoodTrucks
             var commissaries = new HashSet<string>(sites.Select(s => s.Address), StringComparer.Ordinal);
             var at = PlayerHelper.GetPosition();
 
-            // Every filter that lights a building, for one building.
             IEnumerable<string> Lit(string key, string? buildingType, BuildingRegistration? registration)
             {
                 var business = registration?.businessTypeName;
@@ -206,15 +182,6 @@ namespace FoodTrucks
             return new JObject { ["filter"] = filter, ["count"] = lit.Count, ["buildings"] = list };
         }
 
-        // ---- route ----
-
-        // { "op": "add_stop", "vehicle", "address", "days"?: ["monday", …] | "all", "open"?: "HH:MM", "close"?: "HH:MM" }: the
-        // map pick's spot by that building (StopPicker.Snap from its first entrance) added to each day, at the given hours or
-        // the default ones (RouteStops.AddWithDefaultTimes, as the map pick). { "op": "paste_day", "vehicle", "from", "to":
-        // [days] | "all" }: the Week plan tab's copy and paste of a day's route.
-        // A food's selling price on one vehicle, as the vehicle page's price field sets it (PriceDialog.SetPrice): a price
-        // in dollars, or "auto" (or empty) for the automatic price. The blind tester's only way to price (playtest 1 sold
-        // at the default all month).
         private static object PriceCommand(JObject args)
         {
             var id = Need(args, "vehicle", "the food vehicle's id");
@@ -340,7 +307,6 @@ namespace FoodTrucks
             return days;
         }
 
-        // "HH:MM" as minutes from midnight, or null when the key is left out.
         private static int? ClockArg(JObject args, string key)
         {
             var text = Str(args, key);

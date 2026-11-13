@@ -4,8 +4,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Core's CartStance places, from a cart's live transform: on the ground at the cart's root height (the body's
-    // ground-level origin), turned only about the vertical.
     internal static class CartStanceWorld
     {
         private static (double X, double Z) Flat(Transform cart) => (cart.forward.x, cart.forward.z);
@@ -17,7 +15,6 @@ namespace FoodTrucks
             return new Vector3((float)x, p.y, (float)z);
         }
 
-        // Read the actual fitted display spots, excluding the below-counter fridge.
         public static double WorkAlong(Transform cart) => CartStance.WorkAlong(
             FittedAlong(cart.Find("EquipmentFront")), FittedAlong(cart.Find("EquipmentRear")));
 
@@ -29,7 +26,6 @@ namespace FoodTrucks
             return null;
         }
 
-        // The way the server faces: across the cart towards the customers' side.
         public static Vector3 Facing(Transform cart, int side)
         {
             var (x, z) = CartStance.Facing(Flat(cart), side);
@@ -42,7 +38,6 @@ namespace FoodTrucks
             return new Vector3((float)x, 0f, (float)z);
         }
 
-        // How far forward of the cart's middle a world point is.
         public static double Along(Transform cart, Vector3 world) =>
             CartStance.ToLocal((cart.position.x, cart.position.z), Flat(cart), (world.x, world.z)).Z;
     }

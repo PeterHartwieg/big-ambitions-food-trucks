@@ -5,8 +5,6 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Demand;
 
-// The park area (Peter, 14 October 2026): its own weekend curve, season and rain factors, the game's park areas in the
-// classifier, and zones that set it.
 public class ParkAreaTests
 {
     private const string HotDog = "ba:itemname_hotdog";
@@ -25,7 +23,6 @@ public class ParkAreaTests
         Raining = rain
     };
 
-    // The park's own crowd in passers an hour, without the street baseline.
     private static double ParkPassers(DemandQuery query)
     {
         var estimate = model.Estimate(query);
@@ -73,7 +70,6 @@ public class ParkAreaTests
 
         Assert.Equal(2.8 * ShippedData.Tables.PassersPerHour, saturday, 9);
         Assert.True(saturday > 2 * wednesday);
-        // Late morning to early evening: lunch and afternoon beat the morning and the evening on a Sunday.
         Assert.True(ParkPassers(Query(DayOfWeek.Sunday, 12)) > ParkPassers(Query(DayOfWeek.Sunday, 9)));
         Assert.True(ParkPassers(Query(DayOfWeek.Sunday, 15)) > ParkPassers(Query(DayOfWeek.Sunday, 18)));
     }
@@ -88,7 +84,6 @@ public class ParkAreaTests
     [Fact]
     public void AfterMidnightTheNightBelongsToTheDayBefore()
     {
-        // 01:00 on Monday is still Sunday's late hours (weekend curve), 01:00 on Saturday still Friday's (weekday curve).
         var mondayNight = ParkPassers(Query(DayOfWeek.Monday, 1));
         var saturdayNight = ParkPassers(Query(DayOfWeek.Saturday, 1));
 
@@ -104,9 +99,7 @@ public class ParkAreaTests
         var january = ParkPassers(Query(DayOfWeek.Saturday, 15, month: 1));
 
         Assert.Equal(may * 1.3, july, 9);
-        // January's month footfall 0.6 times the park's winter 0.35.
         Assert.Equal(may * 0.6 * 0.35, january, 9);
-        // The office crowd has no season factor: January is only the month's 0.6.
         var office = new DemandQuery { Areas = AreaMix.Single("office"), Menu = new[] { HotDog }, MinuteOfDay = 720, Day = DayOfWeek.Wednesday, Month = 1 };
         var officeMay = new DemandQuery { Areas = AreaMix.Single("office"), Menu = new[] { HotDog }, MinuteOfDay = 720, Day = DayOfWeek.Wednesday, Month = 5 };
         Assert.Equal(model.Estimate(officeMay).AreaFootfall["office"] * 0.6, model.Estimate(office).AreaFootfall["office"], 9);
@@ -125,7 +118,6 @@ public class ParkAreaTests
     [Fact]
     public void ParkCrowdsWantIceCreamMoreThanTheStreet()
     {
-        // Saturday 15:00 in May: the park's crowd 2.8 at ice cream x2.2, the street's 0.5 at x1.
         var estimate = model.Estimate(Query(DayOfWeek.Saturday, 15, item: IceCream));
         Assert.Equal(0.20 * (0.5 + 2.2 * 2.8) / (0.5 + 2.8), estimate.Appetite, 9);
     }

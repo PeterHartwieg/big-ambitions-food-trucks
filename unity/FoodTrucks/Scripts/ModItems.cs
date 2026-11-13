@@ -30,13 +30,11 @@ namespace FoodTrucks
             Prefix + "dumplings", Prefix + "tacos", Prefix + "choppedcheese", Prefix + "grilledcorn",
         };
 
-        // Extra Storage first, so Ctrl+U fits it before the machines fill a cart's two slots.
         public static readonly string[] Machines =
         {
             Prefix + "storagecabinet", Prefix + "dumplingsteamer", Prefix + "griddle", Prefix + "corngrill",
         };
 
-        // Item name, asset file in Items/.
         private static readonly (string Name, string Asset)[] Assets =
         {
             (Prefix + "dumplings", "Dumplings"),
@@ -54,10 +52,8 @@ namespace FoodTrucks
 
         public static bool IsRegistered(string itemName) => registered.Contains(itemName);
 
-        // The part of an item name after "itemname_", which the game uses for its prefab and icon file names.
         private static string Id(string itemName) => itemName.Substring(Prefix.Length);
 
-        // The game's icon address for an item (PlayerHelper.GetItemNameIconPath).
         private static string IconAddress(string itemName) => "ItemIcons/" + Id(itemName) + ".png";
 
         public static void Register(AssetBundle bundle)
@@ -83,7 +79,6 @@ namespace FoodTrucks
                 Log.Error($"Item {name}: not registered: the asset is named '{item.itemName}'.");
                 return;
             }
-            // The game keeps its own item when a name collides, and only logs a warning.
             if (ItemsGetter.AllItems?.Any(i => i != null && i.itemName == name) == true && !ItemsGetter.IsModItem(name))
             {
                 Log.Error($"Item {name}: not registered: the game already has an item with this name.");
@@ -102,7 +97,6 @@ namespace FoodTrucks
                      $"wholesale {item.wholesalePrice:0.##}, box {item.boxSize}, icon {(icon != null ? "yes" : "missing")}).");
         }
 
-        // Puts the icons into the game's caches; safe to call any number of times.
         public static void RegisterIcons(string when)
         {
             if (registered.Count == 0) return;
@@ -119,7 +113,6 @@ namespace FoodTrucks
             foreach (var name in registered)
             {
                 if (!icons.TryGetValue(name, out var icon) || icon == null) continue;
-                // The cache first: once the address is known, the game reads the cache and never Addressables.
                 cache[name] = icon;
                 var address = IconAddress(name);
                 lookups[address.ToLowerInvariant()] = address;

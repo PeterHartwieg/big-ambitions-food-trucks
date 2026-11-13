@@ -7,8 +7,6 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Commissary
 {
-    // A commissary garage (design: Commissary and new foods). The game side finds the building by its address;
-    // its loading bay is the given point, or the building's nearest entrance when the data gives none.
     public sealed class CommissarySite
     {
         public CommissarySite(string id, string name, string address, (double X, double Z)? bay, double? bayHeading = null)
@@ -21,25 +19,15 @@ namespace FoodTrucks.Core.Commissary
             BayHeading = bayHeading;
         }
 
-        // Lower-case letters, digits and dashes: it is part of the commissary's phone contact ID.
         public string Id { get; }
-        // Locale key of the commissary's name.
         public string Name { get; }
-        // "street#number", as the game's address: "ba:street_twentysecondstreet#6".
         public string Address { get; }
-        // World position of the loading bay (x, z), when set by hand.
         public (double X, double Z)? Bay { get; }
-        // With a measured bay in a lot of stalls (Industry City, Peter, 13 October 2026): the way the truck faces, nose-in,
-        // in degrees clockwise from +z as the log writes headings. The bay is taken as measured when the truck stands
-        // legally there facing this way (BaySnap.Measured); the search then only tries this axis. The sign stands at the
-        // stall's head rather than on a kerb beside the paint.
         public double? BayHeading { get; }
 
-        // Nose-in in a lot of stalls rather than along a kerb.
         public bool InLot => BayHeading != null;
     }
 
-    // The validated contents of data/commissaries.json.
     public sealed class CommissaryTables
     {
         public const int SchemaVersion = 1;
@@ -53,8 +41,6 @@ namespace FoodTrucks.Core.Commissary
 
         public CommissarySite? Site(string? id) => id == null ? null : Sites.FirstOrDefault(s => s.Id == id);
 
-        // The commissary whose bay is nearest to (x, z), if within radius. bays gives each site's bay points, or
-        // null for a site the city doesn't have.
         public CommissarySite? At(Func<CommissarySite, IEnumerable<(double X, double Z)>?> bays, double x, double z, double radiusMetres)
         {
             if (bays == null) throw new ArgumentNullException(nameof(bays));
@@ -72,7 +58,6 @@ namespace FoodTrucks.Core.Commissary
             return best;
         }
 
-        // Metres from (x, z) to the nearest of the points; MaxValue for none.
         public static double Distance(IEnumerable<(double X, double Z)>? points, double x, double z)
         {
             if (points == null) return double.MaxValue;
@@ -119,7 +104,6 @@ namespace FoodTrucks.Core.Commissary
             return new CommissaryTables(sites);
         }
 
-        // Splits "street#number" into the game's street name and number.
         public static (string Street, int Number) SplitAddress(string address) => PitchTables.SplitAddress(address);
     }
 }

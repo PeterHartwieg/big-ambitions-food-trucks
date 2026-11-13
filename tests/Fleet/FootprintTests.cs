@@ -7,8 +7,6 @@ namespace FoodTrucks.Core.Tests.Fleet;
 
 public class FootprintTests
 {
-    // Row-major 3 x 4: a turn about the vertical axis by `degrees` (clockwise seen from above, as Unity's yaw), a scale,
-    // then a move.
     private static double[] Pose(double degrees, (double X, double Y, double Z) move, double scale = 1)
     {
         var r = degrees * Math.PI / 180;
@@ -16,7 +14,6 @@ public class FootprintTests
         return new[] { c, 0, s, move.X, 0, scale, 0, move.Y, -s, 0, c, move.Z };
     }
 
-    // a then b: the matrix of applying b first, then a.
     private static double[] Then(double[] a, double[] b)
     {
         var m = new double[12];
@@ -32,7 +29,6 @@ public class FootprintTests
         return m;
     }
 
-    // The inverse of a turn-and-move pose (no scale).
     private static double[] Inverse(double degrees, (double X, double Y, double Z) move)
     {
         var undoTurn = Pose(-degrees, (0, 0, 0));
@@ -64,7 +60,6 @@ public class FootprintTests
     [Fact]
     public void APartTurnedAndScaledInsideTheVehicleCountsAsItStands()
     {
-        // A 1 x 1 x 4 box turned 90 degrees and scaled by 0.5, 2 m forward: 2 m across, 0.5 m along.
         var box = Footprint.Box(new List<(double[], LocalBox)> { (Pose(90, (0, 0, 2), 0.5), new LocalBox((0, 0, 0), (1, 1, 4))) })!.Value;
         Assert.Equal(-1.0, box.Min.X, 6);
         Assert.Equal(1.0, box.Max.X, 6);

@@ -74,13 +74,11 @@ class Shape:
         me.update()
         ob = bpy.data.objects.new(name, me)
         bpy.context.scene.collection.objects.link(ob)
-        # Recalculate rather than rely on profile traversal direction.
         bm = bmesh.new()
         bm.from_mesh(me)
         bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
         bm.to_mesh(me)
         bm.free()
-        # Store per-face semantic colours for a reproducible single atlas.
         attr = me.attributes.new('part_color', 'INT', 'FACE')
         keys = list(PALETTE)
         for p, color in zip(attr.data, self.colors):
@@ -93,7 +91,6 @@ def blockout(detail=False):
         if name in bpy.data.objects:
             bpy.data.objects.remove(bpy.data.objects[name], do_unlink=True)
     s = Shape()
-    # Closed thin-wall cup: 64 ring vertices and two radial bottom fans.
     a = s.ring(16, .024, 0)
     b = s.ring(16, .032, .091)
     c = s.ring(16, .0308, .091)
@@ -103,7 +100,6 @@ def blockout(detail=False):
     s.bridge(c, d, 'plastic')
     s.cap(a, (0, 0, 0), 'edge', True)
     s.cap(d, (0, 0, .003), 'plastic')
-    # The irregular boundary is geometric, visible through the clear shell.
     a = s.ring(16, .0234, .0033)
     b = s.ring(16, .0267, .043, wobble=.0018)
     c = s.ring(16, .0300, .0868, wobble=.0010)
@@ -113,7 +109,6 @@ def blockout(detail=False):
     s.bridge(c, d, lambda i: 'red_light' if i % 3 == 0 else 'red')
     s.cap(a, (0, 0, .0033), 'blue', True)
     s.cap(d, (-.001, .001, .108), 'red_light')
-    # Twelve-sided double-wall dome, with a real opening for the straw.
     profile = [(.033, .090), (.034, .093), (.029, .104),
                (.018, .1135), (.0045, .117), (.0045, .1156),
                (.0175, .1121), (.028, .103), (.0325, .0926),
@@ -122,8 +117,6 @@ def blockout(detail=False):
     for k in range(len(rings)):
         color = 'edge' if k in (0, 4, 8, 9) else 'plastic'
         s.bridge(rings[k], rings[(k+1) % len(rings)], color)
-    # Straw starts in the mound, passes through the central lid aperture,
-    # then bends toward -Y. Coordinate construction leaves transforms applied.
     centres = [Vector((0, 0, .079)), Vector((0, 0, .127)),
                Vector((.020, -.018, .1465))]
     ring_ids = []
@@ -233,8 +226,6 @@ def setup_scene():
         ob.location = pos
         ob.rotation_euler = (target-ob.location).to_track_quat('-Z','Y').to_euler()
         ob.data.energy, ob.data.shape, ob.data.size = power, 'DISK', size
-    # Preview helpers also have unit scale. Their rotations are baked into data
-    # at finalization, so every scene object has rotation zero and scale one.
     for a in bpy.context.screen.areas:
         if a.type == 'VIEW_3D':
             a.spaces.active.region_3d.view_rotation = cam.rotation_euler.to_quaternion()
@@ -278,7 +269,6 @@ def texture_atlas():
         y0, y1 = round((i // cols)*256/rows), round((i // cols+1)*256/rows)
         rgba = PALETTE[keys[me.attributes['part_color'].data[i].value]]
         pixels[y0:y1,x0:x1] = rgba
-        # 1.25-pixel inset, including the image boundaries.
         lo = ((x0+1.25)/256, (y0+1.25)/256)
         hi = ((x1-1.25)/256, (y1-1.25)/256)
         coords = [lo, (hi[0],lo[1]), hi, (lo[0],hi[1])]
@@ -295,9 +285,7 @@ def texture_atlas():
     img.file_format = 'PNG'
     img.filepath_raw = OUT + '/T_Slushie_BaseColor.png'
     img.save()
-    # Keep absolute while the open scene still resides at art/start.blend.
     img.filepath = OUT + '/T_Slushie_BaseColor.png'
-    # Invalidate Cycles' image cache when regenerating an existing atlas.
     img.reload()
     img.update()
     mat = bpy.data.materials.get('M_Slushie') or bpy.data.materials.new('M_Slushie')
@@ -340,7 +328,6 @@ def texture_atlas():
 
 def collision():
     bm = bmesh.new()
-    # 20 support points: eight floor, eight shoulder, four around the straw tip.
     for z, radius in ((0, .027), (.110, .041)):
         for i in range(8):
             a = 2*math.pi*i/8
@@ -380,8 +367,6 @@ def export_asset():
         path_mode='RELATIVE', embed_textures=False)
     col.hide_set(True)
     active(body)
-    # Preview lighting is retained in the build code and saved stage renders.
-    # Keep only applied asset meshes and the untouched reference in the blend.
     for helper in list(bpy.data.objects):
         if helper.name.startswith('Slushie_Preview'):
             bpy.data.objects.remove(helper, do_unlink=True)

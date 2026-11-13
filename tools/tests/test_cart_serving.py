@@ -32,8 +32,6 @@ class CartServingTests(unittest.TestCase):
             self.assertIn('PASS: cart serving pavement, reachable placements, fallback, idle hold and release', ran.stdout)
 
 
-# Purpose-built fakes, not a game implementation. SamplePosition sees a controlled set of walkable
-# points; the event represents either click navigation or WASD. Real baked mesh/physics remain in CHECKS.
 HARNESS = r'''
 using UnityEngine;
 using UnityEngine.AI;

@@ -6,8 +6,6 @@ using FoodTrucks.Core.Saves;
 
 namespace FoodTrucks.Core.Pitches
 {
-    // What a premium spot or an event adds to a pitch: its areas, raised to at least its presences (as a zone in
-    // add mode does), and its footfall factor. Both can apply at once; their factors multiply.
     public sealed class PitchBonus
     {
         public static readonly PitchBonus None = new PitchBonus(null, 1.0);
@@ -38,7 +36,6 @@ namespace FoodTrucks.Core.Pitches
             return Areas == null ? mix : AreaMix.FromPresences(mix.Presences.Concat(Areas.Presences));
         }
 
-        // Fills the query's pitch fields: the areas stay apart from the venues' live factor.
         public void ApplyTo(DemandQuery query)
         {
             if (query == null) throw new ArgumentNullException(nameof(query));
@@ -54,8 +51,6 @@ namespace FoodTrucks.Core.Pitches
     // any other pitch.
     public static class PremiumSpots
     {
-        // The spot whose building entrance is nearest, within the premium radius. `entrances` gives each spot's
-        // entrance positions as the game reads them; spots whose building the game doesn't have are skipped.
         public static PremiumSpot? At(PitchTables tables, Func<PremiumSpot, IEnumerable<(double X, double Z)>?> entrances, double x, double z)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
@@ -79,7 +74,6 @@ namespace FoodTrucks.Core.Pitches
             return best;
         }
 
-        // The vehicle opening on the spot at that minute takes it unless another held it then. Returns who holds it.
         public static (PremiumClaim Claim, string Holder) Claim(SaveState state, VehicleState vehicle, string spotId, long minute)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -96,7 +90,6 @@ namespace FoodTrucks.Core.Pitches
             return (PremiumClaim.Held, vehicle.VehicleId);
         }
 
-        // The vehicle gives the spot back at that minute (it closed, left, or is gone).
         public static void Release(SaveState state, VehicleState vehicle, long minute)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -105,7 +98,6 @@ namespace FoodTrucks.Core.Pitches
             vehicle.PremiumSpot = null;
         }
 
-        // Holds that ended before that minute are dropped, and spots nobody holds.
         public static int Prune(SaveState state, long before)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));

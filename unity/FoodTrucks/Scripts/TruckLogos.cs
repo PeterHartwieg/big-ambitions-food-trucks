@@ -13,8 +13,6 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // The game's logo generator supplies the same artwork as shop signs. A unique private key
-    // isolates its cache/files from shops; only SetUpSettings receives the player's display text.
     internal sealed class TruckLogos : MonoBehaviour
     {
         private static readonly Dictionary<string, string> generationNames = new Dictionary<string, string>();
@@ -81,7 +79,6 @@ namespace FoodTrucks
                 Clear(display); display.Body = body;
                 var material = new Material(template) { name = "FoodTrucks.TruckLogo" };
                 material.SetTexture("_LogoTexture", texture);
-                // Match the native-camera-tested illuminated sign tint; SetColor handles its colour-space conversion.
                 material.SetColor("_LogoColour", Color.white * 10f);
                 display.Material = material;
                 display.BackingMaterial = new Material(material);
@@ -99,7 +96,6 @@ namespace FoodTrucks
             }
             foreach (var key in shown.Keys.Where(k => !seen.Contains(k)).ToList())
             { Clear(shown[key]); shown.Remove(key); }
-            // Release old designs after replacement/removal. A fleet sharing one design shares its texture.
             var used = new HashSet<string>(shown.Values.Select(d => d.Design));
             foreach (var key in textures.Where(p => p.Value != null && !used.Contains(p.Key)).Select(p => p.Key).ToList())
             { Destroy(textures[key]); textures.Remove(key); }
@@ -120,7 +116,6 @@ namespace FoodTrucks
                     {
                         if (!disposed)
                         {
-                            // The high-resolution square includes both icon and name; the native wide sign is text-only.
                             var data = File.ReadAllBytes(Path.Combine(folder, "Billboard.jpg"));
                             var image = new Texture2D(2, 2) { name = "FoodTrucks.Logo", wrapMode = TextureWrapMode.Clamp };
                             if (ImageConversion.LoadImage(image, data))
@@ -147,7 +142,6 @@ namespace FoodTrucks
             var aspect = texture.width / (float)texture.height;
             var height = Mathf.Min(.55f, .55f / aspect);
             root.transform.localScale = new Vector3(height * aspect, height, 1);
-            // The driver-side sign sits above the generator hatch; the customer-side sign below the serving window.
             const float depth = .004f;
             root.transform.localPosition = new Vector3(side * (1.10f + depth), side < 0 ? 2.65f : 1.32f, -.85f);
             root.transform.localRotation = Quaternion.Euler(0, -side * 90, 0);

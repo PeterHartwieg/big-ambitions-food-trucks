@@ -12,15 +12,9 @@ using UI.Notification;
 
 namespace FoodTrucks
 {
-    // The bridge's HTTP side: a loopback-only HttpListener on a background thread, each request served on a pool thread,
-    // so /health, /events and op queries answer while a /call waits for the main thread. It never touches the game:
-    // /health and /events read what the main thread left for them, /call waits for the main thread, where calls run one
-    // after another.
     internal sealed class TestBridgeHttp
     {
         private readonly int port;
-        // The bridge generation this server was started under, fixed for its life: a request it accepts is refused at the
-        // main thread's queue once that generation has ended, even if a stop and a start came in between.
         private readonly int generation;
         private HttpListener? listener;
         private Thread? thread;
@@ -51,7 +45,7 @@ namespace FoodTrucks
                 listener?.Stop();
                 listener?.Close();
             }
-            catch (Exception) { /* Shutting down anyway. */ }
+            catch (Exception) {  }
             thread?.Join(1000);
             listener = null;
             thread = null;
@@ -63,7 +57,7 @@ namespace FoodTrucks
             {
                 HttpListenerContext context;
                 try { context = listener!.GetContext(); }
-                catch (Exception) { break; } // the listener was stopped
+                catch (Exception) { break; }
                 ThreadPool.QueueUserWorkItem(_ => Serve(context, generation));
             }
         }
@@ -92,8 +86,6 @@ namespace FoodTrucks
                     Write(context, 200, TestBridgeEvents.Since(since));
                     return;
                 case "/call" when request.HttpMethod == "POST":
-                    // Loopback is reachable from web pages too. Reject browser-origin calls before reading
-                    // or queuing work, and require a non-simple media type so HTML forms cannot mutate state.
                     if (request.Headers["Origin"] != null || request.Headers["Sec-Fetch-Site"] != null)
                     {
                         Write(context, 403, TestBridge.Fail("Browser-origin calls are refused; use the CLI or MCP bridge client."));
@@ -120,7 +112,6 @@ namespace FoodTrucks
             JObject call;
             try { call = BridgeControl.ControlGate.PrepareBody(JObject.Parse(body)); }
             catch (JsonException ex) { return TestBridge.Fail("The body is not a JSON object: " + ex.Message); }
-            // A client that knew another session must reconnect first: nothing is queued or numbered for it.
             var expect = call["expect_session"] is JValue e && e.Type == JTokenType.String ? e.Value<string>() : null;
             var session = TestBridge.Session;
             if (expect != null && expect != session)
@@ -135,7 +126,6 @@ namespace FoodTrucks
 
         private static void Write(HttpListenerContext context, int status, JObject reply)
         {
-            // The bridge's session, next to ok in every reply.
             var ok = reply.Property("ok");
             if (ok != null && reply.Property("session") == null) ok.AddAfterSelf(new JProperty("session", TestBridge.Session));
             var bytes = Encoding.UTF8.GetBytes(reply.ToString(Formatting.None));
@@ -148,8 +138,6 @@ namespace FoodTrucks
         }
     }
 
-    // The last 2,000 events for /events: every line the mod logs, every notice and phone text, and Unity errors and
-    // exceptions from anywhere in the game. Written from any thread.
     internal static class TestBridgeEvents
     {
         private const int Capacity = 2000;
@@ -176,14 +164,10 @@ namespace FoodTrucks
             Notifications.onShow -= OnGameNotice;
         }
 
-        // The game's and other mods' notices (a fine, a theft, a pay slip), as the screen shows them: a player reads
-        // them as they pop up, so they are events too, and the last ones are kept by game minute for the bank lines.
         private const int GameNoticeCount = 200;
         private static readonly Queue<(int? Day, string? Time, string Text)> gameNotices = new Queue<(int?, string?, string)>();
         private static object? noticeGame, noticeState;
 
-        // Day/time repeat after loads. A notice belongs only to the game and mod-state objects
-        // that observed it, even when the same character or save name is loaded again.
         private static void NoticeSession()
         {
             var game = SaveGameManager.Current;
@@ -196,7 +180,7 @@ namespace FoodTrucks
         private static void OnGameNotice(NotificationType type, string key, Dictionary<string, string> data, float seconds,
             string duplicateIdentifier, Action onClick, bool sound, bool track)
         {
-            if (Notices.Showing) return;   // the mod's own, already in as "notice"
+            if (Notices.Showing) return;
             var text = Notices.Text(key, data);
             Add("notice", "Notice: " + text);
             var (day, time) = TestBridge.ClockNow();
@@ -208,7 +192,6 @@ namespace FoodTrucks
             }
         }
 
-        // The game's notices shown at that game minute, oldest first.
         internal static List<string> GameNoticesAt(int day, string time)
         {
             lock (gate)
@@ -221,7 +204,6 @@ namespace FoodTrucks
         private static void OnUnityLog(string condition, string stackTrace, UnityEngine.LogType type)
         {
             if (type != UnityEngine.LogType.Error && type != UnityEngine.LogType.Exception && type != UnityEngine.LogType.Assert) return;
-            // The mod's own error lines are already in as "error".
             if (Log.Writing) return;
             var text = type == UnityEngine.LogType.Exception && !string.IsNullOrEmpty(stackTrace) ? condition + "\n" + stackTrace : condition;
             Add("unity_error", text);
@@ -256,7 +238,6 @@ namespace FoodTrucks
             }
         }
 
-        // The events numbered `since` and later; `next` is the number to ask from next time. Numbers start at 1.
         internal static JObject Since(long since)
         {
             var list = new JArray();
@@ -267,7 +248,6 @@ namespace FoodTrucks
             {
                 nextSeq = next;
                 var oldest = events.Count == 0 ? next : events.Peek().Value<long>("seq");
-                // Events from `since` on that fell out of the buffer before this read.
                 if (since < oldest) dropped = oldest - since;
                 foreach (var e in events)
                     if (e.Value<long>("seq") >= since) list.Add(e.DeepClone());

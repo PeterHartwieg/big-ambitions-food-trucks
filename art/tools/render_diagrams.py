@@ -31,7 +31,7 @@ COOLER_ONLY = os.environ.get("FT_DIAGRAM_COOLER_ONLY") == "1"
 EXISTING = json.load(open(JSON_OUT)) if COOLER_ONLY else {}
 
 PIECE = 0.40              # a piece's footprint (m): the fallback icon size
-PIECE_HALF_HEIGHT = 0.25  # the place's hotspot above the counter (a typical piece is 0.40 to 0.60 m tall)
+PIECE_HALF_HEIGHT = 0.25
 MARGIN = 0.03
 
 
@@ -44,14 +44,9 @@ KINDS = [
         "kind": "truck", "label": "Truck", "size": (1200, 700), "out": (2400, 800),
         "fbx": "truck/FoodTruck.fbx", "tex": "truck/T_FoodTruck_BC.png",
         "hide": ["Truck_Collision"],
-        # The hatch open: Unity localEulerAngles.z = +80 about its hinge, which is +80 degrees about Blender +Y.
         "hatch": ("Truck_Hatch", 80),
-        # No cash register: in game it stands on the serving counter, in front of the middle places.
-        # Camera: azimuth from the hatch side (-X) towards the rear (+Y), elevation, height of the eye, lens.
         "aim": unity(-0.2, 2.2, -1.10), "azimuth": -5, "elevation": 8, "lens": 85,
-        # What must be in the picture: the window with the menu sign behind it, the awning and the roofline.
         "frame": [Vector((-1.1, y, z)) for y in (0.06, 2.68) for z in (1.70, 3.18)],
-        # VehicleDisplays' Truck layout: filled from the middle out.
         "places": [("EquipmentLine2", unity(-0.62, 1.75, -0.875)), ("EquipmentLine3", unity(-0.62, 1.75, -1.325)),
                    ("EquipmentLine1", unity(-0.62, 1.75, -0.425)), ("EquipmentLine4", unity(-0.62, 1.75, -1.775)),
                    ("EquipmentCooler", unity(0.875, 1.80, -1.80))],
@@ -60,9 +55,7 @@ KINDS = [
         "kind": "cart", "label": "Cart", "size": (900, 700), "out": (2400, 800),
         "fbx": "cart/FoodCart.fbx", "tex": "cart/T_FoodCart_BC.png",
         "hide": ["Cart_Collision", "Cart_Canopy"],
-        # Cash register: Unity (0.29, 0.95, 0.615), +90 degrees about Y (Blender -90 about Z), scale 1.
         "register": (unity(0.29, 0.95, 0.615), -90, 1.0),
-        # Azimuth from the cart's right side (-X) towards its front (-Y).
         "aim": unity(0, 1.0, 0.1), "azimuth": -30, "elevation": 22, "lens": 50,
         "frame": [Vector((x, y, z)) for x in (-0.5, 0.5) for y in (-0.77, 0.77) for z in (0.0, 2.3)],
         "places": [("EquipmentFront", unity(0, 0.963, 0.30)), ("EquipmentRear", unity(0, 0.963, -0.30)),
@@ -78,7 +71,6 @@ def material(name, tex_path):
     bsdf = nt.nodes["Principled BSDF"]
     tex = nt.nodes.new("ShaderNodeTexImage")
     tex.image = bpy.data.images.load(tex_path)
-    # The truck's base colour alpha is its paint mask, 0 on steel and the kitchen: keep the colour as stored.
     tex.image.alpha_mode = "CHANNEL_PACKED"
     nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
     bsdf.inputs["Roughness"].default_value = 0.55
@@ -206,7 +198,6 @@ def render_kind(spec, models):
     world.node_tree.nodes["Background"].inputs[1].default_value = 1.0
     scene.world = world
 
-    # Camera: from the -X side, turned by the azimuth (+ towards +Y), looking down by the elevation.
     a, e = math.radians(spec["azimuth"]), math.radians(spec["elevation"])
     direction = Vector((-math.cos(a) * math.cos(e), math.sin(a) * math.cos(e), math.sin(e)))
     cam = bpy.data.objects.new("DiagramCam", bpy.data.cameras.new("DiagramCam"))
@@ -224,7 +215,6 @@ def render_kind(spec, models):
         vs = [world_to_camera_view(scene, cam, p) for p in spec["frame"]]
         return min(v.x for v in vs), max(v.x for v in vs), min(v.y for v in vs), max(v.y for v in vs)
 
-    # Back off until the frame points fit with the margin, then shift the lens to centre them.
     lo, hi = 1.0, 60.0
     for _ in range(40):
         d = (lo + hi) / 2
@@ -238,8 +228,6 @@ def render_kind(spec, models):
     x0, x1, y0, y1 = bounds()
     cam.data.shift_x = ((x0 + x1) / 2 - 0.5)
     cam.data.shift_y = ((y0 + y1) / 2 - 0.5) * h / w
-    # Widen to the output size: the same vertical view (so the vehicle keeps its size against the image height),
-    # more to the left and right. Blender's sensor width and shifts are along the image's longer side, the width.
     W, H = spec["out"]
     old = cam.data.sensor_width
     cam.data.sensor_width = old * h / w * W / H
@@ -272,7 +260,6 @@ def render_kind(spec, models):
         shoot(os.path.join(PNG_DIR, background))
     print("DIAGRAM", background)
 
-    # Layers: the vehicle as a holdout, one piece shown.
     for ob in vehicle:
         ob.is_holdout = True
     places = []
@@ -350,7 +337,7 @@ def check(result):
     for kind, picks in samples.items():
         info = result[kind]
         px = pixels(os.path.join(PNG_DIR, info["image"]))
-        px[..., :3] *= px[..., 3:]  # straight to premultiplied
+        px[..., :3] *= px[..., 3:]
         by_name = {p["place"]: p for p in info["places"]}
         fill = {p["place"]: picks[i] for i, p in enumerate(info["places"]) if i < len(picks)}
         for name in info["drawOrder"]:
@@ -364,7 +351,7 @@ def check(result):
             dst[..., :3] = lp[..., :3] * a + dst[..., :3] * (1 - a)
             dst[..., 3:] = a + dst[..., 3:] * (1 - a)
         h, w = px.shape[:2]
-        rgb = px[..., :3] + (1 - px[..., 3:])  # premultiplied over white
+        rgb = px[..., :3] + (1 - px[..., 3:])
         yy, xx = np.mgrid[0:h, 0:w]
         for p in info["places"]:
             rgb[np.hypot(xx - p["x"] * w, yy - p["y"] * h) < 5] = (1, 0, 0)

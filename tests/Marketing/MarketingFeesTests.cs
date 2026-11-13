@@ -12,7 +12,6 @@ public class MarketingFeesTests
 {
     private static readonly MarketingRules Rules = new();
 
-    // A cart booked at `level`; with `paidThrough`, that day was paid with it, as Renew writes it.
     private static VehicleState Cart(string? level = null, int? paidThrough = null, long paidCents = 0) =>
         new()
         {
@@ -20,7 +19,6 @@ public class MarketingFeesTests
             MarketingPaidLevel = paidThrough == null ? null : level, MarketingPaidCents = paidCents
         };
 
-    // The game's payment: records each charge and takes it if `accept` says so.
     private sealed class Till
     {
         public readonly List<MarketingCharge> Charges = new();
@@ -139,7 +137,6 @@ public class MarketingFeesTests
         Assert.Equal(("flyers", 8), (cart.MarketingLevel, cart.MarketingStartsDay));
         Assert.Equal("flyers", MarketingFees.Booked(cart, Rules)!.Id);
         Assert.Equal(1.0, MarketingFees.Factor(cart, Rules, 7));
-        // A renewal the same day (a load) charges nothing; the next day charges the day's fee.
         Assert.Null(MarketingFees.Renew(cart, Rules, 7, till.Pay));
         Assert.Empty(till.Charges);
         var charge = MarketingFees.Renew(cart, Rules, 8, till.Pay);
@@ -152,7 +149,6 @@ public class MarketingFeesTests
     [Fact]
     public void ABookingLateInTheDayIsChargedOnceForTheNextDay()
     {
-        // Picked late in the evening, a level is charged once, for the next day only.
         var cart = Cart();
         var till = new Till();
 
@@ -177,7 +173,6 @@ public class MarketingFeesTests
         Assert.Null(MarketingFees.Booked(cart, Rules));
         MarketingFees.Choose(cart, Rules, "flyers", 7);
 
-        // No refunds and no difference charges: the day's one fee stands, and the last booking runs tomorrow.
         Assert.Single(till.Charges);
         Assert.Equal(2000, MarketingFees.Renew(cart, Rules, 8, till.Pay)!.Cents);
         Assert.Equal(1.10, MarketingFees.Factor(cart, Rules, 8));

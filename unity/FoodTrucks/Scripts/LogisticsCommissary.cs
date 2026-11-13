@@ -17,40 +17,19 @@ using CoreLogistics = FoodTrucks.Core.Commissary.CommissaryLogistics;
 
 namespace FoodTrucks
 {
-    // Logistics plans deliver to a commissary (Peter, 14 October 2026; design: Commissary supply and crew restock). A
-    // commissary where the player rents a space is offered in a warehouse plan's destination dropdown under its own name;
-    // at the game's 02:00 run its stock targets are filled from the plan's warehouse into Core's commissary stock. Core's
-    // CommissaryLogistics decides how much; this moves the goods with the game's own calls.
-    //
-    // A commissary destination's address is the game's underground parking street with a negative number per commissary
-    // (Core AddressNumber). That street never has a building registration [code, 1.0: BuildingHelper.
-    // CanTheAddressHaveARegistration], so every game call on it finds none instead of throwing, and none of the game's
-    // own code that later walks the plans touches it: the 02:00 delivery stops at the missing registration
-    // (LogisticsManagerPlanDestination.Deliver, the import/export check in DeliverDestination is null-safe), a building
-    // changing hands or a business moving resets or moves only destinations at that building's address
-    // (LogisticsManagerHelper.CancelAllDeliveriesForAddress, CompatibilityHelper.RemoveLogisticsManagerPlan,
-    // BizManTransfer), and the plan's product list comes out empty. So a save keeps loading with the mod removed without
-    // the uninstall step: such a destination shows as unassigned and delivers nothing. The real building's address isn't
-    // used: the game would then deliver into whoever occupies it, list it twice when the player rents it, and drop the
-    // destination when it changes hands.
     internal static class LogisticsCommissary
     {
-        // The game's street for underground parking entrances [code, 1.0: UndergroundParkingEntrance], whose numbers
-        // are the entrances' own, never negative.
         private const string Street = "ba:street_parking";
         private const string NoSpaceKey = "foodtrucks:logistics_commissary_nospace";
 
         private static bool ready;
-        // Lines said once per load: a destination that delivers nothing, by plan and reason.
         private static readonly HashSet<string> logged = new HashSet<string>(StringComparer.Ordinal);
         private static AccessTools.FieldRef<LogisticsManagerDestinationUI, LogisticsManagerPlanUI>? planUiField;
         private static AccessTools.FieldRef<LogisticsManagerDestinationUI, LogisticsManagerPlan>? planField;
         private static AccessTools.FieldRef<LogisticsManagerDestinationUI, int>? indexField;
         private static AccessTools.FieldRef<LogisticsManagerDestinationUI, UI.Elements.Dropdown>? dropdownField;
-        // The game's list of shortfalls for its "not enough stock" text, by plan (LogisticsManagerPlan.AllUndeliveredNoStock).
         private static System.Reflection.FieldInfo? noStockField;
 
-        // The patches the destination needs, by method; commissaries are offered only when all are active.
         private static readonly (Type Type, string Method)[] Needed =
         {
             (typeof(LogisticsManagerPlan), "DeliverDestination"),
@@ -59,7 +38,6 @@ namespace FoodTrucks
             (typeof(LogisticsManagerDestinationUI), "SetUp")
         };
 
-        // Called once after patching.
         internal static void CheckReady()
         {
             try
@@ -90,7 +68,6 @@ namespace FoodTrucks
             return info != null && info.Prefixes.Concat(info.Postfixes).Any(p => p.PatchMethod.DeclaringType == typeof(LogisticsCommissary));
         }
 
-        // On load: what the plans hold for commissaries.
         internal static void Attach()
         {
             logged.Clear();
@@ -113,8 +90,6 @@ namespace FoodTrucks
 
         private static Address AddressOf(CommissarySite site) => new Address(Street, CoreLogistics.AddressNumber(site.Id));
 
-        // For the test bridge: whether commissaries are offered as destinations, the address a commissary stands for in a
-        // plan (what its dropdown entry sets), and the commissary an address stands for.
         internal static bool Ready => ready;
         internal static Address DestinationFor(CommissarySite site) => AddressOf(site);
         internal static string? SiteIdOf(Address? address) => IdOf(address);
@@ -131,17 +106,11 @@ namespace FoodTrucks
             if (logged.Add(key)) Log.Info(message);
         }
 
-        // ---- The 02:00 delivery ----
-
-        // Prefix on LogisticsManagerPlan.DeliverDestination: a commissary destination is filled here and the game's own
-        // delivery skipped. Its shortfall goes into the game's "not enough stock" text, as a shop's does.
         internal static bool DeliverPrefix(LogisticsManagerPlan __instance, LogisticsManagerPlanDestination destination)
         {
             if (destination == null || !Ours(destination.deliveryTargetAddress)) return true;
             try { Deliver(__instance, destination); }
             catch (Exception ex) { Log.Error("Commissary logistics, delivery: " + ex); }
-            // As the game's own DeliverDestination after a delivery: the game refreshes what depends on stock once the
-            // run's work is done [code, 1.0: LogisticsManagerPlan.DeliverDestination, GameManager.shouldUpdateAfterDeliveries].
             try
             {
                 var game = InstanceBehavior<GameManager>.Instance;
@@ -153,7 +122,6 @@ namespace FoodTrucks
 
         private static void Deliver(LogisticsManagerPlan plan, LogisticsManagerPlanDestination destination)
         {
-            // As the game: no warehouse or one the player no longer rents delivers nothing [code, 1.0: DeliverDestination].
             if (plan.targetAddress.IsUndefined()) return;
             if (!(BuildingHelper.GetBuildingRegistration(plan.targetAddress) is Warehouse warehouse) || !warehouse.RentedByPlayer) return;
             var number = destination.deliveryTargetAddress.streetNumber;
@@ -194,7 +162,6 @@ namespace FoodTrucks
             if (moved.Count > 0)
             {
                 FoodTrucksSession.MarkChanged();
-                // The warehouse's delivery history, as for a shop: goods out, negative [code, 1.0: LogisticsManagerPlanDestination.Deliver].
                 warehouse.deliveryTransactions ??= new List<DeliveryTransaction>();
                 var transaction = new DeliveryTransaction();
                 transaction.SetItems(moved.Select(m => new DeliveryItem(m.Item, -m.Units)));
@@ -209,9 +176,6 @@ namespace FoodTrucks
                      (run.Unpriced.Count > 0 ? "; not in the commissary's catalogue, left alone: " + string.Join(", ", run.Unpriced) : "") + ".");
         }
 
-        // Takes up to the line's units out of the warehouse's pallets with the game's own calls, as its delivery to a shop
-        // does [code, 1.0: LogisticsManagerPlanDestination.ProcessStockTarget], and adds them to the commissary's stock.
-        // Returns the units moved.
         private static int Withdraw(Warehouse warehouse, SaveState state, string siteId, CommissaryLogisticsLine line, int day, string from)
         {
             var cargo = new List<CargoInstance>();
@@ -231,7 +195,6 @@ namespace FoodTrucks
             var got = taken?.amount ?? 0;
             if (got > 0)
             {
-                // Priced at what the warehouse paid (the withdrawal's mean price), not the catalogue's.
                 try { CoreLogistics.Receive(state.Commissary, siteId, line.ItemName, got, CoreLogistics.PaidCents(taken!.pricePerUnit), day, from); }
                 catch (Exception ex)
                 {
@@ -240,14 +203,11 @@ namespace FoodTrucks
                     return 0;
                 }
             }
-            // Stock has already reached Core. Empty-stack cleanup only updates the warehouse's presentation;
-            // its listeners must not abort delivery bookkeeping or the remaining products in the plan.
             try { BuildingHelper.RemoveEmptyCargo(cargo); }
             catch (Exception ex) { Log.Error("Commissary logistics, empty cargo cleanup: " + ex); }
             return got;
         }
 
-        // Into the list the game texts from after the run (LogisticsManagerPlan.OnFinishedDeliveries), named by the commissary.
         private static void ReportShort(LogisticsManagerPlan plan, string name, List<ItemAmountTarget> shortItems)
         {
             try
@@ -259,12 +219,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Commissary logistics, shortfall text: " + ex.Message); }
         }
 
-        // ---- The plan screen ----
-
-        // Prefix on LogisticsManagerPlanUI.GetListOfAvailableProducts: a commissary lists the foods of its catalogue the
-        // game keeps on warehouse pallets (retail products, as the game's own delivery list; no service products, no
-        // machines), and any other item that still has a target, as the game keeps those [code, 1.0:
-        // AddStockTargetsWithPositiveAmounts].
         internal static bool ProductsPrefix(LogisticsManagerPlanDestination destination, ref List<string> __result)
         {
             if (destination == null || !Ours(destination.deliveryTargetAddress)) return true;
@@ -291,7 +245,6 @@ namespace FoodTrucks
             return list;
         }
 
-        // Prefix on LogisticsManagerPlanUI.IsProductInUse: for a commissary, "in use" is what it holds in stock (Core).
         internal static bool InUsePrefix(Address address, string product, ref bool __result)
         {
             if (!Ours(address)) return true;
@@ -309,10 +262,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // Postfix on LogisticsManagerDestinationUI.SetUp: the destination dropdown gets the commissaries with a rented
-        // space after the player's businesses, named as the commissary (not whoever occupies its building), and the
-        // one this destination already names if its space was given up. Its choice handler is replaced by one that
-        // knows those entries; for a business it does what the game's does.
         internal static void SetUpPostfix(LogisticsManagerDestinationUI __instance)
         {
             if (!ready || Commissary.Uninstalled) return;
@@ -363,9 +312,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Commissary logistics, destination dropdown: " + ex); }
         }
 
-        // ---- The uninstall step ----
-
-        // Every commissary destination leaves every plan, so the plans read as the game made them.
         internal static void RemoveFromPlans()
         {
             var removed = 0;

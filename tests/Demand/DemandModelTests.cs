@@ -49,7 +49,6 @@ public class DemandModelTests
 
         var parkCrowd = parkShare * 2.0 * 0.9;
         var officeCrowd = (1 - parkShare) * 0.2;
-        // Exact crowd-weighting arithmetic; section 6 retuned afternoon coffee appetite to 0.40.
         Assert.Equal(0.40 * (0.5 + officeCrowd + 2 * parkCrowd) / (0.5 + officeCrowd + parkCrowd),
             model.Estimate(query).Appetite, 9);
     }
@@ -64,8 +63,6 @@ public class DemandModelTests
 
         query = Query("waterfront", 9, 0, Coffee);
         query.Neighbourhood = Midtown;
-        // Neutral baseline traffic dilutes the park factor even at full park presence.
-        // Keep the exact stacking/cap check with section 6's morning coffee appetite of 0.50.
         Assert.Equal(0.50 * 1.4 * (0.5 + 2 * 0.36) / 0.86, model.Estimate(query).Appetite, 9);
         var demand = JObject.Parse(ShippedData.Demand);
         demand["areas"]!["waterfront"]!["appetite"]!["coffee"] = 3;
@@ -96,7 +93,6 @@ public class DemandModelTests
     [Fact]
     public void OfficeLunchIsAboutThreeTimesTheSpotsAverageHour()
     {
-        // The average over the open day, 05:00 to 02:00, on a weekday.
         var minutes = Enumerable.Range(5 * 60, 21 * 60).Select(m => m % 1440).ToList();
         var average = minutes.Average(m => model.Estimate(new DemandQuery
         {
@@ -185,7 +181,6 @@ public class DemandModelTests
         var estimate = model.Estimate(query);
 
         Assert.Equal(Daypart.Late, estimate.Daypart);
-        // Friday's 1.4, not Saturday's 1.5.
         Assert.Equal((0.08 + 2.5 * 1.4) * ShippedData.Tables.PassersPerHour, estimate.Footfall, 9);
     }
 
@@ -199,7 +194,6 @@ public class DemandModelTests
         sundayNight.Neighbourhood = "ba:neighborhood_murrayhill";
         sundayNight.Day = DayOfWeek.Monday;
 
-        // Murray Hill's late pizza rule runs Thursday to Saturday nights.
         Assert.Equal(0.30 * 1.4, model.Estimate(saturdayNight).Appetite, 9);
         Assert.Equal(0.30, model.Estimate(sundayNight).Appetite, 9);
     }
@@ -207,7 +201,6 @@ public class DemandModelTests
     [Fact]
     public void NoAddOnsWhenTheMainItemBringsNobody()
     {
-        // Pizza appetite is zero at 06:00, so every customer came for a drink.
         var estimate = model.Estimate(Query("office", 6, 0, "ba:itemname_pizza", Soda));
 
         Assert.True(estimate.CustomersPerHour > 0);
@@ -241,7 +234,6 @@ public class DemandModelTests
         var appetiteFactor = neighbourhood.AppetiteFactor("coffee", plainEstimate.Daypart, plain.Day, plainEstimate.Season);
         var footfallFactor = neighbourhood.Footfall * neighbourhood.DaypartFactor(plainEstimate.Daypart)
             * neighbourhood.DayFactor(plain.Day) * neighbourhood.SeasonFactor(plainEstimate.Season);
-        // Both appetites are below the cap, so ratios expose omitted or repeated factors.
         Assert.True(plainEstimate.Appetite > 0 && plainEstimate.Appetite < 1.0);
         Assert.True(plainEstimate.Appetite * appetiteFactor < 1.0);
         Assert.Equal(appetiteFactor, midtownEstimate.Appetite / plainEstimate.Appetite, 9);
@@ -259,9 +251,7 @@ public class DemandModelTests
         winter.Neighbourhood = "ba:neighborhood_thehamptons";
         winter.Month = 1;
 
-        // Waterfront afternoon 2.0 on a Wednesday (0.9), Hamptons 0.7, then the season and month.
         Assert.Equal(0.7 * 1.6 * (0.5 + 2.0 * 0.9) * ShippedData.Tables.PassersPerHour, model.Estimate(summer).Footfall, 9);
-        // The Hamptons' winter 0.5 times the winter month's 0.6: footfall 0.3 of normal.
         Assert.Equal(0.7 * 0.5 * 0.6 * (0.5 + 2.0 * 0.9) * ShippedData.Tables.PassersPerHour, model.Estimate(winter).Footfall, 9);
     }
 
@@ -349,7 +339,6 @@ public class DemandModelTests
 
         var drinkPart = 0.5 * 0.30 * 0.5;
         Assert.Equal(0.25 + drinkPart, withDrinks.Appetite, 9);
-        // Drink-only customers get no add-on drink, so the add-on rate counts only the hot dog customers.
         Assert.Equal(0.25 / (0.25 + drinkPart) * 0.30 * 0.5 * 2.0, withDrinks.AddOnsPerCustomer, 9);
         Assert.Equal(drinkPart / (0.25 + drinkPart), withDrinks.CustomerShares["colddrinks"], 9);
         Assert.Equal(0, food.AddOnsPerCustomer);
@@ -363,7 +352,6 @@ public class DemandModelTests
     [InlineData(90, 0.9)]
     public void ColdDrinksMarketDemandHasItsOwnFloor(double demand, double factor)
     {
-        // Drinks keep market.floor's 0.3 for other categories, but count at least marketFloor 0.7 themselves.
         var query = Query("office", 12, 0, Soda);
         query.MarketDemand = new Dictionary<string, double> { [Soda] = demand };
 
@@ -407,7 +395,6 @@ public class DemandModelTests
         var query = Query("office", 12, 0, HotDog, Coffee);
         query.MarketDemand = new Dictionary<string, double> { [HotDog] = 30, [Coffee] = 100 };
 
-        // Fast food falls to 0.075; coffee leads at 0.12, so fast food adds half.
         Assert.Equal(0.12 + 0.5 * 0.25 * 0.3, model.Estimate(query).Appetite, 9);
     }
 

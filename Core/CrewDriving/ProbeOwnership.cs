@@ -3,7 +3,6 @@ using System.Collections.Generic;
 
 namespace FoodTrucks.Core.CrewDriving
 {
-    /// <summary>Transient identity. ControllerInstance identifies the actual native controller, not its vehicle.</summary>
     public readonly struct ProbeToken : IEquatable<ProbeToken>
     {
         internal readonly Guid Registry;
@@ -21,7 +20,6 @@ namespace FoodTrucks.Core.CrewDriving
         public override int GetHashCode() => HashCode.Combine(Registry, Session, NativeVehicleId, ControllerInstance, Generation);
     }
 
-    /// <summary>Main-thread registry, one per active save session. No global one-truck cap here.</summary>
     public sealed class ProbeOwnership
     {
         private readonly Guid registry = Guid.NewGuid();
@@ -42,7 +40,6 @@ namespace FoodTrucks.Core.CrewDriving
             token = default;
             if (string.IsNullOrWhiteSpace(nativeVehicleId) || controllerInstance == 0 || generation == long.MaxValue)
                 return false;
-            // A replacement controller cannot bypass ownership of the same native vehicle.
             if (owners.ContainsKey(nativeVehicleId)) return false;
             token = new ProbeToken(registry, Session, nativeVehicleId, controllerInstance, ++generation);
             owners.Add(nativeVehicleId, token);
@@ -54,7 +51,6 @@ namespace FoodTrucks.Core.CrewDriving
 
         internal bool BindController(ProbeToken token) => Owns(token) && boundControllers.Add(token.Generation);
 
-        /// <summary>Call AFTER revoking commands, holding/synchronizing the body and restoring captured settings.</summary>
         public bool Release(ProbeToken token)
         {
             if (!Owns(token)) return false;

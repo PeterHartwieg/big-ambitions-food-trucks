@@ -5,7 +5,6 @@ using FoodTrucks.Core.Demand;
 
 namespace FoodTrucks.Core.Selling
 {
-    // One kind of fitted piece and the food it holds. Two pieces of the same kind make one pool with twice the room.
     public sealed class StoragePool
     {
         internal StoragePool(EquipmentInfo piece, int pieces, int capacity, double load, IReadOnlyDictionary<string, int> units)
@@ -20,19 +19,13 @@ namespace FoodTrucks.Core.Selling
         public EquipmentInfo Piece { get; }
         public string EquipmentId => Piece.Id;
         public int Pieces { get; }
-        // Weighted units: pieces x the vehicle's unitsPerPiece x the storage factor.
         public int Capacity { get; }
-        // Weighted units of the pool's foods in the cargo now. May be above Capacity (an old save, a piece taken out).
         public double Load { get; }
-        // Whole items of each of the pool's foods in the cargo, foods with none left out.
         public IReadOnlyDictionary<string, int> Units { get; }
         public double Room => Math.Max(0, Capacity - Load);
-        // Whole weighted units for display, rounded down: a piece reads full ("40/40") only when nothing more fits,
-        // so a coffee machine with 159 cups (39.75 units) reads 39/40.
         public int LoadUnits => (int)Math.Min(int.MaxValue, Math.Floor(Load + 1e-9));
     }
 
-    // A vehicle's storage as its cargo stands: one pool per kind of fitted food piece, in fitting order.
     public sealed class StorageView
     {
         internal StorageView(VehicleInfo vehicle, IReadOnlyList<StoragePool> pools, int storagePieces, double factor,
@@ -47,11 +40,8 @@ namespace FoodTrucks.Core.Selling
 
         public VehicleInfo Vehicle { get; }
         public IReadOnlyList<StoragePool> Pools { get; }
-        // Storage pieces in the cargo; only one counts.
         public int StoragePieces { get; }
-        // 1, or the storage piece's factor while one is fitted.
         public double Factor { get; }
-        // Foods in the cargo that no fitted piece holds (its piece was taken out): they stay until sold.
         public IReadOnlyDictionary<string, int> Unheld { get; }
         public int PerPiece => Storage.Capacity(Vehicle.UnitsPerPiece, 1, Factor);
 
@@ -65,13 +55,9 @@ namespace FoodTrucks.Core.Selling
     public enum LoadRefusal
     {
         None,
-        // No fitted piece serves this food.
         NoPiece,
-        // The piece that serves it is full (or would be with the whole stack).
         PieceFull,
-        // All equipment slots are taken.
         EquipmentSlots,
-        // A storage piece is already fitted, or the stack holds more than one.
         SecondStorage
     }
 
@@ -86,11 +72,8 @@ namespace FoodTrucks.Core.Selling
         }
 
         public int Allowed { get; }
-        // None when the whole stack goes in.
         public LoadRefusal Refusal { get; }
-        // The piece that is full, for PieceFull.
         public string? EquipmentId { get; }
-        // That pool's capacity, for PieceFull.
         public int Capacity { get; }
     }
 
@@ -102,21 +85,15 @@ namespace FoodTrucks.Core.Selling
             NotHeld = notHeld;
         }
 
-        // Whole items of each food to load, foods with none left out.
         public IReadOnlyDictionary<string, int> Load { get; }
-        // Foods on offer that no fitted piece holds, so none were planned.
         public IReadOnlyList<string> NotHeld { get; }
     }
 
-    // Storage per piece (plan, "Storage per piece"; Peter, 10 October 2026). Each fitted piece of equipment holds
-    // unitsPerPiece weighted units of the foods it serves; a piece serving several foods shares its room among them.
-    // One storage piece multiplies every piece's room. Loads only ever check room; nothing here takes stock away.
     public static class Storage
     {
         public static int Capacity(int unitsPerPiece, int pieces, double factor) =>
             (int)Math.Min(int.MaxValue, Math.Floor((double)unitsPerPiece * Math.Max(0, pieces) * factor + 1e-9));
 
-        // Null for a vehicle type that isn't in the tables.
         public static StorageView? Of(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
@@ -170,8 +147,6 @@ namespace FoodTrucks.Core.Selling
             return new StorageView(vehicle, pools, storagePieces, factor, unheld);
         }
 
-        // How much of an incoming stack may go in, and why not all of it. Unknown vehicles, unknown items and
-        // stacks with nested cargo pass whole (the game's own slots still apply).
         public static LoadCheck Check(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo,
             string? incomingItem, int incomingAmount, bool incomingHasNestedCargo)
         {
@@ -185,11 +160,8 @@ namespace FoodTrucks.Core.Selling
             var piece = tables.EquipmentForGameItem(incomingItem);
             if (piece != null)
             {
-                // A second storage piece is refused as such, before the slots, so the player hears the real reason.
                 if (piece.IsStorage && CargoRules.FittedEquipment(tables, lines).Any(id => tables.Equipment(id)!.IsStorage))
                     return new LoadCheck(0, LoadRefusal.SecondStorage);
-                // A stocked fridge follows the same reservation as an empty one. Only the first is reserved.
-                // Count cargo quantities without expanding a stack into a list (old/corrupt saves can be huge).
                 var coolerCount = lines.Where(l => EquipmentLayout.IsCooler(tables.EquipmentForGameItem(l.ItemName)?.Id))
                     .Sum(l => (long)Math.Max(0, l.Amount));
                 var used = EquipmentPieces(tables, lines) - (int)Math.Min(vehicle.CoolerSlots, coolerCount);
@@ -211,9 +183,6 @@ namespace FoodTrucks.Core.Selling
             return new LoadCheck(fits, fits < amount ? LoadRefusal.PieceFull : LoadRefusal.None, pool.EquipmentId, pool.Capacity);
         }
 
-        // What a restock loads from the stock on offer: each pool is filled from its foods; a shared pool splits its
-        // free room evenly by weight among its foods on offer, levelling what is already loaded, and tops up from the
-        // others when one runs short. Food already over a pool's room stays; nothing is planned for it.
         public static RestockPlan Restock(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo,
             IReadOnlyDictionary<string, int> available)
         {
@@ -245,9 +214,6 @@ namespace FoodTrucks.Core.Selling
             return new RestockPlan(load, notHeld);
         }
 
-        // The spare pieces a restock fits from the stock on offer: an Extra Storage first, only into a vehicle that has
-        // none (one at most), then the others in item order, each as far as the slots take it. Nothing is planned that Check would
-        // refuse, so a restock never shows a refusal for a piece it chose not to fit.
         public static IReadOnlyDictionary<string, int> FitPieces(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo,
             IReadOnlyDictionary<string, int> available)
         {
@@ -319,8 +285,6 @@ namespace FoodTrucks.Core.Selling
             public bool CanTakeMore => Planned < Available;
         }
 
-        // Water-filling: raise every food's load towards one level, each capped by what is on offer, then hand out
-        // the last whole items one at a time to the lowest load that still fits. Never past the capacity.
         private static void Fill(List<Food> foods, double poolLoad, int capacity)
         {
             var otherLoad = poolLoad - foods.Sum(f => f.Current);

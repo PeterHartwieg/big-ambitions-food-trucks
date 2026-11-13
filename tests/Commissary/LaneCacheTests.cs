@@ -20,10 +20,8 @@ public class LaneCacheTests
         bool Ready(double now) => cache.Ready(now, () => found, l => l.Alive, l => l.Active);
         Assert.False(Ready(0));
         found = new[] { new Lane() };
-        // Not looked up again before the interval...
         Assert.False(Ready(1));
         Assert.Equal(1, cache.Lookups);
-        // ...then found.
         Assert.True(Ready(LaneCache<Lane>.RefreshSeconds));
         Assert.Equal(2, cache.Lookups);
     }

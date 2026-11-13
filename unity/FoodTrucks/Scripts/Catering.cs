@@ -17,16 +17,11 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Catering gigs (design: Catering gigs). A "Street food bookings" contact texts offers; the player takes them
-    // by phone. A truck that reaches the place in time with the food starts the gig, its units are held back from
-    // street sales, and when the gig ends it is paid and the units go. Core's CateringOffers and CateringGigs decide;
-    // this finds the places, watches the trucks and moves the money and the stock.
     internal sealed class Catering : MonoBehaviour
     {
         public const string ContactId = "foodtrucks-bookings";
         private const string ContactDescription = "foodtrucks:bookings_description";
         private const CallDialogType DialogType = (CallDialogType)9102;
-        // How near the place's nearest entrance a truck must stand to cater there.
         public const float PlaceMetres = 60f;
 
         private static Catering? instance;
@@ -35,19 +30,11 @@ namespace FoodTrucks
         private static bool migrateRadius;
         private static bool migrateAddresses;
         private static string? historyState;
-        // Where trucks stood and when, none of it saved: after a load it starts from then.
-        // By gig and truck: the first minute the truck stood there ready for it (crew or player, licence, food,
-        // portions), so a wait to confirm it is parked never stretches the deadline for a truck that got ready late.
         private readonly Dictionary<(long Gig, string Vehicle), long> readySince = new Dictionary<(long, string), long>();
-        // By place and truck, so gigs back to back at one place share the truck's time there.
         private readonly Dictionary<(string Place, string Vehicle), (long Since, Vector3 At)> nearSince = new Dictionary<(string, string), (long, Vector3)>();
-        // Minutes a truck must have stood still at the place before its gig starts, so driving past doesn't start it:
-        // longer with the player at the wheel, since a red light or a queue holds a truck still for a moment.
         private const long StandMinutes = 2;
         private const long StandMinutesDriving = 10;
-        // By started gig: the last game minute its truck was seen at the place.
         private readonly Dictionary<long, long> lastSeenNear = new Dictionary<long, long>();
-        // "Not ready" told once per gig and truck.
         private readonly HashSet<(long, string)> notReadyShown = new HashSet<(long, string)>();
 
         private void OnEnable() => instance = this;
@@ -65,13 +52,11 @@ namespace FoodTrucks
             historyState = null;
             CallDialogFactory.RegisterDialog(DialogType, () => new BookingsDialog());
             var contact = Contact.EnsurePermanentContact(ContactId, ContactCategoryName.General, ContactDescription);
-            // Not saved by the game, so it is set again after every load.
             contact.callDialogTypeOverride = DialogType;
             GlobalEvents.onNewDay += OnNewDay;
             attached = true;
             var state = FoodTrucksSession.CurrentState;
             Log.Info($"Catering: bookings by phone; {state?.Catering.Offers.Count ?? 0} offers open, {state?.Catering.Gigs.Count ?? 0} gigs booked, booking reputation {state?.Catering.BookingReputation:F2}.");
-            // A load on a day without offers yet gets that day's.
             Offer();
         }
 
@@ -82,7 +67,6 @@ namespace FoodTrucks
             attached = false;
         }
 
-        // The contact, made again if the player deleted it, with its call button.
         internal static Contact Bookings()
         {
             var contact = Contact.EnsurePermanentContact(ContactId, ContactCategoryName.General, ContactDescription);
@@ -90,15 +74,12 @@ namespace FoodTrucks
             return contact;
         }
 
-        // The uninstall step: offers and gigs end without a word, then the contact goes with the mod, so a save without
-        // it shows no raw texts and nothing brings the contact back.
         public static void RemoveContact()
         {
             var state = FoodTrucksSession.CurrentState;
             var catering = state?.Catering;
             if (state != null && catering != null && FoodTrucksSession.CanWrite)
             {
-                // Fees still owed are paid now; one the game still refuses is dropped with the rest.
                 PayUnpaid(state);
                 if (catering.Unpaid.Count > 0) Log.Error($"Catering: {catering.Unpaid.Count} unpaid fees dropped for the uninstall step.");
                 catering.Unpaid.Clear();
@@ -114,8 +95,6 @@ namespace FoodTrucks
 
         private static CateringRules? Rules => DemandData.Rules?.Catering;
 
-        // Whether a truck was at a gig at that game minute: its crew's route leaves it alone then. A gig already
-        // settled still counts for the minutes it ran, since a route can catch up behind catering.
         public static bool BusyAt(string vehicleId, long minute)
         {
             var catering = FoodTrucksSession.CurrentState?.Catering;
@@ -125,7 +104,6 @@ namespace FoodTrucks
                           (g.ArrivedDay.Value - 1) * 1440L + g.ArrivedMinute.Value <= minute && minute < GigStart(g) + g.DurationMinutes);
         }
 
-        // Units a started gig holds back from street sales, by item: its food's items, up to its units, most stock first.
         public static Dictionary<string, int> Reserved(string vehicleId, IReadOnlyDictionary<string, int> stock)
         {
             var held = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -149,15 +127,12 @@ namespace FoodTrucks
             return held;
         }
 
-        // The trucks that can cater: the rules' vehicle types, with a permit.
         private static List<(VehicleInstance Vehicle, VehicleState State, string Kind)> Caterers(SaveState state, CateringRules rules) =>
             CityLicensing.FoodVehicles(state).Where(v => rules.VehicleTypes.Contains(v.Kind) && v.State.HasPermit).ToList();
 
         private static void OnNewDay()
         {
             if (Commissary.Uninstalled || !FoodTrucksSession.CanWrite || FoodTrucksSession.CurrentState == null) return;
-            // A contact removed some other way (an older save, another mod) is back by the next morning, not only with
-            // the next offer's text, which can be days away.
             try
             {
                 if (SaveGameManager.Current?.Contacts.Any(c => c != null && c.id == ContactId) == false)
@@ -171,7 +146,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Catering offers: " + ex); }
         }
 
-        // Today's offers, once a day; the city's buildings are the places.
         private static void Offer()
         {
             var state = FoodTrucksSession.CurrentState;
@@ -203,7 +177,6 @@ namespace FoodTrucks
                 Places = places,
                 EligibleVehicles = caterers.Count,
                 LifetimeServed = lifetimeServed,
-                // Storage per piece: for each category, the most food items one truck holds of it, from the pieces fitted today.
                 CategoryUnits = CategoryUnits(tables, caterers),
                 ReferencePriceCents = prices
             };
@@ -227,9 +200,6 @@ namespace FoodTrucks
             return units;
         }
 
-        // Every building whose own type or business points to one area: a place for that area's gigs. A building whose
-        // entrance is at the edge of one of the game's parks (ParkAreas, within ParkGateMetres) is also a `park` place,
-        // the park gate, when a kind wants parks (Peter, 14 October 2026).
         private const double ParkGateMetres = 25;
 
         private static List<CateringPlace> Places(DemandTables tables, CateringRules rules)
@@ -267,8 +237,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Catering: " + ex); }
         }
 
-        // Address recovery is once per load and never waits for live buildings. Guidance follows state changes.
-        // Looking up history must never create a contact, especially after the uninstall step.
         internal static void RefreshSavedMessages(SaveState state)
         {
             if (Commissary.Uninstalled || !FoodTrucksSession.CanWrite || !ReferenceEquals(state, FoodTrucksSession.CurrentState)) return;
@@ -297,7 +265,6 @@ namespace FoodTrucks
                 catch (Exception ex)
                 {
                     Log.Error("Catering history description: " + ex);
-                    // Retain uncertainty rather than treating an unrenderable candidate as absent.
                     description = new Dictionary<string, string>
                     {
                         { "identityUnknown", "true" },
@@ -309,8 +276,6 @@ namespace FoodTrucks
             }
         }
 
-        // Once a game minute (or once after a skip): gigs that ended or whose truck left are settled, trucks at a
-        // booked place start their gig, earliest booking first, and gigs nobody came to are missed.
         private void Step(SaveState state, CateringRules rules, long now)
         {
             if (Commissary.Uninstalled || !FoodTrucksSession.CanWrite || !ReferenceEquals(state, FoodTrucksSession.CurrentState)) return;
@@ -336,11 +301,8 @@ namespace FoodTrucks
                     }
                 }
                 SettleEnded(state, rules, tables, vehicles, now);
-                // Wait for native buildings before judging destinations or overdue arrivals.
                 if (!EventLocations.Ready) return;
 
-                // Trucks standing at booked places: watched from a day before a gig's window, so one parked there before a
-                // skip counts from then.
                 var caterers = Caterers(state, rules);
                 var watched = new HashSet<(string, string)>();
                 foreach (var place in state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked && now >= GigStart(g) - rules.ArrivalWindowMinutes - 1440)
@@ -349,7 +311,6 @@ namespace FoodTrucks
                     {
                         if (saved.Transit != null || !Near(vehicle, place)) continue;
                         var key = (place, vehicle.id);
-                        // It must stand still: moved more than a few metres since it was first seen, it starts again.
                         var position = PositionOf(vehicle);
                         if (!nearSince.TryGetValue(key, out var seen) || Vector3.Distance(seen.At, position) > 3f)
                         {
@@ -357,7 +318,6 @@ namespace FoodTrucks
                             foreach (var gigAt in state.Catering.Gigs.Where(g => g.PlaceId == place)) readySince.Remove((gigAt.Id, vehicle.id));
                         }
                         watched.Add(key);
-                        // Ready for each booking here, from when it first was; not ready, the count starts again.
                         foreach (var gigAt in state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked && g.PlaceId == place))
                         {
                             if (Ready(state, rules, tables, gigAt, vehicle, saved, now)) { if (!readySince.ContainsKey((gigAt.Id, vehicle.id))) readySince[(gigAt.Id, vehicle.id)] = now; }
@@ -368,7 +328,6 @@ namespace FoodTrucks
                 foreach (var key in readySince.Keys.Where(k => !watched.Contains((state.Catering.Gigs.FirstOrDefault(g => g.Id == k.Gig)?.PlaceId ?? "", k.Vehicle))).ToList())
                     readySince.Remove(key);
 
-                // Bookings earliest first; a gig a skip carried past its end is settled before the truck's next booking.
                 var pending = new List<long>();
                 foreach (var gig in state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked).OrderBy(GigStart).ThenBy(g => g.Id).ToList())
                 {
@@ -380,17 +339,13 @@ namespace FoodTrucks
                         var stand = SaveGameManager.Current.ActiveVehicleId == vehicle.id ? StandMinutesDriving : StandMinutes;
                         if (!readySince.TryGetValue((gig.Id, vehicle.id), out var ready))
                         {
-                            // There in time but not ready: Arrive says why, once. Too late, the misses catch it.
                             var came = Math.Max(seen.Since, start - rules.ArrivalWindowMinutes);
                             if (now >= seen.Since + stand && came <= start + rules.GraceMinutes) Arrive(state, rules, tables, gig, vehicle, saved, kind, came);
                             continue;
                         }
-                        // It came ready, or became free of an earlier gig, at the latest of these.
                         var arrived = Math.Max(Math.Max(Math.Max(seen.Since, ready), start - rules.ArrivalWindowMinutes), BusyUntil(vehicle.id));
                         if (arrived > now) continue;
-                        // Too late for this one: another truck may still make it; nobody does, the misses catch it.
                         if (arrived > start + rules.GraceMinutes) continue;
-                        // Still being confirmed as parked: the gig waits, and isn't missed meanwhile, as it was ready in time.
                         if (now < seen.Since + stand)
                         {
                             pending.Add(gig.Id);
@@ -402,10 +357,8 @@ namespace FoodTrucks
                     }
                 }
 
-                // A gig started for a truck that stood there through a skip may be over already: settled before the misses.
                 SettleEnded(state, rules, tables, vehicles, now);
 
-                // A gig whose truck is still being confirmed in time isn't missed yet: misses are judged up to its deadline.
                 var judged = now;
                 foreach (var gig in state.Catering.Gigs.Where(g => pending.Contains(g.Id)))
                     judged = Math.Min(judged, GigStart(gig) + rules.GraceMinutes);
@@ -424,7 +377,6 @@ namespace FoodTrucks
             }
         }
 
-        // The minute the truck is free of its gigs: the end of one it has started or just finished, else 0.
         private static long BusyUntil(string vehicleId)
         {
             var catering = FoodTrucksSession.CurrentState?.Catering;
@@ -440,8 +392,6 @@ namespace FoodTrucks
             return controller != null ? controller.transform.position : (Vector3)vehicle.position;
         }
 
-        // A truck at the place in the arrival window: the gig starts if someone can serve (its crew, or the player
-        // beside it or in it), it has the licence and permit, the food on its menu and a portion per guest.
         private bool Arrive(SaveState state, CateringRules rules, DemandTables tables, CateringGig gig, VehicleInstance vehicle, VehicleState saved,
             string kind, long minute)
         {
@@ -451,7 +401,6 @@ namespace FoodTrucks
             var player = PlayerBy(vehicle);
             var licensing = Licensing.CanOpen(state, vehicle.id, day, playerAtWindow: player, hires: crew);
             var menu = CartDemand.MenuOf(tables, vehicle);
-            // Units already sold to customers walking to the window aren't there for the guests.
             var stock = Without(CartDemand.StockOf(vehicle, menu.Menu), CartSelling.HeldUnits(vehicle.id));
             var check = licensing != OpenProblem.None
                 ? default
@@ -488,12 +437,11 @@ namespace FoodTrucks
             }
         }
 
-        // Started gigs whose end passed or whose truck left are settled.
         private void SettleEnded(SaveState state, CateringRules rules, DemandTables tables, Dictionary<string, VehicleInstance> vehicles, long now)
         {
             foreach (var gig in state.Catering.Gigs.Where(g => g.Status == GigStatus.Started).ToList())
             {
-                if (!EventLocations.Ready) continue; // No departure judgement while native locations are still loading.
+                if (!EventLocations.Ready) continue;
                 vehicles.TryGetValue(gig.VehicleId, out var truck);
                 var end = GigStart(gig) + gig.DurationMinutes;
                 var there = truck != null && Near(truck, gig.PlaceId);
@@ -512,7 +460,6 @@ namespace FoodTrucks
             }
         }
 
-        // Fees the game didn't credit, tried again each step; the portions left the truck already.
         private static void PayUnpaid(SaveState state)
         {
             foreach (var unpaid in state.Catering.Unpaid.ToList())
@@ -520,7 +467,6 @@ namespace FoodTrucks
                 var day = SaveGameManager.Current.Day;
                 var units = Math.Max(1, unpaid.Units);
                 if (!StreetSales.CanRecordTotal(state, unpaid.VehicleId, day, unpaid.FeeCents, units)) continue;
-                // Earned fees must pay even before native addresses exist. Keep that bank line useful.
                 var place = EventLocations.Ready ? EventLocations.ReadableAddress(unpaid.PlaceId) : null;
                 var info = place == null
                     ? new TransactionInfo("foodtrucks:transaction_catering_unlocated", new Dictionary<string, string>())
@@ -533,8 +479,6 @@ namespace FoodTrucks
             }
         }
 
-        // Whether the truck could start the gig now: someone to serve, licence and permit, the food on its menu and a
-        // portion per guest beyond those promised at the window (the checks Arrive and Core's Arrive make).
         private static bool Ready(SaveState state, CateringRules rules, DemandTables tables, CateringGig gig, VehicleInstance vehicle, VehicleState saved, long minute)
         {
             if (!rules.VehicleTypes.Contains(saved.VehicleType)) return false;
@@ -546,7 +490,6 @@ namespace FoodTrucks
             return units >= Units(rules, gig);
         }
 
-        // The player in the truck or within a few steps of it.
         private static bool PlayerBy(VehicleInstance vehicle)
         {
             if (SaveGameManager.Current.ActiveVehicleId == vehicle.id) return true;
@@ -566,11 +509,9 @@ namespace FoodTrucks
             return stock;
         }
 
-        // The gig ends, or its truck left: paid and stocked down when it completed, a message either way.
         private void Settle(SaveState state, CateringRules rules, DemandTables tables, CateringGig gig, VehicleInstance? truck, long minute)
         {
             var vehicle = StreetSales.Find(state, gig.VehicleId);
-            // The portions held back for it, as street sales saw them, before the gig is archived.
             var held = truck == null ? new Dictionary<string, int>()
                 : Reserved(gig.VehicleId, Without(CartDemand.StockOf(truck, CartDemand.MenuOf(tables, truck).Menu), CartSelling.HeldUnits(gig.VehicleId)));
             var result = CateringGigs.Finish(rules, state.Catering, gig.Id, (int)(minute / 1440) + 1, (int)(minute % 1440));
@@ -583,26 +524,21 @@ namespace FoodTrucks
                 return;
             }
             var day = SaveGameManager.Current.Day;
-            // The record must take the fee before any portion leaves the truck.
             if (truck == null || vehicle == null || result.Units <= 0 || !StreetSales.CanRecordTotal(state, gig.VehicleId, day, result.FeeCents, result.Units))
             {
                 Log.Error($"Catering gig {gig.Id} completed but couldn't be paid: truck {(truck == null ? "gone" : "there")}, record {(vehicle == null ? "missing" : "full")}.");
                 Notices.SendText(Bookings(), "foodtrucks:message_bookings_unpaid", Describe(gig));
                 return;
             }
-            // Serving at a gig is a day the truck worked, for the health grade and the inspector.
             CartSelling.ServedAt(vehicle, string.IsNullOrEmpty(vehicle.VehicleType) ? "truck" : vehicle.VehicleType, minute - 1);
             var available = Without(CartDemand.StockOf(truck, CartDemand.MenuOf(tables, truck).Menu), CartSelling.HeldUnits(gig.VehicleId));
             var taken = Take(state, vehicle, truck, tables, gig.RequiredCategory, result.Units, held, available, minute);
-            // Food the truck no longer had isn't paid for.
             var fee = (long)Math.Round(result.FeeCents * Math.Min(1.0, taken / (double)result.Units));
             var paid = taken > 0 && fee > 0 &&
                        Payments.PayIn(fee, new TransactionInfo("foodtrucks:transaction_catering", new Dictionary<string, string> { { "place", PlaceName(gig.PlaceId) } }));
-            // Income for the tax like any street sale: the fee once, for all its portions.
             if (paid) StreetSales.RecordTotal(state, gig.VehicleId, day, fee, taken);
             else if (taken > 0 && fee > 0)
             {
-                // Kept and tried again each step, so the fee isn't lost with the portions already gone.
                 state.Catering.Unpaid.Add(new UnpaidFee { GigId = gig.Id, VehicleId = gig.VehicleId, PlaceId = gig.PlaceId, FeeCents = fee, Units = taken });
                 Log.Error($"Catering gig {gig.Id}: the game refused the payment of {CartSelling.Money(fee)}; it will be tried again.");
             }
@@ -613,9 +549,6 @@ namespace FoodTrucks
             });
         }
 
-        // Takes the gig's units of its food from the truck: the ones held back for it first, then any other of that
-        // food. Books their wholesale cost, and stale food counts for the health grade as at the window.
-        // `available`: each item's units not promised to customers walking to the window; nothing beyond them is taken.
         private static int Take(SaveState state, VehicleState vehicle, VehicleInstance truck, DemandTables tables, string category, int units,
             IReadOnlyDictionary<string, int> held, IReadOnlyDictionary<string, int> available, long minute)
         {
@@ -655,7 +588,6 @@ namespace FoodTrucks
                     taken += n;
                     want -= n;
                     SoldCounts.Record(vehicle, day, item, n);
-                    // Served at the gig: the commissary-order pool goes first (tax origin of later returns).
                     FoodTrucks.Core.Commissary.Commissaries.LeftVehicle(state.Commissary, item, n);
                     try
                     {
@@ -670,7 +602,6 @@ namespace FoodTrucks
             return taken;
         }
 
-        // Within reach of the place: a truck parked by the building's nearest entrance.
         private static bool Near(VehicleInstance vehicle, string placeId)
         {
             var controller = VehicleHelper.GetVehicleController(vehicle);
@@ -701,7 +632,6 @@ namespace FoodTrucks
             { "reply", offer.ReplyByDay.ToString() }
         };
 
-        // "12 Fifth Street": the place's number and street as the game names it.
         internal static string PlaceName(string placeId)
         {
             return EventLocations.Name(placeId);
@@ -713,7 +643,6 @@ namespace FoodTrucks
 
         private static string Text(string key) => LocalizorManager.GetLocalization(key, null);
 
-        // The places of gigs booked and not over, for the map.
         public static HashSet<string> BookedPlaces()
         {
             var state = FoodTrucksSession.CurrentState;
@@ -721,8 +650,6 @@ namespace FoodTrucks
                 : new HashSet<string>(state.Catering.Gigs.Where(g => g.Status == GigStatus.Booked || g.Status == GigStatus.Started).Select(g => g.PlaceId), StringComparer.Ordinal);
         }
 
-        // Debug key for throwaway saves: a gig at the nearest office, starting in 30 minutes, booked, for the
-        // food of the nearest truck's menu, 40 guests.
         public static void GigHereForTesting(Vector3 position)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -752,7 +679,6 @@ namespace FoodTrucks
         }
     }
 
-    // The bookings call: each open offer in turn, to take or turn down.
     internal sealed class BookingsDialog : Dialog
     {
         public BookingsDialog()

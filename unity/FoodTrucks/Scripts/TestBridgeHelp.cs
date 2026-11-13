@@ -10,10 +10,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // help: the texts a player can read in the game, as the game shows them now: the help menu's pages by category
-    // (StreamingAssets/helpstructure.json, each page's "help_<prefix>_content" in the current language) and, when Real
-    // Life Overhaul is loaded, its Guide's pages with their {facts} filled in from the current settings
-    // [code, 1.0: HelpSystem.cs:138, HelpPageRenderer.cs:108; RLO 0.40.1: Meta/Guide.cs Topics, Fill].
     internal static class TestBridgeHelp
     {
         internal static JToken Run(JObject args)
@@ -26,7 +22,6 @@ namespace FoodTrucks
             var pages = new JArray();
             var path = Path.Combine(Application.streamingAssetsPath, "helpstructure.json");
             if (!File.Exists(path)) return pages;
-            // The file has trailing commas, which the game's Json.NET reads and so does this.
             foreach (var category in JArray.Parse(File.ReadAllText(path)))
             {
                 var categoryKey = (string?)category["CategoryLocalizorKey"] ?? "";

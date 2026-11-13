@@ -60,7 +60,6 @@ def mesh(vertices, faces, colour):
     return finish(ob, colour)
 
 def profile(rings, n, colour, centre=(0,.018)):
-    # A capped surface of revolution, kept deliberately faceted.
     verts = [(centre[0]+r*math.cos(2*math.pi*i/n),
               centre[1]+r*math.sin(2*math.pi*i/n), z)
              for r,z in rings for i in range(n)]
@@ -113,7 +112,6 @@ def heap():
         faces.append((p,start+k,start+kn,perimeter[kn]))
         faces.append((len(verts)-1,start+kn,start+k))
     ob=mesh(verts,faces,'Corn')
-    # Show kernels on every exposed face, rather than a smooth solid block.
     positions=[]
     for y in [-.09,0,.09]:
         for x in [-.12,-.06,0,.06,.12]:
@@ -131,7 +129,6 @@ def heap():
         kernel.scale=(rng.uniform(.027,.033),rng.uniform(.027,.032),rng.uniform(.029,.038))
         kernel.rotation_euler=[rng.random()*2 for _ in range(3)]
         finish(kernel, rng.choices(['CornLight','Corn','CornGold'],[7,3,1])[0])
-        # Three small adjoining lobes break the regular sphere silhouettes.
         if idx in [2,7,12]:
             bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1,radius=.018,
                 location=(location[0]+.021,location[1]-.012,location[2]+.014))
@@ -204,7 +201,6 @@ def atlas(body):
         colour=PALETTE[body.data.materials[tri.material_index].name.replace('PM_','')]
         pixels[y0:y1+1,x0:x1+1][mask]=colour
         occupied[y0:y1+1,x0:x1+1][mask]=True
-    # Two texels of edge padding, so flat blocks remain clean with filtering.
     for _ in range(2):
         old=occupied.copy(); src=pixels.copy()
         for dy,dx in [(0,1),(0,-1),(1,0),(-1,0)]:
@@ -216,7 +212,6 @@ def atlas(body):
     image.filepath_raw=os.path.join(OUT,'T_PopcornMachine_BaseColor.png')
     image.file_format='PNG'
     image.save()
-    # Keep absolute until the scene has its final output-folder path.
     image.filepath=os.path.join(OUT,'T_PopcornMachine_BaseColor.png')
     material=bpy.data.materials.new('M_PopcornMachine')
     material.use_nodes=True
@@ -264,7 +259,6 @@ for name,rgba in PALETTE.items():
     mat.node_tree.nodes.get('Principled BSDF').inputs['Roughness'].default_value=.68
     mats[name]=mat
 
-# Flat underside through the placement point; full counter-sized cabinet.
 box((0,0,.05),(.376,.334,.10),'Red',.004)
 box((0,0,.009),(.365,.324,.018),'RedDark')
 box((0,0,.108),(.385,.343,.016),'SteelLight')
@@ -277,7 +271,6 @@ box((.070,.018,.491),(.012,.012,.080),'Steel')
 if STAGE==1:
     box((0,0,.205),(.32,.278,.17),'Corn')
 else:
-    # Thin cabinet edging, no transparent glass polygons.
     for y in [-.152,.152]:
         box((0,y,.126),(.326,.010,.018),'Steel')
         box((0,y,.521),(.326,.010,.014),'RedDark')
@@ -290,7 +283,6 @@ else:
     box((.120,.018,.449),(.016,.019,.036),'Charcoal')
     box((0,-.1685,.052),(.302,.004,.062),'RedDark')
     box((0,-.171,.052),(.284,.003,.047),'Red')
-    # Operator's two door frames and pull are on +Y, opposite customers.
     box((0,.152,.388),(.009,.010,.246),'Steel')
     for x in [-.026,.026]: box((x,.165,.392),(.008,.022,.049),'Steel')
     box((0,.175,.392),(.060,.008,.008),'Charcoal')
@@ -313,7 +305,6 @@ if STAGE==4:
     export_asset(body)
     bpy.context.scene.render.filepath=os.path.join(OUT,'renders','04-final.png')
     bpy.ops.render.render(write_still=True)
-    # Presentation helpers are not part of the deliverable scene.
     bpy.context.scene.camera=None
     for ob in list(bpy.data.objects):
         if ob.name.startswith('PM_') and ob.type in {'CAMERA','LIGHT'}:

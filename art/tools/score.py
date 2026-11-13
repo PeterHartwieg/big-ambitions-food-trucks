@@ -61,7 +61,6 @@ def geometry(bm):
         "inconsistent_normal_edges": sum(e.is_manifold and not e.is_contiguous for e in bm.edges),
         "degenerate_faces": sum(f.calc_area() < 1e-9 for f in bm.faces),
     }
-    # Closed islands must have a positive signed volume (normals pointing out).
     seen, inside_out = set(), 0
     for f in bm.faces:
         if f.index in seen:
@@ -171,8 +170,6 @@ def scene_report(label, strict_textures):
         loc, rot, sca = o.matrix_world.decompose()
         info = {"triangles": tris(bm), "origin": r(loc), "bbox_min": r(mn), "bbox_max": r(mx),
                 "rotation_deg": r([math.degrees(a) for a in rot.to_euler()], 3), "scale": r(sca), **geometry(bm)}
-        # Blender's FBX importer adds a 90 degree axis rotation of its own, so transforms are checked on the .blend;
-        # Unity imports these files with rotation 0 and scale 1 (art/README.md).
         if label == "blend":
             check(all(abs(a) < 1e-3 for a in info["rotation_deg"]) and all(abs(s - 1) < 1e-4 for s in sca), f"[{label}] {n} transforms not applied")
         check(info["triangles"] <= cfg["max_tris"], f"[{label}] {n} over {cfg['max_tris']} triangles", info["triangles"])
@@ -195,8 +192,7 @@ def scene_report(label, strict_textures):
             for i in range(3):
                 if i != ax:
                     check(abs(loc[i] - h["line"][i]) <= POS_TOL, f"[{label}] {n} origin off the hinge line on {'XYZ'[i]}", r(loc))
-            # Open the part about its hinge axis both ways and record which sign swings it towards "opens_towards".
-            want = h["opens_towards"]  # e.g. "+z" or "-x"
+            want = h["opens_towards"]
             i, sgn = "xyz".index(want[1]), (1 if want[0] == "+" else -1)
             pts = [v.co - loc for v in bm.verts]
             moved = {}
@@ -229,7 +225,6 @@ def scene_report(label, strict_textures):
         for key, (lo, hi) in SPEC.get("extent_at_least", {}).items():
             i = "xyz".index(key)
             check(mn[i] <= lo + 0.02 and mx[i] >= hi - 0.02, f"[{label}] visible extent on {key} {round(mn[i],3)}..{round(mx[i],3)} should reach {lo}..{hi}")
-    # Points that must lie on a surface (grips, hinge, attachment points).
     rep["near_points"] = {}
     for p in SPEC.get("near_points", []):
         o = objs.get(p["object"])
@@ -242,7 +237,6 @@ def scene_report(label, strict_textures):
         rep["near_points"][p["label"]] = round(dist, 4)
         check(dist <= p["max_dist"], f"[{label}] {p['label']}: {p['object']} surface {round(dist,3)} m from {p['point']}")
         bm.free()
-    # Volumes that must stay empty (cargo boxes, the pusher's legs).
     rep["clear_boxes"] = {}
     for c in SPEC.get("clear_boxes", []):
         lo, hi = Vector(c["min"]), Vector(c["max"])
@@ -263,7 +257,6 @@ def scene_report(label, strict_textures):
         box.free()
         rep["clear_boxes"][c["label"]] = hits
         check(hits == 0, f"[{label}] {c['label']} is not clear", hits)
-    # Materials, UVs and textures.
     mats = sorted({m.name for o in visible for m in o.data.materials if m})
     rep["materials"] = mats
     check(len(mats) == 1, f"[{label}] expected one material on the visible objects", mats)
@@ -307,7 +300,6 @@ else:
 
 report["failures"] = failures
 report["passed"] = not failures
-# One score file per spec: <Name>.spec.json scores into <Name>.score.json (folders holding several models).
 base = os.path.basename(spec_path)
 out = os.path.join(FOLDER, "score.json" if base == "spec.json" else base.replace(".spec.json", ".score.json"))
 with open(out, "w") as f:

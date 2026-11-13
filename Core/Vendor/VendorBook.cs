@@ -11,11 +11,6 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Vendor
 {
-    // Who sells at each opening: Street Food's own customers, or an owner (another mod) through VendorApi.Sell.
-    // An owner asks for a vehicle; the next crew opening that starts in a later game hour, while the owner's lease
-    // holds, is the owner's for as long as it stays open, the lease holds and the owner wants it. Every other opening
-    // is Street Food's. With no owner ever (SaveState.Vendor null) nothing here writes anything.
-    // Minutes are absolute game minutes, (day - 1) × 1440 + minute of the day.
     public static class VendorBook
     {
         public const int LeaseMinutes = 60;
@@ -24,10 +19,8 @@ namespace FoodTrucks.Core.Vendor
         public const int MaxItems = 8;
         public const int MaxVehicleIdLength = 128;
         public const int MaxOwnerLength = 64;
-        // The save's JSON name of the block (SaveState.Vendor).
         public const string SaveName = "vendor";
 
-        // Lower-case letters, digits, '.', '_' and '-', 1-64 of them.
         public static bool ValidOwner(string? owner) =>
             !string.IsNullOrEmpty(owner) && owner!.Length <= MaxOwnerLength &&
             owner.All(c => c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-');
@@ -35,7 +28,6 @@ namespace FoodTrucks.Core.Vendor
         public static bool ValidVehicleId(string? id) =>
             !string.IsNullOrEmpty(id) && id!.Length <= MaxVehicleIdLength && !id.Any(char.IsControl);
 
-        // A vendor block written by a newer Street Food is kept unread in the save: nothing may write a new one over it.
         public static bool Locked(SaveState state) =>
             state.Vendor == null && state.ExtensionData != null && state.ExtensionData.ContainsKey(SaveName);
 
@@ -50,15 +42,12 @@ namespace FoodTrucks.Core.Vendor
 
         public static bool LeaseHolds(SaveState state, string owner, long minute) => Lease(state, owner) is { } lease && minute < lease.Until;
 
-        // The block, made on an owner's first call. An already open vehicle's running opening keeps ID 0: never granted.
         public static VendorState Ensure(SaveState state)
         {
             if (Locked(state)) throw new InvalidOperationException("The save holds vendor data from a newer Street Food version.");
             return state.Vendor ??= new VendorState();
         }
 
-        // Records (want) or withdraws an owner's wish for a vehicle at game minute `now`. A repeated wish keeps the first
-        // hour. Withdrawing hands an open opening of that owner back to Street Food at once.
         public static bool Ask(SaveState state, string owner, string vehicleId, bool want, long now, out string reason, ICollection<string>? notes = null)
         {
             reason = string.Empty;
@@ -87,11 +76,9 @@ namespace FoodTrucks.Core.Vendor
             return true;
         }
 
-        // Drops the owner's requests for vehicles that are `gone`. Returns how many.
         public static int Forget(SaveState state, string owner, Func<string, bool> gone) =>
             state.Vendor?.Requests.RemoveAll(r => r.Owner == owner && gone(r.VehicleId)) ?? 0;
 
-        // Extends the owner's lease to LeaseMinutes after `minute`. A lease that ran out first hands its openings back.
         public static long Renew(SaveState state, string owner, long minute, long now, out string reason, ICollection<string>? notes = null)
         {
             reason = string.Empty;
@@ -111,7 +98,6 @@ namespace FoodTrucks.Core.Vendor
             return lease.Until;
         }
 
-        // Drops the owner's lease and requests; every opening it holds goes back to Street Food.
         public static void ReleaseAll(SaveState state, string owner, long now, ICollection<string>? notes = null)
         {
             var book = state.Vendor;
@@ -122,7 +108,6 @@ namespace FoodTrucks.Core.Vendor
             book.Leases.RemoveAll(l => l.Owner == owner);
         }
 
-        // Leases over by `now` end; their openings go back to Street Food at the minute each lease ran out.
         public static int Expire(SaveState state, long now, ICollection<string>? notes = null)
         {
             var book = state.Vendor;
@@ -137,15 +122,12 @@ namespace FoodTrucks.Core.Vendor
             return handed;
         }
 
-        // A vehicle's window opens at `minute` (byCrew: a hire opened it at a route stop). Gives the opening its ID and
-        // its owner. Returns that owner, "" for Street Food. Nothing happens without a vendor block.
         public static string Opened(SaveState state, string vehicleId, long minute, bool byCrew, ICollection<string>? notes = null)
         {
             var book = state.Vendor;
             if (book == null) return string.Empty;
             var entry = Entry(state, vehicleId);
             if (entry == null) book.Vehicles.Add(entry = new VendorVehicle { VehicleId = vehicleId });
-            // Rising with the clock too, so IDs stay unique even if the counter were ever lost.
             entry.OpeningId = Math.Max(checked(entry.LastOpeningId + 1), checked((Math.Max(0, minute) + 1) * 16));
             entry.LastOpeningId = entry.OpeningId;
             entry.OpenedAt = minute;
@@ -168,16 +150,11 @@ namespace FoodTrucks.Core.Vendor
             return entry.Owner;
         }
 
-        // The window closed: its opening has no owner any more.
         public static void Closed(SaveState state, string vehicleId)
         {
             if (Entry(state, vehicleId) is { } entry) entry.Owner = string.Empty;
         }
 
-        // Whether Street Food's own customers come to this open window at `minute`. False only while an owner holds the
-        // opening; a lease that ran out, or a city event or catering gig taking the vehicle, hands it back here first.
-        // A step before the minute the opening was handed back (a crew route's sales catching up behind the clock) was
-        // still the owner's: no Street Food customers there either.
         public static bool OwnCustomers(SaveState state, VehicleState vehicle, long minute, ICollection<string>? notes = null)
         {
             if (OwnerAt(state, vehicle, minute, notes) != null) return false;
@@ -185,7 +162,6 @@ namespace FoodTrucks.Core.Vendor
             return !(vehicle.IsOpen && entry?.HandedBackAt is { } back && minute < back && minute >= entry.OpenedAt);
         }
 
-        // The owner holding this open window at `minute`, or null for Street Food.
         public static string? OwnerAt(SaveState state, VehicleState vehicle, long minute, ICollection<string>? notes = null)
         {
             if (state.Vendor == null) return null;
@@ -200,9 +176,6 @@ namespace FoodTrucks.Core.Vendor
             return null;
         }
 
-        // Street Food takes an opening back at `minute`: its own customers start from then, with a fresh queue. A grant
-        // whose lease had already run out when this is noticed goes back at the lease's end (not before the opening):
-        // the owner held no minute after it.
         internal static bool HandBack(SaveState state, VendorVehicle entry, long minute, string why, ICollection<string>? notes)
         {
             if (entry.Owner.Length == 0) return false;
@@ -216,13 +189,10 @@ namespace FoodTrucks.Core.Vendor
             return true;
         }
 
-        // The vehicle holds a place at a running city event, or is at a catering gig that has started.
         public static bool EventOrCatering(SaveState state, string vehicleId) =>
             state.Events?.Events?.Any(e => e?.Holds?.Any(h => h != null && h.VehicleId == vehicleId && h.Until == null) == true) == true ||
             state.Catering?.Gigs?.Any(g => g != null && g.VehicleId == vehicleId && g.Status == GigStatus.Started) == true;
 
-        // The planned end of a crew opening that started at `openedAt`: the route's first open leg for the stop the crew
-        // opened at that ends after it. Null when the player opened it or no plan covers it.
         public static long? PlannedClose(VehicleState vehicle, long openedAt)
         {
             if (!vehicle.IsOpen || vehicle.HireStop == null || vehicle.Shifts == null) return null;
@@ -239,9 +209,6 @@ namespace FoodTrucks.Core.Vendor
 
         private static string Describe(long minute) => $"day {DayOf(minute)} {MinuteOf(minute) / 60:D2}:{MinuteOf(minute) % 60:D2}";
 
-        // Load: the block is read apart from the rest, so a bad one never makes the whole save unreadable. A newer
-        // layout is kept as it is (back in ExtensionData after the state is read) and the API stays refused; a bad
-        // one is dropped, which hands every vehicle to Street Food.
         public static JToken? TakeOut(JObject document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -274,7 +241,6 @@ namespace FoodTrucks.Core.Vendor
                 var vendor = block.ToObject<VendorState>(serializer) ?? throw new JsonSerializationException("empty");
                 Validate(vendor);
                 state.Vendor = vendor;
-                // An owner only holds an open window; one left on a closed vehicle is cleared.
                 foreach (var entry in vendor.Vehicles.Where(v => v.Owner.Length > 0))
                     if (StreetSales.Find(state, entry.VehicleId)?.IsOpen != true) entry.Owner = string.Empty;
             }

@@ -33,7 +33,6 @@ namespace FoodTrucks.Core.Reputation
             }
             if (state.LastUpdatedDay != int.MinValue && rules.MissPenalty > 0)
             {
-                // After enough missed weeks every bonus is gone, so a long break costs no extra work.
                 var missedDays = Math.Min((long)day - state.LastUpdatedDay - 1,
                     7 * Math.Ceiling(rules.MaxBonus / rules.MissPenalty) + 7);
                 for (long offset = 1; offset <= missedDays; offset++)

@@ -5,7 +5,6 @@ using FoodTrucks.Core.Demand;
 using FoodTrucks.Core.Rules;
 using Newtonsoft.Json.Linq;
 
-// The cart balance calculator. See README.md.
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var opts = Options.Parse(args);
 var tables = LoadTables(opts);
@@ -14,7 +13,6 @@ Selling.Queue = opts.Queue ? new QueueThroughput(tables, rules) : null;
 var prices = GamePrices.Load(opts.Prices);
 if (opts.Patch != null && JObject.Parse(File.ReadAllText(opts.Patch))["game"] is JObject gamePatch) prices.Merge(gamePatch);
 var city = City.Load(opts.City);
-// Isolated reports: no changes to the existing report/planner behavior or JSON schema.
 if (opts.Wants("crew-economics") || opts.Wants("crew-economics-checks"))
 {
     if (opts.Reports.Any(r => r != "crew-economics" && r != "crew-economics-checks"))
@@ -27,8 +25,6 @@ if (opts.Wants("crew-economics") || opts.Wants("crew-economics-checks"))
     return;
 }
 var travel = new Travel { MetresPerMinute = opts.MetresPerSecond };
-// The player drives a truck: a real second is a game minute, so metres a second are metres a game minute. Buying and
-// carrying boxes for four pieces takes longer than for a cart.
 var drive = new Travel { MetresPerMinute = opts.DriveSpeed, ShopMinutes = 15 };
 var spots = city.Spots(tables);
 // Pitches the city's buildings can't produce, as archetype spots: a park (the game's park areas and zones give it;
@@ -59,13 +55,9 @@ var carts = new Dictionary<string, (Cart Cart, string[] Equipment)>
     ["hotdog+cooler"] = (MakeCart(new[] { HotDog, Soda }, "hot dog grill + cooler"), new[] { "hotdoggrill", "cooler" }),
     ["hotdog+coffee"] = (MakeCart(new[] { HotDog, Coffee }, "hot dog grill + coffee machine"), new[] { "hotdoggrill", "coffeemachine" }),
     ["coffee+bakery"] = (MakeCart(new[] { Coffee, Croissant }, "coffee machine + display case (croissants)"), new[] { "coffeemachine", "displaycase" }),
-    // A truck stand-in: the truck's storage per piece, its staff (economy.json, 2) at the window, which is the player
-    // and one hire, and a grill, coffee machine, display case and cooler (four slots).
     ["truck-like"] = (MakeCart(new[] { HotDog, Coffee, Croissant, Soda }, "truck stand-in: 2 at the window, 4 pieces",
         false, null, "truck"), new[] { "hotdoggrill", "coffeemachine", "displaycase", "cooler" }),
 };
-// The new street foods (new-foods-proposal.json), and the vanilla ice cream counter for comparison. A cart is
-// added only when the data and prices know all its items, so runs without the patch are unchanged.
 const string Dumplings = "foodtrucks:itemname_dumplings", Kabob = "ba:itemname_kabob", Tacos = "foodtrucks:itemname_tacos",
     ChoppedCheese = "foodtrucks:itemname_choppedcheese", Corn = "foodtrucks:itemname_grilledcorn", Popcorn = "ba:itemname_popcorn",
     CottonCandy = "ba:itemname_cottoncandy", Slushie = "ba:itemname_slushi", IceCream = "ba:itemname_icecream", Burger = "ba:itemname_burger";
@@ -98,7 +90,6 @@ foreach (var (key, menu, name, equipment, truck) in new (string, string[], strin
         ? (MakeCart(menu, name, false, null, "truck"), equipment)
         : (MakeCart(menu, name), equipment);
 }
-// Each cart's 16-hour day and the ways a route may split it (staying put is one of them).
 var days = new Dictionary<string, (int From, int To, (string Name, (int, int)[] Windows)[] Splits)>
 {
     ["hotdog+cooler"] = (540, 1500, new[]
@@ -122,7 +113,6 @@ var days = new Dictionary<string, (int From, int To, (string Name, (int, int)[] 
     }),
 };
 
-// Carts without their own day take the hot dog cart's (09:00 to 01:00), trucks the truck stand-in's.
 (int From, int To, (string Name, (int, int)[] Windows)[] Splits) DayOf(string key) =>
     days.TryGetValue(key, out var d) ? d : carts[key].Cart.VehicleKind == "truck" ? days["truck-like"] : days["hotdog+cooler"];
 
@@ -170,7 +160,6 @@ if (opts.Wants("archetypes"))
         }
     }
 
-    // How the day and the weather move one strong pitch.
     var hd = carts["hotdog+cooler"].Cart;
     o.AppendLine("## One pitch under each condition: Midtown office lunch, Hell's Kitchen nightlife late, hot dog grill + cooler");
     o.AppendLine();
@@ -236,8 +225,6 @@ if (opts.Wants("single"))
     }
 }
 
-// Candidates for the premium spots: each district's best pitches for a hot dog cart and a coffee cart, on a dry
-// weekday and a dry Saturday, so the picks can cover lunch, mornings, nights and weekends.
 if (opts.Wants("premium"))
 {
     o.AppendLine("## Premium spot candidates: the best pitches per district");
@@ -266,12 +253,9 @@ if (opts.Wants("premium"))
     o.AppendLine();
 }
 
-// Premium spots and events (data/pitches.json): what the bonus adds at each place, against an ordinary day there,
-// for the hot dog cart and the truck stand-in. Events are worth their fee when the gain over their hours beats it.
 if (opts.Wants("pitches"))
 {
     var pitchTables = FoodTrucks.Core.Pitches.PitchTables.Parse(File.ReadAllText(Path.Combine(opts.Data, "pitches.json")), tables);
-    // city.json names a spot "2 fifthstreet" for the key ba:street_fifthstreet#2.
     Spot? At(string address)
     {
         var parts = address.Replace("ba:street_", "").Split('#');
@@ -371,9 +355,6 @@ if (opts.Wants("routes"))
 var ladder = new List<string>();
 if (opts.Wants("compare"))
 {
-    // Moving against staying: the best single spot over the cart's 16-hour day against the best route that
-    // splits the same hours into two or three pitches. The five best all-day spots join every shortlist,
-    // so a route can always stay put.
     foreach (var key in opts.Carts)
     {
         var (cart, equipment) = carts[key];
@@ -471,9 +452,6 @@ if (opts.Wants("pricing"))
 
 if (opts.Wants("ingame"))
 {
-    // The case found in game on 8 October: two offices 20 and 40 m away and a nightclub 30 m away. "Shares" is the
-    // 0.3.0 model (votes normalised, the two biggest areas kept, no street baseline), rebuilt here from the same
-    // votes; "presences" is the additive model in Core now.
     var places = new[]
     {
         new NearbyPlace("ba:buildingtype_office", null, 20), new NearbyPlace("ba:buildingtype_office", null, 40),
@@ -512,8 +490,6 @@ if (opts.Wants("ingame"))
         o.AppendLine($"| {H(hood)} | {label} | {model} | {t.PerHour(t.Passers):0} | {t.PerHour(t.Demand):0.0} | {t.PerHour(t.Served):0.0} | ${Money(t.PerHour(t.Profit))} |");
     }
     o.AppendLine();
-    // How a cart does at an ordinary spot: hot dog grill + cooler customers per hour at weekday lunch (12:00) and evening
-    // (19:00) over every real pitch, by district: the median and the quarter mark.
     o.AppendLine("## Typical spots: hot dog grill + cooler, weekday, ceiling price, customers per hour (served)");
     o.AppendLine();
     o.AppendLine("| District | Lunch 12:00: p25 / median / p90 | Evening 19:00: p25 / median / p90 | Lunch passers/h, median |");
@@ -541,7 +517,6 @@ if (opts.Wants("ingame"))
         o.AppendLine($"| {H(hood)} | {l.P25:0.0} / {l.Med:0.0} / {l.P90:0.0} | {e.P25:0.0} / {e.Med:0.0} / {e.P90:0.0} | {l.Passers:0} |");
     }
     o.AppendLine();
-    // A pure office block (eight office buildings around the pitch) for comparison with the in-game case.
     var block = new AreaClassifier(tables).FromPlaces(Enumerable.Range(0, 8).Select(i => new NearbyPlace("ba:buildingtype_office", null, 5 + i * 6)));
     foreach (var (label, from) in new[] { ("lunch 12:00", 720), ("evening 19:00", 1140) })
     {
@@ -553,8 +528,6 @@ if (opts.Wants("ingame"))
     }
 }
 
-// The new foods against the accepted carts: each cart's best route city-wide (the compare report's search,
-// city pool only) under several conditions, its cost to start, and its best park day in summer.
 if (opts.Wants("foods"))
 {
     var keys = (opts.FoodCarts ?? carts.Keys.ToArray()).Where(carts.ContainsKey).ToArray();
@@ -630,9 +603,6 @@ if (opts.Wants("foods"))
     o.AppendLine();
 }
 
-// Storage per piece (Peter, 10 October 2026): what a piece's storage does to a day. Each vehicle at its best spot
-// city-wide on a dry weekday in May, from the morning full: when the first item runs out, when everything has,
-// how many restocks the day takes, and the day's profit with restock trips and with restocking in place.
 if (opts.Wants("storage"))
 {
     var cases = new (string Label, string[] Menu, string[] Equipment, string Kind, bool Storage)[]
@@ -664,7 +634,6 @@ if (opts.Wants("storage"))
         var (label, menu, equipment, kind, storage) = cases[n];
         if (!menu.All(i => tables.Product(i) != null && prices.Items.ContainsKey(i))) return;
         var cart = MakeCart(menu, label, storage, null, kind);
-        // The day of the cart it is most like: coffee carts open at 06:00, others at 09:00; trucks 07:00 to 23:00.
         var (dFrom, dTo, _) = kind == "truck" ? days["truck-like"] : menu.Contains(Coffee) ? days["coffee+bakery"] : days["hotdog+cooler"];
         var planner = PlannerFor(cart);
         var best = spots.Select(s => (s, d: planner.SingleSpot(s, dFrom, dTo, c))).OrderByDescending(x => x.d.Total.Profit).First();
@@ -696,31 +665,18 @@ if (opts.Wants("storage"))
     o.AppendLine();
 }
 
-// The balance pass of 14 October 2026 (docs/balance/balance-pass-2026-10-14.md): what carts and trucks earn a day and a
-// week, played and crewed, at typical, good, best and premium pitches; whether storage caps the day; how far the
-// commissary's weekly phone limit goes; the delivery fee against hauling; crew wages against takings; parks.
 if (opts.Wants("pass"))
 {
     var cr = rules.Commissary;
     double RentDay(string kind) => cr.DailyRentCents(kind) / 100.0;
-    // EmployeeHelper.CalculateHourlyWageForSkill: customer service's base $16 × (skill^1.05 / 100 + 1) × the wage
-    // multiplier (1.0 at the default difficulty) [code, BC data].
     double Wage(double skill) => 16 * (Math.Pow(skill, 1.05) / 100 + 1);
     var crewSpeed = rules.Service.Speed(FoodTrucks.Core.Rules.ServiceRules.EffectiveSkill(opts.CrewSkill, opts.CrewSatisfaction));
     var wage = Wage(opts.CrewSkill);
-    // The delivery fee: one flat fee per delivery at a commissary (rules.json deliveryFeeCents), whatever it brings and
-    // for however many vehicles. A vehicle's share a day: the fee × deliveries a week ÷ 7 ÷ the vehicles sharing them.
-    // One delivery a week covers a vehicle's week (10 boxes hold 5,000 units; a busy truck sells under 3,000 of all
-    // its foods), so the default is one a week for one vehicle.
     var feeDay = cr.DeliveryFeeCents / 100.0 * opts.DeliveriesPerWeek / 7 / opts.FeeSharing;
     var commissaries = city.Commissaries(Path.Combine(opts.Data, "commissaries.json"));
     var truckMenu = new[] { HotDog, Coffee, Croissant, Soda };
     int CeilHalf(int minute) => (minute + 29) / 30 * 30;
 
-    // What the game pays a hire for (Core CrewPay). A shift hour: every whole hour of the hire's shifts on the week plan
-    // (HireCrew.CountHour, WeekPlan.OnShift), worked or idle; a crew's shifts are Core's auto schedule for its route
-    // (Route below). An open hour of a window the player opened: the hire serves at some minute of its first half
-    // (CrewPay.CloseHours); during a restock trip the window is shut.
     int OpenHours(Stay stay)
     {
         var hours = 0;
@@ -735,10 +691,6 @@ if (opts.Wants("pass"))
         }
         return hours;
     }
-
-    // One day of a setup at a pitch: gross (sales less goods at wholesale), goods, hire-hours paid, units sold, and for
-    // the storage question when the first piece ran out and the share of unlimited-stock sales. Null: not feasible
-    // (a crew needs a commissary in the pitch's region to load at).
 
     (int From, int To) cartDay = (540, 1500), coffeeDay = (360, 1320), truckDay = (420, 1380);
     var setups = new List<(string Label, Cart Cart, int Hires, bool Commissary, Func<Spot, Conditions, DayEval?> Day)>();
@@ -818,7 +770,6 @@ if (opts.Wants("pass"))
             var onShift = FoodTrucks.Core.Fleet.WeekPlan.WeekCount(schedule, crewIds);
             var problem = hireSchedules.Validate(schedule);
             if (problem != FoodTrucks.Core.Fleet.ScheduleProblem.None) { refused.Add($"{name}: {problem}"); continue; }
-            // Each day ends back in the bay (the home leg), or at the bay stop that ends it.
             var (endX, endZ) = (bay.X, bay.Z);
             var first = hireSchedules.PlanDay(schedule, 2, DayOfWeek.Tuesday, endX, endZ, FoodTrucks.Core.Fleet.HireSchedules.Absolute(2, 0) - 1440, mode,
                 home: (bay.X, bay.Z), bayStops: bayStops, coverage: coverage);
@@ -836,11 +787,9 @@ if (opts.Wants("pass"))
                 var to = (int)(leg.End - origin);
                 if (stops[leg.StopIndex].SpotKey.StartsWith("bay"))
                 {
-                    // The crew restocks in the bay before it leaves: each piece filled up again.
                     stock = Selling.TopUp(cart, spot, to, day.To, c, stock);
                     continue;
                 }
-                // Hour by hour, with the crew on shift then (Wednesday's hours of the week; day 3 is a Wednesday).
                 for (var a = from; a < to; a = Math.Min(to, (a / 60 + 1) * 60))
                 {
                     var b = Math.Min(to, (a / 60 + 1) * 60);
@@ -852,18 +801,15 @@ if (opts.Wants("pass"))
                 }
             }
             var hours = schedule.CrewShifts.Where(x => x.Day == DayOfWeek.Wednesday).Sum(x => x.End - x.Start);
-            // The 04:00 check (Commissary's night check) on the planned day: no fine on the way somewhere, open at a stop
-            // (a late stop still serving) or in the bay; standing anywhere else, the fine.
             var check = FoodTrucks.Core.Fleet.HireSchedules.Absolute(3, cr.NightCheckMinute);
             var legs = first.Legs.Concat(plan.Legs).ToList();
             var during = legs.FirstOrDefault(l => l.Start <= check && check < l.End);
             bool InBayStop(int stopIndex) => stopIndex == FoodTrucks.Core.Fleet.HireSchedules.HomeIndex || stops[stopIndex].SpotKey.StartsWith("bay");
             bool fined;
-            if (during.End > during.Start) fined = false; // on its way, or open at a stop
+            if (during.End > during.Start) fined = false;
             else
             {
                 var before = legs.Where(l => l.End <= check).OrderBy(l => l.End).LastOrDefault();
-                // Before its first leg ever the vehicle is where the day before left it: back in the bay.
                 var stopIndex = before.End > before.Start ? before.StopIndex : FoodTrucks.Core.Fleet.HireSchedules.HomeIndex;
                 fined = !InBayStop(stopIndex);
             }
@@ -913,7 +859,6 @@ if (opts.Wants("pass"))
     Conditions On(DayOfWeek day, FoodTrucks.Core.Pitches.PitchBonus? bonus = null, int month = 5, bool rain = false) => new()
         { Day = day, Month = month, Rain = rain, Pricing = opts.Pricing, PriceFactor = opts.PriceFactor, MarketDemand = opts.Market, Pitch = bonus ?? FoodTrucks.Core.Pitches.PitchBonus.None };
     double DayNet(DayEval e, bool commissary, string kind) => e.Gross - e.HireHours * wage - (commissary ? feeDay : 0) - e.Fine - RentDay(kind);
-    // A setup's week at a pitch: the seven days, and the week's gross, paid hire-hours, wages, fee and fines, and net.
     (List<DayEval> Days, double Gross, int Hours, double Wages, double Fee, double Fines, double Net) WeekOf(
         (string Label, Cart Cart, int Hires, bool Commissary, Func<Spot, Conditions, DayEval?> Day) setup, Spot spot, FoodTrucks.Core.Pitches.PitchBonus? bonus)
     {
@@ -980,7 +925,6 @@ if (opts.Wants("pass"))
     }
     o.AppendLine();
 
-    // Extra Storage (and the midday bay stop) at the same pitch: the second setup at the first one's pitches.
     o.AppendLine("## The same pitch with and without Extra Storage (and the midday bay stop)");
     o.AppendLine();
     o.AppendLine("Each pair at the first setup's pitches (Extra Storage takes a slot, so the truck drops its cooler). Payback: days for the week's extra net to pay the cabinet's price.");
@@ -1009,7 +953,6 @@ if (opts.Wants("pass"))
     }
     o.AppendLine();
 
-    // The phone limit: boxes of each food a week (rules.json commissary.foodBoxesPerWeek), one limit for the whole fleet.
     o.AppendLine($"## The weekly phone limit: {cr.FoodBoxesPerWeek} boxes of each food a week for the whole fleet");
     o.AppendLine();
     o.AppendLine("Each food's units sold in the week above, and how many such vehicles the fleet's limit supplies (limit ÷ one vehicle's week). A box holds the item's box size (500 for every food here).");
@@ -1020,8 +963,6 @@ if (opts.Wants("pass"))
         o.AppendLine($"| {setup} | {tier} | {string.Join(", ", units.OrderByDescending(p => p.Value).Select(p => $"{p.Key.Split('_').Last()} {p.Value:0} ({cr.FoodBoxLimit(p.Key) * prices.Items[p.Key].Box / Math.Max(1, p.Value):0.0})"))} |");
     o.AppendLine();
 
-    // The delivery fee against hauling: the player's day at the good pitch restocking from the wholesaler (no fee),
-    // from the nearest commissary (the fee on all goods, the Restock button) and in place (no trip at all).
     var played = new (string Label, Cart Cart, Travel Tr, (int From, int To) Day)[]
     {
         ("Cart: hot dog grill + cooler, player", setups[0].Cart, travel, cartDay), ("Cart: hot dog grill + Extra Storage, player", setups[1].Cart, travel, cartDay),
@@ -1047,7 +988,6 @@ if (opts.Wants("pass"))
     }
     o.AppendLine();
 
-    // Parks: the best park pitch (archetype, one per district) against the setup's good real pitch.
     var parkSpots = spots.Where(s => s.Name.StartsWith("park (")).ToList();
     if (parkSpots.Count > 0)
     {
@@ -1078,9 +1018,6 @@ if (opts.Wants("pass"))
     }
 }
 
-// Regression checks for the calculator itself; a failure throws. Route (review 0.9.7, round 2): a middle stop that
-// starts without a refill and restocks inside its stay must hand its end stock to the next stop, so a refill is
-// counted only after a stay that really ended with a piece below half.
 if (opts.Wants("checks"))
 {
     var cart = carts["hotdog+cooler"].Cart;
@@ -1088,8 +1025,6 @@ if (opts.Wants("checks"))
     var c = Cond();
     var windows = new[] { (9 * 60, 10 * 60), (10 * 60, 13 * 60 + 50), (13 * 60 + 50, 14 * 60 + 50) };
     bool BelowHalf(Dictionary<string, double> stock) => cart.PieceLoads(stock).Values.Any(l => l < cart.PerPiece / 2.0);
-    // The first pitch, in name order, where the case happens: the first stop leaves every piece above half (no refill),
-    // the middle stop restocks inside its stay and ends above half too, so the third stop needs no refill.
     var found = spots.OrderBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.Hood, StringComparer.Ordinal).Select(s =>
     {
         var first = planner.SellFull(s, windows[0].Item1, windows[0].Item2, c);
@@ -1123,11 +1058,6 @@ if (opts.Wants("costs"))
     o.AppendLine();
 }
 
-// The AI playthrough's plan (tools/playthrough writes it from the game's routes): each vehicle's foods and its week of
-// stops at their hours, priced as its crew sells them. The crew load in the bay before the first stop and carry that
-// stock through the day (RestockMode.None, as Core's CrewRestock loads only in the bay). Each stop is the city's
-// building nearest the stop's position (city.json positions are approximate). Revenue and units per weekday, for the
-// runner's ±25% comparison; written as JSON with --json-out.
 if (opts.Wants("playthrough"))
 {
     if (opts.Plan == null) throw new ArgumentException("--reports playthrough needs --plan FILE (tools/playthrough report writes balance-plan.json).");
@@ -1145,7 +1075,6 @@ if (opts.Wants("playthrough"))
         var id = (string?)v["id"] ?? "?";
         var kind = (string?)v["kind"] ?? "cart";
         var menu = (v["menu"] ?? new JArray()).Select(t => (string)t!).Where(i => tables.Product(i) != null).ToArray();
-        // The new foods' prices are only in the proposal's game section (game-prices.json predates them).
         if (menu.Any(i => !prices.Items.ContainsKey(i)) && File.Exists(proposal) && JObject.Parse(File.ReadAllText(proposal))["game"] is JObject newPrices)
             prices.Merge(newPrices);
         menu = menu.Where(prices.Items.ContainsKey).ToArray();
@@ -1192,7 +1121,6 @@ if (opts.Wants("playthrough"))
 if (opts.Out != null) File.WriteAllText(opts.Out, o.ToString());
 Console.Write(o.ToString());
 
-// Merge native data fields before Core loads them. Core owns stock weights and area appetite.
 static DemandTables LoadTables(Options opts, bool zeroBaseline = false)
 {
     var demand = JObject.Parse(File.ReadAllText(Path.Combine(opts.Data, "demand.json")));
@@ -1206,12 +1134,10 @@ static DemandTables LoadTables(Options opts, bool zeroBaseline = false)
         var settings = new JsonMergeSettings { MergeArrayHandling = MergeArrayHandling.Replace, MergeNullValueHandling = MergeNullValueHandling.Merge };
         if (patch["demand"] is JObject d) demand.Merge(d, settings);
         if (patch["economy"] is JObject e) economy.Merge(e, settings);
-        // A null in the patch removes the key (economy.equipment.burgerstation in new-foods-proposal.json).
         foreach (var gone in demand.Descendants().Concat(economy.Descendants()).OfType<JProperty>().Where(p => p.Value.Type == JTokenType.Null).ToList()) gone.Remove();
     }
-    // The share model had no street baseline: zero it to rebuild the old footfall.
     if (zeroBaseline && demand["streetBaseline"] is JObject baseline)
-        foreach (var p in baseline.Properties().ToList()) p.Value = 1e-9; // the data must stay above 0
+        foreach (var p in baseline.Properties().ToList()) p.Value = 1e-9;
     return DemandTables.Parse(demand.ToString(), economy.ToString(), zones);
 }
 
@@ -1227,24 +1153,18 @@ sealed class Options
     public double Market = 100;
     public RestockMode Restock = RestockMode.Wholesaler;
     public double MetresPerSecond = 4.0;
-    // The player's truck in town, metres a second (a game minute a real second): about 29 km/h with turns and lights.
     public double DriveSpeed = 8.0;
-    // A typical hire for the pass report: customer service skill and satisfaction.
     public double CrewSkill = 60;
     public double CrewSatisfaction = 85;
-    // Phone deliveries a week at the vehicle's commissary, and how many vehicles share each (one flat fee per delivery).
     public double DeliveriesPerWeek = 1;
     public double FeeSharing = 1;
     public double CartPrice = 1200;
     public bool Parks = true;
-    // The playthrough report's plan and its JSON output (tools/playthrough).
     public string? Plan;
     public string? JsonOut;
     public string CrewEconomicsConfig = "";
-    // --service queue (default): the game's queue since 0.4.0. --service fluid: the old min(buyers, capacity).
     public bool Queue = true;
     public string[] Carts = { "hotdog+cooler", "coffee+bakery", "truck-like" };
-    // Carts for the foods report: --carts when given, otherwise every cart the data knows.
     public string[]? FoodCarts;
     public HashSet<string> Reports = new() { "archetypes", "spots", "single", "compare", "pricing", "costs" };
 

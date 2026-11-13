@@ -67,21 +67,17 @@ def build():
     sc.unit_settings.system = 'METRIC'
     sc.unit_settings.scale_length = 1.0
     g = Geometry()
-    # Cash drawer and deck.
     g.box((-.075, -.065, 0), (.075, .065, .050), 'body', .004)
     g.box((-.072, -.062, .050), (.072, .062, .058), 'deck', .003)
     g.box((-.060, -.0665, .018), (.060, -.064, .021), 'gap')
     g.box((-.006, -.068, .030), (.006, -.064, .038), 'lock', .001)
-    # Receipt slot with a curl of paper at the back left.
     g.box((-.065, .030, .058), (-.025, .055, .064), 'bezel', .002)
     g.box((-.060, .040, .064), (-.030, .044, .082), 'paper')
-    # Screen post and the screen, tilted back by 18 degrees, facing the customer (-Y).
     g.box((-.014, .010, .058), (.014, .030, .090), 'body', .003)
     tilt = Matrix.Translation((0, .020, .132)) @ Matrix.Rotation(math.radians(-18), 4, 'X')
     g.box((-.066, -.009, -.046), (.066, .009, .046), 'bezel', .004, tilt)
     g.box((-.058, -.0105, -.038), (.058, -.008, .038), 'screen', 0, tilt)
     g.box((.044, -.0115, -.044), (.054, -.0095, -.040), 'accent', 0, tilt)
-    # Card terminal at the front right, keypad tilted towards the customer.
     g.box((.022, -.064, .058), (.068, -.026, .068), 'bezel', .003)
     pad = Matrix.Translation((.045, -.045, .074)) @ Matrix.Rotation(math.radians(20), 4, 'X')
     g.box((-.020, -.017, -.006), (.020, .017, .006), 'bezel', .003, pad)

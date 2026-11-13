@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Runs one GPT 6.1 Sol modelling session in Codex against the Blender listening on <port>.
-# The folder holds prompt.md and spec.json from make_prop_prompts.py; the report lands in report.md.
-# Usage: art/tools/run_sol_prop.sh <folder> <port> [reference image ...]
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$(cd "$1" && pwd)"

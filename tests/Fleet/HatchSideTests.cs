@@ -8,20 +8,18 @@ namespace FoodTrucks.Core.Tests.Fleet;
 
 public class HatchSideTests
 {
-    // A street across the truck, in metres along the truck's right (+) from its centre line: pavement beyond
-    // the kerb, a parking lane between the kerb and the first driving lane, driving lanes 3.5 m wide.
     private sealed class Street
     {
-        public double Kerb = 1.3;            // signed: + kerb on the truck's right (the hatch side)
+        public double Kerb = 1.3;
         public double ParkingWidth = 2.4;
         public int Lanes = 2;
         public double LaneWidth = 3.5;
-        public bool LanesKnown = true;       // false: the traffic system had no waypoints near
-        public double SlantDegrees;          // the truck turned this much off the kerb's line
-        public double[]? ExtraLanes;         // driving lane centres anywhere, e.g. a median's other side
-        public bool ParkingSeen = true;      // false: the game's parking colliders miss the parking lane entirely
+        public bool LanesKnown = true;
+        public double SlantDegrees;
+        public double[]? ExtraLanes;
+        public bool ParkingSeen = true;
 
-        private int Towards => Kerb > 0 ? -1 : 1; // from the kerb into the street
+        private int Towards => Kerb > 0 ? -1 : 1;
 
         private double[] LaneCentres()
         {
@@ -47,10 +45,10 @@ public class HatchSideTests
     }
 
     [Theory]
-    [InlineData(1.2)]  // flush against the kerb (half the truck's width is 1.10 m)
+    [InlineData(1.2)]
     [InlineData(1.6)]
-    [InlineData(2.4)]  // over a metre off the kerb, still inside the parking lane
-    [InlineData(3.4)]  // the far edge of a wide space
+    [InlineData(2.4)]
+    [InlineData(3.4)]
     public void KerbsideParkingWithTheHatchToThePavementOpens(double kerb)
     {
         var street = new Street { Kerb = kerb };
@@ -90,7 +88,6 @@ public class HatchSideTests
     [Fact]
     public void WithoutAParkingLaneTheRoadSideStillReadsRoad()
     {
-        // A space with the driving lane right beside it: the lane's centre is 1.75 m past the space's edge.
         Assert.Equal(HatchVerdict.WrongWay, new Street { Kerb = -1.3, ParkingWidth = 2.2, LaneWidth = 3.0 }.Verdict());
         Assert.Equal(HatchVerdict.Pavement, new Street { Kerb = 1.3, ParkingWidth = 2.2, LaneWidth = 3.0 }.Verdict());
     }
@@ -98,7 +95,6 @@ public class HatchSideTests
     [Fact]
     public void RoadOnBothSidesHasNoPavement()
     {
-        // A space in a median: driving lanes on the hatch side and beyond the "kerb" on the other.
         var street = new Street { Kerb = -1.3, ExtraLanes = new[] { -2.8, -6.3 } };
         Assert.Equal(HatchVerdict.NoPavement, street.Verdict());
     }
@@ -123,7 +119,6 @@ public class HatchSideTests
     [Fact]
     public void PavementBeforeRoadOnTheHatchSideOpensEvenWithRoadFurtherOut()
     {
-        // A narrow pavement with a street beyond it (a corner, an island): the line forms before the road.
         Assert.Equal(HatchVerdict.Pavement, HatchSide.Decide(new SideReading(2.0, 4.0), new SideReading(null, 2.0)));
         Assert.Equal(HatchVerdict.WrongWay, HatchSide.Decide(new SideReading(4.0, 2.0), new SideReading(1.5, null)));
     }
@@ -177,8 +172,6 @@ public class HatchSideTests
                     yield return new object[] { lane, parking, seen };
     }
 
-    // The strip between a parking lane and a wide driving lane's middle is walkable and in no parking lane the game
-    // knows of; it read as pavement in the first 0.9.6 build, so a hatch to the road opened on wide streets.
     [Theory]
     [MemberData(nameof(Streets))]
     public void TheHatchToTheRoadIsRefusedOnEveryStreetWidth(double laneWidth, double parkingWidth, bool parkingSeen)
@@ -196,10 +189,6 @@ public class HatchSideTests
     [MemberData(nameof(Streets))]
     public void KerbsideParkingOpensOnEveryStreetWidth(double laneWidth, double parkingWidth, bool parkingSeen)
     {
-        // From flush against the kerb out to the far edge of the space: the truck's middle up to 1 m past the
-        // parking strip's edge, its outer side then over the driving lane (WindowShape's reach of 3.4 m), or 0.6 m
-        // past it at a 20° slant. Further out on a 3 m lane, the lane's middle runs under the truck's own side and
-        // reads road on both sides: "no pavement".
         foreach (var kerb in new[] { 1.2, 1.6, 2.0, 2.4, 2.8, 3.0, 3.4 })
             foreach (var slant in new[] { 0.0, 10.0, -10.0, 20.0, -20.0 })
             {

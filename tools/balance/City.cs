@@ -15,8 +15,6 @@ public sealed class Building
     public double X, Z;
     public double[] Box = new double[4];
 
-    // Metres from a point to the building's outline box (0 inside). The game measures to the nearest
-    // entrance door (World.Read); doors sit on the outline, so this is the closest a door can be.
     public double DistanceFrom(double x, double z)
     {
         var dx = Math.Max(Math.Max(Box[0] - x, 0), x - Box[2]);
@@ -56,15 +54,12 @@ public sealed class City
 
     public IEnumerable<Building> Wholesalers => Buildings.Where(b => b.BusinessType == "ba:businesstype_wholesalestore");
 
-    // The commissary garages of data/commissaries.json, by address.
     public List<Building> Commissaries(string path)
     {
         var keys = ((JArray)JObject.Parse(File.ReadAllText(path))["commissaries"]!).Select(c => (string)c["address"]!).ToList();
         return Buildings.Where(b => keys.Contains(b.Key)).ToList();
     }
 
-    // A pitch in front of every building: the spot is the building's map anchor, and every building whose
-    // outline lies within the classifier's radius votes, as World.Read feeds AreaClassifier in the game.
     public List<Spot> Spots(DemandTables tables)
     {
         var classifier = new AreaClassifier(tables);
@@ -82,21 +77,14 @@ public sealed class City
     }
 }
 
-// Moving the cart. The player pushes it on foot; the game advances one in-game minute per real second at
-// normal speed (GameManager.RunMainGameTick: Time.deltaTime × MinutesMultiplier, 1.0 by default)
-// and the player jogs at 4 m/s by default, 6 m/s when running (GlobalReferences.walkingSpeedJog/Run,
-// ThirdPersonCharacter) [code, unverified in game]. So jogging covers 240 m per in-game hour.
 public sealed class Travel
 {
     public double MetresPerMinute { get; init; } = 4.0;
-    // Streets are not straight lines between two points.
     public double Detour { get; init; } = 1.3;
-    // Buying a box and loading the cart at the wholesaler.
     public int ShopMinutes { get; init; } = 10;
 
     public int Minutes(double metres) => (int)Math.Ceiling(metres * Detour / MetresPerMinute);
 
-    // Through the nearest depot (a wholesaler by default, or a commissary) from one spot to the next.
     public (int Minutes, Building? Wholesaler) Restock(City city, Spot from, Spot to, IEnumerable<Building>? depots = null)
     {
         var best = (Minutes: int.MaxValue, Wholesaler: (Building?)null);

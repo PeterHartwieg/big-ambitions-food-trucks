@@ -52,9 +52,6 @@ def adapter():
             .replace('/* ISCREW */', method('HireCrew.cs', 'public static bool IsCrew(')))
 
 
-# The patched game members as ILSpy shows them in BigAmbitions.dll (SHA-256 9427561B...E911, checked 28 October 2026):
-# the patch target, its declaration, and the handler's parameters Harmony binds by name (__instance, the original's
-# parameter names, ___ plus a private field's name).
 NATIVE = (
     ('ModelPostfix', 'UI.Smartphone.Apps.MyEmployees.EmployeeModel', 'public EmployeeModel(EmployeeInstance instance)',
      ['EmployeeModel __instance', 'EmployeeInstance instance']),
@@ -95,7 +92,6 @@ class CrewEmployeeScreenTests(unittest.TestCase):
             self.assertIn(line, flat)
         self.assertEqual(flat.count('typeof(CrewEmployeeScreen)'), 3)
         self.assertIn('method == ".ctor" ? AccessTools.Constructor(type, args)', source)
-        # Display only: no patch on the predicates the crew's work and pay depend on.
         for predicate in ('"IsAssignedToAnyBusiness"', '"GetCurrentTask"', '"IsAssignedToAnyWorkShift"'):
             self.assertNotIn(predicate, source)
         screen = (ROOT / 'unity/FoodTrucks/Scripts/CrewEmployeeScreen.cs').read_text()
@@ -116,7 +112,6 @@ class CrewEmployeeScreenTests(unittest.TestCase):
                     self.assertIn(parameter, declaration, handler)
 
     def test_native_names_in_the_game_assembly(self):
-        # Optional: re-reads the names above from a local copy of the game's assembly (never shipped or committed).
         folder = os.environ.get('BA_GAME_DLLS')
         ilspy = shutil.which('ilspycmd')
         if not folder or not (Path(folder) / 'BigAmbitions.dll').is_file() or not ilspy:

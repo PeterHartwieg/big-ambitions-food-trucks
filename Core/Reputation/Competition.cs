@@ -11,7 +11,6 @@ namespace FoodTrucks.Core.Reputation
         public string VehicleId { get; set; } = string.Empty;
         public double X { get; set; }
         public double Z { get; set; }
-        // The adapter passes only open vehicles with their stocked items.
         public IReadOnlyCollection<string> Menu { get; set; } = Array.Empty<string>();
     }
 
@@ -72,7 +71,6 @@ namespace FoodTrucks.Core.Reputation
         {
             var x = Math.Abs(a.X - b.X);
             var z = Math.Abs(a.Z - b.Z);
-            // Reject distant coordinates before squaring, so extreme finite positions stay safe.
             return x <= rules.NearbyMetres && z <= rules.NearbyMetres && x * x + z * z <= rules.NearbyMetres * rules.NearbyMetres;
         }
 

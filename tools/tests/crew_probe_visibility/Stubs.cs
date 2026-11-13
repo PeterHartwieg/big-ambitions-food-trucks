@@ -196,7 +196,6 @@ namespace FoodTrucks
 {
     public class BridgeError : Exception { public BridgeError(string message) : base(message) { } }
     public static class FoodTrucksMod { public const string TruckTypeName = "foodtruck"; }
-    // Any accidental probe/ownership command invocation fails immediately.
     public static class CrewDriveProbe
     {
         internal static CrewProbeTraffic? ObstacleTraffic => throw new Exception("Probe obstacle traffic touched during visibility inspection");

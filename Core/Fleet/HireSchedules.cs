@@ -8,18 +8,12 @@ namespace FoodTrucks.Core.Fleet
 {
     public enum TravelMode
     {
-        // Trucks: the game's taxi formula.
         Drive,
-        // Carts: pushed at walking pace.
         Push
     }
 
-    // How long a hire's vehicle is off the map between two stops. The game has no NPC that drives a
-    // player vehicle, so the mod marks it in transit for this long and then places it at the next stop
-    // (design: Technical answers, row 11).
     public static class Travel
     {
-        // Vehicles saved before Milestone 4 have no type, and all of them were carts.
         public static TravelMode ModeFor(string? vehicleType) =>
             string.IsNullOrEmpty(vehicleType) || vehicleType == "cart" ? TravelMode.Push : TravelMode.Drive;
 
@@ -30,7 +24,6 @@ namespace FoodTrucks.Core.Fleet
             return Math.Sqrt(dx * dx + dz * dz);
         }
 
-        // Minutes from one place to another, as PlanDay, the runner and the route editor all count them.
         public static int Between(FleetRules rules, double fromX, double fromZ, double toX, double toZ, TravelMode mode, double gameSpeed = 1.0) =>
             Minutes(rules, Distance(fromX, fromZ, toX, toZ), mode, gameSpeed);
 
@@ -58,16 +51,9 @@ namespace FoodTrucks.Core.Fleet
         TooManyStops,
         EmptySpotKey,
         BadPosition,
-        // Opening at or after closing, before midnight, closing after the latest close, or open longer than a day.
         BadTimes,
-        // A stop opens before the one before it closes, or a day's last stop runs past midnight into the next day's first.
         Overlap,
-        // A stop opens before the vehicle can get there from the one before (its close plus the drive). Not one of
-        // Validate's: such a route still runs, the stop opening late on arrival (PlanDay); the route's to-do and the
-        // BizMan page say so (HireRunner.RouteProblem).
         Unreachable,
-        // Part of a route day (from the morning restock to the drive back) has nobody on shift (WeekPlan.Gaps). Not one
-        // of Validate's: the vehicle waits closed where it is until a shift starts.
         Uncovered
     }
 
@@ -75,8 +61,6 @@ namespace FoodTrucks.Core.Fleet
     {
         Travel,
         Open,
-        // The morning restock in the commissary bay before the vehicle leaves (FleetRules.RestockMinutes). Its stop is
-        // the first stop it leaves for.
         Restock
     }
 
@@ -91,9 +75,7 @@ namespace FoodTrucks.Core.Fleet
         }
 
         public LegKind Kind { get; }
-        // The stop this leg drives to or opens at.
         public int StopIndex { get; }
-        // Absolute game minutes; End is exclusive.
         public long Start { get; }
         public long End { get; }
     }
@@ -110,16 +92,12 @@ namespace FoodTrucks.Core.Fleet
         public static readonly DayPlan Empty = new DayPlan(Array.Empty<PlannedLeg>(), Array.Empty<int>(), 0);
 
         public IReadOnlyList<PlannedLeg> Legs { get; }
-        // Stops the vehicle can't reach before they close (or with nobody on shift while they are open).
         public IReadOnlyList<int> Skipped { get; }
-        // Distance covered, for fuel.
         public double Metres { get; }
         public long ShiftStart => Legs.Count == 0 ? 0 : Legs[0].Start;
         public long ShiftEnd => Legs.Count == 0 ? 0 : Legs.Max(l => l.End);
-        // From the first leg to the last.
         public double ShiftHours => (ShiftEnd - ShiftStart) / 60.0;
 
-        // The leg running at that minute, or null between legs and outside the shift.
         public PlannedLeg? LegAt(long minute)
         {
             foreach (var leg in Legs)
@@ -128,8 +106,6 @@ namespace FoodTrucks.Core.Fleet
         }
     }
 
-    // When at least one crew member is on shift, as merged intervals of absolute game minutes (WeekPlan.Coverage).
-    // The vehicle moves and serves only inside them (Peter, 16 October 2026).
     public sealed class Coverage
     {
         private readonly List<(long Start, long End)> spans;
@@ -152,8 +128,6 @@ namespace FoodTrucks.Core.Fleet
 
         public bool Covers(long minute) => spans.Any(s => minute >= s.Start && minute < s.End);
 
-        // The earliest t >= from with [t, t + length) all covered and t + length <= before; null when there is none.
-        // A zero length needs no one on shift.
         public long? Earliest(long from, long length, long before)
         {
             if (length <= 0) return from <= before ? from : (long?)null;
@@ -166,7 +140,6 @@ namespace FoodTrucks.Core.Fleet
             return null;
         }
 
-        // The covered pieces of [from, to), in order.
         public IEnumerable<(long Start, long End)> Clip(long from, long to)
         {
             foreach (var (start, end) in spans)
@@ -177,7 +150,6 @@ namespace FoodTrucks.Core.Fleet
             }
         }
 
-        // The uncovered pieces of [from, to), in order.
         public IEnumerable<(long Start, long End)> Gaps(long from, long to)
         {
             var at = from;
@@ -190,7 +162,6 @@ namespace FoodTrucks.Core.Fleet
         }
     }
 
-    // A hire's day: drive (or push) to each of the weekday's stops so as to open on time, sell, close, move on.
     public sealed class HireSchedules
     {
         private readonly FleetRules rules;
@@ -201,14 +172,9 @@ namespace FoodTrucks.Core.Fleet
 
         public static long Absolute(int day, int minute) => (day - 1) * 1440L + minute;
 
-        // A leg's stop index for the vehicle's own commissary bay (where it rents its space): the drive back after the
-        // last stop (Peter, 16 October 2026). Not a stop of the route.
         public const int HomeIndex = -1;
-        // A trip back to the bay names this spot.
         public const string HomeSpotKey = "foodtrucks:commissary-bay";
 
-        // The first stop (from a day's second on) that opens before the vehicle can get there from the stop before, or -1.
-        // A day's first stop isn't limited by where the day starts: the crew leaves early enough.
         public int UnreachableStop(HireSchedule schedule, TravelMode mode, double gameSpeed = 1.0)
         {
             if (schedule?.Stops == null) return -1;
@@ -225,8 +191,6 @@ namespace FoodTrucks.Core.Fleet
             return -1;
         }
 
-        // Each weekday's stops on their own: valid times in order without overlap, at most MaxStops; a day's last stop
-        // running past midnight closes by the time the next day's first opens, when that day runs.
         public ScheduleProblem Validate(HireSchedule schedule)
         {
             if (schedule == null) throw new ArgumentNullException(nameof(schedule));
@@ -239,7 +203,6 @@ namespace FoodTrucks.Core.Fleet
                     return ScheduleProblem.BadPosition;
                 if (stop.OpenAt < 0 || stop.OpenAt >= 1440 || stop.CloseAt <= stop.OpenAt || stop.CloseAt > rules.LatestCloseMinute)
                     return ScheduleProblem.BadTimes;
-                // A day at most: a longer stop would run into its own opening the next day.
                 if (stop.CloseAt - stop.OpenAt > 1440) return ScheduleProblem.BadTimes;
             }
             foreach (var day in WeekPlan.Days)
@@ -260,16 +223,6 @@ namespace FoodTrucks.Core.Fleet
 
         public bool RunsOn(HireSchedule schedule, DayOfWeek weekday) => WeekPlan.RunsOn(schedule, weekday);
 
-        // The legs for one day of the route (the weekday's own stops), starting where the vehicle stands and no earlier
-        // than availableFrom. The vehicle leaves as late as it can and still open on time; when it can't, it opens on
-        // arrival and closes at the usual time, and a stop it can't reach before closing is skipped. An invalid schedule
-        // or a day off gives an empty plan.
-        // With `home` (the vehicle's own commissary bay): a day that starts in the bay begins with the restock
-        // (RestockMinutes, a Restock leg) just before it leaves, and the day ends with a drive back there after the last
-        // stop it reached, unless that stop is in the bay already (`bayStops`). With `coverage` (who is on shift), the
-        // restock and each drive need someone on shift throughout, so the vehicle waits closed where it is until a shift
-        // starts, and it is open only while someone is on shift (an Open leg per covered piece); a stop with no covered
-        // piece left is skipped. Null coverage: always someone on shift.
         public DayPlan PlanDay(HireSchedule schedule, int day, DayOfWeek weekday, double fromX, double fromZ, long availableFrom,
             TravelMode mode, double gameSpeed = 1.0, (double X, double Z)? home = null, IReadOnlyCollection<int>? bayStops = null,
             Coverage? coverage = null)
@@ -341,8 +294,6 @@ namespace FoodTrucks.Core.Fleet
             return new DayPlan(legs, skipped, metres);
         }
 
-        // The vehicle closes and leaves for a stop: off the map until ArrivesAt. The result lists the
-        // customers sent away, for the visible queue; null when the vehicle wasn't open.
         public static SalesResult? Depart(VehicleState vehicle, ScheduleStop stop, PlannedLeg leg)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -362,8 +313,6 @@ namespace FoodTrucks.Core.Fleet
             return closed;
         }
 
-        // Ends the transit once its time is up and returns where the game side should place the
-        // vehicle (the nearest free parking spot to it); null while still on the way or not travelling.
         public static TransitState? ArriveIfDue(VehicleState vehicle, long now)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));

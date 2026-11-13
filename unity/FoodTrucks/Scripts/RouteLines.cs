@@ -5,15 +5,11 @@ using UnityEngine.UI;
 
 namespace FoodTrucks
 {
-    // Straight lines on the vehicle page's route map (the streets, and the route joining its stops), drawn in the
-    // graphic's own rectangle so they follow its size: points are fractions of the rectangle (u from the left, v from the
-    // bottom). The map's RectMask2D cuts what runs past its edge.
     internal sealed class RouteLines : MaskableGraphic
     {
         private readonly List<(Vector2 A, Vector2 B)> segments = new List<(Vector2, Vector2)>();
         private float thickness = 3f;
 
-        // A path through the points in order, back to the first when closed.
         internal void Set(IList<Vector2> path, bool closed, float width)
         {
             var pieces = new List<(Vector2, Vector2)>();

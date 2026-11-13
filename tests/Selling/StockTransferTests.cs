@@ -7,8 +7,6 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Selling;
 
-// The bay's Commissary stock list (Peter, 15 October 2026): take and give back by name, Fill up loads food only, and a
-// piece that leaves sends back the food that no longer fits.
 public class StockTransferTests
 {
     private const string HotDog = "ba:itemname_hotdog";
@@ -41,11 +39,9 @@ public class StockTransferTests
         Assert.Equal(1200, hotDog.Units);
         Assert.Equal(50, hotDog.Most);
         Assert.Equal(LoadRefusal.PieceFull, hotDog.Refusal);
-        // No grill on board: burgers can't be taken until one is fitted, and the list says why.
         var burger = choices.Single(c => c.Item == Burger);
         Assert.Equal(0, burger.Most);
         Assert.Equal(LoadRefusal.NoPiece, burger.Refusal);
-        // A piece goes one at a time.
         var grill = choices.Single(c => c.Item == Grill);
         Assert.True(grill.IsPiece);
         Assert.Equal(2, grill.Units);
@@ -85,14 +81,12 @@ public class StockTransferTests
     [Fact]
     public void OneOfTwoPiecesLeavingSendsBackOnlyTheExcessFromTheFullestFood()
     {
-        // Two grills on a truck hold 160; one leaves, so 80 stay. 120 on board: 40 go back, burgers first until level.
         var cargo = new[] { L(Grill, 2), L(Burger, 80), L(Kabob, 40) };
 
         var back = StockTransfer.FoodLeavingWith(Tables, "truck", cargo, Grill);
 
         Assert.Equal(40, back.Values.Sum());
         Assert.Equal(D((Burger, 40)), back);
-        // Room to spare: nothing goes back.
         Assert.Empty(StockTransfer.FoodLeavingWith(Tables, "truck", new[] { L(Grill, 2), L(Burger, 60) }, Grill));
     }
 
@@ -103,16 +97,12 @@ public class StockTransferTests
 
         var back = StockTransfer.FoodLeavingWith(Tables, "truck", cargo, Storage);
 
-        // 160 to 80 per piece: 70 hot dogs, and 80 units of coffee at 0.25 a cup.
         Assert.Equal(D((HotDog, 70), (Coffee, 80)), back);
     }
 
     [Fact]
     public void TheLastPieceLeavingTakesAllItsFoodEvenOverItsRoom()
     {
-        // An old save: 100 hot dogs with one grill on a cart (room 40). Taking the grill out leaves no room at all, so
-        // all 100 go back rather than 60 staying with nothing to hold them (review round 1 of the UI flow, Astra).
-        // Other pools keep what they hold, even over their room. A food isn't a piece.
         var cargo = new[] { L(HotDogGrill, 1), L(HotDog, 100), L(Grill, 1), L(Burger, 90) };
 
         Assert.Equal(D((HotDog, 100)), StockTransfer.FoodLeavingWith(Tables, "cart", cargo, HotDogGrill));

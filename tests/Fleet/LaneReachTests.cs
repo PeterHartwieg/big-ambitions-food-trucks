@@ -16,8 +16,6 @@ public class LaneReachTests
     private static IEnumerable<int> Counted(IEnumerable<(int Id, Point P)> waypoints, Point probe, double radius) =>
         waypoints.Where(w => LaneReach.Counts(w.P.X - probe.X, w.P.Y - probe.Y, w.P.Z - probe.Z, radius)).Select(w => w.Id).OrderBy(i => i);
 
-    // FreeParking reads the lanes once round the stop, at any height, and each space narrows them. A space on a slope,
-    // a ramp or another road level must count exactly the waypoints its own read would.
     [Theory]
     [InlineData(60.0)]
     [InlineData(200.0)]
@@ -29,11 +27,9 @@ public class LaneReachTests
             .Select(i => (i, new Point(random.NextDouble() * 600 - 300, random.NextDouble() * 24 - 12, random.NextDouble() * 600 - 300)))
             .ToList();
         var cover = LaneReach.CoverRadius(searchMetres, 25);
-        // The wide read: the game's search with no height filter.
         var read = waypoints.Where(w => w.Item2.DistanceTo(target) < cover).ToList();
         for (var s = 0; s < 300; s++)
         {
-            // Spaces up to searchMetres away, up to 10 m above or below the stop.
             var space = new Point(random.NextDouble() * 2 * searchMetres - searchMetres, random.NextDouble() * 20 - 10, random.NextDouble() * 2 * searchMetres - searchMetres);
             if (space.DistanceTo(target) > searchMetres) continue;
             Assert.Equal(Counted(waypoints, space, 25), Counted(read, space, 25));

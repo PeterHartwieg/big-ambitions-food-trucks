@@ -10,18 +10,13 @@ using FoodTrucks.Core.Rules;
 
 namespace FoodTrucks
 {
-    // The demand, economy and rule tables from the mod folder's data/ files, loaded once at startup.
-    // Players can edit them; a bad file is reported in the log and the cart can't open until it's fixed.
     internal static class DemandData
     {
         public static DemandTables? Tables { get; private set; }
         // rules.json: queues and service for now; licences, fleet, reputation and catering later.
         public static RuleTables? Rules { get; private set; }
-        // pitches.json: premium spots, city events and partnerships.
         public static PitchTables? Pitches { get; private set; }
-        // commissaries.json: the commissary garages.
         public static CommissaryTables? Commissaries { get; private set; }
-        // vehicle-diagrams.json: the vehicle page's equipment drawing (optional).
         public static VehicleDiagrams? Diagrams { get; private set; }
         public static string? Error { get; private set; }
 
@@ -51,7 +46,6 @@ namespace FoodTrucks
                 Log.Error("Demand data not loaded; carts can't open. " + ex.Message);
                 return;
             }
-            // Apart: a mistake in pitches.json takes away premium spots, events and partnerships, not selling.
             try
             {
                 Pitches = PitchTables.Parse(Read(Path.Combine(modRootPath, "data"), "pitches.json"), Tables);
@@ -62,7 +56,6 @@ namespace FoodTrucks
                 Pitches = null;
                 Log.Error("Pitches not loaded; no premium spots, events or partnerships. " + ex.Message);
             }
-            // Apart too: without commissaries there is no renting, ordering or overnight check.
             try
             {
                 Commissaries = CommissaryTables.Parse(Read(Path.Combine(modRootPath, "data"), "commissaries.json"));
@@ -74,7 +67,6 @@ namespace FoodTrucks
                 Commissaries = null;
                 Log.Error("Commissaries not loaded; no renting, ordering or overnight check. " + ex.Message);
             }
-            // Optional: without it the vehicle page's Menu box lists its equipment as a line of text.
             Diagrams = null;
             try
             {
@@ -93,7 +85,6 @@ namespace FoodTrucks
             }
         }
 
-        // zones.json is optional; the others are required.
         private static string? Read(string folder, string name)
         {
             var path = Path.Combine(folder, name);

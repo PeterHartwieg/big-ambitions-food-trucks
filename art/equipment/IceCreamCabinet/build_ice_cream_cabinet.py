@@ -73,7 +73,6 @@ def box(name, center, dims, key, bevel=0):
     ob.data.materials.append(material(key))
     if bevel:
         mod = ob.modifiers.new('Small edge chamfer', 'BEVEL')
-        # Keep thin sheet chamfers below half the thickness to avoid collapsed faces.
         mod.width = min(bevel, min(dims)*.24)
         mod.segments = 1
         bpy.ops.object.modifier_apply(modifier=mod.name)
@@ -85,7 +84,6 @@ def box(name, center, dims, key, bevel=0):
     return ob
 
 def rr(w, d, r):
-    # Eight corners, counterclockwise in XY.
     return [(-w/2+r,-d/2),(w/2-r,-d/2),(w/2,-d/2+r),
             (w/2,d/2-r),(w/2-r,d/2),(-w/2+r,d/2),
             (-w/2,d/2-r),(-w/2,-d/2+r)]
@@ -174,14 +172,12 @@ def review(filename, textured=False):
     return scene.render.filepath
 
 def blockout():
-    # Only the asset collection is rebuilt. HumanRef_1.8m is never modified.
     for ob in list(collection().objects):
         bpy.data.objects.remove(ob,do_unlink=True)
     bpy.context.scene.unit_settings.system='METRIC'
     bpy.context.scene.unit_settings.scale_length=1
     box('Cabinet_WhiteShell',(0,0,.131),(.392,.344,.262),'White',.004)
     box('Cabinet_Plinth',(0,0,.009),(.390,.340,.018),'Steel',.002)
-    # Chamfered steel counter ring, opening under the four trays.
     ring('Well_CounterLip',0,0,[(.398,.352,.009,.255),(.398,.352,.009,.272),
                                 (.360,.280,.008,.272),(.360,.280,.008,.255)],'SteelLight')
     box('Well_DarkFloor',(0,0,.263),(.36,.280,.009),'Shadow')
@@ -191,14 +187,12 @@ def blockout():
     box('Hood_TopRail',(0,.147,.472),(.382,.016,.015),'Red')
     box('Hood_FrontRail',(0,-.159,.283),(.388,.016,.020),'Red')
     box('Hood_RearBase',(0,.147,.277),(.38,.016,.020),'Red')
-    # Temporary simple coloured fills establish the four-flavour reading.
     for x,key in zip((.132,.044,-.044,-.132),('Vanilla','Strawberry','Chocolate','Mint')):
         box('Blockout_'+key,(x,-.005,.285),(.074,.228,.030),key,.004)
     bpy.context.view_layer.update()
     return review('01-blockout.png')
 
 def ice_fill(x,key):
-    # Three low ridges along a single closed ice cream fill, not separate scoops.
     w,d=.069,.219
     nx,ny=5,9
     verts=[]
@@ -224,7 +218,6 @@ def ice_fill(x,key):
     for i in range(len(boundary)):
         j=(i+1)%len(boundary)
         faces.append((boundary[i],base[i],base[j],boundary[j]))
-    # Bottom fan has outward normals corrected with the rest of the closed part.
     center=len(verts)
     verts.append((x,-.005,.269))
     for i in range(len(base)):
@@ -235,21 +228,17 @@ def details():
     for ob in list(collection().objects):
         if ob.name.startswith('Blockout_'):
             bpy.data.objects.remove(ob,do_unlink=True)
-    # Reference's broad clean front and four steel strips; no lettering.
     for z in (.050,.080,.110,.140):
         box('Front_DarkStripe',(0,-.1735,z),(.369,.003,.012),'Shadow')
         box('Front_SteelStripe',(0,-.176,z+.002),(.369,.004,.006),'SteelLight')
     box('Front_UpperTrim',(0,-.173,.235),(.377,.004,.008),'Steel')
-    # A shallow rear cold-wall, below the display sightline.
     box('Well_RearColdWall',(0,.132,.300),(.354,.013,.066),'Steel')
     for z in (.293,.306,.319):
         box('Well_RearGroove',(0,.1246,z),(.346,.002,.003),'Shadow')
     for x,key in zip((.132,.044,-.044,-.132),('Vanilla','Strawberry','Chocolate','Mint')):
-        # Continuous steel folded rim with four loops, no hidden open boundaries.
         ring('Tub_'+key,x,-.005,[(.080,.239,.008,.266),(.080,.239,.008,.286),
                                (.070,.221,.006,.286),(.070,.221,.006,.266)],'SteelLight')
         ice_fill(x,key)
-    # An unobtrusive operator-side inset with grip, above the rear ventilation.
     box('Rear_Panel',(0,.173,.155),(.318,.003,.147),'SteelLight',.002)
     box('Rear_Grip',(0,.177,.200),(.084,.006,.011),'Shadow',.002)
     for z in (.074,.091,.108):
@@ -280,7 +269,6 @@ def texture():
     me=body.data
     me.uv_layers.active.name='UVMap'
     me.calc_loop_triangles()
-    # Rasterise the actual packed UVs into one flat-colour atlas, then pad seams.
     res=512
     pixels=np.zeros((res,res,4),dtype=np.float32)
     pixels[:,:,:]=(.25,.28,.30,1)
@@ -300,7 +288,6 @@ def texture():
         q=((c[1]-a[1])*(xs-c[0])+(a[0]-c[0])*(ys-c[1]))/denom
         covered=(p>=-1e-6)&(q>=-1e-6)&(p+q<=1+1e-6)
         key=me.materials[me.polygons[tri.polygon_index].material_index].name.replace('IC_Preview_','')
-        # Palette numbers are display/sRGB colors; write those values into PNG.
         pixels[y0:y1+1,x0:x1+1][covered]=PALETTE[key]
         mask[y0:y1+1,x0:x1+1]|=covered
     fill=float(mask.mean())
@@ -323,7 +310,6 @@ def texture():
     img.filepath_raw=os.path.join(OUT,name+'.png')
     img.file_format='PNG'
     img.save()
-    # Keep the absolute image path until save_as remaps from art/start.blend.
     img.filepath=os.path.join(OUT,name+'.png')
     mat=bpy.data.materials.get('M_IceCreamCabinet') or bpy.data.materials.new('M_IceCreamCabinet')
     mat.use_nodes=True
@@ -344,7 +330,6 @@ def texture():
         p.material_index=0
         p.use_smooth=False
     body['texture_coverage_raster_512']=fill
-    # Remove the unused temporary color materials from the delivered scene.
     for m in list(bpy.data.materials):
         if m.name.startswith('IC_Preview_') and m.users==0:
             bpy.data.materials.remove(m)
@@ -355,13 +340,10 @@ def texture():
 
 def finish():
     body=bpy.data.objects['IceCreamCabinet_Body']
-    # Review before FBX export mutates evaluation/visibility caches.
     review('04-final.png',True)
     existing=bpy.data.objects.get('IceCreamCabinet_Collision')
     if existing:
         bpy.data.objects.remove(existing,do_unlink=True)
-    # Envelope follows the curved hood in six segments; 20 hull vertices / 36 tris.
-    # Slightly larger than the visible frame, still inside the specified footprint.
     points=[(-.18,0),(.18,0),(.18,.480)]
     for i in range(6,-1,-1):
         theta=i*math.pi/12
@@ -394,7 +376,6 @@ def finish():
         add_leaf_bones=False,path_mode='RELATIVE',embed_textures=False)
     collision.hide_set(True)
     select_only([body])
-    # Only the mesh objects (and the untouched human reference) remain in the scene.
     bpy.context.preferences.filepaths.save_version=0
     bpy.ops.wm.save_as_mainfile(filepath=OUT+'/IceCreamCabinet.blend')
     counts={}

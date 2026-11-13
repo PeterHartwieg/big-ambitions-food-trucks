@@ -201,7 +201,6 @@ public class StreetFoodStatementTests
         Assert.Equal(-1_000, statement.Licence[0]);
         Assert.Equal(0, statement.NotBrokenDown[0]);
 
-        // The game's rows lose the moved costs and the group gains them: the statement still adds up.
         var summary = SalesLedger.SummaryCents(state, 9);
         Assert.Equal(summary - 1_500 - 12_500, statement.Total[0]);
         Assert.Equal(new long[] { 0, 0, 0 }, statement.Total.Skip(1).ToArray());
@@ -224,7 +223,6 @@ public class StreetFoodStatementTests
     public void ADayUpdatedMidwayShowsTheEarlierPartAsNotBrokenDown()
     {
         var state = new SaveState();
-        // Sales recorded by an older version that day (no vehicle lines), then one with the breakdown.
         state.DailySales.Add(new DailySales { Day = 9, RevenueCents = 1_000, CostCents = 400 });
         StreetSales.Record(state, "cart", 9, 500, 2);
         SalesLedger.RecordCost(state, 9, "cart", 300);
@@ -259,7 +257,6 @@ public class StreetFoodStatementTests
         SalesLedger.RecordGameCost(state, 9, "cart", LedgerLine.Parking, 300);
         SalesLedger.MarkInSummary(state, 9);
 
-        // The game's row has less than the ledger (a wage it never stored): nothing is moved that day.
         var statement = StreetFoodStatement.Build(state, Days, new long[] { 800, 0, 0, 0 }, new long[] { 302, 0, 0, 0 });
 
         Assert.Equal(0, statement.MovedWages[0]);
@@ -326,7 +323,6 @@ public class CrewLogTests
         var state = new SaveState();
         for (var i = 0; i < 3; i++) CrewLog.AddHour(state, 1, "emp", "a");
 
-        // Six hours paid, three of them logged on a vehicle: half the wage is the vehicle's.
         Assert.Equal(new[] { ("a", 600L) }, CrewLog.Split(state, 1, "emp", 1_200, 6).ToArray());
     }
 
@@ -396,12 +392,10 @@ public class CrewWageAttributionTests
     [Fact]
     public void ALoadLateAtNightCoversTheNextDay()
     {
-        // Loaded at 23:30 on day 10; the first hourly count comes at midnight, on day 11.
         var state = new SaveState();
         CrewLog.Begin(state, 10);
         CrewLog.Begin(state, 11);
         Assert.Equal(11, state.CrewHoursSince);
-        // Day 11's wage for shop hours only, the hire on a truck's crew at payment: not the truck's.
         Assert.Empty(CrewLog.Attribute(state, 11, "e1", 4800, 6, "truck"));
     }
 
@@ -411,9 +405,7 @@ public class CrewWageAttributionTests
         var state = new SaveState();
         CrewLog.Begin(state, 10);
 
-        // Day 10: hours counted before this version ran weren't logged, so the crew at payment takes the wage.
         Assert.Equal(new[] { ("truck", 900L) }, CrewLog.Attribute(state, 10, "emp", 900, 6, "truck").ToArray());
-        // From day 11 the log decides: shop hours with no vehicle hours are no vehicle's wage.
         Assert.Empty(CrewLog.Attribute(state, 11, "emp", 900, 6, "truck"));
         Assert.Empty(CrewLog.Attribute(state, 12, "emp", 900, 6, "truck"));
     }

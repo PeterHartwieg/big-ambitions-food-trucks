@@ -21,30 +21,20 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Commissaries (design: Commissary and new foods). Garages from data/commissaries.json where the player rents a
-    // space per vehicle by phone (the call's Spaces), orders stock by phone for delivery at 08:00, takes and gives back
-    // stock at the bay (Commissary stock on the vehicle's panel, CommissaryStock.cs), and pays rent daily; at 04:00 the
-    // City fines a food vehicle that isn't in its bay, and one standing in its own bay counts as cleaned.
-    // Core's Commissaries decides; this finds the bays, moves the money and the cargo, and sends the texts.
     internal sealed partial class Commissary : MonoBehaviour
     {
-        // Each commissary's phone contact is this plus its ID; en.json names it.
         public const string ContactPrefix = "foodtrucks-commissary-";
         private const string ContactDescription = "foodtrucks:commissary_description";
         private const CallDialogType DialogType = (CallDialogType)9103;
-        // Rent and orders are tax-deductible under this label; overnight fines are not.
         private const string ExpenseLabel = "foodtrucks:transaction_commissary_label";
-        // The player standing this much beyond the bay radius has visited the commissary.
         private const float VisitExtraMetres = 15f;
         private const float CheckSeconds = 0.5f;
 
         private static bool attached;
-        // Set by the uninstall step for the rest of this session: nothing runs, nothing unlocks, no contact comes back.
         private static bool uninstalled;
         internal static bool Uninstalled => uninstalled;
         private long lastMinute = -1;
         private float nextCheck;
-        // Vehicles told once per load that their space is at a commissary data/commissaries.json no longer has.
         private readonly HashSet<string> unknownSiteShown = new HashSet<string>();
 
         private static CommissaryRules? Rules => DemandData.Rules?.Commissary;
@@ -87,9 +77,6 @@ namespace FoodTrucks
                 LogBusinessAt(site);
             }
             LogGameDeliveryFees(Rules!);
-            // The lanes filled the bays with parked cars on the game's load event, before this one: they go now, under
-            // the loading screen. Bays still to be searched are searched first, while the screen hides any car their
-            // sweep removes (a bay resolved later keeps the view rule and its paint waits; BayParking).
             BayParking.UnderLoadingScreen = true;
             try
             {
@@ -111,9 +98,6 @@ namespace FoodTrucks
                      $"{commissary.Charges.Count} rent charges and {commissary.Fines.Count} fines unpaid; night checked through day {commissary.NightCheckedThroughDay?.ToString() ?? "(not started)"}.");
         }
 
-        // The game's own wholesale delivery fee, a value on each wholesaler's settings asset that the code doesn't show
-        // (WholesaleStoreSettings.deliveryFee, copied into each contract and charged once per delivery), logged once
-        // against the commissary's flat fee so a session can compare them.
         private static bool deliveryFeesLogged;
 
         private static void LogGameDeliveryFees(CommissaryRules rules)
@@ -132,9 +116,6 @@ namespace FoodTrucks
 
         public static void Detach() => attached = false;
 
-        // A new game gives random AI shops to retail and office units and a rival's factory to a few random warehouses
-        // (CityGenerator.PopulateBuildings, SetupRivalFactories); homes never get one. The garages are picked to avoid
-        // that, but a rival factory can still land in one, so the log says when a garage's building has a business.
         private static void LogBusinessAt(CommissarySite site)
         {
             try
@@ -155,25 +136,12 @@ namespace FoodTrucks
             return list.Count == 0 ? "none" : string.Join(", ", list);
         }
 
-        // Where the bay search starts: the point set in data, else the building's entrances. Null while the city has no
-        // such building.
         internal static List<(double X, double Z)>? Origins(CommissarySite site)
         {
             if (site.Bay != null) return new List<(double X, double Z)> { site.Bay.Value };
             return World.EntrancesOf(site.Address)?.Select(d => ((double)d.x, (double)d.z)).ToList();
         }
 
-        // ---- Bays (review round 4, the coordinator's design) ----
-        // Peter (11 October 2026): "The purple area is not on a parking spot". Each commissary's bay is resolved once
-        // per city: from each origin, the nearest place within BaySnap.MaxMetres where a food truck stands legally parked
-        // by the game's own wheel test, centred across its lane (Core BaySnap). The result goes into the save
-        // (CommissaryState.Bays), with the origins and the rule version it was searched with, so a load decides from the
-        // same points without searching. A vehicle is in the bay when the game's wheel test calls it legally parked and
-        // its middle is within the bay radius of a resolved point (Core CommissaryBays.InBay); the paint, Ctrl+F3, the
-        // Commissary stock button, the visit unlock and the 04:00 check all ask InBay or the resolved points. An unresolved
-        // commissary decides nothing: no unlock, no button, no paint, and the 04:00 check waits for it.
-
-        // The resolved bay points, or null while not resolved. Empty when the search found no legal parking.
         internal static IReadOnlyList<CommissaryBayPoint>? ResolvedBays(CommissarySite site)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -184,22 +152,15 @@ namespace FoodTrucks
 
         private static IEnumerable<(double X, double Z)>? ResolvedPoints(CommissarySite site) => ResolvedBays(site)?.Select(p => (p.X, p.Z));
 
-        // Two bays closer than this (entrances side by side) are one.
         private const double SameBayMetres = 3;
-        // The search reads the parking colliders this far round its origin.
         private const float ProbeMetres = (float)BaySnap.MaxMetres + 8f;
-        // A bay that couldn't be resolved (the city's parking lanes not loaded) is tried again after this long.
         private const float ResolveRetrySeconds = 5f;
         private static readonly Dictionary<string, float> resolveAt = new Dictionary<string, float>(StringComparer.Ordinal);
-        // Messages logged once per load, keyed by commissary and reason (review round 9: one key per commissary hid a
-        // second reason). Readiness notes and errors are kept apart.
         private static readonly HashSet<string> notReadyLogged = new HashSet<string>(StringComparer.Ordinal);
         private static readonly HashSet<string> errorLogged = new HashSet<string>(StringComparer.Ordinal);
 
         private static bool Once(HashSet<string> logged, string siteId, string reason) => logged.Add(siteId + "|" + reason);
 
-        // Commissaries whose bay was searched (to the end) since this load: a stored "no bay" is searched again once per
-        // load (Core CommissaryBays.SearchDue; live session 2: a failed search was final for good).
         private static readonly HashSet<string> searchedThisLoad = new HashSet<string>(StringComparer.Ordinal);
 
         private static bool SearchDue(CommissarySite site)
@@ -210,8 +171,6 @@ namespace FoodTrucks
             return CommissaryBays.SearchDue(CommissaryBays.Current(state.Commissary, site.Id, origins), searchedThisLoad.Contains(site.Id));
         }
 
-        // Resolves one commissary's bay if it isn't yet: true when it is resolved (now or before). `force` skips the
-        // retry wait (the 04:00 check). A stored "no bay" counts as resolved while it waits for its search again.
         private static bool Resolve(CommissarySite site, string why, bool force)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -226,7 +185,6 @@ namespace FoodTrucks
             return Search(state, site, origins, stored ? why + ", searched again: the save had no bay" : why) || stored;
         }
 
-        // The search itself: true when its result was stored, false when the street wasn't ready for it.
         private static bool Search(SaveState state, CommissarySite site, List<(double X, double Z)> origins, string why)
         {
             if (!Legality.ParkingSceneReady())
@@ -239,7 +197,6 @@ namespace FoodTrucks
             var found = new List<(BaySnapResult Bay, (double X, double Z) From, (double X, double Z) Door)>();
             var start = Time.realtimeSinceStartup;
             var colliders = 0;
-            // What each origin came to, for the one line a commissary without a bay gets.
             var tried = new List<string>();
             foreach (var origin in origins)
             {
@@ -254,9 +211,6 @@ namespace FoodTrucks
                     tried.Add($"{label}: no parking lanes within {ProbeMetres:F0} m");
                     continue;
                 }
-                // The side rule (Peter, 13 October 2026; Core BaySide): a place counts only when the straight walk from
-                // the door to it crosses no driving lane, so the bay is on the door's side of the street. From a point set
-                // in data the door is the entrance nearest it, and the point itself must pass, else it isn't used.
                 if (door == null)
                 {
                     tried.Add($"{label}: the building has no entrance to check the street's side from");
@@ -277,9 +231,6 @@ namespace FoodTrucks
                 var sideLanes = side.Lanes;
                 var doorX = (double)door.Value.x;
                 var doorZ = (double)door.Value.z;
-                // No driving lane at all round the door: every street has lanes, so the read missed them (an entrance well
-                // above or below the street, review round 1, Opus). The side can't be checked, so nothing is resolved now
-                // and the search is tried again, as while the parking lanes load.
                 if (sideLanes.Count == 0)
                 {
                     if (Once(errorLogged, site.Id, "no driving lanes"))
@@ -302,11 +253,6 @@ namespace FoodTrucks
                     across++;
                     return false;
                 };
-                // From an entrance, a place the door's pedestrians can't reach within a short walk (the street behind the
-                // building, Core WalkRule) is passed over for good; a point set in data is trusted for its walk. The walk
-                // starts at the door's NavMesh point, which must itself have a short walk to the street; if it hasn't,
-                // nothing is guessed (review round 8: a replacement start near the door could be behind the building):
-                // that origin gives no bay and asks for a measured point.
                 var tooLong = 0;
                 var noRoute = 0;
                 if (site.Bay == null)
@@ -314,7 +260,6 @@ namespace FoodTrucks
                     var from = WalkFrom(site.Id, door.Value);
                     if (from.Kind == WalkStart.NotReady)
                     {
-                        // The traffic system isn't running yet, so the door can't be checked: not resolved, tried again.
                         if (from.Why.Length > 0)
                         {
                             if (Once(errorLogged, site.Id, "traffic read"))
@@ -333,7 +278,6 @@ namespace FoodTrucks
                     {
                         var walkStart = from.Point;
                         var sideOnly = reach;
-                        // The side first: it is cheaper than a NavMesh path.
                         reach = (x, z) =>
                         {
                             if (!sideOnly(x, z)) return false;
@@ -344,8 +288,6 @@ namespace FoodTrucks
                         };
                     }
                 }
-                // A measured bay with a heading is nose-in in a lot: the point as measured when legal facing that way, else
-                // the nearest legal place facing that way (Core BaySnap.Measured).
                 var bay = site.Bay != null
                     ? BaySnap.Measured(origin.X, origin.Z, site.BayHeading, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres, reach)
                     : BaySnap.Nearest(origin.X, origin.Z, probe.Legal, probe.Axes, Legality.TruckFootprint(), BaySnap.MaxMetres, reach);
@@ -362,9 +304,6 @@ namespace FoodTrucks
                 if (bay != null && !found.Any(f => BaySnap.Distance(f.Bay.X, f.Bay.Z, bay.X, bay.Z) < SameBayMetres))
                     found.Add((bay, origin, (doorX, doorZ)));
             }
-            // No parking collider at all round any origin: more likely the street isn't there yet than a commissary
-            // without parking, so nothing is stored and it is tried again (review round 5). "No bay" is stored only
-            // after a search over colliders that were there.
             if (colliders == 0)
             {
                 if (Once(notReadyLogged, site.Id, "no colliders"))
@@ -375,16 +314,12 @@ namespace FoodTrucks
             searchedThisLoad.Add(site.Id);
             FoodTrucksSession.MarkChanged();
             BayMarkers.Forget(site.Id);
-            // The new bay's first clearance, with no view rule, before its paint can be drawn (the markers are made in a
-            // later part of this look or a later look, BayMarkers.Update), so a car seen from the first frame can't stay in
-            // a bay that appears round it (review round 1, Sol and Astra).
             BayParking.SweepNewBay(site, Rules!.BayRadiusMetres);
             var ms = (Time.realtimeSinceStartup - start) * 1000f;
             foreach (var (bay, from, _) in found)
                 Log.Info($"Commissary {site.Id}: bay on legal parking at x {bay.X:F1}, z {bay.Z:F1}, {bay.Distance:F1} m from x {from.X:F1}, z {from.Z:F1} " +
                          $"({(site.Bay != null ? "set in data" : "entrance")}), {(site.InLot ? "nose-in in a lot, facing" : "the lane along")} {Math.Atan2(bay.AlongX, bay.AlongZ) * 180 / Math.PI:F0} degrees; " +
                          $"resolved {why} in {ms:F0} ms and kept in the save.");
-            // One line per load for a commissary still without a bay, with what each origin came to.
             if (found.Count == 0)
                 Log.Error($"Commissary {site.Id}: no bay this load (searched {why} in {ms:F0} ms): {string.Join("; ", tried)}. " +
                           "No vehicle is ever in its bay, no paint is drawn and its rented vehicles aren't fined at 04:00. " +
@@ -392,13 +327,8 @@ namespace FoodTrucks
             return true;
         }
 
-        // Extra reach for the lanes read round a door (Core BaySide): a lane segment that crosses a walk is read when
-        // either of its waypoints is within the read, and the traffic system's waypoints can stand some way apart.
         private const float SideSlackMetres = 40f;
 
-        // The driving lanes' centre lines round a door, far enough out to cover the walk to any place within reach of
-        // origin. Null while the traffic system isn't running (Why empty) or its lanes can't be read (Why says why); a
-        // read that finds no lane at all is an empty list, and every place is then on the door's side.
         private static (List<((double X, double Z) A, (double X, double Z) B)>? Lanes, string Why) SideLanes(Vector3 door, (double X, double Z) origin, double reach)
         {
             if (!GleyTrafficSystem.TrafficManager.HasInstance || !GleyTrafficSystem.TrafficManager.IsInitialized) return (null, "");
@@ -407,8 +337,6 @@ namespace FoodTrucks
             return (lanes.FlatSegments(), lanes.Describe());
         }
 
-        // The driving lanes round each bay point's entrance, read once per load for "in the bay" (Core
-        // CommissaryBays.OnDoorSide); a read that failed or found none is tried again after ResolveRetrySeconds.
         private static readonly Dictionary<(double, double), (float Radius, List<((double X, double Z) A, (double X, double Z) B)>? Lanes, float RetryAt)> doorLanes =
             new Dictionary<(double, double), (float, List<((double X, double Z) A, (double X, double Z) B)>?, float)>();
 
@@ -424,7 +352,6 @@ namespace FoodTrucks
                 if (known.Lanes == null || known.Lanes.Count == 0)
                     if (Time.unscaledTime < known.RetryAt) return null;
             }
-            // The read's height filter needs the door's height: the ground under the stored entrance.
             var doors = Sites?.Sites.Select(s => World.EntrancesOf(s.Address)).Where(d => d != null).SelectMany(d => d!)
                 .Where(d => Math.Abs(d.x - x) < 0.01 && Math.Abs(d.z - z) < 0.01).ToList();
             if (doors == null || doors.Count == 0) return null;
@@ -441,18 +368,12 @@ namespace FoodTrucks
 
         private enum WalkStart
         {
-            // The door's own NavMesh point has a short walk to the street.
             Door,
-            // The door isn't on the NavMesh at all: nothing is known about walks from it.
             Unknown,
-            // The door's point has no short walk to the street, or the street can't be found: no bay from it.
             CutOff,
-            // The traffic system isn't running yet: the door can't be checked now.
             NotReady,
         }
 
-        // Where the walk check starts for a door: its NavMesh point, if that has a short walk (Core WalkRule) to the
-        // street, the NavMesh by the nearest driving lane within 40 m.
         private static (WalkStart Kind, Vector3 Point, string Why) WalkFrom(string siteId, Vector3 door)
         {
             try
@@ -461,7 +382,6 @@ namespace FoodTrucks
                 if (!UnityEngine.AI.NavMesh.SamplePosition(door, out var doorHit, 3f, areas)) return (WalkStart.Unknown, door, "");
                 if (!GleyTrafficSystem.TrafficManager.HasInstance || !GleyTrafficSystem.TrafficManager.IsInitialized) return (WalkStart.NotReady, door, "");
                 var lanes = TrafficLanes.Near(door, 40f);
-                // A read that failed isn't "no street near": not ready, tried again, never saved (review round 9).
                 if (lanes.Unavailable) return (WalkStart.NotReady, door, lanes.Describe());
                 var lane = lanes.Nearest(door);
                 if (lane == null) return (WalkStart.CutOff, doorHit.position, "no driving lane within 40 m: " + lanes.Describe());
@@ -485,10 +405,8 @@ namespace FoodTrucks
             }
         }
 
-        // The walk from a start on the NavMesh to the pavement nearest a place (Core WalkRule).
         private static WalkVerdict Walk(Vector3 from, double x, double z) => WalkDetail(from, x, z).Verdict;
 
-        // The walk with its lengths: the NavMesh path (0 when there is none) and the straight line.
         private static (WalkVerdict Verdict, float Path, float Straight) WalkDetail(Vector3 from, double x, double z)
         {
             try
@@ -507,9 +425,6 @@ namespace FoodTrucks
             catch (Exception) { return (WalkVerdict.Unknown, 0f, 0f); }
         }
 
-        // Twice a second from Look: at most one unresolved commissary per call, so searches spread across frames. They
-        // are taken in turn, and one whose retry isn't due is passed over, so a commissary that waits doesn't hold up
-        // the others (review round 6; Core ResolveOrder).
         private static int resolveCursor;
 
         private static void ResolveOne(CommissaryTables sites)
@@ -527,7 +442,6 @@ namespace FoodTrucks
 
         private static bool CityReady(CommissaryTables sites) => sites.Sites.Any(s => Origins(s) != null);
 
-        // The commissary whose resolved bay a position is within (radius plus extraMetres) of: the visit unlock.
         internal static CommissarySite? SiteNear(Vector3 position, float extraMetres)
         {
             var sites = Sites;
@@ -536,10 +450,8 @@ namespace FoodTrucks
             return sites.At(ResolvedPoints, position.x, position.z, rules.BayRadiusMetres + extraMetres);
         }
 
-        // The commissary whose bay the vehicle is in (legally parked, its middle within the radius), or null.
         internal static CommissarySite? SiteOf(VehicleInstance vehicle) => Sites?.Sites.FirstOrDefault(s => InBay(vehicle, s, out _));
 
-        // The commissary with a resolved bay point nearest the vehicle, within the given metres; null when none is.
         private static CommissarySite? NearestSite(VehicleInstance vehicle, double metres)
         {
             var controller = VehicleHelper.GetVehicleController(vehicle);
@@ -557,8 +469,6 @@ namespace FoodTrucks
             return nearest;
         }
 
-        // Hourly parking uses the same rented space and bay test as 04:00. A missing or unresolved bay grants no parking
-        // exemption; the overnight rule's NoBay grace doesn't mean the vehicle is standing in a rented bay.
         internal static CommissarySite? PublicParkingBay(VehicleInstance vehicle)
         {
             try
@@ -575,7 +485,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error(ex); return null; }
         }
 
-        // A commissary searched with no legal parking found: it has no bay, and its vehicles aren't fined.
         private static bool NoBay(CommissarySite site) => ResolvedBays(site) is { Count: 0 };
 
         private static Vector3 PositionOf(VehicleInstance vehicle)
@@ -584,13 +493,8 @@ namespace FoodTrucks
             return controller != null ? controller.transform.position : (Vector3)vehicle.position;
         }
 
-        // Parked in the open (not in a building or garage), its middle within the radius of the commissary's resolved
-        // bay, and (a truck) legally parked by the game's test. A cart counts by its middle alone (Peter, review round 5).
         internal static bool InBay(VehicleInstance vehicle, CommissarySite site, out string why) => InBayAnswer(vehicle, site, out why) == true;
 
-        // InBay with a third answer: null when the vehicle is within the radius but its street side can't be read yet
-        // (no driving lanes read round the door and no answer kept for it there). The 04:00 check waits on that rather
-        // than fine (review round 2, Astra and Sol); everything else takes it as "not in the bay".
         internal static bool? InBayAnswer(VehicleInstance vehicle, CommissarySite site, out string why)
         {
             var rules = Rules;
@@ -599,7 +503,6 @@ namespace FoodTrucks
             if (!string.IsNullOrEmpty(vehicle.streetName)) { why = "inside a building"; return false; }
             var position = PositionOf(vehicle);
             if (!CommissaryBays.WithinRadius(points, position.x, position.z, rules.BayRadiusMetres)) { why = "outside the radius"; return false; }
-            // On the door's side of the street (Core CommissaryBays.OnDoorSide): the opposite kerb is within the radius too.
             var onSide = CommissaryBays.OnDoorSide(points, position.x, position.z, rules.BayRadiusMetres, p => LanesFor(p, (float)rules.BayRadiusMetres));
             var sideKey = (site.Id, vehicle.id ?? "");
             if (onSide != null) lastSide[sideKey] = (position, onSide.Value);
@@ -624,7 +527,6 @@ namespace FoodTrucks
             return site == null ? id ?? "" : Name(site);
         }
 
-        // The commissary's contact, with its call button. Created (as a new contact, with the game's notice) on the first visit.
         internal static Contact ContactFor(string siteId)
         {
             var contact = Contact.EnsurePermanentContact(ContactPrefix + siteId, ContactCategoryName.General, ContactDescription);
@@ -632,7 +534,6 @@ namespace FoodTrucks
             return contact;
         }
 
-        // The first visit: the commissary's contact appears, as the game's own contacts do, and it writes.
         internal static bool Unlock(SaveState state, CommissarySite site, string how)
         {
             if (uninstalled) return false;
@@ -643,8 +544,6 @@ namespace FoodTrucks
             try { Contact.ShowAddedContactNotifications(); }
             catch (Exception ex) { Log.Error("Commissary, new contact notice: " + ex); }
             var rules = Rules!;
-            // A new key for the new text (renting by phone): the phone words sent messages again from their key. With the
-            // building's address resolved, the key that says where it is (older messages keep theirs, without one).
             var address = CommissaryLocation.Address(site);
             var welcome = new Dictionary<string, string>
             {
@@ -658,18 +557,11 @@ namespace FoodTrucks
             return true;
         }
 
-        // The order form's call can end with the phone closed, which tells no one: its item list is closed then. Checked
-        // in Update and again in LateUpdate, so a phone closed anywhere in a frame (input, UI events, other scripts'
-        // Update) is seen before the next frame's clicks reach the list.
-        // While the game quits the player is destroyed before this component, and PlayerHelper.GetPosition throws
-        // (six errors after "Quitting game..." on 13 October 2026).
         private static bool NoPlayer => InstanceBehavior<GameManager>.Instance?.playerController == null;
 
         private void LateUpdate()
         {
             CommissaryOrderForm.Watch();
-            // A jump of the player (teleport, taxi, fast travel) sweeps the bays near where they land before the frame
-            // is drawn (BayParking).
             var sites = Sites;
             var rules = Rules;
             if (!attached || uninstalled || sites == null || rules == null || FoodTrucksSession.CurrentState == null || NoPlayer) return;
@@ -702,7 +594,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Commissary: " + ex); }
         }
 
-        // Twice a second: the player at a bay unlocks it; the panel's Commissary stock button shows while the vehicle is in a bay.
         private static void Look(SaveState state)
         {
             if (Sites != null) ResolveOne(Sites);
@@ -725,8 +616,6 @@ namespace FoodTrucks
             }
         }
 
-        // Once a game minute (or once after a skip): unpaid charges tried again, spaces of vehicles gone given up,
-        // rent charged, orders delivered and paid, and the 04:00 check.
         private void Step(SaveState state, CommissaryRules rules, CommissaryTables sites, long now)
         {
             CartSale.Retry(state);
@@ -741,11 +630,8 @@ namespace FoodTrucks
             ResolvePendingCleaning(state, sites);
         }
 
-        // The game's own setting that lifts its wholesale and import limits lifts the commissary's weekly food limits too
-        // [code, 1.0: DeliveryHelper.AreWholesaleAndImportLimitsDisabled reads gameVariables.disableWholesaleAndImportLimits].
         internal static bool LimitsLifted => SaveGameManager.Current?.gameVariables?.disableWholesaleAndImportLimits == true;
 
-        // Today's catalogue prices, as the phone order form has them: what a standing order books at.
         private static Func<string, CommissaryPrice?> TodaysPrices()
         {
             Dictionary<string, (int Box, long Cents)>? prices = null;
@@ -757,9 +643,6 @@ namespace FoodTrucks
             };
         }
 
-        // Standing orders due by now book today's delivery at today's prices (Core CommissaryStandingOrders.Book), before
-        // Deliver pays for them in the same step. What a food's weekly limit left out, items the commissary no longer
-        // sells and a day without a space there are texted by the commissary; the standing order stays.
         internal static void BookStanding(SaveState state, CommissaryRules rules, int day, int minute)
         {
             if (state.Commissary.StandingOrders.Count == 0) return;
@@ -769,9 +652,6 @@ namespace FoodTrucks
             foreach (var run in runs) TellRun(state, run);
         }
 
-        // One standing order's booking: a log line, and the commissary's texts. "No space" is texted once until it has a
-        // space again, an item no longer sold once until it sells again (Core TellNoSpace, TellNotSold); a limit cut each
-        // time it happens.
         private static void TellRun(SaveState state, CommissaryStandingBooking run)
         {
             var standing = run.Standing;
@@ -801,20 +681,16 @@ namespace FoodTrucks
                 });
         }
 
-        // "2 boxes of Hot dog, Griddle": a standing order's lines.
         internal static string StandingItems(CommissaryStandingOrder standing) =>
             string.Join(", ", standing.Lines.Select(l => string.Format(LocalizorManager.GetLocalization(
                 l.Capped ? (l.Boxes == 1 ? "foodtrucks:commissary_standing_line_one" : "foodtrucks:commissary_standing_line") : "foodtrucks:commissary_standing_piece", null),
                 l.Boxes, LocalizorManager.GetLocalization(l.ItemName, null))));
 
-        // "every day", "every Thursday".
         internal static string StandingRepeat(CommissaryStandingOrder standing) =>
             standing.Repeat == CommissaryRepeat.Weekly
                 ? LocalizorManager.GetLocalization("foodtrucks:commissary_repeat_weekly", null).Replace("{weekday}", CityPitches.Weekday(standing.NextDay))
                 : LocalizorManager.GetLocalization("foodtrucks:commissary_repeat_daily", null);
 
-        // Debts the game refused earlier (not enough money), tried again: rent, then fines. Orders don't wait here: they
-        // are paid on delivery, and one the game refuses then is cancelled (Deliver).
         private static void PayPending(SaveState state, CommissaryRules rules, bool showNotification)
         {
             var commissary = state.Commissary;
@@ -837,7 +713,6 @@ namespace FoodTrucks
             }
         }
 
-        // The player's food vehicles, by ID: on the map and those with the private driver.
         private static Dictionary<string, VehicleInstance> Fleet()
         {
             var game = SaveGameManager.Current;
@@ -848,7 +723,6 @@ namespace FoodTrucks
             return fleet;
         }
 
-        // A space whose vehicle the player no longer has (sold, removed) is given up after its rent is settled.
         private static void PruneSpaces(SaveState state, CommissaryRules rules)
         {
             var commissary = state.Commissary;
@@ -865,7 +739,6 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
         }
 
-        // Rent for every day not charged yet, today's included; a refused payment waits as a charge.
         internal static void SettleRentForSale()
         {
             if (FoodTrucksSession.CurrentState == null || Rules == null || !FoodTrucksSession.CanWrite)
@@ -901,18 +774,12 @@ namespace FoodTrucks
             }
         }
 
-        // Orders due by now arrive and are paid, goods and delivery fee in one payment under the commissary's tax label, as
-        // the game's wholesale and furniture deliveries are paid when they arrive [code, 1.0: BusinessHelper.
-        // DeliverWholesaleContract, FurnitureDeliveryHelper.PayDelivery]. A payment the game refuses (not enough money)
-        // cancels that order and nothing arrives; the commissary texts why, as the game's stores do with their
-        // "not enough funds" message, and the order isn't tried again.
         internal static void Deliver(SaveState state, CommissaryRules rules, int day, int minute)
         {
             if (state.Commissary.Orders.Count == 0) return;
             var today = SaveGameManager.Current.Day;
             var run = Commissaries.Deliver(state.Commissary, rules, day, minute, order =>
             {
-                // Payments.TryPayOut says whether the game booked the payment even when it throws. Nothing to pay is paid.
                 var paid = order.TotalCents <= 0 || Payments.TryPayOut(order.TotalCents, OrderInfo(order.CommissaryId), showNotification: false);
                 FoodTrucksSession.MarkChanged();
                 if (!paid) return false;
@@ -941,7 +808,6 @@ namespace FoodTrucks
                 Log.Info($"Commissary delivery: order {order.Id}, {order.Units} {order.ItemName} at {order.CommissaryId} not delivered: " +
                          $"the payment of {CartSelling.Money(order.TotalCents)} was refused (not enough money); the order is cancelled" +
                          (standing ? $", standing order {order.StandingOrderId} stays." : "."));
-                // A standing order's delivery: only that one is cancelled; the standing order stays (its own text says so).
                 if (state.Commissary.Unlocked.Contains(order.CommissaryId))
                     Notices.SendText(ContactFor(order.CommissaryId), standing ? "foodtrucks:message_commissary_standing_unpaid" : "foodtrucks:message_commissary_delivery_unpaid", new Dictionary<string, string>
                     {
@@ -952,15 +818,12 @@ namespace FoodTrucks
             }
         }
 
-        // The 04:00 check (design: Overnight rule). Core keeps the day it checked through, so a load or a skip catches up.
         private void NightCheck(SaveState state, CommissaryRules rules, CommissaryTables sites, long now, int day, int minute)
         {
             var commissary = state.Commissary;
             var fleet = Fleet();
             if (commissary.NightCheckedThroughDay == null)
             {
-                // The first check this save sees starts tracking from now: a night that has passed before the rule
-                // existed isn't fined (Core would check this morning's 04:00 after 04:00).
                 Commissaries.NightCheck(commissary, rules, day, minute, Enumerable.Empty<CommissaryVehicle>());
                 FoodTrucksSession.MarkChanged();
                 Log.Info($"Overnight check: starts on day {day} at {CityPitches.Clock(minute)}, checked through day {commissary.NightCheckedThroughDay}; {fleet.Count} food vehicles.");
@@ -972,11 +835,8 @@ namespace FoodTrucks
                     });
                 return;
             }
-            // Nothing to check until 04:00 has passed since the last check.
             var latest = minute >= rules.NightCheckMinute ? day : day - 1;
             if (latest <= commissary.NightCheckedThroughDay.Value) return;
-            // Every commissary with a rented space is resolved first, wherever the player is; one that can't be yet (the
-            // city's parking lanes not loaded) holds the check until it is, rather than deciding from another point.
             var waiting = commissary.Spaces.Select(sp => sites.Site(sp.CommissaryId)).Where(site => site != null).Distinct()
                 .Where(site => !Resolve(site!, "for the 04:00 check", force: true)).Select(site => site!.Id).ToList();
             if (waiting.Count > 0)
@@ -990,8 +850,6 @@ namespace FoodTrucks
             }
             var unresolvedOther = sites.Sites.Where(site => ResolvedBays(site) == null).Select(site => site.Id).ToList();
             var flags = Flags(state, sites, fleet, now);
-            // A vehicle in its bay's radius whose street side can't be read yet (no lanes read round the door, as just
-            // after a load) holds the check too, never fined on an unknown (Core Commissaries.Undecided).
             var undecided = Commissaries.Undecided(commissary, flags);
             if (undecided.Count > 0)
             {
@@ -1003,7 +861,6 @@ namespace FoodTrucks
                 }
                 return;
             }
-            // Before the check moves its day on: a vehicle in its own bay is cleaned for the evening before each check.
             var pendingBefore = commissary.PendingCleaning.Keys.ToList();
             CleanOvernight(state, Commissaries.CleanedOvernight(commissary, rules, day, minute, flags));
             foreach (var held in commissary.PendingCleaning.Keys.Except(pendingBefore).ToList())
@@ -1020,11 +877,7 @@ namespace FoodTrucks
                 if (paid) SalesLedger.RecordOvernightFine(state, SaveGameManager.Current.Day, fine.VehicleId, fine.Cents);
                 else commissary.Fines.Add(fine);
                 Log.Info($"Overnight fine: {World.Short(fine.VehicleId)} out on the night of day {fine.Day}, {CartSelling.Money(fine.Cents)} {(paid ? "paid" : "unpaid (not enough money); tried again")}.");
-                // The text says what was wrong (live session 4: a truck legally in another commissary's bay, with no space
-                // anywhere, read "wasn't in a commissary bay"): no space at all, or not in its own commissary's bay.
                 var space = commissary.Spaces.FirstOrDefault(sp => sp.VehicleId == fine.VehicleId);
-                // New keys for the new texts: the game keeps a sent message's key and parameters and words it again from
-                // them, so the old keys keep their old text for fines already in the phone (review round 4, Astra and Sol).
                 var key = space == null ? "foodtrucks:message_city_overnight_fine_nospace" : "foodtrucks:message_city_overnight_fine_ownbay";
                 Notices.SendText(CityLicensing.City(), paid ? key : key + "_unpaid", new Dictionary<string, string>
                 {
@@ -1034,7 +887,6 @@ namespace FoodTrucks
                     { "fine", CartSelling.Money(fine.Cents) },
                     { "time", CityPitches.Clock(rules.NightCheckMinute) }
                 });
-                // And on screen: the text alone went unseen with the clock running fast (blind run 2, I32).
                 Notices.Show(NotificationType.Warning, "foodtrucks:notification_overnight_fine", new Dictionary<string, string>
                 {
                     { "vehicle", VehicleName(state, fine.VehicleId) },
@@ -1046,10 +898,6 @@ namespace FoodTrucks
         private int nightWaitLogged = -1;
         private int nightSideWaitLogged = -1;
 
-        // Cleaning happens only at the commissary where a vehicle rents its space (Peter, 15 October 2026): standing in
-        // that bay at the 04:00 check counts as cleaned for the service day that just ended (Core
-        // Commissaries.CleanedOvernight), so a crewed vehicle stays clean by ending its route in its bay. A day already
-        // counted for health takes nothing (Core ReputationBook.CleanedOn); one line per vehicle either way.
         private static void CleanOvernight(SaveState state, IReadOnlyList<(string VehicleId, int ServiceDay)> cleaned)
         {
             var closedThrough = ReputationBook.ClosedThrough(state);
@@ -1066,8 +914,6 @@ namespace FoodTrucks
             if (cleaned.Count > 0) FoodTrucksSession.MarkChanged();
         }
 
-        // Each minute while overnight cleaning waits for a vehicle's street side (Core Commissaries.ResolvePendingCleaning):
-        // decided as soon as the side can be read; a vehicle gone or without its space there any more isn't cleaned.
         private static void ResolvePendingCleaning(SaveState state, CommissaryTables sites)
         {
             var pending = state.Commissary.PendingCleaning;
@@ -1090,8 +936,6 @@ namespace FoodTrucks
         private static string Describe(CommissaryVehicle v) =>
             $"{World.Short(v.VehicleId)} {(v.AtOwnCommissaryBay ? "in its bay" : "out")}{(v.PlayerInside ? ", player inside" : "")}{(v.OnLateStop ? ", late stop" : "")}{(v.InTransit ? ", in transit" : "")}{(v.AtPlayerProperty ? ", at your own building" : "")}";
 
-        // The addresses ("street#number") of buildings the player rents (a business, warehouse or home: the game's
-        // RentedByPlayer) or owns (its real estate list).
         private static HashSet<string> PlayerProperty()
         {
             var game = SaveGameManager.Current;
@@ -1108,9 +952,6 @@ namespace FoodTrucks
             return set;
         }
 
-        // Peter (9 October 2026): a vehicle at the player's own building isn't fined. The game records a vehicle inside a
-        // building (a warehouse's vehicle slot, a garage, any interior) with that building's address, so that counts;
-        // the game has no parking lot of a building, so outside it counts within the bay radius of one of its entrances.
         private static bool AtProperty(VehicleInstance vehicle, HashSet<string> property)
         {
             if (property.Count == 0) return false;
@@ -1121,7 +962,6 @@ namespace FoodTrucks
             return property.Any(address => World.DistanceTo(address, position.x, position.z) <= rules.BayRadiusMetres);
         }
 
-        // Each food vehicle's standing for the night check.
         private List<CommissaryVehicle> Flags(SaveState state, CommissaryTables sites, Dictionary<string, VehicleInstance> fleet, long now)
         {
             var game = SaveGameManager.Current;
@@ -1141,11 +981,8 @@ namespace FoodTrucks
                     VehicleId = vehicle.id,
                     AtOwnCommissaryBay = inBay == true,
                     BaySideUnknown = inBay == null,
-                    // Spared the fine because its commissary has no bay, not standing in one: no overnight cleaning.
                     BayGrace = site != null && !withDriver.Contains(vehicle.id) && NoBay(site),
                     PlayerInside = game.ActiveVehicleId == vehicle.id || TruckWindow.PlayerAt(vehicle.id),
-                    // Only a window the crew has open at a stop right now: a route that sold out and closed early is out like any other.
-                    // and someone of its crew on shift and able to serve it.
                     OnLateStop = saved != null && saved.IsOpen && saved.HireStop != null && HireCrew.OnShift(saved, HireCrew.Now()).Count > 0,
                     InTransit = withDriver.Contains(vehicle.id) || saved?.Transit != null,
                     AtPlayerProperty = !withDriver.Contains(vehicle.id) && AtProperty(vehicle, property)
@@ -1154,7 +991,6 @@ namespace FoodTrucks
             return list;
         }
 
-        // "Food cart", "Food truck 2": as Econoview names them.
         private static string VehicleName(SaveState state, string vehicleId)
         {
             if (StreetFoodBooks.VehicleNames().TryGetValue(vehicleId, out var name)) return name;
@@ -1176,12 +1012,8 @@ namespace FoodTrucks
             return info;
         }
 
-        // A fine is no business expense: no tax label.
         private static TransactionInfo FineInfo() => new TransactionInfo("foodtrucks:transaction_overnight_fine", new Dictionary<string, string>());
 
-        // ---- Spaces, by phone (plan, "UI flow: the vehicle panel holds only cargo"; Peter, 15 October 2026) ----
-
-        // One row of the call's Spaces list: a food vehicle and the one thing it can do at this commissary.
         internal sealed class SpaceChoice
         {
             public SpaceChoice(string vehicleId, string kind, string op, string label)
@@ -1194,14 +1026,10 @@ namespace FoodTrucks
 
             public string VehicleId { get; }
             public string Kind { get; }
-            // "rent", "move" or "release".
             public string Op { get; }
             public string Label { get; }
         }
 
-        // The player's food vehicles, each with its one action at this commissary: rent a space here (with the monthly
-        // rent), move its space here from another commissary, or give up its space here. Vehicles in transit or with a
-        // crew are listed too: renting is paperwork. Two vehicles with one name get a number, so each label is unique.
         internal static List<SpaceChoice> SpaceChoices(string siteId)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -1229,9 +1057,6 @@ namespace FoodTrucks
             return list;
         }
 
-        // Does a Spaces choice with Rent or Release (rent charged, the notice shown, as they always did), then the
-        // commissary texts what changed into its conversation, as it texts orders. `inCall`: the call is on, so the text
-        // belongs to it and is read already. Returns that text, or null when nothing changed (the log says why).
         internal static string? ApplySpace(SpaceChoice choice, string siteId, bool inCall)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -1247,7 +1072,6 @@ namespace FoodTrucks
                 Log.Info($"Commissary {siteId}: Spaces {choice.Op} for {who} refused: the vehicle is gone.");
                 return null;
             }
-            // The list was made when it opened; the vehicle's space must still be what the choice was made for.
             var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == choice.VehicleId);
             var fits = space == null ? "rent" : space.CommissaryId != siteId ? "move" : "release";
             if (fits != choice.Op)
@@ -1258,8 +1082,6 @@ namespace FoodTrucks
             var from = space?.CommissaryId;
             var done = choice.Op == "release" ? Release(choice.VehicleId, choice.Kind, siteId) : Rent(choice.VehicleId, choice.Kind, siteId);
             if (!done) return null;
-            // The phone's to-dos follow at once, not at the next game minute: with the game paused while the phone is used,
-            // "No commissary space" stayed up after renting (the first blind playtest, 17 October 2026).
             try { VehicleTodos.ReconcileNow(); }
             catch (Exception ex) { Log.Error("To-dos after a space change: " + ex.Message); }
             var name = VehicleName(state, choice.VehicleId);
@@ -1270,7 +1092,6 @@ namespace FoodTrucks
                 "move" => ("foodtrucks:message_commissary_space_moved", new Dictionary<string, string> { { "vehicle", name }, { "from", NameOf(from) }, { "rent", rent } }),
                 _ => ("foodtrucks:message_commissary_space_released", new Dictionary<string, string> { { "vehicle", name } })
             };
-            // A space rented or moved here says where here is, when the building's address resolves.
             var site = Sites?.Site(siteId);
             var address = choice.Op == "release" || site == null ? null : CommissaryLocation.Address(site);
             if (address != null)
@@ -1284,18 +1105,12 @@ namespace FoodTrucks
             return Notices.Text(key, data);
         }
 
-        // Says why a vehicle isn't in a bay: within one's radius on its door's side but not legally parked, or not at one.
         private static void SayNotInBay(VehicleInstance vehicle, string kind)
         {
             var near = Sites?.Sites.FirstOrDefault(s => !InBay(vehicle, s, out var whyNot) && whyNot.StartsWith("not legally parked", StringComparison.Ordinal));
             CartSelling.Say(near != null ? "foodtrucks:notification_commissary_park_legally" : "foodtrucks:notification_commissary_not_here", kind);
         }
 
-        // The test bridge's rent_bay: the Spaces choice for this vehicle at the commissary whose bay it stands in (rent or
-        // move), as if picked in that commissary's call, with the same checks, notice and text. Renting by phone needs no
-        // vehicle in the bay, so one standing near a bay (within RentNearMetres of its points, outside it or not legally
-        // parked) rents there too: blind run 2 (I25) had a bought truck beside the bay that the phone rented and
-        // rent_bay refused. Null when it ran; otherwise why not (a refusal shows its notice first).
         private const double RentNearMetres = 40.0;
         internal static string? RentBayForTesting(VehicleInstance vehicle)
         {
@@ -1321,8 +1136,6 @@ namespace FoodTrucks
             return ApplySpace(choice, site.Id, inCall: false) == null ? "the Spaces choice changed nothing (see the log)" : null;
         }
 
-        // Renting a space here, or moving the vehicle's space here; its first day's rent is charged at once. True when
-        // the space is here now.
         private static bool Rent(string vehicleId, string kind, string siteId)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -1335,7 +1148,6 @@ namespace FoodTrucks
                 Log.Error($"Commissary: no rent for {kind} in rules.json.");
                 return false;
             }
-            // Days not charged yet go to the old place first.
             ChargeRent(state, rules);
             Commissaries.Rent(state.Commissary, rules, vehicleId, kind, siteId, day);
             FoodTrucksSession.MarkChanged();
@@ -1358,7 +1170,6 @@ namespace FoodTrucks
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
             if (state == null || rules == null || !FoodTrucksSession.CanWrite) return false;
-            // Core wants the rent settled before a space goes.
             ChargeRent(state, rules);
             if (!Commissaries.Release(state.Commissary, vehicleId))
             {
@@ -1371,8 +1182,6 @@ namespace FoodTrucks
             return true;
         }
 
-        // What one fill-up loaded: the units per item, the foods nothing on board holds, the units the cargo refused and
-        // kept here, and the units left in stock here.
         private sealed class Loaded
         {
             public Dictionary<string, int> Items { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -1381,11 +1190,6 @@ namespace FoodTrucks
             public long Left { get; set; }
         }
 
-        // Loads the commissary's food into the vehicle (storage per piece; plan, "Storage per piece"): Core's
-        // StockTransfer.FillUp plans it, each fitted piece filled from its foods, a shared piece split evenly by weight
-        // and topped up from the other food. Foods with no fitted piece stay here, and so does equipment: a piece is
-        // fitted only when the player takes it by name (Commissary stock). Whatever doesn't go in goes back to the
-        // commissary's stock in its place. Fill up and the crew (CrewRestock) both load this way.
         private static Loaded LoadFromStock(SaveState state, FoodTrucks.Core.Demand.DemandTables tables, VehicleInstance vehicle, string kind, string siteId)
         {
             var result = new Loaded();
@@ -1402,7 +1206,6 @@ namespace FoodTrucks
             return result;
         }
 
-        // The game's signals for a cargo that changed outside its own loading: the HUD's count and the cargo event.
         private static void CargoChanged(VehicleInstance vehicle)
         {
             try
@@ -1413,11 +1216,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Commissary stock, cargo event: " + ex); }
         }
 
-        // ---- Crew restock (plan, "Commissary supply and crew restock") ----
-
-        // The commissary a crewed vehicle can restock at where it stands: the one where it rents its space, when it is in
-        // that bay (the in-bay test). Whether anything there would load doesn't matter: the restock step also
-        // finds what the commissary was short of and texts it (review round 1, Astra and Sol). Null otherwise.
         internal static string? CrewRestockSite(SaveState state, VehicleInstance vehicle)
         {
             var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.id);
@@ -1426,8 +1224,6 @@ namespace FoodTrucks
             return InBay(vehicle, site, out _) ? site.Id : null;
         }
 
-        // The commissary where the vehicle rents its space, when it stands in that bay (the on-foot menu's Clean); null
-        // otherwise, with why for the log.
         internal static CommissarySite? OwnBay(SaveState state, VehicleInstance vehicle, out string why)
         {
             var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.id);
@@ -1440,11 +1236,6 @@ namespace FoodTrucks
             return null;
         }
 
-        // The route's stops in the bay of the commissary where the vehicle rents its space (within the bay radius of a
-        // resolved bay point, on the door's side): such a stop is reached only in the bay, and a crew with nothing to sell
-        // may still drive to it to restock (Core VehicleWhere.BayStops, review rounds 2 and 3 of the balance pass). An
-        // unknown street side counts as not in it and isn't cached, so it is read again next time. Cached per vehicle
-        // while its commissary, bay and stops stay the same.
         internal static IReadOnlyCollection<int> CrewBayStops(SaveState state, VehicleState vehicle)
         {
             var stops = vehicle.Schedule?.Stops;
@@ -1471,12 +1262,6 @@ namespace FoodTrucks
 
         private static readonly Dictionary<string, (string Key, IReadOnlyCollection<int> Stops)> bayStopCache = new Dictionary<string, (string, IReadOnlyCollection<int>)>();
 
-        // Where a crew parks a vehicle arriving at a stop in its own bay: the site's resolved bay points, each lined up
-        // with its lane and the hatch to the pavement (a nose-in bay in a lot as measured), then places along the bay's
-        // paint nearest the first point, as the test bridge's bay teleport does. The caller tries them in order, takes
-        // the first free one and keeps it only if the vehicle then stands in the bay by InBay. Every place along the paint
-        // is listed (every metre), not a first few, so a bay with a truck in its middle still offers its free ends; each
-        // zone's facing is probed once.
         internal static List<(Vector3 Position, Quaternion Rotation)> BayPlaces(CommissarySite site, float halfLength)
         {
             var points0 = ResolvedBays(site);
@@ -1490,8 +1275,6 @@ namespace FoodTrucks
         private static readonly Dictionary<string, (string Key, List<(Vector3, Quaternion)> Places)> bayPlaceCache =
             new Dictionary<string, (string, List<(Vector3, Quaternion)>)>();
 
-        // The part of the in-bay test that doesn't depend on where the vehicle stands: the bay resolved, and the street's
-        // side readable at its first point (InBayAnswer gives no answer while the driving lanes round the door aren't read).
         internal static bool BayReady(CommissarySite site, out string why)
         {
             var rules = Rules;
@@ -1549,17 +1332,12 @@ namespace FoodTrucks
             return result;
         }
 
-        // The commissary's stock of the vehicle's foods, as Core's key for "did it change since the crew last tried".
         internal static string? CrewStockKey(SaveState state, VehicleInstance vehicle, string kind, string siteId)
         {
             var tables = DemandData.Tables;
             return tables == null ? null : FoodTrucks.Core.Fleet.CrewRestock.StockKey(tables, kind, CargoLimit.Lines(vehicle), InStock(state, siteId));
         }
 
-        // The crew loads food with Fill up's code before it sets off (HireRoutes, on Core's Restock step),
-        // never spare equipment. The log says what went in; when a fitted piece still has room and the commissary has
-        // none of its foods (an empty commissary included), the commissary texts what was missing, once per vehicle and
-        // game day (Core CrewRestock).
         internal static void CrewRestock(SaveState state, VehicleState saved, VehicleInstance vehicle, string kind, string siteId, long now)
         {
             var tables = DemandData.Tables;
@@ -1585,7 +1363,6 @@ namespace FoodTrucks
                 });
         }
 
-        // "Tacos, Chopped Cheese: the Griddle is full (160/160)": the piece's foods still in stock here.
         private static string PieceFull(VehicleInstance vehicle, StoragePool pool, List<CommissaryStockLine>? stock)
         {
             var foods = pool.Piece.Products.Where(p => stock != null && stock.Any(l => l.ItemName == p && l.Units > 0))
@@ -1595,8 +1372,6 @@ namespace FoodTrucks
                 .Replace("{load}", pool.LoadUnits.ToString()).Replace("{capacity}", pool.Capacity.ToString());
         }
 
-        // The foods loaded, "80 Hotdog (the Hotdog Grill holds 80)": a food whose piece is now full while more of its
-        // foods stay in stock says why the load stopped there; for a shared piece the note follows the last of its foods.
         private static List<string> FoodParts(FoodTrucks.Core.Demand.DemandTables tables, VehicleInstance vehicle, StorageView? view,
             Dictionary<string, int> loaded, List<CommissaryStockLine>? stock)
         {
@@ -1613,13 +1388,11 @@ namespace FoodTrucks
             return parts;
         }
 
-        // "(the Hotdog Grill holds 80)", or "(2 Hotdog Grills hold 160)".
         private static string CapNote(VehicleInstance vehicle, StoragePool pool) =>
             LocalizorManager.GetLocalization(pool.Pieces > 1 ? "foodtrucks:commissary_restock_capped_many" : "foodtrucks:commissary_restock_capped", null)
                 .Replace("{piece}", StoragePanel.PieceName(vehicle, pool.Piece)).Replace("{count}", pool.Pieces.ToString())
                 .Replace("{capacity}", pool.Capacity.ToString());
 
-        // A piece is full for its foods still in stock here: not even one more of the lightest of them fits.
         private static bool Capped(FoodTrucks.Core.Demand.DemandTables tables, StoragePool pool, List<CommissaryStockLine>? stock)
         {
             if (stock == null) return false;
@@ -1629,7 +1402,6 @@ namespace FoodTrucks
             return pool.Room + 1e-9 < lightest;
         }
 
-        // What this commissary holds of each item.
         private static Dictionary<string, int> InStock(SaveState state, string siteId)
         {
             var wanted = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -1638,9 +1410,6 @@ namespace FoodTrucks
             return wanted;
         }
 
-        // What loaded units carry from their batch (review round 1 of the UI flow): ordered stock joins the fleet's pool of
-        // ordered units on vehicles, so a return keeps its tax origin (Core Commissaries.TookOnVehicle), and food that was
-        // on a vehicle before keeps the day it first came on board (Core ReputationBook.Restored).
         private static void Followed(SaveState state, VehicleInstance vehicle, CommissaryStockLine line, int moved)
         {
             try
@@ -1657,8 +1426,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error($"Commissary stock, following {line.ItemName} onto {vehicle.id}: {ex}"); }
         }
 
-        // Takes the wanted units out of stock, oldest first, loads them through TryToAddToCargo (so CargoLimit still has the
-        // last word) and returns what didn't go in to its batch. Returns the units returned.
         private static long Load(SaveState state, VehicleInstance vehicle, string siteId, IReadOnlyDictionary<string, int> wanted,
             Dictionary<string, int> loaded)
         {
@@ -1693,10 +1460,6 @@ namespace FoodTrucks
 
         private static string Format(string key, params string[] values) => string.Format(LocalizorManager.GetLocalization(key, null), values);
 
-        // ---- Ordering (the commissary's phone contact) ----
-
-        // What a commissary sells: economy.json's foods and the game items its equipment maps to, where the game has the
-        // item (a mod's items only while it is installed) and a price. Foods first, then machines, each by name.
         internal static List<(string Item, int Box, long UnitCents)> Catalogue(bool machines)
         {
             var tables = DemandData.Tables;
@@ -1710,17 +1473,14 @@ namespace FoodTrucks
                 var item = ItemsGetter.GetByName(name, suppressError: true);
                 if (item == null) continue;
                 var price = item.GetWholesalePrice();
-                // Furniture has no wholesale price: its shop price, with the difficulty's market multiplier as GetWholesalePrice applies to foods.
                 if (price <= 0f) price = item.DefaultMarketPrice * (SaveGameManager.Current?.gameVariables.marketPriceMultiplier ?? 1f);
                 var cents = (long)Math.Round(price * 100.0);
                 if (cents <= 0) continue;
-                // Equipment is sold by the piece, whatever box the game packs it in; food by the game's whole box.
                 list.Add((name, machines ? 1 : Math.Max(1, item.boxSize), cents));
             }
             return list.OrderBy(i => LocalizorManager.GetLocalization(i.Item1, null), StringComparer.CurrentCulture).ToList();
         }
 
-        // What the commissary's order form lists: the catalogue with what this commissary holds of each item.
         internal static List<CommissaryOrderForm.Line> FormLines(SaveState state, string siteId)
         {
             var stock = state.Commissary.Stock.TryGetValue(siteId, out var lines) ? lines : new List<CommissaryStockLine>();
@@ -1729,7 +1489,6 @@ namespace FoodTrucks
                 .ToList();
         }
 
-        // A quote placed as Core's orders. No money moves now: each order is paid when it arrives (Deliver).
         internal static IReadOnlyList<CommissaryOrder> PlaceQuote(string siteId, CommissaryQuote quote)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -1752,8 +1511,6 @@ namespace FoodTrucks
             return orders;
         }
 
-        // A quote for an order to this commissary, delivered tomorrow: one flat fee for the delivery, none when something
-        // else already arrives there tomorrow morning (Core CommissaryOrdering.SharesDelivery). Null without data.
         internal static CommissaryQuote? QuoteFor(string siteId, IEnumerable<CommissaryOrderRequest> requests)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -1763,7 +1520,6 @@ namespace FoodTrucks
             return CommissaryOrdering.Quote(rules, requests, CommissaryOrdering.SharesDelivery(state.Commissary, siteId, tomorrow));
         }
 
-        // A confirmed order that repeats: Core keeps it as a standing order, its first delivery tomorrow.
         internal static CommissaryStandingOrder? PlaceStanding(string siteId, CommissaryQuote quote, CommissaryRepeat repeat, int? firstDay = null)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -1786,8 +1542,6 @@ namespace FoodTrucks
             return true;
         }
 
-        // Why a quote doesn't fit a food's weekly limit, for the phone: "Hot dog: 2 boxes left in the week from Monday
-        // (day 8), the order needs 3". Null when it fits.
         internal static string? OverLimit(SaveState state, CommissaryRules rules, string siteId, CommissaryQuote quote, CommissaryRepeat repeat, int? firstDay = null)
         {
             var today = (int)(HireCrew.Now() / 1440) + 1;
@@ -1801,8 +1555,6 @@ namespace FoodTrucks
                 .Replace("{limit}", rules.FoodBoxLimit(check.ItemName!).ToString());
         }
 
-        // The test bridge's fixture: the phone's Rent for this vehicle at this commissary, without standing in
-        // its bay (the commissary is unlocked first, as the first visit does). Null when the vehicle has its space there.
         internal static string? RentForTesting(string vehicleId, string siteId)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -1818,10 +1570,6 @@ namespace FoodTrucks
             return state.Commissary.Spaces.Any(s => s.VehicleId == vehicleId && s.CommissaryId == siteId) ? null : "the rent didn't happen (see the log)";
         }
 
-        // The test bridge's order: the phone form's confirm without the call. The same Core quote and order code and log
-        // lines; nothing is paid now (orders are paid on delivery). `items` are item keys or names with their boxes.
-        // Returns the orders placed and the delivery fee the quote adds (0 when another order already arrives there that
-        // morning), or why none were placed.
         internal static (IReadOnlyList<CommissaryOrder> Orders, string? Refusal, long FeeCents) OrderForTesting(string siteId, IEnumerable<(string Item, int Boxes)> items)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -1853,14 +1601,8 @@ namespace FoodTrucks
             return (placed, placed.Count == 0 ? "Core placed no order" : null, quote.FeeCents);
         }
 
-        // ---- The uninstall step ----
-
-        // Delivered stock is paid back at its goods price; open orders are cancelled with nothing to pay back, since they
-        // are paid on delivery. Debts the game takes now are paid, the rest dropped, and the contacts go with the mod.
         public static void RemoveForUninstall()
         {
-            // Set first: if the refund or a payment below throws, the mod's contacts still lose their protection
-            // (ModContacts) and the bookings contact isn't added again in the morning (Catering.OnNewDay).
             uninstalled = true;
             var state = FoodTrucksSession.CurrentState;
             var rules = Rules;
@@ -1868,18 +1610,14 @@ namespace FoodTrucks
             {
                 var commissary = state.Commissary;
                 var spaces = commissary.Spaces.Count;
-                // Rent up to today belongs to the vehicles' time there.
                 try { ChargeRent(state, rules); }
                 catch (Exception ex) { Log.Error("Uninstall: commissary rent: " + ex); }
-                // Stock a logistics plan brought was never paid under the commissary's label (LogisticsCommissary).
                 var fromPlans = FoodTrucks.Core.Commissary.CommissaryLogistics.GoodsCents(commissary);
-                // Nor was stock a vehicle gave back at the bay (Commissary stock): it may have come from a wholesaler.
                 var fromVehicles = Commissaries.ReturnedGoodsCents(commissary);
                 var refund = Commissaries.Refund(commissary);
                 var paidBack = false;
                 if (refund.Total > 0)
                 {
-                    // The game's tax tracking ignores money coming in, so the deduction is taken back by hand below.
                     var info = new TransactionInfo("foodtrucks:transaction_commissary_refund", new Dictionary<string, string>());
                     paidBack = Payments.PayIn(refund.Total, info);
                     if (paidBack)
@@ -1889,7 +1627,6 @@ namespace FoodTrucks
                     }
                     else Log.Error($"Uninstall: the commissary refund of {CartSelling.Money(refund.Total)} was not paid.");
                 }
-                // Rent and fines still owed: paid now if the game takes them, else dropped.
                 PayPending(state, rules, showNotification: false);
                 if (commissary.Charges.Count > 0 || commissary.Fines.Count > 0)
                     Log.Error($"Uninstall: {commissary.Charges.Count} commissary charges and {commissary.Fines.Count} fines unpaid, dropped.");
@@ -1912,9 +1649,6 @@ namespace FoodTrucks
             if (removed > 0) Log.Info($"Uninstall: {removed} commissary contacts removed.");
         }
 
-        // Takes a refunded amount off this tax year's deductions under the commissary label (TaxHelper keeps them per label
-        // and values in currentTaxPeriodDeductibleExpenses; it only ever adds). Never below 0; returns the cents taken.
-        // Rent shares the label, so an order paid in an earlier tax year can take this year's rent deduction down.
         internal static long ReverseDeduction(long cents)
         {
             var expenses = SaveGameManager.Current?.currentTaxPeriodDeductibleExpenses;
@@ -1930,23 +1664,13 @@ namespace FoodTrucks
             return (long)Math.Round(cents - Math.Max(0.0, left) * 100.0);
         }
 
-        // ---- Debug ----
-
-        // Where each commissary's bay is from the player and the vehicle they are in, and the nearest one.
-        // ---- The test bridge's commissary bay_candidates (docs/test-bridge.md) ----
-
         internal sealed class BayCandidate
         {
             public double X, Z, Heading, Distance;
-            // The walk from the door's NavMesh point (null from a point set in data, or with no walk start).
             public string? Walk;
             public float? WalkMetres, StraightMetres;
-            // Whether the straight walk from the door crosses no driving lane (Core BaySide); null with no door.
             public bool? SameSide;
-            // The place the automatic search picks from this origin.
             public bool Automatic;
-            // Why the automatic search passes this place over ("farther than the automatic pick" when it takes a nearer
-            // one first); null for the place it takes (Automatic).
             public string? Rejected;
         }
 
@@ -1956,18 +1680,12 @@ namespace FoodTrucks
             public double X, Z;
             public Vector3? Door;
             public string WalkStart = "";
-            // A point set in data: whether it is itself on the door's side (null for an entrance, which is the door).
             public bool? SameSide;
             public int Colliders;
             public bool Truncated;
             public List<BayCandidate> Candidates = new List<BayCandidate>();
         }
 
-        // Legal truck spots (the game's wheel test, as BaySnap's) within radius of each search origin, nearest first, each
-        // with its walk from the door, whether it is on the door's side of the street (Core BaySide) and why the automatic
-        // search (BaySnap.MaxMetres, the side and walk rules) would pass it over. The origins are a commissary's (its
-        // entrances, or the point set in data), or with an address any building's entrances, searched as a commissary's
-        // would be: for scouting a new garage. Reads only; nothing is stored. Status is null for an address.
         internal static (string? Status, List<BayCandidateOrigin> Origins) BayCandidatesForTesting(string? siteId, string? address, double radius)
         {
             CommissarySite? site = null;
@@ -2002,12 +1720,9 @@ namespace FoodTrucks
                 var door = doors == null || doors.Length == 0 ? (Vector3?)null : doors.OrderBy(d => Flat(d, origin)).First();
                 var entry = new BayCandidateOrigin { Kind = measured ? "data" : "entrance", X = origin.X, Z = origin.Z, Door = door };
                 var centre = new Vector3((float)origin.X, door?.y ?? PlayerHelper.GetPosition().y, (float)origin.Z);
-                // Wide enough for the automatic search's 30 m too, so its pick never changes with the listing radius
-                // (review round 2, Astra and Sol).
                 var probe = new Legality.ParkingProbe(centre, (float)Math.Max(radius, BaySnap.MaxMetres) + 8f);
                 entry.Colliders = probe.Count;
                 entry.Truncated = probe.Truncated;
-                // The side rule's lanes, read for the whole listing radius.
                 List<((double X, double Z) A, (double X, double Z) B)>? sideLanes = null;
                 var laneless = false;
                 if (door != null)
@@ -2016,7 +1731,6 @@ namespace FoodTrucks
                     sideLanes = side.Lanes ?? throw new InvalidOperationException(side.Why.Length > 0
                         ? "the traffic lanes couldn't be read (" + side.Why + "); try again in a few seconds"
                         : "the traffic system isn't ready to check the door's street; try again in a few seconds");
-                    // No lane at all: the side is unknown, as the search treats it (it waits and tries again).
                     if (sideLanes.Count == 0)
                     {
                         laneless = true;
@@ -2046,10 +1760,6 @@ namespace FoodTrucks
                         default: throw new InvalidOperationException("the traffic system isn't ready to check the door's street; try again in a few seconds");
                     }
                 }
-                // The automatic pick is the bay search's own: Nearest within BaySnap.MaxMetres with the same rules (the side
-                // from the door; the walk from the door's NavMesh point when it has a short walk to the street, none from a
-                // point set in data or a door off the NavMesh), and nothing at all from a door cut off from the street, a
-                // point set in data that is itself across the road, or an origin with no door.
                 Func<double, double, bool>? reach = null;
                 if (!cutOff && sideLanes != null)
                 {
@@ -2123,7 +1833,6 @@ namespace FoodTrucks
                          (vehicle != null ? $", {CommissaryTables.Distance(ResolvedPoints(site), vehicle.Value.x, vehicle.Value.z):F0} m from the vehicle" : "") + ".");
             }
             var distance = CommissaryTables.Distance(ResolvedPoints(nearest), from.x, from.z);
-            // In the bay is the same test the 04:00 check uses: the vehicle legally parked and its middle within the radius.
             string standing;
             if (ResolvedBays(nearest) == null) standing = "bay not resolved yet";
             else if (cart == null || vehicle == null) standing = distance <= rules.BayRadiusMetres ? "on foot, within the bay's radius" : "outside the bay";
@@ -2136,8 +1845,6 @@ namespace FoodTrucks
             CartSelling.Notify("foodtrucks:notification", ("message", $"Nearest commissary: {Name(nearest)}, {distance:F0} m ({standing})."));
         }
 
-        // Orders on the way arrive now and are paid, as if it were their 08:00, and a standing order's delivery due by
-        // tomorrow comes too (throwaway saves).
         public static void DeliverForTesting()
         {
             var state = FoodTrucksSession.CurrentState;
@@ -2146,15 +1853,12 @@ namespace FoodTrucks
             var now = HireCrew.Now();
             var day = (int)(now / 1440) + 1;
             var minute = (int)(now % 1440);
-            // Everything is delivered today, never on a day before day 1 (Sol, review round 1: day 1 before 08:00 made day 0).
             var count = 0;
             foreach (var order in state.Commissary.Orders.Where(o => o.DeliverDay > day))
             {
                 order.DeliverDay = day;
                 count++;
             }
-            // A standing order's delivery due today or tomorrow comes now; its schedule goes on from its own day, so no
-            // delivery is added and none of its days change (Core BookEarly).
             var early = 0;
             var prices = TodaysPrices();
             foreach (var standing in state.Commissary.StandingOrders.Where(o => o.NextDay >= day && o.NextDay <= day + 1).OrderBy(o => o.Id).ToList())
@@ -2164,13 +1868,11 @@ namespace FoodTrucks
                 early++;
             }
             if (early > 0) FoodTrucksSession.MarkChanged();
-            // Delivered (and so removed) in the same step, before any save could see the moved days.
             Deliver(state, rules, day, Math.Max(minute, rules.DeliveryMinute));
             Log.Info($"Debug: {count} commissary orders brought forward and {early} standing deliveries due by tomorrow booked early; all delivered now (paid on delivery).");
             CartSelling.Notify("foodtrucks:notification", ("message", $"Debug: {count} orders and {early} standing deliveries brought forward; see the commissary's texts."));
         }
 
-        // What the 04:00 check would say now, without fining anyone.
         public static void NightForTesting()
         {
             var state = FoodTrucksSession.CurrentState;
@@ -2192,10 +1894,6 @@ namespace FoodTrucks
         }
     }
 
-    // A commissary's call, all in its conversation: what it holds for you, then "Order stock" opens the order form
-    // (CommissaryOrderForm), the commissary reads the order back with its total, and "Confirm order" places it.
-    // "Spaces and standing orders" leads to Spaces (rent, move or give up a vehicle's space here, picked from the game's
-    // list) and Standing orders. Without a space here the call starts at that second step (plan, "UI flow").
     internal sealed class CommissaryDialog : Dialog
     {
         public CommissaryDialog()
@@ -2226,7 +1924,6 @@ namespace FoodTrucks
             }
         };
 
-        // Hanging up, from any step.
         private static void HangUp()
         {
             CommissaryOrderForm.End("hung up");
@@ -2238,7 +1935,6 @@ namespace FoodTrucks
 
         private static TextMessage HangUpMessage() => new TextMessage("ba:messagetype_contacts_message_player_cancel_call");
 
-        // The commissary this contact belongs to.
         private static CommissarySite? Site()
         {
             var id = Current?.contact?.id;
@@ -2246,9 +1942,6 @@ namespace FoodTrucks
             return DemandData.Commissaries?.Site(id.Substring(Commissary.ContactPrefix.Length));
         }
 
-        // Null when this commissary takes an order now, else the closing line saying why not.
-        // forOrders false: Spaces and standing orders, which need no space here (review round 1, Astra: a standing
-        // order outlives the last space, and must stay cancellable; Spaces is where a first space is rented).
         private static DialogEntry? Refusal(CommissarySite? site, bool forOrders = true)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -2267,17 +1960,14 @@ namespace FoodTrucks
 
         private static DialogEntry Start()
         {
-            // A Spaces list still open from an earlier call goes: this call is where the player is now.
             EndSpaces("a new call");
             var site = Site();
             var refusal = Refusal(site, forOrders: false);
             if (refusal != null) return refusal;
             var commissary = FoodTrucksSession.CurrentState!.Commissary;
-            // The call opens saying where the commissary is, when its building's address resolves.
             var address = CommissaryLocation.Address(site!);
             if (!CommissaryOrdering.CanOrder(commissary, site!.Id))
             {
-                // No space here: the call opens on Spaces and Standing orders, with the rent for a space.
                 var rules = DemandData.Rules!.Commissary!;
                 var nospace = new
                 {
@@ -2300,14 +1990,11 @@ namespace FoodTrucks
                 orders = Notices.Counted(commissary.Orders.Count(o => o.CommissaryId == site.Id), "foodtrucks:count_orders"),
                 standing = Notices.Counted(CommissaryStandingOrders.At(commissary, site.Id).Count, "foodtrucks:count_standing")
             };
-            // A new key for the text with standing orders: the phone words old messages again from their key and data.
             var key = CommissaryLocation.MessageKey("foodtrucks:dialog_commissary_start_standing", address);
             Notices.Send(Current.contact, new TextMessage(key, ToDictionary(data), read: true, isNewInteraction: true));
             return Menu(site.Id, LocalizorManager.Localize(key, data));
         }
 
-        // The call's menu: Order stock and "Spaces and standing orders" with a space here; without one, the second
-        // step's choices straight away.
         private static DialogEntry Menu(string siteId, Localizor.LanguageChangeEvent.LanguageChangeEventDataHolder message)
         {
             var commissary = FoodTrucksSession.CurrentState!.Commissary;
@@ -2325,7 +2012,6 @@ namespace FoodTrucks
             };
         }
 
-        // The second step: Spaces, and Standing orders when there are any.
         private static DialogEntry SpacesMenu(string siteId, Localizor.LanguageChangeEvent.LanguageChangeEventDataHolder message)
         {
             var refusal = Refusal(DemandData.Commissaries?.Site(siteId), forOrders: false);
@@ -2344,13 +2030,6 @@ namespace FoodTrucks
             };
         }
 
-        // ---- Spaces: the game's list picker, outside the phone ----
-
-        // The list the call opened, while its choice may still act: its number and the commissary. The picker shows
-        // outside the phone, as the vehicle page's prompts do (BizManVehiclePage: the price prompt), so
-        // the call ends and the phone closes for it (review round 1 of the UI flow, Opus); the choice is texted into the
-        // conversation, which the phone opens on again. A later list, a new call to a commissary or the uninstall step
-        // forget it (EndSpaces), and the picker's own close drops its callback, so a late click does nothing.
         private static (int Id, string SiteId)? spacesOpen;
         private static int spacesCount;
 
@@ -2365,7 +2044,6 @@ namespace FoodTrucks
                 Log.Info($"Commissary call {siteId}: Spaces lists nothing: the player has no food cart or truck.");
                 return SpacesMenu(siteId, LocalizorManager.Localize("foodtrucks:dialog_commissary_spaces_none", (object?)null));
             }
-            // The game's list picker belongs to the interior designer and registers itself when that UI starts.
             if (DropdownSelector.onShow == null)
             {
                 Log.Error($"Commissary call {siteId}: Spaces can't open: the game's list picker isn't available in this scene.");
@@ -2380,7 +2058,6 @@ namespace FoodTrucks
             Log.Info($"Commissary call {siteId}: Spaces lists {choices.Count} vehicles ({string.Join(", ", choices.Select(c => $"{World.Short(c.VehicleId)} {c.Op}"))}); " +
                      "the call ends and the phone closes for the list.");
             Notices.Send(contact, new TextMessage("foodtrucks:dialog_commissary_spaces_pick", null, read: true));
-            // The call ends as hanging up ends it, the phone closes, and the list opens the next frame.
             CommissaryOrderForm.End("Spaces list");
             PhoneCall.HangUp();
             InstanceBehavior<UIs>.Instance?.fullMenu?.Toggle(show: false);
@@ -2404,9 +2081,6 @@ namespace FoodTrucks
             return null;
         }
 
-        // A vehicle picked: acts only while the list is still the one opened (EndSpaces). The commissary texts what
-        // changed into its conversation (Commissary.ApplySpace), and the phone opens on it again, as the vehicle page
-        // comes back after its prompts.
         private static void Chosen(int id, string siteId, Contact contact, Commissary.SpaceChoice? choice)
         {
             if (spacesOpen?.Id != id)
@@ -2435,8 +2109,6 @@ namespace FoodTrucks
             });
         }
 
-        // Forgets the Spaces list and closes the game's picker if it is still showing it: a new list, a new call to a
-        // commissary, the uninstall step.
         internal static void EndSpaces(string why)
         {
             var current = spacesOpen;
@@ -2456,8 +2128,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Commissary call, closing the Spaces list: " + ex); }
         }
 
-        // The standing orders, one at a time: what it delivers, how often and when next. Next (or Done on the last, back to
-        // the menu), or cancel it.
         private static DialogEntry? Standing(string siteId, int index)
         {
             var site = DemandData.Commissaries?.Site(siteId);
@@ -2503,11 +2173,9 @@ namespace FoodTrucks
                     { "repeat", Commissary.StandingRepeat(standing) },
                     { "items", Commissary.StandingItems(standing) }
                 }, read: true));
-            // The next one moves up into this place.
             return Standing(siteId, index);
         }
 
-        // The game's phone order form, filled with what the commissary sells (CommissaryOrderForm).
         private static DialogEntry? Form(string siteId)
         {
             var site = DemandData.Commissaries?.Site(siteId);
@@ -2536,7 +2204,6 @@ namespace FoodTrucks
             };
         }
 
-        // The form sent: the commissary reads the order back with its total, paid on delivery. Nothing is booked yet.
         private static DialogEntry? FormSet(string siteId)
         {
             var site = DemandData.Commissaries?.Site(siteId);
@@ -2554,14 +2221,12 @@ namespace FoodTrucks
                     CartSelling.Notify("foodtrucks:notification_commissary_order_too_many", ("max", CommissaryOrdering.MaxBoxesPerOrder.ToString()));
                     return null;
             }
-            // A food over its weekly limit for tomorrow's week: refused, the form stays to change it.
             var over = Commissary.OverLimit(FoodTrucksSession.CurrentState!, rules, siteId, quote, CommissaryRepeat.Once);
             if (over != null)
             {
                 CartSelling.Notify("foodtrucks:notification", ("message", over));
                 return null;
             }
-            // The order is read back as it stands now: the form and its item list are done with ("Change" opens a fresh one).
             CommissaryOrderForm.End("read back");
             var items = string.Join("<br>", quote.Lines.Select(LineText));
             Notices.SendFromPlayer(Current.contact, new TextMessage("foodtrucks:message_commissary_order_player", new Dictionary<string, string> { { "items", items } }, read: true));
@@ -2574,7 +2239,6 @@ namespace FoodTrucks
                 total = CartSelling.Money(quote.TotalCents),
                 time = CityPitches.Clock(rules.DeliveryMinute)
             };
-            // The fee is per delivery here: shared when another order already arrives tomorrow morning.
             var quoteKey = quote.SharedDelivery ? "foodtrucks:dialog_commissary_quote_shared" : "foodtrucks:dialog_commissary_quote";
             Notices.Send(Current.contact, new TextMessage(quoteKey, ToDictionary(data), read: true));
             Log.Info($"Commissary order at {siteId}: read back {quote.Boxes} boxes ({string.Join(", ", quote.Lines.Select(l => $"{l.Boxes} {l.ItemName}"))}), " +
@@ -2592,9 +2256,6 @@ namespace FoodTrucks
             };
         }
 
-        // Confirmed: once, or repeating (a standing order, Core CommissaryStandingOrders). Just once places it as before;
-        // Repeat asks every day or every week on tomorrow's weekday. `message` replaces the question (an over-limit
-        // refusal of a repeat, so Just once stays within reach).
         private static DialogEntry? HowOften(string siteId, CommissaryQuote quote, string? message = null)
         {
             var site = DemandData.Commissaries?.Site(siteId);
@@ -2615,8 +2276,6 @@ namespace FoodTrucks
             };
         }
 
-        // The first delivery day is fixed when the question names its weekday, so a call open over midnight books the
-        // weekday it named (Core CommissaryStandingOrders.FirstDay).
         private static DialogEntry? Repeat(string siteId, CommissaryQuote quote)
         {
             var site = DemandData.Commissaries?.Site(siteId);
@@ -2630,15 +2289,12 @@ namespace FoodTrucks
                 OnConfirm = Guard(() => PlacedStanding(siteId, quote, CommissaryRepeat.Daily, first)),
                 ConfirmTextOverride = LocalizorManager.Localize("foodtrucks:dialog_commissary_every_day", (object?)null),
                 OnSecondOption = Guard(() => PlacedStanding(siteId, quote, CommissaryRepeat.Weekly, first)),
-                // The game localizes this key with no arguments, so the weekday is in the message above, not on the button.
                 SecondOptionTextOverride = "foodtrucks:dialog_commissary_every_week",
                 OnCancel = HangUp,
                 onCancelMessage = HangUpMessage()
             };
         }
 
-        // A standing order booked: its food has to fit each food's weekly limit in its first two weeks, else the
-        // commissary says why and asks again how often, so Just once (which may still fit) stays within reach.
         private static DialogEntry? PlacedStanding(string siteId, CommissaryQuote quote, CommissaryRepeat repeat, int firstDay)
         {
             var site = DemandData.Commissaries?.Site(siteId);
@@ -2675,7 +2331,6 @@ namespace FoodTrucks
             };
         }
 
-        // "3 boxes of Dumplings (240 items, $408 a box)"; equipment by the piece: "Griddle × 2, $2,000 each".
         private static string LineText(CommissaryQuoteLine line)
         {
             var piece = DemandData.Tables?.EquipmentForGameItem(line.ItemName) != null;
@@ -2686,15 +2341,12 @@ namespace FoodTrucks
                 line.Boxes, LocalizorManager.GetLocalization(line.ItemName, null), line.Units, CartSelling.Money(line.BoxPriceCents));
         }
 
-        // Confirmed: Core books the orders, to be paid on delivery; each order's text goes into the conversation.
         private static DialogEntry? Placed(string siteId, CommissaryQuote quote)
         {
             var site = DemandData.Commissaries?.Site(siteId);
             var refusal = Refusal(site);
             if (refusal != null) return refusal;
             var rules = DemandData.Rules!.Commissary!;
-            // Checked again at placing: midnight may have passed since the read-back, into a new week (review round 1, Opus).
-            // Over the limit, the commissary says why and the order form opens again to change it (review round 2, Opus).
             var over = Commissary.OverLimit(FoodTrucksSession.CurrentState!, rules, siteId, quote, CommissaryRepeat.Once);
             if (over != null)
             {
@@ -2702,7 +2354,6 @@ namespace FoodTrucks
                 CartSelling.Notify("foodtrucks:notification", ("message", over));
                 return Form(siteId);
             }
-            // Whether the fee is shared is decided again now: another order may have been placed since the read-back.
             var tomorrow = (int)(HireCrew.Now() / 1440) + 2;
             var shared = CommissaryOrdering.SharesDelivery(FoodTrucksSession.CurrentState!.Commissary, siteId, tomorrow);
             var placed = Commissary.PlaceQuote(siteId, quote);
@@ -2722,7 +2373,6 @@ namespace FoodTrucks
                 texts.Add(LocalizorManager.Localize(key, data).ToString());
             }
             {
-                // One text for the delivery fee: once for tomorrow morning's delivery here, whatever arrives with it.
                 var key = shared ? "foodtrucks:message_commissary_ordered_fee_shared" : "foodtrucks:message_commissary_ordered_fee";
                 var data = new Dictionary<string, string> { { "fee", CartSelling.Money(rules.DeliveryFeeCents) }, { "time", CityPitches.Clock(rules.DeliveryMinute) } };
                 Notices.Send(Current.contact, new TextMessage(key, data, read: true));

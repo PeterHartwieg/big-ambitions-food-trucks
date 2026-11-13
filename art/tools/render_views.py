@@ -74,7 +74,6 @@ scene.render.engine = "BLENDER_EEVEE"
 scene.render.resolution_x, scene.render.resolution_y = 1200, 900
 scene.view_settings.view_transform = "AgX"
 
-# Azimuth measured from the front (-Y) towards the model's right (-X).
 views = {"a-front-right": (40, 18), "b-right-side": (90, 6), "c-rear-left": (215, 22), "d-front-left-high": (-35, 45)}
 for name, (az, el) in views.items():
     a, e = math.radians(az), math.radians(el)

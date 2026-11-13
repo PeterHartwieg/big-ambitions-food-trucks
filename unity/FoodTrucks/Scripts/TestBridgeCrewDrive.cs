@@ -66,7 +66,6 @@ namespace FoodTrucks
             }
         }
 
-        // Developer route inspection only: no route generation, spawning, repositioning or clock changes.
         private static JArray CrewWaypoints(JObject args)
         {
             var scene = UnityEngine.Object.FindObjectOfType<CurrentSceneData>();

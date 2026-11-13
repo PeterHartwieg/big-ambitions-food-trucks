@@ -50,7 +50,6 @@ SLOPE=.18
 def shelf_z(level, y): return [.146,.273,.386][level] + SLOPE*y
 
 def croissant(x,y,z):
-    # Six closed diamond cross-sections bent into a broad crescent.
     v=[]
     for i in range(6):
         a=math.radians(10+160*i/5)
@@ -67,7 +66,6 @@ def croissant(x,y,z):
     part(v,f,c)
 
 def donut(x,y,z,icing):
-    # Octagonal ring, four cross-section vertices. Top half is icing.
     v=[]
     for i in range(8):
         a=2*math.pi*i/8
@@ -81,7 +79,6 @@ def donut(x,y,z,icing):
     part(v,f,c)
 
 def cupcake(x,y,z,icing):
-    # One closed mesh: tapered paper cup, cake rim, angular frosting peak.
     rings=[(.024,0),(.030,.030),(.033,.035),(.027,.050),(.012,.066)]
     v=[(x+r*math.cos(i*math.pi/3),y+r*math.sin(i*math.pi/3),z+h)
        for r,h in rings for i in range(6)]
@@ -129,13 +126,11 @@ def build(stage=2):
     for ob in list(bpy.data.objects):
         if ob.name.startswith('PastryCase_'): bpy.data.objects.remove(ob,do_unlink=True)
     verts,faces,colors=[],[],[]
-    # Steel underside reaches z=0 over the origin; two front drawers.
     box((0,0,.0525),(.378,.316,.105),'steel')
     box((0,-.159,.052),(.365,.004,.088),'shadow')
     for x in [-.092,.092]:
         box((x,-.163,.053),(.178,.006,.084),'drawer')
         box((x,-.171,.073),(.087,.009,.009),'woodlight')
-    # Shallow slats running across the width, with a continuous supporting deck.
     for level in range(3):
         box((0,0,shelf_z(level,0)-.010),(.384,.318,.014),'wooddark',SLOPE)
         for j in range(5):
@@ -191,7 +186,6 @@ def atlas():
     bpy.ops.object.mode_set(mode='EDIT');bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.uv.smart_project(angle_limit=math.radians(66),island_margin=.006,area_weight=0,correct_aspect=True,scale_to_bounds=True)
     bpy.ops.object.mode_set(mode='OBJECT')
-    # Rasterise flat face colours into the unique UV islands; expand two pixels.
     pixels=np.zeros((512,512,4),dtype=np.float32);pixels[:]=(.4,.4,.4,1)
     mask=np.zeros((512,512),dtype=bool)
     uv=me.uv_layers.active.data
@@ -235,7 +229,6 @@ def finish():
     body=bpy.data.objects['PastryCase_Body']
     old=bpy.data.objects.get('PastryCase_Collision')
     if old: bpy.data.objects.remove(old,do_unlink=True)
-    # Hull of eight outer envelope corners, created by convex_hull, encloses all details.
     bm=bmesh.new()
     for x in [-.198,.198]:
         for y in [-.177,.177]:

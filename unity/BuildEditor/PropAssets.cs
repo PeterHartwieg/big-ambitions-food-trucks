@@ -7,14 +7,11 @@ using UnityEngine;
 
 namespace FoodTrucks.BuildEditor
 {
-    // Fixed props the vehicle prefabs carry, from art/props (tools/build-mod.sh copies them into Vehicles/PropArt):
-    // the cash register on the cart's counter and the truck's serving counter. Looks only: no collider.
     internal static class PropAssets
     {
         private const string Folder = ModAssets.ModFolder + "/Vehicles/PropArt";
         private const string Register = "CashRegister";
 
-        // A "Cash_Register" child of parent with the register's mesh and material, on layer; returns its renderer.
         public static MeshRenderer AddRegister(Transform parent, Vector3 position, Quaternion rotation, int layer, float scale = 1f)
         {
             var (mesh, material) = Load(Register);

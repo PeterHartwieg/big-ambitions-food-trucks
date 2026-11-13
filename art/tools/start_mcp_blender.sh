@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Opens a separate Blender with art/start.blend whose MCP bridge listens on its own port, so several
-# Sol runs can model at once. The Codex run then needs -c mcp_servers.blender.env.BLENDER_MCP_PORT='"<port>"'.
-# Preferences aren't saved in these instances, so the default port 9876 stays as it is.
-# Usage: art/tools/start_mcp_blender.sh <port>
 set -euo pipefail
 PORT="${1:?port, for example 9877}"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"

@@ -5,9 +5,6 @@ using UnityEngine.UI;
 
 namespace FoodTrucks
 {
-    // A layout element whose height follows its width: the width the layout gives it over `Aspect` (width over height),
-    // at most `MaxHeight`. The vehicle drawing fills the Menu box's width this way (Peter, 16 October 2026: "bigger and
-    // wider"); the layout asks for heights after it has set widths, so the width read here is the one it will draw at.
     internal sealed class AspectHeight : UIBehaviour, ILayoutElement
     {
         internal float Aspect = 3f;

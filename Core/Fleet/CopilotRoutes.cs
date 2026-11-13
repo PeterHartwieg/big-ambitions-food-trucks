@@ -8,8 +8,6 @@ using Newtonsoft.Json;
 
 namespace FoodTrucks.Core.Fleet
 {
-    // A reviewed day replacement. This never fits times, hires crew or opens a
-    // closed weekday. The adapter resolves legal positions before calling it.
     public static class CopilotRoutes
     {
         public static string Digest(string text)
@@ -35,7 +33,6 @@ namespace FoodTrucks.Core.Fleet
                 Closed = old.Closed?.ToList() ?? new List<DayOfWeek>(),
                 CrewShifts = old.CrewShifts?.ToList() ?? new List<CrewShift>()
             };
-            // Check the player's order before the week is grouped for the mod.
             for (var i = 1; i < stops.Count; i++)
             {
                 var a = stops[i - 1]; var b = stops[i];

@@ -11,8 +11,6 @@ using UI;
 
 namespace FoodTrucks
 {
-    // Business closure at a commissary: one cart and its cargo, at the native resale multiplier.
-    // The game's VehicleInstance.GetSellingPrice returns zero for hand vehicles, including their cargo.
     internal static class CartSale
     {
         private static bool selling;
@@ -46,7 +44,6 @@ namespace FoodTrucks
             var cart = controller.vehicleInstance;
             var refusal = Refusal(cart);
             if (refusal != null) { CartSelling.Notify(refusal); return; }
-            // HudConfirm otherwise auto-confirms when its UI is absent. Never sell without a visible confirmation.
             if (HudConfirm.onShow == null) { CartSelling.Notify("foodtrucks:cart_sale_unavailable"); return; }
             var state = FoodTrucksSession.CurrentState!;
             var siteId = Commissary.SiteOf(cart)!.Id;
@@ -79,7 +76,6 @@ namespace FoodTrucks
                     CartSelling.Notify("foodtrucks:cart_sale_takings_pending");
                     return;
                 }
-                // Catch-up/held orders must never change the quoted inventory silently.
                 if (Quote(cart) != cents) { CartSelling.Notify("foodtrucks:cart_sale_changed"); return; }
                 Commissary.SettleRentForSale();
                 var game = SaveGameManager.Current;
@@ -88,7 +84,6 @@ namespace FoodTrucks
                     VehicleId = cart.id, Name = name, Cents = cents, Day = game.Day,
                     Minute = HireSchedules.Absolute(TimeHelper.CurrentDay, TimeHelper.CurrentHour * 60 + (int)TimeHelper.CurrentMinute)
                 };
-                // Remember the claim before deletion; payment is only allowed once native ownership is gone.
                 state.CartSales.Add(sale);
                 FoodTrucksSession.MarkChanged();
                 try
@@ -127,7 +122,6 @@ namespace FoodTrucks
             finally { selling = false; }
         }
 
-        // Also runs after reload. A failed native payout stays saved, and a still-owned cart never pays out.
         internal static void Retry(SaveState state)
         {
             if (selling || !FoodTrucksSession.CanWrite) return;
@@ -139,7 +133,6 @@ namespace FoodTrucks
                     if (SaveGameManager.Current.VehicleInstances.Concat(SaveGameManager.Current.privateDriverVehicleInstances ??
                         Enumerable.Empty<VehicleInstance>()).Any(v => v.id == sale.VehicleId))
                     {
-                        // A reload captured an interrupted deletion. No proceeds were paid while owned; discard its quote.
                         state.CartSales.Remove(sale);
                         FoodTrucksSession.MarkChanged();
                         continue;

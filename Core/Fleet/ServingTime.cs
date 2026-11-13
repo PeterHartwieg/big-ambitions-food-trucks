@@ -2,7 +2,6 @@ using System;
 
 namespace FoodTrucks.Core.Fleet
 {
-    // Selection limits for a single working spell. Selling still uses SalesSimulator, minute by minute.
     public static class ServingTime
     {
         public const int MinimumMinutes = 5;

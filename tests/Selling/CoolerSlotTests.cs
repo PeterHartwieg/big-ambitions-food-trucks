@@ -39,7 +39,6 @@ public class CoolerSlotTests
     [InlineData("truck", 4, 160)]
     public void HistoricalMultipleFridgesKeepCapacityAcrossEveryFittingOrder(string kind, int slots, int cans)
     {
-        // Native saves own cargo separately; these are historical cargo layouts, not native save fixtures.
         for (var count = 1; count <= slots; count++)
         {
             var old = Enumerable.Range(0, count).Select(i => Line(i % 2 == 0 ? Small : Large, nested: i % 2 == 1))

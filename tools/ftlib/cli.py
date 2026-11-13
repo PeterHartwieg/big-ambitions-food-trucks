@@ -17,16 +17,13 @@ def readable(value, indent=0):
     return json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
 
 
-# Options of `ft` itself (before the subcommand) that take a value.
 TOP_VALUE_OPTIONS = set()
-# Options of `ft call` that take a value, so their value is never read as a key=value argument.
 CALL_VALUE_OPTIONS = {'--args', '--timeout', '--json'}
 
 
 def call_flags(argv):
     """For the `call` subcommand only: a --json not followed by a JSON object means "print the raw reply" (as --raw),
     wherever it stands, and the output flags move after the key=value arguments so argparse never splits them."""
-    # The subcommand is the first word that isn't one of ft's own options.
     at = next((i for i, token in enumerate(argv) if not token.startswith('-')), None)
     if at is None or argv[at] != 'call':
         return argv
@@ -103,8 +100,6 @@ def main():
     p = sub.add_parser('call')
     p.add_argument('cmd')
     p.add_argument('pairs', nargs='*')
-    # --json anywhere on the line prints the raw JSON reply; --json '{...}' (a JSON object) is the call's arguments, as
-    # --args '{...}' is.
     p.add_argument('--json', dest='json_option', metavar='OBJECT')
     p.add_argument('--args', dest='arguments', metavar='OBJECT', help='The call arguments as a JSON object')
     p.add_argument('--raw', action='store_true', dest='call_raw', help='Print the raw reply (as --json does)')
@@ -168,7 +163,6 @@ def main():
             reply = bridge.call('shoot', shoot_args(args), args.timeout)
             if args.fetch:
                 local = str(fetch_shot(reply['result']['path'], args.fetch))
-                # In the result too, where --json readers look for the shot (live session 5), and at the top as before.
                 reply['result']['local_path'] = local
                 reply['local_path'] = local
                 for key in ('asis_path', 'game_path'):

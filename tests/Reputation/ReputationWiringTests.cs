@@ -34,8 +34,6 @@ public class ReputationWiringTests
 
         var shared = model.Estimate(Lunch(effect.CategoryShares, ReputationFactor.Combine(1, 1, effect.FootfallFactor)));
 
-        // Half the hot dog customers, but 10% more people pass two carts than one. The cooler isn't
-        // on the other cart, so the drink-only customers stay.
         Assert.Equal(0.5, effect.CategoryShares["fastfood"]);
         Assert.InRange(shared.CustomersPerHour / alone.CustomersPerHour, 0.5 * 1.1, 0.75);
     }
@@ -43,8 +41,6 @@ public class ReputationWiringTests
     [Fact]
     public void AContestedCategoryNeverPromotesAnother()
     {
-        // Hot dogs and pizza at lunch: fast food leads and pizza adds half its share. Halving the
-        // hot dog customers must not make pizza the full-weight category.
         var query = new DemandQuery
         {
             Areas = AreaMix.Single("office"),
@@ -65,8 +61,6 @@ public class ReputationWiringTests
     [Fact]
     public void ASplitUnderTheAppetiteCapNeverLiftsAnotherCategory()
     {
-        // Coffee and croissants at 06:00 on a rainy January weekday in Industry City: the menu's
-        // appetite runs into the cap of 1. Halving coffee must leave the bakery customers alone.
         var query = new DemandQuery
         {
             Areas = AreaMix.Single("industrial"),

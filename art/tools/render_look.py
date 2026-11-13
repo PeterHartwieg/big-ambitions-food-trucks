@@ -40,7 +40,7 @@ def material(item, i):
         return n
     bc = tex(item["bc"], True)
     if item.get("m"):
-        m = tex(item["m"], True)   # decoded as sRGB, as Unity samples the game's masks and ours (only G changes)
+        m = tex(item["m"], True)
         sep = nt.nodes.new("ShaderNodeSeparateColor")
         nt.links.new(m.outputs["Color"], sep.inputs[0])
         mix = nt.nodes.new("ShaderNodeMix")
@@ -50,7 +50,7 @@ def material(item, i):
         nt.links.new(bc.outputs["Color"], mix.inputs["A"])
         nt.links.new(sep.outputs["Green"], mix.inputs["B"])
         nt.links.new(mix.outputs["Result"], bsdf.inputs["Base Color"])
-        rem = nt.nodes.new("ShaderNodeMapRange")   # HDRP smoothness remap
+        rem = nt.nodes.new("ShaderNodeMapRange")
         rem.inputs["To Min"].default_value = item.get("smooth_min", 0.0)
         rem.inputs["To Max"].default_value = item.get("smooth_max", 1.0)
         nt.links.new(m.outputs["Alpha"], rem.inputs["Value"])
@@ -94,7 +94,7 @@ def load(item, i):
     for o in keep:
         o.data.materials.clear()
         o.data.materials.append(ma)
-        if item.get("smooth_all"):   # meshes from the game: their normals are part of the look
+        if item.get("smooth_all"):
             pass
     return keep
 
@@ -133,7 +133,6 @@ lo, hi = bounds(all_obs)
 centre = (lo + hi) / 2
 span = max(hi.x - lo.x, (hi.z - lo.z) * CFG.get("width", 1600) / CFG.get("height", 900))
 
-# Pavement
 bpy.ops.mesh.primitive_plane_add(size=200, location=(centre.x, 0, 0))
 ground = bpy.context.object
 gm = bpy.data.materials.new("Pavement")
@@ -143,7 +142,6 @@ gb.inputs["Base Color"].default_value = (0.12, 0.12, 0.115, 1)
 gb.inputs["Roughness"].default_value = 0.85
 ground.data.materials.append(gm)
 
-# Camera: three-quarter view from the front (-Y), slightly above, as a player on foot sees it.
 cam = bpy.data.objects.new("Cam", bpy.data.cameras.new("Cam"))
 sc.collection.objects.link(cam)
 sc.camera = cam

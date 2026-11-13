@@ -3,7 +3,6 @@ using System.Collections.Generic;
 
 namespace FoodTrucks.Core.Fleet
 {
-    // A box in its own frame: its centre and size (a box collider's center and size, or a mesh's local bounds).
     public readonly struct LocalBox
     {
         public LocalBox((double X, double Y, double Z) centre, (double X, double Y, double Z) size)
@@ -16,11 +15,6 @@ namespace FoodTrucks.Core.Fleet
         public (double X, double Y, double Z) Size { get; }
     }
 
-    // A vehicle's footprint in its own frame (x across, y up, z along): the axis-aligned box round its parts' boxes, each
-    // carried into the vehicle's frame by the matrix from the part's frame to the vehicle's (rotation and scale, then
-    // translation; row-major 3 x 4). The matrix is the vehicle's world-to-local times the part's local-to-world, so the
-    // result doesn't depend on where the vehicle stands or which way it faces; a world-aligned box read back into the
-    // vehicle's frame would grow as the vehicle turns (a 2 x 6 m truck at 45 degrees reads 5.7 x 5.7 m).
     public static class Footprint
     {
         public static (double X, double Y, double Z) Transform(double[] m, (double X, double Y, double Z) p)
@@ -31,7 +25,6 @@ namespace FoodTrucks.Core.Fleet
                     m[8] * p.X + m[9] * p.Y + m[10] * p.Z + m[11]);
         }
 
-        // Min and max corners in the vehicle's frame; null without parts.
         public static ((double X, double Y, double Z) Min, (double X, double Y, double Z) Max)? Box(IEnumerable<(double[] Matrix, LocalBox Box)> parts)
         {
             if (parts == null) throw new ArgumentNullException(nameof(parts));
@@ -52,8 +45,6 @@ namespace FoodTrucks.Core.Fleet
             return (min.Value, max.Value);
         }
 
-        // Whether two footprints on the ground overlap (separating axes), each grown by `margin` metres on every side.
-        // Height isn't looked at: the caller has already picked what stands at the vehicle's level.
         public static bool Overlap(FlatBox a, FlatBox b, double margin = 0)
         {
             foreach (var axis in new[] { a.Forward, a.Right, b.Forward, b.Right })
@@ -64,8 +55,6 @@ namespace FoodTrucks.Core.Fleet
             return true;
         }
 
-        // The same for two things that also have a height span (bottom and top, metres): they overlap only where both
-        // their spans and their footprints do, so a car on another parking level doesn't count (review round 6).
         public static bool Overlap(FlatBox a, (double Bottom, double Top) aSpan, FlatBox b, (double Bottom, double Top) bSpan, double margin = 0)
         {
             if (aSpan.Bottom >= bSpan.Top || bSpan.Bottom >= aSpan.Top) return false;
@@ -73,7 +62,6 @@ namespace FoodTrucks.Core.Fleet
         }
     }
 
-    // A footprint on the ground: its middle (x, z), the way it faces (a unit vector in x, z) and its half sizes.
     public readonly struct FlatBox
     {
         public FlatBox(double x, double z, double forwardX, double forwardZ, double halfWidth, double halfLength)
@@ -90,12 +78,10 @@ namespace FoodTrucks.Core.Fleet
         public double X { get; }
         public double Z { get; }
         public (double X, double Z) Forward { get; }
-        // Forward turned a quarter clockwise seen from above (Unity's right for a yaw).
         public (double X, double Z) Right => (Forward.Z, -Forward.X);
         public double HalfWidth { get; }
         public double HalfLength { get; }
 
-        // Half the footprint's extent along a unit axis.
         public double Reach((double X, double Z) axis) =>
             HalfLength * Math.Abs(Forward.X * axis.X + Forward.Z * axis.Z) + HalfWidth * Math.Abs(Right.X * axis.X + Right.Z * axis.Z);
     }

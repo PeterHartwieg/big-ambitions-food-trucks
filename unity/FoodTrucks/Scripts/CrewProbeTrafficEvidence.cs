@@ -9,12 +9,8 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // On-demand, read-only evidence of native recognition. Compare successive snapshots to
-    // observe stopping; membership alone is not proof of braking or a collision-free journey.
     internal static class CrewProbeTrafficEvidence
     {
-        // No scene search, ID resolution, physics query or ownership call: all live reads use
-        // the exact reference retained by the decisive overlap. IDs below are evidence only.
         internal static JObject InspectObstacle(CrewProbeTraffic? traffic)
         {
             var result = new JObject { ["read_only"] = true, ["complete"] = true,
@@ -86,7 +82,6 @@ namespace FoodTrucks
         private static void Incomplete(JObject result, JObject live, string section, Exception ex)
         {
             result["complete"] = false;
-            // Preserve any fields already read, including the cached identity.
             var details = live[section] as JObject;
             if (details == null) { details = new JObject(); live[section] = details; }
             details["status"] = "error"; details["error"] = Text(ex.GetType().Name + ": " + ex.Message);

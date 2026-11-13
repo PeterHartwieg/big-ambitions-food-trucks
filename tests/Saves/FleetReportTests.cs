@@ -76,14 +76,14 @@ public class FleetReportTests
     public void TodayAndTheWeekAddUpForOneVehicle()
     {
         var state = new SaveState();
-        StreetSales.Record(state, "cart", 10, 500, 4);              // 2,000 sales today
-        StreetSales.RecordTotal(state, "cart", 10, 3_000, 20);      // 3,000 catering today
+        StreetSales.Record(state, "cart", 10, 500, 4);
+        StreetSales.RecordTotal(state, "cart", 10, 3_000, 20);
         SalesLedger.RecordCost(state, 10, "cart", 1_200);
         SalesLedger.RecordLine(state, 10, "cart", LedgerLine.Parking, 300);
-        StreetSales.Record(state, "cart", 4, 500, 2);               // 1,000 six days ago
+        StreetSales.Record(state, "cart", 4, 500, 2);
         SalesLedger.RecordLine(state, 4, "cart", LedgerLine.Wages, 400);
-        StreetSales.Record(state, "cart", 3, 500, 10);              // seven days ago: outside the week
-        StreetSales.Record(state, "truck", 10, 900, 1);             // another vehicle
+        StreetSales.Record(state, "cart", 3, 500, 10);
+        StreetSales.Record(state, "truck", 10, 900, 1);
 
         var money = FleetReport.Vehicle(state, "cart", 10);
         Assert.Equal(5_000, money.TodaySalesCents);
@@ -109,7 +109,6 @@ public class FleetReportTests
         SalesLedger.RecordCost(state, 9, "cart", 500);
         SalesLedger.RecordLicence(state, 9, 1_000);
         SalesLedger.RecordEventPlaces(state, 8, 700);
-        // A day recorded before the breakdown: sales and stock cost without vehicles.
         state.DailySales.Add(new DailySales { Day = 7, RevenueCents = 2_000, CostCents = 800 });
         state.DailySales.Add(new DailySales { Day = 2, RevenueCents = 9_000 });
 
@@ -122,7 +121,6 @@ public class FleetReportTests
         var state = new SaveState();
         StreetSales.Record(state, "cart", 7, 1_000, 3);
         SalesLedger.RecordLicence(state, 8, 1_000);
-        // Today and a day older than the week don't count.
         StreetSales.Record(state, "cart", 9, 5_000, 1);
         state.DailySales.Add(new DailySales { Day = 1, RevenueCents = 9_000 });
 
@@ -134,17 +132,13 @@ public class FleetReportTests
     public void ADayBegunBeforeTheBreakdownKeepsItsEarlierProfitOnceVehiclesAreRecorded()
     {
         var state = new SaveState();
-        // Recorded by an older version: $100 of sales and $30 of stock, no vehicles.
         state.DailySales.Add(new DailySales { Day = 5, RevenueCents = 10_000, CostCents = 3_000 });
-        // The same day, after the update: a $20 wage, then a $5 sale with $2 of stock.
         SalesLedger.RecordLine(state, 5, "cart", LedgerLine.Wages, 2_000);
         StreetSales.Record(state, "cart", 5, 500, 1);
         SalesLedger.RecordCost(state, 5, "cart", 200);
 
         Assert.Equal(7_000 - 2_000 + 300, FleetReport.WeekProfitCents(state, 5));
-        // The vehicle shows only what was itemised.
         Assert.Equal(500 - 200 - 2_000, FleetReport.Vehicle(state, "cart", 5).TodayProfitCents);
-        // And the total matches what Econoview's Street food group adds up to once the day is in the summary.
         SalesLedger.MarkInSummary(state, 5);
         var statement = StreetFoodStatement.Build(state, new[] { 5 }, new[] { 2_000L }, new[] { 0L });
         Assert.Equal(statement.Total[0], FleetReport.WeekProfitCents(state, 5));
@@ -157,14 +151,14 @@ public class AvgDailyIncomeTests
     public void FinishedDaysWithARecordAreAveragedAndTodayIsLeftOut()
     {
         var state = new SaveState();
-        StreetSales.Record(state, "cart", 10, 500, 10);             // today: left out
-        StreetSales.Record(state, "cart", 9, 500, 4);               // 2,000
+        StreetSales.Record(state, "cart", 10, 500, 10);
+        StreetSales.Record(state, "cart", 9, 500, 4);
         SalesLedger.RecordLine(state, 9, "cart", LedgerLine.Wages, 600);
-        StreetSales.Record(state, "cart", 5, 500, 2);               // 1,000
+        StreetSales.Record(state, "cart", 5, 500, 2);
         SalesLedger.RecordCost(state, 5, "cart", 400);
-        StreetSales.Record(state, "cart", 3, 500, 2);               // seven days before today: in the window
-        StreetSales.Record(state, "cart", 2, 500, 50);              // eight days before: outside
-        StreetSales.Record(state, "truck", 9, 900, 1);              // another vehicle
+        StreetSales.Record(state, "cart", 3, 500, 2);
+        StreetSales.Record(state, "cart", 2, 500, 50);
+        StreetSales.Record(state, "truck", 9, 900, 1);
 
         Assert.Equal((1_400 + 600 + 1_000) / 3, FleetReport.AvgDailyProfitCents(state, "cart", 10));
     }

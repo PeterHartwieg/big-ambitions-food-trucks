@@ -4,7 +4,6 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Saves
 {
-    // One vehicle's rows in the statement. Amounts are signed: income above 0, costs below.
     public sealed class StatementVehicle
     {
         public StatementVehicle(string vehicleId, int columns)
@@ -15,20 +14,11 @@ namespace FoodTrucks.Core.Saves
 
         public string VehicleId { get; }
         public long[] Total { get; }
-        // Only lines with an amount in some column, in LedgerLine order.
         public SortedDictionary<LedgerLine, long[]> Lines { get; } = new SortedDictionary<LedgerLine, long[]>();
     }
 
-    // Econoview's street food rows over its day columns, worked out from the ledger and the game's stored summaries.
-    //
-    // The group's total for a day is what the day summary added to the game's total profit (SalesLedger.SummaryCents)
-    // plus the crew wages and parking moved in from the game's own rows. Those two are taken off the game's
-    // "Unassigned staff wages" and "Parking fees" rows by the same amounts (MovedWages, MovedParking), so the rows
-    // still add up to the stored total profit. Anything in the summary that the per-vehicle lines don't cover
-    // (days from before the breakdown) is the NotBrokenDown row.
     public sealed class StreetFoodStatement
     {
-        // Rounding slack between the game's float sums and the ledger's cents.
         public const long ToleranceCents = 5;
 
         private StreetFoodStatement(int columns)
@@ -48,7 +38,6 @@ namespace FoodTrucks.Core.Saves
         public long[] EventPlaces { get; }
         public long[] DeliveryFees { get; }
         public long[] NotBrokenDown { get; }
-        // Costs to take off the game's rows, 0 or more.
         public long[] MovedWages { get; }
         public long[] MovedParking { get; }
 
@@ -56,11 +45,6 @@ namespace FoodTrucks.Core.Saves
             Total.All(v => v == 0) && Vehicles.Count == 0 && Licence.All(v => v == 0) &&
             EventPlaces.All(v => v == 0) && DeliveryFees.All(v => v == 0) && NotBrokenDown.All(v => v == 0);
 
-        // days: each column's day number (0 for a column without a summary). gameWagesCents and gameParkingCents:
-        // the game's stored unassigned staff wages and parking fees for each column, as costs of 0 or more.
-        // A day not marked in the summary shows nothing, since the stored total doesn't include it. Wages or
-        // parking are only moved when the vehicles' share fits inside the game's row for that day; otherwise
-        // that day's share stays in the game's row and the vehicle line shows nothing for it.
         public static StreetFoodStatement Build(SaveState? state, IReadOnlyList<int> days,
             IReadOnlyList<long> gameWagesCents, IReadOnlyList<long> gameParkingCents)
         {

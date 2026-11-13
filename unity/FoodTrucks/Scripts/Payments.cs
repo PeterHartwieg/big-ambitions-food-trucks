@@ -13,7 +13,6 @@ namespace FoodTrucks
     {
         public static bool PayIn(long cents, TransactionInfo info) => PayIn(cents, info, null);
 
-        // Money in, booked on `day` when given (the game books its shops' revenue into the day sold).
         public static bool PayIn(long cents, TransactionInfo info, int? day)
         {
             if (cents <= 0) throw new ArgumentOutOfRangeException(nameof(cents));
@@ -31,7 +30,6 @@ namespace FoodTrucks
             }
         }
 
-        // Pays money out the same way (a cost booked on `day`), reporting whether the transaction was booked.
         public static bool PayOut(long cents, TransactionInfo info, int day)
         {
             if (cents <= 0) throw new ArgumentOutOfRangeException(nameof(cents));
@@ -49,8 +47,6 @@ namespace FoodTrucks
             }
         }
 
-        // Pays money out today only if the player has it (the game refuses otherwise, with its "not enough money"
-        // notice when asked), reporting whether the transaction was booked.
         public static bool TryPayOut(long cents, TransactionInfo info, bool showNotification)
         {
             if (cents <= 0) throw new ArgumentOutOfRangeException(nameof(cents));

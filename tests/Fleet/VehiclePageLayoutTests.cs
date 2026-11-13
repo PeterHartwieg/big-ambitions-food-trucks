@@ -87,7 +87,6 @@ public class RouteMapTests
 
         Assert.All(map.Stops, p => Assert.InRange(p.U, 0.1 - 1e-9, 0.9 + 1e-9));
         Assert.All(map.Stops, p => Assert.InRange(p.V, 0.1 - 1e-9, 0.9 + 1e-9));
-        // East is right, north is up, and 400 m east spans twice the panel fraction of 200 m north once aspect is counted.
         Assert.True(map.Stops[1].U > map.Stops[0].U);
         Assert.True(map.Stops[2].V > map.Stops[1].V);
         var eastPanels = (map.Stops[1].U - map.Stops[0].U) * 2;

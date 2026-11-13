@@ -4,11 +4,8 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Saves
 {
-    // Which vehicle each hire worked on, hour by hour, so the day's wage goes to the vehicles worked rather than to
-    // the crew a hire is on when the game pays at midnight.
     public static class CrewLog
     {
-        // Records one worked hour (the game side counts a hire's paid hours one at a time).
         public static void AddHour(SaveState state, int day, string employeeId, string vehicleId)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -22,17 +19,12 @@ namespace FoodTrucks.Core.Saves
                 entry.Hours++;
         }
 
-        // Notes that hours are logged from now on. Called when a save loads and as hours are counted; the first call
-        // sets the marker to the next day, since hours counted earlier today (before this version ran) weren't logged.
         public static void Begin(SaveState state, int today)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             state.CrewHoursSince ??= today + 1;
         }
 
-        // The vehicles a paid wage belongs to. Days covered by the log go by its hours alone: no logged hours
-        // means no vehicle's wage (say, hours worked in one of the player's shops before joining a crew).
-        // Days from before the log go to the crew the hire is on at payment (crewVehicleId), if any.
         public static List<(string VehicleId, long Cents)> Attribute(SaveState? state, int day, string employeeId, long paidCents,
             double workedHours, string? crewVehicleId)
         {
@@ -46,10 +38,6 @@ namespace FoodTrucks.Core.Saves
         public static bool HasHours(SaveState? state, int day, string employeeId) =>
             state != null && state.CrewHours.Any(h => h != null && h.Day == day && string.Equals(h.EmployeeId, employeeId, StringComparison.Ordinal));
 
-        // Splits a paid wage over the vehicles the hire worked that day, by hours, vehicles in ID order. workedHours is the
-        // game's paid hours for the day: when the log holds fewer, only the logged hours' share is split and the rest
-        // goes to no vehicle (it stays in the game's row). Leftover cents go to the vehicle with the most hours.
-        // Empty when nothing was logged.
         public static List<(string VehicleId, long Cents)> Split(SaveState? state, int day, string employeeId, long paidCents, double workedHours)
         {
             var result = new List<(string VehicleId, long Cents)>();
@@ -79,14 +67,12 @@ namespace FoodTrucks.Core.Saves
             return result.Where(r => r.Cents > 0).ToList();
         }
 
-        // Drops a hire's hours for a day once that day's wage is paid.
         public static void Consume(SaveState state, int day, string employeeId)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             state.CrewHours.RemoveAll(h => h == null || (h.Day == day && string.Equals(h.EmployeeId, employeeId, StringComparison.Ordinal)));
         }
 
-        // Drops hours from before a day (wages never paid: a hire let go or the game skipped them).
         public static void Prune(SaveState state, int beforeDay)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));

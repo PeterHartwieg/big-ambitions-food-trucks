@@ -41,7 +41,6 @@ public class DaySummaryTests
         Assert.Equal((5_200L, 600L, 25_000L), (report.RevenueCents, report.StockCostCents, report.DeliveryFeesCents));
         Assert.Equal(5_200 - 600 - 25_000 - 20_000 - 1_644 - 5_000, report.ProfitCents);
         Assert.Equal(new[] { "hells-kitchen" }, report.FeesPaidAt);
-        // A vehicle with nothing that day is still listed while the player has it.
         Assert.Equal(0, report.Vehicles.Single(v => v.VehicleId == "cart").ProfitCents);
     }
 

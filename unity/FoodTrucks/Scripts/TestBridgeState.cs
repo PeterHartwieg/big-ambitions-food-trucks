@@ -11,8 +11,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // The bridge's `state` (docs/test-bridge.md, "State"): read from the mod's state and the game's, changing nothing.
-    // A field the bridge can't fill is null, never left out.
     internal static class TestBridgeState
     {
         internal static JObject Read()
@@ -70,7 +68,6 @@ namespace FoodTrucks
                 catch (Exception ex) { vehicles.Add(new JObject { ["id"] = instance.id, ["error"] = ex.Message }); }
             }
             result["vehicles"] = vehicles;
-            // The player's other cars and vans (a car of their own, a job's hired van): id, type and where it stands.
             var others = new JArray();
             foreach (var instance in game.VehicleInstances.Where(v => v != null && FoodTrucksMod.KindOf(v.vehicleTypeName) == null))
             {
@@ -98,7 +95,6 @@ namespace FoodTrucks
             {
                 ["street_food"] = (today?.RevenueCents ?? 0) / 100.0,
                 ["sales_waiting"] = state.CrewTakings.Sum(t => t.Cents) / 100.0,
-                // Historical alias for existing scenarios; both now include player and crew sales.
                 ["crew_waiting"] = state.CrewTakings.Sum(t => t.Cents) / 100.0,
             };
             return result;
@@ -147,15 +143,11 @@ namespace FoodTrucks
             var controller = VehicleHelper.GetVehicleController(instance);
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
             var heading = controller != null ? controller.transform.eulerAngles.y : (float?)null;
-            // A truck parks: the game's own wheel test, as its panel's LEGAL/ILLEGAL. A cart stands on the pavement: the
-            // mod's pavement rule.
             bool legal;
             string legalReason;
             var info = InstanceBehavior<UI.UIs>.Instance?.playerHUD?.itemPanelUI?.vehicleInfo;
             if (kind == "truck" && SaveGameManager.Current.ActiveVehicleId == instance.id && info != null && info.isActiveAndEnabled)
             {
-                // The player drives it: the panel's live reading, which the game saves as the truck's parking state when it
-                // parks (the state Open for business checks, CartSelling.PitchProblem).
                 legal = info.currentParkingState == ParkingState.Legal;
                 legalReason = $"panel's live reading: {info.currentParkingState}";
             }
@@ -174,7 +166,6 @@ namespace FoodTrucks
             string? hatchSide = null;
             if (kind == "truck")
             {
-                // The truck's hatch is on its right (art/README.md); HatchCheck reads whether that side has the pavement.
                 hatchSide = "right";
                 if (controller != null) toPavement = HireRoutes.Hatch(instance.id, controller.transform).Opens;
             }
@@ -202,7 +193,6 @@ namespace FoodTrucks
                     ["item"] = LocalizorManager.GetLocalization(group.Key, null),
                     ["key"] = group.Key,
                     ["amount"] = group.Sum(c => c.amount),
-                    // The price set on this vehicle's page; null while it sells at the automatic price.
                     ["set_price"] = record?.CustomPriceCents != null && record.CustomPriceCents.TryGetValue(group.Key, out var setCents)
                         ? (JToken)(setCents / 100.0) : JValue.CreateNull(),
                 });
@@ -272,8 +262,6 @@ namespace FoodTrucks
             };
         }
 
-        // The week plan, Monday first: each weekday's closed mark and stops, its route day (restock to back in the bay, as
-        // minutes from that day's midnight, past 1440 for a late route) and the parts of it with nobody on shift.
         private static JArray WeekOf(VehicleState vehicle)
         {
             var schedule = vehicle.Schedule!;
@@ -301,7 +289,6 @@ namespace FoodTrucks
             return list;
         }
 
-        // Each crew member's shifts and week: name, id, the week's hours and the range they want (null: no demand).
         private static JArray ShiftsOf(VehicleState vehicle) =>
             new JArray((vehicle.Crew ?? new List<string>()).Select(id =>
             {
@@ -324,12 +311,9 @@ namespace FoodTrucks
         private static string Snake(string name) =>
             string.Concat(name.Select((c, i) => i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
 
-        // The phone's to-dos the mod made for this vehicle (null: the fleet's, the vendor licence), as they stand after the
-        // last minute's reconcile: kind and food.
         private static JArray Todos(string? vehicleId) =>
             new JArray(VehicleTodos.ListFor(vehicleId).Select(t => new JObject { ["kind"] = t.Kind, ["item"] = t.Item, ["text"] = t.Text }));
 
-        // The game's transactions of today and yesterday, oldest first: label as the bank app shows it, amount, day, time.
         private static JArray Transactions(GameInstance game)
         {
             var list = new JArray();
@@ -337,7 +321,6 @@ namespace FoodTrucks
             {
                 if (t == null || t.timestamp.Day < game.Day - 1) continue;
                 var time = $"{t.timestamp.Hour:D2}:{(int)t.timestamp.Minute:D2}";
-                // A notice shown in the same game minute says what a bare label ("Fine") was for.
                 var notices = TestBridgeEvents.GameNoticesAt(t.timestamp.Day, time);
                 list.Add(new JObject
                 {
@@ -345,7 +328,6 @@ namespace FoodTrucks
                     ["label"] = Notices.Text(t.transactionType ?? "", t.transactionData),
                     ["type"] = t.transactionType,
                     ["amount"] = Math.Round(t.amount, 2),
-                    // The game's balance after it (floored to whole dollars), which tells two equal transactions apart.
                     ["balance"] = Math.Round(t.balance, 2),
                     ["day"] = t.timestamp.Day,
                     ["time"] = time,
@@ -354,8 +336,6 @@ namespace FoodTrucks
             return list;
         }
 
-        // Each commissary's bay: "resolved" with its point, "failed" when the search found no legal parking, "pending"
-        // until the city's parking lanes let it search. `entrance` is the building's entrance nearest the bay.
         private static JArray Bays()
         {
             var list = new JArray();
@@ -418,9 +398,6 @@ namespace FoodTrucks
 
         internal static double Round(float value) => Math.Round(value, 2);
 
-        // What the game's hourly parking charge reads for a vehicle nobody drives: its stored parking state, the
-        // neighbourhood it was left in and that neighbourhood's hourly price (ParkingSimulator.RunHourly: legal parking
-        // adds the price to unpaidParkingAmount every hour, $25 in a parking garage; illegal parking draws tickets).
         private static JObject Parking(VehicleInstance instance)
         {
             double? price = null;

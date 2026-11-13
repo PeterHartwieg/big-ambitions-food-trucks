@@ -6,10 +6,6 @@ namespace FoodTrucks.Core.Pitches
 {
     public enum PartnerProblem { None, VehicleHasPartner, VenueHasPartner }
 
-    // A vehicle's "street food partner" deal with one of the player's own venues (design: Live crowds, Partnerships).
-    // One venue per vehicle and one vehicle per venue. While the vehicle works outside its partner, the venue's crowd
-    // counts in full, whatever the distance within the partnership radius, and its surges are bigger; a day the
-    // vehicle worked there long enough raises the venue's facility satisfaction the next morning.
     public static class Partnerships
     {
         public static PartnershipState? Of(SaveState state, string vehicleId) =>
@@ -40,7 +36,6 @@ namespace FoodTrucks.Core.Pitches
             return state.Partnerships.RemoveAll(p => p.VehicleId == vehicleId) > 0;
         }
 
-        // Drops partnerships whose vehicle or venue is gone (sold, venue no longer the player's).
         public static int Prune(SaveState state, Func<PartnershipState, bool> keep)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -48,8 +43,6 @@ namespace FoodTrucks.Core.Pitches
             return state.Partnerships.RemoveAll(p => !keep(p));
         }
 
-        // Minutes the vehicle sold outside its partner on a game day. Once they reach the minimum, that day counts
-        // as worked.
         public static void Worked(PartnershipState partnership, PartnershipRules rules, int day, int minutes)
         {
             if (partnership == null) throw new ArgumentNullException(nameof(partnership));
@@ -65,9 +58,6 @@ namespace FoodTrucks.Core.Pitches
                 partnership.LastWorkedDay = day;
         }
 
-        // The game's daily satisfaction update on `today` scores the day just ended. The bonus for a worked day goes on
-        // the next morning's score, when the game worked it out from paying customers (ScoredDay): at the update, or
-        // as soon as the day counts as worked when its last minutes were sold after it (a time skip). Once per day.
         public static bool BonusDue(PartnershipState partnership, int today) =>
             partnership?.LastWorkedDay is { } worked && partnership.ScoredDay == today && worked == today - 1 &&
             worked > (partnership.BonusForDay ?? int.MinValue);
@@ -78,7 +68,6 @@ namespace FoodTrucks.Core.Pitches
             partnership.BonusForDay = partnership.LastWorkedDay;
         }
 
-        // The venue's facility satisfaction with the bonus, and the overall the game's own way: the mean of its four parts.
         public static (int Facility, int Overall) WithBonus(int customerService, int pricing, int cleanliness, int facility, PartnershipRules rules)
         {
             var raised = Math.Min(100, facility + rules.SatisfactionBonus);

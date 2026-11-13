@@ -21,14 +21,11 @@ namespace FoodTrucks.Core.Selling
             Detail = detail;
         }
 
-        // Empty when there is a problem.
         public Menu Menu { get; }
         public MenuProblem Problem { get; }
-        // The vehicle type or equipment ID behind the problem.
         public string? Detail { get; }
     }
 
-    // The items a vehicle sells. From Milestone 2 the menu follows the fitted equipment.
     public sealed class Menu
     {
         public static readonly Menu Empty = new Menu(Array.Empty<string>());
@@ -58,8 +55,6 @@ namespace FoodTrucks.Core.Selling
             return false;
         }
 
-        // The item the next customer buys: the menu item with the most units in stock,
-        // ties broken by menu order. Null when nothing on the menu is in stock.
         public string? PickNext(IReadOnlyDictionary<string, int> unitsByItem)
         {
             if (unitsByItem == null) throw new ArgumentNullException(nameof(unitsByItem));
@@ -79,8 +74,6 @@ namespace FoodTrucks.Core.Selling
         public static MenuBuild FromCargo(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo) =>
             FromEquipment(tables, vehicleType, CargoRules.FittedEquipment(tables, cargo));
 
-        // The products the fitted equipment unlocks, in fitting order. Equipment is inventory: each
-        // piece uses a general slot except the first cooler, which has its own place. Duplicates add no items.
         public static MenuBuild FromEquipment(DemandTables tables, string? vehicleType, IEnumerable<string?> fittedEquipment)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));

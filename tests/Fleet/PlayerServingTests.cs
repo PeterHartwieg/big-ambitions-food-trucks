@@ -12,7 +12,6 @@ public class PlayerServingTests
     {
         Assert.True(PlayerServing.Serves("truck", atHatch: true, 0.5, Working));
         Assert.True(PlayerServing.Serves("truck", atHatch: true, null, Working));
-        // Stepped out by the rear door: close by, but not serving.
         Assert.False(PlayerServing.Serves("truck", atHatch: false, 3.5, Working));
         Assert.False(PlayerServing.Serves("truck", atHatch: false, 0, Working));
     }
