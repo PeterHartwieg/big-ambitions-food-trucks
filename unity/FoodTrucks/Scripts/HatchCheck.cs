@@ -9,15 +9,8 @@ using UnityEngine.AI;
 
 namespace FoodTrucks
 {
-    // Whether a truck standing at a position and rotation has its hatch (on its right, art/README.md) towards
-    // the pavement. This side only probes; Core's HatchSide decides. Each point of the probe grid is read for
-    // the things the game knows there: the traffic system's driving lanes (the reliable road signal), the Roads
-    // layer, parking lanes, crosswalks and the walkable NavMesh. The NavMesh alone can't tell pavement from
-    // road: people walk across streets, so the street is walkable too.
     internal static class HatchCheck
     {
-        // The lanes are gathered from waypoints within this distance; a lane passing the truck has waypoints
-        // a few metres apart, so its nearest ones are well within it.
         internal const float LaneSearchMetres = 25f;
 
         public sealed class Result
@@ -37,12 +30,9 @@ namespace FoodTrucks
             public SideReading Opposite { get; }
             public string Lanes { get; }
             public string Kerb { get; }
-            // False when the reading had no traffic data (the manager not ready, or no lane near) and fell back to
-            // the NavMesh alone; such a reading isn't kept (HireRoutes.Hatch).
             public bool LanesKnown { get; }
             public bool Opens => HatchSide.Opens(Verdict);
 
-            // Null when the truck may open, else the message saying why not.
             public string? RefusalKey => Verdict switch
             {
                 HatchVerdict.WrongWay => "foodtrucks:legality_truck_hatch",
@@ -54,8 +44,6 @@ namespace FoodTrucks
                 $"{Verdict}: hatch side {Hatch}; other side {Opposite}; {Lanes}; {Kerb}";
         }
 
-        // nearby: a TrafficLanes.Read for a wider area that covers this position (FreeParking reads once for every space
-        // it tries); narrowed here as Near would read for the position itself.
         public static Result Probe(Vector3 position, Quaternion rotation, TrafficLanes? nearby = null)
         {
             var forward = Flat(rotation * Vector3.forward);
@@ -64,7 +52,6 @@ namespace FoodTrucks
             var hatch = Side(position, forward, right, 1, lanes, out var hatchKerb);
             var opposite = Side(position, forward, right, -1, lanes, out var oppositeKerb);
             var verdict = HatchSide.Decide(hatch, opposite);
-            // The pavement's height over the truck's wheels, for seeing in the log whether kerbs are raised.
             var kerb = $"first pavement {Height(hatchKerb)} on the hatch side, {Height(oppositeKerb)} on the other";
             return new Result(verdict, hatch, opposite, lanes.Describe(), kerb, lanes.Known);
         }
@@ -105,15 +92,10 @@ namespace FoodTrucks
         private static float FlatDistance(Vector3 a, Vector3 b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
     }
 
-    // The traffic system's driving lanes near a point, as segments from each waypoint to the next. Cars drive
-    // along these, so they are road wherever the NavMesh says people may walk. Unknown (no segments) when the
-    // traffic system isn't running, which leaves the NavMesh alone to decide, as before.
     internal sealed class TrafficLanes
     {
-        // Waypoints on a bridge or under one don't count for the street below (Core's LaneReach.HeightMetres).
         private const float HeightMetres = (float)LaneReach.HeightMetres;
 
-        // Each waypoint read, with its segments to the waypoints it links to (and itself, so a lone one still counts).
         private readonly List<(Vector3 Point, List<(Vector3 A, Vector3 B)> Segments)> waypoints;
         private readonly List<(Vector3 A, Vector3 B)> segments;
         private readonly string? problem;
@@ -128,26 +110,17 @@ namespace FoodTrucks
 
         public static readonly TrafficLanes None = new TrafficLanes(new List<(Vector3, List<(Vector3, Vector3)>)>(), "traffic system not running", unavailable: true);
 
-        // The lanes couldn't be read (the traffic system not running, or the read threw), as opposed to a read that found
-        // none near: a caller that decides something lasting waits and tries again (review round 9).
         public bool Unavailable { get; }
 
-        // The lanes a probe at centre counts: waypoints closer than radius (3D, as the game's own search measures)
-        // and within HeightMetres of the centre's height.
         public static TrafficLanes Near(Vector3 centre, float radius) => Read(centre, radius).Within(centre, radius);
 
-        // Every waypoint closer than radius, at any height, for narrowing per point later (Within). A read for a
-        // search area covers each point within spaceMetres of its centre when radius is spaceMetres plus the probe's
-        // radius (Core's LaneReach.CoverRadius): the traffic system scans every waypoint in the city per read.
         public static TrafficLanes Read(Vector3 centre, float radius)
         {
             try
             {
-                // Instance makes a new manager when there is none, so HasInstance first.
                 if (!TrafficManager.HasInstance || !TrafficManager.IsInitialized) return None;
                 var manager = TrafficManager.Instance;
                 var near = new List<Waypoint>();
-                // The game's search calls the filter for every waypoint within the radius; it collects them all.
                 manager.GetClosestWaypoint(centre, radius, w =>
                 {
                     if (w != null) near.Add(w);
@@ -162,7 +135,6 @@ namespace FoodTrucks
                         var other = manager.GetWaypoint(index);
                         if (other != null) own.Add((waypoint.position, other.position));
                     }
-                    // A waypoint on its own still marks a lane.
                     own.Add((waypoint.position, waypoint.position));
                     found.Add((waypoint.position, own));
                 }
@@ -174,9 +146,6 @@ namespace FoodTrucks
             }
         }
 
-        // The waypoints a probe at centre counts, from a wider read: closer than radius as the game measures it
-        // (squared 3D distance under radius squared) and within HeightMetres of centre's height. Near uses this too,
-        // so a probe given a wider read sees exactly what a probe reading for itself would.
         public TrafficLanes Within(Vector3 centre, float radius)
         {
             if (problem != null) return this;
@@ -185,7 +154,6 @@ namespace FoodTrucks
             return new TrafficLanes(kept, kept.Count == 0 ? $"no traffic lanes within {radius:F0} m" : null);
         }
 
-        // Flat distance from the point to the nearest lane's centre line, or null without lanes.
         public float? Distance(Vector3 point)
         {
             if (segments.Count == 0) return null;
@@ -202,8 +170,6 @@ namespace FoodTrucks
             return best;
         }
 
-        // The nearest point on a lane's centre line (segments at least half a metre long) and the lane's flat direction
-        // there, or null without lanes.
         public (Vector3 Point, Vector3 Direction)? Nearest(Vector3 point)
         {
             (Vector3, Vector3)? found = null;
@@ -223,7 +189,6 @@ namespace FoodTrucks
             return found;
         }
 
-        // The lanes' centre lines flat on the ground, for Core's BaySide (a bay on its door's side of the street).
         public List<((double X, double Z) A, (double X, double Z) B)> FlatSegments() =>
             segments.Select(s => (((double)s.A.x, (double)s.A.z), ((double)s.B.x, (double)s.B.z))).ToList();
 

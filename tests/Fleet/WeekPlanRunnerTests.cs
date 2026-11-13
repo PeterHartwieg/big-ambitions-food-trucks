@@ -16,7 +16,6 @@ public class WeekPlanRunnerTests
     private static readonly FleetRules rules = ShippedData.Rules.Fleet;
     private static readonly HireSchedules schedules = new(rules);
     private static readonly HireRunner runner = new(rules);
-    // The bay 2 km from the stops at x 0: 80 minutes' drive.
     private static readonly (double X, double Z) Bay = (-2000, 0);
 
     private static long At(int day, int hour, int minute = 0) => HireSchedules.Absolute(day, hour * 60 + minute);
@@ -33,7 +32,6 @@ public class WeekPlanRunnerTests
     private static VehicleWhere AtStop(bool stayPut = false) => new(0, 0, leaveAlone: false, stayPut: stayPut, home: Bay);
     private static VehicleWhere InBay() => new(Bay.X, Bay.Z, leaveAlone: false, canRestock: true, home: Bay);
 
-    // Day 3 (Wednesday): out to the 11:00-14:00 stop from the bay, parked there.
     private static VehicleState OutAtTheStop(int shiftEnd)
     {
         var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 660, 840));
@@ -52,7 +50,6 @@ public class WeekPlanRunnerTests
     public void ADelayedDriveBackGoesWhenThePlayerLetsGoAndTheShiftCoversIt()
     {
         var truck = OutAtTheStop(shiftEnd: 18);
-        // The player stays by it past the planned drive back (14:00-15:20).
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 14), AtStop(stayPut: true)).Kind);
         runner.EnsurePlan(truck, At(3, 16), 0, 0, home: Bay);
         var back = runner.Step(truck, At(3, 16), AtStop());
@@ -65,7 +62,6 @@ public class WeekPlanRunnerTests
     [Fact]
     public void AfterALateStopTheDriveBackGoesThoughTomorrowIsPlanned()
     {
-        // Sunday's stop 22:00-02:00 and Monday's 11:00-14:00, 2 km from the bay (day 7 is a Sunday).
         var truck = Truck(Stop(DayOfWeek.Sunday, "bars", 1320, 1560), Stop(DayOfWeek.Monday, "office", 660, 840));
         truck.Crew.Add("e2");
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Sunday, 12, 24);
@@ -78,8 +74,6 @@ public class WeekPlanRunnerTests
 
         var back = runner.Step(truck, At(8, 2), AtStop());
         Assert.Equal((HireActionKind.Depart, HireSchedules.HomeIndex, At(8, 3, 20)), (back.Kind, back.Stop, back.ArrivesAt));
-        // Held by the player past the planned drive back: Monday's restock comes next, so it still goes (02:40 to 04:00 is
-        // on shift); at 03:30 the drive would outrun the 04:00 shift end, so it waits for Monday's 08:00 shift.
         Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(8, 2, 40), AtStop()).Kind);
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(8, 3, 30), AtStop()).Kind);
         Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(8, 8), AtStop()).Kind);
@@ -88,7 +82,6 @@ public class WeekPlanRunnerTests
     [Fact]
     public void TodaysDriveBackGoesWhenTomorrowWasPlannedAtNoon()
     {
-        // Wednesday 11:00-14:00, and Thursday's 00:30 stop whose restock starts Wednesday 22:40.
         var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 660, 840), Stop(DayOfWeek.Thursday, "night market", 30, 90));
         truck.Crew.Add("e2");
         WeekPlan.SetShift(rules, truck, "e2", DayOfWeek.Wednesday, 9, 15);
@@ -100,14 +93,12 @@ public class WeekPlanRunnerTests
         Assert.Contains(truck.Shifts, p => p.Day == 4);
 
         Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 14), AtStop()).Kind);
-        // Held until 16:00, after the planned drive back: the next leg is the restock, so it drives back.
         Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 16), AtStop()).Kind);
     }
 
     [Fact]
     public void AnOwedDriveBackWaitsWhenTheNextLegIsAStop()
     {
-        // Stops 11:00-12:00 and 15:00-16:00 at the same place; between them nothing to do and the drive back owed.
         var truck = Truck(Stop(DayOfWeek.Wednesday, "a", 660, 720), Stop(DayOfWeek.Wednesday, "b", 900, 960));
         WeekTestData.AllDay(truck);
         runner.EnsurePlan(truck, At(3, 6), 0, 0, home: Bay);
@@ -135,7 +126,6 @@ public class WeekPlanRunnerTests
     [Fact]
     public void OpeningAwayFromTheBayWithoutDrivingThereOwesTheDriveBack()
     {
-        // Already parked at its Wednesday 11:00-14:00 pitch; shifts Wednesday 09:00-14:00 and Friday 09:00-12:00.
         var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 660, 840));
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 9, 14);
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Friday, 9, 12);
@@ -155,8 +145,6 @@ public class WeekPlanRunnerTests
     [Fact]
     public void AWindowLoadedOpenAwayFromTheBayOwesTheDriveBack()
     {
-        // Saved open at the Wednesday 11:00-14:00 pitch by a build that didn't arm the drive back on opening; shifts
-        // Wednesday 09:00-14:00 and Friday 09:00-12:00.
         var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 660, 840));
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 9, 14);
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Friday, 9, 12);
@@ -216,13 +204,10 @@ public class WeekPlanRunnerTests
     public void ADriveBackThatWouldOutrunTheShiftWaits()
     {
         var truck = OutAtTheStop(shiftEnd: 16);
-        // 15:00 plus 80 minutes is 16:20, after the shift: it waits (and the next shift takes it back).
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 15), AtStop()).Kind);
         Assert.True(truck.ReturnPending);
     }
 
-    // Peter, 16 October 2026: the Schedule tab's day toggle closes the route day. Closed while the window is open at
-    // the stop, the window closes and the drive back still goes with the shift.
     [Fact]
     public void ClosingTodayAtTheStopClosesTheWindowAndStillDrivesBack()
     {
@@ -262,7 +247,6 @@ public class WeekPlanRunnerTests
         runner.EnsurePlan(truck, At(4, 9), 0, 0, home: Bay);
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(4, 9), AtStop()).Kind);
 
-        // Saved and loaded on Thursday night: still owed.
         var codec = new SaveCodec();
         var state = new SaveState();
         state.Vehicles.Add(truck);
@@ -276,7 +260,6 @@ public class WeekPlanRunnerTests
     [Fact]
     public void ADepartureForAStopNeedsTheShiftForTheWholeDrive()
     {
-        // On shift 09:00-11:00 and 12:00-14:00 only; held by the player until 10:30, the 80-minute drive would end at 11:50.
         var truck = Truck(Stop(DayOfWeek.Wednesday, "office", 660, 840));
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 9, 11);
         truck.Crew.Add("e2");
@@ -290,7 +273,6 @@ public class WeekPlanRunnerTests
     [Fact]
     public void TomorrowStartsBeforeMidnightWhenItsRestockDoes()
     {
-        // Monday's 00:30 stop: restock from Sunday 22:40, leave at 23:10 (day 7 is a Sunday).
         var truck = Truck(Stop(DayOfWeek.Monday, "night market", 30, 90));
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Sunday, 22, 24);
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 0, 3);
@@ -301,7 +283,6 @@ public class WeekPlanRunnerTests
         Assert.Equal((LegKind.Restock, At(7, 22, 40)), (monday.Legs[0].Kind, monday.Legs[0].Start));
         Assert.Equal(HireActionKind.Restock, runner.Step(truck, At(7, 22, 40), InBay()).Kind);
         Assert.Equal(WeekPlan.RouteDayOf(schedules, truck.Schedule, DayOfWeek.Monday, TravelMode.Drive, home: Bay).Start, -80);
-        // An edit drops the early plan; it comes back.
         HireRunner.Replan(truck, At(7, 21, 30));
         Assert.DoesNotContain(truck.Shifts, p => p.Day == 8);
         runner.EnsurePlan(truck, At(7, 21, 30), Bay.X, Bay.Z, home: Bay);
@@ -311,7 +292,6 @@ public class WeekPlanRunnerTests
     [Fact]
     public void AShiftAddedAfterMidnightPicksUpYesterdaysLateStop()
     {
-        // Sunday's stop 23:00-02:00 at the bay's door, staffed only until midnight at first.
         var truck = Truck(Stop(DayOfWeek.Sunday, "bars", 1380, 1560));
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Sunday, 20, 24);
         runner.EnsurePlan(truck, At(7, 20), 0, 0);
@@ -356,7 +336,6 @@ public class WeekPlanRunnerTests
         truck.IsOpen = true;
         truck.HireStop = 0;
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), new VehicleWhere(0, 0, leaveAlone: false)).Kind);
-        // The shift is cut to 12:00 without a replan yet: it closes all the same.
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 9, 12);
         Assert.Equal(HireActionKind.Close, runner.Step(truck, At(3, 12, 30), new VehicleWhere(0, 0, leaveAlone: false)).Kind);
     }
@@ -364,7 +343,6 @@ public class WeekPlanRunnerTests
     [Fact]
     public void BothProblemsAreReported()
     {
-        // Two stops 1 km apart back to back (unreachable), nobody on shift (uncovered).
         var truck = Truck(Stop(DayOfWeek.Monday, "a", 600, 720), Stop(DayOfWeek.Monday, "b", 720, 840));
         truck.Schedule!.Stops[1].X = 1000;
 

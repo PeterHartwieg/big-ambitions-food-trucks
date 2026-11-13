@@ -16,16 +16,8 @@ import argparse
 import json
 import os
 
-# Metres per map unit, per region of Big Copilot's map. The map draws each region in its own frame,
-# so the scale differs. Relative scales come from same-sized buildings: a 225 m2 "C" unit's outline
-# is 17.6 units across (square root of its box) on the mainland, 11.8 in Industry City and 5.2 in the
-# Hamptons; the 2,000 m2 cinemas and theatres give the same ratio for the Hamptons (32.8 against 10.5).
-# The absolute value is a judgement between two bounds: a C unit's outline (at least its 225 m2,
-# so at least 0.85 m a unit) and a cinema's (at most its 2,000 m2 on one floor, so at most 1.36).
 SCALE = {"mainland": 1.0, "industry-city": 1.49, "the-hamptons": 3.2}
 
-# Fixed AI businesses present in every game, read from a 1.0 save (build 3682). Rival businesses
-# differ per game and come only from --save.
 FIXED_BUSINESSES = {
     "ba:street_firststreet#37": "ba:businesstype_wholesalestore",
     "ba:street_firststreet#18": "ba:businesstype_wholesalestore",
@@ -71,7 +63,6 @@ def main():
         s = SCALE[shape["region"]]
         x, y, w, h = shape["bounds"]
         ax, ay = shape["anchor"]
-        # Map y grows southwards; the tool only needs distances, so z = y works.
         buildings.append({
             "key": key, "region": shape["region"], "hood": "ba:neighborhood_" + f["h"],
             "buildingType": "ba:buildingtype_" + f["t"], "businessType": businesses.get(key),

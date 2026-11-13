@@ -49,20 +49,12 @@ namespace FoodTrucks.Core.Commissary
         public long OvernightFineCents { get; }
         public int NightCheckMinute { get; }
         public int DeliveryMinute { get; }
-        // One flat fee per delivery: everything a commissary delivers from phone orders on one morning together, whatever
-        // its size and however many orders, carts or trucks it is for (Peter, 14 October 2026). The game charges a flat
-        // fee per delivery too: a wholesale contract's deliveryFee per delivery, whatever its size, and $250 for a
-        // furniture delivery [code, 1.0: DeliveryContract.TotalPricePerDelivery, FurnitureDeliveryContractSettings].
         public long DeliveryFeeCents { get; }
         public double BayRadiusMetres { get; }
-        // Boxes of one food delivered from phone orders in a game week, at all commissaries together, one-off and standing
-        // orders together, by delivery day (Peter, 14 October 2026: one limit for the whole fleet, so a growing fleet builds
-        // its own supply chain). The default, and overrides by game item. Equipment has no limit (CommissarySupply).
         public int FoodBoxesPerWeek { get; }
         public IReadOnlyDictionary<string, int> FoodBoxesPerWeekByItem { get; }
         public int FoodBoxLimit(string itemName) => itemName != null && FoodBoxesPerWeekByItem.TryGetValue(itemName, out var limit) ? limit : FoodBoxesPerWeek;
 
-        // Round each day's rent once, to whole cents; halves round away from zero.
         public long DailyRentCents(string kind) => checked((long)Math.Round(RentPerMonthCents[kind] * 12m / 365m, 0, MidpointRounding.AwayFromZero));
 
         internal static CommissaryRules Read(DataReader r, JObject obj)

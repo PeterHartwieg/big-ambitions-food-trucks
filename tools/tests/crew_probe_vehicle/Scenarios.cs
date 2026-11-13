@@ -91,7 +91,6 @@ internal static class Scenarios
     }
     private static void Refusal(string state)
     {
-        // A false cache must never hide an active starter or owner.
         var car = Setup(false);
         var n = car.vehicleController;
         switch (state)
@@ -128,7 +127,6 @@ internal static class Scenarios
     }
     private static void FreshDefault()
     {
-        // FoodTruck's parked prefab command is ignition=true, without a flying start.
         var car = Setup(false, ignition: true);
         var engine = car.vehicleController.powertrain.engine;
         Check(!engine.IsRunning, "fresh parked truck has no running cache yet");

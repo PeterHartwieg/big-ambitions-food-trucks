@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 
-// All native state the adapter can change is tracked, including redundant writes.
 internal static class Writes
 {
     internal static int Count;
@@ -114,7 +113,7 @@ namespace NWH.VehiclePhysics2
         public bool IsRunning => runningCache;
         public int Starts, Stops;
         public void StartEngine() { Starts++; ignition = true; starterActive = true; }
-        public void StopEngine() { Stops++; ignition = false; } // Intentionally leaves running cache untouched.
+        public void StopEngine() { Stops++; ignition = false; }
         internal void ObserveRunning() { runningCache = true; }
         public void Step() => throw new Exception("Adapter must never step physics to refresh the engine cache");
     }
@@ -148,7 +147,6 @@ public class CarController : Behaviour
     public VehicleType vehicleType = new VehicleType();
     public Fuel fuelModule = new Fuel();
     public int NativeStarts, NativeStops;
-    // Behavioral test doubles for native transitions, not an engine simulation.
     private void StartEngine() => Transition(true);
     private void StopEngine() => Transition(false);
     private void Transition(bool start)
@@ -185,7 +183,6 @@ namespace Helpers
 }
 namespace FoodTrucks
 {
-    // Body certification is an independent boundary, covered by its own harness.
     internal sealed class CrewProbeBody
     {
         internal static int Constructions;

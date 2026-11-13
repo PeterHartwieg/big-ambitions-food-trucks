@@ -11,8 +11,6 @@ namespace FoodTrucks.Core.Saves
 {
     public class SaveState
     {
-        // Schema 2: all window sales wait in CrewTakings, including sales served by the player.
-        // Schema 1 migrates unchanged: its pot contains only unpaid crew sales, with player sales already paid.
         public const int CurrentSchemaVersion = 2;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -22,45 +20,23 @@ namespace FoodTrucks.Core.Saves
         public LicenceState Licence { get; set; } = new LicenceState();
         public List<VehicleState> Vehicles { get; set; } = new List<VehicleState>();
         public List<DailySales> DailySales { get; set; } = new List<DailySales>();
-        // Regulars belong to the whole fleet, by spot and weekday.
         public RegularsState Regulars { get; set; } = new RegularsState();
-        // Offers, booked gigs and the booking reputation. Its random state is seeded by the game side
-        // on first use (CateringState.New); 0 until then.
         public CateringState Catering { get; set; } = new CateringState();
-        // Visited commissaries, spaces, orders, stock and failed payments (older saves read an empty state).
         [JsonProperty(NullValueHandling = NullValueHandling.Include)]
         public CommissaryState Commissary { get; set; } = new CommissaryState();
-        // The city's events and the player's bookings (additive field: older saves read none).
         public EventsState Events { get; set; } = new EventsState();
-        // Who held each premium spot when, by spot ID (Holds).
         public Dictionary<string, List<PlaceHold>> PremiumHolds { get; set; } = new Dictionary<string, List<PlaceHold>>(StringComparer.Ordinal);
-        // Vehicles partnered with the player's own venues.
         public List<PartnershipState> Partnerships { get; set; } = new List<PartnershipState>();
-        // Hours each hire worked on each vehicle per payroll day, so the wage the game pays at midnight is split
-        // over the vehicles worked (additive field: older saves read none). Dropped once the wage is paid.
         public List<CrewHours> CrewHours { get; set; } = new List<CrewHours>();
-        // The first payroll day whose hours are all in CrewHours, set once by the first version that logs them
-        // (additive field: null in older saves). Wages for earlier days go to the crew the hire is on at payment.
         public int? CrewHoursSince { get; set; }
-        // The last game hour ((day - 1) × 24 + hour) each hire was paid for as crew, so an hour that is both a route
-        // hour and an hour at a window the player opened is paid once (additive field: older saves read none).
         public Dictionary<string, long> CrewPaidHour { get; set; } = new Dictionary<string, long>(StringComparer.Ordinal);
-        // The hour in whose first half each hire last served a window the player opened, and on which vehicle, until
-        // that hour is over and decided (CrewPay.CloseHours; additive field: older saves read none).
         public Dictionary<string, CrewServed> CrewServedHour { get; set; } = new Dictionary<string, CrewServed>(StringComparer.Ordinal);
-        // All window sales not paid in yet, per vehicle and day; player and crew paid together at midnight.
-        // The historical CrewTakings field name is retained.
         public List<CrewTaking> CrewTakings { get; set; } = new List<CrewTaking>();
 
-        // Confirmed cart sales awaiting payment. Kept across reload if the native payment fails.
         public List<FoodTrucks.Core.Fleet.CartSale> CartSales { get; set; } = new List<FoodTrucks.Core.Fleet.CartSale>();
 
-        // Each food vehicle's number in its name ("Food cart 2"), kept so a vehicle bought later never renumbers the
-        // others (FleetNames; additive field: older saves read none and number their vehicles in ID order once).
         public List<VehicleNumber> VehicleNumbers { get; set; } = new List<VehicleNumber>();
 
-        // Another mod's lease and the owners of crew openings through the vendor API (VendorBook; additive field). Null,
-        // and so not written at all, until such a mod first asks for a vehicle or renews a lease.
         public FoodTrucks.Core.Vendor.VendorState? Vendor { get; set; }
 
         [JsonExtensionData]
@@ -76,7 +52,6 @@ namespace FoodTrucks.Core.Saves
     public class VehicleNumber
     {
         public string Id { get; set; } = string.Empty;
-        // The game's vehicle type name: each kind is numbered on its own.
         public string Kind { get; set; } = string.Empty;
         public int Number { get; set; }
 
@@ -87,9 +62,7 @@ namespace FoodTrucks.Core.Saves
     public class LicenceState
     {
         public bool HasVendorLicence { get; set; }
-        // The last day the licence is valid.
         public int LicenceExpiresOnDay { get; set; }
-        // The day the first licence was bought.
         public int? FirstLicensedDay { get; set; }
 
         [JsonExtensionData]
@@ -99,77 +72,39 @@ namespace FoodTrucks.Core.Saves
     public class VehicleState
     {
         public string VehicleId { get; set; } = string.Empty;
-        // Optional version-1 logo, interpreted by VehicleLogo; old saves have no branding.
-        // Preserve unreadable/newer cosmetics verbatim without rejecting the vehicle's financial state.
         public JToken? Logo { get; set; }
         public bool IsOpen { get; set; }
         public double SaleProgress { get; set; }
         public int LifetimeSales { get; set; }
         public long LifetimeRevenueCents { get; set; }
-        // Item names keep their exact spelling; absent in older schema-1 saves.
         public Dictionary<string, long> CustomPriceCents { get; set; } = new Dictionary<string, long>(StringComparer.Ordinal);
-        // The queue and the orders at the window while open (SalesSimulator); null when closed.
         public ServiceState? Service { get; set; }
-        // "cart" or "truck", as in economy.json. Set when the mod first sees the vehicle.
         public string VehicleType { get; set; } = string.Empty;
         public bool HasPermit { get; set; }
-        // A hire's route; null when the player runs the vehicle.
         public HireSchedule? Schedule { get; set; }
-        // Set while a hire drives between stops; the vehicle is off the map until it arrives.
         public TransitState? Transit { get; set; }
-        // Hidden cleanliness points and the grade on the window; null until the vehicle first opens.
         public HealthState? Health { get; set; }
-        // The game's employee IDs of the hires who run this vehicle, in the order they were taken on.
         public List<string> Crew { get; set; } = new List<string>();
-        // The route's planned days still running: today's, and yesterday's while a late stop runs past midnight.
         public List<ShiftPlan> Shifts { get; set; } = new List<ShiftPlan>();
-        // The stop a hire opened the window at; null when the player opened it or it is closed.
         public int? HireStop { get; set; }
-        // Where the crew last parked it for a stop: a truck may stand further from the stop than the stop radius.
         public ArrivalState? Arrival { get; set; }
-        // A stop the crew couldn't park at, given up on until its opening ends.
         public SkipState? Skipped { get; set; }
-        // What happened each day not yet counted into health and regulars: opened, cleaned, stale stock, and the
-        // minutes open at each spot. Counted and dropped when a new day starts (ReputationBook.CloseDaysBefore).
         public List<DayRecord> Days { get; set; } = new List<DayRecord>();
-        // The pitch the open window stands on, fixed when it opened; null when closed.
         public string? OpenPitch { get; set; }
-        // The working day the vehicle last opened on, so cleaning after a late shift reaches that day.
         public int? LastOpenedDay { get; set; }
-        // Food on board by the day it came on, oldest first, sold oldest first (stale stock).
         public Dictionary<string, List<StockBatch>> StockBatches { get; set; } = new Dictionary<string, List<StockBatch>>(StringComparer.Ordinal);
-        // The premium spot this open window holds (first come among the player's vehicles); null when none.
         public string? PremiumSpot { get; set; }
-        // Units of each item sold today and yesterday, for BizMan's fleet page (SoldCounts; additive field: older
-        // saves read none). Older days are dropped as new sales come in.
         public List<SoldDay> Sold { get; set; } = new List<SoldDay>();
-        // The start minute of the route leg the crew last restocked at the commissary for (CrewRestock): once per leg.
         public long? RestockedFor { get; set; }
-        // The commissary's stock of its foods after that attempt (CrewRestock.StockKey): a change allows one more.
         public string? RestockStockKey { get; set; }
-        // The game day the commissary last texted what a crew restock was short of: once a day.
         public int? RestockShortDay { get; set; }
-        // The crew owes the drive back to the commissary bay: set when it leaves for a stop, or the plan reaches its
-        // drive back; cleared once in the bay. Kept apart from the plans, so a delay, a replan or a load doesn't lose it
-        // (HireRunner.Step).
         public bool ReturnPending { get; set; }
-        // A window the crew opened whose stop a route edit took away (RouteEditor.Remap): the runner closes it on its next
-        // step, rather than leaving it open as if the player had opened it.
         public bool CrewWindowLost { get; set; }
-        // The marketing level the player booked (MarketingRules), renewed at every day change; null is none. An ID this
-        // version doesn't know (a newer version's level) is kept as it is and runs as none: no passers, no fee (additive
-        // field: older saves read none).
         public string? MarketingLevel { get; set; }
-        // The first game day the booked level may be charged: the day after it was picked. Null once a day is paid: the
-        // level then renews at every day change (MarketingFees; additive field).
         public int? MarketingStartsDay { get; set; }
-        // The last game day whose marketing fee is paid, the level it ran with and what was paid for it, all written
-        // whenever a day is paid (MarketingFees; additive fields: older saves read none, nothing paid).
         public int? MarketingPaidThroughDay { get; set; }
         public string? MarketingPaidLevel { get; set; }
         public long MarketingPaidCents { get; set; }
-        // The paid day before that and the level that ran on it, so sales still catching up on that day after midnight
-        // keep its marketing even once the new day's fee is paid or refused (additive fields: older saves read none).
         public int? MarketingPreviousDay { get; set; }
         public string? MarketingPreviousLevel { get; set; }
 
@@ -177,34 +112,24 @@ namespace FoodTrucks.Core.Saves
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
-    // Street food revenue per in-game day, the mod's own record for income tax.
     public class DailySales
     {
         public int Day { get; set; }
         public long RevenueCents { get; set; }
-        // What the stock sold that day cost at the wholesaler (additive field: older saves read 0).
         public long CostCents { get; set; }
-        // True once this day's profit has been added to the game's financial summary, so Econoview shows
-        // the carts' row only where the stored total includes it (summaries from before 0.3.0 don't).
         public bool InSummary { get; set; }
         // The day's money per vehicle, for Econoview's breakdown (additive field: days recorded by older
         // versions have none, and their profit shows as one "not broken down" figure).
         public List<VehicleDay> ByVehicle { get; set; } = new List<VehicleDay>();
-        // The vendor licence bought that day; it belongs to the whole fleet, not to one vehicle.
         public long LicenceCents { get; set; }
-        // Event places booked that day, less places paid back; below 0 on a day with more refunds than bookings.
         public long EventPlacesCents { get; set; }
-        // Delivery fees paid that day, less refunded fees; goods become cost of goods only when sold.
         public long DeliveryFeesCents { get; set; }
-        // What the day summary added to the game's total profit for this day, kept when the day is marked.
-        // Null for days marked by older versions, which added sales less stock cost (SalesLedger.SummaryCents).
         public long? SummaryCents { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
-    // Hours one hire was counted as working on one vehicle on one payroll day (the game's day the hours fell in).
     public class CrewServed
     {
         public long Hour { get; set; }
@@ -225,43 +150,30 @@ namespace FoodTrucks.Core.Saves
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
-    // One vehicle's money on one day. Every amount is 0 or more: income and costs alike.
     public class VehicleDay
     {
         public string VehicleId { get; set; } = string.Empty;
-        // Street sales at the window.
         public long SalesCents { get; set; }
-        // Catering fees.
         public long CateringCents { get; set; }
-        // The wholesale cost of the stock sold or served.
         public long StockCents { get; set; }
-        // The crew's wages, which the game pays as unassigned staff wages (moved out of that row in Econoview).
         public long WagesCents { get; set; }
-        // Parking fees and tickets, which the game charges in its own "Parking fees" row (moved out of it too).
         public long ParkingCents { get; set; }
-        // The vehicle's vending permit.
         public long PermitCents { get; set; }
         public long CommissaryRentCents { get; set; }
         public long OvernightFineCents { get; set; }
-        // The vehicle's daily marketing fees (additive field: older saves read 0).
         public long MarketingCents { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
-    // SalesSimulator's state for one open vehicle. Minute counts simulated minutes since it opened.
     public class ServiceState
     {
         public long RandomState { get; set; }
         public long Minute { get; set; }
         public long NextCustomerId { get; set; } = 1;
-        // Customers walking up to the line, in the order they arrived; each joins Queue at JoinsAtMinute
-        // (additive field: saves from 0.9.0 and earlier have none and load with an empty list).
         public List<ServiceCustomer> Approaching { get; set; } = new List<ServiceCustomer>();
-        // Waiting customers, first in line first.
         public List<ServiceCustomer> Queue { get; set; } = new List<ServiceCustomer>();
-        // Orders being made, one per serving worker.
         public List<ServiceCustomer> Window { get; set; } = new List<ServiceCustomer>();
 
         [JsonExtensionData]
@@ -271,16 +183,10 @@ namespace FoodTrucks.Core.Saves
     public class ServiceCustomer
     {
         public long Id { get; set; }
-        // While approaching: the minute they turned up. In the queue: the minute they joined it, which is
-        // where their patience counts from.
         public long ArrivedAtMinute { get; set; }
-        // Approaching only: the minute they reach the line and join the queue.
         public long JoinsAtMinute { get; set; }
-        // Minutes this customer waits in dry weather before leaving.
         public double Patience { get; set; }
-        // The demand category the customer came for.
         public string Category { get; set; } = string.Empty;
-        // At the window only: the item being made and the work left on it.
         public string? Item { get; set; }
         public double MinutesLeft { get; set; }
 
@@ -288,19 +194,10 @@ namespace FoodTrucks.Core.Saves
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
-    // A hire's daily route: stops in order, each with its opening hours (minutes after the day's midnight).
-    // A vehicle's week plan (Peter, 16 October 2026): each weekday has its own stops (ScheduleStop.Day) or none, and each
-    // crew member has their own shifts per weekday. A weekday with stops runs unless it is in Closed. Stops are kept
-    // grouped by weekday, Monday first, each day's in time order (WeekPlan.Order); a stop's index is its place in this
-    // one list, so plans, the open window and a trip on its way name a stop of any day without ambiguity.
-    // Saves written before the week plan had one stop list and a "days" list (empty meaning every day); WeekPlan.Upgrade
-    // turns that into the same stops on each of those days when the save loads.
     public class HireSchedule
     {
         public List<ScheduleStop> Stops { get; set; } = new List<ScheduleStop>();
-        // Weekdays the vehicle stays closed although it has stops there (the day tile's tick box).
         public List<DayOfWeek> Closed { get; set; } = new List<DayOfWeek>();
-        // Each crew member's shifts, at most one per weekday (WeekPlan.SetShift).
         public List<CrewShift> CrewShifts { get; set; } = new List<CrewShift>();
 
         [JsonExtensionData]
@@ -309,13 +206,10 @@ namespace FoodTrucks.Core.Saves
 
     public class ScheduleStop
     {
-        // The weekday this stop belongs to; its times count from that day's midnight.
         public DayOfWeek Day { get; set; }
-        // The game side's key for the spot, the same key regulars use.
         public string SpotKey { get; set; } = string.Empty;
         public double X { get; set; }
         public double Z { get; set; }
-        // Height and facing (degrees) where the vehicle stood: a cart is put back exactly there.
         public double Y { get; set; }
         public double Heading { get; set; }
         public int OpenAt { get; set; }
@@ -325,26 +219,18 @@ namespace FoodTrucks.Core.Saves
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
-    // One crew member's shift on a weekday, in whole hours from that day's midnight: Start < End <= 24, at most
-    // FleetRules.MaxShiftHours long, as the game's own work shifts. A late route past midnight needs a shift on the
-    // next weekday from 00:00. Shifts are set on the game's own Schedule tab (Peter, 16 October 2026), on the vehicle's
-    // rows: Station names the row, "serving1" and "serving2" (a truck's two staff places, a cart's one); anyone on shift
-    // serves, drives and restocks. A crew member may have more than one shift a day, never two at the same hour, and a row never
-    // holds two shifts at the same hour (WeekPlan.CheckShifts).
     public class CrewShift
     {
         public string EmployeeId { get; set; } = string.Empty;
         public DayOfWeek Day { get; set; }
         public int Start { get; set; }
         public int End { get; set; }
-        // Additive field: shifts saved before the Schedule tab read null, a serving row.
         public string? Station { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
-    // One day of a hire's route as HireSchedules.PlanDay planned it. Times are absolute game minutes.
     public class ShiftPlan
     {
         public int Day { get; set; }
@@ -368,7 +254,6 @@ namespace FoodTrucks.Core.Saves
     public class ArrivalState
     {
         public string SpotKey { get; set; } = string.Empty;
-        // The stop it was parked for, when known; a route can visit one spot twice.
         public int? StopIndex { get; set; }
         public double X { get; set; }
         public double Z { get; set; }
@@ -419,7 +304,6 @@ namespace FoodTrucks.Core.Saves
     public class SkipState
     {
         public string SpotKey { get; set; } = string.Empty;
-        // The stop given up, when known; a route can visit one spot twice.
         public int? StopIndex { get; set; }
         public long Until { get; set; }
 
@@ -427,23 +311,19 @@ namespace FoodTrucks.Core.Saves
         public IDictionary<string, JToken> ExtensionData { get; set; } = new Dictionary<string, JToken>();
     }
 
-    // Times are absolute game minutes: (day - 1) × 1440 + minute of the day.
     public class TransitState
     {
         public string ToSpotKey { get; set; } = string.Empty;
         public double ToX { get; set; }
         public double ToZ { get; set; }
-        // The stop it is going to, and when that stop's planned opening ends; absent in older transits.
         public int? ToStopIndex { get; set; }
         public long? ToCloseAt { get; set; }
         public double ToY { get; set; }
         public double ToHeading { get; set; }
-        // Where it left from, so it can go back there when the stop has no room for it.
         public double FromX { get; set; }
         public double FromY { get; set; }
         public double FromZ { get; set; }
         public double FromHeading { get; set; }
-        // The game's parking state where it left from, as a number, to restore if it goes back there.
         public int FromParkingState { get; set; }
         public long DepartsAt { get; set; }
         public long ArrivesAt { get; set; }

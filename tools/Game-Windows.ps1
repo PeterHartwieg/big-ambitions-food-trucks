@@ -1,6 +1,3 @@
-# Starts, stops or reports on Big Ambitions on the game PC, for agent-driven test sessions.
-# A process started from an ssh session has no desktop, so start runs the game through a one-off scheduled task
-# with an interactive logon: it opens in the signed-in user's session, as if started from the Start menu.
 param(
     [Parameter(Mandatory = $true)][ValidateSet('start', 'stop', 'status')][string]$Action,
     [string]$GameArgs = '-console -foodtrucks-test'
@@ -14,7 +11,6 @@ $receiptPath=Join-Path $env:USERPROFILE '.big-ambitions-bridge\normal\run.json'
 
 function Get-Game { Get-Process 'Big Ambitions' -ErrorAction SilentlyContinue }
 
-# True when the running game was started with the test flag, so it is ours to stop.
 function Test-TestGame {
     $game = Get-Game
     if (!$game) { return $false }
@@ -77,7 +73,6 @@ switch ($Action) {
         "Game started (pid $($game.Id)) with: $GameArgs"
     }
     'stop' {
-        # Only run-remote.sh stop --force gets here, after the bridge's quit didn't close the game.
         $game = Get-Game
         if (!$game) { 'Game: not running.'; break }
         if (!(Test-TestGame)) { throw 'The running game was started without -foodtrucks-test, so it is not a test session. Not stopped.' }

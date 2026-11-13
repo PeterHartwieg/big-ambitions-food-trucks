@@ -7,7 +7,6 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Marketing
 {
-    // One marketing level a vehicle can run: its passers factor and its fee per game day by vehicle kind.
     public sealed class MarketingLevel
     {
         public MarketingLevel(string id, double footfall, IReadOnlyDictionary<string, long> costPerDayCents)
@@ -30,13 +29,11 @@ namespace FoodTrucks.Core.Marketing
         }
 
         public string Id { get; }
-        // Multiplies the vehicle's passers, as the game's promotion multiplies a shop's customers.
         public double Footfall { get; }
         public IReadOnlyDictionary<string, long> CostPerDayCents { get; }
         public bool IsNone => Id == MarketingRules.None;
     }
 
-    // The marketing levels of data/rules.json, in order. The first is always "none": no factor, no fee.
     public sealed class MarketingRules
     {
         public const string None = "none";
@@ -57,7 +54,6 @@ namespace FoodTrucks.Core.Marketing
 
         public IReadOnlyList<MarketingLevel> Levels { get; }
 
-        // Null for an unknown ID (a level a newer mod version added), or for null.
         public MarketingLevel? Level(string? id) => id == null ? null : Levels.FirstOrDefault(l => l.Id == id);
 
         private static IEnumerable<MarketingLevel> DefaultLevels() => new[]

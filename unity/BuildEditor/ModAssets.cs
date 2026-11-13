@@ -8,8 +8,6 @@ using UnityEngine;
 
 namespace FoodTrucks.BuildEditor
 {
-    // Generates the mod's Unity assets from code so they can be rebuilt and reviewed as text.
-    // Entry point for `Unity -batchmode -executeMethod FoodTrucks.BuildEditor.ModAssets.Generate`.
     public static class ModAssets
     {
         public const string ModFolder = "Assets/Mods/FoodTrucks";
@@ -33,7 +31,6 @@ namespace FoodTrucks.BuildEditor
                 EnsureManifest();
                 TruckAssets.GenerateTruck(VehiclesFolder, TruckTypeName);
                 EquipmentAssets.Generate(VehiclesFolder);
-                // The machines' prefabs use the equipment models and materials made just before.
                 ItemAssets.Generate();
                 CartAssets.GenerateCart(VehiclesFolder, CartTypeName);
                 CommissaryAssets.Generate();
@@ -73,7 +70,6 @@ namespace FoodTrucks.BuildEditor
             manifest.AssetBundleName = "foodtrucks.unity3d";
             manifest.ModAssembly = AssetDatabase.LoadAssetAtPath<AssemblyDefinitionAsset>(ModFolder + "/FoodTrucks.asmdef");
             manifest.LocalesFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(ModFolder + "/Locales");
-            // Dependencies/ is found by convention; the folder is recreated by the build script.
             manifest.DependenciesFolder = null!;
             manifest.TargetPlatforms = ModTargetPlatforms.Windows | ModTargetPlatforms.Mac;
             if (manifest.ModAssembly == null) throw new InvalidOperationException("FoodTrucks.asmdef not found.");

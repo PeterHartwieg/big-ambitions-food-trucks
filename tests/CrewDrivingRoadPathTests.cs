@@ -7,7 +7,6 @@ namespace FoodTrucks.Core.Tests;
 
 public class CrewDrivingRoadPathTests
 {
-    // SYNTHETIC native-like fixtures. These are not captured Gley routes or measured native results.
     private static ProbePoint[] Turn(double radius = 20, double stepAngle = .2)
     {
         var p = new List<ProbePoint> { new(0, 0), new(0, .25), new(0, 10), new(0, 20) };
@@ -80,7 +79,7 @@ public class CrewDrivingRoadPathTests
                     maxDeviation = Math.Max(maxDeviation, distance);
                 }
         }
-        Assert.True(maxDeviation > .03); // actually exercises smoothing, rather than a straight polyline
+        Assert.True(maxDeviation > .03);
     }
 
     [Theory]
@@ -141,7 +140,7 @@ public class CrewDrivingRoadPathTests
             var b = Math.Atan2(points[i].X - points[i - 1].X, points[i].Z - points[i - 1].Z);
             Assert.InRange(Math.Abs(Math.Atan2(Math.Sin(b - a), Math.Cos(b - a))), 0, .12);
             var spacing = Math.Sqrt(Math.Pow(points[i].X - points[i - 1].X, 2) + Math.Pow(points[i].Z - points[i - 1].Z, 2));
-            Assert.True(spacing < .8); // one-metre-only subdivision would leave wider turning spans
+            Assert.True(spacing < .8);
         }
     }
 
@@ -168,7 +167,6 @@ public class CrewDrivingRoadPathTests
     [Fact]
     public void FeasibleRadiusOutsideNarrowNativeCorridorIsRefused()
     {
-        // Radius 30 is feasible, but these 14.8 m native chords need >0.5 m of lateral smoothing.
         var wide = Circle(30, 1.5, 3);
         var error = Assert.Throws<ArgumentException>(() => ProbeRoadPath.Prepare(wide, CrewDrivingTests.Truck()));
         Assert.Contains("certified", error.Message);
@@ -205,7 +203,6 @@ public class CrewDrivingRoadPathTests
         var tooManySamples = new ProbePoint[2048];
         for (var i = 0; i < tooManySamples.Length; i++) tooManySamples[i] = new ProbePoint(0, i * .48);
         Assert.Equal(2048, ProbeRoadPath.Prepare(tooManySamples, geometry).Path.Count);
-        // Each 0.96 m native span needs two <=0.95 m samples, exceeding the global sample cap.
         var exceedsSamples = new ProbePoint[1030];
         for (var i = 0; i < exceedsSamples.Length; i++) exceedsSamples[i] = new ProbePoint(0, i * .96);
         Assert.Throws<ArgumentException>(() => ProbeRoadPath.Prepare(exceedsSamples, geometry));

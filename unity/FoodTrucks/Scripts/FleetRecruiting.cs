@@ -19,20 +19,6 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // The game's recruitment agency recruits for the street food fleet (Peter, 17 October 2026). In 1.0 the agency wants a
-    // building business with a name (RecruitmentAgencyDialog's constructor), so a player with only carts and trucks
-    // couldn't hire at all. The game's own Basic HR course check stays: it comes first in the constructor.
-    //
-    // The fleet is one more entry in the campaign form's business list: a stand-in BuildingRegistration with no street,
-    // never in the save, named "Street food fleet". Its Address is null (BuildingRegistration.Address reads its building,
-    // and an empty street has none), so the game's own campaign code books the price unattributed to a business, saves the
-    // campaign with no business address, and generates candidates with no assigned address: they arrive unassigned, as the
-    // game's own debug candidates do (RecruitmentCommands), and HireCandidate keeps them so. Everything else is the game's:
-    // the price, the deadline, the candidates' hours and wages, the hiring in My Employees.
-    //
-    // A campaign with no business address is the fleet's. The agency's campaign list reads that address's business name,
-    // so it shows the fleet's name for one; without the mod the list would fail on it, so the uninstall step ends the
-    // fleet's campaigns and refunds the candidates not found yet.
     internal static class FleetRecruiting
     {
         private const string FleetNameKey = "foodtrucks:recruitment_fleet";
@@ -62,13 +48,11 @@ namespace FoodTrucks
             }
         }
 
-        // The stand-in for the fleet in the form's business list. One per form opening; recognised by its name and empty street.
         private sealed class FleetEntry : BuildingRegistration
         {
             public FleetEntry() { BusinessName = FleetName(); }
         }
 
-        // A campaign without a business: the fleet's (a save may bring the missing address back as an empty one).
         internal static bool IsFleet(RecruitmentCampaign? campaign) =>
             campaign != null && (campaign.businessAddress == null || campaign.businessAddress.IsUndefined() || string.IsNullOrEmpty(campaign.businessAddress.streetName));
 
@@ -77,7 +61,6 @@ namespace FoodTrucks
         private static int FoodVehicles() =>
             SaveGameManager.Current?.VehicleInstances?.Count(v => v != null && FoodTrucksMod.KindOf(v.vehicleTypeName) != null) ?? 0;
 
-        // The agency's skills for this conversation's agency, or null.
         private static string[]? AgencySkillsHere()
         {
             var address = DialogController.current?.contact?.Address;
@@ -93,9 +76,6 @@ namespace FoodTrucks
             failed = true;
         }
 
-        // Prefix on RecruitmentAgencyDialog.NoBusinesses, which the constructor shows after the Basic HR check when the player
-        // has no named building business. With a food vehicle and an agency that recruits customer service, the
-        // conversation goes on as for a business: the agency's greeting, then the campaign form.
         internal static bool NoBusinessesPrefix(RecruitmentAgencyDialog __instance, ref DialogEntry __result)
         {
             try
@@ -119,7 +99,6 @@ namespace FoodTrucks
             }
         }
 
-        // Postfix on RecruitmentSettings.OnEnable: the fleet as the last entry of the form's business list.
         internal static void SettingsEnablePostfix(RecruitmentSettings __instance)
         {
             try
@@ -136,8 +115,6 @@ namespace FoodTrucks
             catch (Exception ex) { Fail("the campaign form's list", ex); }
         }
 
-        // Prefix on RecruitmentSettings.SelectBusiness: the fleet picked. Its skill is customer service; the rest is the
-        // game's form as for a business (the schedule toggles follow the skill when it is picked).
         internal static bool SelectBusinessPrefix(RecruitmentSettings __instance, int businessIndex)
         {
             try
@@ -145,7 +122,6 @@ namespace FoodTrucks
                 if (Registrations == null || SkillsDropdown == null || AgencySkills == null) return true;
                 var list = Registrations(__instance);
                 if (list == null || businessIndex < 0 || businessIndex >= list.Count || !(list[businessIndex] is FleetEntry fleet)) return true;
-                // The stand-in never reaches the game's own SelectBusiness, which reads its building's type (review round 2).
                 var skills = CanWork ? FleetRecruitment.Skills(FoodVehicles(), AgencySkills(__instance)) : Array.Empty<string>();
                 var dropdown = SkillsDropdown(__instance);
                 if (skills.Count == 0)
@@ -176,8 +152,6 @@ namespace FoodTrucks
             }
         }
 
-        // Prefix on RecruitmentAgencyDialog.OnRecruitmentSettingsSet: a form still open on the fleet after the uninstall step
-        // starts nothing (review round 1): the game's own "select a business", and the form stays.
         internal static bool SettingsSetPrefix(ref DialogEntry? __result)
         {
             try
@@ -195,7 +169,6 @@ namespace FoodTrucks
             }
         }
 
-        // Postfix on RecruitmentAgencyDialog.OnRecruitmentSettingsSet: a log line for a fleet campaign the game started.
         internal static void SettingsSetPostfix(DialogEntry __result)
         {
             try
@@ -209,8 +182,6 @@ namespace FoodTrucks
             catch (Exception ex) { Fail("the campaign's log line", ex); }
         }
 
-        // Prefix on RecruitmentCampaignsList.SetUpContract: a fleet campaign (no business address) listed with the fleet's
-        // name. The rest is the game's own entry, line for line.
         internal static bool ContractPrefix(RecruitmentCampaignsList __instance, RecruitmentCampaign recruitmentCampaign)
         {
             try
@@ -244,9 +215,6 @@ namespace FoodTrucks
             }
         }
 
-        // The uninstall step: the fleet's campaigns end, and the price of the candidates not found yet comes back, so no
-        // campaign the game can't show is left in the save. A campaign whose refund is refused stays, and the player is
-        // told to run the step again before removing the mod. Returns the refund in cents and the campaigns left.
         internal static (long Refunded, int Left) EndForUninstall()
         {
             var campaigns = SaveGameManager.Current?.RecruitmentCampaigns;
@@ -256,7 +224,6 @@ namespace FoodTrucks
             foreach (var campaign in campaigns.Where(IsFleet).ToList())
             {
                 var cents = FleetRecruitment.RefundCents((long)Math.Round(campaign.price * 100.0), campaign.amountOfCandidates, campaign.candidatesFound);
-                // Paid back first; a refused refund keeps the campaign, so nothing is lost and the step can run again.
                 if (cents > 0)
                 {
                     var info = new TransactionInfo("ba:transaction_recruitmentcampaign", new Dictionary<string, string> { { "businessName", FleetName() } });

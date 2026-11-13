@@ -60,7 +60,6 @@ def provision():
         for file in [dll,newtonsoft]:
             subprocess.run(['scp','-q',str(file),HOST+':'+directory+'/'+file.name],check=True,timeout=60)
         remote("$ErrorActionPreference='Stop'; Set-Content (Join-Path $env:USERPROFILE "+literal(directory+'/ready')+") 'ready'")
-    # Stable loader points to an immutable DLL pair. Already running PowerShell callers keep their version.
     loader = "[void][Reflection.Assembly]::LoadFrom((Join-Path $env:USERPROFILE '"+directory+"/Newtonsoft.Json.dll'))\n[void][Reflection.Assembly]::LoadFrom((Join-Path $env:USERPROFILE '"+directory+"/BridgeControl.dll'))\n"
     remote("$ErrorActionPreference='Stop'; [IO.File]::WriteAllText((Join-Path $env:USERPROFILE '.big-ambitions-bridge/Control.ps1'), ([Console]::In.ReadToEnd() | ConvertFrom-Json))", loader)
 

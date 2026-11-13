@@ -20,12 +20,6 @@ using ItemTags = BigAmbitions.Tags.TagRef.Itemtag;
 
 namespace FoodTrucks
 {
-    // The bridge's fixture and logistics commands (docs/test-bridge.md, "fixture logistics", "logistics"). The fixture
-    // turns the loaded FT save into one where a logistics plan delivers to a commissary: a warehouse with pallets and
-    // stock, a headquarters with a logistics manager, a delivery vehicle and driver in the warehouse, a space at the
-    // commissary and a plan from the warehouse to it. Each step uses the game's own helpers, as the console's RentBuilding,
-    // BizMan's Start business, the hiring screen, the warehouse's driver dropdown and the plan screen do; a step finds
-    // what an earlier run made and leaves it. One log line per step.
     internal static partial class TestBridgeCommands
     {
         internal const string FixtureWarehouseName = "FT Fixture Warehouse";
@@ -37,7 +31,6 @@ namespace FoodTrucks
         private const string DriverSkill = "ba:skill_deliverydriver";
         private const string HotDog = "ba:itemname_hotdog";
 
-        // Thrown by a step that can't be done: the fixture stops there and says why.
         private sealed class StepFailed : Exception
         {
             public StepFailed(string message) : base(message) { }
@@ -56,7 +49,6 @@ namespace FoodTrucks
             }
         }
 
-        // { "name": "logistics", "site"?, "stock"?, "targets"?, "vehicle"? }
         private static JToken Fixture(JObject args)
         {
             var name = Need(args, "name", "the fixture's name: logistics");
@@ -141,7 +133,6 @@ namespace FoodTrucks
             public LogisticsManagerPlan? Plan;
         }
 
-        // [ { "item", "<amountKey>" } ], or the default; an item is a key or the game's name for it.
         private static List<(string Item, int Amount)> ItemRows(JObject args, string key, string amountKey, (string, int)[] fallback)
         {
             if (args[key] == null || args[key]!.Type == JTokenType.Null) return fallback.ToList();
@@ -165,9 +156,6 @@ namespace FoodTrucks
             return match?.itemName ?? throw new BridgeError($"No game item '{text}'.");
         }
 
-        // ---- Steps ----
-
-        // The player rents a space at the commissary with the phone's Rent (Commissary.RentForTesting).
         private static (string, string) CommissarySpace(FixtureContext c, FoodTrucks.Core.Saves.SaveState state)
         {
             if (CommissaryOrdering.CanOrder(state.Commissary, c.Site.Id))
@@ -188,8 +176,6 @@ namespace FoodTrucks
             return ("done", $"{FoodTrucksMod.KindOf(vehicle.vehicleTypeName)} {vehicle.id} rented a space at {c.Site.Id} (the phone's Rent, first day's rent charged)");
         }
 
-        // A warehouse building near the commissary, rented as the console's RentBuilding does (BuildingHelper.RentBuilding,
-        // no rent, no deposit) and started as a warehouse as BizMan's Start business does (StartBusinessUI.SetUpBusiness).
         private static (string, string) FixtureWarehouse(FixtureContext c)
         {
             var existing = PlayerBusinesses(WarehouseType).OfType<Warehouse>().Where(r => r.GetBuildingType() == WarehouseBuilding)
@@ -212,10 +198,6 @@ namespace FoodTrucks
                             $"at no rent and started {warehouse.BusinessName}, {warehouse.vehicleSlots.Count} vehicle slots{course}");
         }
 
-        // Pallet storage (items tagged iswarehousestorage) registered in the warehouse as the game's layout insert does
-        // (ItemHelper.InitializeNewInstance, BuildingRegistration.AddItemInstanceToBuilding), enough for the stock. The
-        // places come from the game's own layout for a building of this size when it has pallets, else beside the
-        // building's delivery spot.
         private static (string, string) FixturePallets(FixtureContext c)
         {
             var warehouse = c.Warehouse!;
@@ -249,8 +231,6 @@ namespace FoodTrucks
             return ("done", $"placed {added.Count} {string.Join(", ", added.Select(a => a.itemName).Distinct())} ({source}), room for {free} boxes");
         }
 
-        // Stock on the pallets through the game's own delivery into a building (ItemHelper.DeliverCargoToBuilding, as an
-        // import partnership delivers), up to each item's amount, priced per unit (the item's wholesale price unless given).
         private static (string, string) FixtureStock(FixtureContext c)
         {
             var warehouse = c.Warehouse!;
@@ -275,13 +255,9 @@ namespace FoodTrucks
             return ("done", string.Join(", ", done) + (already.Count > 0 ? "; already there: " + string.Join(", ", already) : ""));
         }
 
-        // The warehouse's plan, if it has one (a warehouse is in at most one plan, as the plan screen's warehouse list
-        // leaves out warehouses another plan has).
         private static LogisticsManagerPlan? PlanOf(Warehouse warehouse) =>
             SaveGameManager.Current.logisticsManagerPlans.FirstOrDefault(p => p != null && !p.isFactory && p.targetAddress == warehouse.Address);
 
-        // A headquarters, rented and started as the warehouse is; the player's own if there is one. When the warehouse
-        // already has a plan, the plan's own headquarters, so a manager is never hired at one headquarters for another's plan.
         private static (string, string) FixtureHeadquarters(FixtureContext c)
         {
             var planned = PlanOf(c.Warehouse!);
@@ -311,15 +287,11 @@ namespace FoodTrucks
             return ("done", $"rented {building.Address} ({building.BuildingSize}, {Metres(origin, building)} m from {c.Site.Id}'s door) at no rent and started {registration.BusinessName}{course}");
         }
 
-        // A logistics manager working for the headquarters, hired as the game's recruitment makes a candidate
-        // (RecruitmentHelper.GenerateCandidate with the headquarters as the assigned business, then EmployeeHelper.HireCandidate).
         private static (string, string) FixtureManager(FixtureContext c)
         {
             var hq = c.Headquarters!.Address;
             var plans = SaveGameManager.Current.logisticsManagerPlans;
             var mine = PlanOf(c.Warehouse!);
-            // The plan's own manager first, then any free one of this headquarters; only one the 02:00 run counts as
-            // there (EmployeeInstance.IsEmployeeAvailable: not absent without a stand-in, not being replaced).
             var existing = EmployeeHelper.GetEmployeeInstances().Where(e => e != null && e.HasSkill(LogisticsSkill) && e.assignedAddress == hq &&
                     e.IsEmployeeAvailable() && !plans.Any(p => p != mine && p.assignedEmployeeId == e.id))
                 .OrderBy(e => mine != null && mine.assignedEmployeeId == e.id ? 0 : 1).FirstOrDefault();
@@ -336,9 +308,6 @@ namespace FoodTrucks
                             "No work shift: the headquarters has no workstation (see the doc)");
         }
 
-        // A slot with a vehicle that delivers (destinationsThatCanDeliver above 0): one already there, else a new one in the
-        // first free slot, placed as the game's vehicle delivery does (VehicleDeliveryHelper.TryPlaceVehicleInWarehouse:
-        // the slot's parking place, VehicleSlot.AssignVehicle), free. The driver step uses this slot.
         private static (string, string) FixtureVehicle(FixtureContext c)
         {
             var warehouse = c.Warehouse!;
@@ -374,8 +343,6 @@ namespace FoodTrucks
                             $"driver skill {type.requiredDeliveryDriverSkillValue} needed; no money paid");
         }
 
-        // A delivery driver for that slot, hired for the warehouse and set as the warehouse's driver dropdown does
-        // (DriverStation.SetUp: VehicleSlot.employeeDriverId, EmployeeInstance.UpdateWeeklyHoursAndDays).
         private static (string, string) FixtureDriver(FixtureContext c)
         {
             var warehouse = c.Warehouse!;
@@ -405,10 +372,6 @@ namespace FoodTrucks
                             $"to slot {warehouse.vehicleSlots.IndexOf(slot) + 1}; max destinations {max}");
         }
 
-        // The plan, as BizMan's logistics screen builds it: a warehouse plan of the headquarters (LogisticsManagersPlanList
-        // .AddPlan), the warehouse picked (LogisticsManagerPlanUI.OnChangedWarehouse), the manager picked
-        // (ChangeLogisticsManager), a destination added and set to the commissary's entry of the mod's dropdown
-        // (LogisticsCommissary.DestinationFor, as UpdateSelectedBusiness sets it), and the stock targets typed in.
         private static (string, string) FixturePlan(FixtureContext c)
         {
             if (!LogisticsCommissary.Ready)
@@ -460,8 +423,6 @@ namespace FoodTrucks
                 (changes.Count == 0 ? $"plan {plan.id} delivers to {c.Site.Id}" : string.Join("; ", changes)) + $"; destination {index + 1} of {max}");
         }
 
-        // ---- Helpers ----
-
         private static IEnumerable<BuildingRegistration> PlayerBusinesses(string type) =>
             SaveGameManager.Current.BuildingRegistrations.Where(r => r != null && r.RentedByPlayer && r.businessTypeName == type);
 
@@ -477,8 +438,6 @@ namespace FoodTrucks
             return controller == null ? -1 : (int)Math.Round(Vector3.Distance(from, controller.transform.position));
         }
 
-        // The rentable building nearest the point: on the market (AvailableForRent in its registration), not the player's,
-        // no special service, not a commissary's building.
         private static Building? NearestRentable(Vector3 from, Func<Building, bool> fits)
         {
             var all = SaveGameManager.Current.BuildingRegistrations.Where(r => r?.Address != null)
@@ -503,15 +462,10 @@ namespace FoodTrucks
             return best;
         }
 
-        // What BizMan's Start business sets for a warehouse or headquarters (StartBusinessUI.SetUpBusiness), without its
-        // name checks and course check (the course is reported, not required) and without the happiness and goal events.
-        // Returns a note on the course for the step's line.
         private static string StartBusiness(BuildingRegistration registration, string type, string name)
         {
             registration.BusinessName = name;
             registration.businessTypeName = type;
-            // Headquarters: Monday to Friday 8 to 16, as Start business sets them (ResetScheduleDays does the same).
-            // Warehouse: Monday to Saturday 8 to 16.
             registration.ResetScheduleDays();
             if (type == WarehouseType)
                 foreach (var day in registration.scheduleDays) day.isOpen = (int)day.day != 7;
@@ -551,8 +505,6 @@ namespace FoodTrucks
 
         private static bool IsPallet(ItemInstance instance) => instance?.ItemCached != null && instance.ItemCached.HasTag(ItemTags.iswarehousestorage);
 
-        // Places for pallets in this warehouse: the pallets of the game's own layout for a building of this size (a
-        // warehouse layout first), skipping places an item stands at already; then a row beside the delivery spot.
         private static List<(string Item, Vector3 Position, float Yaw)> PalletPlaces(Warehouse warehouse, out string source)
         {
             var building = warehouse.BuildingCached;
@@ -570,7 +522,6 @@ namespace FoodTrucks
                 source = $"the places of the game's {layout.BusinessType} layout '{layout.LayoutName}' for this building size";
                 return spots;
             }
-            // No layout with pallets: a row beside the delivery spot, 2 m apart. Unchecked against the interior's walls.
             var pallet = palletNames.Select(n => ItemsGetter.GetByName(n, suppressError: true)).Where(i => i != null)
                 .OrderByDescending(i => i!.cargoCapacity).ThenBy(i => i!.itemName, StringComparer.Ordinal).First()!;
             var root = InstanceBehavior<BuildingManager>.Instance.GetBuildingTransform(new BuildingSizeInfo(warehouse));
@@ -589,8 +540,6 @@ namespace FoodTrucks
         private static VehicleInstance? VehicleOf(VehicleSlot slot) =>
             string.IsNullOrEmpty(slot.vehicleInstanceId) ? null : SaveGameManager.Current.VehicleInstances.FirstOrDefault(v => v != null && v.id == slot.vehicleInstanceId);
 
-        // The game's vehicle type for warehouse deliveries that asks least of its driver: delivers to at least one
-        // destination, fits a warehouse slot (not a hand vehicle or scooter), not a mod's.
         private static VehicleType? DeliveryVehicleType() =>
             VehicleTypeHelper.GetVehicleTypeNames().Where(n => !VehicleTypeHelper.IsModVehicleType(n) && FoodTrucksMod.KindOf(n) == null)
                 .Select(VehicleTypeHelper.GetVehicleType)
@@ -607,10 +556,6 @@ namespace FoodTrucks
             ["type"] = registration.businessTypeName,
         };
 
-        // ---- logistics: status and run ----
-
-        // { "op": "status" | "run", "warehouse"? }: "warehouse" (an address as the replies give it) lists only that
-        // warehouse's plan; run still runs every plan.
         private static JToken Logistics(JObject args)
         {
             var op = Need(args, "op", "status or run");
@@ -620,15 +565,12 @@ namespace FoodTrucks
             RequireFtCity("logistics run");
             if (LogisticsManagerHelper.WarehouseDeliveriesWork.HasPendingWork || LogisticsManagerHelper.FactoryDeliveriesWork.HasPendingWork)
                 throw new BridgeError("The game's own logistics run is still working through its deliveries; try again in a moment.");
-            // The game's run casts each plan's warehouse registration to a Warehouse and would throw on anything else.
             var broken = SaveGameManager.Current.logisticsManagerPlans.Where(p => p != null && !p.isFactory && HasTarget(p) && WarehouseOf(p) == null).ToList();
             if (broken.Count > 0)
                 throw new BridgeError($"Plans whose warehouse isn't a warehouse the game knows ({string.Join(", ", broken.Select(p => $"{p.id} at {p.targetAddress}"))}); " +
                                       "the game's run would fail on them. Pick another warehouse for them in BizMan.");
             var before = PlansJson(only);
             var planned = SaveGameManager.Current.logisticsManagerPlans.Where(p => p != null && !p.isFactory).Sum(p => p.GetPlannedDeliveries().Count());
-            // As the 02:00 hour does (GameManager.RunMainGameTick), then drained at once as DeletePlan does
-            // (DistributedWork.ForceCompleteAllWork), so the deliveries and the game's end-of-run texts happen in this call.
             LogisticsManagerHelper.DoAllWarehouseDeliveries();
             LogisticsManagerHelper.WarehouseDeliveriesWork.ForceCompleteAllWork();
             var after = PlansJson(only);
@@ -643,13 +585,9 @@ namespace FoodTrucks
 
         private static bool HasTarget(LogisticsManagerPlan plan) => plan.targetAddress != null && !plan.targetAddress.IsUndefined();
 
-        // The plan's warehouse; null when it has none or its registration isn't a warehouse.
         private static Warehouse? WarehouseOf(LogisticsManagerPlan plan) =>
             HasTarget(plan) ? BuildingHelper.GetBuildingRegistration(plan.targetAddress) as Warehouse : null;
 
-        // A plan: its warehouse with what its pallets hold of each item any destination targets, its manager, how many
-        // destinations it delivers to, and each destination with its targets and, for a commissary, what it holds of them
-        // (the mod's stock; null for a business).
         private static JObject PlanJson(LogisticsManagerPlan plan)
         {
             var warehouse = WarehouseOf(plan);

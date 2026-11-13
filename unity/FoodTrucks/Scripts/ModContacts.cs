@@ -21,8 +21,6 @@ namespace FoodTrucks
         internal static bool IsOurs(string? id) =>
             id != null && (id == Catering.ContactId || id.StartsWith(Commissary.ContactPrefix, StringComparison.Ordinal));
 
-        // Opens the phone's Contacts app on one contact's conversation, as the commissary call does after Spaces: the app
-        // opens on the contact it last showed.
         internal static void OpenConversation(Contact contact)
         {
             SaveGameManager.Current.PlayerDefaults.contactsLastName = contact.id;
@@ -30,8 +28,6 @@ namespace FoodTrucks
             InstanceBehavior<UIs>.Instance.fullMenu.ShowApp(AppName.Contacts);
         }
 
-        // Opens the contact's conversation and presses its call button, as the game's ContactsApp.OpenAndStartCall does
-        // (Peter's playtest: "Call commissary" only opened the chat). A contact without a call button only opens.
         internal static void OpenAndCall(Contact contact)
         {
             OpenConversation(contact);
@@ -54,7 +50,6 @@ namespace FoodTrucks
             }
         }
 
-        // Postfix on ContactScrollerController.LoadContact: the card just added has no delete button.
         internal static void LoadContactPostfix(ContactScrollerController __instance, Contact contact)
         {
             try
@@ -72,16 +67,10 @@ namespace FoodTrucks
             }
         }
 
-        // The listener this header put on the game's View on map button, taken off before the next contact's header.
         private static UnityEngine.Events.UnityAction? viewOnMap;
 
-        // Its own once-only log flag, so an earlier failure in the other postfixes doesn't hide the header's.
         private static bool headerFailed;
 
-        // Postfix on ContactsApp.SetUpHeader: a commissary contact has no address of its own (the game's address branch
-        // would tie its call to the host tenant's opening hours), so the game hides Address and View on map. After the
-        // game's header, this shows the host building's address and a View on map to it, resolved now; while it can't be
-        // resolved, "Address unavailable" and no map button. The call button is the game's, left as it set it.
         internal static void HeaderPostfix(Contact contact, UnityEngine.UI.Button ___viewOnMapButton, UnityEngine.GameObject ___addressGameObject,
             Localizor.LanguageChangeEvent.TextLocalizationComponent ___addressLabel)
         {
@@ -116,7 +105,6 @@ namespace FoodTrucks
             }
         }
 
-        // Postfix on ContactsHelper.GetPermanentIds: "Delete all" keeps them too.
         internal static void PermanentIdsPostfix(ref System.Collections.Generic.List<string> __result)
         {
             try

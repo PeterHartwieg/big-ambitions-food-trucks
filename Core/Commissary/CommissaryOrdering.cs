@@ -4,8 +4,6 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Commissary
 {
-    // One line of an order form: an item, its box size and wholesale price per unit, and the boxes wanted. Capped: food,
-    // whose boxes count towards its weekly limit on phone orders (CommissarySupply); equipment isn't.
     public sealed class CommissaryOrderRequest
     {
         public CommissaryOrderRequest(string itemName, int boxSize, long unitPriceCents, int boxes, bool capped = true)
@@ -28,7 +26,6 @@ namespace FoodTrucks.Core.Commissary
         public bool Capped { get; }
     }
 
-    // A priced line: each line becomes one order at its goods price. The delivery fee is the quote's, once per delivery.
     public sealed class CommissaryQuoteLine
     {
         internal CommissaryQuoteLine(CommissaryOrderRequest request)
@@ -56,9 +53,7 @@ namespace FoodTrucks.Core.Commissary
     public enum CommissaryQuoteProblem
     {
         None,
-        // No line has a box in it.
         Empty,
-        // More boxes than one order takes (CommissaryOrdering.MaxBoxesPerOrder).
         TooManyBoxes
     }
 
@@ -81,29 +76,19 @@ namespace FoodTrucks.Core.Commissary
 
         public IReadOnlyList<CommissaryQuoteLine> Lines { get; }
         public int Boxes { get; }
-        // Food boxes, counted towards the weekly limits.
         public int CappedBoxes { get; }
         public long GoodsCents { get; }
-        // The flat fee for one delivery at the commissary (rules), and whether another order already arrives there the
-        // same morning, so this one shares its fee: then FeeCents is 0. If that other order is cancelled first, this one
-        // carries the fee when it arrives (Commissaries.Deliver).
         public long FeePerDeliveryCents { get; }
         public bool SharedDelivery { get; }
-        // What this quote adds to the delivery's fee: the flat fee, or 0 when shared.
         public long FeeCents { get; }
         public long TotalCents { get; }
         public CommissaryQuoteProblem Problem { get; }
     }
 
-    // Ordering by phone (design: Commissary and new foods): the order form's lines priced into a quote, and a quote
-    // placed as one order per item. Placing books the orders and takes no money: each is paid when it arrives
-    // (Commissaries.Deliver), as the game's own deliveries are. The game shows the form and moves the money.
     public static class CommissaryOrdering
     {
-        // Boxes one phone order takes, all items together.
         public const int MaxBoxesPerOrder = 10;
 
-        // Whether a commissary takes orders: the player has visited it and a vehicle has its space there.
         public static bool CanOrder(CommissaryState state, string commissaryId)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -111,8 +96,6 @@ namespace FoodTrucks.Core.Commissary
             return state.Unlocked.Contains(commissaryId, StringComparer.Ordinal) && state.Spaces.Any(s => s.CommissaryId == commissaryId);
         }
 
-        // Whether something else already arrives at the commissary on `day`: an order booked for that day, or a standing
-        // order that delivers then. An order for that day then shares that delivery's fee.
         public static bool SharesDelivery(CommissaryState state, string commissaryId, int day)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -120,8 +103,6 @@ namespace FoodTrucks.Core.Commissary
                    state.StandingOrders.Any(s => s.CommissaryId == commissaryId && CommissaryStandingOrders.DeliversOn(s, day));
         }
 
-        // Lines with no boxes are left out; the same item twice is one line. One delivery fee for the quote, none when it
-        // shares a delivery that something else already brings (SharesDelivery).
         public static CommissaryQuote Quote(CommissaryRules rules, IEnumerable<CommissaryOrderRequest> requests, bool sharedDelivery = false)
         {
             if (rules == null) throw new ArgumentNullException(nameof(rules));
@@ -147,9 +128,6 @@ namespace FoodTrucks.Core.Commissary
             return new CommissaryQuote(lines, rules.DeliveryFeeCents, sharedDelivery);
         }
 
-        // One order per line, all or none: the commissary must take orders, the quote must have no problem, and its food
-        // boxes must fit under each food's weekly limit for tomorrow's week (CommissarySupply). Nothing is paid here; the
-        // money moves on delivery, the fee with it.
         public static IReadOnlyList<CommissaryOrder> Place(CommissaryState state, CommissaryRules rules, string commissaryId,
             CommissaryQuote quote, (int Day, int Minute) now, bool unlimited = false)
         {
@@ -161,7 +139,7 @@ namespace FoodTrucks.Core.Commissary
             if (now.Day < 1) throw new ArgumentOutOfRangeException(nameof(now));
             if (!CommissarySupply.Check(state, rules, quote, CommissaryRepeat.Once, now.Day, unlimited).Fits)
                 throw new InvalidOperationException("The order goes over a food's weekly limit on phone orders.");
-            _ = checked(state.NextOrderId + quote.Lines.Count); // Refuse running out of order IDs before any order is booked.
+            _ = checked(state.NextOrderId + quote.Lines.Count);
             var orders = new List<CommissaryOrder>(quote.Lines.Count);
             var deliverDay = checked(now.Day + 1);
             foreach (var line in quote.Lines)

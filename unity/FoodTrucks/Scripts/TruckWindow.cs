@@ -38,20 +38,15 @@ namespace FoodTrucks
     // and is placed at the hatch again as after Open, with the window and its line left as they are.
     internal sealed class TruckWindow : MonoBehaviour
     {
-        // A blocker value of our own, so the game's activities never unset it for us (the set holds any value).
         private const NavigationBlocker Blocker = (NavigationBlocker)4100;
         private const float SampleMetres = 3f;
-        // The truck moved this far from where it stood at opening: whatever moved it, the player steps out.
         private const float MovedMetres = 1f;
-        // The game warps the player to the door a frame after the seat is left (CarController.ExitVehicle).
         private const int MinWaitFrames = 3;
         private const int MaxWaitFrames = 60;
-        // Frames the game's panel gets to see each state before the next (shown, moving, started).
         private const int FramesPerState = 2;
 
         private static TruckWindow? instance;
 
-        // Buttons without a key (HatchActivity): an action the game routes only to free placement, never to the panel.
         internal const PlayerAction NoKey = PlayerAction.SnapFreePlacement;
         internal const string CloseButtonName = "FoodTrucksCloseWindow";
         internal const string DriveButtonName = "FoodTrucksDrive";
@@ -65,29 +60,19 @@ namespace FoodTrucks
         private Vector3 fallbackExit;
         private int stateFrame;
         private Coroutine? entering;
-        // The truck whose hatch the player is on the way to (after Open, until placed or left outside).
         private string? enteringId;
-        // Why the player last left each truck's hatch this session, for the "nobody at the window" log line.
         private readonly Dictionary<string, string> leftBecause = new Dictionary<string, string>(StringComparer.Ordinal);
-        // The walk to a rear door for Back to the hatch: the game's goal callback we set, while it is still the
-        // player's goal. Another click replaces or clears the game's goal, which ends ours.
         private UnityAction? returnWalk;
         private static readonly System.Reflection.FieldInfo? GoalActionField = HarmonyLib.AccessTools.Field(typeof(PlayerController), "_goalAction");
 
-        // Out of energy: the game sends an exhausted player to hospital, which an open activity panel stops, and
-        // it fires its own out-of-energy cancel only when energy crosses the line, not when it is already below.
         private static bool Exhausted()
         {
             var game = SaveGameManager.Current;
             return game != null && game.gameVariables != null && !game.gameVariables.disableEnergy && game.Energy <= 0f;
         }
 
-        // The player stands at this truck's hatch.
         public static bool PlayerAt(string id) => instance != null && instance.vehicleId == id && instance.place != null;
 
-        // The player serves this truck's window: at its hatch, or on the way there in the frames after Open, so
-        // the window doesn't report nobody at it before the player is placed. Only the hatch serves a truck
-        // (Core PlayerServing); a player who stepped out doesn't, however close.
         public static bool PlayerServes(string id) =>
             PlayerAt(id) || (instance != null && instance.entering != null && instance.enteringId == id);
 
@@ -103,19 +88,14 @@ namespace FoodTrucks
             if (instance == this) instance = null;
         }
 
-        // The game's panel rebuilds its buttons when key bindings change, which brings the key labels back; the
-        // next Update clears them again, after every handler of the event has run.
         private void OnBindingsChanged() => keyLabelsCleared = false;
 
         private void OnDestroy()
         {
-            // The session ends (another save, the main menu): let go of the player if it is still ours.
             try { Release("session ended", move: true); }
             catch (Exception ex) { Log.Error("Truck window, session end: " + ex); }
         }
 
-        // Called by Open (the on-foot menu's "Open for business"): beside the truck the player is placed at its hatch,
-        // further off they walk to its rear door first, as for Back to the hatch.
         public static void EnterFromOutside(VehicleController controller)
         {
             var id = controller.vehicleInstance?.id;
@@ -125,7 +105,6 @@ namespace FoodTrucks
             else BackToHatch(controller);
         }
 
-        // Places the player at the truck's hatch once they are out of any seat and on the NavMesh.
         public static void Enter(string truckId)
         {
             if (CrewDriveProbe.Owns(truckId)) return;
@@ -140,16 +119,12 @@ namespace FoodTrucks
             self.entering = self.StartCoroutine(self.EnterWhenOut(truckId));
         }
 
-        // The uninstall step: out of the truck before it goes.
         public static void StepOutNow(string reason) => instance?.StepOut(reason, drive: false);
 
-        // Why nobody is at this truck's hatch, for the log: the last step-out's reason this session, else the load.
         public static string WhyNotAtHatch(string id) =>
             instance != null && instance.leftBecause.TryGetValue(id, out var why) ? "the player left the hatch: " + why
                 : "the player hasn't been at the hatch since the save was loaded (a save made there puts them outside)";
 
-        // "Back to the hatch" is offered for this vehicle: an open truck, the player on foot, empty-handed, not at a
-        // hatch or on the way to one.
         public static bool CanGoBack(VehicleInstance? truck)
         {
             var self = instance;
@@ -159,9 +134,6 @@ namespace FoodTrucks
             return StreetSales.Find(FoodTrucksSession.CurrentState, truck.id)?.IsOpen == true;
         }
 
-        // The overlay's "Back to the hatch": walk to the rear door (the game's own storage spot), then be placed at the
-        // hatch as after Open. The window stays open and its line waits; nothing is closed or reopened.
-        // How far from the truck's middle the player may be placed at its hatch.
         private const float PlaceMetres = 8f;
 
         public static void BackToHatch(VehicleController controller)
@@ -194,10 +166,6 @@ namespace FoodTrucks
                 Arrive();
                 return;
             }
-            // An unreachable rear door is fine within Place's own reach of the truck (PlaceMetres; review round 4: 0.9.8
-            // took the game's 2.5 m from the truck's middle, so a player at the rear corner of a truck backed against a
-            // wall was refused although Place would accept them), and otherwise refused with a notice, since the game
-            // would run the goal at once wherever the player stands.
             if (!player.ExistsRoute(target))
             {
                 if (Vector3.Distance(player.transform.position, controller.transform.position) <= PlaceMetres)
@@ -216,7 +184,6 @@ namespace FoodTrucks
             player.SetGoal(target, walk);
         }
 
-        // A Back to the hatch walk is under way: our callback is still the player's goal.
         private bool Returning()
         {
             if (returnWalk == null) return false;
@@ -235,7 +202,6 @@ namespace FoodTrucks
                 yield return null;
                 if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId))
                 {
-                    // The game found no way out and put the player back in the seat.
                     Log.Info($"Truck window: {id}: the player is back in the driver's seat; not placed at the hatch.");
                     entering = null;
                     enteringId = null;
@@ -303,8 +269,6 @@ namespace FoodTrucks
             attached = player;
             truckAt = controller.transform.position;
             stateFrame = Time.frameCount;
-            // Any walk still pending (an earlier Back to the hatch, or another interaction's goal) is dropped, so its
-            // callback can't run after the player steps out again (review round 2).
             player.ResetNavigation();
             returnWalk = null;
             player.AttachToObject(newPlace.transform, Blocker);
@@ -320,8 +284,6 @@ namespace FoodTrucks
             if (vehicleId == null || activity == null) return;
             try
             {
-                // The game's panel starts an activity in steps: shown (the game pauses), moving towards it (the game
-                // unpauses), started (its buttons). The player is already in place, so each step lasts two frames.
                 var state = activity.GetState();
                 if ((state == PlayerActivityState.NotStarted || state == PlayerActivityState.MovingTowardsActivity) &&
                     Time.frameCount - stateFrame >= FramesPerState)
@@ -341,7 +303,6 @@ namespace FoodTrucks
             }
         }
 
-        // The panel prints each button's key after its label; Close and Drive have none. True once both are done.
         internal static bool ClearKeyLabels(int expected = 2)
         {
             var ui = InstanceBehavior<UIs>.Instance?.playerActivityUI;
@@ -358,7 +319,6 @@ namespace FoodTrucks
             return done >= expected;
         }
 
-        // Why the player can't stay at the hatch any more, or null.
         private string? Problem()
         {
             var id = vehicleId!;
@@ -382,8 +342,6 @@ namespace FoodTrucks
             return null;
         }
 
-        // Steps the player out by the truck (the rear door; the driver's door for Drive), ends the panel's
-        // activity and, for Drive, gets into the driver's seat. Safe to call again: only the first call acts.
         internal void StepOut(string reason, bool drive)
         {
             if (vehicleId == null) return;
@@ -398,7 +356,6 @@ namespace FoodTrucks
             if (drive && controller != null) StartCoroutine(DriveWhenFree(controller));
         }
 
-        // Undoes the attachment and forgets the hatch. True when the player's agent was warped to the exit.
         private bool Release(string reason, bool move, Vector3? exitOverride = null)
         {
             if (vehicleId == null) return false;
@@ -411,7 +368,6 @@ namespace FoodTrucks
             activity = null;
             place = null;
             var warped = false;
-            // Only the player we attached, and only while still on our place: never a new scene's player.
             if (move && player != null && thisPlace != null && player.transform.parent == thisPlace.transform)
             {
                 var controller = ControllerOf(id);
@@ -427,14 +383,11 @@ namespace FoodTrucks
             {
                 if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId))
                 {
-                    // In a vehicle or on a scooter: the game holds the player its own way; only our blocker goes.
                     player.UnsetNavigationBlocker(Blocker);
                     Log.Info($"Truck window: {id}: the player is in a vehicle ({reason}); only the hatch's blocker removed.");
                 }
                 else
                 {
-                    // Something else moved the player off our place, or the attachment failed halfway: undo all of
-                    // it (collider, physics, agent, parent, blocker) where they stand, on the NavMesh nearby.
                     var here = Sample(player.transform.position) ?? player.transform.position;
                     player.transform.position = here;
                     player.DeattachFromObject(Blocker);
@@ -449,7 +402,6 @@ namespace FoodTrucks
 
         private IEnumerator DriveWhenFree(VehicleController controller)
         {
-            // The game's panel closes the frame after the activity finishes; the seat waits for that.
             for (var i = 0; i < 10 && PlayerActivityUI.IsPanelOpen; i++) yield return null;
             yield return null;
             if (controller == null || !string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) yield break;
@@ -461,13 +413,12 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Truck window, to the driver's seat: " + ex); }
         }
 
-        // A point on the NavMesh just outside the truck: by the rear door, or the driver's door first for Drive.
         private Vector3 Exit(VehicleController controller, bool driverFirst)
         {
             var rear = controller.vehicleLoadingPosition != null ? Sample(controller.vehicleLoadingPosition.position) : null;
             Vector3? door = null;
             try { door = Sample(controller.GetNavMeshTargetPosition()); }
-            catch (Exception) { /* a truck without door targets steps out at the rear */ }
+            catch (Exception) { }
             var first = driverFirst ? door ?? rear : rear ?? door;
             return first ?? Sample(controller.transform.position + controller.transform.right * 2.5f) ?? fallbackExit;
         }
@@ -481,7 +432,6 @@ namespace FoodTrucks
             return cart == null ? null : VehicleHelper.GetVehicleController(cart);
         }
 
-        // Harmony postfix on PlayerHelper.SaveCurrentPosition: at the hatch, the save gets the step-out point.
         internal static void SavePositionPostfix()
         {
             try
@@ -497,8 +447,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Truck window, save position: " + ex); }
         }
 
-        // For the test bridge's state: "starting" from Open until the hatch's activity runs, "at_hatch" once it runs,
-        // "walking" on a Back to the hatch walk, else null.
         internal static string? Phase()
         {
             var self = instance;
@@ -509,8 +457,6 @@ namespace FoodTrucks
             return self.Returning() ? "walking" : null;
         }
 
-        // The panel's Step out and Close window for the test bridge, as if clicked: false unless the player is at this
-        // truck's hatch.
         internal static bool PanelStepOut(string id)
         {
             if (instance == null || !PlayerAt(id)) return false;
@@ -525,21 +471,16 @@ namespace FoodTrucks
             return true;
         }
 
-        // Button handlers from the panel.
         internal void OnStepOut() => StepOut("stepped out", drive: false);
 
         internal void OnDrive() => StepOut("to the driver's seat", drive: true);
 
         internal void OnClose(string id)
         {
-            // Closing runs the usual close (message, hatch down); Update then sees the window closed, but the
-            // player steps out at once.
             CartSelling.CloseByPlayer(id);
             StepOut("closed the window", drive: false);
         }
 
-        // The game ends the activity after a time skip (it calls Perform first, in the same frame), when the player
-        // runs out of energy, and on Unstuck (which moves the player off our place first) or other game events.
         internal void OnFinishedByGame(bool afterTimeSkip)
         {
             string reason;
@@ -553,7 +494,6 @@ namespace FoodTrucks
         internal void OnCancelledWhileStarting() => StepOut("cancelled while starting", drive: false);
     }
 
-    // Native work controls shared with the cart; attachment and the three hatch actions stay here.
     internal sealed class HatchActivity : ServingActivity
     {
         private readonly TruckWindow owner;

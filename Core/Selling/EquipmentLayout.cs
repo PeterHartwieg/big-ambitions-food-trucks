@@ -4,15 +4,11 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Selling
 {
-    // The first cooler occupies the reserved place. Further coolers are ordinary equipment,
-    // retaining the capacity and validity of existing multi-fridge saves.
     public static class EquipmentLayout
     {
         public const string CoolerPlace = "EquipmentCooler";
         public static bool IsCooler(string? id) => id == "cooler";
 
-        // General places first, reserved place last. Optional previous IDs keep existing general
-        // displays in place when another piece is removed; reservation always takes precedence.
         public static IReadOnlyList<(int Slot, T Piece)> Place<T>(IEnumerable<T> pieces, int generalSlots,
             int coolerSlots, Func<T, string?> id, IReadOnlyList<string?>? previous = null)
         {

@@ -52,7 +52,6 @@ def cube(name, loc, dims, key, bevel=0):
     return colour(ob, key)
 
 def rings(name, centre, profiles, key, n=16):
-    # Each profile is (height, x radius, y radius); capped closed solids.
     vs = [(centre[0] + rx*math.cos(2*math.pi*i/n),
            centre[1] + ry*math.sin(2*math.pi*i/n), z)
           for z, rx, ry in profiles for i in range(n)]
@@ -108,7 +107,6 @@ def camera_setup():
         scene.collection.objects.link(ob)
         ob.location = loc
         ob.rotation_euler = (Vector((0,0,0.3))-ob.location).to_track_quat('-Z','Y').to_euler()
-    # Keep the reference in view when inspecting scale, without changing it.
     for screen in bpy.data.screens:
         for area in screen.areas:
             if area.type == 'VIEW_3D':
@@ -126,7 +124,6 @@ def save_stage(filename):
 def build_blockout():
     if bpy.context.object and bpy.context.object.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
-    # On regeneration, remove only this build's objects, never the reference.
     for ob in list(bpy.data.objects):
         if ob.name.startswith(('SM_', 'SlushieMachine_')):
             bpy.data.objects.remove(ob, do_unlink=True)
@@ -150,7 +147,6 @@ def build_blockout():
     save_stage('01-blockout.png')
 
 def tray(x):
-    # An eight-sided rectangular basin: raised rim, lowered solid floor.
     points = [(-1,-0.78),(-0.82,-1),(0.82,-1),(1,-0.78),
               (1,0.78),(0.82,1),(-0.82,1),(-1,0.78)]
     vs=[]
@@ -169,7 +165,7 @@ def tray(x):
     bpy.context.collection.objects.link(ob)
     colour(ob,'Edge')
     colour(ob,'Dark')
-    PARTS.pop()  # colour also registers the existing part a second time.
+    PARTS.pop()
     for p in me.polygons:
         if p.index >= 17:
             p.material_index=1
@@ -181,7 +177,6 @@ def add_detail():
         tray(x)
         cylinder('SM_TapFlange',(x,-0.080,0.307),(x,-0.105,0.307),0.026,'Edge')
         cylinder('SM_TapValve',(x,-0.102,0.307),(x,-0.137,0.307),0.020,'Dark')
-        # Closed low-poly elbow, pointing towards the customer then down.
         vs=[]
         for y,z,theta in [(-0.126,0.294,0),(-0.153,0.280,math.pi/4),(-0.158,0.242,math.pi/2)]:
             for i in range(8):
@@ -225,7 +220,6 @@ def texture_and_uv():
     bm=bmesh.new()
     bm.from_mesh(body.data)
     bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
-    # Triangulate caps, retaining quads for efficient UV projection.
     bmesh.ops.triangulate(bm,faces=[f for f in bm.faces if len(f.verts)>4])
     bm.to_mesh(body.data)
     bm.free()
@@ -234,7 +228,6 @@ def texture_and_uv():
     bpy.ops.uv.smart_project(angle_limit=math.radians(65),island_margin=0.006,
                              margin_method='FRACTION',area_weight=0.0,scale_to_bounds=False)
     bpy.ops.object.mode_set(mode='OBJECT')
-    # Raster flat face colours into the atlas, with two pixels of edge padding.
     me=body.data
     me.calc_loop_triangles()
     uv=me.uv_layers.active.data
@@ -290,7 +283,6 @@ def texture_and_uv():
 
 def finish():
     body=bpy.data.objects['SlushieMachine_Body']
-    # A tapered convex envelope encloses the plinth, taps and bowl silhouettes.
     bm=bmesh.new()
     for z,rx,ymin,ymax in [(0,0.195,-0.175,0.175),
                            (0.280,0.195,-0.175,0.175),
@@ -312,7 +304,6 @@ def finish():
     collider.display_type='WIRE'
     collider.hide_set(True)
     save_stage('04-final.png')
-    # Relative base-colour reference ships alongside the FBX and .blend.
     for img in bpy.data.images:
         if img.name.startswith('T_SlushieMachine'):
             img.filepath='//T_SlushieMachine_BaseColor.png'

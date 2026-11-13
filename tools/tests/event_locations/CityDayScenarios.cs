@@ -15,7 +15,7 @@ static class Program
         var state = new SaveState(); FoodTrucksSession.CurrentState = state;
         state.Events.LastAnnouncedDay = 4;
         state.Vehicles.Add(new VehicleState { VehicleId = "closed", IsOpen = false, PremiumSpot = "pitch" });
-        state.Events.Events.Add(new CityEvent { Id = 1, Kind = kind.Id, PlaceId = place.Id, Day = 1, End = 960 }); // Expiry waits for validation.
+        state.Events.Events.Add(new CityEvent { Id = 1, Kind = kind.Id, PlaceId = place.Id, Day = 1, End = 960 });
         var live = new CityEvent { Id = 2, Kind = kind.Id, PlaceId = place.Id, Day = 4, Start = 600, End = 960, Booked = 1 };
         live.Holds.Add(new PlaceHold { VehicleId = "closed", From = 4000 }); state.Events.Events.Add(live);
         var invalid = new CityEvent { Id = 3, Kind = kind.Id, PlaceId = "missing", Day = 5, Start = 600, End = 960, Booked = 2, FeeCents = 8000 };
@@ -85,7 +85,7 @@ static class Program
         EventLocations.Ready = ready; GameManager.Paid = 0;
         CityPitches.NewDay(state, 4, loading: true);
         EventLocations.Ready = true;
-        HireCrew.Minute += 3; // Readiness can arrive later; a closed hold must retain its load-time end.
+        HireCrew.Minute += 3;
         CityPitches.RetryAddresses();
         var expected = !open && heldMinutes == 0 ? 16000 : 8000;
         Check(!state.Events.Events.Contains(city) && GameManager.Paid == expected,
@@ -95,7 +95,6 @@ static class Program
     }
     static void RefundRetry(EventPlace place, EventKind kind, int eventDay, int claimed, string failure)
     {
-        // Now really varies: ended, running and future invalid bookings all follow the cancellation path.
         HireCrew.Minute = eventDay == 4 ? 5000 : 4500;
         var state = new SaveState(); FoodTrucksSession.CurrentState = state; CityPitches.Reset();
         state.Events.LastAnnouncedDay = 4;

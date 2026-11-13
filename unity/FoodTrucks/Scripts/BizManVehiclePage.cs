@@ -29,38 +29,22 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // A vehicle's own page in BizMan (Peter, 11 and 15 October 2026), in the three columns of the Street food page
-    // (BizManFleet), with two tabs (Peter, 16 October 2026): Overview has the vehicle's summary and menu in the first
-    // column, alerts and the commissary space in the second, the partner deal in the third; Week plan (BizManWeekPlan)
-    // has the crew, the day's route and the shifts across the page. Each section is a copy of the game's warehouse box (BizManParts);
-    // the crew, days and partner choices are copies of the warehouse Drivers tab's dropdown, and the stops a copy of the
-    // logistics manager plan's reorderable list. Clicking a vehicle's row on the Street food page opens it; Back goes to the
-    // overview. It sits outside BizManBusiness, so the game's business page, its settings and its unsaved-changes check
-    // never see it. Every change writes the mod's save data at once, so the phone can close at any point.
     internal static class BizManVehiclePage
     {
         private static bool broken;
         private static BizManList? builtFor;
         private static string? vehicleId;
 
-        // The templates, copies kept inactive in the Street food page's holder, and the paths of their parts.
         internal static GameObject? dropdownTemplate, listTemplate;
-        // A copy of the game's product price field (InventoryProductCellView.retailPrice); null when it isn't there.
         private static GameObject? priceFieldTemplate;
         private static bool priceFieldLogged;
-        // The page dropdowns' light box colour (read from the copied dropdown), the price fields' background.
         private static Color? fieldGrey;
         internal static string entryPath = "", entryNamePath = "", entryRemovePath = "", entryDropdownPath = "";
         private static readonly List<string> entryHiddenPaths = new List<string>();
-        // Buttons in the stop row that stay but no longer do anything (1.0: the collapse button is the whole header).
         private static readonly List<string> entryInertPaths = new List<string>();
 
         public static bool IsOpen => vehicleId != null;
 
-        // ---- Opening ----
-
-        // Opens BizMan on the vehicle's page, from anywhere (the end of a map pick, a price or a stop asked outside the
-        // phone, a to-do's click).
         internal static void OpenFor(string id)
         {
             var bizMan = InstanceBehavior<UIs>.Instance?.fullMenu?.bizMan;
@@ -70,7 +54,6 @@ namespace FoodTrucks
                 return;
             }
             bizMan.Open();
-            // The list wakes over the next frame (BizManList.OnEnable loads its parts one frame on).
             HireRoutes.Later(() => Guard(() =>
             {
                 if (!Ensure(bizMan.list))
@@ -83,7 +66,6 @@ namespace FoodTrucks
             }));
         }
 
-        // A vehicle's row on the Street food page was clicked.
         public static void Show(BizManList list, string id)
         {
             if (!Ensure(list))
@@ -96,10 +78,8 @@ namespace FoodTrucks
             Log.Info($"BizMan: vehicle page for {KindOf(id)} {id}.");
         }
 
-        // The Street food page went back to its overview or closed: no vehicle page shows.
         public static void Forget() => vehicleId = null;
 
-        // On leaving the city: the page belongs to its scene's BizMan.
         public static void Reset()
         {
             builtFor = null;
@@ -108,10 +88,6 @@ namespace FoodTrucks
             vehicleId = null;
         }
 
-        // ---- Building ----
-
-        // Builds the templates once per BizMan list, in the Street food page's holder. False (with one error logged) when
-        // a part it copies is missing.
         private static bool Ensure(BizManList list)
         {
             var holder = BizManFleet.EnsurePage(list);
@@ -139,12 +115,10 @@ namespace FoodTrucks
             var bizMan = InstanceBehavior<UIs>.Instance?.fullMenu?.bizMan ?? throw Missing("the BizMan app");
             var business = bizMan.business ?? throw Missing("BizMan's business page");
 
-            // The warehouse Drivers tab's row.
             var drivers = business.GetComponentsInChildren<Drivers>(true).FirstOrDefault() ?? throw Missing("the warehouse Drivers tab");
             var station = Need(drivers.driverStationTemplate, "Drivers.driverStationTemplate");
             var dropdown = Field<GameDropdown>(station, "driverDropdown");
 
-            // The logistics manager plan's parts.
             var plans = Need(business.logisticsLogisticsManagersPlanList, "BizManBusiness.logisticsLogisticsManagersPlanList");
             var plan = Need(plans.logisticsManagerPlanUI, "LogisticsManagersPlanList.logisticsManagerPlanUI");
             var destination = Field<LogisticsManagerDestinationUI>(plan, "destinationTemplate");
@@ -164,10 +138,8 @@ namespace FoodTrucks
             entryNamePath = Path(entryName.transform, destination.transform, "the destination row's name");
             entryRemovePath = Path(entryRemove.transform, destination.transform, "the destination row's remove button");
             entryDropdownPath = Path(entryDropdown.transform, destination.transform, "the destination row's dropdown");
-            // Dragging starts on the row's handle (all of the row when it has none); the page mustn't hide it.
             var handle = destination.GetComponent<ReorderableListItem>().handle;
             var handlePath = handle == null ? "" : Path(handle, destination.transform, "the stop row's drag handle");
-            // The parts the page uses in each stop row; nothing that holds one of them may be hidden.
             var kept = new List<(string Path, string What)>
             {
                 (entryNamePath, "name"), (entryRemovePath, "remove button"), (entryDropdownPath, "dropdown"),
@@ -176,8 +148,6 @@ namespace FoodTrucks
             bool Holds(string part, string path) => part.Length == 0 || path == part || path.StartsWith(part + "/", StringComparison.Ordinal);
             entryHiddenPaths.Clear();
             entryInertPaths.Clear();
-            // In 1.0 the collapse button is the row's whole header (name, remove button, dropdown and drag handle in it):
-            // it stays, its button switched off; a collapse button on its own is hidden.
             var collapsePath = Path(entryCollapse.transform, destination.transform, "the destination row's collapse button");
             (kept.Any(k => Holds(collapsePath, k.Path)) ? entryInertPaths : entryHiddenPaths).Add(collapsePath);
             entryHiddenPaths.Add(Path(entryArrow, destination.transform, "the destination row's arrow"));
@@ -188,12 +158,8 @@ namespace FoodTrucks
                 if (entryHiddenPaths.Any(p => p.Length > 0 && Holds(p, keptPath)))
                     throw new InvalidOperationException($"The stop row's {what} is inside a part the page hides.");
 
-            // Copy the dropdown alone: vehicle fields, captions, backgrounds and warehouse spacing do not belong
-            // on a crew/day/partner row. Instantiate remaps the dropdown's internal button and option references.
             dropdownTemplate = Object.Instantiate(dropdown.gameObject, holder);
             dropdownTemplate.name = "FoodTrucks.PageDropdown";
-            // The dropdown's light box, for the price fields: its middle box, else its header's background, else its
-            // lightest opaque image.
             var grey = dropdownTemplate.transform.Find("Header/MiddleBox")?.GetComponent<Image>()
                        ?? dropdownTemplate.transform.Find("Header/Background")?.GetComponent<Image>()
                        ?? dropdownTemplate.GetComponentsInChildren<Image>(true).Where(i => i.color.a > 0.9f)
@@ -201,10 +167,6 @@ namespace FoodTrucks
             fieldGrey = grey != null ? grey.color : (Color?)null;
             listTemplate = Object.Instantiate(reorderable.gameObject, holder);
             listTemplate.name = "FoodTrucks.PageStops";
-            // A drag disables the list's layout group and adds, then removes, a LayoutElement on its object. Both references
-            // must be the copy's own (Instantiate remaps only references inside the copied object), or a drag on this page
-            // would change the game's logistics plan; and that object must have no LayoutElement of its own for the removal
-            // to take.
             var copiedList = listTemplate.GetComponent<ReorderableList>() ?? throw Missing("the copied ReorderableList");
             var listLayout = new List<string>();
             foreach (var field in new[] { "verticalLayoutGroup", "contentSizeFitter" })
@@ -218,7 +180,6 @@ namespace FoodTrucks
                 listLayout.Add($"{field} at '{path}'");
             }
             var entry = listTemplate.transform.Find(entryPath) ?? throw Missing("the copied destination row");
-            // The copy came with the plan's own rows, if it had been opened; the game's reset clears them off the template.
             entry.ResetTemplate();
             var ui = entry.GetComponent<LogisticsManagerDestinationUI>();
             if (ui != null) Object.DestroyImmediate(ui);
@@ -242,8 +203,6 @@ namespace FoodTrucks
                      $"price field: {priceField}; field colour {(fieldGrey?.ToString() ?? "not found, a light grey")}.");
         }
 
-        // The game's product price field (the inventory pricing row's retailPrice), copied alone. Optional: without it the
-        // Menu box's prices are changed with the text prompt. Returns what the log says about it.
         private static string PriceFieldTemplate(BizManBusiness business, Transform holder)
         {
             priceFieldTemplate = null;
@@ -255,7 +214,6 @@ namespace FoodTrucks
             var copied = copy.GetComponent<GameInput>();
             var input = copied == null ? null : Traverse.Create(copied).Field("tmpInputField").GetValue<Component>();
             var placeholder = copied == null ? null : Traverse.Create(copied).Field("placeholder").GetValue<Component>();
-            // Its references must be its own, or typing on this page would change the game's row.
             if (input == null || !input.transform.IsChildOf(copy.transform) || (placeholder != null && !placeholder.transform.IsChildOf(copy.transform)))
             {
                 Object.Destroy(copy);
@@ -266,15 +224,12 @@ namespace FoodTrucks
             return $"copied from {PathTo(field.transform)}";
         }
 
-        // A part with no layout of its own keeps the height the game gave it, and fills the page's width.
         private static void KeepHeight(GameObject copy, Transform original)
         {
             var element = copy.GetComponent<LayoutElement>() ?? copy.AddComponent<LayoutElement>();
             if (element.preferredHeight <= 0f && copy.GetComponent<LayoutGroup>() == null && original is RectTransform rect && rect.rect.height > 1f)
                 element.preferredHeight = rect.rect.height;
         }
-
-        // ---- Filling ----
 
         internal static void RefreshLater() => HireRoutes.Later(() => Guard(Refresh));
 
@@ -299,7 +254,6 @@ namespace FoodTrucks
             }
             HireCrew.Check(state);
             var vehicle = StreetSales.Find(state, id);
-            // A route saved before the travel rule is fitted as its page opens (the crew's planning does it too).
             if (vehicle != null) RouteStops.FitIfNeeded(vehicle, "page opened");
             var kind = FoodTrucksMod.KindOf(instance.vehicleTypeName) ?? "cart";
             var canWrite = FoodTrucksSession.CanWrite;
@@ -330,8 +284,6 @@ namespace FoodTrucks
                 LayoutRebuilder.MarkLayoutForRebuild((RectTransform)column);
         }
 
-        // The vehicle at a glance: what it is, where and how it is, the game's alert count, its average daily income
-        // and health grade, and Set destination.
         private static void Summary(Transform column, SaveState state, VehicleState? vehicle, VehicleInstance instance, string name, bool withDriver, bool canWrite)
         {
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
@@ -350,9 +302,6 @@ namespace FoodTrucks
             box.Row(Text("foodtrucks:bizman_column_grade"), grade == Grade.Ungraded ? "-" : grade.ToString(), "", grade == Grade.C ? (Color)colors.lightRed : (Color?)null);
         }
 
-        // The vehicle's to-dos, as a store's page lists its alerts: each one's text in the game's alert colour (red for
-        // what stops sales or costs money; the game's yellow reads orange on the white box, as its own table turns yellow
-        // text orange on a light row), "No alerts" when there are none.
         private static void Alerts(Transform column, string id)
         {
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
@@ -367,15 +316,8 @@ namespace FoodTrucks
                 box.Paragraph(text, priority >= 2 ? (Color)colors.red : priority == 1 ? (Color)colors.orange : (Color?)null);
         }
 
-        // The table's columns: Food, Price, Market price, On board, status (left edges as fractions of the row).
         private static readonly float[] MenuColumns = { 0f, 0.36f, 0.54f, 0.68f, 0.84f };
 
-        // Menu: one row per food the vehicle stocks (StockLevels.Stocked, the to-dos' own rule), priced the way the game's
-        // inventory pricing shows a shop's product (InventoryProductCellView): the price now, typed into a copy of the
-        // game's price field (yellow above the market price, red at twice the item's default price; empty is the automatic
-        // price, shown greyed), the market price where the vehicle stands, what is on board of what its pieces hold, and low
-        // or empty stock in red. Without the game's field a click on the row asks with the text prompt. Then the fitted
-        // equipment on one line.
         private static void Menu(Transform column, string id, VehicleState? vehicle, VehicleInstance instance, bool canWrite)
         {
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
@@ -415,7 +357,6 @@ namespace FoodTrucks
                 if (row != null && useField) PriceField(row, id, line);
             }
             if (!drawn) box.Paragraph(Format("foodtrucks:bizman_page_menu_equipment", ("pieces", Equipment(view, instance))));
-            // What each fitted piece cooks, so a food it can't sell is plain before stock is bought (the first blind playtest).
             foreach (var pool in view.Pools)
             {
                 var cooks = StoragePanel.Foods(pool.Piece);
@@ -424,14 +365,11 @@ namespace FoodTrucks
             }
         }
 
-        // A price's colour, as InventoryProductCellView.UpdateAmountBackground: red at the red price, yellow above the
-        // yellow one (orange on the white box's text), else none.
         private static Color? PriceColour(PriceDialog.Line line, Colors colors) =>
             line.RedCents > 0 && line.PriceCents >= line.RedCents ? (Color)colors.red
             : line.YellowCents > 0 && line.PriceCents > line.YellowCents ? (Color)colors.orange
             : (Color?)null;
 
-        // "Dumpling Steamer, Griddle ×2, Extra Storage (doubles storage)".
         private static string Equipment(StorageView view, VehicleInstance instance)
         {
             var pieces = view.Pools.Select(p => StoragePanel.PieceName(instance, p.Piece) + (p.Pieces > 1 ? " ×" + p.Pieces : "")).ToList();
@@ -439,8 +377,6 @@ namespace FoodTrucks
             return string.Join(", ", pieces);
         }
 
-        // A copy of the game's product price field over the row's price column: the set price, or empty with the automatic
-        // price greyed in it; the game's background colours; a new price is written when the field is left.
         private static void PriceField(Transform row, string id, PriceDialog.Line line)
         {
             var cell = row.Find("FoodTrucks.Cell1");
@@ -460,8 +396,6 @@ namespace FoodTrucks
             var field = copy.GetComponent<GameInput>();
             if (field == null) return;
             var culture = CultureHelper.CultureInfo;
-            // The price it charges now, always, as the game's row does (retailPrice.SetText(price "N2", notify: false)):
-            // a set price in the field's own text colour, the automatic one in grey.
             field.SetText((line.PriceCents / 100f).ToString("N2", culture), notify: false);
             var colors = InstanceBehavior<GlobalReferences>.Instance.colors;
             var tmp = Traverse.Create(field).Field("tmpInputField").GetValue<Selectable>();
@@ -470,12 +404,8 @@ namespace FoodTrucks
             var hint = tmp == null ? null : Traverse.Create(tmp).Property("placeholder").GetValue() as Graphic;
             if (text != null && text.transform.IsChildOf(copy.transform))
             {
-                // The game's field sits on a dark table with white text; on the white box its text takes the box's dark text
-                // colour, grey for an automatic price.
                 text.color = line.Custom ? (Color)colors.midnight : (Color)colors.darkGrey;
             }
-            // The currency sign before the price was white, as on the game's dark table: on the grey field it takes the
-            // price's colour (Peter's playtest, 16 October 2026: a white $ on white).
             foreach (var graphic in copy.GetComponentsInChildren<Graphic>(true))
                 if (graphic.name == "Prefix") graphic.color = text != null ? text.color : (Color)colors.midnight;
             var background = copy.GetComponent<Image>();
@@ -490,8 +420,6 @@ namespace FoodTrucks
             }
             if (background != null)
             {
-                // The game's field is a dark translucent block made for its dark table (RGBA 0, 0, 0, 0.65 in game); on the
-                // white box it takes the light grey of the page's dropdowns, tinted yellow or red as the game tints its own.
                 Color32 tint = BizManParts.Layout.FieldGrey;
                 if (line.RedCents > 0 && line.PriceCents >= line.RedCents) tint = colors.red;
                 else if (line.YellowCents > 0 && line.PriceCents > line.YellowCents) tint = colors.yellow;
@@ -527,7 +455,6 @@ namespace FoodTrucks
                         return;
                     }
                     var cents = (long)Math.Round(dollars * 100.0);
-                    // The shown price left as it was: nothing to set (an automatic price stays automatic).
                     if (cents == shown) return;
                     PriceDialog.SetPrice(id, item, name, (cents / 100.0).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
                 }
@@ -535,8 +462,6 @@ namespace FoodTrucks
             }));
         }
 
-        // The commissary space, read only (spaces are rented by phone, under Spaces in the commissary's call), and the
-        // way to that call.
         private static void CommissarySpace(Transform column, SaveState state, string id, string kind)
         {
             var box = new BizManParts.Box(column, Text("foodtrucks:bizman_page_space_header"));
@@ -547,10 +472,8 @@ namespace FoodTrucks
             if (space != null && site != null)
             {
                 box.Row(Text("foodtrucks:bizman_page_space_at"), Commissary.Name(site));
-                // Where it is: the host building's address, resolved as the page opens, and GPS to that building.
                 var address = CommissaryLocation.Address(site);
                 box.Row(Text("foodtrucks:bizman_page_space_address"), address ?? CommissaryLocation.AddressText(site));
-                // Per day, as Commissary charges it (CommissaryRules.DailyRentCents: the month's rent over a year's days).
                 if (rules != null && rules.RentPerMonthCents.ContainsKey(kind))
                     box.Row(Text("foodtrucks:bizman_page_space_rent"), Format("foodtrucks:bizman_page_space_rent_value", ("rent", CartSelling.Money(rules.DailyRentCents(kind)))));
                 box.Row(Text("foodtrucks:bizman_page_space_since"), Format("foodtrucks:bizman_page_space_since_value", ("day", space.SinceDay.ToString())));
@@ -560,8 +483,6 @@ namespace FoodTrucks
                 box.Button(Text("foodtrucks:bizman_page_space_call"), () => Call(siteId));
                 return;
             }
-            // The missing space is a to-do (its fine there); here the commissaries it could call (Peter, 16 October 2026: no
-            // lines explaining the page).
             var known = state.Commissary.Unlocked.Select(u => sites?.Site(u)).Where(s => s != null).Select(s => s!).ToList();
             box.Paragraph(Text("foodtrucks:bizman_page_space_none"));
             foreach (var other in known)
@@ -571,7 +492,6 @@ namespace FoodTrucks
             }
         }
 
-        // "Hell's Kitchen" for "Hell's Kitchen Commissary": the buttons sit under the Commissary space title.
         internal static string ShortName(FoodTrucks.Core.Commissary.CommissarySite site)
         {
             var name = Commissary.Name(site);
@@ -585,7 +505,6 @@ namespace FoodTrucks
             ModContacts.OpenAndCall(Commissary.ContactFor(siteId));
         }
 
-        // Partner venue: No partner, the current one, and the player's own venues within reach of where the vehicle stands.
         private static void Partner(Transform column, SaveState state, string id, VehicleInstance instance, bool canWrite)
         {
             var box = new BizManParts.Box(column, Text("foodtrucks:bizman_page_partner_header"));
@@ -609,9 +528,6 @@ namespace FoodTrucks
                 chosen => ChoosePartner(id, venues[chosen]));
         }
 
-        // Marketing: None and each level priced for this kind of vehicle, with its extra passers and daily fee; the pick is
-        // booked from tomorrow. Below, the level today paid for (a level runs only on a paid day, VehicleMarketing) and what
-        // runs from tomorrow.
         private static void Marketing(Transform column, VehicleState? vehicle, string kind, string id, bool canWrite)
         {
             var rules = DemandData.Rules?.Marketing;
@@ -621,7 +537,6 @@ namespace FoodTrucks
             var labels = levels.Select(l => l.IsNone ? Text("foodtrucks:bizman_page_marketing_none")
                 : Format("foodtrucks:bizman_page_marketing_option", ("level", Text("foodtrucks:marketing_level_" + l.Id)),
                     ("percent", MarketingPercent(l)), ("cost", CartSelling.Money(l.CostPerDayCents[kind])))).ToList();
-            // An unknown level (a newer version's) shows as None until the player picks another.
             var selected = Math.Max(0, levels.FindIndex(l => l.Id == vehicle?.MarketingLevel));
             AddRow(box, Text("foodtrucks:bizman_page_marketing"), labels, selected, canWrite,
                 chosen => ChooseMarketing(id, levels[chosen].Id));
@@ -639,9 +554,6 @@ namespace FoodTrucks
         internal static string MarketingPercent(MarketingLevel level) =>
             Math.Round((level.Footfall - 1) * 100).ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
 
-        // ---- Parts ----
-
-        // A box row with a copy of the game's dropdown as its value.
         internal static void AddRow(BizManParts.Box box, string title, List<string> options, int selected, bool interactable, Action<int> chosen)
         {
             var dropdown = box.DropdownRow<GameDropdown>(title, dropdownTemplate!);
@@ -660,9 +572,6 @@ namespace FoodTrucks
             dropdown.SetInteractable(interactable);
         }
 
-        // ---- Changes ----
-
-        // The crew dropdown's choice for one slot (null: Unassigned). Also the test bridge's crew command.
         internal static void ChooseCrew(string id, int slot, string? employeeId, string? expectedCurrentId = null, bool checkCurrent = false)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -671,7 +580,6 @@ namespace FoodTrucks
             var kind = KindOf(id);
             if (string.IsNullOrEmpty(vehicle.VehicleType)) vehicle.VehicleType = kind;
             var currentId = slot < vehicle.Crew.Count ? vehicle.Crew[slot] : null;
-            // A resignation/reassignment may have moved the roster since this dropdown was drawn.
             if (checkCurrent && currentId != expectedCurrentId)
             {
                 RefreshLater();
@@ -689,7 +597,6 @@ namespace FoodTrucks
             {
                 if (HireCrew.Add(state, vehicle, joining))
                 {
-                    // The new hand takes the slot they were picked for.
                     vehicle.Crew.Remove(joining.id);
                     vehicle.Crew.Insert(Math.Min(slot, vehicle.Crew.Count), joining.id);
                     CartSelling.Say("foodtrucks:notification_crew_added", kind, ("name", HireCrew.Name(joining)));
@@ -699,8 +606,6 @@ namespace FoodTrucks
             RefreshLater();
         }
 
-        // The game's text prompt, as the old Prices button had it. It shows outside the phone, like the map pick's time
-        // pickers: the phone closes for it and opens again on this page once it is answered or closed.
         private static void ChangePrice(string id, string item, string name)
         {
             if (!FoodTrucksSession.CanWrite)
@@ -724,7 +629,6 @@ namespace FoodTrucks
             RefreshLater();
         }
 
-        // The marketing dropdown's choice, a level ID, booked from tomorrow. False when nothing changed: read-only data.
         internal static bool ChooseMarketing(string id, string level)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -735,8 +639,6 @@ namespace FoodTrucks
             RefreshLater();
             return true;
         }
-
-        // ---- Helpers ----
 
         internal static string CrewOption(EmployeeInstance employee) =>
             Format("foodtrucks:bizman_page_crew_option", ("name", HireCrew.Name(employee)), ("skill", HireCrew.Skill(employee).ToString("F0")),
@@ -768,7 +670,6 @@ namespace FoodTrucks
         private static string Path(Transform target, Transform root, string what) =>
             BizManFleet.PathBelow(target, root) ?? throw new InvalidOperationException($"{what} isn't inside the part it belongs to.");
 
-        // An empty path is the part itself.
         private static Transform Find(Transform root, string path) => path.Length == 0 ? root : root.Find(path) ?? root;
 
         private static void Hide(Transform root, string path)

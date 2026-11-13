@@ -23,3 +23,4 @@ When the Windows PC is unavailable, the sibling Driven Rides checkout provides a
 - Mod state written into a save must stay loadable: version every schema, migrate forward, and never overwrite data written by a newer mod version.
 - Mark evidence in the README as checked (seen in game), pending or unverified. Code reading is not a check.
 - Neutral names: no references to any YouTube series or personal saves in shipped files.
+- No code comments. Fix the problem, or open an issue, instead of leaving an excuse in the code. `tools/comment_ban.py` (run by the tools tests) fails on any comment that is not a directive or listed in `docs/comment-excuses.md`.

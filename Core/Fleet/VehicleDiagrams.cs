@@ -6,8 +6,6 @@ using FoodTrucks.Core.Selling;
 
 namespace FoodTrucks.Core.Fleet
 {
-    // A piece's own picture on the drawing: a file cropped to the piece, and where its top-left corner and size fall on
-    // the full image, in the full image's pixels (y down).
     public sealed class DiagramLayer
     {
         public DiagramLayer(string file, int x, int y, int width, int height)
@@ -26,9 +24,6 @@ namespace FoodTrucks.Core.Fleet
         public int Height { get; }
     }
 
-    // One place on a vehicle's drawing: its hotspot as fractions of the image (x from the left, y from the top), the
-    // icon size for a piece with no layer (a fraction of the image's height), and the layers of the pieces that can
-    // stand there, by game item.
     public sealed class DiagramPlace
     {
         public DiagramPlace(string name, double x, double y, double size, IReadOnlyDictionary<string, DiagramLayer> layers)
@@ -60,23 +55,13 @@ namespace FoodTrucks.Core.Fleet
             DrawOrder = drawOrder;
         }
 
-        // The background PNG's file name (the vehicle with empty places), under the mod's UI folder, and its size.
         public string Image { get; }
         public int Width { get; }
         public int Height { get; }
-        // In fill order: the first fitted piece takes the first place.
         public IReadOnlyList<DiagramPlace> Places { get; }
-        // The places' names from back to front: the order their layers are drawn in.
         public IReadOnlyList<string> DrawOrder { get; }
     }
 
-    // data/vehicle-diagrams.json, schema 2 (layered drawings, 16 October 2026): per vehicle kind the background image and
-    // its size, a fallback icon size, the draw order and the places in the order VehicleDisplays fills them, each with
-    // its hotspot, size and layers by game item:
-    //   { "schemaVersion": 2, "truck": { "image": "VehicleDiagram_Truck.png", "width": 1200, "height": 500, "iconSize": 0.1,
-    //     "drawOrder": ["EquipmentLine4", …], "places": [ { "place": "EquipmentLine2", "x": 0.51, "y": 0.31, "size": 0.08,
-    //     "layers": { "ba:itemname_hotdoggrill": { "file": "…png", "x": 584, "y": 214, "width": 68, "height": 45 } } } ] } }
-    // Keys starting with "_" are notes.
     public sealed class VehicleDiagrams
     {
         public const int SchemaVersion = 2;
@@ -142,7 +127,6 @@ namespace FoodTrucks.Core.Fleet
                         if (!order.Contains(placeName)) order.Add(placeName);
                     }
                 else if (kind["drawOrder"] != null) throw Bad(name + ".drawOrder must be a list");
-                // Places the order leaves out are drawn last, in fill order.
                 order.AddRange(places.Select(p => p.Name).Where(p => !order.Contains(p)));
                 kinds[name] = new VehicleDiagram(image!, width, height, places, order);
             }
@@ -179,7 +163,6 @@ namespace FoodTrucks.Core.Fleet
                 .Select(p => (places[p.Slot], p.Piece)).ToList();
         }
 
-        // The pieces in fitting order on the places in fill order; pieces past the last place aren't drawn.
         public static IReadOnlyList<(DiagramPlace Place, T Piece)> Fill<T>(VehicleDiagram diagram, IEnumerable<T> pieces) =>
             diagram.Places.Zip(pieces, (place, piece) => (place, piece)).ToList();
     }

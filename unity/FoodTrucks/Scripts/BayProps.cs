@@ -10,33 +10,16 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // The commissary bay's street furniture beyond the paint (Peter, 11 October 2026: "the purple box breaks immersion"):
-    // the LOADING ZONE lettering in the bay, a NYC-style loading zone sign at the kerb naming the commissary, and a few
-    // props on the pavement by the commissary's door. Models come from the mod's bundle (art/commissary, built by
-    // CommissaryAssets); the pallet of boxes and the hand truck are the game's own meshes where it has them (the
-    // DeliveryPallet and HandTruck prefabs, loaded by name and copied as plain meshes so none of their game code runs),
-    // with the mod's models as the fallback. The game has no dumpster or roll cage, so those are always the mod's.
-    // Everything here is a child of the bay's marker, shown, hidden and destroyed with it (BayMarkers). The lettering
-    // and the sign have no collider; each prop has a box collider and a carving NavMeshObstacle of its footprint, and
-    // stands against the facade beside the door, out of the door's way, off the road and with a walkway left in front.
     internal static class BayProps
     {
         private const string Folder = "Assets/Mods/FoodTrucks/Commissary/BayArt/";
-        // The lettering model's size at scale 1 (art/commissary/build_commissary.py): 1 m cap height, 8.04 m long.
         private const float LetteringLength = 8.04f;
         private const float LetteringMaxCap = 0.70f;
         private const float LetteringMinCap = 0.30f;
-        // A pole stands this far behind the kerb's face, on the pavement.
         private const float PoleBehindKerb = 0.40f;
-        // Pavement left free in front of a prop, and the gap kept to each side of the door's middle.
         private const float WalkwayMetres = 1.5f;
         private const float DoorClearMetres = 2.0f;
-        // A point closer than this to a driving lane's middle is road or a parking lane (HatchSide's 3.25 m band).
         private const float RoadBandMetres = 3.25f;
-        // Props are tried along the facade every PropStepMetres, out to MaxAlongMetres from the door's middle, and stand
-        // against the wall read where each goes: the outermost wall within FacadeShiftMetres of the door's own line
-        // (Core PropPlacement; live sessions 1 to 3: Hell's Kitchen's recessed door between pilasters put every prop
-        // into a pilaster, one place per side, "something stands there").
         private const float PropStepMetres = 0.5f;
         private const float MaxAlongMetres = 9f;
         private const float FacadeShiftMetres = 0.8f;
@@ -66,9 +49,6 @@ namespace FoodTrucks
             return material;
         }
 
-        // LOADING ZONE in the middle of the longest stretch, scaled to fit it and the paint's width, flat at the road's
-        // highest point under it. `local` is the paint root's frame: +x along the street, +z to the road. Returns a line
-        // for the log.
         public static string Lettering(Transform root, (float From, float To) longest, float width, Func<Vector3, float> groundAt)
         {
             var model = Model("BayLettering");
@@ -88,14 +68,6 @@ namespace FoodTrucks
             return $"LOADING ZONE {cap:F2} m high, {cap * LetteringLength:F1} m long";
         }
 
-        // The sign: on the pavement just behind the kerb, by the middle of the longest stretch, its plate facing the
-        // road for drivers. Local -z is the pavement side (the paint's root faces the road). The
-        // kerb is the first step up of 8 cm or more from the paint's own edge (0.9.10 measured from the driving lane's
-        // waypoint height, which needn't be the road's); without one (a flush plaza, as across from the Hell's Kitchen
-        // door), the pavement's edge: the first point off the parking lane and the road that is on the NavMesh. The pole
-        // stands PoleBehindKerb past either, where nothing solid stands; a person or vehicle there doesn't count.
-        // Without a place the log says, for each spot tried, what was missing (live session 4: 0.9.10's line didn't
-        // say which of its two reasons held).
         public static string Sign(Transform root, string siteId, (float From, float To) longest, float width, Func<Vector3, float> groundAt, float laneY)
         {
             var model = Model("BaySign");
@@ -134,7 +106,6 @@ namespace FoodTrucks
                 var local = new Vector3(x, 0f, kerb.Value - PoleBehindKerb);
                 var at = root.TransformPoint(local);
                 at.y = groundAt(at);
-                // Room for the pole: nothing solid within 0.25 m of it up to head height.
                 var blocker = Physics.OverlapCapsule(at + Vector3.up * 0.3f, at + Vector3.up * 2.0f, 0.25f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
                     .FirstOrDefault(c => c != null && !c.transform.IsChildOf(root) && !NotWall(c) && c.GetComponentInParent<ThirdPersonCharacter>() == null &&
                                          ((1 << c.gameObject.layer) & (int)LayerHelper.humanLayerMask) == 0);
@@ -146,10 +117,6 @@ namespace FoodTrucks
                 var sign = Object.Instantiate(model, root, false);
                 sign.name = "LoadingZoneSign";
                 sign.transform.position = at;
-                // As the model is built: the plate on the road side of the pole (the root's +z), its face and double
-                // arrow towards the road. Seen in game (live session 7): the plate stood 4 cm road-side of the pole this
-                // way. 0b461b7 turned it half round from a picture taken from the pavement, where the back's mirrored
-                // copy of the face reads as well, and so put the plate on the pavement side.
                 sign.transform.localRotation = Quaternion.identity;
                 var plate = Material("M_BaySign_" + siteId);
                 if (plate != null)
@@ -160,11 +127,6 @@ namespace FoodTrucks
             return "no sign (" + (tried.Count == 0 ? "the longest stretch is too short for a spot" : string.Join("; ", tried)) + ")";
         }
 
-        // The sign of a nose-in bay in a lot (CommissarySite.InLot): past the stall's head, the end the truck's nose
-        // points to (head +1 is the paint's local +x), on the first step up of 8 cm or more (a kerb) or the first point
-        // off the parking and the road that is on the NavMesh (the pavement's edge), within 3 m of the paint's end,
-        // PoleBehindKerb further on, its plate facing back along the stall to the aisle. Without either there is no sign:
-        // a lot has no kerb beside the paint to put one on.
         public static string SignAtHead(Transform root, string siteId, (float From, float To) longest, int head, Func<Vector3, float> groundAt)
         {
             var model = Model("BaySign");
@@ -211,7 +173,6 @@ namespace FoodTrucks
                 var sign = Object.Instantiate(model, root, false);
                 sign.name = "LoadingZoneSign";
                 sign.transform.position = at;
-                // The model's plate faces the root's +z; turned a quarter so it faces back along the stall (-head on x).
                 sign.transform.localRotation = Quaternion.Euler(0f, head > 0 ? -90f : 90f, 0f);
                 var plate = Material("M_BaySign_" + siteId);
                 if (plate != null)
@@ -229,8 +190,6 @@ namespace FoodTrucks
             public Func<Transform, GameObject?> Make { get; }
         }
 
-        // What placing the props came to: the log line, and whether to try again later (the street not ready, or a
-        // vehicle or the player standing where a prop would go) rather than settle for what fitted.
         public readonly struct Outcome
         {
             public Outcome(string line, bool tryAgain) { Line = line; TryAgain = tryAgain; }
@@ -238,9 +197,6 @@ namespace FoodTrucks
             public bool TryAgain { get; }
         }
 
-        // Why a prop doesn't fit somewhere; Transient when something that moves (a vehicle, the player) is in the way.
-        // Kind groups the refusals of one prop's places for the log (the first place's Why is the example shown); a
-        // place blocked by a named collider is its own kind, so each obstacle is named.
         private readonly struct Refusal
         {
             public Refusal(string why, bool transient, string? kind = null) { Why = why; Transient = transient; Kind = kind ?? why; }
@@ -249,10 +205,6 @@ namespace FoodTrucks
             public string Kind { get; }
         }
 
-        // The props by the door, against the facade on either side of it, each at the first place outwards from the
-        // door where it fits: on the NavMesh, touching nothing, clear of every entrance (the commissary's and its
-        // neighbours'), not on the road, and with WalkwayMetres of walkable pavement left in front of it. Those that
-        // don't fit anywhere within MaxAlongMetres are left out; the log says why, naming what stood there.
         public static Outcome ByTheDoor(Transform parent, Vector3 door, TrafficLanes lanes, CityBuildingController? own = null)
         {
             var nearest = lanes.Nearest(door);
@@ -291,19 +243,11 @@ namespace FoodTrucks
                 var rayMetres = laneMetres + FacadeBehindDoorMetres;
                 var hits = Physics.RaycastAll(from, -outward, rayMetres, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
                     .Where(h => h.collider != null && !NotWall(h.collider)).OrderBy(h => h.distance).ToList();
-                // A building surface more than 6 m in front of the door point is something else on the pavement (a kiosk).
-                // A building surface narrower than KioskMetres along the street is a newsstand or shelter on the pavement,
-                // not the facade (review round 7, Opus). The Buildings layer and its hover twin both count (review round 7,
-                // Sol: a building the cursor is over has its facade colliders moved to BuildingsOutlined).
                 var rayAlong = new Vector3(outward.z, 0f, -outward.x);
                 var hit = hits.FirstOrDefault(h => IsBuilding(h.collider) && h.distance >= laneMetres - 6f && WidthAlong(h.collider, rayAlong) >= KioskMetres);
-                // The fallback near the door point never takes a kiosk either: nothing narrower than KioskMetres along
-                // the street is a facade (review round 9, Astra: a kiosk the first test refused came back here).
                 if (hit.collider == null)
                     hit = hits.FirstOrDefault(h => h.distance >= laneMetres - 3f && h.distance <= laneMetres + 1.5f && WidthAlong(h.collider, rayAlong) >= KioskMetres);
                 if (hit.collider == null)
-                    // Nothing solid at all: the buildings may still be streaming in, so it is tried again (MaxPropTries
-                    // bounds it; review round 7, Opus). Only other things hit: settled.
                     return new Outcome($"no props by the door at x {door.x:F1}, z {door.z:F1}: no building wall within {WallNearDoorMetres:F0} m of the door point, and none on a ray at waist height from the driving lane at " +
                                        $"x {from.x:F1}, z {from.z:F1} back {rayMetres:F0} m, {FacadeBehindDoorMetres:F0} m past the door ({(hits.Count == 0 ? "nothing solid hit" : "hit only " + string.Join(", ", hits.Take(3).Select(h => Describe(h.collider))))})", hits.Count == 0);
                 doorWall = hit.collider;
@@ -313,7 +257,6 @@ namespace FoodTrucks
                 if (normal.sqrMagnitude > 0.5f && Vector3.Angle(normal, outward) < 35f) outward = normal.normalized;
             }
             var along = new Vector3(outward.z, 0f, -outward.x);
-            // Every entrance near enough to matter: the commissary's other doors and its neighbours'.
             var entrances = World.DoorPositions().Where(d => Flat(d - door) < 20f).ToList();
             var props = new[]
             {
@@ -325,7 +268,6 @@ namespace FoodTrucks
             var placed = new List<string>();
             var skipped = new List<string>();
             var tryAgain = false;
-            // Props refused only for being off the NavMesh everywhere tried.
             var offNavMesh = 0;
             var reach = new Dictionary<int, float> { [1] = DoorClearMetres, [-1] = DoorClearMetres };
             foreach (var prop in props)
@@ -339,13 +281,10 @@ namespace FoodTrucks
                     var box = made.GetComponent<BoxCollider>();
                     var size = box != null ? box.size : new Vector3(1f, 1f, 1f);
                     var centre = box != null ? box.center : new Vector3(0f, 0.5f, 0f);
-                    // Long side along the facade.
                     var turn = size.z > size.x ? Quaternion.AngleAxis(90f, Vector3.up) : Quaternion.identity;
                     var rotation = Quaternion.LookRotation(outward, Vector3.up) * turn;
                     var alongSize = Mathf.Max(size.x, size.z);
                     var depth = Mathf.Min(size.x, size.z);
-                    // Why each place was refused, by kind: how many, and the first one's words, for the log when the prop
-                    // fits nowhere.
                     var refusals = new Dictionary<string, (int Count, string Example)>(StringComparer.Ordinal);
                     var transient = false;
                     var ok = false;
@@ -360,8 +299,6 @@ namespace FoodTrucks
                             var wall = wallAt ?? 0f;
                             var at = facade + outward * (wall + depth / 2f + FacadeGapMetres) + along * s;
                             var ground = 0f;
-                            // No wall behind it (past the building's corner, an alley mouth): never a free-standing prop
-                            // (review round 1, Opus).
                             var why = wallAt == null
                                 ? new Refusal($"no wall behind it at x {at.x:F1}, z {at.z:F1}", false, "no wall")
                                 : Fits(at, rotation, centre, size, outward, depth, lanes, entrances, parent, out ground);
@@ -398,7 +335,6 @@ namespace FoodTrucks
                     tryAgain = true;
                 }
             }
-            // None on the NavMesh at all: the street's navigation may still be loading.
             if (placed.Count == 0 && skipped.Count > 0 && offNavMesh == skipped.Count) tryAgain = true;
             return new Outcome($"props by the door at x {door.x:F1}, z {door.z:F1} (facade facing {Mathf.Atan2(outward.x, outward.z) * Mathf.Rad2Deg:F0} degrees" +
                                $", {Describe(doorWall!)}, {(near != null ? "the wall at the door" : "met from the street")}, {Vector3.Dot(facade - door, outward):+0.0;-0.0} m from the door point): {(placed.Count == 0 ? "none" : string.Join(", ", placed))}" +
@@ -407,10 +343,6 @@ namespace FoodTrucks
 
         private const string NotOnNavMesh = "not on the pavement's NavMesh";
 
-        // The wall where a prop goes, in metres out from the door's facade line (+ to the street): rays back towards
-        // the building at both ends and the middle of the prop's length, from just above the overlap box's floor
-        // (0.15 m, Fits) to waist height; the outermost hit within FacadeShiftMetres (Core PropPlacement.FacadeOffset).
-        // Null when nothing usable is hit: no wall there.
         private static float? FacadeAt(Vector3 facade, Vector3 outward, Vector3 along, float s, float length, Transform ownProps)
         {
             var hits = new List<double>();
@@ -429,15 +361,10 @@ namespace FoodTrucks
             return offset == null ? (float?)null : (float)offset.Value;
         }
 
-        // A person, a vehicle or anything pushed by physics: never the street's own furniture.
         private static bool Moving(Collider c) =>
             c.GetComponentInParent<ThirdPersonCharacter>() != null || c.GetComponentInParent<VehicleController>() != null ||
             ((1 << c.gameObject.layer) & (int)LayerHelper.humanLayerMask) != 0 || (c.attachedRigidbody != null && !c.attachedRigidbody.isKinematic);
 
-        // Never a wall: anything that moves, and the player's own colliders (layer Player; the player's root collider
-        // has no ThirdPersonCharacter above it).
-        // Parked and traffic cars too, by their layers (review round 7, Opus: on a narrow pavement a parked car could be
-        // the first solid surface and read as the facade).
         private static bool NotWall(Collider c)
         {
             var layer = c.gameObject.layer;
@@ -447,18 +374,10 @@ namespace FoodTrucks
 
         private static readonly int PlayerLayer = LayerHelper.PlayerLayerIndex;
 
-        // A building's collider: on the Buildings layer or its hover twin, or a part of a city building on the Default
-        // layer, where the game's camera-block mode moves the parts between the camera and the player (review round 9,
-        // Astra).
         private static bool IsBuilding(Collider c) =>
             ((1 << c.gameObject.layer) & (int)LayerHelper.buildingAndOutlinesLayerMask) != 0 ||
             (c.gameObject.layer == LayerHelper.DefaultLayerIndex && c.GetComponentInParent<CityBuildingController>() != null);
 
-        // A collider's extent along a flat direction, from its world bounds.
-        // The nearest building surface within WallNearDoorMetres of a door point that stands outside it, and the flat
-        // direction from that surface to the door (the wall's outside). The commissary's own building first, when its
-        // colliders can be told apart (under its CityBuildingController), else any building (review round 11, Opus: a
-        // neighbour's wall nearer the door point could be taken). Null when none can be told.
         private static (Collider Collider, Vector3 Point, Vector3 Outward)? NearestWall(Vector3 door, CityBuildingController? own)
         {
             if (own != null)
@@ -477,13 +396,11 @@ namespace FoodTrucks
             foreach (var c in Physics.OverlapSphere(probe, WallNearDoorMetres, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
             {
                 if (c == null || !IsBuilding(c) || NotWall(c) || c.bounds.size.y < 1.5f || !accept(c)) continue;
-                // A kiosk or shelter next to the door isn't the wall the door is in.
                 if (Mathf.Max(c.bounds.size.x, c.bounds.size.z) < KioskMetres) continue;
                 if (c is MeshCollider mesh && !mesh.convex) continue;
                 var point = c.ClosestPoint(probe);
                 var away = probe - point;
                 away.y = 0f;
-                // Inside the collider (ClosestPoint gives the point itself) tells nothing.
                 if (away.sqrMagnitude < 0.05f * 0.05f) continue;
                 var distance = away.magnitude;
                 if (distance < bestDistance)
@@ -504,10 +421,8 @@ namespace FoodTrucks
         }
 
         private const float KioskMetres = 4f;
-        // How far behind the door point the facade ray looks for the wall.
         private const float FacadeBehindDoorMetres = 8f;
 
-        // What a collider is, for the log: its name, its root object's name and its layer.
         internal static string Describe(Collider c)
         {
             var root = c.transform.root;
@@ -515,8 +430,6 @@ namespace FoodTrucks
             return $"{c.name}{(root != null && root != c.transform ? " on " + root.name : "")}, layer {(string.IsNullOrEmpty(layer) ? c.gameObject.layer.ToString() : layer)}";
         }
 
-        // Null when the prop fits there, else why not. `ground` is the pavement's height under it, found from the door's
-        // height (the facade ray's hit is a metre up) before both NavMesh probes.
         private static Refusal? Fits(Vector3 at, Quaternion rotation, Vector3 centre, Vector3 size, Vector3 outward, float depth, TrafficLanes lanes,
             List<Vector3> entrances, Transform ownProps, out float ground)
         {
@@ -527,15 +440,11 @@ namespace FoodTrucks
             at.y = ground;
             var road = lanes.Distance(at);
             if (road != null && road.Value < RoadBandMetres + depth / 2f) return new Refusal($"{road.Value:F1} m from a driving lane at x {at.x:F1}, z {at.z:F1}", false, "road");
-            // Clear of every entrance: none within DoorClearMetres of the footprint (the facade's own door is already
-            // that far away along it).
             var footprint = new Vector2(Mathf.Max(size.x, size.z) / 2f, depth / 2f);
             foreach (var entrance in entrances)
             {
                 var local = Quaternion.Inverse(Quaternion.LookRotation(outward, Vector3.up)) * (entrance - at);
                 var dx = Mathf.Max(0f, Mathf.Abs(local.x) - footprint.x);
-                // An entrance behind the prop (a door point inside its building, as at Lower Manhattan) counts by its
-                // distance along the facade alone, so a prop never stands in front of a recessed door.
                 var dz = local.z < 0f ? 0f : Mathf.Max(0f, Mathf.Abs(local.z) - footprint.y);
                 if (Mathf.Abs(local.y) < 3f && new Vector2(dx, dz).magnitude < DoorClearMetres - 0.05f)
                     return new Refusal($"next to the entrance at x {entrance.x:F1}, z {entrance.z:F1}", false, "entrance");
@@ -547,8 +456,6 @@ namespace FoodTrucks
             var halves = size / 2f - new Vector3(0.03f, 0f, 0.03f);
             halves.y = Mathf.Max(0.05f, halves.y - 0.1f);
             var middle = new Vector3(at.x, ground + 0.15f + halves.y, at.z);
-            // Pedestrians walk on and the carving obstacle steers them round; a vehicle or the player standing there is
-            // waited for (tried again later); anything else is in the way for good.
             var transient = false;
             foreach (var other in Physics.OverlapBox(middle, halves, rotation, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
             {
@@ -569,8 +476,6 @@ namespace FoodTrucks
         private static bool IsPlayer(Collider collider) =>
             Flat(collider.transform.position - PlayerHelper.GetPosition()) < 1.5f;
 
-        // The pavement's height under a point near the door's height: the highest surface within half a metre above it,
-        // or below, that isn't a person, a vehicle or one of the props already placed.
         private static float GroundUnder(Vector3 point, Transform ownProps)
         {
             var best = float.MinValue;
@@ -586,14 +491,12 @@ namespace FoodTrucks
 
         private static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
 
-        // The game's DeliveryPallet with the bottom two layers of its boxes (the prefab stacks four), as plain meshes.
         private static GameObject? GamePallet(Transform parent)
         {
             var copy = CopyGame("DeliveryPallet", parent, t => !t.name.StartsWith("SM_CardboardBox", StringComparison.Ordinal) || t.localPosition.y < 0.7f);
             return copy ?? Copy(Model("BayPalletStack"), parent);
         }
 
-        // The game's hand truck (the player's), standing, as plain meshes.
         private static GameObject? GameHandTruck(Transform parent)
         {
             var copy = CopyGame("Vehicles/PlayerVehicles/HandTruck", parent, _ => true);
@@ -608,9 +511,6 @@ namespace FoodTrucks
             return made;
         }
 
-        // A game prefab's visible meshes copied into a new object with a box collider and a carving NavMeshObstacle round
-        // them, so no game component (item, vehicle, animator) comes along. Skips the game's placement indicators and
-        // anything inactive in the prefab. Null when the prefab or its meshes aren't there.
         private static GameObject? CopyGame(string prefabName, Transform parent, Func<Transform, bool> keep)
         {
             GameObject? prefab;
@@ -654,7 +554,6 @@ namespace FoodTrucks
                 part.AddComponent<MeshFilter>().sharedMesh = mesh;
                 var partRenderer = part.AddComponent<MeshRenderer>();
                 partRenderer.sharedMaterials = mats;
-                // Street dirt decals skip it, as they skip every bay piece and the game's vehicles (SurfaceLook.NoStreetDecals).
                 partRenderer.renderingLayerMask = BayMarkers.NoDecalsRenderingLayers;
                 var b = mesh.bounds;
                 var corners = new List<Vector3>();
@@ -662,13 +561,11 @@ namespace FoodTrucks
                     corners.Add(m.MultiplyPoint3x4(b.center + Vector3.Scale(b.extents, new Vector3((c & 1) == 0 ? -1 : 1, (c & 2) == 0 ? -1 : 1, (c & 4) == 0 ? -1 : 1))));
                 foreach (var corner in corners)
                 {
-                    // The first corner of all starts the bounds; a flat mesh repeats corners, so never compare them.
                     if (first) bounds = new Bounds(corner, Vector3.zero);
                     else bounds.Encapsulate(corner);
                     first = false;
                 }
             }
-            // Stand it on the ground: its lowest point at the object's origin.
             foreach (Transform child in made.transform) child.localPosition -= new Vector3(0f, bounds.min.y, 0f);
             bounds.center -= new Vector3(0f, bounds.min.y, 0f);
             var box = made.AddComponent<BoxCollider>();

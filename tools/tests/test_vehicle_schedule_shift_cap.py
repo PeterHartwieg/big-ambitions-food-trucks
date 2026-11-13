@@ -54,7 +54,6 @@ def harness():
         member('VehicleSchedule.cs', 'public static bool EmployeeChangedPrefix('),
         member('VehicleSchedule.cs', 'public static void WeeklyHoursPostfix('),
     ]
-    # Before the fix there is no refusal: SyncBack keeps whatever the tab holds (the red run).
     if REFUSE in source:
         members.append(member('VehicleSchedule.cs', REFUSE))
     return HARNESS.replace('/* VEHICLE_SCHEDULE */', '\n'.join(members))
@@ -80,13 +79,11 @@ class VehicleScheduleShiftCapTests(unittest.TestCase):
         self.assertTrue(ok, output)
 
     def test_valid_paste_is_accepted_and_saved(self):
-        # The game replaces the destination days, then updates each crew member's weekly hours.
         ok, output = run(harness(), 'PASS: vehicle schedule paste cap', 'paste')
         self.assertTrue(ok, output)
 
     def test_refusal_is_wired_and_redraws_the_selected_day(self):
         sync = member('VehicleSchedule.cs', 'private static void SyncBack(')
-        # Judged against the loaded rules before anything is written to the save.
         self.assertIn('WeekPlan.OverMaxHours(rules.Fleet, vehicle.Schedule?.CrewShifts, shifts)', sync)
         self.assertLess(sync.index('OverMaxHours'), sync.index('schedule.CrewShifts = shifts;'))
         self.assertNotIn('MaxShiftHours', sync)
@@ -98,11 +95,9 @@ class VehicleScheduleShiftCapTests(unittest.TestCase):
         locale = (ROOT / 'unity/FoodTrucks/Locales/en.json').read_text(encoding='utf-8')
         self.assertIn('"foodtrucks:notification_schedule_shift_too_long": "', locale)
         self.assertIn('{max} hours', locale)
-        # The bridge setter keeps its own single-shift check (CheckShift, TooLong) and replace-per-day semantics.
         self.assertNotIn('OverMaxHours', member('VehicleSchedule.cs', 'internal static ShiftProblem SetForBridge('))
 
     def test_native_names_in_the_game_assembly(self):
-        # Optional: re-reads the redraw's private members from a local copy of the game's assembly (never shipped).
         folder = os.environ.get('BA_GAME_DLLS')
         ilspy = shutil.which('ilspycmd')
         if not folder or not (Path(folder) / 'BigAmbitions.dll').is_file() or not ilspy:

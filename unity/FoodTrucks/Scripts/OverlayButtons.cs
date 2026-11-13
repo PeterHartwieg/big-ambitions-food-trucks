@@ -11,15 +11,6 @@ using UnityEngine.UI;
 
 namespace FoodTrucks
 {
-    // The food vehicle's own buttons in its on-foot menu (click the vehicle on foot: the game's "Enter vehicle" and
-    // "Manage storage" buttons, VehicleOverlay). Copies of the overlay's Enter vehicle button, each shown only when it
-    // applies (Peter, 15 October 2026: the vehicle panel holds only cargo):
-    // - "Open for business": a closed food vehicle, the player on foot (CartSelling.OpenHere checks the rest).
-    // - "Back to the hatch": an open truck while the player isn't at its hatch (TruckWindow.CanGoBack). A truck sells
-    //   only with someone at its window, so without it every step-out (a time skip, Unstuck, a load) ended solo selling
-    //   until the window was closed and reopened.
-    // - "Close": an open vehicle while the player isn't at its hatch, so a cart can close without being moved.
-    // - "Clean": in the bay of the commissary where the vehicle rents its space (CartSelling.CleanHere).
     internal static class OverlayButtons
     {
         private sealed class Spec
@@ -38,7 +29,6 @@ namespace FoodTrucks
             public Action<VehicleController> Click { get; }
         }
 
-        // In the order they stand, just before Enter vehicle.
         private static readonly Spec[] Specs =
         {
             new Spec("FoodTrucks.SellCart", "foodtrucks:overlay_sell_cart",
@@ -60,13 +50,10 @@ namespace FoodTrucks
         private static readonly FieldInfo? StorageField = AccessTools.Field(typeof(VehicleOverlay), "manageStorageButton");
         private static readonly FieldInfo? AddHandTruckField = AccessTools.Field(typeof(VehicleOverlay), "addHandTruckToStorageButton");
         private static readonly FieldInfo? AddItemsField = AccessTools.Field(typeof(VehicleOverlay), "addItemsToStorageButton");
-        // The vehicle the overlay showed when the buttons were last set up.
         private static VehicleController? shownFor;
         private static bool failed;
         private static readonly HashSet<string> logged = new HashSet<string>();
 
-        // Vanilla hand carts bypass VehicleOverlay and immediately start pushing. At a commissary expose the
-        // cart's actions instead. Held cargo and hand trucks retain their native loading interactions.
         internal static void CommissaryCartCtaPostfix(EntityController entityController)
         {
             try
@@ -79,13 +66,11 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Commissary cart actions: " + ex); }
         }
 
-        // Postfix on VehicleOverlay.UpdateOverlay(EntityController).
         internal static void UpdateOverlayPostfix(VehicleOverlay __instance, EntityController entityController)
         {
             if (failed) return;
             try
             {
-                // The game leaves its buttons as they are while a click action is pending; so do these.
                 if (CtaManager.ctaAction != null) return;
                 if (!(EnterField?.GetValue(__instance) is Button enter))
                 {
@@ -118,11 +103,6 @@ namespace FoodTrucks
             }
         }
 
-        // Postfix on VehicleCtaBehavior.GetCta(EntityController). On foot the game gives a hand vehicle (the cart) and
-        // an empty vehicle "click to drive", whose click pushes or enters it at once, so the on-foot menu with these
-        // buttons never opened for a cart. For a food vehicle that click becomes "click to use" without an action:
-        // the click opens the menu, whose own Use cart / Enter vehicle button still drives. Only where the game would
-        // show that menu (OverlayManager.ShouldShowDetailedOverlay), else the click keeps driving.
         internal static void CtaPostfix(EntityController entityController, ref ValueTuple<string, Action> __result)
         {
             try
@@ -137,9 +117,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Vehicle click: " + ex); }
         }
 
-        // The game sets its own on-foot buttons (Use cart / Enter vehicle, Manage storage) only for a vehicle with cargo, and
-        // leaves them as the last vehicle had them otherwise. Since CtaPostfix opens the menu for an empty food vehicle too,
-        // set them here as the game does for one with cargo, so the menu always has a way to push or enter it.
         private static void NativeOnFootButtons(VehicleOverlay overlay, Button enter, VehicleController controller)
         {
             if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId) || PlayerHelper.ItemInstanceInHands != null) return;
@@ -164,7 +141,6 @@ namespace FoodTrucks
         {
             var button = UnityEngine.Object.Instantiate(enter, enter.transform.parent);
             button.name = spec.Name;
-            // A fresh event drops the copied listener (the game's DriveVehicle).
             button.onClick = new Button.ButtonClickedEvent();
             button.onClick.AddListener(() => Click(spec));
             button.interactable = true;
@@ -176,8 +152,6 @@ namespace FoodTrucks
             }
             else Log.Error($"{spec.Name}: the copied button has no label; it shows the game's text.");
             button.gameObject.SetActive(false);
-            // Placed once, just before Enter vehicle: setting it on every update swapped them each time. Made in the
-            // order of Specs, each lands after the ones made before it.
             button.transform.SetSiblingIndex(enter.transform.GetSiblingIndex());
             if (logged.Add(spec.Name)) Log.Info($"Vehicle overlay: {spec.Name} button added.");
             return button;

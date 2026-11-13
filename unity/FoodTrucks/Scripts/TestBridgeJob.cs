@@ -10,10 +10,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Real Life Overhaul's running job (a Gig Line gig or a rota shift), read by reflection so the bridge works without
-    // RLO: what the shift card says, where the game's guider points, a gig's client building and a street cart's
-    // vendor spot [RLO 0.40.1: Jobs/JobDirector.cs, Jobs/Job.cs, Jobs/JobSpots.cs DoorSpot, Kinds/CleanerJob.cs,
-    // Kinds/VendorJob.cs, Jobs/JobStand.cs]. Null when RLO isn't loaded or no job runs.
     internal static class TestBridgeJob
     {
         private const BindingFlags Any = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -37,7 +33,6 @@ namespace FoodTrucks
             if (Get(job, "HasMarker") is bool marker && marker && Get(job, "MarkerAt") is Vector3 at)
                 result["marker"] = new JObject { ["x"] = Math.Round(at.x, 1), ["z"] = Math.Round(at.z, 1), ["label"] = Get(job, "MarkerLabel") as string };
 
-            // A gig at a client's building (cleaning): the building to walk to and go into.
             var client = type.GetField("_client", Any)?.GetValue(job);
             if (client != null && Get(client, "Building") is CityBuildingController building && building != null)
             {
@@ -55,9 +50,6 @@ namespace FoodTrucks
                     result["client"]!["seconds_left"] = Math.Max(0, Math.Round(ends - Time.time));
             }
 
-            // A street cart (Uncle Lou's): the vendor's spot behind it, which starts the work when the player walks on.
-            // Until RLO's solid check has passed (_pitchReady) the spot is only a candidate: RLO shows no marker yet, and
-            // a player standing on it can make the next candidates fail, so it is reported as being set up.
             var gigCart = type.GetField("_pitchReady", Any) != null;
             if (gigCart && !(type.GetField("_pitchReady", Any)!.GetValue(job) as bool? ?? false)
                 && type.GetField("_post", Any)?.GetValue(job) is Vector3 pending && pending != Vector3.zero)
@@ -81,8 +73,6 @@ namespace FoodTrucks
             return result;
         }
 
-        // ---- Simulated play ----
-
         // What a competent player earns against the clock's base pay for the same units, by job kind: the skip pays
         // 85% of the base (ShiftRates.Share) without tips or bonuses; a good hand-played shift earns the full base plus
         // the whole-bundle bonus (flyers, shelves), quick-service tips and the no-walk-off bonus (the cart), or the
@@ -97,9 +87,6 @@ namespace FoodTrucks
         private static double? armedRate;
         private static bool patched;
 
-        // job auto: the running job's minigame played for the player as a competent player would, as a time skip: the
-        // job's own "Let time pass" started and run on the game's time machine, then paid up from its 85% to the
-        // competent rate. Only the kinds with that skip; driving jobs are driven.
         internal static JToken Run(JObject args)
         {
             var op = TestBridgeCommands.Need(args, "op", "auto");
@@ -117,7 +104,6 @@ namespace FoodTrucks
             if (ui.GetCurrentActivity != null && ui.GetCurrentActivityState != PlayerActivityState.Finished)
                 throw new BridgeError("An activity is already under way; let it finish or stop it first.");
             EnsurePatched();
-            // The busker's skip is behind its More button.
             if (type.Name == "BuskerJob" && type.GetField("_more", Any) is FieldInfo more && !(more.GetValue(job) is bool m && m))
                 type.GetMethod("More", Any, null, Type.EmptyTypes, null)?.Invoke(job, null);
             var offer = type.GetMethod("OfferSkip", Any, null, Type.EmptyTypes, null) ?? throw new BridgeError($"{type.Name} has no OfferSkip.");
@@ -133,15 +119,13 @@ namespace FoodTrucks
             return new JObject { ["kind"] = type.Name, ["rate"] = rate, ["started"] = true };
         }
 
-        // ---- Driving jobs (courier, ride-hail) ----
-
         // Driving is a skill like the minigames, and the self-driving ride can't stop beside a fare or keep off
         // pedestrians, so a driving shift is played for the player as a competent driver would: RLO's own figures
         // for each parcel or fare (UnitPay, DistancePay, its trip sampler and day caps), paid through JobDirector.Pay,
         // then the clock runs for the driving time RLO's par times allow. Nothing is crashed and nobody is hit.
-        private const int DrivingShiftMinutes = 300;        // a fare shift as long as a gig shift elsewhere
-        private const float DrivingEnergyPerHour = 2.5f;    // as the drinks cart's clock costs (about 10 in 4 h)
-        private const float EnergyFloor = 12f;              // work never takes energy below this (RLO's guide)
+        private const int DrivingShiftMinutes = 300;
+        private const float DrivingEnergyPerHour = 2.5f;
+        private const float EnergyFloor = 12f;
 
         private static JToken SimulateDriving(Type director, object instance, object job, Type type)
         {
@@ -162,8 +146,6 @@ namespace FoodTrucks
                 var route = Get(job, "_route") as float? ?? 0f;
                 var window = Get(job, "_window") as float? ?? 0f;
                 if (count <= 0) throw new BridgeError("The round isn't planned yet: take the parcels job first.");
-                // The rest of the round, delivered in about three quarters of the time the client allows; the doors tip
-                // as often as RLO's recipients do (35%, 5.5 to 16.5 each at the job's rate).
                 var rate = Get(Get(job, "Ctx"), "Rate") as float? ?? 1f;
                 var left = count - delivered;
                 var tips = Get(job, "_tips") as int? ?? 0;
@@ -204,7 +186,6 @@ namespace FoodTrucks
                     slipType.GetField("Units")!.SetValue(slip, 1);
                     slipType.GetField("Base")!.SetValue(slip, UnitPay());
                     slipType.GetField("Distance")!.SetValue(slip, DistancePay(metres));
-                    // A smooth, quick ride: comfort 75 to 89 (12 to 18% tip) and the quick bonus RLO adds for it.
                     slipType.GetField("Tips")!.SetValue(slip, Mathf.RoundToInt(fare * UnityEngine.Random.Range(0.12f, 0.18f) * tipFactor));
                     slipType.GetField("Bonus")!.SetValue(slip, Mathf.RoundToInt(fare * 0.05f));
                     Call(job, "UnitDone", fares + 1, fare);
@@ -214,15 +195,12 @@ namespace FoodTrucks
                     fares++;
                     Set(job, "_fares", fares);
                     units++;
-                    // RLO's own times: the drive to the fare at a good pace, 30 s to get in, its par for the ride, and the pause between fares.
                     minutes += Flat(from, front) / 8f + 30 + metres / 7.5f + 20 + 8;
                     from = drop;
                 }
                 if (units == 0) throw new BridgeError("No fare could be found from here, or the day's fares or your energy are used up.");
             }
             Call(job, "Finish", Enum.Parse(AccessTools.TypeByName("RealLifeOverhaul.JobEnd"), "Done"));
-            // The clock below runs fast, and the game drains energy then as for someone walking about; a driving shift
-            // costs what the other gigs' clocks cost, so energy is set to that once the clock has run (hunger falls as usual).
             var spent = (float)(DrivingEnergyPerHour * minutes / 60);
             var startEnergy = game.Energy;
             var targetEnergy = startEnergy <= EnergyFloor ? startEnergy : Mathf.Max(EnergyFloor, startEnergy - spent);
@@ -261,7 +239,6 @@ namespace FoodTrucks
             throw new BridgeError($"RLO's {target.GetType().Name}.{name} isn't there.");
         }
 
-        // Once the skip runs, the game's time-machine key, as the player presses it on the activity panel.
         private static IEnumerator PressTimeMachine(PlayerActivity.PlayerActivityUI ui, object skip)
         {
             var until = Time.realtimeSinceStartup + 10f;
@@ -289,7 +266,6 @@ namespace FoodTrucks
             patched = true;
         }
 
-        // Before the skip settles: the job and what its shift had paid so far.
         private static void FinishPrefix(out object?[]? __state)
         {
             __state = null;
@@ -301,7 +277,6 @@ namespace FoodTrucks
             __state = new[] { instance, job, Get(Get(job, "Shift"), "Total"), Get(Get(job, "Shift"), "Units") };
         }
 
-        // After it settles: the difference between the competent rate and the 85% the skip paid, as tips.
         private static void FinishPostfix(object?[]? __state)
         {
             var rate = armedRate;
@@ -326,7 +301,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Test bridge: job auto top-up failed: " + ex); }
         }
 
-        // A property or field by name, public or not; null when it isn't there.
         private static object? Get(object? target, string name)
         {
             if (target == null) return null;

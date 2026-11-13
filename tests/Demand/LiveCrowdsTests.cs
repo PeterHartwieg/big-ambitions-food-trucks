@@ -30,7 +30,6 @@ public class LiveCrowdsTests
         Assert.Equal(2.5 * 1.5, live.Weight(Venue(VenueKind.Theatre, true), 22 * 60 + 40, DayOfWeek.Saturday));
         Assert.Equal(1.0, live.Weight(Venue(VenueKind.Theatre, true), 17 * 60 + 10, DayOfWeek.Wednesday));
         Assert.Equal(2.5 * 1.5, live.Weight(Venue(VenueKind.Theatre, true), 17 * 60 + 10, DayOfWeek.Sunday));
-        // The doors close as the last audience leaves: the surge still comes.
         Assert.Equal(2.5, live.Weight(Venue(VenueKind.Theatre, false, closedAgo: 10), 22 * 60 + 40, DayOfWeek.Wednesday));
     }
 
@@ -71,7 +70,6 @@ public class LiveCrowdsTests
 
         Assert.Equal(0.0, classifier.LiveFactors(new[] { club })["nightlife"]);
         Assert.Equal(2.5, classifier.LiveFactors(new[] { theatre })["nightlife"], 9);
-        // Same votes each: half closed, half surging.
         Assert.Equal(1.25, classifier.LiveFactors(new[] { club, theatre })["nightlife"], 9);
         Assert.Empty(classifier.LiveFactors(new[] { new NearbyPlace("ba:buildingtype_office", null, 20) }));
     }

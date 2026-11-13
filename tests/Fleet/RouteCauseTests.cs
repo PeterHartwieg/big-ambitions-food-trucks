@@ -8,13 +8,11 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Fleet;
 
-// The route to-do names its real cause (agreed with Peter, 17 October 2026).
 public class RouteCauseTests
 {
     private static readonly FleetRules rules = ShippedData.Rules.Fleet;
     private static readonly (double X, double Z) Bay = (-2000, 0);
 
-    // The shipped English texts, as the game localizes them.
     private static readonly Dictionary<string, string> En = new()
     {
         ["foodtrucks:route_cause_times"] = "check the stops' times",
@@ -72,7 +70,6 @@ public class RouteCauseTests
         Assert.Equal(7, gap.Days.Count);
         Assert.Equal($"nobody on shift {RouteCause.Clock(gap.Start)}–10:00 Monday to Sunday: the restock and walk start before the shift",
             cause.Describe(Text, walk: true));
-        // Days with other gaps are said to be there too, and the line stays one line.
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Sunday, 8, 12);
         var two = new HireRunner(rules).RouteCauseOf(truck, home: Bay)!;
         Assert.Equal(2, two.Uncovered.Count);

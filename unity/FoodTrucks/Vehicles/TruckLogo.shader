@@ -38,8 +38,6 @@ Shader "FoodTrucks/TruckLogo"
             }
             float4 Frag(Varyings input) : SV_Target
             {
-                // The runtime supplies the calibrated sign tint. No light is spawned; the camera grades
-                // this surface with the rest of the scene, and depth still hides it behind other objects.
                 return float4(SAMPLE_TEXTURE2D(_LogoTexture, sampler_LogoTexture, input.uv).rgb * _LogoColour.rgb, 1);
             }
             ENDHLSL

@@ -27,7 +27,6 @@ def octagon(x, y, z, c):
             (x-c,y,z),(-x+c,y,z),(-x,y-c,z),(-x,-y+c,z)]
 
 def tray():
-    # Four connected rings: underside, outer rim, inner rim, inner floor.
     verts = (octagon(.100,.077,0,.018) + octagon(.119,.103,.023,.024)
              + octagon(.1175,.1015,.023,.023) + octagon(.099,.076,.002,.018))
     faces, colours = [], []
@@ -41,7 +40,6 @@ def tray():
     part(verts,faces,colours)
 
 def tortilla(cx):
-    # Folded disc with round-ended silhouette, a shallow U and real thickness.
     surface = [(cx,-.063,.025)]
     for y, width in [(-.056,.57),(-.032,.90),(0,1),(.032,.90),(.056,.57)]:
         for t in [-1,-.6,0,.6,1]:
@@ -56,7 +54,6 @@ def tortilla(cx):
         for i in range(4):
             a=1+row*5+i
             faces.append((a,a+5,a+6,a+1))
-    # A vertical thickness shift gives one closed shell without degenerate tips.
     n=len(surface)
     verts=surface+[(x,y,z+.0018) for x,y,z in surface]
     full=faces+[tuple(i+n for i in reversed(f)) for f in faces]
@@ -67,7 +64,6 @@ def tortilla(cx):
     part(verts,full,colours)
 
 def diamond(center, size, angle, colour, highlight=None):
-    # Closed six-vertex chunk / leaf, eight triangles.
     x,y,z=center; sx,sy,sz=size
     pts=[(-sx,0,0),(0,-sy,0),(sx,0,0),(0,sy,0),(.001,0,sz),(0,0,-sz*.65)]
     m=Matrix.Rotation(angle,3,'Z')
@@ -97,11 +93,9 @@ def toppings():
                     (.007,.010,.0015),.7+i+j*.55,'cilantro','cilantro_light')
 
 def lime():
-    # A quarter-cylinder wedge resting on its rind with a raised juicy cut face.
     cx,cy,cz=.067,-.068,.011
     radius=.024; length=.032
     ang=[0,math.pi/8,math.pi/4,3*math.pi/8,math.pi/2]
-    # Axis along X; radial Y/Z plane. Fan caps form four visible citrus segments.
     verts=[]
     for x in [-length/2,length/2]:
         verts.append((cx+x,cy,cz))
@@ -158,7 +152,6 @@ def atlas(body):
     image=bpy.data.images.get('T_Tacos_BaseColor')
     if image: bpy.data.images.remove(image)
     image=bpy.data.images.new('T_Tacos_BaseColor',width=256,height=256,alpha=True)
-    # Palette-only cells with dedicated, inset, non-overlapping face islands.
     pixels=[0.12,0.12,0.12,1.0]*(256*256)
     for p,colour in zip(me.polygons,C):
         col,row=p.index%cols,p.index//cols
@@ -192,7 +185,6 @@ def atlas(body):
 
 def collision():
     bm=bmesh.new()
-    # Four-point floor encloses the tray underside; octagonal rim and raised cap.
     floor=[(-.101,-.078,0),(.101,-.078,0),(.101,.078,0),(-.101,.078,0)]
     for co in floor+octagon(.121,.105,.024,.024)+octagon(.099,.090,.080,.020):
         bm.verts.new(co)
@@ -239,7 +231,6 @@ def build(stage=4):
         for screen in bpy.data.screens:
             for area in screen.areas:
                 if area.type=='VIEW_3D': area.spaces.active.shading.color_type='TEXTURE'
-        # Bind the texture to the active node for Workbench texture display.
         mat=body.data.materials[0]
         mat.node_tree.nodes.active=next(n for n in mat.node_tree.nodes if n.type=='TEX_IMAGE')
     if stage>=4:

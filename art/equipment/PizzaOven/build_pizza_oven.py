@@ -139,14 +139,12 @@ def build_blockout():
         if ob.name.startswith(('PizzaOven_', 'PizzaPart_', 'PizzaStudio_')):
             bpy.data.objects.remove(ob, do_unlink=True)
     PARTS.clear(); materials()
-    # Continuous lower tray underside reaches z=0 and covers the mounting point.
     box('LowerTray', (0,.007,.009), (.376,.324,.018), 0, .002)
     for x in [-.177,.177]:
         for y in [-.143,.157]:
             box('StandLeg', (x,y,.112), (.021,.021,.218), 0)
     box('OvenCase', (0,.005,.344), (.396,.326,.266), 0, .004)
     box('FlatTop', (0,.005,.484), (.396,.326,.018), 0, .003)
-    # Both doors face -Y; the customer's right is -X.
     for z in [.277, .391]:
         box('DoorBacking', (.030,-.161,z), (.292,.008,.090), 3)
         box('GlazedDoor', (.030,-.166,z), (.275,.004,.066), 4, .001)
@@ -157,13 +155,11 @@ def build_blockout():
 
 def add_details():
     materials()
-    # Three tray runners on each side of the short open stand.
     for x in [-.157,.157]:
         for z in [.058,.104,.150]:
             box('TrayRunner', (x,.009,z), (.032,.279,.008), 1)
     box('RearCrossRail', (0,.156,.108), (.345,.014,.015), 2)
     box('StandTopFrontRail', (0,-.146,.204), (.365,.021,.020), 1)
-    # Thin bright door frames, black handle mounts, substantial steel grip bars.
     for z in [.277,.391]:
         for zz in [z-.040,z+.040]:
             box('DoorHorizontalFrame', (.030,-.167,zz), (.294,.006,.009), 1)
@@ -181,7 +177,6 @@ def add_details():
         box('RedStatus', (-.150,-.170,z-.029), (.009,.004,.011), 7)
     box('DeckDivider', (0,-.159,.334), (.384,.007,.010), 2)
     box('LowerFascia', (0,-.161,.218), (.385,.010,.017), 1)
-    # Broad dark vent slats read on the customer's left without fine geometry.
     for z in [.276,.390]:
         box('SideVentRecess', (.198,.012,z), (.002,.214,.068), 3)
         for zz in [z-.023,z-.007,z+.009,z+.025]:
@@ -191,8 +186,6 @@ def add_details():
 
 def make_atlas():
     body = bpy.data.objects['PizzaOven_Body']; me = body.data
-    # Unique padded cells: flat part colours do not require proportional texel density.
-    # Adjacent triangles created on export share the same quad, never other UV islands.
     uv = me.uv_layers.active or me.uv_layers.new(name='UVMap')
     uv.name = 'UVMap'
     count=len(me.polygons); side=math.ceil(math.sqrt(count)); cell=512//side
@@ -228,7 +221,6 @@ def prepare_final():
     bmesh.ops.triangulate(bm,faces=list(bm.faces))
     bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
     bm.to_mesh(body.data); bm.free()
-    # A simple convex enclosing box keeps collision independent of small trim details.
     bm=bmesh.new()
     lo=[min(v.co[i] for v in body.data.vertices) for i in range(3)]
     hi=[max(v.co[i] for v in body.data.vertices) for i in range(3)]

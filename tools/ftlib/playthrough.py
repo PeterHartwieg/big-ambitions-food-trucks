@@ -21,7 +21,6 @@ ECONOMY = json.loads((ROOT / 'data/economy.json').read_text())
 FOODS = set(ECONOMY['products'])
 WEEK = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
 SAVE_PREFIX = 'FT playtest'
-# The dealer's prices, as the bridge's vehicle buy charges them (the vehicle type assets).
 PRICES = {kind: float(re.search(r'^\s*price: ([0-9.]+)', (ROOT / f'unity/FoodTrucks/Vehicles/Food{kind.title()}.asset').read_text(), re.M).group(1))
           for kind in ('truck', 'cart')}
 SALES_TYPES = ('foodtrucks:transaction_sale', 'foodtrucks:transaction_crew_sales', 'foodtrucks:transaction_catering')
@@ -30,12 +29,9 @@ RENT_TYPE = 'foodtrucks:transaction_commissary_rent'
 ORDER_TYPE = 'foodtrucks:transaction_commissary_order'
 FINE_TYPE = 'foodtrucks:transaction_overnight_fine'
 PURCHASE_TYPE = 'ba:transaction_vehiclebought'
-# The game keeps money and transaction amounts as 32-bit floats: each booking can round by a fraction of a cent at a
-# balance of tens of thousands. A cent of slack, plus a fifth of a cent per transaction booked in between.
 SLACK_CENTS = 1
 SLACK_PER_TRANSACTION = .2
 BALANCE_BAND = .25
-# Money columns of the ledger, written in dollars with cents.
 MONEY_FIELDS = ('revenue', 'stock_cost', 'wages', 'commissary_rent', 'delivery_fees', 'fines', 'purchases', 'money_before', 'money_after',
                 'game_day_total', 'game_other')
 LEDGER_FIELDS = ('day', 'vehicle', 'kind', 'stops_served', 'minutes_open', 'sold', 'revenue', 'stock_cost', 'wages',
@@ -68,8 +64,6 @@ def money_text(c):
 def slack(count):
     return SLACK_CENTS + math.ceil(SLACK_PER_TRANSACTION * count)
 
-
-# ---- snapshots ----
 
 def snapshot(state, summaries, events=(), label=''):
     """The parts of `state` the checks use, with the day summaries for today and yesterday (day_summary replies)."""
@@ -129,8 +123,6 @@ def new_transactions(prev, cur):
             fresh.append(t)
     return fresh
 
-
-# ---- checks ----
 
 def check_money(prev, cur):
     """The money change between two snapshots is the sum of the game's transactions booked in between."""
@@ -206,7 +198,6 @@ def delivered_between(prev, cur, placed, refused):
     """Orders delivered between two snapshots: those waiting at `prev` or placed since (`placed`), gone at `cur`, and not
     refused. Returns [(order)], each with site, item, units, total."""
     waiting = {o['n']: o for o in prev['orders']}
-    # An order the snapshots never showed counts only in the window its 08:00 delivery falls in.
     start, end = (prev['day'], prev['time']), (cur['day'], cur['time'])
     for o in placed:
         if start < (o['due_day'], '08:00') <= end: waiting.setdefault(o['n'], o)
@@ -257,7 +248,7 @@ def check_moves(snap, crewed_only=False):
              if v['problem'] and v['problem'] != 'none']
     for v in snap['vehicles']:
         if crewed_only and (not v['crew'] or not any(d['stops'] for d in v['week']) or snap.get('player_with') == v['id']):
-            continue  # the player's own vehicle goes where the player takes it
+            continue
         site = snap['spaces'].get(v['id'])
         if site and v['in_bay'] and v['bay_site'] == site and not v['open']:
             continue
@@ -299,14 +290,11 @@ def refused_orders(events):
     return out
 
 
-# ---- the ledger ----
-
 def ledger_rows(day, summary, prev, cur, delivered, purchases, transactions):
     """Rows for one finished day: one per vehicle and one for the fleet's own lines. Stock start and end are the vehicle's
     at the two snapshots around the day (05:00 to 05:00 in the day loop)."""
     rows = []
     game_total = sum(cents(t['amount']) for t in transactions if t['day'] == day)
-    # Everything the game booked that day that isn't one of the mod's lines, a crew wage or a vehicle bought.
     other = sum(cents(t['amount']) for t in transactions if t['day'] == day and t['type'] not in OUR_TYPES)
     for v in summary['vehicles']:
         start = next((x['stock'] for x in prev['vehicles'] if x['id'] == v['id']), {})
@@ -353,8 +341,6 @@ def read_ledger(path):
         return list(csv.DictReader(f))
 
 
-# ---- the balance comparison ----
-
 def balance_plan(snap, plan):
     """What tools/balance prices: each vehicle's foods and the stops of its week as the game holds them now."""
     names = {v['id']: v.get('name') for v in plan.get('vehicles', []) if v.get('id')}
@@ -398,8 +384,6 @@ def compare_balance(ledger, expected, from_day=1):
     return rows
 
 
-# ---- the run against the bridge ----
-
 class Run:
     """One playthrough's folder (build/playtest/<run>) and its bridge session."""
 
@@ -413,7 +397,6 @@ class Run:
         self.meta_path = self.folder / 'run.json'
         self.meta = json.loads(self.meta_path.read_text()) if self.meta_path.exists() else None
 
-    # -- files --
     def save_meta(self):
         self.folder.mkdir(parents=True, exist_ok=True)
         self.meta_path.write_text(json.dumps(self.meta, indent=2))
@@ -431,7 +414,6 @@ class Run:
         self.meta['stopped'] = violation.as_dict()
         self.save_meta()
 
-    # -- bridge helpers --
     def call(self, cmd, args=None, timeout_s=30):
         return self.bridge.call(cmd, args or {}, timeout_s)['result']
 
@@ -484,7 +466,6 @@ class Run:
         self.call('time', {'run_until': {'day': day, 'time': clock}, 'speed': self.speed})
         self.wait('clock.arrived_at', {'equals': f'day {day} {clock}'}, self.day_timeout_s)
 
-    # -- setup --
     def setup(self, plan):
         try:
             return self._setup(plan)
@@ -505,13 +486,11 @@ class Run:
         if state['vehicles']:
             raise Violation('guard', f"the save already has {len(state['vehicles'])} food vehicles; Phase A starts from a fresh character")
         if plan.get('starting_money') is not None:
-            # Optional: a starting balance set before the books start (no transaction). Phase A keeps the character's own.
             self.call('money', {'set': plan['starting_money']})
         before = self.take('setup start')
         self.log(f'Setup on day {before["day"]} {before["time"]}: {len(plan["vehicles"])} vehicles at {plan["commissary"]}, money {money_text(before["money"])}.')
         due = self.establish(plan['vehicles'], plan['orders'], before['day'], licence=plan.get('licence', 'debug') == 'debug')
         self.save_game()
-        # The order arrives at 08:00 the next morning: fit the equipment and fill up in the bay, then plan the shifts.
         self.run_clock_to(due, '08:05')
         self.ready(plan['vehicles'])
         after = self.take('setup end')
@@ -537,7 +516,6 @@ class Run:
             self.call('teleport', {'who': vid, 'place': f'bay:{site}', 'clear': True})
             self.done(self.call('vehicle', {'id': vid, 'op': 'rent_bay'}), f"renting a space at {site} for the {v['name']}")
         if licence:
-            # The debug action grants the vendor licence and a permit for every food vehicle, free of charge (no transaction).
             self.call('debug', {'action': 'licence'})
         for v in vehicles:
             vid = self.meta['vehicles'][v['name']]
@@ -598,7 +576,6 @@ class Run:
         self.call('time', {'speed': 1})
         self.done(self.call('vehicle', {'id': vid, 'op': 'enter'}), f"getting into the {v['name']}")
         self.wait('player.in_vehicle', {'equals': vid}, 60)
-        # The panel's takes work paused; only the Park button needs the clock running.
         self.call('time', {'pause': True})
         for item in v['equipment']:
             self.done(self.call('vehicle', {'id': vid, 'op': 'transfer', 'direction': 'take', 'item': item, 'units': 1}),
@@ -616,7 +593,6 @@ class Run:
         self.save_meta()
         return name
 
-    # -- the day loop --
     def run_days(self, days):
         try:
             return self._run_days(days)
@@ -693,7 +669,6 @@ class Run:
             self.save_meta()
             self.log(f"  change on day {day}: {change.get('why', change['op'])}.")
 
-    # -- checks over a window --
     def check_window(self, prev, cur, moves=False, crewed_only=False):
         try:
             for text in check_events(cur['events']): self.note(text)
@@ -713,7 +688,6 @@ class Run:
                 for text in check_moves(cur, crewed_only): self.note(text)
             self.meta['refused'] = sorted(refused)
             for o in delivered:
-                # Orders arrive at 08:00 on their due day and are paid then.
                 self.meta['delivered'].append({**o, 'day': o['due_day']})
             for day in range(prev['day'], cur['day']):
                 if day in self.meta['checked_days'] or str(day) not in cur['summaries']: continue
@@ -731,7 +705,6 @@ class Run:
             self.record_violation(violation)
             raise
 
-    # -- the referee: watch a game someone else plays --
     def watch(self, stop_file, poll_s=2.0, polls=None, record_only=False):
         """Takes a snapshot after each in-game 05:00 and runs the checks; changes nothing. On a hard failure it pauses the
         game and writes the reason to `stop_file`. Returns 0 when `polls` ran out, 2 after a stop. With `record_only` it
@@ -803,7 +776,6 @@ class Run:
             self.meta['vehicles'].setdefault(v['id'], v['id'])
 
     def note(self, text):
-        # Something odd that doesn't stop the run: in run.json's notes and the report.
         self.meta.setdefault('notes', []).append(text)
         self.log(f'  note: {text}')
 
@@ -815,7 +787,6 @@ class Run:
         return next((s for s in self.snapshots() if s['day'] == day and s['time'] == clock), None)
 
 
-# Stock runs before books: it works out the deliveries the books then compare with.
 CHECKS = ('log', 'money', 'stock', 'books', 'moves')
 
 

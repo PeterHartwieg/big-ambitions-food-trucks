@@ -30,7 +30,6 @@ def make_body(detail):
         faces.append(vs)
         colors.append(color)
     n = 16
-    # A sealed vessel; its pale top is hidden beneath the popcorn.
     for r, z in [(0.037, 0), (0.0505, 0.103)]:
         for i in range(n):
             a = 2 * math.pi * i / n - math.pi / 2 - math.pi / n
@@ -42,7 +41,6 @@ def make_body(detail):
         face((0, i+1, i), 1)
         face((n, n+i, n+i+1), 2)
     if detail:
-        # Closed four-sided rolled paper lip, just 3 mm thick.
         start = len(verts)
         for r, z in [(0.0505, 0.1015), (0.053, 0.104),
                      (0.0505, 0.1065), (0.049, 0.104)]:
@@ -54,11 +52,8 @@ def make_body(detail):
                 j = (i+1) % n
                 face((start+k*n+i, start+k*n+j,
                       start+((k+1)%4)*n+j, start+((k+1)%4)*n+i), 1)
-    # The blockout uses a simple dome. Detail replaces it with 20 puffs.
     bm = bmesh.new()
     if detail:
-        # A closed twenty-triangle puff. Broad lobes stay legible in a tiny
-        # stock-box icon; two recessed vertices suggest the split kernel.
         bmesh.ops.create_icosphere(bm, subdivisions=1, radius=1)
         bm.verts.ensure_lookup_table()
         bm.faces.ensure_lookup_table()
@@ -66,7 +61,6 @@ def make_body(detail):
         template_f = [tuple(v.index for v in f.verts) for f in bm.faces]
         rng = random.Random(28)
         placements = []
-        # Eleven shoulder puffs, seven on the next tier, two at the crown.
         for count, radius, z, size, phase in [(11, .040, .112, .0143, .08),
                                              (7, .025, .129, .0148, .31),
                                              (2, .010, .137, .0122, .6)]:
@@ -77,13 +71,11 @@ def make_body(detail):
         for ki, (x,y,z,s) in enumerate(placements):
             start = len(verts)
             rot = Euler((rng.random()*3, rng.random()*3, rng.random()*6)).to_matrix()
-            # Alternating swollen vertices make asymmetric butterfly kernels.
             for vi, v in enumerate(template_v):
                 bulge = (.58 if vi in (1,7) else 1.14 if vi%3==0 else .98)
                 q = rot @ Vector((v.x*s*bulge, v.y*s*bulge*.93, v.z*s*bulge*.83))
                 verts.append((x+q.x, y+q.y, min(z+q.z, .149)))
             for fi, f in enumerate(template_f):
-                # Cream lobes with a few warm buttery recesses, all flat blocks.
                 color = 4 if fi == (ki*3)%20 else (2 if (fi+ki)%5 == 0 else 3)
                 face(tuple(start+i for i in f), color)
     else:
@@ -113,7 +105,6 @@ def make_body(detail):
     ca=me.color_attributes.new(name='PreviewColor', type='FLOAT_COLOR', domain='CORNER')
     for p in me.polygons:
         c=PALETTE[me.attributes['PartColor'].data[p.index].value]
-        # Color attributes store linear values; palette itself is sRGB.
         c=tuple(((v+.055)/1.055)**2.4 if v>.04045 else v/12.92 for v in c[:3])+(1,)
         for li in p.loop_indices:
             ca.data[li].color=c
@@ -138,17 +129,12 @@ def material(ob):
 
 
 def texture(ob, mat, shader):
-    # Every triangle has a unique, generously padded atlas address. Flat
-    # colours need no directional texture detail or shared/stacked UVs.
-    # 16 x 20 cells, two separate triangular islands per cell.
     me=ob.data
     uv=me.uv_layers.new(name='UVMap')
     pixels=np.zeros((256,256,4), dtype=np.float32)
     pixels[:]=PALETTE[1]
     slot=0
     for ci,color in enumerate(PALETTE):
-        # Pair only equally coloured triangles. The entire cell is painted
-        # their colour, including padding and the common diagonal.
         group=[p for p in me.polygons if me.attributes['PartColor'].data[p.index].value==ci]
         for p in group:
             cell=slot//2
@@ -188,8 +174,6 @@ def texture(ob, mat, shader):
 
 def collision():
     bm=bmesh.new()
-    # Ten-vertex rings yield 36 triangles. A conservative tapered envelope
-    # includes the popped dome without spending faces on kernel concavities.
     for radius,z in [(.041,0),(.064,.150)]:
         for i in range(10):
             a=2*math.pi*i/10
@@ -288,7 +272,6 @@ def build(stage='final'):
     if stage in ('texture','final'):
         texture(body,mat,shader)
     select(body)
-    # Frame the asset while preserving the reference object itself.
     for screen in bpy.data.screens:
         for area in screen.areas:
             if area.type=='VIEW_3D':

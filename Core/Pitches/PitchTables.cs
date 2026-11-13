@@ -6,8 +6,6 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Pitches
 {
-    // A curated pitch outside one building (design: Pitches). The game side finds the building by its address
-    // and measures from its entrances; a vehicle within the premium radius stands on the spot.
     public sealed class PremiumSpot
     {
         public PremiumSpot(string id, string name, string address, AreaMix areas, double footfall)
@@ -20,17 +18,12 @@ namespace FoodTrucks.Core.Pitches
         }
 
         public string Id { get; }
-        // Locale key of the spot's name.
         public string Name { get; }
-        // "street#number", as the game's address: "ba:street_fifthstreet#2".
         public string Address { get; }
-        // The spot's character: areas raised to at least these presences, as a zone in add mode does.
         public AreaMix Areas { get; }
-        // Multiplies the passers at the spot.
         public double Footfall { get; }
     }
 
-    // A place the city holds events at.
     public sealed class EventPlace
     {
         public EventPlace(string id, string name, string address, IReadOnlyList<string> kinds)
@@ -44,12 +37,9 @@ namespace FoodTrucks.Core.Pitches
         public string Id { get; }
         public string Name { get; }
         public string Address { get; }
-        // The event kinds held here.
         public IReadOnlyList<string> Kinds { get; }
     }
 
-    // A kind of city event: on which weekdays, how likely, how far ahead the city announces it, its hours, the
-    // crowd it brings and what a vendor's place costs.
     public sealed class EventKind
     {
         public EventKind(string id, string name, IReadOnlyList<DayOfWeek> days, double chance, int leadDays, int start, int end,
@@ -71,20 +61,16 @@ namespace FoodTrucks.Core.Pitches
         public string Id { get; }
         public string Name { get; }
         public IReadOnlyList<DayOfWeek> Days { get; }
-        // Chance of an event of this kind on each of its weekdays.
         public double Chance { get; }
         public int LeadDays { get; }
-        // Minutes after the day's midnight; End is after Start, within the day.
         public int Start { get; }
         public int End { get; }
         public double Footfall { get; }
         public AreaMix Areas { get; }
-        // Places the player's vehicles can book; the rest go to other vendors.
         public int Places { get; }
         public long FeeCents { get; }
     }
 
-    // Venues the player owns that a vehicle can partner with, and what the partner gets.
     public sealed class PartnershipRules
     {
         public PartnershipRules(double radiusMetres = 50, double surge = 1.5, IReadOnlyList<VenueKind>? venues = null,
@@ -98,16 +84,12 @@ namespace FoodTrucks.Core.Pitches
         }
 
         public double RadiusMetres { get; }
-        // Multiplies the partner venue's surges (a club's closing, a show letting out).
         public double Surge { get; }
         public IReadOnlyList<VenueKind> Venues { get; }
-        // Added to the venue's facility satisfaction after a day the partner worked outside it.
         public int SatisfactionBonus { get; }
-        // Minutes open outside the venue that count as having worked there that day.
         public int MinWorkedMinutes { get; }
     }
 
-    // The validated contents of data/pitches.json: premium spots, event places and kinds, partnerships.
     public sealed class PitchTables
     {
         public const int SchemaVersion = 1;
@@ -136,7 +118,6 @@ namespace FoodTrucks.Core.Pitches
         public EventPlace? Place(string? id) => id == null ? null : Places.FirstOrDefault(p => p.Id == id);
         public EventKind? Kind(string? id) => id == null ? null : Kinds.FirstOrDefault(k => k.Id == id);
 
-        // Areas are checked against the demand tables, so a typo fails at load, not in the middle of a sale.
         public static PitchTables Parse(string? json, DemandTables tables)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
@@ -254,7 +235,6 @@ namespace FoodTrucks.Core.Pitches
             return hour * 60 + minute;
         }
 
-        // Splits "street#number" into the game's street name and number.
         public static (string Street, int Number) SplitAddress(string address)
         {
             var hash = address.LastIndexOf('#');

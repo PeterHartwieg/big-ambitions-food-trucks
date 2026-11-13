@@ -33,8 +33,8 @@ public class ServingTimeTests
     }
 
     [Theory]
-    [InlineData(2)] // visible frames catching up
-    [InlineData(60)] // fast-forward
+    [InlineData(2)]
+    [InlineData(60)]
     [InlineData(500)] // native work skip
     public void CatchUpKeepsTheSameOrdersStockAndDailyTakingsAsLiveMinutes(int frameMinutes)
     {
@@ -52,8 +52,6 @@ public class ServingTimeTests
         Assert.Contains("\"sold\":4", skip);
     }
 
-    // CartSelling's absolute SalesClock loop, with real Core orders, cargo draws and midnight pots.
-    // Changing the number of minutes between frames cannot change the sequence of one-minute inputs.
     private static string Sell(int frameMinutes, int units)
     {
         var simulator = new SalesSimulator(ShippedData.Tables, ShippedData.Rules.Queue);
@@ -83,7 +81,6 @@ public class ServingTimeTests
                 from = end;
                 open = !result.SoldOut;
             }
-            // End-of-skip Perform/catch-up at the same absolute minute has nothing left to sell.
             Assert.Null(SalesClock.NextStep(from, Math.Min(until, from)));
         }
         return JsonConvert.SerializeObject(new { stock = stock.Values.Sum(), sold, from, orders, state.CrewTakings, state.DailySales });

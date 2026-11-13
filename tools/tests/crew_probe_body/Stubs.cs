@@ -141,8 +141,6 @@ namespace UnityEngine
         {
             get
             {
-                // Only the external trigger may use a world AABB; physical certificates
-                // must retain the root-local shape path (including disabled wheel shells).
 #if TRAFFIC_INTEGRATION
                 Bounds shape;
                 if (this is BoxCollider box) shape = new Bounds(box.center, box.size);
@@ -168,7 +166,7 @@ namespace UnityEngine
         {
             ClosestPointReads++;
             if (Throw) throw new Exception("unavailable");
-            if (!enabled || !gameObject.activeInHierarchy) return point; // native disabled behavior
+            if (!enabled || !gameObject.activeInHierarchy) return point;
             var local = transform.InverseTransformPoint(point);
             if (this is MeshCollider m && m.CookedClosestPoint != null)
                 return transform.TransformPoint(m.CookedClosestPoint(local));

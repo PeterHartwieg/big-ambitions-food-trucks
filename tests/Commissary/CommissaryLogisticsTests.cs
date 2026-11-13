@@ -45,7 +45,6 @@ public class CommissaryLogisticsTests
     [Fact]
     public void TwoTargetsForOneItemComeToTheLargerOne()
     {
-        // The game reads the stock again after each target, so 10 then 25 of one item ends at 25.
         var state = CommissariesTests.Rented();
         var plan = CommissaryLogistics.Plan(state, "a", new[] { Target("tacos", 10), Target("corn", 5), Target("tacos", 25) }, Prices);
         Assert.Equal(new[] { ("tacos", 25), ("corn", 5) }, plan.Lines.Select(l => (l.ItemName, l.Units)));
@@ -60,12 +59,10 @@ public class CommissaryLogisticsTests
         Assert.False(plan.Accepted);
         Assert.Empty(plan.Lines);
 
-        // Visited but never rented, or never visited: the same.
         var visited = new CommissaryState();
         Commissaries.Unlock(visited, "a");
         Assert.False(CommissaryLogistics.Plan(visited, "a", new[] { Target("tacos", 80) }, Prices).Accepted);
         Assert.False(CommissaryLogistics.Accepts(new CommissaryState(), "a"));
-        // A space at another commissary doesn't count here.
         Assert.False(CommissaryLogistics.Accepts(CommissariesTests.Rented(), "b"));
     }
 
@@ -84,7 +81,6 @@ public class CommissaryLogisticsTests
         Assert.Equal("ba:street_x 4", (string?)line.OrderMetadata["from"]);
         Assert.Equal(17, CommissaryLogistics.Held(state, "a", "tacos"));
 
-        // Restock takes the older batch first, as for orders.
         var taken = Commissaries.Restock(state, "a", new Dictionary<string, int> { ["tacos"] = 8 });
         Assert.Equal(new[] { (1L, 5), (2L, 3) }, taken.Select(t => (t.BatchId, t.Units)));
         Assert.True(CommissaryLogistics.FromLogistics(taken[1]));
@@ -137,7 +133,6 @@ public class CommissaryLogisticsTests
         Assert.All(numbers, n => Assert.True(n < 0));
         Assert.Equal(numbers.Count, numbers.Distinct().Count());
         foreach (var id in ids) Assert.Equal(id, CommissaryLogistics.IdFor(ids, CommissaryLogistics.AddressNumber(id)));
-        // Fixed per id, whatever order the data lists them in.
         Assert.Equal(CommissaryLogistics.AddressNumber("hells-kitchen"), CommissaryLogistics.AddressNumber("hells-kitchen"));
         Assert.Null(CommissaryLogistics.IdFor(ids, 7));
         Assert.Null(CommissaryLogistics.IdFor(ids, -1));
@@ -146,14 +141,12 @@ public class CommissaryLogisticsTests
     [Fact]
     public void ABatchFromTheWarehouseCarriesWhatTheWarehousePaidNotTheCatalogue()
     {
-        // The withdrawal's mean price per unit, in dollars, to whole cents.
         Assert.Equal(137, CommissaryLogistics.PaidCents(1.365));
         Assert.Equal(140, CommissaryLogistics.PaidCents(1.4f));
         Assert.Equal(0, CommissaryLogistics.PaidCents(0));
         Assert.Equal(0, CommissaryLogistics.PaidCents(-2));
         Assert.Equal(0, CommissaryLogistics.PaidCents(double.NaN));
         var state = CommissariesTests.Rented();
-        // The plan's catalogue says 150; the warehouse paid 1.365 a unit.
         var plan = CommissaryLogistics.Plan(state, "a", new[] { new KeyValuePair<string, int>("tacos", 20) }, new Dictionary<string, long> { ["tacos"] = 150 });
         var line = CommissaryLogistics.Receive(state, "a", "tacos", plan.Lines.Single().Units, CommissaryLogistics.PaidCents(1.365), 2, "w");
         Assert.Equal(137, line.UnitPriceCents);

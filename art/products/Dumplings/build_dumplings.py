@@ -38,8 +38,6 @@ def tray():
     cap(rings[0][::-1],WHITE); cap(rings[-1],WHITE)
 
 def dumpling(cx,cy,angle,fried,detail):
-    # Ten longitudinal stations. Five-sided cross sections pinch into a
-    # folded top seam; the two end points taper the crescent silhouette.
     cs,sn=math.cos(angle),math.sin(angle)
     def p(x,y,z): return vert((cx+cs*x-sn*y,cy+sn*x+cs*y,z))
     tips=[p(-.032,-.004,.014),p(.032,-.004,.014)]
@@ -68,7 +66,6 @@ def dumpling(cx,cy,angle,fried,detail):
             face((a[k],a[j],b[j],b[k]),col)
 
 def cup():
-    # Closed container with recessed dark sauce surface, broad white rim.
     rings=[]
     for rad,z in [(.014,.0065),(.019,.028),(.0165,.028),(.016,.023)]:
         rings.append([vert((rad*math.cos(2*math.pi*i/6),-.068+rad*math.sin(2*math.pi*i/6),z)) for i in range(6)])
@@ -87,7 +84,6 @@ def preview_materials(body):
         mat.node_tree.nodes.get('Principled BSDF').inputs['Roughness'].default_value=.8
         body.data.materials.append(mat)
     for poly,col in zip(body.data.polygons,COLORS): poly.material_index=palette.index(col)
-    # Keep color attributes per face through triangulation.
     attr=body.data.attributes.new('PartColor','FLOAT_COLOR','FACE')
     for dst,col in zip(attr.data,COLORS): dst.color=col
     part=body.data.attributes.new('PartIndex','INT','FACE')
@@ -114,7 +110,6 @@ def setup_render():
         data=bpy.data.lights.new(name,'AREA'); data.energy=energy*.065; data.shape='DISK'; data.size=size
         ob=bpy.data.objects.new(name,data); scene.collection.objects.link(ob); ob.location=loc
         ob.rotation_euler=(Vector((0,0,.02))-ob.location).to_track_quat('-Z','Y').to_euler()
-    # Frame the asset in the live solid/material viewport, leaving reference untouched.
     for screen in bpy.data.screens:
         for area in screen.areas:
             if area.type=='VIEW_3D':
@@ -132,7 +127,6 @@ def build(stage=2):
     global V,F,COLORS
     V,F,COLORS=[],[],[]
     if bpy.context.object and bpy.context.object.mode!='OBJECT': bpy.ops.object.mode_set(mode='OBJECT')
-    # Remove only generated asset/presentation objects on a repeated build.
     for ob in list(bpy.data.objects):
         if ob.name.startswith(('Dumplings_','PresentationCamera','Key','Fill','Rim')): bpy.data.objects.remove(ob,do_unlink=True)
     tray()
@@ -155,9 +149,6 @@ def build(stage=2):
 def texture():
     body=bpy.data.objects['Dumplings_Body']; select(body)
     me=body.data
-    # Pair triangles of the same colour in rectangular UV islands.
-    # These analytical islands have no overlaps and generous 256px gutters.
-    # Flat colour lets us prioritise coverage rather than texel distortion.
     uv=me.uv_layers.active or me.uv_layers.new(name='UVMap')
     palette=[WHITE,DOUGH,SEAM,GOLD,SAUCE]
     parts=me.attributes['PartIndex'].data
@@ -174,7 +165,6 @@ def texture():
             col=cell%cols; row=cell//cols
             x0=.01+col*.98/cols; x1=.01+(col+1)*.98/cols
             y0=.01+row*.98/rows; y1=.01+(row+1)*.98/rows
-            # Whole cell is uniform; inset UVs leave a full texel of padding.
             px0=max(0,round(x0*256)); px1=min(256,round(x1*256))
             py0=max(0,round(y0*256)); py1=min(256,round(y1*256))
             pixels[py0:py1,px0:px1]=color
@@ -201,7 +191,6 @@ def finish():
     old=bpy.data.objects.get('Dumplings_Collision')
     if old: bpy.data.objects.remove(old,do_unlink=True)
     bm=bmesh.new()
-    # Chamfered prism contains the entire tray/food with 16 hull vertices.
     for z in (0,.040):
         for x,y in [(-.101,-.101),(.101,-.101),(.120,-.082),(.120,.082),(.101,.101),(-.101,.101),(-.120,.082),(-.120,-.082)]: bm.verts.new((x,y,z))
     hull=bmesh.ops.convex_hull(bm,input=list(bm.verts),use_existing_faces=False)

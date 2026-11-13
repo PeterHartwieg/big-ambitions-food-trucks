@@ -6,13 +6,10 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Commissary;
 
-// A measured bay in a lot of stalls, nose-in (Industry City, Peter, 13 October 2026): the row of stalls is one parking
-// collider running across them, so the plain search lays the truck along the row, across the stall lines.
 public class BayLotTests
 {
     private const double Box = 0.1;
 
-    // A row of stalls along x from -20 to 20, `depth` metres deep along z, centred on z 0.
     private static Func<double, double, double, double, bool> Row(double depth) =>
         (x, z, _, _) => x >= -20 - Box && x <= 20 + Box && z >= -depth / 2 - Box && z <= depth / 2 + Box;
 
@@ -27,7 +24,6 @@ public class BayLotTests
         Assert.Equal((1.3, 0.0), (bay!.X, bay.Z));
         Assert.Equal(0, bay.AlongX, 9);
         Assert.Equal(-1, bay.AlongZ, 9);
-        // Without a heading the search lays it along the row, across the stalls.
         var plain = BaySnap.Measured(1.3, 0, null, Row(5.0), RowAxes, WheelFootprint.Truck);
         Assert.Equal(1, Math.Abs(plain!.AlongX), 9);
     }
@@ -35,7 +31,6 @@ public class BayLotTests
     [Fact]
     public void ANoseInPoseOffTheStallsSnapsFacingTheSameWay()
     {
-        // 1 m towards the aisle: the rear wheels would stand off the row.
         var bay = BaySnap.Measured(1.3, 1.0, 180, Row(5.0), RowAxes, WheelFootprint.Truck);
         Assert.NotNull(bay);
         Assert.Equal(-1, bay!.AlongZ, 9);
@@ -46,7 +41,6 @@ public class BayLotTests
     [Fact]
     public void StallsTooShallowForTheTruckNoseInGiveNoBayRatherThanTurningIt()
     {
-        // 3 m deep: the 3.6 m wheelbase with its clearance needs 3.8 m; along the row it would fit.
         Assert.Null(BaySnap.Measured(1.3, 0, 180, Row(3.0), RowAxes, WheelFootprint.Truck));
         Assert.NotNull(BaySnap.Measured(1.3, 0, null, Row(3.0), RowAxes, WheelFootprint.Truck));
     }

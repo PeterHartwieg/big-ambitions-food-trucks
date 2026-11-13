@@ -8,9 +8,6 @@ using Localizor;
 
 namespace FoodTrucks
 {
-    // Marketing for one cart or truck (design: Marketing). Core's MarketingFees decides what is due; this pays each day's
-    // fee through the game under the marketing tax label, records it for Econoview and says when a day's fee couldn't be
-    // paid. A level picked on the vehicle page is booked from the next day.
     internal static class VehicleMarketing
     {
         private const string ExpenseLabel = "foodtrucks:transaction_marketing_label";
@@ -24,7 +21,6 @@ namespace FoodTrucks
             Detach();
             GlobalEvents.onNewDay += OnNewDay;
             attached = true;
-            // After a load: today's fees for levels still on.
             Renew();
         }
 
@@ -41,7 +37,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Marketing: " + ex); }
         }
 
-        // Today's fee for every vehicle the player still has with a level booked. A refused fee turns the level off.
         internal static void Renew()
         {
             var state = FoodTrucksSession.CurrentState;
@@ -51,7 +46,6 @@ namespace FoodTrucks
             if (today < 1) return;
             foreach (var vehicle in state.Vehicles.Where(v => v.MarketingLevel != null).ToList())
             {
-                // One vehicle's failure doesn't keep the others from their day's fee.
                 try
                 {
                     if (BizManVehiclePage.Instance(vehicle.VehicleId) == null) continue;
@@ -59,7 +53,6 @@ namespace FoodTrucks
                     var charge = MarketingFees.Renew(vehicle, rules, today, c => Pay(state, c));
                     if (charge == null)
                     {
-                        // A level priced at 0 runs today without a payment.
                         if (vehicle.MarketingPaidThroughDay != before) FoodTrucksSession.MarkChanged();
                         continue;
                     }
@@ -74,8 +67,6 @@ namespace FoodTrucks
             }
         }
 
-        // The player's pick on the vehicle page: booked from the next day, with nothing to pay now. Today's sales keep the
-        // level today paid for, so nothing needs selling up to now first.
         internal static void Choose(VehicleState vehicle, string level)
         {
             var rules = Rules ?? throw new InvalidOperationException("The marketing rules aren't loaded.");
@@ -87,7 +78,6 @@ namespace FoodTrucks
                      (vehicle.MarketingStartsDay is int starts ? $", charged from day {starts}." : "."));
         }
 
-        // The level running today, for the page; null without one.
         internal static MarketingLevel? Active(VehicleState? vehicle)
         {
             var rules = Rules;
@@ -95,7 +85,6 @@ namespace FoodTrucks
             return rules == null || game == null ? null : MarketingFees.Active(vehicle, rules, game.Day);
         }
 
-        // The booked level the next day change renews; null without one.
         internal static MarketingLevel? Booked(VehicleState? vehicle)
         {
             var rules = Rules;

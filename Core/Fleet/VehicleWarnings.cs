@@ -8,7 +8,6 @@ using FoodTrucks.Core.Selling;
 
 namespace FoodTrucks.Core.Fleet
 {
-    // The game side turns each kind into its own to-do type, numbered from these values: never renumber them.
     public enum VehicleWarningKind
     {
         LowStock = 1,
@@ -18,14 +17,11 @@ namespace FoodTrucks.Core.Fleet
         NoPermit = 5,
         NoCommissarySpace = 6,
         HealthGradeC = 7,
-        // Fleet warnings: the vendor licence, one for all vehicles, pointing at the City.
         LicenceRunningOut = 8,
         LicenceExpired = 9,
-        // A vehicle with a route and no cooking equipment: its crew is paid for the shift but has nothing to sell.
         NoEquipment = 10
     }
 
-    // One warning: a to-do in the game's phone. Two warnings with the same kind, vehicle and item are the same to-do.
     public readonly struct VehicleWarning : IEquatable<VehicleWarning>
     {
         public VehicleWarning(VehicleWarningKind kind, string? vehicleId, string? itemName = null)
@@ -36,9 +32,7 @@ namespace FoodTrucks.Core.Fleet
         }
 
         public VehicleWarningKind Kind { get; }
-        // Null for a fleet warning.
         public string? VehicleId { get; }
-        // The food, for LowStock and EmptyStock; null otherwise.
         public string? ItemName { get; }
 
         public bool IsFleet => VehicleWarnings.IsFleetKind(Kind);
@@ -62,17 +56,11 @@ namespace FoodTrucks.Core.Fleet
         public override string ToString() => $"{Kind} {VehicleId ?? "fleet"}{(ItemName == null ? "" : " " + ItemName)}";
     }
 
-    // What needs the player's attention on a food vehicle, decided from the save state and the tables (plan, "Street food
-    // page and vehicle warnings", Peter, 15 October 2026). The game side shows each warning as a to-do and reconciles the
-    // list with the phone's to-dos; nothing here changes the state.
     public static class VehicleWarnings
     {
         public static bool IsFleetKind(VehicleWarningKind kind) =>
             kind == VehicleWarningKind.LicenceRunningOut || kind == VehicleWarningKind.LicenceExpired;
 
-        // The warnings for one vehicle, in a fixed order. `cargo` is the vehicle's cargo as the adapter reads it; `crew` is
-        // how many of its hires still exist (null: count vehicle.Crew); `itemExists` says whether a food exists in the game
-        // now (null: all do).
         public static IReadOnlyList<VehicleWarning> For(DemandTables tables, FleetRules rules, SaveState state, VehicleState vehicle,
             IEnumerable<CargoLine> cargo, int? crew = null, Func<string, bool>? itemExists = null, double gameSpeed = 1.0,
             (double X, double Z)? home = null, IReadOnlyCollection<int>? bayStops = null)
@@ -86,7 +74,6 @@ namespace FoodTrucks.Core.Fleet
             var warnings = new List<VehicleWarning>();
             var lines = cargo.ToList();
 
-            // Stock: the foods it stocks, by the Stock box's own rule (StockLevels), so the box and the to-dos agree.
             var view = Storage.Of(tables, vehicle.VehicleType, lines);
             if (view != null)
                 foreach (var food in StockLevels.Stocked(tables, view, vehicle, itemExists))
@@ -95,8 +82,6 @@ namespace FoodTrucks.Core.Fleet
                     else if (food.Level == StockLevel.Low) warnings.Add(new VehicleWarning(VehicleWarningKind.LowStock, id, food.Item));
                 }
 
-            // Crew and route: only a vehicle with a route (a weekday with stops that isn't closed) needs crew. A route day
-            // with nobody on shift is a route problem (Uncovered), as are stops that fail the rules or can't be reached.
             var hasRoute = WeekPlan.RunsAnyDay(vehicle.Schedule);
             var info = tables.Vehicle(vehicle.VehicleType);
             var hires = Math.Max(0, crew ?? vehicle.Crew?.Count ?? 0);
@@ -104,8 +89,6 @@ namespace FoodTrucks.Core.Fleet
                 warnings.Add(new VehicleWarning(VehicleWarningKind.MissingCrew, id));
             if (hasRoute && new HireRunner(rules).RouteProblem(vehicle, gameSpeed, home, bayStops) != ScheduleProblem.None)
                 warnings.Add(new VehicleWarning(VehicleWarningKind.RouteProblem, id));
-            // Shifts are paid as scheduled, as the game pays its own staff; a route with no machine to cook on says so
-            // (blind run 2, I16: a crew was paid a day in the bay with no word why).
             if (hasRoute && view != null && view.Pools.Count == 0)
                 warnings.Add(new VehicleWarning(VehicleWarningKind.NoEquipment, id));
 
@@ -117,7 +100,6 @@ namespace FoodTrucks.Core.Fleet
             return warnings;
         }
 
-        // The fleet's warning about the vendor licence: in its renewal window, or run out. None before the first licence.
         public static IReadOnlyList<VehicleWarning> Fleet(FleetRules rules, LicenceState licence, int today)
         {
             if (rules == null) throw new ArgumentNullException(nameof(rules));
@@ -128,8 +110,6 @@ namespace FoodTrucks.Core.Fleet
             return Array.Empty<VehicleWarning>();
         }
 
-        // What the to-do list must change to match `wanted`: warnings to add, and existing ones to complete. Duplicates in
-        // `existing` beyond the first are completed too.
         public static (IReadOnlyList<VehicleWarning> Add, IReadOnlyList<VehicleWarning> Complete) Reconcile(
             IEnumerable<VehicleWarning> wanted, IEnumerable<VehicleWarning> existing)
         {

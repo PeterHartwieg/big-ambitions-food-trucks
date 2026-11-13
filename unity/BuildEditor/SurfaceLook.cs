@@ -6,23 +6,10 @@ using UnityEngine;
 
 namespace FoodTrucks.BuildEditor
 {
-    // Materials and renderer settings shared by every model the mod ships (art/README.md, "Surface look").
-    // art/tools/game_look.py writes three maps per model next to its FBX: T_<Name>_BC (base colour, sRGB),
-    // T_<Name>_M (HDRP mask: R metallic, G ambient occlusion, B unused, A smoothness) and T_<Name>_N
-    // (tangent-space normal map, OpenGL/Y up). The game's own props use the same HDRP/Lit layout with all three
-    // maps and the remaps at their defaults, so the values in the maps are the values the game renders.
     internal static class SurfaceLook
     {
-        // HDRP rendering layers: bit 0 is the default light layer, bit 8 the default decal layer. The game's
-        // vehicles (M_Van, M_VanBig, the taxi, the hand truck) render with 1, so the street's dirt and litter
-        // decal projectors (decal layer 0) skip them; its props in buildings use 257. Read from the 1.0 prefabs
-        // bundle (MeshRenderer.m_RenderingLayerMask).
         public const uint VehicleRenderingLayers = 1;
 
-        // An HDRP/Lit material at path with the model's three maps from folder (T_<name>_BC/_M/_N.png). baseColour
-        // names another base colour map on the same UVs (T_<baseColour>_BC.png), e.g. the commissary sign's plates.
-        // baseColour: a variant's base colour (T_<baseColour>_BC.png); its own mask T_<baseColour>_M.png is used when
-        // there is one (the sign plates' lettering is in the mask's gloss too), else the model's.
         public static Material LitMaterial(string path, string folder, string name, string? baseColour = null)
         {
             var bc = Texture($"{folder}/T_{baseColour ?? name}_BC.png", TextureImporterType.Default, srgb: true);
@@ -53,23 +40,18 @@ namespace FoodTrucks.BuildEditor
             material.EnableKeyword("_MASKMAP");
             material.EnableKeyword("_NORMALMAP");
             material.EnableKeyword("_NORMALMAP_TANGENT_SPACE");
-            // No decals on the mod's models: the material refuses them, and the renderers leave the decal
-            // layer (NoStreetDecals), as the game's vehicles do.
             material.SetFloat("_SupportDecals", 0f);
             material.EnableKeyword("_DISABLE_DECALS");
             EditorUtility.SetDirty(material);
             return material;
         }
 
-        // Every renderer below root leaves HDRP's default decal layer, so street dirt never projects onto it.
         public static void NoStreetDecals(GameObject root)
         {
             foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
                 renderer.renderingLayerMask = VehicleRenderingLayers;
         }
 
-        // Import the FBX's own normals (smoothed and weighted by game_look.py) and Mikk tangents, which the
-        // normal maps were baked against.
         public static bool NormalsAsBaked(ModelImporter model)
         {
             if (model.importNormals == ModelImporterNormals.Import && model.importTangents == ModelImporterTangents.CalculateMikk) return false;

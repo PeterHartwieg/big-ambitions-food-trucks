@@ -49,7 +49,6 @@ static class Program
         var a = Description(); var b = Description("35", "2");
         foreach (var disposition in new[] { "declined", "missed", "cancelled" })
         {
-            // Legacy offers retain guests/end/fee and the old address, but no stable IDs.
             var oldA = new Dictionary<string, string>(a); oldA.Remove("bookingId"); oldA.Remove("locationId");
             oldA["place"] = "34 #ba:street_fourthavenue";
             var oldB = new Dictionary<string, string>(oldA) { ["place"] = "35 ba:street_fourthavenue" };
@@ -59,7 +58,6 @@ static class Program
             Repair(c, a, b);
             Equal("34 4th Avenue", messageA.messageData!["place"]);
             Equal("35 4th Avenue", messageB.messageData!["place"]);
-            // Exercise the actual decline/miss/cancel paths, retaining the phone history.
             var state = CateringState.New(42); state.NextOfferId = 3;
             foreach (var d in new[] { a, b }) state.Offers.Add(new CateringOffer
             {
@@ -123,7 +121,6 @@ static class Program
         var otherLabel = (string)locale["foodtrucks:pitch_lower-sixth-avenue"]!;
         if (string.IsNullOrWhiteSpace(otherLabel)) throw new Exception("Missing real locale label");
         Equal("Fourth Avenue, Midtown", label);
-        // Exact old reminder shape: event/place/start/end/booked; no day or stable IDs.
         var legacy = new Dictionary<string, string> { ["event"] = "weekend market", ["place"] = label,
             ["start"] = "10:00", ["end"] = "14:00", ["booked"] = "2" };
         var message = Message(legacy, "foodtrucks:message_city_event_today");
@@ -145,7 +142,6 @@ static class Program
         foreach (var eventName in new[] { (string)locale["foodtrucks:event_market"]!, (string)locale["foodtrucks:event_festival"]! })
         foreach (var key in new[] { "foodtrucks:message_city_event", "foodtrucks:message_city_event_booked", "foodtrucks:message_city_event_today" })
         {
-            // Match the 0.10.7 payloads: booked has no end/fee; today has no day/fee.
             var data = new Dictionary<string, string>(legacy) { ["event"] = eventName };
             if (key != "foodtrucks:message_city_event_today")
             {
@@ -157,7 +153,6 @@ static class Program
             }
             if (key == "foodtrucks:message_city_event_booked") data.Remove("end");
             var own = Message(data, key); var readable = Message(new(data) { ["place"] = "34 4th Avenue" }, key);
-            // Even stable IDs must not authorize overwriting another place's readable history.
             var different = Message(new(data) { ["place"] = otherLabel, ["bookingId"] = "1" }, key);
             var history = new Contact(); history.messagesQueue.Enqueue(own); history.messagesQueue.Enqueue(readable); history.messagesQueue.Enqueue(different);
             var identified = new Dictionary<string, string>(candidate) { ["bookingId"] = "1", ["event"] = eventName };
@@ -169,13 +164,11 @@ static class Program
             Equal(otherLabel, different.messageData!["place"]); Equal("34 4th Avenue", readable.messageData!["place"]);
             var changes = FoodTrucksSession.Changes; Repair(history, identified); Equal(changes, FoodTrucksSession.Changes);
         }
-        // Other keys retain the unreadable-place gate even if a matching legacy label is supplied.
         var catering = Message(new(Description()) { ["place"] = label }); c.messagesQueue.Enqueue(catering);
         Repair(c, new Dictionary<string, string>(Description()) { ["legacyPlace"] = label }); Equal(label, catering.messageData!["place"]);
     }
     static void SavedBookingRadius()
     {
-        // No live gig or native address data is needed, even for a readable or absent address.
         World.Found = null; Equal(false, EventLocations.Ready);
         foreach (var place in new[] { "34 4th Avenue", "34 ba:street_fourthavenue", "Location unavailable", "" })
         {
@@ -196,7 +189,7 @@ static class Program
 
     static void OrphanHistory()
     {
-        World.Found = null; // History's own location, never a surviving gig/building.
+        World.Found = null;
         foreach (var raw in new[] { "ba:street_fifthavenue#19", "19 ba:street_fifthavenue", "19 #ba:street_fifthavenue" })
         {
             var contact = new Contact();
@@ -213,7 +206,6 @@ static class Program
             Equal("This booking is no longer active.", booked.messageData["guidance"]);
             Equal(2, contact.messagesQueue.Count);
             var changes = FoodTrucksSession.Changes;
-            // Serializing/reloading the actual payload must require no second dirty write.
             booked.messageData = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string,string>>(
                 Newtonsoft.Json.JsonConvert.SerializeObject(booked.messageData));
             EventLocations.RefreshBookingRadius(contact);
@@ -257,7 +249,7 @@ static class Program
         Equal("This booking is no longer active.", live.messageData["guidance"]);
         var stable = Message(new(Description()) { ["place"] = "Location unavailable" }); c.messagesQueue.Enqueue(stable);
         EventLocations.RefreshCateringHistory(c, Array.Empty<Dictionary<string,string>>());
-        Equal("34 4th Avenue", stable.messageData!["place"]); // Explicit locationId survives the gig.
+        Equal("34 4th Avenue", stable.messageData!["place"]);
         var readable = Message(new(Description()) { ["place"] = "34 Fourth Avenue" }); c.messagesQueue.Enqueue(readable);
         EventLocations.RefreshCateringHistory(c, Array.Empty<Dictionary<string,string>>());
         Equal("34 Fourth Avenue", readable.messageData!["place"]);

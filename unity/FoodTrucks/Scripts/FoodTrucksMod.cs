@@ -12,7 +12,6 @@ using Vehicles.VehicleTypes;
 
 namespace FoodTrucks
 {
-    // Loads once at game start: vehicle types, the mod's own items and Harmony patches.
     [ModEntryOnInitializationLoad]
     public sealed class FoodTrucksMod : IModBigAmbitions
     {
@@ -22,7 +21,6 @@ namespace FoodTrucks
         internal const string CartTypeName = "foodtrucks:vehicletype_foodcart";
         internal const string CartPrefabPath = "Assets/Mods/FoodTrucks/Vehicles/FoodCart.prefab";
         internal const string TruckPrefabPath = "Assets/Mods/FoodTrucks/Vehicles/FoodTruck.prefab";
-        // Every vehicle type this mod has ever registered starts with this, spike types included.
         internal const string VehicleTypePrefix = "foodtrucks:vehicletype_";
         private const string HandVehicleTag = "ba:vehicletag_ishandvehicle";
 
@@ -34,13 +32,11 @@ namespace FoodTrucks
 
         internal static readonly string[] SoldAtDealer = { CartTypeName, TruckTypeName };
 
-        // The mod's asset bundle, for the prefab fixes applied at city load.
         internal static AssetBundle? Bundle { get; private set; }
 
         internal static bool IsModVehicle(string? typeName) =>
             typeName != null && typeName.StartsWith(VehicleTypePrefix, StringComparison.Ordinal);
 
-        // "cart" or "truck", the vehicle kinds in economy.json and rules.json; null for any other vehicle.
         internal static string? KindOf(string? typeName) =>
             typeName == CartTypeName ? "cart" : typeName == TruckTypeName ? "truck" : null;
 
@@ -50,7 +46,6 @@ namespace FoodTrucks
 
         internal static readonly List<string> RegisteredVehicleTypes = new List<string>();
 
-        // The game's id for this mod (its folder for a local mod), for the late attach's log line.
         internal static string? ModId { get; private set; }
 
         public Task OnLoadAsync(ModContext context)
@@ -76,8 +71,6 @@ namespace FoodTrucks
             Patches.Apply();
             BigAmbitions.ModsInternal.ModDiscoveryRegistry.OnDiscoveryUpdated -= SaveGuard.DiscoveryUpdated;
             BigAmbitions.ModsInternal.ModDiscoveryRegistry.OnDiscoveryUpdated += SaveGuard.DiscoveryUpdated;
-            // Only with -foodtrucks-test on the game's command line (docs/test-bridge.md); started here so it answers at
-            // the main menu.
             try { TestBridge.Start(); }
             catch (Exception ex) { Log.Error("Test bridge: " + ex); }
             return Task.CompletedTask;
@@ -96,14 +89,12 @@ namespace FoodTrucks
                 Log.Error($"Vehicle type asset '{assetPath}' is named '{type.vehicleTypeName}', expected '{typeName}'.");
                 return;
             }
-            // The serialized tag list has no database; AddTag resolves the vanilla tag index at runtime.
             if (typeName == CartTypeName) type.AddTag(HandVehicleTag);
 
             if (ModdingAPI.RegisterModVehicleType(type))
             {
                 registered.Add(typeName);
                 RegisteredVehicleTypes.Add(typeName);
-                // The game checks the tag by index, so log the index lookup rather than the string list.
                 var handVehicle = type.HasTag(BigAmbitions.Tags.TagRef.Vehicletag.ishandvehicle);
                 Log.Info($"Vehicle registered: {typeName} (hand vehicle tag: {handVehicle}, price {type.price}).");
             }
@@ -135,15 +126,12 @@ namespace FoodTrucks
     {
         private static IModLogger? logger;
 
-        // Gets every line this class writes, with its kind ("log", "error", "notice", "phone"): the test bridge's events.
         internal static Action<string, string>? Listener;
 
         public static void Init(IModLogger modLogger) => logger = modLogger;
 
-        // The game's mod logger adds its own "[Mod:Food Trucks]" prefix.
         public static void Info(string message) => Event("log", message);
 
-        // An info line of another kind for the listener (Notices: "notice", "phone").
         public static void Event(string kind, string message)
         {
             if (logger != null) logger.Info(message);
@@ -151,7 +139,6 @@ namespace FoodTrucks
             Tell(kind, message);
         }
 
-        // Every error line starts with this marker, once, for log checks.
         internal const string ErrorMarker = "ERROR: ";
 
         public static void Error(string message)
@@ -167,14 +154,13 @@ namespace FoodTrucks
             Tell("error", message);
         }
 
-        // True while this class hands an error line to Unity, so the test bridge doesn't count it twice.
         [ThreadStatic] private static bool writing;
         internal static bool Writing => writing;
 
         private static void Tell(string kind, string message)
         {
             try { Listener?.Invoke(kind, message); }
-            catch (Exception) { /* A listener never stops the mod's logging. */ }
+            catch (Exception) { }
         }
 
         public static void Error(Exception exception)

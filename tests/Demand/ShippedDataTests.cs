@@ -23,7 +23,6 @@ public class ShippedDataTests
     public void CoffeeMachineMapsOnlyToTheIndustrialMachine()
     {
         var tables = ShippedData.Tables;
-        // And to the Bakery mod's bistro machine, when that mod is installed.
         Assert.Equal(new[] { "ba:itemname_industrialcoffeemachine", "bakeryxx:itemname_bistromachine" }, tables.Equipment("coffeemachine")!.GameItems);
         Assert.Same(tables.Equipment("coffeemachine"), tables.EquipmentForGameItem("ba:itemname_industrialcoffeemachine"));
         Assert.Null(tables.EquipmentForGameItem("ba:itemname_cheapcoffeemachine"));
@@ -65,7 +64,6 @@ public class ShippedDataTests
     public void NearbyNightclubAddsAnEveningCrowdToAnOfficeSpot(DayOfWeek day)
     {
         var classifier = new AreaClassifier(ShippedData.Tables);
-        // Section 6's in-game case: two offices at 20/40 m and a club at 30 m.
         var buildings = new[]
         {
             new NearbyPlace("ba:buildingtype_office", null, 20),
@@ -87,7 +85,6 @@ public class ShippedDataTests
         Assert.True(lunch >= 60, $"{day}: Midtown lunch should be busy, got {lunch} passers/h.");
         query.MinuteOfDay = 19 * 60;
         var evening = model.Estimate(query).Footfall;
-        // Compare with the study's dense pure office block, rather than pinning a crowd ratio.
         query.Areas = classifier.FromPlaces(Enumerable.Repeat(new NearbyPlace("ba:buildingtype_office", null, 0), 8));
         Assert.True(evening > model.Estimate(query).Footfall);
         query.Areas = offices;

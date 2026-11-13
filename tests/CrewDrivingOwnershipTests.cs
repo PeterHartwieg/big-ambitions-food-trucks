@@ -67,7 +67,7 @@ public class CrewDrivingOwnershipTests
         var old = new CrewDrivingTests.Rig(owners, "truck");
         old.Tick();
         Assert.Equal(ProbeState.Cancelled, old.Controller.Cancel(old.Token).State);
-        Assert.Equal(1, owners.Count); // native cleanup still owns the body
+        Assert.Equal(1, owners.Count);
         Assert.True(owners.Release(old.Token));
         Assert.False(owners.Release(old.Token));
         var replacement = new CrewDrivingTests.Rig(owners, "truck");

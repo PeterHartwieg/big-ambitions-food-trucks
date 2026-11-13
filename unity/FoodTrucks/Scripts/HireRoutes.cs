@@ -11,51 +11,32 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // Runs each crewed vehicle's route: Core's HireRunner says what the crew should do now, this does it.
-    // The game has no NPC that drives a player vehicle (design: Technical answers, row 11), so a vehicle
-    // on its way is taken off the map (its controller destroyed, its parking state Undefined so the game
-    // charges no parking) and put back when the travel time is up: a truck in the nearest free parking space
-    // to the stop, the way the game's private driver returns a car; a cart where the player stood it.
     internal sealed class HireRoutes : MonoBehaviour
     {
         private const float TickSeconds = 0.25f;
-        // A stop with no free parking space nearby is tried again for this many game minutes, then wider.
         private const int RetryMinutes = 10;
-        // Parking spaces this close count as the stop; after a wait, the crew takes one further out.
         private const float MaxParkingMetres = 60f;
         private const float WideParkingMetres = 200f;
-        // Steps per vehicle per tick: enough to close, leave and so on after a load or a time skip.
         private const int MaxSteps = 4;
-        // Moments stepped per vehicle per tick (Run).
         private const int MaxMoments = 512;
 
         private static HireRoutes? instance;
         private static readonly List<Action> later = new List<Action>();
         private HireRunner? runner;
         private float nextTick;
-        // Refusals already told to the player: vehicle, stop, day.
         private readonly HashSet<(string, int, int)> refusalsShown = new HashSet<(string, int, int)>();
-        // The game minute each vehicle's route has been run up to. Not saved: after a load it starts now.
         private readonly Dictionary<string, long> routedUntil = new Dictionary<string, long>();
-        // Vehicles whose route fails the rules, logged once per problem.
         private readonly Dictionary<string, ScheduleProblem> routeProblems = new Dictionary<string, ScheduleProblem>();
         private readonly HashSet<string> broken = new HashSet<string>();
         private readonly HashSet<string> indoorsShown = new HashSet<string>();
-        // The game minute the player last pushed or drove each vehicle.
         private readonly Dictionary<string, long> lastHeld = new Dictionary<string, long>();
-        // The crew doesn't drive a vehicle away within this long of the player using it, or with the player this close.
         private const long StayPutMinutes = 60;
         private const float StayPutMetres = 15f;
-        // Set by Where: the crew is on shift and would go, but the player is by the vehicle or used it within the hour.
         private bool keptByPlayer;
-        // Vehicles the player has really held since the load (lastHeld also starts at the load for every vehicle).
         private readonly HashSet<string> reallyHeld = new HashSet<string>();
-        // Vehicles whose crew already said today that they wait for the player to step away: vehicle, day.
         private readonly HashSet<(string, int)> waitShown = new HashSet<(string, int)>();
-        // Each truck's last hatch reading, kept while it stands still: the route asks every game minute.
         private static readonly Dictionary<string, (Vector3 Position, Quaternion Rotation, HatchCheck.Result Result)> hatches =
             new Dictionary<string, (Vector3, Quaternion, HatchCheck.Result)>();
-        // Trucks already logged as standing the wrong way for a stop: vehicle, stop, day.
         private readonly HashSet<(string, int, int)> hatchShown = new HashSet<(string, int, int)>();
 
         // Whether a truck's hatch faces the pavement where it stands (HatchCheck), read again once it moves. A reading
@@ -72,9 +53,6 @@ namespace FoodTrucks
             return result;
         }
 
-        // The player has the vehicle (got in, or grabbed the cart): where the crew parked it no longer counts as the
-        // crew's placement (HireRunner.ParkedFor), even if it comes back within a few metres, turned round. Only an
-        // untouched crew placement keeps that pass. Called on the game's onEnterVehicle, whatever crew or route it has.
         internal static void PlayerTook(VehicleState vehicle)
         {
             if (vehicle.Arrival == null || !FoodTrucksSession.CanWrite) return;
@@ -83,7 +61,6 @@ namespace FoodTrucks
             Log.Info($"Route: the player took {vehicle.VehicleType} {vehicle.VehicleId}; where the crew parked it no longer counts as at its stop.");
         }
 
-        // Runs an action on the next frame, after the game's list picker has closed its current list.
         public static void Later(Action action)
         {
             lock (later) later.Add(action);
@@ -91,7 +68,6 @@ namespace FoodTrucks
 
         private void OnEnable() => instance = this;
 
-        // The earliest game minute a route still has to run from, null when none lags (CartSelling.SoldThrough).
         internal static long? RoutedThrough() =>
             instance == null ? null : instance.routedUntil.Where(p => !instance.broken.Contains(p.Key)).Select(p => (long?)p.Value).Min();
 
@@ -100,13 +76,9 @@ namespace FoodTrucks
             if (instance == this) instance = null;
         }
 
-        // How far this vehicle's route has run, null when it isn't being run (no crew, stopped, or not started).
         internal static long? RoutedUntil(string vehicleId) =>
             instance != null && !instance.broken.Contains(vehicleId) && instance.routedUntil.TryGetValue(vehicleId, out var until) ? until : (long?)null;
 
-        // Inside the game's midnight processing (CartSelling.CatchUpDay): every running route steps up to `boundary`
-        // (midnight) the way its ticks would have, its window selling up to there, so the closing day's crew sales are
-        // all made before the day is finalised. The next tick goes on from the boundary.
         internal static void CatchUpTo(long boundary)
         {
             var self = instance;
@@ -129,7 +101,6 @@ namespace FoodTrucks
             }
         }
 
-        // Run's steps from `from` up to, not including, `boundary`; the window sells up to the boundary.
         private void RunTo(VehicleState vehicle, long from, long boundary)
         {
             var instance = Instance(vehicle.VehicleId);
@@ -150,7 +121,6 @@ namespace FoodTrucks
         private void Update()
         {
             RunLater();
-            // During sleep and other skips every frame counts, so each step is at most one frame of game time.
             if (Time.unscaledTime < nextTick && !CartSelling.Skipping) return;
             nextTick = Time.unscaledTime + TickSeconds;
             var state = FoodTrucksSession.CurrentState;
@@ -159,7 +129,6 @@ namespace FoodTrucks
             try
             {
                 runner ??= new HireRunner(rules.Fleet);
-                // The city load spawns vehicles where they were saved, those on their way too.
                 HideInTransit(state);
                 HireCrew.Check(state);
             }
@@ -170,13 +139,11 @@ namespace FoodTrucks
             }
             var now = HireCrew.Now();
             var running = state.Vehicles.Where(v => (v.Crew != null && v.Crew.Count > 0) || v.Transit != null || v.HireStop != null || v.CrewWindowLost).ToList();
-            // A vehicle that sat out ticks (no crew for a while) starts again from now, not from where it stopped.
             foreach (var id in routedUntil.Keys.Where(id => running.All(v => v.VehicleId != id)).ToList()) routedUntil.Remove(id);
             foreach (var vehicle in running)
             {
                 if (broken.Contains(vehicle.VehicleId))
                 {
-                    // A stopped route still brings a vehicle on its way back, as soon as there is room.
                     if (vehicle.Transit != null)
                     {
                         try { Recover(vehicle); }
@@ -187,7 +154,6 @@ namespace FoodTrucks
                 try { Run(vehicle, now); }
                 catch (Exception ex)
                 {
-                    // One vehicle's route stops; the others go on. A window its crew opened closes.
                     broken.Add(vehicle.VehicleId);
                     Log.Error($"Hire routes: {vehicle.VehicleType} {vehicle.VehicleId} stopped: {ex}");
                     CartSelling.Notify("foodtrucks:notification_routes_failed");
@@ -225,7 +191,6 @@ namespace FoodTrucks
                 var instance = Instance(vehicle.VehicleId);
                 var controller = instance == null ? null : VehicleHelper.GetVehicleController(instance);
                 if (controller == null) continue;
-                // The player got in (it came back with the private driver, say): the trip is over.
                 if (SaveGameManager.Current.ActiveVehicleId == vehicle.VehicleId)
                 {
                     if (instance!.parkingState == ParkingState.Undefined) instance.parkingState = ParkingState.Legal;
@@ -239,7 +204,6 @@ namespace FoodTrucks
                 if (!afterLoad && Vector3.Distance(controller.transform.position, from) > 5f &&
                     Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position) <= FetchedMetres)
                 {
-                    // Whoever brought it set its parking; it only needs to be counted again if nobody did.
                     if (instance!.parkingState == ParkingState.Undefined) instance.parkingState = ParkingState.Legal;
                     vehicle.Transit = null;
                     vehicle.Arrival = null;
@@ -253,32 +217,23 @@ namespace FoodTrucks
         }
 
         private const float FetchedMetres = 50f;
-        // The first tick after a load hides whatever the load spawned, without asking how it got there.
         private bool loadHidden;
-        // The vehicles' collision hulls as boxes, a little spare (art/README.md): the truck's runs x −1.23…1.26,
-        // y 0…3.10, z −3.15…2.65; the cart's body x ±0.48, y 0…0.95, z ±0.70.
         private static readonly Vector3 TruckHalfSize = new Vector3(1.3f, 1.55f, 2.95f);
         private static readonly Vector3 TruckCentre = new Vector3(0f, 1.55f, -0.25f);
         private static readonly Vector3 CartHalfSize = new Vector3(0.5f, 0.5f, 0.75f);
         private static readonly Vector3 CartCentre = new Vector3(0f, 0.55f, 0f);
 
-        // Steps through the minutes since the last tick in order: each moment a leg starts or ends, or a
-        // transit is due, gets its own steps, and the crew's window sells up to it first. So a time skip
-        // over a whole stop still opens, sells and closes it.
         private void Run(VehicleState vehicle, long now)
         {
             if (CrewDriveProbe.Owns(vehicle.VehicleId)) return;
             var instance = Instance(vehicle.VehicleId);
             if (instance == null)
             {
-                // Away with the private driver, say: when it comes back, the route goes on from then.
                 routedUntil.Remove(vehicle.VehicleId);
                 return;
             }
             if (!routedUntil.TryGetValue(vehicle.VehicleId, out var from) || from > now) from = now;
             var t = from;
-            // A long skip has many moments (legs, the hours, arrivals): up to MaxMoments a tick; the rest go on next tick
-            // from the last one handled, so no moment is skipped and the window sells only up to it.
             for (var guard = 0; guard < MaxMoments; guard++)
             {
                 StepAt(vehicle, instance, t);
@@ -294,7 +249,6 @@ namespace FoodTrucks
             CartSelling.AdvanceTo(vehicle, HireCrew.NowExact());
         }
 
-        // The next leg boundary or arrival after t, or now.
         private static long NextMoment(VehicleState vehicle, long t, long now)
         {
             var next = now;
@@ -304,14 +258,11 @@ namespace FoodTrucks
                     if (leg.Start > t && leg.Start < next) next = leg.Start;
                     if (leg.End > t && leg.End < next) next = leg.End;
                 }
-            // An arrival, and the two later tries for parking.
             if (vehicle.Transit != null)
                 foreach (var due in new[] { vehicle.Transit.ArrivesAt, vehicle.Transit.ArrivesAt + RetryMinutes, vehicle.Transit.ArrivesAt + 2 * RetryMinutes })
                     if (due > t && due < next) next = due;
-            // A new day gets its plan at midnight.
             var midnight = (t / 1440 + 1) * 1440;
             if (midnight > t && midnight < next) next = midnight;
-            // Shifts start and end on the hour: an owed drive back waits for one, an open window closes at one's end.
             var hour = (t / 60 + 1) * 60;
             if (vehicle.Crew != null && vehicle.Crew.Count > 0 && hour > t && hour < next) next = hour;
             return next;
@@ -321,14 +272,9 @@ namespace FoodTrucks
         {
             CartSelling.AdvanceTo(vehicle, t);
             var controller = VehicleHelper.GetVehicleController(instance);
-            // The same starting point as the payroll's preview (HireRunner.PlanFrom).
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
             var (planX, planZ) = HireRunner.PlanFrom(vehicle, position.x, position.z);
-            // A route saved before the travel rule (or with drives longer at today's game speed) is fitted first.
             RouteStops.FitIfNeeded(vehicle, "planning");
-            // A route that fails today's rules (saved under older ones) gets no plan: said once in the log. One with a stop
-            // it can't reach in time still runs, that stop opening late.
-            // The day ends back in the bay where it rents its space (Peter, 16 October 2026).
             var home = HomeOf(vehicle);
             var problem = runner!.RouteProblem(vehicle, GameSpeed(), HomePoint(home), home?.BayStops);
             if (problem == ScheduleProblem.None) routeProblems.Remove(vehicle.VehicleId);
@@ -344,7 +290,6 @@ namespace FoodTrucks
             runner.EnsurePlan(vehicle, t, planX, planZ, GameSpeed(), HomePoint(home), home?.BayStops);
             for (var i = 0; i < MaxSteps; i++)
             {
-                // Read after planning: the checks below depend on the leg the plan has running.
                 var where = Where(vehicle, instance, t, home);
                 var action = runner.Step(vehicle, t, where, GameSpeed());
                 if (action.Kind == HireActionKind.None)
@@ -356,9 +301,6 @@ namespace FoodTrucks
             }
         }
 
-        // A crew on shift that would set off or restock but stays put because of the player (the first blind playtest,
-        // 17 October 2026: crews sat in the bay for hours with no word why). Said, and logged, once per vehicle and game
-        // day, never while the game sleeps or skips time.
         private void SayWaiting(VehicleState vehicle, long t)
         {
             if (CartSelling.Skipping || !waitShown.Add((vehicle.VehicleId, HireRunner.DayOf(t)))) return;
@@ -368,8 +310,6 @@ namespace FoodTrucks
             CartSelling.Say("foodtrucks:notification_hire_waits_for_player", kind, ("crew", CrewNames(vehicle)), ("name", name));
         }
 
-        // A crew that turns back from a stop it couldn't take says so (blind run 2, I21: a cart stood closed for three
-        // hours with no word why). Never while the game sleeps or skips time.
         private static void SayStopTaken(VehicleState vehicle, TransitState transit, string kind, string key)
         {
             if (CartSelling.Skipping) return;
@@ -379,13 +319,11 @@ namespace FoodTrucks
             CartSelling.Say(key, kind, ("name", name), ("stop", stop));
         }
 
-        // Where the vehicle stands, and whether the crew may touch it or sell there.
         private VehicleWhere Where(VehicleState vehicle, VehicleInstance instance, long t, (ScheduleStop Place, string SiteId, IReadOnlyCollection<int> BayStops)? home)
         {
             var controller = VehicleHelper.GetVehicleController(instance);
             var position = controller != null ? controller.transform.position : (Vector3)instance.position;
             var held = SaveGameManager.Current.ActiveVehicleId == vehicle.VehicleId;
-            // Inside a building or an underground garage it isn't on the street to drive off from.
             var indoors = !string.IsNullOrEmpty(instance.streetName);
             if (indoors && indoorsShown.Add(vehicle.VehicleId))
             {
@@ -393,11 +331,8 @@ namespace FoodTrucks
                 CartSelling.Say("foodtrucks:notification_hire_indoors", KindOf(vehicle));
             }
             if (!indoors) indoorsShown.Remove(vehicle.VehicleId);
-            // After a load, nobody knows when the player last used it: as if just now, so nothing drives off at once.
             if (held || !lastHeld.ContainsKey(vehicle.VehicleId)) lastHeld[vehicle.VehicleId] = t;
             if (held) reallyHeld.Add(vehicle.VehicleId);
-            // The game's enter event clears the crew's arrival (PlayerTook, from CartSelling); this catches a vehicle the
-            // player already had when the save loaded.
             if (held) PlayerTook(vehicle);
             keptByPlayer = false;
             var canSell = true;
@@ -406,13 +341,9 @@ namespace FoodTrucks
             string? restockAt = null;
             string? stockKey = null;
             IReadOnlyCollection<int>? bayStops = null;
-            // A leg running, or the drive back owed (VehicleState.ReturnPending): the checks the crew's moves need.
             if (!held && !indoors && !vehicle.IsOpen && vehicle.Transit == null && (HireRunner.Want(vehicle, t) != null || vehicle.ReturnPending))
             {
                 canSell = KindOf(vehicle) == "truck" ? instance.parkingState == ParkingState.Legal : Legality.Check(position).Legal;
-                // A truck left at a stop with its hatch to the road can't sell there: the crew parks it again,
-                // turned the right way (FreeParking), rather than open with the line in the traffic or wait
-                // there all day. One the crew parked itself counts as at its stop anyway (HireRunner).
                 if (canSell && KindOf(vehicle) == "truck" && controller != null)
                 {
                     var hatch = Hatch(vehicle.VehicleId, controller.transform);
@@ -427,34 +358,21 @@ namespace FoodTrucks
                 }
                 var tables = DemandData.Tables;
                 hasStock = tables == null || CartDemand.StockOf(instance, CartDemand.MenuOf(tables, instance).Menu).Count > 0;
-                // The player just stepped out (to buy stock, say) or stands right by it: it stays where it is.
-                // So does a vehicle with nobody of its crew on shift, or all of them off sick, training or replaced.
                 var recentlyHeld = lastHeld.TryGetValue(vehicle.VehicleId, out var heldAt) && t - heldAt < StayPutMinutes;
                 var near = !BuildingManager.IsInsideBuilding && Vector3.Distance(PlayerHelper.GetPosition(), position) <= StayPutMetres;
                 var nobodyOnShift = !HireCrew.Present(vehicle).Any(e => WeekPlan.OnShift(vehicle.Schedule, e.id, t));
                 stayPut = recentlyHeld || near || nobodyOnShift;
-                // The hour after a load counts as held too, but the player did nothing: no word about waiting for them then.
                 keptByPlayer = (near || (recentlyHeld && reallyHeld.Contains(vehicle.VehicleId))) && !nobodyOnShift;
-                // In its own commissary's bay: the crew restocks (or finds what is short) before it sets off, once per leg
-                // and again when the commissary's stock of its foods changes (Core CrewRestock.Due).
                 restockAt = Commissary.CrewRestockSite(FoodTrucksSession.CurrentState!, instance);
                 if (restockAt != null) stockKey = Commissary.CrewStockKey(FoodTrucksSession.CurrentState!, instance, KindOf(vehicle), restockAt);
-                // The stops in its own bay: reached only in the bay, and the only ones it may drive to when sold out.
                 bayStops = Commissary.CrewBayStops(FoodTrucksSession.CurrentState!, vehicle);
             }
             restockSites[vehicle.VehicleId] = restockAt;
-            // A truck at a catering gig at this minute stays there, as one the player holds does (without counting as
-            // the player's use, which would keep it an hour longer).
             return new VehicleWhere(position.x, position.z, held || indoors || Catering.BusyAt(vehicle.VehicleId, t), canSell, hasStock, stayPut,
                 canRestock: restockAt != null, stockKey: stockKey, bayStops: bayStops, home: HomePoint(home),
-                // Someone on shift able to serve now (HireCrew.OnShift leaves out the sick, training and replaced).
                 canServe: HireCrew.OnShift(vehicle, t).Count > 0);
         }
 
-        // The bay of the commissary where the vehicle rents its space, which its crew starts each route day in (the
-        // restock) and drives back to after the day's last stop (Core HireSchedules.HomeIndex), as the bay's first place;
-        // and the route's stops that are in that bay (a day ending at one needs no second drive). Null without a space, or
-        // while the bay has no places yet (logged once): the day then starts and ends where the vehicle stands.
         internal static (ScheduleStop Place, string SiteId, IReadOnlyCollection<int> BayStops)? HomeOf(VehicleState vehicle)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -484,10 +402,8 @@ namespace FoodTrucks
 
         private static readonly HashSet<string> homeMissing = new HashSet<string>();
 
-        // The commissary each vehicle could restock at, as the last Where read it.
         private readonly Dictionary<string, string?> restockSites = new Dictionary<string, string?>();
 
-        // Does one step; false when nothing changed, so the loop stops.
         private bool Do(VehicleState vehicle, VehicleInstance instance, HireAction action, long t)
         {
             var kind = KindOf(vehicle);
@@ -504,8 +420,6 @@ namespace FoodTrucks
                     return Arrive(vehicle, instance, action.Transit!, t, kind);
                 case HireActionKind.Restock:
                 {
-                    // Marked done for this leg and this stock first, so a load that throws isn't tried again every minute;
-                    // then with the stock left after loading, so only a later change (a delivery) brings another attempt.
                     var state = FoodTrucksSession.CurrentState!;
                     restockSites.TryGetValue(vehicle.VehicleId, out var site);
                     HireRunner.Restocked(vehicle, t, site == null ? null : Commissary.CrewStockKey(state, instance, kind, site));
@@ -520,8 +434,6 @@ namespace FoodTrucks
                     if (refusal == null)
                     {
                         Log.Info($"Route: {kind} {vehicle.VehicleId}: the crew opened at stop {action.Stop + 1}.");
-                        // Route progress goes to the log and the vehicle page, not the notices (Peter, 17 October 2026),
-                        // unless the player stands where they see the window open, as for the crew's routine close.
                         if (!CartSelling.Skipping && CartSelling.PlayerNear(instance))
                             CartSelling.Say("foodtrucks:notification_hire_open", kind, ("crew", CrewNames(vehicle)));
                         return true;
@@ -552,19 +464,15 @@ namespace FoodTrucks
                 TakeOffMap(controller);
             }
             var parking = instance.parkingState;
-            // No parking fees or tickets while it's away (ParkingSimulator skips Undefined).
             instance.parkingState = ParkingState.Undefined;
             var home = action.Stop == HireSchedules.HomeIndex ? HomeOf(vehicle) : null;
             HireRunner.Depart(vehicle, action, t, position.x, position.y, position.z, heading, home?.Place);
             vehicle.Transit!.FromParkingState = (int)parking;
             FoodTrucksSession.MarkChanged();
             var where = home != null ? $"its bay at {home.Value.SiteId}" : $"stop {action.Stop + 1} ({vehicle.Schedule!.Stops[action.Stop].SpotKey})";
-            // Log and vehicle page only: no notice for each leg of each route (Peter, 17 October 2026).
             Log.Info($"Route: {kind} {vehicle.VehicleId} leaves for {where}, arriving at minute {action.ArrivesAt} ({action.ArrivesAt - t} minutes).");
         }
 
-        // A stopped route never leaves its vehicle off the map: one on its way goes back where it left from, or
-        // for a truck into a free space near there. Tried every tick until there is room.
         private static void Recover(VehicleState vehicle)
         {
             if (CrewDriveProbe.Owns(vehicle.VehicleId)) return;
@@ -588,7 +496,6 @@ namespace FoodTrucks
                 }
                 else
                 {
-                    // A cart tries the stop it was heading for instead.
                     var to = new Vector3((float)transit.ToX, (float)transit.ToY, (float)transit.ToZ);
                     var toRotation = Quaternion.Euler(0f, (float)transit.ToHeading, 0f);
                     if (Taken(to, toRotation, kind))
@@ -611,15 +518,9 @@ namespace FoodTrucks
             Log.Info($"Route: {vehicle.VehicleType} {vehicle.VehicleId} brought back to {position} after its route stopped.");
         }
 
-        // Street placements (arrival, fallback, recovery, bring-back, FreeParking), as before: another vehicle on the
-        // vehicles layer where this one's hull would be (the game's own spawn cleanup releases parked lane cars, as for
-        // its own vehicles), plus the player standing in the footprint; never `self`'s own hull (review round 6).
         private static bool Taken(Vector3 position, Quaternion rotation, string kind, VehicleInstance? self = null) =>
             Occupied(position, rotation, kind, self, 1 << LayerHelper.VehiclesLayerIndex, QueryTriggerInteraction.UseGlobal);
 
-        // Bay arrivals only (review rounds 4 to 6): anything a vehicle mustn't be put on, the player's and the mod's
-        // vehicles, the lanes' parked cars and AI traffic with their trigger colliders, and the player; never `self`.
-        // Bay spawns skip the game's cleanup (SpawnNoCleanup), so nothing in the bay is deleted.
         private static bool BayTaken(Vector3 position, Quaternion rotation, string kind, VehicleInstance self) =>
             Occupied(position, rotation, kind, self,
                 (1 << LayerHelper.VehiclesLayerIndex) | (1 << LayerHelper.ParkedVehiclesLayerIndex) | (1 << LayerHelper.AiVehiclesLayerIndex) |
@@ -632,20 +533,16 @@ namespace FoodTrucks
             var own = self == null ? null : VehicleHelper.GetVehicleController(self)?.transform;
             foreach (var hit in Physics.OverlapBox(centre, half, rotation, mask, triggers))
                 if (hit != null && (own == null || !hit.transform.IsChildOf(own))) return true;
-            // The player, wherever their collider sits: standing inside the hull's footprint.
             var local = Quaternion.Inverse(rotation) * (PlayerHelper.GetPosition() - centre);
             return Mathf.Abs(local.x) <= half.x + 0.3f && Mathf.Abs(local.z) <= half.z + 0.3f && Mathf.Abs(local.y) <= half.y + 1f;
         }
 
-        // Whether a truck standing there would be refused for its hatch (HatchCheck): such a space is taken
-        // the other way round. Anything else stands as the lane has it, as an unclear spot opens anyway.
         private static bool HatchRefused(Vector3 position, Quaternion rotation, TrafficLanes lanes, out HatchCheck.Result result)
         {
             result = HatchCheck.Probe(position, rotation, lanes);
             return !result.Opens;
         }
 
-        // As the game's own vehicle sale does, traffic forgets the colliders before the vehicle goes.
         private static void TakeOffMap(VehicleController controller)
         {
             if (CrewDriveProbe.Owns(controller)) return;
@@ -655,21 +552,15 @@ namespace FoodTrucks
                 if (controller.additionalCollider != null) GleyTrafficSystem.Manager.TriggerColliderRemovedEvent(controller.additionalCollider);
             }
             catch (Exception ex) { Log.Error($"Route: collider event for {controller.vehicleInstance?.id}: {ex}"); }
-            // The game's own removal tells its listeners (multi-storey car parks keep a list of vehicles).
             try { VehicleHelper.onVehicleDestroyed?.Invoke(controller); }
             catch (Exception ex) { Log.Error($"Route: vehicle destroyed event for {controller.vehicleInstance?.id}: {ex}"); }
             // Its save hook would write its old pose over the instance until OnDestroy runs at the frame's end;
             // the same delegate is removed here first (VehicleController.Start adds it, OnDestroy removes it).
             GlobalEvents.onSaveGame -= controller.SavePosition;
-            // Deactivating unregisters it from the game's vehicle list at once (VehicleController.OnDisable);
-            // Destroy only happens at the end of the frame, and an arrival in the same frame must not find it.
             controller.gameObject.SetActive(false);
             Object.Destroy(controller.gameObject);
         }
 
-        // A truck goes into the nearest free parking space near the stop, a cart where the player stood it.
-        // With no room near the stop, the truck tries again a little later; after that, wider; and in the
-        // end it goes back where it left from, so it is never lost off the map.
         private static bool Arrive(VehicleState vehicle, VehicleInstance instance, TransitState transit, long t, string kind)
         {
             var target = new Vector3((float)transit.ToX, (float)transit.ToY, (float)transit.ToZ);
@@ -677,7 +568,6 @@ namespace FoodTrucks
             Quaternion rotation;
             string? neighbourhood = null;
             var atStop = true;
-            // A stop in its own commissary's bay: parked in the bay or not at all (review round 3).
             var bayArrival = BayArrival(vehicle, instance, transit, t, kind, out var bayFallback);
             if (bayArrival != null) return bayArrival.Value;
             if (kind == "truck")
@@ -692,13 +582,11 @@ namespace FoodTrucks
                 if (spot != null) (position, rotation, neighbourhood) = spot.Value;
                 else
                 {
-                    // Back towards where it left from: a free space there, or its own spot if nothing has taken it.
                     var from = new Vector3((float)transit.FromX, (float)transit.FromY, (float)transit.FromZ);
                     var back = FreeParking(from, WideParkingMetres);
                     if (back != null) (position, rotation, neighbourhood) = back.Value;
                     else if (Taken(from, Quaternion.Euler(0f, (float)transit.FromHeading, 0f), kind))
                     {
-                        // Not even its own spot is free: it stays on its way and tries again each tick.
                         if (late == 2 * RetryMinutes) Log.Info($"Route: truck {vehicle.VehicleId} has nowhere to park near {transit.ToSpotKey} or where it left from; still trying.");
                         return false;
                     }
@@ -716,7 +604,6 @@ namespace FoodTrucks
             {
                 position = target;
                 rotation = Quaternion.Euler(0f, (float)transit.ToHeading, 0f);
-                // A vehicle on the cart's spot: it waits, and after a while goes back where it left from.
                 if (Taken(position, rotation, kind))
                 {
                     var from = new Vector3((float)transit.FromX, (float)transit.FromY, (float)transit.FromZ);
@@ -740,12 +627,9 @@ namespace FoodTrucks
                 Log.Error($"Route: {kind} {vehicle.VehicleId} could not be placed at {position}.");
                 return false;
             }
-            // A parking space is legal; back on its own old spot, it is what it was.
             instance.parkingState = !atStop && neighbourhood == null ? (ParkingState)transit.FromParkingState : ParkingState.Legal;
             if (neighbourhood != null) instance.parkingNeighbourhood = neighbourhood;
             var placed = controller.transform.position;
-            // Parked near a bay stop but not in the bay: not arrived, so Core skips the stop until its opening ends and
-            // the next bay stop tries again, rather than driving there over and over.
             if (bayFallback) atStop = false;
             HireRunner.Arrived(vehicle, placed.x, placed.z, atStop, t);
             FoodTrucksSession.MarkChanged();
@@ -753,17 +637,11 @@ namespace FoodTrucks
             return true;
         }
 
-        // Arriving at a stop in the bay of the commissary where the vehicle rents its space: it is placed on the bay (its
-        // resolved points, then places along the paint) and counts as arrived only if it then stands in the bay by the
-        // restock test (Commissary.InBay). Null when the stop isn't such a stop (the ordinary arrival runs). One placement
-        // attempt per game minute; while none works it stays on its way, logged once. After 2 × RetryMinutes it parks as
-        // at any stop but as not arrived (Core skips the stop until its opening ends), so it is never off the map for good.
         private static bool? BayArrival(VehicleState vehicle, VehicleInstance instance, TransitState transit, long t, string kind, out bool fallback)
         {
             fallback = false;
             var state = FoodTrucksSession.CurrentState;
             var index = transit.ToStopIndex;
-            // A bay stop of the route, or the drive back to its bay after the last stop.
             var home = transit.ToSpotKey == HireSchedules.HomeSpotKey;
             if (state == null || (!home && (index == null || !Commissary.CrewBayStops(state, vehicle).Contains(index.Value)))) return null;
             var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.VehicleId);
@@ -773,8 +651,6 @@ namespace FoodTrucks
             var key = (vehicle.VehicleId, transit.ArrivesAt);
             if (bayTried.TryGetValue(vehicle.VehicleId, out var tried) && tried == t) return false;
             bayTried[vehicle.VehicleId] = t;
-            // What doesn't depend on the place: the bay resolved and its street side readable. Without it no place can pass
-            // InBay this minute, so none is tried (and the 20 minutes still run out to the street fallback).
             var ready = Commissary.BayReady(site, out var notReady);
             var places = ready ? Commissary.BayPlaces(site, kind == "truck" ? TruckHalfSize.z : CartHalfSize.z) : new List<(Vector3, Quaternion)>();
             bayCovered.TryGetValue(key, out var covered);
@@ -790,8 +666,6 @@ namespace FoodTrucks
                 if (late == 0) Log.Info($"Route: the bay of {site.Id} can't take {kind} {vehicle.VehicleId} yet ({notReady}); it waits on its way.");
                 return false;
             }
-            // At most PlacesPerAttempt places a minute, carrying on from where the last attempt stopped, but enough that the
-            // whole set is tried before the 20 minutes are up; a catch-up after a time skip tries all that are left at once.
             var minutesLeft = 2 * RetryMinutes - late;
             var left = places.Count - covered;
             var take = minutesLeft <= 1 ? left : Math.Max(PlacesPerAttempt, (int)Math.Ceiling(left / (double)minutesLeft));
@@ -822,7 +696,6 @@ namespace FoodTrucks
                 Log.Info($"Route: {kind} {vehicle.VehicleId} arrived in the bay of {site.Id}: {placed.transform.position}.");
                 return true;
             }
-            // Off the map again until a place in the bay frees up, as a vehicle on its way is.
             if (placedAny && VehicleHelper.GetVehicleController(instance) is { } shown) TakeOffMap(shown);
             if (late == 0) Log.Info($"Route: no free place in the bay of {site.Id} for {kind} {vehicle.VehicleId}; it waits on its way and tries each minute.");
             return false;
@@ -834,13 +707,8 @@ namespace FoodTrucks
         private const int PlacesPerAttempt = 8;
         private static readonly HashSet<(string, long)> bayGaveUp = new HashSet<(string, long)>();
 
-        // Puts the vehicle at a position: moves its controller if it has one, or spawns it as the game does
-        // when the private driver brings a car back. The position is written to the save either way.
-        // True while a bay arrival spawns a vehicle: the game's cleanup of blocking cars is skipped (CartParts.DestroyBlockingPrefix).
         internal static bool SpawnNoCleanup;
 
-        // `noCleanup` only for bay arrivals, which checked the place with BayTaken; street placements keep the game's cleanup.
-        // The physics scene is synced after every placement, so the next check sees the vehicle where it now stands.
         private static VehicleController? Place(VehicleInstance instance, Vector3 position, Quaternion rotation, bool noCleanup = false)
         {
             var placed = PlaceUnsynced(instance, position, rotation, noCleanup);
@@ -854,20 +722,15 @@ namespace FoodTrucks
             if (controller != null)
             {
                 VehicleHelper.TeleportVehicle(controller, position, rotation);
-                // TeleportVehicle moves the rigidbody; the transform follows on the next physics step, and the
-                // save and the hatch check read the transform now.
                 controller.transform.SetPositionAndRotation(position, rotation);
                 controller.SavePosition();
                 return controller;
             }
-            // CreateAndSpawnVehicle adds the instance to the end of the list; it goes back to its old place after.
             var list = SaveGameManager.Current.VehicleInstances;
             var index = list.IndexOf(instance);
             list.Remove(instance);
             try
             {
-                // The game's spawn deletes parked and traffic cars in the way (VehicleHelper.DestroyBlockingVehicles). A bay
-                // arrival placed only where BayTaken found nothing, so its spawn deletes nothing (CartParts.DestroyBlockingPrefix).
                 SpawnNoCleanup = noCleanup;
                 controller = VehicleHelper.CreateAndSpawnVehicle(instance, position, rotation);
             }
@@ -881,18 +744,12 @@ namespace FoodTrucks
             return controller;
         }
 
-        // The nearest free parking space to the stop, as the game's private driver finds one: lanes by distance,
-        // no disabled or delivery lanes, a random free slot in the lane that no player vehicle blocks.
-        // The same search for the test bridge's drive: `self`, the truck being parked, doesn't take a space from itself.
         internal static (Vector3, Quaternion, string?)? FreeParkingNear(Vector3 target, float maxMetres, VehicleInstance self) => FreeParking(target, maxMetres, self);
 
         private static (Vector3, Quaternion, string?)? FreeParking(Vector3 target, float maxMetres, VehicleInstance? self = null)
         {
-            // The lanes belong to the city scene: found once per city load.
             if (laneCache == null || laneCache.Any(l => l == null))
                 laneCache = Object.FindObjectsByType<ParkingLaneGenerator>(FindObjectsSortMode.None);
-            // Every lane whose middle is within reach (a lane runs up to about a block, so its middle can be
-            // that much further than its nearest slot), nearest first.
             var reach = maxMetres + LaneReachMetres;
             var lanes = laneCache
                 .Where(l => l != null && !l.isHandicapParking && !l.preventUseByPrivateDriver && !l.designatedDeliveryVanSpot && l.chanceOfFreeSpot <= 99)
@@ -900,17 +757,12 @@ namespace FoodTrucks
                 .Where(l => l.Distance <= reach * reach)
                 .OrderBy(l => l.Distance)
                 .Select(l => l.Lane);
-            // A space that reads road by the hatch either way round (a median) is kept only in case no lane offers better.
             (Vector3, Quaternion, string?)? refused = null;
-            // The driving lanes for every space tried, read once at any height (the traffic system's search scans the
-            // whole city); each probe keeps those within its own reach and height, as its own read would.
             TrafficLanes? traffic = null;
             foreach (var lane in lanes)
             {
                 if (!lane.TryGetRandomFreeSpotForPlayerVehicle(out var position, out var rotation, 1 << LayerHelper.VehiclesLayerIndex)) continue;
                 if (Vector3.Distance(position, target) > maxMetres) continue;
-                // The hatch has to face the pavement: a lane's rotation can point either way along the kerb. The
-                // game's slot test is sized for a car, so the truck's own hull is checked, the way it will stand.
                 traffic ??= TrafficLanes.Read(target, (float)LaneReach.CoverRadius(maxMetres, HatchCheck.LaneSearchMetres));
                 if (HatchRefused(position, rotation, traffic, out var hatch))
                 {
@@ -934,7 +786,6 @@ namespace FoodTrucks
         private static string CrewNames(VehicleState vehicle) =>
             string.Join(", ", (vehicle.Crew ?? new List<string>()).Select(HireCrew.Find).Where(e => e != null).Select(e => HireCrew.Name(e!)));
 
-        // Game minutes per real second, as the game's taxi times its trips.
         internal static double GameSpeed()
         {
             var speed = PlayerPrefSettings.GameSpeed;

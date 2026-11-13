@@ -52,7 +52,6 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(self.bridge.session, session)
         status = self.bridge.op(error.exception.op)['result']
         self.assertEqual((status['session'], status['status']), (session, 'failed'))
-        # Bad request bodies and endpoints also carry the current session.
         with self.assertRaises(BridgeError) as error:
             self.bridge._request('/call', {})
         self.assertEqual(error.exception.reply['session'], session)
@@ -119,7 +118,6 @@ class SessionTests(unittest.TestCase):
         self.assertNotEqual(report['session'], self.mock.session)
         self.assertEqual(report['events'], 0)
         self.assertNotEqual(self.mock.state['money'], 1)
-        # An explicit new run discards old context and accepts the new session.
         with tempfile.TemporaryDirectory() as folder:
             report, _ = runner.run({'name': 'fresh', 'checks': 'unit', 'steps': [{'note': 'fresh run'}]}, folder)
         self.assertTrue(report['ok'], report['summary'])
@@ -181,7 +179,6 @@ class SessionTests(unittest.TestCase):
             self.mock.unload()
             self.mock.start_bridge()
             return original_start(thread)
-        # Admission has created the pending op, but its worker is not enqueued yet.
         with patch.object(threading.Thread, 'start', new=stop_before_worker_start), patch.object(self.mock, 'call', wraps=self.mock.call) as calls:
             reply = self.mock.operation('debug', {'action': 'spawn truck'})
             for thread in workers: thread.join(1)

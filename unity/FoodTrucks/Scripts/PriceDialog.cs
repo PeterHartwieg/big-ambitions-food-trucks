@@ -13,10 +13,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // A cart's or truck's prices, for the Menu box of its BizMan page (BizManVehiclePage), the way the game's own
-    // inventory pricing shows a shop's (InventoryProductCellView): the price now, the market price where the vehicle
-    // stands, and the thresholds that colour a price yellow (above the market) and red (twice the item's default price).
-    // A price the player sets replaces the automatic one (pricing manager or default); an empty one goes back to it.
     internal static class PriceDialog
     {
         internal readonly struct Line
@@ -35,18 +31,14 @@ namespace FoodTrucks
 
             public string Item { get; }
             public string Name { get; }
-            // What the vehicle charges now, and whether that is the player's own price.
             public long PriceCents { get; }
             public bool Custom { get; }
-            // The price without the player's: pricing manager or default.
             public long AutomaticCents { get; }
             public long MarketCents { get; }
-            // As the game's product row: a price above YellowCents shows yellow, at RedCents or above red (0: no colour).
             public long YellowCents { get; }
             public long RedCents { get; }
         }
 
-        // The vehicle's menu as lines; empty when it has none (or isn't a food vehicle in this save).
         internal static List<Line> Lines(string vehicleId)
         {
             var lines = new List<Line>();
@@ -63,8 +55,6 @@ namespace FoodTrucks
                 var market = MarketCents(item, neighbourhood);
                 var game = ItemsGetter.GetByName(item, suppressError: true);
                 var defaultCents = game == null ? 0 : (long)Math.Round(game.DefaultMarketPrice * 100.0);
-                // InventoryProductCellView: yellow above the item's default price, or above the market where a rival's shop
-                // in the district sells it and is cheaper; red at twice the default price.
                 var yellow = RivalSells(item, neighbourhood) && market > 0 ? Math.Min(defaultCents, market) : defaultCents;
                 lines.Add(new Line(item, LocalizorManager.GetLocalization(item, null), CartPricing.PriceCents(vehicle, item, neighbourhood),
                     custom, automatic, market, yellow, defaultCents * 2));
@@ -72,8 +62,6 @@ namespace FoodTrucks
             return lines;
         }
 
-        // The game's market price (ItemHelper.GetLowestMarketPrice: the cheapest shop in the district selling it, else its
-        // own estimate). For the mod's own foods, which no shop sells, and outside a known district: the default price.
         private static long MarketCents(string item, string? neighbourhood)
         {
             if (string.IsNullOrEmpty(neighbourhood) || ModItems.Foods.Contains(item) ||
@@ -101,7 +89,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // The game's text prompt for one item's price. `done` runs once the prompt closes, answered or not.
         internal static void AskPrice(string vehicleId, string item, string name, Action? done = null)
         {
             var input = InstanceBehavior<UIs>.Instance?.textInputUi;
@@ -147,7 +134,6 @@ namespace FoodTrucks
                 CartSelling.Notify("foodtrucks:notification_price_automatic", ("item", name));
                 return;
             }
-            // The same parse and range the save accepts, so a typed price can never make the save unloadable.
             if (!PriceChoice.TryParseCents(text, out var cents))
             {
                 Log.Info($"Price: {item} on {vehicleId} not changed: '{text}' isn't a price.");
@@ -160,14 +146,12 @@ namespace FoodTrucks
             CartSelling.Notify("foodtrucks:notification_price_set", ("item", name), ("price", CartSelling.Money(cents)));
         }
 
-        // In the city, or with a private driver (the vehicle page lists both).
         private static VehicleInstance? Instance(string id)
         {
             var game = SaveGameManager.Current;
             return game?.VehicleInstances.FirstOrDefault(v => v.id == id) ?? game?.privateDriverVehicleInstances?.FirstOrDefault(v => v.id == id);
         }
 
-        // Where the vehicle stands: its live position, else the one saved for it.
         private static Vector3 PositionOf(VehicleInstance cart)
         {
             var controller = VehicleHelper.GetVehicleController(cart);

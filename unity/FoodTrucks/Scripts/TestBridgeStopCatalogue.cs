@@ -9,9 +9,6 @@ namespace FoodTrucks
 {
     internal static partial class TestBridgeCommands
     {
-        // Owner-only map export. Uses exactly the native route picker's physics,
-        // wheel footprint, hatch direction and pavement rules. Small batches keep
-        // the main thread responsive; this does not change vehicles or schedules.
         private static object StopCatalogue(JObject args)
         {
             if (!Legality.ParkingSceneReady()) throw new BridgeError("City parking lanes are not loaded.");
@@ -42,9 +39,6 @@ namespace FoodTrucks
                 ["next"] = Math.Min(entrances.Length, start + count), ["rows"] = rows };
         }
 
-        // A legal pavement sample can still put the cart's body through a
-        // mailbox. Exclude permanent obstructions using the actual prefab hull.
-        // Parked cars and people are transient: this is not a vacancy forecast.
         private static bool CatalogueObstructed(string kind, Vector3 ground, float heading)
         {
             var prefab = FoodTrucksMod.Bundle?.LoadAsset<GameObject>(kind == "truck" ? FoodTrucksMod.TruckPrefabPath : FoodTrucksMod.CartPrefabPath);

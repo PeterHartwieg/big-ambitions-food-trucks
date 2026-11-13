@@ -3,7 +3,6 @@ using System.Collections.Generic;
 
 namespace FoodTrucks.Core.CrewDriving
 {
-    /// <summary>A bounded convex projection used to certify that internal wheel shapes stay behind the visible body.</summary>
     public sealed class ProbeFootprint
     {
         private readonly ProbePoint[] hull;
@@ -47,7 +46,6 @@ namespace FoodTrucks.Core.CrewDriving
             return new ProbeFootprint(boundary.ToArray());
         }
 
-        /// <summary>Certifies every rotation of an axis-aligned local box in [-yaw, yaw], with an inward margin.</summary>
         public bool ContainsYawSweep(ProbePoint pivot, ProbePoint min, ProbePoint max, double yawRadians, double inset)
         {
             if (!Finite(pivot.X) || !Finite(pivot.Z) || !Finite(min.X) || !Finite(min.Z) ||
@@ -56,14 +54,12 @@ namespace FoodTrucks.Core.CrewDriving
             for (var i = 0; i < hull.Length; i++)
             {
                 var a = hull[i]; var b = hull[(i + 1) % hull.Length];
-                // Outward normal of a counterclockwise hull edge.
                 var nx = b.Z - a.Z; var nz = a.X - b.X;
                 var limit = nx * (a.X - pivot.X) + nz * (a.Z - pivot.Z) - inset * Math.Sqrt(nx * nx + nz * nz);
                 for (var corner = 0; corner < 4; corner++)
                 {
                     var x = (corner & 1) == 0 ? min.X : max.X;
                     var z = (corner & 2) == 0 ? min.Z : max.Z;
-                    // Unity yaw: (x cos + z sin, -x sin + z cos).
                     if (Maximum(nx * x + nz * z, nx * z - nz * x, yawRadians) > limit) return false;
                 }
             }

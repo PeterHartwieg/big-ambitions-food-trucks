@@ -17,7 +17,6 @@ public class MenuTests
         Assert.Equal(MenuProblem.None, build.Problem);
         Assert.Equal(new[] { "ba:itemname_hotdog", "ba:itemname_sodacan" }, build.Menu.Items);
         Assert.False(build.Menu.IsOnMenu("ba:itemname_water"));
-        // Commissary ordering uses ProductNames, independently of the menu.
         Assert.DoesNotContain("ba:itemname_water", ShippedData.Tables.ProductNames);
         Assert.False(build.Menu.IsOnMenu("ba:itemname_burger"));
     }
@@ -47,7 +46,6 @@ public class MenuTests
         var build = Menu.FromEquipment(ShippedData.Tables, "truck", new[] { "hotdoggrill", "cooler", "coffeemachine", "displaycase" });
 
         Assert.Equal(MenuProblem.None, build.Problem);
-        // Seven base-game items (the cooler sells soda only) and five from the Bakery mod, which only reach a vehicle when that mod is installed.
         Assert.Equal(12, build.Menu.Items.Count);
         Assert.Equal(7, build.Menu.Items.Count(i => i.StartsWith("ba:", StringComparison.Ordinal)));
     }

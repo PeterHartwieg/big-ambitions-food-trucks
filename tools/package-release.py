@@ -37,7 +37,6 @@ def package(source, manifest, output):
     if output.resolve().is_relative_to(source.resolve()):
         raise ValueError('Archive output must be outside the runtime package')
     output.parent.mkdir(parents=True, exist_ok=True)
-    # Write outside the source and replace only after success. No full-package copy or large memory buffer.
     with tempfile.TemporaryDirectory(prefix='FoodTrucks-zip-', dir=output.parent) as temporary:
         archive = Path(temporary) / 'candidate.zip'
         with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zipped:
@@ -54,11 +53,8 @@ def package(source, manifest, output):
                         outgoing.write(chunk)
                     if digest.hexdigest() != entries[name]:
                         raise ValueError(f'Package changed while archiving: {name}')
-        # Detect changed bytes or a changed file set during packaging before keeping an archive.
         if verify(source, manifest) != entries:
             raise ValueError('Package changed while archiving')
-        # Both paths are on the same filesystem. Link atomically without overwriting an existing candidate;
-        # temporary cleanup drops the staging name without a second archive copy or extra disk allocation.
         os.link(archive, output)
     return output
 

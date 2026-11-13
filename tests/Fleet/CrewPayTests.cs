@@ -31,7 +31,6 @@ public class CrewPayTests
         Assert.False(CrewPay.OnShift(truck, At(3, 15)));
         Assert.True(CrewPay.PlayerWindow(truck));
 
-        // Day 3 is a Wednesday.
         WeekPlan.SetShift(Demand.ShippedData.Rules.Fleet, truck, "e1", System.DayOfWeek.Wednesday, 14, 18);
         Assert.True(CrewPay.OnShift(truck, At(3, 15)));
         Assert.Equal(new[] { "e1" }, CrewPay.OnShiftCrew(truck, At(3, 15)));
@@ -88,7 +87,6 @@ public class CrewPayTests
     [Fact]
     public void AWindowSoldOutBeforeTheHourNeverEarnsIt()
     {
-        // The sales reach 12:59, sell out and close; the minute 13:00 is never reached with the window open.
         var truck = Truck(open: true);
         Assert.False(CrewPay.OpenHourDue(truck, At(3, 12, 59)));
         truck.IsOpen = false;
@@ -98,8 +96,6 @@ public class CrewPayTests
     [Fact]
     public void RouteHoursDoNotDecideAnOpenHourTheMarkerDoes()
     {
-        // A 12-14 route, and a hire added at 12:10 to a window the player opened: the route's count at 12:00 didn't
-        // include them, so the hour is theirs to earn.
         var state = new SaveState();
         var truck = Truck(open: true);
         Leg(truck, At(3, 12), At(3, 14));
@@ -107,7 +103,6 @@ public class CrewPayTests
 
         Assert.True(CrewPay.OpenHourDue(truck, At(3, 12, 10)));
         Assert.True(CrewPay.Unpaid(state, "late", hour));
-        // One the route did count at 12:00 isn't counted again.
         CrewPay.TryPay(state, "e1", hour);
         Assert.False(CrewPay.Unpaid(state, "e1", hour));
     }
@@ -115,7 +110,6 @@ public class CrewPayTests
     [Fact]
     public void AnHourTheGameCountedIsNotCountedAgain()
     {
-        // A shop worker counted by the game at 12:00, then unassigned and put on an open truck at 12:10.
         var state = new SaveState();
         var hour = CrewPay.HourOf(At(3, 12));
         CrewPay.GameCounted(state, "shop", hour);
@@ -123,7 +117,6 @@ public class CrewPayTests
         Assert.False(CrewPay.Unpaid(state, "shop", hour));
         Assert.False(CrewPay.TryPay(state, "shop", hour));
         Assert.True(CrewPay.TryPay(state, "shop", hour + 1));
-        // It never moves a marker back.
         CrewPay.GameCounted(state, "shop", hour);
         Assert.Equal(hour + 1, state.CrewPaidHour["shop"]);
     }
@@ -137,12 +130,10 @@ public class CrewPayTests
         Assert.Equal(new[] { "b", "c" }, alone.Crew);
         Assert.Equal(new[] { 70.0, 55.0 }, alone.Skills);
 
-        // The player at the window takes a place from the weakest.
         var withPlayer = CrewPay.Team(crew, 60.0, 2);
         Assert.Equal(new[] { "b" }, withPlayer.Crew);
         Assert.Equal(new[] { 70.0, 60.0 }, withPlayer.Skills);
 
-        // On a tie the crew member serves, as before.
         Assert.Equal(new[] { "a" }, CrewPay.Team(new[] { ("a", 50.0) }, 50.0, 1).Crew);
         Assert.Empty(CrewPay.Team(new[] { ("a", 40.0) }, 90.0, 1).Crew);
     }
@@ -152,15 +143,11 @@ public class CrewPayTests
     {
         var crew = new[] { ("a", 40.0), ("b", 70.0), ("c", 55.0) };
 
-        // Two crew better than the player: the player still serves, with the best of them; two at the hatch.
         var held = CrewPay.Team(crew, 30.0, 2, playerHeld: true);
         Assert.Equal(new[] { "b" }, held.Crew);
         Assert.Equal(new[] { 70.0, 30.0 }, held.Skills);
-        // Without the player the best two serve, as for any vehicle.
         Assert.Equal(new[] { "b", "c" }, CrewPay.Team(crew, null, 2, playerHeld: true).Crew);
-        // A staff of one leaves the player alone at the window.
         Assert.Empty(CrewPay.Team(crew, 30.0, 1, playerHeld: true).Crew);
-        // Ties among the crew go in their order.
         Assert.Equal(new[] { "a" }, CrewPay.Team(new[] { ("a", 50.0), ("b", 50.0) }, 10.0, 2, playerHeld: true).Crew);
     }
 
@@ -171,12 +158,10 @@ public class CrewPayTests
         var hour = CrewPay.HourOf(At(3, 15, 10));
 
         Assert.True(CrewPay.TryPay(state, "e1", hour));
-        // The route's count, a second window or a move to another vehicle in the same hour adds nothing.
         Assert.False(CrewPay.TryPay(state, "e1", hour));
         Assert.False(CrewPay.Unpaid(state, "e1", hour));
         Assert.True(CrewPay.TryPay(state, "e2", hour));
         Assert.True(CrewPay.TryPay(state, "e1", hour + 1));
-        // An earlier hour never comes round again.
         Assert.False(CrewPay.TryPay(state, "e1", hour));
     }
 
@@ -211,12 +196,10 @@ public class CrewPayTests
         CrewPay.Served(state, "e1", "t1", At(3, 13, 29));
         CrewPay.Served(state, "e2", "t1", At(3, 13, 30));
 
-        // Nothing is decided while the hour runs.
         Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 13)), Credit));
         var paid = CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 14)), Credit);
 
         Assert.Equal(new[] { ("e1", "t1", CrewPay.HourOf(At(3, 13))) }, paid);
-        // Decided once.
         Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 15)), Credit));
         Assert.Empty(state.CrewServedHour);
     }
@@ -224,8 +207,6 @@ public class CrewPayTests
     [Fact]
     public void ASkipAcrossAnHourAndARouteStartPaysBothInOrder()
     {
-        // A skip from 12:59 to 14:01 with a route starting at 14:00: at 13:00 the sales are caught up (nothing served
-        // yet), at 14:00 the sales reach 14:00 first, so 13:10's serving is decided before the route stamps 14:00.
         var state = new SaveState();
         Assert.Empty(CrewPay.CloseHours(state, CrewPay.HourOf(At(3, 13)), Credit));
         CrewPay.Served(state, "e1", "t1", At(3, 13, 10));
@@ -252,8 +233,6 @@ public class CrewPayTests
     [Fact]
     public void AnHourMarkedLongAgoStillCountsAsPaidUntilPruned()
     {
-        // With the decisions in order, an older marker never blocks a later hour, and a marker from earlier today
-        // still blocks its own hour while the sales replay sits in it.
         var state = new SaveState();
         var eleven = CrewPay.HourOf(At(3, 11));
         CrewPay.TryPay(state, "e1", eleven);
@@ -309,8 +288,6 @@ public class CrewPayTests
     [Fact]
     public void AnHourEarnedBeforeMovingToAShopIsStillPaidOnTheTruck()
     {
-        // Serves the truck at 12:10, assigned to a shop at 12:40 with a shift from 13:00. At 13:00 the hour that ended is
-        // decided before the game counts the shop's 13:00, so 12:00 is credited to the truck.
         var state = new SaveState();
         var noon = CrewPay.HourOf(At(3, 12));
         CrewPay.Served(state, "e1", "t1", At(3, 12, 10));
@@ -335,7 +312,6 @@ public class CrewPayTests
         Assert.True(CrewPay.Unpaid(state, "e1", noon));
         Assert.True(state.CrewServedHour.ContainsKey("e1"));
 
-        // Tried again at the next decision.
         Assert.Single(CrewPay.CloseHours(state, noon + 2, Credit));
         Assert.False(CrewPay.Unpaid(state, "e1", noon));
         Assert.Empty(state.CrewServedHour);
@@ -344,8 +320,6 @@ public class CrewPayTests
     [Fact]
     public void SettlingEverythingIncludesTheHourStillRunning()
     {
-        // The uninstall step at 12:20 after serving at 12:05: the running hour is paid now, and its marker stays so
-        // play carrying on doesn't pay it again.
         var state = new SaveState();
         var noon = CrewPay.HourOf(At(3, 12));
         CrewPay.Served(state, "e1", "t1", At(3, 12, 5));
@@ -368,8 +342,6 @@ public class CrewPayTests
         Assert.Empty(state.CrewServedHour);
     }
 
-    // A crew member who worked the 12:00 route hour on t1 (on today's counters) and served a window the player
-    // opened on t2 at 13:10, whose employment changes at 13:40.
     private static SaveState WorkedTodayAndServing(out long one)
     {
         var state = new SaveState();
@@ -388,7 +360,6 @@ public class CrewPayTests
     [InlineData("fired")]
     public void LeavingTheCrewPaysEverythingOwedOnceOnTheVehicles(string change)
     {
-        // Every change of employment settles the same way; the game's own payout afterwards finds nothing of the mod's.
         Assert.NotNull(change);
         var state = WorkedTodayAndServing(out var one);
 
@@ -400,7 +371,6 @@ public class CrewPayTests
 
         CrewPay.Settled(state, "e1", 3, owed);
 
-        // Paid exactly once: nothing owed again, the midnight split has no hours for it, the next decision pays nothing.
         Assert.Equal(0, CrewPay.Owed(state, "e1", 3).Hours);
         Assert.False(CrewLog.HasHours(state, 3, "e1"));
         Assert.Empty(CrewPay.CloseHours(state, one + 1, Credit));
@@ -438,9 +408,6 @@ public class CrewPayTests
     [Fact]
     public void ARetirementInAMidnightSkipPaysNoHourAfterMidnight()
     {
-        // A skip from 23:59 to 00:10 in one frame: the payroll closes 23:00 into the closing day, then the game's daily
-        // run retires the worker with the clock already at 00:10. The sales go only to 00:00, so no service is noted
-        // after midnight and nothing for 00:00 is owed.
         var state = new SaveState();
         CrewPay.Served(state, "e1", "t1", At(3, 23, 10));
         var midnight = At(4, 0);
@@ -448,7 +415,6 @@ public class CrewPayTests
 
         var limit = CrewPay.CatchUpLimit(inGameTick: true, midnight, At(4, 0, 10));
         Assert.Equal(midnight, limit);
-        // The sales catch up to `limit`: the last minute they reach is 23:59, never 00:00.
         for (var minute = At(3, 23, 59); minute < limit; minute++) CrewPay.Served(state, "e1", "t1", minute);
 
         var owed = CrewPay.Owed(state, "e1", 4);

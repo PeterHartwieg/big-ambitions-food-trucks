@@ -4,14 +4,8 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Demand
 {
-    // How fast the window serves. An order takes the longest service time of its items, so a burger
-    // slows the whole queue (design: Equipment and menu).
     public static class ServiceRate
     {
-        // Average minutes per order: each category's slowest item on the menu, weighted by that
-        // category's share of the customers (equal weights when the shares are empty). Drink-only
-        // customers count at the drinks' own time; add-on drinks ride with a slower main item and add
-        // nothing. 0 when nothing on the menu is a product.
         public static double OrderMinutes(DemandTables tables, IEnumerable<string> menu, IReadOnlyDictionary<string, double>? customerShares)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
@@ -39,7 +33,6 @@ namespace FoodTrucks.Core.Demand
             return weightTotal > 0 ? weighted / weightTotal : slowest.Values.Average();
         }
 
-        // Customers the window can serve per hour.
         public static double CustomersPerHour(int staff, double orderMinutes)
         {
             if (staff <= 0 || double.IsNaN(orderMinutes) || double.IsInfinity(orderMinutes) || orderMinutes <= 0) return 0;

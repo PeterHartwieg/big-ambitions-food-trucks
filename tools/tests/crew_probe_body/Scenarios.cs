@@ -37,7 +37,6 @@ internal static class Scenarios
                 mount.transform.localPosition = new Vector3(i % 2 == 0 ? -.87f : .87f, .7f, i < 2 ? -1.7f : 1.7f);
                 var wc = mount.Add<WheelController>(); Wheels[i] = wc; wc.ParentRigidbody = Body; wc.HitCollider = Road;
                 Car.vehicleController.powertrain.wheels.Add(new Entry { wheelUAPI = wc });
-                // Native references are authoritative; support sibling shells as well as child shells.
                 var shell = Child(go.transform, "shell");
                 wc.wheel.colliderGO = shell; wc.wheel.colliderTransform = shell.transform;
                 wc.wheel.topMeshCollider = shell.Add<MeshCollider>();
@@ -100,14 +99,12 @@ internal static class Scenarios
                 SetPose(w, w.spring.maxLength * n / 20, -5 + n * .5f);
                 w.wheel.bottomMeshCollider.enabled = n % 2 == 0; Good(c);
             }
-            // A controller's own child shell is equally valid.
             r = new Rig();
             foreach (var w in r.Wheels) { w.wheel.colliderTransform.parent = w.transform; SetPose(w, .2f, 0); }
             Good(r.Capture());
             r = new Rig(); r.Car.transform.localPosition = new Vector3(10, 0, 12); r.Car.transform.localRotation = Quaternion.Euler(0, 20, 0);
             foreach (var w in r.Wheels) { SetPose(w, .2f, 0); w.wheel.colliderTransform.localRotation = Quaternion.identity; }
             c = r.Capture(); Good(c);
-            // Independent pitched/rolled corner projection must stay inside both operating allowances.
             const float rearZ = -1.7f;
             var planar = c.PlanarTiltPadding(rearZ); var vertical = c.VerticalTiltPadding(rearZ);
             for (var corner=0;corner<8;corner++) for (var degrees=-2.86f;degrees<=2.86f;degrees+=.13f)
@@ -176,7 +173,7 @@ internal static class Scenarios
         var normal = new Rig(); var extra = Child(normal.Car.transform, "unknown solid").Add<BoxCollider>(); extra.enabled = false; extra.size = new Vector3(3, 4, 7);
         var body = normal.Capture(); Check(!body.IsWheel(extra), "unknown incorrectly gets wheel exception");
         Check(body.Min.z <= -3.5f && body.Max.z >= 3.5f, "disabled unknown missing from full envelope");
-        extra.enabled = true; Good(body); // traffic parent remains responsible for its visibility.
+        extra.enabled = true; Good(body);
     }
     private static void Geometry()
     {
@@ -196,13 +193,11 @@ internal static class Scenarios
         Refuse(r => r.Wheels[0].transform.localPosition.x = 1.3f, true);
         Refuse(r => r.Car.transform.localScale.x = 2, true);
         Refuse(r => r.Car.vehicleCollider!.transform.localScale.x = float.NaN, true);
-        // Body AABB admits this, but its diamond's actual convex projection excludes the wheels.
         Refuse(r => {
             var mesh = ((MeshCollider)r.Car.vehicleCollider!).sharedMesh!;
             mesh.Data = new[] { new Vector3(-1.25f, .3f, 0), new Vector3(0, .3f, -3), new Vector3(1.25f, .3f, 0), new Vector3(0, .3f, 3),
                 new Vector3(-1.25f, 3.1f, 0), new Vector3(0, 3.1f, -3), new Vector3(1.25f, 3.1f, 0), new Vector3(0, 3.1f, 3) };
         }, true, true);
-        // A separate body must not bridge gaps through a joined convex hull.
         Refuse(r => {
             var a = (BoxCollider)r.Car.vehicleCollider!; a.center.x = -1.1f; a.size.x = .3f;
             var b = Child(r.Car.transform, "additional").Add<BoxCollider>(); b.center = new Vector3(1.1f, 1.7f, 0); b.size = new Vector3(.3f, 2.8f, 6); r.Car.additionalCollider = b;
@@ -212,7 +207,6 @@ internal static class Scenarios
         optional.enabled = false; Check(cert.Validate() != null, "optional body disabled");
     }
 
-    // Project onto a plane only when outside; test points violate at most this plane.
     private static Vector3 Clip(Vector3 p, Vector3 normal, float limit)
     {
         var excess = p.x * normal.x + p.y * normal.y + p.z * normal.z - limit;
@@ -220,13 +214,10 @@ internal static class Scenarios
     }
     private static void Cooked()
     {
-        // Source hull and bounds remain wide while the independently controlled cooked hull shrinks.
         Refuse(r => ((MeshCollider)r.Car.vehicleCollider!).CookedClosestPoint = p =>
             new Vector3(Math.Clamp(p.x, -.95f, .95f), p.y, p.z), true, true);
-        // The unpadded yaw reach fits this box; the mandatory tilt padding does not.
         Refuse(r => ((MeshCollider)r.Car.vehicleCollider!).sharedMesh =
             BoxMesh(new Vector3(0, 1.7f, 0), new Vector3(2.1f, 2.8f, 6)), true, true);
-        // The wide roof keeps the raw projection wide; the actual low band excludes wheels.
         Refuse(r => {
             var c = (MeshCollider)r.Car.vehicleCollider!;
             for (var i = 0; i < c.sharedMesh!.Data.Length; i++)
@@ -240,8 +231,6 @@ internal static class Scenarios
         Refuse(r => r.Car.gameObject.activeSelf = false, true, true);
         Refuse(r => { var b = (BoxCollider)r.Car.vehicleCollider!; b.size.y = .14f; }, true);
 
-        // Clip just the body's outer corners: a whole-truck bounding box would fail, but
-        // each separate wheel prism fits in this convex octagonal extrusion.
         var rig = new Rig(true); var mc = (MeshCollider)rig.Car.vehicleCollider!;
         var polygon = new[] { new Vector3(-1.25f, 0, -2.05f), new Vector3(-.3f, 0, -3), new Vector3(.3f, 0, -3),
             new Vector3(1.25f, 0, -2.05f), new Vector3(1.25f, 0, 2.05f), new Vector3(.3f, 0, 3),
@@ -261,7 +250,6 @@ internal static class Scenarios
         Check(Writes.Count == writes, "cooked certification wrote native state");
         Check(c.Min.x == -1.25f && c.Max.x == 1.25f && c.Min.y < .01f, "physical envelope was narrowed or raised");
 
-        // A rolled default box's projection passes, but its low section does not.
         rig = new Rig(); var go = Child(rig.Car.transform, "rotated body");
         go.transform.localRotation = Quaternion.Euler(0, 0, 20); go.transform.localPosition.y = 1.7f;
         var box = go.Add<BoxCollider>(); box.size = new Vector3(2.5f, 2.8f, 6);
@@ -298,7 +286,6 @@ internal static class Scenarios
         t = Trigger(); t.transform.localScale.x = float.PositiveInfinity; Check(!c.CoversTrigger(t), "nonfinite trigger scale accepted");
         t = Trigger(); t.size.y = float.PositiveInfinity; Check(!c.CoversTrigger(t), "unreadable trigger accepted");
 
-        // All prism corners, rather than root-local height alone, determine trigger coverage.
         t = Trigger(-1, 1);
         rig.Car.transform.localPosition = new Vector3(500, 0, 500);
         rig.Car.transform.localRotation = Quaternion.Euler(2, 40, 1);
@@ -306,7 +293,6 @@ internal static class Scenarios
         Good(c); Check(c.CoversTrigger(t), "valid tilted root and tall trigger refused");
         foreach (var w in rig.Wheels) Check(c.ValidateWheelStep(w) == null, "tilted root cheap Step refused");
         Check(!c.CoversTrigger(Trigger(.34f, .46f)), "tilted prism corners escaped height check");
-        // Capture itself also works at the translated/tilted pose with native world-space shells.
         Good(rig.Capture());
         rig.Car.transform.localRotation = Quaternion.Euler(3, 40, 0);
         Check(c.Validate() != null && !c.CoversTrigger(t), "above-limit root tilt accepted");

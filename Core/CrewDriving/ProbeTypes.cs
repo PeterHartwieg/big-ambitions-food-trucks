@@ -17,14 +17,12 @@ namespace FoodTrucks.Core.CrewDriving
         public ProbePoint(double x, double z) { X = x; Z = z; }
     }
 
-    /// <summary>Measured metres, degrees, m/s. Front/rear are bumper distances FROM THE REAR AXLE.</summary>
     public sealed class ProbeGeometry
     {
         public double Wheelbase { get; }
         public double Front { get; }
         public double Rear { get; }
         public double Width { get; }
-        /// <summary>Minimum usable road-wheel lock across the entire configured speed range.</summary>
         public double MaxSteerDegrees { get; }
         public double MaxSpeedMs { get; }
         public double MaxCurvature => Math.Tan(MaxSteerDegrees * Math.PI / 180) / Wheelbase;
@@ -40,7 +38,6 @@ namespace FoodTrucks.Core.CrewDriving
         }
     }
 
-    /// <summary>One physics observation. Heading is atan2(forwardX,forwardZ) radians; speed is signed forward m/s.</summary>
     public readonly struct ProbeObservation
     {
         public double RearX { get; }
@@ -54,9 +51,7 @@ namespace FoodTrucks.Core.CrewDriving
         public bool FuelEnabled { get; }
         public double FuelLitres { get; }
         public bool Wrecked { get; }
-        /// <summary>Rear-axle path coordinate (metres) of the plane the vehicle FRONT must not cross; null = green.</summary>
         public double? StopBoundaryAlong { get; }
-        /// <summary>Free metres from the actual foremost body to nearest obstacle; negative = penetration.</summary>
         public double? GapAhead { get; }
 
         public ProbeObservation(double rearX, double rearZ, double heading, double speedMs, double dt,
@@ -70,7 +65,6 @@ namespace FoodTrucks.Core.CrewDriving
         }
     }
 
-    /// <summary>Forward-only controls. A stale command MUST NOT be applied, including its stop pedals.</summary>
     public readonly struct ProbeCommand
     {
         public ProbeState State { get; }
@@ -84,8 +78,6 @@ namespace FoodTrucks.Core.CrewDriving
         public double DesiredSpeedMs { get; }
         public double RearAlong { get; }
         public double StopBoundaryAlong { get; }
-        /// <summary>Conservative distant route clearance; actual front-corner plane clearance near/beyond the boundary.
-        /// Negative always measures a physical crossing, independent of clamped rear progress.</summary>
         public double FrontBoundaryDistance { get; }
         public double BoundaryViolationMetres => Math.Max(0, -FrontBoundaryDistance);
 

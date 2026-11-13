@@ -11,10 +11,6 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks.BuildEditor
 {
-    // The food truck: the SDK's example car with the final truck model from art/truck (art/README.md,
-    // "Food truck"). tools/build-mod.sh copies the FBX and textures into Vehicles/TruckArt first.
-    // Driving: the game's own delivery truck (DeliveryTruck in its 1.0 prefabs bundle), a touch slower. See the
-    // Driving block below and art/README.md, "Driving".
     internal static class TruckAssets
     {
         private const string ExampleVehicleType = "Assets/Mods/Example-Vehicle/TurboHonza.asset";
@@ -43,18 +39,13 @@ namespace FoodTrucks.BuildEditor
         // lengthen. The tyres' load rating (7,000 N) stays well above the load.
         private const float Mass = 1600f;
         private const float GameMass = 1400f;
-        private const float SpringMaxForce = 5000f * Mass / GameMass; // N, 5,714; NWH spring maxForce, linear curve
-        private const float DamperRate = 5000f * Mass / GameMass; // NWH damper bumpRate and reboundRate
-        private const float EnginePower = 40f; // kW, NWH engine maxPower
-        private const float FinalGearRatio = 13.5f; // top gear 2.108: 10,000 rpm at 50 km/h on 0.38 m wheels
-        private const int TopSpeed = 50; // km/h
-        private const float BrakeTorque = 2500f; // N m on each wheel, the delivery truck's (grip-limited, see Mass)
-        // Steering (Peter, 13 October 2026, after driving 1,600 kg: "the curves you can take are too narrow"). The
-        // example car's 35 degrees on our 3.60 m wheelbase turned the truck in about 6.3 m (wheelbase / sin of the
-        // angle, to the outer front wheel), car-like. 28 degrees gives about 7.7 m, a step van's 15 to 16 m kerb-to-kerb
-        // circle.
+        private const float SpringMaxForce = 5000f * Mass / GameMass;
+        private const float DamperRate = 5000f * Mass / GameMass;
+        private const float EnginePower = 40f;
+        private const float FinalGearRatio = 13.5f;
+        private const int TopSpeed = 50;
+        private const float BrakeTorque = 2500f;
         private const float MaxSteerAngle = 28f;
-        // The delivery truck's power curve: power fraction over rpm / rev limiter, with its tangents.
         private static readonly Keyframe[] PowerCurve =
         {
             new Keyframe(0f, 0f, 0f, 0f),
@@ -73,12 +64,6 @@ namespace FoodTrucks.BuildEditor
         private static readonly Vector3 RegisterPosition = new Vector3(0.90f, 1.80f, -0.82f);
         private const float RegisterScale = 2.2f;
 
-        // The cooking line (Peter, 10 October 2026): four spots on the back counter, opposite the hatch, numbered
-        // from the cab end and filled from the middle out, so one or two pieces stand right behind the player.
-        // Full size, 0.45 m apart along the truck and centred on the window (z -1.10); a 0.40 x 0.36 m piece
-        // covers x -0.44 to -0.80, between the counter's front edge (-0.40) and the backsplash (-0.985), and
-        // the tallest (0.65 m) stays under the hood (2.64). Checked for all sixteen models with
-        // art/truck/review_interior.py (art/README.md, "Equipment spots").
         private const float LineX = -0.62f;
         private const float CounterTop = 1.75f;
         private static readonly (string Name, Vector3 Position)[] EquipmentSpots =
@@ -87,7 +72,6 @@ namespace FoodTrucks.BuildEditor
             ("EquipmentLine3", new Vector3(LineX, CounterTop, -1.325f)),
             ("EquipmentLine1", new Vector3(LineX, CounterTop, -0.425f)),
             ("EquipmentLine4", new Vector3(LineX, CounterTop, -1.775f)),
-            // Shallow customer-facing fridge at the rear of the serving counter, clear of crew and register.
             ("EquipmentCooler", new Vector3(0.875f, 1.80f, -1.80f)),
         };
 
@@ -134,7 +118,6 @@ namespace FoodTrucks.BuildEditor
                 obstacle.center = new Vector3(0f, 1.55f, -0.25f);
                 obstacle.size = new Vector3(2.20f, 3.10f, 5.80f);
 
-                // The hatch opens when the truck opens for business (rotated in game, see TruckHatch).
                 var hatch = new GameObject("Truck_Hatch");
                 hatch.layer = body.layer;
                 hatch.transform.SetParent(body.transform.parent, false);
@@ -142,12 +125,9 @@ namespace FoodTrucks.BuildEditor
                 hatch.AddComponent<MeshFilter>().sharedMesh = meshes["Truck_Hatch"];
                 var hatchRenderer = hatch.AddComponent<MeshRenderer>();
                 hatchRenderer.sharedMaterial = material;
-                // The game paints, dirties and outlines the renderers in these lists; the hatch is body work.
                 Append(root, "renderers", hatchRenderer);
                 Append(root, "bodyMeshes", hatchRenderer);
 
-                // The four equipment spots (VehicleDisplays) on the back counter, each turned so the piece's front
-                // (+Z) faces the cook and the hatch (+X). The hatch side keeps only its serving counter (in the FBX).
                 foreach (var (name, position) in EquipmentSpots)
                 {
                     var spot = new GameObject(name).transform;
@@ -191,7 +171,6 @@ namespace FoodTrucks.BuildEditor
                 Set(root, "powertrain.transmission.finalGearRatio", FinalGearRatio);
                 Set(root, "brakes.maxTorque", BrakeTorque);
                 Set(root, "steering.maximumSteerAngle", MaxSteerAngle);
-                // Off on every game vehicle too; the game's SetMaxSpeed console command writes this value.
                 Set(root, "module.speedLimit", TopSpeed);
                 Set(root, "module.capacity", type.maxFuel);
                 Set(root, "module.amount", type.maxFuel);
@@ -206,15 +185,8 @@ namespace FoodTrucks.BuildEditor
                 var spoiler = root.transform.Find("Spoiler");
                 if (spoiler != null) Object.DestroyImmediate(spoiler.gameObject);
 
-                // The register in front of the server at (0.59, 0.94, -1.10), offset 0.28 m towards the cab to
-                // leave the middle open (Peter, 13 October 2026). Uniform scale 2.2 keeps its proportions:
-                // 0.293 x 0.330 m footprint, x 0.750 to 1.043, z -0.985 to -0.655, top y 2.190. The drawer
-                // rests at y 1.80 with 84% of its depth on the 0.24 m counter and about 2 cm overhang each side;
-                // clear of the crew (x <= 0.74), frame and hatch. Front (+Z), screen and drawer face inside (-X).
-                // Body work for the game's lists, like the hatch.
                 var register = PropAssets.AddRegister(body.transform.parent, RegisterPosition, Quaternion.Euler(0f, -90f, 0f), body.layer, RegisterScale);
                 Append(root, "renderers", register);
-                // No street dirt on the truck: its renderers leave the decal layer, as the game's vehicles do.
                 SurfaceLook.NoStreetDecals(root);
 
                 PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
@@ -229,9 +201,6 @@ namespace FoodTrucks.BuildEditor
 
         private const int VehicleMapSize = 1024;
 
-        // Read/Write meshes for the game's damage deformation; the normal map as a normal map. The mask (sRGB, as
-        // SurfaceLook.MaskTexture explains) and the normal map are capped at 1,024 px like the game's vehicle maps
-        // (Van_N, T_VanBig_M/_N); game_look.py writes them at the 2,048 px source size, which kept the bundle at 25 MB.
         private static void ConfigureImports(string artFolder)
         {
             var model = (ModelImporter)AssetImporter.GetAtPath(artFolder + "/FoodTruck_Model.fbx");
@@ -246,7 +215,6 @@ namespace FoodTrucks.BuildEditor
             SurfaceLook.MaskTexture(artFolder + "/T_FoodTruck_M.png", VehicleMapSize);
         }
 
-        // Meshes by object name in the FBX (the names are fixed by art/truck/spec.json).
         private static Dictionary<string, Mesh> Meshes(string fbxPath)
         {
             var model = AssetDatabase.LoadAssetAtPath<GameObject>(fbxPath);
@@ -267,8 +235,6 @@ namespace FoodTrucks.BuildEditor
             var path = artFolder + "/M_FoodTruck.mat";
             var exampleFolder = Path.GetDirectoryName(ExampleMaterial)!.Replace('\\', '/');
             var text = File.ReadAllText(Path.Combine(ProjectRoot, ExampleMaterial));
-            // The base colour and mask are game_look.py's (T_FoodTruck_BC, _M: graded colour with baked grime,
-            // occlusion and wear); the normal map is its baked rounded edges. art/README.md, "Surface look".
             foreach (var (suffix, ours) in new[] { ("D", "BC"), ("E", "E"), ("EM_1", "EM_1"), ("EM_2", "EM_2"), ("MaskMap", "M"), ("N", "N") })
             {
                 var from = AssetDatabase.AssetPathToGUID($"{exampleFolder}/T_HonzaCar_{suffix}.png");
@@ -290,7 +256,6 @@ namespace FoodTrucks.BuildEditor
             // doesn't fill and rendered almost black in shade whenever the game drew its decal buffers (13 and 14 October).
             foreach (var (from, to) in new[]
                      {
-                         // Identity entries: the paint mask needs the example's _Min 0 and _Max 0.5 (fails if the SDK changes them).
                          ("    - _Min: 0\n", "    - _Min: 0\n"), ("    - _Max: 0.5\n", "    - _Max: 0.5\n"),
                          ("    - Color_3d0f0cdbe6b74be28a1a5be5bab71dea: {r: 0.4431373, g: 0, b: 0, a: 0}\n",
                           "    - Color_3d0f0cdbe6b74be28a1a5be5bab71dea: {r: 0.7294118, g: 0.63529414, b: 0.46666667, a: 1}\n"),
@@ -312,7 +277,6 @@ namespace FoodTrucks.BuildEditor
         private static GameObject Find(GameObject root, string path) =>
             root.transform.Find(path)?.gameObject ?? throw new InvalidOperationException($"Example prefab has no {path}.");
 
-        // Nested prefab instances (Driverside, Spotlights, ...) sit anywhere below the root.
         private static void Place(GameObject root, string name, Vector3 position)
         {
             var target = root.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == name)

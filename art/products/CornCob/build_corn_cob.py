@@ -35,8 +35,6 @@ def build(stage=3):
         if count == 4:
             return [(x,y),(x+a,y),(x+a,y+b),(x,y+b)]
         return [(x,y),(x+a,y),(x+a*.5,y+b)]
-    # Seamless shell: each kernel is four facets rising from a rectangular cell.
-    # Shared groove vertices make a closed manifold rather than loose kernel cubes.
     xs = [-.047 + .158*j/ROWS for j in range(ROWS+1)]
     radii = [.019, .022, .024, .0245, .0245, .0245,
              .0245, .024, .0235, .0225, .020, .014]
@@ -60,7 +58,6 @@ def build(stage=3):
         tip = v((xs[j]+(-.001 if j==0 else .003),0,ZC))
         for k in range(N):
             face([rings[j][k],rings[j][(k+1)%N],tip],small_uv(3))
-    # Paper sleeve: thin closed wall, open mouth around the food, folded bottom rim.
     sleeve_rings=[]
     for x,r in [(-.075,.016),(-.038,.0254),(-.038,.0245),(-.075,.0151)]:
         sleeve_rings.append([v((x,r*math.cos(2*math.pi*(k-.5)/N),
@@ -80,8 +77,6 @@ def build(stage=3):
     for j in (0,2):
         for k in range(1,5):
             face([stick_rings[j][0],stick_rings[j][k],stick_rings[j][k+1]],small_uv(3))
-    # Put the lowest broad sleeve facet on the shelf, directly under the footprint.
-    # The cob's bottom groove also forms a flat facet covering (0,0,0).
     verts=[(x,y,max(0,z-.003)) for x,y,z in verts]
     for index in sleeve_rings[2]:
         x,y,z=verts[index]
@@ -97,7 +92,6 @@ def build(stage=3):
     bm=bmesh.new(); bm.from_mesh(me)
     bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
     bm.to_mesh(me); bm.free()
-    # One baked colour atlas, no procedural nodes or extra material slots.
     pix=np.zeros((256,256,4),dtype=np.float32)
     pix[:]=(.80,.57,.16,1)
     for y in range(256):
@@ -113,13 +107,11 @@ def build(stage=3):
                     col=[(1.0,.73,.09,1),(1.0,.68,.045,1),(.98,.76,.13,1)][(jj+kk*2)%3]
                     if min(fu,1-fu)<.055 or min(ft,1-ft)<.055:
                         col=(.80,.45,.035,1)
-                    # Three diagonal sear bands across the customer-facing half.
                     front = 2<=kk<=6
                     band=jj+fu+.24*(kk+ft-4)
                     if front and any(abs(band-p)<.18 for p in (3.2,6.3,8.7)):
                         col=(.20,.095,.025,1)
                 pix[y,x]=col
-    # Flat per-part rectangles with generous gutters in the lower atlas strip.
     for idx,coords in enumerate(face_uv):
         if idx<ROWS*N*4: continue
         xs_uv=[p[0] for p in coords]; ys_uv=[p[1] for p in coords]
@@ -143,7 +135,6 @@ def build(stage=3):
     mat.node_tree.links.new(tex.outputs['Color'],bs.inputs['Base Color'])
     mat.node_tree.links.new(bs.outputs['BSDF'],out.inputs['Surface'])
     me.materials.append(mat)
-    # A 20-triangle convex hull built from twelve bounding support vertices.
     cb=bmesh.new()
     mn=np.min(np.array(verts),axis=0); mx=np.max(np.array(verts),axis=0)
     for x,ry,low,high in [(mn[0]-.001,.005,.018,.028),(-.055,.029,0,.053),(mx[0]+.001,.029,0,.053)]:

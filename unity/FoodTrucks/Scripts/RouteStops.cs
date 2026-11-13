@@ -11,24 +11,15 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Adding and changing a route's stops, shared by the BizMan vehicle page ("Add the spot where it stands", its stop
-    // rows) and the map pick. Core's RouteEditor decides; this picks default times, writes the save and tells the crew.
     internal static class RouteStops
     {
-        // Opening hours are picked in half hours.
         internal const int Step = 30;
 
         internal static int LatestClose => DemandData.Rules?.Fleet.LatestCloseMinute ?? 27 * 60;
 
-        // A new stop's default hours: from 11:00 (or the first free time after it, else the first free time of the day)
-        // for up to three hours, within the gaps the route's other stops leave. The stop goes in at once and its times are
-        // changed with the dropdowns on its row of the vehicle page (Peter, 15 October 2026: the list pickers that asked
-        // for the times took the player out of the page).
         internal const int DefaultOpen = 11 * 60;
         internal const int DefaultLength = 3 * 60;
 
-        // Adds a stop to `day` (the weekday chosen on the Week plan tab) at the default hours. `done` runs after either
-        // outcome, so the caller goes back to the page.
         public static void AddWithDefaultTimes(string vehicleId, DayOfWeek day, Vector3 position, float heading, Action? done = null)
         {
             try
@@ -87,7 +78,6 @@ namespace FoodTrucks
             return true;
         }
 
-        // Removes a stop; the crew closes a window open there first.
         public static void Remove(VehicleState vehicle, int index)
         {
             if (vehicle.Schedule == null || index < 0 || index >= vehicle.Schedule.Stops.Count || !FoodTrucksSession.CanWrite) return;
@@ -97,9 +87,6 @@ namespace FoodTrucks
             Log.Info($"Route: stop {index + 1} of the week removed from {vehicle.VehicleType} {vehicle.VehicleId}.");
         }
 
-        // The route changed: each stop opens no earlier than the drive from the one before allows (Core
-        // RouteEditor.FitTravel, said in one notice), today is planned again, the crew's weekly hours follow, the save is marked.
-        // `shifts`: the edit changed shifts too (a paste, a cleared day), so yesterday's late plan is planned again as well.
         public static void Changed(VehicleState vehicle, bool shifts = false)
         {
             FitTravel(vehicle);
@@ -109,9 +96,6 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
         }
 
-        // A route saved before the travel rule, or whose drives grew with the game speed, is fitted too, without an edit:
-        // when its page opens and as the crew plans (HireRoutes). Only a route that changes is written, said in the same
-        // notice; one that can't be fitted is only logged, once per vehicle and problem stop.
         internal static void FitIfNeeded(VehicleState vehicle, string why)
         {
             if (vehicle?.Schedule == null || vehicle.Schedule.Stops.Count < 2 || !FoodTrucksSession.CanWrite) return;
@@ -124,7 +108,6 @@ namespace FoodTrucks
 
         private static readonly HashSet<(string, int)> stuckShown = new HashSet<(string, int)>();
 
-        // True when stops moved.
         private static bool FitTravel(VehicleState vehicle, bool quiet = false)
         {
             var rules = DemandData.Rules;
@@ -153,15 +136,12 @@ namespace FoodTrucks
             return true;
         }
 
-        // A stop's number on its weekday's route, from 1.
         internal static int Number(HireSchedule? schedule, int index)
         {
             var stop = schedule?.Stops?.ElementAtOrDefault(index);
             return stop == null ? index + 1 : WeekPlan.StopsOf(schedule, stop.Day).IndexOf(index) + 1;
         }
 
-        // A stop's name for lists: the premium spot it is at, else the nearest building's address and the
-        // neighbourhood, else its pitch key.
         public static string Label(ScheduleStop stop)
         {
             var position = new Vector3((float)stop.X, (float)stop.Y, (float)stop.Z);
@@ -180,7 +160,6 @@ namespace FoodTrucks
             return stop.SpotKey;
         }
 
-        // The formatted address of the building whose entrance is nearest, within 60 m.
         public static string? NearestAddress(Vector3 position)
         {
             CityBuildingController? best = null;
@@ -198,7 +177,6 @@ namespace FoodTrucks
             return best?.building?.Address?.ToFormattedString();
         }
 
-        // What the BizMan page says about a route that fails today's rules (HireRunner.RouteProblem).
         internal static string ProblemKey(ScheduleProblem problem) =>
             problem == ScheduleProblem.Overlap ? "foodtrucks:bizman_page_route_invalid_overlap"
             : problem == ScheduleProblem.Unreachable ? "foodtrucks:bizman_page_route_invalid_travel"

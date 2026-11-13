@@ -20,7 +20,6 @@ class CrewDriveAdapterTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory(prefix='ft-crew-drive-adapter-')
         cls.addClassCleanup(directory.cleanup)
         folder = Path(directory.name)
-        # Isolate Core's build outputs from the concurrently compiling parent.
         shutil.copytree(ROOT / 'Core', folder / 'Core',
                         ignore=shutil.ignore_patterns('bin', 'obj'))
         major = subprocess.check_output(['dotnet', '--version'], text=True).split('.')[0]

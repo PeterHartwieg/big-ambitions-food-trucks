@@ -22,14 +22,8 @@ using Extensions;
 
 namespace FoodTrucks
 {
-    // Vehicle warnings as the game's own to-dos in the phone (plan, "Street food page and vehicle warnings"). Core decides
-    // the list (VehicleWarnings); once a game minute it is reconciled with the to-dos: missing ones made with the game's
-    // CreateTodoTask, cleared ones completed as the game completes its own. Each warning kind has its own TodoTaskType,
-    // TypeBase + the kind's number, with the vehicle id in itemInstanceId and the food in itemName. Patches give them
-    // text, destination and click, keep the game's completion check off them, and keep them out of every save file.
     internal sealed class VehicleTodos : MonoBehaviour
     {
-        // Our to-do types are 9201 and up (VehicleWarningKind 1..). The game's own end at 20.
         internal const int TypeBase = 9200;
         private const int TypeLast = 9299;
 
@@ -39,8 +33,6 @@ namespace FoodTrucks
         private static long lastOverviewRefresh = long.MinValue / 2;
         private long lastMinute = long.MinValue;
 
-        // Called once after patching. Without the text, completion check, click and save patches our to-dos would break
-        // the game's to-do list or reach a save file, so none are made then.
         internal static void CheckReady()
         {
             var tasksUi = typeof(TasksUI);
@@ -77,24 +69,17 @@ namespace FoodTrucks
             return new VehicleWarning(kind, VehicleWarnings.IsFleetKind(kind) ? null : task.itemInstanceId, task.itemName);
         }
 
-        // ---- What the overview and the vehicle page show ----
-
-        // The to-dos the phone shows for this vehicle now.
         internal static int CountFor(string vehicleId) =>
             Ours().Count(t => !VehicleWarnings.IsFleetKind(KindOf(t)) && string.Equals(t.itemInstanceId, vehicleId, StringComparison.Ordinal));
 
-        // The fleet's own to-dos (the vendor licence): 0 or 1.
         internal static int FleetCount() => Ours().Count(t => VehicleWarnings.IsFleetKind(KindOf(t)));
 
-        // For the test bridge: each to-do of this vehicle (null: the fleet's) as its kind's name and food.
         internal static List<(string Kind, string? Item, string Text)> ListFor(string? vehicleId) =>
             Ours().Where(t => vehicleId == null
                     ? VehicleWarnings.IsFleetKind(KindOf(t))
                     : !VehicleWarnings.IsFleetKind(KindOf(t)) && string.Equals(t.itemInstanceId, vehicleId, StringComparison.Ordinal))
                 .Select(t => (Name(KindOf(t)), t.itemName, TextOf(t))).ToList();
 
-        // What a route to-do says is wrong (Core RouteCause): the stops' times, which stop can't be reached, or which days
-        // and hours have nobody on shift. Worked out when the text shows, so it follows edits to the route and shifts.
         internal static string RouteCauseText(string? vehicleId)
         {
             try
@@ -115,8 +100,6 @@ namespace FoodTrucks
             }
         }
 
-        // For the vehicle page's Alerts box: each to-do of this vehicle as its text (without the vehicle's name) and the
-        // game's priority (2 red, 1 yellow, 0 white), most urgent first.
         internal static IReadOnlyList<(string Text, int Priority)> For(string vehicleId) =>
             Ours().Where(t => !VehicleWarnings.IsFleetKind(KindOf(t)) && string.Equals(t.itemInstanceId, vehicleId, StringComparison.Ordinal))
                 .Select(t => (TextOf(t), (int)t.priority))
@@ -136,8 +119,6 @@ namespace FoodTrucks
         private static IEnumerable<TodoTask> Ours() =>
             SaveGameManager.Current?.TodoTasks?.Where(IsOurs) ?? Enumerable.Empty<TodoTask>();
 
-        // ---- Reconciling ----
-
         private void OnEnable() => instance = this;
 
         private void OnDisable()
@@ -151,7 +132,6 @@ namespace FoodTrucks
             {
                 var ui = InstanceBehavior<UIs>.Instance;
                 if (ui == null || ui.tasksUI == null || SaveGameManager.Current == null) return;
-                // As the game's own check: not while the time machine runs (sleep, waiting); once it ends, the minute moved.
                 if (ui.timeMachine != null && ui.timeMachine.isRunning) return;
                 var now = HireCrew.Now();
                 if (now == lastMinute) return;
@@ -161,12 +141,10 @@ namespace FoodTrucks
             catch (Exception ex)
             {
                 Log.Error("To-dos: " + ex);
-                // One error a minute at most.
                 lastMinute = HireCrew.Now();
             }
         }
 
-        // Runs Core's list against the phone's to-dos now (also the test bridge's `todos` refresh).
         internal static void ReconcileNow()
         {
             var tasks = InstanceBehavior<UIs>.Instance?.tasksUI;
@@ -189,7 +167,6 @@ namespace FoodTrucks
                     if (string.IsNullOrEmpty(saved.VehicleType))
                         saved = new VehicleState { VehicleId = vehicle.id, VehicleType = kind, HasPermit = saved.HasPermit, Schedule = saved.Schedule, Crew = saved.Crew, Health = saved.Health, Sold = saved.Sold };
                     var crew = saved.Crew.Count(id => HireCrew.Find(id) != null);
-                    // The route day starts and ends in its own bay, so the shifts must cover the restock and the drive back too.
                     var home = HireRoutes.HomeOf(saved);
                     wanted.AddRange(VehicleWarnings.For(tables, rules, state, saved, CargoLimit.Lines(vehicle), crew, ItemExists, HireRoutes.GameSpeed(),
                         HireRoutes.HomePoint(home), home?.BayStops));
@@ -199,7 +176,6 @@ namespace FoodTrucks
 
             var existing = Ours().ToList();
             var (add, complete) = VehicleWarnings.Reconcile(wanted, existing.Select(WarningOf));
-            // Complete each warning once per task: duplicates come back as many times as they are extra.
             foreach (var warning in complete)
             {
                 var task = existing.FirstOrDefault(t => WarningOf(t).Equals(warning));
@@ -213,7 +189,6 @@ namespace FoodTrucks
                 Add(tasks, warning);
                 Log.Info($"To-do added: {Describe(warning)}.");
             }
-            // The overview's rows follow: at once when a to-do changed, else every ten game minutes (open or closed, income).
             var now = HireCrew.Now();
             if (add.Count > 0 || complete.Count > 0 || now - lastOverviewRefresh >= 10 || now < lastOverviewRefresh)
             {
@@ -222,17 +197,10 @@ namespace FoodTrucks
             }
         }
 
-        // The game's CreateTodoTask and CompleteTodoTask also call TasksUI.UpdateBusinessAlerts with the task's address. Ours
-        // have none, and with BizMan open before any building's page has been shown its business's address is null too, so
-        // the game would schedule BizManBusiness.LoadAlerts, which then throws on the missing building and never clears its
-        // schedule flag (no building's alerts would refresh again). So ours are added and completed here, by the same steps
-        // without that call: into the list and its row (AddTodoTaskToUI), out of it with the game's struck-through fade
-        // (CompleteTodoTaskRoutine).
         private static void Add(TasksUI tasks, VehicleWarning warning)
         {
             var task = new TodoTask
             {
-                // Not the game's base64 id: a row is found by its name with Transform.Find, where '/' would be a path.
                 id = "foodtrucks-" + Guid.NewGuid().ToString("N"),
                 type = TypeOf(warning.Kind),
                 itemName = warning.ItemName,
@@ -253,15 +221,12 @@ namespace FoodTrucks
             }
             finally
             {
-                // The routine removes the task only when it has a row; one without goes here, and so does one whose row
-                // the game couldn't remove (InstantlyCompleteTodoTask throws before TasksUI has started).
                 SaveGameManager.Current.TodoTasks.Remove(task);
             }
         }
 
         private static readonly Dictionary<string, bool> exists = new Dictionary<string, bool>(StringComparer.Ordinal);
 
-        // Whether the game has this item now: a Bakery food doesn't without the Bakery mod.
         internal static bool ItemExists(string item)
         {
             if (!exists.TryGetValue(item, out var found))
@@ -269,14 +234,11 @@ namespace FoodTrucks
             return found;
         }
 
-        // The player's food vehicles, those left with the game's private driver included.
         private static IEnumerable<VehicleInstance> FoodVehicles(GameInstance game) =>
             game.VehicleInstances.Concat(game.privateDriverVehicleInstances ?? Enumerable.Empty<VehicleInstance>())
                 .Where(v => v != null && !string.IsNullOrEmpty(v.id) && FoodTrucksMod.KindOf(v.vehicleTypeName) != null)
                 .GroupBy(v => v.id, StringComparer.Ordinal).Select(g => g.First());
 
-        // The game's colours: yellow (1) for low stock and a fading grade, red (2) for what stops sales or costs money,
-        // white (0) for a licence still running, as the game's tax reminder.
         private static Priority PriorityOf(VehicleWarningKind kind) => kind switch
         {
             VehicleWarningKind.LowStock => (Priority)1,
@@ -293,7 +255,6 @@ namespace FoodTrucks
             return $"{Name(warning.Kind)} for {kind} {warning.VehicleId}{(warning.ItemName == null ? "" : ", " + warning.ItemName)}";
         }
 
-        // "low_stock", "no_commissary_space": the kind as the log and the test bridge name it.
         internal static string Name(VehicleWarningKind kind)
         {
             var text = kind.ToString();
@@ -306,7 +267,6 @@ namespace FoodTrucks
             return name.ToString();
         }
 
-        // Every one of ours out of the phone at once, without the completed look: the uninstall step, or a session ending.
         internal static void RemoveAll(string why)
         {
             var game = SaveGameManager.Current;
@@ -315,12 +275,9 @@ namespace FoodTrucks
             if (ours.Count == 0) return;
             var tasks = InstanceBehavior<UIs>.Instance?.tasksUI;
             if (tasks != null) tasks.InstantlyCompleteListOfTasks(ours);
-            // InstantlyCompleteListOfTasks drops only tasks with a row in the list; the rest go here.
             var left = game.TodoTasks.RemoveAll(IsOurs);
             Log.Info($"To-dos: {ours.Count} removed ({why}){(left > 0 ? $", {left} of them without a row in the list" : "")}.");
         }
-
-        // ---- Patches (TasksUI) ----
 
         private static readonly Dictionary<VehicleWarningKind, string> Keys = new Dictionary<VehicleWarningKind, string>
         {
@@ -336,8 +293,6 @@ namespace FoodTrucks
             [VehicleWarningKind.NoEquipment] = "foodtrucks:todo_no_equipment",
         };
 
-        // TasksUI.GetTodoDescription: our text ("Food truck 2: Hotdog is low on stock"). The game's switch has no case for
-        // our types and would give an empty label.
         public static bool DescriptionPrefix(TodoTask task, bool showBusinessName, ref LanguageChangeEventDataHolder __result)
         {
             if (!IsOurs(task)) return true;
@@ -346,7 +301,6 @@ namespace FoodTrucks
                 var kind = KindOf(task);
                 var data = new Dictionary<string, string>
                 {
-                    // The key itself, as the game's alert_low_stock passes it: the label translates it when it shows.
                     ["itemname"] = task.itemName ?? "",
                     ["day"] = (FoodTrucksSession.CurrentState?.Licence.LicenceExpiresOnDay ?? 0).ToString(),
                 };
@@ -362,7 +316,6 @@ namespace FoodTrucks
             }
         }
 
-        // "Food truck 2", or "Street food" for the fleet's own.
         private static string Owner(TodoTask task)
         {
             if (VehicleWarnings.IsFleetKind(KindOf(task)) || task.itemInstanceId == null)
@@ -370,8 +323,6 @@ namespace FoodTrucks
             return StreetFoodBooks.VehicleNames().TryGetValue(task.itemInstanceId, out var name) ? name : task.itemInstanceId;
         }
 
-        // TasksUI.CheckForCompletedTodoTasks: ours are out of the list while it runs. Its switch has no case for our types and
-        // throws on them (ArgumentOutOfRangeException), which would stop the check for every to-do after ours.
         public static void CompletionCheckPrefix(out List<(int Index, TodoTask Task)>? __state)
         {
             __state = null;
@@ -386,8 +337,6 @@ namespace FoodTrucks
             return __exception;
         }
 
-        // TasksUI.ClickTask: a vehicle's to-do opens its page in BizMan, the licence's the City's conversation. The game's
-        // switch would throw on our types.
         public static bool ClickPrefix(TodoTask task)
         {
             if (!IsOurs(task)) return true;
@@ -406,9 +355,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // TasksUI.AddTodoTaskToUI: the row's destination button. The game's GetDestination knows only addresses and has none
-        // for our types; a vehicle on the street has no address, so the button is set up here: the vehicle's place, as the
-        // fleet's Set destination; the City's address for the licence.
         public static void AddToUiPostfix(TodoTask task, Transform ____tasksGroup)
         {
             if (!IsOurs(task) || ____tasksGroup == null) return;
@@ -416,7 +362,6 @@ namespace FoodTrucks
             {
                 var row = ____tasksGroup.Find(task.id);
                 var button = row != null ? row.GetButtonByName("DestinationButton") : null;
-                // Active already: set up when the row was made (the game returns early for a row it has).
                 if (button == null || button.gameObject.activeSelf) return;
                 button.onClick = new Button.ButtonClickedEvent();
                 button.onClick.AddListener(() =>
@@ -440,8 +385,6 @@ namespace FoodTrucks
                 return;
             }
             var vehicle = game.VehicleInstances.FirstOrDefault(v => v.id == task.itemInstanceId);
-            // No space yet: the pin leads to the nearest commissary, where one is rented (the first blind playtest, 17
-            // October 2026: nothing told the player where a commissary was). The map's Street food filter shows them all.
             if (KindOf(task) == VehicleWarningKind.NoCommissarySpace && vehicle != null)
             {
                 var near = NearestCommissary(vehicle);
@@ -453,11 +396,9 @@ namespace FoodTrucks
             }
             if (vehicle == null)
             {
-                // With the private driver: nowhere to go to.
                 CartSelling.Notify("foodtrucks:notification_todo_no_place");
                 return;
             }
-            // On its way between stops (HireRoutes.Depart): off the map, its saved place is where it left from.
             if (StreetSales.Find(FoodTrucksSession.CurrentState, vehicle.id)?.Transit != null)
             {
                 CartSelling.Notify("foodtrucks:notification_todo_on_the_way");
@@ -478,7 +419,6 @@ namespace FoodTrucks
             Notices.Show(NotificationType.Success, "notification_destination_set", new Dictionary<string, string> { { "address", name } }, 4f);
         }
 
-        // The address of the commissary whose door is nearest the vehicle, or null when none is in this city.
         private static Address? NearestCommissary(VehicleInstance vehicle)
         {
             var controller = VehicleHelper.GetVehicleController(vehicle);
@@ -498,7 +438,6 @@ namespace FoodTrucks
             return best;
         }
 
-        // As the game's own destination button does.
         private static void GoToAddress(Address address)
         {
             SaveGameManager.Current.customDestination = address;
@@ -507,10 +446,6 @@ namespace FoodTrucks
             GuidersManager.SetGuiderTarget(address, DirectionGuiderType.Destination);
         }
 
-        // ---- Patches (saving and loading) ----
-
-        // SaveGameSerializationHelper.SerializeJsonData and SerializeBinaryData: ours are out of the game while it is written,
-        // so a save never holds them (a save opened without the mod has none), and back in right after.
         public static void SerializePrefix(GameInstance instance, out List<(int Index, TodoTask Task)>? __state)
         {
             __state = null;
@@ -529,8 +464,6 @@ namespace FoodTrucks
             return __exception;
         }
 
-        // SaveGameManager.InitializeLoadedSave: any of ours in a loaded save (one written by a build without the strip, or
-        // edited by hand) goes before the game builds its to-do list; the minute's reconcile makes them again if due.
         public static void LoadedPostfix()
         {
             try
@@ -555,7 +488,6 @@ namespace FoodTrucks
         private static void PutBack(List<TodoTask>? list, List<(int Index, TodoTask Task)>? taken)
         {
             if (list == null || taken == null) return;
-            // Ascending original places, so each goes back where it was when nothing else moved.
             foreach (var (index, task) in taken)
                 if (!list.Contains(task)) list.Insert(Math.Min(index, list.Count), task);
         }

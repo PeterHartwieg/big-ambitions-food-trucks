@@ -3,7 +3,6 @@ using FoodTrucks.Core.Saves;
 
 namespace FoodTrucks.Core.Marketing
 {
-    // One marketing fee for one vehicle and one game day. Paid says whether the game took the money.
     public sealed class MarketingCharge
     {
         public string VehicleId { get; set; } = string.Empty;
@@ -13,16 +12,8 @@ namespace FoodTrucks.Core.Marketing
         public bool Paid { get; set; }
     }
 
-    // Daily marketing fees (design: Marketing). A level runs only on a day its fee is paid. Picking a level books it from
-    // the next day: nothing is charged and today keeps the level it paid for, if any. The first time the day changes with
-    // a level booked, that day's whole fee is due; days the game skipped in between are neither charged nor marketed.
-    // Picking again the same day only replaces the booking. `pay` takes the money through the game and says whether it
-    // did. A level priced at 0 runs without a payment.
     public static class MarketingFees
     {
-        // The level that raised the vehicle's passers on `day`: the one paid for that day, the current paid day's or the
-        // one before it, so sales still catching up on yesterday keep yesterday's marketing. Null for none, an unknown
-        // level or a vehicle kind the level has no price for.
         public static MarketingLevel? Active(VehicleState? vehicle, MarketingRules rules, int day)
         {
             if (rules == null) throw new ArgumentNullException(nameof(rules));
@@ -31,20 +22,14 @@ namespace FoodTrucks.Core.Marketing
             return vehicle.MarketingPreviousDay == day ? Running(vehicle, rules, vehicle.MarketingPreviousLevel) : null;
         }
 
-        // DemandQuery.Marketing for the vehicle on `day`.
         public static double Factor(VehicleState? vehicle, MarketingRules rules, int day) => Active(vehicle, rules, day)?.Footfall ?? 1.0;
 
-        // The booked level that renews at the next day change, for the page. Null for none, an unknown level or a
-        // vehicle kind the level has no price for.
         public static MarketingLevel? Booked(VehicleState? vehicle, MarketingRules rules)
         {
             if (rules == null) throw new ArgumentNullException(nameof(rules));
             return vehicle == null ? null : Running(vehicle, rules, vehicle.MarketingLevel);
         }
 
-        // A new day: today's fee for the booked level, once. Null when nothing is to pay: no level, none, an unknown level,
-        // a vehicle kind the level has no price for, today already paid, a level booked today (it starts tomorrow), or a
-        // level priced at 0 (which then runs today). A refused payment turns the level off.
         public static MarketingCharge? Renew(VehicleState vehicle, MarketingRules rules, int today, Func<MarketingCharge, bool> pay)
         {
             Check(vehicle, rules, today);
@@ -65,8 +50,6 @@ namespace FoodTrucks.Core.Marketing
             return charge;
         }
 
-        // The player picks a level: it is booked from the next day, and today runs on with whatever today paid for. Throws
-        // for an unknown level or a vehicle kind it has no price for.
         public static void Choose(VehicleState vehicle, MarketingRules rules, string levelId, int today)
         {
             Check(vehicle, rules, today);
@@ -87,14 +70,12 @@ namespace FoodTrucks.Core.Marketing
             return level == null || level.IsNone || vehicle.VehicleType == null || !level.CostPerDayCents.ContainsKey(vehicle.VehicleType) ? null : level;
         }
 
-        // Changes the booking; the paid day keeps the level it paid for.
         private static void Book(VehicleState vehicle, string? levelId, int? startsDay)
         {
             vehicle.MarketingLevel = levelId;
             vehicle.MarketingStartsDay = startsDay;
         }
 
-        // The level `day` is paid with. The paid day before it and its level become the previous ones.
         private static void Settle(VehicleState vehicle, string levelId, int day, long paidCents)
         {
             if (vehicle.MarketingPaidThroughDay is int paid && paid < day)

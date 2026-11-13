@@ -8,13 +8,9 @@ using NWH.WheelController3D;
 
 namespace FoodTrucks
 {
-    // Read-only certificate for the narrow, zero-camber, undamaged +/-5 degree profile.
-    // The owner must call ValidateWheelStep from the required native Step prefix.
     internal sealed class CrewProbeBody
     {
         private const float Epsilon = .00001f;
-        // NWH writes shell poses in world space, so Unity's inverse transform leaves sub-mm
-        // rounding in local positions. This allowance stays inside the 1 mm hull inset.
         private const float PoseEpsilon = .0005f;
         private const double Yaw = Math.PI / 36;
         private const double MaxTilt = .05;
@@ -25,8 +21,6 @@ namespace FoodTrucks
         internal long MeshVertexReads { get; private set; }
         internal long WheelValidations { get; private set; }
 
-        // Operating bounds rotate about the rear axle used by Core and traffic. Separate
-        // tilt allowances keep future yaw-only queries outside every permitted pitch/roll pose.
         internal float PlanarTiltPadding(float rearZ) => TiltPadding(rearZ, false);
         internal float VerticalTiltPadding(float rearZ) => TiltPadding(rearZ, true);
         private float TiltPadding(float rearZ, bool vertical)
@@ -36,8 +30,6 @@ namespace FoodTrucks
             var horizontal = Math.Sqrt(x * x + z * z);
             var y = Math.Max(Math.Abs(Min.y), Math.Abs(Max.y));
             var sine = Math.Sin(MaxTilt); var cosine = Math.Cos(MaxTilt);
-            // The planar frame follows the projected forward axis. Include pitch/roll cross
-            // coupling as well as foreshortening, not just a single-axis rotation.
             return (float)(vertical ? y * (1 - cosine) + horizontal * sine :
                 y * sine + horizontal * (1 - cosine + sine * sine / cosine));
         }
@@ -76,7 +68,6 @@ namespace FoodTrucks
         private readonly List<int> triangles = new List<int>(1536);
         private readonly List<VehicleParkingHelper> parkingInventory = new List<VehicleParkingHelper>(2);
 
-        // Capture every local link: a compensating reparent or mount edit is not accepted.
         private sealed class Pose
         {
             private readonly Transform[] links;
@@ -242,7 +233,6 @@ namespace FoodTrucks
                 }
             }
             solids = captured.ToArray();
-            // Physical capture is independent of traffic and of any particular cooked slice.
             foreach (var w in wheels)
                 foreach (var c in new[] { w.Top, w.Bottom })
                 {
@@ -263,8 +253,6 @@ namespace FoodTrucks
             z = Math.Max(Math.Abs(shape.min.z), Math.Abs(shape.max.z)) + Math.Max(Math.Abs(shape.min.x), Math.Abs(shape.max.x)) * Math.Sin(Yaw);
         }
 
-        // The finite search may conservatively miss a feasible slice. No selection is performed
-        // after admission. Root-relative lever arms include the entire body, not the rear axle.
         internal string? SelectBand(float commonMin, float commonMax)
         {
             TrafficCertified = false; BandCandidates = 0; AttemptedBandMin = null;
@@ -321,18 +309,13 @@ namespace FoodTrucks
             var wheelHi = w.Pivot.y + shape.max.y;
             var distance = Math.Max(Math.Max(Math.Abs(wheelLo - bandLo), Math.Abs(wheelLo - bandHi)),
                 Math.Max(Math.Abs(wheelHi - bandLo), Math.Abs(wheelHi - bandHi)));
-            // Project along trigger up, preserving its local X/Z. Include both truck tilt
-            // and the retained tiny Gley upright tolerance, plus the existing numeric inset.
             var padding = distance * Math.Tan(MaxTilt + CrewProbeTrigger.UprightTolerance) + .002;
             var min = new Vector3(w.Pivot.x - (float)(reachX + padding), bandLo, w.Pivot.z - (float)(reachZ + padding));
             var max = new Vector3(w.Pivot.x + (float)(reachX + padding), bandHi, w.Pivot.z + (float)(reachZ + padding));
             FailureStage = "prism_envelope";
             if (!Finite(min) || !Finite(max) || min.x < Min.x || min.y < Min.y || min.z < Min.z ||
                 max.x > Max.x || max.y > Max.y || max.z > Max.z) return false;
-            // This envelope check bounds the root-tilt lever arm. Cooked containment below
-            // remains mandatory; an outer box is never used as the authority's inner proof.
             prism = new Bounds((min + max) * .5f, max - min);
-            // Each shell fits ONE cooked convex authority. A union cannot bridge a gap.
             for (var i = 0; i < 8; i++)
             {
                 var point = car.transform.TransformPoint(Corner(prism, i));
@@ -367,8 +350,6 @@ namespace FoodTrucks
         {
             FailingShell = FailingCorner = -1; FailingAuthority = 0; FailingPoint = default; FailureStage = null;
         }
-        // Pure queries are also used for inactive/distant diagnostic entries. Only the
-        // live admission/observation refusal may latch a failing prism/corner.
         internal bool CoversInterval(float lo, float hi) => TrafficCertified && WorldBandMin >= lo && WorldBandMax <= hi;
         internal void RecordCoverageFailure(float lo, float hi)
         {
@@ -379,8 +360,6 @@ namespace FoodTrucks
             FailingPoint = below ? minPoint : maxPoint;
         }
 #if CREW_PROBE_BODY_TESTS
-        // Legacy body-only harness convenience. Not compiled into the mod; production
-        // computes world prism heights once in Traffic and uses CoversInterval directly.
         internal bool CoversTrigger(Collider trigger)
         {
             try
@@ -517,8 +496,6 @@ namespace FoodTrucks
                 foreach (var w in wheels) if (w.Controller == wheel) { captured = w; break; }
                 if (captured == null) return "Wheel is not captured by this body contract.";
                 error = ValidateWheel(captured); if (error != null) return error;
-                // Full inventory and vertex comparison happens once in Observe. Native powertrain
-                // stepping only changes wheel state; guard that exact wheel and required bodies here.
                 foreach (var s in solids)
                     if (s.Required || s.Collider == captured.Top || s.Collider == captured.Bottom)
                     { error = ValidateSolid(s, false); if (error != null) return error; }
@@ -596,8 +573,6 @@ namespace FoodTrucks
             }
             return max.x > min.x && max.y > min.y && max.z > min.z;
         }
-        // Compose local links rather than subtracting large world coordinates: a moving
-        // truck must retain the same certificate far from the world's origin.
         private static Vector3 ToRoot(Transform t, Transform root, Vector3 p)
         {
             for (var depth = 0; t != root; depth++, t = t.parent)

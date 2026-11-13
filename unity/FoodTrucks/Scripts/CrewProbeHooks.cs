@@ -9,7 +9,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Only installed by ApplyTestBridge. Every required patch must succeed before a probe may start.
     internal static class CrewProbeHooks
     {
         internal static void Install(Harmony harmony)
@@ -38,7 +37,6 @@ namespace FoodTrucks
             Add(typeof(SaveGameManager), "Save", null, nameof(Save));
             Add(typeof(GameSpeedController), "Set", new[] { typeof(GameSpeed) }, nameof(Speed));
             Add(typeof(GameManager), "SetMinutesMultiplier", new[] { typeof(float) }, nameof(Minutes));
-            // Patch both overloads without depending on Timestamp's assembly/name.
             var skips = typeof(Timemachine.TimeMachine).GetMethods(BindingFlags.Instance | BindingFlags.Public)
                 .Where(m => m.Name == "StartTimeMachine").ToArray();
             if (skips.Length != 2)
@@ -72,7 +70,7 @@ namespace FoodTrucks
         private static bool Save(ref bool __result)
         {
             if (CrewDriveProbe.StopAll("Before native save")) return true;
-            __result = false; // Before Save sets its in-progress bookkeeping; retry remains possible.
+            __result = false;
             return false;
         }
         private static bool Speed(GameSpeed __0) => (!__0.paused && (int)__0.speed == 1) || CrewDriveProbe.StopAll("Pause or native acceleration");

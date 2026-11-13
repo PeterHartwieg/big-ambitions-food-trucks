@@ -5,8 +5,6 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Demand
 {
-    // The validated contents of data/demand.json, data/economy.json and data/zones.json.
-    // Parse throws DemandDataException naming the file and field of the first problem.
     public sealed class DemandTables
     {
         public const int DemandSchemaVersion = 1;
@@ -14,7 +12,6 @@ namespace FoodTrucks.Core.Demand
         public const int ZonesSchemaVersion = 1;
 
         internal static readonly string[] DaypartKeys = { "early", "morning", "lunch", "afternoon", "evening", "late", "night" };
-        // Indexed by System.DayOfWeek, which starts on Sunday.
         internal static readonly string[] DayKeys = { "sun", "mon", "tue", "wed", "thu", "fri", "sat" };
         internal static readonly string[] SeasonKeys = { "winter", "spring", "summer", "autumn" };
         internal static readonly string[] MonthKeys = { "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec" };
@@ -60,7 +57,6 @@ namespace FoodTrucks.Core.Demand
 
             PassersPerHour = r.Number(demand, "passersPerHour", 0, 100000);
             daypartStarts = ReadDayparts(r, r.Object(demand, "dayparts"));
-            // Older demand files have no street baseline; retain their area-only traffic.
             streetBaseline = demand["streetBaseline"] == null ? new double[DaypartKeys.Length]
                 : FullTable(r, r.Object(demand, "streetBaseline"), DaypartKeys, double.Epsilon, 100);
 
@@ -173,13 +169,10 @@ namespace FoodTrucks.Core.Demand
             return result;
         }
 
-        // True from midnight until Early starts: those hours still belong to the previous day's night out.
         public bool IsBeforeEarly(int minuteOfDay) => minuteOfDay < daypartStarts[(int)Daypart.Early];
 
-        // When the night ends: minutes before this belong to the evening before (night out, service day).
         public int NightEndsMinute => daypartStarts[(int)Daypart.Early];
 
-        // The mod's own month for an in-game day: day 1 is the first day of StartMonth.
         public int MonthOf(int gameDay)
         {
             var monthIndex = (long)Math.Floor((gameDay - 1) / (double)DaysPerMonth);
@@ -204,7 +197,6 @@ namespace FoodTrucks.Core.Demand
         public CategoryTable Category(string name) =>
             categories.TryGetValue(name, out var category) ? category : throw new ArgumentException($"Unknown category '{name}'.", nameof(name));
 
-        // Unknown neighbourhoods (mod-added ones, for example) are neutral.
         public NeighbourhoodTable Neighbourhood(string? name) =>
             name != null && neighbourhoods.TryGetValue(name, out var table) ? table : NeighbourhoodTable.Neutral;
 
@@ -221,7 +213,6 @@ namespace FoodTrucks.Core.Demand
         public EquipmentInfo? EquipmentForGameItem(string? itemName) =>
             itemName != null && equipmentByGameItem.TryGetValue(itemName, out var piece) ? piece : null;
 
-        // The one piece that serves and stores a product (the loader allows at most one), or null.
         public EquipmentInfo? EquipmentForProduct(string? itemName) =>
             itemName != null && equipmentByProduct.TryGetValue(itemName, out var piece) ? piece : null;
 
@@ -244,7 +235,6 @@ namespace FoodTrucks.Core.Demand
                     throw r.Fail(path, $"must be a time as HH:MM, got '{text}'");
                 starts[i] = hours * 60 + minutes;
             }
-            // Each daypart must start after the one before it, counting round the clock from Early.
             for (var i = 1; i < starts.Length; i++)
             {
                 var previous = ((starts[i - 1] - starts[0]) % 1440 + 1440) % 1440;
@@ -305,7 +295,6 @@ namespace FoodTrucks.Core.Demand
             return rules;
         }
 
-        // Area name to weight; every name must be a known area.
         private Dictionary<string, double> AreaWeights(DataReader r, JObject obj, bool requirePositive, double maximum = 100)
         {
             var weights = new Dictionary<string, double>(StringComparer.Ordinal);
@@ -360,7 +349,6 @@ namespace FoodTrucks.Core.Demand
             {
                 var obj = AsObject(r, entry);
                 r.OnlyKeys(obj, "products", "gameItems", "display", "storageFactor");
-                // A storage piece (storageFactor) serves no food and multiplies the storage of every fitted piece.
                 var storageFactor = obj["storageFactor"] == null ? 1.0 : r.Number(obj, "storageFactor", 1.0, 10);
                 if (obj["storageFactor"] != null && storageFactor <= 1.0)
                     throw r.Fail(DataReader.PathOf(obj, "storageFactor"), "must be above 1");
@@ -373,7 +361,6 @@ namespace FoodTrucks.Core.Demand
                     var item = r.Text(token, token.Path);
                     if (!productTable.ContainsKey(item)) throw r.Fail(token.Path, $"names '{item}', which is not listed in products");
                     if (items.Contains(item)) throw r.Fail(token.Path, $"lists '{item}' twice");
-                    // Each food is stored in one kind of piece, so a vehicle's storage splits cleanly by piece.
                     if (productOwners.TryGetValue(item, out var productOwner))
                         throw r.Fail(token.Path, $"lists '{item}', which equipment '{productOwner}' already serves");
                     productOwners.Add(item, entry.Name);
@@ -393,7 +380,6 @@ namespace FoodTrucks.Core.Demand
                         gameItems.Add(item);
                     }
                 }
-                // The model shown on a cart's counter spot: a name under Vehicles/EquipmentArt in the bundle.
                 string? display = null;
                 if (obj["display"] != null)
                 {
@@ -464,7 +450,6 @@ namespace FoodTrucks.Core.Demand
                     if (!(pointToken is JArray pair) || pair.Count != 2) throw r.Fail(pointToken.Path, "must be a point [x, z]");
                     polygon.Add(new ZonePoint(r.Number(pair[0], pair[0].Path, -1e7, 1e7), r.Number(pair[1], pair[1].Path, -1e7, 1e7)));
                 }
-                // A closing point that repeats the first is allowed and dropped.
                 if (polygon.Count > 1 && polygon[0].X == polygon[polygon.Count - 1].X && polygon[0].Z == polygon[polygon.Count - 1].Z)
                     polygon.RemoveAt(polygon.Count - 1);
                 var problem = PolygonProblem(polygon);
@@ -474,7 +459,6 @@ namespace FoodTrucks.Core.Demand
             return zones;
         }
 
-        // Null for a simple polygon with an area; otherwise what is wrong with it.
         private static string? PolygonProblem(IReadOnlyList<ZonePoint> polygon)
         {
             if (polygon.Count < 3) return "needs at least three distinct points";
@@ -486,7 +470,6 @@ namespace FoodTrucks.Core.Demand
                 if (a.X == b.X && a.Z == b.Z) return $"repeats point {i + 1} straight after itself";
                 area += a.X * b.Z - b.X * a.Z;
             }
-            // Edges that don't share a corner must not touch: the zone has to be a simple outline.
             for (var i = 0; i < polygon.Count; i++)
             {
                 for (var j = i + 1; j < polygon.Count; j++)
@@ -527,7 +510,6 @@ namespace FoodTrucks.Core.Demand
             return values;
         }
 
-        // Missing keys mean 1.0.
         private static double[] PartialTable(DataReader r, JObject? obj, string[] keys)
         {
             var values = Enumerable.Repeat(1.0, keys.Length).ToArray();
@@ -579,20 +561,14 @@ namespace FoodTrucks.Core.Demand
         }
 
         public string Name { get; }
-        // The weekday curve.
         public double Footfall(Daypart daypart) => footfall[(int)daypart];
-        // The curve for a day: weekendFootfall on Saturday and Sunday when the area has one, else the weekday curve.
-        // The caller passes the day the hour belongs to (before Early it is still the previous day).
         public double Footfall(Daypart daypart, DayOfWeek day) =>
             weekendFootfall != null && (day == DayOfWeek.Saturday || day == DayOfWeek.Sunday)
                 ? weekendFootfall[(int)daypart] : footfall[(int)daypart];
         public bool HasWeekendCurve => weekendFootfall != null;
         public double DayFactor(DayOfWeek day) => days[(int)day];
-        // This area's own crowd in a season, on top of the month's footfall that every passer has (missing seasons 1.0).
         public double SeasonFactor(Season season) => seasons[(int)season];
-        // This area's own crowd while it rains, on top of rain.footfall that every passer has (1.0 when not given).
         public double Rain { get; }
-        // Unlisted categories keep their base appetite.
         public double AppetiteFactor(string category) => appetite.TryGetValue(category, out var factor) ? factor : 1.0;
     }
 
@@ -612,8 +588,6 @@ namespace FoodTrucks.Core.Demand
         public string Name { get; }
         public double NewCustomerWeight { get; }
         public double AddOnFactor { get; }
-        // The lowest the game's market demand counts for this category's items, above market.floor: a cart walks
-        // to where people are, so shops nearby selling the same thing hurt it less (cold drinks).
         public double MarketFloor { get; }
         public double Appetite(Daypart daypart) => appetite[(int)daypart];
     }
@@ -711,9 +685,7 @@ namespace FoodTrucks.Core.Demand
         public double RadiusMetres { get; }
         public double EdgeWeight { get; }
         public double Saturation { get; }
-        // Accepted for compatibility; independent area presences are never trimmed.
         public int MaxAreas { get; }
-        // Accepted and validated for compatibility; no longer used to supply area presence.
         public string FallbackArea { get; }
         public IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> BuildingTypes { get; }
         public IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> BusinessTypes { get; }
@@ -732,7 +704,6 @@ namespace FoodTrucks.Core.Demand
         public string ItemName { get; }
         public string Category { get; }
         public double ServiceMinutes { get; }
-        // Share of the vehicle's stock limit occupied by one item; defaults to 1.0.
         public double StockWeight { get; }
     }
 
@@ -750,11 +721,8 @@ namespace FoodTrucks.Core.Demand
 
         public string Id { get; }
         public IReadOnlyList<string> Products { get; }
-        // Vanilla item names that fit this piece of equipment. Missing gameItems means none.
         public IReadOnlyList<string> GameItems { get; }
-        // The display model on a cart's counter, or null to show nothing on the spot.
         public string? Display { get; }
-        // Above 1 for a storage piece: it serves no food and multiplies every fitted piece's storage. One counts.
         public double StorageFactor { get; }
         public bool IsStorage => StorageFactor > 1.0;
     }
@@ -773,8 +741,6 @@ namespace FoodTrucks.Core.Demand
         public string Type { get; }
         public int EquipmentSlots { get; }
         public int CoolerSlots { get; }
-        // Food each fitted piece of equipment holds, in weighted units, whatever the game's box slots allow
-        // (one wholesale box can hold hundreds of units). A storage piece multiplies it (Storage).
         public int UnitsPerPiece { get; }
         public int Staff { get; }
     }

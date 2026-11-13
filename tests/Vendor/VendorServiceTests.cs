@@ -16,7 +16,6 @@ public class VendorServiceTests
 {
     private const string Cart = "cart-a";
 
-    // A host with cart A and a lease renewed at `now`.
     private static (VendorTestHost Host, VendorService Service) Leased(long now)
     {
         var host = new VendorTestHost { Now = now };
@@ -48,8 +47,6 @@ public class VendorServiceTests
         out string reason, string item = "ba:itemname_hotdog", long cents = 450, string owner = Owner) =>
         service.Sell(owner, Cart, openingId, item, cents, VendorBook.DayOf(minute), VendorBook.MinuteOf(minute), out sale, out uncertain, out reason);
 
-    // --- Without a consumer nothing changes ---
-
     [Fact]
     public void WithoutAConsumerAnOpeningWritesNothingAndKeepsItsOwnCustomers()
     {
@@ -70,7 +67,6 @@ public class VendorServiceTests
     [Fact]
     public void ASaveWithoutAConsumerSavesExactlyAsBefore()
     {
-        // A save as 0.10.11 writes it: no vendor block anywhere.
         const string json = "{\"schemaVersion\":2,\"writtenByModVersion\":\"0.10.11\",\"saveCount\":4,\"licence\":{\"hasVendorLicence\":true,\"licenceExpiresOnDay\":9}," +
                             "\"vehicles\":[{\"vehicleId\":\"cart-a\",\"isOpen\":true,\"vehicleType\":\"cart\",\"hireStop\":0,\"service\":{\"randomState\":5,\"minute\":3,\"nextCustomerId\":1}}]," +
                             "\"crewTakings\":[{\"vehicleId\":\"cart-a\",\"day\":3,\"cents\":900,\"sales\":2}],\"someFutureField\":{\"x\":1}}";
@@ -82,7 +78,6 @@ public class VendorServiceTests
 
         var first = codec.Serialize(loaded.State);
         Assert.Null(JObject.Parse(first)["vendor"]);
-        // Opening and selling without a consumer leaves the block out too.
         VendorBook.Opened(loaded.State, "cart-a", At(3, 11, 0), byCrew: true);
         Assert.Equal(first, codec.Serialize(loaded.State));
         Assert.Equal(first, codec.Serialize(codec.Load(first).State!));
@@ -103,8 +98,6 @@ public class VendorServiceTests
         Assert.Equal(string.Empty, vehicle.OpeningOwner);
         Assert.Equal(-1, vehicle.OpenedDay);
     }
-
-    // --- The opening-boundary grant ---
 
     [Fact]
     public void AnOpeningInTheHourOfTheRequestStaysStreetFoodsAndTheNextLaterOneIsGranted()
@@ -220,8 +213,6 @@ public class VendorServiceTests
         Assert.Contains(host.Lines, l => l.Contains("lease does not hold"));
     }
 
-    // --- Lease lifetime and release ---
-
     [Fact]
     public void ALeaseThatRunsOutMidOpeningHandsBackWithAFreshQueue()
     {
@@ -262,7 +253,6 @@ public class VendorServiceTests
         Assert.Empty(host.Save.Vendor!.Leases);
         Assert.Equal(string.Empty, VendorBook.Entry(host.Save, Cart)!.Owner);
         Assert.Contains(host.Lines, l => l.Contains("handed back") && l.Contains("lease ran out"));
-        // The request stays: a renewed lease is granted the next opening.
         Assert.NotNull(VendorBook.Request(host.Save, Cart));
     }
 
@@ -298,8 +288,6 @@ public class VendorServiceTests
         host.Close(Cart);
         Assert.Equal(string.Empty, VendorBook.Entry(host.Save, Cart)!.Owner);
     }
-
-    // --- Sales through SellItem ---
 
     [Fact]
     public void ASaleBooksExactCentsOnTheDayAndReportsUnits()
@@ -433,8 +421,6 @@ public class VendorServiceTests
         Assert.Equal("not the owner of this opening", reason);
     }
 
-    // --- The snapshot ---
-
     [Fact]
     public void SixtyFourVehiclesAreReadAndSixtyFiveAreRefused()
     {
@@ -518,8 +504,6 @@ public class VendorServiceTests
         Assert.Null(host.Save.Vendor);
     }
 
-    // --- Saved grant and lease ---
-
     [Fact]
     public void TheGrantAndLeaseSurviveASaveAndLoad()
     {
@@ -534,7 +518,6 @@ public class VendorServiceTests
         Assert.Equal(At(3, 12, 0), VendorBook.Lease(loaded.State!, Owner)!.Until);
         Assert.Equal(json, codec.Serialize(loaded.State!));
 
-        // Reloaded without the owner: nobody renews, and Street Food takes the opening back when the lease is over.
         var vehicle = StreetSales.Find(loaded.State!, Cart)!;
         Assert.False(VendorBook.OwnCustomers(loaded.State!, vehicle, At(3, 11, 30)));
         Assert.True(VendorBook.OwnCustomers(loaded.State!, vehicle, At(3, 12, 0)));
@@ -593,8 +576,6 @@ public class VendorServiceTests
         Assert.Contains(loaded.Notes, n => n.Contains("unreadable"));
     }
 
-    // --- Review fixes ---
-
     [Fact]
     public void AnEarlierMinuteOfTheSameDayIsRefused()
     {
@@ -611,7 +592,6 @@ public class VendorServiceTests
     [Fact]
     public void ABackdatedSaleAfterTheLeaseRanOutIsRefusedBeforeTheTickExpiresIt()
     {
-        // The lease ends at 12:00; the clock is at 12:01 and no tick has expired the lease yet.
         var (host, service, opening) = Granted(At(3, 10, 5), At(3, 11, 0));
         host.Now = At(3, 12, 1);
 
@@ -622,7 +602,6 @@ public class VendorServiceTests
         Assert.Empty(host.Save.CrewTakings);
         Assert.Empty(host.Sales);
 
-        // Noticed at 12:01, handed back at the lease's end: a lagging catch-up gets Street Food customers from 12:00.
         var vehicle = host.Vehicle(Cart);
         Assert.Equal(At(3, 12, 0), VendorBook.Entry(host.Save, Cart)!.HandedBackAt);
         Assert.Equal(SeededRandom.SeedFor(Cart, At(3, 12, 0)), vehicle.Service!.RandomState);
@@ -635,7 +614,6 @@ public class VendorServiceTests
     [InlineData(true)]
     public void AReleaseNoticedAfterTheLeaseRanOutHandsBackAtTheLeasesEnd(bool all)
     {
-        // The lease ends at 12:00; the owner releases at 12:20, before any tick expired it.
         var (host, service, _) = Granted(At(3, 10, 5), At(3, 11, 0));
         var vehicle = host.Vehicle(Cart);
         host.Now = At(3, 12, 20);
@@ -652,7 +630,6 @@ public class VendorServiceTests
     {
         var (host, service, _) = Granted(At(3, 10, 5), At(3, 11, 0));
         var vehicle = host.Vehicle(Cart);
-        // The route's sales cursor is at 11:35 when the owner releases at 11:40.
         host.Now = At(3, 11, 40);
         Assert.Equal(VendorApiStatus.Ready, service.RequestOwner(Owner, Cart, false, out _));
 
@@ -667,7 +644,6 @@ public class VendorServiceTests
     {
         var (host, service, _) = Granted(At(3, 10, 5), At(3, 11, 0));
         var vehicle = host.Vehicle(Cart);
-        // The tick expires the lease (until 12:00) at 12:10, while the crew window has sold only up to 11:55.
         host.Now = At(3, 12, 10);
         service.Tick();
 
@@ -675,7 +651,6 @@ public class VendorServiceTests
         Assert.False(VendorBook.OwnCustomers(host.Save, vehicle, At(3, 11, 59)));
         Assert.True(VendorBook.OwnCustomers(host.Save, vehicle, At(3, 12, 0)));
 
-        // The boundary survives a save and belongs to that opening only.
         var loaded = new SaveCodec().Load(new SaveCodec().Serialize(host.Save)).State!;
         Assert.False(VendorBook.OwnCustomers(loaded, StreetSales.Find(loaded, Cart)!, At(3, 11, 59)));
         host.Close(Cart);
@@ -696,7 +671,6 @@ public class VendorServiceTests
         Assert.Equal(VendorApiStatus.Refused, service.RequestOwner(Owner, "new", true, out var reason));
         Assert.Equal("too many requests", reason);
 
-        // One requested vehicle is sold: its request goes, and the new vehicle's request fits.
         host.Vehicles.Remove("v07");
         Assert.Equal(VendorApiStatus.Ready, service.RequestOwner(Owner, "new", true, out _));
         Assert.Null(VendorBook.Request(host.Save, "v07"));
@@ -721,8 +695,6 @@ public class VendorServiceTests
         Assert.Equal(19, into.Take(count).Single(v => v.VehicleId == Cart).Units[0]);
         Assert.Same(other, into.Take(count).Single(v => v.VehicleId == "cart-b"));
     }
-
-    // --- Geometry and rate ---
 
     [Fact]
     public void ATrucksWindowIsOnItsRightAndItsLineRunsTowardsTheBack()

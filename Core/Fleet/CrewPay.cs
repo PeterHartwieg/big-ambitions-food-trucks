@@ -5,32 +5,14 @@ using FoodTrucks.Core.Saves;
 
 namespace FoodTrucks.Core.Fleet
 {
-    // When a vehicle's crew works, and which of those hours the game pays. The game side counts each paid hour on
-    // the game's own counters (HireCrew), so the game's midnight payroll pays it as an unassigned wage.
-    //
-    // Two kinds of hour are paid. A shift hour: every hour of the crew member's own shift on the vehicle's week plan,
-    // counted as the hour starts (HireCrew.CountHour; Peter, 16 October 2026: paid per scheduled hour, worked or idle).
-    // An open hour: a window the player opened is paid to the crew who serve it for each hour they serve at some minute
-    // of its first half. Crew serve only on shift, so an open hour is nearly always a shift hour paid already; the
-    // marker below keeps it from being paid twice. The sales note who served (Served) as they reach
-    // each minute; the hour is decided once, when it is over (CloseHours): at the next hour's start, or at midnight
-    // just before the game's payroll, after the sales have been caught up to that moment. So the decisions come in
-    // the order of the hours, interleaved with the game's own hourly count: hour h's open pay is decided before hour
-    // h + 1's route pay is stamped and before the game counts h + 1. Each hire is paid at most once per hour,
-    // whichever comes first and on whichever vehicle, and not at all for an hour the game itself already counted
-    // (a shop shift worked at the hour's start before the hire joined a crew).
     public static class CrewPay
     {
         public const int HalfHour = 30;
 
-        // The game hour a minute falls in: (day - 1) × 24 + hour.
         public static long HourOf(long minute) => (long)Math.Floor(minute / 60.0);
 
-        // Whether any of the crew is at the vehicle at that minute (before anyone's absence): on a shift of the week plan
-        // (Peter, 16 October 2026), at a window whoever opened it. Not while it is on its way somewhere.
         public static bool OnShift(VehicleState vehicle, long minute) => OnShiftCrew(vehicle, minute).Count > 0;
 
-        // The crew on shift at the vehicle at that minute, in crew order; none while it is on its way.
         public static List<string> OnShiftCrew(VehicleState vehicle, long minute)
         {
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
@@ -38,23 +20,13 @@ namespace FoodTrucks.Core.Fleet
             return WeekPlan.OnShiftCrew(vehicle, minute);
         }
 
-        // A window the player opened: the route leaves it alone and doesn't pay for it.
         public static bool PlayerWindow(VehicleState vehicle) =>
             vehicle != null && vehicle.IsOpen && vehicle.HireStop == null && !vehicle.CrewWindowLost && vehicle.Transit == null &&
             vehicle.Crew != null && vehicle.Crew.Count > 0;
 
-        // Whether serving a window the player opened at this minute (a minute the sales reached with the window still
-        // open) earns the hour: the minute is in the hour's first half. Whether the hire has that hour already is the
-        // paid-hour marker's to say (Unpaid), never the route's plan.
         public static bool OpenHourDue(VehicleState vehicle, long minute) =>
             PlayerWindow(vehicle) && minute - HourOf(minute) * 60 < HalfHour;
 
-        // Who serves at the window: the best of the crew on shift and the player when at the window, up to the
-        // vehicle's staff. Returns the crew among them (they alone are paid for serving) and every skill that serves.
-        // `playerHeld`: the player stands held at the window (the truck's hatch) and can't step aside, so they always
-        // serve and the best crew fill the other places; with the truck's staff of 2 (Peter, 14 October 2026: "one line
-        // makes sense for 2") two people show at the hatch, never three. Otherwise (the cart) the best skills serve and
-        // ties go to the crew, in their order: the player can step aside.
         public static (List<T> Crew, List<double> Skills) Team<T>(IEnumerable<(T Who, double Skill)> crew, double? playerSkill, int limit,
             bool playerHeld = false)
         {
@@ -73,18 +45,11 @@ namespace FoodTrucks.Core.Fleet
             return (chosen.Where(p => p.IsCrew).Select(p => p.Who).ToList(), chosen.Select(p => p.Skill).ToList());
         }
 
-        // How far the sales may be caught up before a hire's pay is settled. Inside the game's tick the clock's minute
-        // already holds the rest of the frame's advance (a time skip's) while the hour's and the day's events run, so a
-        // change made there (a retirement at midnight, a resignation in the hourly run) happens at the start of the hour
-        // being processed: the sales go no further. A change the player makes goes up to the live minute.
         public static double CatchUpLimit(bool inGameTick, long hourBeingProcessedStart, double liveMinute) =>
             inGameTick ? Math.Min(hourBeingProcessedStart, liveMinute) : liveMinute;
 
-        // The day an hour belongs to: (hour / 24) + 1.
         public static int DayOfHour(long hour) => (int)Math.Floor(hour / 24.0) + 1;
 
-        // The sales reached this minute of a window the player opened with the hire serving it: a minute of an
-        // hour's first half earns that hour, decided when the hour is over. The first vehicle in the hour keeps it.
         public static void Served(SaveState state, string employeeId, string vehicleId, long minute)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -95,12 +60,6 @@ namespace FoodTrucks.Core.Fleet
             state.CrewServedHour[employeeId] = new CrewServed { Hour = hour, VehicleId = vehicleId };
         }
 
-        // Decides every noted hour before `beforeHour` (the hour now starting, midnight's, or long.MaxValue to settle
-        // all, the current hour included), in hour order. An hour the hire has been paid or counted for already (the
-        // route, another window, the game's own shift) is dropped. Each other one goes to `credit` (employee, vehicle,
-        // hour), which puts it on the game's counters: only when that succeeds is the hour stamped paid and the note
-        // dropped, so an earned hour is never lost to a failed or skipped credit; a note that can't be credited stays
-        // to be tried at the next decision, until it is a day old. Returns the hours credited.
         public static List<(string EmployeeId, string VehicleId, long Hour)> CloseHours(SaveState state, long beforeHour,
             Func<string, string, long, bool> credit, string? vehicleId = null)
         {
@@ -126,10 +85,6 @@ namespace FoodTrucks.Core.Fleet
             return paid;
         }
 
-        // What the mod owes a hire whose employment is changing (a building job, a replacement, fired or resigning),
-        // to be paid on the spot as an unassigned crew wage: the hours already on today's counters for vehicles
-        // (CrewLog; the game would otherwise pay them with a building's wage, a delivery driver's fixed day, or not at
-        // all) and a noted hour not yet decided (the running one, or one whose credit failed). By vehicle, in ID order.
         public static CrewOwed Owed(SaveState state, string employeeId, int today)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -153,8 +108,6 @@ namespace FoodTrucks.Core.Fleet
             return new CrewOwed(byVehicle.Select(p => (p.Key, p.Value)).ToList(), onCounters, pending);
         }
 
-        // After the owed hours are paid: today's logged hours are done with, the noted hour is stamped paid and its
-        // note dropped, so neither the next decision nor the midnight payroll's split pays them again.
         public static void Settled(SaveState state, string employeeId, int today, CrewOwed owed)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -165,7 +118,6 @@ namespace FoodTrucks.Core.Fleet
                 state.CrewServedHour.Remove(employeeId);
         }
 
-        // Whether the hire's hour is still free: neither the mod nor the game counted it.
         public static bool Unpaid(SaveState state, string employeeId, long hour)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -173,8 +125,6 @@ namespace FoodTrucks.Core.Fleet
                    !state.CrewPaidHour.TryGetValue(employeeId, out var last) || last < hour;
         }
 
-        // Marks the hire's hour paid; false (and nothing changes) when it already was. Hours are counted in order,
-        // so the last counted hour is all that needs keeping.
         public static bool TryPay(SaveState state, string employeeId, long hour)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -184,7 +134,6 @@ namespace FoodTrucks.Core.Fleet
             return true;
         }
 
-        // The game counted this hour for the employee itself (a building shift): the mod mustn't count it again.
         public static void GameCounted(SaveState state, string employeeId, long hour)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -192,7 +141,6 @@ namespace FoodTrucks.Core.Fleet
             if (Unpaid(state, employeeId, hour)) state.CrewPaidHour[employeeId] = hour;
         }
 
-        // Markers more than a day old are dropped (a hire let go, or off the crew). One value per hire, so it stays small.
         public static void Prune(SaveState state, long currentHour)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -214,11 +162,8 @@ namespace FoodTrucks.Core.Fleet
             PendingHour = pendingHour;
         }
 
-        // Hours owed per vehicle.
         public List<(string VehicleId, int Hours)> ByVehicle { get; }
-        // How many of them are on the game's counters already (to be taken off when paid on the spot).
         public int OnCounters { get; }
-        // The noted hour among them, if any.
         public long? PendingHour { get; }
         public int Hours => ByVehicle?.Sum(v => v.Hours) ?? 0;
     }

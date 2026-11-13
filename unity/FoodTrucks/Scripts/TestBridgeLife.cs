@@ -18,24 +18,15 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // The player's own life, for the blind tester (docs/test-bridge.md, "The player's life"): clicking things in the world
-    // (`use`, the game's left click on an object: a bed, a shop's shelf or till, a taxi, a school's door, a building), the
-    // taxi's ride to a building (`taxi`), the phone (`phone`, `call`) and eating from a bag in hands (`eat`). Each runs the
-    // game's own code with its checks, prices and time; nothing is placed, granted or paid by the bridge.
     internal static partial class TestBridgeCommands
     {
-        // ---- use: a click on a thing in the world ----
-
         private const float UseDefaultRadius = 20f;
         private const float UseMaxRadius = 80f;
         private const int UseMaxEntries = 40;
-        // How long a click's walk over to the thing may take (real seconds) before the reply says where the player is.
         private const float UseSeconds = 120f;
-        // A walk to the clicked thing that hasn't moved for this long has stalled; a car this close is got into directly.
         private const float UseStallSeconds = 5f;
         internal const float CarReachMetres = 3.5f;
 
-        // The things of the last use list, for a click by id.
         private static List<EntityController> lastUse = new List<EntityController>();
 
         private static object Use(JObject args)
@@ -50,13 +41,10 @@ namespace FoodTrucks
                     RequireFtCity("use " + op);
                     return UseClick(args);
                 default:
-                    // No right click: on the player's own furniture it starts moving it, which follows the real mouse
-                    // (review round 1). Placing a bought piece is place's.
                     throw new BridgeError($"Unknown use op '{op}': list or click.");
             }
         }
 
-        // Where the thing stands for the player: a building at its nearest entrance, anything else where it is.
         private static Vector3 UsePoint(EntityController entity, Vector3 from)
         {
             if (entity is CityBuildingController building && building.entranceDoors != null && building.entranceDoors.Length > 0)
@@ -65,8 +53,6 @@ namespace FoodTrucks
             return entity.transform.position;
         }
 
-        // Whether a left click on it does anything a player would see: a call to action, a detailed overlay, something
-        // to buy, a building or a vehicle. Walls and decoration are left out.
         private static bool Clickable(EntityController entity)
         {
             if (entity == null || !entity.isActiveAndEnabled || !entity.visible || !entity.primaryInteractionEnabled) return false;
@@ -85,7 +71,6 @@ namespace FoodTrucks
             {
                 if (entity == null) continue;
                 var at = UsePoint(entity, from);
-                // Another floor of the building isn't in reach.
                 if (Math.Abs(at.y - from.y) > 4f && !(entity is CityBuildingController)) continue;
                 var distance = (float)Flat(at, from);
                 if (distance <= radius && Clickable(entity)) found.Add((entity, at, distance));
@@ -127,7 +112,6 @@ namespace FoodTrucks
             }
             if (entity is ItemController item && item.playerItemPurchaserSettings != null && item.playerItemPurchaserSettings.enabled)
             {
-                // What it sells; the price is on the shop's own label and at the till.
                 var sells = item.playerItemPurchaserSettings;
                 entry["sells"] = string.IsNullOrEmpty(sells.itemName) ? null : LocalizorManager.GetLocalization(sells.itemName, null);
                 entry["sells_key"] = sells.itemName;
@@ -135,8 +119,6 @@ namespace FoodTrucks
             return entry;
         }
 
-        // The game's call to action over the thing, as hovering it shows ("Click to sleep"), and whether the click runs it.
-        // CtaManager's state is the hover's, so it is cleared again.
         private static (string? Key, bool HasAction) Cta(EntityController entity)
         {
             try
@@ -161,8 +143,6 @@ namespace FoodTrucks
             return entity.gameObject.name;
         }
 
-        // Notices.BeginCapture only sees the mod's Notices.Show wrapper. A world click must also report vanilla
-        // refusals. The game's event carries exactly the key/data that NotificationsUI localizes for the screen.
         private sealed class UseNoticeCapture : IDisposable
         {
             internal readonly List<string> Messages = new List<string>();
@@ -178,10 +158,6 @@ namespace FoodTrucks
             public void Dispose() { Notifications.onShow -= Capture; }
         }
 
-        // An id click has no screen position. CityBuildingController.OnIoLeftClick tests the *desktop* pointer's
-        // IsPointerOverGameObject, so a pointer left over the hands HUD can swallow a perfectly valid door click.
-        // Use the native entity navigation and virtual Interact instead. Interact still decides access, opening
-        // hours, DLC, goals, installation, entrance fees and the door id; never call BuildingManager.EnterBuilding.
         private static bool UseBuildingClick(CityBuildingController building, PlayerController player, out string? why)
         {
             why = null;
@@ -192,7 +168,6 @@ namespace FoodTrucks
             else if (GameManager.IsAnyMiniGameActive())
                 why = "Finish the minigame before clicking a building.";
             else if (!player.IsOnNavmesh())
-                // In 1.0 IsOnNavmesh means on foot or using a spawnInPlayerObject vehicle (e.g. a hand truck).
                 why = "Leave the motor vehicle before walking to a building entrance.";
             if (why != null) return false;
 
@@ -221,7 +196,6 @@ namespace FoodTrucks
             if (entity == null || !Clickable(entity)) throw new BridgeError($"Thing {id} is gone or can't be clicked now; list again.");
             if (Paused() == true) throw new BridgeError("The game is paused: the walk over takes real time. Set a speed first.");
             RequireFreeHands("a click");
-            // What the mouse's click handling waits for too (MouseController): the interior designer, the subway, placing.
             if (UI.InteriorDesigner.InteriorDesignerUI.IsOpen || SubwaySystem.IsRiding || BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode)
                 throw new BridgeError("Not now: close what is open first (ui escape).");
             var name = ThingName(entity);
@@ -235,14 +209,11 @@ namespace FoodTrucks
             var placingCancelled = false;
             try
             {
-                // The hover sets the call to action before the click, as the mouse does (OnIoLeftClick skips it while an
-                // overlay shows over the thing).
                 CtaManager.UpdateCta(entity);
                 handled = entity is CityBuildingController building ? UseBuildingClick(building, player, out why) : entity.OnIoLeftClick();
                 if (!handled && why == null)
                     why = player.NavigationDisabled ? "The player can't interact now" + Blockers(player) + "."
                         : "The game's click handler declined this interaction without giving a reason; inspect look and ui list.";
-                // Moving furniture by hand isn't one of the tester's controls: it follows the real mouse.
                 if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode)
                     placingCancelled = Buildings.Indoors.InteriorDesign.PlacementHelper.CancelPlacementModeIfIsActive();
             }
@@ -260,8 +231,6 @@ namespace FoodTrucks
             return new Deferred(() =>
             {
                 var now = UnityEngine.Time.realtimeSinceStartup;
-                // A moment for the game's reaction (a panel, a notice), then until the walk over has ended and any
-                // building's door has finished loading.
                 if (now - started < 0.5f) return null;
                 var walking = player.hasOnGoalReachedAction;
                 if (walking)
@@ -270,8 +239,6 @@ namespace FoodTrucks
                     if (Vector3.Distance(here, lastPosition) > 0.1f) { lastPosition = here; stillSince = now; }
                     else if (now - stillSince > UseStallSeconds)
                     {
-                        // The walk to a car's driver's door can stall short of it (the door's point unreachable). Up
-                        // close, the game itself gets in without walking (VehicleController.DriveVehicle within 2.5 m).
                         if (entity is VehicleController car && Vector3.Distance(here, car.transform.position) <= CarReachMetres)
                         {
                             player.ResetNavigation();
@@ -316,7 +283,6 @@ namespace FoodTrucks
             }, () => capture.Dispose());
         }
 
-        // The building the player is inside, by address, or null outside.
         internal static string? InsideAddress()
         {
             if (!BuildingManager.IsInsideBuilding) return null;
@@ -325,15 +291,8 @@ namespace FoodTrucks
             return address == null ? "a building" : World.AddressKey(address.streetName, address.streetNumber);
         }
 
-        // ---- taxi: the ride to a building, once a taxi waits ----
-
-        // How long a ride may take in real seconds (the game skips its minutes fast).
         private const float TaxiSeconds = 120f;
 
-        // { "address" }: the destination picked on the taxi's map, as the building card's travel button does
-        // (BuildingResume.TaxiTravel → TaxiSystem.TravelTo): the game charges the fare and skips the ride's minutes, then
-        // sets the player down at the building. A taxi must be waiting: one clicked in the street (use click) opens the
-        // map in taxi mode. Without it, nothing is charged and nothing moves.
         private static object Taxi(JObject args)
         {
             var address = Need(args, "address", "the building's address, ba:street_<name>#<number>");
@@ -376,18 +335,13 @@ namespace FoodTrucks
             }, () => Notices.EndCapture(caught));
         }
 
-        // ---- phone and calls ----
-
         private static readonly Dictionary<string, AppName> PhoneApps = new Dictionary<string, AppName>(StringComparer.OrdinalIgnoreCase)
         {
             ["persona"] = AppName.Persona, ["contacts"] = AppName.Contacts, ["employees"] = AppName.MyEmployees,
             ["bizman"] = AppName.BizMan, ["econoview"] = AppName.EconoView,
             ["market"] = AppName.MarketInsider, ["rivals"] = AppName.Rivals,
-            // Not VoogleMaps: the game opens the map through SmartphoneUI.OpenApp, not the full menu (review round 1);
-            // the tester reads the map with the map command, and a taxi opens it in taxi mode.
         };
 
-        // { "app" }: the phone opened on one of its full-menu apps, as its key and app buttons do.
         private static object Phone(JObject args)
         {
             var name = Need(args, "app", string.Join(", ", PhoneApps.Keys));
@@ -404,8 +358,6 @@ namespace FoodTrucks
             if (machine != null && machine.isRunning) throw new BridgeError($"Time is skipping (sleep, a course, a ride): {what} waits until it ends.");
         }
 
-        // { "op": "list" } or { "contact": "<id or name>" }: the phone's contacts, or a call to one (the conversation opened and its
-        // call button pressed, ContactsApp.OpenAndStartCall). The call's options are then the screen's buttons (ui list).
         private static object Call(JObject args)
         {
             var contacts = (SaveGameManager.Current?.Contacts ?? new List<Contact>()).Where(c => c != null && !string.IsNullOrEmpty(c.id)).ToList();
@@ -432,8 +384,6 @@ namespace FoodTrucks
                 throw new BridgeError("You're in a call or a conversation already: finish it first (its own buttons, or ui escape).");
             var contact = matches[0];
             Log.Info($"Test bridge: calling {contact.id}.");
-            // The conversation opened, and a frame later its call button pressed only if the game shows it usable
-            // (ContactsApp.StartCall would press it regardless: a contact with no call button would call the last one).
             return WithNotices(() => ModContacts.OpenAndCall(contact), notices => new JObject
             {
                 ["contact"] = contact.id, ["name"] = ContactName(contact),
@@ -449,11 +399,6 @@ namespace FoodTrucks
             return string.IsNullOrEmpty(text) || text!.StartsWith("#", StringComparison.Ordinal) ? contact.id : text;
         }
 
-        // ---- eat: from the paper bag in hands ----
-
-        // { "item"? }: eats one of a food in the bag the player holds, as the hands panel's action button does
-        // (CargoItemUi: paid, not sealed, a bag, a consumable; Item.TryToConsume, then one fewer in the bag). The first
-        // food in the bag when no item is named.
         private static object Eat(JObject args)
         {
             RequireFreeHands("eating");
@@ -487,23 +432,14 @@ namespace FoodTrucks
             });
         }
 
-        // ---- place: furniture from the box in hands, set down in the player's own building ----
-
         private static readonly System.Reflection.MethodInfo? GroundPositionMethod =
             HarmonyLib.AccessTools.Method(typeof(BigAmbitions.PlacementSystem.PlacementSystem), "UpdateGroundItemPosition");
         private static readonly System.Reflection.FieldInfo? PlacementValidField =
             HarmonyLib.AccessTools.Field(typeof(BigAmbitions.PlacementSystem.PlacementSystem), "IsNewItemPlacementValid");
 
-        // { "square" } or { "x", "z" }, with "rotation", "move", "check": the hands panel's Place for a box of furniture (ItemPanelUI.ClickPlace: the bed out of
-        // its box), moved to that point of the floor as the mouse moves it there (PlacementSystem's ground step from a ray
-        // straight down: the floor hit, blocked areas, the item's grid) and turned to the nearest of its rotation steps
-        // (degrees, clockwise), then confirmed when the game finds the place free, as a click does. A refused place puts
-        // the furniture back in its box. Only inside a building of the player's own; one mouse-free step, so the
-        // per-frame mouse follow never runs in between.
         private static object Place(JObject args)
             => PlaceHeld(args, false);
 
-        // Uses the same floor/grid/collision checks as furniture placement, but keeps the container closed.
         private static object Drop(JObject args)
         {
             RequireCarryControl();
@@ -547,8 +483,6 @@ namespace FoodTrucks
             if (PlacementRotationInput()) throw new BridgeError("Release the placement rotation controls before trying again.");
             if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode) throw new BridgeError("Something is being placed already.");
             if (GroundPositionMethod == null || PlacementValidField == null) throw new BridgeError("The game's placement step wasn't found (game update?).");
-            // "move": furniture already standing in this building (the nearest whose name contains it) is picked up and set
-            // down again through the game's own move (PlacementHelper.StartPlacementMode); a refused move puts it back.
             var moveName = keepContainer ? null : Str(args, "move");
             ItemInstance? hands = null;
             ItemController? moving = null;
@@ -586,7 +520,6 @@ namespace FoodTrucks
             var name = LocalizorManager.GetLocalization(itemName, null);
             var step = item.degreesPerRotation > 0 ? item.degreesPerRotation : 45f;
             var yRotation = (float)(Math.Round(rotation / step) * step % 360 + 360) % 360;
-            // Snapshot what native cancellation must conserve, including children and attachment relationships.
             var before = PlacementSnapshot();
             var oldSnap = BigAmbitions.PlacementSystem.PlacementSystem.snapFreePlacement;
             var caught = Notices.BeginCapture();
@@ -623,8 +556,6 @@ namespace FoodTrucks
                     floorSeen = inside ? $"{floor.collider.name} (y {floor.point.y:F2})" : "no floor on the player's level";
                     if (inside) GroundPositionMethod.Invoke(null, new object[] { ray });
                     blocked = inside && BigAmbitions.PlacementSystem.PlacementSystem.placedInBlockedArea;
-                    // A blocked surface returns before the native updater moves the ghost. Don't report its old pose
-                    // or old use targets as the candidate's resolved position/reachability.
                     at = requested;
                     if (inside && !blocked)
                     {
@@ -646,7 +577,6 @@ namespace FoodTrucks
                     }
                     if (resolved)
                     {
-                        // Preview needs refreshed candidate targets too; restore their caches after cancellation.
                         foreach (var member in placing.GetComponentsInChildren<EntityController>(true))
                             foreach (var t in (NavTargetsField?.GetValue(member) as Transform[]) ?? Array.Empty<Transform>())
                                 if (t != null && !navBefore.ContainsKey(t)) navBefore[t] = t.localPosition;
@@ -706,10 +636,6 @@ namespace FoodTrucks
         private static readonly System.Reflection.MethodInfo? StackPositionMethod =
             HarmonyLib.AccessTools.Method(typeof(BigAmbitions.PlacementSystem.PlacementSystem), "UpdateStackItemPosition");
 
-        // { "on": NAME, "check"? }: furniture that sits on other furniture (a cash register on a cabinet, a coffee machine on
-        // a counter), set on the nearest piece in this building whose name contains NAME, at one of its attachment points
-        // that takes it, as the mouse puts it there (PlacementSystem.UpdateStackItemPosition: a ray onto the attachment
-        // point), then confirmed when the game finds it valid, as a click does; it is saved attached to that piece.
         private static object PlaceOn(JObject args)
         {
             var onName = Str(args, "on")!;
@@ -785,8 +711,6 @@ namespace FoodTrucks
         private static readonly System.Reflection.FieldInfo? NavTargetsField =
             HarmonyLib.AccessTools.Field(typeof(EntityController), "navMeshTargets");
 
-        // { "radius"? }: read only. For each item near the player, its walk-to points as the game's reach check sees them
-        // (EntityController.GetClosestNavMeshTargetPosition): the wall test, the path status and how far the path ends short.
         private static object NavProbe(JObject args)
         {
             var radius = (float)(Num(args, "radius") ?? 6);
@@ -828,9 +752,6 @@ namespace FoodTrucks
             };
         }
 
-        // ---- What the player has: hands, home ----
-
-        // What the player holds: the item and its contents (a bag's food, a box's goods).
         internal static JObject? Hands()
         {
             var hands = PlayerHelper.ItemInstanceInHands;
@@ -847,7 +768,6 @@ namespace FoodTrucks
             };
         }
 
-        // The homes the player rents (residential buildings), by address: where a bed of their own is.
         internal static JArray Homes()
         {
             var homes = new JArray();

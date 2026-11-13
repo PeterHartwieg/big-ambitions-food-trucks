@@ -4,8 +4,6 @@ using Newtonsoft.Json.Linq;
 
 namespace FoodTrucks.Core.Fleet
 {
-    // Optional, independently versioned cosmetic data. Keep the original token so a missing icon,
-    // malformed design or newer logo format cannot corrupt a save or be silently overwritten.
     public sealed class VehicleLogo
     {
         public const int CurrentVersion = 1;

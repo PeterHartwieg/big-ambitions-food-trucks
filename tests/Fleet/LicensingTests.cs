@@ -47,7 +47,6 @@ public class LicensingTests
 
         Assert.Equal(LicenceProblem.TooEarlyToRenew, licensing.Buy(licence, 50, passedFoodSafety: true));
         Assert.Equal(LicenceProblem.None, licensing.Buy(licence, 51, passedFoodSafety: true));
-        // Renewing before expiry adds a full period to the old expiry.
         Assert.Equal(120, licence.LicenceExpiresOnDay);
         Assert.Equal(1, licence.FirstLicensedDay);
     }
@@ -119,7 +118,6 @@ public class LicensingTests
         Licensing.BuyPermit(state, "v1", 1);
         Assert.Equal(OpenProblem.None, Licensing.CanOpen(state, "v1", 1, playerAtWindow: true, hires: 0));
         Assert.Equal(OpenProblem.NoCrew, Licensing.CanOpen(state, "v1", 1, playerAtWindow: false, hires: 0));
-        // A hire works under the vehicle's permit and the player's licence.
         Assert.Equal(OpenProblem.None, Licensing.CanOpen(state, "v1", 1, playerAtWindow: false, hires: 1));
         Assert.Equal(OpenProblem.LicenceExpired, Licensing.CanOpen(state, "v1", 61, playerAtWindow: true, hires: 0));
         Assert.Equal(OpenProblem.NoLicence, Licensing.CanOpen(new SaveState { Vehicles = { new VehicleState { VehicleId = "v1" } } }, "v1", 1, true, 0));

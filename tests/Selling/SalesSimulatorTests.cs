@@ -17,8 +17,6 @@ public class SalesSimulatorTests
     private const string Coffee = "ba:itemname_cupofcoffee";
     private const string Soda = "ba:itemname_sodacan";
 
-    // These tests predate the walk-in: customers join the queue the minute they arrive (SalesWalkInTests
-    // covers the walk). Everything else is the shipped queue rules.
     internal static readonly QueueRules NoWalk = new(ShippedData.Rules.Queue.PatienceMinutes, ShippedData.Rules.Queue.PatienceSpread,
         ShippedData.Rules.Queue.RainPatience, ShippedData.Rules.Queue.MaxQueue);
 
@@ -36,7 +34,6 @@ public class SalesSimulatorTests
         };
     }
 
-    // Runs minute by minute, applying the draws to the stock as the game side would.
     private static List<SalesResult> Run(ServiceState state, SalesInput input, int minutes, SalesSimulator? runner = null)
     {
         var stock = input.Stock.ToDictionary(p => p.Key, p => p.Value);
@@ -59,8 +56,6 @@ public class SalesSimulatorTests
     [Fact]
     public void ACategorySellsOnlyItsChosenItem()
     {
-        // Hot dogs and burgers are both fast food; burgers have fewer units but are the chosen item.
-        // Once they run out, fast food customers walk on rather than buy hot dogs they may not accept.
         var input = Input(30, units: 0, menu: new[] { HotDog, Burger });
         input.Stock = new Dictionary<string, int> { [HotDog] = 50, [Burger] = 3 };
         input.CategoryItems = new Dictionary<string, string> { ["fastfood"] = Burger };
@@ -75,8 +70,6 @@ public class SalesSimulatorTests
     [Fact]
     public void AnOrderWhoseItemIsNoLongerOfferedGetsTheCurrentOne()
     {
-        // A burger order is at the window when the burger's price stops being accepted: the customer
-        // gets the category's new item instead of a burger at a refused price.
         var state = SalesSimulator.Open(13);
         var input = Input(200, units: 0, menu: new[] { HotDog, Burger });
         input.Stock = new Dictionary<string, int> { [HotDog] = 50, [Burger] = 50 };
@@ -242,7 +235,6 @@ public class SalesSimulatorTests
     {
         var results = Run(SalesSimulator.Open(3), Input(10), 60 * 100);
 
-        // 10 an hour for 100 hours, all served by a worker who could do 20.
         Assert.InRange(Served(results), 900, 1100);
         Assert.Equal(0, results.Sum(r => r.Count(CustomerExit.GaveUp) + r.Count(CustomerExit.QueueFull)));
     }
@@ -261,7 +253,6 @@ public class SalesSimulatorTests
     [Fact]
     public void OneWorkerServesTwentyHotDogsAnHourWhateverTheCrowd()
     {
-        // Hot dogs take 3 minutes: one worker serves 20 an hour, the rest queue and give up.
         var results = Run(SalesSimulator.Open(5), Input(60), 600);
 
         Assert.InRange(Served(results), 198, 201);
@@ -334,7 +325,6 @@ public class SalesSimulatorTests
             longest = Math.Max(longest, state.Queue.Count);
         }
 
-        // Someone whose patience ends at a minute's close can leave the last minute one short.
         Assert.Equal(expected, longest);
         Assert.True(turnedAway > 0);
     }
@@ -364,7 +354,6 @@ public class SalesSimulatorTests
     [Fact]
     public void ASlowItemSlowsTheQueue()
     {
-        // Burgers take 5 minutes: 12 an hour.
         var results = Run(SalesSimulator.Open(6), Input(60, menu: Burger), 600);
 
         Assert.InRange(Served(results), 118, 121);
@@ -423,14 +412,12 @@ public class SalesSimulatorTests
         var result = simulator.Advance(state, rain, 5);
 
         Assert.True(waiting > 0);
-        // Ten minutes in, rain cuts patience to 9 to 15 minutes: the first arrivals leave at once.
         Assert.True(result.Count(CustomerExit.GaveUp) > 0);
     }
 
     [Fact]
     public void ACustomerWhoseWaitRainEndedIsNotServed()
     {
-        // Waited 15 minutes with patience 20: in rain (12) they should leave before the free worker calls them.
         var state = SalesSimulator.Open(32);
         state.Minute = 15;
         state.NextCustomerId = 2;
@@ -484,7 +471,6 @@ public class SalesSimulatorTests
 
         var result = simulator.Advance(state, input, 5);
 
-        // Without shares the main share is a half, so 0.5 per customer is one drink per hot dog.
         Assert.Contains(result.Sales, s => s.AddOn && s.Item == Soda);
     }
 
@@ -521,7 +507,6 @@ public class SalesSimulatorTests
     [Fact]
     public void AFreedWorkerStartsTheNextCustomerMidMinute()
     {
-        // A soda takes a minute: a worker with 0.5 left finishes, then makes half of the next one.
         var state = SalesSimulator.Open(38);
         state.NextCustomerId = 3;
         state.Window.Add(new ServiceCustomer { Id = 1, Patience = 20, Category = "colddrinks", Item = Soda, MinutesLeft = 0.5 });
@@ -664,7 +649,6 @@ public class SalesSimulatorTests
         var mains = result.Count(s => !s.AddOn && s.Item == HotDog);
         var addOns = result.Where(s => s.AddOn).ToList();
         Assert.All(addOns, s => Assert.Equal(Soda, s.Item));
-        // 0.16 per customer over the 80% who came for food: 0.2 per hot dog.
         Assert.InRange(addOns.Count / (double)mains, 0.17, 0.23);
         Assert.DoesNotContain(addOns, a => result.Any(s => !s.AddOn && s.CustomerId == a.CustomerId && s.Item == Soda));
     }
@@ -703,7 +687,6 @@ public class SalesSimulatorTests
 
         Assert.Single(state.Window);
         Assert.Null(state.Queue[0].Item);
-        // Back in line, their wait starts again.
         Assert.Equal(state.Minute - 1, state.Queue[0].ArrivedAtMinute);
     }
 
@@ -773,7 +756,6 @@ public class SalesSimulatorTests
     [Fact]
     public void SeedsAreStable()
     {
-        // Fixed values: a change here would give every saved vehicle other customers.
         Assert.Equal(SeededRandom.SeedFor("cart-1", 3), SeededRandom.SeedFor("cart-1", 3));
         Assert.NotEqual(SeededRandom.SeedFor("cart-1", 3), SeededRandom.SeedFor("cart-1", 4));
         Assert.Equal(-3802972073786313226L, SeededRandom.SeedFor("cart-1", 3));

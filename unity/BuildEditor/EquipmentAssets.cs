@@ -7,14 +7,6 @@ using UnityEngine;
 
 namespace FoodTrucks.BuildEditor
 {
-    // The equipment models shown on a cart's counter spots (art/equipment, art/README.md "Equipment").
-    // tools/build-mod.sh copies each FBX (as <Name>_Model.fbx), its three surface maps (T_<Name>_BC/_M/_N) and its
-    // icon (Icons/Icon_<Name>.png) into Vehicles/EquipmentArt; this makes one HDRP/Lit material, one
-    // <Name>_Display.prefab and one icon sprite per model there. The prefabs have no colliders:
-    // the pieces are looks only. Origin at the bottom centre, front (Blender -Y) along +Z. data/economy.json's
-    // "display" names them. The suffixes matter: the game finds a mod item's prefab by file name alone, in any
-    // mod's bundle (PrefabHelper, AssetService.FindAssetInAnyBundleByFileName), so no other asset in the bundle
-    // may be called griddle, corngrill or dumplingsteamer, the machines ItemAssets builds.
     internal static class EquipmentAssets
     {
         public static readonly string[] Models =
@@ -72,9 +64,6 @@ namespace FoodTrucks.BuildEditor
 
         internal static string ModelPath(string folder, string name) => $"{folder}/{name}_Model.fbx";
 
-        // A piece's picture for order lists (art/tools/render_icons.sh, in the game's item icon style), a sprite in the
-        // bundle at Vehicles/EquipmentArt/Icons/Icon_<Name>.png. The prefix keeps it apart from every prefab and item
-        // name (the game finds those by file name in any bundle).
         internal static string IconName(string name) => "Icon_" + name;
 
         private static string ProjectRoot => Path.GetDirectoryName(Application.dataPath)!;

@@ -11,7 +11,6 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Fleet;
 
-// Vehicle warnings as the game's to-dos (plan, "Street food page and vehicle warnings", Peter, 15 October 2026).
 public class VehicleWarningsTests
 {
     private const string HotDog = "ba:itemname_hotdog";
@@ -24,7 +23,6 @@ public class VehicleWarningsTests
     private static FleetRules Rules => ShippedData.Rules.Fleet;
     private static CargoLine L(string item, int amount) => new(item, amount, false);
 
-    // A permitted vehicle with a commissary space and no route: nothing to warn about but its stock.
     private static (SaveState State, VehicleState Vehicle) Setup(string kind = "cart")
     {
         var vehicle = new VehicleState { VehicleId = "v1", VehicleType = kind, HasPermit = true };
@@ -48,7 +46,6 @@ public class VehicleWarningsTests
     }
 
     [Theory]
-    // A cart's hot dog grill holds 40 hot dogs: low at a quarter of that or less, empty at none.
     [InlineData(40, null)]
     [InlineData(11, null)]
     [InlineData(10, VehicleWarningKind.LowStock)]
@@ -59,7 +56,6 @@ public class VehicleWarningsTests
         var (state, vehicle) = Setup();
         var cargo = new List<CargoLine> { L(HotDogGrill, 1) };
         if (hotDogs > 0) cargo.Add(L(HotDog, hotDogs));
-        // Sold out: it sold hot dogs on its last day out.
         else vehicle.Sold.Add(Sold(4, HotDog));
 
         var warnings = For(state, vehicle, cargo);
@@ -71,7 +67,6 @@ public class VehicleWarningsTests
     [Fact]
     public void StockCountsAgainstWhatTheFittedPiecesHold()
     {
-        // Two grills on a truck hold 160: 40 hot dogs is a quarter, so low; with one grill (80) it is half.
         var (state, vehicle) = Setup("truck");
         Assert.Equal(VehicleWarningKind.LowStock, Assert.Single(For(state, vehicle, new[] { L(HotDogGrill, 2), L(HotDog, 40) })).Kind);
         Assert.Empty(For(state, vehicle, new[] { L(HotDogGrill, 1), L(HotDog, 40) }));
@@ -82,11 +77,9 @@ public class VehicleWarningsTests
     [Fact]
     public void OnlyFoodsTheVehicleStocksWarn()
     {
-        // A coffee machine also makes tea, lattes and americanos; a cart carrying only coffee warns about none of them.
         var (state, vehicle) = Setup();
         Assert.Empty(For(state, vehicle, new[] { L(Machine, 1), L(Coffee, 160) }));
 
-        // Tea it sold yesterday and has run out of is empty; coffee down to a quarter is low.
         vehicle.Sold.Add(Sold(3, Tea));
         Assert.Equal(new[] { new VehicleWarning(VehicleWarningKind.LowStock, "v1", Coffee), new VehicleWarning(VehicleWarningKind.EmptyStock, "v1", Tea) },
             For(state, vehicle, new[] { L(Machine, 1), L(Coffee, 40) }));
@@ -95,7 +88,6 @@ public class VehicleWarningsTests
     [Fact]
     public void FoodsMissingFromTheGameNeverWarn()
     {
-        // A Bakery latte in the sales record, but the Bakery mod is gone: no to-do the player could never clear.
         var (state, vehicle) = Setup();
         vehicle.Sold.Add(Sold(3, Latte));
         var cargo = new[] { L(Machine, 1), L(Coffee, 160) };
@@ -106,7 +98,6 @@ public class VehicleWarningsTests
     [Fact]
     public void FoodOffTheMenuHasNoStockWarning()
     {
-        // The grill was taken out: the hot dogs on board are on no menu.
         var (state, vehicle) = Setup();
         Assert.Empty(For(state, vehicle, new[] { L(HotDog, 2) }));
     }
@@ -115,16 +106,13 @@ public class VehicleWarningsTests
     public void ARouteWithoutEquipmentWarns()
     {
         var (state, vehicle) = Setup();
-        // No route: nothing to say about a bare cart.
         Assert.Empty(For(state, vehicle, new CargoLine[0]));
 
         vehicle.Crew = new List<string> { "e1" };
         vehicle.Schedule = Route();
         WeekTestData.AllDay(vehicle);
         Assert.Equal(new VehicleWarning(VehicleWarningKind.NoEquipment, "v1"), Assert.Single(For(state, vehicle, new CargoLine[0])));
-        // Food without a machine to cook it on is no equipment either.
         Assert.Contains(new VehicleWarning(VehicleWarningKind.NoEquipment, "v1"), For(state, vehicle, new[] { L(HotDog, 20) }));
-        // One machine is enough.
         Assert.DoesNotContain(For(state, vehicle, new[] { L(HotDogGrill, 1), L(HotDog, 40) }), w => w.Kind == VehicleWarningKind.NoEquipment);
     }
 
@@ -139,15 +127,12 @@ public class VehicleWarningsTests
         Assert.Equal(new VehicleWarning(VehicleWarningKind.MissingCrew, "v1"), Assert.Single(For(state, vehicle, cargo, crew: 1)));
         Assert.Empty(For(state, vehicle, cargo, crew: 2));
 
-        // Without the count given, the saved crew list counts (on shift around the clock here).
         vehicle.Crew = new List<string> { "e1", "e2" };
         WeekTestData.AllDay(vehicle);
         Assert.Empty(For(state, vehicle, cargo));
-        // With part of the route day nobody on shift, the route has a problem.
         vehicle.Schedule.CrewShifts.RemoveAll(s => s.Day == DayOfWeek.Wednesday);
         Assert.Equal(new VehicleWarning(VehicleWarningKind.RouteProblem, "v1"), Assert.Single(For(state, vehicle, cargo)));
         WeekTestData.AllDay(vehicle);
-        // A route without stops is no route.
         vehicle.Crew.Clear();
         vehicle.Schedule = new HireSchedule();
         Assert.Empty(For(state, vehicle, cargo));
@@ -177,7 +162,6 @@ public class VehicleWarningsTests
 
         vehicle.Health.Grade = Grade.B;
         Assert.DoesNotContain(VehicleWarningKind.HealthGradeC, For(state, vehicle, cargo).Select(w => w.Kind));
-        // Another vehicle's space doesn't count.
         state.Commissary.Spaces.Add(new CommissarySpace { VehicleId = "v2", Kind = "cart", CommissaryId = "hells-kitchen" });
         Assert.Contains(VehicleWarningKind.NoCommissarySpace, For(state, vehicle, cargo).Select(w => w.Kind));
     }
@@ -190,7 +174,6 @@ public class VehicleWarningsTests
         Assert.Empty(VehicleWarnings.Fleet(Rules, new LicenceState(), 10));
 
         var licence = new LicenceState { HasVendorLicence = true, LicenceExpiresOnDay = 100 };
-        // Days left counts today: on day 100 - window + 1 there are `window` days left.
         Assert.Empty(VehicleWarnings.Fleet(Rules, licence, 100 - window));
         var running = Assert.Single(VehicleWarnings.Fleet(Rules, licence, 100 - window + 1));
         Assert.Equal(VehicleWarningKind.LicenceRunningOut, running.Kind);
@@ -217,7 +200,6 @@ public class VehicleWarningsTests
     [Fact]
     public void KindNumbersStayPut()
     {
-        // The game side's to-do types are 9200 + these numbers; a saved or shown to-do relies on them.
         Assert.Equal(1, (int)VehicleWarningKind.LowStock);
         Assert.Equal(9, (int)VehicleWarningKind.LicenceExpired);
     }

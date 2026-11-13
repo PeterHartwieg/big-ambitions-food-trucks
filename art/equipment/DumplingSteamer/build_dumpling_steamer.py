@@ -70,7 +70,6 @@ def join_body():
 
 
 def lathe(name, profiles, colors, n=18, center=(0,.037), alternating=False):
-    # Solid capped surface of revolution; profiles travel bottom to top.
     cx,cy=center
     vs=[(cx+r*math.cos(2*math.pi*i/n),cy+r*math.sin(2*math.pi*i/n),z)
         for r,z in profiles for i in range(n)]
@@ -85,7 +84,6 @@ def lathe(name, profiles, colors, n=18, center=(0,.037), alternating=False):
     return mesh_part(name,vs,faces,keys)
 
 def rounded_rect(name,rings,colors,center=(0,0)):
-    # Eight-sided rectangles with clipped corners, also used as a closed tray shell.
     vs=[]
     for w,d,z,clip in rings:
         x,y=w/2,d/2
@@ -106,7 +104,6 @@ def blockout():
     for ob in list(bpy.data.objects):
         if ob.name.startswith(('DS_','DumplingSteamer_','Studio_')):
             bpy.data.objects.remove(ob,do_unlink=True)
-    # Broad placement base: continuous flat underside covers the origin.
     rounded_rect('BurnerBase',[(.372,.344,0,.022),(.384,.354,.010,.026),
                              (.384,.354,.029,.026),(.370,.340,.035,.022)],
                  ['Burner','SteelDark','Steel'])
@@ -120,7 +117,6 @@ def blockout():
               ['BambooRim','Bamboo','BambooDark','BambooLight'],alternating=True)
     lathe('BambooLid',[(.143,.354),(.143,.365),(.118,.387),(.038,.400)],
           ['BambooRim','BambooLight','Bamboo'],n=18)
-    # Customer side is -Y. Tray sits low, in front of the basket stack.
     rounded_rect('ServingTray',[(.344,.085,.035,.012),(.355,.091,.052,.016),
                               (.337,.074,.052,.012),(.321,.059,.042,.008)],
                  ['Tray','SteelLight','TrayInner'],center=(0,-.128))
@@ -128,8 +124,6 @@ def blockout():
     return body
 
 def dumpling(name, center, length=.064, width=.038, height=.034, angle=0):
-    # A closed crescent with a deliberately scalloped pinched top seam.
-    # Two sides meet at six alternating peaks; broad belly facets read at game scale.
     profile=[(-.5,0),(-.39,-.40),(-.12,-.52),(.18,-.49),(.42,-.32),
              (.5,0),(.36,.28),(.13,.34),(-.16,.33),(-.39,.23)]
     cx,cy,cz=center; n=len(profile)
@@ -141,7 +135,6 @@ def dumpling(name, center, length=.064, width=.038, height=.034, angle=0):
             z=cz+(0 if j==0 else height*.42)
             vs.append((cx+xx*math.cos(angle)-yy*math.sin(angle),
                        cy+xx*math.sin(angle)+yy*math.cos(angle),z))
-    # Seam follows the crown from left to right and gives visible folded dough.
     seam=[]
     for i in range(6):
         x=(-.41+.164*i)*length
@@ -152,25 +145,20 @@ def dumpling(name, center, length=.064, width=.038, height=.034, angle=0):
     faces=[tuple(range(n-1,-1,-1))]; colors=['Dough']
     for i in range(n):
         faces.append((i,(i+1)%n,(i+1)%n+n,i+n)); colors.append('Dough')
-    # Stitch belly crown to pinched ridge with a matched five-segment fan each side.
     for i in range(5):
         faces.append((n+i,n+i+1,seam[i+1],seam[i])); colors.append('Dough')
         back=[0,9,8,7,6,5]
         faces.append((n+back[i+1],n+back[i],seam[i],seam[i+1])); colors.append('Pleat' if i%2==0 else 'Dough')
-    # Front and rear fans share their end edges and close the crown.
     return mesh_part(name,vs,faces,colors)
 
 def detail():
     global PARTS
     PARTS=[bpy.data.objects['DumplingSteamer_Body']]
-    # Compact carry/lift handles on the metal pot, retained inside the footprint.
     for x in (-.149,.149):
         box('PotHandle',(x,.037,.093),(.040,.052,.016),'Burner')
         box('HandleMount',(x*.88,.037,.089),(.020,.040,.018),'SteelDark')
-    # Bamboo lid has an honest squared arch rather than a tall generic knob.
     for x in (-.029,.029): box('LidGripUpright',(x,.037,.409),(.011,.018,.029),'BambooDark')
     box('LidGripTop',(0,.037,.425),(.069,.023,.010),'BambooRim')
-    # Five closed, broad bamboo slats draped over the faceted lid.
     for dy in (-.064,-.032,0,.032,.064):
         half=math.sqrt(.107**2-dy**2)
         vs=[]
@@ -183,16 +171,12 @@ def detail():
         faces=[(3,2,1,0),(16,17,18,19)]
         faces += [(i*4+j,i*4+(j+1)%4,(i+1)*4+(j+1)%4,(i+1)*4+j) for i in range(4) for j in range(4)]
         mesh_part('LidSlat',vs,faces,['BambooLight']*len(faces))
-    # Clearly visible control on the forward-left corner of the burner base.
     lathe('GasControl',[(.014,.035),(.014,.048)],['Knob'],n=8,center=(.162,-.069))
     box('ControlMark',(.162,-.069,.049),(.017,.003,.003),'SteelLight')
-    # Three pale, hand-folded dumplings in the forward serving tray.
     dumpling('Dumpling_A',(-.103,-.132,.043),angle=-.18)
     dumpling('Dumpling_B',(-.023,-.131,.043),angle=.17)
     dumpling('Dumpling_C',(.055,-.132,.043),angle=-.13)
-    # Pair of narrow tapered chopsticks rests diagonally on the right tray lip.
     for offset in (0,.017):
-        # Tapered square section, preserving identity transforms on the mesh object.
         a=Vector((.087+offset,-.168,.057)); b=Vector((.166+offset,-.091,.061))
         tangent=(b-a).normalized(); side=tangent.cross(Vector((0,0,1))).normalized()
         up=side.cross(tangent).normalized()
@@ -254,7 +238,6 @@ def uv_texture():
     bpy.ops.object.mode_set(mode='OBJECT')
     mesh=body.data; mesh.uv_layers.active.name='UVMap'
     mesh.calc_loop_triangles(); uv=mesh.uv_layers.active.data
-    # Rasterise flat per-face palette into the atlas, with padding for filtered sampling.
     pix=np.zeros((512,512,4),dtype=np.float32); pix[:,:,:3]=(.20,.24,.26); pix[:,:,3]=1
     mask=np.zeros((512,512),bool)
     for tri in mesh.loop_triangles:
@@ -301,7 +284,6 @@ def uv_texture():
     mat.node_tree.links.new(shader.outputs['BSDF'],output.inputs['Surface'])
     mesh.materials.clear(); mesh.materials.append(mat)
     for face in mesh.polygons: face.material_index=0; face.use_smooth=False
-    # Remove now-unused temporary palette materials from the final scene.
     for m in list(bpy.data.materials):
         if m.name.startswith('Build_') and m.users==0: bpy.data.materials.remove(m)
     for screen in bpy.data.screens:
@@ -315,8 +297,6 @@ def collision_export():
     old=bpy.data.objects.get('DumplingSteamer_Collision')
     if old: bpy.data.objects.remove(old,do_unlink=True)
     bm=bmesh.new()
-    # Broad lower envelope encloses the base and tray; upper octagon encloses the stack.
-    # 24 support points produce fewer than 60 triangles; hull construction is explicit.
     for z,w,d,cy,clip in ((0,.384,.354,0,.026),(.077,.384,.357,.0015,.026),(.430,.286,.286,.037,.083)):
         x,y=w/2,d/2
         for a,b in ((-x+clip,-y),(x-clip,-y),(x,-y+clip),(x,y-clip),(x-clip,y),(-x+clip,y),(-x,y-clip),(-x,-y+clip)):

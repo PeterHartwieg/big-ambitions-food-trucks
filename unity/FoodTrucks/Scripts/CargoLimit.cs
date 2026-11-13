@@ -11,12 +11,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Caps what goes into a Food Trucks vehicle: food up to the room left in the fitted piece that holds it
-    // (Core's Storage: storage per piece), equipment up to its slots and one Extra Storage.
-    // Every way the game loads a vehicle goes through VehicleInstance.MergeIntoCargo (tops up existing
-    // stacks) or TryToAddToCargo (fills slots), so these two hooks cover them all. A partial load is
-    // reported the way the game already reports a vehicle filling up: TryToAddToCargo returns false and
-    // the source keeps the rest, so a box in the player's hands stays there with what didn't fit.
     internal static class CargoLimit
     {
         [ThreadStatic] private static bool inside;
@@ -27,7 +21,6 @@ namespace FoodTrucks
             vehicle.cargoInstances.Where(c => c != null).Select(c =>
                 new CargoLine(c.itemName, c.amount, c.nestedCargoInstances != null && c.nestedCargoInstances.Count > 0));
 
-        // How much of this stack may go in, and why not all; null when the vehicle or item isn't limited.
         private static LoadCheck? Allowed(VehicleInstance vehicle, CargoInstance incoming)
         {
             var tables = DemandData.Tables;
@@ -38,9 +31,6 @@ namespace FoodTrucks
             return check.Allowed >= incoming.amount ? (LoadCheck?)null : check;
         }
 
-        // Prefix: hide the part that doesn't fit from the merge; the finalizer gives it back to the source,
-        // also when a cargo listener throws inside the merge. Safe because merging never keeps a reference
-        // to the incoming stack. The add that follows a merge reports the cap, so this one stays quiet.
         public static void MergePrefix(VehicleInstance __instance, CargoInstance cargoInstanceToMerge, out int __state)
         {
             __state = 0;
@@ -61,10 +51,6 @@ namespace FoodTrucks
             return __exception;
         }
 
-        // Prefix: when only part fits, add a copy of that part (the game may store the very object it is
-        // given, and the source must keep its own), then take what went in off the source and report false.
-        // Once the copy has been offered, the original never runs: whatever went in is taken off the source,
-        // even if a cargo listener throws on the way.
         public static bool AddPrefix(VehicleInstance __instance, CargoInstance cargoInstance, ref bool __result)
         {
             if (inside) return true;
@@ -93,7 +79,6 @@ namespace FoodTrucks
             }
             catch (Exception ex)
             {
-                // Nothing has moved yet: refuse the load rather than let the full stack through.
                 Log.Error(ex);
                 return false;
             }
@@ -109,10 +94,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // Prefix on ICargoHolder.TryToMergeAndMoveCargoBetweenHolders (a hand truck or a box in hand unloaded into a
-        // vehicle). The game moves the stacks last-first, so food loaded onto a hand truck after its grill would reach
-        // the vehicle before the grill and be refused for want of it. Into a food vehicle, the equipment that fits goes
-        // first, each stack moved the way the game moves it; the original then moves the rest.
         public static void MoveEquipmentFirstPrefix(ICargoHolder fromHolder, ICargoHolder toHolder, out bool __state)
         {
             __state = false;
@@ -123,12 +104,10 @@ namespace FoodTrucks
                 var cargo = fromHolder.GetCargoInstances();
                 if (cargo == null) return;
                 var equipment = cargo.Where(c => c != null && tables.EquipmentForGameItem(c.itemName) != null).ToList();
-                // Food after equipment only matters when both are in the load.
                 if (equipment.Count == 0 || equipment.Count == cargo.Count(c => c != null)) return;
                 for (var i = equipment.Count - 1; i >= 0; i--)
                 {
                     var stack = equipment[i];
-                    // A piece that won't fit whole is left to the original, so its refusal shows once.
                     if (Allowed(vehicle, stack) != null) continue;
                     var amount = stack.amount;
                     toHolder.MergeIntoCargo(stack);
@@ -147,22 +126,13 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Cargo limit: equipment-first unload: " + ex); }
         }
 
-        // Something moved in the prefix counts as a move, as it would have inside the original.
         public static void MoveEquipmentFirstPostfix(ref bool __result, bool __state)
         {
             if (__state) __result = true;
         }
 
-        // How close the player must be to hear a food vehicle's cargo change: the game's range for NPC voices
-        // (NpcVocalizerManager.vocalisationRange).
         private const float BoxSoundMetres = 15f;
 
-        // Prefix on VehicleController.OnItemAddedToCargo, which runs on every cargo change of a spawned vehicle and plays
-        // the game's HandTruckAddBox sound at the player's position, however far away the vehicle is: the game only changes
-        // a vehicle's cargo with the player beside it. A food vehicle's cargo also changes with nobody near (crew sales,
-        // catering, Restock), so its sound plays only with the player within BoxSoundMetres and not in another building
-        // (the game's own test in VehicleController.OnCurrentHeightChanged) or an underground garage. The cargo count is
-        // updated either way.
         public static bool BoxSoundPrefix(VehicleController __instance)
         {
             bool quiet;
@@ -170,13 +140,11 @@ namespace FoodTrucks
             {
                 var vehicle = __instance.vehicleInstance;
                 if (VehicleKind(vehicle) == null) return true;
-                // No player (a load or quit): nobody to hear it, and the game's own code would throw on the position.
                 if (PlayerHelper.PlayerController == null) quiet = true;
                 else
                 {
                     var player = PlayerHelper.GetPosition();
                     var here = __instance.transform.position;
-                    // An underground garage counts as away unless the vehicle stands down there too (a level apart).
                     var away = (BuildingManager.IsInsideBuilding &&
                                 vehicle.Address != InstanceBehavior<BuildingManager>.Instance.buildingRegistration?.Address) ||
                                (Parking.UndergroundParking.UndergroundParkingManager.IsInsideParking && Mathf.Abs(player.y - here.y) > 2.5f);

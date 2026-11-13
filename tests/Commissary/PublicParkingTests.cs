@@ -23,7 +23,6 @@ public class PublicParkingTests
     {
         var state = Rented(kind);
         Assert.True(Commissaries.PublicParkingCovered(state, "v", kind, "a"));
-        // A failed rent payment remains an active space, as it does for the overnight check.
         state.Charges.AddRange(Commissaries.RentDue(state, new CommissaryRules(), 1));
         Assert.True(Commissaries.PublicParkingCovered(state, "v", kind, "a"));
         Assert.Single(state.Spaces);
@@ -110,14 +109,12 @@ public class PublicParkingTests
     {
         var state = Rented();
         var balance = Commissaries.PublicParkingAfterHour(0f, 5f, false);
-        // Arriving at 23:50 adds no covered hourly tick before RunDaily collects yesterday's balance.
         var chargedYesterday = balance;
         balance = 0f;
         balance = Commissaries.PublicParkingAfterHour(balance, balance + 5f,
             Commissaries.PublicParkingCovered(state, "v", "truck", "a"));
         Assert.Equal(5f, chargedYesterday);
         Assert.Equal(0f, balance);
-        // Today's later street hour belongs to the next midnight's bill.
         balance = Commissaries.PublicParkingAfterHour(balance, balance + 5f, false);
         Assert.Equal(5f, balance);
     }

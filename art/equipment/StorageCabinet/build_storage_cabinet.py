@@ -32,13 +32,13 @@ PALETTE = {
 }
 BRUSHED = {'steel', 'steel_light', 'steel_dark'}
 
-W = .196      # half width (0.392 m)
-YF = -.140    # carcass front face
-YB = .170     # carcass back face
-H = .600      # overall height (worktop top)
-T = .016      # sheet thickness
-PL = .045     # plinth height
-DIV = .330    # top of the divider between the doors and the open shelf
+W = .196
+YF = -.140
+YB = .170
+H = .600
+T = .016
+PL = .045
+DIV = .330
 
 
 class Geometry:
@@ -69,11 +69,9 @@ class Geometry:
         self.add(verts,faces,color)
 
     def bar_z(self, x, y, z0, z1, r, n, color):
-        # Vertical round bar (handle), n-sided, capped.
         verts=[(x+r*math.cos(2*math.pi*i/n), y+r*math.sin(2*math.pi*i/n), z)
                for z in (z0,z1) for i in range(n)]
         faces=[(i,(i+1)%n,(i+1)%n+n,i+n) for i in range(n)]
-        # Fan caps (no n-gons): one centre vertex per end.
         verts += [(x,y,z0),(x,y,z1)]
         for i in range(n):
             faces.append((2*n,(i+1)%n,i))
@@ -81,7 +79,6 @@ class Geometry:
         self.add(verts,faces,color)
 
     def cardboard(self, lo, hi):
-        # Box with a darker flap seam and a tape strip across the top.
         x,y,z=lo; X,Y,Z=hi
         self.box(lo,hi,['card_dark','card','card_dark','card_dark','card_dark','card'])
         cx=(x+X)/2
@@ -103,40 +100,31 @@ def build(stage=2):
         ob=bpy.data.objects.get(name)
         if ob: bpy.data.objects.remove(ob,do_unlink=True)
     g=Geometry()
-    # Recessed dark plinth; its underside covers the placement point.
     g.box((-W+.012,YF+.022,0),(W-.012,YB-.006,PL),'plinth')
-    # Carcass: base, two sides, back, divider, worktop.
     g.box((-W,YF,PL),(W,YB,PL+T),'steel_dark')
     g.box((-W,YF,PL),(-W+T,YB,H-.022),'steel')
     g.box((W-T,YF,PL),(W,YB,H-.022),'steel')
     g.box((-W+T,YB-T,PL+T),(W-T,YB,H-.022),'steel')
     g.box((-W+T,YF,DIV-T),(W-T,YB-T,DIV),'steel_light')
     g.chamfer_slab((-W,YF-.008,H-.022),(W,YB,H),.006,'steel_light')
-    # Open shelf interior: darker liner so the opening reads from the front.
     g.box((-W+T,YB-T-.004,DIV),(W-T,YB-T,H-.022),'inside')
     g.box((-W+T,YF+.010,H-.030),(W-T,YB-T,H-.022),'inside')
     if stage >= 2:
-        # Two doors, proud of the carcass, with a dark gap between and around them.
         g.box((-W+T,YF-.002,PL+T),(W-T,YF,DIV-T),'gap')
         for x0,x1 in ((-W+.004,-.003),(.003,W-.004)):
             g.box((x0,YF-.014,PL+T+.004),(x1,YF-.002,DIV-T-.004),'steel')
-            # Pressed panel: a slightly raised lighter inset.
             g.box((x0+.022,YF-.017,PL+T+.030),(x1-.022,YF-.014,DIV-T-.030),'steel_light')
-        # Bar handles beside the centre gap, on stand-offs.
         for x in (-.024,.024):
             for z in (.150,.270):
                 g.box((x-.005,YF-.026,z-.005),(x+.005,YF-.014,z+.005),'steel_dark')
             g.bar_z(x,YF-.030,.140,.280,.0065,6,'handle')
-        # Hinges on the outer edges.
         for x in (-W+.004,W-.010):
             for z in (.085,.270):
                 g.box((x,YF-.018,z),(x+.006,YF-.010,z+.030),'steel_dark')
-        # Front lip of the open shelf and a toe-kick vent.
         g.box((-W+T,YF-.004,DIV-.006),(W-T,YF,DIV+.006),'steel_dark')
         for i in range(4):
             z=.012+i*.007
             g.box((-.120,YF+.020,z),(.120,YF+.022,z+.003),'steel_dark')
-        # Stock on the open shelf: two stacked cartons, a smaller carton, a lidded tub.
         g.cardboard((-.170,-.110,DIV),(-.040,.130,DIV+.105))
         g.cardboard((-.160,-.095,DIV+.105),(-.050,.115,DIV+.190))
         g.cardboard((-.030,-.090,DIV),(.065,.120,DIV+.080))
@@ -229,7 +217,6 @@ def texture():
         color=np.array(PALETTE[name],dtype=np.float32)
         pixels[y0:y1,x0:x1,:]=color
         if name in BRUSHED:
-            # Brushing runs along the face's U direction: faint per-row streaks.
             streak=rng.normal(0,.008,(y1-y0,1,1)).astype(np.float32)
             pixels[y0:y1,x0:x1,:3]=np.clip(color[:3]+streak,0,1)
         lo=((x0+1.25)/512,(y0+1.25)/512)
@@ -237,7 +224,6 @@ def texture():
         if len(p.loop_indices)==4:
             coords=[lo,(hi[0],lo[1]),hi,(lo[0],hi[1])]
         else:
-            # Triangles (handle caps): fit the corners on a circle inside the cell.
             n=len(p.loop_indices); cx=(lo[0]+hi[0])/2; cy=(lo[1]+hi[1])/2
             rx=(hi[0]-lo[0])/2; ry=(hi[1]-lo[1])/2
             coords=[(cx+rx*math.cos(2*math.pi*j/n),cy+ry*math.sin(2*math.pi*j/n)) for j in range(n)]
@@ -269,7 +255,6 @@ def texture():
 def finish():
     body=bpy.data.objects['StorageCabinet_Body']
     bm=bmesh.new()
-    # Convex outer envelope: carcass, worktop lip and the projecting handles.
     for x in (-W,W):
         for y in (YF-.037,YB):
             for z in (0,H): bm.verts.new((x,y,z))

@@ -12,7 +12,6 @@ namespace FoodTrucks.Core.Common
 
         public SeededRandom(long state) => this.state = unchecked((ulong)state);
 
-        // The value to store; a generator built from it continues with the same draws.
         public long State => unchecked((long)state);
 
         public ulong NextULong()
@@ -26,13 +25,10 @@ namespace FoodTrucks.Core.Common
             }
         }
 
-        // In [0, 1).
         public double NextDouble() => (NextULong() >> 11) * (1.0 / (1UL << 53));
 
-        // True with the given probability.
         public bool Chance(double probability) => probability > 0 && NextDouble() < probability;
 
-        // A Poisson draw with the given mean (Knuth's method; fine for the small means of one minute).
         public int Poisson(double mean)
         {
             if (double.IsNaN(mean) || mean <= 0) return 0;
@@ -48,8 +44,6 @@ namespace FoodTrucks.Core.Common
             return count;
         }
 
-        // A stable seed from text and a number, for example a vehicle ID and the day it opened.
-        // FNV-1a, so it never changes between runtimes the way string.GetHashCode does.
         public static long SeedFor(string text, long number)
         {
             if (text == null) throw new ArgumentNullException(nameof(text));

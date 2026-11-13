@@ -21,7 +21,6 @@ namespace FoodTrucks
     {
         internal const string ContactId = "the_city_of_new_york";
         private const string ContactDescription = "government";
-        // An unused CallDialogType value; the factory is a plain dictionary and nothing enumerates the enum.
         private const CallDialogType DialogType = (CallDialogType)9101;
         private const string FeesLabel = "foodtrucks:transaction_cityfees_label";
 
@@ -32,12 +31,10 @@ namespace FoodTrucks
             Detach();
             CallDialogFactory.RegisterDialog(DialogType, () => new CityDialog());
             var contact = Contact.EnsurePermanentContact(ContactId, ContactCategoryName.General, ContactDescription);
-            // Not saved by the game, so it is set again after every load.
             contact.callDialogTypeOverride = DialogType;
             GlobalEvents.onNewDay += OnNewDay;
             attached = true;
             Log.Info("City of New York: licences, permits and event places by phone.");
-            // After a load: catch up on the city's announcements and end partnerships whose vehicle or venue is gone.
             var state = FoodTrucksSession.CurrentState;
             if (state != null && SaveGameManager.Current != null)
             {
@@ -60,7 +57,6 @@ namespace FoodTrucks
         internal static Licensing? NewLicensing() =>
             DemandData.Rules == null ? null : new Licensing(DemandData.Rules.Fleet);
 
-        // The city writes when renewal opens and when the licence has run out.
         private static void OnNewDay()
         {
             try
@@ -94,7 +90,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("City reminder: " + ex); }
         }
 
-        // The player's food vehicles, in a fixed order, each with its state in the save.
         internal static List<(VehicleInstance Vehicle, VehicleState State, string Kind)> FoodVehicles(SaveState state)
         {
             var list = new List<(VehicleInstance, VehicleState, string)>();
@@ -109,17 +104,13 @@ namespace FoodTrucks
             return list;
         }
 
-        // Pays a city fee. False (with the game's own "not enough money" notice) when the player can't.
         internal static bool Charge(long cents, string transactionKey)
         {
             var info = new TransactionInfo(transactionKey, new Dictionary<string, string>());
             info.SetTaxDeductibleName(FeesLabel);
-            // A money-change listener can throw after the game books the fee. Continue granting
-            // the purchase when that happened, otherwise the player loses the money and gets nothing.
             return cents == 0 || Payments.TryPayOut(cents, info, showNotification: true);
         }
 
-        // Debug key for throwaway saves: a licence and a permit for every food vehicle, free and without the course.
         public static void GrantForTesting()
         {
             var state = FoodTrucksSession.CurrentState;
@@ -137,10 +128,8 @@ namespace FoodTrucks
         }
     }
 
-    // The call: the licence first, then a permit for each vehicle that has none, one at a time.
     internal sealed class CityDialog : Dialog
     {
-        // The game calls the constructor and every button without a guard, so nothing may throw out of them.
         public CityDialog()
         {
             try { DialogController.current.ShowEntry(Start()); }
@@ -152,7 +141,6 @@ namespace FoodTrucks
             }
         }
 
-        // A button's step, with any failure logged and the call ended with the city's apology.
         private static Func<DialogEntry> Guard(Func<DialogEntry?> step) => () =>
         {
             try { return step()!; }
@@ -186,7 +174,6 @@ namespace FoodTrucks
             else if (!valid) key = "foodtrucks:dialog_city_start_expired";
             else if (canBuy) key = "foodtrucks:dialog_city_start_renewable";
             else key = "foodtrucks:dialog_city_start_valid";
-            // Permits and event places are offered only to a licensed vendor.
             var missing = valid ? CityLicensing.FoodVehicles(state).Count(v => !v.State.HasPermit) : 0;
             var events = valid ? Upcoming(state).Count() : 0;
             Func<DialogEntry>? second = null;
@@ -230,7 +217,6 @@ namespace FoodTrucks
             };
         }
 
-        // Both permits and event places to offer: the player picks one.
         private static DialogEntry Choose() => new DialogEntry
         {
             messageData = LocalizorManager.Localize("foodtrucks:dialog_city_choose", (object?)null),
@@ -243,7 +229,6 @@ namespace FoodTrucks
             onCancelMessage = new TextMessage("ba:messagetype_contacts_message_player_cancel_call")
         };
 
-        // Upcoming events, including fully booked ones; wraps around for "next".
         private static DialogEntry Event(int index)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -284,7 +269,6 @@ namespace FoodTrucks
             };
         }
 
-        // Retain fully booked events in the phone so their directions remain available.
         private static IEnumerable<CityEvent> Upcoming(Core.Saves.SaveState state) => state.Events.Events
             .Where(e => HireCrew.Now() < CityEvents.EndsAt(e) && DemandData.Pitches?.Place(e.PlaceId) is { } p &&
                 EventLocations.ReadableAddress(p.Address) != null)
@@ -320,7 +304,6 @@ namespace FoodTrucks
             if (city == null || city.Booked >= city.Places || now >= CityEvents.EndsAt(city)) return Event(index);
             var location = tables.Place(city.PlaceId);
             if (location == null || EventLocations.ReadableAddress(location.Address) == null) return Event(index);
-            // Paid first: a refused payment books nothing.
             if (!CityLicensing.Charge(city.FeeCents, "foodtrucks:transaction_event")) return null;
             SalesLedger.RecordEventPlaces(state, SaveGameManager.Current.Day, city.FeeCents);
             var result = CityEvents.Book(state.Events, eventId, now);
@@ -366,7 +349,6 @@ namespace FoodTrucks
             return Start();
         }
 
-        // The vehicles without a permit, from the index-th on; wraps around for "next".
         private static DialogEntry Permit(int index)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -419,7 +401,6 @@ namespace FoodTrucks
             return Permit(index);
         }
 
-        // Where the vehicle stands, by neighbourhood, so the player can tell two carts apart.
         private static string Place(VehicleInstance vehicle)
         {
             var controller = VehicleHelper.GetVehicleController(vehicle);
@@ -432,7 +413,6 @@ namespace FoodTrucks
                 : LocalizorManager.GetLocalization(neighbourhood, null);
         }
 
-        // A last line from the city, then the call ends.
         private static DialogEntry Closing(string key)
         {
             Notices.Send(Current.contact, new TextMessage(key, null, read: true, isNewInteraction: true));

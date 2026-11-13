@@ -168,7 +168,6 @@ def render(stage):
 def build_blockout():
     assert 'HumanRef_1.8m' in bpy.data.objects, 'Run from the supplied start scene'
     if bpy.context.object and bpy.context.object.mode!='OBJECT': bpy.ops.object.mode_set(mode='OBJECT')
-    # Only replace objects owned by this script; never touch the human reference.
     for ob in list(bpy.data.objects):
         if ob.name.startswith(('CoffeeStation_', 'Presentation_', 'Part_')): bpy.data.objects.remove(ob,do_unlink=True)
     PARTS.clear(); materials()
@@ -186,7 +185,6 @@ def build_blockout():
 
 def add_details():
     materials()
-    # Front (-Y) brew cavity and high-contrast control strip.
     box('Part_Recess',(.098,.025,.199),(.151,.007,.271),3)
     box('Part_ControlStrip',(.098,-.121,.388),(.148,.006,.042),2)
     for x in [.051,.094]:
@@ -197,24 +195,19 @@ def add_details():
     box('Part_Status',(.143,-.126,.388),(.012,.004,.008),7)
     cylinder('Part_Group',(.098,-.058),.028,.310,.340,1,12)
     cylinder('Part_Nozzle',(.098,-.058),.008,.291,.313,2,8)
-    # Espresso portafilter's dark grip projects towards the customer.
     box('Part_Grip',(.098,-.108,.317),(.022,.075,.016),2)
     box('Part_TrayInset',(.098,-.092,.048),(.149,.143,.003),2)
     for x in [.042,.070,.098,.126,.154]:
         box('Part_TrayRail',(x,-.092,.052),(.007,.127,.005),1)
-    # Pump heads, projecting pour spouts, and rear carry loops.
     for y in [-.019,.111]:
         cylinder('Part_PumpStem',(-.095,y),.020,.310,.337,0,10)
         lathe('Part_Pump',(-.095,y),[(0,.331),(.032,.331),(.038,.338),(.038,.351),(.030,.356),(0,.356)],[2]*5,8)
         box('Part_PourSpout',(-.095,y-.055,.307),(.025,.046,.019),2)
         cylinder('Part_SpoutTip',(-.095,y-.072),.008,.290,.307,2,8)
-        # An arch across X avoids extending behind the footprint.
         for x in [-.134,-.056]:
             box('Part_HandleLeg',(x,y+.028,.325),(.011,.013,.049),2)
         box('Part_HandleTop',(-.095,y+.028,.350),(.086,.013,.011),2)
-    # Replace the cup block by a hollow tapered nested stack; four rolled rims.
     body=bpy.data.objects['CoffeeStation_Body']
-    # Blockout component is identified by its Paper material and removed from the joined mesh.
     bm=bmesh.new(); bm.from_mesh(body.data)
     paper_slots={i for i,m in enumerate(body.data.materials) if m and m.name=='Preview_Paper'}
     doomed=[f for f in bm.faces if f.material_index in paper_slots]
@@ -233,8 +226,6 @@ def add_details():
 def make_atlas():
     body=bpy.data.objects['CoffeeStation_Body']
     me=body.data
-    # A unique padded atlas cell per face. Flat colours need no texel-density distortion correction.
-    # Quads consume the full cell, triangle endcaps consume half, with no UV sharing.
     uv=me.uv_layers.active or me.uv_layers.new(name='UVMap')
     uv.name='UVMap'
     count=len(me.polygons); side=math.ceil(math.sqrt(count))
@@ -244,7 +235,6 @@ def make_atlas():
     for i,p in enumerate(me.polygons):
         x=(i%side)*cell; y=(i//side)*cell
         color=me.materials[p.material_index].diffuse_color[:]
-        # Image pixel values are encoded sRGB, matching artist palette values.
         pixels[y:y+cell,x:x+cell]=color
         lo=((x+1.5)/512,(y+1.5)/512)
         hi=((x+cell-1.5)/512,(y+cell-1.5)/512)
@@ -278,7 +268,6 @@ def finish():
     bmesh.ops.triangulate(bm,faces=list(bm.faces))
     bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces))
     bm.to_mesh(body.data); bm.free()
-    # Simplified envelope around the complete station, generated as a true convex hull.
     bm=bmesh.new()
     for z,w,d in [(0,.194,.175),(.36,.194,.175),(.436,.189,.156)]:
         for x,y in [(-w,-d),(w,-d),(w,d),(-w,d)]: bm.verts.new((x,y,z))
@@ -296,7 +285,6 @@ def finish():
     body['customer_front']='-Y'; body['dimensions_metres']='0.386 x 0.348 x 0.435'
     body['style']='Flat colour, unbranded, compact espresso brewer with two pump airpots and cups'
     render('04-final')
-    # Final scene contains only the delivered meshes and the untouched scale reference.
     for ob in list(bpy.data.objects):
         if ob.name.startswith('Presentation_'): bpy.data.objects.remove(ob,do_unlink=True)
     bpy.context.scene.camera=None

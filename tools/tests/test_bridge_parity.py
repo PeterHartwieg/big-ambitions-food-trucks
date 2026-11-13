@@ -62,7 +62,6 @@ class ParityTests(unittest.TestCase):
                 for _ in range(30): self.mock.tick()
                 self.assertEqual(self.mock.state['money'], money)
                 self.assertEqual(list(self.mock.recent), notices)
-                # Crew serves the same vehicle after the player leaves.
                 self.mock.finish_work()
                 self.mock.state['player'].update(x=v['x']+200, at_hatch=None)
                 v['crew'] = ['Worker']
@@ -343,7 +342,6 @@ class ParityTests(unittest.TestCase):
     def test_state_differences_and_notice_capture(self):
         self.assertIsNone(self.v['queue']);self.assertIsNone(self.v['route']);self.assertIsNone(self.v['commissary'])
         self.assertIsNone(self.mock.state['licence']['until_day'])
-        # The mod's to-dos: a list per vehicle and the fleet's under licence (the mock makes none).
         state=self.mock.call('state',{})
         self.assertEqual(state['licence']['todos'],[]);self.assertEqual(state['vehicles'][0]['todos'],[])
         pose=self.mock.call('teleport',{'who':'player','x':1.234,'z':2.345,'heading':-90})
@@ -381,7 +379,6 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(set(route['week'][0]['stops'][0]),{'open','close','x','z'})
         self.assertEqual(route['week'][0]['route_day'],{'start':510,'end':1440})
         self.assertEqual(route['next'],'stop 1, 08:30 to 00:00 at x 393.2, z 217.6')
-        # The game side writes the same keys (TestBridgeState.WeekOf and ShiftsOf).
         source=(TOOLS.parent/'unity/FoodTrucks/Scripts/TestBridgeState.cs').read_text()
         for key in ('week','shifts','problem','day','closed','route_day','gaps','employee','week_hours','wants_min','wants_max'):
             self.assertIn(f'["{key}"]',source)
@@ -409,8 +406,6 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(runner.resolve('vehicle:$truck'),'vehicle:truck-1')
         self.assertEqual(runner.resolve({'run_until':{'day':'+1','time':'08:05'}})['run_until']['day'],'+1')
 
-    # Live session 4 follow-ups (13 October 2026): needs in state, keep_needs on run_until, the teleport surface, the
-    # free camera and the shot's camera in the reply, health's time_skip.
     def test_needs_in_state_and_kept_up_on_run_until(self):
         needs=self.mock.call('state',{})['player']['needs']
         self.assertEqual(set(needs),{'energy','hunger','happiness','happiness_modifiers','max','collapse_at','energy_off','going_to_hospital','kept_up','warnings'})
@@ -451,7 +446,6 @@ class ParityTests(unittest.TestCase):
     def test_teleport_reports_the_surface_and_a_vehicle_the_recheck(self):
         reply=self.mock.call('teleport',{'who':'player','x':5,'z':6,'y':0.5})
         self.assertEqual(reply['surface'],"the walkable surface nearest the y asked for (0.50) of 1: 0.00 walkable; walking routes checked from the player's place")
-        # Live session 5, row 40: a y with no walkable ground near it is refused, not snapped to the street.
         self.refused('teleport',{'who':'player','x':5,'z':6,'y':5.06},
                      "No walkable ground at x 5.0, z 6.0 near y 5.06: no walkable surface within 1.5 m of the y asked for (5.06); surfaces there: 0.00 walkable; walking routes checked from the player's place.")
         reply=self.mock.call('teleport',{'who':self.id,'x':5,'z':6})
@@ -471,8 +465,6 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(self.mock.call('shoot',{'name':'pose','pose':'vehicle-side','target':self.id,'width':16,'height':16})['pose_note'],None)
 
     def test_shot_diagnostics_compare_and_game_view(self):
-        # Live session 6 research: the bridge lists what it uncovered (the game's view-blocking fade) and the outlines it
-        # lifted, and can write the as-is picture and the game's own frame beside the shot.
         reply=self.mock.call('shoot',{'name':'diag','x':0,'y':1.7,'z':0,'yaw':0,'width':16,'height':16})
         self.assertEqual((reply['uncovered'],reply['outlined'],reply['hovered'],reply['asis_path'],reply['game_path'],reply['game_error']),([],[],[],None,None,None))
         self.assertNotIn('asis_uncovered',reply)
@@ -493,7 +485,6 @@ class ParityTests(unittest.TestCase):
         world=(TOOLS.parent/'unity/FoodTrucks/Scripts/TestBridgeWorld.cs').read_text()
         commands=(TOOLS.parent/'unity/FoodTrucks/Scripts/TestBridgeCommands.cs').read_text()
         def refusal(cmd,args,text,fragment,where=source):
-            # The mock's whole text, and the C#'s literal piece of it (the rest is interpolated there).
             self.refused(cmd,args,text)
             self.assertIn(fragment,where)
         T=self.id
@@ -518,7 +509,6 @@ class ParityTests(unittest.TestCase):
         self.mock.self_driving=False
         self.assertEqual(self.mock.call('drive',{'op':'check'})['problems'],["HART. Self Driving isn't loaded: switch it on in the Mods menu."])
         self.assertIn("HART. Self Driving isn't loaded: switch it on in the Mods menu.",source)
-        # The simulated journey does not require the optional physical-driving mod.
         started=self.mock.call('drive',{'id':T,'place':'bay:hells-kitchen'})
         self.assertTrue(started['running'])
         self.assertTrue(started['simulated'])
@@ -529,7 +519,6 @@ class ParityTests(unittest.TestCase):
         check={'self_driving','rig_folder','rig_ready','truck_type','drivable_prefab','prefab','wheels','last_ride','problems'}
         self.assertEqual(set(self.mock.call('drive',{'op':'check'})),check)
         for key in check: self.assertIn(f'["{key}"]',source)
-        # While it drives: no second drive, no run_until, no teleport or vehicle op on that truck.
         refusal('drive',{'id':T,'place':'bay:hells-kitchen'},f'A drive is under way ({T} to bay:hells-kitchen): wait for it (drive status).',
                 'A drive is under way ({drive!.Id} to {drive.Place}): wait for it (drive status).')
         refusal('time',{'run_until':{'time':'09:00'}},f'A drive is under way ({T}), and run_until would end its ride: wait for it (drive status).',

@@ -13,15 +13,10 @@ using Localizor;
 
 namespace FoodTrucks
 {
-    // The street food business in the game's books: its profit in the day summary, and in Econoview a "Street food"
-    // group with a row per vehicle that opens into its lines (Core's StreetFoodStatement decides the numbers).
-    // Crew wages and parking are paid by the game into its own rows; the patches here note each vehicle's share
-    // as it is charged, and Econoview shows that share under the vehicle and takes it off the game's rows.
     internal static class StreetFoodBooks
     {
         internal const string ScrollerTypeName = "UI.Smartphone.Apps.EconoView.EconoViewIncomeStatementScrollerController";
         private const string UnassignedWage = "ba:transaction_unassignedwage";
-        // The game's fixed parking ticket (ParkingSimulator.RunHourly charges $125).
         private const long TicketCents = 12_500;
 
         private static readonly Dictionary<LedgerLine, string> LineKeys = new Dictionary<LedgerLine, string>
@@ -39,11 +34,8 @@ namespace FoodTrucks
 
         private static MethodInfo? createRow;
         private static FieldInfo? rowName, rowParent, rowValues, rowExpanded;
-        // Both of the game's rows have to lose the moved costs, or they would count twice: moving is on only when
-        // both of those patches are in place (CheckMoves, after patching).
         private static bool movesActive;
 
-        // Diagnostic hours since load, not money: the game's balance already persists the hourly exemptions.
         private sealed class BayHours
         {
             public string Name = "";
@@ -59,11 +51,9 @@ namespace FoodTrucks
             parkingHoursDay = -1;
         }
 
-        // Called once after patching.
         internal static void CheckMoves()
         {
             var scroller = AccessTools.TypeByName(ScrollerTypeName);
-            // The Street food rows have to be there too, or the moved costs would show nowhere.
             movesActive = scroller != null && HasOurPostfix(scroller, "LoadSalaryRows") &&
                           HasOurPostfix(scroller, "LoadOngoingExpenseRows") && HasOurPostfix(scroller, "LoadFeeRows");
             Log.Info(movesActive
@@ -78,7 +68,6 @@ namespace FoodTrucks
             return info != null && info.Postfixes.Any(p => p.PatchMethod.DeclaringType == typeof(StreetFoodBooks));
         }
 
-        // Day summary: the street food profit counts in the game's total profit (day summary, history, rivals).
         public static void DaySummary(int dayNumber, FinancialSummary __result)
         {
             try
@@ -103,8 +92,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error(ex); }
         }
 
-        // Econoview's "Street food" group, after the other income. Its children: a row per vehicle (closed, opening into
-        // its lines), then the fleet's licence, event places and commissary delivery fees, then anything from before the breakdown.
         public static void IncomeRows(object __instance)
         {
             try
@@ -135,14 +122,12 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error(ex); }
         }
 
-        // The game's "Unassigned staff wages" row (and its group) without the crew's wages shown under the vehicles.
         public static void OngoingExpenseRows(object __instance)
         {
             try { Move(__instance, "econoview_row_ongoing_expenses", "econoview_row_unassigned_staff_wages", s => s.MovedWages, dropEmptyGroup: false); }
             catch (Exception ex) { Log.Error(ex); }
         }
 
-        // The game's "Parking fees" row (and its group) without the vehicles' parking.
         public static void FeeRows(object __instance)
         {
             try { Move(__instance, "econoview_row_fees", "econoview_row_parking_fees", s => s.MovedParking, dropEmptyGroup: true); }
@@ -162,7 +147,6 @@ namespace FoodTrucks
             var child = group == null ? null : rows.LastOrDefault(r => (string)rowName!.GetValue(r) == childName && ReferenceEquals(rowParent!.GetValue(r), group));
             if (group == null || child == null)
             {
-                // Can't happen while Core only moves what the game's row holds; then the vehicles' lines count twice.
                 Log.Error($"Econoview: no {childName} row to move {string.Join(", ", cents)} cents out of.");
                 return;
             }
@@ -178,7 +162,6 @@ namespace FoodTrucks
                 data.Remove(group);
         }
 
-        // Float sums of the game's charges and the ledger's cents can differ by a few cents.
         private static float Snap(float value) => Math.Abs(value) * 100f < StreetFoodStatement.ToleranceCents ? 0f : value;
 
         private static StreetFoodStatement? Statement(object instance)
@@ -192,7 +175,6 @@ namespace FoodTrucks
             return StreetFoodStatement.Build(state, days, wages, parking);
         }
 
-        // The game keeps costs as negative amounts.
         private static long Cost(float amount) => amount < 0f ? (long)Math.Round(-(double)amount * 100.0) : 0L;
 
         private static bool Reflect(object instance)
@@ -216,12 +198,9 @@ namespace FoodTrucks
 
         private static string Sign(long[] cents) => cents.Sum() >= 0 ? "Success" : "Danger";
 
-        // "Food cart", "Food truck", numbered when the player has more than one of a kind. Each keeps its number once it has
-        // one (Core FleetNames, saved in SaveState.VehicleNumbers), so a vehicle bought later never renames the others.
         internal static Dictionary<string, string> VehicleNames()
         {
             var names = new Dictionary<string, string>(StringComparer.Ordinal);
-            // Vehicles left with the private driver wait in the game's own list.
             var game = SaveGameManager.Current;
             var vehicles = game.VehicleInstances.Concat(game.privateDriverVehicleInstances ?? Enumerable.Empty<VehicleInstance>())
                 .Where(v => v != null && !string.IsNullOrEmpty(v.id) && FoodTrucksMod.KindOf(v.vehicleTypeName) != null)
@@ -229,7 +208,6 @@ namespace FoodTrucks
                 .OrderBy(v => v.id, StringComparer.Ordinal)
                 .ToList();
             var state = FoodTrucksSession.CurrentState;
-            // Read-only data (a newer mod's save): numbered here as they would be, but nothing is written.
             var numbers = state != null && FoodTrucksSession.CanWrite
                 ? state.VehicleNumbers
                 : new List<VehicleNumber>(state?.VehicleNumbers ?? new List<VehicleNumber>());
@@ -244,7 +222,6 @@ namespace FoodTrucks
             return names;
         }
 
-        // A vehicle the player no longer has.
         private static string GoneName(string vehicleId)
         {
             var kind = StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId)?.VehicleType;
@@ -252,9 +229,6 @@ namespace FoodTrucks
             return LocalizorManager.GetLocalization("foodtrucks:econoview_vehicle_gone", null).Replace("{vehicle}", label);
         }
 
-        // Crew wages: the game pays each employee at midnight, into yesterday, for the hours counted that day. A wage
-        // booked as unassigned is split over the vehicles the hire worked those hours on (CrewLog, written as
-        // HireCrew counts each hour). Only for days from before the log does it go to the crew the hire is on.
         internal sealed class WageCall
         {
             public Transaction? Last;
@@ -268,7 +242,6 @@ namespace FoodTrucks
             {
                 var state = FoodTrucksSession.CurrentState;
                 if (state == null || !FoodTrucksSession.CanWrite || __instance == null || SaveGameManager.Current == null) return;
-                // Most employees are nobody's crew: skip them before touching the transactions.
                 if (CrewVehicle(state, __instance.id) == null && !CrewLog.HasHours(state, SaveGameManager.Current.Day - 1, __instance.id)) return;
                 __state = new WageCall { Last = LastTransaction(), WorkedHours = __instance.workedHoursToday };
             }
@@ -305,15 +278,12 @@ namespace FoodTrucks
             return transactions == null || transactions.Count == 0 ? null : transactions.Last();
         }
 
-        // Parking: at midnight the game charges each vehicle what it ran up the day before, into yesterday.
-        // Hourly exemptions have already left only the street hours due; this prefix only notes them for Econoview.
         public static void ParkingDailyPrefix(out Dictionary<string, float>? __state)
         {
             __state = null;
             try
             {
                 if (!FoodTrucksSession.CanWrite) return;
-                // NewDay runs RunDaily before the new day's first RunHourly: finish yesterday's log first.
                 if (parkingHoursDay == SaveGameManager.Current.Day - 1)
                     foreach (var hours in parkingHours.Values)
                         Log.Info($"Commissary {string.Join(", ", hours.Bays.OrderBy(b => b))}: no public parking for {hours.Name} " +
@@ -336,7 +306,6 @@ namespace FoodTrucks
                 var day = SaveGameManager.Current.Day - 1;
                 foreach (var vehicle in FoodVehicles())
                 {
-                    // Charged when the game cleared the amount.
                     if (!__state.TryGetValue(vehicle.id, out var amount) || vehicle.unpaidParkingAmount != 0f) continue;
                     SalesLedger.RecordGameCost(state, day, vehicle.id, LedgerLine.Parking, (long)Math.Round(amount * 100.0));
                 }
@@ -350,7 +319,6 @@ namespace FoodTrucks
             public float UnpaidAmount;
         }
 
-        // Public parking accrues hourly; tickets are charged immediately, into today.
         public static void ParkingHourlyPrefix(out Dictionary<string, ParkingHour>? __state)
         {
             __state = null;

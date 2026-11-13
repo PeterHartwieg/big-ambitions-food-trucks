@@ -15,8 +15,6 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // A private copy of the shop editor. Only its three business-dependent methods are replaced;
-    // the native shape importer, colour pickers and font choices keep their normal behavior.
     internal static class TruckLogoEditor
     {
         private static LogoCustomizer? editor;
@@ -79,7 +77,6 @@ namespace FoodTrucks
                 var size = child.gameObject.AddComponent<LayoutElement>();
                 size.preferredWidth = 260; size.preferredHeight = 52;
             }
-            // Keep the native editor inactive until its identity and draft have been registered.
             var holder = new GameObject("FoodTrucks.LogoEditor", typeof(RectTransform), typeof(LayoutElement));
             holder.SetActive(false); holder.transform.SetParent(parent, false);
             holder.GetComponent<LayoutElement>().preferredHeight = 650;
@@ -158,7 +155,6 @@ namespace FoodTrucks
             {
                 var design = Draft();
                 var previous = StreetSales.GetOrAdd(session!, vehicleId!).Logo;
-                // Preserve unknown additive fields when editing the supported version.
                 var token = previous is Newtonsoft.Json.Linq.JObject old ? (Newtonsoft.Json.Linq.JObject)old.DeepClone() : new Newtonsoft.Json.Linq.JObject();
                 token.Merge(design.Save());
                 StreetSales.GetOrAdd(session!, vehicleId!).Logo = token;

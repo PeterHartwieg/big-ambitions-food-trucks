@@ -8,15 +8,12 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Fleet;
 
-// Travel between stops in the route editor (Peter, 16 October 2026): a stop opens no earlier than the stop before closes
-// plus the drive, rounded up to the half hour. Shipped rules: driving 0.04 min/m, pushing 1.2 m/s, latest close 27:00.
 public class RouteTravelTests
 {
     private static readonly FleetRules rules = ShippedData.Rules.Fleet;
     private static readonly HireSchedules schedules = new(rules);
     private const int Step = 30;
 
-    // Wednesday's stops (day 3).
     private static ScheduleStop Stop(string key, double x, int open, int close) =>
         new() { Day = DayOfWeek.Wednesday, SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
 
@@ -28,7 +25,6 @@ public class RouteTravelTests
     [Fact]
     public void AShortDriveMovesTheNextStopToTheNextHalfHourAndKeepsItsLength()
     {
-        // 1 km is 40 minutes: closing at 12:00, the next can open at 12:40, so 13:00.
         var route = Route(Stop("a", 0, 600, 720), Stop("b", 1000, 720, 840));
 
         var fit = Fit(route);
@@ -43,8 +39,6 @@ public class RouteTravelTests
     [Fact]
     public void PetersRouteSavedBeforeTheRuleMovesItsSecondStop()
     {
-        // A truck route played on 16 October 2026: 11:00-14:00, then 14:00-17:00 about a kilometre away. Fitted without
-        // an edit (as the page opens and the crew plans), the second stop opens at 15:00 (14:40 rounded up) until 18:00.
         var route = Route(Stop("3rd avenue 13", 0, 660, 840), Stop("2nd avenue 7", 1000, 840, 1020));
 
         Assert.Equal(1, schedules.UnreachableStop(route, TravelMode.Drive));
@@ -53,7 +47,6 @@ public class RouteTravelTests
         Assert.Equal(40, Assert.Single(fit.Moved).DriveMinutes);
         Assert.Equal((900, 1080), (route.Stops[1].OpenAt, route.Stops[1].CloseAt));
         Assert.Equal(-1, schedules.UnreachableStop(route, TravelMode.Drive));
-        // A second fit finds nothing to move: the route is written once.
         Assert.Empty(Fit(route).Moved);
     }
 
@@ -68,7 +61,6 @@ public class RouteTravelTests
     [Fact]
     public void ALongDrivePushesTheLaterStopsToo()
     {
-        // 3 km is 120 minutes: b moves from 12:00 to 14:00 (closing 16:00), which pushes c from 15:00 to 16:30.
         var route = Route(Stop("a", 0, 600, 720), Stop("b", 3000, 720, 840), Stop("c", 3500, 900, 1020));
 
         var fit = Fit(route);
@@ -81,7 +73,6 @@ public class RouteTravelTests
     [Fact]
     public void ACartIsPushedSoItsStopMovesFurtherThanATrucks()
     {
-        // 300 m: a truck drives it in 12 minutes (12:30), a cart is pushed for 75 at 4 m/s (13:30).
         var truck = Route(Stop("a", 0, 600, 720), Stop("b", 300, 720, 780));
         var cart = Route(Stop("a", 0, 600, 720), Stop("b", 300, 720, 780));
 
@@ -95,7 +86,6 @@ public class RouteTravelTests
     [Fact]
     public void AStopWithNoRoomLeftIsReportedAndNothingChanges()
     {
-        // The first stop runs to 26:30; 40 minutes on, the second would open at 27:30, past the latest close.
         var route = Route(Stop("a", 0, 600, 1590), Stop("b", 1000, 1590, 1620));
 
         var fit = Fit(route);
@@ -109,7 +99,6 @@ public class RouteTravelTests
     [Fact]
     public void AfterAReorderTheTimesFollowTheNewOrder()
     {
-        // Moving the far stop first: the near one, now second, is 2 km away and moves an hour and a half on.
         var vehicle = new VehicleState
         {
             VehicleId = "t1", VehicleType = "truck",
@@ -120,7 +109,6 @@ public class RouteTravelTests
 
         var fit = Fit(vehicle.Schedule);
 
-        // far 10:00-12:00, then 80 minutes to near: 13:20, so 13:30.
         Assert.Equal((810, 930), (vehicle.Schedule.Stops[1].OpenAt, vehicle.Schedule.Stops[1].CloseAt));
         Assert.Single(fit.Moved);
     }
@@ -135,7 +123,6 @@ public class RouteTravelTests
 
         Assert.DoesNotContain(720, times);
         Assert.Contains(780, times);
-        // Before the first stop nothing limits it.
         Assert.Contains(540, times);
     }
 
@@ -156,8 +143,6 @@ public class RouteTravelTests
     }
 }
 
-// The commissary at both ends of a route day (Peter, 16 October 2026): after the last stop the crew drives back to the
-// bay where the vehicle rents its space; the next morning it leaves the bay in time for the first stop.
 public class RouteHomeTests
 {
     private static readonly FleetRules rules = ShippedData.Rules.Fleet;
@@ -165,14 +150,11 @@ public class RouteHomeTests
     private static readonly HireRunner runner = new(rules);
     private static readonly (double X, double Z) Bay = (-2000, 0);
 
-    // Wednesday's stops (day 3).
     private static ScheduleStop Stop(string key, double x, int open, int close) =>
         new() { Day = DayOfWeek.Wednesday, SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
 
     private static long At(int day, int hour, int minute = 0) => HireSchedules.Absolute(day, hour * 60 + minute);
 
-    // The stops on Wednesday and Thursday (days 3 and 4); Thursday's first stop comes after Wednesday's. The crew on shift
-    // around the clock.
     private static VehicleState Truck(params ScheduleStop[] stops) => WeekTestData.AllDay(new VehicleState
     {
         VehicleId = "t1", VehicleType = "truck", HasPermit = true, Crew = new List<string> { "e1" },
@@ -187,9 +169,7 @@ public class RouteHomeTests
         var plan = schedules.PlanDay(route, 3, DayOfWeek.Wednesday, Bay.X, Bay.Z, At(3, 0), TravelMode.Drive, home: Bay);
 
         var back = plan.Legs.Last();
-        // 3 km back from the bars at 23:00: 120 minutes.
         Assert.Equal((LegKind.Travel, HireSchedules.HomeIndex, At(3, 23), At(4, 1)), (back.Kind, back.StopIndex, back.Start, back.End));
-        // The morning: the restock from 9:10, then 2 km from the bay is 80 minutes, leaving at 9:40 to open at 11:00.
         Assert.Equal((LegKind.Restock, 0, At(3, 9, 10)), (plan.Legs[0].Kind, plan.Legs[0].StopIndex, plan.Legs[0].Start));
         Assert.Equal((LegKind.Travel, 0, At(3, 9, 40)), (plan.Legs[1].Kind, plan.Legs[1].StopIndex, plan.Legs[1].Start));
         Assert.Equal(2000 + 1000 + 3000, plan.Metres, 6);
@@ -215,7 +195,6 @@ public class RouteHomeTests
         runner.EnsurePlan(truck, At(3, 6), Bay.X, Bay.Z, home: Bay);
         var away = new VehicleWhere(0, 0, leaveAlone: false, home: Bay);
 
-        // 14:00, the stop is over: back to the bay, 80 minutes.
         var leave = runner.Step(truck, At(3, 14), away);
         Assert.Equal((HireActionKind.Depart, HireSchedules.HomeIndex, At(3, 15, 20)), (leave.Kind, leave.Stop, leave.ArrivesAt));
         var bay = new ScheduleStop { SpotKey = "bay", X = Bay.X, Z = Bay.Z };
@@ -226,10 +205,8 @@ public class RouteHomeTests
         var arrive = runner.Step(truck, At(3, 15, 20), away);
         Assert.Equal(HireActionKind.Arrive, arrive.Kind);
         HireRunner.Arrived(truck, Bay.X, Bay.Z, atStop: true, At(3, 15, 20));
-        // In the bay: nothing more to do.
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 15, 30), new VehicleWhere(Bay.X, Bay.Z, leaveAlone: false, canRestock: true, home: Bay)).Kind);
 
-        // The next day starts from the bay, where it stands, with the restock: Thursday's stop is index 1.
         runner.EnsurePlan(truck, At(4, 0), Bay.X, Bay.Z, home: Bay);
         var morning = truck.Shifts.Single(p => p.Day == 4).Legs;
         Assert.Equal((LegKind.Restock, 1, At(4, 9, 10)), (morning[0].Kind, morning[0].StopIndex, morning[0].Start));
@@ -239,8 +216,6 @@ public class RouteHomeTests
     [Fact]
     public void ADriveBackRunningPastMidnightStartsTheNextDayFromTheBay()
     {
-        // The bars close at 23:00 and the drive back (120 minutes) ends at 01:00: at midnight the vehicle is on its way, and
-        // the new day is planned from the bay, not from where the game reads it.
         var truck = Truck(Stop("office", 0, 660, 840), Stop("bars", 1000, 1080, 1380));
         runner.EnsurePlan(truck, At(3, 6), Bay.X, Bay.Z, home: Bay);
 
@@ -259,7 +234,6 @@ public class RouteHomeTests
 
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 14), new VehicleWhere(Bay.X, 0, leaveAlone: false, canRestock: true, home: Bay)).Kind);
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 14), new VehicleWhere(3, 0, leaveAlone: false, stayPut: true, home: Bay)).Kind);
-        // Without a bay (no space) the day simply ends where the last stop was.
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 14), new VehicleWhere(3, 0, leaveAlone: false)).Kind);
     }
 
@@ -270,7 +244,6 @@ public class RouteHomeTests
 
         var day = WeekPlan.RouteDayOf(schedules, truck.Schedule, DayOfWeek.Wednesday, TravelMode.Drive, home: Bay);
 
-        // Restock from 9:10, 80 minutes out, the stop, 80 minutes back: 9:10 to 15:20.
         Assert.Equal((9 * 60 + 10, 15 * 60 + 20), (day.Start, day.End));
         Assert.True(WeekPlan.RouteDayOf(schedules, truck.Schedule, DayOfWeek.Friday, TravelMode.Drive, home: Bay).Empty);
     }
@@ -281,7 +254,6 @@ public class RouteHomeTests
         var route = new HireSchedule { Stops = { Stop("bars", 0, 1080, 1440) } };
         var plan = schedules.PlanDay(route, 3, DayOfWeek.Wednesday, Bay.X, Bay.Z, At(3, 0), TravelMode.Drive, home: Bay);
 
-        // Closing at midnight, 80 minutes back: in the bay at 01:20, before the 04:00 check.
         Assert.Equal(At(4, 1, 20), plan.Legs.Last().End);
         Assert.True(plan.Legs.Last().End < At(4, 4));
     }

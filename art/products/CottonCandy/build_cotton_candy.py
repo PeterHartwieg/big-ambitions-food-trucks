@@ -36,8 +36,6 @@ def cloud_point(theta, phi, detailed=False):
     d = Vector((math.sin(theta)*math.cos(phi), math.sin(theta)*math.sin(phi), math.cos(theta)))
     radial = 1.0
     if detailed:
-        # Smooth union of five broad rounded puffs. Solve each sphere's outer
-        # ray intersection, then gently blend joins; no fine surface noise.
         puffs = [((.46,-.08,.05),.67), ((-.43,-.10,.20),.65),
                  ((.06,.02,.49),.64), ((0,-.21,-.43),.66),
                  ((0,.32,.03),.66)]
@@ -51,7 +49,6 @@ def cloud_point(theta, phi, detailed=False):
                 k = .075
                 h = max(k-abs(radial-t),0)/k
                 radial = max(radial,t)+h*h*k*.25
-    # Egg profile: top shoulders a little broader than the lower taper.
     width = 1.0 + .14*d.z
     return (d.x*.040*width*radial, d.y*.035*width*radial, .094 + d.z*.045*radial)
 
@@ -61,7 +58,6 @@ def mesh_body(detailed=False):
     def face(v, uv):
         faces.append(v)
         uvs.append(uv)
-    # One closed continuous pink surface. Seam lies on the rear (+Y).
     vertices.append(cloud_point(0, 0, detailed))
     for j in range(1,RINGS+1):
         theta = math.pi*j/(RINGS+1)
@@ -81,7 +77,6 @@ def mesh_body(detailed=False):
     for i in range(N):
         face((idx(RINGS,i),bottom,idx(RINGS,i+1)),[uv(RINGS,i),uv(RINGS+1,i+.5),uv(RINGS,i+1)])
     cloud_faces = len(faces)
-    # A truncated paper cone: the closed, flat bottom includes the origin.
     off = len(vertices)
     for z,radius in [(0,.0027),(.061,.009)]:
         for i in range(12):
@@ -183,7 +178,6 @@ def detail():
 def atlas():
     ob = bpy.data.objects['CottonCandy_Body']
     image = bpy.data.images.new('T_CottonCandy_BaseColor',width=256,height=256,alpha=True)
-    # Flat colour blocks; UV seams and padding remain inside their part's block.
     pixels = []
     for y in range(256):
         for x in range(256): pixels.extend(PINK if x < 210 else PAPER)
@@ -204,7 +198,6 @@ def atlas():
     ob.data.materials.clear()
     ob.data.materials.append(mat)
     for p in ob.data.polygons: p.material_index = 0
-    # Explicit triangles, preserving the UV loops and smooth normals.
     bm = bmesh.new()
     bm.from_mesh(ob.data)
     bmesh.ops.triangulate(bm,faces=list(bm.faces),quad_method='BEAUTY')
@@ -216,8 +209,6 @@ def atlas():
 
 def collision():
     body = bpy.data.objects['CottonCandy_Body']
-    # 20 support vertices, 36 triangles. Three octagonal support levels
-    # taper to a square cone base; the hull encloses every body vertex.
     bm = bmesh.new()
     supports = []
     for x,y in [(-.004,-.004),(.004,-.004),(.004,.004),(-.004,.004)]:
@@ -247,7 +238,6 @@ def collision():
 def finish():
     body = bpy.data.objects['CottonCandy_Body']
     hull = bpy.data.objects.get('CottonCandy_Collision') or collision()
-    # All visible mesh coordinates are baked around the floor origin.
     for ob in (body,hull):
         active(ob)
         bpy.ops.object.transform_apply(location=False,rotation=True,scale=True)

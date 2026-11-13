@@ -70,12 +70,10 @@ class CheckTests(unittest.TestCase):
                  txn(pt.ORDER_TYPE, -1500.0, 2), txn(pt.PURCHASE_TYPE, -15000.0, 2), txn(pt.WAGE_TYPE, -99.0, 3)]
         pt.check_day_books(2, books, day, 1500_00, 15000_00)
         self.assertEqual(pt.check_day_books(2, books, day, 1500_00, 15000_00), [])
-        # The game's other spending isn't ours: more wages or vehicles than the crews' and the runner's is a note.
         notes = pt.check_day_books(2, books, summary(2, sales=26.0, wages=100.0, commissary_rent=41.1), 1500_00, 15000_00)
         self.assertEqual(len(notes), 1)
         self.assertIn('wages', notes[0])
         self.assertEqual(len(pt.check_day_books(2, books + [txn('ba:transaction_rent', -900.0, 2)], day, 1500_00, 0)), 1)
-        # Less than ours, or any of our own lines off, stops the run.
         with self.assertRaises(pt.Violation) as caught:
             pt.check_day_books(2, books, summary(2, sales=26.0, wages=120.0, commissary_rent=41.1), 1500_00, 15000_00)
         self.assertIn('wages', caught.exception.message)
@@ -90,14 +88,12 @@ class CheckTests(unittest.TestCase):
         with self.assertRaises(pt.Violation) as caught:
             pt.check_stock(prev, cur, [])
         self.assertIn('(+500)', caught.exception.message)
-        # A vehicle that ends with less than it started less what it sold lost stock, even if the totals agree.
         lost = snap(3, '05:00', 0, {HOTDOG: 920 + 15}, {HOTDOG: 5}, [summary(2, {HOTDOG: 20}), summary(3, {})])
         with self.assertRaises(pt.Violation) as caught:
             pt.check_stock(prev, lost, [])
         self.assertIn('vanished', caught.exception.message)
 
     def test_sales_before_and_after_the_snapshot_hours_are_split_by_the_sold_counts(self):
-        # 3 sold on day 2 before 05:00 belong to the window before; 4 more after 00:00 on day 3 to this one.
         prev = snap(2, '05:00', 0, {}, {HOTDOG: 40}, [summary(1), summary(2, {HOTDOG: 3})])
         cur = snap(3, '05:00', 0, {}, {HOTDOG: 40 - 10 - 4}, [summary(2, {HOTDOG: 13}), summary(3, {HOTDOG: 4})])
         self.assertEqual(pt.sold_between(prev, cur, 'truck-1'), {HOTDOG: 14})
@@ -112,7 +108,6 @@ class CheckTests(unittest.TestCase):
         pt.check_moves(snap(3, '05:00', 0, {}, {}, [], in_bay=False, x=100., z=50., week=night))
         with self.assertRaises(pt.Violation):
             pt.check_moves(snap(3, '05:00', 0, {}, {}, [], open_=True))
-        # The referee leaves the player's own vehicle alone, and a vehicle without a crewed route.
         mine = snap(3, '05:00', 0, {}, {}, [], in_bay=False, x=100., z=50., week=[{'day': 'monday', 'stops': [{'open': '11:00', 'close': '14:00', 'x': 0, 'z': 0}]}])
         mine['player_with'] = 'truck-1'
         self.assertEqual(pt.check_moves(mine, crewed_only=True), [])
@@ -169,7 +164,6 @@ class OfflineCheckTests(unittest.TestCase):
         d = snap(4, '05:00', 1000_00 - 750_00 + 1, {HOTDOG: 500}, {}, [summary(3, {}), summary(4, {})], [txn(pt.ORDER_TYPE, -750.0, 2)])
         d['stock'] = None
         for s in (a, b, c, d): s['label'] = f"day {s['day']} 05:00"; s['vehicles'] = []
-        # Order 1 (500 hot dogs) arrives day 2; order 2 (an equipment order) and order 3 (burgers, due day 9) don't count before.
         orders = [{'n': 1, 'site': 'hells-kitchen', 'item': HOTDOG, 'units': 500, 'total': 750.0, 'due_day': 2, 'goods': 750_00},
                   {'n': 3, 'site': 'hells-kitchen', 'item': 'ba:itemname_burger', 'units': 1500, 'total': 900.0, 'due_day': 9, 'goods': 900_00}]
         results, _ = pt.check_folder(self.folder([a, b, c, d], orders))
@@ -177,7 +171,6 @@ class OfflineCheckTests(unittest.TestCase):
         self.assertEqual(status[('day 1 05:00 to day 2 05:00', 'stock')], 'pass')
         self.assertEqual(status[('day 2 05:00 to day 3 05:00', 'stock')], 'pass')
         self.assertEqual(status[('day 2 05:00 to day 3 05:00', 'books')], 'pass')
-        # The last window: money off by a cent too many fails, stock is not checkable, and the others still run.
         self.assertEqual(status[('day 3 05:00 to day 4 05:00', 'stock')], 'not checkable')
         self.assertEqual(status[('day 3 05:00 to day 4 05:00', 'money')], 'fail')
         self.assertEqual(status[('day 3 05:00 to day 4 05:00', 'moves')], 'pass')
@@ -269,7 +262,6 @@ class PlaythroughRunTests(unittest.TestCase):
         self.assertEqual(stopped['check'], 'stock')
         self.assertIn(HOTDOG, stopped['message'])
         self.assertIn('-7', stopped['message'])
-        # A stopped run doesn't go on.
         self.assertEqual(self.main('run', '--run', 'b', '--days', '1'), 2)
 
     def test_money_that_moves_without_a_transaction_stops_the_run(self):
@@ -310,14 +302,12 @@ class BridgeOpsParityTests(unittest.TestCase):
                 player.update(x=20., z=29., heading=heading)
                 self.assertTrue(self.mock.operate(v, 'open')['done'])
                 angle = math.radians(heading)
-                # Behind the cart at its counter centre: 0.85 m to the cart's left.
                 self.assertAlmostEqual(player['x'], v['x']-.85*math.cos(angle))
                 self.assertAlmostEqual(player['z'], v['z']+.85*math.sin(angle))
                 self.assertAlmostEqual(player['heading'], (heading+90)%360)
                 self.assertIsNone(player['in_vehicle'])
                 self.assertIsNone(player['at_hatch'])
                 self.assertEqual(self.mock.serving(v), 'player')
-                # An open cart keeps its existing distance rule and never pulls a walker back.
                 player.update(x=40., z=30.)
                 self.assertEqual(self.mock.serving(v), 'nobody')
                 self.mock.operate(v, 'close')
@@ -342,7 +332,6 @@ class BridgeOpsParityTests(unittest.TestCase):
                             dx, dz = point[0]-vehicle['x'], point[2]-vehicle['z']
                             tested.append((dx, dz))
                             pavement = dx*outward[0]+dz*outward[1] >= -.001
-                            # Fixture: front end cut off by a fence when only the rear is reachable.
                             reachable = available == 'front' or (available == 'rear' and dx*forward[0]+dz*forward[1] < 0)
                             return pavement and reachable
 
@@ -554,7 +543,6 @@ class BlindPlayTests(unittest.TestCase):
         self.ui_click('Hang up')
 
     def hire_candidate(self):
-        # The mock has no recruitment campaign: a candidate waits on the phone, as one the game's channels sent.
         with self.session.mock.lock:
             self.session.mock.life['candidates'].append({'id': 'candidate-1', 'name': 'Mock candidate', 'skill': 55., 'satisfaction': 100., 'wage': 11.})
         self.assertEqual(self.play('phone', 'employees'), 0, self.lines)
@@ -571,14 +559,12 @@ class BlindPlayTests(unittest.TestCase):
                         'use [--radius M]', 'eat [ITEM]', 'place X Z', 'phone APP', 'call list', 'ui set ID VALUE', 'How the city works',
                         'drive VEHICLE PLACE', 'bay:SITE', 'stop:N'):
             self.assertIn(command, text.getvalue())
-        # Hints, not numbers: no price, fee or duration in the manual's city section.
         hints = text.getvalue().split('How the city works', 1)[1].split('If the referee', 1)[0]
         self.assertNotRegex(hints, r'\$|\d')
         import argparse
         names = set(runpy.run_path(str(TOOLS / 'play'), run_name='play_test')['parser']()._subparsers._group_actions[0].choices)
         self.assertEqual(names, {'look', 'notices', 'places', 'go', 'walk', 'map', 'screen', 'ui', 'time', 'buy', 'vehicle', 'order',
                                  'crew', 'price', 'route', 'save', 'load', 'use', 'eat', 'place', 'floorplan', 'drop', 'pickup', 'handtruck', 'phone', 'call', 'drive', 'work', 'licence'})
-        # No shortcuts: no money, teleport, spawn, fixture or debug op is reachable, and the old licence and hire are gone.
         for argv in (['money', 'set', '1000000'], ['licence'], ['hire'], ['teleport', 'x'], ['debug', 'hire']):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 PLAY(argv)
@@ -605,7 +591,6 @@ class BlindPlayTests(unittest.TestCase):
         cart = self.session.mock.state['vehicles'][0]['id']
         self.session.bridge.call('time', {'speed': 1})
         self.assertEqual(self.play('vehicle', cart, 'enter'), 0, self.lines)
-        # Entering walks to the cart first.
         for _ in range(50):
             if self.session.bridge.call('state')['result']['player']['in_vehicle'] == cart: break
             time.sleep(.05)
@@ -615,7 +600,6 @@ class BlindPlayTests(unittest.TestCase):
         v = self.session.mock.state['vehicles'][0]
         self.assertTrue(v['commissary']['in_bay'])
         self.assertTrue(self.session.mock.state['clock']['paused'])
-        # Out of the cart, a walk to a point; a truck can't be walked.
         self.session.bridge.call('time', {'speed': 1})
         self.assertEqual(self.play('vehicle', cart, 'exit'), 0, self.lines)
         self.assertEqual(self.play('walk', '400', '230'), 0, self.lines)
@@ -644,12 +628,10 @@ class BlindPlayTests(unittest.TestCase):
         self.session.mock.state['player'].update(x=0., z=0.)
         self.assertEqual(self.play('buy', 'truck'), 0, self.lines)
         truck = self.session.mock.state['vehicles'][0]['id']
-        # Only from the driver's seat, and a cart is pushed.
         self.assertEqual(self.play('drive', truck, 'bay:hells-kitchen'), 1, self.lines)
         self.assertIn(f'get in first (vehicle {truck} enter)', self.lines[0])
         self.enter(truck)
         self.assertEqual(self.play('drive', truck, 'bay:hells-kitchen', '--speed', '4'), 2, self.lines)
-        # To the bay: out of the space, the ride, into the bay; the clock is put back as it was (paused).
         self.assertEqual(self.play('drive', truck, 'bay:hells-kitchen'), 0, self.lines)
         self.assertFalse(any('pulled' in line for line in self.lines))
         self.assertTrue(any(line.startswith('Simulated trip: Complete: arrived') for line in self.lines), self.lines)
@@ -657,23 +639,19 @@ class BlindPlayTests(unittest.TestCase):
         self.assertTrue(any('parked legally, in the bay at hells-kitchen' in line for line in self.lines), self.lines)
         self.assertTrue(self.session.mock.state['clock']['paused'])
         self.assertTrue(self.session.mock.state['vehicles'][0]['commissary']['in_bay'])
-        # To a building: by the kerb, the hatch to the pavement.
         address = runpy.run_path(str(TOOLS / 'mock-bridge'), run_name='mock_city')['CITY'][3]['key']
         self.assertEqual(self.play('drive', truck, 'address:' + address), 0, self.lines)
         self.assertIn('Parked by the kerb.', self.lines)
         self.assertTrue(any('hatch to the pavement' in line for line in self.lines), self.lines)
-        # To a stop of today's route; a stop that isn't there is the game's refusal.
         self.assertEqual(self.play('drive', truck, 'stop:1'), 1, self.lines)
         self.assertIn("has 0 stops on today's route (Monday); no stop 1", self.lines[0])
         self.session.bridge.call('route', {'op': 'add_stop', 'vehicle': truck, 'address': 'ba:street_secondavenue#8', 'days': ['monday']})
         self.assertEqual(self.play('drive', truck, 'stop:1'), 0, self.lines)
         self.assertIn('Parked by the kerb.', self.lines)
-        # A stop in the truck's own commissary's bay is parked in the bay, not at the kerb nearby.
         self.session.mock.state['commissary']['spaces'].append({'site': 'hells-kitchen', 'vehicle': truck})
         self.session.mock.plans[truck].append({'day': 'monday', 'address': 'bay', 'x': 595., 'z': 220., 'open': 1200, 'close': 1260})
         self.assertEqual(self.play('drive', truck, 'stop:2'), 0, self.lines)
         self.assertIn('Parked in the bay.', self.lines)
-        # Physical-driving availability/refusals do not affect the simulated trip.
         self.session.mock.ride_refusal = 'no route to the destination'
         self.session.mock.self_driving = False
         self.assertEqual(self.play('drive', truck, 'address:' + address), 0, self.lines)
@@ -687,7 +665,6 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.play('walk', '400', '230'), 0, self.lines)
         clock = self.session.bridge.call('state')['result']['clock']
         self.assertEqual((clock['paused'], clock['speed']), (True, 4))
-        # Refused by the game after the clock was started: put back all the same.
         self.assertEqual(self.play('walk', '--to', 'vehicle:no-such-cart'), 1, self.lines)
         clock = self.session.bridge.call('state')['result']['clock']
         self.assertEqual((clock['paused'], clock['speed']), (True, 4))
@@ -696,8 +673,6 @@ class BlindPlayTests(unittest.TestCase):
         self.session.bridge.call('save', {'name': 'FT playtest'})
         self.assertEqual(self.play('map', 'filters'), 0, self.lines)
         self.assertTrue(any(line.startswith('commissaries:') for line in self.lines), self.lines)
-        # The Street food filters follow Core's rule: a business decides before its building (a liquor store in a
-        # shop draws the night crowd, a recruitment agency in a special building draws offices).
         city = {b['key']: b for b in runpy.run_path(str(TOOLS / 'mock-bridge'), run_name='mock_city')['CITY']}
         for address, filter_ in (('ba:street_fifthavenue#44', 'nightlife'), ('ba:street_broadwaystreet#5', 'offices')):
             self.session.mock.state['player'].update(x=city[address]['x'], z=city[address]['z'])
@@ -715,7 +690,6 @@ class BlindPlayTests(unittest.TestCase):
         flat = next(k for k, b in city.items() if b.get('buildingType') == 'ba:buildingtype_residential' and not b.get('businessType'))
         self.session.mock.state['player'].update(x=city[burger]['x'], z=city[burger]['z'])
         self.session.bridge.call('save', {'name': 'FT playtest'})
-        # Time runs the needs down: nothing tops them up.
         self.assertEqual(self.play('time', 'until', '+0', '23:00'), 0, self.lines)
         needs = self.session.mock.state['player']['needs']
         self.assertLess(needs['hunger'], 25)
@@ -724,7 +698,6 @@ class BlindPlayTests(unittest.TestCase):
         self.assertTrue(any('you are hungry' in line for line in self.lines), self.lines)
         self.assertTrue(any(line == 'Home: none.' for line in self.lines), self.lines)
         self.assertIn('  happiness: No home -20%', self.lines)
-        # A burger: in through the door, order at the till, eat from the bag.
         self.session.bridge.call('time', {'speed': 1})
         door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == burger)
         self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
@@ -742,7 +715,6 @@ class BlindPlayTests(unittest.TestCase):
         self.assertIn('hands are empty', self.lines[0])
         self.assertEqual(self.play('walk', '--to', 'exit'), 0, self.lines)
         self.assertIn('You walked out of', self.lines[0])
-        # A flat: its entrance offers it for rent.
         self.ride(flat)
         door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == flat)
         self.assertTrue(door['for_rent'])
@@ -752,7 +724,6 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.play('look'), 0, self.lines)
         self.assertIn('  happiness: First apartment +10%, 7 days left', self.lines)
         self.assertFalse(any('No home' in line for line in self.lines), self.lines)
-        # A bed: bought in a shop, carried home in its box, set down on the floor.
         self.ride(furniture)
         door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == furniture)
         self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
@@ -766,12 +737,10 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
         self.assertEqual(self.play('place', '2', '3', '--rotation', '100'), 0, self.lines)
         self.assertIn('turned 90 degrees', self.lines[0])
-        # Sleep: a click on the bed, the hours on the slider, Start; the time skip passes before the tool answers.
         needs['energy'] = 20.
         self.assertEqual(self.play('use', self.thing('Click to sleep')), 0, self.lines)
         self.assertEqual(self.play('ui', 'list'), 0, self.lines)
         slider = next(line for line in self.lines if '(slider' in line).split(']')[0][1:]
-        # A text field (the bank's loan amount): ui type fills it; a slider refuses it.
         self.assertNotEqual(self.play('ui', 'type', slider, '20000'), 0, self.lines)
         self.session.mock.last_ui.append({'id': 99, 'text': 'Amount', 'kind': 'text field', 'path': 'Loan/Amount', 'value': ''})
         self.assertEqual(self.play('ui', 'type', '99', '20000'), 0, self.lines)
@@ -789,14 +758,12 @@ class BlindPlayTests(unittest.TestCase):
         self.session.mock.state['player'].update(x=city[school]['x'], z=city[school]['z'])
         self.session.bridge.call('save', {'name': 'FT playtest'})
         self.assertEqual(self.play('buy', 'cart'), 0, self.lines)
-        # Without the course the City turns the licence down.
         self.assertEqual(self.play('call', 'list'), 0, self.lines)
         self.assertIn('The City of New York (the_city_of_new_york)', self.lines)
         self.assertEqual(self.play('call', 'the_city_of_new_york'), 0, self.lines)
         self.assertEqual(self.play('ui', 'list'), 0, self.lines)
         self.ui_click(next(line for line in self.lines if 'Buy a licence' in line).split('] ', 1)[1])
         self.assertIsNone(self.session.mock.state['licence']['until_day'])
-        # The course: the school's Market Demands door, Food Safety, all its hours on the slider, Start.
         self.session.bridge.call('time', {'speed': 1})
         door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == school)
         self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
@@ -824,13 +791,11 @@ class BlindPlayTests(unittest.TestCase):
         self.session.bridge.call('time', {'speed': 1})
         door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == agency)
         self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
-        # Before the HR course the agency turns you away, as the game's does.
         self.assertEqual(self.play('use', self.thing('Receptionist')), 0, self.lines)
         self.assertEqual(self.play('ui', 'list'), 0, self.lines)
         self.assertTrue(any('Basic HR course' in line for line in self.lines), self.lines)
         self.ui_click('Hang up')
         self.assertEqual(self.play('walk', '--to', 'exit'), 0, self.lines)
-        # The course at the school's Basic HR door.
         self.ride(school)
         door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == school)
         self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
@@ -841,7 +806,6 @@ class BlindPlayTests(unittest.TestCase):
         self.ui_click('Start')
         self.assertIn('basic_hr', self.session.mock.life['diplomas'])
         self.assertEqual(self.play('walk', '--to', 'exit'), 0, self.lines)
-        # Still no business and no vehicle: the agency says so.
         self.ride(agency)
         door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == agency)
         self.assertEqual(self.play('use', str(door['id'])), 0, self.lines)
@@ -849,7 +813,6 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.play('ui', 'list'), 0, self.lines)
         self.assertTrue(any('business of your own' in line for line in self.lines), self.lines)
         self.ui_click('Hang up')
-        # With a cart, the fleet is in the form: business, skill, part or full time, the deadline, then Confirm.
         self.assertEqual(self.play('walk', '--to', 'exit'), 0, self.lines)
         self.assertEqual(self.play('buy', 'cart'), 0, self.lines)
         door = next(t for t in self.session.bridge.call('use', {})['result']['things'] if t.get('address') == agency)
@@ -870,7 +833,6 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.session.mock.state['money'], money - 300)
         t = self.session.mock.read_state()['transactions_today'][-1]
         self.assertEqual(t['type'], 'ba:transaction_recruitmentcampaign')
-        # The candidate turns up over the next days, unassigned; hired on the phone, it can join the cart's crew.
         self.assertEqual(self.play('walk', '--to', 'exit'), 0, self.lines)
         self.assertEqual(self.play('time', 'until', '+1', '12:00'), 0, self.lines)
         self.assertTrue(any('Candidate received' in e['text'] for e in self.session.mock.ring))
@@ -904,7 +866,6 @@ class BlindPlayTests(unittest.TestCase):
         self.assertEqual(self.play('vehicle', 'cart-1', 'teleport'), 2)
 
     def test_a_blind_week_start_with_the_referee_watching(self):
-        # The fresh character's home is in Hell's Kitchen.
         self.session.mock.state['player'].update(x=1440., z=420.)
         self.session.bridge.call('save', {'name': 'FT playtest'})
         self.assertEqual(self.play('places', '--radius', '500'), 0)
@@ -932,7 +893,7 @@ class BlindPlayTests(unittest.TestCase):
         watcher = threading.Thread(target=lambda: result.update(code=referee.watch(self.stop, poll_s=.05, polls=400)))
         watcher.start()
         self.assertEqual(self.play('time', 'until', '+1', '08:05'), 0, self.lines)
-        self.assertEqual(self.play('vehicle', cart, 'enter'), 0, self.lines)  # the walk there waits for the clock
+        self.assertEqual(self.play('vehicle', cart, 'enter'), 0, self.lines)
         self.assertEqual(self.play('time', 'speed', '1'), 0)
         import time as clock
         deadline = clock.time() + 5
@@ -942,7 +903,6 @@ class BlindPlayTests(unittest.TestCase):
             self.assertEqual(self.play(*argv), 0, (argv, self.lines))
         clock.sleep(.5)
         self.assertFalse(Path(self.stop).exists())
-        # Stock that vanishes behind the player's back: the referee stops the game and says why.
         with self.session.mock.lock:
             line = next(s for s in self.session.mock.state['commissary']['stock'] if s['key'] == HOTDOG)
             line['amount'] -= 3

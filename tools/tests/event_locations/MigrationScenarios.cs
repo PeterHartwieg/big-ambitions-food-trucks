@@ -24,7 +24,7 @@ static class Program
         var gig=Gig(); state.Catering.Gigs.Add(gig);
         var legacy=Confirmation(gig); c.messagesQueue.Enqueue(legacy);
         Streets.AddressHelper.Street="THROW";
-        Catering.Run(state); // Real migration caller, Ready=false, no building, native lookup throws.
+        Catering.Run(state);
         Check(legacy.messageData!["place"]=="34 4th Avenue", "history fallback must run before readiness");
         Check(legacy.messageData["guidance"]=="active" && legacy.messageData["metres"]=="60", "legacy active fields before readiness");
         Check(Streets.AddressHelper.LastKey=="ba:street_fourthavenue", "lookup must receive genuine legacy street key");
@@ -42,14 +42,13 @@ static class Program
             var accepted=CateringOffers.Accept(new(),state.Catering,offer.Id,4,500,1);
             Check(accepted.Success,"Core accepts fresh offer after initial migration"); gig=accepted.Gig!;
             var msg=new TextMessage {messageKey="foodtrucks:message_bookings_booked",messageData=Catering.Describe(gig)};
-            c.messagesQueue.Enqueue(msg); Catering.Run(state); // actual Describe + Core acceptance after initial migration
+            c.messagesQueue.Enqueue(msg); Catering.Run(state);
             Check(msg.messageData!["guidance"]=="active", "new acceptance active");
             if(transition=="miss" || transition=="midnight") CateringGigs.MissOverdue(new(),state.Catering,transition=="midnight"?5:4,700);
             else { gig.Status=GigStatus.Started; CateringGigs.Finish(new(),state.Catering,2,4,transition=="complete"?660:610); }
             Catering.Run(state); Check(msg.messageData["guidance"]=="inactive", transition+" flips in session");
             state.Catering.History.Clear();
         }
-        // Malformed native payloads between valid records must not stop later repairs or loop migration.
         c.messagesQueue.Enqueue(null!); c.messagesQueue.Enqueue(new()); c.messagesQueue.Enqueue(new() { messageKey="foodtrucks:message_bookings_booked" });
         foreach(var field in new[]{"place","locationId"}) foreach(var value in new string?[]{null,"", "unparseable"})
         {
@@ -150,7 +149,6 @@ static class Program
         Catering.Reset(); Catering.RunStep(state,1440); Catering.RunStep(state,1440);
         Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"readable legacy queue reload is byte-stable without dirty mark");
 
-        // Names can become available after buildings, without changing Ready or any booking/queue input.
         msg=c.messagesQueue.Single(); msg.messageData!["place"]="34 Fourth Avenue"; msg.messageData["guidance"]="keep wording";
         Streets.AddressHelper.Street="THROW"; Catering.Reset(); Catering.RunStep(state,1440);
         Check(msg.messageData["guidance"]=="keep wording" && state.Catering.Gigs.Count==1,"unknown native name preserves wording and gig");
@@ -164,7 +162,6 @@ static class Program
 
     static void ReadableSpelling(Contact c)
     {
-        // Keep the original same-spelling readiness case above; vary only native rendering here.
         foreach (var native in new[]{"Fourth Avenue", "Fourth Ave"})
         {
             var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
@@ -182,7 +179,6 @@ static class Program
             Catering.Reset(); Catering.RunStep(state,1440); Catering.RunStep(state,1440);
             Check(saved==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,"spelling queue survives reload without dirty mark");
         }
-        // Positive evidence still rules out another house or differing stable IDs/details.
         foreach(var field in new[]{"place","bookingId","locationId","guests"})
         {
             var state=new SaveState(); FoodTrucksSession.CurrentState=state; state.Catering.NextOfferId=10;
@@ -235,7 +231,6 @@ static class Program
             var before=JsonConvert.SerializeObject(c.messagesQueue); var writes=FoodTrucksSession.Changes;
             Catering.RunStep(state,1440); Catering.RunStep(state,1440);
             Check(before==JsonConvert.SerializeObject(c.messagesQueue) && writes==FoodTrucksSession.Changes,transition+" initially unknown, no write");
-            // Change only an orphan-only catalog entry; candidate, Ready, day, Core and queue stay fixed.
             if(transition=="collision") Streets.AddressHelper.Catalog.Remove("ba:street_othername");
             else Streets.AddressHelper.Catalog["ba:street_westminster"]="Westminster";
             Catering.RunStep(state,1440);
@@ -252,8 +247,6 @@ static class Program
 
     static void HistoryCollisionTransitions(Contact c)
     {
-        // Run reconciliation alone, with an expired offer whose candidate becomes unknown
-        // only when the orphan's street alias collides. No Step/cancellation lookups run.
         var state=new SaveState(); FoodTrucksSession.CurrentState=state;
         state.Catering.Gigs.Add(Gig()); SaveGameManager.Current.Day=3;
         World.Found=new(){building=new(){Address=new(){streetName=Gig().PlaceId.Split('#')[0],streetNumber=34}}};
@@ -355,7 +348,6 @@ static class Program
         };
         foreach(var row in cases) Check(Match(row.Left,row.Right)==row.Expected,$"tri-state {row.Left} / {row.Right}: expected {row.Expected?.ToString()??"unknown"}");
         Check(Match("34 ba:street_fourthavenue","34 4th Avenue","ba:street_fourthavenue#34")==true,"raw street identity stays true");
-        // Whole native names may establish aliases; spaces/hyphens never manufacture them.
         Streets.AddressHelper.Catalog["ba:street_otherbroadway"]="Broad Way";
         Streets.AddressHelper.Catalog["ba:street_broadwaystreet"]="Broadway Street";
         Check(Match("34 Broadway","34 Broad Way")==null && Match("34 Broadway","34 Broadway Street")==null,"shared fallback makes Broadway ambiguous across catalog IDs");
@@ -461,8 +453,6 @@ namespace FoodTrucks
         internal static int OfferGuidanceRenders;
         internal static string Weekday(int d) => d.ToString();
         internal static string Text(string key) {
-            // The collision fixture has only booked candidates: their Describe calls use
-            // booking_map_hint, so only the historical offer can render either offer key.
             if(key is "foodtrucks:offer_map_hint" or "foodtrucks:offer_inactive") OfferGuidanceRenders++;
             return key switch {
         "foodtrucks:booking_inactive" => "inactive",

@@ -9,7 +9,7 @@ public class UnusedPlaceRefundTests
     [InlineData(0, 16000)]
     [InlineData(1, 8000)]
     [InlineData(2, 0)]
-    [InlineData(3, 0)] // More distinct historical holders than bookings.
+    [InlineData(3, 0)]
     public void RefundsOnlyUnusedBookings(int distinctVehicles, long expected)
     {
         var city = new CityEvent { Booked = 2, FeeCents = 8000 };
@@ -29,7 +29,6 @@ public class UnusedPlaceRefundTests
         Assert.Equal(16000, CityEvents.UnusedPlaceRefund(city));
         city.Holds.Add(new PlaceHold { VehicleId = "first", From = 600, Until = 650 });
         Assert.Equal(8000, CityEvents.UnusedPlaceRefund(city));
-        // Conservative lifetime use: two different vehicles consume two bookings even without overlap.
         city.Holds.Add(new PlaceHold { VehicleId = "second", From = 650, Until = 700 });
         Assert.Equal(0, CityEvents.UnusedPlaceRefund(city));
     }

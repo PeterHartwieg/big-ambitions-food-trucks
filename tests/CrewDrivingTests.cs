@@ -10,7 +10,6 @@ public class CrewDrivingTests
     internal static ProbePath Straight() => new ProbePath(new[] { new ProbePoint(0, 0), new ProbePoint(0, 100) });
     internal static ProbePath Arc(double radius)
     {
-        // Exact circle chords <= .5 m, plus tangent straights sampled at the same spacing.
         var steps = (int)Math.Ceiling(radius * Math.PI / 2 / .5);
         var pts = new ProbePoint[41 + steps + 40];
         for (var i = 0; i <= 40; i++) pts[i] = new ProbePoint(0, i * .5);
@@ -23,8 +22,6 @@ public class CrewDrivingTests
         return new ProbePath(pts);
     }
 
-    // Physical pedal-driven bicycle. Deliberately never sets speed to the controller's desired speed.
-    // Smooth/rate-limit the wheel, integrate braking/acceleration, and integrate the ACTUAL body pose.
     internal sealed class Rig
     {
         internal readonly ProbeOwnership Owners;
@@ -94,7 +91,6 @@ public class CrewDrivingTests
         }
         Assert.Equal(ProbeState.Finished, rig.Controller.State);
         Assert.InRange(Math.Abs(rig.X), 0, .01);
-        // Native NWH Ackermann formula for the captured truck's track and wheelbase.
         var angle = 4 * Math.PI / 180;
         var actual = Math.Atan(4 * 1.74 * Math.Sin(angle) / (2 * 3.6 * Math.Cos(angle) - 1.74 * Math.Sin(angle))) * 180 / Math.PI;
         Assert.InRange(actual, 0, 5);
@@ -169,7 +165,6 @@ public class CrewDrivingTests
         Assert.True(maxSteer > 5);
         Assert.InRange(rig.MaxSpeed, 2, 4.01);
         Assert.InRange(rig.Heading, 1.5, 1.65);
-        // At radius 10, truck corner cap is below Driven Rides' copied 12 km/h minimum.
         var tight = new Rig(path: Arc(10));
         for (var i = 0; i < 500; i++) tight.Tick();
         Assert.True(tight.MaxSpeed < 3);
@@ -211,7 +206,7 @@ public class CrewDrivingTests
         Assert.Equal(ProbeReason.BoundaryCrossed, c.Reason);
         Assert.Equal(ProbeState.Cancelled, c.State);
         Assert.Equal(2, c.BoundaryViolationMetres, 8);
-        Assert.Equal(0, c.RearAlong); // rejected jump cannot advance logical progress
+        Assert.Equal(0, c.RearAlong);
         Assert.Equal(0, c.Throttle); Assert.Equal(1, c.Brake);
         Assert.True(c.RequiresStationaryHold);
     }
@@ -302,7 +297,7 @@ public class CrewDrivingTests
         Assert.Equal(expected, c.Reason); Assert.Equal(ProbeState.Cancelled, c.State);
         Assert.Equal(0, c.Throttle); Assert.True(c.RequiresStationaryHold);
         AssertFinite(c);
-        Assert.Equal(0, rig.Tick().Throttle); // latched cancellation
+        Assert.Equal(0, rig.Tick().Throttle);
     }
 
     [Fact]

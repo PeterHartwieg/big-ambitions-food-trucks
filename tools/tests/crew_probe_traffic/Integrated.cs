@@ -26,7 +26,7 @@ internal static class TrafficIntegrated
             Ordinary = Model("ordinary", 0, 1); Raised = Model("raised", .36f, 1.36f);
             Raised.gameObject.activeSelf = !inactiveRaised;
             foreach (var c in Rig.Car.GetComponentsInChildren<Collider>(true)) c.gameObject.layer = 12;
-            foreach (var w in Rig.Wheels) w.wheel.colliderGO.layer = 2; // Actual wheel visibility exception is necessary.
+            foreach (var w in Rig.Wheels) w.wheel.colliderGO.layer = 2;
             Body = new CrewProbeBody(Rig.Car);
             Check(!Body.TrafficCertified && Body.CookedQueries == 0, "physical capture must not require any cooked traffic slice");
         }
@@ -109,7 +109,7 @@ internal static class TrafficIntegrated
         using(var t=w.Start())
         {
             w.Trigger(w.Raised).AttachmentOverride=new GameObject("future wrong attachment").Add<Rigidbody>();
-            w.Observe(t); // Native attachedRigidbody is unavailable while inactive/disabled.
+            w.Observe(t);
             w.Raised.gameObject.activeSelf=true;w.Trigger(w.Raised).enabled=true;
             w.Observe(t,"trigger_attached_rigidbody_changed");
         }
@@ -123,7 +123,7 @@ internal static class TrafficIntegrated
         w.Ordinary.transform.parent=parent.transform;
         w.Ordinary.transform.MatrixDerivedScale=true;
         var box=w.Trigger(w.Ordinary);box.center=new Vector3(0,.5f/uniform,0);
-        box.size=new Vector3(200/uniform,1/uniform,500/uniform); // Magnifies derived-dimension rounding.
+        box.size=new Vector3(200/uniform,1/uniform,500/uniform);
         using(var t=w.Start())
         {
             var captured=w.Ordinary.transform.lossyScale;var noisy=false;
@@ -142,7 +142,6 @@ internal static class TrafficIntegrated
             w.Observe(t,"trigger_authored_root_scale_changed");
         }
         }
-        // Even a one-ULP authored edit stays forbidden; tolerance is for derived values only.
         Mutate(x=>x.Ordinary.transform.localScale.x=MathF.BitIncrement(1f),"trigger_authored_root_scale_changed");
         Mutate(x=>x.Trigger(x.Ordinary).size.x=MathF.BitIncrement(x.Trigger(x.Ordinary).size.x),"trigger_shape_scale_changed");
         Mutate(x=>x.Ordinary.transform.parent=new GameObject("new parent").transform,"trigger_root_reparented");
@@ -169,7 +168,6 @@ internal static class TrafficIntegrated
         var failure=Property(result,"failure")!;
         Check((string)Property(failure,"code")! == "trigger_root_height_offset" && ((string)Property(failure,"detail")!).Contains("pool=0"),"real first refusal must survive later inactive noncovering report");
         Check(Property(result,"failing_shell")==null && Property(result,"failing_corner")==null,"height-domain failure must not acquire another trigger's corner");
-        // An actual prism refusal's cached corner is also unchanged by later pure queries.
         Check(w.Body.SelectBand(.36f,1f)==null,"select diagnostic test band");
         w.Body.RecordCoverageFailure(w.Body.WorldBandMax+1,w.Body.WorldBandMax+2);
         var shell=w.Body.FailingShell;var corner=w.Body.FailingCorner;var point=w.Body.FailingPoint;
@@ -197,24 +195,20 @@ internal static class TrafficIntegrated
             w.Raised.gameObject.activeSelf = true; disabled.enabled = true; w.Observe(t);
             Check(w.Body.Min.y < .01f && w.Body.Max.y >= 3.1f, "physical envelope remains full suspension/body");
         }
-        // The old low slice is invalid, yet the selected higher cooked slice is valid.
         w = new World(); var mesh = (MeshCollider)w.Rig.Car.vehicleCollider!;
         mesh.CookedClosestPoint = p => p.y < .55f ? new Vector3(Math.Clamp(p.x, -.5f, .5f), p.y, p.z) : p;
         using (var t = w.Start()) w.Observe(t);
-        // Midpoint fails. A deterministic endpoint candidate fits, without reselection later.
         w = new World(); mesh = (MeshCollider)w.Rig.Car.vehicleCollider!;
         mesh.CookedClosestPoint = p => p.y < .665f ? new Vector3(0, p.y, p.z) : p;
         using (var t = w.Start()) { Check(w.Body.BandCandidates > 1 && w.Body.BandCandidates <= 17, "bounded search reaches a higher cooked band"); w.Observe(t); }
         Refuse(x => { var c=x.Trigger(x.Raised);c.center.y=5.5f; }, "common_band_empty");
         Refuse(x => { var c=x.Trigger(x.Raised);c.center.y=2.5f; }, "common_band_empty");
         Refuse(x => ((MeshCollider)x.Rig.Car.vehicleCollider!).CookedClosestPoint = p => new Vector3(Math.Clamp(p.x, -.5f, .5f), p.y, p.z), "cooked_band_search_exhausted");
-        // A wide roof does not prove the slice: independently cooked taper excludes every candidate.
         Refuse(x => ((MeshCollider)x.Rig.Car.vehicleCollider!).CookedClosestPoint = p => p.y < 1 ? new Vector3(Math.Clamp(p.x, -.5f, .5f), p.y, p.z) : p, "cooked_band_search_exhausted");
         w = new World();
         Refuse(x=>x.Trigger(x.Raised).transform.localScale.y=-1,"trigger_local_transform_unsupported");
         Refuse(x=>x.Trigger(x.Raised).transform.localRotation=Quaternion.Euler(1,0,0),"trigger_local_transform_unsupported");
         Refuse(x=> {var c=x.Trigger(x.Raised);c.transform.parent!.localScale=new Vector3(2,1,1);c.transform.localRotation=Quaternion.Euler(0,45,0);},"trigger_shear_or_local_tilt");
-        // Separate left/right authorities can certify separate shells, but no union is used.
         var left = (MeshCollider)w.Rig.Car.vehicleCollider!;
         left.sharedMesh = Scenarios.BoxMesh(new Vector3(-.66f, 1.7f, 0), new Vector3(1.18f, 2.8f, 6));
         var right = new GameObject("right authority");right.transform.parent=w.Rig.Car.transform;right.layer=12;
@@ -251,14 +245,12 @@ internal static class TrafficIntegrated
         Mutate(x=> {var child=new GameObject("added node");child.transform.parent=x.Ordinary.frontTrigger;},"trigger_hierarchy_membership_changed");
         Mutate(x=>x.Trigger(x.Ordinary).enabled=false,"no usable front trigger");
         Mutate(x=>Physics.PairIgnore=true,"pair ignores");Physics.PairIgnore=false;
-        // A tiny tilt below the retained tolerance has an inner interval, not an outer AABB.
         var c=new GameObject("tiny tilt").Add<BoxCollider>();c.isTrigger=true;c.size=new Vector3(100000,.1f,2);c.transform.rotation=Quaternion.Euler(0,0,.0004f);
         Check(CrewProbeTrigger.WorldInterval(c,out _,out _,out _)=="trigger_world_interval_empty","tiny tilt side-face erosion rejects empty inner slab");
     }
     private static void Steady()
     {
         var w = new World(); using var t = w.Start();
-        // Supported yaw/horizontal movement includes steering front-root yaw.
         w.Ordinary.transform.position=new Vector3(10,0,8);w.Ordinary.transform.rotation=Quaternion.Euler(0,30,0);
         w.Ordinary.frontTrigger.localRotation=Quaternion.Euler(0,10,0);w.Trigger(w.Ordinary).transform.localPosition.x=.1f;
         w.Observe(t);

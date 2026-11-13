@@ -27,7 +27,6 @@ class MeshBuild:
             bevel=min(bevel,min(dims)*.30)
             bmesh.ops.bevel(bm, geom=list(bm.edges), offset=bevel, segments=1, affect='EDGES')
         bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
-        # Chamfer corners can be triangles; triangulate only polygons with >4 corners.
         bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts)>4])
         bm.verts.ensure_lookup_table(); bm.verts.index_update()
         self.add([v.co for v in bm.verts], [[v.index for v in f.verts] for f in bm.faces], color)
@@ -40,7 +39,6 @@ class MeshBuild:
         faces=[]
         for i in range(sides):
             j=(i+1)%sides; faces.append((i,j,sides+j,sides+i))
-        # Fan caps without centre vertices, no n-gons.
         for i in range(1,sides-1):
             faces.extend([(0,i+1,i),(sides,sides+i,sides+i+1)])
         self.add(verts,faces,color)
@@ -53,7 +51,6 @@ class MeshBuild:
             for j in range(p): faces.append((i*p+j,((i+1)%sides)*p+j,((i+1)%sides)*p+(j+1)%p,i*p+(j+1)%p))
         self.add(verts,faces,color)
     def ring_z(self, centre, profile, sides, color):
-        # A closed ring round a vertical axis: profile is (radius, dz) pairs.
         verts=[]; faces=[]; p=len(profile)
         for i in range(sides):
             t=i*2*math.pi/sides
@@ -62,7 +59,6 @@ class MeshBuild:
             for j in range(p): faces.append((i*p+j,i*p+(j+1)%p,((i+1)%sides)*p+(j+1)%p,((i+1)%sides)*p+j))
         self.add(verts,faces,color)
     def radial_bar(self, hub, angle, r0, r1, color=5):
-        # Closed narrow rectangular spoke, with depth along X.
         u=Vector((0,math.cos(angle),math.sin(angle))); v=Vector((0,-math.sin(angle),math.cos(angle)))
         centre=Vector(hub); verts=[]
         for r in (r0,r1):
@@ -87,8 +83,6 @@ def wheel(x,name):
     return w.obj(name,hub)
 
 def canopy(m, c):
-    # The open canopy goes into c (its own object, shown while the cart sells), the pole into m.
-    # Twelve alternating panels, each three facets wide. A closed thin shell.
     n=36; profile=[(.036,2.288),(.42,2.235),(.80,2.079),(.80,2.030)]
     verts=[]
     for inner in (False,True):
@@ -122,7 +116,7 @@ def furled(f):
     for r,z in profile:
         for i in range(n):
             t=2*math.pi*(i+.5)/n
-            rr=r*(1.0 if i%2==0 else .86)   # pleats
+            rr=r*(1.0 if i%2==0 else .86)
             verts.append((rr*math.cos(t),-.60+rr*math.sin(t),z))
     faces=[]; colors=[]; L=len(profile)
     for j in range(L-1):
@@ -132,12 +126,10 @@ def furled(f):
         faces.append((0,i+1,i)); colors.append(3)
         top=(L-1)*n; faces.append((top,top+i,top+i+1)); colors.append(3)
     f.add(verts,faces,colors)
-    # Strap round the folds, and the rib tips gathered at the bottom.
     f.ring_z((0,-.60,1.80),[(.0675,-.016),(.0745,-.012),(.0745,.012),(.0675,.016)],12,2)
     f.cyl((0,-.60,1.44),(0,-.60,1.50),.022,1,8)
 
 def fender(m,sign):
-    # Swept steel strip, clear of the complete R=.25 wheel volume.
     n=12; verts=[]; faces=[]
     for i in range(n+1):
         t=math.radians(12+156*i/n)
@@ -157,35 +149,28 @@ def build(stage):
         if ma.name.startswith('Cart_') and not ma.users: bpy.data.materials.remove(ma)
     s=bpy.context.scene; s.unit_settings.system='METRIC'; s.unit_settings.scale_length=1
     b=MeshBuild()
-    # Main steel shell: four closed plates plus a floor, all within exact body dimensions.
     b.box((0,0,.262),(.80,1.40,.024),1,.006)
     for x in (-.391,.391): b.box((x,0,.59),(.018,1.40,.66),0,.004)
     for y in (-.691,.691): b.box((0,y,.59),(.764,.018,.66),0,.004)
     if stage=='blockout': b.box((0,0,.936),(.80,1.40,.028),5,.004)
     else:
-        # Counter assembled around a real recessed steam well. Top stays at .950.
         for x in (-.2785,.2785): b.box((x,0,.936),(.243,1.40,.028),5,.003)
         b.box((0,-.491,.936),(.314,.418,.028),5,.003)
         b.box((0,.341,.936),(.314,.718,.028),5,.003)
-        # Steam well floor and interior walls (concealed with closed lid).
         b.box((0,-.150,.875),(.314,.264,.012),1)
         for x in (-.1535,.1535): b.box((x,-.150,.909),(.007,.264,.068),1)
         for y in (-.2785,-.0215): b.box((0,y,.909),(.300,.007,.068),1)
-        # Dark flush rim, never above .965.
         for x in (-.154,.154): b.box((x,-.15,.952),(.008,.260,.004),1)
         for y in (-.278,-.022): b.box((0,y,.952),(.30,.006,.004),1)
-        # Fixed second lid with flush pull, set behind the hinged one.
         b.box((0,.295,.952),(.306,.266,.007),1,.002)
         b.box((0,.295,.957),(.29,.25,.004),0,.001)
         b.box((0,.370,.961),(.065,.012,.004),6,.001)
         b.cyl((-.12,-.025,.950),(.12,-.025,.950),.006,1,8)
-    # Correct single rear push bar, with grip centres at the required hand points.
     b.cyl((-.375,.75,1.16),(.375,.75,1.16),.0175,5,10)
     for x in (-.30,.30): b.cyl((x-.053,.75,1.16),(x+.053,.75,1.16),.020,2,10)
     for x in (-.355,.355):
         b.cyl((x,.69,.914),(x,.75,1.16),.014,0,8)
         b.box((x,.684,.930),(.05,.025,.045),1,.004)
-    # The front swivel caster and rear folding prop both reach the floor.
     b.cyl((0,-.60,.11),(0,-.60,.27),.021,1,8)
     b.cyl((-.019,-.617,.060),(.019,-.617,.060),.060,2,12)
     b.cyl((-.022,-.617,.060),(.022,-.617,.060),.021,5,8)
@@ -196,23 +181,18 @@ def build(stage):
     cano=MeshBuild(); canopy(b,cano)
     if stage!='blockout':
         for sign in (-1,1): fender(b,sign)
-        # Lower front/rear folded seams and subtle side reinforcement.
         for y in (-.701,.701):
             b.box((0,y,.293),(.76,.007,.038),1,.002)
             b.box((0,y,.888),(.76,.007,.014),1,.002)
-        # Serving door on the right (-X), ahead of the wheel. No branding.
         b.box((-.403,-.434,.598),(.008,.458,.526),6,.005)
         b.box((-.409,-.434,.598),(.010,.444,.512),0,.006)
         for z in (.402,.778):
             b.box((-.417,-.656,z),(.014,.028,.061),1,.003)
             b.cyl((-.423,-.660,z-.030),(-.423,-.660,z+.030),.008,5,8)
-        # Small side pull, with two standoffs.
         for y in (-.300,-.246): b.box((-.426,y,.645),(.025,.010,.021),1,.002)
         b.cyl((-.441,-.306,.645),(-.441,-.240,.645),.007,5,8)
-        # Blank pressed panel on the other face, placed above the wheel.
         b.box((.404,.05,.754),(.008,.74,.248),1,.004)
         b.box((.410,.05,.754),(.006,.716,.224),0,.003)
-        # Fine ribs under canopy remain wholly above headroom.
         for i in range(12):
             t=i*math.pi/6
             cano.cyl((.036*math.cos(t),-.60+.036*math.sin(t),2.283),(.785*math.cos(t),-.60+.785*math.sin(t),2.074),.003,1,5)
@@ -222,7 +202,6 @@ def build(stage):
     lid.box((0,-.150,.952),(.30,.25,.010),0,.002)
     lid.box((0,-.223,.959),(.068,.017,.006),6,.001)
     li=lid.obj('Cart_Lid',(0,-.025,.95))
-    # Build the strictly convex hull explicitly with the prescribed bmesh operator.
     points=[(x,y,z) for x in (-.4,.4) for y in (-.7,.7) for z in (.25,.95)]
     points += [(x,.25*math.cos(i*math.pi/8),.25+.25*math.sin(i*math.pi/8)) for x in (-.48,.48) for i in range(16)]
     points += [(x,y,0) for x in (-.055,.055) for y in (-.66,.66)]
@@ -235,7 +214,6 @@ def build(stage):
     me=bpy.data.meshes.new('Cart_Collision_Mesh'); bm.to_mesh(me); bm.free()
     co=bpy.data.objects.new('Cart_Collision',me); s.collection.objects.link(co)
     co.hide_render=True; co.display_type='WIRE'; co.hide_set(True)
-    # Temporary palette materials support the blockout/detail reviews.
     mats=[]
     for i,c in enumerate(PALETTE):
         ma=bpy.data.materials.new('Cart_Review_'+str(i)); ma.diffuse_color=c; mats.append(ma)
@@ -296,7 +274,6 @@ def texture_and_uv(visible):
     bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.uv.smart_project(angle_limit=math.radians(66),island_margin=.004,margin_method='FRACTION', area_weight=.1,scale_to_bounds=True)
     bpy.ops.object.mode_set(mode='OBJECT')
-    # Rasterise flat part colours into a single atlas with 3px gutter dilation.
     n=1024; tex=np.zeros((n,n,4),dtype=np.float32); tex[:]=(.30,.36,.40,1)
     mask=np.zeros((n,n),dtype=bool)
     for ob in visible:

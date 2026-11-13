@@ -4,16 +4,10 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Fleet
 {
-    // The game's recruitment agency recruiting for the street food fleet (Peter, 17 October 2026): a player with only
-    // carts and trucks has no building business, which the agency otherwise wants. The game's Basic HR course stays
-    // required. A fleet campaign has no business address, so its candidates arrive unassigned, ready for a vehicle's crew.
     public static class FleetRecruitment
     {
-        // The one skill the fleet hires for: who serves at the window.
         public const string Skill = "ba:skill_customerservice";
 
-        // The skills the agency offers for the fleet: customer service, if this agency recruits it and the player owns a
-        // food vehicle. Empty otherwise, and then the fleet isn't offered.
         public static IReadOnlyList<string> Skills(int foodVehicles, IEnumerable<string>? agencySkills)
         {
             if (foodVehicles <= 0 || agencySkills == null) return Array.Empty<string>();

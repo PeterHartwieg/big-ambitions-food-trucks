@@ -101,7 +101,7 @@ class OperationTests(unittest.TestCase):
         for _ in range(501): self.mock.operation('state',{})
         self.assertEqual(self.bridge.op(identifier)['result']['status'],'pending')
         self.assertEqual(len(self.mock.state['vehicles']),1)
-        self.assertEqual(len(self.mock.operations),501)  # 500 completed plus the pending mutation
+        self.assertEqual(len(self.mock.operations),501)
         self.mock.operation_waiters[identifier][1].set()
         recovered=self.bridge.recover(identifier,2)
         self.assertTrue(recovered['ok'])
@@ -146,7 +146,6 @@ class OperationTests(unittest.TestCase):
         self.assertEqual(before['clock']['arrived_at'],'day 2 07:59')
         self.assertIsNone(before['clock']['run_until'])
         self.assertEqual(before['clock']['speed'],1)
-        # The commissary's daily rent is charged at midnight; only the order's payment matters here.
         orders=lambda transactions:[t for t in transactions if t['type']=='foodtrucks:transaction_commissary_order']
         self.assertEqual(orders(before['transactions_today']),[])
         self.bridge.call('time',{'run_until':{'day':2,'time':'08:00'},'speed':60})

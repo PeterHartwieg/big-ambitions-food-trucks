@@ -128,8 +128,6 @@ from ftlib.bridge import Bridge, BridgeError  # noqa: E402
 
 PREFIX = 'FT playtest'
 MAX_SPEED = 20
-# FT_PLAY_CLOCK=player: the clock moves only as a player can move it: at normal speed while you act or wait, and
-# further only through the game's own activities (sleep, a bench, rest, a course, a work panel's skip).
 PLAYER_CLOCK = os.environ.get('FT_PLAY_CLOCK') == 'player'
 MAX_WAIT = 120
 if PLAYER_CLOCK:
@@ -146,9 +144,7 @@ VEHICLE_OPS = ('open', 'close', 'enter', 'exit', 'back_to_hatch', 'work_window',
 PHONE_APPS = ('contacts', 'employees', 'bizman', 'econoview', 'market', 'persona', 'rivals')
 FEELINGS = {'hungry': 'you are hungry', 'very_hungry': 'you are starving', 'tired': 'you are tired',
             'exhausted': 'you are exhausted', 'out_of_energy': 'you have no energy left: you can barely walk and will soon collapse'}
-# How long a click may hold a time skip (sleep, a course) before the tool stops waiting, in real seconds.
 SKIP_WAIT_S = 600
-# How long a drive may take before the tool stops waiting, in real seconds (the self-driving ride gives up after 20 minutes).
 DRIVE_WAIT_S = 25 * 60
 
 
@@ -163,7 +159,6 @@ def money(value):
 class Play:
     def __init__(self, bridge, out=print, stop_file=None, memory=None):
         self.bridge = bridge
-        # Where `notices` remembers what you've read, per game session.
         self.memory = memory or os.environ.get('FT_PLAY_MEMORY') or os.path.expanduser('~/.ft-play.json')
         self.out = out
         self.stop_file = stop_file if stop_file is not None else os.environ.get('FT_PLAY_STOP')
@@ -180,7 +175,6 @@ class Play:
         if health.get('scene') != 'city' or not (health.get('save') or '').startswith(PREFIX):
             raise Refused(f"You can only play in a save whose name starts with '{PREFIX}' (now: {health.get('save')!r}, {health.get('scene')}).")
 
-    # ---- looking ----
     def look(self):
         s = self.call('state')
         c = s.get('clock') or {}
@@ -304,7 +298,6 @@ class Play:
             path = str(fetch_shot(path, fetch))
         self.out(f"Screen: {path}{' (' + r['game_error'] + ')' if r.get('game_error') else ''}")
 
-    # ---- acting ----
     def go(self, address):
         self.acting()
         r = self.call('taxi', {'address': address}, 150)
@@ -328,7 +321,6 @@ class Play:
                 if was_paused: self.call('time', {'pause': True, **({'speed': was_speed} if was_speed not in (None, 1) else {})})
                 elif was_speed not in (None, 1): self.call('time', {'speed': was_speed})
             except BridgeError:
-                # The click opened a screen that holds the clock (the map, a panel): the game keeps it until that closes.
                 self.out('The clock is held by the screen that opened; it runs again once you close it.')
 
     def use(self, ident=None, radius=None):
@@ -416,7 +408,6 @@ class Play:
         self.out(f"Floor plan: {r['address']}, floor {r['floor']}; {r['square_size']:g} m squares. Columns +X, rows +Z.")
         columns = r['columns']
         width = len(str(r['rows']))
-        # Multiple header lines keep each map square exactly one character wide, even past column Z.
         header_height = max(map(len, columns))
         for digit in range(header_height):
             self.out(' ' * (width + 1) + ''.join(c.rjust(header_height)[digit] for c in columns))
@@ -553,8 +544,6 @@ class Play:
         came in meanwhile."""
         deadline = time.time() + SKIP_WAIT_S
         skipped = False
-        # A skip can start a moment after the click (a ride's fade, the walk to the bed or the school's chair): it counts
-        # as started while the player walks there, rides or the skip runs.
         settle = time.time() + 1
         while time.time() < deadline:
             player = self.call('state').get('player') or {}
@@ -575,7 +564,6 @@ class Play:
         money_before = self.call('state').get('money')
         r = self.call('job', {'op': 'auto'})
         if r.get('simulated'):
-            # A driving shift: paid as a competent driver would earn it, then the clock runs for the driving time.
             self.out(f"Driving the job ({r['kind']}) as a skilled driver would: {r['units']} "
                      f"{'fares' if r['kind'] == 'TaxiJob' else 'parcels'}, about {r['minutes']} game minutes, until {r['until']}.")
             deadline = time.time() + 900
@@ -588,7 +576,6 @@ class Play:
             return
         self.out(f"Working the job ({r['kind']}) as a skilled player would, while time passes.")
         self.wait_for_skip(cursor)
-        # The pay lands as the skip settles, a moment after the clock is back.
         deadline = time.time() + 5
         s = self.call('state')
         while s.get('money') == money_before and time.time() < deadline:
@@ -619,13 +606,11 @@ class Play:
         if not 0 < speed <= MAX_SPEED: raise Refused(f'Speed is above 0 and at most {MAX_SPEED}.')
         clock = self.call('state')['clock']
         target_day = clock['day'] if day is None else (clock['day'] + int(day[1:]) if str(day).startswith('+') else int(day))
-        # A time already past today is refused rather than read as tomorrow: a day of needs running down unseen.
         if day is not None and str(day) == '+0': day = None
         if day is None and value <= clock['time']:
             raise Refused(f"It is already {clock['time']} on day {clock['day']}, so {value} today has passed. "
                           f"For tomorrow, give the day: time until +1 {value}.")
         cursor = self.bridge.events(1)['next']
-        # Your needs run down as in any game: nothing tops them up.
         self.call('time', {'run_until': {'day': target_day, 'time': value}, 'speed': speed, 'keep_needs': False})
         if not wait:
             self.out(f'Running until day {target_day} {value}.'); return
@@ -702,7 +687,6 @@ class Play:
         elif op not in VEHICLE_OPS:
             raise Refused(f"Unknown vehicle action {op}: {', '.join(VEHICLE_OPS)}, fast_forward, skip_work, take or return.")
         cursor = self.bridge.events(1)['next'] if op == 'skip_work' else None
-        # The game's own buttons (Park among them) don't work while paused: a player lets the clock run to use them.
         r = self.call('vehicle', args) if op in ('skip_work', 'fast_forward') else self.clock_at_one(lambda: self.call('vehicle', args))
         self.out(f"{op}: {'done' if r['done'] else 'not done'}{' (' + r['why'] + ')' if r.get('why') else ''}.")
         for n in r.get('notices') or []: self.out(f'  {n}')

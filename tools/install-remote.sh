@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Copies build/FoodTrucks to the Windows game PC over ssh and installs it into ModsLocal.
-# Usage: tools/install-remote.sh [ssh host]   (or set BA_GAME_HOST)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HOST="${1:-${BA_GAME_HOST:?Pass the ssh host of the Windows game PC, or set BA_GAME_HOST}}"

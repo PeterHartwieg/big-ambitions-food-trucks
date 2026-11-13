@@ -1,5 +1,3 @@
-// Controlled stand-ins for the game boundaries Uninstall.cs touches. The native Delete is modelled on the
-// game's VehicleHelper.Delete: it removes from VehicleInstances only, never from the private driver's list.
 using FoodTrucks.Core.Saves;
 
 namespace UnityEngine { static class Time { public static float unscaledTime = 1000f; } }
@@ -44,7 +42,6 @@ namespace Helpers
         public enum Fault { None, Throw, Keep }
         public static Fault DeleteFault;
         public static int Deletes, NullControllerDeletes;
-        // Only a vehicle out in the world has a controller; one in the private driver's garage has none.
         public static VehicleController? GetVehicleController(VehicleInstance v) =>
             SaveGameManager.Current!.VehicleInstances.Contains(v) ? new VehicleController { vehicleInstance = v } : null;
         public static void Delete(this VehicleInstance v, VehicleController? c)

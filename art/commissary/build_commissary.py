@@ -27,14 +27,11 @@ FONT_FILE = os.path.join(os.path.dirname(bpy.app.binary_path), '..', 'Resources'
                          '%d.%d' % bpy.app.version[:2], 'datafiles', 'fonts', 'Inter.woff2')
 RNG = np.random.default_rng(20261011)
 
-# Road paint: the game's own decal paint is a flat 188 sRGB (T_Line_*, T_Crosswalk_*), so the same white (sRGB 0..1).
 PAINT = (0.74, 0.74, 0.72)
 ASPHALT = (0.20, 0.20, 0.20)
 SIGN_RED = (0.72, 0.08, 0.08)
 SIGN_GREEN = (0.05, 0.36, 0.20)
 SIGN_BLACK = (0.06, 0.06, 0.06)
-
-# ---------------------------------------------------------------------------------------------- helpers
 
 def reset():
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -58,7 +55,7 @@ def save_png(name, rgb, alpha=None, keep=True):
     h, w, _ = rgb.shape
     img = bpy.data.images.new(name, w, h, alpha=alpha is not None)
     a = np.ones((h, w)) if alpha is None else alpha
-    px = np.dstack([rgb, a])[::-1].astype(np.float32)  # Blender rows start at the bottom
+    px = np.dstack([rgb, a])[::-1].astype(np.float32)
     img.pixels.foreach_set(px.ravel())
     path = os.path.join(OUT if keep else RENDERS, name)
     img.filepath_raw = path
@@ -66,7 +63,7 @@ def save_png(name, rgb, alpha=None, keep=True):
     img.save()
     if not keep:
         img.pack()
-        img.use_fake_user = True   # the named plates have no material until the sign's atlas bake
+        img.use_fake_user = True
         os.remove(path)
     return img
 
@@ -175,8 +172,6 @@ def text_mesh(name, body, size=1.0, bold=0.0, align='CENTER'):
     bpy.ops.object.convert(target='MESH')
     return bpy.context.view_layer.objects.active
 
-# ---------------------------------------------------------------------------------------------- road paint
-
 def paint_texture():
     """Worn road paint, tileable over 2 m: the white with asphalt showing through scuffs and fine grit."""
     n = 512
@@ -199,7 +194,6 @@ def lettering(paint_mat):
     xs = [v.co.x for v in me.vertices]; ys = [v.co.y for v in me.vertices]
     cap = max(ys) - min(ys)
     cx = (max(xs) + min(xs)) / 2; cy = (max(ys) + min(ys)) / 2
-    # Condensed, like street lettering, then turned 180 degrees about Z: Blender -X is Unity +x and -Y Unity +z.
     m = Matrix.Rotation(math.pi, 4, 'Z') @ Matrix.Diagonal((0.80 / cap, 1.0 / cap, 1, 1)) @ Matrix.Translation((-cx, -cy, 0))
     me.transform(m)
     for v in me.vertices:
@@ -223,8 +217,6 @@ def lettering(paint_mat):
     print(f'[commissary] BayLettering: {tris} tris, {max(xs) - min(xs):.2f} m long at 1 m cap height')
     return ob
 
-# ---------------------------------------------------------------------------------------------- the sign
-
 PLATE_W, PLATE_H, PLATE_T = 0.40, 0.80, 0.006
 PLATE_BOTTOM = 1.90
 POLE_H, POLE_R = 3.00, 0.032
@@ -243,7 +235,7 @@ def sign_texture(file_name, place):
     scene.world.color = (1, 1, 1)
     cam = bpy.data.objects.new('SignCam', bpy.data.cameras.new('SignCam'))
     cam.data.type = 'ORTHO'
-    cam.data.ortho_scale = 1.0  # 0.5 x 1.0 units: the plate is 0.40 x 0.80 m, drawn here at 1.25 x
+    cam.data.ortho_scale = 1.0
     cam.location = (0, 0, 5)
     scene.collection.objects.link(cam)
     scene.camera = cam
@@ -275,7 +267,6 @@ def sign_texture(file_name, place):
         return put(bpy.data.objects.new('r', me), mat, z)
 
     rect(-0.25, -0.5, 0.25, 0.5, 'white', 0)
-    # A red border, as on NYC parking signs.
     for (a, b, c, d) in ((-0.235, 0.475, 0.235, 0.487), (-0.235, -0.487, 0.235, -0.475),
                          (-0.235, -0.487, -0.223, 0.487), (0.223, -0.487, 0.235, 0.487)):
         rect(a, b, c, d, 'red')
@@ -283,7 +274,6 @@ def sign_texture(file_name, place):
     text('VEHICLES ONLY', 0.27, 0.065, 'red')
     text('LOADING', 0.135, 0.095, 'red')
     text('ZONE', 0.015, 0.095, 'red')
-    # A double-headed arrow: the zone runs both ways along the kerb from the sign.
     rect(-0.15, -0.055, 0.15, -0.035, 'red')
     for sx in (-1, 1):
         me = bpy.data.meshes.new('a')
@@ -357,11 +347,11 @@ def sign_model(plate_mat, pole_mat):
         for loop in f.loops:
             c = loop.vert.co
             u = (c.x - x0) / PLATE_W; v = (c.z - z0) / PLATE_H
-            if i == 0:          # front, seen from -Y (the road): +X on the viewer's right
+            if i == 0:
                 loop[uv].uv = (u, v)
-            elif i == 1:        # back, seen from +Y (the pavement): +X on the viewer's left
+            elif i == 1:
                 loop[uv].uv = (1 - u, v)
-            else:               # the plate's edges: the white margin
+            else:
                 loop[uv].uv = (0.02, 0.5)
     bm.to_mesh(me); bm.free()
     me.materials.append(plate_mat)
@@ -371,8 +361,6 @@ def sign_model(plate_mat, pole_mat):
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     print(f'[commissary] BaySign: pole {triangulate(pole)} tris, plate {triangulate(plate)} tris')
     return pole, plate
-
-# ---------------------------------------------------------------------------------------------- props
 
 def wood_texture():
     """Pallet and crate timber: pale weathered pine with grain along U, 256 x 256."""
@@ -415,7 +403,6 @@ def crate(name, mat, size, at, produce_mat=None):
     walls = [box(name, (sx, 0.012, sz), (x, y - sy / 2 + 0.006, z), mat), box(name, (sx, 0.012, sz), (x, y + sy / 2 - 0.006, z), mat),
              box(name, (0.012, sy, sz), (x - sx / 2 + 0.006, y, z), mat), box(name, (0.012, sy, sz), (x + sx / 2 - 0.006, y, z), mat),
              box(name, (sx, sy, 0.012), (x, y, z), mat)]
-    # Filled to just under the rim with produce.
     walls.append(box(name + '_fill', (sx - 0.03, sy - 0.03, 0.02), (x, y, z + sz - 0.05), produce_mat))
     return walls
 
@@ -478,7 +465,6 @@ def dumpster(name, mat, lid_mat):
     bm = bmesh.new(); bm.from_mesh(me); planar_uv(bm, 0.5); bm.to_mesh(me); bm.free()
     me.materials.append(mat)
     parts = [body]
-    # Lids: two slightly raised dark panels over the top, a lip and the corner casters.
     for x in (-w / 4, w / 4):
         lid = box(name + '_lid', (w / 2 - 0.03, d + 0.16, 0.04), (x, -0.06, 0), lid_mat)
         lid.rotation_euler.x = math.atan2(h_back - h_front, d + 0.12)
@@ -518,7 +504,6 @@ def props(mats):
     """The props by the commissary's door, each its own FBX: a pallet stack with crates and cartons, a hand truck with
     cartons, a roll cage with cartons, and a dumpster."""
     out = {}
-    # PalletStack: two pallets, three crates of produce and two cartons on top.
     parts = pallet('p1', mats['wood']) + pallet('p2', mats['wood'], (0, 0, 0.144))
     for i, (x, y) in enumerate(((-0.33, -0.22), (0.07, -0.22), (0.39, 0.20))):
         parts += crate('c', mats['crate'], (0.40, 0.30, 0.26), (x, y, 0.288), mats[('produce', 'greens', 'produce')[i]])
@@ -526,21 +511,16 @@ def props(mats):
     parts += carton('k', mats['carton'], (0.50, 0.38, 0.32), (-0.30, 0.22, 0.288))
     parts += carton('k', mats['carton'], (0.38, 0.30, 0.26), (-0.30, 0.22, 0.608))
     out['BayPalletStack'] = prop('BayPalletStack', parts, mats)
-    # HandTruck with two cartons on its nose plate.
     parts = hand_truck('h', mats['steel'])
     parts += carton('k', mats['carton'], (0.38, 0.30, 0.34), (0, -0.10, 0.008))
     parts += carton('k', mats['carton'], (0.34, 0.28, 0.28), (0, -0.10, 0.348))
     out['BayHandTruck'] = prop('BayHandTruck', parts, mats)
-    # RollCage, part loaded.
     parts = roll_cage('r', mats['steel'])
     parts += carton('k', mats['carton'], (0.60, 0.70, 0.40), (0.02, 0, 0.14))
     parts += carton('k', mats['carton'], (0.45, 0.40, 0.30), (0.05, 0.10, 0.54))
     out['BayRollCage'] = prop('BayRollCage', parts, mats)
-    # Dumpster.
     out['BayDumpster'] = prop('BayDumpster', dumpster('d', mats['dumpster'], mats['dumpster_lid']), mats)
     return out
-
-# ---------------------------------------------------------------------------------------------- build
 
 def build():
     reset()
@@ -585,12 +565,6 @@ def build():
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, 'BayCommissary.blend'))
     return sorted(k for k in sign_imgs if k)
 
-# ---------------------------------------------------------------------------------------------- look sources
-
-# Per model: its objects, the atlas size (art/README.md: 256 px for small props, 512 for the larger ones and the
-# sign, whose plate gets most of it) and its surface classes for game_look.py. Colours are the bake's sRGB values;
-# tolerances cover each texture's noise. Wood and cardboard are matte (fabric's 0.20), the produce food, the dumpster
-# worn paint (dark's 0.30); steel and the black lids are classed by colour.
 WOOD = {'rgb': [0.62, 0.51, 0.37], 'class': 'fabric', 'tolerance': 0.13}
 CARTON = {'rgb': [0.62, 0.47, 0.30], 'class': 'fabric', 'tolerance': 0.07}
 PRODUCE = {'rgb': [0.78, 0.22, 0.10], 'class': 'food', 'tolerance': 0.20}
@@ -598,7 +572,6 @@ GREENS = {'rgb': [0.30, 0.52, 0.16], 'class': 'food', 'tolerance': 0.13}
 MODELS = {
     'BayPalletStack': dict(objects=['BayPalletStack_Body'], size=512, classes=[WOOD, CARTON, PRODUCE, GREENS]),
     'BayHandTruck': dict(objects=['BayHandTruck_Body'], size=256, classes=[CARTON]),
-    # The cage's hundred 12 to 15 mm bars pack with more margin than face, so its atlas is only about a third full.
     'BayRollCage': dict(objects=['BayRollCage_Body'], size=512, classes=[CARTON], min_fill=0.3),
     'BayDumpster': dict(objects=['BayDumpster_Body'], size=512,
                         classes=[{'rgb': [0.16, 0.30, 0.22], 'class': 'dark', 'tolerance': 0.10}]),
@@ -679,7 +652,6 @@ def unwrap(obs, size):
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.uv.smart_project(angle_limit=math.radians(66), margin_method='FRACTION', island_margin=3.0 / size,
                              area_weight=0.0, correct_aspect=True, scale_to_bounds=False)
-    # Repack tighter (the roll cage's and the pallets' many thin boards and bars): rotated, by their outlines.
     bpy.ops.uv.select_all(action='SELECT')
     bpy.ops.uv.pack_islands(rotate=True, rotate_method='ANY', shape_method='CONCAVE', margin_method='FRACTION',
                             margin=2.0 / size)
@@ -690,11 +662,11 @@ def unwrap_sign(pole, plate, size):
     """The sign's atlas, laid out by hand so the plate's faces get most of it (about 1.8 mm a texel): front and back
     side by side from the bottom left, the pole's side unrolled in a column on the right (3 m over the atlas's
     height), and the plate's edges, the cap, the clamps and the discs shelf-packed in the strip above the plate."""
-    m = 3.0 / size                                  # margin, 3 texels
-    S = (1 - 3 * m - 0.07) / (2 * PLATE_W) * 0.98   # plate scale, UV per metre
+    m = 3.0 / size
+    S = (1 - 3 * m - 0.07) / (2 * PLATE_W) * 0.98
     S = min(S, (0.86 - 2 * m) / PLATE_H)
-    Sp = (1 - 2 * m) / (POLE_H + 0.03)              # pole scale
-    islands = []                                    # (object, [(poly index, [(u, v) per loop])], w, h)
+    Sp = (1 - 2 * m) / (POLE_H + 0.03)
+    islands = []
     for o in (pole, plate):
         o.data.uv_layers[0].name = 'Tiled'
         o.data.uv_layers.new(name='UVMap')
@@ -716,12 +688,10 @@ def unwrap_sign(pole, plate, size):
             uvs = [(me.vertices[v].co.x, me.vertices[v].co.y) for v in p.vertices]
         groups.setdefault(key, []).append((p.index, [(a * S, b * S) for a, b in uvs]))
     placed = {}
-    # Front and back, fixed.
     for key, ox in (('front', m), ('back', 2 * m + PLATE_W * S)):
         placed[(plate.name, key)] = (ox, m)
     small = [(plate, k, g) for k, g in groups.items() if k not in ('front', 'back')]
     plate_groups = groups
-    # The pole: side faces unrolled per part (pole, cap, clamps), discs and annuli flat.
     me = pole.data
     pgroups = {}
     for p in me.polygons:
@@ -746,7 +716,6 @@ def unwrap_sign(pole, plate, size):
         return min(us), min(vs), max(us) - min(us), max(vs) - min(vs)
     w = extent(pgroups[main])[2]
     placed[(pole.name, main)] = (1 - m - w, m)
-    # Shelf-pack the rest above the plate, each lying on its long side.
     for i, (o, k, g) in enumerate(small):
         _, _, gw, gh = extent(g)
         if gh > gw:
@@ -793,7 +762,6 @@ def look_sources(sites):
         source = atlas_bake(keep, size, f'T_{name}_BaseColor.png')
         variants = []
         if name == 'BaySign':
-            # One atlas per commissary: the plate's own named image swapped in, the same UVs.
             plate = next(o for o in keep if o.name.endswith('Plate'))
             node = next(n for n in plate.data.materials[0].node_tree.nodes if n.type == 'TEX_IMAGE')
             for sid in sites:

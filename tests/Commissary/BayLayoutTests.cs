@@ -10,11 +10,9 @@ public class BayLayoutTests
     [Fact]
     public void ThePaintAxisIsTheRightAxisOfAMarkerFacingAwayFromTheDoor()
     {
-        // Door to +z: the marker faces -z, and a Unity transform facing -z has its right axis at -x.
         var (x, z) = BayLayout.PaintAxis(0, 1);
         Assert.Equal(-1, x, 9);
         Assert.Equal(0, z, 9);
-        // Door to +x: facing -x, right is +z.
         (x, z) = BayLayout.PaintAxis(2, 0);
         Assert.Equal(0, x, 9);
         Assert.Equal(1, z, 9);
@@ -27,8 +25,6 @@ public class BayLayoutTests
     [InlineData(0.6, -0.8)]
     public void AnAsymmetricStretchIsPaintedOnTheSideItWasFound(double acrossX, double acrossZ)
     {
-        // Parking only on one side of the door, from 0 to 8 m along the world direction `kerb` (either way along the
-        // street, whichever the lane's direction gave). The paint at local x must land on the same world points.
         foreach (var sign in new[] { 1.0, -1.0 })
         {
             var axis = BayLayout.PaintAxis(acrossX, acrossZ);
@@ -51,7 +47,6 @@ public class BayLayoutTests
     [Fact]
     public void NoParkingAnywhereDrawsNothing()
     {
-        // 0.9.8 assumed a whole bay here and painted it on a no-parking kerb.
         var found = BayLayout.Stretches(9.6, _ => false);
         Assert.Equal(BayStretchSource.NoneUsable, found.Source);
         Assert.Empty(found.Spans);
@@ -60,7 +55,6 @@ public class BayLayoutTests
     [Fact]
     public void ParkingTooShortEverywhereDrawsNothing()
     {
-        // A 1 m fragment near a corner: no full-length bay is made up.
         var found = BayLayout.Stretches(10, x => x >= 4 && x <= 5);
         Assert.Equal(BayStretchSource.NoneUsable, found.Source);
         Assert.Empty(found.Spans);
@@ -86,48 +80,37 @@ public class BayLayoutTests
     [Fact]
     public void ACarWithItsMiddleOutsideButItsBodyInThePaintIsInTheBay()
     {
-        // A 5.8 m van with its middle 2.5 m past the stretch's end (beyond 0.9.9's 2 m rule) stands 0.4 m in the paint.
         Assert.True(BayKeepOut.Overlaps(Stretch, 2.35, 17.0, 0, 1, 0, 2.9, 0.9, 0));
         Assert.True(BayKeepOut.Overlaps(Stretch, 2.35, 16.4, 0, 1, 0, 2.4, 0.9, 0));
-        // Wholly beyond the end, past the margin.
         Assert.False(BayKeepOut.Overlaps(Stretch, 2.35, 17.1, 0, 1, 0, 2.4, 0.9, 0.1));
     }
 
     [Fact]
     public void ACarAlongsideInTheDrivingLaneIsNotInTheBay()
     {
-        // 3.1 m across (the driving lane's middle), 0.9 m half width: its side 2.2 m out, the paint's edge at 1.175 m.
         Assert.False(BayKeepOut.Overlaps(Stretch, 2.35, 0, 3.1, 1, 0, 2.4, 0.9, 0.1));
-        // Half over the paint's edge.
         Assert.True(BayKeepOut.Overlaps(Stretch, 2.35, 0, 1.9, 1, 0, 2.4, 0.9, 0.1));
     }
 
     [Fact]
     public void ACarTurnedAcrossTheLaneReachesFurtherAcross()
     {
-        // Side by side parking: turned 90 degrees, its length runs across the lane.
         Assert.True(BayKeepOut.Overlaps(Stretch, 2.35, 0, 3.4, 0, 1, 2.4, 0.9, 0));
         Assert.False(BayKeepOut.Overlaps(Stretch, 2.35, 0, 3.4, 1, 0, 2.4, 0.9, 0));
-        // A car longer than a short stretch covering it wholly still counts.
         Assert.True(BayKeepOut.Overlaps(new[] { (0.0, 2.0) }, 2.35, 1, 0, 1, 0, 2.4, 0.9, 0));
     }
 
     [Fact]
     public void AnAngledCarClearOfTheCornerIsNotInTheBay()
     {
-        // Review round 1 (Sol): 45 degrees, its middle at 16.5 along and 3.2 across, clear of the paint's corner. Its
-        // bounding box in the bay's frame reaches in; the car itself doesn't.
         Assert.False(BayKeepOut.Overlaps(Stretch, 2.35, 16.5, 3.2, 1, 1, 2.4, 0.9, 0.1));
-        // Review round 1 (Astra): a 2 m stretch 2 m wide, the car at (4, 2.5) facing (1, -1).
         Assert.False(BayKeepOut.Overlaps(new[] { (0.0, 2.0) }, 2, 4, 2.5, 1, -1, 2.9, 0.9, 0.1));
     }
 
     [Fact]
     public void AnAngledCarWithACornerInThePaintIsInTheBay()
     {
-        // The same car as Sol's moved 1 m nearer along and across: its nose reaches over the paint's corner.
         Assert.True(BayKeepOut.Overlaps(Stretch, 2.35, 15.5, 2.2, 1, 1, 2.4, 0.9, 0.1));
-        // Astra's car moved in until its corner crosses into the stretch.
         Assert.True(BayKeepOut.Overlaps(new[] { (0.0, 2.0) }, 2, 2.8, 1.6, 1, -1, 2.9, 0.9, 0.1));
     }
 
@@ -141,8 +124,6 @@ public class BayLayoutTests
     [Fact]
     public void ACarFoundByOneZonesBoxButStandingInTheNextIsTaken()
     {
-        // Review round 3 (Sol): paint stretches -14.5…14.5 and -9.5…19.5, a 4.8 m car centred at 18.5. The first zone's
-        // box (2 m beyond its paint) finds it, but it stands only in the second.
         var zones = new[] { (From: -14.5, To: 14.5), (From: -9.5, To: 19.5) };
         var car = new Car(18.5, 2.4);
         bool In((double From, double To) z, Car c) => BayKeepOut.Overlaps(new[] { z }, 2.35, c.Along, 0, 1, 0, c.HalfLength, 0.9, 0.1);
@@ -150,7 +131,6 @@ public class BayLayoutTests
         Assert.True(In(zones[1], car));
         Assert.Same(car, Assert.Single(BayKeepOut.CarsInZones(zones, _ => new[] { car }, In)));
         Assert.Same(car, Assert.Single(BayKeepOut.CarsInZones(zones.Reverse(), _ => new[] { car }, In)));
-        // A car in both zones is taken once; one in neither not at all.
         var both = new Car(0, 2.4);
         var neither = new Car(30, 2.4);
         Assert.Equal(new[] { both, car }, BayKeepOut.CarsInZones(zones, _ => new[] { both, neither, car }, In));
@@ -159,7 +139,6 @@ public class BayLayoutTests
     [Fact]
     public void TheFacadeIsTheOutermostWallHitNearTheDoorsLine()
     {
-        // A recessed door (0), pilasters 0.25 m out, a hydrant 1.4 m out: the pilasters are the wall.
         Assert.Equal(0.25, PropPlacement.FacadeOffset(new[] { 0.0, 0.25, 1.4 }, 0.8)!.Value, 9);
         Assert.Null(PropPlacement.FacadeOffset(new[] { 1.4 }, 0.8));
         Assert.Null(PropPlacement.FacadeOffset(Array.Empty<double>(), 0.8));

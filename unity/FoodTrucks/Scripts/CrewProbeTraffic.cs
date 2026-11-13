@@ -13,10 +13,6 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // Dev-only Gate A adapter. Main thread only. Minimal patterns adapted from Driven Rides
-    // 90981d0061418a4d4742792d90c62c6a686f2a80: Scripts/GleyGraph.cs (native graph),
-    // GleyTraffic.cs (cached intersection binding), NwhCar.cs (visibility masks),
-    // NwhPlanner.cs (nonalloc corridor queries). No native implementation is reproduced here.
     internal sealed class CrewProbeTraffic : IDisposable
     {
         private const int MaxPoints = 512, MaxIntersections = 4096, MaxPool = 1024;
@@ -28,7 +24,6 @@ namespace FoodTrucks
         private static readonly FieldInfo? ObstaclesField = Field(typeof(VehicleComponent), "obstacleLayers");
         private static readonly FieldInfo? PlayersField = Field(typeof(VehicleComponent), "playerLayers");
         private static readonly FieldInfo? BuildingsField = Field(typeof(VehicleComponent), "buildingLayers");
-        // LayerMask is a value type: FieldInfo.GetValue would box three masks per pooled car per step.
         private static readonly Func<VehicleComponent, LayerMask>? ReadObstacles = MaskReader(ObstaclesField);
         private static readonly Func<VehicleComponent, LayerMask>? ReadPlayers = MaskReader(PlayersField);
         private static readonly Func<VehicleComponent, LayerMask>? ReadBuildings = MaskReader(BuildingsField);
@@ -179,8 +174,6 @@ namespace FoodTrucks
             var error = body.SelectBand(lo, hi);
             if (error == null) return null;
             if (error != "common_band_empty") return error + BodyDetail(body);
-            // The limiting floor and ceiling can belong to different inactive models.
-            // Name both instead of blaming the first pool entry for an empty intersection.
             return error + $" common=[{lo:R},{hi:R}] lower=(" + Detail("limiting_floor", models[lowerModel], lowerModel, lower, body) +
                 ") upper=(" + Detail("limiting_ceiling", models[upperModel], upperModel, upper, body) + ")";
         }
@@ -198,8 +191,6 @@ namespace FoodTrucks
 
         private static string Detail(string code, Visibility model, int index, Collider? c, CrewProbeBody? body)
         {
-            // Fault diagnostics must preserve the original reason even if Unity has already
-            // destroyed a captured object. Cached identities remain useful in that case.
             var colliderIndex = -1;
             if (model.Triggers != null)
                 for (var i = 0; i < model.Triggers.Length; i++) if (ReferenceEquals(model.Triggers[i], c)) { colliderIndex = i; break; }
@@ -254,15 +245,13 @@ namespace FoodTrucks
         {
             get { var n = 0; for (var i = 0; i < crossings.Length; i++) if (crossings[i].Entered) n++; return n; }
         }
-        internal int ColliderOverrides => 0; // Gate A never changes native collider layers.
+        internal int ColliderOverrides => 0;
         internal int Observed { get; private set; }
         internal int? BlockerId { get; private set; }
         internal int? BlockerLayer { get; private set; }
         internal Vector3 BlockerPosition { get; private set; }
         internal string? BlockerQuery { get; private set; }
         internal float? BlockerGap { get; private set; }
-        // Only value copies and the exact reference are captured in the observer. Native shape,
-        // hierarchy and JSON reads belong to the explicit bridge diagnostic, never this hot path.
         internal long ObservationSequence { get; private set; }
         internal Collider? BlockerCollider { get; private set; }
         internal Vector3 BlockerQueryCenter { get; private set; }
@@ -280,7 +269,6 @@ namespace FoodTrucks
         internal float? SignalChangeSpeed { get; private set; }
         internal float? SignalChangeClearance { get; private set; }
         internal float ObservationMilliseconds { get; private set; }
-        // Dispose can transfer responsibility to an explicit retained-body record. It never lies about zero leaks.
         internal bool Retained => disposed && Owners.TryGetValue(carId, out var owner) && owner == this;
         internal int NativeTrafficId => id;
         internal string? Failure => fault;
@@ -302,7 +290,7 @@ namespace FoodTrucks
                 var parameter = Expression.Parameter(typeof(VehicleComponent));
                 return Expression.Lambda<Func<VehicleComponent, LayerMask>>(Expression.Field(parameter, field), parameter).Compile();
             }
-            catch { return null; } // Unsupported runtime binding refuses admission, never an allocating fallback.
+            catch { return null; }
         }
         private static bool Finite(float f) => !float.IsNaN(f) && !float.IsInfinity(f);
         private static bool Finite(Vector3 p) => Finite(p.x) && Finite(p.y) && Finite(p.z);
@@ -345,7 +333,6 @@ namespace FoodTrucks
                 if (IntersectionField == null || MembersField == null || PoolField == null || ObstaclesField == null ||
                     ReadObstacles == null || ReadPlayers == null || ReadBuildings == null || !TrafficManager.HasInstance || !TrafficManager.IsInitialized)
                     throw new InvalidOperationException("required Gley bindings/initialization missing");
-                // FindObjectOfType only at admission; do not use GetSceneInstance (it can create a scene).
                 var scene = Object.FindObjectOfType<CurrentSceneData>();
                 var setup = Resources.Load<LayerSetup>("LayerSetupData");
                 var pool = (PoolField.GetValue(TrafficManager.Instance) as TrafficVehicles)?.GetVehicleList();
@@ -413,7 +400,6 @@ namespace FoodTrucks
                     if (distances[c.Entry] <= frontAhead + Margin || distances[route.Length - 1] - distances[c.Exit] <= rearBehind + frontAhead + 1f)
                         throw new InvalidOperationException("insufficient start/end body clearance from junction");
 
-                // Collision-check our negative namespace against ALL native membership lists, not just this route.
                 var all = new List<GenericIntersection>();
                 if (scene.allLightsIntersections == null || scene.allPriorityIntersections == null ||
                     scene.allLightsIntersections.Length + scene.allPriorityIntersections.Length > MaxIntersections)
@@ -422,7 +408,7 @@ namespace FoodTrucks
                 foreach (var x in scene.allPriorityIntersections) if (x != null) all.Add(x);
                 foreach (var c in crossings) if (!all.Contains(c.Intersection)) throw new InvalidOperationException("junction absent from native inventory");
                 if (generation >= 100000000) throw new InvalidOperationException("traffic generation exhausted");
-                var id = -1700000000 - ++generation; // Never -1; native lists store arbitrary ints without indexing them.
+                var id = -1700000000 - ++generation;
                 foreach (var x in all)
                     if (!(MembersField.GetValue(x) is List<int> members) || members.Count > MaxPool + MaxPoints || members.Contains(id))
                         throw new InvalidOperationException("native membership missing, unbounded or traffic ID collision");
@@ -440,8 +426,6 @@ namespace FoodTrucks
                     if (!collider.enabled || !collider.gameObject.activeInHierarchy || collider.isTrigger) continue;
                     if (!Finite(collider.bounds.center) || !Finite(collider.bounds.extents)) throw new InvalidOperationException("invalid collider bounds");
                     solids++;
-                    // Measure shape-local bounds, independent of the truck's world heading. Unknown shapes
-                    // are rejected instead of deriving inflated dimensions from rotated world AABBs.
                     Bounds b;
                     if (collider is BoxCollider box) b = new Bounds(box.center, box.size);
                     else if (collider is MeshCollider mesh && mesh.sharedMesh != null) b = mesh.sharedMesh.bounds;
@@ -465,8 +449,6 @@ namespace FoodTrucks
                     throw new InvalidOperationException("supplied dimensions do not enclose actual native colliders");
                 ValidateBodyVisibility(car, colliders, bodyContract, visibleLayers, rigidbodyLayers, visibility);
                 var sourcePoints = path;
-                // One immutable prepared curve drives Core, projection, obstacle sweeps and marker distances.
-                // The native points/tangents remain separate for mutation checks and physical signal planes.
                 var prepared = prepareBeforeAdmission?.Invoke((Vector3[])sourcePoints.Clone());
                 var markers = prepared?.SourcePointIndices;
                 if (prepared != null)
@@ -500,10 +482,9 @@ namespace FoodTrucks
                 candidate.measuredRear = rear;
                 foreach (var c in candidate.crossings)
                     if (candidate.BodyPlane(c.EntrySource, true) >= -Margin) throw new InvalidOperationException("actual front already at/past junction entry");
-                // Everything above is read-only. Publish mutation/lifetime only after complete admission validation.
                 Owners.Add(candidate.carId, candidate);
                 traffic = candidate;
-                points = (Vector3[])path.Clone(); // Caller cannot mutate the observer's committed geometry.
+                points = (Vector3[])path.Clone();
                 return true;
             }
             catch (Exception ex)
@@ -522,8 +503,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // Check actual initialized pool masks AND the setup for future pooled cars. Never pretend that
-        // Gley sees NWH merely because both have colliders. No global collision matrix/mask mutation.
         private static int ReadVisibleLayers(LayerSetup setup, List<VehicleComponent> pool, Visibility[] visibility,
             out int rigidbodyLayers, CrewProbeBody? body = null)
         {
@@ -537,14 +516,9 @@ namespace FoodTrucks
                     throw new InvalidOperationException(Detail("native Gley model/layer replaced", visibility[i], i, null, body));
                 var inventoryError = visibility[i].Validate(body, i);
                 if (inventoryError != null) throw new InvalidOperationException(Detail(inventoryError, visibility[i], i, null, body));
-                // Native OnTriggerEnter explicitly handles a SAME-layer non-Gley rigidbody as a dynamic
-                // obstacle (StopInDistance); it does not assign it a pool ID. Require that rigidbody below.
-                // Root recognition precedes buildings, which precede obstacles and players. Building
-                // recognition is excluded because native BuildingInteraction is AvoidReverse.
                 var rootLayerBit = 1 << v.gameObject.layer;
                 rigidbodyLayers |= rootLayerBit;
                 mask &= ((ReadObstacles!(v).value | ReadPlayers!(v).value) & ~ReadBuildings!(v).value) | rootLayerBit;
-                // Trigger colliders can live on child layers, independently of the Gley root.
                 foreach (var trigger in visibility[i].Triggers)
                 {
                     if (trigger == null) throw new InvalidOperationException("native Gley trigger removed");
@@ -556,8 +530,6 @@ namespace FoodTrucks
             return mask;
         }
 
-        // A certificate exempts only exact NWH wheel references; every other solid keeps native
-        // visibility requirements. Default overrides avoid reimplementing Unity's priority resolver.
         private static void ValidateBodyVisibility(CarController car, Collider[] colliders, CrewProbeBody? contract,
             int visible, int rigidbodyLayers, Visibility[] models)
         {
@@ -565,7 +537,7 @@ namespace FoodTrucks
             {
                 if (!contract.TrafficCertified) throw new InvalidOperationException("traffic_band_not_selected");
                 contract.ClearFailure();
-                contract.UpdateWorldBand(); // Once per Observe, outside both trigger and solid-pair loops.
+                contract.UpdateWorldBand();
                 for (var m = 0; m < models.Length; m++)
                 {
                     var model = models[m]; var usable = false;
@@ -579,8 +551,6 @@ namespace FoodTrucks
                             throw new InvalidOperationException(Detail("Gley trigger rigidbody collision settings unavailable/unsupported", model, m, trigger, contract));
                         if (!trigger.enabled || !trigger.gameObject.activeInHierarchy) continue;
                         usable = true;
-                        // Far parked pool transforms cannot establish a road-height guarantee.
-                        // Every nearby live instance must obey the explicit restricted domain.
                         if (!CrewProbeTrigger.Nearby(trigger, car.transform.position)) continue;
                         var reason = CrewProbeTrigger.WorldInterval(trigger, out var lo, out var hi, out _);
                         if (reason == null && Math.Abs(model.Vehicle.transform.position.y - car.transform.position.y) > .05f)
@@ -686,8 +656,6 @@ namespace FoodTrucks
                 if (!Finite(rearAlong) || !Finite(speedMs) || speedMs < 0f || speedMs > 40f)
                     throw new InvalidOperationException("invalid progress/speed observation");
                 var measured = Measure(out var actualRear, out var actualFront, out var actualBack, out var why);
-                // Junction checks run BEFORE any supplied progress clamp or fault return. Even an illegal
-                // crossing must remain represented until the rear clears; a later green cannot erase it.
                 foreach (var c in crossings)
                 {
                     var stopped = route[c.EntrySource].stop;
@@ -724,15 +692,9 @@ namespace FoodTrucks
                     if (!c.Entered && !c.Cleared && route[c.EntrySource].stop)
                     {
                         Min(ref stopAlong, along[c.Entry] - Margin);
-                        // Close to the marker, preserve the ORIGINAL native plane as an additional
-                        // conservative front gap. Smoothing must never move a traffic-light boundary.
                         if (actualRear + frontAhead + width + 5f >= along[c.Entry])
                             Min(ref gapAhead, -BodyPlane(c.EntrySource, true) - Margin);
                     }
-                // The Core path endpoint is its terminal boundary. Returning it here as an earlier
-                // signal boundary would leave Core Holding forever instead of completing the probe.
-                // Conservative 1 m/s² braking + one second reaction + full body. If this budget cannot
-                // cover it, hold rather than silently shorten observation at higher speeds.
                 var look = speedMs * speedMs / 2f + speedMs + frontAhead + rearBehind + 5f;
                 if (look > MaxLook) throw new InvalidOperationException("braking horizon exceeds bounded observer");
                 var end = Mathf.Min(along[along.Length - 1], actualFront + Mathf.Max(15f, look));
@@ -741,7 +703,6 @@ namespace FoodTrucks
             catch (Exception ex)
             {
                 fault = fault ?? ex.Message; failure = fault;
-                // Fail closed: current front boundary, so the caller requests an immediate physical hold.
                 stopAlong = Finite(rearAlong) ? rearAlong + frontAhead : 0f; gapAhead = 0f;
             }
             finally { ObservationMilliseconds = (float)((Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency); }
@@ -756,12 +717,8 @@ namespace FoodTrucks
                 if (c.Cleared) continue;
                 ReconcileRegistry(c);
                 var front = BodyPlane(c.EntrySource, true);
-                // A distant curved route may cross an infinite entry plane long before reaching that
-                // junction. Use independently measured route locality, never caller-clamped progress.
                 if (!c.Entered && actualRear + frontAhead + width >= along[c.Entry] && front >= 0f)
                 {
-                    // Lights inherit GenericIntersection.IsPathFree=false. Do NOT call CanChange here.
-                    // Native WaypointManager.TrafficLightChanged updates stop (red AND amber).
                     if (c.Denied || route[c.EntrySource].stop) fault = "measured front crossed forbidden signal boundary";
                     if (c.Members.Contains(id)) throw new InvalidOperationException("traffic identity membership collision");
                     c.Intersection.VehicleEnter(id); c.Entered = true;
@@ -769,7 +726,6 @@ namespace FoodTrucks
                 }
                 if (c.Entered)
                 {
-                    // Minimum support of the WHOLE measured body past exit plane, not rear-axle progress.
                     if (actualRear - rearBehind > along[c.Exit] && BodyPlane(c.ExitSource, false) > Margin)
                     {
                         c.Intersection.VehicleLeft(id); c.Entered = false; c.Cleared = true;
@@ -791,8 +747,6 @@ namespace FoodTrucks
             }
             if (c.Entered && !c.Members.Contains(id))
             {
-                // A native reset must not erase a body that still blocks the junction. Re-establish
-                // only our explicit identity, then fail the drive; the retained-body record owns it.
                 c.Intersection.VehicleEnter(id);
                 if (!c.Members.Contains(id)) throw new InvalidOperationException("native junction registration repair failed");
                 fault = fault ?? "native junction registration lost";
@@ -822,7 +776,6 @@ namespace FoodTrucks
             if (lateral > corridorTolerance || Vector3.Dot(Flat(car.transform.forward).normalized, Flat(points[segment + 1] - points[segment]).normalized) < headingCosine)
             { why = "native body outside route corridor/alignment"; return false; }
             front = float.MinValue; back = float.MaxValue;
-            // Independent physical support, including overhang and sideways body extent through turns.
             for (var k = 0; k < 8; k++)
             {
                 var local = new Vector3((k & 1) == 0 ? localMin.x : localMax.x,
@@ -833,7 +786,6 @@ namespace FoodTrucks
             return true;
         }
 
-        // Projection deliberately extrapolates first/last segments. Never hide actual overshoot by clamping.
         private float Project(Vector3 p, out int segment, out float lateral)
         {
             var best = float.MaxValue; var result = 0f; segment = 0;
@@ -851,8 +803,6 @@ namespace FoodTrucks
 
         private void Sweep(float rear, float front, float back, float end, ref float? stop, ref float? gap)
         {
-            // Extra forward/piece-length and corner-radius clearance; lateral coverage
-            // uses the combined physical and uncertainty envelope below directly.
             const float extraClearance = .10f;
             // A full envelope along each segment. Dense prepared turns fit inside the oriented
             // envelope; only a corner over 0.1 rad needs the wider fallback square.
@@ -860,9 +810,6 @@ namespace FoodTrucks
             // front overhang swinging across a polyline corner. Stationary interpretation of ALL obstacles.
             var overhang = Mathf.Max(frontAhead, rearBehind);
             var radius = Mathf.Sqrt(overhang * overhang + width * width / 4f) + extraClearance + corridorTolerance;
-            // Width/front/rear include the certificate's planar tilt allowance. Together
-            // with corridor tracking and heading/chord allowances this is the full lateral
-            // envelope; no additional side-clearance term is needed.
             var chordAllowance = bodyContract == null ? .1f : .02f;
             var sweepHalfWidth = width / 2f + corridorTolerance + overhang * Mathf.Sin(headingAllowance + chordAllowance);
             var y = car.transform.TransformPoint(new Vector3(0, 0, rearZ)).y + bottom + height / 2f;
@@ -884,7 +831,6 @@ namespace FoodTrucks
                 b.y = Mathf.LerpUnclamped(points[i].y, points[i + 1].y, (hi - along[i]) / (along[i + 1] - along[i]));
                 var centre = (a + b) / 2f + tangent * ((frontAhead - rearBehind) / 2f);
                 centre.y = y + ((a.y + b.y) / 2f - referenceY);
-                // Split into <=2 m pieces: bounded nearest conservative boundary instead of one huge box.
                 var steps = Mathf.Max(1, Mathf.CeilToInt((hi - lo) / 2f));
                 for (var s = 0; s < steps; s++)
                 {
@@ -895,8 +841,6 @@ namespace FoodTrucks
                     if (Blocked(at, new Vector3(sweepHalfWidth, sweepHalfHeight,
                         (finish - start + frontAhead + rearBehind) / 2f + extraClearance + width * .5f * Mathf.Sin(headingAllowance + chordAllowance)), Quaternion.LookRotation(tangent), a.y, "piece", back))
                     {
-                        // The swept box is parameterized by REAR-AXLE travel. Convert that free travel
-                        // to a gap; it is not a signal plane through the truck's current front.
                         BlockerGap = Mathf.Max(0f, start - rear); Min(ref gap, BlockerGap.Value); return;
                     }
                 }
@@ -927,9 +871,6 @@ namespace FoodTrucks
                     var furthest = Project(b.center, out _, out _) + Mathf.Sqrt(b.extents.x * b.extents.x + b.extents.z * b.extents.z);
                     if (furthest < back - .01f) continue;
                 }
-                // Only a static surface wholly BELOW the queried body is ground. Do not filter an entire
-                // road/building layer (a divider can share it); tall/compound surfaces cause a safe false stop.
-                // Remove only the query's 10 cm vertical padding when deciding what lies below the body.
                 var support = ground;
                 var topLimit = at.y - half.y + .11f;
                 if (bodyContract != null)
@@ -966,8 +907,6 @@ namespace FoodTrucks
             // record survives the controller; no hidden ID, no TriggerColliderRemovedEvent while body lives.
             try
             {
-                // Cancellation may happen between physics and the next Observe. Account for that last
-                // body movement synchronously, including forbidden crossings, before releasing anything.
                 if (car != null && scene != null) { Measure(out var rear, out _, out _, out _); UpdateCrossings(rear); }
             }
             catch (Exception ex) { fault = fault ?? "traffic retirement: " + ex.Message; }
@@ -976,8 +915,6 @@ namespace FoodTrucks
             {
                 if (car != null)
                 {
-                    // Independent record: attaching it to the car risks OnDestroy running before the
-                    // CarController becomes Unity-null, leaving no callback to retire its membership.
                     var record = new GameObject("FoodTrucks retained traffic body");
                     Object.DontDestroyOnLoad(record);
                     hold = record.AddComponent<CrewProbeTrafficHold>(); hold.Traffic = this;
@@ -1002,15 +939,10 @@ namespace FoodTrucks
                 if (!gone)
                 {
                     var beyondExit = rear - rearBehind > along[c.Exit] && BodyPlane(c.ExitSource, false) > Margin;
-                    // Native takeover can reverse out through the original entry. Keep occupancy
-                    // until the WHOLE body is behind that physical plane and local route progress
-                    // agrees; a distant curved segment cannot clear an infinite plane by accident.
                     var beforeEntry = rear + Mathf.Max(frontAhead, rearBehind) + width < along[c.Entry] &&
                         BodyPlane(c.EntrySource, true) < -Margin;
                     if (!beyondExit && !beforeEntry) continue;
                 }
-                // Native scene resets may replace the list. Remove only our own identity from its original
-                // registry as well; do not touch another generation's membership or a Driven Rides -1.
                 if (ReferenceEquals(MembersField!.GetValue(c.Intersection), c.Members)) c.Intersection.VehicleLeft(id);
                 else c.Members.Remove(id);
                 c.Entered = false;
@@ -1028,9 +960,6 @@ namespace FoodTrucks
         }
     }
 
-    // Emergency cancellation while physically blocking a junction is NOT normal completion. Lifecycle
-    // must report retained counts, hold the body, and require explicit recovery/takeover. The native
-    // intersection is released only after whole-body clearance or actual body removal, never on a timer.
     internal sealed class CrewProbeTrafficHold : MonoBehaviour
     {
         internal CrewProbeTraffic? Traffic;

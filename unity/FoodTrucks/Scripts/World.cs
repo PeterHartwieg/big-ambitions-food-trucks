@@ -12,9 +12,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // What the cart's spot looks like to the demand model: nearby buildings and businesses, the
-    // neighbourhood, and the zones on top. Computed when a cart opens and at the start of each day,
-    // never every minute (implementation plan, Game adapters).
     internal sealed class Spot
     {
         public Spot(AreaMix areas, string? neighbourhood, int buildings, int day, Vector3 position = default, int hour = -1,
@@ -32,15 +29,10 @@ namespace FoodTrucks
         }
 
         public float Y { get; }
-        // Read while the game was still simulating its businesses' hour: the player's venues' guest counts may be
-        // short, so the next sales step reads the spot again.
         public bool Provisional { get; set; }
-        // The game hour its venues were read for: a new hour reads them again.
         public int Hour { get; }
-        // The buildings within reach, and for live venues what the game said of them this hour.
         public IReadOnlyList<(NearbyPlace Place, VenueNow? Venue)> Places { get; }
 
-        // Each area's live crowd at that minute of this hour (LiveCrowds, AreaClassifier.LiveFactors).
         public IReadOnlyDictionary<string, double> LiveFactors(DemandTables tables, LiveCrowds? live, int minuteOfDay, DayOfWeek day)
         {
             if (live == null || !Places.Any(p => p.Venue != null)) return new Dictionary<string, double>();
@@ -50,11 +42,9 @@ namespace FoodTrucks
             return new AreaClassifier(tables).LiveFactors(weighted);
         }
 
-        // A partner venue's surges are bigger (PartnershipRules.Surge); its guests and staff count as usual.
         private double Weight(LiveCrowds live, PartnershipRules? partners, VenueNow venue, int minuteOfDay, DayOfWeek day) =>
             live.Weight(At(venue, minuteOfDay), minuteOfDay, day, venue.Partner && partners != null ? partners.Surge : 1.0);
 
-        // The venue at that minute: one that closed at the top of this hour has been closed since then.
         private VenueNow At(VenueNow venue, int minuteOfDay) => venue.ClosedMinutesAgo == null ? venue
             : new VenueNow
             {
@@ -68,27 +58,21 @@ namespace FoodTrucks
             return factors.Count == 0 ? "" : string.Join(", ", factors.Select(f => $"{f.Key} x{f.Value:F2}"));
         }
 
-        // Where it was read, on the ground.
         public float X { get; }
         public float Z { get; }
 
         public AreaMix Areas { get; }
         public string? Neighbourhood { get; }
         public int Buildings { get; }
-        // The game day it was read on; a new day reads it again.
         public int Day { get; }
     }
 
     internal static class World
     {
-        // The building type the classifier knows subway stations by (demand.json, classifier.buildingTypes).
         public const string SubwayEntrance = "subwayentrance";
 
-        // Every city building's entrance doors, cached per city load. All city scenes load together, so
-        // the controllers exist even far from the player. Not cached while the city isn't there yet.
         private static List<(CityBuildingController Controller, Vector3[] Doors)>? buildings;
 
-        // Each building's entrances by its address, "street#number" (PitchTables addresses).
         private static Dictionary<string, Vector3[]>? byAddress;
         private static Dictionary<string, CityBuildingController>? controllersByAddress;
 
@@ -102,13 +86,12 @@ namespace FoodTrucks
 
         public static string AddressKey(string? street, int number) => $"{street}#{number}";
 
-        // The city building at an address ("street#number"), or null.
         public static CityBuildingController? BuildingAt(string address)
         {
             if (controllersByAddress == null)
             {
                 var list = Buildings();
-                if (list.Count == 0) return null; // Retry once the city exists.
+                if (list.Count == 0) return null;
                 var map = new Dictionary<string, CityBuildingController>(StringComparer.Ordinal);
                 foreach (var (controller, _) in list)
                 {
@@ -122,7 +105,6 @@ namespace FoodTrucks
             return controllersByAddress.TryGetValue(address, out var found) && found != null ? found : null;
         }
 
-        // The entrances of the building at an address; null when the city has no such building.
         public static Vector3[]? EntrancesOf(string address)
         {
             if (byAddress == null)
@@ -140,7 +122,6 @@ namespace FoodTrucks
             return byAddress.TryGetValue(address, out var entrances) ? entrances : null;
         }
 
-        // Metres on the ground from a position to the nearest entrance of the building at an address.
         public static double DistanceTo(string address, float x, float z)
         {
             var doors = EntrancesOf(address);
@@ -148,8 +129,6 @@ namespace FoodTrucks
             return doors.Min(d => Math.Sqrt((d.x - x) * (d.x - x) + (d.z - z) * (d.z - z)));
         }
 
-        // Business registrations by address, read directly: BuildingHelper.GetBuildingRegistration creates
-        // a registration when none exists, which a read must not do.
         public static Dictionary<(string, int), BuildingRegistration> Registrations()
         {
             var businesses = new Dictionary<(string, int), BuildingRegistration>();
@@ -183,14 +162,10 @@ namespace FoodTrucks
             return buildings;
         }
 
-        // Every building with its entrances (catering places).
         internal static List<(CityBuildingController Controller, Vector3[] Doors)> AllBuildings() => Buildings();
 
-        // Every entrance of every building, for the legality rule.
         public static IEnumerable<Vector3> DoorPositions() => Buildings().SelectMany(b => b.Doors);
 
-        // `at`: the absolute game minute whose hour the venues are read for; null is now. `partnerVenue`: the address
-        // of the vehicle's partner venue, whose crowd counts as if the vehicle stood at its door.
         public static Spot ReadSpot(DemandTables tables, Vector3 position, double? at = null, string? partnerVenue = null)
         {
             var absolute = (long)Math.Floor(at ?? HireCrew.NowExact());
@@ -205,7 +180,6 @@ namespace FoodTrucks
             var places = new List<NearbyPlace>();
             string? neighbourhood = null;
             var nearest = float.MaxValue;
-            // One vote per building, at its nearest entrance.
             foreach (var (controller, entrances) in Buildings())
             {
                 var distance = entrances.Min(door => Vector3.Distance(position, door));
@@ -216,7 +190,6 @@ namespace FoodTrucks
                     neighbourhood = building.Neighbourhood;
                 }
                 var address = building.Address;
-                // The partner venue, still the player's: its crowd comes to the window in full.
                 var partner = partnerVenue != null && address != null && AddressKey(address.streetName, address.streetNumber) == partnerVenue && distance <= partnerRadius;
                 if (distance > radius && !partner) continue;
                 if (address == null) continue;
@@ -230,7 +203,6 @@ namespace FoodTrucks
                 if (venue != null) venue.Partner = partner;
                 read.Add((place, venue));
             }
-            // Subway stations bring their own crowd (the `transit` area in demand.json).
             var stations = InstanceBehavior<CityManager>.Instance?.subwayStations;
             if (stations != null)
             {
@@ -241,7 +213,6 @@ namespace FoodTrucks
                     if (distance <= radius) places.Add(new NearbyPlace(SubwayEntrance, null, distance));
                 }
             }
-            // The game's parks bring their own crowd (the `park` area), measured to the park's edge.
             foreach (var (type, distance) in ParkAreas.Near(position, radius))
                 places.Add(new NearbyPlace(type, null, distance));
             var areas = new AreaClassifier(tables).Classify(places, position.x, position.z);
@@ -251,8 +222,6 @@ namespace FoodTrucks
             };
         }
 
-        // A venue as the game has it this hour: open by its own schedule (AI businesses have one too), when it
-        // closed if that was within the last hour, and for offices and factories the staff at work.
         private static VenueNow VenueNow(BuildingRegistration registration, VenueKind kind, int day, int hour)
         {
             var open = OpenAt(registration, day, hour);
@@ -261,7 +230,6 @@ namespace FoodTrucks
             {
                 var previousDay = hour == 0 ? day - 1 : day;
                 var previousHour = hour == 0 ? 23 : hour - 1;
-                // Closed at the top of this hour; the minutes since are counted when the weight is asked for.
                 if (previousDay >= 1 && OpenAt(registration, previousDay, previousHour)) closedAgo = 0;
             }
             int? workers = null;
@@ -274,12 +242,10 @@ namespace FoodTrucks
                 }
                 else if (registration.aiEmployees != null) workers = open ? registration.aiEmployees.Count : 0;
             }
-            // The player's own nightclubs, theatres and cinemas: their guests in the hour before.
             int? guests = null;
             if (registration.RentedByPlayer && (kind == VenueKind.Nightclub || kind == VenueKind.Theatre || kind == VenueKind.Cinema))
             {
                 var (guestDay, guestHour) = hour == 0 ? (day - 1, 23) : (day, hour - 1);
-                // Closed that hour: no count says anything about the crowd now.
                 if (guestDay >= 1 && OpenAt(registration, guestDay, guestHour)) guests = GuestsIn(registration, guestDay, guestHour);
             }
             return new VenueNow { Kind = kind, Open = open, ClosedMinutesAgo = closedAgo, Workers = workers, Guests = guests };
@@ -298,8 +264,6 @@ namespace FoodTrucks
                     o.timestamp.Day == day && o.timestamp.Hour == hour && o.entries.Exists(e => e.paid));
             else
             {
-                // The game writes an hour's report only when it had paying customers: a day on record without
-                // that hour had none.
                 var history = registration.orderHistory?.Find(h => h != null && h.dayNumber == day);
                 count = history?.hourReports == null ? null : history.hourReports.Find(r => r != null && r.hour == hour)?.customers ?? 0;
             }
@@ -317,16 +281,11 @@ namespace FoodTrucks
             return schedule != null && schedule.IsOpenAtHour(hour);
         }
 
-        // Day 1 is a Monday (seen in game: "Monday (Day 1)", Milestone 1 session).
         public static DayOfWeek DayOfWeekOf(int gameDay) =>
             (DayOfWeek)(((int)DayOfWeek.Monday + Math.Max(0, gameDay - 1)) % 7);
 
-        // How near a pitch already known (a regulars entry or a route stop) counts as that pitch, so parking a
-        // few metres off on another day still finds its regulars.
         private const double SamePitchMetres = 30;
 
-        // The key regulars and routes know a pitch by: a known pitch nearby (regulars, route stops, today's
-        // visits not counted yet), or a new one on a 10 m grid.
         public static string PitchKey(SaveState? state, float x, float z)
         {
             string? best = null;
@@ -359,9 +318,6 @@ namespace FoodTrucks
                    double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out z);
         }
 
-        // `at`: the absolute game minute ((day - 1) × 1440 + minute) to ask about; null is now.
-        // `pitch`: a premium spot's or a running event's areas and passers (CityPitches.BonusFor).
-        // `marketing`: the vehicle's paid marketing for that day (MarketingFees.Factor).
         public static DemandQuery Query(DemandTables tables, Spot spot, IReadOnlyCollection<string> menu,
             double reputation = 1.0, IReadOnlyDictionary<string, double>? categoryShares = null, double? at = null, PitchBonus? pitch = null,
             double marketing = 1.0)
@@ -373,20 +329,14 @@ namespace FoodTrucks
             var market = new Dictionary<string, double>();
             if (!string.IsNullOrEmpty(spot.Neighbourhood))
             {
-                // Only for products the game tracks in this neighbourhood; for the rest it reports 0, which its own callers read as
-                // 100 (CustomerEntriesCalculatorRetail). Left out, Core treats them as unsaturated.
                 foreach (var item in menu)
                 {
                     if (ItemsGetter.GetByName(item, suppressError: true)?.isADemandedProduct != true) continue;
-                    // Popcorn, cotton candy and slushies have demand only in the game's cinema neighbourhoods;
-                    // elsewhere the game logs an error and answers 50, so leave them out there too.
-                    // The game's check looks the neighbourhood up unguarded; one it didn't load keeps the old read.
                     if (NeighborhoodHelper.Neighborhoods?.Contains(spot.Neighbourhood) == true
                         && !ProductMarketHelper.CanNeighborhoodHaveItemDemand(spot.Neighbourhood, item)) continue;
                     market[item] = ProductMarketHelper.GetNeighborhoodDemand(item, spot.Neighbourhood).demand;
                 }
             }
-            // The game's default for this multiplier is 0.5; difficulty moves it (GameVariables).
             var promotion = game.gameVariables.baseCustomerPromotionMultiplier / 0.5f;
             var query = new DemandQuery
             {
@@ -410,7 +360,6 @@ namespace FoodTrucks
             return query;
         }
 
-        // Plain text for the status and the demand readout.
         public static string Describe(Spot spot) =>
             $"{Short(spot.Neighbourhood)}, {spot.Buildings} buildings within reach, areas {spot.Areas}" +
             (spot.Places.Any(p => p.Venue != null) ? $"; {spot.Places.Count(p => p.Venue != null)} live venues, now {Live(spot)}" : "");

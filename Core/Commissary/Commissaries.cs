@@ -14,9 +14,6 @@ namespace FoodTrucks.Core.Commissary
             return true;
         }
 
-        // RentDue covers the rental day; Rent itself doesn't take money. Moving preserves the uninterrupted
-        // rental's starting day and cursor, so unprocessed days and same-day rent aren't lost or charged twice.
-        // Renting after release starts a new rental, but preserves any rent already processed for that day.
         public static CommissarySpace Rent(CommissaryState state, CommissaryRules rules, string vehicleId,
             string kind, string commissaryId, int day)
         {
@@ -39,7 +36,6 @@ namespace FoodTrucks.Core.Commissary
             return space;
         }
 
-        // The adapter should settle RentDue before releasing a space. Its stock and orders remain available.
         public static bool Release(CommissaryState state, string vehicleId)
         {
             Check(state); Name(vehicleId, nameof(vehicleId));
@@ -59,10 +55,8 @@ namespace FoodTrucks.Core.Commissary
             var processed = new List<CommissarySpace>();
             foreach (var space in state.Spaces)
             {
-                // Retain unknown future kinds with their cursor untouched; do not invent a rent for them.
                 if (!rules.RentPerMonthCents.ContainsKey(space.Kind))
                 {
-                    // Anchor its unprocessed days before the fleet marker advances.
                     space.RentPaidThroughDay ??= Math.Max(space.SinceDay - 1, state.RentPaidThroughDay ?? 0);
                     continue;
                 }
@@ -82,8 +76,6 @@ namespace FoodTrucks.Core.Commissary
             string itemName, int units, long wholesaleUnitPriceCents, (int Day, int Minute) now) =>
             Book(state, rules, commissaryId, itemName, units, wholesaleUnitPriceCents, now, checked(now.Day + 1), 0, null);
 
-        // One order for delivery on deliverDay: tomorrow for a phone order, today for a standing order's delivery.
-        // cappedBoxes are its food boxes, counted towards the item's weekly limit (CommissarySupply).
         internal static CommissaryOrder Book(CommissaryState state, CommissaryRules rules, string commissaryId, string itemName,
             int units, long wholesaleUnitPriceCents, (int Day, int Minute) now, int deliverDay, int cappedBoxes, long? standingOrderId,
             int? countDay = null)
@@ -99,32 +91,19 @@ namespace FoodTrucks.Core.Commissary
             var order = new CommissaryOrder { Id = state.NextOrderId, CommissaryId = commissaryId, ItemName = itemName,
                 Units = units, UnitPriceCents = wholesaleUnitPriceCents, OrderedDay = now.Day, DeliverDay = deliverDay,
                 CappedBoxes = cappedBoxes, StandingOrderId = standingOrderId, CountDay = countDay == deliverDay ? null : countDay };
-            // The delivery fee is set on delivery, once per commissary and morning (Deliver).
-            _ = checked(order.GoodsCents + rules.DeliveryFeeCents); // Refuse an overflowing price before changing state.
+            _ = checked(order.GoodsCents + rules.DeliveryFeeCents);
             var nextId = checked(state.NextOrderId + 1);
             state.Orders.Add(order);
             state.NextOrderId = nextId;
             return order;
         }
 
-        // Orders are paid on delivery, as the game's own wholesale and furniture deliveries are [code, 1.0:
-        // BusinessHelper.DeliverWholesaleContract, FurnitureDeliveryHelper.DeliverFurnitureContract]: each order due by
-        // now (its delivery day at the delivery minute, or an earlier day) is offered to pay, oldest first. Paid, its
-        // goods go into the commissary's stock; refused, the order is cancelled and nothing arrives, as the game drops a
-        // one-off delivery the player can't pay for. Orders not yet due are left alone.
-        // The delivery fee (Peter, 14 October 2026): one flat fee per delivery, that is per commissary and delivery day,
-        // whatever arrives there that morning. The first order offered in a delivery carries it (FeeCents, paid with its
-        // goods); the others carry none. A refused order is cancelled with its fee, and the next order of that delivery
-        // carries the fee instead, so a delivery where something arrives pays it exactly once, and one where nothing
-        // arrives pays nothing. Paid fees are kept (FeesPaid), so a second run for the same day (Ctrl+Alt+F3, a payment
-        // that threw) doesn't charge it again.
         public static CommissaryDeliveries Deliver(CommissaryState state, CommissaryRules rules, int nowDay, int nowMinute,
             Func<CommissaryOrder, bool> pay)
         {
             Check(state, rules); Time(nowDay, nowMinute);
             if (pay == null) throw new ArgumentNullException(nameof(pay));
             var due = Due(state, rules, nowDay, nowMinute);
-            // Checked before any payment: nothing is paid for an order that can't then be delivered.
             if (due.Any(o => o.DeliverDay < 1)) throw new InvalidOperationException("An order is due on a day before day 1.");
             _ = checked(state.NextBatchId + due.Count);
             var delivered = new List<CommissaryOrder>();
@@ -134,7 +113,6 @@ namespace FoodTrucks.Core.Commissary
             {
                 var paidAlready = state.FeesPaid.Any(f => f.CommissaryId == order.CommissaryId && f.Day == order.DeliverDay);
                 order.FeeCents = paidAlready ? 0 : rules.DeliveryFeeCents;
-                // Each order leaves the list as soon as it is decided, so a payment that throws keeps the ones before it.
                 var paid = pay(order);
                 state.Orders.Remove(order);
                 if (!paid)
@@ -152,7 +130,6 @@ namespace FoodTrucks.Core.Commissary
             return new CommissaryDeliveries(delivered, refused);
         }
 
-        // The orders due by now, oldest delivery day first, then in the order they were placed.
         public static IReadOnlyList<CommissaryOrder> Due(CommissaryState state, CommissaryRules rules, int nowDay, int nowMinute)
         {
             Check(state, rules); Time(nowDay, nowMinute);
@@ -185,8 +162,6 @@ namespace FoodTrucks.Core.Commissary
             return taken;
         }
 
-        // Returned lines carry their original BatchId; partial or whole rejected loads regain their FIFO place.
-        // Lines without a BatchId are new batches. No stock-limit or cargo-slot decisions belong in Core here.
         public static void ReturnToStock(CommissaryState state, string commissaryId, IEnumerable<CommissaryStockLine> lines)
         {
             Check(state); Name(commissaryId, nameof(commissaryId));
@@ -224,24 +199,14 @@ namespace FoodTrucks.Core.Commissary
             state.NextBatchId = nextId;
         }
 
-        // OrderMetadata on a batch a vehicle gave back at the bay (StockTransfer; plan, "UI flow"): "source" is this value,
-        // "day" the day it came back, "vehicle" the vehicle. OrderedKey true when its units came from commissary orders
-        // (their cost was deducted under the commissary's label), with DeductedPerUnitKey that deducted cost per unit in
-        // cents, which can differ from the batch's price (the cargo's averaged price after the game merged stacks);
-        // LoadedDayKey the oldest day the food was loaded on, so taking it again keeps its age (review rounds 1 to 3 of
-        // the UI flow).
         public const string ReturnedSourceValue = "vehicle";
         public const string OrderedKey = "ordered";
         public const string DeductedPerUnitKey = "deductedPerUnit";
         public const string LoadedDayKey = "loadedDay";
 
-        // A batch whose cost the commissary's tax label carries: a phone order's delivery, or a returned batch whose units
-        // came from one. Logistics stock and returned stock of other origins don't.
         public static bool Deducted(CommissaryStockLine line) =>
             line != null && !CommissaryLogistics.FromLogistics(line) && (!FromVehicle(line) || Flag(line, OrderedKey));
 
-        // The cost per unit, in cents, that a deducted batch put under the commissary's label: a returned ordered batch's
-        // recorded cost, else its own price. Zero for a batch that isn't deducted.
         public static double DeductedPerUnit(CommissaryStockLine line)
         {
             if (!Deducted(line)) return 0;
@@ -251,10 +216,6 @@ namespace FoodTrucks.Core.Commissary
             return line.UnitPriceCents;
         }
 
-        // Units of a taken batch that went onto a vehicle: a deducted batch's units and their deducted cost join the
-        // fleet's pool of ordered stock out on vehicles (CommissaryState.OrderedOnVehicles, OrderedOnVehiclesCents), so
-        // giving them back keeps their origin and cost. Cargo merges stacks at an averaged price, so origin and cost are
-        // pooled per item rather than followed unit by unit.
         public static void TookOnVehicle(CommissaryState state, CommissaryStockLine line, int units)
         {
             Check(state);
@@ -277,8 +238,6 @@ namespace FoodTrucks.Core.Commissary
             TakeFromPool(state, itemName, units);
         }
 
-        // Takes up to `units` out of an item's ordered pool at its average cost: the units and cents taken. Cents never
-        // go below zero and are dropped with the last unit.
         private static (int Units, long Cents) TakeFromPool(CommissaryState state, string itemName, int units)
         {
             if (!state.OrderedOnVehicles.TryGetValue(itemName, out var pool) || pool <= 0)
@@ -351,7 +310,6 @@ namespace FoodTrucks.Core.Commissary
             line?.OrderMetadata != null && line.OrderMetadata.TryGetValue(CommissaryLogistics.SourceKey, out var source) &&
             source.Type == Newtonsoft.Json.Linq.JTokenType.String && (string?)source == ReturnedSourceValue;
 
-        // The oldest day a returned batch's food was loaded on a vehicle, or null (never on one, or not recorded).
         public static int? LoadedDay(CommissaryStockLine line) =>
             line?.OrderMetadata != null && line.OrderMetadata.TryGetValue(LoadedDayKey, out var day) &&
             day.Type == Newtonsoft.Json.Linq.JTokenType.Integer && (int)day >= 1 ? (int)day : (int?)null;
@@ -360,10 +318,6 @@ namespace FoodTrucks.Core.Commissary
             line.OrderMetadata != null && line.OrderMetadata.TryGetValue(key, out var value) &&
             value.Type == Newtonsoft.Json.Linq.JTokenType.Boolean && (bool)value;
 
-        // Of returned stock still in the commissaries, the value the uninstall pays back but doesn't take off the
-        // commissary's deduction: its goods value less what its units put under that label (their deducted cost, for
-        // units from commissary orders). Stock of other origin never went under the label. May be negative when the
-        // cargo's averaged price is below the deducted cost; the caller's reversal is then larger than the refund share.
         public static long ReturnedGoodsCents(CommissaryState state)
         {
             Check(state);
@@ -373,8 +327,6 @@ namespace FoodTrucks.Core.Commissary
             return (long)Math.Round(cents);
         }
 
-        // Rent covers hourly public parking only for this food vehicle in the bay of its active space.
-        // The adapter supplies a bay ID only after the usual InBay test passes.
         public static bool PublicParkingCovered(CommissaryState state, string vehicleId, string? kind, string? bayCommissaryId)
         {
             Check(state); Name(vehicleId, nameof(vehicleId));
@@ -382,12 +334,9 @@ namespace FoodTrucks.Core.Commissary
                    state.Spaces.Any(s => s.VehicleId == vehicleId && s.Kind == kind && s.CommissaryId == bayCommissaryId);
         }
 
-        // Remove only this hour's increment in a rented bay; earlier street charges stay due at midnight.
         public static float PublicParkingAfterHour(float before, float after, bool covered) =>
             covered ? Math.Min(before, after) : after;
 
-        // Across skipped nights, today's flags stand in for each skipped check. The first call starts tracking
-        // now: before 04:00 it sets the baseline to yesterday, after 04:00 it checks only today's night.
         public static IReadOnlyList<CommissaryFine> NightCheck(CommissaryState state, CommissaryRules rules,
             int nowDay, int nowMinute, IEnumerable<CommissaryVehicle> vehicles)
         {
@@ -397,8 +346,6 @@ namespace FoodTrucks.Core.Commissary
             if (fleet.Any(v => v == null || string.IsNullOrWhiteSpace(v.VehicleId)) || fleet.Select(v => v.VehicleId).Distinct(StringComparer.Ordinal).Count() != fleet.Count)
                 throw new ArgumentException("Vehicles must have distinct, non-empty IDs.", nameof(vehicles));
             var latest = nowMinute >= rules.NightCheckMinute ? nowDay : nowDay - 1;
-            // A vehicle whose standing can't be decided yet holds the whole check: nothing is fined and the night isn't
-            // marked checked, so it runs again once the street's side can be read (Undecided).
             if (Undecided(state, fleet).Count > 0) return Array.Empty<CommissaryFine>();
             var first = state.NightCheckedThroughDay.HasValue ? (long)state.NightCheckedThroughDay.Value + 1 : nowDay;
             var fines = new List<CommissaryFine>();
@@ -413,13 +360,6 @@ namespace FoodTrucks.Core.Commissary
             return fines;
         }
 
-        // The service days a vehicle counts as cleaned at the 04:00 check (Peter, 15 October 2026): standing in the bay
-        // of the commissary where it rents its space, really in it (not only excused because that commissary has no
-        // bay), not in transit. Each night the check covers gives the service day that just ended, the evening before
-        // the check's day. Call before NightCheck, which moves the checked-through day on; nothing while the check waits.
-        // A vehicle with a space whose street side can't be read yet, and which isn't fined anyway (the player inside,
-        // say, so the check doesn't wait for it), keeps those days pending in the save (CommissaryState.PendingCleaning)
-        // until its side is known: ResolvePendingCleaning (review round 1 of the UI flow, Astra).
         public static IReadOnlyList<(string VehicleId, int ServiceDay)> CleanedOvernight(CommissaryState state, CommissaryRules rules,
             int nowDay, int nowMinute, IEnumerable<CommissaryVehicle> vehicles)
         {
@@ -448,8 +388,6 @@ namespace FoodTrucks.Core.Commissary
             return cleaned;
         }
 
-        // A vehicle's overnight cleaning that waited for its street side, now decided: in its own bay, the waiting service
-        // days are cleaned; otherwise (out of the bay, gone, no space any more) they are dropped. Removed either way.
         public static IReadOnlyList<int> ResolvePendingCleaning(CommissaryState state, string vehicleId, bool inOwnBay)
         {
             Check(state); Name(vehicleId, nameof(vehicleId));
@@ -458,8 +396,6 @@ namespace FoodTrucks.Core.Commissary
             return inOwnBay ? days.Where(d => d >= 1).Distinct().OrderBy(d => d).ToList() : (IReadOnlyList<int>)Array.Empty<int>();
         }
 
-        // The vehicles the night check can't decide yet: one that would be fined unless it is in its own bay, has a space,
-        // and whose street side at that bay couldn't be read. Any other exemption decides it without the bay.
         public static IReadOnlyList<string> Undecided(CommissaryState state, IEnumerable<CommissaryVehicle> vehicles)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -470,8 +406,6 @@ namespace FoodTrucks.Core.Commissary
                 .Select(v => v.VehicleId).ToList();
         }
 
-        // The uninstall step: delivered stock (paid on delivery) is refunded at its goods price; open orders haven't been
-        // paid, so they are cancelled with nothing to refund, and standing orders end. Spaces are given up; rent and fine debts remain to settle.
         public static CommissaryRefund Refund(CommissaryState state)
         {
             Check(state);

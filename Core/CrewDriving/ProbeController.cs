@@ -2,16 +2,15 @@ using System;
 
 namespace FoodTrucks.Core.CrewDriving
 {
-    /// <summary>Small single-use physics controller. Cancel revokes driving but retains ownership for native cleanup.</summary>
     public sealed class ProbeController
     {
-        public const double StopMargin = 1;                 // metres before every front boundary
-        public const double CorridorTolerance = .6;        // rear axle metres from the polyline
-        public const double HeadingTolerance = .35;        // radians (~20 degrees)
-        public const double PlannedDeceleration = 1.5;     // assumed guaranteed m/s², MUST be measured natively
-        public const double BrakeDeceleration = 4;         // assumed m/s² per full brake, MUST be measured natively
-        public const double LateralAcceleration = .8;      // m/s², no minimum corner speed
-        public const double ReactionSeconds = .3;          // assumed upper bound on native brake response
+        public const double StopMargin = 1;
+        public const double CorridorTolerance = .6;
+        public const double HeadingTolerance = .35;
+        public const double PlannedDeceleration = 1.5;
+        public const double BrakeDeceleration = 4;
+        public const double LateralAcceleration = .8;
+        public const double ReactionSeconds = .3;
         private const double StoppedSpeed = .05;
         private readonly ProbeOwnership ownership;
         private readonly ProbePath path;
@@ -39,7 +38,6 @@ namespace FoodTrucks.Core.CrewDriving
             Token = token;
             boundary = path.Length;
             clearance = path.Length - geometry.Front;
-            // The whole short probe uses its tightest curve cap: no late braking into a corner and no speed floor.
             cruise = Math.Min(geometry.MaxSpeedMs, path.MaxCurvature > 1e-9 ? Math.Sqrt(LateralAcceleration / path.MaxCurvature) : geometry.MaxSpeedMs);
         }
 
@@ -50,8 +48,6 @@ namespace FoodTrucks.Core.CrewDriving
             if (State == ProbeState.Cancelled) return Stop(reason, true, true);
             if (!ValidNumbers(o)) return Fail(ProbeReason.InvalidObservation);
 
-            // Compute an actual front-corner/tangent-plane crossing BEFORE projection/window validation.
-            // Thus clamped progress or a bad jump can never disguise crossing the physical endpoint.
             boundary = o.StopBoundaryAlong.HasValue ? Math.Min(path.Length, o.StopBoundaryAlong.Value) : path.Length;
             clearance = BoundaryDistance(o, boundary);
             var stopReason = boundary < path.Length ? ProbeReason.Signal : ProbeReason.Endpoint;
@@ -65,9 +61,6 @@ namespace FoodTrucks.Core.CrewDriving
             if (o.SpeedMs < -.02) return Fail(ProbeReason.WrongDirection);
             if (Math.Abs(o.WheelDegrees) > geometry.MaxSteerDegrees + .5) return Fail(ProbeReason.SteeringLimit);
 
-            // Suspension can rock an otherwise held body's rear axle a few centimetres. Allow a
-            // bounded pose tolerance only while stationary; measured reverse velocity and the
-            // physical front-plane checks above always remain authoritative.
             var poseTolerance = observed && lastSpeed <= StoppedSpeed && Math.Abs(o.SpeedMs) <= StoppedSpeed ? .11 : .03;
             var travel = observed ? Math.Max(lastSpeed, Math.Max(0, o.SpeedMs)) * o.Dt + 1.5 * o.Dt * o.Dt + poseTolerance : corridorTolerance;
             if (observed)
@@ -86,7 +79,6 @@ namespace FoodTrucks.Core.CrewDriving
             if (!observed && Math.Abs(o.SpeedMs) > .2) return Fail(ProbeReason.InvalidObservation);
             RearAlong = Math.Max(RearAlong, p.Along);
             lastX = o.RearX; lastZ = o.RearZ; lastHeading = o.Heading; lastSpeed = Math.Max(0, o.SpeedMs); observed = true;
-            // Update after projection as well: logical progress is only used for the distant conservative bound.
             clearance = BoundaryDistance(o, boundary);
             if (o.GapAhead.HasValue) clearance = Math.Min(clearance, o.GapAhead.Value);
             if (clearance < -1e-6) return Fail(ProbeReason.BoundaryCrossed);
@@ -98,7 +90,6 @@ namespace FoodTrucks.Core.CrewDriving
             }
 
             var room = Math.Max(0, clearance - StopMargin);
-            // Source-adapted stopping equation v² = 2ad, with an explicit response/timestep reserve.
             var latency = ReactionSeconds + o.Dt;
             var safe = PlannedDeceleration * (Math.Sqrt(latency * latency + 2 * room / PlannedDeceleration) - latency);
             var desired = Math.Min(cruise, safe);
@@ -125,7 +116,6 @@ namespace FoodTrucks.Core.CrewDriving
             var error = desired - lastSpeed;
             var throttle = error > 0 ? Math.Min(.5, .6 * error) : 0;
             var brake = error < 0 ? Math.Min(1, -error / (BrakeDeceleration * o.Dt)) : 0;
-            // Distance-based braking also handles a newly revealed obstacle; never keep throttle while braking.
             if (room < lastSpeed * latency + lastSpeed * lastSpeed / (2 * PlannedDeceleration))
             {
                 var need = lastSpeed * lastSpeed / (2 * Math.Max(.05, room - lastSpeed * latency));
@@ -133,12 +123,10 @@ namespace FoodTrucks.Core.CrewDriving
                 throttle = 0;
             }
             var handbrake = 0.0;
-            // NWH can choose reverse on the service brake near standstill. Hold with the handbrake there.
             if (desired == 0 && lastSpeed < 1) { brake = 0; handbrake = 1; }
             return Command(reason, true, false, steer, throttle, brake, handbrake, desired);
         }
 
-        /// <summary>Idempotently stop this generation. Keep its token until native cleanup has completed.</summary>
         public ProbeCommand Cancel(ProbeToken token)
         {
             if (!Current(token)) return Stop(ProbeReason.StaleOwnership, false, true);
@@ -174,9 +162,6 @@ namespace FoodTrucks.Core.CrewDriving
             var frontZ = o.RearZ + hz * geometry.Front;
             var foremostCorner = (frontX - point.X) * tx + (frontZ - point.Z) * tz +
                 geometry.Width / 2 * Math.Abs(hz * tx - hx * tz);
-            // Always retain the physical plane measurement, even after an arbitrary off-path jump. For
-            // distant curved approaches also use the smaller conservative route-room bound. A prepared
-            // probe must approach each supplied stop plane from its permitted side; no winding past it.
             if (RearAlong < at - reach && ProbeMath.Distance(o.RearX - point.X, o.RearZ - point.Z) > reach)
                 return Math.Min(-foremostCorner, at - RearAlong - geometry.Front - geometry.Width / 2);
             return -foremostCorner;

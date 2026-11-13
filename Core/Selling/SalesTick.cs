@@ -34,7 +34,6 @@ namespace FoodTrucks.Core.Selling
 
             var total = progress + elapsedMinutes * salesPerHour / 60;
             var wholeSales = Math.Floor(total);
-            // Compare before converting: even a finite rate can overflow the double total.
             if (wholeSales >= stockUnits)
                 return new SalesTickResult(stockUnits, 0, true, false);
 

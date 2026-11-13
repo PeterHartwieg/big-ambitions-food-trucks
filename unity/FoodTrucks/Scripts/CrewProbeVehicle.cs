@@ -9,8 +9,6 @@ using NwhController = NWH.VehiclePhysics2.VehicleController;
 
 namespace FoodTrucks
 {
-    // Native ownership for the disposable Gate A probe. No player entry, cloned vehicles or fuel writes.
-    // Geometry measurement adapts Driven Rides NwhCar.MeasureLive at 90981d0061418a4d4742792d90c62c6a686f2a80.
     internal sealed class CrewProbeVehicle
     {
         private static readonly Action<CarController>? StartNative = Bind("StartEngine");
@@ -56,10 +54,6 @@ namespace FoodTrucks
             Body = Nwh.vehicleRigidbody;
             if (Body == null || Body.velocity.sqrMagnitude > .01f || Body.angularVelocity.sqrMagnitude > .01f)
                 throw new InvalidOperationException("Truck must be stationary.");
-            // An active controller may belong to another mod. A probe never steals it.
-            // IsRunning can stay stale after native StopEngine, and a fresh parked prefab can
-            // retain ignition=true. Neither flag proves activity with the controller disabled;
-            // require native stationary handling and an inactive starter instead.
             if (car.controlledByPlayer || Nwh.enabled || !Body.isKinematic ||
                 Nwh.powertrain.engine.starterActive)
                 throw new InvalidOperationException("Truck must have completed native stationary handling with controller and starter off.");
@@ -100,9 +94,7 @@ namespace FoodTrucks
 
         internal void Begin()
         {
-            changed = true; // Even a partially failing native StartEngine must be unwound.
-            // Observers read the physical transform in FixedUpdate. Native interpolation otherwise exposes
-            // last rendered poses across several physics steps and can hide/misreport boundary crossings.
+            changed = true;
             Body.interpolation = RigidbodyInterpolation.None;
             Nwh.input.autoSetInput = false;
             HoldInput();
@@ -142,7 +134,7 @@ namespace FoodTrucks
         {
             if (!ReferenceEquals(session, SaveGameManager.Current) ||
                 !ReferenceEquals(VehicleHelper.GetVehicleController(Instance), Car)) return;
-            Car.SavePosition(); // Native pose and actual tank. Does not flush DamageHandler.
+            Car.SavePosition();
             Instance.damage = Car.GetCurrentCondition();
             if ((Car.transform.position - origin).sqrMagnitude < .0001f)
             {
@@ -150,7 +142,6 @@ namespace FoodTrucks
             }
             else
             {
-                // Native parking geometry, without CarController.UpdateParkingZone's player HUD writes.
                 var legal = !BuildingManager.IsInsideBuilding;
                 var area = "";
                 foreach (var wheel in Nwh.powertrain.wheels)
@@ -172,10 +163,8 @@ namespace FoodTrucks
         internal void Restore()
         {
             if (!changed) return;
-            // Called only by the exact owner, before native player entry can establish its own state.
             StationaryHold();
             StopNative!(Car);
-            // Restore the captured command, never restart from the engine's stale running cache.
             Nwh.powertrain.engine.ignition = engineIgnition;
             Nwh.powertrain.engine.starterActive = starter;
             Nwh.enabled = enabled;

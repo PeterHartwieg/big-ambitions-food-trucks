@@ -45,8 +45,6 @@ public class StockLimitTests
         var cart = ShippedData.Tables.Vehicle("cart")!;
         var truck = ShippedData.Tables.Vehicle("truck")!;
 
-        // Storage per piece (Peter, 10 October 2026). One person serves 12 to 20 an hour: a cart with one food
-        // piece and the storage piece holds 80 units, 4 to 7 hours.
         Assert.Equal(40, cart.UnitsPerPiece);
         Assert.Equal(80, truck.UnitsPerPiece);
         Assert.InRange(cart.UnitsPerPiece * 2 / 20.0, 3, 8);

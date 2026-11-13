@@ -10,8 +10,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Versioned integration called by Big Copilot Link on the main thread.
-    // Capture is read-only. Route writes require a separate reviewed quote.
     public static class BigCopilotSnapshot
     {
         private static bool Ready(GameInstance instance) =>
@@ -54,7 +52,6 @@ namespace FoodTrucks
             if (vehicle == null || physical == null) return Refuse("changed", true);
             var revision = CopilotRoutes.Revision(vehicle);
             if (body.Value<string>("revision") != revision) return Refuse("changed", true);
-            // An active crew keeps its current stop and journey. Review again when parked and closed.
             if (vehicle.IsOpen || vehicle.Transit != null) return Refuse("vehicle_busy");
             var dayToken = body["weekday"];
             var input = body["stops"] as JArray;
@@ -71,7 +68,6 @@ namespace FoodTrucks
                     (long)row["open"]! < 0 || (long)row["open"]! >= 1440 || (long)row["close"]! > rules.LatestCloseMinute ||
                     (long)row["close"]! <= (long)row["open"]!) return Refuse("invalid_route");
                 var x = (double)row["x"]!; var z = (double)row["z"]!;
-                // Keep an existing exact place, including its ground height and heading.
                 var old = vehicle.Schedule?.Stops.FirstOrDefault(s => Math.Abs(s.X - x) < .0001 && Math.Abs(s.Z - z) < .0001);
                 Vector3 at; float heading;
                 if (old != null) { at = new Vector3((float)old.X, (float)old.Y, (float)old.Z); heading = (float)old.Heading; }
@@ -89,8 +85,6 @@ namespace FoodTrucks
             var problem = CopilotRoutes.Preview(previewVehicle, day, stops, rules, speed, out var candidate);
             if (problem != ScheduleProblem.None) return Refuse(problem == ScheduleProblem.Unreachable ? "travel_gap" : "invalid_route");
             var crew = HireCrew.Present(vehicle).Select(e => e.id).OrderBy(i => i, StringComparer.Ordinal).ToArray();
-            // BayStops are indices into this schedule: classify the proposed
-            // stops, while leaving the live vehicle untouched during review.
             previewVehicle.Schedule = candidate;
             var home = HireRoutes.HomeOf(previewVehicle);
             var routeDay = WeekPlan.RouteDayOf(new HireSchedules(rules), candidate, day, Travel.ModeFor(kind), speed,
@@ -108,9 +102,6 @@ namespace FoodTrucks
             {
                 problem = CopilotRoutes.Apply(vehicle, day, candidate, rules);
                 if (problem != ScheduleProblem.None) return Refuse("changed", true);
-                // No RouteStops.Changed: that path fits times automatically. Reviewed times stay exact.
-                // The route has changed. A follow-up failure must not answer as
-                // though nothing happened and invite a blind retry.
                 try { HireRunner.Replan(vehicle, HireCrew.Now()); }
                 catch (Exception ex) { Log.Error("Big Copilot route replan: " + ex); }
                 try { HireCrew.SetWeeklyWork(vehicle); }

@@ -8,8 +8,6 @@ using FoodTrucks.ModApi;
 
 namespace FoodTrucks.Core.Tests.Vendor;
 
-// The game side for VendorService tests: a save, a clock and food vehicles whose sale books like CartSelling.SellItem
-// (ledger and midnight pot first, then the unit).
 internal sealed class VendorTestHost : IVendorHost
 {
     public const string Owner = "persistentcity";
@@ -72,7 +70,6 @@ internal sealed class VendorTestHost : IVendorHost
 
     public VehicleState Vehicle(string id) => StreetSales.Find(Save, id)!;
 
-    // A window opens as CartSelling.StartSelling opens it: a fresh queue, then the vendor book's ID and owner.
     public string Open(string id, long minute, bool byCrew = true)
     {
         var vehicle = Vehicle(id);

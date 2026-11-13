@@ -10,7 +10,6 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // Loads with every city scene and owns the per-save session.
     [ModEntryOnCityLoad]
     public sealed class FoodTrucksCity : IModBigAmbitions
     {
@@ -21,10 +20,8 @@ namespace FoodTrucks
         public Task OnLoadAsync(ModContext context)
         {
             loaded = true;
-            // The game clears its icon address list on every city load; the mod's item icons go back in.
             try { ModItems.RegisterIcons("city load"); }
             catch (Exception ex) { Log.Error("Item icons: " + ex); }
-            // GlobalEvents.Init() clears subscribers before each city load, so subscribe per city scope.
             GlobalEvents.RegisterOnGameLoadedLateCallback(OnCityReady);
             FoodTrucksSession.SubscribeGameEvents();
             return Task.CompletedTask;
@@ -33,7 +30,6 @@ namespace FoodTrucks
         private void OnCityReady()
         {
             if (!loaded || LoadScene.isLoading || SaveGameManager.Current == null) return;
-            // Again once the city is ready, in case the address list was rebuilt after this mod's city load.
             try { ModItems.RegisterIcons("city ready"); }
             catch (Exception ex) { Log.Error("Item icons: " + ex); }
             try { FoodTrucksSession.Attach(SaveGameManager.Current); }
@@ -49,7 +45,6 @@ namespace FoodTrucks
         }
     }
 
-    // The mod's state for the loaded save, read from and written to GameInstance.modData.
     internal static class FoodTrucksSession
     {
         public const string SaveKey = "foodtrucks:state";
@@ -62,17 +57,11 @@ namespace FoodTrucks
 
         public static LoadStatus LastLoadStatus { get; private set; }
 
-        // The block each loaded save came with, and the last one the mod wrote, so a save never goes out without it
-        // (SaveGuard).
         internal static readonly SaveBlockKeeper Keeper = new SaveBlockKeeper();
 
-        // Whether the session is on this game instance, also read-only (data from a newer mod version, or unreadable:
-        // state is null then, and the block stays in the save untouched).
         public static bool IsAttachedTo(GameInstance? current) =>
             current != null && game != null && ReferenceEquals(game, current);
 
-        // The game's save and unload events. GlobalEvents.Init() clears subscribers before each load, so the city part
-        // and a late attach subscribe again; removing first keeps one subscription each.
         public static void SubscribeGameEvents()
         {
             GlobalEvents.onSaveGame -= OnSaveGame;
@@ -89,9 +78,6 @@ namespace FoodTrucks
 
         private static void OnSaveGame()
         {
-            // Runs synchronously before the game serializes the save. Never throw into the game's save.
-            // Sales Core has made but the queue view still holds are booked into the midnight pot first, so the save has them.
-            // Apart, so failed booking never stops the mod's data from being written.
             try { CartSelling.PayAllHeldNow(); }
             catch (Exception ex) { Log.Error(ex); }
             try { WriteToSave(); }
@@ -100,20 +86,15 @@ namespace FoodTrucks
 
         private static void OnGameUnloaded() => Detach();
 
-        // False for data written by a newer mod version: it is read for tax but never changed.
         public static bool CanWrite => canWrite && CurrentState != null;
 
-        // Null unless a save is attached and its mod data was readable.
         public static SaveState? CurrentState =>
             game != null && ReferenceEquals(game, SaveGameManager.Current) ? state : null;
 
-        // How many times a save was attached this session (the test bridge's load completion).
         internal static int Attaches { get; private set; }
 
         public static void Attach(GameInstance current)
         {
-            // Twice on one game (the city part after a late attach) would read the save's block again over the
-            // session's unsaved changes.
             if (IsAttachedTo(current))
             {
                 Log.Info("Save data: already attached to this game; nothing read again.");
@@ -125,7 +106,6 @@ namespace FoodTrucks
             current.modData.TryGetValue(SaveKey, out var json);
             if (string.IsNullOrWhiteSpace(json) && Keeper.BlockFor(current) is string known)
             {
-                // Something took the block out of the game since its load: read the one it came with, never a fresh start.
                 Log.Error($"Save data: the game's Food Trucks block went missing after the load; put back the one read with the save ({SaveBlockKeeper.Describe(known)}).");
                 current.modData[SaveKey] = known;
                 json = known;
@@ -136,7 +116,6 @@ namespace FoodTrucks
             LastLoadStatus = result.Status;
             game = current;
             state = result.State;
-            // Data written by a newer mod version, or unreadable data, stays in the save untouched.
             var newerWriter = state != null && ModVersion.IsNewerThan(state.WrittenByModVersion, FoodTrucksMod.Version);
             canWrite = state != null && !newerWriter;
 
@@ -147,8 +126,6 @@ namespace FoodTrucks
             else
                 Log.Error($"Save data {result.Status}: {result.Error ?? "written by a newer version"}. The mod will not change it.");
 
-            // Crew hours are logged from the day after this load at the latest, even if the first hourly count
-            // only comes after midnight (a save loaded at 23:30).
             if (canWrite) CrewLog.Begin(state!, current.Day);
 
             runtimeObject = new GameObject("FoodTrucks.Runtime");
@@ -165,13 +142,11 @@ namespace FoodTrucks
             runtimeObject.AddComponent<TruckLogos>();
             runtimeObject.AddComponent<Commissary>();
             runtimeObject.AddComponent<VehicleTodos>();
-            // The vendor API for another mod (docs/vendor-api.md): inert until that mod calls it.
             FoodTrucks.Core.Vendor.VendorRuntime.Attach(new StreetFoodVendorHost());
             try { PrefabFixes.Apply(); }
             catch (Exception ex) { Log.Error("Prefab fixes: " + ex); }
             try { CartParts.LogLanes(); }
             catch (Exception ex) { Log.Error("Parking lanes: " + ex); }
-            // The game refills its course list when its data loads, so the course goes back in at every load.
             try { FoodSafetyCourse.Register(); }
             catch (Exception ex) { Log.Error("Food Safety course: " + ex); }
             try { CityLicensing.Attach(); }
@@ -184,7 +159,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Commissary logistics: " + ex); }
             try { VehicleMarketing.Attach(); }
             catch (Exception ex) { Log.Error("Marketing: " + ex); }
-            // The Bakery mod's goods sell from the display case and the coffee machine when it is installed.
             try
             {
                 var bakery = BigAmbitions.Items.ItemsGetter.GetByName("bakeryxx:itemname_bread", suppressError: true) != null;
@@ -196,8 +170,6 @@ namespace FoodTrucks
         public static void WriteToSave()
         {
             if (!canWrite || state == null || game == null || !ReferenceEquals(game, SaveGameManager.Current)) return;
-            // The count and version change only if serialization succeeds, so a failed write
-            // leaves both the save's previous mod data and the in-memory count untouched.
             var json = Codec.SerializeForSave(state, FoodTrucksMod.Version);
             if (game.modData == null) game.modData = new Dictionary<string, string>();
             game.modData[SaveKey] = json;

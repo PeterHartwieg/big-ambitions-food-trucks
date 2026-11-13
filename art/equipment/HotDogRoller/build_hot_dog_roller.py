@@ -85,7 +85,6 @@ def cylinder(label, c, r, depth, color, axis='X', n=8):
     return part(label, vs, fs, color, smooth_axis=0 if axis=='X' else 1)
 
 def hotdog(c, color):
-    # Six-sided softened capsules. End rings give the rounded sausage silhouette.
     n = 6
     vs = []
     for x,r in [(-.050,.0055),(-.044,.0125),(.044,.0125),(.050,.0055)]:
@@ -97,40 +96,33 @@ def hotdog(c, color):
         fs += [(ring*n+i,ring*n+(i+1)%n,(ring+1)*n+(i+1)%n,(ring+1)*n+i) for i in range(n)]
     return part('hotdog',vs,fs,color,smooth_axis=0)
 
-# Structural underside covers the placement point, flush with the counter.
-# Four short feet at the outer corners remain visible beneath the front fascia.
 box('underside',(0,.008,.016),(.298,.238,.032),'shadow')
 for x in (-.171,.171):
     for y in (-.125,.137):
         box('short_foot',(x,y,.016),(.030,.032,.032),'black')
 box('chassis',(0,.004,.083),(.386,.308,.102),'steel',bevel=.0025)
-# Open stainless end housings, sloping upward towards the rear. No glass cover.
 for x0,x1 in [(-.195,-.174),(.174,.195)]:
     prism('side_housing',x0,x1,-.150,.166,.032,.160,.218,'steel')
 prism('rear_lip',-.174,.174,.154,.168,.125,.209,.212,'edge')
 box('front_rim',(0,-.144,.141),(.348,.017,.016),'edge')
 prism('dark_deck',-.174,.174,-.132,.153,.123,.138,.177,'shadow')
-# Seven full-width rollers; the deck rises 3 cm from front to back.
 for i in range(7):
     y = -.126 + i*.043
     z = .151 + .115*(y+.126)
     cylinder('steel_roller',(0,y,z),.0105,.351,'roller')
 
 if STAGE >= 2:
-    # Three columns across six rows, recognizable from the street without a sign.
     for row in range(6):
         y = -.1045 + row*.043
         z = .151 + .115*(y+.126) + .0175
         for col,x in enumerate((-.114,0,.114)):
             hotdog((x,y,z),'dog_warm' if (row+col)%4==0 else 'dog')
-    # Blank black inset on the customer-facing -Y side. Controls at customer right.
     box('blank_front_inset',(0,-.1515,.091),(.342,.004,.071),'black')
     for x in (-.128,-.067):
         cylinder('knob_mount',(x,-.155,.084),.023,.004,'edge',axis='Y')
         cylinder('control_knob',(x,-.165,.084),.019,.018,'black',axis='Y')
         box('knob_pointer',(x,-.175,.090),(.003,.002,.014),'edge')
         box('pilot_light',(x,-.155,.116),(.008,.005,.008),'red')
-    # A shallow drip drawer is slightly pulled forward, still inside the footprint.
     box('drawer_shadow',(0,-.152,.043),(.330,.007,.012),'black')
     box('tray_floor',(0,-.155,.036),(.324,.041,.005),'steel')
     box('tray_front',(0,-.174,.043),(.332,.007,.017),'edge')
@@ -180,7 +172,6 @@ if STAGE >= 3:
         color = tuple(me.materials[me.polygons[tri.polygon_index].material_index].diffuse_color)
         pixels[y0:y1+1,x0:x1+1][mask] = color
         occupied[y0:y1+1,x0:x1+1] |= mask
-    # Two pixel colour bleed for filtering; unique face UVs remain non-overlapping.
     for _ in range(2):
         old = occupied.copy()
         for dy,dx in [(-1,0),(1,0),(0,-1),(0,1)]:
@@ -208,8 +199,6 @@ if STAGE >= 3:
     tex.interpolation = 'Linear'
     links = mat.node_tree.links
     links.new(tex.outputs['Color'],bsdf.inputs['Base Color'])
-    # This preview shader distinguishes steel from food using only the colour map.
-    # No extra images: Unity receives the single neutral base-colour texture.
     sep = nodes.new('ShaderNodeSeparateColor')
     links.new(tex.outputs['Color'],sep.inputs[0])
     diff = nodes.new('ShaderNodeMath'); diff.operation = 'SUBTRACT'
@@ -229,7 +218,6 @@ if STAGE >= 3:
         p.material_index = 0
 
 if STAGE >= 4:
-    # Hull from actual body vertices, with interior geometry removed by bmesh.
     bm = bmesh.new()
     for v in body.data.vertices:
         bm.verts.new(v.co)
@@ -248,7 +236,6 @@ if STAGE >= 4:
     collision.hide_render = True
     collision.display_type = 'WIRE'
 
-# Review lighting and camera from -Y, slightly above, looking towards the front.
 scene = bpy.context.scene
 scene.render.engine = 'CYCLES'
 scene.cycles.device = 'CPU'

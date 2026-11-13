@@ -39,7 +39,6 @@ public class PriceCurveTests
     [Fact]
     public void EveryGameCustomerBuysUpToTheWorkingClassIndex()
     {
-        // In the game nobody refuses a price up to 1.2 times the reference, whatever the neighbourhood.
         Assert.Equal(1.0, Curve.Conversion(PriceCurve.LowestPriceIndex));
         Assert.Equal(1.0, Curve.Conversion(Curve.NeighbourhoodRatio(1.2, 1.0, 1.2)));
     }

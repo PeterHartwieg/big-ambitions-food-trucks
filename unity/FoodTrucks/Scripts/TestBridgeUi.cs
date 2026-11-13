@@ -19,27 +19,18 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // The bridge's `ui`: what a person would click. `list` walks the open canvases for visible, interactable buttons (the
-    // game's buttons are all UnityEngine.UI.Button; its own button classes wrap one) and the options of each visible
-    // dropdown (the game's own UI.Elements.Dropdown), and reads the visible text of open dialogs and the phone. `click`
-    // invokes a button's onClick, or selects a dropdown option as the dropdown's own option row does. `escape` runs the
-    // game's Esc handling (CancelButtonHandler.HandleEscapeClick) for whatever is open.
     internal static class TestBridgeUi
     {
-        // TextMeshPro isn't among the mod's compile references; its text is read by reflection.
         private static readonly Type? TmpText = Type.GetType("TMPro.TMP_Text, Unity.TextMeshPro");
         private static readonly PropertyInfo? TmpTextProperty = TmpText?.GetProperty("text");
         private static readonly PropertyInfo? TmpAlphaProperty = TmpText?.GetProperty("alpha");
-        // Text fields (a bank loan's amount, BankLoanSettings.amountInput): TMP_InputField, by reflection too.
         private static readonly Type? TmpInput = Type.GetType("TMPro.TMP_InputField, Unity.TextMeshPro");
         private static readonly PropertyInfo? TmpInputText = TmpInput?.GetProperty("text");
         private static readonly PropertyInfo? TmpInputInteractable = TmpInput?.GetProperty("interactable");
-        // Typing runs every character through the field's own check (its content type and character limit), as a key press does.
         private static readonly MethodInfo? TmpInputValidate = TmpInput == null ? null
             : AccessTools.Method(TmpInput, "Validate", new[] { typeof(string), typeof(int), typeof(char) });
         private static readonly PropertyInfo? TmpInputLimit = TmpInput?.GetProperty("characterLimit");
         private static readonly PropertyInfo? TmpInputOnValidate = TmpInput?.GetProperty("onValidateInput");
-        // Fields that take their value only when editing ends (a shop's AmountSelector quantity) listen to onEndEdit.
         private static readonly PropertyInfo? TmpInputOnEndEdit = TmpInput?.GetProperty("onEndEdit");
         private static readonly FieldInfo? OptionsField = AccessTools.Field(typeof(Dropdown), "_options");
         private static readonly FieldInfo? LocalizeField = AccessTools.Field(typeof(Dropdown), "_localizeOptions");
@@ -48,23 +39,17 @@ namespace FoodTrucks
         {
             public int Id;
             public string Text = "";
-            // The texts beside a button in its row (a title, a price), when its own label ("Do it", "Open it")
-            // doesn't say what it does.
             public string Context = "";
             public string Path = "";
             public string Kind = "button";
             public Button? Button;
             public Dropdown? Dropdown;
             public int Option;
-            // A slider (the activity panel's hours, a campaign's days) or a toggle (part time, full time): set and
-            // clicked as a drag or a click on them does.
             public Slider? Slider;
             public Toggle? Toggle;
-            // A text field: typed into with ui type.
             public Component? Input;
         }
 
-        // The entries of the last list, for click by id.
         private static List<Entry> last = new List<Entry>();
 
         internal static JToken Run(JObject args)
@@ -93,9 +78,6 @@ namespace FoodTrucks
             }
         }
 
-        // `tree`: reads only. The objects whose hierarchy path ends with `path` (inactive ones too), each with its children
-        // down to `depth`: name, active, size, components, and the colour of each Graphic and the alpha of a CanvasGroup.
-        // For comparing a copied game part with the game's own (15 October 2026: our WhiteBox copies showed no background).
         private static JToken Tree(JObject args)
         {
             var path = TestBridgeCommands.Need(args, "path", "the end of an object's hierarchy path, e.g. \"Content/WhiteBox (Template)(Clone)\"");
@@ -152,8 +134,6 @@ namespace FoodTrucks
 
         internal static void Forget() => last = new List<Entry>();
 
-        // The game's own save, load, delete and character controls, and the confirmations the pause menu opens, are
-        // left to the save and load commands: a click there could overwrite or delete a save that isn't FT.
         private static readonly HashSet<string> SaveLoadOwners = new HashSet<string>(StringComparer.Ordinal)
         {
             "LoadGame", "LoadGameCharacterEntryView", "LoadGameSaveEntryView", "SaveGameCompatibilityUI", "FuneralUI",
@@ -167,7 +147,6 @@ namespace FoodTrucks
                 foreach (var c in t.GetComponents<MonoBehaviour>())
                     if (c != null && SaveLoadOwners.Contains(c.GetType().Name)) return true;
             var inPauseMenu = target.GetComponentInParent<UI.MiniMenu.MiniMenu>() != null;
-            // A confirmation while the pause menu is open is one of its own (overwrite a save, leave unsaved).
             if (HudConfirm.isOpen && UI.MiniMenu.MiniMenu.IsOpen && target.GetComponentInParent<HudConfirmUi>() != null) return true;
             if (entry.Button != null)
             {
@@ -189,7 +168,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // The control's label now, to check a click by id against the list it came from.
         private static string CurrentText(Entry entry)
         {
             if (entry.Button != null) return Label(entry.Button.transform);
@@ -204,7 +182,6 @@ namespace FoodTrucks
             return "";
         }
 
-        // Labels that say what to do but not to what: their row's texts go with them.
         private static readonly HashSet<string> GenericLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "do it", "open", "open it", "choose", "change", "book", "pick", "buy", "select", "go", "ok", "start", "use",
@@ -213,7 +190,6 @@ namespace FoodTrucks
         private static JToken List()
         {
             last = Entries();
-            // Row texts only where the label alone can't tell the buttons apart: a generic word, or one shown twice.
             var counts = last.GroupBy(e => e.Text).ToDictionary(g => g.Key, g => g.Count());
             foreach (var e in last)
                 if (e.Text.Length <= 1 || (counts[e.Text] < 2 && !GenericLabels.Contains(e.Text))) e.Context = "";
@@ -282,7 +258,6 @@ namespace FoodTrucks
                         !Visible(input.transform, out var at)) continue;
                     found.Add((at, new Entry { Input = input, Kind = "text field", Text = ControlLabel(input.transform), Path = PathOf(input.transform) }));
                 }
-            // Top to bottom, then left to right, as a person reads the screen.
             var list = found.OrderByDescending(f => Mathf.Round(f.At.y)).ThenBy(f => f.At.x).Select(f => f.Entry).ToList();
             for (var i = 0; i < list.Count; i++) list[i].Id = i + 1;
             return list;
@@ -329,7 +304,6 @@ namespace FoodTrucks
             else if (entry.Toggle != null)
             {
                 if (!entry.Toggle.IsInteractable()) throw new BridgeError($"\"{entry.Text}\" isn't clickable now.");
-                // What a click on a toggle does (Toggle.InternalToggle): flip it; one in a group that allows none off stays on.
                 if (entry.Toggle.isOn && entry.Toggle.group != null && !entry.Toggle.group.allowSwitchOff) { }
                 else entry.Toggle.isOn = !entry.Toggle.isOn;
             }
@@ -338,7 +312,6 @@ namespace FoodTrucks
             return new JObject { ["clicked"] = entry.Text };
         }
 
-        // What is open, in the order the game's Esc handling closes things (CancelButtonHandler).
         internal static List<string> Open()
         {
             var open = new List<string>();
@@ -350,16 +323,12 @@ namespace FoodTrucks
             var dialog = InstanceBehavior<UIs>.Instance?.playerHUD?.dialogUI;
             if (dialog != null && dialog.isPanelOpen) open.Add("call");
             if (PlayerActivityUI.IsPanelOpen) open.Add("activity panel");
-            // Furniture being placed (a right click on it, or place's start): Esc cancels it.
             if (BigAmbitions.PlacementSystem.PlacementSystem.IsInPlacementMode) open.Add("placing furniture");
             return open;
         }
 
-        // Toggles the list left out, each logged once.
         private static readonly HashSet<string> Skipped = new HashSet<string>();
 
-        // A toggle whose own rect has no size (the game's "Temporarily closed" switch in BizMan and the building's panel)
-        // is still clicked through its checkbox graphic or its row, so those count as where it is on screen.
         private static bool ToggleVisible(Toggle toggle, out Vector2 at)
         {
             if (Visible(toggle.transform, out at)) return true;
@@ -370,9 +339,6 @@ namespace FoodTrucks
 
         private static Component? Target(Entry entry) => (Component?)entry.Button ?? (Component?)entry.Dropdown ?? (Component?)entry.Slider ?? (Component?)entry.Toggle ?? entry.Input;
 
-        // { "id", "value" }: a slider from the last list moved to the value, as dragging it does (its onValueChanged runs:
-        // the activity panel's hours, a campaign's days). The value is held to the slider's range and, for a slider of
-        // whole numbers, rounded.
         private static JToken Set(JObject args)
         {
             var id = TestBridgeCommands.Num(args, "id") ?? throw new BridgeError("ui set needs \"id\" (a slider from the last list) and \"value\".");
@@ -389,8 +355,6 @@ namespace FoodTrucks
             return new JObject { ["set"] = entry.Text, ["value"] = Math.Round(slider.value, 2), ["min"] = slider.minValue, ["max"] = slider.maxValue, ["texts"] = new JArray(Texts()) };
         }
 
-        // { "id", "text" }: a text field from the last list given that text, as typing it does (its onValueChanged runs:
-        // the bank's loan amount updates the daily payment). Nothing is confirmed: the screen's own buttons do that.
         private static JToken TypeText(JObject args)
         {
             var id = TestBridgeCommands.Num(args, "id") ?? throw new BridgeError("ui type needs \"id\" (a text field from the last list) and \"text\".");
@@ -402,15 +366,11 @@ namespace FoodTrucks
             if (SaveOrLoadControl(entry)) throw new BridgeError(SaveLoadText);
             TmpInputText!.SetValue(input, Typed(input, text));
             var now = TmpInputText.GetValue(input) as string ?? "";
-            // Then editing ends, as clicking away does, so the next click works with the new value (Sol review).
             if (TmpInputOnEndEdit?.GetValue(input) is UnityEngine.Events.UnityEvent<string> endEdit) endEdit.Invoke(now);
             Log.Info($"Test bridge: typed \"{now}\" into \"{entry.Text}\" ({entry.Path}).");
             return new JObject { ["typed"] = entry.Text, ["value"] = now, ["texts"] = new JArray(Texts()) };
         }
 
-        // What the field keeps of the text when it is typed key by key: each character through the field's own
-        // onValidateInput (if set) or its Validate (the content type: digits only for the bank's loan amount), up to its
-        // character limit. "$20,000" in a number field becomes "20000", which BankDialog.LoanRequest can parse.
         private static string Typed(Component input, string text)
         {
             var kept = "";
@@ -426,7 +386,6 @@ namespace FoodTrucks
             return kept;
         }
 
-        // A slider's or toggle's own text, else the nearest text of its parents (the label beside it).
         private static string ControlLabel(Transform t)
         {
             for (var p = t; p != null; p = p.parent)
@@ -436,7 +395,6 @@ namespace FoodTrucks
 
         private static JToken Escape()
         {
-            // The game's list picker (the commissary's choices) isn't in its Esc handling; its Cancel closes it.
             if (DropdownSelector.isOpen)
             {
                 var picker = Object.FindObjectOfType<DropdownSelectorUI>();
@@ -455,9 +413,6 @@ namespace FoodTrucks
             return new JObject { ["closed"] = text };
         }
 
-        // ---- Text ----
-
-        // The visible text blocks of open dialogs, the phone and the notices on screen; at the main menu, of every canvas.
         private static List<string> Texts()
         {
             var roots = new List<Transform>();
@@ -479,13 +434,10 @@ namespace FoodTrucks
                 if (DropdownSelector.isOpen) Add(Object.FindObjectOfType<DropdownSelectorUI>());
                 if (UI.MiniMenu.MiniMenu.IsOpen) Add(uis?.miniMenuUI);
                 if (PlayerActivityUI.IsPanelOpen) Add(Object.FindObjectOfType<PlayerActivityUI>());
-                // The overlays over a clicked object or building, the shop's purchase panel and the map's building card.
                 Add(uis?.overlayUI);
                 if (uis?.playerHUD?.purchaseUI != null && uis.playerHUD.purchaseUI.isActiveAndEnabled) Add(uis.playerHUD.purchaseUI);
                 if (CityMap.IsOpen) Add(uis?.buildingResume);
                 foreach (var notices in Object.FindObjectsOfType<NotificationsUI>()) Add(notices.container);
-                // The job's shift card (a gig's "Cleaning wanted at ..."), and other mods' windows on the HUD
-                // (Real Life Overhaul's lists: the hotel room, licences, the bank desk).
                 Add(uis?.playerHUD?.currentJobUI);
                 if (uis?.playerHUD != null)
                     foreach (Transform child in uis.playerHUD.transform)
@@ -497,7 +449,6 @@ namespace FoodTrucks
             {
                 foreach (var (component, text) in TextBlocks(root))
                 {
-                    // Roots can overlap (for example a dialog under the open phone). Read each label once.
                     if (!seen.Add(component) || !Visible(component.transform, out _)) continue;
                     if (texts.Count == 0 || texts[texts.Count - 1] != text) texts.Add(text);
                 }
@@ -505,9 +456,6 @@ namespace FoodTrucks
             return texts;
         }
 
-        // ---- Helpers ----
-
-        // On an enabled canvas, not faded out by a CanvasGroup, with its middle on the screen; `at` is that middle.
         private static bool Visible(Transform t, out Vector2 at)
         {
             at = default;
@@ -531,8 +479,6 @@ namespace FoodTrucks
             return at.x >= 0 && at.y >= 0 && at.x <= Screen.width && at.y <= Screen.height;
         }
 
-        // Both native TMP labels and the mod's Unity UI Text labels, in hierarchy order.
-        // Traverse once so a mixed hierarchy neither duplicates labels nor groups them by text implementation.
         private static IEnumerable<(Component Component, string Text)> TextBlocks(Transform root)
         {
             foreach (var component in root.GetComponentsInChildren<Behaviour>(false))
@@ -555,8 +501,6 @@ namespace FoodTrucks
             }
         }
 
-        // The nearest parent that holds texts outside the button and outside other buttons, if that parent is a row
-        // (a few texts) rather than a whole panel or list: its texts, in hierarchy order.
         private static string RowContext(Button button)
         {
             var own = Label(button.transform);
@@ -581,7 +525,6 @@ namespace FoodTrucks
             return t.name;
         }
 
-        // Rich-text tags out, whitespace to single spaces.
         private static string Clean(string? text)
         {
             if (string.IsNullOrEmpty(text)) return "";

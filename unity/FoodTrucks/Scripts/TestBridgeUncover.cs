@@ -44,7 +44,6 @@ namespace FoodTrucks
         private static readonly FieldInfo? KeepGroundPlane = AccessTools.Field(typeof(CityBuildingController), "keepGroundPlaneAlways");
         private static readonly int RevealId = Shader.PropertyToID("_Reveal");
 
-        // A renderer as it was: its property block (null when it had none), enabled flag and shadow mode.
         private sealed class RendererState
         {
             public Renderer Renderer = null!;
@@ -57,7 +56,6 @@ namespace FoodTrucks
         private readonly HashSet<Renderer> saved = new HashSet<Renderer>();
         private readonly List<(GameObject Thing, int Layer)> outlined = new List<(GameObject, int)>();
 
-        // Names for the shot's reply: what this frame undid.
         internal readonly List<string> Uncovered = new List<string>();
         internal readonly List<string> Outlined = new List<string>();
         internal readonly List<string> Hovered = new List<string>();
@@ -70,8 +68,6 @@ namespace FoodTrucks
 
         private TestBridgeUncover() { }
 
-        // Undoes both round a camera at `from`; Dispose puts everything back. With `apply` false nothing changes, but the
-        // lists still say what would have been undone (the as-is picture of `compare`).
         internal static TestBridgeUncover Begin(Vector3 from, bool apply)
         {
             var scope = new TestBridgeUncover();
@@ -92,12 +88,9 @@ namespace FoodTrucks
         private static IEnumerable<ViewBlockingEntity> Entities()
         {
             if (ActiveEntities?.GetValue(null) is List<ViewBlockingEntity> list) return list.ToList();
-            // Without the game's list: every entity in block mode (a scene-wide search; only if the field is gone).
             return UnityEngine.Object.FindObjectsByType<ViewBlockingEntity>(FindObjectsSortMode.None).Where(e => e != null && e.IsInCameraBlockMode);
         }
 
-        // For state: what the game fades for its own camera now, and where that camera is (to stand the player where a
-        // building comes between them, for a check of the shots).
         internal static Newtonsoft.Json.Linq.JArray ViewBlocked()
         {
             var list = new Newtonsoft.Json.Linq.JArray();
@@ -111,7 +104,6 @@ namespace FoodTrucks
             return list;
         }
 
-        // Saves a renderer's state once, before its first change.
         private bool Save(Renderer? r)
         {
             if (r == null) return false;
@@ -127,8 +119,6 @@ namespace FoodTrucks
             return true;
         }
 
-        // A renderer the game hid for block mode, shown again: shadows-only back to casting, or a disabled renderer (the
-        // game disables those whose shadow mode is off) enabled.
         private void Show(Renderer? r)
         {
             if (r == null || r.CompareTag("BuildingLOD")) return;
@@ -183,14 +173,6 @@ namespace FoodTrucks
             }
         }
 
-        // 3. The hovered or highlighted building (live session 9: the game's idle cursor over 22 1st Street opened its card
-        //    and drew the building pale with a white edge, and `outlined` stayed empty). The mouse over a building
-        //    (CityBuildingController.OnIoEnter, kept in CurrentBuildingHighlighted and MouseController.currentTargetEntity),
-        //    its card (BuildingResume.TargetController) and a map filter (SetHighlight) put its objects on BuildingsOutlined
-        //    (SetOutlineLayer: the root, its parts, its LOD, ground plane and billboards, which needn't be children of the
-        //    root) and, with a colour, set _SelectionColor in the property blocks of renderersToHide and the LOD
-        //    (SetOutlineColor) [code, 1.0]. Lifted for the frame: those objects back to the Buildings layer, the colour
-        //    cleared in a copy of each block; all saved first and written back exactly.
         private void Unhover(bool apply)
         {
             var targets = new Dictionary<CityBuildingController, List<string>>();
@@ -250,8 +232,6 @@ namespace FoodTrucks
                 if (outlined.Count > before || (!apply && Has(controller.transform, buildingLayer))) Outlined.Add(controller.name);
             }
             var roots = new HashSet<Transform>();
-            // From each collider up to its item (or its body), not the scene root: an item's root can be the game's
-            // container of every owned item and vehicle (review round 10).
             foreach (var c in Physics.OverlapSphere(from, Reach, 1 << itemLayer, QueryTriggerInteraction.Collide))
             {
                 if (c == null) continue;
@@ -276,7 +256,6 @@ namespace FoodTrucks
             thing.layer = layer;
         }
 
-        // Puts back the outline layers, then every renderer, each on its own.
         public void Dispose()
         {
             for (var i = outlined.Count - 1; i >= 0; i--)

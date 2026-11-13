@@ -4,8 +4,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Shape-local enclosure converted to root-local space, independent of collider enabled state.
-    // No physics queries, world-AABB fallback, or managed allocations in repeated calls.
     internal static class CrewProbeShape
     {
         internal static bool TryBounds(Collider c, Transform root, out Vector3 min, out Vector3 max)

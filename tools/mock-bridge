@@ -24,40 +24,29 @@ from ftlib.logcheck import read_rules
 from ftlib.shots import ROOT
 
 SITES = [s['id'] for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']]
-# Commissaries with a measured bay in data, and the city's buildings (the balance tool's list), for bay_candidates.
 MEASURED = {s['id']: s['bay'] for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries'] if s.get('bay')}
 CITY = json.loads((ROOT / 'tools/balance/city.json').read_text())['buildings']
 BUILDINGS = {b['key'] for b in CITY}
 CLASSIFIER = json.loads((ROOT / 'data/demand.json').read_text())['classifier']
-# Made-up park triggers for parks (name, kind, min x/y/z, max x/y/z); the game's come from the scene.
 PARKS = [('Park_Trigger', 'parkarea', (1180.0, 9.5, 600.0, 1290.0, 19.5, 700.0)),
          ('SkatePark_Trigger', 'skatepark', (1490.0, 9.8, 440.0, 1520.0, 14.8, 470.0))]
 TUNING = json.loads((ROOT / 'data/rules.json').read_text())
 ECONOMY = json.loads((ROOT / 'data/economy.json').read_text())
-# Prices and base-game box sizes are fake; the quote and per-item protocol are real.
 LOCALE = json.loads((ROOT / 'unity/FoodTrucks/Locales/en.json').read_text())
 
 CATALOG = {key: (LOCALE.get(key,key.split('itemname_')[-1].title()),500,1.5) for key in ECONOMY['products']}
-# What each food is held by (the equipment piece that serves it) and which game item is that piece, from economy.json.
 HOLDS = {product: name for name, e in ECONOMY['equipment'].items() if isinstance(e, dict) for product in e['products']}
 PIECES = {key: name for name, e in ECONOMY['equipment'].items() if isinstance(e, dict) for key in e['gameItems']}
 SLOTS = {kind: v['equipmentSlots'] for kind, v in ECONOMY['vehicles'].items()}
 STAFF = {kind: v['staff'] for kind, v in ECONOMY['vehicles'].items()}
 PER_PIECE = {kind: v['unitsPerPiece'] for kind, v in ECONOMY['vehicles'].items()}
-# The dealer's price: the vehicle type asset's (the bridge reads VehicleType.price).
 PRICES = {kind: float(re.search(r'^\s*price: ([0-9.]+)', (ROOT / f'unity/FoodTrucks/Vehicles/Food{kind.title()}.asset').read_text(), re.M).group(1))
           for kind in ('truck', 'cart')}
-# The mock's windows sell one unit every ten minutes at this price; each unit cost CATALOG's wholesale price.
 SALE_CENTS = 1300
 WAGE_CENTS = 1000
 CATALOG.update({key:(LOCALE.get(key,key.split('itemname_')[-1].title()),1,750.) for e in ECONOMY['equipment'].values() if isinstance(e, dict) for key in e['gameItems']})
 
-# The player's life in the mock (docs/test-bridge.md, "The player's life"). The dialogs it opens, and those that are an
-# activity panel holding the clock. The game's own numbers where the 1.0 code has them: the taxi's $0.15 and 0.04 game
-# minutes a metre, a bed's 0.35 energy a minute, the hospital at -20. The shops' goods and prices are made up.
 LIFE_DIALOGS = {'taxi_map', 'presentation', 'purchase', 'sleep', 'course', 'course_choice', 'phone_app', 'city', 'agency', 'agency_form'}
-# The Basic HR course the recruitment agency wants (made-up hours and price; the game's are its DiplomaData), and the agency's
-# campaign form: the game's price, $50 per candidate per day short of the longest deadline plus one.
 BASIC_HR = {'hours': 4, 'pricePerHour': 30}
 AGENCY_DAYS, AGENCY_CANDIDATES = 7, 5
 LIFE_PANELS = {'sleep', 'course'}
@@ -66,7 +55,6 @@ SHOPS = {'ba:businesstype_fastfoodrestaurant': [('ba:itemname_burger', 'Burger',
          'ba:businesstype_coffeeshop': [('ba:itemname_cupofcoffee', 'Cup of coffee', 4., 'food', 10)],
          'ba:businesstype_supermarket': [('ba:itemname_sandwich', 'Sandwich', 5., 'food', 30)],
          'ba:businesstype_furniturestore': [('ba:itemname_kingsizebed', 'King size bed', 900., 'furniture', 0)]}
-# Happiness modifiers as the game lists them (made-up amounts; the game's are asset data).
 MOOD = {'no_home': {'type': 'ba:happinessmodifier_no_home', 'name': 'No home', 'amount': -20, 'hours_left': -1, 'shows_time': False},
         'first_apartment': {'type': 'ba:happinessmodifier_first_apartment', 'name': 'First apartment', 'amount': 10, 'hours_left': 168, 'shows_time': True}}
 FULL_SERVICE = {'ba:businesstype_fastfoodrestaurant', 'ba:businesstype_coffeeshop'}
@@ -99,7 +87,6 @@ def week_route(open_minute, close_minute, x, z):
 
 
 def week_days(days):
-    # "Monday to Friday", "Saturday and Sunday", "Monday, Wednesday and Friday" (Core RouteCause.Days).
     order=sorted(set(days),key=WEEK.index)
     parts=[]; i=0
     while i<len(order):
@@ -135,7 +122,6 @@ def png(path, width, height, colour):
     Path(path).write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!IIBBBBB', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b''))
 
 
-# new_game's character and the Normal preset's starting money (live run, 17 October 2026).
 NEW_GAME_CHARACTER = 'FT Playtest'
 NEW_GAME_MONEY = 10000.
 
@@ -148,7 +134,6 @@ class Mock:
         self.operations = {}
         self.operation_waiters = {}
         self.stopped = False
-        # Sites whose measured bay is across the road from their door (tests set this).
         self.measured_across = set()
         self.session = uuid.uuid4().hex
         self.lifecycle = 0
@@ -158,7 +143,6 @@ class Mock:
         # Fixture result for both meshes, off-street ground and a complete player path. No baked mesh here;
         # the real adapter's fallback scan and individual safety gates run in test_cart_serving.py.
         self.cart_serving_safe = lambda vehicle, point: True
-        # The self-driving mod (drive): loaded, and the ride it refuses (None: it drives).
         self.self_driving = True
         self.ride_refusal = None
         self.drive_run = None
@@ -183,7 +167,6 @@ class Mock:
         self.frame = 0
         self.stop = threading.Event()
         self.saves = {}
-        # Tests set this to stand for the player inside a building, where the fixture refuses as the game's does.
         self.inside_building = False
         self.character = 'FT test character'
         self.reset('FT mock')
@@ -218,7 +201,6 @@ class Mock:
         self.selected = None
         self.boxes = 0
         self.order_number = 0
-        # Deliveries (site, day) whose flat fee is paid: one fee per commissary and morning, as Core's Commissaries.Deliver.
         self.fees_paid = set()
         self.routes = {}
         self.takings = {}
@@ -232,8 +214,6 @@ class Mock:
         self.ledger = {}
         self.sold = {}
         self.visits = {}
-        # The player's life (docs/test-bridge.md, "The player's life"): where they are inside, what they hold, the homes they
-        # rent and the beds set down there, a taxi waiting, the course's hours, candidates on the phone.
         self.life = {'inside': None, 'hands': None, 'homes': [], 'beds': {}, 'bed_floors': {}, 'taxi': False, 'course_minutes': 0,
                      'dropped': [], 'handtrucks': [], 'drop_blocked': False, 'floorplan_blocked': False, 'floorplan_unreachable': False,
                      'use_on_navmesh': True, 'use_route': 'complete', 'use_navigation_blockers': [],
@@ -321,7 +301,6 @@ class Mock:
             self.state['notices_recent'] = list(self.recent)
 
     def prepare_saves(self):
-        # These stand in for saves a person prepares in the game, not bridge commands.
         for name in ('FT bridge', 'FT commissary-pay-on-delivery', 'FT commissary-refused-payment',
                      'FT crew-midnight-payout', 'FT hatch-only-selling', 'FT bay-shots', 'FT truck-look-shots', 'FT logistics'):
             self.reset(name)
@@ -354,7 +333,6 @@ class Mock:
         self.store('Non-FT mock')
 
     def finish_new_game(self, name):
-        # A fresh character of its own: day 1 08:00, the Normal preset's money, no home, nothing owned; paused, saved.
         self.character=NEW_GAME_CHARACTER+' '+uuid.uuid4().hex[:6]
         self.reset(name)
         self.state['clock']['time']='08:00'
@@ -395,8 +373,6 @@ class Mock:
                  'entrance':{'x':393.2+i*100+5,'z':217.6} if self.bay_status.get(site,'resolved')=='resolved' else None} for i,site in enumerate(SITES)]
 
     def parks(self):
-        # The bridge's shape from made-up boxes, with the balance tool's buildings as entrances: the 5 nearest within
-        # 150 m of each box on the ground, the neighbourhood of the building nearest the centre.
         def flat(x,z,box):
             dx=max(box[0]-x,0,x-box[3]); dz=max(box[2]-z,0,z-box[5])
             return math.hypot(dx,dz)
@@ -412,9 +388,6 @@ class Mock:
         return {'entrance_radius':150,'parks':parks,'skipped':[{'name':'Park_Trigger_Closed','kind':'parkarea','reason':'inactive'}]}
 
     def bay_candidates(self, args):
-        # The bridge's shape with made-up spots: one the automatic search takes, one past a long walk, one across the road
-        # from the door, one beyond 30 m. With "address" any building's entrances are the origins (no status). A site
-        # with a measured bay has one "data" origin at that point, checked for its side from the nearest door.
         site=args.get('site'); address=args.get('address')
         if (site is None)==(address is None):
             raise ValueError('bay_candidates needs "site" (a commissary\'s id) or "address" (any building, as ba:street_…#N), not both.')
@@ -440,9 +413,6 @@ class Mock:
                (x-14.0,z+12.0,180.,18.4,'short',19.0,18.4,False,False,'across the road from the door'),
                (x-36.0,z+20.0,180.,41.2,'short',44.0,41.0,True,False,"beyond the automatic search's 30 m")]
         if measured:
-            # From a point set in data: no walks, the side checked from the nearest door; nothing automatic when the
-            # point itself is across the road. With a heading (nose-in in a lot) every spot faces that way and the
-            # automatic pick is the point itself.
             measured_text='the point set in data is across the road from the door, so the automatic search takes nothing from it'
             heading=measured.get('heading')
             if heading is not None:
@@ -474,11 +444,9 @@ class Mock:
                                                 'balance':math.floor(self.state['money']),'day':day,'time':self.state['clock']['time']})
 
     def pay(self, cents, kind, day=None, **data):
-        # Money moves in whole cents, as the mod's Payments do, and the game books the transaction.
         self.state['money']=round(self.state['money']+cents/100,2)
         self.transaction(kind,cents/100,day=day,**data)
 
-    # The mod's per-vehicle ledger (Core SalesLedger, VehicleDay), sold counts (SoldCounts) and spots worked (DayRecord).
     def book(self, day, vehicle_id, line, cents):
         entry=self.ledger.setdefault(str(day),{'vehicles':{},'delivery_fees':0,'revenue':0,'stock_cost':0})
         lines=entry['vehicles'].setdefault(vehicle_id,{k:0 for k in ('sales','catering','stock_cost','wages','parking','permit','commissary_rent','overnight_fines')})
@@ -515,7 +483,6 @@ class Mock:
                 'fees_paid_at':sorted({site for site,d in self.fees_paid if d==day}),'vehicles':vehicles}
 
     def places(self, args):
-        # The buildings round the player as the map shows them (the balance tool's city), no demand figures.
         radius=max(20,min(500,num(args,'radius') if num(args,'radius') is not None else 150))
         p=self.state['player']
         sites={s['address']:s for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']}
@@ -531,7 +498,6 @@ class Mock:
                         'commissary':{'site':site['id'],'name':LOCALE.get(site['name'],site['id'])} if site else None,'distance':round(d)})
         return {'radius':radius,'places':out}
 
-    # ---- walk: the game's click-to-move, pushing a held cart (the mock moves at once) ----
     def walk(self, args):
         player=self.state['player']
         if self.state['clock']['paused']: raise ValueError('The game is paused: walking takes real time. Set a speed first.')
@@ -579,7 +545,6 @@ class Mock:
         return {'x':round(player['x'],2),'y':0.,'z':round(player['z'],2),'heading':round(player['heading'],2),'arrived':True,'from_goal':0.,
                 'goal':{'x':round(x,2),'z':round(z,2)},'path':'complete','metres':round(metres),'holding':held['id'] if held else None,'inside':None}
 
-    # ---- map: the city map's highlights as data (the mock's city: the balance tool's buildings) ----
     def map_command(self, args):
         p=self.state['player']
         sites={s['address']:s for s in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']}
@@ -589,7 +554,6 @@ class Mock:
             if not business and btype not in ('ba:buildingtype_special',None):
                 out+=['for_rent','for_rent:'+btype]
             if business: out.append('business:'+business)
-            # Core StreetFoodMap over AreaClassifier.RuleFor: a business's rule before its building's (data/demand.json).
             rule=CLASSIFIER['businessTypes'].get(business) if business else None
             if rule is None and btype: rule=CLASSIFIER['buildingTypes'].get(btype)
             rule=rule or {}
@@ -623,7 +587,6 @@ class Mock:
                         'commissary':{'site':site['id'],'name':LOCALE.get(site['name'],site['id'])} if site else None})
         return {'filter':f,'count':len(matched),'buildings':out}
 
-    # ---- vehicle buy: the debug spawn beside the player, paid at the dealer's price ----
     def buy(self, args):
         kind=need(args,'kind','truck or cart')
         if kind not in ('truck','cart'): raise ValueError(f"Unknown kind '{kind}': truck or cart.")
@@ -635,7 +598,6 @@ class Mock:
         start=self.seq
         v=self.spawn(kind, announce=False)
         v.update(x=player['x']+3.,z=player['z']+(6. if kind=='truck' else 2.))
-        # Bought at a commissary's door, the mock puts it in that commissary's bay (in game: wherever the spawn finds room).
         for site in json.loads((ROOT / 'data/commissaries.json').read_text())['commissaries']:
             building=next((b for b in CITY if b['key']==site['address']),None)
             if building and math.hypot(building['x']-player['x'],building['z']-player['z'])<=40: self.place_vehicle(v,site['id'])
@@ -646,7 +608,6 @@ class Mock:
         return {'done':True,'id':v['id'],'kind':kind,'price':cents/100,'money':round(self.state['money'],2),'notices':notices,
                 'state':next(x for x in self.read_state()['vehicles'] if x['id']==v['id'])}
 
-    # ---- routes by address (the bridge's route command) ----
     def price_command(self, args):
         v=self.vehicle(need(args,'vehicle',"the food vehicle's id"))
         if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
@@ -694,7 +655,6 @@ class Mock:
             if open_at is not None and close_at<=open_at: close_at+=1440
             building=next((b for b in CITY if b['key']==address),None)
             if building is None: raise ValueError(f'no building at {address} in this city')
-            # The mock's spot: 6 m out from the building's centre on the street, the hatch to the pavement.
             x,z=round(building['x']+6.,2),round(building['z'],2)
             added=[]
             for day in chosen:
@@ -702,7 +662,6 @@ class Mock:
                 if open_at is not None:
                     o,c=open_at,close_at
                 else:
-                    # RouteStops.AddWithDefaultTimes: from 11:00 or the first free time after it, for up to three hours.
                     o=660
                     for a,b in taken:
                         if a<=o<b: o=b
@@ -733,8 +692,6 @@ class Mock:
         raise ValueError(f"Unknown route op '{op}': add_stop, paste_day.")
 
     def plan_route(self, v, shifts=None):
-        # The bridge's route shape from the mock's stops: each day's route runs from the restock in the commissary bay an
-        # hour before the first stop to the drive back half an hour after the last.
         stops=self.plans.get(v['id'],[])
         clock=lambda m: f'{(m % 1440) // 60:02d}:{m % 60:02d}'
         week=[]
@@ -750,8 +707,6 @@ class Mock:
                 'week':week,'shifts':shifts if shifts is not None else old.get('shifts',[]),'problem':None}
 
     def route_todos(self, v):
-        # The route to-do with its cause, as the game side's VehicleTodos and Core RouteCause word it: here only whole
-        # route days with nobody of the crew on shift.
         if not self.plans.get(v['id']) or not v['crew'] or not v['route']: return []
         shifts={x['day'] for e in v['route'].get('shifts',[]) if e['employee'] in v['crew'] for x in e['shifts']}
         bare=[d['day'] for d in v['route']['week'] if d['stops'] and d['day'] not in shifts]
@@ -760,8 +715,6 @@ class Mock:
         return [{'kind':'route_problem','item':None,'text':text}]
 
     def plan_hour(self, day, m):
-        # The planned vehicles at minute m of `day`: the morning restock in the bay, opening and closing at each stop, the
-        # drive back; crew wages for every shift hour, worked or idle (Core CrewPay); sales one unit every ten minutes.
         weekday=WEEK[(day-1)%7]
         for v in self.state['vehicles']:
             stops=sorted((s for s in self.plans.get(v['id'],[]) if s['day']==weekday),key=lambda s:s['open'])
@@ -788,7 +741,6 @@ class Mock:
                 self.event(f"Route: {v['kind']} {v['id']} back in the bay at {site}.")
 
     def crew_restock(self, v, site):
-        # Core CrewRestock: food only, into the room each piece has, from the commissary's stock.
         loaded=[]
         for stock in self.state['commissary']['stock']:
             if stock['site']!=site or stock['key'] not in HOLDS or stock['amount']<=0: continue
@@ -804,7 +756,6 @@ class Mock:
         self.event(f"Crew restock: {v['kind']} {v['id']} at {site}: {', '.join(loaded) or 'nothing to load'}.")
 
     def pay_wages(self, day):
-        # At midnight the game pays each hire for yesterday's shift hours, booked into yesterday as unassigned staff wages.
         weekday=WEEK[(day-1)%7]
         for v in self.state['vehicles']:
             if not self.plans.get(v['id']): continue
@@ -863,7 +814,6 @@ class Mock:
                         if self.stopped or lifecycle!=self.lifecycle: raise ValueError('the bridge stopped')
                         result=copy.deepcopy(self.call(cmd,args))
                         if cmd=='shoot': files.append(Path(result['path']))
-                # Deferred work lets the main thread and health/events keep running.
                 delay=self.operation_delays.get(cmd,.12 if cmd=='shoot' else 0)
                 if delay: finished.wait(delay)
                 with self.ops_lock:
@@ -876,7 +826,7 @@ class Mock:
                     self.operation_waiters.pop(identifier,None)
                     if self.operations.get(identifier) is op:
                         self.operations.pop(identifier)
-                        self.operations[identifier]=op  # retention follows completion, not admission
+                        self.operations[identifier]=op
                     completed=[key for key, item in self.operations.items() if item['status']!='pending']
                     for key in completed[:-500]: del self.operations[key]
                 finished.set()
@@ -941,7 +891,6 @@ class Mock:
             needs=player['needs']
             needs['warnings']=[w for w in (('very_hungry' if needs['hunger']<=5 else 'hungry' if needs['hunger']<=25 else None),
                                             ('out_of_energy' if needs['energy']<=0 else 'exhausted' if needs['energy']<=5 else 'tired' if needs['energy']<=25 else None)) if w]
-            # The mock's game camera hangs over the player; nothing is faded for it.
             result['game_camera']={'x':round(player['x'],2),'y':round(player['y']+18,2),'z':round(player['z']-12,2),'yaw':0.,'pitch':55.}
             result['view_blocked']=[]
             result['commissary']['bays']=self.bays()
@@ -1008,7 +957,6 @@ class Mock:
         name,box,price=CATALOG[item]
         units=boxes*box
         goods=round(units*price,2)
-        # The fee is set on delivery (one per commissary and morning); a waiting order carries none.
         order = {'n':self.order_number, 'site':site, 'items':f'{units} {name}',
                  'item':item,'units':units,'goods':goods,'fee':0.0,'total':goods,
                  'due_day':self.state['clock']['day']+1}
@@ -1055,7 +1003,6 @@ class Mock:
                 self.event(f"Crew sales: {v['id']}, day {day} {hour:02d}:00 hour: {count} customers, {count} items, ${count*13:.2f}, paid in after midnight; {sum(s['amount'] for s in v['stock'])} units left.", day=day)
 
     def settle_takings(self, all=False):
-        # Player and crew share one saved pot per vehicle/day. Removed vehicles refund today's pot too.
         owned = {v['id']: v for v in self.state['vehicles']}
         today = self.state['clock']['day']
         for (vid, day), total in sorted(list(self.takings.items()), key=lambda e: (e[0][1], e[0][0])):
@@ -1069,13 +1016,10 @@ class Mock:
         self.state['ledger_today']['crew_waiting'] = waiting
 
     def spend_needs(self):
-        # The game's average burn (0.056 energy a minute, 1.5 hunger per energy); the bridge tops both up below 40 while
-        # keep_needs is on, as the game side does through the game's needs API.
         needs=self.state['player']['needs']
         needs['energy']=max(needs['collapse_at'],round(needs['energy']-.056,3))
         needs['hunger']=max(0.,round(needs['hunger']-.084,3))
         if self.state['clock']['keep_needs']:
-            # Only for an FT save of a character with FT saves only, as the bridge checks every frame (review round 6).
             why=None
             if not (self.state['save'] or '').startswith('FT'): why=f"the save is now '{self.state['save']}', which doesn't start with FT"
             else:
@@ -1137,7 +1081,6 @@ class Mock:
                 if v['open'] and v['serving'] == 'nobody':
                     self.event(LOCALE['foodtrucks:notification_paused_truck'], 'notice')
             if v['open'] and v['serving'] != 'nobody' and m % 10 == 0:
-                # The food with the most on board sells (first listed on a tie).
                 stock = max((s for s in v['stock'] if s['amount'] > 0), key=lambda s: s['amount'], default=None)
                 if stock:
                     stock['amount'] -= 1
@@ -1214,7 +1157,6 @@ class Mock:
         if self.state['player']['in_vehicle'] and not any(t['id']==self.state['player']['in_vehicle'] for t in self.life['handtrucks']) and self.dialog == 'closed':
             add(LOCALE['foodtrucks:itempanel_commissary_stock'])
         if not self.state['player']['in_vehicle'] and not self.state['player']['at_hatch'] and self.dialog == 'closed':
-            # The on-foot menu of the mock's vehicle, as if it had been clicked.
             v = next((v for v in self.state['vehicles'] if v['id'] == self.selected), None)
             if v and not v['open']: add(LOCALE['foodtrucks:overlay_open'])
         if self.work and self.dialog=='closed':
@@ -1227,7 +1169,6 @@ class Mock:
                 entries[-1].update({k: v for k, v in entry.items() if k in ('value', 'min', 'max', 'whole_numbers', 'on')})
             return entries
         if self.dialog == 'commissary':
-            # Commissary stock: Fill up, a take per item in stock here, a return per item on board.
             site = self.vehicle()['commissary']['bay_site']
             v=self.vehicle(); name=LOCALE['foodtrucks:commissary_'+site]
             here=[s for s in self.state['commissary']['stock'] if s['site']==site and s['amount']>0]
@@ -1366,7 +1307,6 @@ class Mock:
         angle = math.radians(v['heading'])
         side = -1 if v['hatch_side'] == 'left' else 1
         outward = (side*math.cos(angle), -side*math.sin(angle))
-        # Core CartStance: the symmetric equipment spots share the counter centre.
         centre = (0.0, 0.0)
         candidates = [('behind the cart at the equipment centre, opposite the queue', centre[0]-outward[0]*.85, centre[1]-outward[1]*.85)]
         for placement, dx, dz in candidates:
@@ -1468,7 +1408,6 @@ class Mock:
             self.event(f"Truck window: player stepped out of truck {v['id']} at (0, 0, 0) (stepped out).")
             if not v['crew']:
                 self.event(f"Window {v['id']}: nobody serving the truck; the player left the hatch: stepped out.")
-                # As in game: the notice comes from the next per-minute sales check, not with the step-out.
                 self.__dict__.setdefault('paused_notice', set()).add(v['id'])
         elif op=='close':
             if not v['open']: raise ValueError(f"Vehicle {v['id']} isn't open.")
@@ -1517,8 +1456,6 @@ class Mock:
         notices=[e['text'][8:] for e in self.ring if e['seq']>start and e['kind']=='notice']
         return {'done':done,'why':None if done else why,'notices':notices,'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==v['id'])}
 
-    # Commissary stock's take or return of one item (by key or name), as TransferForTesting: a take loads what the
-    # item's piece still holds, a return gives back all on board (or units). Returns why not, or None.
     def transfer(self, v, direction, item, units):
         if direction not in ('take','return'): return f"direction is take or return, not '{direction}'"
         site=v['commissary']['bay_site']
@@ -1528,7 +1465,6 @@ class Mock:
         if line is None:
             return f"Commissary stock offers no {direction} of '{item}' here ({', '.join(s['key'] for s in source) or 'none'})"
         if direction=='take' and line['key'] in PIECES:
-            # A piece of equipment goes on one at a time, into a free slot.
             fitted = [p['item'] for p in v['pieces']]
             reserved = ECONOMY['vehicles'][v['kind']].get('coolerSlots', 0)
             general = len(fitted) - min(reserved, fitted.count('cooler'))
@@ -1603,8 +1539,6 @@ class Mock:
             if loaded: self.event(LOCALE['foodtrucks:notification_commissary_restocked'].format(vehicle=v['kind'],loaded=', '.join(loaded),full='',left=left),'notice')
             else: self.event(LOCALE['foodtrucks:notification_commissary_restock_full'].format(vehicle=v['kind'],left=left),'notice')
 
-    # The fixture and logistics commands (docs/test-bridge.md): a warehouse, a headquarters and a plan to a commissary,
-    # kept as one record per save; the run moves what is missing up to each target from the warehouse to the commissary.
     FIXTURE_STEPS = ('commissary_space','warehouse','pallets','stock','headquarters','logistics_manager','vehicle','driver','plan')
     ITEM_NAMES = {'ba:itemname_hotdog':'Hotdog'}
 
@@ -1702,7 +1636,6 @@ class Mock:
         self.event(f"Test bridge: logistics run now (the game's 02:00 warehouse deliveries), day {c['day']} {c['time']}: {planned} destinations planned.")
         return {'deliveries':planned,'before':before,'after':plans()}
 
-    # ---- the player's life: clicks on things, the taxi, the phone, eating and furniture ----
     def door(self, address):
         b=next((b for b in CITY if b['key']==address),None)
         if b is None: raise ValueError(f'no building at {address} in this city')
@@ -1748,7 +1681,6 @@ class Mock:
         return sorted(out,key=lambda t:t['distance'])[:40]
 
     def skip(self, minutes, regen=0.):
-        # A time skip: the minutes pass at once, with what they bring (midnight, deliveries); energy builds up meanwhile.
         needs=self.state['player']['needs']
         for _ in range(int(round(minutes))):
             self.tick()
@@ -1808,7 +1740,6 @@ class Mock:
                                           'paid':all(c['paid'] for c in hands['contents']),'held':hands})
                 self.life['hands']=None
             return
-        # The game may load only part of a box, leaving the rest in hands. Mock slots represent whole cargo boxes.
         while hands['contents'] and len(truck['contents'])<truck['capacity']:
             truck['contents'].append(hands['contents'].pop(0))
         if not hands['contents']: self.life['hands']=None
@@ -1875,7 +1806,6 @@ class Mock:
         return (col-2)*.5,(row-2)*.5
 
     def plan_bed_geometry(self,x,z,rotation):
-        # Fake collider and use target, transformed like an ordinary ground item around its anchor.
         angle=math.radians(rotation); cosine=math.cos(angle); sine=math.sin(angle)
         def world(a,b): return x+a*cosine+b*sine,z+b*cosine-a*sine
         polygon=[world(a,b) for a,b in ((-.25,-.25),(.75,-.25),(.75,1.25),(-.25,1.25))]
@@ -2183,7 +2113,6 @@ class Mock:
         return BASIC_HR if (self.life['activity'] or {}).get('course')=='basic_hr' else TUNING['fleet']['course']
 
     def agency_open(self):
-        # The game's order: an active campaign, then the Basic HR course, then a business (the mod adds the fleet).
         life=self.life
         if 'basic_hr' not in life['diplomas']: self.dialog='agency'; life['agency_says']='diploma'; return
         if not self.state['vehicles']: self.dialog='agency'; life['agency_says']='no_business'; return
@@ -2195,7 +2124,6 @@ class Mock:
         return 50.*(AGENCY_DAYS-form['days']+1)*form['candidates']
 
     def life_hour(self):
-        # The game's hourly run (RecruitmentHelper.RunHourly): candidates at their find times, unassigned for the fleet.
         c=self.state['clock']; day=c['day']; hour=int(c['time'][:2]); life=self.life
         for campaign in list(life['campaigns']):
             for when in [w for w in campaign['times'] if w==(day,hour)]:
@@ -2335,7 +2263,6 @@ class Mock:
                 if lic['permits']>=len(self.state['vehicles']): life['city_step']='start'
                 return
 
-    # ---- drive: the player's truck, out of its space, driven by the self-driving mod, parked (docs/test-bridge.md) ----
     DRIVE_RIG='C:/Users/mock/AppData/LocalLow/Hovgaard Games/Big Ambitions/DrivenRides/tests'
 
     def drive_command(self, args):
@@ -2387,7 +2314,6 @@ class Mock:
             if int(what)>len(stops):
                 raise ValueError(f"{identifier} has {len(stops)} stop{'' if len(stops)==1 else 's'} on today's route ({today}); no stop {what}.")
             stop=stops[int(what)-1]; goal=(stop['x'],stop['z'])
-            # A stop in the truck's own commissary's bay is parked in the bay (Commissary.CrewBayStops: within its radius).
             space=next((x['site'] for x in self.state['commissary']['spaces'] if x['vehicle']==identifier),None)
             if space and math.hypot(goal[0]-(393.2+SITES.index(space)*100),goal[1]-217.6)<=15:
                 site=space; goal=(393.2+SITES.index(space)*100,217.6)
@@ -2406,7 +2332,6 @@ class Mock:
     def drive_status(self, advance=True):
         run=self.drive_run
         if run is None: return {'running':False,'phase':'none'}
-        # The mock's ride ends at the first look after its start.
         if advance and run['running']: self.finish_drive(run)
         v=next((x for x in self.state['vehicles'] if x['id']==run['id']),None)
         out={k:copy.deepcopy(val) for k,val in run.items() if not k.startswith('_')}
@@ -2543,7 +2468,6 @@ class Mock:
                 raise ValueError('A screen holds the clock (the phone, the map, a call, an activity or a menu): close it first (ui escape).')
             if until is not None and self.driving():
                 raise ValueError(f'A drive is under way ({self.driving()}), and run_until would end its ride: wait for it (drive status).')
-            # The whole request is checked before anything changes, as the bridge does (review round 6).
             target=None
             if until is not None:
                 day=until.get('day',c['day'])
@@ -2620,10 +2544,8 @@ class Mock:
             if place is None:
                 x,z=num(args,'x'),num(args,'z')
                 if x is None or z is None: raise ValueError('teleport needs "x" and "z", or "place".')
-                # The mock's city is flat: one walkable surface at y 0 (the bridge stacks every ground surface and picks).
                 y=num(args,'y')
                 what='walkable surface' if who=='player' else 'surface'
-                # For the player the bridge checks walking routes from where they stand, when they stand on the NavMesh.
                 far=who=='player' and math.hypot(obj['x']-x,obj['z']-z)>100
                 route=('' if who!='player' else "; walking routes not checked (the player isn't on the NavMesh)" if obj['in_vehicle']
                        else "; walking routes not checked (more than 100 m from the player)" if far else "; walking routes checked from the player's place")
@@ -2685,7 +2607,6 @@ class Mock:
             shared=any(o['site']==site and o['due_day']==tomorrow for o in self.state['commissary']['orders'])
             fee=0.0 if shared else TUNING['commissary']['deliveryFeeCents']/100
             orders=[self.add_order(site,boxes,item=item) for item,boxes in merged.items()]
-            # As the game side: the first order shows the fee this quote adds, paid with it on delivery.
             rows=[{k:order[k] for k in ('n','site','item','units','goods','due_day')} for order in orders]
             for i,row in enumerate(rows):
                 row['fee']=fee if i==0 else 0.0; row['total']=round(row['goods']+row['fee'],2)
@@ -2697,7 +2618,6 @@ class Mock:
             if not self.mod_loaded: raise ValueError("The mod's save data isn't loaded.")
             if not self.can_write: raise ValueError("The mod's save data is read-only.")
             if op=='auto_schedule' and self.plans.get(v['id']):
-                # A route set by address: each of the crew (up to the vehicle's staff) covers each route day, at most 12 hours.
                 route=self.plan_route(v)
                 crew=v['crew'][:STAFF[v['kind']]]
                 shifts=[]
@@ -2712,7 +2632,6 @@ class Mock:
                 v['route']=self.plan_route(v,shifts)
                 return {'done':bool(shifts),'notices':[],'state':next(vehicle for vehicle in self.read_state()['vehicles'] if vehicle['id']==identifier)}
             if op=='auto_schedule':
-                # One crew member covers the stop's hours every day (the mock has no commissary, so no restock or drive back).
                 route=v['route']
                 if route and v['crew']:
                     first=route['week'][0]['route_day']
@@ -2772,7 +2691,6 @@ class Mock:
                 texts=self.state['notices_recent'][-2:] + ([clean(t) for t in self.phone_texts[-20:]] if self.dialog in ('phone','order','confirm','items') else [])
                 if self.dialog=='confirm':
                     goods=self.boxes*750;per=TUNING['commissary']['deliveryFeeCents']/100
-                    # The mock reads back the unshared quote: one flat fee for tomorrow's delivery.
                     fee=per
                     texts=[clean(LOCALE['foodtrucks:dialog_commissary_quote'].format(items='Hotdog',goods=f'${goods:.2f}',fee=f'${fee:.2f}',perDelivery=f'${per:.2f}',total=f'${goods+fee:.2f}',time='08:00'))]
                 if self.dialog in LIFE_DIALOGS: texts=self.life_texts()
@@ -2865,8 +2783,6 @@ class Mock:
             path=self.shots/(name+'.png')
             colour=(180,190,200) if self.state['clock']['time']<'20:00' else (35,45,65)
             png(path,width,height,colour)
-            # The mock has no walls, fades or outlines: a named pose always stands clear (pose_note null), and nothing is
-            # uncovered or outlined.
             reply={'path':str(path),'camera':camera,'pose_note':None,'uncovered':[],'outlined':[],'hovered':[],'asis_path':None,'game_path':None,'game_error':None}
             if args.get('compare'):
                 asis=self.shots/(name+'-asis.png'); png(asis,width,height,colour)

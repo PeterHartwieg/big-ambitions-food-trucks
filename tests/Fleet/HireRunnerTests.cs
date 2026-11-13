@@ -17,10 +17,8 @@ public class HireRunnerTests
     private static ScheduleStop Stop(string key, double x, int open, int close) =>
         new() { Day = DayOfWeek.Wednesday, SpotKey = key, X = x, Z = 0, OpenAt = open, CloseAt = close };
 
-    // Day 3 is a Wednesday.
     private static long At(int day, int hour, int minute = 0) => HireSchedules.Absolute(day, hour * 60 + minute);
 
-    // Stops on Wednesday; the crew on shift around the clock.
     private static VehicleState Truck(params ScheduleStop[] stops) => WeekTestData.AllDay(new VehicleState
     {
         VehicleId = "t1",
@@ -35,7 +33,6 @@ public class HireRunnerTests
     [Fact]
     public void AHiredTruckDrivesOpensClosesAndMovesOn()
     {
-        // 2 km to the office is 80 minutes, 3 km on to the bars 120.
         var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60), Stop("bars", 5000, 18 * 60, 23 * 60));
         runner.EnsurePlan(truck, At(3, 6), 0, 0);
 
@@ -70,7 +67,6 @@ public class HireRunnerTests
         var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60));
         runner.EnsurePlan(truck, At(3, 6), 0, 0);
 
-        // The player left it 1 km from the stop during opening hours: 40 minutes from now.
         var leave = runner.Step(truck, At(3, 12), At(1000));
 
         Assert.Equal(At(3, 12, 40), leave.ArrivesAt);
@@ -126,7 +122,6 @@ public class HireRunnerTests
     [Fact]
     public void WithNobodyOnShiftTheTruckWaitsWhereItIsUntilAShiftStarts()
     {
-        // The shift starts at 10:00, after the planned 9:40 departure: it leaves at 10:00 and opens on arrival at 11:20.
         var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60));
         truck.Schedule!.CrewShifts.Clear();
         WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Wednesday, 10, 13);
@@ -134,7 +129,6 @@ public class HireRunnerTests
 
         var legs = truck.Shifts.Single().Legs;
         Assert.Equal((LegKind.Travel, At(3, 10), At(3, 11, 20)), (legs[0].Kind, legs[0].Start, legs[0].End));
-        // Open only while someone is on shift: until 13:00, not the stop's 14:00.
         Assert.Equal((LegKind.Open, At(3, 11, 20), At(3, 13)), (legs[1].Kind, legs[1].Start, legs[1].End));
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 9, 40), At(0)).Kind);
         Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 10), At(0)).Kind);
@@ -184,7 +178,6 @@ public class HireRunnerTests
         Assert.Equal(ShiftProblem.None, WeekPlan.SetShift(rules, truck, "e1", DayOfWeek.Monday, 8, 12));
 
         Assert.Equal((8, 12), (truck.Schedule.CrewShifts.Single().Start, truck.Schedule.CrewShifts.Single().End));
-        // Monday is day 1: on shift 08:00 to 12:00, not at 12:00.
         Assert.True(WeekPlan.OnShift(truck.Schedule, "e1", At(1, 8)));
         Assert.False(WeekPlan.OnShift(truck.Schedule, "e1", At(1, 12)));
         Assert.True(WeekPlan.OnShift(truck.Schedule, "e1", At(8, 11, 59)));
@@ -210,11 +203,9 @@ public class HireRunnerTests
         runner.EnsurePlan(truck, At(3, 6), 0, 0);
         HireRunner.Depart(truck, runner.Step(truck, At(3, 9, 40), At(0)), At(3, 9, 40), 0, 0, 0, 0);
 
-        // The nearest free space was 50 m on, beyond the 25 m stop radius.
         HireRunner.Arrived(truck, 2050, 0, atStop: true, At(3, 11));
 
         Assert.Equal(HireActionKind.Open, runner.Step(truck, At(3, 11), At(2050)).Kind);
-        // Moved away by someone else, it goes back.
         Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 11), At(2080)).Kind);
     }
 
@@ -225,13 +216,11 @@ public class HireRunnerTests
         runner.EnsurePlan(truck, At(3, 6), 0, 0);
         HireRunner.Depart(truck, runner.Step(truck, At(3, 9, 40), At(0)), At(3, 9, 40), 0, 0, 0, 0);
 
-        // No parking near the office: back where it left from.
         HireRunner.Arrived(truck, 0, 0, atStop: false, At(3, 11, 20));
 
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), At(0)).Kind);
         runner.EnsurePlan(truck, At(3, 14), 0, 0);
         Assert.Null(truck.Skipped);
-        // The plan leaves the office for the bars at 16:40 (2 km, 80 minutes).
         Assert.Equal(HireActionKind.Depart, runner.Step(truck, At(3, 16, 40), At(0)).Kind);
     }
 
@@ -245,7 +234,6 @@ public class HireRunnerTests
         truck.IsOpen = true;
         truck.HireStop = 0;
 
-        // An earlier stop goes in front of the late one after midnight.
         Assert.Equal(ScheduleProblem.None, RouteEditor.AddStop(schedules, truck, Stop("office", 0, 11 * 60, 14 * 60)));
 
         Assert.Equal(1, truck.HireStop);
@@ -256,7 +244,6 @@ public class HireRunnerTests
         Assert.Equal("bars", truck.Schedule!.Stops[HireRunner.Want(truck, At(4, 1))!.StopIndex].SpotKey);
         RouteEditor.RemoveStop(truck, 0);
         Assert.Null(truck.HireStop);
-        // The shifts keep the week plan.
         Assert.Empty(truck.Schedule!.Stops);
         Assert.Null(HireRunner.Want(truck, At(4, 1)));
     }
@@ -269,7 +256,6 @@ public class HireRunnerTests
 
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), new VehicleWhere(0, 0, leaveAlone: false, stayPut: true)).Kind);
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), new VehicleWhere(0, 0, leaveAlone: false, hasStock: false)).Kind);
-        // At the stop, staying put doesn't stop it opening.
         Assert.Equal(HireActionKind.Open, runner.Step(truck, At(3, 12), new VehicleWhere(2000, 0, leaveAlone: false, stayPut: true)).Kind);
     }
 
@@ -281,9 +267,7 @@ public class HireRunnerTests
         var where = new VehicleWhere(0, 0, leaveAlone: false, stayPut: true);
 
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), where).Kind);
-        // Without the player by it, the crew would set off now.
         Assert.True(runner.WouldMove(truck, At(3, 12), where.WithStayPut(false)));
-        // At the stop it opens rather than moves; with nothing to sell it wouldn't leave either.
         Assert.False(runner.WouldMove(truck, At(3, 12), new VehicleWhere(2000, 0, leaveAlone: false)));
         Assert.False(runner.WouldMove(truck, At(3, 12), new VehicleWhere(0, 0, leaveAlone: false, hasStock: false)));
     }
@@ -320,7 +304,6 @@ public class HireRunnerTests
         HireRunner.Depart(truck, runner.Step(truck, At(3, 21), At(0)), At(3, 21), 0, 0, 0, 0);
         runner.EnsurePlan(truck, At(4, 0, 30), 0, 0);
 
-        // No parking until well after midnight: back where it left from.
         HireRunner.Arrived(truck, 0, 0, atStop: false, At(4, 0, 30));
 
         Assert.True(truck.Skipped!.Until <= At(4, 0, 31));
@@ -338,7 +321,6 @@ public class HireRunnerTests
 
         RouteEditor.AddStop(schedules, truck, Stop("bars", 4000, 18 * 60, 23 * 60));
         HireRunner.Replan(truck, At(3, 12));
-        // Planned from where the truck stands, 40 m out: a short leg to the stop it is open at.
         runner.EnsurePlan(truck, At(3, 12), 2040, 0);
 
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 12), At(2040)).Kind);
@@ -395,7 +377,6 @@ public class HireRunnerTests
         var truck = Truck(Stop("office", 2000, 11 * 60, 14 * 60), Stop("bars", 2000, 18 * 60, 23 * 60));
         runner.EnsurePlan(truck, At(3, 6), 2000, 0);
 
-        // The player left it 2 km away at 13:00: 80 minutes back, after 14:00.
         Assert.Equal(HireActionKind.None, runner.Step(truck, At(3, 13), At(0)).Kind);
     }
 

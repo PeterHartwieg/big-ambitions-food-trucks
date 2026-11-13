@@ -18,7 +18,6 @@ scene = bpy.context.scene
 for ob in list(scene.objects):
     if not ob.name.endswith('_Body') and not ob.name.startswith('BaySign_'):
         bpy.data.objects.remove(ob, do_unlink=True)
-# The sign and the props as they ship: their surface-look versions (art/tools/apply_look.sh), when made.
 for name in ('BaySign', 'BayPalletStack', 'BayHandTruck', 'BayRollCage', 'BayDumpster'):
     path = os.path.join(OUT, name + '.blend')
     if not os.path.exists(path):
@@ -32,7 +31,6 @@ for name in ('BaySign', 'BayPalletStack', 'BayHandTruck', 'BayRollCage', 'BayDum
             bpy.data.objects.remove(old, do_unlink=True)
             ob.name = name_
         scene.collection.objects.link(ob)
-# The sign's plate shows Hell's Kitchen, as in game for that commissary.
 plate = bpy.data.objects['BaySign_Plate']
 named = os.path.join(OUT, 'T_BaySign_hells-kitchen_BC.png')
 if plate.data.materials and plate.data.materials[0].name.endswith('_GameLook') and os.path.exists(named):
@@ -42,12 +40,12 @@ if plate.data.materials and plate.data.materials[0].name.endswith('_GameLook') a
             n.image = bpy.data.images.load(named)
     plate.data.materials[0] = m
 
-LANE_W = 2.4          # the parking lane
-PAINT_W = 2.2         # BayZone width: the legal run less the probe boxes
+LANE_W = 2.4
+PAINT_W = 2.2
 LINE = 0.15
 KERB_Y, KERB_H = 1.25, 0.15
 FACADE_Y = 5.25
-SPAN = (-6.5, 6.5)    # one stretch, as in Hell's Kitchen's log
+SPAN = (-6.5, 6.5)
 
 
 def mat(name, rgb, rough=0.9, noise=0.0, scale=4.0):
@@ -91,11 +89,9 @@ slab('Kerb', -30, 30, KERB_Y, KERB_Y + 0.25, -0.1, KERB_H, concrete)
 slab('Pavement', -30, 30, KERB_Y + 0.25, FACADE_Y, -0.1, KERB_H, concrete)
 slab('Facade', -30, 30, FACADE_Y, FACADE_Y + 0.4, 0, 9, brick)
 slab('RollerDoor', -1.6, 1.6, FACADE_Y - 0.05, FACADE_Y, KERB_H, 3.4, door)
-# The driving lane's centre line beyond the parking lane.
 for x in np.arange(-30, 30, 6):
     slab('Dash', x, x + 3, -4.6, -4.48, 0, 0.004, lane_paint)
 
-# The bay outline exactly as BayMarkers.BuildMesh draws it: long edges and end bars, 15 cm lines, 2.5 cm up.
 bm = bmesh.new()
 uv = bm.loops.layers.uv.verify()
 
@@ -117,14 +113,12 @@ outline = bpy.data.objects.new('BayOutline', me)
 scene.collection.objects.link(outline)
 me.materials.append(paint)
 
-# Lettering: 0.70 m cap height, centred on the stretch, reading from the pavement (letters' tops to the road, -Y).
 letters = bpy.data.objects['BayLettering_Body']
 scale = 0.70
 letters.scale = (scale, scale, 1)
 letters.location = (0, 0, 0.013)
-letters.rotation_euler = (0, 0, 0)  # built with the tops to -Y (the road), reading left to right from the pavement
+letters.rotation_euler = (0, 0, 0)
 
-# The sign at the kerb by the bay's middle, plate facing the road; props by the door, against the facade.
 for n in ('BaySign_Pole', 'BaySign_Plate'):
     o = bpy.data.objects[n]
     o.location = (0.0, KERB_Y + 0.45, KERB_H)
@@ -135,7 +129,6 @@ for n, (x, y, rot) in props.items():
     o.location = (x, y, KERB_H)
     o.rotation_euler = (0, 0, rot)
 
-# A box truck stand-in parked in the bay, to judge the scale (5.8 x 2.2 x 3.1 m).
 truck = mat('truck', (0.85, 0.82, 0.70), 0.6)
 slab('Truck', -4.9, 0.9, -1.05, 1.05, 0.35, 3.1, truck)
 for x in (-4.0, 0.0):
@@ -169,7 +162,6 @@ views = {
     'sign': ((1.8, -2.4, 1.7), (0.0, KERB_Y + 0.45, 2.3), 45),
     'props': ((0.5, 1.6, 2.2), (-1.5, FACADE_Y - 0.6, 0.5), 28),
 }
-# Without the truck too, for the paint and lettering.
 paths = []
 for name, (loc, target, lens) in views.items():
     for o in scene.objects:
@@ -183,7 +175,6 @@ for name, (loc, target, lens) in views.items():
     bpy.ops.render.render(write_still=True)
     paths.append(p)
 
-# One sheet of the five views, 2560 x 1440 (the top view in the corner left over).
 sheet = np.zeros((1440 + 720, 2560, 4), dtype=np.float32)
 for i, p in enumerate(paths):
     img = bpy.data.images.load(p)

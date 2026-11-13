@@ -14,7 +14,7 @@ class BuildingUseBindingTests(unittest.TestCase):
         start = source.index('        private static bool UseBuildingClick(')
         method = source[start:source.index('        private static object UseClick(', start)]
         start = source.index('        private sealed class UseNoticeCapture')
-        notice_capture = source[start:source.index('        // An id click', start)]
+        notice_capture = source[start:source.index('        private static bool UseBuildingClick(', start)]
         major = subprocess.check_output(['dotnet', '--version'], text=True).strip().split('.')[0]
         with tempfile.TemporaryDirectory(prefix='ft-building-use-') as folder:
             root = Path(folder)

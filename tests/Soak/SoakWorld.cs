@@ -12,8 +12,6 @@ using Storage = FoodTrucks.Core.Selling.Storage;
 
 namespace FoodTrucks.Core.Tests.Soak;
 
-// Game-owned cargo, positions and balance are plain stand-ins. Core owns all route, service,
-// commissary, wage-hour, ledger and taking decisions. The oracle never calls Core to derive totals.
 internal sealed partial class SoakWorld
 {
     private readonly int seed;
@@ -31,18 +29,12 @@ internal sealed partial class SoakWorld
     private string? atWindow;
     private int nextEmployee;
     private int saves, crewSales, playerSales, routeSales, slept, invalidPlans, crewRestocks, standingBooked;
-    // The drive back to the commissary bay: trips home, those that left after their planned leg (delayed by the player
-    // holding the vehicle, a replan or a gap in the shifts), shift edits at midnight, and the nights each vehicle has
-    // owed the drive back with a fully staffed route.
     private int homeTrips, delayedHome, midnightShiftEdits;
     private readonly Dictionary<string, int> owedNights = new();
-    // Vehicles that had a HomeChance since the last midnight.
     private readonly HashSet<string> homeChance = new();
 
-    // Each commissary's bay in the soak's world.
     private static (double X, double Z) BayAt(string site) => site == "a" ? (0, 0) : (600, 0);
 
-    // The bay of the commissary where the vehicle rents its space: the route day starts and ends there.
     private (double X, double Z)? HomeOf(VehicleState v)
     {
         var site = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == v.VehicleId)?.CommissaryId;
@@ -64,7 +56,6 @@ internal sealed partial class SoakWorld
         public bool Property;
         public double SoldThrough;
         public long RoutedThrough;
-        // Batches carry purchase prices just as game cargo entries do (not averaged).
         public List<Lot> Cargo = new();
     }
     private sealed record Lot(string Item, int Units, long Price);
@@ -114,8 +105,6 @@ internal sealed partial class SoakWorld
             for (var hour = 0; hour < days * 24; hour++)
             {
                 now = hour * 60L;
-                // Normally the preceding hour is complete; injected midnight lag catches up
-                // only after the closing day's payout attempt, before new player actions.
                 CloseHours(hour);
                 if (hour > 0 && hour % 24 == 0)
                 {
@@ -137,7 +126,7 @@ internal sealed partial class SoakWorld
                     {
                         var start = now;
                         RunVehicle(v, boundary - 15);
-                        v = state.Vehicles.Single(v => v.VehicleId == id); // a save may replace it
+                        v = state.Vehicles.Single(v => v.VehicleId == id);
                         if (v.IsOpen && v.Crew.Count > 0 && !(Awake && atWindow == id) &&
                             state.CrewTakings.Any(t => t.VehicleId == id && t.Day == Day && t.Sales > 0))
                             DeferLastMinutes(id, boundary - 15, boundary);
@@ -149,7 +138,6 @@ internal sealed partial class SoakWorld
                 now = boundary;
                 CheckWorld();
             }
-            // Stop at a random minute of the last day: uninstall must pay today's waiting sales too.
             Uninstall();
             Require(heldAtMidnight == delayedPayDay.Count && delayedPayouts == delayedPayDay.Count,
                 "a deferred day was not held and then paid exactly once at a later midnight");
@@ -174,12 +162,10 @@ internal sealed partial class SoakWorld
         {
             case 0: Order(v); break;
             case 1:
-                // Travel to a bay is game-owned. Never teleport an in-transit or open vehicle.
                 if (v.Transit == null && !v.IsOpen) { van.Bay = random.Next(2) == 0 ? "a" : "b"; (van.X, van.Z) = BayAt(van.Bay); van.Property = false; Restock(v, van.Bay); }
                 break;
             case 2: if (v.Transit == null && !v.IsOpen) { atWindow = v.VehicleId; Open(v, null, now + random.NextDouble()); } break;
             case 3: Close(v); break;
-            // At the window, or standing by a closed vehicle (the crew leaves it where it is: a delayed drive).
             case 4: if (v.IsOpen || v.Transit == null) atWindow = v.VehicleId; break;
             case 5: atWindow = null; break;
             case 6: ChangeRoute(v); break;
@@ -207,7 +193,6 @@ internal sealed partial class SoakWorld
         }
     }
 
-    // One day's stops, on the weekdays the kind runs (every day for 0 and 1).
     private HireSchedule NewRoute(int kind, Action<List<ScheduleStop>>? change = null)
     {
         ScheduleStop Stop(string name, int open, int close) => new() { SpotKey = name, X = random.Next(0, 500),
@@ -222,7 +207,6 @@ internal sealed partial class SoakWorld
         return new HireSchedule { Stops = FoodTrucks.Core.Tests.Fleet.WeekTestData.On(day, days.ToArray()) };
     }
 
-    // The crew's shifts from the auto schedule; now and then one shift is left out, so the route waits for a shift.
     private void Staff(VehicleState v)
     {
         if (v.Schedule == null) return;
@@ -235,7 +219,6 @@ internal sealed partial class SoakWorld
     private void ChangeRoute(VehicleState v)
     {
         if (v.Schedule == null || v.Schedule.Stops.Count == 0) { v.Schedule = NewRoute(random.Next(4)); Staff(v); }
-        // Edits use RouteEditor, preserving yesterday's late legs and remapping indices.
         var before = codec.Serialize(state);
         var index = random.Next(v.Schedule.Stops.Count);
         var open = random.Next(48) * 30;
@@ -258,7 +241,6 @@ internal sealed partial class SoakWorld
             Staff(v);
             HireRunner.Replan(v, now);
         }
-        // Malformed older saves enter through public state. Probe a copy, not a live edited route.
         var probe = random.Next(4);
         var bad = new VehicleState { VehicleId = "old", VehicleType = v.VehicleType, Crew = new() { "probe" }, Schedule = NewRoute(0, stops =>
         {
@@ -299,13 +281,11 @@ internal sealed partial class SoakWorld
             var homeNow = HomeChance(v, t, home);
             for (var guard = 0; guard < 4; guard++)
             {
-                // In the bay of its own commissary space with stock there: the crew may restock (CrewRestock).
                 var ownBay = van.Bay != null && state.Commissary.Spaces.Any(s => s.VehicleId == v.VehicleId && s.CommissaryId == van.Bay);
                 var action = runner.Step(v, t, new VehicleWhere(van.X, van.Z, van.Property,
                     hasStock: Stock(v).Values.Any(n => n > 0), stayPut: Awake && atWindow == v.VehicleId,
                     canRestock: ownBay, stockKey: ownBay ? CrewRestock.StockKey(ShippedData.Tables, v.VehicleType, Lines(v), Available(van.Bay!)) : null,
                     home: home));
-                // Free to drive back, owing it, with crew on shift for the whole drive: it goes now.
                 if (guard == 0 && homeNow)
                     Require(action.Kind == HireActionKind.Depart && action.Stop == HireSchedules.HomeIndex,
                         $"an owed drive back didn't leave with crew on shift for all of it: {v.VehicleId} got {action.Kind} {action.Stop}");
@@ -315,7 +295,6 @@ internal sealed partial class SoakWorld
                 {
                     case HireActionKind.Close: Close(v); break;
                     case HireActionKind.Depart:
-                        // A drive only with someone on shift all the way (review round 1).
                         Require(WeekPlan.CoverageOf(v.Schedule, v.Crew, t - 1440, action.ArrivesAt + 1440).Earliest(t, action.ArrivesAt - t, action.ArrivesAt) == t,
                             "a drive left without crew on shift for all of it");
                         var toHome = action.Stop == HireSchedules.HomeIndex;
@@ -334,7 +313,6 @@ internal sealed partial class SoakWorld
                         var homeTrip = transit.ToSpotKey == HireSchedules.HomeSpotKey;
                         van.X = fits ? transit.ToX + (v.VehicleType == "truck" && !homeTrip ? 35 : 0) : transit.FromX;
                         van.Z = fits ? transit.ToZ : transit.FromZ;
-                        // Back in the bay of its space (if it still rents one there).
                         if (fits && homeTrip) van.Bay = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == v.VehicleId)?.CommissaryId;
                         HireRunner.Arrived(v, van.X, van.Z, fits, t); break;
                     case HireActionKind.Open:
@@ -347,7 +325,6 @@ internal sealed partial class SoakWorld
                         break;
                 }
             }
-            // A crew window never stays open with nobody on shift (the step just closed it otherwise).
             Require(!(v.IsOpen && v.HireStop != null) || WeekPlan.OnShiftCrew(v, t).Count > 0 || (van.Property && !v.IsOpen),
                 "a crew window stayed open with nobody on shift");
             var next = until;
@@ -361,14 +338,10 @@ internal sealed partial class SoakWorld
             now = t;
             if (t == saveAt) { SaveLoad(); v = state.Vehicles.Single(x => x.VehicleId == v.VehicleId); }
         }
-        // The route cursor and the open window's sales clock are separate, as in
-        // CartSelling.SoldThroughOf. Only Advance moves the open window's clock.
         van.RoutedThrough = until;
         now = hourStart;
     }
 
-    // Whether the vehicle stands idle away from its bay owing the drive back with nothing planned, free to go (no skip,
-    // not held by the player) and with crew on shift for the whole drive from now; noted for CheckOwedReturns.
     private bool HomeChance(VehicleState v, long t, (double X, double Z)? home)
     {
         var van = vans[v.VehicleId];
@@ -410,7 +383,6 @@ internal sealed partial class SoakWorld
         var van = vans[v.VehicleId];
         if (!v.IsOpen || v.Service == null) return;
         var player = Awake && atWindow == v.VehicleId && PlayerServing.Serves(v.VehicleType, true, 0, 8);
-        // Only the crew on shift serve.
         var team = CrewPay.Team(WeekPlan.OnShiftCrew(v, from).Select(e => (e, 60.0)), player ? 80.0 : (double?)null, ShippedData.Tables.Vehicle(v.VehicleType)!.Staff,
             playerHeld: v.VehicleType == "truck");
         var serviceTeam = ShippedData.Rules.Service.Team(team.Skills);
@@ -446,7 +418,6 @@ internal sealed partial class SoakWorld
                 SalesLedger.RecordCost(state, day, v.VehicleId, cost);
                 Add(revenue, (v.VehicleId, day), price); Add(costs, (v.VehicleId, day), cost);
                 Add(sold, sale.Item, 1);
-                // Every window sale waits for midnight, including the player's. Only the coverage counters differ.
                 Require(!paidTakings.Contains((v.VehicleId, day)), "sale arrived after its day was paid");
                 if (day < liveDay) lateCrewSales++;
                 CrewTakings.Accrue(state, v.VehicleId, day, price);
@@ -460,9 +431,6 @@ internal sealed partial class SoakWorld
         }
     }
 
-    // HireRunner.Step keeps an already-open window at its stop during a replan's
-    // approach leg. That leg is a planning artefact, not an actual departure.
-    // Preserve the hours check: merely naming the same stop must not allow early sales.
     internal static bool RouteSaleAllowed(VehicleState v, long minute)
     {
         if (!v.IsOpen || v.HireStop == null || v.Transit != null) return false;
@@ -473,8 +441,6 @@ internal sealed partial class SoakWorld
         var opening = plan.Legs.FirstOrDefault(l => l.Kind == LegKind.Open &&
             l.StopIndex == v.HireStop && l.End > minute);
         if (opening == null) return false;
-        // The stop's hours on the plan's own day, yesterday's for a late stop replanned after midnight (soak seed 35:
-        // the shifts scheduled again at 00:00 put a restock leg before a bay stop open since 23:30).
         var starts = HireSchedules.Absolute(plan.Day, v.Schedule!.Stops[v.HireStop.Value].OpenAt);
         return minute >= starts && minute < opening.End;
     }
@@ -496,7 +462,7 @@ internal sealed partial class SoakWorld
         Require(loaded.Status == LoadStatus.Loaded, "load failed: " + loaded.Error);
         Require(loaded.State!.SchemaVersion == SaveState.CurrentSchemaVersion, "save version is not current");
         Require(JToken.DeepEquals(JToken.Parse(json), JToken.Parse(codec.Serialize(loaded.State))), "save/load changed state");
-        state = loaded.State; // Never keep a pre-load Core reference; game-owned cargo/pose/balance survives separately.
+        state = loaded.State;
         saves++;
         Note("save/load; continue with loaded Core state");
     }
@@ -506,7 +472,6 @@ internal sealed partial class SoakWorld
         CrewPay.Prune(state, hour);
         foreach (var v in state.Vehicles)
         {
-            // Each crew member is paid every hour of their own shift (the week plan), worked or idle.
             foreach (var e in v.Crew)
                 if (WeekPlan.OnShift(v.Schedule, e, hour * 60) && CrewPay.TryPay(state, e, hour)) Credit(e, v.VehicleId, hour);
         }
@@ -551,8 +516,6 @@ internal sealed partial class SoakWorld
         var due = all ? CrewTakings.All(state) : CrewTakings.Due(state, Day, SoldThroughOf);
         if (!all)
         {
-            // Payment deadlines are an independent oracle, set when lag is injected;
-            // do not derive the expected due set from Core's sold-through filter.
             var expected = takingsOracle.Keys.Where(k => !paidTakings.Contains(k) && k.Item2 < Day &&
                 PaymentDay(k) <= Day).OrderBy(k => k.Item2).ThenBy(k => k.Item1, StringComparer.Ordinal);
             Require(expected.SequenceEqual(due.Select(t => (t.VehicleId, t.Day))),
@@ -633,8 +596,6 @@ internal sealed partial class SoakWorld
         Require(SalesLedger.SumCents(state, first, day) == revenue.Where(p => p.Key.Item2 >= first && p.Key.Item2 <= day).Sum(p => p.Value), "tax period total differs");
     }
 
-    // At midnight now and then: a vehicle's shifts are scheduled again (the night's coverage changes while a late stop or
-    // a drive back may be running); every unfinished plan is planned again.
     private void MidnightShiftEdit()
     {
         if (random.Next(3) != 0) return;
@@ -658,12 +619,8 @@ internal sealed partial class SoakWorld
             var owed = v.ReturnPending && v.Transit == null && !v.IsOpen && home != null && !van.Property && atWindow != v.VehicleId &&
                        v.Crew.Count > 0 && (v.Schedule?.CrewShifts.Count ?? 0) > 0 && runner.RouteProblems(v, 1.0, home).Count == 0;
             var chance = homeChance.Remove(v.VehicleId);
-            // Out at a late stop or with stops still ahead at midnight isn't owing yet; that night isn't counted.
             var busy = HireRunner.Want(v, now) != null || v.Shifts.Any(p => p.Legs.Any(l => l.StopIndex != HireSchedules.HomeIndex && l.End > now));
             if (owed && busy) continue;
-            // A night counts only when the crew had a free chance to drive back during the day before it (homeChance):
-            // shifts with days off, the player keeping the vehicle, or a failed arrival whose retry falls after the
-            // shift's end leave none, and the runner rightly never drives without crew on shift for the whole drive.
             if (owed && !chance) continue;
             owedNights[v.VehicleId] = owed ? owedNights.GetValueOrDefault(v.VehicleId) + 1 : 0;
             Require(owedNights[v.VehicleId] <= 2, $"a fully staffed vehicle owed the drive back for three nights: {v.VehicleId} at x {van.X}, z {van.Z}, bay {van.Bay}, home {home}, " +

@@ -11,12 +11,6 @@ using UnityEngine.AI;
 
 namespace FoodTrucks
 {
-    // The cart's idle serving stance, owned by CartSelling. Unlike the enclosed truck hatch, this is on
-    // walkable ground: keep the live player agent/collider and let the game's next navigation command release
-    // the stance. Never use ThirdPersonCharacter.ForceToPosition for the player: it leaves physics kinematic
-    // and the agent's updatePosition/updateRotation off (1.0). No attachment or navigation blocker is needed.
-    // The place is Core's CartStance: behind the cart at the fitted equipment midpoint, facing the customers,
-    // worked out in the cart's frame and carried into the world by its live transform, as WindowCrew does for the crew.
     internal sealed class CartServing
     {
         private PlayerController? player;
@@ -67,7 +61,6 @@ namespace FoodTrucks
                 Log.Info($"Cart serving: {id}: no safe reachable serving point behind the counter; player left where they stand.");
                 return;
             }
-            // Face across the working centre towards the customers.
             var centre = CartStanceWorld.WorkAlong(controller.transform);
             var look = behindCart && CartStance.FacesAcross(CartStanceWorld.Along(controller.transform, spot), centre)
                 ? spot + CartStanceWorld.Facing(controller.transform, side)
@@ -79,8 +72,8 @@ namespace FoodTrucks
             try
             {
                 target.transform.SetPositionAndRotation(spot, turn);
-                who.ResetNavigation(); // discard the old handle/storage/interaction goal before the warp
-                PlayerHelper.Teleport(target.transform); // 1.0: NavMeshAgent.Warp plus player rotation
+                who.ResetNavigation();
+                PlayerHelper.Teleport(target.transform);
             }
             finally { UnityEngine.Object.Destroy(target); }
             if (!agent.isOnNavMesh || Vector3.Distance(who.transform.position, spot) > 0.1f)
@@ -103,10 +96,6 @@ namespace FoodTrucks
             Log.Info($"Cart serving: {id}: player placed {placement} at {spot}, queue on the {(side > 0 ? "right" : "left")}, facing the window at {look}; pedestrian ground, off street, complete player path (agent {filter.agentTypeID}); idle stance held until walking or closing.");
         }
 
-        // Stand opposite the customers at the working centre. A
-        // kerbside cart's opposite side can be the road: player-mesh membership alone is not evidence of pavement.
-        // Every result must also be on the NPC mesh, pass the queue's street exclusions and have a complete path
-        // from the live player. behindCart: the spot is on the side opposite the customers.
         internal static bool ServingPoint(Transform cart, int side, float radius, Vector3 start,
             NavMeshQueryFilter filter, TrafficLanes lanes, out Vector3 spot, out string placement, out bool behindCart)
         {
@@ -116,8 +105,6 @@ namespace FoodTrucks
                 out spot, out placement, out behindCart);
         }
 
-        // PlayerController emits this for both click/SetGoal navigation and WASD starting. Release without
-        // ResetNavigation: the new destination/action belongs to the game and must be allowed to finish.
         private void OnNavigation()
         {
             if (vehicleId != null) ServingWork.BeforeLeaving(vehicleId);
@@ -166,8 +153,6 @@ namespace FoodTrucks
                     OnNavigation();
                     return;
                 }
-                // Keep idle avoidance/physics from turning or nudging the server out of their place. All agent,
-                // collider and physics flags remain the game's; the next navigation event ends this immediately.
                 if ((who.transform.position - position).sqrMagnitude > 0.0001f && !agent.Warp(position))
                 {
                     Release("the serving point is no longer walkable");

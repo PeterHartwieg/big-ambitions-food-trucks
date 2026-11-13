@@ -53,7 +53,6 @@ public class CustomerPickTests
     public void ZeroSharesChooseTheCategoryWithMostTotalUnits(double roll)
     {
         var shares = new Dictionary<string, double> { ["coffee"] = 0, ["fastfood"] = 0, ["pizza"] = 0 };
-        // Fast food wins on category total (13), then hot dog wins within it (7).
         var stock = new Dictionary<string, int> { [Coffee] = 10, [Burger] = 6, [HotDog] = 7, [Pizza] = 12 };
 
         Assert.Equal(HotDog, CustomerPick.MainItem(ShippedData.Tables, shares, stock, roll));

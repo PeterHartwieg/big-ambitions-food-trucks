@@ -14,7 +14,6 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def install(package, manifest, game_root):
-    # pgrep exit 1 means no match; all other failures must fail closed.
     process = subprocess.run(['pgrep', '-f', r'/Big Ambitions\.app/Contents/MacOS/'],
                              capture_output=True, text=True)
     if process.returncode == 0:
@@ -30,10 +29,8 @@ def install(package, manifest, game_root):
     if target.exists() and not target.is_dir():
         raise ValueError('ModsLocal/FoodTrucks exists and is not a directory')
     game_root.mkdir(parents=True, exist_ok=True)
-    # Staging is outside ModsLocal: the loader must never see two copies of FoodTrucks.
     with tempfile.TemporaryDirectory(prefix='FoodTrucks-stage-', dir=game_root) as staging:
         incoming = Path(staging) / 'FoodTrucks'
-        # Check source before copy, then the exact staged bytes before replacing anything.
         verify(package, manifest)
         shutil.copytree(package, incoming, symlinks=True)
         verify(incoming, manifest)

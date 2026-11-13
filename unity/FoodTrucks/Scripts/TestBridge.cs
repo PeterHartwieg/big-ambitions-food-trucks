@@ -12,13 +12,6 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // The test bridge (docs/test-bridge.md): HTTP on 127.0.0.1:8330 inside the game, so an agent on the Mac can drive and
-    // read the game through an ssh tunnel. Only when the game was started with -foodtrucks-test; without the flag nothing
-    // listens and the game behaves as before. It starts at the mod's initialisation load, so it answers at the main menu,
-    // and stops when the mod unloads.
-    //
-    // Threads: the HTTP thread (TestBridgeHttp) never touches the game. /health and /events read values the main thread
-    // writes (Snapshot, TestBridgeEvents); /call queues its command for the main thread (TestBridgePump) and waits.
     internal static class TestBridge
     {
         internal const string Flag = "-foodtrucks-test";
@@ -30,10 +23,8 @@ namespace FoodTrucks
 
         internal static bool Running => http != null;
 
-        // A new random id at each start, in every reply: a client sees from a change that the game (or the mod) restarted.
         internal static volatile string Session = "";
 
-        // The values /health answers with, refreshed by the main thread every frame. Replaced whole, never changed.
         internal sealed class Snapshot
         {
             public string Scene = "menu";
@@ -49,7 +40,6 @@ namespace FoodTrucks
 
         internal static volatile Snapshot Current = new Snapshot();
 
-        // The Unity main thread, where the game's clock may be read directly.
         internal static int MainThread = -1;
 
         internal static void Start()
@@ -72,7 +62,6 @@ namespace FoodTrucks
                 server.Start();
                 http = server;
                 Patches.ApplyTestBridge();
-                // An agent drives the game while its window may not have the focus.
                 Application.runInBackground = true;
                 Log.Info($"Test bridge: listening on http://127.0.0.1:{Port}/ (session {Session}).");
             }
@@ -85,8 +74,6 @@ namespace FoodTrucks
 
         internal const string StoppedText = "the bridge stopped";
 
-        // Stops taking calls, fails every queued and pending one, releases what they hold and clears the bridge's state,
-        // so a start after a mod re-enable begins clean.
         internal static void Stop()
         {
             CrewDriveProbe.StopAll("Test bridge stopped");
@@ -95,7 +82,6 @@ namespace FoodTrucks
             try { http?.Stop(); }
             catch (Exception ex) { Log.Error("Test bridge, stopping: " + ex.Message); }
             http = null;
-            // Before the pump (and the coroutines that would restore them) goes.
             try { TestBridgeCommands.RestoreAllInterpolation(); }
             catch (Exception ex) { Log.Error("Test bridge, restoring interpolation: " + ex.Message); }
             if (pump != null) Object.Destroy(pump.gameObject);
@@ -115,8 +101,6 @@ namespace FoodTrucks
             if (wasRunning) Log.Info("Test bridge: stopped.");
         }
 
-        // Every /call is an operation with a number, kept with its outcome (all pending and the last OpsKept completed), so a client whose call
-        // timed out can ask what became of it (cmd "op") instead of running it again.
         private sealed class Op
         {
             public long Id;
@@ -132,7 +116,6 @@ namespace FoodTrucks
         private static readonly Queue<long> opOrder = new Queue<long>();
         private static long nextOp = 1;
 
-        // Runs a /call on the main thread and waits up to timeoutSeconds for its reply. Runs on an HTTP thread.
         internal static JObject Call(string cmd, JObject args, double timeoutSeconds, int generation)
         {
             try
@@ -189,8 +172,6 @@ namespace FoodTrucks
                     op.Status = "done";
                     op.Result = task.Result;
                 }
-                // A pending mutation must stay recoverable even when newer reads finish first.
-                // Stop clears the registry; a late continuation must not repopulate its retention queue.
                 if (ops.TryGetValue(op.Id, out var retained) && ReferenceEquals(retained, op))
                 {
                     opOrder.Enqueue(op.Id);
@@ -199,7 +180,6 @@ namespace FoodTrucks
             }
         }
 
-        // { "cmd": "op", "args": { "id": N } }: answered on the HTTP thread, whatever the main thread is doing.
         private static JObject OpStatus(JObject args)
         {
             var id = TestBridgeCommands.Num(args, "id");
@@ -217,7 +197,6 @@ namespace FoodTrucks
 
         internal static JObject Fail(string error) => new JObject { ["ok"] = false, ["error"] = error };
 
-        // Called every frame on the main thread.
         internal static void Refresh()
         {
             var game = SaveGameManager.Current;
@@ -241,8 +220,6 @@ namespace FoodTrucks
             WatchClock(game, scene);
         }
 
-        // The game's clock now, for an event's stamp: read directly on the main thread in the city (so a line logged
-        // after the clock moved this frame carries the moved clock), else the frame's snapshot.
         internal static (int? Day, string? Time) ClockNow()
         {
             if (Thread.CurrentThread.ManagedThreadId == MainThread)
@@ -258,10 +235,6 @@ namespace FoodTrucks
             return (s.Day, s.Time);
         }
 
-        // Clock jumps: the clock moving more than JumpMinutes in one frame (or backwards), as a time skip, a hospital
-        // stay or something setting the time does. Live session 4 (13 October 2026) saw an event stamped day 1 08:44
-        // and /health say 11:47 a few seconds later; both read the same clock (this snapshot), so the clock itself had
-        // jumped between them. Each run of jumps is logged once it has settled for a second, with what was running.
         private const double JumpMinutes = 30;
         private static double? lastMinutes;
         private static (double From, double To, string Why, float Settled)? jump;
@@ -323,14 +296,11 @@ namespace FoodTrucks
         }
     }
 
-    // A command's refusal: the reply is ok: false with this message.
     internal sealed class BridgeError : Exception
     {
         public BridgeError(string message) : base(message) { }
     }
 
-    // A command whose result comes in a later frame (a save finishing, a teleport out of a building): the pump asks
-    // Poll every frame until it returns the result or throws.
     internal sealed class Deferred
     {
         public Deferred(Func<JToken?> poll, Action? onStop = null)
@@ -340,26 +310,19 @@ namespace FoodTrucks
         }
 
         public Func<JToken?> Poll { get; }
-        // Run when the bridge stops before the result came, or when Poll throws (the shot's camera and texture go).
         public Action? OnStop { get; }
     }
 
-    // A hidden object that lives across scenes and runs the bridge's work on the main thread each frame: queued calls,
-    // the /health snapshot, run_until and the bridge's own coroutines (load, quit).
     internal sealed class TestBridgePump : MonoBehaviour
     {
-        // Each queued call carries the generation it was admitted under; a stop moves to the next one, and the pump fails
-        // anything from an earlier generation. Admission and the stop share one lock, so nothing slips in between.
         private static readonly ConcurrentQueue<(Func<object?> Work, TaskCompletionSource<JToken?> Done, int Generation)> queue =
             new ConcurrentQueue<(Func<object?>, TaskCompletionSource<JToken?>, int)>();
         private static readonly object admission = new object();
         private static int generation;
-        // Set when the bridge stops: no new work is taken.
         internal static volatile bool Stopped;
 
         internal static int Generation => Volatile.Read(ref generation);
 
-        // The bridge starts (again): calls are taken under the current generation.
         internal static void Admit()
         {
             lock (admission) Stopped = false;
@@ -374,10 +337,8 @@ namespace FoodTrucks
             return go.AddComponent<TestBridgePump>();
         }
 
-        // Calls in progress whose result comes later (Deferred), with their waiters.
         private static readonly List<(Deferred Work, TaskCompletionSource<JToken?> Done)> pending = new List<(Deferred, TaskCompletionSource<JToken?>)>();
 
-        // `admitted`: the generation the request came in under; refused if that generation has ended since.
         internal static Task<JToken?> Run(Func<object?> work, int admitted)
         {
             var done = new TaskCompletionSource<JToken?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -401,7 +362,6 @@ namespace FoodTrucks
             catch (Exception ex) { TestBridgeCommands.RefreshOwnership(); done.SetException(ex); }
         }
 
-        // The bridge stops: every queued and pending call fails, and what pending ones hold is released.
         internal static void FailAll(string why)
         {
             lock (admission)
@@ -434,8 +394,6 @@ namespace FoodTrucks
                 catch (Exception ex)
                 {
                     pending.RemoveAt(i);
-                    // A failed call releases what it holds too (a shot's camera and texture), not only a stopped one
-                    // (review round 10, Sol). Every OnStop is safe to run twice.
                     try { work.OnStop?.Invoke(); }
                     catch (Exception cleanup) { Log.Error("Test bridge, releasing a failed call: " + cleanup.Message); }
                     done.TrySetException(ex);
@@ -457,7 +415,6 @@ namespace FoodTrucks
             try { TestBridgeCommands.EveryFrame(); }
             catch (Exception ex) { Once("every frame", ex); }
             PollPending();
-            // Calls queued by the HTTP thread; each one answers its own waiter, errors included.
             var n = 0;
             while (n++ < 50 && queue.TryDequeue(out var item))
             {

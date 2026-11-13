@@ -31,8 +31,6 @@ class WindowCrewTests(unittest.TestCase):
             self.assertIn('PASS: window crew at the cart equipment midpoint and the truck hatch', ran.stdout)
 
 
-# Stand-ins only. Transform follows Unity's convention for a vehicle turned about the vertical (yaw in radians):
-# right (cos, 0, -sin), forward (sin, 0, cos), TransformPoint = position + right*x + up*y + forward*z.
 HARNESS = r'''
 using UnityEngine;
 using UnityEngine.AI;

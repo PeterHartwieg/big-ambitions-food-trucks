@@ -12,8 +12,6 @@ namespace FoodTrucks.Core.Demand
         public DemandDataException(string message) : base(message) { }
     }
 
-    // Strict reads over a parsed data file. Every failure names the file and the JSON path.
-    // Keys starting with an underscore are notes and never read.
     internal sealed class DataReader
     {
         private readonly string file;
@@ -68,7 +66,6 @@ namespace FoodTrucks.Core.Demand
             return true;
         }
 
-        // Rejects keys the schema does not know, so a typo fails instead of silently reading 1.0.
         public void OnlyKeys(JObject obj, params string[] allowed)
         {
             foreach (var property in obj.Properties())
@@ -79,7 +76,6 @@ namespace FoodTrucks.Core.Demand
             }
         }
 
-        // Properties that are data, in file order, without notes.
         public IEnumerable<JProperty> Entries(JObject obj)
         {
             foreach (var property in obj.Properties())
@@ -133,7 +129,6 @@ namespace FoodTrucks.Core.Demand
         {
             if (token.Type != JTokenType.Integer && token.Type != JTokenType.Float)
                 throw Fail(path, "must be a number");
-            // Integers beyond long arrive as BigInteger, which Value<double>() can't convert.
             if (!(((JValue)token).Value is IConvertible))
                 throw Fail(path, $"must be between {Format(min)} and {Format(max)}");
             var value = token.Value<double>();

@@ -1,13 +1,3 @@
-// The small-store yardstick: Big Copilot's validated Open a store model, run unchanged over the
-// city's small retail buildings at the game's default difficulty.
-//
-//   node tools/balance/store/store_yardstick.cjs PAYLOAD.json [--big-copilot ~/big-copilot] [--json OUT]
-//
-// PAYLOAD.json comes from extract_payload.py. The model file and the product data are read from
-// Big Copilot; nothing there is changed. What this script changes, and only in its own copy of the
-// facts: the difficulty (customer promotion 0.5, prices and wages 1.0: GameVariables' code
-// defaults), the cost of goods (the plain wholesale price, import index 1.0, no purchasing agent),
-// and the player's own shops (dropped, so satisfaction is the model's well-run default of 95).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -23,7 +13,6 @@ const rules = JSON.parse(fs.readFileSync(path.join(bc, "ba_store_rules.json"), "
 const itemPrices = JSON.parse(fs.readFileSync(path.join(bc, "ba_item_prices.json"), "utf8")).items;
 const P = JSON.parse(fs.readFileSync(payloadFile, "utf8"));
 
-// --- facts at the default difficulty ---------------------------------------------------------
 function factsFor({freshMarket}){
   const F = JSON.parse(JSON.stringify(P.openStore));
   F.game = {...F.game, promo: 0.5, prices: 1.0, wages: 1.0, tax: 10};
@@ -38,12 +27,9 @@ function factsFor({freshMarket}){
 }
 
 const price = item => (itemPrices[item] || {}).p || 0;
-const COUNTER = 400;   // Square Appliances' counter top (opener research, 23 Sep 2026)
+const COUNTER = 400;
 const REGISTER = price("ba:itemname_cashregister");
 
-// Starter shops: the fewest items a beginner opens with. Equipment from ba_item_prices.json,
-// one box of each product at wholesale. counters = counter tops for the register and each
-// counter-mounted machine.
 const STARTERS = {
   "hot dogs + soda": {slug: "ba:businesstype_fastfoodrestaurant", products: ["ba:itemname_hotdog", "ba:itemname_sodacan"],
     equipment: ["ba:itemname_hotdoggrill", "ba:itemname_drinksfridge"], counters: 2},
@@ -98,14 +84,12 @@ const out = {difficulty: "code defaults: promotion 0.5, prices 1.0, wages 1.0, t
 for(const fresh of [false, true]){
   const F = factsFor({freshMarket: fresh});
   const market = fresh ? "no other sellers" : "save's sellers";
-  // 1. The validated configuration: whole range, 24/7, best marketing (Big Copilot's planner default).
   for(const slug of ["ba:businesstype_fastfoodrestaurant", "ba:businesstype_coffeeshop"]){
     const api = make(F);
     const rows = buildings.map(b => ({b, m: best(api, slug, b, {}), inv: api.model.investment({type: slug}, b)})).filter(r => r.m);
     out.runs.push(summary(`${slug.replace("ba:businesstype_", "")}, full range, 24/7, best marketing`, market, rows,
       r => r.inv ? r.inv.self : NaN));
   }
-  // 2. Starter shops: few products, open 06:00 to 22:00, no marketing, the model's staffing cost.
   for(const [name, s] of Object.entries(STARTERS)){
     const api = make(starterFacts(F, s));
     const rows = buildings.filter(b => b.size === "A").map(b => ({b, m: api.model.model(s.slug, b, {open: OPEN_06_22}), inv: starterInvestment(s, b)}))

@@ -7,13 +7,10 @@ namespace FoodTrucks.Core.Selling
 {
     public enum TransferKind
     {
-        // From the commissary's stock into the vehicle.
         Take,
-        // From the vehicle back into the commissary's stock.
         Return
     }
 
-    // One line of the bay's Commissary stock list: "Take Hotdog: 1,200 here", "Return Griddle: 1 on board".
     public sealed class TransferChoice
     {
         internal TransferChoice(TransferKind kind, string item, bool isPiece, int units, int most, LoadRefusal refusal)
@@ -28,27 +25,14 @@ namespace FoodTrucks.Core.Selling
 
         public TransferKind Kind { get; }
         public string Item { get; }
-        // A piece of equipment, moved one at a time; otherwise a food, moved by the unit.
         public bool IsPiece { get; }
-        // Take: the units at the commissary. Return: the units on board that can go back.
         public int Units { get; }
-        // Take: the most that loads now (a piece: 0 or 1). Return: all of Units.
         public int Most { get; }
-        // Take: why Most is short of what was asked (Storage.Check's reason); None for a return.
         public LoadRefusal Refusal { get; }
     }
 
-    // The two-way stock transfer at a commissary's bay (plan, "UI flow: the vehicle panel holds only cargo"; Peter,
-    // 15 October 2026). Replaces Restock: the player picks what to take or give back. Loads follow storage per piece
-    // (Storage.Check), so a take never asks for more than fits; a piece that leaves sends back the food that no
-    // longer fits without it. Decides only; the game side moves the cargo and the stock.
     public static class StockTransfer
     {
-        // Every choice the list offers: a take for each item in stock here (foods, then pieces), a return for each food
-        // on board and each fitted piece. `stock` is the commissary's units by item; `onBoard` the vehicle's units that
-        // can go back by item (the game leaves out unpaid and sealed stacks, and nested ones except a fitted piece, which
-        // goes back with what it holds). Every item in stock can be taken, the contents a stocked piece came back with
-        // included; on board, items that are neither a food nor a piece of equipment aren't the commissary's business.
         public static IReadOnlyList<TransferChoice> Choices(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo,
             IReadOnlyDictionary<string, int> stock, IReadOnlyDictionary<string, int> onBoard)
         {
@@ -72,8 +56,6 @@ namespace FoodTrucks.Core.Selling
             return choices;
         }
 
-        // How many of the item load now when `wanted` are asked for, and why not all: the same rule as every other load
-        // (CargoLimit), so the game's own refusal never fires on a take.
         public static LoadCheck Take(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo, string item, int wanted)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
@@ -82,8 +64,6 @@ namespace FoodTrucks.Core.Selling
             return Storage.Check(tables, vehicleType, cargo, item, Math.Max(0, wanted), false);
         }
 
-        // Fill up: food only, as Restock filled it (Storage.Restock: each fitted piece from its foods, a shared piece
-        // split evenly by weight). Equipment in stock stays; a piece is fitted only when picked by name.
         public static RestockPlan FillUp(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo, IReadOnlyDictionary<string, int> stock)
         {
             if (tables == null) throw new ArgumentNullException(nameof(tables));
@@ -93,11 +73,6 @@ namespace FoodTrucks.Core.Selling
             return Storage.Restock(tables, vehicleType, cargo, foods);
         }
 
-        // The food that has to go back with `pieces` of a piece of equipment: in each pool the removal makes smaller (its
-        // own kind's, or every pool for an Extra Storage), whatever is over the smaller room, taken from the food with the
-        // most load first so the pool stays balanced. A pool with no piece left has no room, so all its food goes, even
-        // food that was already over its room in an old save (review round 1 of the UI flow, Astra). Pools the removal
-        // doesn't touch keep what they hold.
         public static IReadOnlyDictionary<string, int> FoodLeavingWith(DemandTables tables, string? vehicleType, IEnumerable<CargoLine> cargo,
             string pieceItem, int pieces = 1)
         {
@@ -133,7 +108,6 @@ namespace FoodTrucks.Core.Selling
 
         private static bool Known(DemandTables tables, string item) => IsPiece(tables, item) || tables.Product(item) != null;
 
-        // The cargo with `count` of an item taken out, last stacks first.
         private static List<CargoLine> Without(List<CargoLine> lines, string item, int count)
         {
             var result = new List<CargoLine>(lines);

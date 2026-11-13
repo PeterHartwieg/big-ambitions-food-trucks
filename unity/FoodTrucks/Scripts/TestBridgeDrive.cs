@@ -15,31 +15,17 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // Test-only player travel: advance the game clock for a distance-based journey, then park natively.
-    // This is not physical crew driving. Legacy Self Driving diagnostics remain available through op=check.
-    // No other mod is required for start; interruptions must not grant an early arrival.
     internal static partial class TestBridgeCommands
     {
-        // The rig's ride: a speed of 1 to 3 times real time (its own clamp).
         private const int DriveMinSpeed = 1, DriveMaxSpeed = 3;
-        // How long the rig may take to pick the command up (it polls each second), and the whole ride (its own limit is
-        // 20 minutes; a minute more for the start and the result).
         private const float RigPickUpSeconds = 10f;
         private const float RideSeconds = 21f * 60f;
-        // Lane waypoints round the truck tried for the pull-out, nearest first.
         private const float LaneSearchMetres = 40f;
         private const int LaneCandidates = 24;
-        // Lane spots tried when Self Driving refuses a ride before it drives (its start check: a parked car in the way of
-        // the truck joining the lane); then the truck goes back.
         private const int PullOutAttempts = 3;
-        // The way ahead of a lane spot kept clear of parked cars: as far as the self-driving mod's join check looks (its
-        // refusal named a parked car 43 m ahead), as wide as the truck with its margin.
         private const float ClearAheadMetres = 50f, ClearHalfWidth = 1.75f;
-        // Closer than this to where it goes, the truck isn't driven, only parked.
         private const float NoRideMetres = 40f;
-        // Further than this from where it goes after the ride (a ride cut short far away), it isn't parked by teleport.
         private const float ParkReachMetres = 150f;
-        // As a crew's truck looks for a space at a stop (HireRoutes: 60 m, then 200 m).
         private const float KerbMetres = 60f, KerbWideMetres = 200f;
 
         private sealed class DriveRun
@@ -70,17 +56,11 @@ namespace FoodTrucks
             public bool Simulated;
         }
 
-        // Driving is played for the player, as the minigames are: the self-driving ride ran people over and drove on
-        // (attempt 6, days 8 and 12), and the driver is the player, so every bump and hit-and-run was theirs to pay. A
-        // drive now lets the clock run for the trip at a city pace and then parks the vehicle at the place, as the
-        // ride would have; nothing on the way is hit. 8 m a game minute is the truck in town (tools/balance
-        // --drive-speed), and streets add about a third to the straight line.
         private const float SimMetresPerMinute = 8f;
         private const float SimDetour = 1.35f;
 
         private static DriveRun? drive;
 
-        // A drive under way: the clock's run_until and a teleport of that truck wait for it.
         internal static bool Driving => drive != null && !drive.Done;
         internal static string? DrivingVehicle => Driving ? drive!.Id : null;
 
@@ -99,8 +79,6 @@ namespace FoodTrucks
             }
         }
 
-        // ---- The self-driving mod ----
-
         private static string RigFolder => Path.Combine(Application.persistentDataPath, "DrivenRides", "tests");
         private static bool? selfDrivingLogged;
 
@@ -109,7 +87,6 @@ namespace FoodTrucks
             Assembly? found = null;
             try { found = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "DrivenRides"); }
             catch (Exception ex) { Log.Error("Test bridge, Self Driving link: " + ex.Message); }
-            // Once per state, as a patch's startup line: Active when the mod is loaded, Not active when it isn't.
             var active = found != null;
             if (selfDrivingLogged != active)
             {
@@ -121,12 +98,8 @@ namespace FoodTrucks
             return found;
         }
 
-        // The truck's drivable prefab, found the way the self-driving mod looks for one (Vehicles/PlayerVehicles/<id>, by
-        // the game's prefab helper, which falls back to a file name in any mod's bundle), with an NWH VehicleController in
-        // it, and its wheels.
         private static (bool Found, string? Name, int Wheels) DrivablePrefab()
         {
-            // "foodtrucks:vehicletype_foodtruck" -> "foodtruck", as the self-driving mod cuts a type name (NwhCar.Id).
             var id = FoodTrucksMod.TruckTypeName.Substring(FoodTrucksMod.VehicleTypePrefix.Length);
             var prefab = PrefabHelper.LoadPrefabAssetByName("Vehicles/PlayerVehicles/" + id);
             if (prefab == null) return (false, null, 0);
@@ -137,8 +110,6 @@ namespace FoodTrucks
             return (hasNwh, prefab.name, wheels);
         }
 
-        // { "op": "check" }: whether a drive can go at all: the self-driving mod loaded, its rig's folder there, and the truck
-        // found as a drivable car by its prefab. Reads only.
         private static JToken DriveCheck()
         {
             var mod = SelfDriving();
@@ -179,7 +150,6 @@ namespace FoodTrucks
             return null;
         }
 
-        // The file from a byte offset, read while the other mod may append to it.
         private static string ReadShared(string path, long from)
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
@@ -195,9 +165,6 @@ namespace FoodTrucks
             catch (Exception) { return 0; }
         }
 
-        // ---- start ----
-
-        // { "op": "start", "id", "place": "bay:<site>" | "address:<ba:street_…#N>" | "stop:<N>", "speed"?: 1..3 }
         private static JToken DriveStart(JObject args)
         {
             var id = Need(args, "id", "the truck's id");
@@ -248,8 +215,6 @@ namespace FoodTrucks
             return DriveStatus();
         }
 
-        // Where the drive goes: the point to park by, and the building the self-driving mod drives to (it takes the
-        // building nearest the point it is given).
         private static void ResolveGoal(DriveRun run, VehicleInstance vehicle, FoodTrucks.Core.Saves.SaveState state)
         {
             var colon = run.Place.IndexOf(':');
@@ -288,8 +253,6 @@ namespace FoodTrucks
                     if (number > stops.Count)
                         throw new BridgeError($"{vehicle.id} has {stops.Count} stop{(stops.Count == 1 ? "" : "s")} on today's route ({today}); no stop {number}.");
                     var stop = schedule!.Stops[stops[number - 1]];
-                    // A stop in the truck's own commissary's bay (as crews count one, Commissary.CrewBayStops) is parked in
-                    // the bay, not at the kerb nearby, so the truck isn't fined at 04:00 (review round 1, Sol).
                     var space = state.Commissary.Spaces.FirstOrDefault(s => s.VehicleId == vehicle.id);
                     if (space != null && global::FoodTrucks.Commissary.CrewBayStops(state, record!).Contains(stops[number - 1]))
                     {
@@ -305,11 +268,6 @@ namespace FoodTrucks
             }
         }
 
-        // The self-driving rig drives to the building whose position is nearest the x, z it is given (all of the city's
-        // buildings, outside a gated community), and stops by that building's way in. Some buildings' controllers stand at
-        // the world's origin (live check, 17 October 2026: 37 4th Avenue's did, and the rig took 15 2nd Avenue), so the
-        // building picked is the one whose way in is nearest the goal among those the rig can tell apart by position, and
-        // its own position is sent.
         private static void RideTargetNear(DriveRun run, Vector3 goal)
         {
             var all = UnityEngine.Object.FindObjectsOfType<CityBuildingController>(true)
@@ -330,10 +288,6 @@ namespace FoodTrucks
             run.RideBuilding = $"{best.building.StreetNumber} {best.building.StreetName}";
         }
 
-        // The truck onto the nearest driving lane it fits on, facing with traffic, its rear axle on a lane waypoint as the
-        // self-driving mod's start check wants it (the route starts under the car). Lanes the truck doesn't fit on (another
-        // of the player's vehicles, a building, a person) are passed over; the lanes' parked cars and traffic there are
-        // cleared by the game's own clean-up, as for a spawned vehicle.
         private static JObject PullOut(VehicleInstance vehicle, VehicleController controller, List<int> tried)
         {
             if (!TrafficManager.HasInstance || !TrafficManager.IsInitialized) throw new BridgeError("The city's traffic isn't running yet: try again in a few seconds.");
@@ -347,12 +301,9 @@ namespace FoodTrucks
                 return false;
             });
             if (near.Count == 0) throw new BridgeError($"No driving lane within {LaneSearchMetres:F0} m of {vehicle.id}.");
-            // The rear axle's place along the truck (its wheels' rearmost, local z).
             var rearZ = Legality.TruckWheels().Min(w => w.z);
             var vans = Vans();
             var refused = new List<string>();
-            // Nearest first, those with the way ahead clear of parked cars before the rest; not a spot tried already, nor
-            // one within 10 m of it on the same lane.
             var candidates = near.OrderBy(w => (w.position - from).sqrMagnitude).Take(LaneCandidates)
                 .Where(w => !tried.Any(t => manager.GetWaypoint(t) is Waypoint old && (old.position - w.position).sqrMagnitude < 100f
                                             && Quaternion.Angle(manager.GetWaypointOrientation(old), manager.GetWaypointOrientation(w)) < 30f))
@@ -374,7 +325,6 @@ namespace FoodTrucks
                     continue;
                 }
                 var reply = TeleportVehicle(vehicle.id, ground, rotation.eulerAngles.y, true, blockers.Where(b => b.LaneCar != null).ToList(), vans);
-                // The traffic there, as the game clears a spawned car's place.
                 VehicleHelper.DestroyBlockingVehicles(controller.gameObject, controller.vehicleType, controller.transform);
                 tried.Add(w.listIndex);
                 var pose = reply as JObject ?? new JObject();
@@ -388,7 +338,6 @@ namespace FoodTrucks
                                   (refused.Count > 0 ? $" ({string.Join("; ", refused)})." : "."));
         }
 
-        // No parked car in the strip ahead of a lane waypoint, along its direction, as wide as the truck with its margin.
         private static bool ClearAhead(TrafficManager manager, Waypoint w)
         {
             var forward = manager.GetWaypointOrientation(w) * Vector3.forward;
@@ -401,8 +350,6 @@ namespace FoodTrucks
         }
 
         private static bool IsPlayerObject(GameObject g) => g.GetComponentInParent<PlayerController>() != null;
-
-        // ---- the ride and the parking ----
 
         private static IEnumerator DriveSteps(DriveRun run)
         {
@@ -500,9 +447,6 @@ namespace FoodTrucks
             Log.Info($"Test bridge: drive {run.Id}: Self Driving says {run.Ride.ToString(Newtonsoft.Json.Formatting.None)}");
         }
 
-        // The ride from lane spot to lane spot: refused before it drove (its start check found something in the way of
-        // the truck joining the lane), the truck goes to the next spot and the ride is sent again; after the last, back into
-        // the space it pulled out of.
         private static IEnumerator Rides(DriveRun run)
         {
             for (var attempt = 1; ; attempt++)
@@ -533,13 +477,11 @@ namespace FoodTrucks
                     PutBack(run, $"Self Driving refused the ride: {refused}; no other place on the lane ({ex.Message})");
                     yield break;
                 }
-                // Settled on its wheels before the next try (the rig waits for a standing car too).
                 var until = UnityEngine.Time.realtimeSinceStartup + 1f;
                 while (UnityEngine.Time.realtimeSinceStartup < until) yield return null;
             }
         }
 
-        // The city was left (a load, the main menu) while the drive ran: it ends there.
         private static bool LeftCity(DriveRun run)
         {
             if (Scene() == "city" && SaveGameManager.Current != null) return false;
@@ -547,7 +489,6 @@ namespace FoodTrucks
             return true;
         }
 
-        // A drive that never got going: the truck back where it stood, so it isn't left in a driving lane.
         private static void PutBack(DriveRun run, string why)
         {
             string back;
@@ -620,7 +561,6 @@ namespace FoodTrucks
             else Log.Info($"Test bridge: drive {run.Id} to {run.Place}: failed: {error}.");
         }
 
-        // {} or { "op": "status" }: the drive under way, or the last one (with its result).
         private static JToken DriveStatus()
         {
             var run = drive;
@@ -659,7 +599,6 @@ namespace FoodTrucks
             };
         }
 
-        // The bridge stops: the drive is forgotten (a ride under way in the other mod runs to its own end).
         internal static void ResetDrive()
         {
             var run = drive;

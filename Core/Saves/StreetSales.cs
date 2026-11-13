@@ -7,7 +7,6 @@ namespace FoodTrucks.Core.Saves
         public static bool CanRecord(SaveState state, string vehicleId, int day, long priceCents, int count) =>
             CanRecordTotal(state, vehicleId, day, priceCents, count, perUnit: true);
 
-        // A sum paid for several units at once (a catering gig's fee for its portions).
         public static bool CanRecordTotal(SaveState state, string vehicleId, int day, long revenueCents, int count) =>
             CanRecordTotal(state, vehicleId, day, revenueCents, count, perUnit: false);
 
@@ -36,7 +35,6 @@ namespace FoodTrucks.Core.Saves
 
             var vehicle = GetOrAdd(state, vehicleId);
             SalesLedger.Record(state, day, revenueCents);
-            // A sum for several units at once is a catering fee; Econoview shows it apart from street sales.
             SalesLedger.RecordLine(state, day, vehicleId, perUnit ? LedgerLine.Sales : LedgerLine.Catering, revenueCents);
             vehicle.LifetimeSales = lifetimeSales;
             vehicle.LifetimeRevenueCents = lifetimeRevenueCents;
@@ -80,7 +78,6 @@ namespace FoodTrucks.Core.Saves
             if (string.IsNullOrEmpty(vehicleId)) throw new ArgumentException("Vehicle id must not be empty.", nameof(vehicleId));
         }
 
-        // perUnit: cents is each unit's price; otherwise it is the sum for all of them.
         private static void PrepareRecording(SaveState state, string vehicleId, int day, long cents, int count, bool perUnit,
             out long revenueCents, out int lifetimeSales, out long lifetimeRevenueCents)
         {

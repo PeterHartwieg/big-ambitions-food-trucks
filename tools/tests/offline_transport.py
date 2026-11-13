@@ -73,7 +73,6 @@ class OfflineSession:
         self.folder.cleanup()
 
 
-# Subprocesses still exchange MCP messages through real stdio pipes.
 BOOT = '''
 import os, runpy, sys
 sys.path.insert(0, sys.argv[1])

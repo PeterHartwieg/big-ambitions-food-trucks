@@ -17,7 +17,7 @@ args = sys.argv[sys.argv.index("--") + 1:]
 fbx_path, texture_path, out_path = args[0], args[1], args[2]
 SIZE = 512
 FILL = 0.86
-AZIMUTH = 26   # degrees from the front towards the model's left (+X): the game's icons show the front and the left side
+AZIMUTH = 26
 ELEVATION = 24
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -95,7 +95,6 @@ scene.camera = cam
 cam.location = centre + direction * 5
 cam.rotation_euler = (-direction).to_track_quat("-Z", "Y").to_euler()
 bpy.context.view_layer.update()
-# Fit the projected box: the camera's right and up axes.
 inv = cam.matrix_world.inverted()
 local = [inv @ p for p in pts]
 xs, ys = [p.x for p in local], [p.y for p in local]

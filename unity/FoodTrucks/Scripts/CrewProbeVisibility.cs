@@ -11,8 +11,6 @@ using UnityEngine;
 
 namespace FoodTrucks
 {
-    // One-off main-thread diagnostic. Only reads existing components, masks and physics settings.
-    // Deliberately independent of probe ownership, geometry/admission and engine adapters.
     internal static class CrewProbeVisibility
     {
         private const int MaxColliders = 128, MaxPool = 1024, MaxTriggers = 16;
@@ -110,7 +108,6 @@ namespace FoodTrucks
             report["colliders"] = inventory;
             report["collider_count"] = inventory.Count;
             report["collider_layers"] = new JArray(layers);
-            // Missing/out-of-tree role references must not masquerade as a complete body inventory.
             report["native_role_references"] = new JObject {
                 ["vehicle_collider"] = Reference(car.vehicleCollider, colliders),
                 ["additional_collider"] = Reference(car.additionalCollider, colliders) };
@@ -125,8 +122,6 @@ namespace FoodTrucks
             ["instance_id"] = c == null ? (int?)null : c.GetInstanceID(),
             ["in_inventory"] = c != null && inventory.Contains(c) };
 
-        // Bounded depth-first traversal includes inactive objects and every Collider component.
-        // Does not allocate the entire truck/pool hierarchy via GetComponentsInChildren.
         private static List<Collider> Collect(Transform root, int limit, out bool truncated, out List<Transform> visited)
         {
             var result = new List<Collider>();

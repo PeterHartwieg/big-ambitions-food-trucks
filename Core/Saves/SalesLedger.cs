@@ -4,7 +4,6 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Saves
 {
-    // One vehicle's lines in Econoview's street food breakdown.
     public enum LedgerLine
     {
         Sales,
@@ -48,8 +47,6 @@ namespace FoodTrucks.Core.Saves
             entry.RevenueCents = checked(entry.RevenueCents + revenueCents);
         }
 
-        // Adds the wholesale cost of stock sold on a day. Never fails: the cost only feeds the profit shown
-        // in the game's summaries, so an overflow is capped rather than refusing a sale already paid.
         public static void RecordCost(SaveState state, int day, long costCents)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -58,16 +55,12 @@ namespace FoodTrucks.Core.Saves
             entry.CostCents = Add(entry.CostCents, costCents);
         }
 
-        // The same, for the vehicle that sold or served the stock.
         public static void RecordCost(SaveState state, int day, string vehicleId, long costCents)
         {
             RecordCost(state, day, costCents);
             RecordLine(state, day, vehicleId, LedgerLine.Stock, costCents);
         }
 
-        // Adds to one vehicle's line for a day, for Econoview's breakdown. Like RecordCost it never fails:
-        // amounts are capped, and nothing at or below 0 is recorded. Sales and catering go through StreetSales,
-        // which also keeps the day's revenue for tax.
         public static void RecordLine(SaveState state, int day, string vehicleId, LedgerLine line, long cents)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -89,9 +82,6 @@ namespace FoodTrucks.Core.Saves
             }
         }
 
-        // A cost the game charges and keeps in its own summary rows (crew wages, parking). It is only recorded
-        // while the day's summary is still to come: once the game has stored that day's figures, a late charge
-        // isn't in them, so moving it out of the game's row would break the total. False when not recorded.
         public static bool RecordGameCost(SaveState state, int day, string vehicleId, LedgerLine line, long cents)
         {
             if (line != LedgerLine.Wages && line != LedgerLine.Parking)
@@ -101,7 +91,6 @@ namespace FoodTrucks.Core.Saves
             return true;
         }
 
-        // The vendor licence, the whole fleet's.
         public static void RecordLicence(SaveState state, int day, long cents)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -110,7 +99,6 @@ namespace FoodTrucks.Core.Saves
             entry.LicenceCents = Add(entry.LicenceCents, cents);
         }
 
-        // Event places: a booking adds its fee, a refund passes a negative amount.
         public static void RecordEventPlaces(SaveState state, int day, long cents)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -121,19 +109,15 @@ namespace FoodTrucks.Core.Saves
                 : (entry.EventPlacesCents < long.MinValue - cents ? long.MinValue : entry.EventPlacesCents + cents);
         }
 
-        // Call only after the game payment succeeds (including a retry), on the day it was paid.
         public static void RecordCommissaryRent(SaveState state, int day, string vehicleId, long cents) =>
             RecordLine(state, day, vehicleId, LedgerLine.CommissaryRent, cents);
 
         public static void RecordOvernightFine(SaveState state, int day, string vehicleId, long cents) =>
             RecordLine(state, day, vehicleId, LedgerLine.OvernightFine, cents);
 
-        // Like rent: only after the game payment succeeds, on the day it was paid.
         public static void RecordMarketing(SaveState state, int day, string vehicleId, long cents) =>
             RecordLine(state, day, vehicleId, LedgerLine.Marketing, cents);
 
-        // Fleet-wide, like event places: a payment adds its fee, a refund passes a negative amount.
-        // The goods price is carried into cargo and recorded by RecordCost only when those goods sell.
         public static void RecordDeliveryFees(SaveState state, int day, long cents)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -144,7 +128,6 @@ namespace FoodTrucks.Core.Saves
                 : (entry.DeliveryFeesCents < long.MinValue - cents ? long.MinValue : entry.DeliveryFeesCents + cents);
         }
 
-        // Marks a day as counted in the game's financial summary, keeping the amount that was added.
         public static void MarkInSummary(SaveState state, int day)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
@@ -160,9 +143,6 @@ namespace FoodTrucks.Core.Saves
         public static bool IsInSummary(SaveState? state, int day) =>
             state != null && state.DailySales.Any(d => d != null && d.Day == day && d.InSummary);
 
-        // What the day summary adds for a day the mod knows of: sales and catering, less the stock sold, the
-        // permits, commissary rent, overnight fines, marketing, the licence, event places and delivery fees. Crew wages
-        // and parking aren't in it: the game's summary has them.
         public static long DayProfitCents(SaveState? state, int day)
         {
             if (state == null) return 0;
@@ -177,8 +157,6 @@ namespace FoodTrucks.Core.Saves
             return profit;
         }
 
-        // What the game's stored summary holds for a day: the amount kept when it was marked, or for a day marked
-        // by an older version, sales less stock cost (what those versions added). 0 for a day not in the summary.
         public static long SummaryCents(SaveState? state, int day)
         {
             if (state == null) return 0;
@@ -191,7 +169,6 @@ namespace FoodTrucks.Core.Saves
             return total;
         }
 
-        // Inclusive on both ends, like the game's tax period.
         public static long SumCents(SaveState? state, int firstDay, int lastDay)
         {
             if (state == null) return 0;

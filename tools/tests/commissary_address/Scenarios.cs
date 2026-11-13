@@ -1,7 +1,3 @@
-// Commissary address on the phone contact and in BizMan: the production postfix, location accessor and rented-space
-// panel against controlled stand-ins for the game's contact header, map, guider and street names. Harmony is emulated:
-// the postfixes Patches.cs registers on ContactsApp.SetUpHeader run after the game's header, their parameters bound
-// by name as Harmony binds them (the original's parameter names, ___ plus a private field's name).
 using System.Reflection;
 using Entities;
 using FoodTrucks;
@@ -58,7 +54,6 @@ static class Program
 
     static Contact Commissary(string id) => new() { id = FoodTrucks.Commissary.ContactPrefix + id, description = "foodtrucks:commissary_description", callDialogTypeOverride = 9103 };
 
-    // The game's header, then the registered postfixes, as Harmony runs them.
     static void Open(ContactsApp app, Contact contact)
     {
         app.SetUpHeader(contact);
@@ -79,8 +74,6 @@ static class Program
         }
     }
 
-    // What the header shows: address line, View on map, call button, opening hours.
-    // Listeners count on a shown button; the game leaves old ones on a hidden one.
     static string Shown(ContactsApp app) =>
         $"address {(app.Address.activeSelf ? app.AddressLabel.Value : "hidden")}; map {Button(app.ViewOnMap)}; call {Button(app.Call)}; hours {(app.OpeningHours.activeSelf ? "shown" : "hidden")}";
     static string Button(UnityEngine.UI.Button b) => b.gameObject.activeSelf ? "shown x" + b.onClick.Count : "hidden";
@@ -97,8 +90,6 @@ static class Program
         var app = new ContactsApp();
         var map = Helpers.InstanceBehavior<CityManager>.Instance.cityMap!;
         var menu = Helpers.InstanceBehavior<UI.UIs>.Instance.fullMenu;
-        // An Industry City contact from an older save: made by EnsurePermanentContact, so no address of its own, with a space
-        // rented there; it shows its building's address without another visit.
         var state = new SaveState();
         state.Commissary.Unlocked.Add("industry-city");
         state.Commissary.Spaces.Add(new CommissarySpace { VehicleId = "cart-1", Kind = "cart", CommissaryId = "industry-city", SinceDay = 3 });
@@ -108,22 +99,18 @@ static class Program
         Equal("address 2 21st Street; map shown x1; call shown x1; hours hidden", Shown(app), "Industry City header");
         Equal(true, app.AddressLabel.Key == null, "address label is plain text");
         Equal(true, industry.Address.IsUndefined(), "contact address left unset");
-        // The call is still the game's, through the contact's call dialog override.
         app.Call.onClick.Invoke();
         Equal("foodtrucks-commissary-industry-city open", app.Calls.Last(), "call usable");
-        // View on map, map closed: the phone closes and the map opens on the building with its card.
         CityMap.IsOpen = false; menu.Shown = null;
         app.ViewOnMap.onClick.Invoke();
         Equal(false, menu.Shown, "phone closed for the map");
         Equal(1, map.Toggles, "map opened");
         Equal(World.BuildingAt("ba:street_twentyfirststreet#2"), map.Focused, "focused Industry City building");
-        // Map already open: the game's FocusOnBuilding.
         map.Focused = null;
         app.ViewOnMap.onClick.Invoke();
         Equal(1, map.Toggles, "open map not toggled again");
         Equal(World.BuildingAt("ba:street_twentyfirststreet#2"), map.Focused, "open map refocused");
 
-        // Every shipped commissary, Lower Manhattan among them.
         foreach (var (id, address) in Expected)
         {
             Open(app, Commissary(id));
@@ -134,8 +121,6 @@ static class Program
             Equal(World.BuildingAt(site.Address), map.Focused, id + " focus");
         }
 
-        // Switching: an addressless game contact keeps none of the commissary's listener; a business contact gets only the
-        // game's own; the next commissary's button goes to its own building.
         Open(app, Commissary("industry-city"));
         var fred = new Contact { id = "uncle_fred" };
         Open(app, fred);
@@ -158,7 +143,6 @@ static class Program
         app.ViewOnMap.onClick.Invoke();
         Equal(World.BuildingAt("ba:street_twelfthstreet#5"), map.Focused, "switched contact focuses its own building");
 
-        // Other contacts: untouched, the mod's bookings contact and commissary IDs the data no longer has included.
         foreach (var other in new[] { new Contact { id = "foodtrucks-bookings", callDialogTypeOverride = 9101 }, new Contact { id = "foodtrucks-commissary-gone", callDialogTypeOverride = 9103 },
                      new Contact { id = "speedy_bites" }, new Contact { id = "foodtrucks-commissaryindustry-city" } })
         {
@@ -167,7 +151,6 @@ static class Program
             Equal(VanillaOnly(other), Shown(app), other.id + " untouched");
         }
 
-        // Unresolved: no building, or its street name not loaded yet. "Address unavailable", no View on map, call usable.
         foreach (var unresolved in new Action<bool>[] { on => World.Hide("ba:street_twentyfirststreet#2", on), on => Streets.AddressHelper.Broken = on ? "ba:street_twentyfirststreet" : null })
         {
             Open(app, Commissary("lower-manhattan"));
@@ -176,13 +159,11 @@ static class Program
             Equal("address Address unavailable; map hidden; call shown x1; hours hidden", Shown(app), "unresolved address");
             app.Call.onClick.Invoke();
             Equal("foodtrucks-commissary-industry-city open", app.Calls.Last(), "call usable while unresolved");
-            // Resolves on the next open, with no new visit.
             unresolved(false);
             Open(app, Commissary("industry-city"));
             Equal("address 2 21st Street; map shown x1; call shown x1; hours hidden", Shown(app), "resolved later");
         }
 
-        // Uninstalled: the game's header only, and a click left from before does nothing.
         Open(app, Commissary("industry-city"));
         var stale = app.ViewOnMap.onClick.Listeners.ToList();
         FoodTrucks.Commissary.Uninstalled = true;
@@ -194,8 +175,6 @@ static class Program
         Equal(0, map.Toggles, "map not opened after uninstall");
         FoodTrucks.Commissary.Uninstalled = false;
 
-        // A game UI call that throws, in the header or in the map click: logged, the phone keeps working, and the next
-        // open or click works again.
         Equal(0, Log.Errors.Count, "no errors before the failures");
         Open(app, Commissary("industry-city"));
         Localizor.LanguageChangeEvent.TextLocalizationComponent.Fail = true;
@@ -237,18 +216,15 @@ static class Program
             Equal(World.BuildingAt(key)!.building!.Address, UI.Guiders.GuidersManager.Target, vehicle + " GPS to the building");
             Equal(true, box.Buttons.Any(b => b.Caption == "Call commissary"), vehicle + " call kept");
         }
-        // Unresolved: "Address unavailable", Set destination disabled and inert.
         World.Hide("ba:street_twentyfirststreet#2", true);
         var missing = Panel(state, "cart-1", "cart");
         Equal("Address unavailable", missing.RowValue("Address"), "BizMan unresolved address");
         var disabled = missing.Buttons.Single(b => b.Caption == "Set destination");
         Equal(false, disabled.Interactable, "Set destination disabled");
         UI.Guiders.GuidersManager.Target = null;
-        // Pressed anyway (its action, as wired): nothing happens while the address is unresolved.
         disabled.Click();
         Equal(null, UI.Guiders.GuidersManager.Target, "no GPS while unresolved");
         World.Hide("ba:street_twentyfirststreet#2", false);
-        // No space: the panel as before, no address.
         var none = Panel(state, "cart-2", "cart");
         Equal(null, none.RowValue("Address"), "no address without a space");
         Equal(false, none.Buttons.Any(b => b.Caption == "Set destination"), "no destination without a space");
@@ -261,7 +237,6 @@ static class Program
         return BizManParts.Box.Last!;
     }
 
-    // Texts: "<key>_address" with the address when it resolves, the original key otherwise (saved messages keep theirs).
     static void Messages()
     {
         var location = typeof(ModContacts).Assembly.GetType("FoodTrucks.CommissaryLocation") ?? throw new Exception("No CommissaryLocation");
@@ -273,14 +248,12 @@ static class Program
         var text = Localizor.LocalizorManager.GetLocalization("foodtrucks:dialog_commissary_start_standing_address",
             new Dictionary<string, string> { ["commissary"] = "Industry City Commissary", ["address"] = "2 21st Street", ["spaces"] = "1 space", ["stock"] = "no items", ["orders"] = "no orders", ["standing"] = "no standing orders" });
         Equal(true, text.StartsWith("Industry City Commissary, 2 21st Street."), "call text with address");
-        // An old saved welcome payload (no address) still reads in full.
         var old = Localizor.LocalizorManager.GetLocalization("foodtrucks:message_commissary_welcome_phone",
             new Dictionary<string, string> { ["commissary"] = "Industry City Commissary", ["cart"] = "$300", ["truck"] = "$1,250" });
         Equal(false, old.Contains('{'), "old welcome renders");
     }
 }
 
-// ---- Stand-ins for the game ----
 class Address
 {
     public string streetName = ""; public int streetNumber;
@@ -294,7 +267,6 @@ class CityMap
     public static bool IsOpen;
     public CityBuildingController? buildingToFocus, Focused;
     public int Toggles;
-    // The game's Toggle opens the map on buildingToFocus and selects its card.
     public void Toggle() { Toggles++; IsOpen = !IsOpen; if (IsOpen) { Focused = buildingToFocus; buildingToFocus = null; } }
     public void FocusOnBuilding(CityBuildingController controller) => Focused = controller;
 }
@@ -325,7 +297,6 @@ namespace Streets
         internal static Dictionary<string, string> Names = new();
         internal static string? Broken;
         internal static IEnumerable<string> StreetDataNames => Names.Keys;
-        // A street whose name hasn't loaded comes back as its data ID.
         internal static string GetStreetNameLocalized(this string key) => key == Broken ? key : Names.TryGetValue(key, out var n) ? n : key;
         internal static string GetStreetNameLocalized(this Address a) => a.streetName.GetStreetNameLocalized();
         internal static string ToFormattedString(this Address a) => $"{a.streetNumber} {a.GetStreetNameLocalized()}";
@@ -391,8 +362,6 @@ namespace Entities
 }
 namespace UI.Smartphone.Apps.Contacts
 {
-    // ContactsApp.SetUpHeader's address, call and View on map handling as BigAmbitions.dll has it (the fields by their
-    // game names; test_commissary_address checks them against the assembly when it is available).
     class ContactsApp
     {
         private UnityEngine.UI.Button callButton = new();
@@ -427,7 +396,6 @@ namespace UI.Smartphone.Apps.Contacts
             addressLabel.Key = "contacts_address";
             addressLabel.SetValue(Streets.AddressHelper.ToFormattedString(contact.Address), clearKey: true);
             addressGameObject.SetActive(true);
-            // The host business's opening hours decide whether the call counts as open.
             openingHoursGameObject.SetActive(true);
             callButton.onClick.RemoveAllListeners();
             callButton.onClick.AddListener(() => Calls.Add(contact.id + " by opening hours"));
@@ -439,7 +407,6 @@ namespace UI.Smartphone.Apps.Contacts
     }
 }
 
-// ---- Stand-ins for the rest of the mod ----
 namespace FoodTrucks
 {
     static class Log

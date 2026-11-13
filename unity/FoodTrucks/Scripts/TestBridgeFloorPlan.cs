@@ -15,7 +15,6 @@ namespace FoodTrucks
 {
     internal static partial class TestBridgeCommands
     {
-        // The default Item.gridSize, in world metres. Item-specific snapping still belongs to PlacementSystem.
         private const float PlanSquareSize = 0.5f;
         private const int MaxPlanSquares = 30000;
 
@@ -46,7 +45,6 @@ namespace FoodTrucks
             }
             internal bool Hit(Vector3 p, out RaycastHit hit)
             {
-                // Only this floor's actual ground geometry. No bounds-filled floor, lower level, or street fallback.
                 hit = default;
                 var found = false;
                 foreach (var c in Floors)
@@ -75,7 +73,6 @@ namespace FoodTrucks
                 ["nested"] = c.nestedCargoInstances == null ? null : JToken.FromObject(c.nestedCargoInstances),
             }));
 
-        // Internal conservation evidence only. No price/balance fields are returned by floorplan or place.
         private static JObject PlacementSnapshot()
         {
             var hands = PlayerHelper.ItemInstanceInHands;
@@ -119,7 +116,6 @@ namespace FoodTrucks
             var colliders = root.GetComponentsInChildren<Collider>(false).Concat(registeredGrids).Distinct()
                 .Where(c => c != null && c.enabled && c.gameObject.activeInHierarchy && !c.isTrigger && c.GetComponentInParent<ItemController>() == null &&
                     (((1 << c.gameObject.layer) & (int)LayerHelper.groundLayerMask) != 0)).ToArray();
-            // Determine physical floor height under the player's feet, before sampling elsewhere.
             var hits = colliders.Select(c => c.Raycast(new Ray(me + Vector3.up * .25f, Vector3.down), out var h, 3f)
                     ? (RaycastHit?)h : null).Where(h => h.HasValue).Select(h => h!.Value).OrderByDescending(h => h.point.y).ToArray();
             if (hits.Length == 0) throw new BridgeError("No building floor under the player; stand on the floor first.");
@@ -127,7 +123,6 @@ namespace FoodTrucks
             plan.Floors = colliders.Where(c => c.bounds.min.y <= plan.Y + .35f && c.bounds.max.y >= plan.Y - .35f).ToArray();
             var bounds = plan.Floors[0].bounds;
             foreach (var c in plan.Floors.Skip(1)) bounds.Encapsulate(c.bounds);
-            // Include one square of perimeter so walls and exit thresholds have labelled squares too.
             plan.MinX = Mathf.CeilToInt(bounds.min.x / PlanSquareSize) - 1;
             plan.MinZ = Mathf.CeilToInt(bounds.min.z / PlanSquareSize) - 1;
             plan.Columns = Mathf.FloorToInt(bounds.max.x / PlanSquareSize) - plan.MinX + 2;
@@ -144,8 +139,6 @@ namespace FoodTrucks
             ["square"] = plan.Square(p), ["x"] = Math.Round(p.x, 3), ["y"] = Math.Round(p.y, 3), ["z"] = Math.Round(p.z, 3),
         };
 
-        // Physical box footprints are projected oriented boxes, not their axis-aligned bounding rectangles.
-        // Other collider shapes use conservative bounds, explicitly identified in the observation.
         private static List<Vector2> Footprint(Collider c)
         {
             var points = new List<Vector2>();

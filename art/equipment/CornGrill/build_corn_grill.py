@@ -45,7 +45,6 @@ def rectangle(cx, cy, w, d, z, bevel=0.008):
             (cx+a-c,cy+b,z),(cx-a+c,cy+b,z),(cx-a,cy+b-c,z),(cx-a,cy-b+c,z)]
 
 def trough(cx,cy,w,d,bottom,top,thick,color):
-    # Closed eight-corner metal shell, with a visible inner floor.
     vs = rectangle(cx,cy,w-.022,d-.018,bottom) + rectangle(cx,cy,w,d,top)
     vs += rectangle(cx,cy,w-2*thick,d-2*thick,top) + rectangle(cx,cy,w-.022-2*thick,d-.018-2*thick,bottom+thick)
     fs=[]
@@ -67,8 +66,6 @@ def rod(p0,p1,radius,color,n=6):
     add(vs,fs,color)
 
 def orient_closed_islands(bm):
-    # Recalc can choose the wrong side of a narrow folded leaf; enforce positive
-    # signed volume separately for every disconnected closed component.
     seen=set()
     for face in bm.faces:
         if face in seen: continue
@@ -140,16 +137,13 @@ def blockout():
     V,F,C=[],[],[]
     for ob in list(bpy.data.objects):
         if not ob.name.startswith('HumanRef'): bpy.data.objects.remove(ob,do_unlink=True)
-    # Low H-shaped sled base. Its cross member stands directly over the origin.
     for x in (-.143,.047): box((x,0,.006),(.022,.273,.012),'iron')
     box((-.048,0,.006),(.212,.019,.012),'iron')
     for x in (-.143,.047):
         for y in (-.108,.108): box((x,y,.037),(.019,.021,.054),'iron')
     trough(-.047,0,.296,.300,.061,.137,.010,'iron')
-    # Silver grate surround, with black firebox visibly recessed under it.
     for x in (-.188,.094): box((x,0,.138),(.011,.288,.009),'rim')
     for y in (-.144,.144): box((-.047,y,.138),(.280,.010,.009),'rim')
-    # End shelf and butter dish, at the customer's left (+X).
     box((.146,0,.119),(.098,.288,.012),'iron')
     trough(.151,-.012,.078,.202,.126,.145,.005,'steel')
     box((.151,-.012,.133),(.057,.175,.005),'sauce')
@@ -159,7 +153,6 @@ def blockout():
 
 
 def corn(cx,cy,length,index):
-    # Eight-sided tapered cob with seven ring stations: broad kernel-like bands.
     n=8; base=len(V); z=.1575
     profile=[(-.5,.0085),(-.40,.0148),(-.24,.017),(-.07,.0178),(.12,.0172),(.32,.0147),(.5,.0065)]
     vs=[]
@@ -172,14 +165,12 @@ def corn(cx,cy,length,index):
     for k in range(6):
         for j in range(n):
             fs.append((k*n+j,k*n+(j+1)%n,(k+1)*n+(j+1)%n,(k+1)*n+j))
-            # Sparse toasted facets rather than a continuous black stripe.
             toasted=(j in (1,2,3) and ((k*3+j+index*2)%11 in (0,1)))
             cols.append('char' if toasted else ('light' if (k+j+index)%5==0 else ('gold' if j in (4,5,6) or (k+j)%7==0 else 'corn')))
     fs += [(0,j+1,j) for j in range(1,n-1)]
     fs += [(6*n,6*n+j,6*n+j+1) for j in range(1,n-1)]
     cols += ['gold']*6+['light']*6
     V.extend(vs); F.extend([tuple(base+i for i in f) for f in fs]); C.extend(COLORS.index(c) for c in cols)
-    # Two closed folded leaves rise at the back and taper to distinct pointed tips.
     end=cy+length*.42
     for sign in (-1,1):
         x=cx+sign*.006
@@ -190,18 +181,14 @@ def corn(cx,cy,length,index):
 
 
 def detail():
-    # Grate bars run across the ears. Few broad bars stay readable at game distance.
     for y in [-.124+i*.025 for i in range(11)]: box((-.047,y,.139),(.264,.0055,.006),'steel')
-    # A visible charcoal bed, faceted and dark: no flame particles or hidden details.
     for i in range(8):
         x=-.15+(i%4)*.065; y=-.067+(i//4)*.128
         verts=[(x-.022,y-.017,.079),(x+.025,y-.017,.079),(x+.021,y+.022,.079),(x-.020,y+.020,.079), (x+.002,y+.002,.110)]
         add(verts,[(0,3,2),(0,2,1),(0,1,4),(1,2,4),(2,3,4),(3,0,4)],'coal' if i%3 else 'ash')
     for i in range(7):
         corn(-.166+i*.0365, -.006+(i%3-1)*.007, .218-(i%3)*.009,i)
-    # Three subdued metal air slots on the -Y customer face.
     for x in (-.105,-.047,.011): box((x,-.148,.106),(.031,.003,.010),'coal')
-    # Small end handles tucked inside the footprint.
     for y in (-.12,.12): box((.139,y,.142),(.027,.010,.010),'rim')
     sync()
     return render_stage('02-detail')
@@ -209,7 +196,6 @@ def detail():
 
 def texture():
     ob=bpy.data.objects['CornGrill_Body']; me=ob.data
-    # Each face owns a unique atlas cell, providing zero-overlap UVs for flat colour.
     count=len(me.polygons); cols=math.ceil(math.sqrt(count)); rows=math.ceil(count/cols)
     for layer in list(me.uv_layers): me.uv_layers.remove(layer)
     uv=me.uv_layers.new(name='UVMap')
@@ -226,8 +212,6 @@ def texture():
         x0=round(cx*512/cols); x1=round((cx+1)*512/cols)
         y0=round(cy*512/rows); y1=round((cy+1)*512/rows)
         pixels[y0:y1,x0:x1]=rgba
-        # Corn uses only flat rectangular colour blocks: two broad kernel rows
-        # on each facet, with subtle golden gaps. No normals or extra materials.
         color_name=COLORS[part.data[i].value]
         if color_name in ('corn','gold','light','char') and len(p.vertices)==4:
             gap=list(rgba)
@@ -257,7 +241,6 @@ def texture():
 
 def finish():
     ob=bpy.data.objects['CornGrill_Body']
-    # Conservative eight-corner hull encloses every visible part, including husk tips.
     old=bpy.data.objects.get('CornGrill_Collision')
     if old: bpy.data.objects.remove(old,do_unlink=True)
     bm=bmesh.new()
@@ -272,7 +255,6 @@ def finish():
     hull.hide_render=True; hull.display_type='WIRE'; hull.hide_set(True)
     for item in (ob,hull):
         item.location=(0,0,0); item.rotation_euler=(0,0,0); item.scale=(1,1,1)
-    # Orient the viewport to the customer (-Y); camera uses the same front quadrant.
     bpy.ops.object.select_all(action='DESELECT'); ob.select_set(True); hull.hide_set(False); hull.select_set(True)
     bpy.context.view_layer.objects.active=ob
     bpy.ops.export_scene.fbx(filepath=OUT+'/CornGrill.fbx', use_selection=True, object_types={'MESH'},

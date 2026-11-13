@@ -23,22 +23,6 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // A vehicle's crew shifts on the game's own Schedule tab (Peter, 16 October 2026): the BizMan business page opens on
-    // an in-memory BuildingRegistration that stands in for the vehicle. It is never added to the game's registrations or
-    // saved, has no building, and holds the vehicle's week as the game's ScheduleDays: each weekday open unless its route
-    // is closed (the day buttons' open toggle opens and closes the route day, as for a shop: Peter, 16 October 2026), its
-    // opening hours the route day's hours (WeekPlan.RouteHours: they follow the route, so the hour toggles are refused),
-    // and the crew's shifts on the vehicle's rows, synthetic workstations copied from a vanilla cash register (customer
-    // service): one per staff place, Serving 1 (and 2 on a truck), ids ft:<vehicle>:serving1 / serving2. Anyone on shift
-    // serves, drives and restocks (no driving row: Peter).
-    //
-    // The mod's save keeps Core's model (HireSchedule.CrewShifts with their row); the stand-in's days are built from it
-    // when the tab opens and every change the game makes is read back into it (SyncBack), so nothing of the game's types
-    // is saved. The patches below are inert unless the stand-in is showing: the business page shows only the Schedule tab
-    // with the vehicle's name; the crew are the employees; the rows are the workstations; the game's employee updates,
-    // which would zero a crew member's hours and give them the idle to-do, read the shifts back and set their weekly work
-    // the mod's way (HireCrew.SetWeeklyWork); the auto-fill button runs Core's auto schedule (the game's needs an HR
-    // manager and a real building); closing the page puts the business page's own fields back and returns to the vehicle.
     internal static class VehicleSchedule
     {
         private const string BaseItem = "ba:itemname_cashregister";
@@ -49,15 +33,10 @@ namespace FoodTrucks
         private static (Address? Address, Building? Building, BuildingRegistration? Registration)? saved;
         private static string? baseItem;
 
-        // The stand-in is on the business page.
         internal static bool Showing { get; private set; }
-        // The stand-in's business page is closing: its schedule's OnDisable (which may run after the page's own) is
-        // skipped too. Cleared on the next frame, and by any other business page.
         private static bool closing;
         private static bool ready;
 
-        // Every guard patch is active (Patches.Apply, then CheckReady). Without one of them a stand-in with no address
-        // would reach game code that then works on every employee in the save, so the tab isn't offered (fail closed).
         internal static bool Ready => ready;
 
         private static readonly (Type Type, string Method, Type[]? Args, bool Postfix)[] Guards =
@@ -107,9 +86,6 @@ namespace FoodTrucks
             saved = null;
         }
 
-        // ---- Opening ----
-
-        // Opens BizMan's business page on the vehicle's Schedule tab.
         internal static void Open(string id)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -145,7 +121,6 @@ namespace FoodTrucks
                 var instance = new ItemInstance(item) { id = RowId(id, row), alias = RowName(row).ToUpperInvariant() };
                 registration.itemInstances[instance.id] = instance;
             }
-            // Shifts on a row the vehicle hasn't (an old driving row, a second row on a cart) move to a free one or go.
             var notes = WeekPlan.RepairShifts(vehicle, WeekPlan.Stations(HireCrew.Limit(kind)));
             foreach (var note in notes) Log.Info(note);
             if (notes.Count > 0) FoodTrucksSession.MarkChanged();
@@ -167,7 +142,6 @@ namespace FoodTrucks
             }
             catch (Exception ex)
             {
-                // Back as it was: the page's own fields, no stand-in, the list.
                 var (address, building, previous) = saved ?? (null, null, null);
                 business.address = address;
                 business.building = building;
@@ -204,11 +178,9 @@ namespace FoodTrucks
         private static string RowName(string station) =>
             BizManVehiclePage.Format("foodtrucks:schedule_row_serving", ("number", station.Substring("serving".Length)));
 
-        // The game's weekday for one of ours, and back, by name (the game's days are numbered 1 to 7 from Monday).
         private static DayOfWeek WeekdayOf(DayOfWeekOrdered day) =>
             Enum.TryParse<DayOfWeek>(day.ToString(), true, out var parsed) ? parsed : WeekPlan.Days[Math.Max(0, Math.Min(6, (int)day - 1))];
 
-        // The vehicle's week as the game's ScheduleDays, Monday first as the game indexes them (GetScheduleDay(i) is i - 1).
         private static List<ScheduleDay> Days(VehicleState vehicle, string id)
         {
             var rules = DemandData.Rules!;
@@ -224,7 +196,6 @@ namespace FoodTrucks
                 days.Add(new ScheduleDay
                 {
                     day = ordered,
-                    // Open unless the route day is closed; shifts outside the route's hours may be set (paid, nothing to do).
                     isOpen = !WeekPlan.IsClosed(vehicle.Schedule, day),
                     openingHourSlots = WeekPlan.OpeningSlots(hours, day).Select(s => new OpeningHourSlot(s.Start, s.End)).ToList(),
                     workShifts = Shifts(vehicle, id, day),
@@ -241,10 +212,6 @@ namespace FoodTrucks
                 itemInstanceId = RowId(id, s.Station ?? WeekPlan.Serving(1)), type = WorkShiftType.Default,
             }).ToList();
 
-        // ---- Reading the game's changes back ----
-
-        // The stand-in's shifts into the vehicle's save data, when they changed: today's plans follow, and the crew's
-        // weekly hours and days on the game's employees.
         private static void SyncBack()
         {
             if (!Showing || standIn == null || vehicleId == null) return;
@@ -285,10 +252,6 @@ namespace FoodTrucks
                      string.Join(", ", shifts.Select(s => $"{s.EmployeeId} {s.Day} {s.Start:D2}-{s.End:D2} {s.Station}")) + ".");
         }
 
-        // A Schedule-tab change that would give a crew member more than FleetRules.MaxShiftHours on a weekday, all their
-        // shifts that day together (issue #14), is refused: the save keeps its shifts, the stand-in's days are built from
-        // them again, and the tab is drawn again on the next frame, once the game's drag or paste is done with its own
-        // shift objects.
         private static void Refuse(VehicleState vehicle, FleetRules rules, List<(string EmployeeId, DayOfWeek Day, int Hours)> over)
         {
             foreach (var day in standIn!.scheduleDays ?? new List<ScheduleDay>()) day.workShifts = Shifts(vehicle, vehicleId!, WeekdayOf(day.day));
@@ -305,9 +268,6 @@ namespace FoodTrucks
             });
         }
 
-        // The selected day again, as the game's own clear button does (ScheduleDaySelectionController.OnDaySelected with
-        // its selected index): the shift caches and rows are rebuilt from the stand-in's days. LoadScheduler would jump to
-        // today, so it is only the fallback.
         private static void Redraw()
         {
             var schedule = InstanceBehavior<UIs>.Instance?.fullMenu?.bizMan?.business?.bizManSchedule;
@@ -323,8 +283,6 @@ namespace FoodTrucks
             select.GetValue(selected.GetValue<int>());
         }
 
-        // Core's auto schedule for the week or a day (the game's auto-fill button), written to the save and to the
-        // stand-in's days in place (the screen holds them).
         private static void Auto(ScheduleDay? only)
         {
             var state = FoodTrucksSession.CurrentState;
@@ -346,14 +304,9 @@ namespace FoodTrucks
             FoodTrucksSession.MarkChanged();
             Log.Info($"Schedule: auto schedule for {vehicleId} ({(only == null ? "the week" : WeekdayOf(only.day).ToString())}): " +
                      string.Join(", ", vehicle.Schedule.CrewShifts.Select(s => $"{s.EmployeeId} {s.Day} {s.Start:D2}-{s.End:D2} {s.Station}")) + ".");
-            // The screen again, on the same data.
             InstanceBehavior<UIs>.Instance?.fullMenu?.bizMan?.business?.bizManSchedule?.LoadScheduler();
         }
 
-        // ---- Patches (Patches.Apply), inert unless the stand-in is showing ----
-
-        // BizManBusiness.RefreshData: only the Schedule tab, the vehicle's name and type, no logo, security, closed toggle,
-        // requirements or alerts.
         public static bool RefreshPrefix(BizManBusiness __instance)
         {
             if (!IsStandIn(__instance.buildingRegistration)) return true;
@@ -387,7 +340,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // BizManBusiness.LoadAlerts: the vehicle's to-dos are on its own page; none here (the stand-in has no address).
         public static bool AlertsPrefix(BizManBusiness __instance)
         {
             if (!IsStandIn(__instance.buildingRegistration)) return true;
@@ -397,8 +349,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // BizManBusiness.OnDisable: the shifts are read back, the page's own fields put back, and BizMan returns to the
-        // vehicle's page if it is still open. The game's registration-change events aren't sent for the stand-in.
         public static bool BusinessClosedPrefix(BizManBusiness __instance)
         {
             if (!IsStandIn(__instance.buildingRegistration)) return true;
@@ -424,8 +374,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Schedule: closing: " + ex); }
             finally
             {
-                // The session ends here whatever happened; the schedule's own OnDisable, which may come after this one, is
-                // skipped through `closing` until the next frame.
                 Reset();
                 closing = true;
                 HireRoutes.Later(() =>
@@ -439,8 +387,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // BizManBusiness.SetAddress: the page moves to a real business (BizMan.Open from a notification, the name
-        // dropdown) while the stand-in shows: the vehicle's session ends first, its shifts read back.
         public static void SetAddressPrefix(BizManBusiness __instance)
         {
             closing = false;
@@ -457,10 +403,8 @@ namespace FoodTrucks
             finally { Reset(); }
         }
 
-        // BizManSchedule.OnDisable: no customer entries, theatre or missing-employee checks or address event for the stand-in.
         public static bool ScheduleClosedPrefix(BizManSchedule __instance)
         {
-            // Only the stand-in's own page (or its closing, when the page's OnDisable ran first): never a real business's.
             var shown = Traverse.Create(__instance).Field("bizManBusiness").GetValue<BizManBusiness>()?.buildingRegistration;
             if (!closing && !IsStandIn(shown)) return true;
             try
@@ -472,13 +416,10 @@ namespace FoodTrucks
             return false;
         }
 
-        // ScheduleHelper.FetchEmployees: the vehicle's crew.
         public static bool EmployeesPrefix()
         {
             if (!Here) return true;
             var vehicle = vehicleId == null ? null : StreetSales.Find(FoodTrucksSession.CurrentState, vehicleId);
-            // Every crew member who exists, off sick, training or being replaced too: the game draws their shift bars and
-            // looks them up by id (GetEmployeeColor). Who works is decided by the mod's own rules, not this list.
             var crew = vehicle == null ? new List<EmployeeInstance>()
                 : vehicle.Crew.Select(HireCrew.Find).Where(e => e != null).Select(e => e!).ToList();
             Traverse.Create(typeof(ScheduleHelper)).Property("Employees").SetValue(crew);
@@ -488,7 +429,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // ScheduleHelper.FetchWorkstations: the vehicle's rows.
         public static bool WorkstationsPrefix()
         {
             if (!Here) return true;
@@ -498,9 +438,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // ScheduleHelper.UpdateEmployeeAfterWorkShiftChange(employee, single) and UpdateEmployeesAfterWorkShiftChange: the
-        // game would set the hours from the stand-in's days as a building's (zero for a crew member, who has no address),
-        // unassign them and give them the idle to-do. Instead the shifts are read back and the mod sets their weekly work.
         public static bool EmployeeChangedPrefix()
         {
             if (!Here) return true;
@@ -509,8 +446,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // EmployeeInstance.UpdateWeeklyHoursAndDays (a paste of a day, a removed shift): the crew's weekly work follows the
-        // shifts again.
         public static void WeeklyHoursPostfix(EmployeeInstance __instance)
         {
             if (!Showing || __instance == null || vehicleId == null) return;
@@ -520,7 +455,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Schedule: weekly hours: " + ex); }
         }
 
-        // ScheduleAutoFillerHelper.AutoFillSchedule: Core's auto schedule for the stand-in.
         public static bool AutoFillPrefix(BuildingRegistration business, ScheduleDay day)
         {
             if (!IsStandIn(business)) return true;
@@ -529,8 +463,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // ScheduleDaySelectionController.UpdateHrManagerAvailability: the auto-fill buttons work for a vehicle with crew,
-        // without an HR manager (Core's auto schedule, not the game's solver).
         public static void AutoAvailablePostfix(object __instance)
         {
             if (!Here) return;
@@ -548,7 +480,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Schedule: auto schedule buttons: " + ex); }
         }
 
-        // ScheduleHourToggle.OnPointerDown: the opening hours are the route day's; they change with the route.
         public static bool HourTogglePrefix()
         {
             if (!Here) return true;
@@ -556,11 +487,6 @@ namespace FoodTrucks
             return false;
         }
 
-        // ScheduleDayButton.OnOpenToggleChange: the day's open toggle opens or closes the vehicle's route that weekday, as for
-        // a shop (Peter, 16 October 2026). The route is changed first (RouteEditor.SetClosed, refused as before when a night
-        // would run into a working morning: the toggle goes back); then the game's own handler marks the day and reloads it.
-        // Today is planned again (RouteStops.Changed): a window open at a stop of a closed day closes and its drive back
-        // stays owed (VehicleState.ReturnPending), so nothing is stranded.
         public static bool DayTogglePrefix(ScheduleDayButton __instance, bool isOpen)
         {
             if (!Here) return true;
@@ -592,7 +518,6 @@ namespace FoodTrucks
             }
         }
 
-        // The stand-in's opening hours again after the route changed (in place: the screen holds the days).
         private static void OpeningHours(VehicleState vehicle)
         {
             if (standIn?.scheduleDays == null) return;
@@ -604,10 +529,6 @@ namespace FoodTrucks
                 day.openingHourSlots = WeekPlan.OpeningSlots(hours, WeekdayOf(day.day)).Select(s => new OpeningHourSlot(s.Start, s.End)).ToList();
         }
 
-        // ScheduleHelper.CalculateOpeningHoursState: a pasted day (ScheduleDayButton.OnPasteScheduleClick, once per day on
-        // paste to all) takes the source day's opening hours along with its shifts. The hours follow the route, so all
-        // seven days get the route's hours back before the game reads them for the header, the rows and the add buttons.
-        // The pasted shifts, the days and their open state stay as the game left them.
         public static void OpeningStatePrefix()
         {
             if (!Here) return;
@@ -619,7 +540,6 @@ namespace FoodTrucks
             catch (Exception ex) { Log.Error("Schedule: opening hours: " + ex); }
         }
 
-        // ScheduleScrollerController.LoadStation: a vehicle's row brings no customers and has nothing attached.
         public static void StationPostfix(object __instance)
         {
             if (!Here) return;
@@ -629,9 +549,6 @@ namespace FoodTrucks
             data[data.Count - 1].attachedItems = null;
         }
 
-        // ---- The test bridge ----
-
-        // Sets one crew member's shift (the bridge's crew schedule op): `start` == `end` removes their shifts that day.
         internal static ShiftProblem SetForBridge(string id, string employeeId, DayOfWeek day, int start, int end, string? station)
         {
             var state = FoodTrucksSession.CurrentState;

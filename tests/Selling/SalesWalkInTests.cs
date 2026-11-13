@@ -7,7 +7,6 @@ using Xunit;
 
 namespace FoodTrucks.Core.Tests.Selling;
 
-// Customers walk up to the line before they join the queue (queue.walkInMinutes in rules.json).
 public class SalesWalkInTests
 {
     private const string HotDog = "ba:itemname_hotdog";
@@ -57,7 +56,6 @@ public class SalesWalkInTests
 
         var later = simulator.Advance(state, input, 1);
         Assert.NotEmpty(later.Joined);
-        // Everyone sold to had joined the queue first.
         var joined = new HashSet<long>(early.Joined.Concat(later.Joined));
         Assert.All(later.Sales, s => Assert.Contains(s.CustomerId, joined));
     }
@@ -85,7 +83,6 @@ public class SalesWalkInTests
     {
         var state = SalesSimulator.Open(1);
         state.NextCustomerId = 2;
-        // Turned up at minute 0, joins at 10, and waits 5 minutes in line.
         state.Approaching.Add(Walking(1, joinsAt: 10, patience: 5));
         var input = Input(0, servers: 0);
 
@@ -184,7 +181,6 @@ public class SalesWalkInTests
     [Fact]
     public void TheWalkDoesNotChangeHowManyAWindowServes()
     {
-        // Busy and quiet hours alike: the walk delays each customer but loses none.
         foreach (var perHour in new[] { 30.0, 90.0, 300.0 })
         {
             var walk = Serve(simulator, perHour);
@@ -259,7 +255,6 @@ public class WalkInSaveTests
     }
 
     [Theory]
-    // An ID at or above NextCustomerId, one shared with the queue, and a negative join minute.
     [InlineData("[{\"id\":4,\"patience\":20,\"category\":\"fastfood\",\"joinsAtMinute\":9}]")]
     [InlineData("[{\"id\":1,\"patience\":20,\"category\":\"fastfood\",\"joinsAtMinute\":9}]")]
     [InlineData("[{\"id\":3,\"patience\":20,\"category\":\"fastfood\",\"joinsAtMinute\":-1}]")]

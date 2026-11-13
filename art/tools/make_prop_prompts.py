@@ -6,8 +6,6 @@ Each prop gets its own folder under art/equipment/ or art/products/, built by on
 import json
 import os
 
-# Equipment stands on a cart's counter or the truck's counter behind the hatch, front (customer side) towards -Y.
-# One footprint for all, so any piece fits any slot: 0.40 m wide (X), 0.36 m deep (Y).
 EQUIPMENT = {
     "CoffeeStation": ("Compact coffee station", 0.55,
         "A street-cart coffee setup: a compact stainless drip brewer or small espresso machine with a drip tray, "
@@ -48,8 +46,6 @@ EQUIPMENT = {
         "bright paper and ribbon, two snow globes and small generic city souvenirs (a tiny taxi, a mini skyline "
         "block), plus a cylinder holder at one side with four folded umbrellas in different colours standing in it. "
         "No text, flags or logos."),
-    # Compact versions of the base game's own equipment, to sit on the cart beside the game's look. Each run gets
-    # the game's item icon attached as a reference (kept outside the repo).
     "HotDogRoller": ("Compact hot dog roller grill", 0.40,
         "A compact version of the game's own hot dog grill (see the attached reference picture of the game's item): "
         "a brushed-steel roller grill with rows of shiny rollers carrying hot dogs, a sloped glass-free top, a front "
@@ -76,7 +72,6 @@ EQUIPMENT = {
         "croissants, donuts and cupcakes in neat rows. Same materials, colours and style as the reference, only smaller."),
 }
 
-# Handheld products, like the game's own food items: sold over the counter and carried in wholesale boxes.
 PRODUCTS = {
     "CornCob": ("Corn on the cob",
         "One grilled corn cob on a wooden stick, bare yellow kernels with dark grill marks, the lower end in a "

@@ -32,8 +32,6 @@ namespace FoodTrucks.Core.Fleet
             return checked((long)Math.Round(price * 100, MidpointRounding.AwayFromZero));
         }
 
-        // The adapter settles wages and releases native employees first. Keep historical sales, wages and vehicle
-        // numbers for accounts; end only this vehicle's future operation. Shared stock, orders and event tickets stay.
         public static void Close(SaveState state, string id, long minute)
         {
             var vehicle = state.Vehicles.FirstOrDefault(v => v.VehicleId == id);

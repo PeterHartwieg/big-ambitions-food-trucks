@@ -15,7 +15,6 @@ using Object = UnityEngine.Object;
 
 namespace FoodTrucks
 {
-    // Player controls only. No cargo/state writes, spawns, forced entry or Harmony patches.
     internal static partial class TestBridgeCommands
     {
         private static void RequireCarryControl()
@@ -35,7 +34,6 @@ namespace FoodTrucks
             (item.playerItemPurchaserSettings == null || !item.playerItemPurchaserSettings.enabled) &&
             (item.ItemInstance.ItemCached.HasTag(TagRef.Itemtag.isbox) || item.ItemInstance.ItemCached.HasTag(TagRef.Itemtag.isbag));
 
-        // Reuse the real click and its walk, merging, capacity, registration and destruction handling.
         private static object Pickup(JObject args)
         {
             RequireCarryControl();
@@ -45,7 +43,6 @@ namespace FoodTrucks
             return UseClick(args);
         }
 
-        // Only actual vanilla hand trucks/flatbeds. Food carts keep their existing vehicle controls.
         private static bool OrdinaryHandTruck(HandTruck truck) => truck != null && truck.vehicleInstance != null &&
             FoodTrucksMod.KindOf(truck.vehicleInstance.vehicleTypeName) == null;
 
@@ -61,7 +58,6 @@ namespace FoodTrucks
             ["name"] = LocalizorManager.GetLocalization(truck.vehicleInstance.vehicleTypeName, null),
             ["pushing"] = SaveGameManager.Current.ActiveVehicleId == truck.vehicleInstance.id,
             ["distance"] = Math.Round(Flat(truck.transform.position, PlayerHelper.GetPosition()), 1),
-            // These are the boxes and quantities shown in the cargo panel, never purchase costs or tuning.
             ["contents"] = new JArray(truck.vehicleInstance.cargoInstances.Where(c => c != null && c.amount > 0).Select(c => new JObject
             {
                 ["key"] = c.itemName, ["item"] = LocalizorManager.GetLocalization(c.itemName, null),
@@ -93,7 +89,6 @@ namespace FoodTrucks
                 throw new BridgeError("Return the mop or shopping basket before using a hand truck.");
             if (op == "grab" && active == id) throw new BridgeError("You're already pushing that hand truck.");
             if (op == "load" && !PlayerHelper.IsHoldingItem) throw new BridgeError("Your hands are empty.");
-            // Bag conversion into storage drops the contents' paid flags; refuse before the game can convert it.
             if (op == "load" || op == "grab")
             {
                 var unpaid = PlayerHelper.ItemInstanceInHands?.cargoInstances?.FirstOrDefault(c => c != null && c.amount > 0 && !c.paid);
@@ -119,7 +114,7 @@ namespace FoodTrucks
                 else if (op == "load" || grabbingAfterLoad) truck.MoveAndAddHeldItemToStorage();
                 else if (op == "grab") truck.DriveVehicle();
                 else if (active != id) truck.MoveAndManageStorage();
-                else ui.manageCargoUI.Close(); // A panel cargo click takes a box and parks; an open storage view transfers instead.
+                else ui.manageCargoUI.Close();
             }
             catch { Notices.EndCapture(caught); throw; }
             return new Deferred(() =>
@@ -139,7 +134,6 @@ namespace FoodTrucks
                 if (op == "take" && !takeClicked && elapsed < UseSeconds)
                 {
                     takeClicked = true;
-                    // Invoke the visible row's own listener, preserving sealed cargo, exit and transfer behavior.
                     var root = active == id ? (Component)ui.itemPanelUI : ui.manageCargoUI;
                     var holderField = HarmonyLib.AccessTools.Field(typeof(CargoItemUi), "_currentCargoHolder");
                     var buttonField = HarmonyLib.AccessTools.Field(typeof(CargoItemUi), "itemButton");

@@ -16,7 +16,6 @@ using UnityEngine.UI;
 
 namespace FoodTrucks
 {
-    // Native activity controls and cargo HUD only. Sales, stock, dates and takings remain CartSelling/Core's.
     internal static class ServingWork
     {
         private static ServingActivity? active;
@@ -58,8 +57,6 @@ namespace FoodTrucks
             try
             {
                 active = activity;
-                // WorkActivity uses the station's consumption. Read it from the native register prefab too,
-                // rather than embedding a second set of needs rates in the selling simulation.
                 var register = PrefabHelper.LoadItemControllerFromPrefab("ba:itemname_cashregister") as EmployeeStationController;
                 if (register == null) throw new InvalidOperationException("The native cash register work-energy settings are unavailable.");
                 EnergyHelper.RemoveEnergySpender("move");
@@ -89,24 +86,18 @@ namespace FoodTrucks
             if (active != activity || ending) return;
             var oldCargo = cargo;
             var panel = stockPanel;
-            // Teardown may run after Unity has destroyed the HUD. Release ownership before any callbacks
-            // or game calls, so even a failed cleanup cannot block this or the next session's work.
             active = null;
             cargo = null;
             stockPanel = null;
             ending = true;
             try
             {
-                // Book every already simulated order before walking/driving/closing can change service or stock.
                 try { CartSelling.PayAllHeldNow(); }
                 catch (Exception ex) { Log.Error("Serving work, held orders: " + ex); }
                 try { oldCargo?.RemoveCallFromOnItemsInCargoUpdated(RefreshStock); }
                 catch (Exception ex) { Log.Error("Serving work, cargo listener: " + ex); }
                 try
                 {
-                    // Toggle(false) clears GameManager.selectedVehicle without a null check. While the city unloads or
-                    // the game quits, the manager is gone or no longer returned, and the scene removes the panel anyway
-                    // (NullReferenceException in Toggle after a bridge quit while serving, issue #19).
                     var game = GameManager.isCitySceneBeingUnloaded ? null : InstanceBehavior<GameManager>.Instance;
                     if (panel != null && game != null && string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) panel.Toggle(false);
                 }
@@ -124,7 +115,6 @@ namespace FoodTrucks
                     }
                 }
                 catch (Exception ex) { Log.Error("Serving work, speed: " + ex); }
-                // Keep skipVehicle until the end event has resumed the sales clocks, irrespective of event order.
                 try
                 {
                     var ui = InstanceBehavior<UIs>.Instance;
@@ -144,7 +134,7 @@ namespace FoodTrucks
                 if (activity != null)
                 {
                     activity.MarkFinished();
-                    End(activity); // Also clean up an activity that was already marked Finished.
+                    End(activity);
                 }
             }
             finally
@@ -178,8 +168,6 @@ namespace FoodTrucks
             catchingUp = true;
             try
             {
-                // Keep the old server in place until the last elapsed minute has sold. Routes decide their
-                // closing boundaries first, so a late frame cannot sell past the end of a crew stop.
                 var now = HireCrew.NowExact();
                 HireRoutes.CatchUpTo((long)Math.Floor(now));
                 CartSelling.CatchUpTo(now);
@@ -200,20 +188,17 @@ namespace FoodTrucks
             }
         }
 
-        // Runs BEFORE SetVehicle: its nested button/row updates must already belong to the game when
-        // entering a vehicle, including entry without a navigation event or an intervening LateUpdate.
         internal static void OtherPanel() => stockPanel = null;
         internal static void VehiclePanel(VehicleController vehicle)
         {
             if (!string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId))
             {
-                OtherPanel(); // Never hide or clear the vehicle the game has just selected.
+                OtherPanel();
                 DrivingPrefix();
             }
             else if (vehicle == null || vehicle.vehicleInstance != cargo) OtherPanel();
         }
 
-        // SetVehicle does not select/enter the vehicle. These buttons are driving/loading controls, not serving.
         internal static void ReadOnlyButtons(ItemPanelUI __instance)
         {
             if (stockPanel != __instance || active == null || !string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) return;
@@ -227,14 +212,11 @@ namespace FoodTrucks
             if (stockPanel != __instance || active == null || !string.IsNullOrEmpty(SaveGameManager.Current?.ActiveVehicleId)) return;
             foreach (var button in __instance.cargoContainer.GetComponentsInChildren<Button>(true))
             {
-                // Normal driving/pushing creates its rows from this template afterwards. Keep it interactive.
                 if (button.transform.IsChildOf(__instance.cargoSlotTemplate)) continue;
                 button.interactable = false;
             }
         }
 
-        // The game gates its toggle and shortcut on being indoors. Lift only that gate for our activity;
-        // the toggle's original listener still sets GameSpeed(TimeSpeed.FastForward) and resets it afterwards.
         internal static void SpeedOptionsPostfix(PlayerActivityUI __instance, Toggle ___fastForwardToggle)
         {
             if (__instance.GetCurrentActivity is ServingActivity activity)
@@ -263,7 +245,6 @@ namespace FoodTrucks
                 InstanceBehavior<UIs>.Instance?.timeMachine?.CancelTimeMachine();
         }
 
-        // Bridge calls the actual toggle/skip button, including the panel's duration and end-of-skip bookkeeping.
         internal static void Control(string id, string op, int? minutes, bool enabled)
         {
             var activity = Current;
@@ -317,8 +298,6 @@ namespace FoodTrucks
             state = PlayerActivityState.Finished;
             ServingWork.End(this);
         }
-        // The game calls Perform with the entire skip at its end as well as with running minutes.
-        // Catch up to an absolute clock, never resell that duration or drain needs a second time.
         public void Perform(int elapsed) => CartSelling.CatchUpTo(HireCrew.NowExact());
         public abstract void Finish();
         public abstract LabelInfo GetHeadlineLabel();

@@ -4,21 +4,10 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Common
 {
-    // Choices the test bridge makes (docs/test-bridge.md), kept here so they are tested without the game.
-
-    // Which ground surface a teleport lands on, of the ones stacked above a point (a street under an elevated road).
-    // Live session 4 (13 October 2026): the highest surface put the player on the elevated highway.
     public static class GroundPick
     {
-        // How far an explicit y may be from the surface it asks for.
         public const double ExplicitReach = 1.5;
 
-        // `surfaces`: each surface's height and whether people can walk there (NavMesh near it). An explicit y takes
-        // the surface nearest it within ExplicitReach, walkable when `walkableOnly` (the player); otherwise a walkable
-        // surface nearest the mover's own height, then (not for `walkableOnly`) any surface nearest it. Returns the index,
-        // or -1 when there is no such surface, and a few words on why, for the reply. Live session 5: the reply said "nearest the
-        // mover's height (0.09) of 2: 3.22, 0.20" and took 3.22, because the street at 0.20 read as not walkable; the
-        // heights are now listed with which are walkable, and an explicit y with nothing walkable near it is refused.
         public static (int Index, string Why) Choose(IReadOnlyList<(double Y, bool Walkable)> surfaces, double referenceY, double? explicitY,
             bool walkableOnly = false)
         {
@@ -48,25 +37,17 @@ namespace FoodTrucks.Core.Common
         }
     }
 
-    // Keeping the player's needs up while the bridge runs the clock fast (live session 4: after two game days of
-    // run_until the character collapsed, the clock jumped to 08:00 the next day and the hospital charged $2,000).
     public static class NeedsTopUp
     {
-        // Topped up when energy or hunger falls below this (the game's scale is 0 to 100; it hospitalises at -20).
         public const double Below = 40;
 
         public static bool Due(double energy, double hunger) => energy < Below || hunger < Below;
     }
 
-    // How far out a shot's camera may stand along its line from the subject, given the first solid thing on that line.
     public static class ShotClearance
     {
-        // Metres kept between the camera and the first hit.
         public const double Margin = 0.4;
 
-        // `wanted`: the pose's distance; `firstHit`: the distance to the first solid thing from the subject, null when
-        // the line is clear; `minimum`: the nearest the pose still shows its subject. The distance to use, or null when
-        // the line is blocked nearer than that (then the next way round is tried).
         public static double? Fit(double wanted, double? firstHit, double minimum)
         {
             if (firstHit == null || firstHit.Value >= wanted + Margin) return wanted;

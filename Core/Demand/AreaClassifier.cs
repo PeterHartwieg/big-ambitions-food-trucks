@@ -4,7 +4,6 @@ using System.Linq;
 
 namespace FoodTrucks.Core.Demand
 {
-    // One building near the spot, as the game adapter reads it. The adapter decides how to measure the distance.
     public sealed class NearbyPlace
     {
         public NearbyPlace(string buildingType, string? businessType, double distanceMetres, double weight = 1.0)
@@ -18,7 +17,6 @@ namespace FoodTrucks.Core.Demand
         public string BuildingType { get; }
         public string? BusinessType { get; }
         public double DistanceMetres { get; }
-        // How much of its usual crowd it brings now (LiveCrowds.Weight); 1.0 for anything not live.
         public double Weight { get; }
     }
 
@@ -59,22 +57,16 @@ namespace FoodTrucks.Core.Demand
                 }
             }
 
-            // No classified buildings means street baseline only, without a fallback crowd.
             if (votes.Count == 0) return AreaMix.FromPresences(Array.Empty<KeyValuePair<string, double>>());
-            // Fixed summation order prevents rounding from changing ties when places are reordered.
             var totals = votes.Select(pair =>
             {
                 pair.Value.Sort();
                 return new KeyValuePair<string, double>(pair.Key, 1.0 - Math.Exp(-pair.Value.Sum() / settings.Saturation));
             });
-            // MaxAreas is accepted for old data, but never trims independent crowds.
             return AreaMix.FromPresences(totals.OrderByDescending(pair => pair.Value)
                 .ThenBy(pair => pair.Key, StringComparer.Ordinal));
         }
 
-        // Each area's live crowd against the usual one: its votes' mean live weight (NearbyPlace.Weight), so a
-        // closed venue takes its share out and a surge multiplies it, after the presence curve. Areas whose
-        // places are all at weight 1 are left out.
         public IReadOnlyDictionary<string, double> LiveFactors(IEnumerable<NearbyPlace> places)
         {
             if (places == null) throw new ArgumentNullException(nameof(places));
@@ -105,7 +97,6 @@ namespace FoodTrucks.Core.Demand
             return result;
         }
 
-        // The areas a building votes for: its business type's rule, else its building type's; null for neither.
         public IReadOnlyDictionary<string, double>? RuleFor(string? buildingType, string? businessType)
         {
             var settings = tables.Classifier;
@@ -115,7 +106,6 @@ namespace FoodTrucks.Core.Demand
             return rule;
         }
 
-        // Whether a building brings the area's crowd to the spots around it.
         public bool Draws(string area, string? buildingType, string? businessType) =>
             RuleFor(buildingType, businessType) is { } rule && rule.TryGetValue(area, out var weight) && weight > 0;
 

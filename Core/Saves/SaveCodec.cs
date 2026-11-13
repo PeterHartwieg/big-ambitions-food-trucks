@@ -35,7 +35,6 @@ namespace FoodTrucks.Core.Saves
 
             this.currentVersion = currentVersion;
             this.migrations = new Dictionary<int, Func<JObject, JObject>>();
-            // Schema 1 has the same layout. Its pot holds only unpaid crew sales; player sales were already paid.
             migrations ??= new Dictionary<int, Func<JObject, JObject>> { [1] = document => document };
             foreach (var migration in migrations)
             {
@@ -53,7 +52,6 @@ namespace FoodTrucks.Core.Saves
             return document.ToString(Formatting.None);
         }
 
-        // Applies the saved count and mod version only after serialization succeeds.
         public string SerializeForSave(SaveState state, string modVersion)
         {
             if (state == null)
@@ -110,14 +108,10 @@ namespace FoodTrucks.Core.Saves
                     document["schemaVersion"] = ++version;
                 }
 
-                // Vehicle numbers only name vehicles: read apart, entry by entry, so a bad one never makes the save Corrupt.
                 var numbers = FoodTrucks.Core.Fleet.FleetNames.TakeOut(document, JsonSerializer.Create(settings));
-                // The vendor API's block too: a bad one is dropped, a newer one kept as it is.
                 var vendor = FoodTrucks.Core.Vendor.VendorBook.TakeOut(document);
                 var state = document.ToObject<SaveState>(JsonSerializer.Create(settings))
                     ?? throw new JsonSerializationException("Save state must be a JSON object.");
-                // Routes saved before the week plan become the same stops on each of their days; shifts saved before the
-                // Schedule tab's rows get a free row (never a reason to reject the save).
                 var notes = new List<string>();
                 foreach (var vehicle in state.Vehicles ?? new List<VehicleState>())
                 {
@@ -125,7 +119,6 @@ namespace FoodTrucks.Core.Saves
                     FoodTrucks.Core.Fleet.WeekPlan.Upgrade(vehicle);
                     notes.AddRange(FoodTrucks.Core.Fleet.WeekPlan.RepairShifts(vehicle));
                 }
-                // Vehicle numbers only name vehicles: a bad entry is dropped, never a reason to reject the save.
                 state.VehicleNumbers = FoodTrucks.Core.Fleet.FleetNames.Repaired(numbers);
                 ValidateState(state);
                 FoodTrucks.Core.Vendor.VendorBook.PutBack(state, vendor, JsonSerializer.Create(settings), notes);
