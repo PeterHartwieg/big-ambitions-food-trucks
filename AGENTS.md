@@ -24,3 +24,4 @@ When the Windows PC is unavailable, the sibling Driven Rides checkout provides a
 - Mark evidence in the README as checked (seen in game), pending or unverified. Code reading is not a check.
 - Neutral names: no references to any YouTube series or personal saves in shipped files.
 - No code comments. Fix the problem, or open an issue, instead of leaving an excuse in the code. `tools/comment_ban.py` (run by the tools tests) fails on any comment that is not a directive or listed in `docs/comment-excuses.md`.
+- No new markdown files unless Peter explicitly asks for one (a plan or a review); put status in the PR description or the issue. `tools/md_ban.py` (run by the tools tests) fails on new `.md`/`.mdx` paths unless the PR has the `docs-approved` label.
