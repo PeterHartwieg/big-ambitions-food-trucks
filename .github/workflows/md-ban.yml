@@ -1,0 +1,16 @@
+name: md-ban
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+permissions:
+  contents: read
+jobs:
+  md-ban:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - run: git fetch --no-tags --depth=1 origin ${{ github.event.pull_request.base.sha }}
+      - run: python3 tools/md_ban.py --base ${{ github.event.pull_request.base.sha }} --event "$GITHUB_EVENT_PATH"
