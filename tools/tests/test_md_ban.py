@@ -1,4 +1,6 @@
 from pathlib import Path
+import contextlib
+import io
 import json
 import subprocess
 import sys
@@ -43,15 +45,19 @@ class MarkdownBanTests(unittest.TestCase):
     def found(self):
         return md_ban.new_markdown(*md_ban.repo_changes(self.root, 'base'))
 
-    def run_main(self, event=None):
-        args = ['--repo', str(self.root), '--base', 'base']
+    def run_main(self, event=None, base='base'):
+        args = ['--repo', str(self.root), '--base', base]
         if event is not None:
             events = tempfile.TemporaryDirectory(prefix='ft-md-ban-event-')
             self.addCleanup(events.cleanup)
             path = Path(events.name) / 'event.json'
             path.write_text(json.dumps(event))
             args += ['--event', str(path)]
-        return md_ban.main(args)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = md_ban.main(args)
+        self.output = out.getvalue()
+        return code
 
     def test_no_markdown_passes(self):
         self.write('a.py', 'x = 1\n')
@@ -66,6 +72,7 @@ class MarkdownBanTests(unittest.TestCase):
         self.commit()
         self.assertEqual(self.found(), ['docs/plan.md', 'page.MDX'])
         self.assertEqual(self.run_main(), 1)
+        self.assertIn('docs/plan.md: new markdown file not allowed', self.output)
 
     def test_untracked_markdown_fails(self):
         self.write('status.md', 'status\n')
@@ -91,6 +98,16 @@ class MarkdownBanTests(unittest.TestCase):
         self.assertEqual(self.run_main({'pull_request': {'labels': [{'name': 'docs-approved'}]}}), 0)
         self.assertEqual(self.run_main({'pull_request': {'labels': [{'name': 'other'}]}}), 1)
         self.assertEqual(self.run_main({}), 1)
+
+    def test_markdown_deleted_on_main_passes_against_merge_parent(self):
+        git(self.root, 'checkout', '-q', '-b', 'feature')
+        self.write('b.txt', 'b\n')
+        self.commit()
+        git(self.root, 'checkout', '-q', 'main')
+        git(self.root, 'rm', '-q', 'README.md')
+        self.commit()
+        git(self.root, 'merge', '-q', '--no-ff', '-m', 'merge', 'feature')
+        self.assertEqual(self.run_main(base='HEAD^1'), 0)
 
 
 if __name__ == '__main__':

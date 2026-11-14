@@ -10,7 +10,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 1
-      - run: git fetch --no-tags --depth=1 origin ${{ github.event.pull_request.base.sha }}
-      - run: python3 tools/md_ban.py --base ${{ github.event.pull_request.base.sha }} --event "$GITHUB_EVENT_PATH"
+          fetch-depth: 2
+      - run: python3 tools/md_ban.py --base HEAD^1 --event "$GITHUB_EVENT_PATH"
