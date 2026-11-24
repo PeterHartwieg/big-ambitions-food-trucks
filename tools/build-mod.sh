@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+GENERATE=0
+VARIANT=""
+CORE_PROP=""
+for arg in "$@"; do
+  case "$arg" in
+    --generate) GENERATE=1 ;;
+    --test-faults|--test-contract-2)
+      [ -z "$VARIANT" ] || { echo "--test-faults and --test-contract-2 are separate test builds; pass only one of them" >&2; exit 1; }
+      VARIANT="${arg#--}"
+      if [ "$VARIANT" = test-faults ]; then CORE_PROP="-p:FoodTrucksTestFaults=true"; else CORE_PROP="-p:FoodTrucksTestContract2=true"; fi ;;
+    *) echo "Unknown option $arg: --generate, --test-faults or --test-contract-2" >&2; exit 1 ;;
+  esac
+done
+PACKAGE="FoodTrucks${VARIANT:+-$VARIANT}"
+
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SDK="${BA_SDK:-$REPO/build/sdk}"
 SDK_URL="https://github.com/hovgaardgames/bigambitions.git"
@@ -42,7 +57,7 @@ if [ ! -f "$DEPS/0Harmony.dll" ] || [ ! -f "$REPO/build/Harmony-LICENSE.txt" ]; 
 fi
 echo "$HARMONY_DLL_SHA256  $DEPS/0Harmony.dll" | shasum -a 256 -c - >/dev/null || { echo "Cached 0Harmony.dll does not match the pinned hash; delete it and rebuild" >&2; exit 1; }
 
-dotnet build "$REPO/Core/FoodTrucks.Core.csproj" -c Release -nologo -v quiet
+dotnet build "$REPO/Core/FoodTrucks.Core.csproj" -c Release -nologo -v quiet ${CORE_PROP:+"$CORE_PROP"}
 cp "$REPO/Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll" "$DEPS/FoodTrucks.Core.dll"
 dotnet build "$REPO/tools/bridge-locks/BridgeControl.csproj" -c Release -nologo -v quiet
 cp "$REPO/tools/bridge-locks/bin/Release/netstandard2.0/BridgeControl.dll" "$DEPS/BridgeControl.dll"
@@ -112,12 +127,12 @@ run_unity() {
   grep "FoodTrucksBuild" "$log" || true
 }
 
-if [ "${1:-}" = "--generate" ]; then
+if [ "$GENERATE" = 1 ]; then
   run_unity FoodTrucks.BuildEditor.ModAssets.Generate generate
 fi
 run_unity FoodTrucks.BuildEditor.BatchBuild.Build build
 
-OUT="$REPO/build/FoodTrucks"
+OUT="$REPO/build/$PACKAGE"
 rm -rf "$OUT"
 cp -R "$SDK/Output/FoodTrucks" "$OUT"
 cp "$REPO/build/Harmony-LICENSE.txt" "$OUT/Dependencies/Harmony-LICENSE.txt"
@@ -126,6 +141,7 @@ mkdir -p "$OUT/data"
 cp "$REPO"/data/*.json "$OUT/data/"
 python3 "$REPO/tools/validate-bundles.py" "$OUT"
 dotnet run --project "$REPO/tools/release/VerifyRelease.csproj" -c Release -- "$OUT" "$MOD_DIR/ModManifest.asset"
-( cd "$OUT" && find . -type f | sort | xargs shasum -a 256 ) > "$REPO/build/FoodTrucks.sha256"
+( cd "$OUT" && find . -type f | sort | xargs shasum -a 256 ) > "$REPO/build/$PACKAGE.sha256"
 echo "Built $OUT"
-cat "$REPO/build/FoodTrucks.sha256"
+[ -z "$VARIANT" ] || echo "$VARIANT is a test build: never install it into a normal profile or upload it to the Workshop"
+cat "$REPO/build/$PACKAGE.sha256"

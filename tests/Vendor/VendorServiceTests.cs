@@ -12,6 +12,7 @@ using static FoodTrucks.Core.Tests.Vendor.VendorTestHost;
 
 namespace FoodTrucks.Core.Tests.Vendor;
 
+[Collection("VendorApi")]
 public class VendorServiceTests
 {
     private const string Cart = "cart-a";
@@ -409,6 +410,154 @@ public class VendorServiceTests
         Assert.Equal(1, VendorBook.Entry(host.Save, Cart)!.Sequence);
     }
 
+#if FOODTRUCKS_TEST_FAULTS
+    private static void Faulted(Action test)
+    {
+        VendorFaultHook.Reset();
+        try { test(); }
+        finally { VendorFaultHook.Reset(); }
+    }
+
+    [Fact]
+    public void TheArmedFaultThrowsOnceAfterTheLedgerRecordOfAVendorApiSale() => Faulted(() =>
+    {
+        var (host, service, opening) = Granted(At(3, 10, 5), At(3, 11, 0));
+        host.Now = At(3, 11, 10);
+        VendorFaultHook.Arm(VendorFaultHook.SellAfterLedger);
+
+        Assert.Equal(VendorApiStatus.Failed, Sell(service, opening, At(3, 11, 10), out var sale, out var uncertain, out var reason));
+        Assert.True(uncertain);
+        Assert.Null(sale);
+        Assert.Contains("do not retry", reason);
+        Assert.Equal(450, Assert.Single(host.Save.CrewTakings).Cents);
+        Assert.Equal(1, host.Vehicle(Cart).LifetimeSales);
+        Assert.Single(host.Sales);
+        Assert.Equal(1, VendorBook.Entry(host.Save, Cart)!.Sequence);
+        Assert.Contains(host.Lines, l => l.Contains("failed after the ledger record") && l.Contains("FoodTrucks test fault sell_after_ledger"));
+        Assert.False(VendorFaultHook.Armed);
+        Assert.True(VendorFaultHook.Fired);
+        Assert.Equal(0, VendorFaultHook.ShotsRemaining);
+
+        Assert.Equal(VendorApiStatus.Ready, Sell(service, opening, At(3, 11, 10), out sale, out uncertain, out _));
+        Assert.False(uncertain);
+        Assert.Equal(2, sale!.Sequence);
+        Assert.Equal(900, Assert.Single(host.Save.CrewTakings).Cents);
+    });
+
+    [Fact]
+    public void AFailureBeforeTheLedgerOrARefusedSaleLeavesTheShotArmed() => Faulted(() =>
+    {
+        var (host, service, opening) = Granted(At(3, 10, 5), At(3, 11, 0));
+        host.Now = At(3, 11, 10);
+        VendorFaultHook.Arm(VendorFaultHook.SellAfterLedger);
+
+        host.ThrowBeforeRecord = true;
+        Assert.Equal(VendorApiStatus.Failed, Sell(service, opening, At(3, 11, 10), out _, out var uncertain, out var reason));
+        Assert.False(uncertain);
+        Assert.Equal("failed before the sale", reason);
+        host.ThrowBeforeRecord = false;
+        host.RefuseSale = true;
+        Assert.Equal(VendorApiStatus.Refused, Sell(service, opening, At(3, 11, 10), out _, out uncertain, out reason));
+        Assert.False(uncertain);
+        Assert.Equal("sale refused", reason);
+        Assert.Empty(host.Save.CrewTakings);
+        Assert.True(VendorFaultHook.Armed);
+        Assert.Equal(1, VendorFaultHook.ShotsRemaining);
+        Assert.False(VendorFaultHook.Fired);
+
+        host.RefuseSale = false;
+        Assert.Equal(VendorApiStatus.Failed, Sell(service, opening, At(3, 11, 10), out _, out uncertain, out _));
+        Assert.True(uncertain);
+        Assert.True(VendorFaultHook.Fired);
+    });
+
+    [Fact]
+    public void OrdinaryStreetFoodSalesNeverReachTheFault() => Faulted(() =>
+    {
+        var host = new VendorTestHost { Now = At(3, 10, 0) };
+        host.AddVehicle(Cart);
+        host.Open(Cart, At(3, 10, 0));
+        VendorFaultHook.Arm(VendorFaultHook.SellAfterLedger);
+
+        StreetSales.Record(host.Save, Cart, 3, 450, 1);
+        CrewTakings.Accrue(host.Save, Cart, 3, 450);
+
+        Assert.Equal(450, Assert.Single(host.Save.CrewTakings).Cents);
+        Assert.True(VendorFaultHook.Armed);
+        Assert.False(VendorFaultHook.Fired);
+    });
+
+    [Fact]
+    public void AnEscapedFaultStillDisarmsAndAnUnarmedHookIsInert() => Faulted(() =>
+    {
+        VendorFaultHook.AfterLedger(Cart, "ba:itemname_hotdog");
+        Assert.False(VendorFaultHook.Fired);
+
+        VendorFaultHook.Arm(VendorFaultHook.SellAfterLedger);
+        var ex = Assert.Throws<VendorFaultException>(() => VendorFaultHook.AfterLedger(Cart, "ba:itemname_hotdog"));
+        Assert.Equal(VendorFaultHook.SellAfterLedger, ex.Point);
+        Assert.False(VendorFaultHook.Armed);
+        Assert.Equal(0, VendorFaultHook.ShotsRemaining);
+        Assert.True(VendorFaultHook.Fired);
+        VendorFaultHook.AfterLedger(Cart, "ba:itemname_hotdog");
+
+        var (host, service, opening) = Granted(At(3, 10, 5), At(3, 11, 0));
+        host.Now = At(3, 11, 10);
+        Assert.Equal(VendorApiStatus.Ready, Sell(service, opening, At(3, 11, 10), out var sale, out var uncertain, out _));
+        Assert.False(uncertain);
+        Assert.Equal(1, sale!.Sequence);
+    });
+
+    [Fact]
+    public void LoadingASaveClearsTheFault() => Faulted(() =>
+    {
+        var host = new VendorTestHost { Now = At(3, 10, 0) };
+        try
+        {
+            VendorFaultHook.Arm(VendorFaultHook.SellAfterLedger);
+            VendorRuntime.Attach(host);
+            Assert.False(VendorFaultHook.Armed);
+            Assert.Null(VendorFaultHook.Point);
+
+            VendorFaultHook.Arm(VendorFaultHook.SellAfterLedger);
+            Assert.Throws<VendorFaultException>(() => VendorFaultHook.AfterLedger(Cart, "ba:itemname_hotdog"));
+            VendorRuntime.Detach();
+            Assert.False(VendorFaultHook.Fired);
+
+            VendorFaultHook.Arm(VendorFaultHook.SellAfterLedger);
+            VendorRuntime.Detach();
+            Assert.False(VendorFaultHook.Armed);
+        }
+        finally { VendorRuntime.Detach(); }
+    });
+
+    [Fact]
+    public void TheBridgeArmsOncePerShotAndRefusesUnknownPoints() => Faulted(() =>
+    {
+        JObject Call(string json) => VendorFaultHook.Bridge(JObject.Parse(json));
+
+        Assert.Equal(JObject.Parse("{\"armed\":false,\"point\":null,\"shots_remaining\":0,\"fired\":false}"), Call("{\"action\":\"status\"}"));
+        Assert.Contains("Unknown fault point 'sell_before_ledger'",
+            Assert.Throws<ArgumentException>(() => Call("{\"action\":\"arm\",\"point\":\"sell_before_ledger\"}")).Message);
+        Assert.Throws<ArgumentException>(() => Call("{\"action\":\"arm\"}"));
+        Assert.Throws<ArgumentException>(() => Call("{\"action\":\"fire\"}"));
+        Assert.False(VendorFaultHook.Armed);
+
+        Assert.Equal(JObject.Parse("{\"armed\":true,\"point\":\"sell_after_ledger\",\"shots_remaining\":1}"),
+            Call("{\"action\":\"arm\",\"point\":\"sell_after_ledger\"}"));
+        Assert.Throws<InvalidOperationException>(() => Call("{\"action\":\"arm\",\"point\":\"sell_after_ledger\"}"));
+        Assert.Equal(JObject.Parse("{\"armed\":true,\"point\":\"sell_after_ledger\",\"shots_remaining\":1,\"fired\":false}"), Call("{\"action\":\"status\"}"));
+        Assert.Equal(JObject.Parse("{\"armed\":false,\"fired\":false}"), Call("{\"action\":\"disarm\"}"));
+
+        Call("{\"action\":\"arm\",\"point\":\"sell_after_ledger\"}");
+        Assert.Throws<VendorFaultException>(() => VendorFaultHook.AfterLedger(Cart, "ba:itemname_hotdog"));
+        Assert.Equal(JObject.Parse("{\"armed\":false,\"point\":\"sell_after_ledger\",\"shots_remaining\":0,\"fired\":true}"), Call("{\"action\":\"status\"}"));
+        Assert.Equal(JObject.Parse("{\"armed\":true,\"point\":\"sell_after_ledger\",\"shots_remaining\":1}"),
+            Call("{\"action\":\"arm\",\"point\":\"sell_after_ledger\"}"));
+        Assert.Equal(JObject.Parse("{\"armed\":false,\"fired\":false}"), Call("{\"action\":\"disarm\"}"));
+    });
+
+#endif
     [Fact]
     public void AnOpeningStreetFoodHoldsCannotBeSoldThrough()
     {

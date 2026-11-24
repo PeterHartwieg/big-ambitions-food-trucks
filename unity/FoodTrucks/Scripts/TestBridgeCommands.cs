@@ -57,6 +57,7 @@ namespace FoodTrucks
                 case "ui": return TestBridgeUi.Run(args);
                 case "job": RequireFtCity(cmd); return TestBridgeJob.Run(args);
                 case "licence": RequireFtCity(cmd); return TestBridgeLicence.Run(args);
+                case "vendor_fault": return TestBridgeVendorFault.Run(cmd, args);
                 case "help": RequireCity(cmd); return TestBridgeHelp.Run(args);
                 case "shoot": RequireCity(cmd); return TestBridgeShoot.Shoot(args);
                 case "save": RequireFtCity(cmd); return Save(args);

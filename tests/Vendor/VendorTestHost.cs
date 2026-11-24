@@ -22,6 +22,7 @@ internal sealed class VendorTestHost : IVendorHost
     public int FactsCalls;
     public bool ThrowBeforeRecord;
     public bool ThrowAfterRecord;
+    public bool RefuseSale;
     public readonly List<(string Vehicle, string Item, long Minute)> Sales = new List<(string, string, long)>();
 
     public IReadOnlyList<VendorFacts> Facts()
@@ -35,6 +36,7 @@ internal sealed class VendorTestHost : IVendorHost
     public long SellOne(string vehicleId, string item, long minute)
     {
         if (ThrowBeforeRecord) throw new InvalidOperationException("before");
+        if (RefuseSale) return -1;
         var facts = Vehicles[vehicleId];
         var index = facts.Items.ToList().IndexOf(item);
         var cents = facts.PriceCents[index];

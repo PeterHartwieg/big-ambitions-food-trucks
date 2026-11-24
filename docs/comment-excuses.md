@@ -55,7 +55,7 @@ Code comments are banned (see `AGENTS.md`). The comments listed here were kept b
 - `tools/balance/Program.cs:30-33` imperfect-choice
 - `tools/balance/Program.cs:708-720` imperfect-choice
 - `tools/balance/Program.cs:734-736` workaround
-- `tools/build-mod.sh:50-53` workaround
+- `tools/build-mod.sh:65-68` workaround
 - `tools/ftlib/playthrough.py:435-436` workaround
 - `tools/ftlib/shots.py:26` workaround
 - `tools/game-lock.sh:1-2` temporary
@@ -114,7 +114,7 @@ Code comments are banned (see `AGENTS.md`). The comments listed here were kept b
 - `unity/FoodTrucks/Scripts/SaveGuard.cs:13-27` workaround
 - `unity/FoodTrucks/Scripts/StreetFoodBooks.cs:85-86` known-gap
 - `unity/FoodTrucks/Scripts/TestBridgeCollisions.cs:8-12` known-gap
-- `unity/FoodTrucks/Scripts/TestBridgeCommands.cs:767-773` workaround
+- `unity/FoodTrucks/Scripts/TestBridgeCommands.cs:768-774` workaround
 - `unity/FoodTrucks/Scripts/TestBridgeJob.cs:76-80` imperfect-choice
 - `unity/FoodTrucks/Scripts/TestBridgeJob.cs:122-125` imperfect-choice
 - `unity/FoodTrucks/Scripts/TestBridgeLicence.cs:10-15` workaround

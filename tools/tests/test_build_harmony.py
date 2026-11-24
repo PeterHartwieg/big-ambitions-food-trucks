@@ -46,7 +46,10 @@ elif command == 'unity':
     Path(args[args.index('-logFile') + 1]).write_text('FoodTrucksBuild fixture\n')
     if os.environ.get('HARNESS_REMOVE_NOTICE'):
         (root / 'build/Harmony-LICENSE.txt').unlink(missing_ok=True)
-elif command not in ('rsync', 'python3', 'dotnet'):
+elif command == 'dotnet':
+    with (root / 'dotnet-args').open('a') as calls:
+        calls.write(' '.join(args) + '\n')
+elif command not in ('rsync', 'python3'):
     sys.exit('unexpected command: ' + command)
 '''
 
@@ -116,9 +119,9 @@ class BuildHarmonyTests(unittest.TestCase):
             if notice is not None:
                 package.writestr('LICENSE', notice)
 
-    def run_build(self, **environment):
+    def run_build(self, *flags, **environment):
         return subprocess.run(
-            ['bash', str(self.script)], cwd=self.root,
+            ['bash', str(self.script), *flags], cwd=self.root,
             env={**self.env, **environment}, capture_output=True, text=True, timeout=20,
         )
 
@@ -180,6 +183,43 @@ class BuildHarmonyTests(unittest.TestCase):
         self.assertFalse((self.output / 'Dependencies/Harmony-LICENSE.txt').exists())
         self.assertFalse((self.root / 'build/FoodTrucks.sha256').exists())
         self.assertNotIn('Built ', result.stdout)
+
+    def core_builds(self):
+        calls = (self.root / 'dotnet-args').read_text().splitlines()
+        return [c for c in calls if c.startswith('build ') and 'FoodTrucks.Core.csproj' in c]
+
+    def test_default_build_sets_no_test_symbol(self):
+        self.notice.write_bytes(NOTICE)
+        result = self.run_build()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        [core] = self.core_builds()
+        self.assertNotIn('FoodTrucksTest', core)
+        self.assertTrue(self.output.is_dir())
+        self.assertNotIn('test build', result.stdout)
+
+    def test_each_test_flag_builds_its_own_package_with_one_symbol(self):
+        self.notice.write_bytes(NOTICE)
+        for flag, prop in (('--test-faults', '-p:FoodTrucksTestFaults=true'),
+                           ('--test-contract-2', '-p:FoodTrucksTestContract2=true')):
+            with self.subTest(flag=flag):
+                (self.root / 'dotnet-args').unlink(missing_ok=True)
+                result = self.run_build(flag)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                [core] = self.core_builds()
+                self.assertEqual([p for p in core.split() if 'FoodTrucksTest' in p], [prop])
+                package = 'FoodTrucks-' + flag[2:]
+                self.assertTrue((self.root / 'build' / package / 'Dependencies/Harmony-LICENSE.txt').exists())
+                self.assertTrue((self.root / 'build' / (package + '.sha256')).exists())
+                self.assertIn('never install it into a normal profile or upload it to the Workshop', result.stdout)
+        self.assertFalse(self.output.exists())
+        self.assertFalse((self.root / 'build/FoodTrucks.sha256').exists())
+
+    def test_both_test_flags_or_an_unknown_flag_stop_before_build(self):
+        for flags in (('--test-faults', '--test-contract-2'), ('--test-fault',)):
+            with self.subTest(flags=flags):
+                result = self.run_build(*flags)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertFalse((self.root / 'events').exists())
 
 
 if __name__ == '__main__':

@@ -16,4 +16,13 @@
   <ItemGroup>
     <None Include="../data/*.json" Link="data/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <PropertyGroup Condition="'$(FoodTrucksTestFaults)' == 'true'">
+    <DefineConstants>$(DefineConstants);FOODTRUCKS_TEST_FAULTS</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(FoodTrucksTestContract2)' == 'true'">
+    <DefineConstants>$(DefineConstants);FOODTRUCKS_TEST_CONTRACT2</DefineConstants>
+  </PropertyGroup>
+  <Target Name="FoodTrucksOneTestVariant" BeforeTargets="CoreCompile" Condition="'$(FoodTrucksTestFaults)' == 'true' And '$(FoodTrucksTestContract2)' == 'true'">
+    <Error Text="FoodTrucksTestFaults and FoodTrucksTestContract2 are separate test builds; set one of them, not both." />
+  </Target>
 </Project>

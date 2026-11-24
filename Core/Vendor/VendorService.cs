@@ -240,7 +240,13 @@ namespace FoodTrucks.Core.Vendor
             var lifetime = vehicle!.LifetimeSales;
             var pot = Pot(state!, vehicleId, day);
             long cents;
-            try { cents = host.SellOne(vehicleId, item, minute); }
+            try
+            {
+                cents = host.SellOne(vehicleId, item, minute);
+#if FOODTRUCKS_TEST_FAULTS
+                if (cents >= 0) VendorFaultHook.AfterLedger(vehicleId, item);
+#endif
+            }
             catch (Exception ex)
             {
                 uncertain = vehicle.LifetimeSales != lifetime || Pot(state!, vehicleId, day) != pot;
@@ -427,9 +433,21 @@ namespace FoodTrucks.Core.Vendor
     {
         public static VendorService? Current { get; private set; }
 
-        public static VendorService Attach(IVendorHost host) => Current = new VendorService(host);
+        public static VendorService Attach(IVendorHost host)
+        {
+#if FOODTRUCKS_TEST_FAULTS
+            VendorFaultHook.Reset();
+#endif
+            return Current = new VendorService(host);
+        }
 
-        public static void Detach() => Current = null;
+        public static void Detach()
+        {
+#if FOODTRUCKS_TEST_FAULTS
+            VendorFaultHook.Reset();
+#endif
+            Current = null;
+        }
 
         public static long Revision() => Current?.Poll() ?? 0;
     }
