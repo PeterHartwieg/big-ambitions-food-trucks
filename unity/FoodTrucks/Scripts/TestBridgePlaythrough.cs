@@ -306,7 +306,9 @@ namespace FoodTrucks
                     throw new BridgeError($"\"address\" is a building's address as the game writes it, ba:street_<name>#<number>; got '{address}'.");
                 var doors = World.EntrancesOf(address) ?? throw new BridgeError($"no building at {address} in this city");
                 if (doors.Length == 0) throw new BridgeError($"the building at {address} has no entrance");
-                atAddress = s => doors.Any(d => Math.Sqrt((d.x - s.X) * (d.x - s.X) + (d.z - s.Z) * (d.z - s.Z)) <= StopSnap.MaxMetres);
+                var kind = FoodTrucksMod.KindOf(instance.vehicleTypeName) ?? "cart";
+                var spot = StopPicker.Snap(kind, doors[0], out _, out var how) ?? throw new BridgeError($"No {kind} spot by {address}: {how}.");
+                atAddress = StopEdit.AtSpot(spot.Position.x, spot.Position.z);
             }
             var open = ClockArg(args, "open");
             var close = ClockArg(args, "close");
@@ -328,12 +330,14 @@ namespace FoodTrucks
                 if (problem == ScheduleProblem.None)
                 {
                     var now = HireCrew.Now();
+                    StopEdit.ForgetYesterday(vehicle, at, now);
+                    RouteStops.Changed(vehicle);
+                    at = vehicle.Schedule!.Stops.IndexOf(edited);
                     if (StopEdit.MustClose(vehicle, at, now))
                     {
                         CartSelling.CloseByCrew(vehicle, now);
                         closed = !vehicle.IsOpen;
                     }
-                    RouteStops.Changed(vehicle);
                 }
                 Log.Info($"Test bridge: route edit_stop {id}: stop {picked} of the week to {StopEdit.Clock(newOpen)}-{StopEdit.Clock(newClose)}: {problem}" +
                          (problem == ScheduleProblem.None ? $", now index {at}{(closed ? ", closed (its new close has passed)" : "")}." : "."));

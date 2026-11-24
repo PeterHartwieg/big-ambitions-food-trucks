@@ -215,6 +215,86 @@ public class StopEditTests
     }
 
     [Fact]
+    public void AnAddressNamesOnlyTheStopAtItsOwnPitch()
+    {
+        var cart = Week();
+
+        Assert.Equal(1, StopEdit.Pick(cart.Schedule, null, DayOfWeek.Monday, null, StopEdit.AtSpot(130.5, -0.5)));
+        Assert.Equal("No stop by that address on monday.",
+            Refusal(() => StopEdit.Pick(cart.Schedule, null, DayOfWeek.Monday, null, StopEdit.AtSpot(120, 0))));
+        Assert.Equal("No stop by that address on tuesday.",
+            Refusal(() => StopEdit.Pick(cart.Schedule, null, DayOfWeek.Tuesday, null, StopEdit.AtSpot(130, 0))));
+    }
+
+    [Fact]
+    public void AnOpenStopTheEditMovesIsFollowedToItsNewIndex()
+    {
+        var cart = Week();
+        cart.IsOpen = true;
+        cart.HireStop = 1;
+        var now = At(1, 12 * 60);
+
+        Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 1, 8 * 60, 10 * 60, out var moved));
+
+        Assert.Equal(0, moved);
+        Assert.Equal(0, cart.HireStop);
+        Assert.True(StopEdit.MustClose(cart, moved, now));
+        Assert.False(StopEdit.MustClose(cart, 1, now));
+    }
+
+    [Fact]
+    public void TheCloseIsJudgedOnTheHoursTravelFittingLeaves()
+    {
+        var cart = Cart(Stop(DayOfWeek.Monday, "a", 0, 10 * 60, 12 * 60 + 30), Stop(DayOfWeek.Monday, "b", 1000, 13 * 60, 15 * 60));
+        cart.IsOpen = true;
+        cart.HireStop = 1;
+        var edited = cart.Schedule!.Stops[1];
+        var now = At(1, 13 * 60 + 5);
+
+        Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 1, 12 * 60 + 30, 13 * 60, out var moved));
+        Assert.True(StopEdit.MustClose(cart, moved, now));
+        RouteEditor.FitTravel(schedules, ShippedData.Rules.Fleet, cart.Schedule, TravelMode.Drive, 1.0, 30, ShippedData.Rules.Fleet.LatestCloseMinute);
+
+        Assert.Equal((13 * 60 + 30, 14 * 60), (edited.OpenAt, edited.CloseAt));
+        Assert.False(StopEdit.MustClose(cart, cart.Schedule.Stops.IndexOf(edited), now));
+    }
+
+    [Fact]
+    public void ShorteningYesterdaysOpenStopAfterMidnightClosesTheCrewAtTheNewClose()
+    {
+        var runner = new HireRunner(ShippedData.Rules.Fleet);
+        var cart = WeekTestData.AllDay(Week());
+        var bars = new VehicleWhere(400, 0, leaveAlone: false);
+        runner.EnsurePlan(cart, At(2, 20 * 60), 400, 0);
+        runner.EnsurePlan(cart, At(3, 15), 400, 0);
+        cart.IsOpen = true;
+        cart.HireStop = 3;
+        Assert.Equal(HireActionKind.None, runner.Step(cart, At(3, 31), bars).Kind);
+
+        var now = At(3, 15);
+        Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 3, 20 * 60, 24 * 60 + 30, out var moved));
+        Assert.False(StopEdit.MustClose(cart, moved, now));
+        StopEdit.ForgetYesterday(cart, moved, now);
+        HireRunner.Replan(cart, now);
+        runner.EnsurePlan(cart, now + 1, 400, 0);
+
+        Assert.Equal(HireActionKind.None, runner.Step(cart, At(3, 29), bars).Kind);
+        Assert.Equal(HireActionKind.Close, runner.Step(cart, At(3, 30), bars).Kind);
+    }
+
+    [Fact]
+    public void OnlyAnEditToYesterdaysStopForgetsYesterdaysPlan()
+    {
+        var cart = WeekTestData.AllDay(Week());
+        cart.Shifts = new List<ShiftPlan> { new() { Day = 2 }, new() { Day = 3 } };
+
+        StopEdit.ForgetYesterday(cart, 0, At(3, 15));
+        Assert.Equal(new[] { 2, 3 }, cart.Shifts.Select(p => p.Day).ToArray());
+        StopEdit.ForgetYesterday(cart, 3, At(3, 15));
+        Assert.Equal(new[] { 3 }, cart.Shifts.Select(p => p.Day).ToArray());
+    }
+
+    [Fact]
     public void TheReplyClockKeepsHoursAfterMidnight()
     {
         Assert.Equal("09:05", StopEdit.Clock(9 * 60 + 5));

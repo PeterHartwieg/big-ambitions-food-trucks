@@ -13,6 +13,11 @@ namespace FoodTrucks.Core.Fleet
 
     public static class StopEdit
     {
+        public const double SameSpotMetres = 1.0;
+
+        public static Func<ScheduleStop, bool> AtSpot(double x, double z) =>
+            s => Math.Abs(s.X - x) <= SameSpotMetres && Math.Abs(s.Z - z) <= SameSpotMetres;
+
         public static int Pick(HireSchedule? schedule, int? index, DayOfWeek? day, int? stop, Func<ScheduleStop, bool>? atAddress)
         {
             var stops = schedule?.Stops ?? new List<ScheduleStop>();
@@ -62,6 +67,14 @@ namespace FoodTrucks.Core.Fleet
             var problem = RouteEditor.SetTimes(schedules, vehicle, index, open, close);
             moved = problem == ScheduleProblem.None && stop != null ? vehicle.Schedule!.Stops.IndexOf(stop) : index;
             return problem;
+        }
+
+        public static void ForgetYesterday(VehicleState vehicle, int index, long now)
+        {
+            if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
+            var stop = vehicle.Schedule?.Stops?.ElementAtOrDefault(index);
+            var day = GameDays.DayOf(now);
+            if (stop != null && stop.Day == WeekPlan.Previous(GameDays.Weekday(day))) vehicle.Shifts?.RemoveAll(p => p.Day == day - 1);
         }
 
         public static bool ClosePassed(ScheduleStop stop, long now)

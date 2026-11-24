@@ -715,7 +715,8 @@ class Mock:
                 raise ValueError(f'"address" is a building\'s address as the game writes it, ba:street_<name>#<number>; got \'{address}\'.')
             building=next((b for b in CITY if b['key']==address),None)
             if building is None: raise ValueError(f'no building at {address} in this city')
-            near=lambda s: math.hypot(s['x']-building['x'],s['z']-building['z'])<=40
+            px,pz=round(building['x']+6.,2),round(building['z'],2)
+            near=lambda s: abs(s['x']-px)<=1.0 and abs(s['z']-pz)<=1.0
         open_at,close_at=clock('open'),clock('close')
         week=sorted(stops,key=lambda s:(WEEK.index(s['day']),s['open']))
         if index is not None:
@@ -741,7 +742,9 @@ class Mock:
         if open_at is None and close_at is None: raise ValueError('Give "open", "close" or both, as "HH:MM".')
         o=picked['open'] if open_at is None else open_at
         c=picked['close'] if close_at is None else close_at+1440 if close_at<=o else close_at
-        others=[(s['open'],s['close']) for s in stops if s['day']==picked['day'] and s is not picked]
+        shift={0:0,1:1440,6:-1440}
+        others=[(s['open']+shift[d],s['close']+shift[d]) for s in stops if s is not picked
+                for d in [(WEEK.index(s['day'])-WEEK.index(picked['day']))%7] if d in shift]
         problem=None if c>o and c<=27*60 else 'BadTimes'
         if problem is None and any(a<c and o<b for a,b in others): problem='Overlap'
         if problem is None:
