@@ -10,10 +10,10 @@ namespace FoodTrucks.Core.Fleet
             return atCart && distanceMetres.HasValue && distanceMetres.Value <= workingDistance;
         }
 
-        public static bool Serves(string kind, bool playerPresent, bool atHatch, Func<double?> distanceMetres, double workingDistance, bool atCart)
+        public static bool Serves<T>(string kind, bool playerPresent, bool atHatch, T target, Func<T, double?> distanceMetres, double workingDistance, bool atCart)
         {
             if (!playerPresent) return false;
-            return Serves(kind, atHatch, distanceMetres(), workingDistance, atCart);
+            return Serves(kind, atHatch, distanceMetres(target), workingDistance, atCart);
         }
     }
 }

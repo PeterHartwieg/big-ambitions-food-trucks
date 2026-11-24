@@ -1150,8 +1150,8 @@ namespace FoodTrucks
             if (BuildingManager.IsInsideBuilding || UndergroundParkingManager.IsInsideParking) return false;
             if (SaveGameManager.Current.ActiveVehicleId == cart.id) return false;
             var controller = VehicleHelper.GetVehicleController(cart);
-            return PlayerServing.Serves(CartDemand.KindOf(cart), PlayerHelper.PlayerController != null, TruckWindow.PlayerServes(cart.id),
-                () => controller == null ? (double?)null : Vector3.Distance(PlayerHelper.GetPosition(), controller.transform.position),
+            return PlayerServing.Serves(CartDemand.KindOf(cart), PlayerHelper.PlayerController != null, TruckWindow.PlayerServes(cart.id), controller,
+                c => c == null ? (double?)null : Vector3.Distance(PlayerHelper.GetPosition(), c.transform.position),
                 WorkingDistance, instance?.cartServing.PlayerAt(cart.id) == true);
         }
 

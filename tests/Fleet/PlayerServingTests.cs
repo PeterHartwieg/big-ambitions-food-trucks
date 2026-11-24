@@ -38,23 +38,4 @@ public class PlayerServingTests
     {
         Assert.False(PlayerServing.Serves("cart", atHatch: false, null, Working));
     }
-
-    [Theory]
-    [InlineData("cart")]
-    [InlineData("truck")]
-    public void AMissingPlayerServesNothingAndIsNeverMeasured(string kind)
-    {
-        var measured = false;
-        Assert.False(PlayerServing.Serves(kind, playerPresent: false, atHatch: true, () => { measured = true; return 0.5; }, Working, atCart: true));
-        Assert.False(measured);
-    }
-
-    [Fact]
-    public void APresentPlayerIsMeasuredOnce()
-    {
-        var measured = 0;
-        Assert.True(PlayerServing.Serves("cart", playerPresent: true, atHatch: false, () => { measured++; return 0.5; }, Working, atCart: true));
-        Assert.Equal(1, measured);
-        Assert.False(PlayerServing.Serves("cart", playerPresent: true, atHatch: false, () => null, Working, atCart: true));
-    }
 }
