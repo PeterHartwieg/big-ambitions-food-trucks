@@ -44,9 +44,21 @@ elif command == 'curl':
     shutil.copyfile(root / 'fixture.nupkg', args[args.index('-o') + 1])
 elif command == 'unity':
     Path(args[args.index('-logFile') + 1]).write_text('FoodTrucksBuild fixture\n')
+    deps = root / 'unity/FoodTrucks/Dependencies'
+    shutil.copyfile(deps / 'FoodTrucks.Core.dll', root / 'build/sdk/Output/FoodTrucks/Dependencies/FoodTrucks.Core.dll')
+    if os.environ.get('HARNESS_UNITY_FAIL'):
+        sys.exit(1)
     if os.environ.get('HARNESS_REMOVE_NOTICE'):
         (root / 'build/Harmony-LICENSE.txt').unlink(missing_ok=True)
-elif command not in ('rsync', 'python3', 'dotnet'):
+elif command == 'dotnet':
+    with (root / 'dotnet-args').open('a') as calls:
+        calls.write(' '.join(args) + '\n')
+    if 'build' in args and any(a.endswith('FoodTrucks.Core.csproj') for a in args):
+        props = [a for a in args if 'FoodTrucksTest' in a]
+        if not props and os.environ.get('HARNESS_DEFAULT_CORE_FAIL'):
+            sys.exit(23)
+        (root / 'Core/bin/Release/netstandard2.1/FoodTrucks.Core.dll').write_text(' '.join(props) or 'default')
+elif command not in ('rsync', 'python3'):
     sys.exit('unexpected command: ' + command)
 '''
 
@@ -107,7 +119,7 @@ class BuildHarmonyTests(unittest.TestCase):
             'UNITY': str(stub.parent / 'unity'),
             'TMPDIR': str(self.root),
         })
-        for key in ('HARNESS_CURL_FAIL', 'HARNESS_REMOVE_NOTICE'):
+        for key in ('HARNESS_CURL_FAIL', 'HARNESS_REMOVE_NOTICE', 'HARNESS_UNITY_FAIL', 'HARNESS_DEFAULT_CORE_FAIL'):
             self.env.pop(key, None)
 
     def write_package(self, dll=DLL, notice=NOTICE):
@@ -116,9 +128,9 @@ class BuildHarmonyTests(unittest.TestCase):
             if notice is not None:
                 package.writestr('LICENSE', notice)
 
-    def run_build(self, **environment):
+    def run_build(self, *flags, **environment):
         return subprocess.run(
-            ['bash', str(self.script)], cwd=self.root,
+            ['bash', str(self.script), *flags], cwd=self.root,
             env={**self.env, **environment}, capture_output=True, text=True, timeout=20,
         )
 
@@ -180,6 +192,69 @@ class BuildHarmonyTests(unittest.TestCase):
         self.assertFalse((self.output / 'Dependencies/Harmony-LICENSE.txt').exists())
         self.assertFalse((self.root / 'build/FoodTrucks.sha256').exists())
         self.assertNotIn('Built ', result.stdout)
+
+    def core_builds(self):
+        calls = (self.root / 'dotnet-args').read_text().splitlines()
+        return [c for c in calls if c.startswith('build ') and 'FoodTrucks.Core.csproj' in c]
+
+    def test_default_build_sets_no_test_symbol(self):
+        self.notice.write_bytes(NOTICE)
+        result = self.run_build()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        [core] = self.core_builds()
+        self.assertNotIn('FoodTrucksTest', core)
+        self.assertTrue(self.output.is_dir())
+        self.assertNotIn('test build', result.stdout)
+
+    def test_each_test_flag_builds_its_own_package_with_one_symbol(self):
+        self.notice.write_bytes(NOTICE)
+        for flag, prop in (('--test-faults', '-p:FoodTrucksTestFaults=true'),
+                           ('--test-contract-2', '-p:FoodTrucksTestContract2=true')):
+            with self.subTest(flag=flag):
+                (self.root / 'dotnet-args').unlink(missing_ok=True)
+                result = self.run_build(flag)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                [core, restore] = self.core_builds()
+                self.assertEqual([p for p in core.split() if 'FoodTrucksTest' in p], [prop])
+                self.assertNotIn('FoodTrucksTest', restore)
+                package = 'FoodTrucks-' + flag[2:]
+                self.assertEqual((self.root / 'build' / package / 'Dependencies/FoodTrucks.Core.dll').read_text(), prop)
+                self.assertEqual((self.deps / 'FoodTrucks.Core.dll').read_text(), 'default')
+                self.assertTrue((self.root / 'build' / package / 'Dependencies/Harmony-LICENSE.txt').exists())
+                self.assertTrue((self.root / 'build' / (package + '.sha256')).exists())
+                self.assertIn('never install it into a normal profile or upload it to the Workshop', result.stdout)
+        self.assertFalse(self.output.exists())
+        self.assertFalse((self.root / 'build/FoodTrucks.sha256').exists())
+
+    def test_a_failed_test_build_still_restores_the_default_core(self):
+        self.notice.write_bytes(NOTICE)
+        result = self.run_build('--test-faults', HARNESS_UNITY_FAIL='1')
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.deps / 'FoodTrucks.Core.dll').read_text(), 'default')
+        self.assertNotIn('FoodTrucksTest', self.core_builds()[-1])
+
+    def test_a_failed_default_restore_fails_the_build_and_unstages_the_test_core(self):
+        self.notice.write_bytes(NOTICE)
+        for flag in ('--test-faults', '--test-contract-2'):
+            with self.subTest(flag=flag):
+                result = self.run_build(flag, HARNESS_DEFAULT_CORE_FAIL='1')
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('Could not restore the default FoodTrucks.Core.dll', result.stderr)
+                self.assertFalse((self.deps / 'FoodTrucks.Core.dll').exists())
+
+    def test_a_default_build_after_a_test_build_packages_the_default_core(self):
+        self.notice.write_bytes(NOTICE)
+        for flags in (('--test-contract-2',), ()):
+            result = self.run_build(*flags)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.output / 'Dependencies/FoodTrucks.Core.dll').read_text(), 'default')
+
+    def test_both_test_flags_or_an_unknown_flag_stop_before_build(self):
+        for flags in (('--test-faults', '--test-contract-2'), ('--test-fault',)):
+            with self.subTest(flags=flags):
+                result = self.run_build(*flags)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertFalse((self.root / 'events').exists())
 
 
 if __name__ == '__main__':

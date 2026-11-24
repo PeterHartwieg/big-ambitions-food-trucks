@@ -19,7 +19,9 @@ public class VendorApiTests
     public void WithoutStreetFoodRunningEveryCallIsOff()
     {
         VendorRuntime.Detach();
+#if !FOODTRUCKS_TEST_CONTRACT2
         Assert.Equal(1, VendorApi.ContractVersion);
+#endif
         Assert.Equal(0, VendorApi.Revision);
         Assert.Equal(VendorApiStatus.Off, VendorApi.Read(new VendorApiVehicle[64], out var count));
         Assert.Equal(0, count);

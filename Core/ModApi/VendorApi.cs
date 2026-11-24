@@ -74,7 +74,11 @@ namespace FoodTrucks.ModApi
 
     public static class VendorApi
     {
+#if FOODTRUCKS_TEST_CONTRACT2
+        public static int ContractVersion => 2;
+#else
         public static int ContractVersion => 1;
+#endif
 
         public static long Revision => VendorRuntime.Revision();
 

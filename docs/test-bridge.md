@@ -80,6 +80,21 @@ Entries have sorted paths, fixed timestamps and permissions. Identical package b
 
 Ownership validation (17 October 2026): **checked in game** on both bridges. The normal Steam game launched while the offline rig stayed running; missing/wrong tokens were refused, the normal owner could quit, and releasing its lock left the rig's ownership intact. The rig also rejected release during simulation and during a screenshot that outlived its HTTP timeout. Restart retained ownership. Both locks were released after testing. Evidence is retained locally in `build/normal-lock-validation.json` and the agent rig's `build/agent-tests/lock-validation.json`. Shared lock tests, client/session/operation tests, packaging tests and both runtime builds passed. This does not establish broader headless gameplay parity.
 
+## Test builds
+
+`tools/build-mod.sh` makes two test-only variants for Persistent City's checks. Each sets one MSBuild property on `FoodTrucks.Core.csproj`, which adds one compile symbol. The script refuses both flags together, and so does MSBuild.
+
+| Flag | Property | Symbol | Package | What changes |
+|---|---|---|---|---|
+| `--test-faults` | `-p:FoodTrucksTestFaults=true` | `FOODTRUCKS_TEST_FAULTS` | `build/FoodTrucks-test-faults` | Adds `FoodTrucks.VendorFaultHook` and `FoodTrucks.VendorFaultException` to `FoodTrucks.Core.dll`. `ContractVersion` stays 1 |
+| `--test-contract-2` | `-p:FoodTrucksTestContract2=true` | `FOODTRUCKS_TEST_CONTRACT2` | `build/FoodTrucks-test-contract-2` | `FoodTrucks.ModApi.VendorApi.ContractVersion` returns 2. Nothing else; there is no v2 contract, and `docs/vendor-api.md` stays the v1 contract |
+
+With no flag the script builds the normal package in `build/FoodTrucks`: no fault type, `ContractVersion` 1. `dotnet test tests/FoodTrucks.Core.Tests.csproj -c Release` takes the same two properties; `VendorTestBuildTests` checks which variant it runs against. Never install a test package into a normal profile and never upload one to the Workshop.
+
+The fault hook has one point, `sell_after_ledger`. `VendorService.Sell` calls `VendorFaultHook.AfterLedger` when `IVendorHost.SellOne` returns a sale (in game, after `StreetSales.Record`, `CrewTakings.Accrue`, the cargo and `FlushCrewSales`). An armed hook disarms itself, then throws `VendorFaultException` with the message `FoodTrucks test fault sell_after_ledger: VendorFaultHook threw after the ledger record of <item> at <vehicle>`. `VendorService.Sell` catches it like any failure after the record: `Failed`, `uncertain` true, no sale, reason `failed after the ledger record; do not retry`, the opening's sequence bumped. A sale that fails before the record or that `SellOne` refuses leaves the shot armed. Street Food's own sales never reach the hook. The armed state lives in memory only, is never written to a save, and resets whenever a save attaches or detaches.
+
+The `vendor_fault` bridge command is in every build's `FoodTrucks.dll`. It looks the hook up in `FoodTrucks.Core.dll` at run time, so a build without `FOODTRUCKS_TEST_FAULTS` answers every call with `vendor_fault hook unavailable: this FoodTrucks.Core.dll was built without FOODTRUCKS_TEST_FAULTS (tools/build-mod.sh --test-faults).` A second `arm` is refused until `disarm` or until the shot fires. Unknown points and actions are refused.
+
 ## Transport
 
 All bodies are UTF-8 JSON. Every reply has `ok` and, next to it, `session`: 8 hex characters the bridge picks at random each time it starts. A different `session` means the game or the mod restarted, and nothing a client knew from before (operation numbers, event numbers, state) holds. A `/call` body may carry `"expect_session": "<8 hex>"`; when it differs from the current session the call is refused before it is numbered or queued: `{ "ok": false, "session": "<current>", "error": "the bridge restarted (session <current>); reconnect first." }`. A failed call has `ok: false` and `error` (one sentence a person can act on).
@@ -171,6 +186,7 @@ Positions are world metres (`x`, `y`, `z`); `heading` is degrees clockwise from 
 | `load` | `{ "name": "FT bridge" }` | Loads a save from the main menu or from the city | `{ "loading": true }`; poll `/health` for `scene: "city"` | built, not yet run in game |
 | `new_game` | `{ "name": "FT playtest" }`, optional `"preset": "HART Group series"` | From the main menu only: a new custom game with the Normal preset's values (or, with `preset`, the saved custom preset of that name from the profile's `CustomGamePresets` folder) and the tutorial off, a character "FT Playtest" with the creator's random look, then the city paused and saved under the name | `{ "loading": true, "name", "character": "FT Playtest", "preset" }`; poll `/health` or `state.load` for `done` | run in game (17 October 2026: day 1 08:02, $10,000, no home, Hell's Kitchen, no pop-ups) |
 | `quit` | `{}` | Quits the game | `{}` | built, not yet run in game |
+| `vendor_fault` | `{ "action": "arm", "point": "sell_after_ledger" }`, `{ "action": "status" }` or `{ "action": "disarm" }` | Fault test builds only (see "Test builds"). `arm` makes the next successful Vendor API sale throw once, after its ledger record; `arm` and `disarm` need an FT save, `status` changes nothing. Any other build refuses every action with `vendor_fault hook unavailable: …` | `arm`: `{ "armed": true, "point", "shots_remaining": 1 }`; `status`: `{ "armed", "point", "shots_remaining", "fired" }`; `disarm`: `{ "armed": false, "fired" }` | unit-tested, not yet run in game |
 
 Poses for `shoot` (the camera is placed relative to the target and looks at it):
 

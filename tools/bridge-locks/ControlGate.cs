@@ -30,6 +30,7 @@ namespace BridgeControl
         public static bool IsReadOnly(string cmd, JObject args)
         {
             if (new[] { "state", "op", "parks", "places", "map", "day_summary" }.Contains(cmd)) return true;
+            if (cmd == "vendor_fault") return (string)args["action"] == "status";
             return cmd == "ui" && ((string)args["op"] == "list" || (string)args["op"] == "tree");
         }
 

@@ -79,6 +79,18 @@ public sealed class BridgeLockTests : IDisposable
         Assert.Null(body["args"]!["__bridge_lock_permit"]);
         Assert.Throws<InvalidOperationException>(()=>ControlGate.Intercept("quit",(JObject)body["args"]!));
     }
+    [Fact] public void VendorFaultStatusIsReadOnlyButArmAndDisarmNeedTheLease()
+    {
+        ControlGate.ConfigureStore(Store());
+        var body=ControlGate.PrepareBody(new JObject{["cmd"]="vendor_fault",["args"]=new JObject{["action"]="status"}});
+        Assert.Null(ControlGate.Intercept("vendor_fault",(JObject)body["args"]!));
+        foreach (var action in new[]{"arm","disarm"})
+        {
+            Assert.Throws<InvalidOperationException>(()=>ControlGate.PrepareBody(new JObject{["cmd"]="vendor_fault",["args"]=new JObject{["action"]=action}}));
+            var write=ControlGate.PrepareBody(new JObject{["cmd"]="vendor_fault",["expect_session"]="session",["args"]=new JObject{["action"]=action}});
+            Assert.Throws<InvalidOperationException>(()=>ControlGate.Intercept("vendor_fault",(JObject)write["args"]!));
+        }
+    }
     [Fact] public void UnqueuedReservationCanBeCleanedUp()
     {
         var s=Store();s.Acquire("owner","",A);ControlGate.ConfigureStore(s);
