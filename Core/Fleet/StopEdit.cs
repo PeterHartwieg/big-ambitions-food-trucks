@@ -69,25 +69,40 @@ namespace FoodTrucks.Core.Fleet
             return problem;
         }
 
-        public static void RetimeYesterday(VehicleState vehicle, int index, long now)
+        public static void RetimeYesterday(HireSchedules schedules, VehicleState vehicle, int index, long now, double gameSpeed = 1.0,
+            (double X, double Z)? home = null, IReadOnlyCollection<int>? bayStops = null)
         {
+            if (schedules == null) throw new ArgumentNullException(nameof(schedules));
             if (vehicle == null) throw new ArgumentNullException(nameof(vehicle));
             var stop = vehicle.Schedule?.Stops?.ElementAtOrDefault(index);
             var day = GameDays.DayOf(now);
             if (stop == null || stop.Day != WeekPlan.Previous(GameDays.Weekday(day)) || vehicle.Shifts == null) return;
             var plan = vehicle.Shifts.FirstOrDefault(p => p?.Legs != null && p.Day == day - 1);
-            var leg = plan?.Legs.FirstOrDefault(l => l.Kind == LegKind.Open && l.StopIndex == index && l.Start <= now && l.End > now);
-            if (plan == null || leg == null || !vehicle.IsOpen || vehicle.HireStop != index)
+            var served = plan?.Legs.FirstOrDefault(l => l.Kind == LegKind.Open && vehicle.IsOpen && l.StopIndex == vehicle.HireStop &&
+                                                        l.Start <= now && l.End > now);
+            if (plan == null || served == null)
             {
                 vehicle.Shifts.RemoveAll(p => p.Day == day - 1);
                 return;
             }
+            if (served.StopIndex != index)
+            {
+                if (plan.Legs.Any(l => l.StopIndex == index && l.End > now)) vehicle.Shifts.RemoveAll(p => p.Day == day - 1);
+                return;
+            }
+            var from = served.Start;
             var close = HireSchedules.Absolute(day - 1, stop.CloseAt);
-            var span = WeekPlan.CoverageOf(vehicle.Schedule, vehicle.Crew, now - 1440, close + 1440).Spans
-                .Where(c => c.Start <= now && c.End > now).Select(c => (long?)c.End).FirstOrDefault();
-            var oldEnd = leg.End;
-            leg.End = Math.Max(now, span == null ? close : Math.Min(close, span.Value));
-            plan.Legs.RemoveAll(l => l != leg && l.Start >= oldEnd);
+            var coverage = WeekPlan.CoverageOf(vehicle.Schedule, vehicle.Crew, from - 1440, Math.Max(close, now) + 2 * 1440);
+            plan.Legs.RemoveAll(l => l.Start >= from);
+            foreach (var (start, end) in coverage.Clip(from, close))
+                plan.Legs.Add(new ShiftLeg { Kind = LegKind.Open, StopIndex = index, Start = start, End = end });
+            if (home == null || bayStops?.Contains(index) == true) return;
+            var minutes = Travel.Minutes(schedules.Rules, Travel.Distance(stop.X, stop.Z, home.Value.X, home.Value.Z),
+                Travel.ModeFor(vehicle.VehicleType), gameSpeed);
+            var free = Math.Max(close, now);
+            var leave = minutes <= 0 ? null : coverage.Earliest(free, minutes, free + 1440);
+            if (leave != null)
+                plan.Legs.Add(new ShiftLeg { Kind = LegKind.Travel, StopIndex = HireSchedules.HomeIndex, Start = leave.Value, End = leave.Value + minutes });
         }
 
         public static bool ClosePassed(ScheduleStop stop, long now)

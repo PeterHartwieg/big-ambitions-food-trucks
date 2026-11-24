@@ -332,7 +332,8 @@ namespace FoodTrucks
                     var now = HireCrew.Now();
                     RouteStops.Changed(vehicle);
                     at = vehicle.Schedule!.Stops.IndexOf(edited);
-                    StopEdit.RetimeYesterday(vehicle, at, now);
+                    var home = HireRoutes.HomeOf(vehicle);
+                    StopEdit.RetimeYesterday(new HireSchedules(rules.Fleet), vehicle, at, now, HireRoutes.GameSpeed(), HireRoutes.HomePoint(home), home?.BayStops);
                     if (StopEdit.MustClose(vehicle, at, now))
                     {
                         CartSelling.CloseByCrew(vehicle, now);

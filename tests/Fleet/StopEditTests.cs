@@ -275,7 +275,7 @@ public class StopEditTests
         Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 3, 20 * 60, 24 * 60 + 30, out var moved));
         Assert.False(StopEdit.MustClose(cart, moved, now));
         HireRunner.Replan(cart, now);
-        StopEdit.RetimeYesterday(cart, moved, now);
+        StopEdit.RetimeYesterday(schedules, cart, moved, now);
         runner.EnsurePlan(cart, now + 1, 400, 0);
 
         Assert.Equal(HireActionKind.None, runner.Step(cart, At(3, 29), bars).Kind);
@@ -298,7 +298,7 @@ public class StopEditTests
 
         Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 0, 20 * 60, 24 * 60 + 20, out var moved));
         HireRunner.Replan(cart, now);
-        StopEdit.RetimeYesterday(cart, moved, now);
+        StopEdit.RetimeYesterday(schedules, cart, moved, now, home: bay);
         Assert.False(StopEdit.MustClose(cart, moved, now));
         runner.EnsurePlan(cart, now, 400, 0, home: bay);
 
@@ -321,7 +321,7 @@ public class StopEditTests
 
         Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 0, 20 * 60, 26 * 60, out var moved));
         HireRunner.Replan(cart, now);
-        StopEdit.RetimeYesterday(cart, moved, now);
+        StopEdit.RetimeYesterday(schedules, cart, moved, now, home: bay);
         runner.EnsurePlan(cart, now, 400, 0, home: bay);
 
         Assert.Equal(HireActionKind.None, runner.Step(cart, At(2, 90), bars).Kind);
@@ -335,10 +335,99 @@ public class StopEditTests
         var cart = WeekTestData.AllDay(Week());
         cart.Shifts = new List<ShiftPlan> { new() { Day = 2 }, new() { Day = 3 } };
 
-        StopEdit.RetimeYesterday(cart, 0, At(3, 15));
+        StopEdit.RetimeYesterday(schedules, cart, 0, At(3, 15));
         Assert.Equal(new[] { 2, 3 }, cart.Shifts.Select(p => p.Day).ToArray());
-        StopEdit.RetimeYesterday(cart, 3, At(3, 15));
+        StopEdit.RetimeYesterday(schedules, cart, 3, At(3, 15));
         Assert.Equal(new[] { 3 }, cart.Shifts.Select(p => p.Day).ToArray());
+    }
+
+    [Fact]
+    public void ShorteningYesterdaysOpenStopStillDrivesBackToTheBayBeforeTodaysRoute()
+    {
+        var runner = new HireRunner(ShippedData.Rules.Fleet);
+        var cart = WeekTestData.AllDay(Cart(Stop(DayOfWeek.Monday, "bars", 400, 20 * 60, 26 * 60), Stop(DayOfWeek.Tuesday, "office", 100, 10 * 60, 14 * 60)));
+        var bay = (X: 0.0, Z: 0.0);
+        var bars = new VehicleWhere(400, 0, leaveAlone: false, home: bay);
+        runner.EnsurePlan(cart, At(1, 20 * 60), 400, 0, home: bay);
+        cart.IsOpen = true;
+        cart.HireStop = 0;
+        var now = At(2, 15);
+        runner.EnsurePlan(cart, now, 400, 0, home: bay);
+
+        Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 0, 20 * 60, 24 * 60 + 20, out var moved));
+        HireRunner.Replan(cart, now);
+        StopEdit.RetimeYesterday(schedules, cart, moved, now, home: bay);
+        runner.EnsurePlan(cart, now, 400, 0, home: bay);
+
+        Assert.Equal(HireActionKind.None, runner.Step(cart, At(2, 19), bars).Kind);
+        Assert.Equal(HireActionKind.Close, runner.Step(cart, At(2, 20), bars).Kind);
+        cart.IsOpen = false;
+        cart.HireStop = null;
+        var back = runner.Step(cart, At(2, 20), bars);
+        Assert.Equal(HireActionKind.Depart, back.Kind);
+        Assert.Equal(HireSchedules.HomeIndex, back.Stop);
+        Assert.Equal(LegKind.Restock, cart.Shifts!.Single(p => p.Day == 2).Legs[0].Kind);
+    }
+
+    [Fact]
+    public void ALaterCrewShiftReopensYesterdaysEditedStop()
+    {
+        var runner = new HireRunner(ShippedData.Rules.Fleet);
+        var cart = Cart(Stop(DayOfWeek.Monday, "bars", 400, 20 * 60, 26 * 60 + 30), Stop(DayOfWeek.Tuesday, "office", 100, 10 * 60, 14 * 60));
+        cart.Schedule!.CrewShifts = new List<CrewShift>
+        {
+            new() { EmployeeId = "e1", Day = DayOfWeek.Monday, Start = 0, End = 24, Station = WeekPlan.Serving(1) },
+            new() { EmployeeId = "e1", Day = DayOfWeek.Tuesday, Start = 0, End = 1, Station = WeekPlan.Serving(1) },
+            new() { EmployeeId = "e1", Day = DayOfWeek.Tuesday, Start = 2, End = 3, Station = WeekPlan.Serving(1) },
+            new() { EmployeeId = "e1", Day = DayOfWeek.Tuesday, Start = 9, End = 24, Station = WeekPlan.Serving(1) },
+        };
+        var bars = new VehicleWhere(400, 0, leaveAlone: false);
+        runner.EnsurePlan(cart, At(1, 20 * 60), 400, 0);
+        cart.IsOpen = true;
+        cart.HireStop = 0;
+        var now = At(2, 15);
+        runner.EnsurePlan(cart, now, 400, 0);
+
+        Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 0, 20 * 60, 26 * 60 + 45, out var moved));
+        HireRunner.Replan(cart, now);
+        StopEdit.RetimeYesterday(schedules, cart, moved, now);
+        runner.EnsurePlan(cart, now, 400, 0);
+
+        Assert.Equal(HireActionKind.None, runner.Step(cart, At(2, 59), bars).Kind);
+        Assert.Equal(HireActionKind.Close, runner.Step(cart, At(2, 60), bars).Kind);
+        cart.IsOpen = false;
+        cart.HireStop = null;
+        runner.EnsurePlan(cart, At(2, 120), 400, 0);
+        var reopen = runner.Step(cart, At(2, 120), bars);
+        Assert.Equal(HireActionKind.Open, reopen.Kind);
+        Assert.Equal(0, reopen.Stop);
+        cart.IsOpen = true;
+        cart.HireStop = 0;
+        Assert.Equal(HireActionKind.None, runner.Step(cart, At(2, 164), bars).Kind);
+        Assert.Equal(HireActionKind.Close, runner.Step(cart, At(2, 165), bars).Kind);
+    }
+
+    [Fact]
+    public void EditingAnEarlierStopFromYesterdayKeepsTheLateStopServingNearItsBay()
+    {
+        var runner = new HireRunner(ShippedData.Rules.Fleet);
+        var cart = WeekTestData.AllDay(Cart(Stop(DayOfWeek.Monday, "park", 300, 18 * 60, 22 * 60), Stop(DayOfWeek.Monday, "bars", 400, 22 * 60 + 30, 24 * 60 + 40)));
+        var bay = (X: 424.0, Z: 0.0);
+        var bars = new VehicleWhere(400, 0, leaveAlone: false, home: bay);
+        runner.EnsurePlan(cart, At(1, 18 * 60), 300, 0, home: bay);
+        cart.IsOpen = true;
+        cart.HireStop = 1;
+        var now = At(2, 15);
+        runner.EnsurePlan(cart, now, 400, 0, home: bay);
+
+        Assert.Equal(ScheduleProblem.None, StopEdit.Apply(schedules, cart, 0, 18 * 60, 21 * 60 + 30, out var moved));
+        HireRunner.Replan(cart, now);
+        StopEdit.RetimeYesterday(schedules, cart, moved, now, home: bay);
+        runner.EnsurePlan(cart, now, 400, 0, home: bay);
+
+        Assert.Equal(HireActionKind.None, runner.Step(cart, now, bars).Kind);
+        Assert.Equal(HireActionKind.None, runner.Step(cart, At(2, 39), bars).Kind);
+        Assert.Equal(HireActionKind.Close, runner.Step(cart, At(2, 40), bars).Kind);
     }
 
     [Fact]
